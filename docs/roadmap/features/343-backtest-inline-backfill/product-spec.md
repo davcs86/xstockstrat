@@ -15,12 +15,12 @@ As a trader, I want to backfill the data a backtest is missing directly from its
 ## Functional Requirements
 
 FR-1. The insufficient-data state of the symbol page Backtests card offers a "Backfill missing data" action.
-FR-2. The action requests a daily-bars backfill for the symbol over exactly the missing range reported by the backtest (`coverage_gaps[].gap`), not full history.
+FR-2. The action requests a daily-bars backfill for the symbol from the start of the missing range reported by the backtest (`coverage_gaps[].gap`) through the end of the backtest window, fetching missing bars only (gaps-only, no overwrite), not full history. _(Amended 2026-11-15, operator at the design gate, design.md D-8; it was "over exactly the missing range".)_
 FR-3. While the backfill runs, the card shows its progress inline and the action cannot be triggered again.
 FR-4. When the backfill completes, the card shows a "data ready" state with a "Re-run backtest" action; the backtest is not re-run automatically.
 FR-5. When the backfill fails, is partial, or is canceled, the card says so, with the job's error when one is reported, and offers the backfill action again.
 FR-6. The action is available to every authenticated user, not only admins.
-FR-7. **Fallback (operator-directed, 2026-11-15)**: if design finds that FR-6 requires extensive change, FR-1…FR-6 are dropped and the section instead shows strategy scores only, defaulting to "Not enough data" with no actions.
+FR-7. **Fallback (operator-directed, 2026-11-15)**: if design finds that FR-6 requires extensive change, FR-1…FR-6 are dropped and the section instead shows strategy scores only, defaulting to "Not enough data" with no actions. _(Not taken: the operator chose FR-6 through the bounded self-serve envelope at the design gate, 2026-11-15, design.md R-6. @AC-8 is struck.)_
 
 ## Out of Scope
 
@@ -33,33 +33,37 @@ FR-7. **Fallback (operator-directed, 2026-11-15)**: if design finds that FR-6 re
 
 Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-ui` — Backtests card inline action, progress, re-run state
-- `xstockstrat-ingest` — `TriggerBackfill` authorization (admin-only today) if FR-6 holds
+- `xstockstrat-ingest` — `TriggerBackfill` authorization: admin, or the bounded self-serve envelope with per-symbol de-duplication (design.md)
+- `xstockstrat-config` — seed migration for the new `ingest` key `backfill.self_serve_max_range_days` (added at /sdd-spec from design.md § Config)
+- `xstockstrat-agent` — `trigger_backfill` tool wording, runbook and `strat-lab` skill parity (added at /sdd-spec from design.md § Consumer surfaces)
 
 ## Consumer Surface(s)
 
 _Constitution **C-14**._
 
 - [x] **UI** — `xstockstrat-ui` segment `/trader`: symbol page (`/trader/positions/[symbol]`) Analysis → Backtests card — existing route, new control
-- [ ] **Agent** — unchecked because no agent change is committed yet: `trigger_backfill` behavior changes only if FR-6 is chosen and the `TriggerBackfill` admin gate opens. In that case the Agent tool and the `strat-lab` plugin's `backtest` skill are in scope in the same PR (`docs/patterns/strat-lab-plugin.md`) and design ticks this box; under FR-7 the Agent is untouched
+- [x] **UI** — `xstockstrat-ui` segment `/insights`: strategy page (`/insights/strategies/[id]`) "Backfill this range" button — existing control, opened to every signed-in user (operator, design gate, 2026-11-15; design.md D-10)
+- [x] **Agent** — `trigger_backfill` now succeeds for a non-admin caller inside the self-serve envelope (FR-6 chosen). The tool wording, `docs/runbooks/mcp-tools.md` and the `strat-lab` plugin's `backtest` skill change in the same PR (`docs/patterns/strat-lab-plugin.md`). Ticked at /sdd-spec as design.md directs
 - [ ] **None**
 
 ## Proto Contract Changes
 
-- [ ] No proto changes required — expected, the existing `TriggerBackfill` / `GetBackfillStatus` RPCs cover it; confirm in design
+- [x] No proto changes required — confirmed in design: the existing `TriggerBackfill` / `GetBackfillStatus` RPCs carry every field
 
 ## Config Key Changes
 
-- [ ] No new config keys — a per-user backfill limit key may be needed if FR-6 holds; decide in design. If one is added it carries the full config-key contract (namespace, namespace-relative key, value_type, code default, reader path:symbol, seed migration, live mechanism — C-05, F-07)
+- [ ] No new config keys
+- [x] One new key (design.md § Config; C-05, F-07): namespace `ingest`, key `backfill.self_serve_max_range_days`, `value_type` int, code default and seed 730, reader `services/xstockstrat-ingest/app/config/watcher.py:backfill_self_serve_max_range_days` (`int_positive`), seeded by a config migration, live through `WatchConfig`. `backfill.max_concurrent_jobs` keeps default and seed 3; only the homelab value changes, through `SetConfig`
 
 ## Database Changes
 
-- [ ] No schema changes — confirm in design
+- [x] No schema changes — confirmed in design. The only migration is the config seed row for the new key (data, not schema)
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/backtest-inline-backfill` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (non-breaking proto or config change)
+- [x] 1 service owner approval (non-breaking proto or config change) — the new config key also needs the config team (root `CLAUDE.md` § Approval Flow)
 - [ ] 2 service owners + platform lead (breaking proto change)
 - [ ] DBA review + service owner (schema migration)
 
