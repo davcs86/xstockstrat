@@ -916,3 +916,29 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
 - [ ] Machado source unreachable from this environment; if the executor cannot reach it either, Step 1 blocks and asks the operator.
 - [ ] The gate has only been dry-run against the probe's maths, not the real `colorVision.cjs` — target: Step 3.
 - [ ] Step 10 records that the feature-307 @AC-2 title no longer describes the whole staging file; no wording change without operator sign-off.
+
+## Session 2026-11-15 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 criteria warnings, overlap level WARN (advisory — did not block). Lifecycle unchanged: `implementation-ready`. No Floor breach.
+- Tree reviewed: `feature/chart-series-palette@5a67a3d67`. Spec edits are in `0b0ec9f92`.
+
+### Addressed (edited in `implementation-spec.md`, each re-checked against the code)
+
+- [x] Step 1 item 3 (undeclared `uiTheme.cjs` edit, P-03): the step now defines the sRGB decode and encode locally in `colorVision.cjs` and forbids editing `uiTheme.cjs`. Checked: `gamma` (`uiTheme.cjs:245`) and the decode (`:322`) are not in the export list at `:343-354`.
+- [x] Step 9 Verification item 1 (RED ordering): Step 8 is already committed when Step 9 runs, so the RED run now restores the pre-Step-8 `IndicatorPanels.tsx` from the Step 7 commit with `git checkout <commit> -- <file>`, then puts it back. No `git stash` (the stash stack is shared across worktrees).
+- [x] Step 9 Verification item 3 (unchecked entrypoint): confirmed. `Dockerfile.e2e:127` is `ENTRYPOINT ["pnpm", "test:e2e"]`, `package.json:15` is `"test:e2e": "playwright test"`, and `scripts/run-e2e.py:111` passes arguments the same way. Added `DOCKER_BUILDKIT=1` and the `--secret id=proxy_ca` note (`Dockerfile.e2e:35-39`, `run-e2e.py:87-90`), because `run-e2e.py` has no build-arg pass-through and this item calls `docker build` directly.
+- [x] Step 8 (service step with no unit test of its own): Step 8's Verification now states that its red-green pair is Step 9's items 1-3.
+- [x] Overlap with peer 341 (`fix-indicator-pane-warmup`): added a rebase-only bullet to Step Dependencies. Checked 341's spec in its worktree: it modifies `IndicatorPanels.tsx`, `indicatorChart.ts`, `indicatorChart.test.ts`, `position-detail.spec.ts` and `INVENTORY.md`. No migration, proto field or config key collides.
+
+### Open Threads
+
+Unresolved items carried into execution. `/sdd-execute` announces each one still unchecked at every checkpoint.
+
+- [ ] **O-24 (C-11), before Step 1.** Still open. This run's relayed request again holds six unlabeled answers for a four-feature batch ("Agreed", "Ok, agreed.", "Confirmed", "Sounds good" among them) and no question text, so it does not show that "Confirmed" (floors) and "Agreed" (approval) answered this feature. Ask the operator at `/sdd-execute` Phase-2. If either belonged to a peer, D-27/D-28, the FR-4 and @AC-5 amendments and Steps 3 and 5 reopen.
+- [ ] **Steps 1-2: Machado matrices and the four Lab pins are not transcribed from source (D-21).** Retried in this session: the authors' page reset the connection again. The spec keeps cross-check values only; the executor transcribes from the source or stops and asks the operator (P-03). The probe numbers in Step 3 are advisory until then.
+- [ ] **Step 3: the 12 colour values are the spec author's pick, not the operator's.** The gate is a hard stop with only a reorder allowed. If no order passes, the feature is blocked until the operator decides.
+- [ ] **Step 9: Docker may be unavailable.** Then the fallback in `fails.md:981` applies, the deviation is logged, and the integration PR's CI run is the deciding signal for @AC-2, @AC-3 and @AC-6 on both theme builds.
+- [ ] **Merge order with peer 341 (operator decision).** `merge-order.md` has no row for 341 or 342. The overlap reviewer recommends a soft, rebase-only row putting 342 after 341. Not written.
+- [ ] **Overlap not checked for peers 340 and 343.** Neither has an `implementation-spec.md` yet, so their file lists could not be scanned. Rerun the overlap scan once they do.
+- Accepted, no action (C-18): Step 4 declares the 12 token names in both TS (`SERIES_PALETTE`) and CSS. Step 5 tests the two against each other.
+- Relayed answers not applied: "I plan to do psql over ssh if possible" and "Yes, fix the primitives. Use the switch component from Shadcn." match nothing in this feature.
