@@ -1,6 +1,6 @@
 # xstockstrat-ui — Constitution
 
-Derived by `/context-constitution` 2026-07-24; last refreshed 2026-11-13 (`main-dev` @ `52f6d5a`).
+Derived by `/context-constitution` 2026-07-24; last refreshed 2026-11-15 (`claude/context-constitution-parity-zggeq3` @ `d5de836`).
 Captures the **non-obvious** local invariants of the consolidated Next.js UI + gRPC BFF (`/trader`,
 `/insights`, `/config-ui`, `/accounts`; HTTP 3000). The service CLAUDE.md is thorough, so this file
 holds the asymmetries and scars the docs *don't* state. Does not restate documented/CI-enforced rules

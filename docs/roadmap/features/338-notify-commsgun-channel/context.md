@@ -269,3 +269,10 @@
 **Progress**: 22 done / 22 total
 **Stopped at**: all complete; integration PR #1537 open, CI being watched
 **Next**: merge PR #1537 when CI is green and reviewed; then the homelab staging check in § Open Threads (first item)
+
+## Session 2026-11-15 (CI: feature status automation)
+
+- Promotion PR #1546 merged to main
+- Feature promoted and committed: 6936191e738e267c5507f042b22bc3e785fe9419
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-15
