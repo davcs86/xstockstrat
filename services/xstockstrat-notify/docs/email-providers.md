@@ -6,10 +6,13 @@ outbox behaves. Summary in `CLAUDE.md` § Email providers; operator rules in `op
 A qualifying alert produces at most one email, through SendGrid or
 through the homelab commsgun hub. `src/fanout/emailProvider.ts` holds the rules; `src/fanout/emailRender.ts`
 renders the one subject and text both providers send (the subject has CR/LF replaced by a space and is cut to
-998 code points, commsgun's `invalid_subject` limit); `src/fanout/sendgridSender.ts` is the SendGrid POST.
+998 code points, commsgun's `invalid_subject` limit; the text is cut, with a trailing `[truncated]` line, so the
+commsgun request stays within its 256 KiB body limit, counted as JSON-escaped bytes); `src/fanout/sendgridSender.ts` is the SendGrid POST.
 
 - **Base and readiness.** The *base* is `commsgun.enqueue_url`, `commsgun.app_id` and `commsgun.to_email`,
-  all non-empty. An enqueue URL that is not `https:` reads as empty, so the bearer key never goes out in clear text. The app key has three states (`src/services/commsgunSecret.ts`): `key`, `absent`
+  all non-empty. An enqueue URL that fails the webhook URL rule without its allowlist (`webhookUrlRule.ts#checkHttpsUrl`: `https`
+  only, ≤ 2048 characters, no whitespace or control characters, no userinfo, no trailing-dot host) reads as empty, so
+  the bearer key never goes out in clear text or to a URL carrying credentials. The app key has three states (`src/services/commsgunSecret.ts`): `key`, `absent`
   (resolved, not set) and `unknown` (no resolve has succeeded yet). A failed refresh keeps the last
   resolved state.
 - **Dispatch** (email branch of `FanoutDispatcher`, after the gates, dedup and Slack):

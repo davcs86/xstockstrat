@@ -70,7 +70,7 @@ Namespace: `notify`
 | `webhook.backoff_max_seconds` | int | `3600` | Longest wait between two attempts. A stored ≤ 0 reads as the default |
 | `webhook.request_timeout_seconds` | int | `10` | Per-request timeout of one delivery attempt, clamped to [1,60]. A stored ≤ 0 reads as the default |
 | `fanout.email_provider` | string | `auto` | Email provider of the fanout: `auto`, `commsgun` or `sendgrid`; any other value reads as `auto`. Read live at dispatch and on every worker tick (feature 338) |
-| `commsgun.enqueue_url` | string | `''` | Full HTTPS URL of the commsgun enqueue endpoint; a URL that is not `https:` reads as empty. With `commsgun.app_id` and `commsgun.to_email` it forms the *base configuration*; any of the three empty means commsgun cannot be addressed |
+| `commsgun.enqueue_url` | string | `''` | Full HTTPS URL of the commsgun enqueue endpoint; a URL failing the webhook URL rule without its allowlist (`https` only, no userinfo, …) reads as empty. With `commsgun.app_id` and `commsgun.to_email` it forms the *base configuration*; any of the three empty means commsgun cannot be addressed |
 | `commsgun.app_id` | string | `''` | Subscriber app this environment sends as (`X-Commsgun-App`). Read per attempt |
 | `commsgun.to_email` | string | `''` | Recipient of commsgun email. A queued row keeps the recipient it was queued with |
 | `commsgun.app_key` | string (secret) | — | Bearer key of this environment's app. An `is_secret` row seeded without a value; never in the `WatchConfig` snapshot — resolved through `GetSecret` at boot and when the snapshot `version` changes. Unset means not ready |

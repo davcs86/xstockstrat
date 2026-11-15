@@ -27,3 +27,16 @@ Feature: fix-commsgun-email-channel (bug fix)
     Given the commsgun enqueue endpoint answers 408
     When the answer is classified
     Then the row is retried, not ended
+
+  @AC-5 @regression
+  Scenario: The commsgun request stays within commsgun's 256 KiB body limit
+    Given an alert whose body is larger than 256 KiB once JSON-escaped
+    When the email is rendered and its commsgun request is built
+    Then the request body is at most 262144 bytes
+    And the text ends with a "[truncated]" line and no code point is split
+
+  @AC-6 @regression
+  Scenario: An enqueue URL carrying credentials or failing the URL rule counts as unset
+    Given commsgun.enqueue_url is "https://user:pass@comms.example/v1/messages"
+    When notify reads the commsgun settings
+    Then the base is not configured

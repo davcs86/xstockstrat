@@ -33,3 +33,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - Read `davcs86/commsgun` @ `5c0c129` (public; anonymous clone). `api/internal/enqueue/validate.go#emailContent` rejects a subject that is empty, contains CR or LF (`ContainsAny(subject, "\r\n")`), or has `utf8.RuneCountInString(subject) > constants.SubjectMaxLen` (998).
 - Supersedes the prior session's byte-cap decision: the cap is now **998 code points** (JS `for…of` / spread iterates the same code points Go counts as runes), so non-ASCII titles are no longer over-truncated. RED → GREEN on the updated @AC-2 test. An empty subject cannot occur, because the subject always starts with `[severity] `.
+
+## Session 2026-11-15 (review against commsgun `4e3e58d` and webhooks-mcp `c04b851`)
+
+- Review found no conflict with either producer. commsgun's enqueue code changed only by refactors since `5c0c129`. webhooks-mcp C3 (retry 503; 404/413/422 final) is covered by notify's webhook classification.
+- Owner: "fix all, even the https check". Fixed in this PR, each test-first (6 new cases RED, then 406/406 GREEN):
+  - The pinned-mode alert now explains the https rule only when `commsgun.enqueue_url` is the missing key.
+  - The https check is widened to the whole webhook URL rule minus its allowlist. `checkHttpsUrl` is extracted from `webhookUrlRule.ts#checkCallbackUrl` (no duplicate rule); the existing webhook URL-rule tests are unchanged and green. NOTIFY-14 now names the shared helper.
+  - Email text is capped. The text gets 256 KiB − 8 KiB of JSON-escaped bytes plus a `[truncated]` line. The 8 KiB reserve covers a 998-code-point subject at ≤ 6 escaped bytes (5988), a ≤ 254-character recipient at ≤ 6 (1524) and the keys (~60). The cut is in the shared renderer, so SendGrid gets the same text. NOTIFY-17 now names the 413 rule.
+  - Findings citation re-stamped to commsgun `4e3e58d`.

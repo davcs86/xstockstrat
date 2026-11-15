@@ -536,8 +536,8 @@ function pinnedAlert(settings: { url: string; appId: string; to: string }): Comm
     title: 'Alert email is pinned to commsgun, which is not configured',
     body:
       `notify.fanout.email_provider is commsgun, but ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} ` +
-      'empty (an enqueue URL that is not https counts as empty). No alert email is being sent or queued. ' +
-      'Set the missing keys, or change the provider.',
+      `empty${settings.url ? '' : ' (an enqueue URL that is not a plain https URL counts as empty)'}. ` +
+      'No alert email is being sent or queued. Set the missing keys, or change the provider.',
     sourceService: ALERT_SOURCE,
   };
 }

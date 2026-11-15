@@ -73,6 +73,20 @@ describe('commsgunSettings', () => {
     }
     assert.equal(commsgunSettings(fakeConfig({ str: { ...BASE, 'commsgun.enqueue_url': 'HTTPS://Comms.Example/x' } })).baseSet, true);
   });
+
+  it('@AC-6 (346) the webhook URL rule applies: userinfo, a trailing-dot host, a control character or an over-long URL reads as unset', () => {
+    for (const url of [
+      'https://user:pass@comms.example/v1/messages',
+      'https://user@comms.example/v1/messages',
+      'https://comms.example./v1/messages',
+      'https://comms.example/v1/mes\tsages',
+      `https://comms.example/${'a'.repeat(2048)}`,
+    ]) {
+      const settings = commsgunSettings(fakeConfig({ str: { ...BASE, 'commsgun.enqueue_url': url } }));
+      assert.equal(settings.url, '', url);
+      assert.equal(settings.baseSet, false, url);
+    }
+  });
 });
 
 describe('dispatchAction', () => {

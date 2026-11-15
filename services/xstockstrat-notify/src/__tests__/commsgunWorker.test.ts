@@ -919,6 +919,17 @@ describe('standing incidents', () => {
     assert.equal(t.alerts.length, 3);
   });
 
+  it('@AC-1 (346) the "not https counts as empty" note appears only when the enqueue URL is the missing key', async () => {
+    const urlMissing = rig({ mode: 'commsgun', rows: [], str: { 'commsgun.enqueue_url': 'http://comms.example/v1' } });
+    await tick(urlMissing.worker);
+    assert.ok(urlMissing.alerts[0].body.includes('commsgun.enqueue_url'), urlMissing.alerts[0].body);
+    assert.ok(urlMissing.alerts[0].body.includes('https'), urlMissing.alerts[0].body);
+    const appMissing = rig({ mode: 'commsgun', rows: [], str: { 'commsgun.app_id': '' } });
+    await tick(appMissing.worker);
+    assert.ok(appMissing.alerts[0].body.includes('commsgun.app_id'), appMissing.alerts[0].body);
+    assert.ok(!appMissing.alerts[0].body.includes('https'), appMissing.alerts[0].body);
+  });
+
   for (const [name, state, failures, base, want, text] of [
     ['the key is absent', { kind: 'absent' }, { count: 0, statusClass: '' }, true, 1, 'absent'],
     ['one UNAVAILABLE failure', { kind: 'unknown' }, { count: 1, statusClass: 'UNAVAILABLE' }, true, 0, ''],

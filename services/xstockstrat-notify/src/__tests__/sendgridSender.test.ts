@@ -28,12 +28,14 @@ const capture = (level: string) => (msg: unknown, meta?: unknown) => {
 const fakeLog = { debug: capture('debug'), info: capture('info'), warn: capture('warn'), error: capture('error') };
 
 let renderEmail: RenderModule['renderEmail'];
+let commsgunBody: typeof import('../fanout/commsgunClient')['commsgunBody'];
 let SendgridSender: SenderModule['SendgridSender'];
 let FANOUT_HTTP_TIMEOUT_MS: number;
 
 before(async () => {
   Object.assign(loggerModule, { getLogger: () => fakeLog });
   ({ renderEmail } = await import('../fanout/emailRender'));
+  ({ commsgunBody } = await import('../fanout/commsgunClient'));
   ({ SendgridSender, FANOUT_HTTP_TIMEOUT_MS } = await import('../fanout/sendgridSender'));
 });
 
@@ -137,6 +139,36 @@ describe('renderEmail', () => {
     const accented = renderEmail({ ...PAYLOAD, title: '\u00e9'.repeat(900) }).subject;
     assert.equal([...accented].length, '[ALERT_SEVERITY_WARNING] '.length + 900, 'under 998 runes is not cut, whatever its bytes');
   });
+});
+
+describe('renderEmail — commsgun 256 KiB request cap (346 @AC-5)', () => {
+  const COMMSGUN_MAX_BODY_BYTES = 262144;
+  // Worst case around the text: a full-length subject of six-byte escapes and a 254-character recipient.
+  const subjectTitle = '\u0001'.repeat(2000);
+  const recipient = `${'r'.repeat(242)}@example.com`;
+  const requestBytes = (title: string, body: string): number => {
+    const email = renderEmail({ ...PAYLOAD, title, body });
+    return Buffer.byteLength(commsgunBody({ recipient, subject: email.subject, text: email.text }), 'utf8');
+  };
+
+  it('a text that fits is left untouched', () => {
+    const body = 'y'.repeat(200 * 1024);
+    assert.ok(renderEmail({ ...PAYLOAD, body }).text.endsWith(body));
+  });
+
+  for (const [name, body] of [
+    ['ASCII', 'x'.repeat(300 * 1024)],
+    ['newlines (two bytes each once escaped)', '\n'.repeat(200 * 1024)],
+    ['control characters (six bytes each once escaped)', '\u0001'.repeat(60 * 1024)],
+    ['four-byte code points', '\u{1F4C8}'.repeat(80 * 1024)],
+  ] as const) {
+    it(`an over-long text of ${name} is cut so the whole request is at most 256 KiB, ending with the marker`, () => {
+      assert.ok(requestBytes(subjectTitle, body) <= COMMSGUN_MAX_BODY_BYTES);
+      const text = renderEmail({ ...PAYLOAD, body }).text;
+      assert.ok(text.endsWith('\n[truncated]'), 'the cut is marked');
+      assert.ok(!/[\uD800-\uDBFF]\n\[truncated\]$/.test(text), 'no code point is split');
+    });
+  }
 });
 
 describe('SendgridSender.send', () => {

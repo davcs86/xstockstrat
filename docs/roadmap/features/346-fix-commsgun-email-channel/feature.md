@@ -31,7 +31,7 @@
 
 Five feature-338 commsgun email defects in xstockstrat-notify: no `https:` check on `commsgun.enqueue_url`,
 unsanitised subjects (commsgun 422 `invalid_subject`), no standing key incident in pinned `commsgun` mode,
-408 treated as permanent, and three CLAUDE.md lines that say all email needs SendGrid.
+408 treated as permanent, three CLAUDE.md lines that say all email needs SendGrid, and (found in review) uncapped email text against commsgun's 256 KiB request limit.
 
 ## Next Action
 

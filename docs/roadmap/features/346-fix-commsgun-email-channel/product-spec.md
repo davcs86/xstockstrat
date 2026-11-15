@@ -34,6 +34,14 @@ Feature 338 (commsgun email provider, on `main-dev` only) shipped with these def
    `fanout.sendgrid_{from,to}_email` rows, and the `SENDGRID_API_KEY=` comment.
    *Expected:* each says "SendGrid email …".
 
+6. **Email text is uncapped** (found in review against commsgun `4e3e58d`). commsgun refuses a request over
+   256 KiB (`MaxBodyBytes`) with a permanent 413.
+   *Expected:* the shared renderer cuts the text, counted as JSON-escaped bytes, so the whole commsgun request
+   fits, and marks the cut with a `[truncated]` line.
+
+Defect 1 widened in review: the enqueue URL must pass the whole webhook URL rule except its allowlist (no
+userinfo, no control characters, no trailing-dot host, at most 2048 characters), not only the `https:` check.
+
 ## Reproduction Steps
 
 1. Set `notify.commsgun.enqueue_url=http://comms.example/enqueue` (plus app id and recipient) → the worker POSTs `Authorization: Bearer <key>` over http.
