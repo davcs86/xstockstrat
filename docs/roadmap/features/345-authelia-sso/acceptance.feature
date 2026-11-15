@@ -236,11 +236,13 @@ Feature: authelia-sso
     When AuthenticateUser is called with email "admin@localhost" and the correct password
     Then it returns PERMISSION_DENIED with "password login disabled"
 
-  @AC-32 @FR-1 @FR-2
-  Scenario: Unconfigured SSO fails closed
-    Given staging ui/oidc.issuer and agent/oidc.issuer are ""
-    When a user clicks "Sign in with SSO" on the staging login page, and a client calls the MCP endpoint with any bearer token
-    Then the login page shows "SSO not configured" without redirecting, and the MCP call returns HTTP 401
+  @AC-32 @FR-1 @FR-14
+  Scenario: A half-configured deployment stays in legacy mode
+    Given staging ui/oidc.issuer is "https://auth.example.test" and agent/oidc.issuer is ""
+    When the UI and the agent start
+    Then the login page shows the password form and no "Sign in with SSO" button
+    And MCP accepts an identity-minted token whose aud is "https://xstockstrat-staging.example.test/agent"
+    And both services log "sso_mode_misconfigured" once
 
   @AC-33 @FR-10
   Scenario: Deactivation ends a web session at the next refresh
@@ -265,6 +267,7 @@ Feature: authelia-sso
   Scenario: The seed-owner rule is documented
     When an engineer reads IDENTITY-15 in services/xstockstrat-identity/docs/context-constitution.md
     Then it states that admin@localhost may be renamed by SSO cutover and that new migrations resolve the seed owner by SEED_USER_ID
+    And AGENT-9 in services/xstockstrat-agent/docs/context-constitution.md lists "agent", "indicators" and "ui" as the watched namespaces
 
   @AC-37 @FR-3 @FR-8
   Scenario: An ambiguous email is refused on MCP
@@ -291,3 +294,50 @@ Feature: authelia-sso
     Given subject "u3u4" is not linked in staging
     When it calls the staging MCP endpoint with a valid token whose email claim is ""
     Then the agent returns HTTP 403, no backend RPC is sent and no row is created in identity.users
+
+  @AC-41 @FR-14
+  Scenario: A DigitalOcean deployment behaves as before this feature
+    Given the DigitalOcean dev app's config has ui/oidc.issuer "" and agent/oidc.issuer "" and identity/auth.password_login_enabled true
+    When a user signs in with email "admin@localhost" and the correct password on the login page
+    Then the browser lands on "/trader" with a session for that user
+    And the login page shows no "Sign in with SSO" button
+
+  @AC-42 @FR-14
+  Scenario: Legacy-mode MCP keeps the built-in OAuth server
+    Given the DigitalOcean dev app's agent/oidc.issuer is ""
+    When Claude registers at "/agent/oauth/register", completes "/agent/oauth/authorize" and exchanges the code at "/agent/oauth/token"
+    Then the identity-minted access token is accepted on the MCP endpoint and list_strategies returns a result
+    And "/accounts/authorized-apps" lists that grant with a revoke button
+
+  @AC-43 @FR-14 @FR-2
+  Scenario: SSO mode rejects legacy tokens and routes
+    Given staging is in SSO mode
+    When a client calls "/agent/oauth/register" or sends an identity-minted token to the MCP endpoint
+    Then the register call returns HTTP 404 and the MCP call returns HTTP 401
+
+  @AC-44 @FR-14
+  Scenario: Clearing the issuers rolls a deployment back to legacy mode
+    Given staging is in SSO mode
+    When an operator sets ui/oidc.issuer and agent/oidc.issuer to "" and identity/auth.password_login_enabled to true
+    Then the next login page render shows the password form and no "Sign in with SSO" button
+    And within 60 seconds MCP accepts identity-minted tokens again
+
+  @AC-45 @FR-9 @FR-14
+  Scenario: Legacy mode never hides the password form
+    Given the DigitalOcean dev app's ui/oidc.issuer is "" and identity/auth.password_login_enabled is false
+    When a user opens the login page
+    Then the page shows the password form and the banner "Password login is disabled in config (identity/auth.password_login_enabled) while SSO is not configured. Ask an admin."
+    And submitting email "admin@localhost" with the correct password shows "password login disabled"
+
+  @AC-46 @FR-9 @FR-14
+  Scenario: An unreadable config renders the legacy login
+    Given xstockstrat-config is unreachable from the UI
+    When a user opens the login page
+    Then the page shows the password form and no "Sign in with SSO" button
+
+  @AC-47 @FR-14
+  Scenario: The SSO routes are inert outside SSO mode
+    Given staging ui/oidc.issuer is "https://auth.example.test" and agent/oidc.issuer is ""
+    When a client requests "/api/auth/sso/start" and "/api/auth/sso/callback?code=c1&state=s1"
+    Then both return HTTP 404 with no redirect
+    And no row is written to identity.users or identity.external_identities

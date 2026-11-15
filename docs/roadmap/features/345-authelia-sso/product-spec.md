@@ -31,7 +31,7 @@ session-cookie, middleware, header-propagation (`x-user-id`, `x-access-scope`, `
 unchanged. The login page keeps a "Remember me" checkbox next to "Sign in with SSO". Its value travels in the OIDC
 `state`, and the callback passes it to `setSessionCookies` exactly as the password path does today (UI-8).
 
-FR-2. **MCP as a resource server.** `xstockstrat-agent` accepts **only** Authelia-issued JWT access tokens on its MCP
+FR-2. **MCP as a resource server.** In SSO mode (FR-14), `xstockstrat-agent` accepts **only** Authelia-issued JWT access tokens on its MCP
 endpoint. A token passes only if all of these hold, against Authelia's cached JWKS:
 - a valid signature;
 - `iss` equals the configured issuer;
@@ -100,13 +100,19 @@ This failure is an explicit refusal, not a truthy sentinel (the `IDENTITY_UNAVAI
 not reused). A deactivated user or a changed role takes effect on MCP within that TTL. An MCP request whose
 resolution is refused (any FR-3 step-4 refusal) returns HTTP 403 and sends no backend RPC.
 
-FR-9. **Password login as rollback only.** Password login (`AuthenticateUser` and the UI's password form) stays in the
-code behind `identity` / `auth.password_login_enabled`, off once SSO is live:
-- With it `false`, or the key missing (fail closed), `AuthenticateUser` returns `PERMISSION_DENIED` "password login
-  disabled", and the login page shows only "Sign in with SSO".
-- With it `true`, password login works as today and both options are shown.
-
-This flag does not affect MCP. MCP rollback means redeploying the last release before this feature.
+FR-9. **Password login flag.** Password login (`AuthenticateUser` and the UI's password form) is gated by `identity` /
+`auth.password_login_enabled`.
+- The code default is `false` (fail closed). Migration `050` seeds `true` on every database, DigitalOcean and homelab
+  alike, so every deployment keeps password login until its own cutover.
+- With it `false` or missing, `AuthenticateUser` returns `PERMISSION_DENIED` "password login disabled".
+  - In SSO mode the login page shows only "Sign in with SSO".
+  - In legacy mode (FR-14) the login page still renders the password form and is never hidden, plus a banner: "Password
+    login is disabled in config (identity/auth.password_login_enabled) while SSO is not configured. Ask an admin."
+  - Recovery is one `SetConfig` back to `true`.
+- With it `true`, password login works as today.
+  - In SSO mode both options are shown (the rollback path).
+  - In legacy mode only the password form is shown.
+- The flag does not affect MCP.
 
 FR-10. **Session lifetime.** A web session ends when its refresh token expires (`identity` / `jwt.refresh_ttl_seconds`)
 or at the first refresh after the user is deactivated (`SetUserActive false`; `rotateRefreshToken` already refuses
@@ -114,7 +120,7 @@ inactive users). The access JWT stays usable until it expires (`jwt.access_ttl_s
 Authelia group blocks new logins only. Cutting an existing session needs `SetUserActive false`, as homelab-edge
 `docs/runbooks/sso.md` § 4 instructs.
 
-FR-11. **Authorized apps page.** `/accounts/authorized-apps` no longer lists or revokes xstockstrat OAuth grants. It
+FR-11. **Authorized apps page.** In SSO mode (FR-14), `/accounts/authorized-apps` no longer lists or revokes xstockstrat OAuth grants. It
 explains that connected apps are managed in Authelia and links to the Authelia URL derived from `ui` /
 `oidc.issuer`.
 
@@ -129,17 +135,42 @@ FR-13. **Documentation.** The same PR as each behaviour change updates:
   `xstockstrat-mcp-claude-ro` (read-only), and `xstockstrat-staging-mcp-claude` / `xstockstrat-staging-mcp-claude-ro`
   for staging, with redirect URI `https://claude.ai/api/mcp/auth_callback`;
 - the identity, ui and agent `CLAUDE.md` files (config keys, auth flow);
+- AGENT-1 and AGENT-9 in `services/xstockstrat-agent/docs/context-constitution.md`: the watched namespaces now include
+  `ui`, plus the new read sites in `app/auth.py`;
 - `docs/patterns/frontend-auth.md`;
 - IDENTITY-15 in `services/xstockstrat-identity/docs/context-constitution.md` and `docs/patterns/database.md`: the
   seed email may be renamed by cutover, so new migrations resolve the seed owner by `SEED_USER_ID`, never by
   `admin@localhost`.
+
+FR-14. **Backwards compatibility until cutover (per deployment).** The DigitalOcean apps (`.do/app.yaml`,
+`.do/app.dev.yaml`) and the homelab deployment (`deploy/homelab/compose.yml`) have separate databases and so separate
+config rows. Each deployment runs in exactly one mode, chosen by its own config, with no image or env change.
+
+- **Legacy mode**: `ui` / `oidc.issuer` and `agent` / `oidc.issuer` are empty. This is the seeded default, so every
+  deployment starts here, the DO apps included, and behaves exactly as before this feature:
+  - password login works (`auth.password_login_enabled` is seeded `true`);
+  - the login page shows no SSO button;
+  - the agent keeps today's OAuth 2.1 server (DCR, identity-minted, `aud`-bound tokens validated via `ValidateToken`);
+  - `/accounts/authorized-apps` lists and revokes those grants.
+
+  The new RPCs, table and keys exist but are unused.
+- **SSO mode**: both issuers are set. FR-1, FR-2, FR-7, FR-8 and FR-11 apply (FR-3/4/5 are reached only through
+  them; FR-10 applies in both modes). The agent rejects identity-minted tokens,
+  and its legacy OAuth routes answer 404, so a deployment never accepts both token kinds at once.
+- **Cutover for one deployment** is a config change only: set the `ui.oidc.*` and `agent.oidc.issuer` keys, then set
+  `auth.password_login_enabled` to `false`. Clearing the two issuers returns that deployment to legacy mode (the MCP
+  rollback path; redeploying the previous release remains possible).
+- Outside SSO mode (legacy or half-configured), `/api/auth/sso/start` and `/api/auth/sso/callback` return 404, start no
+  flow, and never call `ResolveExternalIdentity`.
+- A half-configured deployment (exactly one issuer set) is treated as legacy mode on both surfaces, and the agent and
+  UI each log `sso_mode_misconfigured` once per process start.
 
 ## Out of Scope
 
 - Authelia itself: deployment, Caddy routes, `auth.<domain>`, users, groups, client registration (including the client
   IDs named in FR-13 and the access-token `email` claim) live in `davcs86/homelab-edge` (separate PR).
 - commsgun and webhooks-mcp SSO (their own repositories).
-- Removing the old OAuth server, `RegisterOAuthClient`/`IssueAuthCode`/`ExchangeAuthCode`/`RefreshOAuthToken`/
+- Removing the old OAuth server (kept for legacy mode, FR-14, until every deployment has cut over), `RegisterOAuthClient`/`IssueAuthCode`/`ExchangeAuthCode`/`RefreshOAuthToken`/
   `ListAuthorizedApps`/`RevokeAuthorizedApp`, the `oauth_clients`/`oauth_auth_codes` tables, the `agent.oauth.*` keys, or
   `AuthenticateUser`. Removing an RPC is a breaking proto change; that waits for a follow-up feature after the
   rollback window. Until then the old agent OAuth routes stay as they are, and their fail-closed behaviour is owned by
@@ -163,10 +194,13 @@ FR-13. **Documentation.** The same PR as each behaviour change updates:
 
 ## Consumer Surface(s)
 
-- [x] **UI** (`xstockstrat-ui`):
-  - The login entry for all segments (`/trader`, `/insights`, `/config-ui`; pages `src/app/auth/login`,
-    `src/app/auth/oauth-login`) gets a "Sign in with SSO" button and a "Remember me" checkbox. The password form is
-    shown only when the flag is on.
+- [x] **UI** (`xstockstrat-ui`), SSO mode only (legacy mode is unchanged, FR-14):
+  - The login page (`src/app/auth/login`, shared by `/trader`, `/insights` and `/config-ui`) gets a "Sign in with SSO" button next to the "Remember me" checkbox. The password form is shown only when the flag
+    is on.
+  - The page reads the mode and the flag server-side (today it is a `'use client'` page rendering `CredentialsForm`).
+    An unreadable config renders the legacy login: password form, no SSO button.
+  - `src/app/auth/oauth-login` (the login step of the agent's legacy OAuth flow) is unchanged. It is used only in legacy
+    mode; in SSO mode its flow is unreachable, because the agent's `/oauth/*` routes answer 404.
   - `/accounts/authorized-apps` becomes a pointer to Authelia (FR-11).
 - [x] **Agent** (`xstockstrat-agent`): every MCP tool's authentication and effective scope changes; no tool name,
   parameter or response changes. Connector setup moves to pre-registered read-only and full clients.
@@ -204,31 +238,43 @@ environment, because prod and staging are separate Authelia apps.
       load.
 - `ui.oidc.issuer`
   - namespace `ui`, stored key `oidc.issuer`, `string`, code default `""`;
-  - empty means the SSO button reports "SSO not configured" and no redirect happens;
-  - reader `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcConfig` (new), called by
-    `src/app/api/auth/sso/start/route.ts:GET` and `src/app/api/auth/sso/callback/route.ts:GET` (new). One-shot
-    `GetConfig(namespace: 'ui')` per request, live on the next request.
+  - empty means legacy mode (FR-14): no SSO button, and today's password login;
+  - readers:
+    - `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcConfig` (new), called by the login page,
+      `src/app/api/auth/sso/start/route.ts:GET` and `src/app/api/auth/sso/callback/route.ts:GET` (new). One-shot
+      `GetConfig(namespace: 'ui')` per request, live on the next request.
+    - `services/xstockstrat-agent/app/auth.py:sso_mode` (new), for the half-configured check (FR-14), through
+      `read_config_value('ui', 'oidc.issuer')`. This requires adding `ui` to `WATCHED_NAMESPACES`
+      (`app/config/watcher.py`, AGENT-9: an unwatched namespace silently reads `None`). Live through the snapshot.
 - `ui.oidc.client_id`
   - namespace `ui`, stored key `oidc.client_id`, `string`, code default `""` (empty is handled as above);
   - same reader and mechanism as `ui.oidc.issuer`: `src/lib/oidcConfig.ts:loadOidcConfig`, one-shot per request,
     live on the next request.
 - `ui.oidc.client_secret`
   - namespace `ui`, stored key `oidc.client_secret`, `string`, encrypted `is_secret` row, seeded empty;
-  - code default `""`: empty means the callback fails with "SSO not configured" (fail closed);
+  - code default `""`: empty in SSO mode means the callback fails with "SSO not configured" (fail closed);
   - sole reader `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcClientSecret` (new), called only by
     `src/app/api/auth/sso/callback/route.ts:GET`, through `GetSecret` on each callback via the allow-list grant above.
     A rotated value applies on the next callback. It is redacted at every other edge.
 - `agent.oidc.issuer`
   - namespace `agent`, stored key `oidc.issuer`, `string`, code default `""`;
-  - empty means every MCP request returns 401 (fail closed);
+  - empty means legacy mode (FR-14): today's OAuth server and identity-token validation, unchanged;
   - readers (all new code):
-    - `services/xstockstrat-agent/app/auth.py:validate_authelia_token`;
-    - the protected-resource metadata builder in `services/xstockstrat-agent/app/main.py`.
-
-    Both read through `read_config_value('agent', 'oidc.issuer')` (AGENT-9; `agent` is in `WATCHED_NAMESPACES`),
-    live through the snapshot.
+    - `services/xstockstrat-agent/app/auth.py:sso_mode`, `app/auth.py:validate_authelia_token` and the
+      protected-resource metadata builder in `services/xstockstrat-agent/app/main.py`. All read through
+      `read_config_value('agent', 'oidc.issuer')` (AGENT-9; `agent` is in `WATCHED_NAMESPACES`), live through the
+      snapshot.
+    - `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcConfig`, for the half-configured check (FR-14):
+      a one-shot `GetConfig(namespace: 'agent')` per request, live on the next request.
 
 The expected MCP audience is `AGENT_PUBLIC_URL`. No new key duplicates it (AGENT-6/AGENT-8).
+
+The seed migration and the new readers must leave `node scripts/check-config-wiring.mjs --final` with zero findings
+(the CI `config-wiring` job).
+- Add a `registry.receivers` entry in `scripts/config-wiring.json` only for a reader binding the checker cannot resolve.
+  `src/lib/oidcConfig.ts` reads three namespaces (`ui`, `identity`, `agent`), so it uses one binding per namespace.
+- Never add a `findings` baseline entry for these keys: a correctly wired key in the baseline fails as `STALE`
+  (`docs/patterns/config-governance.md` § Baseline).
 
 ## Database Changes
 
@@ -251,7 +297,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 Soft merge order (rebase only): `319-fix-auth-trust-hardening` (same `identityServiceImpl.ts`; owns the old
 `oauth_server.py` fail-closed behaviour) and `324-fix-ci-enforcement-gaps` (CI gate over `manage-users.py`) before
-this feature.
+this feature. `331-fix-agent-mcp-transport-fallthrough` and `323-fix-orphaned-code` also edit `app/main.py`, so expect a rebase.
 
 **First gate: the Authelia spike (v4.39.28, pinned by digest in homelab-edge).** Before `/sdd-spec`, prove on the
 pinned release:

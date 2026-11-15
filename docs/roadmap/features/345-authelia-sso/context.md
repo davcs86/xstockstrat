@@ -75,3 +75,40 @@
   - Authelia must put `email` into access tokens (spike item b);
   - register the client IDs named in FR-13.
 - Recommended design depth: full (4 services, additive proto, two migrations, a security-critical auth path).
+
+## Session 2026-11-15 — owner amendment: backwards compatible with DigitalOcean until cutover
+
+- The owner agreed with every derived call (IssueSessionForUser, SAN gates, AGENT_PUBLIC_URL, the namespaces, seed 050,
+  session lifetime, the client IDs, the ccr-branch sync), with one exception: the change must stay backwards compatible
+  with DigitalOcean until cutover.
+- FR-14 is the per-deployment mode, chosen by config alone. DO (`.do/app*.yaml`) and the homelab have separate
+  databases and config.
+  - Legacy mode (both issuers empty, the seeded default) is exactly today's behaviour.
+  - SSO mode (both issuers set) is FR-1/2/7/8/11.
+  - Half-configured counts as legacy and logs `sso_mode_misconfigured`.
+  - Cutover is config only; clearing the issuers rolls back.
+- This supersedes the earlier "MCP rollback = redeploy" decision. Redeploy stays possible. "No dual path" still holds
+  per deployment: one mode at a time, and the legacy OAuth routes answer 404 in SSO mode.
+- AC-32 changed meaning (half-configured → legacy) before design. Its ID is unchanged; no RED test cites it yet.
+- AC-41 to AC-44 were added. Status went back to draft for re-review.
+- Re-review pass 1 after FR-14: PASS WITH WARNINGS (4). Fixes:
+  - The legacy-mode lockout gets the owner's choice, "seed `true` + guard". The code default stays `false`, `050` seeds
+    `true` on every database, and in legacy mode the password form is never hidden: a banner explains the disabled flag
+    (AC-45).
+  - An unreadable config renders the legacy login (AC-46), and the page reads the mode and flag server-side.
+  - `oauth-login` is unchanged (legacy only).
+  - FR-9 was retitled.
+  - AC-44 is bounded to 60 s.
+- Overlap: still no FAIL. The new WARNs are 331 and 323 (`app/main.py`), on top of 319 and 324. All are soft rebase order.
+- Pass 2 after FR-14: PASS WITH WARNINGS (2). Fixes: the SSO routes return 404 outside SSO mode (FR-14, AC-47); FR-10 applies in both modes.
+- Pass 3 after FR-14: PASS WITH WARNINGS (2). Fixes: the cross-namespace mode read (the UI reads `agent/oidc.issuer` one-shot; the agent adds `ui` to `WATCHED_NAMESPACES` and reads `ui/oidc.issuer` in `app/auth.py:sso_mode`); the Consumer Surface sentence is repaired.
+- Pass 4 after FR-14: PASS WITH WARNINGS (2). Fixes: FR-13 now updates AGENT-1/AGENT-9 (AC-36 extended); the keys are registered in `scripts/config-wiring.json`.
+- Pass 5 after FR-14: PASS WITH WARNINGS (1). Fix: the `config-wiring.json` wording was wrong. Now: zero findings from `check-config-wiring.mjs --final`, `registry.receivers` only for unresolvable bindings, and no baseline entries.
+
+## Session 2026-11-15 — sdd-review product-spec (re-approval after FR-14)
+
+- Product spec approved. Status: draft → spec-ready (pass 6 after FR-14: PASS, 0 warnings).
+- Warnings: none.
+- Overlap findings (WARN, soft rebase order, recorded in the product spec): 319, 324, 331, 323. No FAIL-level collision;
+  config `050` and identity `007` are unclaimed.
+- Recommended design depth: full (4 services, additive proto, two migrations, a two-mode security-critical auth path).

@@ -12,6 +12,8 @@
 |---|---|---|---|
 | 2026-11-15 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings, after 4 passes) |
+| 2026-11-15 | `spec-ready` → `draft` | owner | FR-14 added: backwards compatible with DigitalOcean until cutover; re-review required |
+| 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec re-approved after FR-14 (0 warnings, after 6 passes) |
 
 ---
 
@@ -49,4 +51,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design authelia-sso` — full design recommended (4 services + proto + identity/config migrations + security-critical auth path; the Authelia v4.39.28 spike gates `/sdd-spec`)
+`/sdd-design authelia-sso` — full design recommended (4 services + additive proto + identity/config migrations + two-mode security-critical auth path; the Authelia v4.39.28 spike gates `/sdd-spec`)
