@@ -29,9 +29,10 @@ export function commsgunBody(row: { recipient: string; subject: string; text: st
   return JSON.stringify({ channel: 'email', to: [row.recipient], subject: row.subject, text: row.text });
 }
 
-/** 2xx delivered; 429 and 5xx retried; everything else ends the row. Classes only, never text. */
+/** 2xx delivered; 408, 429 and 5xx retried; everything else ends the row. Classes only, never text. */
 export function classifyStatus(status: number, opaqueRedirect = false): CommsgunSendResult {
   if (status >= 200 && status < 300) return { kind: 'delivered' };
+  if (status === 408) return { kind: 'retry', errorClass: '408', outcome: 'http_error', retryAfterSeconds: null };
   if (status === 429) return { kind: 'retry', errorClass: '429', outcome: 'http_error', retryAfterSeconds: null };
   if (status >= 500 && status < 600) {
     return { kind: 'retry', errorClass: '5xx', outcome: 'http_error', retryAfterSeconds: null };

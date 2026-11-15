@@ -5,7 +5,7 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 2026-09-03 (branch `claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327`) after feature-170
 `portfolio_service.go` line shifts — all rows still reproduce, none resolved). For
 triage/fixing, not governance; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — value-parity row narrowed (GetPnL fixed) + partial-pricing/broker-valued-fetch note; added `r.pool` half-migration row and root cross-ref for the quote-deadline bound gap; line hints re-stamped, all open rows re-verified); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +2 latent bugs (handler error re-wrapping, `broadcastSnapshot` ignoring the persist error), +1 dead-code row, `r.pool` row narrowed, source-service report resolved); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — `broadcastSnapshot` persist-error row resolved). Repo-wide defects (Go 1.22 doc-lie) live in the root findings log.
-Last refreshed 2026-11-13 (`main-dev` @ `52f6d5a`).
+Last refreshed 2026-11-15 (`main-dev` @ `d5de836`).
 
 ## Documentation that lies (docs claim behavior the code lacks)
 
