@@ -23,7 +23,8 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
    and hands the value to an **allow-listed internal service caller** (the `x-internal-caller`
    metadata channel, mirroring feature 102). A grant may additionally require the caller's mTLS peer
    certificate to carry an exact DNS SAN (`peerSan`; the `ingest` grant requires
-   `xstockstrat-ingest`, feature 224, and the `marketdata` grant `xstockstrat-marketdata`, feature 254). `GetSecret` resolves the **exact** scope named by
+   `xstockstrat-ingest`, feature 224, the `marketdata` grant `xstockstrat-marketdata`, feature 254, and the
+   `notify` grant — the exact key `commsgun.app_key` — `xstockstrat-notify`, feature 338). `GetSecret` resolves the **exact** scope named by
    `GetSecretRequest.user_id` (empty = the global row only; a `user_id` = only that user's row — never
    a cross-scope fallback, feature 224). `is_secret` is **row-authoritative on write** (read
    from the stored row, never trusted from the request), so an admin update can never land
@@ -146,6 +147,31 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
 Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
+
+### feature 338 — notify-commsgun-channel (`xstockstrat-notify` / `xstockstrat-config`)
+
+Selects the provider of notify's alert email (SendGrid or the homelab commsgun hub) and bounds commsgun
+delivery. The eight plain keys are **seeded** (staging + production, global, insert-if-absent) by config
+migration `049_notify_commsgun_channel_keys`; the ninth, `commsgun.app_key`, is seeded by the same migration
+as a **value-less secret row** (`is_secret`, NULL ciphertext) so config-ui lists it and an admin can set it
+per environment. The down deletes only global rows the migration wrote that still hold the seeded value, and
+the secret row only while its ciphertext is still NULL — a key that has been set is never deleted.
+`commsgun.app_id` is seeded per environment, not at its code default (one subscriber app per environment).
+`GetSecret` grant: caller `notify`, exact key, peer SAN `xstockstrat-notify`. No `SCALAR_BOUNDS_REGISTRY`
+entries were added — the bounds below are reader-side only. No `scripts/config-wiring.json` baseline entry
+remains. Approval: owner + config team; Security for the secret row and the grant.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `notify` | `fanout.email_provider` | string | `auto` | `src/fanout/emailProvider.ts:emailMode` | `auto` \| `commsgun` \| `sendgrid`; any other value reads as `auto`. Read at dispatch and on every worker tick. |
+| `notify` | `commsgun.enqueue_url` | string | `''` | `src/fanout/emailProvider.ts:commsgunSettings` | Full HTTPS URL. Empty = commsgun not addressable. |
+| `notify` | `commsgun.app_id` | string | `''` | `src/fanout/emailProvider.ts:commsgunSettings` | Seeded `xstockstrat` (production) / `xstockstrat-staging` (staging). Read per attempt. |
+| `notify` | `commsgun.to_email` | string | `''` | `src/fanout/emailProvider.ts:commsgunSettings` | Recipient; a queued row keeps the one it was queued with. |
+| `notify` | `commsgun.app_key` | string (secret) | — | `src/services/commsgunSecret.ts:resolveCommsgunAppKey` | Resolved through `GetSecret` at boot and when the snapshot `version` changes; never read from the snapshot. Unset = not ready. |
+| `notify` | `commsgun.max_attempts` | int | `8` | `src/fanout/commsgunWorker.ts:CommsgunWorker` | `≤ 0` → `8`. Read per attempt. |
+| `notify` | `commsgun.backoff_base_seconds` | int | `30` | `src/fanout/commsgunWorker.ts:CommsgunWorker` | `≤ 0` → `30`. Wait after failed attempt *n* is `min(max(base·2^(n−1), Retry-After), max)`. |
+| `notify` | `commsgun.backoff_max_seconds` | int | `3600` | `src/fanout/commsgunWorker.ts:CommsgunWorker` | `≤ 0` → `3600`. Also caps `Retry-After`. |
+| `notify` | `commsgun.request_timeout_seconds` | int | `10` | `src/fanout/commsgunClient.ts:CommsgunClient` | `≤ 0` → `10`; clamped to `[1,60]`. |
 
 ### feature 334 — webhook-fanout-callback (`xstockstrat-notify` / `xstockstrat-ingest` / `xstockstrat-config`)
 

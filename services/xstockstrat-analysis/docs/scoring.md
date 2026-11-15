@@ -63,3 +63,21 @@ As of Phase 3, RunBacktest executes a real SMA crossover engine (no more synthet
 3. Optionally calls `IngestService.QuerySignals` for newsletter signal weighting
 4. Simulates trades bar-by-bar and computes Sharpe, drawdown, win rate, profit factor
 
+## Strategy Score Persistence (feature 064)
+
+> **Feature 065 update**: the headline `StrategyScore` is now **derived** from per-symbol evidence
+> cells rather than the latest run (see **Cross-Stock Score Derivation** below). The write-through +
+> hydrate-at-boot mechanics described here are unchanged; `strategy_scores_v2` stays a materialized cache
+> (now with `n_symbols`/`total_trading_days`/`provisional` provenance columns and a `delete` for
+> clearing a stale grade). `ScoreStrategy` is repurposed as the manual recompute-from-cells refresh.
+
+`ScoreStrategy` persists the latest `StrategyScore` per strategy to the `analysis.strategy_scores_v2`
+table (upsert on `(user_id, strategy_id)`) in addition to the in-memory
+`self._strategies` dict. The write is **best-effort** (FR-7): it mirrors the ledger-emit `try/except →
+log.warning`, so a DB failure never fails scoring. Reads stay in-memory — `ListStrategies` /
+`GetStrategyReport` still serve `self._strategies`; at boot `main.py` calls `servicer.hydrate_scores()`
+(best-effort) to load persisted rows back into memory, so scores **survive a service restart**. Reuses
+the existing asyncpg pool — no new pool (budget stays 2).
+
+A `math.isfinite` guard drops non-finite component values before the JSONB write. The score
+table (`strategy_scores_v2` since feature 224) has no retention or pagination yet (deactivated and ad-hoc-`strategy_id` scores persist and hydrate).

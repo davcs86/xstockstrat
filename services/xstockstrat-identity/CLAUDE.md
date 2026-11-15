@@ -18,26 +18,14 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 
 ## Ports
 
-This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing every
-`IdentityService` method, including: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`,
-the OAuth 2.1 backend RPCs (feature 049 Part B)
-`RegisterOAuthClient`, `GetOAuthClient`, `IssueAuthCode`, `ExchangeAuthCode`, `RefreshOAuthToken`,
-the per-user authorized-app RPCs (feature 051) `ListAuthorizedApps`, `RevokeAuthorizedApp`,
-the self-service profile RPCs `GetUserMetadata`, `UpdateUserMetadata`, and the admin-gated RPCs
-`AdminGetUserMetadata`, `AdminUpdateUserMetadata`, `CreateUser`, `ListUsers`, `GetUser`,
-`UpdatePassword`, `SetUserRoles`, `SetUserActive` (features 043/183)).
-The frontends validate tokens over gRPC `50058`.
-`ListAdminUserIds` (feature 242, `src/grpc/adminDirectory.ts`) returns active admin user IDs for
-notify's untargeted Web Push audience. It is authorized by the exact mTLS peer SAN
-`xstockstrat-notify` only and is header-blind (IDENTITY-12).
-The former HTTP/Connect-RPC server on `8058` (and the `src/connect/` Connect router) was removed.
+gRPC-only on `50058` (every `IdentityService` method; see `identity.proto`). `ListAdminUserIds` is SAN-gated to
+`xstockstrat-notify` (IDENTITY-12).
 
 ### OAuth 2.1 backend (feature 049 Part B)
 
 Identity is the durable OAuth state store + token mint behind the MCP agent's stateless OAuth 2.1
 HTTP facade. `RegisterOAuthClient` (RFC 7591 DCR, https-only public client) and `GetOAuthClient`
-manage `identity.oauth_clients`; `IssueAuthCode`/`ExchangeAuthCode` use `identity.oauth_auth_codes`
-(single-use, 60s TTL, PKCE S256, exact redirect match). The OAuth access token's `aud`-binding
+manage `identity.oauth_clients`; `IssueAuthCode`/`ExchangeAuthCode` use `identity.oauth_auth_codes`. The OAuth access token's `aud`-binding
 contract is IDENTITY-4 in `docs/context-constitution.md`. The OAuth **refresh token reuses `identity.refresh_tokens`** (rotation
 on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs reuse
 `jwt.access_ttl_seconds` / `jwt.refresh_ttl_seconds` (namespace `identity`).
@@ -53,12 +41,8 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
 ## Database / Migrations
 
 - `000_schema`, `001_identity_tables` (`users`, `api_keys`, `refresh_tokens`), `002_seed_admin`.
-  **`002_seed_admin` seeds `admin@localhost` with the committed bcrypt hash of `"admin"` in every
-  environment** (the db-migrator runs it in prod too). Because that migration is applied and
-  immutable, `authenticateUser` refuses that known seed credential when `APPLICATION_ENV ===
-  'production'` (`isBlockedDefaultAdmin`), forcing an operator to rotate it via
-  `scripts/manage-users.py reset-password` before the default admin can log in; dev/staging keep the
-  convenience login (2026-09-16 security audit, H-4).
+  `002_seed_admin` seeds `admin@localhost`/`admin` in every env; production login is refused until it is
+  rotated (`isBlockedDefaultAdmin`; `scripts/manage-users.py reset-password`).
 - `003_oauth` (feature 049 Part B) — adds `identity.oauth_clients` + `identity.oauth_auth_codes`;
   OAuth refresh tokens reuse `identity.refresh_tokens` (no new table).
 - `004_refresh_token_client` (feature 051) — tags `refresh_tokens` with `client_id`/`last_used_at`
@@ -72,9 +56,6 @@ See `migrations/*.up.sql` for exact columns/constraints/indexes.
 
 ## Config Keys Consumed
 
-> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
-> by a config migration.
-
 Namespace: `identity`
 
 | Key | Type | Default | Description |
@@ -86,17 +67,13 @@ Namespace: `identity`
 
 ## Observability (feature 294-signal-map-instrumentation)
 
-Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
-
 - No `loop tick ok` (no tick loops).
 - Instruments: `identity.login.failures{reason}`, `identity.token.validate_failures{reason missing_token|secret_missing|expired|invalid|other}`, `identity.oauth.exchange_failures{reason}`, `identity.refresh.rejections{kind first_party|oauth}`, `identity.audit.failures{event_type}` and `identity.audit.append.duration` (the six `user.*` audit types, else `other`).
 - Load-bearing log: ERROR `ValidateToken: JWT secret missing`, once per process. No token, email or hash is ever logged or labelled.
 
 ## Environment Variables
 
-> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
-
-Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL` is constructed by docker-compose from `POSTGRES_PASSWORD` in `.env`. `JWT_SECRET` comes from `.env` (see `.env.example`).
+> mTLS: requires `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` (fail-closed) — see root `CLAUDE.md` § Environment Variable Naming Convention.
 
 ```text
 GRPC_PORT=50058
@@ -104,17 +81,9 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 JWT_SECRET=<secret>                    # .env — generate: openssl rand -hex 32
 APPLICATION_ENV=development            # .env.local
 TRADING_MODE=paper                     # paper | live
-DATABASE_CA_CERT=<PEM>                 # feature 266 — required unless DATABASE_URL has exactly sslmode=disable (local compose); unset on a TLS URL ⇒ boot exits naming DATABASE_CA_CERT. Any ssl*/uselibpqcompat URL param is refused. The sslmode=disable carve-out is DB-only — gRPC mTLS stays fail-closed; the service now needs the DB to boot (SELECT 1 probe)
+DATABASE_CA_CERT=<PEM>                 # required unless sslmode=disable — docs/patterns/database.md; the service needs the DB to boot (SELECT 1 probe)
 ```
 
 ## Operations
 
 User management (`scripts/manage-users.py` create-user / reset-password / list-users) and the deploy-time `JWT_SECRET` wiring (`common.JWT_SECRET` in `secrets/<env>.enc.yaml`, legacy `DEV_JWT_SECRET`/`PROD_JWT_SECRET` fallback → `.do/app*.yaml`) live on-demand in this service's `docs/` folder (**`operations.md`**).
-
-## Running Locally
-
-```bash
-pnpm install
-# schema: run ../../scripts/db-migrate.sh from repo root (golang-migrate, not node-pg-migrate)
-pnpm run dev
-```

@@ -44,6 +44,11 @@ useDefault = true
 # named a both-secret test twin `happy6.secret` / `ledger.happy6.secret` in a key list, which the
 # default generic-api-key heuristic read as a credential. It is a fixture key name (later renamed
 # `happy6.sealed`), not a value. Scoped to that exact literal for the history scan.
+#
+# False positive (feature 338): the notify commsgun and SendGrid tests hardcode patterned, obviously-fake
+# key literals (`k-0123456789abcdef…`, `<old|new|prod|stag>-key-0123456789abcdef…`, `SG.test-key-0123456789`)
+# to assert that the key reaches only the Authorization header and never a log. Scoped to those exact
+# literals. Sites: services/xstockstrat-notify/src/__tests__/{commsgun*,fanout,deliveryChannelsLog,sendgridSender}.test.ts.
 [allowlist]
 paths = [
   '''services/xstockstrat-trading/internal/testdata/ibkr/vectors\.json''',
@@ -57,4 +62,7 @@ regexes = [
   '''msc9FW9K\+LhMwlC2vKMbGIMcJOqLHLuIySZyDfw47JMiN9Bx''',
   '''5/Wx3MbGJ87zrySzogrw\+FuDmxa/3fnKqNqOEBp6dw0/J78o''',
   '''happy6\.secret''',
+  '''k-0123456789abcdef0123456789abcdef''',
+  '''(old|new|prod|stag)-key-0123456789abcdef0123456789''',
+  '''SG\.test-key-0123456789''',
 ]

@@ -69,6 +69,7 @@ describe('GetSecret allow-list + failure modes', () => {
   let server: grpc.Server;
   let client: any;
   let ingestClient: any;
+  let notifyClient: any;
   const state: Handlers = {};
 
   before(async () => {
@@ -80,6 +81,7 @@ describe('GetSecret allow-list + failure modes', () => {
     const serverLeaf = mintLeaf(dir, 'xstockstrat-config', ca, caKey);
     const marketdataLeaf = mintLeaf(dir, 'xstockstrat-marketdata', ca, caKey);
     const ingestLeaf = mintLeaf(dir, 'xstockstrat-ingest', ca, caKey);
+    const notifyLeaf = mintLeaf(dir, 'xstockstrat-notify', ca, caKey);
 
     setEnv(...serverLeaf, caPem);
     server = new grpc.Server();
@@ -95,8 +97,10 @@ describe('GetSecret allow-list + failure modes', () => {
     client = new ConfigServiceClient(`127.0.0.1:${port}`, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'));
     setEnv(...ingestLeaf, caPem);
     ingestClient = new ConfigServiceClient(`127.0.0.1:${port}`, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'));
+    setEnv(...notifyLeaf, caPem);
+    notifyClient = new ConfigServiceClient(`127.0.0.1:${port}`, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'));
   });
-  after(() => { client?.close(); ingestClient?.close(); server?.forceShutdown(); });
+  after(() => { client?.close(); ingestClient?.close(); notifyClient?.close(); server?.forceShutdown(); });
 
   function getSecretAs(c: any, metadata: grpc.Metadata, req: Record<string, unknown>) {
     return new Promise<{ err: any; res: any }>((resolve) =>
@@ -164,6 +168,33 @@ describe('GetSecret allow-list + failure modes', () => {
     });
     assert.ok(err, 'a decrypt failure must surface as an error');
     assert.equal(err.code, grpc.status.INTERNAL);
+    assert.equal(res, undefined);
+  });
+
+  const NOTIFY_SECRET = { namespace: 'notify', key: 'commsgun.app_key', environment: 'ENVIRONMENT_STAGING' };
+  const NOTIFY_PLAINTEXT = 'k-0123456789abcdef0123456789abcdef';
+
+  it('@AC-14 (338): notify resolves its commsgun app key over its own mTLS peer', async () => {
+    state.getSecretCiphertext = encryptSecret(NOTIFY_PLAINTEXT);
+    const { err, res } = await getSecretAs(notifyClient, md({ [HEADER_INTERNAL_CALLER]: 'notify' }), NOTIFY_SECRET);
+    assert.equal(err, null);
+    assert.equal(res.found, true);
+    assert.equal(res.value, NOTIFY_PLAINTEXT);
+  });
+
+  it('@AC-14 (338): a caller without a grant is refused the notify key, no plaintext', async () => {
+    state.getSecretCiphertext = encryptSecret(NOTIFY_PLAINTEXT);
+    const { err, res } = await getSecretAs(notifyClient, md({ [HEADER_INTERNAL_CALLER]: 'analysis' }), NOTIFY_SECRET);
+    assert.ok(err, 'an ungranted caller must be refused');
+    assert.equal(err.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(res, undefined);
+  });
+
+  it('@AC-14 (338): the notify caller id over another service peer is refused', async () => {
+    state.getSecretCiphertext = encryptSecret(NOTIFY_PLAINTEXT);
+    const { err, res } = await getSecret(md({ [HEADER_INTERNAL_CALLER]: 'notify' }), NOTIFY_SECRET);
+    assert.ok(err, 'a wrong-SAN peer must be refused');
+    assert.equal(err.code, grpc.status.PERMISSION_DENIED);
     assert.equal(res, undefined);
   });
 });
@@ -288,5 +319,43 @@ describe('redaction and per-user overlay', () => {
     // AC-14: the secret in the overlaid snapshot stays redacted.
     assert.equal(writes[0].values['broker.token'].isSecret, true);
     assert.equal(writes[0].values['broker.token'].stringVal, '[redacted]', 'a secret must stay redacted in a per-user overlay');
+  });
+
+  // Feature 338: the notify commsgun app key rides the same three read edges redacted.
+  const NOTIFY_SECRET_ROW = {
+    namespace: 'notify', key: 'commsgun.app_key', value_type: 'string',
+    value_data: '[redacted]', is_secret: true, description: 'k', default_value: '', environment: 'staging',
+  };
+
+  it('@AC-14 (338): GetConfig, ListKeys and WatchConfig return the notify app key redacted', async () => {
+    const leaky = { ...NOTIFY_SECRET_ROW, value_data: 'k-0123456789abcdef0123456789abcdef', consuming_service: 'xstockstrat-notify' };
+    const pool = makePool({ globalRows: [NOTIFY_SECRET_ROW] });
+    const query = pool.query;
+    pool.query = async (sql: string, params?: any[]) =>
+      sql.includes('DISTINCT ON (key)') ? { rows: [leaky] } : query(sql, params);
+    const impl: any = new ConfigServiceImpl(pool);
+    await impl.reloadNamespace('notify', 'staging');
+
+    let got: any;
+    await impl.getConfig({ request: { namespace: 'notify', environment: 3 } }, (_e: any, r: any) => (got = r));
+    assert.equal(got.values['commsgun.app_key'].isSecret, true);
+    assert.equal(got.values['commsgun.app_key'].stringVal, '[redacted]');
+
+    let listed: any;
+    await impl.listKeys({ request: { namespace: 'notify', environment: 3 } }, (_e: any, r: any) => (listed = r));
+    const k = listed.keys.find((x: any) => x.key === 'commsgun.app_key');
+    assert.equal(k.isSecret, true);
+    assert.equal(k.currentValue, '[redacted]');
+
+    const writes: any[] = [];
+    impl.watchConfig({
+      request: { namespace: 'notify', client_id: 'c', environment: 3 },
+      on: () => {},
+      write: (p: any) => writes.push(p),
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.ok(writes.length >= 1, 'the subscriber must receive an initial snapshot');
+    assert.equal(writes[0].values['commsgun.app_key'].isSecret, true);
+    assert.equal(writes[0].values['commsgun.app_key'].stringVal, '[redacted]');
   });
 });

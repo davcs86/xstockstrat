@@ -6,10 +6,11 @@ export function describeDeliveryChannels(
   fanout: Pick<FanoutDispatcher, 'enabledChannels'>,
   webPush: Pick<WebPushDispatcher, 'isPushEnabled'>,
 ): { enabled: string; disabled: string } {
-  const { slack, sendgrid } = fanout.enabledChannels();
+  const { slack, sendgrid, commsgun } = fanout.enabledChannels();
   const channels: Array<[string, boolean]> = [
     ['slack', slack],
     ['sendgrid', sendgrid],
+    ['commsgun', commsgun],
     ['push', webPush.isPushEnabled()],
   ];
   return {

@@ -146,6 +146,12 @@ const SECRET_CALLER_ALLOWLIST: ReadonlyArray<SecretCallerGrant> = [
     keyPrefixes: ['mcp_credential.'],
     peerSan: 'xstockstrat-ingest',
   },
+  {
+    callerID: 'notify',
+    namespace: 'notify',
+    keys: ['commsgun.app_key'],
+    peerSan: 'xstockstrat-notify',
+  },
 ];
 
 /** The slice of a grpc-js server call the secret gate reads: propagated metadata + the mTLS peer. */

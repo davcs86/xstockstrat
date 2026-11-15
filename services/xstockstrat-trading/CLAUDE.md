@@ -20,18 +20,12 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Broker account registration mode is environment-owned**: `RegisterBrokerAccount` ignores the (deprecated) `is_paper` request field and derives the account's mode from the environment (`trading.broker.paper` config / `TRADING_MODE` env), so users cannot register an account in a mode the deployment does not run. The UI reads `GetTradingEnvironment` to display the fixed mode instead of offering a paper/live choice.
 
-**Credential health**: every registered account's API secrets are validated against the broker (Alpaca `GET /v2/account`, IBKR `GET /portfolio/accounts`) on register, on credential update (`UpdateBrokerAccountCredentials`), and periodically by a background poller. For IBKR, the Live Session Token handshake and `ssodh/init` run before `GET /portfolio/accounts` (feature 249; see the service's `ibkr.md` under its docs folder). A legacy 4-field IBKR account, which has no `signature_key`/`encryption_key`/`dh_prime`, reads INVALID until its credentials are updated. The latest `CredentialStatus` (OK / INVALID / UNKNOWN) is persisted on `trading.broker_accounts` and returned by `ListBrokerAccounts` so the UI can surface accounts whose secrets stopped working.
+**Credential health and offline accounts** (feature 157/159/240): credential validation and its poller, the `BROKER_TYPE_OFFLINE` record-not-route path (incl. the `CancelOrder` offline guard) and the `ConfirmOrder` offline fields live in this service's `docs/` folder (**`offline-accounts.md`**).
 
-**Automatic stop-loss/take-profit brackets** (feature 030): whenever an auto-sized (`ComputePositionSize`) `MARKET`/`LIMIT` entry fills, `maybeSubmitBracket` opens a persisted bracket (`trading.order_brackets`) protecting it — Alpaca attaches the stop/take-profit atomically at entry `SubmitOrder`; IBKR submits them as a follow-up linked pair (`SubmitBracketLegs`, `isSingleGroup`+`parentId`) after the fill is confirmed, since IBKR's Client Portal Web API has no client-settable OCA group field. A per-account **protection-window watchdog** (`StartBracketProtectionWatchdog`, piggybacking on the fill-poller tick) flattens the position and halts the account (`trading.risk.max_unprotected_seconds`) if no bracket confirms in time; a broker-**rejected** flatten counts as a failure (a fresh client order id is minted only after a definitive rejection, never after a timeout/unknown outcome), and an exhausted retry budget always halts. The halt is **persisted** on `trading.broker_accounts` (`halted`/`halted_at`/`halt_reason`, boot-hydrated) and blocks `PlaceOrder`/`ReplaceOrder` — never `CancelOrder`, the operator's sole remaining manual de-risk tool. `trading.risk.bracket_orders_enabled` was seeded `false` in production by feature 030 (pending feature 103 or a documented manual verification), but the pre-189 config key-resolution bug meant the getter always returned its code default `true` — so production ran with brackets ON. Feature 189 (migration 029) bumped the production seed to `true` to preserve that observed behavior once config resolution was fixed (operator sign-off, `docs/roadmap/features/192-fix-trading-config-key-mismatch/context.md`); see also `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` § Archive Synthesis (Rejected alternatives).
+**Automatic stop-loss/take-profit brackets** (feature 030): whenever an auto-sized (`ComputePositionSize`) `MARKET`/`LIMIT` entry fills, `maybeSubmitBracket` opens a persisted bracket (`trading.order_brackets`) protecting it — Alpaca attaches the stop/take-profit atomically at entry `SubmitOrder`; IBKR submits them as a follow-up linked pair (`SubmitBracketLegs`, `isSingleGroup`+`parentId`) after the fill is confirmed, since IBKR's Client Portal Web API has no client-settable OCA group field. A per-account **protection-window watchdog** (`StartBracketProtectionWatchdog`, piggybacking on the fill-poller tick) flattens the position and halts the account (`trading.risk.max_unprotected_seconds`) if no bracket confirms in time; a broker-**rejected** flatten counts as a failure (a fresh client order id is minted only after a definitive rejection, never after a timeout/unknown outcome), and an exhausted retry budget always halts. The halt is **persisted** on `trading.broker_accounts` (`halted`/`halted_at`/`halt_reason`, boot-hydrated) and blocks `PlaceOrder`/`ReplaceOrder` — never `CancelOrder`, the operator's sole remaining manual de-risk tool.
 
-**Offline (manually-tracked) accounts** (feature 157, hardened by feature 159): a `BROKER_TYPE_OFFLINE` account has no broker client — its orders are recorded, not routed. `PlaceOrder` routes to `recordOfflineOrder` (persists `NEW`, empty `broker_order_id`, no broker submit) whenever **either** the in-memory pool tag **or** the **authoritative persisted** `broker_type` (`accountRepo.GetBrokerAccount`) is OFFLINE — a divergence-safe union, so an offline account can never fall through to a broker path even if its pool entry is stale (best-effort: a DB read error falls back to the pool tag). `CancelOrder` **rejects** an offline order with `FailedPrecondition` (offline orders are un-placed via `ConfirmOrder` edits, never a broker cancel) — this is an offline-**type** guard, orthogonal to the halt gating above: `CancelOrder` remains **never halt-gated** (the operator's manual de-risk tool for *broker* accounts). A broker "not cancelable" answer (Alpaca `422` → `broker.ErrOrderNotCancelable`) is resolved by re-reading the order: only a broker-confirmed CANCELED is recorded CANCELED; a filled/other status is adopted through `applyBrokerOrderStatus` (the same path `pollFills` uses) and returned with `success=false`, and a failed re-read leaves the local status for `pollFills` to converge.
-
-**Offline confirm fields (feature 240):** `ConfirmOrder` takes an optional cumulative `fees` (≥ 0, else `INVALID_ARGUMENT` before any load; omitted keeps the recorded value), keeps a stored `filled_at` on un-confirm and bare re-confirm (only a first confirm defaults it to now), and every response path hides `fees`/`filled_at` on a NEW offline order (`hideUnconfirmedFill`) while the stored values persist. `filled_qty` must be finite and ≥ 0 and `filled_avg_price` finite and ≥ 0 when `filled_qty > 0` (both `INVALID_ARGUMENT` before the load); when the position recompute/emit fails `ConfirmOrder` returns `UNAVAILABLE` "positions not published; re-confirm to retry" (re-confirm is idempotent).
-
-**Caller identity comes from the `x-user-id` header, not the request body.** `PlaceOrder`,
-`CancelOrder`, `ReplaceOrder`, and `ConfirmOrder` resolve the caller from the propagated
-**`x-user-id`** header (`middleware.FromContext(ctx).UserID`); their request-body `user_id` field is
-**deprecated and ignored**. For `PlaceOrder` the order **owner** is the server-resolved account owner
+**Caller identity is the `x-user-id` header (root PLAT-11)** on `PlaceOrder`, `CancelOrder`,
+`ReplaceOrder` and `ConfirmOrder`; their body `user_id` is deprecated and ignored. For `PlaceOrder` the order **owner** is the server-resolved account owner
 (`accountEntry.userID` / the `recordOfflineOrder` `userID` param), not a client-claimed body field —
 so it is correct for the internal bracket-flatten path too. **Ownership is enforced fail-closed on
 the execution/mutation RPCs** (2026-09-16 security audit, C-1/C-2/H-2): `PlaceOrder` requires the
@@ -50,22 +44,9 @@ subscribers whose selector matches the order's owner (`orderSubscriber.userID`; 
 so a scoped subscriber never receives another user's live order updates (2026-09-16 security audit,
 H-1) — the initial snapshot already applied this filter.
 
-## Language
-
-Go 1.27
-
 ## Docker Build Pattern
 
 Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, static binary compilation (`CGO_ENABLED=0`), and distroless final images.
-
-## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50051` | Internal service-to-service (protobuf) |
-
-This service is **gRPC-only**. All callers (internal services, the frontends, and the MCP
-agent) connect over gRPC `50051`. The former HTTP/Connect-RPC server on `8051` was removed.
 
 ## Dependencies
 
@@ -80,9 +61,6 @@ agent) connect over gRPC `50051`. The former HTTP/Connect-RPC server on `8051` w
 | TimescaleDB | DB (schema: `trading`) | Persist orders hypertable |
 
 ## Config Keys Consumed
-
-> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
-> by a config migration.
 
 Namespace `trading` (own keys, read through the `trading` watcher) and namespace `platform` (`trading_state`,
 `maintenance_mode`, read through a **separate, required** single-namespace `platform` watcher: `NewTradingService`
@@ -130,8 +108,8 @@ never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledg
 - Schema: `trading`
 - Hypertable: `trading.orders` (partition: `created_at`, chunk: 1 day)
 - `trading.order_brackets` — the per-order bracket (stop-loss/take-profit) state machine (feature 030): `NONE→SUBMITTING→PENDING_VERIFY→ACTIVE→CANCELING→CANCELED`, with a `FAILED` terminal on any submission error. Plain indexed `order_id` column (no FK — `trading.orders`' composite hypertable PK has no single-column FK target, matching this service's existing avoidance of cross-hypertable FKs).
-- `trading.offline_snapshot_headers` — one header per offline snapshot `(account_id, client_snapshot_id, as_of, realized_carried, fees_carried)` (feature 240, migration `011`). The carry is computed atomically with the snapshot write and frozen: a re-submit with the same id and `as_of` keeps it, an `as_of` change on a non-latest snapshot is `FAILED_PRECONDITION`, and an all-rejected re-submit commits nothing. Migration `011` also adds `trading.orders.fees` (`NUMERIC`, NULL for broker orders).
-- `trading.offline_position_baselines` — effective-dated brokerage-statement baseline rows per offline account (feature 163, migration `009`). Each row is `(account_id, symbol, qty, avg_cost_per_share, as_of, client_snapshot_id, created_at)`. The effective baseline for an account is the rows of its latest snapshot header (greatest `as_of`, then `created_at`; a header with no rows is a full flatten); a re-submitted snapshot replaces its own rows atomically (DELETE + INSERT in the same tx as its header). Only offline accounts may have baselines.
+- `trading.offline_snapshot_headers` — one header per offline snapshot (feature 240). The carry is computed atomically with the snapshot write and frozen: a re-submit with the same id and `as_of` keeps it, an `as_of` change on a non-latest snapshot is `FAILED_PRECONDITION`, and an all-rejected re-submit commits nothing. Migration `011` also adds `trading.orders.fees` (`NUMERIC`, NULL for broker orders).
+- `trading.offline_position_baselines` — effective-dated brokerage-statement baseline rows per offline account (feature 163). The effective baseline for an account is the rows of its latest snapshot header (greatest `as_of`, then `created_at`; a header with no rows is a full flatten); a re-submitted snapshot replaces its own rows atomically (DELETE + INSERT in the same tx as its header). Only offline accounts may have baselines.
 
 ## Approval Flow
 
@@ -192,118 +170,24 @@ well: a replaced quantity is the new total order quantity (no hedged-mode lot se
 
 ## Order Status Reconciliation
 
-The fill poller (`pollFills`) calls `GetOrder` for every non-terminal order and maps the broker
-status via `alpacaStatusToProto`. Terminal statuses (`FILLED`/`CANCELED`/`EXPIRED`/`REJECTED`)
-stop reconciliation for that order. **Transient or unrecognized broker statuses map to
-`ORDER_STATUS_UNSPECIFIED` and are skipped** — they never overwrite the order's current status,
-so reconciliation continues until a real terminal status arrives. In particular, Alpaca's
-**`done_for_day`** is non-terminal: it is reported for a `day` order at market close before the
-order settles to its true terminal state (`expired` or `filled`). It must **not** map to
-`CANCELED` — doing so previously froze the order in a wrong terminal state, after which the poller
-stopped and never captured the eventual `expired` (UI showed CANCELED while the broker showed
-expired).
+`pollFills` status mapping (unrecognized statuses → `UNSPECIFIED`, skipped; `done_for_day` is non-terminal) → this service's `docs/` folder (**`reconciliation.md`**).
 
 ## Broker State Reconciliation
 
-`StartReconciliationPoller`/`reconcileTick` (feature 102) periodically compares open orders and
-positions against broker truth via `Broker.ListOrders()`/`GetPositions()`, independent of the
-fill poller — it is the only path that detects an order placed directly through the broker's own
-dashboard, regardless of fill state. A candidate mismatch (unknown broker order, quantity
-discrepancy, or missing broker order) must persist across `1 + trading.reconciliation.grace_ticks`
-consecutive ticks before it becomes a real finding — a routine partial fill or propagation delay
-resolves on its own with no ledger event and no halt (self-heal). A real finding emits
-`reconciliation.mismatch_found`, a CRITICAL alert, and routes to the **ordinary, per-account**
-halt (`HaltSource_HALT_SOURCE_RECONCILIATION`, reusing feature 030's `broker_accounts.halted`
-mechanism).
-
-The `unknown_broker_order` classification is **DB-grounded, not memory-only**. A broker order the
-in-memory map (`s.orders`) doesn't recognize is not immediately foreign: `s.orders` holds only this
-process's own orders plus `LoadInflightOrders`' NEW/PARTIALLY_FILLED hydrate, so a legitimate order
-the platform placed that has since reached a terminal state (FILLED/CANCELED/EXPIRED/REJECTED) is
-absent from memory yet still persisted in `trading.orders`. Before flagging any unmatched broker
-order, `reconcileTick` calls `reconcileOrderLookup.KnownBrokerOrderIDs` (one DB round-trip per tick,
-scoped to the account's unmatched IDs, matching `trading.orders` **and** the bracket leg ids in
-`trading.order_brackets` — Alpaca lists bracket legs as top-level orders) — only an order the platform
-has **no persisted record of at all** is a genuine `unknown_broker_order`. Comparing against memory alone previously misclassified
-every historical terminal order the platform itself placed as foreign, halting the account on a
-routine restart; that was an observed production false halt. A transient DB lookup error is
-**fail-safe**: the account's unknown-order check is skipped for that tick (re-evaluated next tick),
-never a false halt. `emitReconciliationFinding`/`haltAccount` still no-op once the account is
-already halted (any source) — defense-in-depth so any residual re-observation of the same order
-can't re-fire the ledger event, CRITICAL alert, and ERROR log every tick; nothing in this service
-clears a halt except the admin-gated `ResumeAccount` RPC (`ResumeAccountSvc`), so a later finding against an already-halted
-account changes no trading behavior.
-`reconcileTick` itself also throttles the broker calls (`ListOrders`/`GetPositions`) for an
-already-halted account to `trading.reconciliation.halted_poll_interval_ms` (default 5 min) instead
-of the ordinary `interval_ms` cadence (`shouldPollHaltedAccount`) — still eventually observing the
-account (e.g. a manual broker-dashboard order), just not at full rate for one that already can't
-trade. The **position-side** quantity check is **DB-grounded** the same way (feature 206). A broker position
-that disagrees with `xstockstrat-portfolio`'s `ListPositions` projection is not immediately a foreign
-position: the projection can legitimately lag (fill→`order.filled`→portfolio fold) or be transiently
-zeroed by an empty `account.positions.synced`. Before halting, `reconcileTick` calls
-`reconcilePositionLookup.NetFilledQtyBySymbol` (one grouped DB round-trip per tick, scoped to the
-diverging symbols) — the platform's own net filled qty per symbol from `trading.orders`, **deduped
-`DISTINCT ON (order_id)`** so a multi-row order isn't double-counted. If the platform's own fills
-already sum to the broker qty (`qtyApproxEqual`, abs ε 1e-6), the broker position is fully explained
-and the candidate clears — **no halt**; only a broker qty the platform's orders can't account for (a
-genuine dashboard order) halts. A lookup error is **fail-safe** (position check skipped for the tick,
-never a false halt), mirroring the order side. Residuals (not closed; full list in feature 206
-`context.md` § Archive Synthesis): a stalled `pollFills` leaving `trading.orders.filled_qty` stale;
-corporate actions (splits) that change broker qty with no order; Alpaca bracket-leg fills, which never
-reach `trading.orders` (leg ids live only in `trading.order_brackets`); and the net being an unbounded
-lifetime sum, so any untracked position-reducing fill skews it for that symbol from then on — each can
-still trip the position-side halt. A net-zero foreign position is masked by design.
-
-Only a **rare, systemic** finding — `trading.reconciliation.systemic_threshold_pct`
-or more of registered accounts erroring/unreachable in one tick — escalates platform-wide to
-`trading_state=REDUCE_ONLY` (namespace `platform`) via `xstockstrat-config`'s internal-caller authz channel
-(`x-internal-caller`, distinct from the human-role `x-access-scope` header; see
-`services/xstockstrat-config/CLAUDE.md`). The same tick also resolves feature 101's `UNKNOWN`
-order intents against broker truth (FR-6) — a ledger `order_intent.late_response_conflict` event
-first (not yet emitted by 101 today, see the code comment on `resolveUnknownIntents`), falling
-back to a broker-side scan by the derived client-order-id nonce for **Alpaca accounts only** (IBKR
-never sends a customer-order tag on submission, so its `ListOrders` results never carry one to
-match against) — a genuinely inconclusive intent is retried next tick, never guessed.
+`reconcileTick` (feature 102/206): DB-grounded mismatch classification, per-account halt, systemic `REDUCE_ONLY` escalation → this service's `docs/` folder (**`reconciliation.md`**).
 
 ## Position & Balance Sync Observability
 
-The position-sync poller (`syncPositions`) emits no events on a quiet cycle, which previously made a
-silent stall (every account skipped for invalid credentials, or a wedged broker/ledger call)
-indistinguishable from a healthy idle service — zero log output for days. The poller now:
-
-- Logs a per-cycle **heartbeat** at INFO: `position sync cycle complete accounts_synced=N accounts_skipped=M accounts_failed=K`.
-- Runs a **watchdog**: WARNs `position sync stalled` when accounts are registered but none have synced for >3 intervals.
-- WARNs (throttled to once per 15 min/account) when an account is **skipped for invalid credentials**, instead of a DEBUG line invisible at INFO.
-- Logs broker **credential status transitions** (OK→INVALID at WARN; recoveries/first-observations at INFO) from the credential-health poller, so a credential that stops working is visible in logs, not only in the UI.
-
-**Feature 294-signal-map-instrumentation** (the 60 s disabled recheck is a code constant; the other cadences are the `*.interval_ms` config defaults above):
-
-- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `fill_poller` (5 s), `reconciliation` (60 s), `credential_health` (300 s; `disabled` every 60 s while off), `bracket_watchdog` (5 s) and `order_intent_sweeper` (5 s); states `idle`, `skipped`, `disabled`. `position_sync` keeps the heartbeat above and writes no `loop tick ok`, so a `|= "loop tick ok"` filter misses it; portfolio also has a `position_sync` loop, so filter on `service_name` too.
-- Instruments: `trading.flatten.outcome{outcome}`, `trading.bracket.outcome{outcome}`, `trading.order_submit{broker_type, outcome accepted|rejected|uncertain|invalid_credentials}`, `trading.ledger_emit{event_type, outcome ok|retried_ok|failed}` (unknown event types map to `other`), `trading.alert_emit{alert_kind, outcome ok|failed}` (typed constants, no `other`), `trading.escalation.systemic` (unlabelled).
-- Load-bearing log: ERROR `flattenAndHalt: position lookup failed` (a non-NotFound lookup error; no flatten). `flattenAndHalt: no open position to flatten` is INFO.
+Position-sync heartbeat/watchdog, `loop tick ok` loops, instruments and load-bearing logs (feature 294) → this service's `docs/` folder (**`reconciliation.md`**).
 
 ## Environment Variables
 
-> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
+> mTLS: requires `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` (fail-closed) — see root CLAUDE.md § Environment Variable Naming Convention.
 
 ```text
-GRPC_PORT=50051
-CONFIG_ENDPOINT=xstockstrat-config:50060
-LEDGER_ENDPOINT=xstockstrat-ledger:50057
-PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
-INDICATORS_ENDPOINT=xstockstrat-indicators:50054
-MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
-NOTIFY_ENDPOINT=xstockstrat-notify:50059
-APPLICATION_ENV=development            # development | production
+# GRPC_PORT and the *_ENDPOINT vars: see docker-compose.yml / internal/config/config.go
 TRADING_MODE=paper                     # paper | live
 BROKER_ACCOUNTS_ENCRYPTION_KEY=<hex>  # hex-encoded 32-byte AES-256 key; required when broker_accounts table is in use. Generate: openssl rand -hex 32
-```
-
-## Running Locally
-
-```bash
-go mod download
-go run ./cmd/server
 ```
 
 ## Known Limitations
