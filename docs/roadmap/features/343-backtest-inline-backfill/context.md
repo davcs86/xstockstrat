@@ -435,3 +435,23 @@ _(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-disti
   superseded per-round `sdd-batch-design-state` block(s) are dropped; the last one is kept byte-for-byte (the only one
   any workflow reads, `.claude/workflows/sdd-batch.js:191`). Other `sdd-batch-*` blocks are untouched.
 - The loss check was a self-check by the planning agent (no separate `context-distiller` verifier was available).
+
+## Session 2026-11-15 — sdd-execute sequential (sdd-batch-execute)
+- Up-front confirmation: the operator approved the plan with this record (binding, verbatim):
+  `{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","dev":"396b54e0c8adf870537e65360f75761c3b84289b","specHash":"2c1b6a9598927a51bd4aeb655ee103bf9aaa23e7","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],"mismatches":[{"n":1,...},{"n":8,...}]}`
+  (the full mismatch details are the first body line of the respec commit below).
+- Operator answers relayed with the run, verbatim: "1. Yes / 2. No, add it to the scope / 3. Yes".
+- Merged `origin/main-dev@9f8856229` into the feature branch (`cf9f49aff`); the resolver and `ledger-guard` were clean.
+- Tooling detection (steps 1-16): Python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff ✓ · Node v24.22.1 ✓ · pnpm 9.15.9 ✓ ·
+  vitest/playwright/tsc ✓ (linked main-checkout `node_modules`) · Chromium in `/opt/pw-browsers` ✓ · docker ✓.
+- Re-spec commits (`respec(backtest-inline-backfill)` on `git log --first-parent origin/main-dev..HEAD`):
+  - `41dc2fba4` respec(backtest-inline-backfill): align steps 1,8 with current codebase. Step 1: the 343 row
+    (`merge-order.md:127`) and the "Symbol-page cohort: 339-344" section (`:403-411`) already exist (#1545), so the
+    step adds no row and appends one sentence naming 343's remaining shared files to that section. Step 8: the
+    `backfill.md` admin/scope grep evidence corrected to "no match".
+- Assumption (re-spec): of the two options the mismatch named (amend the existing entries or mark Step 1
+  satisfied), amend was chosen, because the existing section does not list the 341 insights-page/e2e overlap or the
+  344 ingest/mock/inventory overlap that this spec's Step Dependencies records.
+```sdd-batch-setup
+{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","date":"2026-11-15"}
+```
