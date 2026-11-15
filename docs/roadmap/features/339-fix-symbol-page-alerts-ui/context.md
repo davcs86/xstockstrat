@@ -862,3 +862,57 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: `xstockstrat-ui`; key reuse patterns: the Notifications inbox mark-read + refetch pattern, `AlertInbox.tsx:42-53`; one `StatTile` fix shared by all three symbol-page grids).
+- Phase 1 Grilling: 4 rounds (full). Chosen approach: five surgical changes in `xstockstrat-ui` only (StatTile wrap guard; Fundamentals two-group redesign with `fmtUsdCompact`; `opportunityChipLabel`; switch `data-[state=…]` rewrite; Alerts drawer listing merged unread alerts with per-row mark-read and a capped-drain Clear all). Rejected: R-1..R-15 in debate.md, among them a local-only Clear all (R-11), a new notify RPC (R-12), a react-query move inside 339 (R-13) and a config key for the drain cap (R-14).
+- Constitution rules touched: P-02, P-03, C-10, C-12, C-13, C-15, C-16, C-17, C-18. Floor breaches: none.
+- Status: spec-ready → design-approved.
+- Termination: approved by the operator at the design gate after round 4. Artifacts: recon.md, debate.md (State approved), design.md.
+
+### Operator sign-off (2026-11-15, design gate, round 4)
+
+- Recorded decision: "the round-4 design is APPROVED."
+- Operator reply as relayed to this session, verbatim:
+  1. "Approved"
+  2. "Confirmed"
+  3. "Sign-off the change, amend it"
+  4. "There are no production instances. Staging is enough."
+- Earlier design-gate decisions, also binding:
+  - The drawer offers both a per-row mark-read and a clear-all action; removing "Clear all" outright is not accepted.
+  - Clear all scope: "choose the one with less friction". Relayed reading: one click marks every unread alert read on the server (the capped drain over the existing RPCs), with no confirm dialog and no undo.
+- Limit of the evidence: the numbered reply does not say which question each item answers, and it may cover the whole batch. This session did not map items 2-4 to this feature's gate questions. The approval itself (item 1 and the recorded decision) is the only item acted on.
+- Register changes made this session:
+  - `debate.md` State is `approved`.
+  - Petition P-1 (reopen D-7) reads `user reopened`, not `user declined`. The operator's both-actions decision is the reopen: D-7 already reads "reopened @ round 3 (operator steer)" and D-15 supersedes it. The batch step asked for `user declined` on any pending petition; that would contradict the register, so it was not applied.
+  - O-12, O-24 and O-25 stay `open` (non-blocking); the step carried no status change for them. They are open threads below.
+
+### Decisions
+
+- All CHANGE rows in design.md § Business Rules Touched (@AC-1, @AC-2, @AC-3, @AC-5, @AC-6, @AC-9 of this feature) are signed off by the operator decisions above and those recorded in the sdd-review session (2026-11-15). No existing durable `@AC` rule is changed.
+- Feature 344 constraint: the `ALERT_UNREAD_COUNT_KEY` value is derived from the merged, de-duplicated unread list and is invalidated by mark-read and Clear all. Feature 339 lands first and leaves only the `refreshUnread()` seam.
+- The drain cap (20 batches of 50) is an unexported constant. It must not be raised without revisiting the notify single-connection load (about 60 sequential queries worst case).
+
+### Open Threads
+
+Target steps use the design's build-order steps (1-5) until `/sdd-spec` numbers them.
+
+- [ ] **Before `/sdd-spec` — spec amendments (D-25).** Remove the "mark all read" exclusion from `product-spec.md` § Out of Scope (`product-spec.md:123`), add FR-10 with the capped-drain wording, and add @AC-10 to `acceptance.feature` with the fixtures "Backfill 9f8e7d6c failed" and "Daily loss limit reached".
+- [ ] **Before `/sdd-spec` — O-12.** Ask the operator whether checkbox, field and questionnaire get the same `data-state` fix. The design leaves them unchanged (R-4). If item 2 of the reply ("Confirmed") was the answer to this question, R-4 needs a reopen first.
+- [ ] **Before `/sdd-spec` — O-24.** Clear all bulk-writes up to 1000 read marks with one tap and no undo, including alerts beyond the 50 shown. The scope rests on the relayed reading of "less friction". The unlocked fallback is listed-only with a "showing 50 of N" line.
+- [ ] **Step 5 — O-25.** The proposer never confirmed the four adversary drain corrections (short-page stop rule with the 50-newer Vitest case, `muted` capped notice, one `compareCreatedAt`, unexported cap with the load note). The approved design includes them.
+- [ ] **Step 5.** A drain can stop partway on a cap or an error, leaving some alerts read and some unread; this is accepted and shown through a notice.
+- [ ] **Step 5.** A worst-case drain queues about 60 queries on notify's single DB connection, alongside `EmitAlert` inserts for all users.
+- [ ] **Step 5.** With 50 or more alerts arriving after the click, the drain returns `capped` and the user must click again.
+- [ ] **Step 5.** The inbox "Mark all read" stays bounded to its loaded rows (fails.md:2774), so the drawer and the inbox differ on purpose.
+- [ ] **Step 5 e2e.** The brief disconnected indicator after a fulfilled stub stream has not been run. Polls in @AC-5/@AC-9 need timeouts above `STREAM_STABLE_MS` (3 s) plus the backoff.
+- [ ] **Step 5.** Pruning can wrongly drop an unread alert if notify ever runs with read replicas or replication lag.
+- [ ] **Step 5 e2e.** The default e2e badge becomes 5 on every trader `AppShell` page. A full Playwright run in the execute sandbox is impractical; scope and pre-warm the run.
+- [ ] **Step 5.** FR-8 holds only up to 50 unread alerts in the drawer list (D-5).
+- [ ] **Step 4.** `renderToStaticMarkup` of the Radix Switch in the Vitest node environment is assumed to emit `data-state`; it has not been run.
+- [ ] **Step 4.** The checked switch thumb colour depends on the OS colour scheme.
+- [ ] **Step 1.** The six other `StatTile` consumers were not run; a wrapped value may change tile height there.
+- [ ] **Steps 2, 3, 5.** The wording "No strategy", "Valuation", "Quality & risk", "Clear all" and the cap notice text is not operator-confirmed.
+- [ ] **Step 2.** Peer `fix-fundamentals-roe-unit` edits `page.tsx:1095`; a textual merge conflict is expected.
+- [ ] **Feature 344 design.** Feature 344 must adopt the recorded `ALERT_UNREAD_COUNT_KEY` constraint.
