@@ -8,6 +8,12 @@
       "key": "broker.paper",
       "kind": "read-unseeded",
       "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
+    },
+    {
+      "namespace": "ui",
+      "key": "chart.indicator_history_bars",
+      "kind": "seeded-unread",
+      "owner": "feature 341 fix-indicator-pane-warmup"
     }
   ],
   "registry": {

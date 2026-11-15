@@ -218,6 +218,9 @@ still live.
   `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`,
   `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go`,
   `services/xstockstrat-marketdata/internal/service/telemetry_allowlist_test.go`.
+- Steps 7+8: `services/xstockstrat-config/migrations/050_ui_chart_history_bars.{up,down}.sql`,
+  `scripts/config-wiring.json`, `scripts/config-wiring-stored.json`,
+  `services/xstockstrat-config/src/__tests__/uiChartHistoryBarsSeedMigration.test.ts`.
 
 Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
@@ -712,3 +715,22 @@ Tooling setup (steps 5+6): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 built with 
   **Orchestrator reading (not operator words): "expand" is taken as "extend", i.e. the EXTEND is
   approved.** The reading was stated back to the operator with a fuller explanation; if the operator
   corrects it, this line is superseded.
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, steps 7+8 (atomic unit)
+
+Tooling setup (steps 7+8): node 24 ✓ · pnpm ✓ (linked main-checkout `node_modules`) · psql ✓ · migrate ✓ · scratch Postgres 16 ✓ 127.0.0.1:5432 (orchestrator's; not started or stopped here).
+
+### Step 7 — migration: seed `ui` / `chart.indicator_history_bars` and regenerate the stored set [done]
+- Part of the Steps 7+8 unit. `050` re-derived (free here and on `origin/main-dev`; 330 still holds `050` on its branch). Added `050_ui_chart_history_bars.{up,down}.sql` (two global int rows at 200, sentinel actor, insert-if-absent; the down deletes only the sentinel row still at 200), the temporary `seeded-unread` finding in `scripts/config-wiring.json`, and regenerated `scripts/config-wiring-stored.json` on the scratch Postgres (committed unedited). TDD: N/A (migration). Offline up/down parity checked by reading both and by Step 8.
+- Wiring gate: `check-config-wiring.mjs --declared-from … --declared-migration …` exit 0 with one `PENDING: …:ui/chart.indicator_history_bars:seeded-unread`; `--keys` exit 0 (same PENDING line); `--final` exit 0, no STALE-STORED / STALE (only the two pre-existing `REPORTED: … readers-disagree`); `config-wiring.test.mjs` 75 pass.
+- Files modified: `services/xstockstrat-config/migrations/050_ui_chart_history_bars.up.sql`, `services/xstockstrat-config/migrations/050_ui_chart_history_bars.down.sql`, `scripts/config-wiring.json`, `scripts/config-wiring-stored.json`
+- Deviations: Verification read as specified (Deviation Log).
+
+### Step 8 — test: seed migration shape [done]
+- Part of the Steps 7+8 unit. New `uiChartHistoryBarsSeedMigration.test.ts` on the shared `findOne` / `splitStatements` helper; one row regex instead of a copy of the 049 test's tuple parser (DRY).
+- AC-1/AC-3 red (`.sdd-logs/v-1.log`, migrations absent): `expected exactly one *_ui_chart_history_bars.up.sql, got []`, 5 fail / 365 pass → green (`.sdd-logs/v-6.log`): lint 0 errors, `tests 370 / pass 370 / fail 0`, `All files 92.24` lines (≥ 40).
+- Files modified: `services/xstockstrat-config/src/__tests__/uiChartHistoryBarsSeedMigration.test.ts`
+- Deviations: the block exits 1 on its last line, the no-match fixtures grep (expected); see the Deviation Log.
+- Open Threads update: the scratch-Postgres thread and the "Step 7 alone passes `--final`" thread are resolved; the `050` claim shared with 330 stays open for the integration PR; owner + config-team approval for the key is still outstanding.
