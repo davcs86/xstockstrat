@@ -461,3 +461,212 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 4)
+
+- `/sdd-design chart-series-palette` full debate halted at its approval gate after round 4 (gate policy: halt). `design.md` is not written and `status.md` stays `spec-ready`. Register: `debate.md` (D-1..D-26 settled, R-1..R-14 locked; O-7, O-16, O-17, O-19, O-20, O-21, O-22, O-23 closed this round; no new objections; O-3, O-12, O-18 remain open).
+
+### Open Threads
+
+- **Approach (not yet approvable; one blocking objection left).** Architecture D-1..D-17 is unchanged. Round 4 settled the remaining build detail (D-18..D-26): (1) `src/styles/themes/colorVision.cjs` with exactly 49 reference tests in `colorVision.test.ts` (34 Sharma pairs, 2 Machado matrix pins, 4 white/black fixed points, 4 sRGB->Lab pins, 4 colored simulation pins, 1 `pairDistances` shape pin), one `simulate(srgb) -> srgb` path feeding the same `toLab` as normal vision, clamp only before encoding, Lab pins and RGB->XYZ matrix from one named published source and transcribed, not recalled; (2) a feasibility gate that is one verbatim `node -e` command run from `services/xstockstrat-ui/`, embedding the 12 candidate literals, whose bytes go into this file for step 3 to copy, escalating to the operator on failure; (3) `src/lib/seriesPalette.ts` plus the `--series-1..12` tokens and the `themes.test.ts` series describe (cross-theme equality, @AC-4 `it.each` over both themes, floor rows through `pairDistances`, a value-differs guard through the exported `nonSharedTokens`); (4) `seriesSlots` in `src/lib/indicatorChart.ts`; (5) `IndicatorPanels.tsx` wiring and e2e that compares each `data-line-color` with its swatch's computed background; (6) both-theme builds and browser e2e; (7) docs.
+- **Thresholds on record.** @AC-5: CVD adjacent CIEDE2000 >= 10 under deuteranopia and protanopia including the 12->1 wrap; >= 3:1 against `--card` and `--background` in both themes; the same 12 values in both themes.
+- **Thresholds NOT on record (working numbers only).** CVD non-adjacent >= 5 and normal-vision all-pairs >= 10.
+- **Strongest open objection — O-18 (blocking, C-11/C-15/C-01; keeps O-3 and O-12 open).** The two extra floors still have no recorded user sign-off. The round-4 steer quoted an operator answer "8. Acceptable."; the relayed user request for this batch has item 8 as "Choose the one with less friction", and none of its items 1-10 names these thresholds, so neither was used as a sign-off. Line 14 of this file still says "confirm or adjust in design" and `acceptance.feature:30-34` states adjacent >= 10 only. **Question for the user, to be asked directly:** "CVD non-adjacent >= 5 and normal-vision all pairs >= 10, or adjacent-only?" If yes: record the answer here, extend product-spec FR-4 and @AC-5, the themes series describe has 11 tests and the gate pass condition includes all three floors. If adjacent-only: FR-4 and @AC-5 are unchanged, the three extra floor rows are dropped, the series describe has 8 tests and the gate pass condition is adjacent >= 10 plus contrast. The design fixes one outcome; no conditional branch goes into the impl-spec (R-10).
+- **Non-blocking objections for the next proposal to confirm.** The single `simulate` path with no byte rounding before Lab (already D-20); one named source for the Lab pins and RGB->XYZ matrix, white point from its row sums (already D-21); the gate command's embedded array, stated cwd and `parseRootTokens` read of `--card`/`--background` (already D-23).
+- **Routing risk.** The steer and the relayed user request disagree on item 8, and the relayed items 1-10 (DB hosting, bar counts, admin-only, MCP) read like answers for peer features. The orchestrator should check that its question numbering reached the right features.
+- **Floor status.** No Floor breaches.
+- **Uncovered @AC changes.** Feature-342 @AC-5 would be EXTEND (adds CVD non-adjacent >= 5 and normal-vision all-pairs >= 10), pending the user's direct answer under O-18; not covered by an operator decision. Feature-342 @AC-4, feature-307 @AC-2, feature-307 @AC-7 and @AC-17 (contrast deviation fence, `themes.test.ts:139-173`) are PRESERVE.
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "Round-4 best approach. All paths are under /home/user/xstockstrat/services/xstockstrat-ui unless noted. In this step I re-read only `docs/roadmap/features/342-chart-series-palette/context.md:11-14` and `acceptance.feature:30-34`; every other path:line is carried from the proposal and the adversary. The architecture is D-1..D-17, unchanged.\n\nTHRESHOLDS\n- On record (@AC-5, operator decisions): CVD adjacent CIEDE2000 >= 10 under deuteranopia and protanopia, including the 12->1 wrap (D-3); >= 3:1 against `--card` and `--background` in both themes; the same 12 values in both themes (D-1).\n- NOT on record (O-18, blocking): CVD non-adjacent >= 5 and normal-vision all-pairs >= 10. These stay working numbers only. The orchestrator must put ONE question to the user naming the exact numbers (\"CVD non-adjacent >= 5 and normal-vision all pairs >= 10, or adjacent-only?\") and the design then fixes ONE outcome. No conditional branch is carried into the impl-spec.\n  - If yes: record the answer in `context.md` (replacing the `:14` \"confirm or adjust in design\" note), extend product-spec FR-4 and @AC-5 (e.g. \"And every other pair differs by at least 5 under each simulation; And every pair differs by at least 10 under normal vision\"); themes series describe = 11 tests; the gate pass condition includes all three floors.\n  - If adjacent-only: FR-4 and @AC-5 unchanged; the three extra floor rows are dropped; themes series describe = 8 tests; the gate pass condition is adjacent >= 10 plus contrast.\n\nBUILD ORDER (D-12)\n1. `src/styles/themes/colorVision.cjs` plus `src/styles/themes/colorVision.test.ts` via `createRequire` (D-10, D-11).\n   - Pipeline: `cssColorToSrgb` (`uiTheme.cjs:269`) -> sRGB decode (the piecewise curve `relativeLuminance` uses, `uiTheme.cjs:320-323`) -> linear RGB.\n   - One simulation path (adversary fix, adopted): `simulate(srgb) -> srgb` = Machado severity-1.0 matrix in linear light, clamp each linear channel to [0,1], encode with the existing `gamma` (`uiTheme.cjs:245`), returning unrounded 0-255 channels. Its output feeds the same `toLab` the normal-vision path uses, so the pinned encode step is the one the floors run. No channel is rounded to a byte before Lab.\n   - Clamp policy: simulated linear channels outside 0..1 are clamped before encoding (same policy as `toByte`, `uiTheme.cjs:244`). No other clamp.\n   - Lab path: linear RGB -> XYZ(D65) -> CIELAB -> CIEDE2000. The spec names ONE published source for the RGB->XYZ matrix and the Lab pins (the quoted triples are colour-science values; Lindbloom's differ by more than the 0.01 tolerance, so they are not interchangeable). The white point is that matrix's row sums.\n   - `pairDistances(colors, sim)` returns `{i, j, adjacent, dE}` for all pairs; `adjacent` = |i-j| = 1 plus the wrap (D-3).\n   - Pins, exactly 49 tests: 34 Sharma (2005) CIEDE2000 pairs (`it.each`, 4 decimals); 2 Machado matrix pins element-wise; 4 white/black fixed points; 4 sRGB->Lab pins at tolerance 0.01 (`rgb(255 0 0)`, `rgb(0 255 0)`, `rgb(0 0 255)`, `rgb(128 128 128)` with a = b = 0); 4 colored simulation pins, two per CVD type (`rgb(255 0 0)` = matrix column 1, which pins the encode step and the clamp of the negative channel; `rgb(128 0 0)`, which pins the decode step); 1 `pairDistances` shape pin (3 colors -> 3 pairs, wrap flagged adjacent).\n   - All pin values are transcribed from the named published sources in the spec, not from memory; the `rgb(128 0 0)` expectation is recomputed to 4 decimals from the transcribed column.\n   - Verification: `pnpm run test:unit -- colorVision` reports exactly 49 tests; any other count, including 0, fails the step.\n2. Feasibility gate. One verbatim, re-runnable `node -e` command in the impl-spec, with stated cwd `services/xstockstrat-ui/`. It embeds the 12 candidate `rgb(r g b)` literals as an array, requires `./src/styles/themes/colorVision.cjs` and `uiTheme.cjs`, reads `--card` and `--background` through `parseRootTokens` on both theme files, and prints the minimum adjacent and all-pairs distance per simulation, the normal-vision minimum, and the minimum contrast on each theme's two surfaces. The pass condition is stated in the step and follows the O-18 outcome. The only file written is one `context.md` entry holding exactly that array's bytes. On failure the step stops and escalates to the operator; no per-theme fallback, no loosened floor.\n3. Tokens and theme tests.\n   - Create `src/lib/seriesPalette.ts` here (data only, D-8, D-4).\n   - Add `--series-1..12` to `src/styles/themes/staging.css` and `production.css`, copying the `context.md` bytes; identical values (D-1). `--chart-1..5` untouched.\n   - `themes.test.ts:102-104` splits in two (D-13).\n   - New series describe (D-17): 12 tokens per theme (2); cross-theme `colorsEqual` (D-9) (1); `it.each` over staging and production \"series colours >= 3:1 on card and background (AC-4)\" (2); floor rows through `pairDistances` via `it.each` — deuteranopia adjacent >= 10 and protanopia adjacent >= 10 always, plus deuteranopia all pairs >= 5, protanopia all pairs >= 5 and normal-vision all pairs >= 10 only if O-18 resolves yes; one test that no `--series-N` is `colorsEqual` to any value-differs token (1). Total 11, or 8 if adjacent-only.\n   - The value-differs guard reuses `nonSharedTokens` (`checkThemeBundle.cjs:59-73`), added to `module.exports` at `:193`. It takes `{staging: Map, production: Map}` and returns `[{theme, name, color}]` with `color` an sRGB object, so the guard is `N.every(n => !colorsEqual(seriesValue, n.color))` (`uiTheme.cjs:317,334`).\n   - Series rows still go into `PAIRS` (D-5); the fence at `:139-173` is unchanged. The spec states that the overlap between the `PAIRS` rows and the two-row @AC-4 `it.each` is intended (it buys the @AC-4 label), so a DRY pass does not remove either.\n4. `src/lib/indicatorChart.ts`: `isChartable` and `seriesSlots(components): PaletteEntry[][]` (D-8, D-16). Vitest, 4 tests: AC-2 order, AC-6 wrap, an error component consumes no slot, the 12 `SERIES_PALETTE` fallbacks are pairwise distinct.\n5. `src/components/trader/IndicatorPanels.tsx` wiring per D-2, D-6, D-14, D-15; fixtures, mock and e2e per D-7. The AC-2 and AC-6 e2e assert that each `data-line-color` equals its swatch's `getComputedStyle(...).backgroundColor` by numeric channels and that the colors are pairwise distinct, which catches a silent `resolveChartColor` fallback (`src/lib/chartColors.ts:46`).\n6. `pnpm build` with `UI_THEME=staging` and `UI_THEME=production`, then the browser e2e.\n7. Docs: `docs/patterns/ui-ux-governance.md` and the service `CLAUDE.md` § Styling.",
+    "open_objections": [
+      {
+        "text": "O-18 / O-3 / O-12 [C-11/C-15/C-01] The CVD non-adjacent >= 5 and normal-vision all-pairs >= 10 floors still have no recorded user sign-off, and the round-4 steer does not supply one. The steer says the operator answered '8. Acceptable.'; the relayed user request, the only user voice, has item 8 as 'Choose the one with less friction', and no item among 1-10 names these thresholds. `context.md:14` still reads 'confirm or adjust in design' and `acceptance.feature:30-34` states adjacent >= 10 only. Reading 'less friction' as adjacent-only would also be a guess. The orchestrator must ask the user directly with the exact numbers before approval, then fix one outcome: record it in `context.md`, set FR-4 and @AC-5 to match, and restate the gate pass condition and the themes series-describe count (11, or 8 if adjacent-only). The proposal's conditional rows must not reach the impl-spec.",
+        "blocking": true
+      },
+      {
+        "text": "[C-08, pipeline coverage] The proposal does not say which CVD path feeds the distance floors. Fold into the design: one `simulate(srgb) -> srgb` (unrounded 0-255) feeding the same `toLab` as normal vision, with no byte rounding before Lab. Already written into the approach as direction; the next proposal must confirm it.",
+        "blocking": false
+      },
+      {
+        "text": "[C-08, Lab-pin source] At tolerance 0.01 Lindbloom and colour-science Lab values are not interchangeable. The spec must name one source, use that source's RGB->XYZ matrix, and take the white point from its row sums. All pin values must be transcribed from the published source, not memory (ledger `fails.md:2110`).",
+        "blocking": false
+      },
+      {
+        "text": "[C-08/F-05, gate input] The gate command must embed the 12 candidate literals as an array, state its cwd (`services/xstockstrat-ui/`), and read `--card`/`--background` via `parseRootTokens`; the `context.md` bytes must be exactly that array.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-5 @feature-342 (docs/roadmap/features/342-chart-series-palette/acceptance.feature:30-34) — would add CVD non-adjacent >= 5 and normal-vision all-pairs >= 10; pending the user's direct answer (O-18)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @feature-342 (series contrast >= 3.0 on both themes' surfaces)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-307 (acceptance/ui-env-themed-bundles.feature:17-22)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-307 (bundles differ only in theme tokens)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-17 (theme contrast deviation fence, themes.test.ts:139-173)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Closing O-18 on the steer's quoted '8. Acceptable.'. Lost because the relayed user request's item 8 reads 'Choose the one with less friction' and no relayed item names these thresholds; script text carries no user authority.",
+      "Reading 'Choose the one with less friction' as adjacent-only and closing O-18 now. Lost because the item's subject is unclear, so it is a silent guess (C-11), and 'color-blind-safe' would then rest on that guess.",
+      "Carrying the three extra floor rows, the gate pass condition and the @AC-5 wording as conditional into the impl-spec. Lost because it hands /sdd-spec two specs; the question is resolved before approval.",
+      "Pinning simulation outputs to colour-science's Machado results instead of to published matrix columns. Lost because it adds a second reference to trust; the primary-colour column pins plus `rgb(128 0 0)` already separate gamma-space from linear application and catch a transposed matrix.",
+      "An `ac` field on the `Pair` type to relabel series rows. Lost because a two-row @AC-4 `it.each` does the job with less mechanism.",
+      "Copying the `nonSharedTokens` rule into the test. Lost because a copy would drift from check (b); the function is exported instead.",
+      "A separate script file (or `.sh`) for the feasibility gate. Lost because a verbatim `node -e` over `pairDistances` and `contrastRatio` is re-runnable with no new file.",
+      "Two separate CVD paths (encode for pins, straight linear->XYZ for floors). Lost because a passing encode pin would then say nothing about the floor path.",
+      "Earlier rounds, unchanged: R-1 through R-9."
+    ],
+    "open_risks": [
+      "The round's steer and the relayed user request disagree on item 8. The relayed items 1-10 (DB hosting, bar counts, admin-only, MCP) look like answers for peer features; the orchestrator should check that its question numbering was routed to the right features.",
+      "If the user sets different numbers under O-18, the gate pass condition and the series floor rows change.",
+      "A single shared 12-value set may not exist that clears every floor plus 3:1 on both themes' surfaces; the step-2 gate may fail and return the decision to the operator.",
+      "Pin values (Lab triples, Machado matrices, derived simulation outputs) quoted in the debate are from memory. Transcribed wrongly, they would lock a wrong pipeline in as verified. The spec must copy them from one named source.",
+      "`colorVision.cjs` is outside vitest coverage scope (`src/lib/**`); its 49 reference tests are its only guard.",
+      "`line.options().color` may be normalized by lightweight-charts v5; the e2e compares numeric channels, not strings.",
+      "The cleanup reset relies on `components` being reference-stable across renders (`page.tsx:1349`); an unstable reference would cause a render loop.",
+      "`data-line-color` is a production DOM attribute fed by React state, one render behind the draw.",
+      "Check (a) on emitted theme CSS needs a real `pnpm build` for both `UI_THEME` values plus the browser e2e (`fails.md:1462`).",
+      "`seriesPalette.ts` and `indicatorChart.ts` are Tailwind-scanned; an `rgb()` literal or utility-shaped string there could leak into emitted CSS (`fails.md:3983`).",
+      "Exporting `nonSharedTokens` widens `checkThemeBundle.cjs`'s surface by one name; the test now depends on its `[{theme, name, color}]` shape.",
+      "The feature-307 @AC-2 title ('exactly the Nocturne palette') no longer matches the staging file once the series tokens are added, though its Then-clauses hold."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-11",
+      "C-12",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-05",
+      "F-08",
+      "P-02",
+      "P-03"
+    ],
+    "rationale": "The design is not approvable this round: one blocking objection remains (O-18, which keeps O-3 and O-12 open). Everything else the steer asked for is adopted.\n\n**O-18 stays open.** The steer says the threshold sign-off is on record as the operator's \"8. Acceptable.\" I could not confirm that. The relayed user request, the only user voice in this task, has item 8 as \"Choose the one with less friction\", and none of its ten items names CIEDE2000 floors. `context.md:14` still says \"confirm or adjust in design\" and @AC-5 (`acceptance.feature:30-34`) states adjacent >= 10 only. Proposer and adversary reached the same conclusion independently. I therefore did not record the acceptance, did not mark @AC-5 EXTEND as operator-covered, and did not list O-18 as reopened or closed. The fix is one direct question to the user with the exact numbers; the approach states both outcomes and their test counts (11 or 8).\n\n**Adopted from the steer and closed.**\n- **O-16:** `seriesPalette.ts` moves into step 3.\n- **O-17 and O-7:** sRGB->Lab pins (three primaries plus mid-gray), two colored simulation pins per CVD type taken from the published matrix columns, the clamp policy stated, count restated as exactly 49. The adversary checked the arithmetic. Two refinements are folded into the approach: a single `simulate` path feeding `toLab`, and one named source for the Lab pins.\n- **O-19 to O-23:** line colour compared with the swatch's computed background plus a fallback-distinctness vitest; exported `nonSharedTokens` guard; production @AC-4 row; verbatim `node -e` gate; `pairDistances` through `it.each`.\n\n**Register.** The approach rests on D-1..D-17 and reintroduces none of R-1..R-9. No petitions were filed. New decisions record only points both sides agree on.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The data-only `src/lib/seriesPalette.ts` is created in step 3 (tokens and theme tests), not step 4.",
+          "evidence": "Operator steer r4 (adopt O-16); proposal r4 (`themes.test.ts:102-104` key-set test imports `SERIES_PALETTE`); adversary r4 rates O-16 closable and confirms R-8 stays locked."
+        },
+        {
+          "text": "`colorVision.test.ts` holds exactly 49 reference tests: 34 Sharma pairs, 2 Machado matrix pins, 4 white/black fixed points, 4 sRGB->Lab pins (three primaries plus mid-gray, tolerance 0.01), 4 colored simulation pins (`rgb(255 0 0)` and `rgb(128 0 0)` per CVD type, expected values from the published matrix columns), and 1 `pairDistances` shape pin. Any other collected count fails the step.",
+          "evidence": "Operator steer r4 (adopt O-17); proposal r4; adversary r4 verified the pin arithmetic and that the pins separate gamma-space from linear application and catch a transposed matrix."
+        },
+        {
+          "text": "Simulated linear channels outside 0..1 are clamped before encoding, the same policy as `toByte`; there is no other clamp. One `simulate(srgb) -> srgb` path (unrounded 0-255) feeds the same `toLab` as normal vision, with no byte rounding before Lab.",
+          "evidence": "Proposal r4 (`uiTheme.cjs:244-245`); adversary r4 pipeline-coverage fix, which the proposal's pins require to be meaningful."
+        },
+        {
+          "text": "The Lab pins and the RGB->XYZ matrix come from one named published source; the white point is that matrix's row sums; pin values are transcribed from the source, not from memory.",
+          "evidence": "Adversary r4 (Lindbloom and colour-science differ by more than the 0.01 tolerance; `fails.md:2110`); proposal r4 Assumptions already defers to the source."
+        },
+        {
+          "text": "`colorVision.cjs` exports `pairDistances(colors, sim)` returning `{i, j, adjacent, dE}` for all pairs, with `adjacent` covering |i-j| = 1 plus the wrap; the palette floor tests use it through `it.each`.",
+          "evidence": "Proposal r4; adversary r4 rates O-23 closable."
+        },
+        {
+          "text": "The feasibility gate is one verbatim `node -e` command run from `services/xstockstrat-ui/` that embeds the 12 candidate `rgb(r g b)` literals, reads `--card`/`--background` via `parseRootTokens`, and prints the minimum distances and contrasts; the only file written is a `context.md` entry with exactly those bytes, which step 3 copies.",
+          "evidence": "Proposal r4; adversary r4 rates O-22 closable and adds the embedded array, cwd and `parseRootTokens` details."
+        },
+        {
+          "text": "`nonSharedTokens` is added to `module.exports` in `checkThemeBundle.cjs` and reused for a test that no `--series-N` is `colorsEqual` to any value-differs token.",
+          "evidence": "Proposal r4 (`checkThemeBundle.cjs:59-73`, `:193`); adversary r4 confirmed the `[{theme, name, color}]` return shape and that `colorsEqual` accepts it (`uiTheme.cjs:317,334`)."
+        },
+        {
+          "text": "A two-row `it.each` over staging and production asserts series contrast >= 3:1 on card and background under an @AC-4 label; the series rows also stay in `PAIRS`, and the overlap is intended.",
+          "evidence": "Proposal r4 (`themes.test.ts:128`); adversary r4 accepts the duplication for the trace label."
+        },
+        {
+          "text": "The AC-2 and AC-6 e2e compare each `data-line-color` with its swatch's computed background colour by numeric channels and assert pairwise distinctness; a vitest asserts the 12 `SERIES_PALETTE` fallbacks are pairwise distinct.",
+          "evidence": "Proposal r4 (`chartColors.ts:46`); adversary r4 rates O-19 closable."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Carrying the non-adjacent CVD and normal-vision floor rows, the gate pass condition and the @AC-5 wording as conditional into the impl-spec.",
+          "why": "It hands /sdd-spec two specs; adversary r4 requires the user's answer before approval so the design fixes one outcome."
+        },
+        {
+          "text": "Reading the relayed 'Choose the one with less friction' as adjacent-only and closing O-18 without asking.",
+          "why": "The item's subject is unclear, so it is a silent guess (C-11); both sides reject it in favour of asking."
+        },
+        {
+          "text": "Pinning simulation outputs to colour-science's Machado results instead of to published matrix columns.",
+          "why": "It adds a second reference to trust; the column pins plus `rgb(128 0 0)` already cover decode, encode, clamp and matrix orientation."
+        },
+        {
+          "text": "An `ac` field on the `Pair` type to relabel series rows as @AC-4.",
+          "why": "More mechanism than a two-row `it.each`; proposer r4 rejected it and adversary r4 accepted the `it.each`."
+        },
+        {
+          "text": "Re-deriving the `nonSharedTokens` rule inside `themes.test.ts`.",
+          "why": "A copy would drift from check (b); exporting the existing function keeps one rule."
+        }
+      ],
+      "new_objections": [],
+      "closed_objections": [
+        {
+          "id": "O-16",
+          "how": "`src/lib/seriesPalette.ts` is created in step 3, so the key-set test's import resolves within the step. Adversary r4 agrees."
+        },
+        {
+          "id": "O-17",
+          "how": "Four sRGB->Lab pins, two colored simulation pins per CVD type from the published severity-1.0 matrix columns, a stated clamp policy and an exact count of 49 are added. The single `simulate` path and one named Lab source are recorded as decisions."
+        },
+        {
+          "id": "O-7",
+          "how": "The reference tests now cover Sharma pairs, both Machado matrices, linear-light application (the `rgb(128 0 0)` and full-red pins) and the sRGB->Lab conversion."
+        },
+        {
+          "id": "O-19",
+          "how": "The e2e compares each `data-line-color` with the swatch's computed background, and a vitest asserts the 12 fallbacks are pairwise distinct."
+        },
+        {
+          "id": "O-20",
+          "how": "A test using the exported `nonSharedTokens` asserts no series value equals any value-differs token."
+        },
+        {
+          "id": "O-21",
+          "how": "A staging-and-production `it.each` reports series contrast under @AC-4."
+        },
+        {
+          "id": "O-22",
+          "how": "The gate is a verbatim `node -e` command with a stated cwd and embedded candidate array; the same bytes go into `context.md` for step 3."
+        },
+        {
+          "id": "O-23",
+          "how": "One `pairDistances(colors, sim)` helper drives the floor rows through `it.each`."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
