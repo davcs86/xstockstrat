@@ -1,6 +1,6 @@
 # xstockstrat-indicators — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-13 (`ccr-7e428591-3j2he0` @ `52f6d5a`). Captures the **non-obvious** local
+Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-15 (`claude/context-constitution-parity-zggeq3` @ `d5de836`). Captures the **non-obvious** local
 invariants of the indicators service (formula engine + subprocess-isolated sandbox, gRPC 50054). The
 sandbox is the security crown jewel — most rules here protect it. Does not restate documented/CI-enforced
 rules (see `## Pointers`).
