@@ -440,3 +440,24 @@ Each asked directly as a numbered question and answered verbatim by the operator
   superseded per-round `sdd-batch-design-state` block(s) are dropped; the last one is kept byte-for-byte (the only one
   any workflow reads, `.claude/workflows/sdd-batch.js:191`). Other `sdd-batch-*` blocks are untouched.
 - The loss check was a self-check by the planning agent (no separate `context-distiller` verifier was available).
+
+## Session 2026-11-15 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation (the operator-approved record, binding, verbatim):
+
+```json
+{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","dev":"3f96d071959081735ce2da665ba1c7f9c2601cb6","specHash":"79f2c0fc984b52e1eb157b563cdb987951befee8","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10],"mismatches":[{"n":1,"detail":"Minor line drift. The spec cites feature.md:36 for the '## Summary' sentence that contains 'suspected percent-vs-fraction unit error'. On the merged tree, line 35 is '## Summary', line 36 is blank and the sentence is at docs/roadmap/features/340-fix-fundamentals-roe-unit/feature.md:37. The content and the edit are unaffected. All other Step 1 anchors match: the acceptance.feature 0.0366 and 28070000/767000000 lines at 10/12, 18/24/25, 29/31 and 48/50, recon.md:136, the product-spec 'low single-digit' (:15) and 'Not traced' (:27) lines, FR-1 :43-45, OQ1 :76-79, Out of Scope :100-101, the defect report title and its ## Expected / ## Root cause hypothesis / ## Confidence sections, and debate D-11/D-12. All Files paths exist."},{"n":4,"detail":"Minor line drift. The spec cites 'earliest-filed wins per quarter end in trailingNetIncome (:425)'. The comparison `if cur, ok := quarters[f.end]; !ok || f.filed.Before(cur.filed)` is at services/xstockstrat-marketdata/internal/edgar/edgar_client.go:423-424, and :425 is the closing brace. The per-fiscal-year rule at :435 matches. Every other Step 4 anchor matches: FetchHistorical :290, periodKey :286/:340, the first-seen write :357-364, periodAgg :220-227 (vals comment :226, a single construction site at :343), flowTags :187-193, instantTags :195-210, niFact :387, toNIFact :393, valIn :230, valAny :241, voteCurrency :259, annualizeQuarterlyROE :475/:479, buildPeriod :526, const DerivationVersion = 1 at :524, service re-derive :2398-2407 and snapshot drop :2353-2361."}]}
+```
+
+- Merged main-dev `9f88562296464b43465d0376b40cefafe93f0743` cleanly. The merge-train resolver had nothing to resolve and ledger-guard reported clean.
+- Re-spec commits (`respec(fix-fundamentals-roe-unit)` in `git log --first-parent origin/main-dev..HEAD`):
+  - `5264c90ccbd40cb4eaec12d49e2de259f4238e60`: Step 1 evidence `feature.md:36` → `:37`; Step 4 evidence
+    `trailingNetIncome` `:425` → `:423-424`. Line drift only, no instruction change.
+- Tooling detection: go1.27.0 is present. golangci-lint 2.5.0 (built with go1.25.1) is present but not at the v2.14.0
+  pin, so the Go steps install it with the pinned `GOTOOLCHAIN=go1.27.0 go install`. buf is absent on the host;
+  Docker 29.9.2 is present for the codegen image (steps 7-8).
+- status.md → `in-progress`; 10 steps pending.
+
+```sdd-batch-setup
+{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","date":"2026-11-15"}
+```
