@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-11-15 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
+| 2026-11-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -19,6 +20,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
+- [Design](design.md) — approved approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec chart-series-palette`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -40,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design chart-series-palette` — quick design recommended (single service, no proto, no schema change, no overlap finding); append `quick` to take it
+`/sdd-spec chart-series-palette` — generate implementation spec from the approved design
