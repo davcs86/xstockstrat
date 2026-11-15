@@ -56,7 +56,7 @@ Design (settled; full text in `design.md` and `debate.md` — D-1..D-26, R-1..R-
 
 ## Files Modified
 
-Steps 1+2: `packages/proto/notify/v1/notify.proto` and the regenerated notify stubs under `packages/proto/gen/{go,python,ts}/notify/v1/` and `packages/proto/gen/ts/dist/notify/v1/`. Steps 3+4: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`, `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`. Feature-directory artifacts:
+Steps 1+2: `packages/proto/notify/v1/notify.proto` and the regenerated notify stubs under `packages/proto/gen/{go,python,ts}/notify/v1/` and `packages/proto/gen/ts/dist/notify/v1/`. Steps 3+4: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`, `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`. Steps 5+6: `services/xstockstrat-notify/src/fanout/webPush.ts`, `services/xstockstrat-notify/src/__tests__/webPush.test.ts`. Feature-directory artifacts:
 - `feature.md`, `status.md` — draft → spec-ready → design-approved → implementation-ready.
 - `product-spec.md` — review rewordings (nav highlight, `buf breaking` path, FR-7 bullet, bell badge in the consumer surface); FR-8 added and the Consumer Surface line amended per D-17 (sdd-spec).
 - `acceptance.feature` — `@AC-1` tagged `@FR-5`; `@AC-6` now reads "the bell on that page shows no unread badge"; `@AC-10 @FR-8` added (D-17). `@AC-8` text unchanged.
@@ -383,3 +383,13 @@ _(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-disti
 - Atomic unit Steps 3+4. Added `describe('getAlert (feature 344)')` with the 8 cases: AC-9 targeted, AC-3 broadcast, AC-2 code 5 plus the SQL and params, malformed id, missing header, AC-1 read state, AC-1 `context` encode/decode round-trip (`{…}` and `{}`), and R-1 (`rowToAlert` has no `context`). The last one passed at red as a characterisation. AC-2/AC-1/AC-3/AC-9 red → green as in Step 3. Green `.sdd-logs/v-3.log`: 414 pass, 0 fail, `exit=1` from the closing `grep "__tests__/fixtures"` no-match only.
 - Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`
 - Deviations: Step 4's fixtures grep cannot match the `./fixtures/` imports — full detail in Deviation Log. Verification resolves `@xstockstrat/proto` through the main checkout's linked `node_modules`, whose stubs lack `getAlert`; the tests call the impl directly and use the unchanged `Alert` codec, so the result does not depend on it.
+
+### Step 5 — service: notify push payload carries the alert url [done]
+- Atomic unit Steps 5+6. Added ``url: `/accounts/notifications/${alert.alertId}` `` to the `PushPayload` literal in `WebPushDispatcher.dispatch`; no other field, no audience change, no `sw.js` change. TDD (unit): AC-7 red `.sdd-logs/v-1.log` — both extended tests failed with `actual: undefined, expected: '/accounts/notifications/a1'` (`ℹ fail 2`); green `.sdd-logs/v-2.log` `ℹ tests 414 / ℹ pass 414 / ℹ fail 0`, `All files … 90.7` lines, lint `0 errors`, `exit=0`.
+- Files modified: `services/xstockstrat-notify/src/fanout/webPush.ts`
+- Deviations: none
+
+### Step 6 — test: push payload url [done]
+- Atomic unit Steps 5+6. Extended the targeted test (`AC-4 / @AC-2`) with the `url` assertion on the first payload and on every sent payload, and the untargeted admin test (`@AC-5`) with the same assertion; both reuse the `alert()` builder (`alertId: 'a1'`), no new literal fixture. AC-7 red → green as in Step 5.
+- Files modified: `services/xstockstrat-notify/src/__tests__/webPush.test.ts`
+- Deviations: none. The `165 @AC-4` EXTEND / `242 @AC-5` PRESERVE confirmation (Open Threads) is still the operator's at the checkpoint.

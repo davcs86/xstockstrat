@@ -262,7 +262,7 @@ Expected: the new suite runs (count the `getAlert` cases in the `node --test` ou
 
 ### Step 5 — service: notify push payload carries the alert url
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/webPush.ts` — modify
@@ -296,7 +296,7 @@ cd services/xstockstrat-notify && pnpm run lint && pnpm run test:coverage && pnp
 
 ### Step 6 — test: push payload url
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/webPush.test.ts` — modify
