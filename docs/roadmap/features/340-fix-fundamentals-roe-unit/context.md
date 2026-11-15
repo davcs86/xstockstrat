@@ -498,3 +498,20 @@ Tooling setup (steps 2+3): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with
 - Config-key wiring gate: not applicable (no key, no migration, no `## Config Key Changes`).
 - Files modified: `services/xstockstrat-marketdata/internal/edgar/testdata/lyft_companyfacts.json`, `services/xstockstrat-marketdata/internal/edgar/own_period_test.go`, `services/xstockstrat-marketdata/internal/edgar/derivation_version_test.go`
 - Deviations: same Verification note as Step 4.
+
+## Session 2026-11-15 — operator standing authorization and checkpoint answers (orchestrator)
+
+- **Standing authorization for checkpoints — operator, verbatim (2026-11-15): "Proceed, do not stop at
+  checkpoints unless it's necessary".** Given in answer to "Proceed past the checkpoints?". The run uses
+  `checkpoints: 'report'` from here on; this entry is its `authorizationRef`. It does not waive blockers,
+  failed verifications, Floor breaches, uncovered `@AC` CHANGE lines or any decision that is the
+  operator's — those still halt.
+- **Scratch Postgres for stored-set generation (orchestrator tooling, not an operator ruling):** a
+  Postgres 16 the main session controls listens on 127.0.0.1:5432. `DATABASE_URL` is not exported into
+  agent shells; prefix the generator: `DATABASE_URL='postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable'
+  python3 scripts/config-wiring-stored.py`. Do not start, stop or delete the server; if it is
+  unreachable, stop and report.
+- **Step 4 selection rules — "Agreed".** Asked: when a period has debt figures but no balance-sheet
+  figures to anchor on, the debt values are left absent; with no anchor at all, a flow figure (net
+  income, revenue, EPS) is taken per unit at its latest period end — confirm or adjust. Both rules are
+  operator-confirmed; the Open Thread is closed.
