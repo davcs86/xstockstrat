@@ -670,3 +670,170 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 5)
+
+- `/sdd-design chart-series-palette` full debate halted at its approval gate after round 5 (gate policy: halt). `design.md` is not written and `status.md` stays `spec-ready`. Register: `debate.md` (D-1..D-30 settled, R-1..R-16 locked; O-3, O-12, O-18 closed this round; O-24..O-27 opened, all non-blocking; no blocking objection is open).
+
+### Open Threads
+
+- **Approach (approvable on one record condition, O-24).** Architecture D-1..D-26 is unchanged. Round 5 fixes one threshold outcome (D-27), all distances in CIEDE2000: under deuteranopia and protanopia simulation, adjacent pairs including the 12->1 wrap >= 10 and every other pair >= 5; under normal vision every pair >= 10; contrast >= 3:1 against `--card` and `--background` in both themes; the same 12 values in both themes. @AC-5 becomes one scenario covering all three floors (D-28), the feasibility-gate pass condition is five distance floors plus four contrast minima (D-29), and the `themes.test.ts` series describe holds exactly 11 tests (D-30). Build order is unchanged (D-12): CVD helper with 49 reference tests, feasibility gate, tokens and theme tests, `seriesSlots`, `IndicatorPanels.tsx` wiring and e2e, both-theme builds, docs.
+- **Artifact edits still to make (orchestrator, on the feature-branch versions; none made in this entry).** (1) A dated operator-decision entry in this file that quotes the threshold question as sent and the verbatim answer, states the floors, and says it replaces the line-14 note "confirm or adjust in design" (line 14 itself stays; this file is append-only). (2) Product-spec FR-4, last clause, restated with the three floors. (3) @AC-5 (`acceptance.feature:30-34`) rewritten as the single scenario titled "Series colors stay distinguishable for normal and red-green color-blind vision". Exact wording for all three is in the state block below.
+- **Strongest open objection — O-24 (non-blocking, C-11/P-03): the answer-to-question mapping is unverified.** The relayed user request for this run is four unlabeled items: "1. Approved", "2. Confirmed", "3. Sign-off the change, amend it", "4. There are no production instances. Staging is enough." The round-5 steer reads item 2 as the answer to this feature's threshold question, and "Confirmed" is in the relayed request verbatim (in round 4 the quoted answer was not). Which question item 2 answered could not be checked from this step, and the batch has six features. Before recording the operator decision, the orchestrator must check its outgoing question list. If item 2 answered a peer feature, O-18, O-3 and O-12 are not closed and the design is not approvable. Item 3 is cited only if it was this feature's FR-4/@AC-5 amendment sign-off. Item 4 is not applied to this feature: it cannot remove the production theme values (operator decision "in both themes", AC-1, D-1), and it drops the `UI_THEME=production` build only if the orchestrator confirms it answered that question.
+- **Other open objections (non-blocking, raised by adversary r5, not yet answered by the proposer).** O-25 (C-08/D-23): the gate omits the D-24 collision guard that step 3 and `pnpm build` check (b) enforce (`checkThemeBundle.cjs:114-137`); add "collisions with `nonSharedTokens` = 0" to the gate output and pass condition, export `nonSharedTokens` (`checkThemeBundle.cjs:193`) in step 1, and on a step-3 failure after a gate pass rerun the gate and append a superseding entry here. O-26 (C-01): name where the 12 candidates come from and allow reordering the same 12 values before declaring gate failure. O-27 (C-15): each of the five @AC-5 floor rows reports the worst pair's `i`, `j`, `dE` and simulation. These are written into the approach as direction, not recorded as decisions.
+- **Main risk.** The gate may fail: one shared 12-value set clearing all five distance floors and 3:1 on two dark cards is tight. Step 2 then stops and escalates to the operator, with no per-theme fallback and no lowered floor.
+- **Floor status.** No Floor breaches.
+- **Uncovered @AC changes.** None, if the O-24 mapping holds: feature-342 @AC-5 is EXTEND (keeps CVD adjacent >= 10, adds CVD non-adjacent >= 5 and normal-vision all-pairs >= 10, states the wrap pair, retitled) and is covered by the operator's "Confirmed". If the mapping does not hold, that EXTEND is uncovered. Feature-342 @AC-4, feature-307 @AC-2, feature-307 @AC-7 and @AC-17 (contrast deviation fence, `themes.test.ts:139-173`) are PRESERVE.
+
+```sdd-batch-design-state
+{
+  "round": 5,
+  "synth": {
+    "approach": "Round-5 best approach. Paths are under /home/user/xstockstrat/services/xstockstrat-ui unless noted. In this step I re-read only `docs/roadmap/features/342-chart-series-palette/context.md:9-15`, `acceptance.feature:30-34` and the `nonSharedTokens`/`module.exports` lines of `src/styles/themes/checkThemeBundle.cjs` (`:59`, `:152`, `:193`); every other path:line is carried from the proposal and the adversary. The architecture is D-1..D-26, unchanged.\n\nTHRESHOLDS (one outcome, no conditional rows — R-10)\n- Deuteranopia and protanopia simulation: every adjacent pair, including the 12->1 wrap (D-3), differs by CIEDE2000 >= 10; every other pair by >= 5.\n- Normal vision: every pair >= 10.\n- Contrast >= 3:1 against `--card` and `--background` in both themes.\n- The same 12 values in both themes (D-1).\n\nARTIFACT EDITS (orchestrator, on the feature-branch versions)\n1. Append to `docs/roadmap/features/342-chart-series-palette/context.md` a dated operator-decision entry that quotes the question as sent (with the numbers) and the verbatim answer \"Confirmed\", states the floors above, and says it replaces the `:14` note (\"confirm or adjust in design\"). `:14` itself stays (append-only). If relayed item 3 (\"Sign-off the change, amend it\") was this feature's FR-4/@AC-5 amendment sign-off, cite it in the same entry; if it answered a peer feature, leave it out.\n2. Product-spec FR-4, last clause: \"...and the palette stays distinguishable: under deuteranopia and protanopia simulation each adjacent pair (including entry 12 with entry 1) differs by a CIEDE2000 distance of at least 10 and every other pair by at least 5; under normal vision every pair differs by at least 10.\"\n3. Rewrite @AC-5 (`acceptance.feature:30-34`) as one scenario:\n   - Title: \"Series colors stay distinguishable for normal and red-green color-blind vision\"\n   - Given the 12 series colors in palette order, where entry 12 and entry 1 are adjacent\n   - When every pair is compared by CIEDE2000 distance under deuteranopia simulation, under protanopia simulation, and under normal vision\n   - Then under each simulation every adjacent pair differs by at least 10\n   - And under each simulation every other pair differs by at least 5\n   - And under normal vision every pair differs by at least 10\n\nBUILD ORDER (D-12)\n1. CVD helper: `src/styles/themes/colorVision.cjs` plus `colorVision.test.ts`, exactly 49 tests (D-10, D-11, D-19, D-20, D-21, D-22). Direction from adversary r5, for the next proposal or the spec to confirm: add `nonSharedTokens` to `module.exports` at `checkThemeBundle.cjs:193` in this step (D-24 fixes the export, not its step), so the step-2 gate can `require` it and the gate itself still writes only `context.md` (D-23).\n2. Feasibility gate (D-23): one verbatim `node -e` run from `services/xstockstrat-ui/`, embedding the 12 candidate `rgb(r g b)` literals and reading `--card`/`--background` via `parseRootTokens` from both theme files.\n   - Pass condition: deuteranopia adjacent min >= 10; protanopia adjacent min >= 10; deuteranopia non-adjacent min >= 5; protanopia non-adjacent min >= 5; normal-vision all-pairs min >= 10; all four contrast minima (two surfaces x two themes) >= 3.0.\n   - Direction from adversary r5 (not yet answered by the proposer): also print and require \"collisions with `nonSharedTokens` = 0\", so a set that passes the gate cannot then fail step 3's guard and `pnpm build` check (b) (`checkThemeBundle.cjs:114-137`).\n   - Direction: the spec names where the 12 candidates come from; reordering the same 12 values is allowed before a failure is declared (it lowers no floor).\n   - On pass: one `context.md` entry with exactly the array's bytes. On failure: stop and escalate to the operator; no per-theme fallback, no lowered floor. Direction: if step 3 fails after a gate pass, rerun the gate and append a superseding `context.md` entry; never edit the earlier one.\n3. Tokens and theme tests: create `src/lib/seriesPalette.ts` (D-18); copy the `context.md` bytes into `src/styles/themes/staging.css` and `production.css` as `--series-1..12` (`--chart-1..5` untouched); split `themes.test.ts:102-104` (D-13); series rows stay in `PAIRS` (D-5, D-25). The series describe holds exactly 11 tests: 12 tokens per theme (2); cross-theme `colorsEqual` (D-9) (1); @AC-4 contrast `it.each` over staging and production (2); @AC-5 floor rows through `pairDistances` `it.each` (5: deuteranopia adjacent >= 10, protanopia adjacent >= 10, deuteranopia non-adjacent >= 5, protanopia non-adjacent >= 5, normal all pairs >= 10); no `--series-N` `colorsEqual` to a value-differs token (D-24) (1). Any other count fails the step. Direction: each floor row's failure message names the worst pair's `i`, `j`, `dE` and simulation.\n4. `src/lib/indicatorChart.ts`: `isChartable` and `seriesSlots` (D-8, D-16) with 4 vitest tests.\n5. `src/components/trader/IndicatorPanels.tsx` wiring, fixtures, mock and e2e (D-2, D-6, D-7, D-14, D-15, D-26).\n6. `pnpm build` with `UI_THEME=staging` and with `UI_THEME=production`, then the browser e2e. Both builds stay: relayed item 4 (\"Staging is enough\") is not applied to this feature.\n7. Docs: `docs/patterns/ui-ux-governance.md` §2/§5 and the service `CLAUDE.md` § Styling.",
+    "open_objections": [
+      {
+        "text": "[C-11/P-03, record condition] The relayed user request contains 'Confirmed' as item 2, but its four items carry no question labels and this is a six-feature batch. Before writing the context.md entry the orchestrator must check its outgoing question list that item 2 answered this feature's threshold question, and the entry must quote the question as sent (with the numbers) and the verbatim answer. If item 2 answered a peer feature, O-18, O-3 and O-12 are not closed and the design is not approvable. Item 3 ('Sign-off the change, amend it') is cited only if it was this feature's FR-4/@AC-5 amendment sign-off. Item 4 ('Staging is enough') is not applied here: it cannot remove the production theme values (operator decision 'in both themes', AC-1, D-1) and may drop the `UI_THEME=production` build only if the orchestrator confirms it answered that question.",
+        "blocking": false
+      },
+      {
+        "text": "[C-08/D-23] The gate does not test everything step 3 tests: it omits the D-24 guard (no `--series-N` `colorsEqual` to a value-differs token), which also fails `pnpm build` check (b) (`checkThemeBundle.cjs:114-137`). Add 'collisions with `nonSharedTokens` = 0' to the gate output and pass condition, export `nonSharedTokens` (`checkThemeBundle.cjs:193`) in step 1 so the gate can require it, and state that a step-3 failure after a gate pass reruns the gate and appends a superseding context.md entry. Written into the approach as direction; the proposer has not answered it.",
+        "blocking": false
+      },
+      {
+        "text": "[C-01] Step 2 names no origin for the 12 candidates, and the adjacency floors depend on order. The spec must name the candidate source and allow reordering the same 12 values before declaring failure and escalating.",
+        "blocking": false
+      },
+      {
+        "text": "[C-15] Each of the five @AC-5 floor rows covers 66 pairs; the assertion message must name the worst pair's `i`, `j`, `dE` and simulation (or list all failing pairs) so a red row is actionable.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-5 @feature-342 (docs/roadmap/features/342-chart-series-palette/acceptance.feature:30-34) — keeps CVD adjacent >= 10, adds CVD non-adjacent >= 5 and normal-vision all-pairs >= 10, states the wrap pair, retitled",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-4 @feature-342 (series contrast >= 3.0 on both themes' surfaces)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-307 (acceptance/ui-env-themed-bundles.feature:17-22)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-307 (bundles differ only in theme tokens)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-17 (theme contrast deviation fence, themes.test.ts:139-173)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "A second @AC scenario for the non-adjacent and normal-vision floors instead of rewriting @AC-5. Lost because it splits FR-4's distinguishability clause across two scenarios; the operator said to set @AC-5 to match and D-17 keeps the rows in one describe.",
+      "A search script that picks and orders a passing 12-color set automatically. Lost because it is tooling the task did not ask for (C-18); a named candidate plus allowed reordering covers the need.",
+      "Applying relayed item 4 ('Staging is enough') as a scope cut for this feature. Lost because its question is unconfirmed and it would conflict with the operator decision 'in both themes', AC-1 and D-1.",
+      "Earlier rounds, unchanged: R-1 through R-14."
+    ],
+    "open_risks": [
+      "The question-to-answer mapping is unverified from this step: 'Confirmed' is in the relayed request, but which question item 2 answered rests on the orchestrator's numbering in a six-feature batch.",
+      "The gate may fail: one shared 12-value set clearing normal all-pairs >= 10, CVD adjacent >= 10 with the wrap, CVD non-adjacent >= 5 and 3:1 on two dark cards (`staging.css:4`, `production.css:4`) is tight. Step 2 then escalates and the design waits for the operator.",
+      "Until the collision check is in the gate, a gate-passing set can still fail step 3 and both builds after its bytes are in the append-only context.md (`fails.md:3983`).",
+      "The on-disk checkout may not be the feature branch; edits to context.md, product-spec FR-4 and @AC-5 must target the feature-branch versions.",
+      "Pin values (Lab triples, Machado matrices, simulation outputs) must be transcribed from one named source at spec time, not from memory (D-21); the proposer suggests colour-science, not yet settled.",
+      "`colorVision.cjs` is outside vitest coverage scope (`src/lib/**`); its 49 reference tests are its only guard.",
+      "`line.options().color` may be normalized by lightweight-charts v5; the e2e compares numeric channels, not strings.",
+      "The cleanup reset relies on `components` being reference-stable across renders (`page.tsx:1349`).",
+      "Check (a) on emitted theme CSS needs a real `pnpm build` for both `UI_THEME` values plus the browser e2e (`fails.md:1462`).",
+      "`seriesPalette.ts` and `indicatorChart.ts` are Tailwind-scanned; an `rgb()` literal or utility-shaped string there could leak into emitted CSS (`fails.md:3983`).",
+      "The feature-307 @AC-2 title ('exactly the Nocturne palette') no longer matches the staging file once the series tokens are added, though its Then-clauses hold."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-11",
+      "C-12",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-05",
+      "P-01",
+      "P-02",
+      "P-03"
+    ],
+    "rationale": "The design is approvable this round, on one condition the orchestrator must check before it records anything: that relayed item 2 answered this feature's threshold question.\n\n**O-18, O-3 and O-12 are closed.** The steer quotes the operator's answer as \"Confirmed\", and the relayed user request, the only user voice here, contains \"Confirmed\" verbatim as item 2. In round 4 the quoted answer was not in the relayed request; this time it is. Proposer and adversary both accept it and both rate the closure sound. I could not verify from this step which question item 2 answered; the four items are unlabeled and the batch has six features. That is carried as a non-blocking record condition, not as a reason to hold the round.\n\n**One threshold outcome.** CVD adjacent >= 10 (with the wrap), CVD non-adjacent >= 5, normal vision all pairs >= 10, 3:1 on both themes' surfaces, the same 12 values in both themes. FR-4 and @AC-5 are rewritten to match, the gate pass condition is restated as five distance floors plus four contrast minima, the themes series describe is exactly 11 tests, and no conditional rows remain (R-10).\n\n**Checked on disk.** `context.md:14` still reads \"confirm or adjust in design\" and @AC-5 at `acceptance.feature:30-34` states adjacent >= 10 only, so both edits are still needed. `nonSharedTokens` is defined at `checkThemeBundle.cjs:59` and is not yet in `module.exports` at `:193`.\n\n**Adversary r5 points.** No Floor breach. Four non-blocking objections are new and the proposer has not answered them, so they stay open: the gate omits the D-24 collision guard, the candidate source and reordering rule are unnamed, the floor rows need actionable failure messages, and the answer mapping must be verified and quoted. I wrote the fixes into the approach as direction but did not record them as decisions, because only one side has spoken.\n\n**Register.** The approach rests on D-1..D-26 and reintroduces none of R-1..R-14. Exporting `nonSharedTokens` in step 1 keeps D-23 (the gate writes only `context.md`) and D-24 (the export exists and is reused). No petitions were filed and the steer reopens nothing.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The palette floors, in CIEDE2000, are: under simulated deuteranopia and protanopia, adjacent pairs (including the 12->1 wrap) >= 10 and every other pair >= 5; under normal vision, every pair >= 10; the same 12 values in both themes. FR-4 and @AC-5 state exactly these, with no conditional rows.",
+          "evidence": "Operator answer 'Confirmed' (relayed user request item 2, quoted by the round-5 steer); proposal r5; adversary r5 rates the closure sound subject to the orchestrator confirming the question mapping."
+        },
+        {
+          "text": "@AC-5 is rewritten as a single scenario covering all three floors (retitled 'Series colors stay distinguishable for normal and red-green color-blind vision'); no second scenario is added.",
+          "evidence": "Proposal r5 (`acceptance.feature:30-34`); operator steer 'set FR-4 and @AC-5 to match'; adversary r5 considered and rejected a second scenario."
+        },
+        {
+          "text": "The feasibility-gate pass condition is: deuteranopia and protanopia adjacent minima >= 10, deuteranopia and protanopia non-adjacent minima >= 5, normal-vision all-pairs minimum >= 10, and all four contrast minima (card and background in each theme) >= 3.0.",
+          "evidence": "Proposal r5 restating D-23 against the confirmed floors; adversary r5 accepts these terms and asks only for an added collision line (open objection)."
+        },
+        {
+          "text": "The `themes.test.ts` series describe holds exactly 11 tests: 2 token-count, 1 cross-theme `colorsEqual`, 2 @AC-4 contrast rows, 5 @AC-5 floor rows through `pairDistances`, 1 value-differs guard. Any other count fails the step.",
+          "evidence": "Proposal r5 (D-9, D-17, D-22, D-24, D-25); operator steer r5 names the count 11; adversary r5 did not contest it."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "A second @AC scenario for the non-adjacent and normal-vision floors instead of rewriting @AC-5.",
+          "why": "It splits FR-4's distinguishability clause across two scenarios; the operator said to set @AC-5 to match and D-17 already keeps the rows in one describe. Both sides reject it."
+        },
+        {
+          "text": "A search script that picks and orders a passing 12-color set automatically.",
+          "why": "Tooling the task did not ask for (C-18); adversary r5 raised and rejected it in favour of a named candidate plus allowed reordering."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "[C-11/P-03] Before recording, the orchestrator must verify against its outgoing question list that relayed item 2 ('Confirmed') answered this feature's threshold question; the context.md entry must quote the question as sent and the verbatim answer. Item 3 is cited only if it was this feature's amendment sign-off; item 4 ('Staging is enough') is not applied to this feature without the same check.",
+          "blocking": false
+        },
+        {
+          "text": "[C-08/D-23] The gate omits the D-24 collision guard that step 3 and `pnpm build` check (b) enforce (`checkThemeBundle.cjs:114-137`). Add 'collisions with `nonSharedTokens` = 0' to the gate output and pass condition, export `nonSharedTokens` (`checkThemeBundle.cjs:193`) in step 1, and define the re-pick path: rerun the gate and append a superseding context.md entry.",
+          "blocking": false
+        },
+        {
+          "text": "[C-01] Name the origin of the 12 gate candidates and allow reordering the same 12 values before declaring gate failure.",
+          "blocking": false
+        },
+        {
+          "text": "[C-15] The five @AC-5 floor rows must report the worst pair's `i`, `j`, `dE` and simulation in the failure message.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-18",
+          "how": "The operator answered 'Confirmed' to the exact floors (relayed user request item 2). The floors go to context.md, FR-4 and @AC-5 are rewritten to match, the gate pass condition and the 11-test count are restated, and no conditional rows remain."
+        },
+        {
+          "id": "O-3",
+          "how": "A non-adjacent floor of CIEDE2000 >= 5 under each CVD simulation is confirmed by the operator and added to @AC-5, the gate and the series tests."
+        },
+        {
+          "id": "O-12",
+          "how": "An all-pairs normal-vision floor of CIEDE2000 >= 10 is confirmed by the operator and added to @AC-5, the gate and the series tests."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
