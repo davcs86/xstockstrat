@@ -1,7 +1,7 @@
 # xstockstrat-agent — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-13 (`main-dev` @
-`52f6d5a`). For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-15 (`main-dev` @
+`d5de836`). For triage/fixing, not
 governance. The internal admin-scope self-grant (`x-access-scope=7`) is a cross-cutting ⚠ security
 question tracked in the root findings log.
 
