@@ -521,3 +521,18 @@ Asked directly, answered verbatim by the operator (2026-11-15):
 - TDD: AC-1/AC-8 red: Vitest `<wbr/>` and `wrap-anywhere` assertions failed (2 failed, 1 passed); e2e `scrollWidth <= clientWidth` failed in all 3 tests (122 vs 253/205/205) → green: Vitest 3 passed, e2e 3 passed, lint and `tsc --noEmit` clean, `mobile-overflow` `/trader/positions` 2 passed (with `--timeout=90000`).
 - Deviations: global `React` for the render test; Position tab clicked (not active by default); value located by `.tabular-nums`; spec-level warmup + 30 s timeout; `mobile-overflow` needed `--timeout=90000` in the sandbox — full detail in Deviation Log. The `GetPosition` stub alone renders the Position panel (Step 2 "not run" item closed).
 - Not run: the six other `StatTile` consumers (open thread unchanged).
+
+## Session 2026-11-15 — sdd-execute sequential, Steps 3+4 (atomic unit)
+
+### Step 3 — service: `fmtUsdCompact` [done]
+- Unit 3+4. New `fmtUsdCompact` below `fmtUsd` in `money.ts`: same null/NaN guard (`—`), else `$` + `en-US` compact notation with two fraction digits (`$6.73B`, `$3.45T`, `$0.00`). `fmtUsd` unchanged.
+- Files modified: `services/xstockstrat-ui/src/lib/money.ts`
+- TDD: red/green recorded under Step 4 (one cycle for the unit).
+- Deviations: none.
+
+### Step 4 — test: `fmtUsdCompact` [done]
+- Unit 3+4. `describe('fmtUsdCompact')` in `money.test.ts`: `6726553623.93` → `$6.73B`, `3.45e12` → `$3.45T`, `3.02e12` → `$3.02T`, `0` → `$0.00`; `—` for `undefined`, `null`, `NaN`.
+- Files modified: `services/xstockstrat-ui/src/lib/money.test.ts`
+- TDD: AC-1 (unit half) red: against a stub returning `''`, `expected '' to be '$6.73B'` and `expected '' to be '—'` (2 failed, 2 passed) → green: `money.test.ts` 4 passed; `test:coverage` 79 files, 554 passed / 2 skipped, Lines 79.42%, Functions 80.71%, Statements 78.21% (≥ 40%); lint (pre-existing warnings only, none in `money*`) and `tsc --noEmit` clean.
+- Deviations: none. Config-key wiring gate N/A (no key touched).
+- Open (unchanged): the `$6.73B` output form is not operator-confirmed — raise at the first checkpoint.

@@ -298,7 +298,7 @@ Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
 
 ### Step 3 — service: `fmtUsdCompact`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/money.ts` — modify
@@ -332,7 +332,7 @@ The union with Step 4. On its own: `cd services/xstockstrat-ui && pnpm run lint 
 
 ### Step 4 — test: `fmtUsdCompact`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/money.test.ts` — modify
