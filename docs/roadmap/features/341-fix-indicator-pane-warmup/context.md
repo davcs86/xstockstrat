@@ -1311,3 +1311,68 @@ Operator input relayed for this round, verbatim (2026-11-15): "1. Approved", "2.
 - [ ] pgxmock row-error injection has no in-repo use; Step 6 falls back to `WillReturnError` with a
   Deviation Log entry if it is unavailable.
 - [ ] DigitalOcean still shows SMA200 as a single dot on a full page (operator-accepted) — no step.
+
+## Session 2026-11-15 — sdd-review impl-spec (advisory)
+
+- Result: PASS WITH WARNINGS — 0 failures, 9 warnings, 0 floor breaches (advisory — did not block).
+  Lifecycle unchanged (`implementation-ready`). Overlap: WARN, no FAIL-level collision.
+- Tree: `origin/feature/fix-indicator-pane-warmup@9aa3a02d0` (detached). `implementation-spec.md`
+  was edited in this session (commit `ecb52c229`); every edit was re-checked against the tree.
+- Operator input relayed this run (2026-11-15), relevant item: "I plan to do psql over ssh if
+  possible." — already in Step 17's runbook preconditions; nothing new to apply.
+
+### Addressed in implementation-spec.md
+
+- [x] Steps 12, 14, 16 — coverage threshold not stated. Step 12 Verification now runs
+  `pnpm run test:coverage` (`ui/package.json:19`; the command CI runs, `ci.yml:796`) and names the
+  gate: `src/lib/**` lines, functions and statements ≥ 40% (`ui/vitest.config.ts:25-34`). Steps 14
+  and 16 state that Playwright has no threshold and point at Step 12's gate.
+- [x] Step 2 — **Files** listed directories. It now lists the eight tracked stubs that carry
+  `ComponentSeries` (`git grep -l ComponentSeries -- packages/proto/gen`: one Go, one Python, two TS
+  sources, four `gen/ts/dist` files). A different generator output is committed as generated and
+  logged in the Deviation Log.
+- [x] Config key wiring (C-05) — no test fed the seeded value through the real reader. Step 12 gains
+  instruction 7: read the seed migration from disk (number-free suffix lookup; `node:fs` precedent
+  `ui/src/lib/dbTlsPlatformGuard.test.ts:4`), take `value_type` / `value_data` from the file text,
+  and assert `readHistoryBars` returns the seeded number and that it equals `DEFAULT_HISTORY_BARS`
+  (F-07). Step 12's file list is unchanged.
+- [x] `050` collision with feature 330 — the overlap pass could not read 330's branch. Re-checked here:
+  `git ls-tree origin/feature/fix-live-enrich-ttl-seed` shows `050_analysis_live_enrich_ttl_reseed`
+  (`.up.sql` and `.down.sql`). The collision is real; Step Dependencies now says so. Trunk tip is
+  still `049`. The Step 7 re-derive instruction stands.
+- [x] Peer 342 overlap — Step Dependencies now also names
+  `ui/src/app/trader/positions/[symbol]/page.tsx` (342's product spec puts the symbol page in scope)
+  and no longer says this review adds the `merge-order.md` row (see Open Threads).
+- [x] Assumption 1 (pin formula) — arithmetic re-checked against `warmup.py:80-89`: SMA 200 →
+  (200 − 1) + 1 = 200; RSI 14 → (15 − 1) + 1 = 15. The reviewer raised no finding. It stays a
+  deviation from the `design.md` text, shown to the operator at the Step 4 gate.
+
+### Open Threads
+
+Carried into execution. `/sdd-execute` announces every `[ ] unaddressed` item at each checkpoint.
+
+- [ ] unaddressed — **`merge-order.md` has no note for this feature.** Two are needed before
+  `/sdd-execute`: the soft rebase note for peer `342-chart-series-palette` (`IndicatorPanels.tsx`,
+  `indicatorChart.ts`, the symbol `page.tsx`) and the config-seed `050` claim shared with
+  `330-fix-live-enrich-ttl-seed`. This session's writes were limited to the feature directory, so
+  the file was not edited.
+- [ ] unaddressed — Step 7: needs a reachable Postgres 16 with `psql` and `migrate` to regenerate
+  `scripts/config-wiring-stored.json`; blocked otherwise (P-03). Never hand-written.
+- [ ] unaddressed — Step 7: owner + config-team approval for the new key is still outstanding
+  (`docs/runbooks/approval-flow.md`). Merge blocker for the Step 7 unit.
+- [ ] unaddressed — Step 7: re-derive the migration number (330 holds `050` on its branch); a
+  renumber regenerates `scripts/config-wiring-stored.json`.
+- [ ] unaddressed — Step 7 alone must pass `node scripts/check-config-wiring.mjs --final` with the
+  temporary `seeded-unread` finding (the reader lands in Step 11, a different consumer surface;
+  338 precedent). Confirm from the command output at execute.
+- [ ] unaddressed — Assumption 2: `HISTORY_CONFIG_TIMEOUT_MS = 3_000` is the spec author's number.
+  Confirm at the Step 13 gate. A wrong value falls back to 200 (PLAT-N1), so the risk is low.
+- [ ] unaddressed — Step 6: pgxmock row-error injection has no in-repo use; the fallback is
+  `WillReturnError` plus a Deviation Log entry.
+- [ ] unaddressed — Step 17: the chunk-width SQL is new text, checked by the operator on first use.
+- [ ] unaddressed — Step 12 touches four files and many cases (one unit with Step 11). Watch the
+  size at execute; split only with a Deviation Log entry.
+- [ ] unaddressed — Peer 342 has no implementation spec yet, so its file list is unconfirmed.
+  Re-run the overlap scan when 342 reaches `implementation-ready`.
+- [ ] unaddressed — The product spec has no `## Config Key Changes` heading (the key sits under Fix
+  Scope). Not edited here; the wiring test above covers the C-05 intent.
