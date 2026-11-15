@@ -227,8 +227,12 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
   `GetFundamentalsResponse { fundamentals }` (`packages/proto/marketdata/v1/marketdata.proto:41,252-253`);
   `xstockstrat.portfolio.v1.PortfolioService/GetPosition` returns a `Position`
   (`packages/proto/portfolio/v1/portfolio.proto:13`).
-- **Not found**: no existing `page.route` stub for `GetFundamentals` or `GetPosition`. The pattern
-  to follow is the JSON unary stub at `ui/e2e/trader/signal-confidence-ticket.spec.ts:42-50`.
+- Existing stubs: `ui/e2e/trader/offline-pnl.spec.ts:26,164` stubs
+  `**/xstockstrat.portfolio.v1.PortfolioService/GetPosition` via its local `routeJson` helper
+  (`:28`), together with a `ListAccounts` stub (`:163`), then goes to `/trader/positions/TSLA`
+  (`:166`) — the precedent for the `@AC-8` stub. `ui/e2e/insights/data-explorer.spec.ts:47,203`
+  stubs `MarketDataPath('GetFundamentals')`. The JSON unary stub at
+  `ui/e2e/trader/signal-confidence-ticket.spec.ts:42-50` is the same pattern.
 - The Position panel is the first Trade panel (`page.tsx:357-371`), so it is the active mobile tab
   by default (`ui/src/components/trader/SymbolPanelGroup.tsx:27,34`).
 - Auth helper: `addAuthCookie` — `ui/e2e/helpers/auth.ts` (used at
@@ -268,7 +272,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
    the label's box is above the value's box. Keep these assertions independent of how the value is
    formatted, because Step 5 changes the market cap to a compact form.
 5. `@AC-8` — stub `GetPosition` with `POSITION_LYFT_WIDE`, go to `/trader/positions/LYFT`, and run
-   the helper on "Cost basis".
+   the helper on "Cost basis". If the Position panel does not render from that stub alone, also stub
+   `ListAccounts` as `offline-pnl.spec.ts:163-166` does.
 6. Name each test with its `@AC-N`.
 
 **Verification**:
@@ -283,7 +288,8 @@ grep -n "FUNDAMENTALS_LYFT\|POSITION_LYFT_WIDE" e2e/fixtures/INVENTORY.md
 ```
 RED before Step 1: the Vitest `<wbr/>` assertion fails and the two e2e `scrollWidth` assertions
 fail. Not run in this session: whether the `GetPosition` stub alone makes the Position panel render
-for LYFT (account selection may also matter). If it does not, record a deviation.
+for LYFT (account selection may also matter; `offline-pnl.spec.ts:163-166` pairs it with a
+`ListAccounts` stub). If it still does not render with both stubs, record a deviation.
 Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
 (`pnpm run test:coverage`, `ui/vitest.config.ts:29-33`) is unaffected; e2e runs and
 `src/components/**` render tests are not coverage-gated.
@@ -481,8 +487,10 @@ Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
   (`ui/src/lib/opportunityShared.tsx:4-5`; fails.md:1652).
 - **Not found**: no source-to-label humanizer in `ui/src` (one inline CSS `capitalize` at
   `ui/src/app/insights/strategies/[id]/page.tsx:258`).
-- Accepted gaps (design.md § 3), not changed here: the mobile `SignalRow` shows the raw source
-  (`ui/src/components/mobile/SectionRenderer.tsx:187-188`), and same-source rows get identical chips.
+- Accepted gaps (design.md § 3), not changed here: the mobile `SignalRow` renders `s.strategyId`
+  (`ui/src/components/mobile/SectionRenderer.tsx:187-188`), not a source field; how
+  `Opportunity.source` maps into `SignalItem.strategyId` is unconfirmed by grep. Same-source rows get
+  identical chips.
 
 **Lands with**: `Step 8`
 
@@ -597,7 +605,8 @@ below was read and compiled on `feature/fix-symbol-page-alerts-ui@525cd5d2f`.
 - Uses in `ui/src` of the variants the import changes (`grep -rnoE "data-<name>:"`): `data-checked:`
   11 and `data-unchecked:` 4 (switch, checkbox, field, questionnaire); `data-open:` 42 and
   `data-closed:` 34 (accordion, alert-dialog, combobox, dropdown-menu, navigation-menu, select,
-  sheet, sidebar, tooltip); `data-active:` 15 (tabs, sidebar); `data-horizontal:` 5 and
+  sheet, sidebar, tooltip); `data-active:` 15 (tabs, sidebar); `data-horizontal:` 6 (5 class uses
+  plus the comment at `ui/src/components/insights/FormulaReferencePanel.tsx:50`) and
   `data-vertical:` 11 (separator, slider, toggle-group); `data-disabled:` 16; `data-selected:` 0.
   `no-scrollbar` is used at `ui/src/components/ui/sidebar.tsx:356` and `combobox.tsx:124`.
 - Compiled in this session with `@tailwindcss/postcss` 4.3.3 over `globals.css` (not a full
@@ -605,7 +614,7 @@ below was read and compiled on `feature/fix-symbol-page-alerts-ui@525cd5d2f`.
   `.data-checked\:bg-primary:where([data-state="checked"]), …:where([data-checked]:not([data-checked="false"]))`;
   `.data-open\:animate-in[data-open]` gains `[data-state="open"]`; `.data-active\:bg-background`
   gains `[data-state="active"]`; `.data-horizontal\:h-px` becomes `:where([data-orientation="horizontal"])`;
-  `.no-scrollbar` is emitted. `checkBundle` (`ui/src/styles/themes/checkThemeBundle.cjs:140`) reports
+  `.no-scrollbar` is emitted. `checkBundle` (`ui/src/styles/themes/checkThemeBundle.cjs:139`) reports
   0 failures on that output for both themes.
 - `ui/src/styles/themes/checkThemeBundle.test.ts:241-250` requires line 1 and line 2 of
   `globals.css` unchanged and both `@source not` lines at an index above 1. Run with the import as
@@ -702,7 +711,7 @@ cd services/xstockstrat-ui && sed -n 3p src/app/globals.css \
   component still carries the class.
 - `ui/src/components/ui/switch.test.ts:1-9` — presence-only test; this step leaves it as is. No
   `ui/src/components/ui/*.test.ts` asserts a `data-*` class string.
-- `ui/e2e/accounts/notifications.spec.ts:68-88` — the existing toggle test. It forces
+- `ui/e2e/accounts/notifications.spec.ts:70-89` — the existing toggle test. It forces
   `Notification.permission` to `granted` with `page.addInitScript` (`:77-82`) because headless
   Chromium reports `denied`, and locates the control with
   `getByRole('switch', { name: 'Enable push notifications' })`.
@@ -779,7 +788,11 @@ added" for `@AC-7` (passes today) and the questionnaire case.
    and the Vitest table holds CSS selectors, not domain data.
 
 **Existing specs at risk from Step 9** (read, not run):
-- No spec uses a screenshot or snapshot assertion, and the only non-retrying `count()` calls
+- `ui/e2e/theme/theme-bundle.spec.ts:79,88,97` use `toMatchAriaSnapshot` (`shell.aria.yml`,
+  `trader-main.aria.yml`, `strategy-equity.aria.yml`). A `globals.css` change matches the `ui-theme`
+  path filter (`.github/workflows/ci.yml:120-122`), so this spec runs in CI. Aria snapshots are
+  probably CSS-insensitive; the Verification below runs the spec to confirm. No spec uses a
+  screenshot assertion, and the only non-retrying `count()` calls
   (`ui/e2e/mobile.spec.ts:28`, `ui/e2e/trader/offline-pnl.spec.ts:155`) do not follow an overlay
   closing. Playwright waits for a target to stop moving before it clicks, and `toHaveCount(0)` /
   `toBeHidden` retry, so the plain open-click-close flows should hold.
@@ -808,7 +821,7 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/components/ui/checkedVari
   && pnpm run lint && pnpm exec tsc --noEmit \
   && pnpm exec playwright test e2e/accounts/notifications.spec.ts e2e/auth.spec.ts \
        e2e/config-ui/templates.spec.ts e2e/mobile-sidebar.spec.ts e2e/mobile-overflow.spec.ts \
-       --project=chromium --no-deps
+       e2e/theme/theme-bundle.spec.ts --project=chromium --no-deps
 ```
 RED before Step 9: twelve of the thirteen Vitest cases fail (all but the questionnaire row),
 `@AC-6` finds the thumb at the leading end, the checkbox keeps its unchecked background and the
@@ -819,7 +832,9 @@ import, 12 failed and 1 passed; with the import as line 3, all 13 passed, `src/s
 green (144 tests in total), `prettier --check` and `tsc --noEmit` were clean, and
 `next lint --file src/components/ui/checkedVariants.test.ts` reported no warnings or errors.
 
-Not run: any browser (the sandbox has none installed). Unverified as a result: every e2e assertion
+Not run at spec time: any browser. A browser is available for the execute run:
+`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` holds `chromium-1243` and a headless shell, and
+`ui/playwright.config.ts` maps it into `launchOptions.executablePath`. Unverified until then: every e2e assertion
 above; that the compiled selectors produce the visible changes listed in Step 9; and whether any
 existing spec turns red once animations play. The full `frontend-e2e` and `frontend-e2e-production`
 CI jobs are the proof for the last point; a `globals.css` change matches the `ui-theme` path filter
