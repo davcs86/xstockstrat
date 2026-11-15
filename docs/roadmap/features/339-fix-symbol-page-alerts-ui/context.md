@@ -484,3 +484,25 @@ Asked directly, answered verbatim by the operator (2026-11-15):
 - **Assumptions (orchestrator, not operator words):** "add it to the scope" covers the whole
   stylesheet, including those changes; the FR-11 and `@AC-12` wording; one e2e (tabs) for FR-11 with
   the rest proven by compiled CSS only; no pre-emptive waits added to existing specs.
+
+## Session 2026-11-15 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation (operator-approved record, verbatim):**
+  `{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","dev":"4a5639d416037de9a680efd24d43aab4af1e43c2","specHash":"21574d5e01f37ca8c26adbe73f057bdf287c7cea","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],"mismatches":[{"n":2,...},{"n":7,...},{"n":9,...},{"n":10,...}]}`
+  — the full mismatch details are in the body of the re-spec commit below.
+- **Merge:** `origin/main-dev@9f8856229` merged into the feature branch (`53dc63844`); resolver and
+  `ledger-guard` clean.
+- **Re-spec commits** (`git log --first-parent origin/main-dev..HEAD`):
+  - `e2535497f7d5fda1a37bdfb5c74e59240a7545d7` — respec(fix-symbol-page-alerts-ui): align steps
+    2,7,9,10 with current codebase. Step 2 cites the existing `GetPosition` / `GetFundamentals`
+    stubs and pairs a `ListAccounts` stub before any `@AC-8` deviation; Step 7 corrects the
+    `SectionRenderer` gap wording; Step 9 count and line drift; Step 10 adds
+    `e2e/theme/theme-bundle.spec.ts` (aria snapshots) to the specs at risk and to Verification, and
+    records that Chromium is provisioned at `/opt/pw-browsers`.
+- **Tooling setup (steps 1-15):** node v24 ✓ · pnpm ✓ 9.15.9 · Playwright Chromium ✓
+  (`/opt/pw-browsers`, chromium-1243) · vitest/tsc/next ✓ (linked main-checkout `node_modules`).
+- Status `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","date":"2026-11-15"}
+```
