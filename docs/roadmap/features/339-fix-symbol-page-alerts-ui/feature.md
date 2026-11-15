@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report |
+| 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@ Four trader-segment display defects: the Fundamentals card overflows at mobile w
 
 ## Next Action
 
-`/sdd-design fix-symbol-page-alerts-ui quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-symbol-page-alerts-ui quick` — quick design recommended (SEV-3, single service, no proto/migration/config; one layout fork — the Fundamentals card redesign — to debate once)
