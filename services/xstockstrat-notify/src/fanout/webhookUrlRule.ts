@@ -69,7 +69,8 @@ export function parseAllowedOrigins(raw: string): { origins: Set<string>; malfor
   return { origins, malformed };
 }
 
-export function checkCallbackUrl(raw: string, allowedOriginsRaw: string): CallbackUrlVerdict {
+/** The URL rule without the allowlist; the commsgun enqueue URL must pass it too. */
+export function checkHttpsUrl(raw: string): { ok: true; url: URL } | { ok: false; reason: CallbackUrlRejection } {
   if (raw.length > MAX_URL_LENGTH) return { ok: false, reason: 'too_long' };
   // Before parsing: the WHATWG parser silently strips tab/newline and trims C0 controls and spaces.
   if (hasWhitespaceOrControl(raw)) return { ok: false, reason: 'bad_characters' };
@@ -78,6 +79,13 @@ export function checkCallbackUrl(raw: string, allowedOriginsRaw: string): Callba
   if (url.protocol !== 'https:') return { ok: false, reason: 'scheme' };
   if (url.username !== '' || url.password !== '') return { ok: false, reason: 'userinfo' };
   if (url.hostname.endsWith('.')) return { ok: false, reason: 'trailing_dot' };
+  return { ok: true, url };
+}
+
+export function checkCallbackUrl(raw: string, allowedOriginsRaw: string): CallbackUrlVerdict {
+  const checked = checkHttpsUrl(raw);
+  if (checked.ok === false) return { ok: false, reason: checked.reason };
+  const { url } = checked;
   const origin = canonicalOrigin(url);
   // Exact equality only: any prefix, suffix or substring comparison here reopens SSRF.
   if (!parseAllowedOrigins(allowedOriginsRaw).origins.has(origin))

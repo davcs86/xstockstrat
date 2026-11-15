@@ -412,5 +412,39 @@ None. 19 repo skills scanned (`.claude/skills/*`, `.agents/skills/*`, `plugins/s
 | constitution pointer | L3-5 of every `services/*/CLAUDE.md` (12) and `packages/{proto,otel}/CLAUDE.md` | `context-forge:constitution-pointer` |
 | machine-managed fence (not context-forge; treated as protected) | `docs/patterns/ui-ux-governance.md` | `307:staging-contrast-deviations:begin/end` |
 
+
+## Scoped re-audit — 2026-11-15 (`claude/context-constitution-parity-zggeq3` @ `5931284`)
+
+The rows above are the full 2026-11-13 audit at `52f6d5a` and stay authoritative. This addendum audits only the five
+context files whose *content* changed since then: feature 338 and the 2026-11-15 refresh. Those files are root
+`CLAUDE.md`, `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-config/CLAUDE.md`, and the notify
+constitution and findings. Every other change in the window is a header restamp or an anchor re-ground. One
+`context-auditor` pass did the audit. The orchestrator re-opened every row carried here and dropped one
+unverifiable duplication (the "Light DB use" parenthetical claimed for the notify constitution's Pointers is not
+there). Every NOTIFY-13..17 anchor resolves, including the commsgun-repo ones.
+
+| Category | Context line | Evidence | Suggested action |
+|---|---|---|---|
+| Stale citation | NOTIFY-14 Why: "`docs/email-providers.md` document[s] the commsgun schedule separately" | `services/xstockstrat-notify/docs/email-providers.md` says only "retried with the backoff above", and nothing above it states a backoff; the schedule lives in the `commsgun.backoff_*` CLAUDE.md rows and the migration-049 seeds | re-ground at the step-3 refresh |
+| Contradicted by code | notify `CLAUDE.md#Config Keys Consumed`, `fanout.sendgrid_{from,to}_email` rows: "email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present" | `src/fanout/fanout.ts#sendEmail` queues a commsgun outbox row with neither | route to notify findings (extends the feature-020 row) |
+| Contradicted by code | notify `CLAUDE.md#Environment Variables`: "`SENDGRID_API_KEY=` … empty ⇒ email fanout disabled" | same | route to notify findings |
+| Cross-file duplication (H) | notify `CLAUDE.md#Email providers`: "A qualifying alert produces at most one email." and "Email is at-most-once, alerts about it … are at-least-once (NOTIFY-13)." | verbatim in `docs/email-providers.md` (top of file); invariant in NOTIFY-13 | trim both sentences; the paragraph's pointers stay |
+| Restated (M) | notify `CLAUDE.md#Config Keys Consumed` narrative tails on the 9 `commsgun.*` / `fanout.email_provider` rows ("A stored ≤ 0 reads as the default" ×5, "clamped to [1,60]", per-environment seed values) | `services/xstockstrat-config/migrations/049_notify_commsgun_channel_keys.up.sql`, `src/fanout/commsgunWorker.ts#maxAttempts`, `src/fanout/commsgunClient.ts#requestTimeoutMs` | owner: trim the cells to type/default/one clause (the rows themselves are required by root config governance) |
+| Restated (M, ⚠ secret boundary) | config `CLAUDE.md#Critical Invariants` #6: the `GetSecret` grant enumeration | `services/xstockstrat-config/src/grpc/authz.ts#SECRET_CALLER_ALLOWLIST` | owner: keep "peerSan on every grant; header alone never suffices" plus a pointer |
+| Restated (M) | config `CLAUDE.md#Observability`: the denial-reason list and "truncated to 64 characters (`LOG_ID_MAX`)" | `src/grpc/authz.ts#secretDenialReason`, `src/grpc/configServiceImpl.ts#LOG_ID_MAX` | owner: trim |
+| JIT / brittle (M) | notify `CLAUDE.md#Observability`: the six commsgun log lines and the `notify.delivery` outcome enumeration | `src/telemetry.ts#DeliveryOutcome` (closed set), `recordDelivery(` call sites; no test pins the text | owner: move to `docs/email-providers.md`, leaving "outcomes are the closed set `telemetry.ts#DeliveryOutcome`" |
+| Bloat → false claim (H) | notify findings `#Documentation that lies`: "_None currently open_ — …" | the same file's "additions" section has three open doc-lie rows | correct at the step-3 refresh |
+| Restated (L) | NOTIFY-3 Why restates its own Rule and Evidence | the row itself | trim Why to the consequence ("a config push retunes fanout/push/commsgun with no restart") |
+
+Keep-but-verify: (1) notify `#Dependencies` "unreachable from DigitalOcean, where `auto` stays on SendGrid" holds only
+while no DO environment sets `commsgun.enqueue_url` (seed `''`). (2) NOTIFY-17 "429/503 retried with `Retry-After`":
+the consumer retries all 5xx (`commsgunClient.ts#classifyStatus`). Clarify that 429/503 are the producer's Retry-After
+set. (3) The `commsgun.app_key` row omits the re-resolve-after-failure path (`commsgunSecret.ts#createCommsgunSecret`
+`lastFailed`), which is probably harmless.
+
+Protected blocks found: the root behavioral contract and the notify/config constitution pointers, none trimmed.
+Measured sizes: root `CLAUDE.md` 411 lines, notify `CLAUDE.md` 147, config `CLAUDE.md` 117, notify constitution 52,
+notify findings 73 (all over the ~2,000-char soft budget, as in the full report).
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). These are low-signal lines to trim, not rules to keep — nothing grounded is dropped (**CF-N8**). Re-run `/context-scrubber` to re-audit._
