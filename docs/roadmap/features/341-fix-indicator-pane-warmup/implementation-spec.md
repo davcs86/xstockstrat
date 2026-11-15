@@ -148,8 +148,8 @@ the PRESERVE-at-risk rule (feature 153 `@AC-1`).
 
 **Codebase Evidence**:
 - `message ComponentSeries` at `analysis.proto:819-827`: fields `ref_name = 1`, `kind = 2`, `series = 3`, `error = 4`. Next free is 5.
-- Request comment to rewrite: `analysis.proto:805-807` ("the page passes the exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens"). `design.md` cites `:806-808`; the lines are `:805-807` on this tree.
-- Response comment `analysis.proto:813` ("Echoes the request times, index-aligned across every series in every component") stays true.
+- Request comment to rewrite: `analysis.proto:806-808` ("the page passes the exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens"), as `design.md` cites (re-checked at the 2026-11-15 re-spec).
+- Response comment `analysis.proto:814` ("Echoes the request times, index-aligned across every series in every component") stays true.
 - Additive fields are non-breaking (`docs/runbooks/proto-versioning.md` "Adding a new optional field").
 
 **Lands with**: `Step 2`
@@ -160,7 +160,7 @@ the PRESERVE-at-risk rule (feature 153 `@AC-1`).
 
 **Instructions**:
 1. In `ComponentSeries`, after `string error = 4;`, add `int32 first_value_bars = 5;` with a comment that states: bars of history this component needs to produce its first value; one value per component (a multi-series component reports its earliest series); 0 means no warm-up or unknown, and a client never reports insufficient history for 0.
-2. Rewrite the comment at `:805-807`: the caller sends its drawn window plus a history prefix (closes and times stay index-aligned and equal length); the server never re-fetches the evaluated symbol's bars.
+2. Rewrite the comment at `:806-808`: the caller sends its drawn window plus a history prefix (closes and times stay index-aligned and equal length); the server never re-fetches the evaluated symbol's bars.
 3. No request field. No other message changes.
 
 **Verification**:
@@ -224,12 +224,12 @@ git grep -lE "first_value_bars|firstValueBars|FirstValueBars" -- packages/proto/
 **Reviewers**: `xstockstrat-analysis` owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `builtin_lookback_bars(indicator, params)` at `warmup.py:70`; per-family arithmetic at `:80-112` (SMA/BB `max(0, period - 1) + _CROSSOVER_LOOKBACK`, RSI/ATR `period + _CROSSOVER_LOOKBACK`, STOCH, EMA, MACD, VWAP 0). `_CROSSOVER_LOOKBACK = 1` at `:59`; `_int_param` at `:62`; defaults `_DEFAULT_PERIOD = 14`, `_DEFAULT_BB_PERIOD = 20` at `:52-53`; `_is_custom_formula(comp)` at `:160`.
+- `builtin_lookback_bars(indicator, params)` at `warmup.py:70`; per-family arithmetic at `:80-112` (SMA/BB `max(0, period - 1) + _CROSSOVER_LOOKBACK`, RSI/ATR `period + _CROSSOVER_LOOKBACK`, STOCH, EMA, MACD, VWAP 0). `_CROSSOVER_LOOKBACK = 1` at `:59`; `_int_param` at `:62`; defaults `_DEFAULT_PERIOD = 14`, `_DEFAULT_BB_PERIOD = 20` at `:52-53`; `_is_custom_formula(comp)` at `:159`.
 - STOCH: "k = rolling(period) valid at period-1" (`warmup.py:93`), so its earliest series first has a value at bar `period`.
 - `_formula_fundamentals(self, definition, propagation_meta, *, cache=None, failures=None)` at `servicer.py:1914-1947`; the `failures` out-param pattern at `:1915`, `:1941-1942`; the one `GetFormula` call at `:1934-1937`.
-- `FormulaDefinition.warmup_period = 12` at `packages/proto/indicators/v1/indicators.proto:176` ("bars of warm-up before this formula's outputs are valid"). `design.md` cites `:174`.
+- `FormulaDefinition.warmup_period = 12` at `packages/proto/indicators/v1/indicators.proto:174` ("bars of warm-up before this formula's outputs are valid"), as `design.md` cites.
 - Handler `GetIndicatorSeries` at `servicer.py:4516`; `formula_fund_map = await self._formula_fundamentals(definition, propagation_meta)` at `:4548`; the three zero-P routes at `:4576` (`comp.source_symbol`), `:4586` (`COMPONENT_KIND_FUNDAMENTAL`), `:4590-4593` (fundamentals-only formula); success `ComponentSeries(...)` at `:4621-4625`; error `ComponentSeries(...)` at `:4629-4633`.
-- Call sites of `_formula_fundamentals` (`grep -rn _formula_fundamentals analysis/app analysis/tests`): nine in `servicer.py` (`:800`, `:997`, `:2807`, `:4012`, `:4316`, `:4548`, `:5108`, `:5787`, `:6125`) and one test, `tests/test_owner_header_guard.py:341`, which passes two positional arguments. The existing extras are keyword-only (`*, cache=None, failures=None`, `:1915`), so a new keyword-only parameter with a `None` default changes none of them.
+- Call sites of `_formula_fundamentals` (`grep -rn _formula_fundamentals analysis/app analysis/tests`): nine in `servicer.py` (`:800`, `:997`, `:2807`, `:4012`, `:4316`, `:4548`, `:5108`, `:5787`, `:6125`) and two tests: `tests/test_owner_header_guard.py:341`, which passes two positional arguments, and `tests/test_fundamentals_pit_pager.py:307` (`svc._formula_fundamentals(_formula_definition(), (), failures=failures)`). The existing extras are keyword-only (`*, cache=None, failures=None`, `:1915`), so a new keyword-only parameter with a `None` default changes none of them.
 - Guard that must stay green: `tests/test_analysis_servicer.py:8029-8034` asserts `"failures=" not in src` for `GetIndicatorSeries`. The new argument is `warmups=`, so it holds.
 - No new outbound call: the `GetFormula` call already forwards `propagation_meta` (`servicer.py:1936`) — C-03 unchanged.
 
@@ -252,7 +252,7 @@ git grep -lE "first_value_bars|firstValueBars|FirstValueBars" -- packages/proto/
 **Verification**:
 ```bash
 cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-uv run pytest tests/test_warmup.py tests/test_analysis_servicer.py tests/test_owner_header_guard.py tests/test_indicator_series_source_symbol.py -q
+uv run pytest tests/test_warmup.py tests/test_analysis_servicer.py tests/test_owner_header_guard.py tests/test_fundamentals_pit_pager.py tests/test_indicator_series_source_symbol.py -q
 grep -n "warmups=" app/handlers/servicer.py     # the parameter, its write, and the one GetIndicatorSeries call site
 ```
 
@@ -319,7 +319,7 @@ grep -n "conftest" tests/test_warmup.py     # none expected: single-consumer inl
   - `QueryBars` (`:100`): `:121` (query), `:127` (`scanBars`, which returns `rows.Err()` at `:171-172`).
   - `QueryRecentBars` (`:180`): `:192` (query), `:197` (`scanBars`).
   - `QueryBarsBatch` (`:464`): `:489` (query), `:494` (`scanBars`).
-- `errors` and `pgconn` are already imported (`marketdata_repo.go:7`, `:13`); `telemetry` at `:19`.
+- `errors` and `pgconn` are already imported (`marketdata_repo.go:6`, `:13`); `telemetry` at `:19`.
 - No SQLSTATE constant exists in the service (`grep -rn "53200\|pgerrcode" marketdata/internal` → none) — **Not found**; the literal is created here, once.
 - `scanBars` is shared by the three read paths (`:142`); the wrap goes at the callers so the `op` label is known.
 - The package is `repository`, excluded from the CI coverage measure (`.github/workflows/ci.yml:374`).
@@ -360,7 +360,7 @@ grep -c "observeLockBreach(ctx" internal/repository/marketdata_repo.go     # 9 c
 - `WillReturnError` is used in this file (`:258`, `:511`). A row-iteration error (`RowError` / `CloseError` on `pgxmock.Rows`) has **no in-repo use** — **Not found**; it is the pgxmock v4.9.0 API (`go.mod:10`), to be confirmed at execute.
 - Manual-reader pattern for a metric assertion outside the telemetry package: `installMetricReader(t)` at `service/telemetry_allowlist_test.go:55-66` (package `service`, not importable). The repository test needs the same six lines once — one consumer in the `repository` package.
 - Allow-list surfaces: `allowedLabelKeys` (`telemetry_allowlist_test.go:28-31`, already holds `telemetry.KeyOp`), `minInstruments` (`:38-41`), `driveAllInstruments` (`:45-52`).
-- C-13: the bar rows are scenario one-offs built inline, as at `:885-887`. No `internal/testdata/` home exists and none is created.
+- C-13: the bar rows and `*pgconn.PgError` values are scenario one-offs built inline, as at `:885-887`. A shared home exists — `services/xstockstrat-marketdata/internal/testdata/` (`package testdata`: `assets.go`, `marks.go`, feature 282) — but holds no bar or PgError fixture, and each new literal has one consumer, so nothing moves there. Re-check this placement at execute: a literal that gains a second consumer goes to `internal/testdata/`.
 
 **Lands with**: `Step 5`
 
@@ -401,10 +401,10 @@ grep -rn "53200" --include="*_test.go" internal | wc -l     # the literal stays 
 **Reviewers**: DBA — NNN numbering, up+down pair, run-order compliance with `scripts/db-migrate.sh`; `xstockstrat-config` owner — key naming, environment scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Last config migration: `049_notify_commsgun_channel_keys` (`ls config/migrations | tail -1`). Next free on this tree is `050`; see "Volatile at merge" in Step Dependencies.
+- Last config migration: `049_notify_commsgun_channel_keys` (`ls config/migrations | tail -1`), on this tree and on `origin/main-dev@9f8856229`. Next free on trunk is `050`; the only other `050` claim is `050_analysis_live_enrich_ttl_reseed` on `origin/feature/fix-live-enrich-ttl-seed` (commit `ce1878107`). `docs/roadmap/features/merge-order.md` now records the `343`→`341` order (`:127`) and the `050` / `342` overlap (`:405-411`); see "Volatile at merge" in Step Dependencies.
 - `ui`-namespace seed precedent: `config/migrations/023_ui_performance_keys.up.sql:17-32` (namespace `ui`, `consuming_service` `xstockstrat-ui`, one row per environment, `user_id` NULL, `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`). Its header (`:6-10`) records that the UI reads `GetConfig(namespace='ui')` one-shot and the stored `key` is the exact string the UI indexes.
 - Column list with the actor sentinel: `config/migrations/048_webhook_fanout_callback_keys.up.sql:4-6` (`… consuming_service, updated_by, environment, user_id`), actor `system:config-migration-feature-<slug>` (`:9`). Down template: `048_…down.sql:4-13` (sentinel **and** seeded `value_data`; "the outer parentheses are load-bearing").
-- The checker reads seeds only from `scripts/config-wiring-stored.json`; `--final` fails `STALE-STORED` when `inputs_sha256` no longer matches the migration set (`scripts/check-config-wiring.mjs:226-231`, `:713-717`). Generator: `scripts/config-wiring-stored.py:1-6` (needs `DATABASE_URL`, `psql`, `migrate`).
+- The checker reads seeds only from `scripts/config-wiring-stored.json`; `--final` fails `STALE-STORED` when `inputs_sha256` no longer matches the migration set (`storedInputsSha256` at `scripts/check-config-wiring.mjs:224-230`; `freshness` / `STALE-STORED` at `:714-717`). Generator: `scripts/config-wiring-stored.py:1-6` (needs `DATABASE_URL`, `psql`, `migrate`).
 - Baseline entry shape: `scripts/config-wiring.json:5-12` (`namespace`, `key`, `kind`, `owner`). Temporary `seeded-unread` entries until the reader lands: 338 Step 1 (`docs/roadmap/features/338-notify-commsgun-channel/implementation-spec.md:183`).
 - The key is absent today: `grep -c "chart.indicator_history_bars" scripts/config-wiring-stored.json` → 0; `grep -rn indicator_history_bars services` → none.
 - Config-key contract (C-05): namespace `ui`; key `chart.indicator_history_bars`; `value_type` `int`; code default 200 (`DEFAULT_HISTORY_BARS`, Step 11); reader `ui/src/lib/indicatorChart.ts:readHistoryBars` (Step 11); seed this step; live mechanism: one-shot `GetConfig` per page load (no `WatchConfig`), so a change applies on the next page load.
@@ -515,8 +515,8 @@ grep -n "ui.chart.indicator_history_bars" src/grpc/configServiceImpl.ts     # on
 **Reviewers**: `xstockstrat-config` owner — key naming, environment scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Harness: `setConfig(value, key = KEY, namespace = NS)` at `setConfigScalarBounds.test.ts:72-78` (admin scope metadata); `queries = []` / `insertQuery()` recording pattern and the `INVALID_ARGUMENT` + range-text assertions at `:212-232`; the accept-without-`create_key` case at `:234-244`.
-- Rejection text carries the range as `[min, max]` (`:216`, `assert.match(…, /\[1, 5\]/)`).
+- Harness: `setConfig(value, key = KEY, namespace = NS)` at `setConfigScalarBounds.test.ts:72-78` (admin scope metadata); `queries = []` / `insertQuery()` recording pattern and the `INVALID_ARGUMENT` + range-text assertions at `:213-235`; the accept-without-`create_key` case at `:237-244`.
+- Rejection text carries the range as `[min, max]` (`:217`, `assert.match(…, /\[1, 5\]/)`).
 - C-13: the key string has one consumer in this file; inline is compliant.
 
 **TDD**: `red-green required`
@@ -556,6 +556,7 @@ grep -n "__tests__/fixtures" src/__tests__/setConfigScalarBounds.test.ts   # non
 - The wiring checker treats `values[…]` as a config read (`INDEX_RE`, `scripts/check-config-wiring.mjs:267`, `:472`) and attributes it by `registry.receivers["<file>:<receiver>"]` (`:546-552`); precedent entry `"services/xstockstrat-ui/src/lib/performanceMetrics.ts:values": "ui"` (`scripts/config-wiring.json:141`). A read in a file with no receiver entry is `unattributed`.
 - `indicatorChart.ts:toLineData` is already listed in `registry.dynamic` (`scripts/config-wiring.json:80`) because of its `values[i]` (`indicatorChart.ts:33`). A **new** function that indexes an identifier named `values` with a non-literal would add a second `dynamic-read` finding.
 - `CHART_WINDOW_BARS`, `DEFAULT_HISTORY_BARS`, `MAX_HISTORY_BARS`, `readHistoryBars`, `windowIndicatorSeries`: **Not found** (`grep -rn "CHART_WINDOW_BARS\|readHistoryBars\|windowIndicatorSeries" services/xstockstrat-ui` → none) — created here.
+- `ConfigValue.int_val` is `int64` (`packages/proto/config/v1/config.proto:63`) and the TS stubs come from protoc-gen-es with no `jstype` option, so the `intVal` oneof value is most likely a `bigint` — to confirm at execute against the `.proto` and the compiled type (`tsc`). No UI code reads an `intVal` today (no precedent).
 - Proto shape after Step 2: `ComponentSeries` gains `firstValueBars` (protobuf-es camelCase), next to `refName`, `error`, `series[].values` used at `ui/src/components/trader/IndicatorPanels.tsx:19-21`, `:94-101`.
 - No new outbound backend call in this step (C-03 unchanged).
 
@@ -567,7 +568,7 @@ grep -n "__tests__/fixtures" src/__tests__/setConfigScalarBounds.test.ts   # non
 
 **Instructions**:
 1. Add **new** exported constants: `CHART_WINDOW_BARS = 200` (W, a layout constant), `DEFAULT_HISTORY_BARS = 200` (equals the seeded default, F-07), `MAX_HISTORY_BARS = 1000`.
-2. Add **new** `readHistoryBars(values: Record<string, ConfigValue>): number`: read `values['chart.indicator_history_bars']?.value`; return `DEFAULT_HISTORY_BARS` unless the oneof case is `intVal`; clamp the integer to [`CHART_WINDOW_BARS`, `MAX_HISTORY_BARS`]. Import `ConfigValue` as `performanceMetrics.ts` does. The parameter must be named `values` (the receiver entry below keys on it).
+2. Add **new** `readHistoryBars(values: Record<string, ConfigValue>): number`: read `values['chart.indicator_history_bars']?.value`; return `DEFAULT_HISTORY_BARS` unless the oneof case is `intVal`; convert the value with `Number(...)` (it is an `int64`, likely a `bigint`), then clamp the integer to [`CHART_WINDOW_BARS`, `MAX_HISTORY_BARS`]. Import `ConfigValue` as `performanceMetrics.ts` does. The parameter must be named `values` (the receiver entry below keys on it).
 3. Add **new** `windowIndicatorSeries(series, requestedBars, windowBars = CHART_WINDOW_BARS)`:
    - `series` is the `GetIndicatorSeries` response shape (`times`, `components`). `H = series.times.length`. `historyExhausted = H < requestedBars`.
    - Tail-slice `times` and every series' point list to the last `windowBars` (`.slice(-windowBars)`; all of them when `H <= windowBars`).
@@ -614,7 +615,7 @@ node scripts/check-config-wiring.mjs --final      # exit 0: no STALE, no dynamic
    - `historyTimes(n)` — `n` ascending daily timestamps.
    - `smaComponent(refName, period, n)` — a `ComponentSeries` with one `value` series of length `n`: `period - 1` leading gaps then values (all gaps when `n < period`), `error: ''`, `firstValueBars: period`.
    - `indicatorSeriesResponse(n, periods)` — `{ times: historyTimes(n), components }` with one `smaComponent` per period, ref names `sma<period>`.
-2. `e2e/fixtures/configKeys.ts`: add `UI_CHART_HISTORY_VALUES` with `init(bars)` → `{ 'chart.indicator_history_bars': { value: { case: 'intVal', value: bars } } }` and `wire(bars)` → the Connect-JSON form, modelled on `PLATFORM_TRADING_STATE_VALUES`. Check the `intVal` wire encoding against the generated `ConfigValue` type (an `int64` field serializes as a string in Connect-JSON).
+2. `e2e/fixtures/configKeys.ts`: add `UI_CHART_HISTORY_VALUES` with `init(bars)` → `{ 'chart.indicator_history_bars': { value: { case: 'intVal', value: BigInt(bars) } } }` and `wire(bars)` → the Connect-JSON form, modelled on `PLATFORM_TRADING_STATE_VALUES`. `int_val` is `int64` (`config.proto:63`): confirm both shapes against the generated `ConfigValue` type with `tsc` — the init value is most likely a `bigint` (use a plain number only if the compiled type says so), and an `int64` field serializes as a string in Connect-JSON.
 3. `INVENTORY.md`: one row for `indicatorHistory.ts` and one for `UI_CHART_HISTORY_VALUES`, each listing its consumers.
 4. `indicatorChart.test.ts`, **new** `describe('readHistoryBars')`: absent key → 200; wrong type (`stringVal`, `floatVal`) → 200; below W (`intVal` 50) → 200; above the ceiling (5000) → 1000; valid 1000 → 1000; valid 600 → 600.
 5. **new** `describe('windowIndicatorSeries')`, D and W passed explicitly:
@@ -665,7 +666,7 @@ grep -n "indicatorHistory\|UI_CHART_HISTORY_VALUES" e2e/fixtures/INVENTORY.md   
 - `staleTime: Infinity` precedent: `ui/src/hooks/useFormulas.ts:16-20`. Deadline constants live in `ui/src/lib/deadlines.ts:2-9`; a per-call `timeoutMs` option is used at `ui/src/lib/traderBff.ts:38`.
 - `mapBars(rawBars)` at `ui/src/lib/chart.ts:38-49` sorts ascending; the page filters `res.bars` for a timestamp at `page.tsx:261`.
 - `marketdata` caps `pageSize` at 5000 (`marketdata/internal/repository/marketdata_repo.go:181-183`); 1000 is inside it. The implicit window is `pageSize × interval × 3` (`marketdata_service.go:466-477`).
-- `page.tsx` already imports `useQueryClient` from `@tanstack/react-query` (`:3`).
+- `page.tsx` imports only `useQueryClient` from `@tanstack/react-query` (`:3`); `useQuery` is not imported yet and must be added to that import.
 - No new backend edge: the browser already calls `/trader/api` ConfigService and MarketDataService; headers are added by the BFF (`traderBff.ts`), C-03 unchanged.
 
 **TDD**: `red-green required`
@@ -674,7 +675,7 @@ grep -n "indicatorHistory\|UI_CHART_HISTORY_VALUES" e2e/fixtures/INVENTORY.md   
 
 **Instructions**:
 1. `deadlines.ts`: add **new** `HISTORY_CONFIG_TIMEOUT_MS = 3_000` with a comment of at most two lines (the read gates the first bars request, so it must fail fast). See Assumption 2.
-2. `page.tsx`, config read: one `useQuery` with a stable key (for example `['ui-chart-history-config']`), `queryFn` = `traderConfigClient.getConfig({ namespace: 'ui' }, { timeoutMs: HISTORY_CONFIG_TIMEOUT_MS })` returning `resp.values`, `staleTime: Infinity`, `retry: false`. Derive `historyBars = readHistoryBars(query.data ?? {})`. Error, timeout or absence therefore yields 200 and never blocks the candlestick (PLAT-N1).
+2. `page.tsx`, config read: add `useQuery` to the `@tanstack/react-query` import at `:3`, then one `useQuery` with a stable key (for example `['ui-chart-history-config']`), `queryFn` = `traderConfigClient.getConfig({ namespace: 'ui' }, { timeoutMs: HISTORY_CONFIG_TIMEOUT_MS })` returning `resp.values`, `staleTime: Infinity`, `retry: false`. Derive `historyBars = readHistoryBars(query.data ?? {})`. Error, timeout or absence therefore yields 200 and never blocks the candlestick (PLAT-N1).
 3. `loadBars`: do nothing until the config query has settled (success or error). Request `page: { pageSize: historyBars }`, still with no `range`. Add the settled flag and `historyBars` to the effect at `:330-333`; the poll keeps using `loadBarsRef`.
 4. In the response handler: keep all returned bars with a timestamp in `barSeries` (the full D closes and times go to `GetIndicatorSeries`); draw only the last `CHART_WINDOW_BARS` bars on the candlestick (`mapBars(res.bars).slice(-CHART_WINDOW_BARS)`). Update the comment at `:132-133` to state the constraint (the drawn window is the tail of the fetched history).
 5. `IndicatorSection`: take `requestedBars` (the clamped `historyBars`) as a prop from the page. When `series` is present, call `windowIndicatorSeries(series, requestedBars)` once (memoised on `series` and `requestedBars`) and pass its `components` and `times` to `IndicatorPanels` in place of `series.components` and the page `times`. Do not read `insufficient` yet (Step 15).
@@ -703,10 +704,10 @@ grep -n "namespace: 'ui'" "src/app/trader/positions/[symbol]/page.tsx"          
 **Reviewers**: `xstockstrat-ui` owner — trading UI correctness, analytics display accuracy, Connect-RPC call safety
 
 **Codebase Evidence**:
-- Existing indicator-panel e2e: `ui/e2e/trader/position-detail.spec.ts:478-515` (`watchlist(page, 'AAPL', 'strat-live-001')`, `page.goto('/trader/positions/AAPL')`, testids `indicator-panels`, `indicator-panel`, `indicator-panel-error`; waits for `.tv-lightweight-charts` at `:501-502`). Helper `watchlist(page, symbol, strategyId)` at `:864`.
+- Existing indicator-panel e2e: `ui/e2e/trader/position-detail.spec.ts:473-514` (`watchlist(page, 'AAPL', 'strat-live-001')`, `page.goto('/trader/positions/AAPL')`, testids `indicator-panels`, `indicator-panel`, `indicator-panel-error`; waits for `.tv-lightweight-charts` at `:502-503`). Helper `watchlist(page, symbol, strategyId)` at `:864`.
 - Per-test override pattern: `page.route('**/xstockstrat.<pkg>.v1.<Service>/<Method>', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(…) }))` (`position-detail.spec.ts:226`, `:417`); request capture via `route.request().postDataJSON()` (`:704-705`).
 - Mock backend today: `getBars` returns `mockDailyBars(req.symbol)` and ignores `pageSize` (`ui/e2e/mock-backend.ts:711-713`, `:137`); `getIndicatorSeries` returns `INDICATOR_SERIES_AAPL` for AAPL (`:1417-1422`); `getConfig` for namespace `ui` returns only the two `performance.*` keys (`:1541-1552`), so the history-depth key is **absent** by default; `getStrategy` returns one `sma_fast` component for any id (`:1378-1391`).
-- Auth helper: `addAuthCookie` (`e2e/helpers/auth.ts`), already used by this spec (`:522`).
+- Auth helper: `addAuthCookie` (`e2e/helpers/auth.ts`), already used by this spec (`:476`); the `getByRole('main')` hydration scoping note is at `:522-525`.
 - Ledger trap (recon.md, fails.md): asserting an outbound `GetBars` in a chart e2e races the async lightweight-charts init — wait for `.tv-lightweight-charts` first.
 - The `GetConfig` glob matches every namespace and segment: the handler must answer only `namespace === 'ui'` and `route.fallback()` otherwise.
 
@@ -716,12 +717,12 @@ grep -n "namespace: 'ui'" "src/app/trader/positions/[symbol]/page.tsx"          
 
 **Instructions**:
 1. `indicatorHistory.ts`: add Connect-JSON (wire) builders next to the init ones — `historyBarsWire(symbol, n)` (a `GetBarsResponse` body with `n` daily bars whose times equal `historyTimes(n)`) and `indicatorSeriesWire(n, periods)` (the wire form of `indicatorSeriesResponse`). Update the two `INVENTORY.md` rows' consumer lists.
-2. `position-detail.spec.ts`, **new** tests beside the block at `:478`:
+2. `position-detail.spec.ts`, **new** tests beside the block at `:473`:
    - **Default depth**: no config override (the key is absent in the mock). Capture the `MarketDataService/GetBars` request for the symbol; after `.tv-lightweight-charts` is visible, assert its `page.pageSize` is 200 and that it carries no `range`.
    - **Configured depth (AC-1)**: route `ConfigService/GetConfig` for namespace `ui` to `UI_CHART_HISTORY_VALUES.wire(1000)`; route `GetBars` to `historyBarsWire('AAPL', 400)`; route `AnalysisService/GetIndicatorSeries` to `indicatorSeriesWire(400, [200])` while capturing the request. Assert: the `GetBars` request has `page.pageSize` 1000; the `GetIndicatorSeries` request carries 400 closes and 400 times (the full history, not the drawn window); one `indicator-panel` is visible for `sma200`; no `indicator-panel-error`.
    - **History equal to the lookback (AC-3)**: same config; `historyBarsWire('AAPL', 200)` and `indicatorSeriesWire(200, [200])`. Assert the `sma200` pane renders as a normal `indicator-panel` (a chart pane, so the last-bar value is drawn) and the text "Not enough history" is absent.
 3. Reuse `watchlist(page, 'AAPL', 'strat-live-001')` and `addAuthCookie`. No inline domain literal: bars, series and config values come from the fixtures (C-12); request captures and the config route guard are scenario one-offs.
-4. The existing test at `:478-515` must stay green unchanged (its fixture carries no `firstValueBars`, so nothing is insufficient).
+4. The existing test at `:473-514` must stay green unchanged (its fixture carries no `firstValueBars`, so nothing is insufficient).
 
 RED: before Step 13 the page sends `pageSize: 200` under the 1000 override and sends 200-or-fewer closes; the `pageSize` 1000 assertion fails.
 
@@ -786,7 +787,7 @@ grep -rn "Not enough history" src | wc -l     # 1: the copy lives in one place
 **Reviewers**: `xstockstrat-ui` owner — trading UI correctness, analytics display accuracy
 
 **Codebase Evidence**:
-- The Step 14 tests and fixtures (`historyBarsWire`, `indicatorSeriesWire`, `UI_CHART_HISTORY_VALUES`) are the base; the pane seam is `data-testid="indicator-panel"` with `data-series` / `data-series-count` (`IndicatorPanels.tsx:182-184`), and the page-level scoping note at `position-detail.spec.ts:524-528` (scope to `getByRole('main')` to avoid the hydration duplicate).
+- The Step 14 tests and fixtures (`historyBarsWire`, `indicatorSeriesWire`, `UI_CHART_HISTORY_VALUES`) are the base; the pane seam is `data-testid="indicator-panel"` with `data-series` / `data-series-count` (`IndicatorPanels.tsx:182-184`), and the page-level scoping note at `position-detail.spec.ts:522-525` (scope to `getByRole('main')` to avoid the hydration duplicate).
 - Canvas has no per-line DOM; `data-series-count` is the readiness seam (`position-detail.spec.ts:490-496`).
 
 **TDD**: `red-green required`
