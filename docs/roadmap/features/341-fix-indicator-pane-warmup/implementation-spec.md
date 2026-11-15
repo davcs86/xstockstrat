@@ -37,7 +37,10 @@ an omission. No new page or route, so C-10(a) nav registration does not apply.
    (`max(0, period - 1) + _CROSSOVER_LOOKBACK`, `period + _CROSSOVER_LOOKBACK`) that equation is off by
    one (SMA 200: 201 ≠ 200). The values are the binding part (they are the product spec's P). Step 4
    pins `(first_value_bars - 1) + _CROSSOVER_LOOKBACK == builtin_lookback_bars`, which is debate D-7's
-   definition ("first valid index + 1"). Basis: D-7, D-17. Needs confirmation at `/sdd-review impl-spec`.
+   definition ("first valid index + 1"). Basis: D-7, D-17. Arithmetic re-checked at `/sdd-review
+   impl-spec` (2026-11-15) against `warmup.py:80-89`: SMA 200 → (200 − 1) + 1 = 200; RSI 14 →
+   (15 − 1) + 1 = 15. The review raised no finding on it; it remains a deviation from the `design.md`
+   text for the operator to see at the Step 4 gate.
 2. **Config-read timeout value.** `design.md` § 4 says "a short timeout" and gives no number. Step 13
    adds `HISTORY_CONFIG_TIMEOUT_MS = 3_000` to `ui/src/lib/deadlines.ts`. Basis: the shortest existing
    deadline is 10 s (`deadlines.ts:3`), and the read blocks the first bars request. The number is this
@@ -106,14 +109,20 @@ the PRESERVE-at-risk rule (feature 153 `@AC-1`).
 - **Volatile at merge** (`fails.md` 2026-11-10, 293): config `050` is the next free number on this tree
   (`ls config/migrations | tail -1` → `049_notify_commsgun_channel_keys`). Spec-ready
   `330-fix-live-enrich-ttl-seed` already holds `050_analysis_live_enrich_ttl_reseed` on
-  `origin/feature/fix-live-enrich-ttl-seed`; batch peer `backtest-inline-backfill` ends at 049. Re-derive
+  `origin/feature/fix-live-enrich-ttl-seed` (re-checked 2026-11-15 with `git ls-tree`: both the `.up.sql`
+  and the `.down.sql` are there), so two branches claim `050` and whichever merges second renumbers;
+  batch peer `backtest-inline-backfill` ends at 049. Re-derive
   the number at Step 7 and again at the integration PR; a renumber means regenerating
   `scripts/config-wiring-stored.json`. Step 8's lookup is number-free. No other branch seeds
   `(ui, chart.indicator_history_bars)` (`grep -rln chart.indicator_history_bars docs/roadmap/features`
   → this feature only); re-run that scan after every `main-dev` merge. This closes O-30 for this tree.
 - Peer `342-chart-series-palette` (`draft`) edits `ui/src/components/trader/IndicatorPanels.tsx` and
-  `ui/src/lib/indicatorChart.ts`. Expect a textual conflict; the soft rebase row in `merge-order.md` is
-  added by `/sdd-review impl-spec` (context.md, product-spec review session).
+  `ui/src/lib/indicatorChart.ts`, and its product spec puts the symbol page
+  (`ui/src/app/trader/positions/[symbol]/page.tsx`) in scope. Expect a textual conflict; whichever
+  merges second rebases and re-greps its anchors. `docs/roadmap/features/merge-order.md` has no note
+  for this pair or for the `050` claim above (`grep -n "341\|342" merge-order.md` → none, 2026-11-15).
+  The impl-spec review could not add it (its writes are limited to this feature directory); it is an
+  Open Thread in `context.md`, to be added before `/sdd-execute`.
 - **Homelab launch — post-deploy operator checkpoint, outside the numbered steps.** The fix reaches the
   homelab only after `set_config ui / chart.indicator_history_bars = 1000` there (design.md § 8). That
   needs the seed migration deployed, which needs the integration PR merged, which needs every step
@@ -168,9 +177,16 @@ grep -n "first_value_bars = 5" analysis/v1/analysis.proto     # one hit, inside 
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/go/analysis/v1/` — modify (generated)
-- `packages/proto/gen/python/analysis/v1/` — modify (generated)
-- `packages/proto/gen/ts/analysis/v1/` — modify (generated, plus `gen/ts/dist/` if tracked)
+- `packages/proto/gen/go/analysis/v1/analysis.pb.go` — modify (generated)
+- `packages/proto/gen/python/analysis/v1/analysis_pb2.py` — modify (generated)
+- `packages/proto/gen/ts/analysis/v1/analysis.ts` — modify (generated)
+- `packages/proto/gen/ts/analysis/v1/analysis_pb.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/analysis/v1/analysis.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/analysis/v1/analysis.js` — modify (generated)
+- `packages/proto/gen/ts/dist/analysis/v1/analysis_pb.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/analysis/v1/analysis_pb.js` — modify (generated)
+
+This is the expected set: the eight tracked stubs that carry `ComponentSeries` today (`git grep -l ComponentSeries -- packages/proto/gen`). The generator decides the real set. If `git status` shows a different file under `packages/proto/gen/`, commit what the generator wrote and record the difference in the Deviation Log.
 
 **Reviewers**: Proto Reviewer — field number uniqueness, no breaking change, `buf lint` / `buf breaking`; `packages/proto` owner — backward compatibility, naming; `xstockstrat-analysis` owner — strategy scoring determinism, no look-ahead bias; `xstockstrat-ui` owner — analytics display accuracy, Connect-RPC call safety
 
@@ -190,7 +206,7 @@ Run `./scripts/buf-gen.sh` from the repo root. Commit the result unedited. Stage
 
 **Verification**:
 ```bash
-./scripts/buf-gen.sh && git status --short packages/proto/gen     # only analysis/v1 stubs change
+./scripts/buf-gen.sh && git status --short packages/proto/gen     # only analysis/v1 stubs change (the eight files above)
 ./scripts/buf-gen.sh && git diff --stat packages/proto/gen         # second run adds nothing new
 git grep -lE "first_value_bars|firstValueBars|FirstValueBars" -- packages/proto/gen | wc -l   # >= 3 (go, python, ts)
 ```
@@ -611,12 +627,17 @@ node scripts/check-config-wiring.mjs --final      # exit 0: no STALE, no dynamic
    - Stale-cache alignment: the returned `times` are the tail of the **response** times, so a series cached one bar behind the page still pairs each value with its own time.
    - The input object is not mutated.
 6. Pipe one windowed series through `toLineData` and assert the gap points carry no `value` key (the existing contract, reused).
+7. Seed-to-reader case (C-05), in `describe('readHistoryBars')`: read the seed migration from disk with `node:fs` (precedent: `ui/src/lib/dbTlsPlatformGuard.test.ts:4`, `:63`), found by the number-free suffix `_ui_chart_history_bars.up.sql` in `services/xstockstrat-config/migrations/`. Take the `value_type` and `value_data` literals of the `chart.indicator_history_bars` row from the file text, never a retyped `'200'`. Assert `value_type` is `int`, then feed `UI_CHART_HISTORY_VALUES.init(Number(value_data))` through `readHistoryBars` and assert the result equals the seeded number and `DEFAULT_HISTORY_BARS` (F-07). This case needs Step 7's files, which Step 11 already requires.
 
 RED: with the helpers as signatures only (returning the default / the input unchanged), the AC-1..AC-4 assertions fail.
+
+Coverage threshold: `ui/vitest.config.ts:25-34` scopes coverage to `src/lib/**` and enforces lines, functions and statements ≥ 40%. `pnpm run test:coverage` (`ui/package.json:19`, `vitest run --coverage`) is the command CI runs (`.github/workflows/ci.yml:796`); it exits non-zero below the threshold.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm run test:unit
+pnpm run test:coverage                                                     # exit 0: src/lib/** lines, functions, statements >= 40%
+grep -n "_ui_chart_history_bars" src/lib/indicatorChart.test.ts            # the seed-to-reader case reads the migration file
 grep -n "from '../../e2e/fixtures" src/lib/indicatorChart.test.ts          # fixtures imported, no inline domain literal
 grep -n "indicatorHistory\|UI_CHART_HISTORY_VALUES" e2e/fixtures/INVENTORY.md   # two catalog rows
 ```
@@ -704,6 +725,8 @@ grep -n "namespace: 'ui'" "src/app/trader/positions/[symbol]/page.tsx"          
 
 RED: before Step 13 the page sends `pageSize: 200` under the 1000 override and sends 200-or-fewer closes; the `pageSize` 1000 assertion fails.
 
+Coverage threshold: Playwright e2e carries no coverage threshold. The `xstockstrat-ui` gate is the vitest `src/lib/**` ≥ 40% threshold that Step 12 runs (`pnpm run test:coverage`).
+
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
@@ -777,6 +800,8 @@ Add two tests to the Step 14 block, with the config routed to `UI_CHART_HISTORY_
 3. **Full page, no notice**: no config override (depth 200); `historyBarsWire('AAPL', 200)` and `indicatorSeriesWire(200, [250])`. Assert zero `indicator-panel-insufficient` and one `indicator-panel` (a full page degrades to gaps).
 
 RED: before Step 15 there is no `indicator-panel-insufficient` element; the AC-2 count assertion fails.
+
+Coverage threshold: none for Playwright e2e; the gate is Step 12's vitest `src/lib/**` ≥ 40% (`pnpm run test:coverage`).
 
 **Verification**:
 ```bash
