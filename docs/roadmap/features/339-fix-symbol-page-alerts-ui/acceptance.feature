@@ -74,3 +74,12 @@ Feature: fix-symbol-page-alerts-ui (bug fix)
     When an alert titled "Order rejected" is streamed and is then also returned as a stored unread alert
     Then the opened drawer lists "Order rejected" exactly once
     And the badge shows "1"
+
+  @AC-10 @FR-10 @regression
+  Scenario: Clear all marks every unread alert read, persists, and empties the drawer and badge
+    Given two stored unread alerts titled "Backfill 9f8e7d6c failed" and "Daily loss limit reached" and the badge shows "2"
+    And no alert streamed since page load
+    When "Clear all" is pressed in the opened drawer
+    Then the drawer shows "No alerts"
+    And the bell shows no unread badge
+    And the Notifications page shows "Backfill 9f8e7d6c failed" and "Daily loss limit reached" as read
