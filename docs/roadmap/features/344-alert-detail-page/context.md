@@ -393,3 +393,20 @@ _(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-disti
 - Atomic unit Steps 5+6. Extended the targeted test (`AC-4 / @AC-2`) with the `url` assertion on the first payload and on every sent payload, and the untargeted admin test (`@AC-5`) with the same assertion; both reuse the `alert()` builder (`alertId: 'a1'`), no new literal fixture. AC-7 red → green as in Step 5.
 - Files modified: `services/xstockstrat-notify/src/__tests__/webPush.test.ts`
 - Deviations: none. The `165 @AC-4` EXTEND / `242 @AC-5` PRESERVE confirmation (Open Threads) is still the operator's at the checkpoint.
+
+## Session 2026-11-15 — operator standing authorization and checkpoint answers (orchestrator)
+
+- **Standing authorization for checkpoints — operator, verbatim (2026-11-15): "Proceed, do not stop at
+  checkpoints unless it's necessary".** Given in answer to "Proceed past the checkpoints?". The run uses
+  `checkpoints: 'report'` from here on; this entry is its `authorizationRef`. It does not waive blockers,
+  failed verifications, Floor breaches, uncovered `@AC` CHANGE lines or any decision that is the
+  operator's — those still halt.
+- **Scratch Postgres for stored-set generation (orchestrator tooling, not an operator ruling):** a
+  Postgres 16 the main session controls listens on 127.0.0.1:5432. `DATABASE_URL` is not exported into
+  agent shells; prefix the generator: `DATABASE_URL='postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable'
+  python3 scripts/config-wiring-stored.py`. Do not start, stop or delete the server; if it is
+  unreachable, stop and report.
+- **`165 @AC-4` / `165 @AC-9` EXTEND and the PRESERVE lines (Steps 5-6 push `url`) — "Agreed".** Asked:
+  the push-notification link extends two existing notify rules and leaves two others unchanged; the
+  extension is that a push notification now carries a link to the alert's page — sign off? Signed off.
+  `271 @AC-5` (Step 18, bell in every segment) was not part of that question and stays open.
