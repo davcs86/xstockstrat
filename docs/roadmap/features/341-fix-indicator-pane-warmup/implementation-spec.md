@@ -304,7 +304,7 @@ grep -n "conftest" tests/test_warmup.py     # none expected: single-consumer inl
 
 ### Step 5 — service: marketdata lock-budget breach counter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/telemetry/otel.go` — modify
@@ -347,7 +347,7 @@ grep -c "observeLockBreach(ctx" internal/repository/marketdata_repo.go     # 9 c
 
 ### Step 6 — test: 53200 counts, another error does not
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify
@@ -879,3 +879,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 3's last line `grep -n "warmups=" app/handlers/servicer.py` shows "the parameter, its write, and the one GetIndicatorSeries call site". Step 4's last line `grep -n "conftest" tests/test_warmup.py` expects no match.
 - **Actual**: Step 3's grep printed 2 lines (`:1915` the parameter, `:4553` the call site). The write is `warmups[fid] = …` (Instruction 2), which the pattern `warmups=` cannot match, so the comment's count of three is off by one; the code follows Instruction 2. Step 4's block exited 1 because its last command is that no-match grep; every pytest and ruff command in it passed.
 - **Disposition**: no code change; both read as passing.
+
+### Steps 5+6 — Verification block results read as specified (2026-11-15)
+- **Spec said**: Step 5's last line `grep -c "observeLockBreach(ctx" internal/repository/marketdata_repo.go` gives 9 call sites (3 + 2 + 2 + 2). Step 6 named pgxmock `RowError` / `CloseError` for the `rows.Err()` path, with `WillReturnError` as the fallback.
+- **Actual**: the grep printed 10. The pattern also matches the definition line `func observeLockBreach(ctx context.Context, …)` (`marketdata_repo.go:67`). The call sites are the specified 9 (`:82`, `:105`, `:108`, `:134`, `:140`, `:205`, `:210`, `:502`, `:507`). pgxmock v4.9.0 has `(*Rows).CloseError`, which sets the error `rows.Err()` returns after iteration (`rows.go:90-94`, `:259`), so the test uses it and the `WillReturnError` fallback was not needed. Both blocks ran with `golangci-lint` v2.14.0 (built with go1.27.0) from `/root/go/bin` put first on `PATH`; `/usr/local/bin/golangci-lint` is v2.5.0.
+- **Disposition**: no code change; read as passing.

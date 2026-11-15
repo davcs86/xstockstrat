@@ -172,8 +172,8 @@ still live.
 - [ ] Confirm `HISTORY_CONFIG_TIMEOUT_MS = 3_000` (spec author's number; a wrong value falls back to
   200, PLAT-N1) — Step 13 gate.
 - [ ] Show the pin-formula deviation to the operator — Step 4 gate.
-- [ ] pgxmock row-error injection has no in-repo use; fallback is `WillReturnError` plus a Deviation
-  Log entry — Step 6.
+- [x] pgxmock row-error injection has no in-repo use; fallback is `WillReturnError` plus a Deviation
+  Log entry — Step 6. Resolved: pgxmock v4.9.0 `CloseError` covers the `rows.Err()` path.
 - [ ] The chunk-width SQL is new text, checked by the operator on first use; runbook launch-step-1
   preconditions (O-31) and the homelab-edge playbook path the runbook cites (O-32) — Step 17.
 - [ ] Step 12 touches four files and many cases (one unit with Step 11); split only with a Deviation
@@ -214,6 +214,10 @@ still live.
   `services/xstockstrat-analysis/app/handlers/servicer.py`,
   `services/xstockstrat-analysis/tests/test_warmup.py`,
   `services/xstockstrat-analysis/tests/test_analysis_servicer.py`.
+- Steps 5+6: `services/xstockstrat-marketdata/internal/telemetry/otel.go`,
+  `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`,
+  `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go`,
+  `services/xstockstrat-marketdata/internal/service/telemetry_allowlist_test.go`.
 
 Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
@@ -670,3 +674,20 @@ Tooling setup (steps 3+4): python 3.12 ✓ (service `.python-version`) · uv ✓
 - Files modified: `services/xstockstrat-analysis/tests/test_warmup.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
 - Deviations: the block exits 1 on its last line, the no-match `grep conftest` (expected); see the Deviation Log.
 - Pin formula: the test pins the spec's `(first_value_bars - 1) + _CROSSOVER_LOOKBACK`, not `design.md`'s `first_value_bars + _CROSSOVER_LOOKBACK` (Assumption 1). Sequential mode has no Step 4 gate prompt, so it goes to the operator in the checkpoint report.
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, steps 5+6 (atomic unit)
+
+Tooling setup (steps 5+6): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 built with go1.27.0 (`/root/go/bin`, put first on `PATH`; `/usr/local/bin` holds v2.5.0) · pgxmock v4.9.0 ✓ (module cache).
+
+### Step 5 — service: marketdata lock-budget breach counter [done]
+- Part of the Steps 5+6 unit. Added counter `marketdata.ohlcv.out_of_memory_errors`, the `OhlcvOp*` labels and `RecordOhlcvOutOfMemory(ctx, op)` in `otel.go`; added `observeLockBreach(ctx, op, err)` and the constant `sqlstateOutOfMemory = "53200"` in the repository, and wrapped the 9 returned errors of `InsertBars`, `QueryBars`, `QueryRecentBars` and `QueryBarsBatch` (including `tx.Commit` and the `scanBars` returns). The error is returned unchanged. TDD: red → green with Step 6 (below).
+- Files modified: `services/xstockstrat-marketdata/internal/telemetry/otel.go`, `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`
+- Deviations: the Verification grep prints 10, because it also matches the definition line; the call sites are the specified 9 (Deviation Log).
+
+### Step 6 — test: 53200 counts, another error does not [done]
+- Part of the Steps 5+6 unit. New `TestObserveLockBreach` (wrapped 53200 counts 1; 57014, a plain error and nil count 0; the input is returned unchanged) and `TestQueryRecentBars_CountsLockBreachFromRows` (pgxmock `CloseError` 53200 on the `rows.Err()` path → `errors.As` finds 53200 and `{op="recent_bars"}` = 1). A test-local `installMetricReader` and `ohlcvOOMCount` read the counter. The allow-list test gains the instrument and one `RecordOhlcvOutOfMemory` drive. Bar rows and `PgError` values stay inline: each has one consumer (C-13).
+- Red, with `observeLockBreach` as a bare passthrough (`.sdd-logs/v-1.log`): `out_of_memory_errors{op=bars} = 0, want 1` and `out_of_memory_errors{op=recent_bars} = 0, want 1`. Green (`.sdd-logs/v-2.log`, `v-3.log`): lint `0 issues.`; the 4 subtests and both new tests PASS; all 16 packages `ok`; `total: (statements) 83.2%` (≥ 40).
+- Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go`, `services/xstockstrat-marketdata/internal/service/telemetry_allowlist_test.go`
+- Deviations: none for the pgxmock fallback (`CloseError` exists in v4.9.0, so `WillReturnError` was not needed); the Open Thread for it is resolved.
