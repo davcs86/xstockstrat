@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -12,6 +12,7 @@
 | 2 | 2026-11-15 | /sdd-batch | 5 | 4 | 4 | 6 | 0 | yes |
 | 3 | 2026-11-15 | /sdd-batch | 7 | 5 | 10 | 7 | 1 | yes |
 | 4 | 2026-11-15 | /sdd-batch | 7 | 3 | 8 | 7 | 0 | yes |
+| 5 | 2026-11-15 | /sdd-batch | 5 | 2 | 7 | 7 | 1 | yes |
 
 ## Settled Decisions
 
@@ -42,6 +43,11 @@
 | D-22 | 4 | Step 3 adds two synthetic tests: `Revenues` only at the prior-year date with the other revenue tag at the anchor, and a later-dated `Liabilities` instant that shifts the anchor and nils equity, ROE and D/E. | Proposer r4 Step 3 (O-20, O-21); adversary r4 raised no objection. | settled |
 | D-23 | 4 | `periodEnd` stays unchanged; the cover-page `period_end` and the stale `pe_ratio` / `pb_ratio` on anchor-miss rows are logged as residuals with `shares`, and checks use the stored `period_end`. | Proposer r4 (O-19, O-23); edgar_client.go:350-352; marketdata_service.go:2418. Adversary r4 disputed only how the stale rows are counted. | settled |
 | D-24 | 4 | The pre and post exports read through the MCP use `query_fundamentals` historical JSON mode, not CSV mode. | services/xstockstrat-agent/app/tools.py:373 (`_historical_to_csv` drops `extra_metrics`); marketdata.proto:288, :291. Not disputed. | settled |
+| D-25 | 5 | Step 5 has no production lane and no production read path. It runs two independent staging lanes, homelab staging first and DO staging only after lane A ends with no escalation, each with its own pre-export, backfill, post-export and audit report. | Operator ruling 2026-11-15, verbatim: 'There are no production instances. Staging is enough.' Proposer r5 Step 5; .do/app.dev.yaml:698-699; R-15. | settled |
+| D-26 | 5 | Chunk 1 of each lane is a canary of LYFT, AXP and AAPL with absolute hard checks (LYFT roe 0.942632 and 0.868791, AXP D/E about 1.73, the balance identity, the TTM check). Every later chunk is re-exported and audited, and the escalation rules are evaluated before the next chunk starts. | Operator steer round 5; proposer r5 Step 5 items 3 to 5; adversary r5 disputed only other callers' reach, not the canary. | settled |
+| D-27 | 5 | Rule (a) covers `net_income`, `revenue`, `eps`, `roe` and `debt_to_equity` at 5% of previously non-nil rows. Rule (c) is report-only against the canary's observed revenue deltas. The stale-ratio count (`eps` nil'd with `pe_ratio` unchanged; `roe` or `debt_to_equity` nil'd with `pb_ratio` unchanged) sizes the residual and is not a gate. | Proposer r5 Step 5 item 5 (O-27); adversary r5: rule (a) honours R-17, no objection to (c) or the stale count. | settled |
+| D-28 | 5 | The closing TTM check runs on the three controls plus a seeded random sample of 20 symbols per lane, scales the sum by 4/n when n < 4, and skips and counts a row whose needed quarter has a nil stored `net_income`. | Proposer r5 Step 5 item 6 (O-28); edgar_client.go:491. Adversary r5 disputed only the window's date key. | settled |
+| D-29 | 5 | The pre-export is taken before the v2 build reaches the lane and must pass a completeness gate: every DISTINCT symbol present with a row count equal to its per-symbol `count(*)`. Rows that appear only after the backfill are reported apart from 'filled'. One audit report per lane is committed. | Proposer r5 Step 5 items 2, 5 and 7 (O-29, O-30); marketdata_repo.go:796-797 overwrites in place; marketdata_service.go:2373-2388. | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -65,6 +71,8 @@
 | R-15 | 4 | A single DO-lane re-backfill and audit covering both DO staging and production. | They are separate databases on one cluster (.do/app.yaml:696-697, .do/app.dev.yaml:698-699) and no marketdata table has an environment column. | locked |
 | R-16 | 4 | Committing the raw pre and post exports to the feature directory. | A universe-wide dump is neither a fixture nor a test (C-13, C-18); only the audit report is committed. | locked |
 | R-17 | 4 | Counting `pe_ratio` and `pb_ratio` in the nil'd-rows escalation threshold. | The price-join merge never goes value to nil (marketdata_service.go:2418), so the count is always zero and gives false comfort. | locked |
+| R-18 | 5 | A production lane or production read path (DO production or the homelab `xstockstrat_production` database) in the Step 5 repair and audit. | The operator ruled there are no production instances and staging is enough. | locked |
+| R-19 | 5 | Rule (b) as a pause whenever the share of rows failing the balance identity does not fall from pre to post. | It pauses every clean chunk (0% to 0%) and every chunk with structural failures; only a rise in the failure share may trip it. | locked |
 
 ## Objections
 
@@ -94,13 +102,20 @@
 | O-21 | 3 | Add a synthetic 10-Q with a later-dated `Liabilities` instant so the anchor-shift nil is pinned by a test. | no | closed @ round 4 (A synthetic 10-Q with a later-dated `Liabilities` instant is added to Step 3.) |
 | O-22 | 3 | Step 5 covers staging only; add a production re-backfill step with the same symbol source, start and chunking, one chunk at a time. | no | closed @ round 4 (The proposer added a production repeat of Step 5; its lane structure and read path are tracked as new blocking objections.) |
 | O-23 | 3 | `periodEnd` (edgar_client.go:350-352) includes `dei` share-count facts, so the stored `period_end` may be the cover-page date (LYFT Q3-2026: 2026-10-30); confirm against stored rows and log with the `shares` residual. | no | closed @ round 4 (`periodEnd` stays unchanged and is logged with the `shares` residual; checks use the stored `period_end`, which the pre-export confirms.) |
-| O-24 | 4 | Step 5 must list three lanes (homelab staging, DO staging, DO production), each with its own pre-export, backfill, post-export and audit; DO staging and production are separate databases (.do/app.yaml:696-697, .do/app.dev.yaml:698-699). | yes | open |
-| O-25 | 4 | The production lane has no reachable read path (only the two staging MCPs exist); the operator must choose a production MCP connector as a precondition or a read-only SQL `\copy` for production only, with the unlabeled user answers mapped in context.md. | yes | open |
-| O-26 | 4 | The escalation rules cannot pause the backfill when the audit runs after all chunks; audit per chunk and make chunk 1 a canary of LYFT, AXP and AAPL. | yes | open |
-| O-27 | 4 | Audit rule calibration: rule (b) must be a pre-versus-post failure-rate comparison (hard only on the controls), rule (c) report-only or canary-calibrated, and rule (a) must replace `pe_ratio` / `pb_ratio` with a count of rows whose `eps`, `roe` or `debt_to_equity` went to nil while the ratio stayed unchanged. | no | open |
-| O-28 | 4 | The closing TTM check must scale by 4/n when n < 4 (edgar_client.go:491), skip rows with a nil stored quarter, and run on the three controls plus a stated sample only. | no | open |
-| O-29 | 4 | Export completeness must be a gate before chunk 1, backed by a per-symbol `count(*)` SQL; rows that appear only after the backfill are reported separately from 'filled'. | no | open |
-| O-30 | 4 | Raw pre and post exports must stay out of git; commit only the audit report. | no | open |
+| O-24 | 4 | Step 5 must list three lanes (homelab staging, DO staging, DO production), each with its own pre-export, backfill, post-export and audit; DO staging and production are separate databases (.do/app.yaml:696-697, .do/app.dev.yaml:698-699). | yes | closed @ round 5 (Step 5 lists the staging lanes (homelab staging, DO staging), each with its own pre-export, backfill, post-export and audit; the third lane is removed by the operator ruling.) |
+| O-25 | 4 | The production lane has no reachable read path (only the two staging MCPs exist); the operator must choose a production MCP connector as a precondition or a read-only SQL `\copy` for production only, with the unlabeled user answers mapped in context.md. | yes | closed @ round 5 (Closed by the operator ruling: there is no production lane, so no production read path is needed.) |
+| O-26 | 4 | The escalation rules cannot pause the backfill when the audit runs after all chunks; audit per chunk and make chunk 1 a canary of LYFT, AXP and AAPL. | yes | closed @ round 5 (The proposer adopted a per-chunk audit with a LYFT, AXP and AAPL canary and rules evaluated before the next chunk; rewrites by other callers are tracked as a new blocking objection.) |
+| O-27 | 4 | Audit rule calibration: rule (b) must be a pre-versus-post failure-rate comparison (hard only on the controls), rule (c) report-only or canary-calibrated, and rule (a) must replace `pe_ratio` / `pb_ratio` with a count of rows whose `eps`, `roe` or `debt_to_equity` went to nil while the ratio stayed unchanged. | no | closed @ round 5 (Rule (a) drops `pe_ratio` / `pb_ratio` and adds the stale-ratio count, rule (b) became a pre-versus-post rate comparison hard only on the controls, rule (c) is report-only; rule (b)'s trip direction is tracked as a new blocking objection.) |
+| O-28 | 4 | The closing TTM check must scale by 4/n when n < 4 (edgar_client.go:491), skip rows with a nil stored quarter, and run on the three controls plus a stated sample only. | no | closed @ round 5 (The TTM check scales by 4/n, skips nil quarters and runs on the controls plus a seeded 20-symbol sample; the window's date key is carried as a reopen petition on D-20.) |
+| O-29 | 4 | Export completeness must be a gate before chunk 1, backed by a per-symbol `count(*)` SQL; rows that appear only after the backfill are reported separately from 'filled'. | no | closed @ round 5 (The completeness gate with per-symbol `count(*)` sits before chunk 1, and rows that appear only after the backfill are reported apart from 'filled'.) |
+| O-30 | 4 | Raw pre and post exports must stay out of git; commit only the audit report. | no | closed @ round 5 (Raw exports go to operator storage and only the per-lane audit reports are committed.) |
+| O-31 | 5 | Lane A's SQL steps cite `docs/runbooks/operator-db-access.md`, which is DigitalOcean-only; name the read path per lane (homelab-edge `docs/runbooks/db-host.md` for lane A) and have the operator state the role, since the read-only `admin` role has no allowed hosts (db-host.md:19). | yes | open |
+| O-32 | 5 | The per-chunk veto does not stop other callers: on v2 any `BackfillFundamentals` call re-derives stale rows (marketdata_service.go:2398-2407). Freeze with `marketdata.fundamentals.history.enabled=false` in both staging environments before the merge, enable per lane for its run, record the flips; the operator must consent to the freeze. | yes | open |
+| O-33 | 5 | Rule (b) must trip only when the post failure share is greater than the pre share, exclude rows with nil `assets`, `liabilities` or equity from both sides, and stay hard only on the controls. | yes | open |
+| O-34 | 5 | State the operator action when `marketdata.fundamentals.history.enabled` is false at the precondition check, folded into the freeze sequence. | no | open |
+| O-35 | 5 | The finish gate cannot require zero rows below `derivation_version` 2; re-run failed symbols once, list the remaining v1 rows by cause and escalate only unexplained rows. | no | open |
+| O-36 | 5 | The canary misses filers with no total `Liabilities` tag or with material non-controlling interest; add one to the canary or make chunk 2 a 10-symbol ramp. | no | open |
+| O-37 | 5 | [C-18] Answer why a read-only SQL `\copy` export per lane, with the MCP kept for the canary and TTM sample, is not simpler than paging `query_fundamentals` across the universe twice per lane; D-24 does not mandate the MCP. | no | open |
 
 ## Reopen Petitions
 
@@ -108,3 +123,4 @@
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
 | P-1 | 3 | O-5 | Adversary r3: the closing check `roe x equity ~= TTM NI` uses an operand that is never stored or served; `annualizeQuarterlyROE` keeps only the ratio (edgar_client.go:491-492) and `extra_metrics` holds only single-period `net_income` (:596). Remedy asked: state TTM NI as a computation from `query_fundamentals` historical rows. | pending user |
+| P-2 | 5 | D-20 | Adversary r5: the check windows on the stored `period_end`, which D-23 records as a cover-page date, while `trailingNetIncome` windows on the facts' own end dates (edgar_client.go:411-470). Cover-date lag differs between 10-Q and 10-K, so the 350-day boundary can include or drop a different quarter than the code did and fail at the 0.1% tolerance. Remedy asked: choose the last four fiscal quarters by `fiscal_period` label, Q4 = FY minus Q1 to Q3. This also amends D-23's 'checks use the stored `period_end`'. | pending user |
