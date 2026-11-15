@@ -1,0 +1,76 @@
+# Debate Register: fix-symbol-page-alerts-ui
+
+**State**: in-debate
+**Mode**: full
+**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+
+## Rounds
+
+| Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 2026-11-15 | /sdd-batch | 8 | 7 | 0 | 12 | 0 | yes |
+| 2 | 2026-11-15 | /sdd-batch | 6 | 3 | 8 | 4 | 0 | yes |
+
+## Settled Decisions
+
+<!-- Status: settled → superseded by D-m (only after a user-approved REOPEN) -->
+| ID | Round | Decision | Evidence | Status |
+|---|---|---|---|---|
+| D-1 | 1 | The overflow guard is fixed once in StatTile with a wrap guard on the value div; no per-grid markup change. | StatTile.tsx:19-31; page.tsx:842,901,1120; all consumers use grid-cols-N (minmax(0,1fr)), confirmed by the adversary | settled |
+| D-2 | 1 | Compact USD is a new fmtUsdCompact beside fmtUsd, used only for Market cap; fmtUsd is unchanged. | money.ts:4-28; page.tsx:1089; operator decision allows abbreviation | settled |
+| D-3 | 1 | The chip label is a single function opportunityChipLabel in opportunityShared.tsx: strategyId, else humanized source, else a fixed placeholder; never the symbol; no label map. | page.tsx:444; operator decision on strategy-less chips; adversary concurs (C-18) | settled |
+| D-4 | 1 | The switch fix is option (c): data-[state=checked]/data-[state=unchecked] in switch.tsx only, with an // app-specific marker and a regression-guard test. | switch.tsx:20,27; the operator decision binds only the switch; adversary concurs | settled |
+| D-5 | 1 | The drawer badge is the length of the merged, de-duplicated unread list (stored plus streamed), with the 9+ display kept and the 50-alert bound accepted. | AlertStream.tsx:48,74; FR-8; adversary concurs after weighing the unreadCount alternative | settled |
+| D-6 | 1 | The drawer refetches unread alerts on mount and on each open; there is no shared store or cross-page event. | No shared store exists between AlertStream and AlertInbox (recon); adversary rejects the CustomEvent as YAGNI | settled |
+| D-7 | 1 | The local-only "Clear all" is removed; per-row mark-read follows the AlertInbox pattern. | AlertStream.tsx:83-92; AlertInbox.tsx:42-53; operator decision (drawer offers mark-read) | settled |
+| D-8 | 1 | The useReconnectingStream wiring is unchanged. | AlertStream.tsx:35-46; PRESERVE rules @AC-9 @feature-270 and @AC-5 @feature-271 | settled |
+| D-9 | 2 | The Fundamentals card is two labelled four-tile groups (Valuation: Market cap, P/E, P/B, EPS; Quality & risk: ROE, Debt/Equity, Beta, Div yield) plus an as-of/source provenance footer, built only from existing fields, with no sub lines. | page.tsx:1099-1128,1074-1076; marketdata.proto:240,242; operator decision (full redesign); adversary confirms the footer is grounded and raises only header style | settled |
+| D-10 | 2 | The mid-digit mitigation is <wbr/> after each comma for string values, in a helper private to StatTile.tsx, with wrap-anywhere as the last resort; min-w-0 is not added. | StatTile.tsx:21-31; package.json:80 (Tailwind 4.3.3); adversary accepts once tested | settled |
+| D-11 | 2 | The dark: compounds in switch.tsx:27 are rewritten along with the bare forms; e2e for @AC-6/@AC-7 is geometry-only (bounding boxes). | switch.tsx:20,27; layout.tsx:26 (dark: is prefers-color-scheme); adversary: rewriting is right and harmless | settled |
+| D-12 | 2 | The stored fixture ALERT_LIST_002 is retitled so stored and streamed alerts have distinct titles; assertions are not id-scoped. | e2e/fixtures/alerts.ts:19-26,56-63; stream-reconnect.spec.ts:131; alert-stream.spec.ts:55 | settled |
+| D-13 | 2 | A failed unread fetch keeps the previous list and badge and shows CardNotice variant=error; mark-read errors use the same notice and the row stays; mark-read buttons carry aria-label "Mark read: <title>". | CardNotice.tsx:5-17; AlertInbox.tsx:42-53; C-17; adversary raised no objection | settled |
+| D-14 | 2 | The Connect stream framing helpers move from stream-reconnect.spec.ts to e2e/helpers/connectStream.ts for reuse by alert-stream.spec.ts. | e2e/trader/stream-reconnect.spec.ts:14-44; DRY guard rail; second consumer exists | settled |
+
+## Rejected Alternatives (locked)
+
+<!-- Status: locked → reopened @ round N (user, context.md <ISO>) -->
+| ID | Round | Alternative | Why rejected | Status |
+|---|---|---|---|---|
+| R-1 | 1 | Truncating or ellipsizing StatTile values | FR-1 needs the whole value drawn inside its tile | locked |
+| R-2 | 1 | Compact formatting for all large-USD symbol-page tiles | Out of scope beyond the FR-3 overflow guard | locked |
+| R-3 | 1 | Switch option (a), @theme/@utility blocks | Possible collision with the feature-307 theme check | locked |
+| R-4 | 1 | Switch option (b), global @custom-variant, without an operator ruling | It changes checkbox, field and questionnaire rendering, which the operator decision does not sanction | locked |
+| R-5 | 1 | Badge driven by the server unreadCount plus a streamed delta | FR-8 would not hold by construction; list length is simpler | locked |
+| R-6 | 1 | Window CustomEvent for cross-page alert sync | YAGNI; FR-7 is met by refetch-on-open | locked |
+| R-7 | 1 | Exporting a class constant from switch.tsx for the guard test | It changes the shadcn file shape | locked |
+| R-8 | 2 | A stateful shared mock that records which alerts it has streamed | Module-level mock state leaks across parallel specs (fails.md:1304); a stateless union with ALERT_STREAM_ALL is cheaper | locked |
+| R-9 | 2 | Break hints returned from money.ts (fmtUsdParts) instead of <wbr/> inside StatTile | Every call site would carry the break logic | locked |
+| R-10 | 2 | A full-value sub line under the compact Market cap | It brings the overflow back | locked |
+
+## Objections
+
+<!-- Status: open → closed @ round N (<how>) | waived @ round N (user) | reopened @ round N (user) -->
+| ID | Round | Objection | Blocking | Status |
+|---|---|---|---|---|
+| O-1 | 1 | Fundamentals "full redesign" is narrowed to compact market cap plus guarded tiles (P-03); a concrete redesign or an operator ruling is required. | yes | closed @ round 2 (The proposal names a concrete redesign of page.tsx:1099-1128: header with stale badge, two labelled four-tile groups, provenance footer, no sub lines, eight tiles. The residual header-style point is a new non-blocking objection.) |
+| O-2 | 1 | The e2e plan breaks the feature-270 reconnect test (C-16): duplicate "Order rejected" titles, incomplete spec rewrite list, and the mock unreadOnly filter must be a stated step. | yes | open |
+| O-3 | 1 | The merge rule has a fetch-ordering race; it needs sequence-guarded latest-wins, a buffer that is not blindly cleared, a marked-read id filter and a test. | yes | open |
+| O-4 | 1 | The overflow root cause is misstated; min-w-0 does nothing. | no | closed @ round 2 (Root cause corrected to unbreakable mono text in minmax(0,1fr) tracks; min-w-0 dropped.) |
+| O-5 | 1 | Mid-digit wrapping of money values needs a recorded mitigation inside StatTile. | no | closed @ round 2 (Mitigation recorded: <wbr/> after commas inside StatTile, wrap-anywhere as last resort.) |
+| O-6 | 1 | Failed-fetch behaviour for the list and badge is unspecified; keep the previous list and use CardNotice. | no | closed @ round 2 (A failed fetch keeps the previous list and badge and shows a CardNotice error.) |
+| O-7 | 1 | The createdAt sort must tolerate undefined; timestamped fixtures are needed (C-12). | no | open |
+| O-8 | 1 | Mark-read buttons need distinct accessible names; errors go through CardNotice (C-17). | no | closed @ round 2 (Per-row aria-label "Mark read: <title>"; errors go through CardNotice.) |
+| O-9 | 1 | Switch: the dark: compounds decision, the renderToStaticMarkup guard, and the bounding-box/translate assertion. | no | closed @ round 2 (dark: compounds are rewritten; the guard uses renderToStaticMarkup with a regex that catches dark:-prefixed bare forms and no new export; e2e uses bounding boxes. The wrong dark-only rationale is tracked as a new non-blocking objection.) |
+| O-10 | 1 | The empty-strategy fixture stays per-spec; @AC-2 assertions scope to role radio (C-12). | no | closed @ round 2 (The empty-strategy fixture is used per-spec through page.route only; @AC-2 assertions scope to getByRole('radio').) |
+| O-11 | 1 | Record the accepted chip gaps: raw source on mobile SignalRow, and identical chips for same-source rows. | no | closed @ round 2 (Both chip gaps are recorded as accepted (SectionRenderer.tsx:187-188; page.tsx:443).) |
+| O-12 | 1 | Operator question: do checkbox, field and questionnaire get the data-state fix? | no | open |
+| O-13 | 2 | Fundamentals group headers: bare Eyebrow headers read flat against tile labels, and sm:grid-cols-4 diverges from sibling grids; pick a distinct header style and record that the operator's full-redesign decision sanctions the divergence (P-03). | no | open |
+| O-14 | 2 | The <wbr/> helper makes StatTile format-aware for 7+ consumers; keep it private and add a unit or render test (C-10/C-18). | no | open |
+| O-15 | 2 | design.md must describe AlertStream as mounted by the trader AppShell (AppShell.tsx:24), remounting per trader navigation, with no cross-segment badge claim. | no | open |
+| O-16 | 2 | Correct the switch rationale: the app is not dark-only in Tailwind terms; dark: is prefers-color-scheme and the thumb colour stays OS-dependent (P-03). | no | open |
+
+## Reopen Petitions
+
+<!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
+| ID | Round | Target | New evidence | Verdict |
+|---|---|---|---|---|
