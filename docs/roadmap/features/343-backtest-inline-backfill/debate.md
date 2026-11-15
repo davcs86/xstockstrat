@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-15 | /sdd-batch | 3 | 3 | 0 | 9 | 0 | yes |
 | 2 | 2026-11-15 | /sdd-batch | 4 | 0 | 9 | 9 | 0 | yes |
 | 3 | 2026-11-15 | /sdd-batch | 6 | 3 | 9 | 7 | 1 | yes |
+| 4 | 2026-11-15 | /sdd-batch | 8 | 5 | 6 | 6 | 0 | yes |
 
 ## Settled Decisions
 
@@ -21,7 +22,7 @@
 | D-2 | 1 | The card tracks its own `jobId` in local state and re-runs through the existing `handleRun`; there is no automatic re-run and no BFF change. | src/hooks/useBackfills.ts:30; page.tsx:1178-1197; src/lib/insightsBff.ts:86,:89; operator decision 2; uncontested in round 1. | settled |
 | D-3 | 1 | The design gate presents FR-6 cost as tiers T0 (envelope only), T1 (plus span-cap key), T2 (plus per-user cap with migration 017) and FR-7; the operator chooses. | Operator decision 4; servicer.py:650-667 shows the range is uncapped under GAPS_ONLY. | settled |
 | D-4 | 2 | T1 is the design's recommended tier: the self-serve envelope plus the WatchConfig key `ingest` / `backfill.self_serve_max_range_days` (int, default 730, `int_positive` reader, config seed migration, full C-05 contract). The operator still chooses the tier at the gate under D-3. | services/xstockstrat-ingest/app/handlers/servicer.py:650-667; app/config/watcher.py:111-113; proposer adopts it and the adversary endorses it in round 2. | settled |
-| D-5 | 2 | The backfill request range stays exactly the reported `gap`. Widening to `{gap.start .. requestedRange.end}` is put to the operator as gate question G-2 and is not adopted without sanction. | Operator decision 1; analysis servicer.py:1581,2123,2214,1315-1322 (trace of the empty-window re-run); e2e/insights/backtest-coverage.spec.ts:77-79; uncontested by the adversary in round 2. | reopened @ round 3 (operator steer) |
+| D-5 | 2 | The backfill request range stays exactly the reported `gap`. Widening to `{gap.start .. requestedRange.end}` is put to the operator as gate question G-2 and is not adopted without sanction. | Operator decision 1; analysis servicer.py:1581,2123,2214,1315-1322 (trace of the empty-window re-run); e2e/insights/backtest-coverage.spec.ts:77-79; uncontested by the adversary in round 2. | reopened @ round 3 (operator steer); reopened @ round 4 (operator steer) |
 | D-6 | 2 | Server proof of @AC-7 is one table-driven ingest test with a real `ingest_pb2.TriggerBackfillRequest` at scope "0": each envelope condition broken gives PERMISSION_DENIED with no `insert_job` and no notify call, at-cap is QUEUED, and admin is unaffected. The MagicMock gate tests are rewritten with real requests. | tests/test_ingest_servicer.py:362,:594; proposer commitment in round 2, uncontested. | settled |
 | D-7 | 2 | Vendor-unfillable gap: after a COMPLETED backfill from the card, a re-run that is still insufficient for the same symbol and gap shows "No vendor data for {range}" and hides the action for that gap. A different gap is still offered. | Proposal round 2 answer to O-8; uncontested by the adversary. | settled |
 | D-8 | 3 | Supersedes D-5: the symbol card's backfill request runs from `gap.start` through the end of the backtest window under GAPS_ONLY. FR-2 and @AC-2 are amended to match. | Operator decision 2026-11-15 (design gate, G-2); planner skips present bars at ingest servicer.py:650-667; window end at page.tsx:1190; adversary agrees in round 3. | settled |
@@ -30,6 +31,14 @@
 | D-11 | 3 | The envelope has an eighth condition: a non-empty `x-user-id` that is not `system`. No `user_id` is added to the `ingest.backfill.queued` payload; an ingest test asserts the event carries `x-user-id` metadata. | servicer.py:502-515; ledgerServiceImpl.ts:76-78; callers insightsBff.ts:86 and agent app/client.py:2141 both forward x-user-id; adopted by the proposer, uncontested in round 3. | settled |
 | D-12 | 3 | PARTIAL copy has two branches: chunk counts when `chunks_total − chunks_completed > 0`, otherwise "{symbol} returned no data for part of the range". One vitest case and one @AC-9 example per branch. | servicer.py:739-740; operator steer adopts O-11; proposer commits in round 3. | settled |
 | D-13 | 3 | `backfill.max_concurrent_jobs` is raised. The gate presents option A (new seeded default) and option B (homelab-only value through `SetConfig`, recorded in the homelab runbook) with a proposed value each; the operator picks. | Operator decision 2026-11-15; watcher.py:111-113; config-rollout.md:293 (homelab has its own database). | settled |
+| D-14 | 4 | Concurrency option B: `backfill.max_concurrent_jobs` keeps default and seed 3; the homelab alone is set to 8 through `set_config`, recorded in the homelab runbook. DigitalOcean is unchanged. | Operator decision 2026-11-15 (design gate, round 3) and relayed item 4 "B"; homelab MCP get_config shows the current value 3; config-rollout.md:293. | settled |
+| D-15 | 4 | The create form on `insights/backfills/page.tsx` stays admin-only and unchanged. | Operator decision 2026-11-15 (round 3) and relayed item 6 "Leave it admin-only". | settled |
+| D-16 | 4 | The lock-budget breach counter is owned by feature 341 (fix-indicator-pane-warmup). This feature adds no counter and gets a merge-order row that waits for 341. | Operator decision 2026-11-15 (round 3) and relayed item 7 "Agreed"; adversary concurs in round 4. | settled |
+| D-17 | 4 | The span-cap default and seed stay 730. The documented coupling is `prefix_calendar_days(max warmup bars)` plus the 366-day card window: 666 days at 200 bars, 1825 at 1000 bars. The homelab is set to 1830 through `set_config`. An over-cap request is denied with copy that names the span and the limit. | services/xstockstrat-analysis/app/services/warmup.py:173-184; page.tsx:1190; relayed item 2; adversary accepts the derivation in round 4. | settled |
+| D-18 | 4 | The envelope predicate returns the first failed condition as a fixed token, and the PERMISSION_DENIED detail is `self-serve backfill denied: <token>`, with ` (max <N> days)` for `range_too_long`. | servicer.py:423-424; proposal round 4; adversary accepts the shape and adds only contract hardening. | settled |
+| D-19 | 4 | Self-serve de-dup runs `pg_advisory_xact_lock`, `has_active_job` and `insert_job` on one connection in one transaction. `insert_job` keeps its signature. The ledger emit and the job spawn happen after commit. The admin path is unchanged. | backfill_jobs.py:29-58,:111; servicer.py:464,:472; adversary closes O-24 in round 4. | settled |
+| D-20 | 4 | On ALREADY_EXISTS the card shows a message and keeps "Backfill missing data" enabled, with no link, no polling and no foreign job id. An admin multi-symbol job blocking self-serve for its symbols is accepted. The case gets its own @AC. | Relayed item 8 "Choose the one with less friction"; R-4; adversary closes O-25 in round 4. | settled |
+| D-21 | 4 | The homelab raise is a runbook sequence: config inputs over the homelab MCP, the three Postgres parameters by read-only SHOW, the per-class lock sum, `max_locks_per_transaction` raised to 1024 first, then `set_config` and read-back, then observation of feature 341's counter. | Operator steer round 4 and relayed items 1 and 5; ohlcv-lock-budget-tuning.md:47-48,59-63; homelab MCP get_config read 2026-11-15; deploy/homelab/compose.yml:22. | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -42,6 +51,11 @@
 | R-4 | 3 | On a de-dup hit, return the existing job's id so the card follows it. | The existing job may cover a different range, which would falsely trigger the D-7 "No vendor data" state. Both sides reject it. | locked |
 | R-5 | 3 | Send GAPS_ONLY for admins on the insights strategy button. | Admins would lose the ability to re-fetch a range where bars already exist; the operator steer allows keeping FULL for admins. | locked |
 | R-6 | 3 | The FR-7 scores-only fallback. | The operator accepted tier T1 as an acceptable cost and risk and declined the fallback. | locked |
+| R-7 | 4 | Option A for the concurrency cap: a new seeded default on every deployment. | The operator chose option B; DigitalOcean stays at 3. | locked |
+| R-8 | 4 | A second lock-breach counter designed in this feature. | The operator assigned the counter to feature 341; this feature depends on it. | locked |
+| R-9 | 4 | Opening the create form on the insights Backfills page to non-admins. | The operator confirmed it stays admin-only and unchanged. | locked |
+| R-10 | 4 | A structured denial through `google.rpc.ErrorInfo` status details. | It adds decoding plumbing for one UI consumer; string tokens with a pinned contract test are enough. | locked |
+| R-11 | 4 | Gating the homelab raise to 8 on the stock `max_locks_per_transaction` value. | The per-class upper bound exceeds the stock budget; raising the parameter is cheap on a database at 10% of capacity. | locked |
 
 ## Objections
 
@@ -67,12 +81,18 @@
 | O-17 | 2 | O-17: cost T1+ (per-symbol active-job de-duplication) and a separate self-serve concurrency limiter for the gate table. | no | closed @ round 3 (T1+ is costed and included; the separate limiter is costed and not included. The gate wording is corrected to "one active job per symbol; no per-user bound (accepted by the operator)".) |
 | O-18 | 2 | O-18: rewrite the @AC-9 examples to server-true copy and add scenarios for zero-denominator progress, "No vendor data", the over-cap denial and both PARTIAL branches. | no | closed @ round 3 (The proposal commits the @AC-9 rewrite and new scenarios for both PARTIAL branches, zero-denominator progress, "No vendor data", the over-cap denial and the de-dup case.) |
 | O-19 | 3 | O-19: restate the lock-budget invariant for the concurrency raise with the homelab's actual `max_locks_per_transaction` and `max_connections`, 30-day chunks and all concurrent bars scans, and present options A and B against both environments (`ohlcv-lock-budget-tuning.md:47-48,59-63`). | yes | open |
-| O-20 | 3 | O-20: design the lock-budget breach metric the user asked for (relayed item 9): the service that counts SQLSTATE 53200 on the bars query path, the instrument, and any added affected service. | yes | open |
-| O-21 | 3 | O-21: "update all pages" (relayed item 7) covers `insights/backfills/page.tsx`. Open it on the self-serve terms with its own @AC, or get explicit operator confirmation that it stays admin-only. | yes | open |
-| O-22 | 3 | O-22: the 1096 span-cap default's coupling to `backtest.max_range_days` is false; derive it from the warmup prefix (`prefix_calendar_days`, analysis servicer.py:1559-1578) plus the card window, and document that coupling and the over-cap denial copy. | no | open |
-| O-23 | 3 | O-23: one PERMISSION_DENIED message misreports most envelope denials; the server detail must identify the failed condition and the UI must use it. | no | open |
-| O-24 | 3 | O-24: the de-dup transaction needs `has_active_job` and `insert_job` on one `conn` (`backfill_jobs.py:29-30`) and the ledger emit and job spawn after commit, with a test row. | no | open |
-| O-25 | 3 | O-25: an admin multi-symbol job blocks self-serve for its symbols; state this as accepted and define what the card offers on ALREADY_EXISTS. | no | open |
+| O-20 | 3 | O-20: design the lock-budget breach metric the user asked for (relayed item 9): the service that counts SQLSTATE 53200 on the bars query path, the instrument, and any added affected service. | yes | closed @ round 4 (No second counter. Feature 341 owns the marketdata 53200 counter; this feature lists it as a dependency with a merge-order row (operator ruling).) |
+| O-21 | 3 | O-21: "update all pages" (relayed item 7) covers `insights/backfills/page.tsx`. Open it on the self-serve terms with its own @AC, or get explicit operator confirmation that it stays admin-only. | yes | closed @ round 4 (The insights Backfills create form stays admin-only and unchanged, confirmed by the operator.) |
+| O-22 | 3 | O-22: the 1096 span-cap default's coupling to `backtest.max_range_days` is false; derive it from the warmup prefix (`prefix_calendar_days`, analysis servicer.py:1559-1578) plus the card window, and document that coupling and the over-cap denial copy. | no | closed @ round 4 (The default stays 730, derived from prefix plus window (666 days at 200 bars). The homelab is set to 1830 for 1000 bars. The coupling and the over-cap denial copy are documented.) |
+| O-23 | 3 | O-23: one PERMISSION_DENIED message misreports most envelope denials; the server detail must identify the failed condition and the UI must use it. | no | closed @ round 4 (The predicate returns a condition token and the detail names it; the UI switches on it. Contract pinning and copy mapping are carried forward as O-27.) |
+| O-24 | 3 | O-24: the de-dup transaction needs `has_active_job` and `insert_job` on one `conn` (`backfill_jobs.py:29-30`) and the ledger emit and job spawn after commit, with a test row. | no | closed @ round 4 (The lock, `has_active_job` and `insert_job` share one connection and transaction; emit and spawn follow the commit; two test rows are added. `insert_job` needs no signature change.) |
+| O-25 | 3 | O-25: an admin multi-symbol job blocks self-serve for its symbols; state this as accepted and define what the card offers on ALREADY_EXISTS. | no | closed @ round 4 (Stated as accepted. On ALREADY_EXISTS the card shows a message and keeps the action enabled. The "queued or running" wording fix is carried forward as O-28.) |
+| O-26 | 4 | O-26: relayed item 5 "Use the mcp to read the values" must be followed as far as it can be: config inputs and the write/read-back over the homelab MCP, only the three Postgres SHOW parameters over the DB-owner DSN. | yes | open |
+| O-27 | 4 | O-27: the denial tokens are an untyped wire contract; define them once in ingest, pin the exact strings in a UI vitest, and never show a raw token to a trader. | no | open |
+| O-28 | 4 | O-28: the ALREADY_EXISTS copy must say "already queued or running", because de-dup covers QUEUED too. | no | open |
+| O-29 | 4 | O-29: put the homelab `set_config` steps (8 and 1830) in the homelab provisioning checklist and record the reverted symptom. | no | open |
+| O-30 | 4 | O-30: the table test must not assert de-dup across the admin and self-serve paths. | no | open |
+| O-31 | 4 | O-31: confirm that relayed item 2 (1000 bars on the homelab) is this feature's to act on, and that analysis `backtest.max_range_days` (730 on the homelab) does not cap a 1000-bar warmup prefix. | no | open |
 
 ## Reopen Petitions
 
