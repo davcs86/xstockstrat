@@ -1729,3 +1729,43 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
 - The homelab `xstockstrat_production` database is not repaired, per the operator ruling — accepted.
 - `DerivationVersion` is shared; check `merge-order.md` for a competing bump — target: `/sdd-spec`.
 - File-level rebase overlap with 317, 320 and 322 — target: integration.
+
+## Session 2026-11-15 — sdd-spec
+
+- Generated implementation-spec.md with 10 steps. Status → implementation-ready.
+- Tree: `feature/fix-fundamentals-roe-unit@90d0a2424`; every `path:line` in the spec was re-read on it.
+- Operator message relayed with this run, verbatim: "I approve 340, including the acceptance scenario. max_connections are now love." The first sentence is the round-6 gate sign-off already recorded above. The second is still unexplained.
+- Key codebase findings:
+  - The first-seen write is `internal/edgar/edgar_client.go:357-364`; `periodAgg` is built at one site (`:343`) and no test constructs it, so the selection change breaks no call site.
+  - `DerivationVersion = 1` at `edgar_client.go:524`. Bumping it turns `TestDerivationVersion_GoldenDriftGuard_feature223` red until the golden gains a version-2 entry (`derivation_version_test.go:16-18`, `:53`), so the fix and its test step are one atomic unit.
+  - The re-derive SQL is `marketdata_repo.go:795-797`; the pgxmock test pins its text and eight arguments (`marketdata_repo_test.go:573-576`), so the strip and its test step are one atomic unit. The Go signature does not change; the three service fakes (`marketdata_service_test.go:3241`, `:3245`, `:3252`) need no edit.
+  - `internal/edgar/testdata/` does not exist. The LYFT fixture creates it.
+  - `docs/roadmap/features/merge-order.md` names `DerivationVersion` only for the launched pair 222/223 (`:82`); no other in-flight feature mentions it. Version 2 is free.
+  - Both staging environments deploy on a push to `main-dev` (`.github/workflows/deploy-dev.yml` calls `deploy-homelab.yml`). This answers the open thread "how homelab staging receives the v2 build": the pre-exports must be taken before the integration PR merges.
+  - `internal/repository` and `internal/service` are left out of the CI coverage measurement; `internal/edgar`, `internal/source`, `internal/finnhub` and `internal/fmp` are measured.
+
+### Decisions
+
+- Step order: the key list and strip (Steps 2+3) land before the selection fix and version bump (Steps 4+5). The design numbers them the other way; the content is unchanged. Reason: the bump is what makes stored rows re-derive, so the strip must exist first.
+- Atomic units (`**Lands with**`): Steps 2+3, 4+5 and 7+8.
+- The restatements (acceptance scenarios, product-spec premise, `feature.md` summary, defect report) are Step 1 of the spec, a docs step that runs before any code step. They were not written in this session: this run may edit only this feature directory, and the defect report is outside it, so the four files are restated together by `/sdd-execute`. The exact restated Gherkin is in Step 1.
+- Step 1 adds one new `Given` to `@AC-5` ("the post-deploy fundamentals backfill has re-derived the stored LYFT periods"). It states the D-2 repair mechanism and changes no `Then`. It is this spec's wording, not an operator-approved line; Step 1 says to drop it if the operator rejects it.
+- Step 6 (vendor unit guards for `@AC-2`, absent/negative guards for `@AC-4`) is marked `TDD: N/A`: the behavior is already correct on this tree, so the tests cannot go red. The step requires a one-off local mutation check instead.
+- Two points the design leaves open were decided in Step 4 and flagged there for review: a bucket with debt instants but none of the three balance-sheet tags has no anchor, so its debt keys are absent; with no anchor, a flow is selected per unit at the metric's latest `end` across its units.
+- The post-deploy repair and audit (design.md § Step 5, items 2 to 7) is not an execute step, because it can only run after the integration PR merges. The spec carries it as § Post-Deploy Procedure and points at design.md for the queries. The pre-merge part (dry run, freeze, pre-export) is Step 10, run with the operator.
+- Audit report file names `audit-lane-a.md` and `audit-lane-b.md` in this directory are chosen by the spec; the design names none.
+- The exported key list is named `DerivationOwnedExtraKeys` by the spec; the design fixes its contents and home (`internal/source`), not its name.
+- Nothing was executed this session: no SQL was run, no config key was changed, no code was edited.
+
+### Open Threads
+
+- O-16 (open): the operator's acceptance of the D/E and P/B blast radius is still not recorded — target: Step 10 item 1, before the freeze.
+- "max_connections are now love." — still unexplained; if a database's `max_connections` changed, re-check the `psql` sessions against the connection budget (F-06) — target: Step 10 item 1.
+- O-38 (open): the design's SQL has never been run — target: Step 10 item 3 (dry run on lane A).
+- The LYFT fixture needs a live fetch from `data.sec.gov` at execute time; if egress is blocked, Step 5 is blocked — target: Step 5.
+- The pinned values 0.942632 and 0.868791 come from an uncommitted fetch; the fixture must reproduce them, and the expected values are not adjusted to fit — target: Step 5.
+- Existing edgar tests were read against the new rule and are expected to stay green; that is a reading, not a run — target: Step 5.
+- The version-2 golden hash may equal the version-1 hash, because the AXP fixture has no comparative instants — target: Step 5.
+- The `buf breaking --against '<repo-root>/.git#branch=feature/fix-fundamentals-roe-unit,subdir=packages/proto'` check needs that branch to exist as a local ref in the main checkout — target: Step 7.
+- Freeze window collides with peer feature 343 testing — target: Step 10 item 2.
+- File-level rebase overlap with 317, 320 and 322 — target: integration.
