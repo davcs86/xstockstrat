@@ -353,3 +353,13 @@ _(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-disti
   superseded per-round `sdd-batch-design-state` block(s) are dropped; the last one is kept byte-for-byte (the only one
   any workflow reads, `.claude/workflows/sdd-batch.js:191`). Other `sdd-batch-*` blocks are untouched.
 - The loss check was a self-check by the planning agent (no separate `context-distiller` verifier was available).
+
+## Session 2026-11-15 — sdd-execute sequential (sdd-batch-execute)
+- Up-front confirmation (operator-approved record; mismatch details abbreviated, verbatim copy in commit 2d2e7bcb8): `{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","dev":"19acdf6d4ccbeb75ae15fb0b8a68f61debcab0cb","specHash":"d8ad63a95b83894f57af5aab23a79de78a0f9f5f","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],"mismatches":[n=1,2,4,17,18,19,20,21,22 — full details in the body of commit 2d2e7bcb8]}`.
+- Merged `origin/main-dev@9f8856229` into the branch (`56b1b1bdc`; resolver: nothing to resolve; ledger-guard clean).
+- Tooling detection (steps 1–23): node v24.22.1 ✓ · pnpm 9.15.9 ✓ · uv 0.11.32 ✓ · python 3.13.18 ✓ · go1.27.0 ✓ · docker 29.9.2 ✓ · Playwright Chromium at `/opt/pw-browsers` ✓ · buf ✗ on host (Docker `Dockerfile.codegen` path via `scripts/localenv-setup.py` for Step 2).
+- Re-spec (directive conditional): line drift fixed in Steps 1 (`ci.yml:240`), 2 (`buf-gen.sh` `:35`/`:48`/`:53-61`), 4 (`:825`), 17 (`providers.tsx:12`) and 19 (`providers.tsx:10`); Steps 17–22 record that the 339 gate still fails (339 not merged, `implementation-ready` on its branch) and stay blocked. The 339 → 344 row is now on main-dev (`merge-order.md:126`), which closes the merge-order half of O-9.
+- respec(alert-detail-page) commits on this branch: `2d2e7bcb8` (implementation-spec.md), `317822030` (feature.md), `0014497b0` (status.md).
+```sdd-batch-setup
+{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","date":"2026-11-15"}
+```
