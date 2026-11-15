@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-15 | /sdd-batch | 5 | 4 | 0 | 8 | 0 | yes |
 | 2 | 2026-11-15 | /sdd-batch | 5 | 3 | 5 | 7 | 0 | yes |
 | 3 | 2026-11-15 | /sdd-batch | 7 | 2 | 7 | 8 | 0 | yes |
+| 4 | 2026-11-15 | /sdd-batch | 9 | 5 | 8 | 0 | 0 | yes |
 
 ## Settled Decisions
 
@@ -34,6 +35,15 @@
 | D-15 | 3 | `IndicatorPanels.tsx:62` stays `components.filter(isChartable)` and is used only for canvas sizing at `:79`; the draw loop and the legend both index the same `slots[ci][si]`. | Proposal r3 (`IndicatorPanels.tsx:62,79,170`, `e2e/fixtures/indicatorSeries.ts:35-40`); adversary r3 rates O-14 closable. | settled |
 | D-16 | 3 | The slot type is `PaletteEntry = { token; fallback }` with no `index` field; `seriesSlots` returns `PaletteEntry[][]`. | Proposal r3; adversary r3 rates O-15 closable. | settled |
 | D-17 | 3 | The palette floor assertions live in the `themes.test.ts` series describe, not in `colorVision.test.ts`. | Proposal r3 (`themes.test.ts:17-18` already parses the theme tokens); adversary r3 did not contest the placement. | settled |
+| D-18 | 4 | The data-only `src/lib/seriesPalette.ts` is created in step 3 (tokens and theme tests), not step 4. | Operator steer r4 (adopt O-16); proposal r4 (`themes.test.ts:102-104` key-set test imports `SERIES_PALETTE`); adversary r4 rates O-16 closable and confirms R-8 stays locked. | settled |
+| D-19 | 4 | `colorVision.test.ts` holds exactly 49 reference tests: 34 Sharma pairs, 2 Machado matrix pins, 4 white/black fixed points, 4 sRGB->Lab pins (three primaries plus mid-gray, tolerance 0.01), 4 colored simulation pins (`rgb(255 0 0)` and `rgb(128 0 0)` per CVD type, expected values from the published matrix columns), and 1 `pairDistances` shape pin. Any other collected count fails the step. | Operator steer r4 (adopt O-17); proposal r4; adversary r4 verified the pin arithmetic and that the pins separate gamma-space from linear application and catch a transposed matrix. | settled |
+| D-20 | 4 | Simulated linear channels outside 0..1 are clamped before encoding, the same policy as `toByte`; there is no other clamp. One `simulate(srgb) -> srgb` path (unrounded 0-255) feeds the same `toLab` as normal vision, with no byte rounding before Lab. | Proposal r4 (`uiTheme.cjs:244-245`); adversary r4 pipeline-coverage fix, which the proposal's pins require to be meaningful. | settled |
+| D-21 | 4 | The Lab pins and the RGB->XYZ matrix come from one named published source; the white point is that matrix's row sums; pin values are transcribed from the source, not from memory. | Adversary r4 (Lindbloom and colour-science differ by more than the 0.01 tolerance; `fails.md:2110`); proposal r4 Assumptions already defers to the source. | settled |
+| D-22 | 4 | `colorVision.cjs` exports `pairDistances(colors, sim)` returning `{i, j, adjacent, dE}` for all pairs, with `adjacent` covering /i-j/ = 1 plus the wrap; the palette floor tests use it through `it.each`. | Proposal r4; adversary r4 rates O-23 closable. | settled |
+| D-23 | 4 | The feasibility gate is one verbatim `node -e` command run from `services/xstockstrat-ui/` that embeds the 12 candidate `rgb(r g b)` literals, reads `--card`/`--background` via `parseRootTokens`, and prints the minimum distances and contrasts; the only file written is a `context.md` entry with exactly those bytes, which step 3 copies. | Proposal r4; adversary r4 rates O-22 closable and adds the embedded array, cwd and `parseRootTokens` details. | settled |
+| D-24 | 4 | `nonSharedTokens` is added to `module.exports` in `checkThemeBundle.cjs` and reused for a test that no `--series-N` is `colorsEqual` to any value-differs token. | Proposal r4 (`checkThemeBundle.cjs:59-73`, `:193`); adversary r4 confirmed the `[{theme, name, color}]` return shape and that `colorsEqual` accepts it (`uiTheme.cjs:317,334`). | settled |
+| D-25 | 4 | A two-row `it.each` over staging and production asserts series contrast >= 3:1 on card and background under an @AC-4 label; the series rows also stay in `PAIRS`, and the overlap is intended. | Proposal r4 (`themes.test.ts:128`); adversary r4 accepts the duplication for the trace label. | settled |
+| D-26 | 4 | The AC-2 and AC-6 e2e compare each `data-line-color` with its swatch's computed background colour by numeric channels and assert pairwise distinctness; a vitest asserts the 12 `SERIES_PALETTE` fallbacks are pairwise distinct. | Proposal r4 (`chartColors.ts:46`); adversary r4 rates O-19 closable. | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -49,6 +59,11 @@
 | R-7 | 2 | `colorVision.test.cjs` as the CVD helper's test file. | vitest collects only `src/**/*.test.ts` (`vitest.config.ts:20`), so it would never run. | locked |
 | R-8 | 3 | Deriving the `--series-1..12` token names inside `themes.test.ts` instead of importing `SERIES_PALETTE`. | It duplicates the list D-4 makes the single source; adversary r3 raised and rejected it in favour of moving `seriesPalette.ts` into the tokens step. | locked |
 | R-9 | 3 | Deriving the canvas-sizing count from `slots.filter(r => r.length).length`. | The existing `chartable` filter at `IndicatorPanels.tsx:62` already does the job unchanged; proposer r3 rejected it and adversary r3 accepted the kept line. | locked |
+| R-10 | 4 | Carrying the non-adjacent CVD and normal-vision floor rows, the gate pass condition and the @AC-5 wording as conditional into the impl-spec. | It hands /sdd-spec two specs; adversary r4 requires the user's answer before approval so the design fixes one outcome. | locked |
+| R-11 | 4 | Reading the relayed 'Choose the one with less friction' as adjacent-only and closing O-18 without asking. | The item's subject is unclear, so it is a silent guess (C-11); both sides reject it in favour of asking. | locked |
+| R-12 | 4 | Pinning simulation outputs to colour-science's Machado results instead of to published matrix columns. | It adds a second reference to trust; the column pins plus `rgb(128 0 0)` already cover decode, encode, clamp and matrix orientation. | locked |
+| R-13 | 4 | An `ac` field on the `Pair` type to relabel series rows as @AC-4. | More mechanism than a two-row `it.each`; proposer r4 rejected it and adversary r4 accepted the `it.each`. | locked |
+| R-14 | 4 | Re-deriving the `nonSharedTokens` rule inside `themes.test.ts`. | A copy would drift from check (b); exporting the existing function keeps one rule. | locked |
 
 ## Objections
 
@@ -61,7 +76,7 @@
 | O-4 | 1 | O-4 Add a `themes.test.ts` assertion that every `--series-N` is equal across themes; it is load-bearing for the check (b) exemption and feature-307 @AC-2. | no | closed @ round 2 (A cross-theme `colorsEqual` assertion for every `--series-N` is added to `themes.test.ts` with a constraint comment.) |
 | O-5 | 1 | O-5 The `seriesSlots` return shape is inconsistent (`number[][]` vs `p.token`/`p.fallback`). Return palette entries. | no | closed @ round 2 (`seriesSlots` returns palette entries per component, so no call site re-indexes. The unused `index` field is tracked separately as O-15.) |
 | O-6 | 1 | O-6 [C-18] Put `isChartable` and `seriesSlots` in `src/lib/indicatorChart.ts`, not in the palette module. | no | closed @ round 2 (`isChartable` and `seriesSlots` are placed in `src/lib/indicatorChart.ts`; `seriesPalette.ts` is data-only.) |
-| O-7 | 1 | O-7 [C-08] `colorVision.cjs` needs published reference tests (Sharma 2005 CIEDE2000 pairs, Machado severity-1.0 matrices, linear-light application stated). | no | open |
+| O-7 | 1 | O-7 [C-08] `colorVision.cjs` needs published reference tests (Sharma 2005 CIEDE2000 pairs, Machado severity-1.0 matrices, linear-light application stated). | no | closed @ round 4 (The reference tests now cover Sharma pairs, both Machado matrices, linear-light application (the `rgb(128 0 0)` and full-red pins) and the sRGB->Lab conversion.) |
 | O-8 | 1 | O-8 [P-03/C-16] Make candidate-set feasibility the first gate of step 1; on failure, escalate instead of falling back to per-theme values. | no | closed @ round 3 (Candidate-set feasibility is step 2, ahead of any token change, and a failure escalates to the operator with no per-theme fallback or loosened floor. Gate reproducibility is tracked separately as O-22.) |
 | O-9 | 2 | O-9 [C-08] Commit to `src/styles/themes/colorVision.test.ts` (loaded via `createRequire`); a `.test.cjs` is never collected by vitest (`vitest.config.ts:20`). The step Verification must name the expected test count. | yes | closed @ round 3 (Proposal r3 commits to `src/styles/themes/colorVision.test.ts` loaded via `createRequire`, with an exact test count in the step Verification. Adversary r3 agrees.) |
 | O-10 | 2 | O-10 [C-08/C-01] Fix the build order: `colorVision.cjs` and its reference pins first, then the candidate-set feasibility gate, then tokens and `themes.test.ts`. | no | closed @ round 3 (Order is now helper and pins, then the gate, then tokens and `themes.test.ts`. The remaining step-3 import of `seriesPalette.ts` is tracked as O-16.) |
@@ -70,14 +85,14 @@
 | O-13 | 2 | O-13 [C-15] Reset `lineColors` to an empty Map in the draw-effect cleanup (`IndicatorPanels.tsx:135-152`) so a stale `data-line-color` cannot survive a strategy switch. | no | closed @ round 3 (`setLineColors(new Map())` is placed in cleanup before the `:139` early return. Adversary r3 finds it sound.) |
 | O-14 | 2 | O-14 [C-01] Name how the canvas-sizing count at `IndicatorPanels.tsx:79` is derived once the draw loop iterates `components` with slot rows. | no | closed @ round 3 (`IndicatorPanels.tsx:62` keeps `components.filter(isChartable)` for sizing at `:79` only.) |
 | O-15 | 2 | O-15 [C-18] Drop `SeriesSlot.index` or name its consumer. | no | closed @ round 3 (`index` is dropped; the slot type is `PaletteEntry`.) |
-| O-16 | 3 | O-16 [C-01/C-08] Step 3's `themes.test.ts` key-set test imports `SERIES_PALETTE`, but `src/lib/seriesPalette.ts` is created in step 4. Move the data-only `seriesPalette.ts` into step 3. | yes | open |
-| O-17 | 3 | O-17 [C-08] The reference pins leave sRGB->linear->XYZ(D65)->CIELAB and the decode->matrix->encode pipeline unchecked; white/black fixed points pass in gamma or linear space. Add sRGB->Lab pins, one non-achromatic simulation pin per CVD type from a published severity-1.0 source, a stated clamp policy, and a restated exact test count. Keeps O-7 open. | yes | open |
+| O-16 | 3 | O-16 [C-01/C-08] Step 3's `themes.test.ts` key-set test imports `SERIES_PALETTE`, but `src/lib/seriesPalette.ts` is created in step 4. Move the data-only `seriesPalette.ts` into step 3. | yes | closed @ round 4 (`src/lib/seriesPalette.ts` is created in step 3, so the key-set test's import resolves within the step. Adversary r4 agrees.) |
+| O-17 | 3 | O-17 [C-08] The reference pins leave sRGB->linear->XYZ(D65)->CIELAB and the decode->matrix->encode pipeline unchecked; white/black fixed points pass in gamma or linear space. Add sRGB->Lab pins, one non-achromatic simulation pin per CVD type from a published severity-1.0 source, a stated clamp policy, and a restated exact test count. Keeps O-7 open. | yes | closed @ round 4 (Four sRGB->Lab pins, two colored simulation pins per CVD type from the published severity-1.0 matrix columns, a stated clamp policy and an exact count of 49 are added. The single `simulate` path and one named Lab source are recorded as decisions.) |
 | O-18 | 3 | O-18 [C-15/C-11] The CVD non-adjacent >= 5 and normal-vision all-pairs >= 10 floors trace to no @AC (`acceptance.feature:30-34` states adjacent >= 10 only) and their sign-off is not recorded (`context.md:14`). Confirm with the user, record in `context.md`, extend FR-4 and @AC-5. Keeps O-3 and O-12 open. | yes | open |
-| O-19 | 3 | O-19 [C-08] AC-2 and AC-6 e2e must compare each `data-line-color` with the swatch's computed `background`, not only with each other, because `resolveChartColor` falls back silently (`chartColors.ts:46`); add a vitest that the 12 fallbacks are pairwise distinct. | no | open |
-| O-20 | 3 | O-20 [C-16] Add a test that no `--series-N` value is `colorsEqual` to any token whose value differs between themes (`checkThemeBundle.cjs:59-73`; `themes.test.ts:131-136` checks only `oklch`). | no | open |
-| O-21 | 3 | O-21 [C-15] Series rows in `PAIRS` report under feature 307's '(AC-14)' label (`themes.test.ts:128`). Label them @AC-4 or add a production counterpart to the staging contrast test. | no | open |
-| O-22 | 3 | O-22 [C-08/F-05] Give the step-2 feasibility gate a named, re-runnable command and state that the 12 candidate values go verbatim into `context.md` for step 3 to copy byte-for-byte. | no | open |
-| O-23 | 3 | O-23 [C-18] Replace the five near-identical floor loops with one `pairDistances(colors, sim)` helper in `colorVision.cjs` used through `it.each`. | no | open |
+| O-19 | 3 | O-19 [C-08] AC-2 and AC-6 e2e must compare each `data-line-color` with the swatch's computed `background`, not only with each other, because `resolveChartColor` falls back silently (`chartColors.ts:46`); add a vitest that the 12 fallbacks are pairwise distinct. | no | closed @ round 4 (The e2e compares each `data-line-color` with the swatch's computed background, and a vitest asserts the 12 fallbacks are pairwise distinct.) |
+| O-20 | 3 | O-20 [C-16] Add a test that no `--series-N` value is `colorsEqual` to any token whose value differs between themes (`checkThemeBundle.cjs:59-73`; `themes.test.ts:131-136` checks only `oklch`). | no | closed @ round 4 (A test using the exported `nonSharedTokens` asserts no series value equals any value-differs token.) |
+| O-21 | 3 | O-21 [C-15] Series rows in `PAIRS` report under feature 307's '(AC-14)' label (`themes.test.ts:128`). Label them @AC-4 or add a production counterpart to the staging contrast test. | no | closed @ round 4 (A staging-and-production `it.each` reports series contrast under @AC-4.) |
+| O-22 | 3 | O-22 [C-08/F-05] Give the step-2 feasibility gate a named, re-runnable command and state that the 12 candidate values go verbatim into `context.md` for step 3 to copy byte-for-byte. | no | closed @ round 4 (The gate is a verbatim `node -e` command with a stated cwd and embedded candidate array; the same bytes go into `context.md` for step 3.) |
+| O-23 | 3 | O-23 [C-18] Replace the five near-identical floor loops with one `pairDistances(colors, sim)` helper in `colorVision.cjs` used through `it.each`. | no | closed @ round 4 (One `pairDistances(colors, sim)` helper drives the floor rows through `it.each`.) |
 
 ## Reopen Petitions
 
