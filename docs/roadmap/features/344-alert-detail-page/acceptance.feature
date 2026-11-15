@@ -1,7 +1,7 @@
 Feature: alert-detail-page
   As a trader, I want to open any alert on its own page and see all of its details, so that I can understand what happened and share or return to it.
 
-  @AC-1 @FR-1 @FR-2
+  @AC-1 @FR-1 @FR-2 @FR-5
   Scenario: The alert page shows every detail of the alert
     Given an alert "a1f3" visible to the user with severity "ERROR", category "backfill", source service "xstockstrat-ingest", correlation id "c-77" and context field "job_id" = "67276d1f"
     When the page "/accounts/notifications/a1f3" is opened
