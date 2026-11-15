@@ -72,7 +72,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] FR-5 (auto mark-read on open) is my proposal, not an operator decision — confirm before design approval.
+- [x] FR-5 (auto mark-read on open) — confirmed by the operator 2026-11-15.
 - [ ] FR-6 depends on what the push payload carries today (alert ID / URL); design must check the service worker and notify's push fan-out.
 - [ ] Whether the page belongs under `/accounts/notifications/` or the trader segment, and whether a child route needs a `PLATFORM_SUBNAV` entry (C-10).
 - [ ] FR-7: which error fields are safe to show (gRPC status code + details) and whether the job row / ledger event keep the raw string.
