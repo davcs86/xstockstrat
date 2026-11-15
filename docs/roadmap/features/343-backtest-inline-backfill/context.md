@@ -60,7 +60,8 @@ Binding register: `debate.md` (State `approved`; D-1…D-28 settled, D-5 superse
 ## Open Threads
 
 - [ ] O-33: the `343@AC-9` rewrite was made on the strength of the round-5 design approval; no operator decision names the scenario on its own, and none of the relayed numbered answers was read as this sign-off — operator, `/sdd-execute` checkpoint.
-- [ ] Step 7 edits the durable suite `docs/sdd/business-rules/platform.feature` (an Examples row on `244@AC-6`) before launch, where C-16 normally promotes at launch; needs the owner to accept a pre-launch EXTEND (precedent: the FQN rows at `:495-498`) — operator, `/sdd-execute` checkpoint.
+- [x] Step 7 edits the durable suite `docs/sdd/business-rules/platform.feature` (an Examples row on `244@AC-6`) before launch, where C-16 normally promotes at launch; accepted by the operator ("Expand it", read as EXTEND) and landed in Step 7.
+- [ ] The feature 343 registered-keys entry in `docs/patterns/config-governance.md` points at `docs/runbooks/config-rollout.md` for the homelab `backfill.max_concurrent_jobs` = 8; that subsection is written by Step 16.
 - [ ] Step 8 touches 6 files (code, two docs, two `strat-lab` skill files) and stays one step unless the operator wants code and docs split (`docs/patterns/strat-lab-plugin.md` requires the skill change in the same PR; Step 9's parity test reads all of them) — `/sdd-execute` checkpoint.
 - [ ] Config migration number `050` is also held by 341 (`050_ui_chart_history_bars`) and 330 (`050_analysis_live_enrich_ttl_reseed`) on their branches (trunk tip is `049`); 343 merges after 341 and renumbers — re-derive at Step 2 and at the integration PR.
 - [x] Step 2 regenerated `scripts/config-wiring-stored.json` against the operator-provided scratch Postgres (Option B). A renumber at the integration PR means regenerating it again.
@@ -85,6 +86,7 @@ Outside the feature directory:
 - `services/xstockstrat-ingest/tests/test_config_watcher.py`, `tests/test_config_read_classification.py` — Step 4.
 - `services/xstockstrat-ingest/app/handlers/servicer.py`, `app/repositories/backfill_jobs.py` — Step 5 (envelope, denial tokens, `_insert_self_serve_job`, `has_active_job`).
 - `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json`, `tests/conftest.py`, `tests/test_ingest_servicer.py`, `tests/test_backfill_jobs.py` — Step 6.
+- `services/xstockstrat-ingest/CLAUDE.md`, `services/xstockstrat-ingest/docs/context-constitution-findings.md`, `docs/patterns/config-governance.md`, `docs/sdd/business-rules/platform.feature` — Step 7 (gate wording, key row, registered-keys entry, `244@AC-6` row).
 
 Feature-directory artifacts:
 
@@ -516,3 +518,10 @@ _(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-disti
   normally happens at launch, so it needs acceptance to do it now. **Orchestrator reading (not operator
   words): "expand" is taken as "extend", i.e. the pre-launch EXTEND is accepted.** The reading was
   stated back to the operator; if the operator corrects it, this line is superseded.
+
+## Session 2026-11-15 — sdd-execute sequential (sdd-batch-execute), Step 7
+
+### Step 7 — docs: ingest gate wording, key table, registered-keys log, business-rule row [done]
+- Ingest `CLAUDE.md` § Authorization: `CancelBackfill` stays admin-gated ("admin scope required"); `TriggerBackfill` is admin or the self-serve envelope, with the eight conditions and tokens in first-failure order, the detail format, the per-symbol `ALREADY_EXISTS` de-dup and an unchanged admin path. Added the `backfill.self_serve_max_range_days` key-table row (seed `050_ingest_backfill_self_serve_keys`), reworded findings `:39` (status stays open), added the feature 343 registered-keys entry above 338, and the `244@AC-6` Examples row (pre-launch EXTEND accepted by the operator, "Expand it"). TDD: N/A (docs). Verification (`.sdd-logs/v-1.log`, exit=0): the key at `CLAUDE.md:33,152`, `config-governance.md:163`, `platform.feature:498`; `admin scope required` only at `CLAUDE.md:17` (`CancelBackfill`); `--final` reports only the two pre-existing `readers-disagree` lines (analysis, trading). Wiring gate step-time `--declared-from` (`v-2`): exit=0, no findings.
+- Files modified: `services/xstockstrat-ingest/CLAUDE.md`, `services/xstockstrat-ingest/docs/context-constitution-findings.md`, `docs/patterns/config-governance.md`, `docs/sdd/business-rules/platform.feature`
+- Deviations: the `platform.feature` site cell overflows its column by 4 characters (the `effective` cell is padded shorter so the row length matches); the `config-rollout.md` reference resolves only once Step 16 lands (Deviation Log).

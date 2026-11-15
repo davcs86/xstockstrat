@@ -495,6 +495,7 @@ Feature: Platform-wide guarantees
       | xstockstrat-ingest     | ingest.backfill.max_concurrent_chunks            | int    | 0      | the backfill chunk semaphore capacity | 3                         |
       | xstockstrat-ingest     | ingest.backfill.chunk_max_bars                   | int    | 0      | the chunk planner's bar cap           | 200000                    |
       | xstockstrat-ingest     | ingest.backfill.chunk_window_days                | int    | 0      | the chunk planner's window in days    | 90                        |
+      | xstockstrat-ingest     | ingest.backfill.self_serve_max_range_days        | int    | 0      | the self-serve backfill range cap in days | 730                   |
       | xstockstrat-ingest     | ingest.mcp_client.poll_interval_seconds          | int    | 0      | the mcp_client poll loop              | 300                       |
       | xstockstrat-indicators | indicators.sandbox.timeout_ms                    | int    | 0      | ExecuteFormula                        | 5000                      |
       | xstockstrat-indicators | indicators.sandbox.memory_bytes                  | int    | 0      | ExecuteFormula                        | 134217728                 |
