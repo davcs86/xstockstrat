@@ -406,6 +406,9 @@ Beyond the two table rows above (344 after 339, 343 after 341), the six features
 overlap textually only. `chart-series-palette` (342) and `fix-indicator-pane-warmup` (341) both edit
 `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`, `src/lib/indicatorChart.ts` and the symbol page
 (`src/app/trader/positions/[symbol]/page.tsx`); 339, 340 and 343 also edit that page (disjoint sections). Whichever merges
-second rebases and re-greps its anchors. Config seed number: 341 and 343 each name `050` as next free, as does
+second rebases and re-greps its anchors. 343 also shares `src/app/insights/strategies/[id]/page.tsx` and
+`e2e/trader/position-detail.spec.ts` with 341, and `services/xstockstrat-ingest/app/handlers/servicer.py`,
+`tests/test_ingest_servicer.py`, `e2e/mock-backend.ts` and `e2e/fixtures/INVENTORY.md` with 344; the regions are
+disjoint and the second merger rebases. Config seed number: 341 and 343 each name `050` as next free, as does
 `fix-live-enrich-ttl-seed` (330) on its branch; the trunk tip is `049`, so each re-derives its number at execute and at its
 integration PR, and the later merger regenerates `scripts/config-wiring-stored.json`.

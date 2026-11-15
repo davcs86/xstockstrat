@@ -87,7 +87,7 @@ Each item is a choice the design left open. A reviewer who disagrees changes it 
 
 ### Step 1 — docs: merge-order row for feature 341
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/`
 **Files**:
 - `docs/roadmap/features/merge-order.md` — modify
