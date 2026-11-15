@@ -811,3 +811,43 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
 - [ ] Every open tab holds a `StreamAlerts` stream and runs the count query — accepted; target: Step 23.
 - [ ] Raw exception text on broadcast backfill alerts is readable on demand by every authenticated user — accepted by the operator (ruling (a)); target: Step 23 findings entry.
 - [ ] No end-to-end test of `context` over the real notify → BFF → browser path — accepted gap; covered in halves by Steps 4, 10 and 12.
+
+## Session 2026-11-15 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 8 warnings, 0 Floor breaches (PASS WITH WARNINGS; advisory — did not block). Lifecycle unchanged (`implementation-ready`).
+- Re-checked this session on `origin/main-dev@d1c97273b`: 339 is not merged (no `fix-symbol-page-alerts-ui` commit in `git log`); `docs/roadmap/features/merge-order.md` has no 339 or 344 row; the notify Reviewers focus text is the registry's own wording (`docs/runbooks/reviewer-registry.md:21`); `frontend-e2e` has no coverage threshold (`docs/patterns/ci-overview.md:29`); 316 is `spec-ready` and names `notifyServiceImpl.ts:15` and `notifyServiceImpl.test.ts:634` (`316-fix-notify-stream-contract/product-spec.md:46,48`).
+- Operator answers relayed to this run, verbatim: "1. Approved / 2. Confirmed / 3. Sign-off the change, amend it / 4. There are no production instances. Staging is enough." They are the same four answers the sdd-spec session received and predate this review, so none is applied to a review finding. "Confirmed" is still **not** recorded as closing O-5.
+- Addressed in `implementation-spec.md`:
+  - [x] Steps 17–22 (C-01, F-09): new "Impl-spec review findings" block and a Step Dependencies sentence. The steps must not run as written before 339 merges; the reviewed path is a `/sdd-spec` re-run after 339 merges and before Step 17; without it, each gate adaptation is a Deviation Log entry.
+  - [x] Steps 10, 14, 16, 18, 20, 22 (B2/B3): each Verification now states that no coverage threshold applies to Playwright e2e and that the `src/lib/**` vitest gate (≥ 40%) is Step 12's.
+  - [x] Overlap with 316 on `notifyServiceImpl.ts` and its test file: recorded in the spec as non-blocking (whichever merges second re-greps).
+- Unresolved ⚠ carried into execution:
+  - Steps 17–22: 339 symbols not in this tree; Step 19 Case A / Case B; Step 21 `SheetClose` fallback; Steps 18 and 20 "state which was used" alternatives (C-01, P-03) — [ ] unaddressed (needs 339 merged, then a re-spec)
+  - Step 17 precondition: the 339 → 344 row in `merge-order.md` (O-9) — [ ] unaddressed (outside this feature directory; orchestrator)
+  - Step 7 / Step 8 case 3: fallback wording has no operator confirmation (O-5, P-03) — [ ] unaddressed
+  - Steps 5/6: `Lands with` fold with no §C trigger — [ ] unaddressed (design.md §2 requires it; recorded trade-off)
+  - Step 13: `PlatformHeader.tsx:94` edit is a no-op in the rendered shell (C-18) — [ ] unaddressed (design.md §5 names it; dropping it is the operator's call)
+  - Steps 1–6: notify Reviewers focus text does not describe a request/response RPC — [ ] unaddressed (cosmetic; registry wording, not changed here)
+  - Step 11: no vitest coverage gate in its own Verification (optional per the review) — [ ] unaddressed (the gate runs in Step 12; whether Step 11 alone holds ≥ 40% was not measured)
+- Overlap findings: WARN, file-level only. 316 (`notifyServiceImpl.ts`, `notifyServiceImpl.test.ts`); 339 (`PlatformHeader.tsx`, the header bell, and a different badge-value shape — already a blocking dependency of Steps 17–22); 334 (`notify.proto`, launched, no field-number clash). No migration, config-key or proto field-number collision. Recommended by the scan and not done here (outside this directory): a blocking `merge-order.md` row "344 blocked by 339 — Steps 17–22 wrap 339's bell and alert read models", and a non-blocking 316 vs 344 note; `merge-order.md:397` still calls 334 `implementation-ready` although its `status.md` is `launched`.
+- This entry supersedes the `## Open Threads` block above.
+
+## Open Threads
+
+- [ ] O-5 (open, non-blocking): the non-RPC fallback body `Backfill job {job_id} failed: unexpected error — see the alert details` has no operator confirmation tied to it; Step 8 case 3 pins it — target: before Step 7 (confirm, or accept explicitly as the default).
+- [ ] O-9 (open, blocks Steps 17–22): the 339 → 344 row in `docs/roadmap/features/merge-order.md` is missing — target: before Step 17; owner is the orchestrator.
+- [ ] Steps 17–22 cite pre-339 anchors and 339 symbols not in this tree; do not run them as written before 339 merges — target: re-run `/sdd-spec alert-detail-page` after 339 merges, before Step 17; otherwise every gate adaptation goes in the Deviation Log (F-09).
+- [ ] Badge value shape (339 merged-list length vs design.md §7 server count) — target: Step 19 decision rule, or the re-spec.
+- [ ] Steps 18 and 20 leave the assertion path to the executor ("state which was used"); Step 21 has a `SheetClose` grep-else-stop — target: tighten in the re-spec after 339 lands.
+- [ ] Step 13 `PlatformHeader.tsx:94` edit is a no-op in the rendered shell (C-18) — target: operator decides keep or drop at the execute checkpoint before Step 13; Step 14's `aria-current` guard covers C-10(a) either way.
+- [ ] Steps 5+6 fold has no §C trigger (design.md §2 requires it) — target: operator may waive at the execute checkpoint; advisory.
+- [ ] Notify Reviewers focus text on Steps 1–6 is the registry's stream wording — cosmetic; target: none.
+- [ ] 316 (`spec-ready`) shares `notifyServiceImpl.ts` and its test file with Steps 3–4; `merge-order.md` has no 316 vs 344 note and a stale 334 status at `:397` — target: orchestrator; whichever merges second re-greps.
+- [ ] design.md §8 says "one step" blocked on 339; the spec splits it into Steps 17–22 — the review raised the stack of six blocked steps and no objection to the split itself.
+- [ ] Inbox list on `useQuery` changes loading and error timing; the 203 inbox e2e could be disturbed — target: Step 19 verification.
+- [ ] Bell refetch on window focus and single retry can perturb the delayed-first-response e2e — target: Step 20 (`--repeat-each=3`).
+- [ ] `invalidateQueries` cancelling an in-flight first fetch is untested — target: Step 20 delayed-first-`ListAlerts` case.
+- [ ] Header width at 640–1024px with the bell in the insights and accounts headers — target: Step 18.
+- [ ] Every open tab holds a `StreamAlerts` stream and runs the count query — accepted; target: Step 23.
+- [ ] Raw exception text on broadcast backfill alerts is readable on demand by every authenticated user — accepted by the operator (ruling (a)); target: Step 23 findings entry.
+- [ ] No end-to-end test of `context` over the real notify → BFF → browser path — accepted gap; covered in halves by Steps 4, 10 and 12.
