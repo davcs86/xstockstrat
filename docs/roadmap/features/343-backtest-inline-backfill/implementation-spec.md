@@ -97,19 +97,22 @@ Each item is a choice the design left open. A reviewer who disagrees changes it 
 **Codebase Evidence**:
 - Table header at `docs/roadmap/features/merge-order.md:23`: `| Feature | Must wait for | Reason | Resolved |`; row shape at `:27` (`` | `third-party-sso-oidc` (280) | `fix-config-keys-contract` (296) | **Hard — …** | ``).
 - Prose-note precedent for a config seed number shared by several features: the section "Config seed number: 334 ↔ 322, 330, 321 (2026-11-11, non-blocking)" at the end of the file.
-- `grep -n '343\|backtest-inline-backfill' docs/roadmap/features/merge-order.md` → no match.
+- Re-spec 2026-11-15 (merged tree `cf9f49aff`): commit `4b1d1e36f` (#1545) already added both entries this step was written to create.
+  - Table row at `:127`: `` `backtest-inline-backfill` (343) | `fix-indicator-pane-warmup` (341) | **Hard — merge order only; 341 need not be `launched`.** … `marketdata.ohlcv.out_of_memory_errors` … 343 numbers its migration above 341's at merge time and regenerates `scripts/config-wiring-stored.json`. | No ``. It carries the dependency, the counter and the renumber that the old Instruction 1 asked for.
+  - Prose section at `:403-411`, "## Symbol-page cohort: 339-344 (2026-11-15, non-blocking)". It covers the shared symbol page (`src/app/trader/positions/[symbol]/page.tsx`, 339 and 341) and the shared `050` seed number. It does not name 343's other overlaps from this spec's Step Dependencies: `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` and `e2e/trader/position-detail.spec.ts` (341), and `services/xstockstrat-ingest/app/handlers/servicer.py`, `tests/test_ingest_servicer.py`, `services/xstockstrat-ui/e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md` (344).
 
 **TDD**: `N/A (docs)`
 
 **Covers**: —
 
 **Instructions**:
-1. Append one table row after the last row of the table at `:23`: feature `` `backtest-inline-backfill` (343) ``, must wait for `` `fix-indicator-pane-warmup` (341) ``, reason: "**Hard — merge order.** 343's homelab runbook step observes the marketdata lock-budget breach counter `marketdata.ohlcv.out_of_memory_errors`, which 341 adds (operator decision 2026-11-15; 343 adds no second counter). Both also name config migration `050`; 343 renumbers above the trunk tip after 341 merges and regenerates `scripts/config-wiring-stored.json`." Leave `Resolved` empty.
-2. Append one prose section at the end of the file, in the style of the "Config seed number" note, titled "Shared files: 343 ↔ 339, 341, 344 (2026-11-15, non-blocking)", listing the four overlaps from this spec's Step Dependencies. State that the regions are disjoint and the second merger rebases.
+1. Add no table row. The existing 343 row at `:127` stays as written.
+2. In the "Symbol-page cohort: 339-344" section (`:403-411`), append one sentence before the "Config seed number:" sentence: 343 also shares `src/app/insights/strategies/[id]/page.tsx` and `e2e/trader/position-detail.spec.ts` with 341, and `services/xstockstrat-ingest/app/handlers/servicer.py`, `tests/test_ingest_servicer.py`, `e2e/mock-backend.ts` and `e2e/fixtures/INVENTORY.md` with 344; the regions are disjoint and the second merger rebases. Add no new section.
 
 **Verification**:
 ```bash
-grep -n 'backtest-inline-backfill' docs/roadmap/features/merge-order.md    # one table row, one prose section
+grep -c 'backtest-inline-backfill' docs/roadmap/features/merge-order.md    # 1 (the row at :127; no duplicate row)
+grep -n 'insights/strategies/\[id\]/page.tsx' docs/roadmap/features/merge-order.md    # one hit inside the Symbol-page cohort section
 ```
 
 ---
@@ -430,7 +433,7 @@ node scripts/check-config-wiring.mjs --final                                # th
 - Client docstring: `services/xstockstrat-agent/app/client.py:2074` "Trigger a historical backfill via gRPC TriggerBackfill (admin-scoped write)."
 - Agent `CLAUDE.md:36-42`: lists `trigger_backfill` among the tools that hit a backend admin gate and says "ingest `TriggerBackfill` checks the ADMIN bit `0x04`".
 - Runbook: `docs/runbooks/mcp-tools.md:964` (section heading), `:966-969` ("**Admin-scoped write** … a non-admin caller is rejected `PERMISSION_DENIED` ("admin scope required")"), the `fill_mode` parameter row at `:980`, the section's **Errors** table at `:1019-1027` (its last row says "**No synchronous error** — apart from `callback_url`, ingest queues unconditionally"), and the `cancel_backfill` contrast at `:1068-1069` ("unlike `trigger_backfill`, this RPC is checked server-side").
-- Skill: `plugins/strat-lab/skills/backtest/reference/backfill.md:12-17` (step 2 "Trigger if needed"), `plugins/strat-lab/skills/backtest/SKILL.md:205-217` (Phase 1). Neither says the tool is admin-only (`grep -n -i 'admin\|scope' reference/backfill.md` → one unrelated hit at `:66`).
+- Skill: `plugins/strat-lab/skills/backtest/reference/backfill.md:12-17` (step 2 "Trigger if needed"), `plugins/strat-lab/skills/backtest/SKILL.md:205-217` (Phase 1). Neither says the tool is admin-only (`grep -n -i 'admin\|scope' reference/backfill.md` → no match; the file has 67 lines).
 - Same-PR rule: `docs/patterns/strat-lab-plugin.md:21-24` (a change to the `trigger_backfill` contract updates `skills/backtest/reference/backfill.md`).
 - No tool is added or removed, so the six tool-count surfaces do not change (`tests/test_tools_endpoint.py` `test_every_tool_count_surface_states_the_catalog_size`).
 - Ledger traps: `fails.md` 2026-08-02 mcp-tools-alignment-triage (every surface that describes a tool changes in one PR, pinned by a parity test) and 2026-08-06 trigger-backfill-mcp-tool.
