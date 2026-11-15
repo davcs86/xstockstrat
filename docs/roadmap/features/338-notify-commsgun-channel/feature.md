@@ -3,6 +3,8 @@
 **Development Branch**: `feature/notify-commsgun-channel`
 **Created**: 2026-11-13
 **Last Updated**: 2026-11-13
+**Committed to main**: 6936191e738e267c5507f042b22bc3e785fe9419
+**Launched date**: 2026-11-15
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-11-13 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1+2 done (sequential mode on the session branch) |
 | 2026-11-13 | `in-progress` → `code-completed` | /sdd-execute | All 22 steps done (sequential mode); integration PR #1537 |
 
+| 2026-11-15 | `code-completed` → `launched` | CI workflow | Promoted via PR #1546; committed 6936191e738e267c5507f042b22bc3e785fe9419 |
 ---
 
 ## Artifacts
