@@ -1,44 +1,63 @@
 Feature: fix-symbol-page-alerts-ui (bug fix)
   Regression guard for docs/reports/2026-11-15-ui-symbol-page-and-alerts-drawer-defects-defect.md.
 
-  @AC-1 @regression
+  @AC-1 @FR-1 @FR-2 @regression
   Scenario: A multi-billion market cap fits its Fundamentals tile at mobile width
     Given the symbol page for "LYFT" at a 384px-wide viewport
-    And fundamentals with a market cap of 6726553623.93
+    And fundamentals with a market cap of 6726553623.93 and a P/E of 41.2
     When the Research tab is shown
-    Then the market cap tile shows "$6.73B"
+    Then the market cap value is displayed wholly inside the "Market cap" tile
     And the market cap value does not overlap the P/E value
+    And each Fundamentals tile shows its label above its value
 
-  @AC-2 @regression
+  @AC-2 @FR-4 @regression
   Scenario: A strategy-less opportunity chip is labelled by its source
     Given opportunities for "LYFT" from strategy "dip_buyer_vol_stop" and one with an empty strategy id and source "fundamentals"
     When the Research tab is shown at mobile width
     Then the chip row shows "dip_buyer_vol_stop" and "Fundamentals"
     And no chip is labelled "LYFT"
 
-  @AC-3 @regression
+  @AC-3 @FR-5 @FR-8 @regression
   Scenario: The Alerts drawer shows a stored unread alert that was not streamed
-    Given one stored unread alert titled "Backfill 67276d1f failed" and no alert streamed since page load
+    Given one stored unread alert titled "Backfill 67276d1f failed" and one stored read alert titled "Backfill 11aa22bb done"
+    And no alert streamed since page load
     When the header bell showing badge "1" is opened
     Then the drawer lists "Backfill 67276d1f failed"
+    And the drawer does not list "Backfill 11aa22bb done"
 
-  @AC-4 @regression
+  @AC-4 @FR-6 @FR-7 @regression
   Scenario: Marking an alert read in the drawer clears it and the badge
-    Given the drawer lists one unread alert and the badge shows "1"
+    Given the drawer lists one unread alert titled "Backfill 67276d1f failed" and the badge shows "1"
     When the alert is marked read in the drawer
     Then the drawer shows "No alerts"
     And the bell shows no unread badge
+    And the Notifications page shows "Backfill 67276d1f failed" as read
 
-  @AC-5 @regression
+  @AC-5 @FR-5 @FR-7 @regression
   Scenario: A streamed alert raises the badge without a reload
-    Given the badge shows "1" and the drawer is closed
+    Given one stored unread alert titled "Backfill 67276d1f failed", the badge shows "1" and the drawer is closed
     When an alert titled "Order rejected" is streamed
     Then the badge shows "2"
-    And the drawer lists "Order rejected" above the stored alert
+    And the opened drawer lists "Order rejected" above "Backfill 67276d1f failed"
 
-  @AC-6 @regression
-  Scenario: A checked switch renders in the checked position
+  @AC-6 @FR-9 @regression
+  Scenario: A checked switch is displayed on
     Given push notifications are enabled on this device
     When the Notifications page is shown
-    Then the push switch has aria-checked "true"
-    And its thumb is rendered at the checked (right) position with the primary fill
+    Then the push switch reports checked "true"
+    And the push switch is displayed in its on position, with the thumb at the trailing end of the track
+
+  @AC-7 @FR-9 @regression
+  Scenario: An unchecked switch is displayed off
+    Given push notifications are not enabled on this device
+    When the Notifications page is shown
+    Then the push switch reports checked "false"
+    And the push switch is displayed in its off position, with the thumb at the leading end of the track
+
+  @AC-8 @FR-3 @regression
+  Scenario: A long value fits its tile in the symbol page's other stat grids
+    Given the symbol page for "LYFT" at a 384px-wide viewport
+    And an open position with a cost basis of 1234567890.12 and a last price of 16.42
+    When the position stat grid is shown
+    Then the cost basis value is displayed wholly inside the "Cost basis" tile
+    And the cost basis value does not overlap any neighbouring tile's value
