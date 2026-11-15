@@ -1268,3 +1268,45 @@ Resume state for the next `/sdd-batch` run (do not edit by hand; supersedes the 
 - O-33: confirm the `343@AC-9` rewrite sign-off — /sdd-spec.
 - Access route for runbook step 2: the design names the DB-owner DSN; the relayed note says psql over ssh if possible — /sdd-spec runbook step.
 - `feature.md` § Summary still says "exactly the missing range"; the range is now `gap.start` through the window end (D-8) — /sdd-spec.
+
+## Session 2026-11-15 — sdd-spec
+
+- Generated implementation-spec.md with 16 steps. Status → implementation-ready.
+- Tree: discovery ran on `feature/backtest-inline-backfill@42f5e7b2e`. `origin/main-dev@d1c97273b` is 4 commits ahead and was not merged here (this step edits only the feature directory); none of those commits changes a cited code file. `/sdd-execute` BRANCH SYNC merges it.
+- Other files edited this session, as `design.md` directs:
+  - `acceptance.feature`: @AC-2 amended (D-8), @AC-9 examples rewritten (D-12), @AC-8 struck (commented out, ID reserved), @AC-10…@AC-16 appended.
+  - `product-spec.md`: FR-2 amended, FR-7 marked not taken, Agent and insights surfaces ticked, the new config key and its contract recorded, `xstockstrat-config` and `xstockstrat-agent` added to Affected Services.
+  - `feature.md`: Summary now states the D-8 range; Reviewers snapshot gains agent, config and DBA.
+- Key codebase findings:
+  - `backfill_jobs.has_active_job` does not exist (`debate.md` D-9 cites `backfill_jobs.py:111`, which is the `= ANY(symbols)` predicate in `list_jobs`). Step 5 creates it. `insert_job` only calls `db_pool.execute`, so a connection can be passed with no signature change.
+  - `make_servicer` (`tests/test_ingest_servicer.py:34-62`) builds `cfg` as a `MagicMock`, so the new config attribute must be set as a real int there. A new `int_positive` read also turns `tests/test_config_read_classification.py` red until the key is in `FR3_KEYS`. Seed, reader and tests are one atomic unit (Steps 2+3+4).
+  - Config migration `050` is next free on this tree, but feature 341 (`050_ui_chart_history_bars`) and feature 330 (`050_analysis_live_enrich_ttl_reseed`) both hold `050` on their branches. This feature merges after 341, so a renumber is expected. Generating `scripts/config-wiring-stored.json` needs a reachable Postgres.
+  - `bars_total` is written when the chunk plan is made (ingest `servicer.py:715-716`), so a QUEUED job has none; that is the zero-denominator case (@AC-14). The PARTIAL and all-chunks-failed FAILED terminal writes carry no `error` (`:739-752`), which is why the copy uses chunk counts (@AC-9, @AC-16).
+  - The e2e sentinel `strat-insufficient-001` returns a gap equal to the requested window and no `timeframe` or `requestedRange` (`e2e/mock-backend.ts:1073-1097`); Step 13 fixes it with `prefixGapRange`. No `getBackfillStatus` mock exists.
+  - The BFF `forward` rethrows the backend `ConnectError` unchanged (`src/lib/bffShared.ts:77-91`), so the denial detail and `ALREADY_EXISTS` reach the browser. The agent passes both codes through (`app/tools.py:225-236`).
+  - Marketdata pool metrics exist as `marketdata.db.pool.empty_acquire_count` and `marketdata.db.pool.empty_acquire_wait` (`internal/telemetry/otel.go:478-479`). Feature 341's counter is `marketdata.ohlcv.out_of_memory_errors` (on its branch only).
+- Assumptions made without an operator answer (full list in implementation-spec.md § Assumptions made at /sdd-spec):
+  - `343@AC-9` was rewritten on the strength of the round-5 design approval. No operator decision names the scenario on its own (O-33 stays `open` in `debate.md`).
+  - The relayed note "I plan to do psql over ssh if possible" is read as the access route for the runbook's Postgres read; the DB-owner DSN is the fallback.
+  - The shared denial-token fixture lives at `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json`, and the `xstockstrat-ui` CI path filter gains that path.
+  - Copy with no text in the design was written here: the generic denial sentence and the @AC-16 failure sentence.
+  - `has_active_job` matches any data kind; the admin request on the insights button stays without `fillMode`; `useTriggerBackfill` is unchanged; no `strat-lab` version bump.
+- Relayed operator items not used: "1. Agreed", "2. Ok, agreed.", "4. Confirmed", "6. Sounds good" (their questions were not in this step's input) and "5. Yes, fix the primitives. Use the switch component from Shadcn." (not about this feature).
+- The batch task text named the directory with a doubled path (`docs/roadmap/features/docs/roadmap/features/343-…`); it was read as this directory.
+- `docs/roadmap/features/merge-order.md` was not edited in this session (outside the feature directory); the row is Step 1.
+- No ledger line was written: no new pattern or trap surfaced beyond those already in `fails.md`.
+
+### Decisions
+
+- Step grouping: atomic units are Steps 2+3+4 (config key), 5+6 (ingest gate), 10+11 (UI helper), 12+13 (card and e2e). Each stays on one surface.
+- The drift guard is one JSON file read by three test suites (ingest, UI vitest, agent parity).
+
+### Open Threads
+
+- O-33 (`343@AC-9` sign-off) and the psql-over-ssh reading are assumptions; confirm at `/sdd-review impl-spec` or with the operator.
+- Config migration number: re-derive at Step 2 and at the integration PR (341 and 330 hold `050`).
+- Step 2 is blocked without a reachable Postgres for `scripts/config-wiring-stored.py`.
+- Whether a `strat-lab` skill text change needs a `plugin.json` version bump: no rule found.
+- A refused trigger is also reported by the global mutation-error fallback, because `useTriggerBackfill` has no `meta.errorHandled`; left as is.
+- Homelab-edge PR #79 is merged but not applied; the live Postgres values are still unread (runbook, Step 16).
+- Peer files shared with 339, 341 and 344 (listed in the spec's Step Dependencies); the integration PR waits for 341.
