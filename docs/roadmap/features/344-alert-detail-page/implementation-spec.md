@@ -108,7 +108,7 @@ Verdict: PASS WITH WARNINGS, no FAIL, no Floor breach. Re-checked on `origin/mai
 ```bash
 cd packages/proto && buf lint && buf breaking --against "$(git rev-parse --show-toplevel)/.git#branch=feature/alert-detail-page,subdir=packages/proto"
 ```
-`subdir=` is mandatory (PLAT-10). In a checkout with no local `feature/alert-detail-page` ref, use `branch=origin/feature/alert-detail-page`, the form CI uses (`.github/workflows/ci.yml:239`). Expected: no lint finding, no breaking change (a new RPC and a new message are additive).
+`subdir=` is mandatory (PLAT-10). In a checkout with no local `feature/alert-detail-page` ref, use `branch=origin/feature/alert-detail-page`, the form CI uses (`.github/workflows/ci.yml:240`). Expected: no lint finding, no breaking change (a new RPC and a new message are additive).
 
 ---
 
@@ -131,7 +131,7 @@ cd packages/proto && buf lint && buf breaking --against "$(git rev-parse --show-
 
 **Codebase Evidence**:
 - Confirmed via: `ls packages/proto/gen/{ts,go,python}/notify/v1` — the seven files above plus the `notifyv1connect` directory.
-- Generator: `scripts/buf-gen.sh` (`buf lint` `:33`, `buf breaking` with `subdir=packages/proto` `:41`, `buf generate` `:47`, Python via `grpcio-tools` `:49-`).
+- Generator: `scripts/buf-gen.sh` (`buf lint` `:35`, `buf breaking` with `subdir=packages/proto` `:41`, `buf generate` `:48`, Python via `grpcio-tools` `:53-61`).
 - Break radius of the new RPC, grepped across `services/`:
   - notify registers the generated `NotifyServiceService` whole (`services/xstockstrat-notify/src/grpc/serviceDefinition.ts:1-6`, `src/index.ts:60`); a method with no handler is additive.
   - Go fakes embed the client interface, so a new method does not break them: `services/xstockstrat-trading/internal/service/trading_resume_account_test.go:354`, `trading_bracket_test.go:177`, `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go:325`, `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go:350`.
@@ -229,7 +229,7 @@ grep -n "x-user-id" src/grpc/notifyServiceImpl.ts   # getAlert reads the header 
 - Confirmed via: `grep -n "metaCall\|^describe\|capturingPool\|seqPool" services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`.
 - `metaCall(userId, request)` builds a call whose metadata carries `x-user-id` (`:534-539`). `capturingPool(rows)` records every `query(sql, params)` (`:520-531`). `noopFanout()` `:61`, `noopWebPush()` `:66`.
 - Suites to model on: `describe('markAlertRead (feature 203)'` `:847-894` (code-3 and no-DB-write assertions at `:876-883`); `describe('listAlerts — read state (feature 203)'` `:896-943`.
-- `Alert` is already imported from `@xstockstrat/proto/notify/v1/notify` (`:25`) and `Alert.encode(alert).finish()` is already used (`:827`).
+- `Alert` is already imported from `@xstockstrat/proto/notify/v1/notify` (`:25`) and `Alert.encode(alert).finish()` is already used (`:825`).
 - `src/__tests__/fixtures/` exists (`collectingReader.ts`, `fakeCommsgun.ts`, `fakeConfig.ts`, `scriptedPool.ts`, `stubFetch.ts`); none holds an alert row.
 
 **Lands with**: `Step 3`
@@ -757,11 +757,12 @@ No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:2
 - The only mount: `import { AlertStream } from './AlertStream';` (`src/components/trader/AppShell.tsx:5`) and `<AlertStream />` inside the `actions` prop (`:24`). `grep -rn "AlertStream" src --include=*.tsx --include=*.ts` finds no other importer.
 - Target: `<div className="flex items-center gap-2 ml-auto">{actions}<CopilotToggle />` in `PlatformHeaderInner` (`src/components/shared/PlatformHeader.tsx:246-248`).
 - `AlertStream.tsx` imports its primitives relatively (`'../ui/button'`, `'../ui/badge'`, `'../ui/sheet'`, `'../ui/separator'`, `:6-9`); `components/shared/` is a sibling of `components/trader/`, so those paths stay valid after the move.
-- Every `PlatformHeader` mount is inside a `QueryClientProvider`: trader (`src/app/trader/layout.tsx` → `providers.tsx:16`), insights (`src/app/insights/layout.tsx` → `src/components/shared/QueryProviders.tsx:15`), accounts (`src/app/accounts/layout.tsx:24-25`), config-ui (`src/app/config-ui/layout.tsx:12-13`).
+- Every `PlatformHeader` mount is inside a `QueryClientProvider`: trader (`src/app/trader/layout.tsx` → `providers.tsx:12`), insights (`src/app/insights/layout.tsx` → `src/components/shared/QueryProviders.tsx:15`), accounts (`src/app/accounts/layout.tsx:24-25`), config-ui (`src/app/config-ui/layout.tsx:12-13`).
 - The bell calls the root-relative `notifyClient` (`/trader/api`), which works from any segment for the four facts recorded at `services/xstockstrat-ui/docs/context-constitution.md:19`.
 - The disconnected label is `sr-only sm:not-sr-only` (`src/components/trader/AlertStream.tsx:53-59`), which is why the 640–1024px width check exists (D-19).
 - e2e that locate the bell on `/trader`: `e2e/trader/alert-stream.spec.ts:19-99`, `e2e/trader/stream-reconnect.spec.ts:111-128`. A header overflow at exactly 1024px on trader pages is a known, pre-existing edge (`e2e/mobile-overflow.spec.ts:76-83`).
 - 339's changes to `AlertStream.tsx`, its helpers in `src/lib/alertShared.ts` and its e2e: **Not found** in this tree.
+- Gate status at re-spec (2026-11-15, `origin/main-dev@9f8856229` merged): **the 339 gate fails, so Steps 17–22 stay blocked.** `origin/feature/fix-symbol-page-alerts-ui@4d1ee033f` is not an ancestor of this branch, `origin/main-dev` has no `fix-symbol-page-alerts-ui` merge commit, `grep unreadOnly src/components/trader/AlertStream.tsx` is empty, and 339's `status.md` on its branch is `implementation-ready`. The 339 → 344 row is now on `origin/main-dev` (`docs/roadmap/features/merge-order.md:126`) and says Steps 17–22 must be re-specified after 339 merges.
 
 **TDD**: `red-green required` — Step 18's `@AC-10` cases fail first (no bell outside `/trader`).
 
@@ -800,6 +801,7 @@ pnpm exec playwright test e2e/trader/alert-stream.spec.ts e2e/trader/stream-reco
 - Overflow helper and viewport pattern: `horizontalOverflow(page)` (`e2e/mobile-overflow.spec.ts:43-47`), `test.use({ viewport: { width: 1280, height: 900 } })` (`:86`), the `networkidle` wait is capped and caught because streams keep the network busy (`:40-41`, `:57`).
 - Dropped-stream indicator and reconnect: `e2e/trader/stream-reconnect.spec.ts:111-128` (`alert-stream-disconnected`).
 - `e2e/alert-bell.spec.ts`: **Not found** — created by this step.
+- Gate status at re-spec (2026-11-15): the 339 gate fails (see Step 17), so this step stays blocked.
 
 **TDD**: `red-green required`
 
@@ -840,11 +842,12 @@ No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:2
 - `useInvalidatingMutation(mutationFn, invalidateKeys, options?: { mutationKey?, meta? })` invalidates each key on success (`src/hooks/useInvalidatingMutation.ts:15-32`).
 - `meta.errorHandled === true` is the only opt-out from the global mutation error fallback (`src/lib/mutationErrorStore.ts:36-38`; `src/lib/queryClient.ts:15-19`); the fallback renders `role="alert"` (`src/components/shared/MutationErrorFallback.tsx:28-36`).
 - Query defaults: `staleTime: 5_000, retry: 1` (`src/lib/queryClient.ts:22`); `refetchOnWindowFocus` is the library default (on).
-- One `QueryClient` per segment provider (`src/app/trader/providers.tsx:14`, `src/components/shared/QueryProviders.tsx:13`), so the cache is shared inside a segment and not across segments.
+- One `QueryClient` per segment provider (`src/app/trader/providers.tsx:10`, `src/components/shared/QueryProviders.tsx:13`), so the cache is shared inside a segment and not across segments.
 - Bell count today: a one-shot effect, `notifyClient.listAlerts({ limit: 1 })` → `setUnreadCount(res.unreadCount)` (`src/components/trader/AlertStream.tsx:19-32`). Stream handler: `(alert) => setAlerts((prev) => prev.some(…) ? prev : [alert, ...prev].slice(0, 50))` (`:42-45`); a reconnect re-delivers alerts (`:34`).
 - Inbox today: local state plus `refetch()` (`src/app/accounts/notifications/AlertInbox.tsx:19-40`), `markRead` calls `notifyClient.markAlertRead` then `refetch()` inside `try/catch` with its own error text (`:42-53`), "N unread" badge from `unreadCount` (`:63-65`).
 - Alert page mark-read: the direct call added in Step 13.
 - **Not found in this tree — from 339's design.md §5 (`origin/feature/fix-symbol-page-alerts-ui@0442d300d`), to be confirmed by grep after the merge**: `refreshUnread()`, `mergeUnread`, `pruneStreamed`, `drainUnread`, a `readIds` set, a badge equal to the merged unread list length, a per-row drawer mark-read and a draining "Clear all". 339's `context.md:894` states its constraint for 344: "the `ALERT_UNREAD_COUNT_KEY` value is derived from the merged, de-duplicated unread list and is invalidated by mark-read and Clear all".
+- Gate status at re-spec (2026-11-15): the 339 gate fails (see Step 17). None of `refreshUnread`, `mergeUnread`, `pruneStreamed`, `drainUnread`, `readIds`, `unreadOnly` is in `src`, so neither Case A nor Case B can be confirmed; this step stays blocked.
 
 **TDD**: `red-green required` — Step 20's badge-drop cases fail first.
 
@@ -892,6 +895,7 @@ pnpm exec playwright test e2e/accounts/notifications.spec.ts e2e/accounts/alert-
 - The accounts header is rendered by the layout and does not remount on list → detail navigation (`src/app/accounts/layout.tsx:24-27`), so only an invalidation can refresh the badge there.
 - 339's streamed-alert scenario: `@AC-5` "A streamed alert raises the badge without a reload" (339 `acceptance.feature`, same ref). 339's e2e file names: **Not found** in this tree — re-grep after the merge.
 - `e2e/helpers/alertReadState.ts`, `e2e/accounts/alert-read-state.spec.ts`: **Not found** — created by this step.
+- Gate status at re-spec (2026-11-15): the 339 gate fails (see Step 17) and 339's e2e files are not in this tree; this step stays blocked.
 
 **TDD**: `red-green required`
 
@@ -933,6 +937,8 @@ No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:2
 - Drawer row today (pre-339, pre-move): `<li key={a.alertId} className="rounded-lg border border-border bg-card p-3 space-y-1">` with the title `<p className="text-sm font-medium">{a.title}</p>` (`src/components/trader/AlertStream.tsx:104-117`, title `:115`). No `Link` / `href` (grep).
 - 339's design keeps drawer rows a plain `<li>` "so feature 344 can wrap them later" and adds a per-row mark-read button (339 design.md §5, same ref). The shipped markup: **Not found** in this tree — re-grep.
 - The link goes on the title, as in the inbox (Step 15), so no button is nested in an anchor (D-9, R-4).
+- `SheetClose` is exported from `src/components/ui/sheet.tsx` (`:18`, `:124`).
+- Gate status at re-spec (2026-11-15): the 339 gate fails (see Step 17), so the drawer markup 339 ships cannot be re-grepped yet; this step stays blocked.
 
 **TDD**: `red-green required` — Step 22 fails first (the drawer title is not a link).
 
@@ -965,6 +971,7 @@ pnpm exec playwright test e2e/trader/alert-stream.spec.ts e2e/alert-bell.spec.ts
 - The drawer is opened today by clicking the bell (`e2e/trader/alert-stream.spec.ts:50-55`); after Step 18 the bell is `page.getByRole('button', { name: 'Alerts' })`.
 - `routeAlertReadState` and `e2e/accounts/alert-read-state.spec.ts` exist after Step 20.
 - 339's `@AC-3` "The Alerts drawer shows a stored unread alert that was not streamed" (339 `acceptance.feature`, same ref) is what makes a stored alert appear in the drawer.
+- Gate status at re-spec (2026-11-15): the 339 gate fails (see Step 17), so this step stays blocked.
 
 **TDD**: `red-green required`
 
