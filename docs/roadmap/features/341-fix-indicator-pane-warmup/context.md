@@ -919,3 +919,271 @@ policy: halt). design.md is not written and status.md is unchanged. The register
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 5)
+
+`/sdd-design fix-indicator-pane-warmup` (full) is halted at its approval gate after round 5 (gate
+policy: halt). design.md is not written and status.md is unchanged. The register is in `debate.md`
+(D-1..D-30, R-1..R-19, O-1..O-32, P-1..P-3).
+
+Operator input relayed for this round, verbatim (2026-11-15): "1. Approved", "2. Confirmed",
+"3. Sign-off the change, amend it", "4. There are no production instances. Staging is enough."
+
+### Open Threads
+
+- **Approach (round 4 stands; D-25..D-30 new).** The additive `first_value_bars = 5` proto field,
+  the analysis helper, the `windowIndicatorSeries` seam, the `EmptyState` pane, the breach counter
+  and the config key `chart.indicator_history_bars` (default 200, bounds [200, 1000], one-shot
+  read with fallback to 200) are unchanged. Three things change:
+  - **Homelab lock inequality, computed (D-25).** The values come from the homelab-edge repo, not
+    a discovery step: `max_locks_per_transaction` 1024 and `max_connections` 70
+    (`roles/db_host/defaults/main.yml:12-13`), `max_prepared_transactions` stock 0. Budget =
+    1024 x (70 + 0) = 71,680 slots. At D = 1000 on 30-day chunks a scan needs at most 404 locks,
+    28,280 at c = 70. It passes. 1-day chunks (only after a restore from a DigitalOcean dump) fail
+    and escalate to the operator. The "raise mlpt to 512" fallback is dropped.
+  - **Runbook section "Homelab deep indicator history" (D-26, D-27, D-28).** Read-only
+    preconditions: homelab-edge `verify` green after PR #79 is applied (it asserts
+    `max_locks_per_transaction` only), one `psql` read of `max_connections`,
+    `max_prepared_transactions` and chunk width, and `list_config_keys ui` showing the key. Then
+    three ordered steps: `set_config` to 1000 through the homelab MCP with `create_key` false and
+    an admin session, then `get_config`; reload the LYFT symbol page and confirm an SMA200 line;
+    observe after several deep-history symbol-page loads that
+    `marketdata.ohlcv.out_of_memory_errors{op="recent_bars"}` shows no increase, with `GetBars`
+    spans as the positive control. Only the homelab `staging` row is set; no homelab-production
+    procedure is written.
+  - **Product-spec amendment text agreed (D-29).** Fix Scope allows exactly one new key
+    `ui.chart.indicator_history_bars` and exactly one config seed migration
+    `NNN_ui_chart_history_bars`; Out of Scope excludes any other key or migration; Affected
+    Services gain xstockstrat-marketdata and xstockstrat-config.
+  - The migration number is resolved at execute time, 050 as of this round (D-30).
+- **Strongest open objection (O-23, blocking, P-04/P-03).** The operator sanctioned the amendment
+  ("Sign-off the change, amend it") and the text is agreed, but it is not yet written. O-23 closes
+  when the product-spec Fix Scope and Out of Scope are edited, this file records the sanction, the
+  reopens, the feature 153 sign-off and the approval-flow note (a new config key needs owner +
+  config team, `docs/runbooks/approval-flow.md`), and `feature.md` gains a Status History row.
+  Design approval is held until then. This session entry does not make those edits.
+- **Open, non-blocking.** O-29 (the config-wiring checker is unread, so the
+  `scripts/config-wiring-stored.json` row is an assumption; a spec task). O-30 (renumber the
+  migration if a peer feature takes 050). O-31 (launch step 1 preconditions in the runbook; the
+  proposer has not confirmed). O-32 (the runbook keeps one `psql` read and must cite the
+  homelab-edge playbook path it depends on).
+- **Closed this round.** O-24, O-25, O-26, O-27, O-28.
+- **Register.** D-5, D-15 and R-9 are operator-reopened. P-1..P-3 still read "pending user" in
+  `debate.md`; the synthesis resolves them as "user reopened" when the amendment record is
+  written.
+- **Floor status.** No Floor breach. The adversary found the proposal sound with no register
+  violation.
+- **Uncovered `@AC` changes.** AC-2 and AC-4 are EXTEND with no operator decision covering them.
+  AC-1 and AC-3 are EXTEND and covered (their preconditions become "with the configured history
+  depth of 1000 bars"). Feature 153 `@AC-1` is PRESERVE on DigitalOcean and PRESERVE-at-risk
+  where 1000 runs, signed off 2026-11-15. `opportunity-live-market-enrichment @AC-4` and the
+  `platform.feature` GetBars warm-set rule are PRESERVE.
+- **Main risks.** The homelab pass rests on homelab-edge PR #79 being applied (merged, not
+  applied; on stock mlpt 64 the budget is 4,480). The 30-day chunk width is unconfirmed until the
+  chunk query runs. The fix reaches the homelab only after the manual `set_config`. DigitalOcean
+  users still see SMA200 as a single dot (operator-accepted). Most path:line citations carried
+  from round 4 were not re-verified.
+
+```sdd-batch-design-state
+{
+  "round": 5,
+  "synth": {
+    "approach": "Round 5 synthesis. The round-4 synthesis stands whole (sections 1-4 and 7-10: additive `first_value_bars = 5`, the analysis helper, the `windowIndicatorSeries` seam, the `EmptyState` pane, the breach counter, config key `chart.indicator_history_bars` default 200 bounded [200, 1000], `MAX_HISTORY_BARS = 1000`, short-timeout one-shot config read with fallback to 200). Three things change, plus adversary corrections the mediator adopts.\n\n**Mediator checks this round (read-only, in the trees).**\n- `/home/user/homelab-edge/roles/db_host/defaults/main.yml:12-13`: `max_connections: 70`, `max_locks_per_transaction: 1024`. `max_prepared_transactions` is not set there (stock 0).\n- `/home/user/homelab-edge/roles/db_host/tasks/verify.yml:20-30` reads live `current_setting('max_locks_per_transaction')` and fails on mismatch. It does not read `max_connections`.\n- `/home/user/homelab-edge/inventories/prod/group_vars/all/main.yml:156`: `db_pgbouncer_pool_size: 10` per database.\n- `/home/user/xstockstrat/docs/runbooks/ohlcv-lock-budget-tuning.md:17`, `:48`: the formula is `mlpt x (max_connections + max_prepared_transactions)`; `:27` readiness uses a fixed 400-day window.\n- Last config migration in the tree is `049_notify_commsgun_channel_keys`.\n- `/home/user/xstockstrat/scripts/config-wiring-stored.json` exists and `/home/user/xstockstrat/scripts/config-wiring.test.mjs:15` reads it; the exact entry shape is still unread (spec task).\n- `/home/user/xstockstrat/services/xstockstrat-agent/app/tools.py:1895-1902`: `set_config` refuses an unregistered key with NOT_FOUND unless `create_key=true`.\n- Other path:line citations are carried from the proposal and adversary, not re-verified.\n\n**1. Homelab lock inequality of record (computed, replaces D-21's \"SHOW then compute\").**\n- Budget = 1024 x (70 + 0) = 71,680 lock slots.\n- D = 1000 gives a 3000-day implicit window (`marketdata_service.go:467-477`). With 30-day chunks: at most 101 chunks x 4 relations = 404 locks per scan; the write term is the same 404.\n- At the worst-case concurrency c = max_connections = 70: 28,280 of 71,680. Passes, with at least 43,400 slots left. 404 is also below mlpt, so no scan borrows from the shared table.\n- The runbook states one failure path for chunk width, not a three-bound table: 1-day chunks appear only if the homelab DB was restored from a DigitalOcean dump (fresh deploy with migration 004 before first insert gives 30-day chunks, including for backfilled old data). 1-day chunks need 8,280-12,000 locks per scan, fail at c = 70, and escalate to the operator.\n- The \"raise mlpt to 512\" fallback is dropped. 1024 is the asserted value; if a live value differs, recompute with it, do not tune.\n\n**2. Runbook section \"Homelab deep indicator history\" in `docs/runbooks/ohlcv-lock-budget-tuning.md`.**\nValues of record cite the homelab-edge paths above, not \"the operator's reading of PR #79\".\nPreconditions (read-only; needed because homelab-edge PR #79 is merged but not yet applied):\n- homelab-edge `verify` green after PR #79 is applied (covers `max_locks_per_transaction` = 1024, `roles/db_host/tasks/verify.yml:20-30`).\n- One `psql` read per `docs/runbooks/operator-db-access.md`: `SHOW max_connections;`, `SHOW max_prepared_transactions;` and the existing chunk-width query. Expected 70 / 0 / 30-day chunks.\n- Migration 050 is applied on the homelab staging DB: `list_config_keys ui` shows `chart.indicator_history_bars`.\n- Any differing value: recompute. Any failure: escalate to the operator; do not silently ship 200.\nLaunch steps, in order:\n1. `set_config` namespace `ui`, key `chart.indicator_history_bars`, value 1000 through the homelab MCP, with `create_key` left false and an admin session (the write is global); then `get_config` to confirm. A NOT_FOUND means migration 050 is missing; do not create the key by hand.\n2. Smoke test: reload the LYFT symbol page (the config read is `staleTime: Infinity`, so an open tab keeps 200) and confirm an SMA200 line draws.\n3. Observation, not a pass/fail load test: load LYFT plus a few deep-history symbol pages at D = 1000, ideally in parallel tabs. Then check `increase(marketdata.ohlcv.out_of_memory_errors{op=\"recent_bars\"})` over that window is zero or the series is absent (the counter is lazily bound). Positive control: marketdata `GetBars` spans or `marketdata.db.pool.empty_acquire_wait` show the reads happened. A readiness cycle is not the check, because readiness uses the fixed 400-day window and never runs the 3000-day scan.\nOne line on scope: only the homelab `staging` row is set. The homelab-production prose is dropped (operator: \"There are no production instances. Staging is enough.\"). Migration 050 still seeds both environment rows at 200, matching `migrations/023_ui_performance_keys.up.sql:17-32`.\n\n**3. Product-spec amendment (operator sanction, verbatim: \"Sign-off the change, amend it\").**\n- Fix Scope, Config: \"exactly one new key, `ui.chart.indicator_history_bars` (int, default 200, bounds [200, 1000])\".\n- Fix Scope, Database: \"exactly one config seed migration in `services/xstockstrat-config/migrations/` (`NNN_ui_chart_history_bars`, 050 as of this round); no service-schema migration\".\n- Out of Scope: \"any database migration or config key beyond the one key and its seed migration in Fix Scope\".\n- Affected Services gain xstockstrat-marketdata and xstockstrat-config.\n- `context.md` records: the verbatim sanction and date; the operator reopen of D-5, D-15 and R-9 (P-1..P-3 verdict \"user reopened\"); the feature 153 `@AC-1` PRESERVE-at-risk sign-off; the approval-flow note that a new config key needs owner + config team (`docs/runbooks/approval-flow.md`).\n- `feature.md` gains a `## Status History` row for the amendment (P-04 phase-gate event). Re-review only if the operator asks.\n\n**4. Spec-level corrections adopted.**\n- Migration number: the spec step re-checks the last config migration at execute time and renumbers if a peer feature in this batch took 050; the number is not fixed in the spec.\n- Config wiring: the spec reads `scripts/config-wiring.test.mjs` and adds the reader entry to `scripts/config-wiring.json` and, if the checker requires it, the seeded row to `scripts/config-wiring-stored.json`.\n- UI `CLAUDE.md` notes `traderBff.ts:166-170` as a `ui`-namespace forward and that `/trader` now reads `ui`. `acceptance.feature` AC-1 and AC-3 preconditions read \"with the configured history depth of 1000 bars\".\n- The gate statement: the homelab DB values now come from the homelab-edge repo; `psql` is used only for the single live read above; the MCP is used for `set_config`, `get_config` and `list_config_keys`.\n\n**Build order** is unchanged from round 4 (proto, analysis, marketdata counter, config migration and bounds, UI reader and seam, pane, e2e, runbook and docs, homelab launch).\n\n**Touchpoints.** One additive proto field; one config seed migration; one new config key; one new marketdata counter.",
+    "open_objections": [
+      {
+        "text": "O-23 (P-04/P-03): the operator sanctioned the amendment ('Sign-off the change, amend it') and the amendment text is agreed. It closes when the orchestrator writes it: the product-spec Fix Scope and Out of Scope edits, the `context.md` entry with the verbatim sanction and the approval-flow note (owner + config team), and a `feature.md` Status History row. Until those are written, design approval is held.",
+        "blocking": true
+      },
+      {
+        "text": "O-29 (spec task): the proposer has still not read `scripts/config-wiring.test.mjs`. `scripts/config-wiring-stored.json` exists and the checker reads it, but whether the seeded key needs a row there, and its shape, is unconfirmed. The spec must read the checker before writing either entry; it must also carry the UI `CLAUDE.md` note and the AC-1/AC-3 rewording.",
+        "blocking": false
+      },
+      {
+        "text": "Migration number: 050 is free in the tree today, but three peer features in this batch could add a config seed and golang-migrate fails on a duplicate version. The spec step must re-check the last config migration at execute time and renumber, and the product-spec amendment should name the migration by slug with 050 as the current number.",
+        "blocking": false
+      },
+      {
+        "text": "Launch step 1 preconditions must be in the runbook: migration 050 applied on the homelab staging DB (`list_config_keys ui` shows the key), `create_key` stays false, the write needs an admin session, and the smoke test reloads the page because the config read is `staleTime: Infinity`. Adopted in the synthesis; the proposer has not confirmed.",
+        "blocking": false
+      },
+      {
+        "text": "homelab-edge `verify` asserts `max_locks_per_transaction` only. `max_connections` = 70 and `max_prepared_transactions` = 0 are set or defaulted in source but not asserted live, so the one `psql` read stays in the runbook. The runbook now cites a second repo's playbook; it must name the path so the coupling is visible.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-4",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "opportunity-live-market-enrichment @AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "platform.feature GetBars warm-set rule",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "marketdata fix-ohlcv-chunk-lock-oom @AC-1 (feature 153) — PRESERVE on DigitalOcean at 200; PRESERVE-at-risk wherever 1000 runs (operator signed off 2026-11-15)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      }
+    ],
+    "rejected_alternatives": [
+      "R-1 to R-8 and R-10 to R-15 stand unchanged. R-9 is operator-reopened: the default is 200 and 1000 is the ceiling.",
+      "Branching on `HOST_PROVIDER` (`homelab ? 1000 : 200`), the proposer's runner-up. It needs no migration and no manual `set_config`, but it puts a per-deployment value in source against config governance, the same reasoning that locked R-13. The adversary agreed; it is now rejected, not held for the gate.",
+      "A readiness cycle as the launch check for the breach counter. Readiness uses the fixed 400-day window and never runs the 3000-day scan, and an absent lazily-bound series cannot be told from a flat one.",
+      "A three-`SHOW` `psql` discovery step as the homelab gate. The values are set in homelab-edge source and `verify` already asserts `max_locks_per_transaction` live; one `psql` read covers the rest.",
+      "The 'raise `max_locks_per_transaction` to 512' fallback. 1024 is already the asserted homelab value; a lower live value means recompute and escalate, not tune.",
+      "Runbook prose for a later homelab production deployment. The operator stated there are no production instances and staging is enough.",
+      "A three-bound concurrency table (c = 4, 20, 70) for 1-day chunks in the runbook. The gate certifies only at c = max_connections, and 1-day chunks escalate whatever the bound.",
+      "A fixed migration number 050 in the spec. Peer features in this batch may take it; the number is resolved at execute time."
+    ],
+    "open_risks": [
+      "The homelab pass rests on homelab-edge PR #79 being applied. It is merged but not applied; on stock mlpt 64 with 70 connections the budget is 4,480 and 30-day chunks pass only at c of 11 or fewer.",
+      "The 30-day chunk width on the homelab rests on the fresh-deploy statement until the chunk query runs. A DB restored from a DigitalOcean dump would have 1-day chunks and block the raise.",
+      "The fix reaches the homelab only after a manual `set_config`. If the launch steps are skipped, the homelab keeps the single dot.",
+      "DigitalOcean users still see SMA200 as a single dot on a full 200-bar page, with no notice (operator-accepted).",
+      "The bound of 1000 cannot tell deployments apart. An admin could set 1000 on DigitalOcean; only the key description, the runbook and the counter guard against it.",
+      "Other workloads on the homelab Postgres share the lock table. They are bounded by max_connections but their per-backend lock use was not measured.",
+      "`max_connections` and `max_prepared_transactions` are not asserted by homelab-edge `verify`; only the runbook's `psql` read observes them.",
+      "The runbook depends on a playbook in a second repo (homelab-edge `verify`); a rename there silently breaks the precondition.",
+      "A 53200 from a cause other than lock-table exhaustion also increments the counter. The counter detects a breach; it does not prevent one.",
+      "The config-wiring checker's requirements for the new reader and the seeded row are unread.",
+      "The migration number may collide with a peer feature in this batch.",
+      "The product-spec is amended after approval without re-review; the operator sanctioned this, but the config-team approval for the new key is still to be obtained.",
+      "The config read adds a round trip before the first bars request; analysis compute and polled payload grow with D on the homelab.",
+      "Most path:line citations in sections carried from round 4 were not re-verified by the mediator."
+    ],
+    "constitution_rules_touched": [
+      "P-02",
+      "P-03",
+      "P-04",
+      "C-01",
+      "C-03",
+      "C-05",
+      "C-07",
+      "C-08",
+      "C-12",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-17",
+      "C-18",
+      "F-06",
+      "F-07",
+      "PLAT-N1"
+    ],
+    "rationale": "**Verdict.** The adversary found the proposal SOUND with no Floor breach and no register violation. I checked the homelab values in the homelab-edge tree and the arithmetic holds: 1024 x 70 = 71,680 slots against 28,280 at the worst-case bound.\n\n**Register.**\n- The approach rests on D-1 to D-4, D-6 to D-14, D-16 to D-20 and D-22 to D-24.\n- D-21 is refined, not contradicted: the gate is still a runbook step before `set_config`, but the inequality is now computed from operator-supplied values and the live read is a precondition. The operator steer directs this.\n- D-5, D-15 and R-9 are reopened by the operator steer by name. The register already marks them \"reopened @ round 4 (operator steer)\", and the relayed request (\"Approved\", \"Confirmed\") is consistent. P-1 to P-3 resolve as \"user reopened\" when the orchestrator writes `context.md`. No new petition from either side.\n- The `HOST_PROVIDER` runner-up is close to the locked R-13 and loses on the same reasoning, so it is recorded as rejected.\n\n**Closed this round.**\n- O-24: the proposer confirmed 1000.\n- O-25: the three ordered steps and the escalation rule are carried, with step 3 corrected to exercise the symbol-page path.\n- O-26: the values come from the homelab-edge repo; `psql` is one live read.\n- O-27: reduced to one line, per the operator's \"no production instances\".\n- O-28: the proposer confirmed.\n\n**Still open.**\n- O-23 stays blocking until the amendment and its record are written. The sanction itself is given: item 3 of the relayed request is the operator's own words.\n- O-29 stays open, non-blocking: the checker is unread, so the stored-JSON entry is still an assumption.\n\n**Corrections to the proposal.**\n- Launch step 3 checked a path D does not touch. It is now an observation after symbol-page loads, with a positive control.\n- The precondition reuses homelab-edge `verify` for mlpt. I found `verify` does not assert `max_connections`, so the `psql` read keeps it.\n- Step 1 states that migration 050 must be applied and `create_key` stays false.\n- The homelab-production prose and the 512 fallback are dropped.\n- The migration number is resolved at execute time.\n\n**Operator decisions honoured.** Root cause located first (D-1); breach metric added; 200 by default and 1000 on the homelab; feature 153 `@AC-1` PRESERVE-at-risk where 1000 runs; one new key and its seed migration sanctioned.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Homelab lock budget of record, refining D-21 and D-24: 1024 x (70 + 0) = 71,680 slots. At D = 1000 on 30-day chunks a scan needs at most 404 locks, 28,280 at c = max_connections = 70. The gate certifies only at c = max_connections. 1-day chunks (possible only after a restore from a DigitalOcean dump) fail and escalate to the operator. The 'raise mlpt to 512' fallback is dropped; a differing live value means recompute, not tune.",
+          "evidence": "Operator steer for round 5; `/home/user/homelab-edge/roles/db_host/defaults/main.yml:12-13`; `/home/user/homelab-edge/inventories/prod/group_vars/all/main.yml:156`; `docs/runbooks/ohlcv-lock-budget-tuning.md:17`, `:48`; `marketdata_service.go:467-477`. The adversary checked the numbers and concurred."
+        },
+        {
+          "text": "The runbook gate is a read-only precondition, not a discovery step: homelab-edge `verify` green after PR #79 is applied (covers `max_locks_per_transaction`), one `psql` read of `max_connections`, `max_prepared_transactions` and chunk width, and `list_config_keys ui` showing the key (migration applied). The runbook cites the homelab-edge paths as the values of record.",
+          "evidence": "Operator steer for round 5 (keep a read-only verification, PR merged but not applied); `/home/user/homelab-edge/roles/db_host/tasks/verify.yml:20-30` asserts mlpt only (mediator check); `docs/runbooks/operator-db-access.md`. Adversary proposal, adopted."
+        },
+        {
+          "text": "Homelab launch steps, in order: (1) `set_config ui chart.indicator_history_bars 1000` through the homelab MCP with `create_key` false and an admin session, then `get_config`; (2) reload the LYFT symbol page and confirm an SMA200 line; (3) an observation after several deep-history symbol-page loads that `marketdata.ohlcv.out_of_memory_errors{op=\"recent_bars\"}` shows zero increase or is absent, with `GetBars` spans or `marketdata.db.pool.empty_acquire_wait` as the positive control. Step 3 is not a pass/fail load test and not a readiness cycle.",
+          "evidence": "`services/xstockstrat-agent/app/tools.py:1895-1902` (NOT_FOUND on an unregistered key); `ohlcv-lock-budget-tuning.md:26-27`, `:43-44`; D-16 (lazy binding); `deploy/homelab/compose.yml:7`. Adversary objection, adopted."
+        },
+        {
+          "text": "Only the homelab `staging` row is set to 1000, stated in one runbook line. No homelab-production procedure is written. The seed migration still seeds both environment rows at 200.",
+          "evidence": "Operator, relayed request 2026-11-15: 'There are no production instances. Staging is enough.'; `migrations/023_ui_performance_keys.up.sql:17-32`."
+        },
+        {
+          "text": "The product-spec is amended under the operator sanction: Fix Scope allows exactly one new key `ui.chart.indicator_history_bars` (int, default 200, bounds [200, 1000]) and exactly one config seed migration `NNN_ui_chart_history_bars`; Out of Scope excludes any other migration or key. `context.md` records the verbatim sanction, the reopens, the feature 153 sign-off and the owner + config team approval note; `feature.md` gains a Status History row. No re-review unless the operator asks.",
+          "evidence": "Operator, design gate round 4 and relayed request 2026-11-15, verbatim: 'Sign-off the change, amend it'; `docs/runbooks/approval-flow.md`. The adversary judged the text correct and in scope."
+        },
+        {
+          "text": "The config seed migration number is resolved at execute time: the spec step re-checks the last config migration and renumbers if 050 is taken. 050 is the number as of round 5.",
+          "evidence": "Last migration in the tree is `049_notify_commsgun_channel_keys` (mediator check); three peer features in this batch may add config seeds; golang-migrate fails on a duplicate version."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Branching on the `HOST_PROVIDER` env (`homelab ? 1000 : 200`) to carry D.",
+          "why": "It puts a per-deployment value in source against root config governance and turns an OTel resource attribute into behaviour; same reasoning as the locked R-13. Both sides agreed."
+        },
+        {
+          "text": "A readiness cycle as the launch check for the breach counter.",
+          "why": "Readiness uses the fixed 400-day window, so it never runs the 3000-day scan D changes, and an absent lazily-bound series cannot be told from a flat one."
+        },
+        {
+          "text": "A 'raise `max_locks_per_transaction` to 512' fallback in the homelab gate.",
+          "why": "1024 is already the value asserted by homelab-edge; a lower live value means the host is not in the expected state, so recompute and escalate."
+        },
+        {
+          "text": "A runbook procedure for a later homelab production deployment.",
+          "why": "The operator stated there are no production instances and staging is enough (YAGNI, C-18)."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "The spec must resolve the config seed migration number at execute time and renumber if a peer feature took 050; the product-spec amendment names the migration by slug.",
+          "blocking": false
+        },
+        {
+          "text": "The runbook must state launch step 1's preconditions: migration applied (`list_config_keys ui`), `create_key` false, admin session, and a page reload before the smoke test. Adopted in the synthesis; the proposer has not confirmed.",
+          "blocking": false
+        },
+        {
+          "text": "homelab-edge `verify` asserts only `max_locks_per_transaction`; the runbook keeps one `psql` read for `max_connections` and `max_prepared_transactions` and must cite the homelab-edge playbook path it depends on.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-24",
+          "how": "The proposer confirmed `maxValue: 1000` and one exported `MAX_HISTORY_BARS = 1000`."
+        },
+        {
+          "id": "O-25",
+          "how": "The runbook carries the precondition and three ordered launch steps with escalation on a failed gate; step 3 is corrected to observe the symbol-page path with a positive control."
+        },
+        {
+          "id": "O-26",
+          "how": "The operator supplied the values from the homelab-edge repo; homelab-edge `verify` covers mlpt and `psql` is one read-only check, stated at the gate. The MCP is used for the config calls."
+        },
+        {
+          "id": "O-27",
+          "how": "Reduced to one runbook line that only the homelab `staging` row is set; the production prose is dropped per the operator ('There are no production instances. Staging is enough.')."
+        },
+        {
+          "id": "O-28",
+          "how": "The proposer confirmed the short timeout, `staleTime: Infinity`, fallback to 200 on timeout or error, and the clamped D passed as `requestedBars`."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": [
+        "D-5",
+        "D-15",
+        "R-9"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
