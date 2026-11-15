@@ -23,119 +23,222 @@ narrowed to what they need.
 ## Functional Requirements
 
 FR-1. **Web login via Authelia.** `xstockstrat-ui` logs users in with the OIDC authorization-code flow (confidential
-client, PKCE S256, `state` + `nonce` checked) against Authelia. After the callback it resolves the user through
-identity (FR-3) and issues the **existing** session JWT carrying `user_id` and `roles`, so middleware, header
-propagation (`x-user-id`, `x-access-scope`, `x-trace-id`) and every backend check are unchanged.
+client, PKCE S256). The callback rejects a mismatched `state` or `nonce`, or an ID token that fails
+signature/`iss`/`aud`/`exp` checks, and creates no session. On success it calls `ResolveExternalIdentity` (FR-3) with
+the ID token's `iss`, `sub` and `email`, and then receives the **existing** session token pair (identity-minted
+access JWT + identity-backed refresh token, signed with env `JWT_SECRET` per IDENTITY-1) for the resolved user. The
+session-cookie, middleware, header-propagation (`x-user-id`, `x-access-scope`, `x-trace-id`) and refresh paths are
+unchanged. The login page keeps a "Remember me" checkbox next to "Sign in with SSO". Its value travels in the OIDC
+`state`, and the callback passes it to `setSessionCookies` exactly as the password path does today (UI-8).
 
-FR-2. **MCP as a resource server.** `xstockstrat-agent` accepts Authelia-issued JWT access tokens on its MCP endpoint,
-validated against Authelia's JWKS (signature, `iss`, `exp`, and `aud` equal to the agent's own resource URI per
-RFC 8707). It publishes RFC 9728 protected-resource metadata naming Authelia as the authorization server. It issues no
-tokens and keeps no per-request state (`instance_count > 1` stays safe). Clients are pre-registered in Authelia; no
-dynamic client registration.
+FR-2. **MCP as a resource server.** `xstockstrat-agent` accepts **only** Authelia-issued JWT access tokens on its MCP
+endpoint. A token passes only if all of these hold, against Authelia's cached JWKS:
+- a valid signature;
+- `iss` equals the configured issuer;
+- `exp` is in the future;
+- `aud` equals `AGENT_PUBLIC_URL` (RFC 8707; the single source of the expected audience, IDENTITY-4/AGENT-8).
 
-FR-3. **Account resolution per environment.** A new identity RPC `ResolveExternalIdentity(issuer, subject, email)`
-returns `{user_id, roles, is_active}` using, in order:
-  1. an existing `(issuer, subject)` link → that user;
-  2. else exactly one **active, unlinked** row whose email matches case-insensitively → link it and append a ledger
-     audit event;
-  3. else no row with that email → create a user with roles written explicitly as `{trader}` and link it;
-  4. else (several case-insensitive matches, or the only match is linked to another subject, or the linked user is
-     inactive) → refuse.
-  Each environment resolves against its own `identity.users`; prod and staging never share links.
+Any failure returns HTTP 401 with a `WWW-Authenticate` header pointing at the agent's RFC 9728 protected-resource
+metadata. That metadata names Authelia as the authorization server. The agent stops accepting identity-minted OAuth
+tokens. It issues no tokens and keeps no per-request state (`instance_count > 1` stays safe). Clients are
+pre-registered in Authelia; there is no dynamic client registration. Authelia is configured to include the `email`
+claim in access tokens (spike item), and the agent never logs a token or its `email` claim.
 
-FR-4. **Email sync.** On every successful resolution, if the token's `email` differs from `identity.users.email`, it is
-copied in; if another row already holds that email, the old value is kept and the clash is logged. Authelia is the only
+FR-3. **Account resolution per environment.** A new identity RPC
+`ResolveExternalIdentity(issuer, subject, email)` returns `{user_id, roles, is_active, outcome}`. Email comparison is
+case-insensitive throughout (lowercased before comparing), and a created user's email is stored lowercased. It
+resolves in this order:
+  1. An existing `(issuer, subject)` link to an **active** user returns that user (`outcome = LINKED_EXISTING`).
+  2. Else, exactly one **active, unlinked** row matching the email is linked (`LINKED_BY_EMAIL`).
+  3. Else, if no row of any state matches the email, a user is created with roles written explicitly as `{trader}`
+     and linked (`CREATED`).
+  4. Anything else is refused with gRPC `FAILED_PRECONDITION` (raw code 9, IDENTITY-3) and one of these details:
+     - `email required`: the subject is unlinked and the token's `email` is absent or empty (nothing is created);
+     - `account inactive`: the linked user is inactive, or the only match is an inactive unlinked row;
+     - `account already linked`: the only match is linked to another subject;
+     - `ambiguous email`: several rows match.
+
+  Link and create are a single atomic write keyed on `(issuer, subject)` (IDENTITY-13). Concurrent first logins for one
+  subject therefore yield exactly one link and at most one created user. A unique-constraint race maps through
+  `mapDbError` and is retried as step 1 (IDENTITY-11). A best-effort, post-commit, allow-listed ledger audit records each
+  link and create through `auditSafe` (IDENTITY-7). Its payload is `user_id`, `issuer` and `outcome` only, with no email
+  and no token. A ledger outage never fails the login. Each environment resolves against its own `identity.users`;
+  prod and staging never share links.
+
+FR-4. **Authorisation of `ResolveExternalIdentity`.** The RPC is authorised **only** by the exact mTLS peer SAN
+`xstockstrat-ui` or `xstockstrat-agent`, checked before any DB access. It ignores every caller-supplied header
+(`x-user-id`, `x-access-scope`, `x-internal-caller`). This follows the `ListAdminUserIds` precedent (IDENTITY-12,
+`src/grpc/adminDirectory.ts`). Any other peer gets `PERMISSION_DENIED`.
+`IssueSessionForUser` (see Proto Contract Changes) is authorised the same way, but only for peer SAN
+`xstockstrat-ui`; it refuses an inactive user with `FAILED_PRECONDITION` `account inactive`.
+
+FR-5. **Email sync.** On every successful resolution, if the token's lowercased `email` differs from
+`identity.users.email`, it is copied in. If another row already holds that email (case-insensitive), the old value is
+kept and a `warn` log records `email_sync_conflict` with `user_id` and `issuer` (no email values). Authelia is the only
 source of emails; xstockstrat offers no change-email path to end users.
 
-FR-5. **Roles stay in xstockstrat.** Roles remain `identity.users.roles` per environment, managed only through
+FR-6. **Roles stay in xstockstrat.** Roles remain `identity.users.roles` per environment, managed only through
 `SetUserRoles` / `manage_user` / `manage-users.py update-roles`. The role → `x-access-scope` bitmask mapping
 (`services/xstockstrat-ui/src/lib/auth.ts` `rolesToAccessScope`, `services/xstockstrat-agent/app/scopes.py`
-`roles_to_access_scope`) is unchanged.
+`roles_to_access_scope`) is unchanged (PLAT-5).
 
-FR-6. **MCP scope narrowing.** The agent computes
-`effective_scope = roles_to_access_scope(roles) & scopes_to_mask(token.scope)` with OAuth scopes
-`xstockstrat.read` → READ 0x01, `xstockstrat.write` → WRITE 0x02, `xstockstrat.admin` → ADMIN 0x04,
-`xstockstrat.trade` → TRADING 0x08. A token can only narrow the user's roles, never widen them. A token with none of
-these scopes has effective scope 0.
+FR-7. **MCP identity and scope narrowing.** For every MCP request the agent stamps the **resolved `user_id`**, never the
+Authelia `sub`, and the **effective scope** onto the request claims that `_caller_user_id` / `_caller_access_scope`
+read (AGENT-3/3b/4, PLAT-4). The effective scope is
+`roles_to_access_scope(roles) & scopes_to_mask(token.scope)`, with these OAuth scopes:
+- `xstockstrat.read` → READ 0x01
+- `xstockstrat.write` → WRITE 0x02
+- `xstockstrat.admin` → ADMIN 0x04
+- `xstockstrat.trade` → TRADING 0x08
 
-FR-7. **Role cache.** The agent caches `ResolveExternalIdentity` results for at most 60 s per subject. When identity is
-unreachable and the cached entry has expired, the request fails closed (no tool runs). A deactivated user or a changed
-role takes effect within that TTL.
+A token can only narrow the user's roles, never widen them. A token with none of these scopes has effective scope 0.
 
-FR-8. **Password login as rollback only.** Password login (`AuthenticateUser` and the UI's password form) stays in the
-code behind a boolean config key and is off once SSO is live. With the key off, a password attempt is rejected and the
-UI shows only the Authelia login. With it on, password login works as today.
+FR-8. **Role cache.** The agent caches `ResolveExternalIdentity` results for at most 60 s per `(issuer, subject)`. When
+identity is unreachable and the entry has expired, the request returns HTTP 503 (today's
+`_send_identity_unavailable` contract, `app/main.py`) and no backend RPC is sent.
+This failure is an explicit refusal, not a truthy sentinel (the `IDENTITY_UNAVAILABLE` pattern in `app/auth.py` is
+not reused). A deactivated user or a changed role takes effect on MCP within that TTL. An MCP request whose
+resolution is refused (any FR-3 step-4 refusal) returns HTTP 403 and sends no backend RPC.
 
-FR-9. **Admin email tooling.** `scripts/manage-users.py` gains an `update-email <old-email> <new-email>` command
-(tested Python, `docs/patterns/script-tooling.md`) so admins can align an existing row's email with the person's
-Authelia email before their first SSO login (cutover option B, homelab-edge `docs/runbooks/sso.md` § 6). It refuses
-when the new email already belongs to another row (case-insensitive).
+FR-9. **Password login as rollback only.** Password login (`AuthenticateUser` and the UI's password form) stays in the
+code behind `identity` / `auth.password_login_enabled`, off once SSO is live:
+- With it `false`, or the key missing (fail closed), `AuthenticateUser` returns `PERMISSION_DENIED` "password login
+  disabled", and the login page shows only "Sign in with SSO".
+- With it `true`, password login works as today and both options are shown.
 
-FR-10. **Operator documentation.** `docs/runbooks/mcp-tools.md` (connector setup with a pre-registered client and the
-read-only vs full connector), the identity, ui and agent `CLAUDE.md` files, and `docs/patterns/frontend-auth.md`
-describe the new flows in the same PR as the behaviour change.
+This flag does not affect MCP. MCP rollback means redeploying the last release before this feature.
+
+FR-10. **Session lifetime.** A web session ends when its refresh token expires (`identity` / `jwt.refresh_ttl_seconds`)
+or at the first refresh after the user is deactivated (`SetUserActive false`; `rotateRefreshToken` already refuses
+inactive users). The access JWT stays usable until it expires (`jwt.access_ttl_seconds`). Removing a person from the
+Authelia group blocks new logins only. Cutting an existing session needs `SetUserActive false`, as homelab-edge
+`docs/runbooks/sso.md` § 4 instructs.
+
+FR-11. **Authorized apps page.** `/accounts/authorized-apps` no longer lists or revokes xstockstrat OAuth grants. It
+explains that connected apps are managed in Authelia and links to the Authelia URL derived from `ui` /
+`oidc.issuer`.
+
+FR-12. **Admin email tooling.** `scripts/manage-users.py` gains `update-email <old-email> <new-email>` (tested Python,
+`docs/patterns/script-tooling.md`, inside feature 324's CI/ruff scope). It lets admins align an existing row's email
+with the person's Authelia email before their first SSO login (cutover option B, homelab-edge
+`docs/runbooks/sso.md` § 6). It stores the new email lowercased, keeps `user_id`, and exits non-zero with
+"email already in use" when another row holds the email case-insensitively.
+
+FR-13. **Documentation.** The same PR as each behaviour change updates:
+- `docs/runbooks/mcp-tools.md`: connector setup with the pre-registered client IDs `xstockstrat-mcp-claude` (full) and
+  `xstockstrat-mcp-claude-ro` (read-only), and `xstockstrat-staging-mcp-claude` / `xstockstrat-staging-mcp-claude-ro`
+  for staging, with redirect URI `https://claude.ai/api/mcp/auth_callback`;
+- the identity, ui and agent `CLAUDE.md` files (config keys, auth flow);
+- `docs/patterns/frontend-auth.md`;
+- IDENTITY-15 in `services/xstockstrat-identity/docs/context-constitution.md` and `docs/patterns/database.md`: the
+  seed email may be renamed by cutover, so new migrations resolve the seed owner by `SEED_USER_ID`, never by
+  `admin@localhost`.
 
 ## Out of Scope
 
-- Authelia itself: its deployment, Caddy routes, `auth.<domain>`, users, groups and client registration live in
-  `davcs86/homelab-edge` (separate PR).
+- Authelia itself: deployment, Caddy routes, `auth.<domain>`, users, groups, client registration (including the client
+  IDs named in FR-13 and the access-token `email` claim) live in `davcs86/homelab-edge` (separate PR).
 - commsgun and webhooks-mcp SSO (their own repositories).
-- Removing the old OAuth server, `RegisterOAuthClient`/`IssueAuthCode`/`ExchangeAuthCode`/`RefreshOAuthToken`, the
-  `oauth_clients` / `oauth_auth_codes` tables, or `AuthenticateUser`. Removing an RPC is a breaking proto change and
-  waits for a follow-up feature after the rollback window.
-- Changing `SEED_USER_ID` (only future, not-yet-applied migrations would see a new value; applied migrations are
-  never edited).
+- Removing the old OAuth server, `RegisterOAuthClient`/`IssueAuthCode`/`ExchangeAuthCode`/`RefreshOAuthToken`/
+  `ListAuthorizedApps`/`RevokeAuthorizedApp`, the `oauth_clients`/`oauth_auth_codes` tables, the `agent.oauth.*` keys, or
+  `AuthenticateUser`. Removing an RPC is a breaking proto change; that waits for a follow-up feature after the
+  rollback window. Until then the old agent OAuth routes stay as they are, and their fail-closed behaviour is owned by
+  feature 319.
+- Changing `SEED_USER_ID`, or editing analysis `029` / identity `002` (applied migrations, F-01).
 - Self-service email or username changes for users.
+- Authorisation gaps on WRITE paths to shared resources (see Risks).
 - Gatus/Proxmox SSO (homelab-edge, a later phase).
 
 ## Affected Services
 
-- `xstockstrat-identity` — `ResolveExternalIdentity` RPC, `external_identities` table, email sync, password-login gate.
-- `xstockstrat-ui` — OIDC client login and callback, session JWT from resolved identity, login page without the
-  password form when the flag is off, the `/accounts/authorized-apps` page (see Open Questions).
-- `xstockstrat-agent` — resource-server validation, protected-resource metadata, scope narrowing, role cache.
-- `xstockstrat-config` — seed migration for the new keys.
-- `packages/proto` — additive `identity.proto` change.
+- `xstockstrat-identity`: `ResolveExternalIdentity` (SAN-gated), `external_identities`, email sync, the password-login
+  gate.
+- `xstockstrat-ui`: OIDC login, callback and "Remember me"; the login page per the flag; the `/accounts/authorized-apps`
+  page.
+- `xstockstrat-agent`: JWKS validation, protected-resource metadata, resolved-identity stamping, scope narrowing, the
+  role cache.
+- `xstockstrat-config`: seed migration `050`, and a `SECRET_CALLER_ALLOWLIST` grant (`src/grpc/authz.ts`, PLAT-9):
+  `{callerID: 'ui', namespace: 'ui', keys: ['oidc.client_secret'], peerSan: 'xstockstrat-ui'}`.
+- `packages/proto`: an additive `identity.proto` change.
 
 ## Consumer Surface(s)
 
-- [x] **UI** — `xstockstrat-ui`: the login entry for all three segments (`/trader`, `/insights`, `/config-ui`, and
-  `/auth/oauth-login`) redirects to Authelia and loses the password form when the flag is off; `/accounts/authorized-apps`
-  is affected because MCP grants move to Authelia (decision open).
-- [x] **Agent** — `xstockstrat-agent`: every MCP tool's authentication and effective scope (no tool name, parameter or
-  response change); connector setup changes (pre-registered client, read-only and full connectors).
-- [x] **Script** — `scripts/manage-users.py update-email`.
+- [x] **UI** (`xstockstrat-ui`):
+  - The login entry for all segments (`/trader`, `/insights`, `/config-ui`; pages `src/app/auth/login`,
+    `src/app/auth/oauth-login`) gets a "Sign in with SSO" button and a "Remember me" checkbox. The password form is
+    shown only when the flag is on.
+  - `/accounts/authorized-apps` becomes a pointer to Authelia (FR-11).
+- [x] **Agent** (`xstockstrat-agent`): every MCP tool's authentication and effective scope changes; no tool name,
+  parameter or response changes. Connector setup moves to pre-registered read-only and full clients.
+- [x] **Script**: `scripts/manage-users.py update-email`.
 
 ## Proto Contract Changes
 
-Additive only (non-breaking):
-- `rpc ResolveExternalIdentity(ResolveExternalIdentityRequest) returns (ResolveExternalIdentityResponse)` with request
-  `issuer`, `subject`, `email`, and response `user_id`, `repeated Role roles`, `is_active`, and an outcome enum
-  (`..._UNSPECIFIED = 0`, linked-existing, linked-by-email, created) for audit and metrics.
-- Whether the UI needs a separate RPC to mint its session tokens for a resolved user (today `AuthenticateUser` returns
-  them) is decided in `/sdd-design`.
+Additive only (non-breaking), in `packages/proto/identity/v1/identity.proto`:
+- `rpc ResolveExternalIdentity(ResolveExternalIdentityRequest) returns (ResolveExternalIdentityResponse)`.
+- `ResolveExternalIdentityRequest { string issuer; string subject; string email; }`.
+- `ResolveExternalIdentityResponse { string user_id; repeated Role roles; bool is_active; ExternalIdentityOutcome outcome; }`.
+- `enum ExternalIdentityOutcome { EXTERNAL_IDENTITY_OUTCOME_UNSPECIFIED = 0; ..._LINKED_EXISTING = 1; ..._LINKED_BY_EMAIL = 2; ..._CREATED = 3; }`.
+- Refusals are gRPC statuses, not outcome values: `FAILED_PRECONDITION` with the FR-3 details, `PERMISSION_DENIED`
+  for a peer not in the FR-4 SAN list.
+- Session tokens for the UI come from a new `rpc IssueSessionForUser(IssueSessionForUserRequest{ string user_id; })
+  returns (AuthTokenResponse)`. It is SAN-gated to `xstockstrat-ui` only and refuses an inactive user. It reuses the
+  `AuthenticateUser` mint path (env `JWT_SECRET`, `identity.refresh_tokens`).
+- Field numbers come from the next free numbers in the file and are confirmed at `/sdd-design` (`buf breaking` against
+  `main-dev`).
 
 ## Config Key Changes
 
-Proposed; exact names, defaults and readers confirmed in `/sdd-design` recon (C-05):
+One seed migration: `services/xstockstrat-config/migrations/050_authelia_sso_keys` (up + down; last applied is `049`,
+C-07). It seeds every key below for both `production` and `staging`. Operators then set the real values per
+environment, because prod and staging are separate Authelia apps.
 
-- `identity.auth.password_login_enabled` — bool. Read by identity `AuthenticateUser` and the UI login route. Seeded
-  `true` until cutover, then set `false` per environment. The code default (key missing) is an open question.
-- `ui.oidc.issuer` — string, Authelia issuer URL. Read by the UI OIDC client.
-- `ui.oidc.client_id` — string. Read by the UI OIDC client.
-- `ui.oidc.client_secret` — encrypted `is_secret` row resolved via `GetSecret`. Read by the UI OIDC client.
-- `agent.oidc.issuer` — string. Read by the agent's JWKS validator and protected-resource metadata.
-- `agent.oidc.resource` — string, the agent's canonical resource URI (expected `aud`).
+- `identity.auth.password_login_enabled`
+  - namespace `identity`, stored key `auth.password_login_enabled`, `bool`;
+  - code default `false` (fail closed); seeded `true` until cutover;
+  - readers:
+    - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:authenticateUser`, through the WatchConfig
+      watcher, live;
+    - `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadPasswordLoginEnabled` (new), called by
+      `src/app/auth/login/page.tsx`, one-shot `GetConfig(namespace: 'identity')` per render, live on the next page
+      load.
+- `ui.oidc.issuer`
+  - namespace `ui`, stored key `oidc.issuer`, `string`, code default `""`;
+  - empty means the SSO button reports "SSO not configured" and no redirect happens;
+  - reader `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcConfig` (new), called by
+    `src/app/api/auth/sso/start/route.ts:GET` and `src/app/api/auth/sso/callback/route.ts:GET` (new). One-shot
+    `GetConfig(namespace: 'ui')` per request, live on the next request.
+- `ui.oidc.client_id`
+  - namespace `ui`, stored key `oidc.client_id`, `string`, code default `""` (empty is handled as above);
+  - same reader and mechanism as `ui.oidc.issuer`: `src/lib/oidcConfig.ts:loadOidcConfig`, one-shot per request,
+    live on the next request.
+- `ui.oidc.client_secret`
+  - namespace `ui`, stored key `oidc.client_secret`, `string`, encrypted `is_secret` row, seeded empty;
+  - code default `""`: empty means the callback fails with "SSO not configured" (fail closed);
+  - sole reader `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcClientSecret` (new), called only by
+    `src/app/api/auth/sso/callback/route.ts:GET`, through `GetSecret` on each callback via the allow-list grant above.
+    A rotated value applies on the next callback. It is redacted at every other edge.
+- `agent.oidc.issuer`
+  - namespace `agent`, stored key `oidc.issuer`, `string`, code default `""`;
+  - empty means every MCP request returns 401 (fail closed);
+  - readers (all new code):
+    - `services/xstockstrat-agent/app/auth.py:validate_authelia_token`;
+    - the protected-resource metadata builder in `services/xstockstrat-agent/app/main.py`.
 
-Each key differs per environment (`production`/`staging`), because prod and staging are separate Authelia apps.
+    Both read through `read_config_value('agent', 'oidc.issuer')` (AGENT-9; `agent` is in `WATCHED_NAMESPACES`),
+    live through the snapshot.
+
+The expected MCP audience is `AGENT_PUBLIC_URL`. No new key duplicates it (AGENT-6/AGENT-8).
 
 ## Database Changes
 
-identity migration `007_external_identities` (up + down):
-- `identity.external_identities (issuer TEXT, subject TEXT, user_id UUID NOT NULL REFERENCES identity.users(user_id)
-  ON DELETE CASCADE, linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (issuer, subject),
-  UNIQUE (issuer, user_id))`.
-- Config migration seeding the keys above.
+- identity migration `007_external_identities` (up + down):
+  - `identity.external_identities (issuer TEXT NOT NULL, subject TEXT NOT NULL, user_id UUID NOT NULL REFERENCES
+    identity.users(user_id) ON DELETE CASCADE, linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (issuer,
+    subject), UNIQUE (issuer, user_id))`;
+  - an index on `lower(identity.users.email)` for the case-insensitive match.
+- config migration `050_authelia_sso_keys` (above).
+- No applied migration is edited (F-01).
 
 ## Feature Workflow Notes
 
@@ -144,12 +247,20 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (non-breaking proto or config change)
 - [ ] 2 service owners + platform lead (breaking proto change)
 - [x] DBA review + service owner (schema migration)
-- [x] Config team + owner (new config keys)
+- [x] Config team + owner (new config keys, `GetSecret` allow-list grant)
 
-**First gate — Authelia spike (v4.39.28, pinned by digest in homelab-edge).** Before `/sdd-spec`, prove on the pinned
-release: (a) Claude.ai and Claude Code complete MCP auth with a pre-registered public client sending RFC 8707
-`resource`; (b) JWT access tokens carry `aud` = resource and the granted `scope`; (c) custom scopes
-`xstockstrat.*` are accepted; (d) whether group membership is re-checked on refresh; (e) `sub` is stable per username.
+Soft merge order (rebase only): `319-fix-auth-trust-hardening` (same `identityServiceImpl.ts`; owns the old
+`oauth_server.py` fail-closed behaviour) and `324-fix-ci-enforcement-gaps` (CI gate over `manage-users.py`) before
+this feature.
+
+**First gate: the Authelia spike (v4.39.28, pinned by digest in homelab-edge).** Before `/sdd-spec`, prove on the
+pinned release:
+- (a) Claude.ai and Claude Code complete MCP auth with a pre-registered public client sending RFC 8707 `resource`;
+- (b) JWT access tokens carry `aud` = resource, the granted `scope`, and the `email` claim;
+- (c) custom scopes `xstockstrat.*` are accepted;
+- (d) whether group membership is re-checked on refresh;
+- (e) `sub` is stable per username.
+
 If (a) or (b) fails, the design falls back to option F: keep the agent's OAuth server and delegate only its login to
 Authelia.
 
@@ -158,22 +269,22 @@ Authelia.
 See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance truth (Constitution
 **C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there.
 
+## Risks (accepted or owned elsewhere)
+
+- **Trader WRITE on shared resources, accepted by the owner (2026-11-15).** New users start as `trader`. marketdata
+  `BackfillBars` (`services/xstockstrat-marketdata/internal/handler/marketdata_handler.go:119-124`) has no admin check,
+  so a trader can spend the shared vendor quota and fill the shared bars tables. The owner accepted this for
+  family-only users and chose not to make a fix a prerequisite.
+- **Analysis 029 re-run after cutover, accepted (IDENTITY-15).** The 029 migration has already run in both
+  environments. Renaming `admin@localhost` (FR-12) makes a later re-run of 029 on that database (dirty-recovery,
+  `scripts/migration-rerun.py`) seed nothing. CI's harness (`scripts/migration-assertions/analysis-029.sql`) uses a
+  fresh database and is unaffected. Handled by documentation (FR-13): new migrations resolve the owner by
+  `SEED_USER_ID`.
+- **Statelessness (insights.md, 072, FR-B13).** The role cache is per instance. It stays correct with
+  `instance_count > 1` only because it is bounded by its TTL and fails closed.
+- **Dependency on the edge.** Authelia down blocks new web logins and token refreshes; issued tokens and sessions keep
+  working until they expire.
+
 ## Open Questions
 
-- [ ] UI session issuance: does `ResolveExternalIdentity` also mint the session tokens, or does a separate RPC do it?
-  Which component holds the OIDC client secret (UI only)?
-- [ ] `/accounts/authorized-apps` (`ListAuthorizedApps`/`RevokeAuthorizedApp`): hide it, link to Authelia's consent
-  management, or keep it for the old OAuth grants during the rollback window?
-- [ ] MCP rollback: does the password-login flag also re-enable the old agent OAuth server, or is MCP rollback just the
-  option F fallback?
-- [ ] Code default of `identity.auth.password_login_enabled` when the key is missing: fail closed (`false`) or keep
-  today's behaviour (`true`)? Ledger: never change a key's `value_type` in place (fails.md, maintenance_mode entry).
-- [ ] Known risk: a `trader` (the starting role) holds WRITE. Recon must verify that every WRITE path touching
-  platform-wide resources requires ADMIN. Lead: marketdata `BackfillBars`
-  (`services/xstockstrat-marketdata/internal/handler/marketdata_handler.go:120`) has no visible admin check, while the
-  agent's `trigger_backfill` is documented as admin-scoped. Ledger: pick the authz model from the verified caller set
-  (insights.md, 092-fix-mcp-writepath-authz).
-- [ ] Known trap: the agent's OAuth path must stay stateless (insights.md, 072, FR-B13). The role cache is per-instance
-  and correct only because it is bounded by TTL and fails closed.
-- [ ] Session lifetime: with Authelia as issuer, what bounds a UI session after a user leaves the Authelia group or is
-  deactivated (session JWT TTL vs. a re-check on refresh)?
+- None. All product decisions are recorded in `context.md` (Sessions 2026-11-15).
