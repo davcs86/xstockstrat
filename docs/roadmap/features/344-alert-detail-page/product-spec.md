@@ -40,13 +40,13 @@ Exact service names from CLAUDE.md Service Registry:
 
 _Constitution **C-14**._
 
-- [x] **UI** — `xstockstrat-ui`: new page under `/accounts/notifications/<alert_id>` (child of the existing Notifications route, reached from list rows, drawer rows and push); links added to the Notifications list and the header Alerts drawer. No new shared-nav entry (C-10): the existing `Notifications` entry (`/accounts/notifications`) stays the highlighted one while an alert page is open
+- [x] **UI** — `xstockstrat-ui`: new page under `/accounts/notifications/<alert_id>` (child of the existing Notifications route, reached from list rows, drawer rows and push); links added to the Notifications list and the header Alerts drawer. The header bell's unread badge drops when an unread alert's page is opened (FR-5). No new shared-nav entry (C-10): the existing `Notifications` entry (`/accounts/notifications`) must be the highlighted one while an alert page is open — today that entry matches its path exactly (`PlatformHeader.tsx`, `navGroups.tsx`), so design changes it to also match child paths
 - [ ] **Agent**
 - [ ] **None**
 
 ## Proto Contract Changes
 
-- New RPC `notify.v1.NotifyService/GetAlert` (request: `alert_id`; response: `Alert`) — additive, non-breaking
+- New RPC `notify.v1.NotifyService/GetAlert` (request: `alert_id`; response: `Alert`) — additive, non-breaking (`buf breaking` passes; 1-owner gate below)
 - No change to `message Alert` expected (it already carries `source_service`, `context`, `correlation_id`, `read`, `read_at`); confirm in design
 
 ## Config Key Changes
@@ -74,7 +74,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 - [x] FR-5 (auto mark-read on open) — confirmed by the operator 2026-11-15.
 - [x] FR-6 push payload — deferred to design: FR-6 and `@AC-7` are binding as written; design checks what the push payload carries today (alert ID / URL) in the service worker and notify's push fan-out and picks how the alert ID reaches the notification.
-- [x] Page location — decided 2026-11-15: a dedicated page per alert (operator decision; not an expandable row) at `/accounts/notifications/<alert_id>`, a child of the existing Notifications route. It gets no nav entry of its own; the parent `Notifications` entry stays highlighted (see Consumer Surface(s)).
-- [x] FR-7 error fields — decided by the operator 2026-11-15: the body is plain language (gRPC status code + details message, as in `@AC-8`); the raw exception text stays only in the alert context. What the job row / ledger event store is not changed by this feature — deferred to design to confirm that no other reader depends on the old body.
+- [x] Page location — decided 2026-11-15: a dedicated page per alert (operator decision; not an expandable row) at `/accounts/notifications/<alert_id>`, a child of the existing Notifications route. It gets no nav entry of its own; the parent `Notifications` entry must stay highlighted, which needs a nav match change (see Consumer Surface(s)).
+- [x] FR-7 error fields — decided by the operator 2026-11-15: the body is plain language (gRPC status code + details message, as in `@AC-8`); the raw exception text stays only in the alert context. The backfill job row and the ledger event are not changed by this feature. Design must confirm that no other reader depends on the old alert body.
 - [x] Dependency — decided by the operator 2026-11-15: 339-fix-symbol-page-alerts-ui changes the same drawer (`AlertStream.tsx`) and is treated as landing first; this feature's drawer links (FR-4) build on 339's drawer. The `merge-order.md` row is recorded by the review router, not by this spec.
-- Known trap (ledger, `strategy-creation-flow`): BFF dispatch can collapse backend errors to a generic "HTTP 400" — verify NOT_FOUND from `GetAlert` reaches the page as "Alert not found".
+- Known trap (ledger, `strategy-creation-flow`): BFF dispatch can collapse backend errors to a generic "HTTP 400" — verify NOT_FOUND from `GetAlert` reaches the page as "Alert not found" (`@AC-2`).
