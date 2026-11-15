@@ -112,3 +112,18 @@
 - Overlap findings (WARN, soft rebase order, recorded in the product spec): 319, 324, 331, 323. No FAIL-level collision;
   config `050` and identity `007` are unclaimed.
 - Recommended design depth: full (4 services, additive proto, two migrations, a two-mode security-critical auth path).
+
+## Session 2026-11-15 — sdd-design (in progress)
+
+- Mode: full debate. The owner authorized more than 5 rounds if necessary (recorded as their override of the cap).
+- Phase 0 Recon: wrote recon.md. Tree `ccr-cb8f5383-len5a9@bf7f6a96` ⊇ origin/main-dev@9f885622. Five scouts: identity,
+  agent, ui, config/proto/scripts/deploy, scenario-recon.
+- Main recon risks:
+  - R-1: agent scope is re-derived from roles at two sites.
+  - R-2: no direct JWT library in the agent.
+  - R-4: `password_hash` is NOT NULL.
+  - R-5: email is case-sensitive everywhere.
+  - R-8: the UI has no public base URL or server config helper, and the middleware matcher does not exclude the SSO
+    routes.
+  - R-13: the metadata builder is in `oauth_metadata.py`, not `main.py`.
+  - R-14: a local mTLS fault returns 401, while an outage returns 503.
