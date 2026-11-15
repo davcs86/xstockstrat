@@ -215,7 +215,7 @@ git grep -lE "first_value_bars|firstValueBars|FirstValueBars" -- packages/proto/
 
 ### Step 3 — service: analysis declares each component's first-value bars
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/warmup.py` — modify
@@ -260,7 +260,7 @@ grep -n "warmups=" app/handlers/servicer.py     # the parameter, its write, and 
 
 ### Step 4 — test: first-value bars per family and on the RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_warmup.py` — modify
@@ -874,3 +874,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: run the Step 1 and Step 2 `**Verification**` blocks on the host, with `buf breaking --against '<repo-root>/.git#branch=feature/fix-indicator-pane-warmup,subdir=packages/proto'`.
 - **Actual**: `buf` is not installed on the host, so both blocks ran unchanged inside the pinned `Dockerfile.codegen` image (`xstockstrat-codegen`). The repo was mounted read-only, the worktree read-write, and the main checkout's `packages/proto/gen/ts/node_modules` read-only, because the worktree has no `node_modules` there for the `tsc` compile. The `branch=` input became `ref=00c2f4a2d63b8024c92d3bb9a9c83a7682c80a8b`, the tip of `origin/feature/fix-indicator-pane-warmup`: the shared repo has no local `feature/fix-indicator-pane-warmup` branch, and buf failed with "couldn't find remote ref". The generator wrote exactly the eight expected stubs.
 - **Disposition**: CI-equivalent fallback (sequential-mode verification fallbacks, proto codegen).
+
+### Steps 3+4 — Verification block results read as specified (2026-11-15)
+- **Spec said**: Step 3's last line `grep -n "warmups=" app/handlers/servicer.py` shows "the parameter, its write, and the one GetIndicatorSeries call site". Step 4's last line `grep -n "conftest" tests/test_warmup.py` expects no match.
+- **Actual**: Step 3's grep printed 2 lines (`:1915` the parameter, `:4553` the call site). The write is `warmups[fid] = …` (Instruction 2), which the pattern `warmups=` cannot match, so the comment's count of three is off by one; the code follows Instruction 2. Step 4's block exited 1 because its last command is that no-match grep; every pytest and ruff command in it passed.
+- **Disposition**: no code change; both read as passing.

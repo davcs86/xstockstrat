@@ -210,6 +210,10 @@ still live.
 
 - Steps 1+2: `packages/proto/analysis/v1/analysis.proto` and its eight generated
   `packages/proto/gen/{go,python,ts,ts/dist}/analysis/v1/` stubs.
+- Steps 3+4: `services/xstockstrat-analysis/app/services/warmup.py`,
+  `services/xstockstrat-analysis/app/handlers/servicer.py`,
+  `services/xstockstrat-analysis/tests/test_warmup.py`,
+  `services/xstockstrat-analysis/tests/test_analysis_servicer.py`.
 
 Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
@@ -648,3 +652,21 @@ Carried into execution. `/sdd-execute` announces every `[ ] unaddressed` item at
 - Part of the Steps 1+2 unit. `./scripts/buf-gen.sh` (run in `Dockerfile.codegen`) changed exactly the eight expected `analysis/v1` stubs. A second run left the same eight-file diff, and `git grep` found `first_value_bars|firstValueBars|FirstValueBars` in 6 gen files (at least 3 required). TDD: N/A (proto-gen).
 - Files modified: `packages/proto/gen/go/analysis/v1/analysis.pb.go`, `packages/proto/gen/python/analysis/v1/analysis_pb2.py`, `packages/proto/gen/ts/analysis/v1/analysis.ts`, `packages/proto/gen/ts/analysis/v1/analysis_pb.ts`, `packages/proto/gen/ts/dist/analysis/v1/{analysis.d.ts,analysis.js,analysis_pb.d.ts,analysis_pb.js}`
 - Deviations: CI-equivalent container fallback (Deviation Log).
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, steps 3+4 (atomic unit)
+
+Tooling setup (steps 3+4): python 3.12 ✓ (service `.python-version`) · uv ✓ 0.11.32 · ruff ✓ 0.16.9 (uv) · pytest ✓ 9.0.3 (uv; `uv sync --extra dev` in the worktree's own `.venv`).
+
+### Step 3 — service: analysis declares each component's first-value bars [done]
+- Part of the Steps 3+4 unit. Added pure `warmup.first_value_bars(comp, formula_warmups, formula_fund_map)` below `builtin_lookback_bars` (SMA/BB/STOCH = period, RSI/ATR = period + 1, EMA/MACD = 1, VWAP/unknown = 0; 0 for `source_symbol`, fundamental and fundamentals-only formula components; declared `warmup_period` + 1 for other formulas). `_formula_fundamentals` gained keyword-only `warmups=None`, filled from the existing `GetFormula` call, and `GetIndicatorSeries` sets `first_value_bars` on the success `ComponentSeries` only (error stays 0). No compute change, no new outbound call. TDD: red → green with Step 4 (below).
+- Files modified: `services/xstockstrat-analysis/app/services/warmup.py`, `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: the Verification grep's "three lines" comment is off by one (the write is `warmups[fid] =`); see the Deviation Log.
+
+### Step 4 — test: first-value bars per family and on the RPC [done]
+- Part of the Steps 3+4 unit. New `TestFirstValueBars` (per-family table, zero cases, formula 30 → 31, and the drift pin `(first_value_bars - 1) + _CROSSOVER_LOOKBACK == builtin_lookback_bars` for SMA/BB/RSI/ATR at periods 2/14/50/200) and two `TestGetIndicatorSeries` tests.
+- AC-2/AC-4 red: with `first_value_bars` a signature returning 0, `assert by_ref == {"sma200": 200, "sma20": 20, "custom": 31}` failed (`{'sma200': 0} != {'sma200': 200}`); 26 failed / 6 passed in the targeted run → green: full suite `1724 passed, 12 skipped` (real_pg, no local Postgres), `Total coverage: 91.37%` (≥ 40); targeted `32 passed` and `2 passed`.
+- Files modified: `services/xstockstrat-analysis/tests/test_warmup.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
+- Deviations: the block exits 1 on its last line, the no-match `grep conftest` (expected); see the Deviation Log.
+- Pin formula: the test pins the spec's `(first_value_bars - 1) + _CROSSOVER_LOOKBACK`, not `design.md`'s `first_value_bars + _CROSSOVER_LOOKBACK` (Assumption 1). Sequential mode has no Step 4 gate prompt, so it goes to the operator in the checkpoint report.

@@ -113,6 +113,42 @@ def builtin_lookback_bars(indicator: str, params) -> int:
     return 0
 
 
+def first_value_bars(comp, formula_warmups=None, formula_fund_map=None) -> int:
+    """Bars a component needs before its first *value* (feature 341), not its first *usable*
+    one: :func:`builtin_lookback_bars` adds ``_CROSSOVER_LOOKBACK`` and the IIR convergence
+    multiple for backtests. The test pin ``(first_value_bars - 1) + _CROSSOVER_LOOKBACK ==
+    builtin_lookback_bars`` (SMA/BB/RSI/ATR) depends on ``_CROSSOVER_LOOKBACK``.
+
+    0 for a benchmark (``source_symbol``) or fundamental operand and for a fundamentals-only
+    formula (they are not computed on the request closes), and for an unknown indicator.
+    """
+    from gen.analysis.v1 import analysis_pb2  # noqa: PLC0415 — lazy, mirrors servicer style
+
+    if comp.source_symbol or comp.kind == analysis_pb2.COMPONENT_KIND_FUNDAMENTAL:
+        return 0
+    if _is_custom_formula(comp):
+        if (formula_fund_map or {}).get(comp.formula_id):
+            return 0
+        declared = int((formula_warmups or {}).get(comp.formula_id, 0) or 0)
+        return declared + 1 if declared else 0
+
+    name = (comp.indicator or "").upper()
+    params = comp.params or {}
+
+    if name in ("SMA", "BB"):
+        default = _DEFAULT_BB_PERIOD if name == "BB" else _DEFAULT_PERIOD
+        return _int_param(params, "period", default)
+    if name in ("RSI", "ATR"):
+        # .diff() puts a NaN at index 0, so the first value is at index period.
+        return _int_param(params, "period", _DEFAULT_PERIOD) + 1
+    if name == "STOCH":
+        # k = rolling(period) is the earliest series, first valid at index period-1.
+        return _int_param(params, "period", _DEFAULT_PERIOD)
+    if name in ("EMA", "MACD"):
+        return 1
+    return 0
+
+
 def required_prefix_bars(definition, formula_warmup_cache: dict | None = None) -> int:
     """Bars of pre-window history this definition needs before its first in-window bar.
 
