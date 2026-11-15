@@ -632,3 +632,318 @@ Resume state for the next `/sdd-batch` run (do not edit by hand; supersedes the 
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 4)
+
+- `/sdd-design backtest-inline-backfill` full debate halted at its approval gate after round 4 (gate policy: halt). `design.md` is not written and `status.md` is unchanged (`spec-ready`). Register: `debate.md` (D-14…D-21 settled, R-7…R-11 locked, O-20…O-25 closed, O-19 still open, O-26…O-31 open, no new petition).
+- Operator answers applied this round (2026-11-15): concurrency option **B**; the insights Backfills create form stays admin-only; the lock-breach counter belongs to feature 341; 200 bars on DigitalOcean and 1000 bars on the homelab; config values are read over the MCP; the lowest-friction handling on ALREADY_EXISTS.
+- `debate.md` still shows petition P-1 as `pending user`. The round-4 synthesis treats it as resolved ("user reopened", D-5 superseded by D-8), but the round gave no verdict row for it, so the cell was left unchanged.
+
+### Open Threads
+
+- **Approach (round 4 best)**: the round-3 design stands (tier T1 envelope, self-serve de-dup, widened symbol-card range, insights strategy button opened to non-admins). Round 4 adds:
+  - **Denial detail (D-18)**: the envelope predicate returns the first failed condition as a fixed token (`multi_symbol`, `data_kind`, `fill_mode`, `overwrite`, `range_unset`, `range_too_long`, `callback_url`, `no_user`). The PERMISSION_DENIED detail is `self-serve backfill denied: <token>`, with ` (max <N> days)` for `range_too_long`. The UI maps `range_too_long` to the span copy and every other token to one generic sentence; a raw token is never shown.
+  - **De-dup transaction (D-19)**: `pg_advisory_xact_lock`, `has_active_job` and `insert_job` run on one connection in one transaction. `insert_job` keeps its signature. The ledger emit and the job spawn happen after commit. The admin path is unchanged.
+  - **ALREADY_EXISTS (D-20)**: the card shows "A backfill for {symbol} is already queued or running. Try again when it finishes." and keeps "Backfill missing data" enabled. No link, no polling, no foreign job id (R-4).
+  - **Span cap (D-17)**: default and seed stay 730 (config seed migration `050`). Span = `prefix_calendar_days(max warmup bars)` + the 366-day card window: 666 days at 200 bars (fits 730 on DigitalOcean), 1825 at 1000 bars (the homelab is set to 1830 through `set_config`).
+  - **Concurrency (D-14, option B)**: `backfill.max_concurrent_jobs` keeps default and seed 3. Only the homelab is set to 8. DigitalOcean is unchanged.
+  - **Homelab runbook sequence (D-21)**: read the config inputs over the homelab MCP; read `max_locks_per_transaction`, `max_connections` and `max_prepared_transactions` by `SHOW` over the DB-owner DSN; compute the per-class lock sum; raise `max_locks_per_transaction` to 1024 and restart Postgres; `set_config` 8 and 1830 and read both back; watch feature 341's 53200 counter for one readiness cycle. The same steps go in the homelab provisioning checklist.
+  - **Scope (D-15, D-16)**: `insights/backfills/page.tsx` stays admin-only and unchanged. This feature adds no lock-breach counter; `merge-order.md` gets a row that makes it wait for `fix-indicator-pane-warmup` (341).
+- **Homelab values read over the MCP on 2026-11-15** (recorded by the round-4 synthesis): ingest `backfill.max_concurrent_jobs` 3, `backfill.max_concurrent_chunks` 3, `backfill.chunk_window_days` 90; analysis `readiness_materializer.max_concurrent_bars_fetches` 2, `opportunity.max_concurrent_bars_fetches` 2, `opportunity.max_concurrent_candidates` 4, `backtest.portfolio_max_concurrent` 9, `strategy.max_concurrent_entry_backfill` 4, `backtest.max_range_days` 730.
+- **Strongest open objection**: **O-19** (blocking, narrowed). The proposal's worked lock example is wrong: it uses S = 25 where backfill alone is 24, and applies L = 248 to every scanner class. The corrected per-class sum is about 6,584 (384 backfill writes + 4,216 full-span readers + 1,984 gap-planning scans), which exceeds a stock budget of 64 × 100 = 6,400. The proposer must adopt the per-class sum, make the raise to 1024 the default step before the raise to 8, and confirm whether backfill gap planning scans the full span (ingest `servicer.py:650-667`).
+  - Also blocking: **O-26** (C-11). The proposal said relayed item 5 ("Use the mcp to read the values") had nothing to act on. The config inputs and the write/read-back go over the homelab MCP; only the three Postgres `SHOW` parameters need the DB-owner DSN. The proposer must adopt this split in the runbook.
+  - Non-blocking: O-27 (the denial tokens are an untyped wire contract; define them once in ingest and pin the strings in a UI vitest), O-28 ("already queued or running" wording), O-29 (the homelab values go in the provisioning checklist with the reverted symptom), O-30 (no de-dup assertion across the admin and self-serve paths), O-31 (confirm that the 1000-bar homelab requirement is this feature's to act on, and that analysis `backtest.max_range_days` = 730 does not cap a 1000-bar warmup prefix).
+- **Floor status**: no Floor breach (`floor_breaches` is empty in both the synthesis and the round). The adversary's verdict is NEEDS WORK on O-19 and O-26.
+- **@AC changes not covered by an operator decision** (must be shown at the gate):
+  - `343@AC-9` — **CHANGE**: example strings rewritten to server-true copy, one example per PARTIAL branch.
+  - `343@AC-3`, `343@AC-6` — EXTEND.
+  - `244@AC-6` (`docs/sdd/business-rules/platform.feature`) — EXTEND: a row for the new key.
+  - `343@AC-1`, `343@AC-5`, `270@AC-4`, `198@AC-6`, `334@AC-1`, `334@AC-26` — PRESERVE.
+  - Covered by operator decisions: `343@AC-2` (**CHANGE**, the widening), `343@AC-7` and `198@AC-7` (EXTEND), `343@AC-4`, `343@AC-8`, `244@AC-5` (PRESERVE; now covered because option B leaves the default and clamp unchanged).
+  - Net-new scenarios due at /sdd-spec: ALREADY_EXISTS (with the "queued or running" wording) and the over-cap denial, plus the round-3 list.
+- **Carried risks**: the homelab's three Postgres parameters are still unread (no connected tool exposes them); raising `max_locks_per_transaction` needs a Postgres restart before concurrency can go to 8; a rebuilt homelab database reverts to 3 and 730 until the checklist is re-run; feature 341's counter is not on `main-dev` yet, so this feature's merge waits on it; config migration `050` and peer features 339, 341 and 344 may collide (re-check at /sdd-spec). The full list is in `open_risks` below.
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "Round 4 best approach: the round-3 design stands (tier T1 envelope, self-serve de-dup, widened symbol-card range, insights strategy button opened). The proposal's answers to O-20, O-21, O-22, O-23, O-24 and O-25 are adopted. Its homelab lock-budget step is corrected below: the config inputs are read over the homelab MCP (I read them this round), the sum is per scanner class, and raising `max_locks_per_transaction` comes first.\n\n**Ingest (`services/xstockstrat-ingest/app/handlers/servicer.py:417-476`)**\n- The gate at `:423` becomes admin OR `_is_self_serve_backfill(...)`, in the same position.\n- The predicate returns the first failed condition as a fixed token: `multi_symbol`, `data_kind`, `fill_mode`, `overwrite`, `range_unset`, `range_too_long`, `callback_url`, `no_user`.\n  - The tokens are defined once as an ingest module constant.\n  - A miss aborts PERMISSION_DENIED with `self-serve backfill denied: <token>`; `range_too_long` adds ` (max <N> days)`.\n- Self-serve path only:\n  - One `async with self._db.acquire() as conn, conn.transaction()` block holds `pg_advisory_xact_lock(hashtext('backfill:'||symbol))`, `has_active_job(conn, symbol)` and `insert_job(conn, ...)`.\n  - `has_active_job` reuses the `= ANY(symbols)` predicate (`app/repositories/backfill_jobs.py:111`) over QUEUED and RUNNING with `LIMIT 1`.\n  - `insert_job` keeps its signature; it only calls `.execute` (`backfill_jobs.py:29-58`).\n  - A hit aborts ALREADY_EXISTS after the block, with no foreign job id (R-4).\n  - `_emit_backfill_event` (`:464`) and the `_run_backfill` spawn (`:472`) run after commit.\n- The admin path is unchanged: pool insert, no lock, no de-dup. Tests do not assert de-dup across the admin and self-serve paths.\n- No proto change, no ingest schema migration, no `user_id` in the queued payload (D-11).\n\n**Span cap `ingest` / `backfill.self_serve_max_range_days`**\n- Code default and seed stay 730 (D-4), via config seed migration `050_ingest_backfill_self_serve_keys`.\n- Documented coupling: span = `prefix_calendar_days(max warmup bars)` + card window.\n  - `prefix_calendar_days` = `ceil(bars × 365/252) + 10` (`services/xstockstrat-analysis/app/services/warmup.py:173-184`).\n  - Card window = 366 days (`trader/positions/[symbol]/page.tsx:1190`).\n  - 200 bars: 290 + 10 + 366 = 666, which fits 730 (DigitalOcean).\n  - 1000 bars: 1449 + 10 + 366 = 1825; the homelab sets 1830 through `set_config`.\n- Over-cap denial copy: \"This backtest needs {span} days of history, more than the self-serve limit of {max} days. Ask an admin to backfill {symbol}.\"\n\n**Concurrency, option B (operator)**\n- `backfill.max_concurrent_jobs` keeps default and seed 3. DigitalOcean is unchanged.\n- Homelab values read over the homelab MCP `get_config` on 2026-11-15:\n\n| Namespace | Key | Value |\n|---|---|---|\n| ingest | `backfill.max_concurrent_jobs` | 3 |\n| ingest | `backfill.max_concurrent_chunks` | 3 |\n| ingest | `backfill.chunk_window_days` | 90 |\n| analysis | `readiness_materializer.max_concurrent_bars_fetches` | 2 |\n| analysis | `opportunity.max_concurrent_bars_fetches` | 2 |\n| analysis | `opportunity.max_concurrent_candidates` | 4 |\n| analysis | `backtest.portfolio_max_concurrent` | 9 |\n| analysis | `strategy.max_concurrent_entry_backfill` | 4 |\n| analysis | `backtest.max_range_days` | 730 |\n\n- Homelab runbook sequence (also a line in the homelab provisioning checklist, so a rebuilt database does not silently revert to 3 and 730):\n  1. Over the homelab MCP: `get_config ingest` and `get_config analysis` for the keys above.\n  2. Over the tailnet DB-owner DSN (`docs/runbooks/config-rollout.md:293`): `SHOW max_locks_per_transaction; SHOW max_connections; SHOW max_prepared_transactions;`. These three are the only inputs with no MCP surface (`docs/runbooks/operator-db-access.md`).\n  3. Compute `Σ L_i × S_i ≤ mlpt × (mc + mpt)` (`docs/runbooks/ohlcv-lock-budget-tuning.md:47-48`) per scanner class, with 30-day chunks and 4 relations per chunk.\n     - Backfill writes: 8 jobs × 3 chunks = 24 transactions × (⌈90 ÷ 30⌉ + 1) × 4 = 16 locks = 384.\n     - Full-span readers: L = (⌈1830 ÷ 30⌉ + 1) × 4 = 248; S = 2 + 2 + 9 + 4 = 17 from the analysis keys, giving 4,216.\n     - Backfill gap-planning scans, if they scan the whole span: 8 × 248 = 1,984.\n     - Upper bound: about 6,584. This exceeds a stock budget of 64 × 100 = 6,400.\n     - The real S is also bounded by the bars database's backend connections behind PgBouncer (`deploy/homelab/compose.yml:22`).\n  4. Default step, not a fallback: raise the homelab `max_locks_per_transaction` to 1024 (DigitalOcean parity) and restart Postgres. The budget becomes 1024 × mc, about 102,400 at mc = 100. Skip only if step 2 already shows 1024 or more.\n  5. Over the homelab MCP: `set_config ingest backfill.max_concurrent_jobs=8` and `set_config ingest backfill.self_serve_max_range_days=1830`, then `get_config` to read both back.\n  6. Watch feature 341's marketdata 53200 counter for one readiness cycle.\n- Reverted symptom to record in the checklist: the span denial copy appears on a 1000-bar warmup.\n\n**Dependencies and scope**\n- Lock-breach counter: owned by feature 341 (fix-indicator-pane-warmup). This feature adds none. Add a `docs/roadmap/features/merge-order.md` row: `backtest-inline-backfill` waits for `fix-indicator-pane-warmup`.\n- `insights/backfills/page.tsx` stays admin-only and unchanged.\n\n**UI**\n- `src/lib/backtestBackfill.ts`: `gapToBackfillRequest`, `backfillJobMessage`, `triggerErrorMessage(err, symbol)`.\n- `triggerErrorMessage` switches on the ConnectError code:\n  - PERMISSION_DENIED with `range_too_long`: the span copy above.\n  - Any other PERMISSION_DENIED: one generic sentence, \"This backfill is not available from here. Ask an admin to backfill {symbol}.\" No raw token is shown.\n  - ALREADY_EXISTS: \"A backfill for {symbol} is already queued or running. Try again when it finishes.\" The \"Backfill missing data\" action stays enabled; no link, no polling.\n- A vitest case pins the exact detail strings that the ingest table test asserts, so the two sides cannot drift.\n- Symbol card, insights strategy button, PARTIAL copy and the D-7 memory are as in round 3.\n\n**Tests (ingest table, real `TriggerBackfillRequest`)**\n- 8 envelope rows, each asserting its token.\n- At-cap row; admin row.\n- Duplicate row: no insert, emit or spawn.\n- Insert-raises row: no emit or spawn.\n- The `x-user-id` metadata test.\n\n**Docs in the same PR**\n- Agent `tools.py:1557,1578-1580` with the new denial detail, `docs/runbooks/mcp-tools.md:964-968`, the strat-lab backfill reference, `tests/test_tools_endpoint.py:104`.\n- Ingest key table, registered-keys log, `platform.feature` `@AC-6 @feature-244` row.\n- Homelab runbook section and provisioning-checklist line.\n\n**Acceptance (at /sdd-spec)**\n- New scenarios for ALREADY_EXISTS (with the \"queued or running\" wording) and the over-cap denial, plus the round-3 list.",
+    "open_objections": [
+      {
+        "text": "O-19 (narrowed): the proposal's worked lock example is wrong on its own terms. It uses S = 25 where backfill alone is 24, and applies L = 248 to every class. The proposer must adopt the per-class sum `Σ L_i × S_i` and make raising the homelab `max_locks_per_transaction` to 1024 the default step before the raise to 8, as written in this synthesis. It must also confirm whether backfill gap planning scans the full span (ingest `servicer.py:650-667`).",
+        "blocking": true
+      },
+      {
+        "text": "O-26 (C-11, relayed item 5 \"Use the mcp to read the values\"): the proposal says the item has nothing to act on. The config inputs are readable over the homelab MCP `get_config`, and I read them this round. The step-5 write and read-back go through `set_config` and `get_config`. Only the three Postgres `SHOW` parameters need the DB-owner DSN. The proposer must adopt this split and say so in the runbook.",
+        "blocking": true
+      },
+      {
+        "text": "O-27 (C-18): the denial tokens and the ` (max <N> days)` suffix are an untyped wire contract. Define the tokens once in ingest, pin the exact strings in a UI vitest, and never show a raw token to a trader.",
+        "blocking": false
+      },
+      {
+        "text": "O-28: the ALREADY_EXISTS copy says \"already running\", but de-dup also covers QUEUED (D-9). Use \"already queued or running\" in the copy and the @AC.",
+        "blocking": false
+      },
+      {
+        "text": "O-29: the homelab values 8 and 1830 exist only as hand-applied `set_config` steps. Put both in the homelab provisioning checklist and record the reverted symptom (the span denial on a 1000-bar warmup).",
+        "blocking": false
+      },
+      {
+        "text": "O-30: the admin path is not serialized against self-serve. The table test must not assert de-dup across the two paths.",
+        "blocking": false
+      },
+      {
+        "text": "O-31 (C-11): relayed item 2 (200 bars on DigitalOcean, 1000 bars on the homelab) may belong to feature 341, not this one. Confirm that the homelab span cap of 1830 is this feature's to set, and that analysis `backtest.max_range_days` (730 on the homelab) does not cap the warmup prefix of a 1000-bar backtest.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "343@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-6",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-7",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-8",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-9",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "270@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "244@AC-6",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "244@AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "198@AC-7",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "198@AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "334@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "334@AC-26",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Option A for the concurrency cap (a new seeded default everywhere): the operator chose option B, so DigitalOcean stays at 3.",
+      "A second lock-breach counter in this feature: the operator assigned the counter to feature 341; this feature depends on it.",
+      "Opening the create form on `insights/backfills/page.tsx` to non-admins: the operator confirmed it stays admin-only and unchanged.",
+      "Gating the homelab raise on the stock `max_locks_per_transaction`: the per-class upper bound (about 6,584) exceeds 64 × 100 = 6,400, and raising the parameter costs about 27 MB on a database running at 10% of capacity.",
+      "A structured denial through `google.rpc.ErrorInfo` status details: more plumbing than one UI consumer justifies; string tokens with a pinned contract test are enough, and D-1 rules out a proto change.",
+      "Showing the raw denial token to the trader (\"Backfill not allowed: {detail}\"): tokens such as `no_user` mean nothing to a user.",
+      "Computing S from a `pg_stat_activity` sample: it is a point-in-time reading, not a bound; useful only as a cross-check beside feature 341's counter.",
+      "Deriving the span-cap default from analysis `backtest.max_range_days`: the gap length comes from the warmup prefix, not from that key.",
+      "A link to the job list or polling on ALREADY_EXISTS: the operator asked for the lowest-friction option, and `/insights/backfills` is admin-only with no symbol deep-link."
+    ],
+    "open_risks": [
+      "The homelab's `max_locks_per_transaction`, `max_connections` and `max_prepared_transactions` are still unread; no connected tool exposes them. The runbook reads them before any change.",
+      "Raising `max_locks_per_transaction` on the homelab needs a Postgres restart before concurrency can go to 8.",
+      "Whether backfill gap planning scans the whole span is unverified; I included it in the upper bound.",
+      "Relayed item 2 (1000 bars on the homelab) may belong to feature 341. If so, the homelab 1830 value is still needed whenever 1000-bar warmups run there.",
+      "The homelab's analysis `backtest.max_range_days` is 730. I did not check whether it interacts with a 1000-bar warmup prefix.",
+      "A rebuilt homelab database reverts to 3 and 730 until the checklist steps are re-run.",
+      "Feature 341's counter design lives on its branch; main-dev has no 53200 handling yet. This feature's merge waits on it.",
+      "One user can still queue one in-envelope job per symbol and fill every slot (accepted by the operator).",
+      "An admin multi-symbol job blocks self-serve for its symbols for its whole duration (accepted).",
+      "A strategy whose warmup prefix exceeds the span cap is denied self-serve backfill.",
+      "Config migration number 050 may collide with a peer feature; re-check at /sdd-spec.",
+      "Peer features 339 (same `page.tsx`), 341 and 344 (ingest) can conflict at merge; re-run the C-16 scan at /sdd-spec.",
+      "Whether `bars_total` is set during a run is unverified; \"Backfilling…\" without a denominator is the fallback copy.",
+      "The `GetBackfillStatus` e2e mock does not exist yet.",
+      "`jobId`, \"Data ready\" and the last-filled gap are local state and are lost on reload (accepted under D-2).",
+      "@AC-9 exists only on the feature branch until the branches are synced."
+    ],
+    "constitution_rules_touched": [
+      "C-05",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-12",
+      "C-13",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-07",
+      "P-02",
+      "P-03",
+      "P-06",
+      "PLAT-4",
+      "PLAT-N1"
+    ],
+    "rationale": "No Floor breach. The adversary's verdict is NEEDS WORK on two points, and both hold.\n\n**Verified this round**\n- I read the homelab config over the MCP (`get_config ingest` and `get_config analysis`). The values are in the approach table. This shows relayed item 5 can be followed for every config input.\n- `deploy/homelab/compose.yml:22` sets `DB_PGBOUNCER: \"true\"`, so the homelab routes through PgBouncer. That closes the proposer's stated unknown.\n- Nothing under `deploy/` sets `max_locks_per_transaction` or `max_connections`, so those stay a runbook read.\n- With the MCP-read values, the per-class upper bound is about 6,584 against a stock budget of 6,400. The proposal's \"passes at 6,200\" does not hold, so raising the lock parameter first is the right default.\n\n**Closed**\n- O-20: dependency on feature 341 plus a merge-order row, as the operator ruled.\n- O-21: admin-only, operator-confirmed.\n- O-22: default 730 kept; 666 and 1825 derived from prefix plus window; denial copy given.\n- O-23: condition tokens in the detail. The remaining contract and copy points move to O-27.\n- O-24: one transaction on `conn`, emit and spawn after commit, two test rows.\n- O-25: accepted, with a message and the action left enabled. The wording fix moves to O-28.\n\n**Still open (blocking)**\n- O-19: the proposal follows the steer's SHOW-first shape, but its arithmetic is wrong. I corrected the approach; the proposer has not yet adopted it.\n- O-26: the proposal set aside a direct user answer.\n\n**Register**\n- D-1 to D-4 and D-6 to D-13 are honoured. D-4's default of 730 is kept.\n- R-1 to R-6 are not reintroduced. ALREADY_EXISTS returns no foreign job id (R-4).\n- D-5 is reopened by the operator steer and superseded by D-8. P-1 is resolved as \"user reopened\"; it needs no new petition.\n\n**Business rules**\n- 244@AC-5 is preserved and now covered: the operator chose option B, so the default and clamp do not move.\n- 343@AC-9 is still a CHANGE without an operator decision and is shown at the gate.\n- The other rows are unchanged from round 3.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Concurrency option B: `backfill.max_concurrent_jobs` keeps default and seed 3; the homelab alone is set to 8 through `set_config`, recorded in the homelab runbook. DigitalOcean is unchanged.",
+          "evidence": "Operator decision 2026-11-15 (design gate, round 3) and relayed item 4 \"B\"; homelab MCP get_config shows the current value 3; config-rollout.md:293."
+        },
+        {
+          "text": "The create form on `insights/backfills/page.tsx` stays admin-only and unchanged.",
+          "evidence": "Operator decision 2026-11-15 (round 3) and relayed item 6 \"Leave it admin-only\"."
+        },
+        {
+          "text": "The lock-budget breach counter is owned by feature 341 (fix-indicator-pane-warmup). This feature adds no counter and gets a merge-order row that waits for 341.",
+          "evidence": "Operator decision 2026-11-15 (round 3) and relayed item 7 \"Agreed\"; adversary concurs in round 4."
+        },
+        {
+          "text": "The span-cap default and seed stay 730. The documented coupling is `prefix_calendar_days(max warmup bars)` plus the 366-day card window: 666 days at 200 bars, 1825 at 1000 bars. The homelab is set to 1830 through `set_config`. An over-cap request is denied with copy that names the span and the limit.",
+          "evidence": "services/xstockstrat-analysis/app/services/warmup.py:173-184; page.tsx:1190; relayed item 2; adversary accepts the derivation in round 4."
+        },
+        {
+          "text": "The envelope predicate returns the first failed condition as a fixed token, and the PERMISSION_DENIED detail is `self-serve backfill denied: <token>`, with ` (max <N> days)` for `range_too_long`.",
+          "evidence": "servicer.py:423-424; proposal round 4; adversary accepts the shape and adds only contract hardening."
+        },
+        {
+          "text": "Self-serve de-dup runs `pg_advisory_xact_lock`, `has_active_job` and `insert_job` on one connection in one transaction. `insert_job` keeps its signature. The ledger emit and the job spawn happen after commit. The admin path is unchanged.",
+          "evidence": "backfill_jobs.py:29-58,:111; servicer.py:464,:472; adversary closes O-24 in round 4."
+        },
+        {
+          "text": "On ALREADY_EXISTS the card shows a message and keeps \"Backfill missing data\" enabled, with no link, no polling and no foreign job id. An admin multi-symbol job blocking self-serve for its symbols is accepted. The case gets its own @AC.",
+          "evidence": "Relayed item 8 \"Choose the one with less friction\"; R-4; adversary closes O-25 in round 4."
+        },
+        {
+          "text": "The homelab raise is a runbook sequence: config inputs over the homelab MCP, the three Postgres parameters by read-only SHOW, the per-class lock sum, `max_locks_per_transaction` raised to 1024 first, then `set_config` and read-back, then observation of feature 341's counter.",
+          "evidence": "Operator steer round 4 and relayed items 1 and 5; ohlcv-lock-budget-tuning.md:47-48,59-63; homelab MCP get_config read 2026-11-15; deploy/homelab/compose.yml:22."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Option A for the concurrency cap: a new seeded default on every deployment.",
+          "why": "The operator chose option B; DigitalOcean stays at 3."
+        },
+        {
+          "text": "A second lock-breach counter designed in this feature.",
+          "why": "The operator assigned the counter to feature 341; this feature depends on it."
+        },
+        {
+          "text": "Opening the create form on the insights Backfills page to non-admins.",
+          "why": "The operator confirmed it stays admin-only and unchanged."
+        },
+        {
+          "text": "A structured denial through `google.rpc.ErrorInfo` status details.",
+          "why": "It adds decoding plumbing for one UI consumer; string tokens with a pinned contract test are enough."
+        },
+        {
+          "text": "Gating the homelab raise to 8 on the stock `max_locks_per_transaction` value.",
+          "why": "The per-class upper bound exceeds the stock budget; raising the parameter is cheap on a database at 10% of capacity."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "O-26: relayed item 5 \"Use the mcp to read the values\" must be followed as far as it can be: config inputs and the write/read-back over the homelab MCP, only the three Postgres SHOW parameters over the DB-owner DSN.",
+          "blocking": true
+        },
+        {
+          "text": "O-27: the denial tokens are an untyped wire contract; define them once in ingest, pin the exact strings in a UI vitest, and never show a raw token to a trader.",
+          "blocking": false
+        },
+        {
+          "text": "O-28: the ALREADY_EXISTS copy must say \"already queued or running\", because de-dup covers QUEUED too.",
+          "blocking": false
+        },
+        {
+          "text": "O-29: put the homelab `set_config` steps (8 and 1830) in the homelab provisioning checklist and record the reverted symptom.",
+          "blocking": false
+        },
+        {
+          "text": "O-30: the table test must not assert de-dup across the admin and self-serve paths.",
+          "blocking": false
+        },
+        {
+          "text": "O-31: confirm that relayed item 2 (1000 bars on the homelab) is this feature's to act on, and that analysis `backtest.max_range_days` (730 on the homelab) does not cap a 1000-bar warmup prefix.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-20",
+          "how": "No second counter. Feature 341 owns the marketdata 53200 counter; this feature lists it as a dependency with a merge-order row (operator ruling)."
+        },
+        {
+          "id": "O-21",
+          "how": "The insights Backfills create form stays admin-only and unchanged, confirmed by the operator."
+        },
+        {
+          "id": "O-22",
+          "how": "The default stays 730, derived from prefix plus window (666 days at 200 bars). The homelab is set to 1830 for 1000 bars. The coupling and the over-cap denial copy are documented."
+        },
+        {
+          "id": "O-23",
+          "how": "The predicate returns a condition token and the detail names it; the UI switches on it. Contract pinning and copy mapping are carried forward as O-27."
+        },
+        {
+          "id": "O-24",
+          "how": "The lock, `has_active_job` and `insert_job` share one connection and transaction; emit and spawn follow the commit; two test rows are added. `insert_job` needs no signature change."
+        },
+        {
+          "id": "O-25",
+          "how": "Stated as accepted. On ALREADY_EXISTS the card shows a message and keeps the action enabled. The \"queued or running\" wording fix is carried forward as O-28."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": [
+        "D-5"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
