@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report |
 | 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
+| 2026-11-15 | `spec-ready` (unchanged) | orchestrator | Product spec amended at the design gate under operator sanction: one config key + its seed migration now in scope; marketdata and config added to Affected Services |
 
 ---
 

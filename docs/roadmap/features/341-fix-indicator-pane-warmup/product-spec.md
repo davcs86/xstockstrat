@@ -65,6 +65,9 @@ Which applies: FR-2 if and only if H < P; otherwise FR-1.
   `src/lib/indicatorChart.ts`, `src/hooks/useIndicatorSeries.ts`).
 - `xstockstrat-analysis` — owner of the `GetIndicatorSeries` RPC that builds the series. Whether its
   code changes is decided by recon (see Root Cause Hypothesis).
+- `xstockstrat-marketdata` — the lock-budget breach counter on the bars query path; its rule
+  feature 153 `@AC-1` is PRESERVE-at-risk where the 1000-bar depth runs (operator sign-off 2026-11-15).
+- `xstockstrat-config` — the seed migration for the one new key in Fix Scope.
 
 ## Consumer Surface(s)
 
@@ -85,8 +88,11 @@ _Constitution **C-14**._
   warm-up request field or an insufficient-history marker on `GetIndicatorSeries`), it must be
   **additive** (new field, non-breaking) and follows the additive gate in
   `docs/runbooks/proto-versioning.md`; a breaking change is out of scope for this fix.
-- **Database**: no migration. The fix reads bars that are already ingested.
-- **Config**: no new or changed config key.
+- **Database**: exactly one config seed migration in `services/xstockstrat-config/migrations/`
+  (`NNN_ui_chart_history_bars`); no service-schema migration. *(Amended 2026-11-15, operator sanction.)*
+- **Config**: exactly one new key, `ui.chart.indicator_history_bars` (int, default 200, bounds
+  [200, 1000]). A new key needs owner + config-team approval (`docs/runbooks/approval-flow.md`).
+  *(Amended 2026-11-15, operator sanction.)*
 
 ## Resolved Questions
 
@@ -108,5 +114,6 @@ dev.
   does not repair it.
 - Changing indicator calculation semantics (formula results on bars that already have a value).
 - Indicator series colors and pane styling (peer feature `chart-series-palette`).
-- A breaking proto change, any database migration, any config key.
+- A breaking proto change; any database migration or config key beyond the one key and its seed
+  migration in Fix Scope.
 - Refactoring or performance work unrelated to the fix.

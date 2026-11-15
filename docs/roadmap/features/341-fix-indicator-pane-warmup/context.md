@@ -1187,3 +1187,18 @@ Operator input relayed for this round, verbatim (2026-11-15): "1. Approved", "2.
   "floor_breaches": []
 }
 ```
+
+---
+
+## Session 2026-11-15 — product-spec amendment (orchestrator, closes O-23)
+
+- **Operator sanction, verbatim (2026-11-15):** "Sign-off the change, amend it" — in answer to: the
+  per-deployment history depth needs one new config key and a seed migration, while the product
+  spec said "no new or changed config key" and "no migration".
+- **Amended in `product-spec.md`:** Fix Scope (Database, Config), Out of Scope, Affected Services
+  (adds xstockstrat-marketdata and xstockstrat-config). `feature.md` Status History has the row.
+- **Operator reopens (P-1..P-3, verdict "user reopened"):** D-5, D-15, R-9 — 200 bars stays on
+  DigitalOcean, 1000 on the homelab.
+- **Operator sign-off:** marketdata feature 153 `@AC-1` is PRESERVE-at-risk where the 1000-bar
+  depth runs.
+- **Approval flow:** a new config key needs owner + config team (`docs/runbooks/approval-flow.md`).
