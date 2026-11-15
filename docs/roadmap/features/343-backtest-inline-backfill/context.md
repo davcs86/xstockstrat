@@ -1366,3 +1366,8 @@ Resume state for the next `/sdd-batch` run (do not edit by hand; supersedes the 
   `max_locks_per_transaction`. `max_connections` (70 after homelab-edge PR #79 is applied to the
   host, 60 before) and `max_prepared_transactions` keep their specified read unless the operator
   extends the ruling.
+- **Operator, verbatim (2026-11-15): "max_connections are now love."** Orchestrator reading (the
+  operator's word is taken as a typo for "live"): homelab-edge PR #79 is applied to the DB host, so
+  `max_connections` = 70 and the PgBouncer pool = 10 per database are the running values. The
+  rollout takes `max_connections` = 70 from `homelab-edge` as well; the "PR merged but not yet
+  applied" precondition is dropped. Not verified by the orchestrator against the live host.
