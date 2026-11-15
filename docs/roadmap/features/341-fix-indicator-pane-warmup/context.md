@@ -1202,3 +1202,54 @@ Operator input relayed for this round, verbatim (2026-11-15): "1. Approved", "2.
 - **Operator sign-off:** marketdata feature 153 `@AC-1` is PRESERVE-at-risk where the 1000-bar
   depth runs.
 - **Approval flow:** a new config key needs owner + config team (`docs/runbooks/approval-flow.md`).
+
+---
+
+## Session 2026-11-15 — sdd-design (approved)
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui, xstockstrat-analysis; marketdata and
+  config joined during the debate). Key reuse patterns: `toLineData` gap rendering unchanged; the
+  newest-page `GetBars` read with only `pageSize` changed.
+- Phase 1 Grilling: 5 rounds (full). Chosen approach: analysis declares each component's
+  `first_value_bars` (additive proto field 5); the UI fetches D bars, draws the last 200 and shows
+  "Not enough history" per component on a short page; D is the seeded config key
+  `ui.chart.indicator_history_bars` (default 200, bounds [200, 1000], set to 1000 on the homelab
+  only); marketdata gains the `marketdata.ohlcv.out_of_memory_errors` counter. Rejected: R-1..R-8
+  and R-10..R-19 (design.md); R-9 was operator-reopened.
+- Operator approval, verbatim (2026-11-15, design gate, round 5): "Agreed" — in answer to: approve
+  the 341 design, with the config key `ui.chart.indicator_history_bars` (default 200, range
+  200-1000) set to 1000 on the homelab only.
+- Register close-out in `debate.md`: State approved; O-23 closed (amendment commit 60a38d20a);
+  P-1..P-3 verdict "user reopened", matching the amendment session above and the D-5 / D-15 / R-9
+  status cells. O-29..O-32 stay open, non-blocking, for `/sdd-spec`.
+- Constitution rules touched: P-02, P-03, P-04, C-01, C-03, C-05, C-07, C-08, C-12, C-13, C-15,
+  C-16, C-17, C-18, F-06, F-07, PLAT-N1. Floor breaches: none.
+- Business rules (C-16): feature 153 `@AC-1` is PRESERVE on DigitalOcean and PRESERVE-at-risk where
+  1000 runs (operator sign-off, round 3). No CHANGE lines.
+- Ledger: no line added.
+- Status: spec-ready → design-approved.
+
+### Open Threads
+
+- [ ] homelab-edge PR #79 is merged but not applied; the homelab lock budget depends on it — homelab
+  launch step.
+- [ ] 30-day chunk width on the homelab is unconfirmed until the chunk query runs — homelab launch
+  step.
+- [ ] The homelab gets the fix only after the manual `set_config` to 1000 — homelab launch step.
+- [ ] DigitalOcean still shows SMA200 as a single dot on a full page (operator-accepted) — no step.
+- [ ] The 1000 bound does not stop an admin setting 1000 on DigitalOcean — config migration step
+  (key description) and runbook step.
+- [ ] Other homelab Postgres workloads share the lock table, unmeasured — launch step 3 observation.
+- [ ] `max_connections` / `max_prepared_transactions` are observed only by the runbook's `psql`
+  read; the runbook depends on the homelab-edge `verify` playbook path — runbook step (O-32).
+- [ ] The counter also counts a 53200 from other causes and does not prevent a breach — marketdata
+  counter step.
+- [ ] Read `scripts/config-wiring.test.mjs` before writing the reader entry or the stored row; add
+  the UI `CLAUDE.md` note and the AC-1/AC-3 rewording (O-29) — `/sdd-spec`.
+- [ ] Re-check the last config migration number at execute time (O-30) — config migration step.
+- [ ] Launch step 1 preconditions in the runbook (O-31) — runbook step.
+- [ ] Owner + config-team approval for the new key is still to be obtained; the product-spec was
+  amended without re-review — before the config migration step merges.
+- [ ] Config read adds a round trip; analysis compute, polled payload and marketdata pool hold time
+  grow with D on the homelab — launch step 3 observation.
+- [ ] Citations carried from rounds 2–4 are unverified — `/sdd-spec` re-greps all of them.
