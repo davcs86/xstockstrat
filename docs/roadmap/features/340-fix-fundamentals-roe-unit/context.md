@@ -48,7 +48,7 @@ Implementation spec (`/sdd-spec`, 10 steps, tree `feature/fix-fundamentals-roe-u
 
 Closed by the operator answers (see the verbatim session below): O-16, the `@AC-5` third `Given`, the meaning of "max_connections are now love.". The operator acknowledged the risk list (343 freeze collision, in-place rewrite, unrun audit SQL, `data.sec.gov` egress, unrepaired homelab `xstockstrat_production`); the items stay listed where an action remains.
 
-- [ ] Restatements decided but not written: `acceptance.feature` (`@AC-1`, `@AC-2`, `@AC-3`, `@AC-5`), the product-spec "low single-digit" claim, the defect-report premise, the feature title and the `feature.md` summary — Step 1, before any code step.
+- [x] Restatements written in Step 1: `acceptance.feature` (`@AC-1`, `@AC-2`, `@AC-3`, `@AC-5`), the product-spec "low single-digit" claim, the defect-report premise and title, and the `feature.md` summary.
 - [ ] Step 4 selection rules (no-anchor debt keys absent; no-anchor flow per unit at its latest `end`) need the design owner's confirmation — Steps 4+5 confirmation.
 - [ ] The LYFT fixture needs a live fetch from `data.sec.gov`; blocked egress blocks the step (the file is not hand-written) — Step 5.
 - [ ] The pinned values 0.942632 and 0.868791 must be reproduced by the fixture; expected values are not adjusted to fit — Step 5.
@@ -77,6 +77,7 @@ Closed by the operator answers (see the verbatim session below): O-16, the `@AC-
 - `docs/roadmap/features/340-fix-fundamentals-roe-unit/{recon.md,debate.md,design.md}` — written by `/sdd-design` (6 rounds).
 - `docs/roadmap/features/340-fix-fundamentals-roe-unit/implementation-spec.md` — written by `/sdd-spec` (10 steps); edited in place by the advisory impl-spec review (commit `78a4d4736`).
 - `docs/roadmap/features/340-fix-fundamentals-roe-unit/status.md` — draft → spec-ready → design-approved → implementation-ready.
+- Step 1: `docs/roadmap/features/340-fix-fundamentals-roe-unit/{acceptance.feature,product-spec.md,feature.md}`, `docs/reports/2026-11-15-marketdata-roe-value-implausible-defect.md` — restated from the LYFT filing.
 - No service code, proto, SQL or config has been changed yet.
 
 ---
@@ -461,3 +462,9 @@ Each asked directly as a numbered question and answered verbatim by the operator
 ```sdd-batch-setup
 {"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","date":"2026-11-15"}
 ```
+
+### Step 1 — docs: restate the acceptance values, product-spec premise, title and defect report from the LYFT filing [done]
+- Restated `@AC-1`/`@AC-5` (roe 0.942632), `@AC-3` (roe 0.868791) and `@AC-2` (EDGAR row dropped, outline retitled) per the spec text; `@AC-4` untouched, IDs unchanged. The `@AC-5` third `Given` was written on the operator's recorded "Alright" (session "operator answers after impl-spec review"). Product-spec premise, root-cause pointer, OQ1 and Out of Scope note, the `feature.md` summary and the defect report's title, `## Expected`, `## Root cause hypothesis` and `## Confidence` (low → high) now carry the traced EDGAR cause. TDD: N/A (docs).
+- Verification (`.sdd-logs/v-1.log`, `exit=1`): counts 2, 1, 0, 5, 0 as expected; both "no match" greps printed nothing, so `exit=1` is the last grep's no-match status.
+- Files modified: `docs/roadmap/features/340-fix-fundamentals-roe-unit/acceptance.feature`, `docs/roadmap/features/340-fix-fundamentals-roe-unit/product-spec.md`, `docs/roadmap/features/340-fix-fundamentals-roe-unit/feature.md`, `docs/reports/2026-11-15-marketdata-roe-value-implausible-defect.md`
+- Deviations: none

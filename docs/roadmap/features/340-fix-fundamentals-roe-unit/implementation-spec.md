@@ -89,7 +89,7 @@ checked through the served value in the post-deploy procedure (canary `query_fun
 
 ### Step 1 — docs: restate the acceptance values, product-spec premise, title and defect report from the LYFT filing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/340-fix-fundamentals-roe-unit/`, `docs/reports/`
 **Files**:
 - `docs/roadmap/features/340-fix-fundamentals-roe-unit/acceptance.feature` — modify

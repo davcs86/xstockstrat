@@ -11,11 +11,13 @@
 
 A trader reading the symbol page Fundamentals card for LYFT on staging sees `ROE +366.34%` beside
 market cap `$6,726,553,623.93`, `P/B 8.77`, `EPS 0.11`. The UI multiplies by 100, so marketdata
-served `roe ≈ 3.6634`. Market cap / P/B implies book equity near $767M; EPS 0.11 implies net income
-in the tens of millions — an ROE in the low single-digit percent. The same `roe` value feeds the
+served `roe ≈ 3.6634`. Traced on LYFT's SEC companyfacts filing (recon.md § Root-Cause Trace,
+debate.md D-11), the served `3.6634` is a genuine trailing-twelve-month net income of 2,809,866,000
+divided by a prior-year-end equity of 767,016,000 (dated 2024-12-31). The `Q3-2026` quarter-end
+equity is 2,980,873,000, so the expected value is `0.942632`. The same `roe` value feeds the
 agent fundamentals tools and the analysis screener/scoring, so a strategy author filtering on ROE is
-misled too. Expected: `roe` is a 0–1-scale fraction (net income / shareholders' equity; `0.0366` =
-3.66%) on every provider path, and agrees with the symbol's own net income and equity.
+misled too. Expected: `roe` is a 0–1-scale fraction (net income / shareholders' equity) on every
+provider path, and agrees with the symbol's own net income and equity.
 
 ## Reproduction Steps
 
@@ -24,8 +26,9 @@ misled too. Expected: `roe` is a 0–1-scale fraction (net income / shareholders
 
 ## Root Cause Hypothesis
 
-**Not traced** — recon must trace it before any fix is designed (Open Question 1). The report's
-"missing percent→fraction conversion" is one candidate, not a premise. Producers of `roe`:
+**Traced** — see `recon.md` § Root-Cause Trace and debate.md D-11: the EDGAR quarterly TTM path
+divides a genuine TTM net income by a first-seen comparative-column equity; it is not a unit error.
+The producers of `roe` below are the paths that were ruled out or examined:
 
 - Finnhub — `internal/finnhub/finnhub_client.go:260` already applies `scale100` to `roeTTM`
   (covered by `finnhub_client_test.go:118`).
@@ -77,6 +80,7 @@ The proto fields `double roe = 8` (`Fundamentals`) and `double roe = 13`
    not traced; recon must trace which provider or merge path produced `roe ≈ 3.66` for LYFT on
    staging before any fix is designed. Once traced, design pins the `Given` of `@AC-1` / `@AC-5` to
    that path and its native input unit; the `Then` values are binding and may not be weakened.
+   Traced 2026-11-15: EDGAR quarterly TTM path; see recon.md.
 
 ## Consumer Surface(s)
 
@@ -98,6 +102,8 @@ dev.
 
 - UI display changes — the ×100 formatting in `money.ts` is correct for a fraction
 - Changing the EDGAR quarterly-TTM ROE semantics of feature 222, unless recon traces the defect there
-- Unit audits of other fundamentals metrics (`dividend_yield`, `debt_to_equity`, …)
+- Unit audits of other fundamentals metrics (`dividend_yield`, `debt_to_equity`, …). `debt_to_equity`
+  and P/B still move with the corrected equity (design.md § Open Risks, O-16), though no unit audit
+  of them is in scope
 - Changes to how analysis screening/scoring or indicators consume `roe`
 - Refactoring unrelated to the bug

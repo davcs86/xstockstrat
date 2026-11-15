@@ -35,7 +35,7 @@
 
 ## Summary
 
-Staging serves `roe ≈ 3.66` for LYFT (rendered `+366.34%`), inconsistent with its market cap, P/B and EPS; suspected percent-vs-fraction unit error on one fundamentals provider path.
+Staging serves `roe ≈ 3.66` for LYFT (rendered `+366.34%`) because the EDGAR quarterly ROE divides a genuine TTM net income (2,809,866,000) by a comparative-column equity (767,016,000, dated 2024-12-31) instead of the `Q3-2026` quarter-end equity (2,980,873,000); the corrected LYFT value is `0.942632`.
 
 ## Reviewers
 
