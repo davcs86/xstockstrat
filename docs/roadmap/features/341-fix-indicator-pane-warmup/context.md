@@ -208,8 +208,10 @@ still live.
 
 ## Files Modified
 
-No service, proto, migration or script file is modified yet (no step executed). Feature-directory
-artifacts only (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
+- Steps 1+2: `packages/proto/analysis/v1/analysis.proto` and its eight generated
+  `packages/proto/gen/{go,python,ts,ts/dist}/analysis/v1/` stubs.
+
+Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
 - `feature.md`, `product-spec.md`, `acceptance.feature`, `context.md` — created by /sdd-triage.
 - `product-spec.md` — FR-1 definition-of-P and coverage notes recorded at product-spec review; Fix
@@ -632,3 +634,17 @@ Carried into execution. `/sdd-execute` announces every `[ ] unaddressed` item at
 ```sdd-batch-setup
 {"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","date":"2026-11-15"}
 ```
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, steps 1+2 (atomic unit)
+
+### Step 1 — proto: `first_value_bars` on `ComponentSeries` [done]
+- Part of the Steps 1+2 unit. Added `int32 first_value_bars = 5;` to `ComponentSeries` with its constraint comment, and rewrote the `GetIndicatorSeriesRequest` closes/times comment (drawn window plus history prefix; the server never re-fetches). `buf lint` and `buf breaking` against the dev-branch tip are clean. TDD: N/A (proto).
+- Files modified: `packages/proto/analysis/v1/analysis.proto`
+- Deviations: verification ran in the codegen container, and `buf breaking` used `ref=<origin tip sha>` instead of `branch=` (full detail in the Deviation Log).
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Part of the Steps 1+2 unit. `./scripts/buf-gen.sh` (run in `Dockerfile.codegen`) changed exactly the eight expected `analysis/v1` stubs. A second run left the same eight-file diff, and `git grep` found `first_value_bars|firstValueBars|FirstValueBars` in 6 gen files (at least 3 required). TDD: N/A (proto-gen).
+- Files modified: `packages/proto/gen/go/analysis/v1/analysis.pb.go`, `packages/proto/gen/python/analysis/v1/analysis_pb2.py`, `packages/proto/gen/ts/analysis/v1/analysis.ts`, `packages/proto/gen/ts/analysis/v1/analysis_pb.ts`, `packages/proto/gen/ts/dist/analysis/v1/{analysis.d.ts,analysis.js,analysis_pb.d.ts,analysis_pb.js}`
+- Deviations: CI-equivalent container fallback (Deviation Log).

@@ -139,7 +139,7 @@ the PRESERVE-at-risk rule (feature 153 `@AC-1`).
 
 ### Step 1 — proto: `first_value_bars` on `ComponentSeries`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -174,7 +174,7 @@ grep -n "first_value_bars = 5" analysis/v1/analysis.proto     # one hit, inside 
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/analysis/v1/analysis.pb.go` — modify (generated)
@@ -869,3 +869,8 @@ node scripts/check-config-wiring.mjs --doc-check      # exit 0: no retired wordi
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Steps 1+2 — proto + stubs: verification run in the codegen container (2026-11-15)
+- **Spec said**: run the Step 1 and Step 2 `**Verification**` blocks on the host, with `buf breaking --against '<repo-root>/.git#branch=feature/fix-indicator-pane-warmup,subdir=packages/proto'`.
+- **Actual**: `buf` is not installed on the host, so both blocks ran unchanged inside the pinned `Dockerfile.codegen` image (`xstockstrat-codegen`). The repo was mounted read-only, the worktree read-write, and the main checkout's `packages/proto/gen/ts/node_modules` read-only, because the worktree has no `node_modules` there for the `tsc` compile. The `branch=` input became `ref=00c2f4a2d63b8024c92d3bb9a9c83a7682c80a8b`, the tip of `origin/feature/fix-indicator-pane-warmup`: the shared repo has no local `feature/fix-indicator-pane-warmup` branch, and buf failed with "couldn't find remote ref". The generator wrote exactly the eight expected stubs.
+- **Disposition**: CI-equivalent fallback (sequential-mode verification fallbacks, proto codegen).

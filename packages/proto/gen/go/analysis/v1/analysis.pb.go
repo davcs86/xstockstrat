@@ -5148,9 +5148,8 @@ type GetIndicatorSeriesRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	StrategyId string                 `protobuf:"bytes,1,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
 	Symbol     string                 `protobuf:"bytes,2,opt,name=symbol,proto3" json:"symbol,omitempty"`
-	// The caller's own already-fetched candlestick closes + their timestamps (the page passes the
-	// exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
-	// and times are index-aligned and equal length.
+	// The caller's drawn window plus a history prefix; closes and times are index-aligned and equal
+	// length. The server never re-fetches the evaluated symbol's bars.
 	Closes        []float64                `protobuf:"fixed64,3,rep,packed,name=closes,proto3" json:"closes,omitempty"`
 	Times         []*timestamppb.Timestamp `protobuf:"bytes,4,rep,name=times,proto3" json:"times,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -5276,9 +5275,12 @@ type ComponentSeries struct {
 	// Non-empty when this component failed to compute (soft-deleted formula, sandbox timeout, NaN
 	// output); series is then empty and the UI renders a per-panel error state. Per-component fault
 	// isolation — one bad component never fails the whole RPC.
-	Error         string `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Error string `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	// Bars of history needed for this component's first value (multi-series: its earliest series).
+	// 0 = no warm-up or unknown; a client never reports insufficient history for 0.
+	FirstValueBars int32 `protobuf:"varint,5,opt,name=first_value_bars,json=firstValueBars,proto3" json:"first_value_bars,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ComponentSeries) Reset() {
@@ -5337,6 +5339,13 @@ func (x *ComponentSeries) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *ComponentSeries) GetFirstValueBars() int32 {
+	if x != nil {
+		return x.FirstValueBars
+	}
+	return 0
 }
 
 type NamedSeries struct {
@@ -6726,12 +6735,13 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x05times\x18\x01 \x03(\v2\x1a.google.protobuf.TimestampR\x05times\x12H\n" +
 	"\n" +
 	"components\x18\x02 \x03(\v2(.xstockstrat.analysis.v1.ComponentSeriesR\n" +
-	"components\"\xbc\x01\n" +
+	"components\"\xe6\x01\n" +
 	"\x0fComponentSeries\x12\x19\n" +
 	"\bref_name\x18\x01 \x01(\tR\arefName\x12:\n" +
 	"\x04kind\x18\x02 \x01(\x0e2&.xstockstrat.analysis.v1.ComponentKindR\x04kind\x12<\n" +
 	"\x06series\x18\x03 \x03(\v2$.xstockstrat.analysis.v1.NamedSeriesR\x06series\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05error\"b\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\x12(\n" +
+	"\x10first_value_bars\x18\x05 \x01(\x05R\x0efirstValueBars\"b\n" +
 	"\vNamedSeries\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12?\n" +
 	"\x06values\x18\x02 \x03(\v2'.xstockstrat.analysis.v1.IndicatorValueR\x06values\"5\n" +
