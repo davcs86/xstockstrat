@@ -552,3 +552,19 @@ Asked directly, answered verbatim by the operator (2026-11-15):
 - `position-detail.spec.ts -g "Fundamentals"`: FR-7 (`:164`) fails as the first cold test, at the 5 s expect on `P/E` while the card still says "Loading fundamentals…". It fails the same way on the base `page.tsx`. With the redesign, `--workers=1 --repeat-each=2 --timeout=90000` passed 9 of 10, including the FR-7 repeat; no-data, feature 220, feature 145 and `@AC-15` passed. The `frontend-e2e` CI job is the confirming run (Deviation Log).
 - Deviations: CI-equivalent fallback for the `position-detail` command — full detail in Deviation Log. Config-key wiring gate N/A (no key touched).
 - Open (unchanged): "Valuation" / "Quality & risk" wording is not operator-confirmed; peer 340 conflict at the old `page.tsx:1095` ROE line is expected.
+
+## Session 2026-11-15 — operator standing authorization and checkpoint answers (orchestrator)
+
+- **Standing authorization for checkpoints — operator, verbatim (2026-11-15): "Proceed, do not stop at
+  checkpoints unless it's necessary".** Given in answer to "Proceed past the checkpoints?". The run uses
+  `checkpoints: 'report'` from here on; this entry is its `authorizationRef`. It does not waive blockers,
+  failed verifications, Floor breaches, uncovered `@AC` CHANGE lines or any decision that is the
+  operator's — those still halt.
+- **Scratch Postgres for stored-set generation (orchestrator tooling, not an operator ruling):** a
+  Postgres 16 the main session controls listens on 127.0.0.1:5432. `DATABASE_URL` is not exported into
+  agent shells; prefix the generator: `DATABASE_URL='postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable'
+  python3 scripts/config-wiring-stored.py`. Do not start, stop or delete the server; if it is
+  unreachable, stop and report.
+- **Checkpoint 5 — "Yes"** (proceed), and **wording — "Confirm"**: asked "The group labels 'Valuation' and
+  'Quality & risk' and the `$6.73B` format were chosen by the spec, not by you. Confirm or give
+  replacements." The labels and the compact format are operator-confirmed.
