@@ -1310,3 +1310,32 @@ Resume state for the next `/sdd-batch` run (do not edit by hand; supersedes the 
 - A refused trigger is also reported by the global mutation-error fallback, because `useTriggerBackfill` has no `meta.errorHandled`; left as is.
 - Homelab-edge PR #79 is merged but not applied; the live Postgres values are still unread (runbook, Step 16).
 - Peer files shared with 339, 341 and 344 (listed in the spec's Step Dependencies); the integration PR waits for 341.
+
+## Session 2026-11-15 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings on criteria (PASS WITH WARNINGS, no floor breach); overlap FAIL-level on the config migration number (advisory — did not block). Lifecycle unchanged (`implementation-ready`).
+- Run as a batch step that was told to fix the spec, so `implementation-spec.md` was edited here (the skill's Mode B normally leaves it untouched). Each edit was re-checked against the tree first.
+- Addressed in `implementation-spec.md`:
+  - [x] Step 11: verification now runs `pnpm run test:coverage` and names the threshold (`src/lib/**` lines, functions and statements ≥ 40%, `services/xstockstrat-ui/vitest.config.ts:29-33`; `package.json:19`). `test:unit` checks no threshold.
+  - [x] Agent CI filter gap: Step 9 now adds `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json` to the `xstockstrat-agent` filter (`.github/workflows/ci.yml:59`), with a grep check. Assumption 4 and Step Dependencies ("Step 9 requires Step 6") updated.
+  - [x] Step 5 Instruction 7: the executor records the insert shape kept, and the suite result for each shape, in the Deviation Log.
+  - [x] Spec claim corrected (found while checking the filter finding): `scripts/config-wiring.test.mjs` does **not** parse the per-service filter lines. `ciFilterGlobs` (`:663-674`) reads only block-list filters and is called for `config-wiring` alone. So the review's "extend the `node --test scripts/config-wiring.test.mjs` check" has nothing to extend; the filter checks in Steps 9 and 11 are greps, and the `node --test` line stays as a regression run only.
+- Unresolved ⚠ carried into execution:
+  - Step 8: touches 6 files (code, two docs, two `strat-lab` skill files); the reviewer suggests splitting code from docs — [ ] unaddressed. Kept as one step: `docs/patterns/strat-lab-plugin.md` requires the skill change in the same PR and Step 9's parity test reads all of them.
+  - Step 7: edits the durable suite `docs/sdd/business-rules/platform.feature` (an Examples row on `244@AC-6`) before launch, where C-16 normally promotes at launch — [ ] unaddressed. Needs the owner to accept a pre-launch EXTEND; the precedent is the FQN rows at `:495-498`.
+  - Assumption 1: `343@AC-9` was rewritten while O-33 is still `open` in `debate.md` — [ ] unaddressed. Needs the operator's confirmation at the gate. This run's relayed operator note carried six numbered answers ("1. Agreed", "2. Ok, agreed.", "4. Confirmed", "6. Sounds good", …) with no questions attached, so none of them was read as this sign-off.
+  - Step 2: generating `scripts/config-wiring-stored.json` needs a reachable Postgres (blocked without one, P-03) — [ ] unaddressed (environment, not a spec defect).
+- Overlap findings:
+  - [migration, FAIL-level] config migration `050` is also claimed by 341 (`050_ui_chart_history_bars`) and 330 (`050_analysis_live_enrich_ttl_reseed`) on their branches (not readable from this checkout; trunk tip is `049`) — [ ] unaddressed until Step 2 and the integration PR re-derive the number. Already in the spec (Step 2 Instruction 1, "Volatile at merge"); 343 merges after 341 and renumbers.
+  - [dependency] 343 waits for 341 (`marketdata.ohlcv.out_of_memory_errors`); `merge-order.md` has no 341 or 343 row — [ ] unaddressed until Step 1 lands the row (that file is outside this session's write scope).
+  - [file, WARN, rebase-only] `trader/positions/[symbol]/page.tsx` (339, 341); `e2e/trader/position-detail.spec.ts`, `insights/strategies/[id]/page.tsx`, `e2e/insights/backtest-coverage.spec.ts` (341); ingest `servicer.py`, `tests/test_ingest_servicer.py`, `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md` (344); `docs/patterns/config-governance.md`, `docs/runbooks/config-rollout.md` (append order). `e2e/insights/backtest-coverage.spec.ts` ↔ 341 is new in this scan and is not in the spec's peer-overlap list.
+  - [config] `ingest` / `backfill.self_serve_max_range_days`: no collision.
+- Relayed operator items: "3. I plan to do psql over ssh if possible" matches Assumption 2 (already applied). "5. Yes, fix the primitives. Use the switch component from Shadcn." is not about this feature.
+
+### Open Threads
+
+- Operator at the `/sdd-execute` checkpoint: confirm the `343@AC-9` rewrite (O-33) and the pre-launch edit to `platform.feature` (Step 7).
+- Step 8 stays one step unless the operator wants code and docs split.
+- Config migration number `050`: re-derive at Step 2 and at the integration PR; renumber after 341.
+- Step 2 needs a reachable Postgres.
+- `merge-order.md` row for 341 → 343 lands in Step 1.
