@@ -155,7 +155,7 @@ then, and any row still open is announced at session end and in the integration 
 
 ### Step 1 — service: `StatTile` value wrap guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/StatTile.tsx` — modify
@@ -200,7 +200,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 
 ### Step 2 — test: `StatTile` render test and tile-fit e2e at 384px
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/StatTile.test.ts` — create
@@ -1233,3 +1233,31 @@ Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Steps 1+2 — `StatTile` wrap guard and tile-fit tests (2026-11-15, SEV-3)
+
+- **Render test needs a global `React`.** Codebase Evidence said a `.test.ts` importing a `.tsx`
+  component already works; importing does, rendering does not: Vitest compiles the component's JSX
+  to classic `React.createElement` (tsconfig `jsx: preserve`), so the first RED run failed with
+  `ReferenceError: React is not defined`. `StatTile.test.ts` sets `globalThis.React` before
+  rendering; no config file changed. Step 10's render test will need the same.
+  **Disposition**: in-scope test detail, within Step 2's Files.
+- **Position panel is not the active mobile tab.** Codebase Evidence said it is active by default
+  (`SymbolPanelGroup.tsx:27,34`). It joins the Trade tabs only after `GetPosition` answers, by which
+  time "Orders & fills" is active, so `@AC-8` clicks the "Position" radio first. The `GetPosition`
+  stub alone renders the panel; no `ListAccounts` stub was needed (closes the Step 2 "not run" item).
+  **Disposition**: in-scope test detail.
+- **Value locator.** The label (`Eyebrow`) is also `font-mono`, so the e2e helper locates the value
+  as the tile's `.font-mono.tabular-nums` child. **Disposition**: in-scope test detail.
+- **Harness timeouts in the sandbox.** Under `pnpm dev` with `--no-deps` (no warmup project) the
+  symbol page outlasts the 10 s local test timeout. `symbol-page-display.spec.ts` warms its one route
+  in `beforeAll` and sets a 30 s per-test timeout (the CI value). The Verification's
+  `mobile-overflow.spec.ts -g "/trader/positions"` command, unchanged, timed out on `page.goto` in
+  two runs (not an overflow assertion); the Docker runner (`scripts/run-e2e.py`) failed to build
+  (`corepack prepare pnpm@9.15.9` exit 1); the warmup project itself timed out. The same command
+  with `--timeout=90000` passed 2/2. **Disposition**: CI-equivalent fallback — the `frontend-e2e`
+  CI job (prod build, 30 s timeout) is the confirming run.
+- **RED capture.** The Verification's `&&` chain stops at the red Vitest run, so the e2e RED was
+  captured by running its Playwright sub-command alone: all three tests failed on the `scrollWidth`
+  assertion (`Expected: <= 122`, `Received: 253` / `205` / `205`).
+  **Disposition**: recorded; no unverified AC — `@AC-1` and `@AC-8` passed in a real Playwright run.

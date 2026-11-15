@@ -506,3 +506,18 @@ Asked directly, answered verbatim by the operator (2026-11-15):
 ```sdd-batch-setup
 {"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","date":"2026-11-15"}
 ```
+
+## Session 2026-11-15 — sdd-execute sequential, Steps 1+2 (atomic unit)
+
+### Step 1 — service: `StatTile` value wrap guard [done]
+- Unit 1+2. `StatTile`'s value div gains `wrap-anywhere`; a private `withCommaBreaks` renders a `<wbr />` after each comma of a string value (numbers unchanged). No `min-w-0`, no truncation, no new prop.
+- Files modified: `services/xstockstrat-ui/src/components/shared/StatTile.tsx`
+- TDD: red/green recorded under Step 2 (one cycle for the unit).
+- Deviations: none for this step (see Step 2).
+
+### Step 2 — test: `StatTile` render test and tile-fit e2e at 384px [done]
+- Unit 1+2. Vitest render test (`renderToStaticMarkup`), fixtures `FUNDAMENTALS_LYFT` / `POSITION_LYFT_WIDE` with `INVENTORY.md` rows, and `e2e/trader/symbol-page-display.spec.ts` (`@AC-1` x2, `@AC-8`).
+- Files modified: `services/xstockstrat-ui/src/components/shared/StatTile.test.ts`, `services/xstockstrat-ui/e2e/fixtures/{fundamentals.ts,positions.ts,INVENTORY.md}`, `services/xstockstrat-ui/e2e/trader/symbol-page-display.spec.ts`
+- TDD: AC-1/AC-8 red: Vitest `<wbr/>` and `wrap-anywhere` assertions failed (2 failed, 1 passed); e2e `scrollWidth <= clientWidth` failed in all 3 tests (122 vs 253/205/205) → green: Vitest 3 passed, e2e 3 passed, lint and `tsc --noEmit` clean, `mobile-overflow` `/trader/positions` 2 passed (with `--timeout=90000`).
+- Deviations: global `React` for the render test; Position tab clicked (not active by default); value located by `.tabular-nums`; spec-level warmup + 30 s timeout; `mobile-overflow` needed `--timeout=90000` in the sandbox — full detail in Deviation Log. The `GetPosition` stub alone renders the Position panel (Step 2 "not run" item closed).
+- Not run: the six other `StatTile` consumers (open thread unchanged).
