@@ -103,7 +103,7 @@ checked through the served value in the post-deploy procedure (canary `query_fun
 - `acceptance.feature:8-12`, `:15-25`, `:28-31`, `:46-50` hold `0.0366` and `28070000 / 767000000`.
   No staging row holds 28,070,000 (`recon.md:136`).
 - `product-spec.md:14-18` holds the "low single-digit percent" claim; `:27-28` says "Not traced".
-- `feature.md:36` holds "suspected percent-vs-fraction unit error".
+- `feature.md:37` holds "suspected percent-vs-fraction unit error".
 - The defect report's title (`:1`), `## Expected` and `## Root cause hypothesis` carry the same premise.
 - Operator sign-offs: design.md § Business Rules Touched (CHANGE `@AC-1`, `@AC-2`, `@AC-3`, `@AC-5`);
   debate.md D-11, D-12.
@@ -343,7 +343,7 @@ the parity test is in `internal/edgar`, which is measured.
   map to `revenue`). `instantTags` — `:195-210`; the balance-sheet three at `:196-198`, the
   share-count tags at `:199-200`, the debt tags at `:203-209`.
 - The own-period pattern to reuse: `niFact` (`:387-391`), `toNIFact` (`:393`), earliest-filed wins
-  per quarter end in `trailingNetIncome` (`:425`) and per fiscal-year end (`:435`).
+  per quarter end in `trailingNetIncome` (`:423-424`) and per fiscal-year end (`:435`).
 - `periodEnd` is the latest `end` of any fact in the bucket (`:350-352`); earliest `filed` at
   `:347-349`. Both stay.
 - Readers of `vals`: `valIn` (`:230`), `valAny` (`:241`), `voteCurrency` (`:259`), `buildPeriod`
