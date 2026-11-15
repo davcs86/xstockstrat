@@ -1,6 +1,6 @@
 # Debate Register: backtest-inline-backfill
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -113,5 +113,5 @@
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 3 | D-5 | Operator ruling 3 of the 2026-11-15 design gate sanctions widening to gap.start through the window end under GAPS_ONLY. D-5 deferred to that gate answer, which had not been given when D-5 was settled. | pending user |
-| P-2 | 5 | D-21 | Proposer, step 4 only: homelab-edge PR #79 and its db-host verify task assert `max_locks_per_transaction` = 1024, so the raise step becomes a read-only check. The adversary supports it and asks that the stop be the computed inequality. | pending user |
+| P-1 | 3 | D-5 | Operator ruling 3 of the 2026-11-15 design gate sanctions widening to gap.start through the window end under GAPS_ONLY. D-5 deferred to that gate answer, which had not been given when D-5 was settled. | user reopened |
+| P-2 | 5 | D-21 | Proposer, step 4 only: homelab-edge PR #79 and its db-host verify task assert `max_locks_per_transaction` = 1024, so the raise step becomes a read-only check. The adversary supports it and asks that the stop be the computed inequality. | user reopened |
