@@ -1227,3 +1227,44 @@ Resume state for the next `/sdd-batch` run (do not edit by hand; supersedes the 
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui, xstockstrat-ingest, plus xstockstrat-agent and the `strat-lab` plugin for the docs; key reuse patterns: the insights strategy page gap → backfill request, `useTriggerBackfill` + `useBackfillStatus(jobId)`).
+- Phase 1 Grilling: 5 rounds (full). Chosen approach: FR-6 through a tier-T1 self-serve envelope on ingest `TriggerBackfill` (eight conditions with denial tokens, per-symbol de-dup, span cap key `backfill.self_serve_max_range_days` default 730), an inline action on the symbol-page Backtests card with manual re-run, the insights strategy button opened to non-admins, and a homelab-only runbook that sets 8 jobs and 1830 days after a read-only lock check. Rejected: R-1…R-15 in `debate.md`, chiefly deleting the gate outright, automatic re-run, the FR-7 fallback and any lock-parameter raise in this feature.
+- Constitution rules touched: C-05, C-08, C-10, C-11, C-12, C-13, C-14, C-15, C-16, C-18, F-07, P-02, P-03, P-06, PLAT-4, PLAT-N1. Floor breaches: none.
+- Status: spec-ready → design-approved.
+- Operator approval (2026-11-15, design gate, round 5), verbatim "Agreed": the round-5 design is approved, including the petitioned D-21 reopen. The lock-setting raise step becomes a read-only check, and the computed inequality is the stop.
+- `debate.md` changes this session: State `in-debate` → `approved`; petition verdicts P-1 and P-2 `pending user` → `user reopened`. No row was added or reworded.
+  - Deviation from the batch step's wording, which said to mark pending petitions `user declined`: both reopens were accepted by the operator (P-1 by the round-3 widening decision, D-8; P-2 by the round-5 approval, D-22), so `user declined` would misstate the record.
+  - O-32 and O-33 keep status `open`, because the step supplied no status line for them. The round-5 approval answers O-32: only a failed lock inequality stops the homelab rollout.
+- `343@AC-9` CHANGE sign-off (C-16): the round-5 approval covers the design that contains the rewrite (D-12). No operator decision names the scenario on its own (O-33), so /sdd-spec confirms before it edits the scenario.
+- Operator answers relayed with this run (2026-11-15), verbatim: "1. Agreed", "2. Ok, agreed.", "3. I plan to do psql over ssh if possible.", "4. Confirmed", "5. Yes, fix the primitives. Use the switch component from Shadcn.", "6. Sounds good". The questions they answer were not in this step's input, and the batch covers four features, so none is mapped to a register row here. Item 3 may concern the access route for runbook step 2; it is carried as an open thread.
+- No ledger line was written. The token drift trap is already in `fails.md` (lines 308 and 1516, cited by D-25).
+
+### Decisions
+
+- The chosen approach is `design.md` § Chosen Approach; the binding register is `debate.md` (D-1…D-28, with D-5 superseded by D-8 and D-21 by D-22).
+
+### Open Threads
+
+- Homelab-edge PR #79 is merged but not applied; the live Postgres values are unread — runbook step 2.
+- The 2-connection bound fails if marketdata gets `DB_POOL_MAX` or more replicas — runbook step 2.
+- Admin GAPS_ONLY ranges are uncapped, so `L_stmt_max` is the longest admin range the operator accepts — runbook step 3.
+- Pre-004 one-day ohlcv chunks would raise L for old ranges; the homelab is asserted to be a fresh deploy, not verified — runbook step 2.
+- Eight jobs move contention onto marketdata's 2 connections and can slow interactive `GetBars` — runbook step 5.
+- The marketdata pool metric names were not checked against the marketdata `CLAUDE.md` — /sdd-spec.
+- Feature 341's 53200 counter lives on its branch; this feature's merge waits on it — merge-order row at /sdd-spec.
+- A rebuilt homelab database reverts to 3 and 730 until the checklist is re-run — runbook checklist step.
+- The shared token fixture's home and loading path are not chosen — /sdd-spec (C-13).
+- Config migration number 050 may collide with a peer feature — /sdd-spec.
+- Peer features 339 (same `page.tsx`), 341 and 344 (ingest) can conflict at merge — re-run the C-16 scan at /sdd-spec.
+- One user can queue one in-envelope job per symbol and fill every slot — accepted by the operator; no step.
+- An admin multi-symbol job blocks self-serve for its symbols for its whole duration — accepted (D-20); no step.
+- Whether `bars_total` is set during a run is unverified; "Backfilling…" without a denominator is the fallback copy — UI card step.
+- The `GetBackfillStatus` e2e mock does not exist yet — UI e2e step.
+- `jobId`, "Data ready" and the last-filled gap are local state and are lost on reload — accepted under D-2; no step.
+- `acceptance.feature` is unchanged: the @AC-2 amendment, the @AC-9 rewrite, the new scenarios and the @AC-8 strike are due at /sdd-spec. The product-spec Agent box (C-14) is ticked there too.
+- O-33: confirm the `343@AC-9` rewrite sign-off — /sdd-spec.
+- Access route for runbook step 2: the design names the DB-owner DSN; the relayed note says psql over ssh if possible — /sdd-spec runbook step.
+- `feature.md` § Summary still says "exactly the missing range"; the range is now `gap.start` through the window end (D-8) — /sdd-spec.
