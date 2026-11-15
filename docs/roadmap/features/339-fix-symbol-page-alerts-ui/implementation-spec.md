@@ -58,6 +58,20 @@ lost the "mark all read" exclusion from § Out of Scope, and `acceptance.feature
   Only the approval is relied on here. If "Staging is enough" refers to the post-merge smoke test,
   it is run on staging only; no step depends on that reading.
 
+**Operator questions `/sdd-execute` must ask (C-11).** The reply above was relayed again to the
+impl-spec review and still could not be mapped to O-12 or O-24, so neither is treated as answered.
+`/sdd-execute` puts each question to the operator in the confirmation it already shows before
+writing a unit, and records the answer in `context.md`:
+
+- **Before the Steps 9-10 unit — O-12.** "Do checkbox, field and questionnaire get the same
+  `data-state` fix as the switch?" A "no" (or no change) runs Step 9 as written. A "yes" reopens
+  R-4 and needs a re-spec of Steps 9-10 first; it is not an in-step addition.
+- **Before the Steps 11-12 unit — O-24.** "Clear all marks every unread alert read on the server,
+  up to 1000 per click, with no confirm and no undo, including alerts beyond the 50 listed.
+  Confirm, or choose listed-only with a 'showing 50 of N' line?" A confirmation runs Steps 11-15
+  as written. Listed-only is the design's unlocked fallback and needs a re-spec of Steps 11, 12,
+  14 and 15 first (`drainUnread` and its notices go away).
+
 ## Scenario Coverage (C-15)
 
 | Scenario | Step(s) | How |
@@ -105,9 +119,22 @@ lost the "mark all read" exclusion from § Out of Scope, and `acceptance.feature
 **Running e2e in the execute sandbox.** A full Playwright run is impractical there (fails.md,
 2026-08-10, feature 126). Every e2e command below is scoped:
 `pnpm exec playwright test <file> --project=chromium --no-deps`, after pre-warming only the routes
-the spec visits. If even the scoped run times out, record the fallback
-(`pnpm exec tsc --noEmit && pnpm run lint && pnpm exec playwright test <file> --list`) as a
-deviation. The fallback does not prove layout or DOM state.
+the spec visits. If even the scoped run times out, the fallback is
+`pnpm exec tsc --noEmit && pnpm run lint && pnpm exec playwright test <file> --list`.
+
+The fallback is not a pass. It proves neither layout nor DOM state, so a step that used it records
+a Deviation Log row headed **unverified AC** that names every scenario left unproven, and announces
+it at the checkpoint:
+
+- e2e is the only proof of `@AC-3`, `@AC-4`, `@AC-7` and `@AC-8`.
+- e2e is the only browser proof of the layout or DOM half of `@AC-1`, `@AC-2` (including the
+  Step 7 chip wiring at `page.tsx:444`) and `@AC-6`, and of the end-to-end half of `@AC-5`, `@AC-9`
+  and `@AC-10`. Their Vitest halves still count.
+
+The red-before-green record for that step's e2e assertions is "not captured" in the same row. Each
+named scenario stays unverified until its spec file is green in a real Playwright run: a local run,
+or the `frontend-e2e` CI job on the PR (`docs/patterns/ci-overview.md`). The row is closed only
+then, and any row still open is announced at session end and in the integration PR description.
 
 ---
 
@@ -242,6 +269,9 @@ grep -n "FUNDAMENTALS_LYFT\|POSITION_LYFT_WIDE" e2e/fixtures/INVENTORY.md
 RED before Step 1: the Vitest `<wbr/>` assertion fails and the two e2e `scrollWidth` assertions
 fail. Not run in this session: whether the `GetPosition` stub alone makes the Position panel render
 for LYFT (account selection may also matter). If it does not, record a deviation.
+Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
+(`pnpm run test:coverage`, `ui/vitest.config.ts:29-33`) is unaffected; e2e runs and
+`src/components/**` render tests are not coverage-gated.
 
 ---
 
@@ -310,6 +340,8 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/lib/money.test.ts \
 RED before Step 3: the import of `fmtUsdCompact` does not resolve, which is why the two steps are
 one unit; inside the unit, write the test against a stub that returns `''` to capture a behaviour
 RED.
+Coverage: `src/lib/**` lines, functions and statements must stay >= 40% under
+`pnpm run test:coverage` (`ui/vitest.config.ts:29-33`).
 
 ---
 
@@ -405,6 +437,9 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit \
 ```
 RED before Step 5: the group headers are absent and the market cap shows the full-precision value.
 The second command keeps the feature-220 rule and the FR-7 tests green.
+Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
+(`pnpm run test:coverage`, `ui/vitest.config.ts:29-33`) is unaffected; e2e runs and
+`src/components/**` render tests are not coverage-gated.
 
 ---
 
@@ -508,6 +543,11 @@ grep -n "LYFT_SOURCE_LABEL_OPPORTUNITIES" e2e/fixtures/INVENTORY.md
 ```
 RED before Step 7: the e2e finds a radio named `LYFT`. The last Playwright command guards the
 feature-155 rule that a row with a strategy id keeps it as the label.
+Coverage: `src/lib/**` lines, functions and statements must stay >= 40% under
+`pnpm run test:coverage` (`ui/vitest.config.ts:29-33`); the e2e part of this step is not
+coverage-gated.
+The Step 7 wiring at `page.tsx:444` has no unit test; the `@AC-2` e2e is its only proof (see
+"Running e2e in the execute sandbox" for the fallback rule).
 
 ---
 
@@ -533,6 +573,8 @@ feature-155 rule that a row with a strategy id keeps it as the label.
   `ui/src/app/config-ui/fundamentals-scan/page.tsx:8`, `ui/src/app/insights/signal-sources/page.tsx:10`.
 
 **Lands with**: `Step 10`
+
+**Operator gate**: ask O-12 before this unit (Execution Summary § Operator questions).
 
 **TDD**: `red-green required`
 
@@ -609,9 +651,21 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/components/ui/switch.test
   && pnpm exec playwright test e2e/accounts/notifications.spec.ts --project=chromium --no-deps
 ```
 RED before Step 9: the guard finds `data-checked:` tokens, and `@AC-6` finds the thumb at the
-leading end. Two things were not run in this session and are deviations if they fail:
-`renderToStaticMarkup` of the Radix Switch in the node environment emitting `data-state`, and the
-`navigator.serviceWorker.ready` override taking effect in headless Chromium.
+leading end.
+
+Checked by the impl-spec review (2026-11-15), in plain node against the installed `radix-ui` and
+`react-dom/server`: `renderToStaticMarkup` of the Radix `Switch.Root` with a `Switch.Thumb` emits
+`data-state="checked"` (respectively `unchecked`) on both the root and the thumb. Still not run:
+the same render through the app's `Switch` wrapper under Vitest (the `@/` alias and `cn`).
+
+Not run, and the higher-risk part of this step: the `navigator.serviceWorker.ready` override
+taking effect in headless Chromium. `ready` is an accessor on `ServiceWorkerContainer.prototype`,
+so a plain assignment may not stick. If `@AC-6` cannot reach `aria-checked="true"` this way, stop
+and record a deviation; do not weaken the assertion or mark `@AC-6` verified on the Vitest guard
+alone.
+Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
+(`pnpm run test:coverage`, `ui/vitest.config.ts:29-33`) is unaffected; e2e runs and
+`src/components/**` render tests are not coverage-gated.
 
 ---
 
@@ -639,6 +693,8 @@ leading end. Two things were not run in this session and are deviations if they 
   `ui/src`).
 
 **Lands with**: `Step 12`
+
+**Operator gate**: ask O-24 before this unit (Execution Summary § Operator questions).
 
 **TDD**: `red-green required`
 
@@ -740,6 +796,8 @@ grep -n "DRAWER_ALERT_" e2e/fixtures/INVENTORY.md
 ```
 RED: inside the unit, write the tests against signature-only helpers (returning `[]` / `done`) so
 the failure is a behaviour failure, not an unresolved import.
+Coverage: `src/lib/**` lines, functions and statements must stay >= 40% under
+`pnpm run test:coverage` (`ui/vitest.config.ts:29-33`).
 
 ---
 
@@ -795,6 +853,9 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit \
 grep -n "from '../helpers/connectStream'" e2e/trader/stream-reconnect.spec.ts
 ```
 All four specs stay green on a tree without Step 14.
+Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
+(`pnpm run test:coverage`, `ui/vitest.config.ts:29-33`) is unaffected; e2e runs and
+`src/components/**` render tests are not coverage-gated.
 
 ---
 
@@ -832,6 +893,9 @@ All four specs stay green on a tree without Step 14.
 - Helpers from Step 11: `UNREAD_PAGE_SIZE`, `mergeUnread`, `pruneStreamed`, `drainUnread`.
 
 **Lands with**: `Step 15`
+
+**Operator gate**: O-24 must be answered (asked before Step 11). The capped-drain parts of this
+step (instruction 6, the `capped` notice, `markNotice`) exist only under that answer.
 
 **TDD**: `red-green required`
 
@@ -978,7 +1042,11 @@ keep three durable rules
 green: `@AC-9 @feature-270` (reconnect), `@AC-5 @feature-271` (stream past the unary deadline) and
 `@AC-6 @feature-203` (inbox). Not run in this session: a route handler that never settles, and the
 brief disconnected indicator after a fulfilled stream; a failure there is a deviation to record,
-not a reason to assert less.
+not a reason to assert less. This is the step most likely to go red at execute for a harness
+reason; a red scenario here leaves its `@AC` unverified (see "Running e2e in the execute sandbox").
+Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
+(`pnpm run test:coverage`, `ui/vitest.config.ts:29-33`) is unaffected; e2e runs and
+`src/components/**` render tests are not coverage-gated.
 
 ---
 
