@@ -837,3 +837,47 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui; key reuse patterns: `resolveChartColor` canvas read-back for every line color, the `PAIRS` contrast structure in `themes.test.ts`).
+- Phase 1 Grilling: 5 rounds (full). Chosen approach: 12 `--series-N` tokens with identical `rgb()` values in both theme files, one `seriesSlots` array driving lines and legend swatches by a whole-chart index mod 12, a new `colorVision.cjs` (Machado-2009, CIEDE2000) backing the floor tests, and a feasibility gate before any token is written. Rejected: a shared `globals.css` `:root` declaration (R-1), conditional floor rows carried into the impl-spec (R-10), an automatic palette search script (R-16); full list R-1..R-16 in `debate.md` and `design.md`.
+- Constitution rules touched: C-01, C-08, C-11, C-12, C-15, C-16, C-18, F-05, P-01, P-02, P-03. Floor breaches: none.
+- Register at approval: D-1..D-30 settled, R-1..R-16 locked, O-24..O-27 open (all non-blocking), no reopen petitions (none filed, so none to mark declined). `debate.md` State: approved.
+- Wrote `design.md`. Amended `product-spec.md` FR-4 (last clause) and `acceptance.feature` @AC-5 to the confirmed floors (D-27, D-28); the wording is the round-5 state's, unchanged.
+- Ledger: no line added.
+- Status: spec-ready → design-approved.
+
+### Operator decision — palette floors (2026-11-15, design gate, round 4)
+
+- As relayed by the batch orchestrator: the operator was asked directly with the exact numbers and answered verbatim "Confirmed".
+- The floors, measured in CIEDE2000: under simulated deuteranopia and protanopia, adjacent colors (including entry 12 with entry 1) >= 10 and every other pair >= 5; for normal vision, every pair >= 10; the same 12 values in both themes. A feasibility check on a candidate set runs first and escalates to the operator if it fails.
+- This replaces the sdd-story note above ("The CIEDE2000 ≥10 threshold in @AC-5 is my proposed measurable form of 'color-blind safe'; confirm or adjust in design"). That line stays; this file is append-only.
+- It is the sign-off for the @AC-5 EXTEND and the FR-4 amendment (C-16).
+- Limit of this record (O-24): the question text as sent was not available to this step, so it is not quoted here. "Confirmed" is in the relayed user request verbatim, but the items are unlabeled across a multi-feature batch, so which question it answered rests on the orchestrator's mapping.
+
+### Operator decision — design approval (2026-11-15, design gate, round 5)
+
+- As relayed by the batch orchestrator: verbatim "Agreed" — the round-5 design is approved. "Agreed" is in the relayed user request verbatim; the same O-24 mapping limit applies.
+- Not applied to this feature: an earlier relayed "Staging is enough" answer. Both `UI_THEME` builds and the production theme values stay (operator decision "in both themes", AC-1, D-1).
+
+### Decisions
+
+- The chosen approach is `design.md` § Chosen Approach; the binding register is `debate.md` D-1..D-30.
+- Thresholds (D-27): CVD adjacent >= 10 with the wrap, CVD non-adjacent >= 5, normal vision all pairs >= 10, contrast >= 3.0 on `--card` and `--background` in both themes, the same 12 values in both themes.
+- Build order (D-12): CVD helper with 49 reference tests; feasibility gate; `seriesPalette.ts`, tokens and the 11 series theme tests; `seriesSlots`; `IndicatorPanels.tsx` wiring and e2e; both-theme builds and the browser e2e; docs.
+
+### Open Threads
+
+- [ ] O-24: have the operator confirm at the `/sdd-spec` gate that "Confirmed" (floors) and "Agreed" (approval) answered this feature's questions. If either belonged to a peer feature, D-27/D-28, the FR-4 and @AC-5 amendments and this approval reopen — target: `/sdd-spec` boot.
+- [ ] The feasibility gate may fail (one shared 12-value set clearing five distance floors and 3:1 on two dark cards is tight); stop and escalate to the operator, no per-theme fallback, no lowered floor — target: step 2.
+- [ ] O-25: add "collisions with `nonSharedTokens` = 0" to the gate output and pass condition, export `nonSharedTokens` in step 1, and on a step-3 failure after a gate pass rerun the gate and append a superseding entry here — target: `/sdd-spec` (steps 1-2).
+- [ ] O-26: name the origin of the 12 candidates; reordering the same 12 values is allowed before declaring gate failure — target: `/sdd-spec` (step 2).
+- [ ] O-27: each @AC-5 floor row's failure message names the worst pair's `i`, `j`, `dE` and simulation — target: `/sdd-spec` (step 3).
+- [ ] Name the single published source for the Lab pins, the RGB->XYZ matrix and the Machado matrices; transcribe, do not recall (D-21) — target: `/sdd-spec` (step 1).
+- [ ] `colorVision.cjs` is outside vitest coverage scope; its 49 reference tests are its only guard — target: step 1.
+- [ ] `line.options().color` may be normalized by lightweight-charts v5; compare numeric channels — target: step 5.
+- [ ] The cleanup reset relies on `components` being reference-stable (`page.tsx:1349`) — target: step 5.
+- [ ] Check (a) needs a real `pnpm build` for both `UI_THEME` values plus the browser e2e (`fails.md:1462`) — target: step 6.
+- [ ] `seriesPalette.ts` and `indicatorChart.ts` are Tailwind-scanned; no `rgb()` literal or utility-shaped string there (`fails.md:3983`) — target: steps 3-4.
+- [ ] The feature-307 @AC-2 title ("exactly the Nocturne palette") no longer describes the staging file, though its Then-clauses hold; a wording change needs its own operator sign-off — target: step 7.
