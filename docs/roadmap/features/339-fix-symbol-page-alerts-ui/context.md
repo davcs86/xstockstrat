@@ -568,3 +568,18 @@ Asked directly, answered verbatim by the operator (2026-11-15):
 - **Checkpoint 5 — "Yes"** (proceed), and **wording — "Confirm"**: asked "The group labels 'Valuation' and
   'Quality & risk' and the `$6.73B` format were chosen by the spec, not by you. Confirm or give
   replacements." The labels and the compact format are operator-confirmed.
+
+## Session 2026-11-15 — sdd-execute sequential, Steps 7+8 (atomic unit)
+
+### Step 7 — service: `opportunityChipLabel` [done]
+- Unit 7+8. New `opportunityChipLabel({ strategyId, source })` in `opportunityShared.tsx`: the strategy id, else the source with `_`/`-` turned into spaces and the first letter upper-cased, else `No strategy`; it never reads the symbol. `page.tsx` `opportunityPanels` uses it for `label` (was `o.strategyId || o.symbol`). No runtime client-only import added.
+- Files modified: `services/xstockstrat-ui/src/lib/opportunityShared.tsx`, `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`
+- TDD: red/green recorded under Step 8 (one cycle for the unit).
+- Deviations: none for this step (see Step 8).
+
+### Step 8 — test: chip label unit test and `@AC-2` e2e [done]
+- Unit 7+8. `describe('opportunityChipLabel')` in `opportunityShared.test.ts` (strategy id wins; `fundamentals` → `Fundamentals`; `unusual_whales` → `Unusual whales`; both empty → `No strategy`). New fixture `LYFT_SOURCE_LABEL_OPPORTUNITIES` (two LYFT rows, no `validUntil`, not in `OPPORTUNITIES`) with its `INVENTORY.md` row. `@AC-2` e2e in `symbol-page-display.spec.ts` stubs `ListOpportunities`, and within the `Opportunities` radiogroup asserts radios `dip_buyer_vol_stop` and `Fundamentals` visible and none named `LYFT`.
+- Files modified: `services/xstockstrat-ui/src/lib/opportunityShared.test.ts`, `services/xstockstrat-ui/e2e/fixtures/{opportunities.ts,INVENTORY.md}`, `services/xstockstrat-ui/e2e/trader/symbol-page-display.spec.ts`
+- TDD: AC-2 red: Vitest 3 failed / 7 passed (`opportunityChipLabel is not a function`); e2e `@AC-2` failed at the `Fundamentals` radio, snapshot `radio "LYFT"` (1 failed, 3 passed) → green: Vitest 10 passed; `test:coverage` 79 files, 557 passed / 2 skipped, Lines 79.56%, Functions 80.8%, Statements 78.36% (≥ 40%); lint (pre-existing warnings only, none in the touched files) and `tsc --noEmit` clean; `symbol-page-display.spec.ts` 4 passed; `position-detail.spec.ts -g "feature 145"` 4 passed with `--timeout=90000` (2 cold `page.goto` timeouts at 10 s without it).
+- Deviations: CI-equivalent fallback for the feature-145 command; the block's exit status is the trailing grep's — full detail in Deviation Log. Config-key wiring gate N/A (no key touched).
+- Open (unchanged): the "No strategy" wording and the source humanizer rule are not operator-confirmed; same-source strategy-less rows get identical chips (accepted gap, design.md § 3).

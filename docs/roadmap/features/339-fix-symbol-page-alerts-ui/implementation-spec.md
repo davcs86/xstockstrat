@@ -466,7 +466,7 @@ Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
 
 ### Step 7 — service: `opportunityChipLabel`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/opportunityShared.tsx` — modify
@@ -514,7 +514,7 @@ The union with Step 8. On its own: `cd services/xstockstrat-ui && pnpm run lint 
 
 ### Step 8 — test: chip label unit test and `@AC-2` e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/opportunityShared.test.ts` — modify
@@ -1280,3 +1280,19 @@ _Populated by /sdd-execute as implementation proceeds._
 - **RED/GREEN capture.** RED: lint and `tsc` passed, then both `@AC-1` tests failed at the
   `Valuation` header (`element(s) not found`). GREEN: `symbol-page-display.spec.ts` 3 passed.
   **Disposition**: recorded; no unverified AC — `@AC-1` passed in a real Playwright run.
+
+### Steps 7+8 — `opportunityChipLabel` and the `@AC-2` tests (2026-11-15, SEV-3)
+
+- **Block exit status masks the chain.** The Verification block's last line (the `INVENTORY.md`
+  grep) sets its exit status, so `exit=0` was printed on both the RED and GREEN runs. Each run was
+  judged from its log instead. **Disposition**: recorded; no spec change.
+- **RED capture.** The `&&` chain stops at the red Vitest run (3 failed / 7 passed,
+  `TypeError: opportunityChipLabel is not a function`). The e2e RED was captured by running its
+  Playwright sub-command alone: `@AC-2` failed at the `Fundamentals` radio (`element(s) not
+  found`), and the snapshot showed `radio "LYFT"` beside `radio "dip_buyer_vol_stop"`.
+  **Disposition**: recorded.
+- **`position-detail.spec.ts -g "feature 145"` cold-start timeout.** In the GREEN chain two of four
+  tests failed on `page.goto` at the harness 10 s test timeout (`:616`, `:651`), not on an
+  assertion. The same command with `--timeout=90000` passed 4/4. **Disposition**: CI-equivalent
+  fallback (as in Steps 1+2 and 5+6); the `frontend-e2e` CI job is the confirming run. No unverified
+  AC — `@AC-2` passed in a real Playwright run.

@@ -19,6 +19,7 @@ import {
   OPPORTUNITY_ACTION,
   FUNDAMENTALS_GAP,
   EnumBadge,
+  opportunityChipLabel,
 } from '@/lib/opportunityShared';
 import { READINESS_CUE } from '@/lib/readinessCue';
 import { useWatchlists } from '@/hooks/useWatchlists';
@@ -441,7 +442,7 @@ function PositionDetailInner() {
 
   const opportunityPanels: SymbolPanel[] = symbolOpportunities.map((o) => ({
     id: o.opportunityKey,
-    label: o.strategyId || o.symbol,
+    label: opportunityChipLabel(o),
     node: <OpportunitySection opportunity={o} symbol={symbol} />,
   }));
 

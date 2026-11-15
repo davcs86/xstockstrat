@@ -1,6 +1,10 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { addAuthCookie, BASE_URL } from '../helpers/auth';
-import { FUNDAMENTALS_LYFT, POSITION_LYFT_WIDE } from '../fixtures';
+import {
+  FUNDAMENTALS_LYFT,
+  LYFT_SOURCE_LABEL_OPPORTUNITIES,
+  POSITION_LYFT_WIDE,
+} from '../fixtures';
 
 /**
  * Symbol-page stat tiles at a 384px phone width (feature 339, @AC-1/@AC-8): every long value stays
@@ -23,6 +27,7 @@ test.beforeAll(async ({ browser }) => {
 
 const GET_FUNDAMENTALS = '**/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals';
 const GET_POSITION = '**/xstockstrat.portfolio.v1.PortfolioService/GetPosition';
+const LIST_OPPORTUNITIES = '**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities';
 
 async function routeJson(page: Page, path: string, body: unknown) {
   await page.route(path, (route) =>
@@ -131,4 +136,19 @@ test('@AC-8 a wide cost basis fits its position tile at 384px', async ({ page })
   await trade.getByRole('radio', { name: 'Position' }).click({ timeout: 15000 });
   await expect(trade.getByText('Cost basis', { exact: true })).toBeVisible();
   await expectTileFits(trade, 'Cost basis');
+});
+
+test('@AC-2 a strategy-less opportunity chip is labelled by its source, never the ticker', async ({
+  page,
+}) => {
+  await routeJson(page, LIST_OPPORTUNITIES, { opportunities: LYFT_SOURCE_LABEL_OPPORTUNITIES });
+  await addAuthCookie(page);
+  await page.goto('/trader/positions/LYFT');
+
+  const chips = page.getByRole('radiogroup', { name: 'Opportunities' });
+  await expect(chips.getByRole('radio', { name: 'dip_buyer_vol_stop', exact: true })).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(chips.getByRole('radio', { name: 'Fundamentals', exact: true })).toBeVisible();
+  await expect(chips.getByRole('radio', { name: 'LYFT' })).toHaveCount(0);
 });
