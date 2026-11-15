@@ -31,10 +31,12 @@ Feature: chart-series-palette
     And the same holds for the production theme's 12 series colors against its "--card" and "--background"
 
   @AC-5 @FR-4
-  Scenario: Adjacent series colors stay distinguishable for red-green color blindness
-    Given the 12 series colors in palette order
-    When each adjacent pair is compared under deuteranopia and protanopia simulation
-    Then every adjacent pair differs by a CIEDE2000 distance of at least 10
+  Scenario: Series colors stay distinguishable for normal and red-green color-blind vision
+    Given the 12 series colors in palette order, where entry 12 and entry 1 are adjacent
+    When every pair is compared by CIEDE2000 distance under deuteranopia simulation, under protanopia simulation, and under normal vision
+    Then under each simulation every adjacent pair differs by at least 10
+    And under each simulation every other pair differs by at least 5
+    And under normal vision every pair differs by at least 10
 
   @AC-6 @FR-5
   Scenario: A thirteenth series reuses the first color
