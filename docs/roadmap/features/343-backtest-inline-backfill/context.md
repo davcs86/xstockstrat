@@ -1356,3 +1356,13 @@ Resume state for the next `/sdd-batch` run (do not edit by hand; supersedes the 
   task asserts the lock setting; (b) regenerate `scripts/config-wiring-stored.json`, which needs a
   scratch Postgres with the migration set applied, not a live database. Those two stay as specified
   unless the operator rules otherwise at the execute checkpoint.
+
+- **Operator, verbatim (2026-11-15): "max_locks_per_transaction assume what homelab-edge has".**
+  Supersedes item (a) above for that parameter: the rollout takes `max_locks_per_transaction` = 1024
+  from `homelab-edge` `roles/db_host/defaults/main.yml` (asserted by its `verify` task) and does
+  not read it live with `psql`. Step 16's read-only `SHOW max_locks_per_transaction` precondition
+  is dropped at execute; the lock inequality is computed with 1024.
+- **Orchestrator assumption (not operator words):** the ruling names only
+  `max_locks_per_transaction`. `max_connections` (70 after homelab-edge PR #79 is applied to the
+  host, 60 before) and `max_prepared_transactions` keep their specified read unless the operator
+  extends the ruling.
