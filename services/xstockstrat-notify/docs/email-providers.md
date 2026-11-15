@@ -6,7 +6,7 @@ outbox behaves. Summary in `CLAUDE.md` § Email providers; operator rules in `op
 A qualifying alert produces at most one email, through SendGrid or
 through the homelab commsgun hub. `src/fanout/emailProvider.ts` holds the rules; `src/fanout/emailRender.ts`
 renders the one subject and text both providers send (the subject has CR/LF replaced by a space and is cut to
-998 UTF-8 bytes, commsgun's `invalid_subject` limit); `src/fanout/sendgridSender.ts` is the SendGrid POST.
+998 code points, commsgun's `invalid_subject` limit); `src/fanout/sendgridSender.ts` is the SendGrid POST.
 
 - **Base and readiness.** The *base* is `commsgun.enqueue_url`, `commsgun.app_id` and `commsgun.to_email`,
   all non-empty. An enqueue URL that is not `https:` reads as empty, so the bearer key never goes out in clear text. The app key has three states (`src/services/commsgunSecret.ts`): `key`, `absent`

@@ -121,7 +121,7 @@ describe('renderEmail', () => {
     assert.equal(lines[3], 'Conviction: (n/a)');
   });
 
-  it('@AC-2 (346) the subject has no CR/LF and is capped at 998 bytes; the text keeps the title', () => {
+  it('@AC-2 (346) the subject has no CR/LF and is capped at 998 runes; the text keeps the title', () => {
     const title = 'BUY AAPL\r\nBcc: x@example.com\n\nmore';
     const email = renderEmail({ ...PAYLOAD, title });
     assert.equal(email.subject, '[ALERT_SEVERITY_WARNING] BUY AAPL Bcc: x@example.com more');
@@ -130,11 +130,12 @@ describe('renderEmail', () => {
     const long = renderEmail({ ...PAYLOAD, title: 'x'.repeat(2000) }).subject;
     assert.equal(long.length, 998);
     assert.ok(long.startsWith('[ALERT_SEVERITY_WARNING] xxx'));
-    // The cap is in UTF-8 bytes (it holds whether commsgun counts bytes or runes) and never splits a code point.
-    const astral = renderEmail({ ...PAYLOAD, title: '\u{1F4C8}'.repeat(600) }).subject;
-    assert.ok(Buffer.byteLength(astral, 'utf8') <= 998);
-    assert.ok(Buffer.byteLength(astral, 'utf8') > 994, 'cut at the last whole code point');
+    // Runes, as commsgun counts them (utf8.RuneCountInString): a cut never splits a code point.
+    const astral = renderEmail({ ...PAYLOAD, title: '\u{1F4C8}'.repeat(2000) }).subject;
+    assert.equal([...astral].length, 998);
     assert.ok(!/[\uD800-\uDBFF]$/.test(astral), 'no lone high surrogate at the end');
+    const accented = renderEmail({ ...PAYLOAD, title: '\u00e9'.repeat(900) }).subject;
+    assert.equal([...accented].length, '[ALERT_SEVERITY_WARNING] '.length + 900, 'under 998 runes is not cut, whatever its bytes');
   });
 });
 

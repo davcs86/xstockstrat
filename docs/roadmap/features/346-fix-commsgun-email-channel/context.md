@@ -28,3 +28,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Existing @AC-25 (pinned, absent key) now expects 2 alerts: the row's own alert plus the new standing incident.
 - Prettier `--check` fails on the touched files at `main-dev` already and is not a CI job; not reformatted (surgical diff).
 - Constitution: NOTIFY-17 retry set widened to 408, and the `invalid_subject` rule added. `email-providers.md` and `CLAUDE.md` updated. Findings rows moved to `## Resolved`.
+
+## Session 2026-11-15 (follow-up — producer contract read)
+
+- Read `davcs86/commsgun` @ `5c0c129` (public; anonymous clone). `api/internal/enqueue/validate.go#emailContent` rejects a subject that is empty, contains CR or LF (`ContainsAny(subject, "\r\n")`), or has `utf8.RuneCountInString(subject) > constants.SubjectMaxLen` (998).
+- Supersedes the prior session's byte-cap decision: the cap is now **998 code points** (JS `for…of` / spread iterates the same code points Go counts as runes), so non-ASCII titles are no longer over-truncated. RED → GREEN on the updated @AC-2 test. An empty subject cannot occur, because the subject always starts with `[severity] `.

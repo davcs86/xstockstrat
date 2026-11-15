@@ -14,21 +14,12 @@ export interface RenderedEmail {
   text: string;
 }
 
-// commsgun rejects a subject over 998 (validate.go SubjectMaxLen) or holding CR/LF with a permanent 422.
-const SUBJECT_MAX_BYTES = 998;
+// commsgun rejects a subject holding CR/LF or over 998 runes (validate.go emailContent) with a permanent 422.
+const SUBJECT_MAX_RUNES = 998;
 
-// Bytes, not UTF-16 units: the cap holds whether the producer counts bytes or runes. Never splits a code point.
+// Code points, as commsgun's utf8.RuneCountInString counts them: a cut never splits one.
 function emailSubject(raw: string): string {
-  const flat = raw.replace(/[\r\n]+/g, ' ');
-  if (Buffer.byteLength(flat, 'utf8') <= SUBJECT_MAX_BYTES) return flat;
-  let out = '';
-  let bytes = 0;
-  for (const ch of flat) {
-    bytes += Buffer.byteLength(ch, 'utf8');
-    if (bytes > SUBJECT_MAX_BYTES) break;
-    out += ch;
-  }
-  return out;
+  return [...raw.replace(/[\r\n]+/g, ' ')].slice(0, SUBJECT_MAX_RUNES).join('');
 }
 
 // The one email renderer: SendGrid and commsgun must send the same subject and text.
