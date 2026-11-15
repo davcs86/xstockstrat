@@ -1,6 +1,6 @@
 # Debate Register: fix-symbol-page-alerts-ui
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -101,4 +101,4 @@
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 3 | D-7 | Proposer: the operator ruled at the design gate (2026-11-15), after D-7 was settled in round 1, that the drawer offers both a per-row mark-read and a clear-all action and that removing Clear all outright is not accepted. MarkAlertReadRequest.alert_ids is repeated (notify.proto:118), so a persisting clear-all needs no contract change. The adversary assessed the evidence as new. | pending user |
+| P-1 | 3 | D-7 | Proposer: the operator ruled at the design gate (2026-11-15), after D-7 was settled in round 1, that the drawer offers both a per-row mark-read and a clear-all action and that removing Clear all outright is not accepted. MarkAlertReadRequest.alert_ids is repeated (notify.proto:118), so a persisting clear-all needs no contract change. The adversary assessed the evidence as new. | user reopened |
