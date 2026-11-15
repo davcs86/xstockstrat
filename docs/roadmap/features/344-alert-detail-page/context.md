@@ -515,3 +515,240 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 4)
+
+- `/sdd-design alert-detail-page` full debate halted at its approval gate after round 4 (gate policy: halt). `design.md` is not written and `status.md` is unchanged (`spec-ready`). Register: `debate.md` (D-1..D-26, R-1..R-13, O-1..O-9, P-1..P-4).
+- Operator steer applied this round (2026-11-15): R-7, the D-10 clause "no unread-count cache or invalidation is invented in 344" and the two D-12 clauses (mount refetch as the trigger; `page.goto('/trader')` bell check) are reopened. D-10 and D-12 are marked `reopened @ round 4` in the register; D-20 and D-21 supersede exactly those clauses, and the rest of both decisions stands.
+- The Verdict cells of P-2, P-3 and P-4 in `debate.md` still read `pending user`; this run was not told to change them. The reopen itself is recorded on R-7, D-10 and D-12.
+- This entry supersedes the round-3 `## Open Threads` block above.
+
+## Open Threads
+
+- **Approach (round 4)**: D-1..D-9, D-11 and D-13..D-19 are unchanged. New this round:
+  - Alert read models share one react-query prefix (D-20). `src/lib/alertShared.ts` exports `ALERTS_QUERY_KEY = ['alerts']` and `ALERT_UNREAD_COUNT_KEY = ['alerts', 'unread-count']`. The bell count becomes a `useQuery` on the count key, replacing the mount effect at `AlertStream.tsx:19-32`. Every mark-read path (the alert page after a successful GetAlert, and the inbox "Mark read") invalidates the `['alerts']` prefix through `useInvalidatingMutation`. The cache is shared within one segment's provider, not across segments.
+  - Both mark-read call sites pass `meta: { errorHandled: true }`, so a failed mark-read stays non-blocking (D-7) and the inbox error is not reported twice; the inbox calls `mutateAsync` inside its existing try/catch (D-22).
+  - The inbox list moves to `useQuery(['alerts', 'list'])` in place of local state plus manual `refetch()`, so one invalidation refreshes the bell, the inbox rows and the inbox "N unread" badge, whichever surface did the mark-read (D-23). The 203 inbox scenarios and existing testids must stay green.
+  - 339 constraint, written as a design input and not a dictated decision (D-25): badge count on `ALERT_UNREAD_COUNT_KEY`; the drawer's stored-unread list under the `['alerts']` prefix; drawer mark-read through `useInvalidatingMutation` on the prefix; the stream `onMessage` path invalidates the count key (never +1, because a reconnect re-delivers alerts).
+  - The post-339 blocked step moves the bell to `PlatformHeaderInner` and the file to `components/shared/`, adds the keys, the invalidations, the inbox query and the drawer title link, re-greps what 339 shipped and adapts to it, and must not drop 339's streamed-alert badge raise (D-24).
+  - Tests (D-21, D-22, D-23, D-24): the badge is asserted on the alert page itself on a direct `page.goto` and on a client navigation from the inbox row title, with no `page.goto('/trader')` step; a delayed-first-`ListAlerts` case; on `/accounts/notifications` one "Mark read" click drops the inbox badge and the bell badge together; after opening an alert from the drawer the drawer no longer lists it as unread; 339's "streamed alert raises the badge" scenario is re-asserted after the swap; a failed MarkAlertRead on the alert page shows no global error banner.
+  - The spec names the bell's new refetch on window focus and its single retry as a behaviour change; badge tests assert values only (D-26).
+- **Strongest open objection — O-9 (non-blocking)**: the 339 constraint is fully worded but not yet written. 339's `context.md` has no such line and `docs/roadmap/features/merge-order.md` has no 339 → 344 row. It stays open until the orchestrator writes both. 339 runs in this same batch, so it may design before the line lands; the post-339 step is conditional for that reason.
+- **Also open, non-blocking — O-5**: the non-RPC fallback body `Backfill job {job_id} failed: unexpected error — see the alert details` still needs operator confirmation. None of the relayed operator answers can be tied to it.
+- **Closed this round**: O-7 (the operator reopened the D-10 clause and the two D-12 clauses; D-20 and D-21 supersede them) and O-8 (inbox list on the shared prefix; both badges refresh on the same invalidation). No blocking objection remains.
+- **Floor status**: no Floor breach.
+- **Uncovered `@AC` changes**: `165 @AC-9`, `165 @AC-4` and `271 @AC-5` are EXTEND and not covered by an operator decision. Covered: `344 @AC-6` CHANGE, `344 @AC-8` CHANGE, `344 @AC-10` EXTEND, `270 @AC-9` EXTEND. All other cited scenarios (339 @AC-5, 165 @AC-5, 203 @AC-1..5, 242 @AC-2/5, 270 @AC-12, 334 @AC-20) are PRESERVE. Cross-feature ids are as cited in earlier rounds; this round only 339's streamed-alert scenario was re-read.
+- **Still outstanding before execute**: the 339 design-input line in 339's `context.md` and the 339 → 344 row in `docs/roadmap/features/merge-order.md` (D-10, D-25). Neither is in this feature's directory, so this run did not write them.
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "Round-4 best approach. D-1..D-9, D-11 and D-13..D-19 are unchanged. The operator reopened R-7, the D-10 clause and the two D-12 clauses, so the shared-cache design is now legitimate. I adopt the proposer's key and the adversary's corrections to it. I checked the disputed facts in code; they support the adversary.\n\n**1. Alert read models share one react-query prefix (supersedes the reopened D-10 clause)**\n- `services/xstockstrat-ui/src/lib/alertShared.ts` exports `ALERTS_QUERY_KEY = ['alerts']` and `ALERT_UNREAD_COUNT_KEY = ['alerts', 'unread-count']`.\n- The bell count is `useQuery({ queryKey: ALERT_UNREAD_COUNT_KEY, queryFn: () => notifyClient.listAlerts({ limit: 1 }), select: r => r.unreadCount })`, replacing the mount effect at `AlertStream.tsx:19-32`.\n- Every mark-read path invalidates the prefix `ALERTS_QUERY_KEY` through `useInvalidatingMutation` (`src/hooks/useInvalidatingMutation.ts:15-32`):\n  - the alert page, after a successful GetAlert (D-7);\n  - the inbox \"Mark read\" (`AlertInbox.tsx:42-53`).\n- Both call sites pass `{ meta: { errorHandled: true } }`. Without it a failed mark-read reaches the global error fallback (`src/lib/queryClient.ts:15-20`, `mutationErrorStore.ts:36-38`), which breaks D-7's \"failure is non-blocking\" and reports the inbox error twice.\n- The cache is shared within one segment's provider, not across segments. A segment switch remounts and refetches.\n- The bell gains a refetch on window focus and one retry (`queryClient.ts:26`: `staleTime: 5_000, retry: 1`). The spec names this; tests assert values only.\n\n**2. Inbox list moves onto the same prefix (answers O-8 in both directions)**\n- `AlertInbox.tsx:19-40` loads its list with `useQuery(['alerts', 'list'])` in place of local state plus manual `refetch()`.\n- One invalidation then refreshes the bell count, the inbox rows and the inbox \"N unread\" badge (`AlertInbox.tsx:63-65`), whichever surface did the mark-read.\n- The inbox calls `mutateAsync` inside its existing try/catch and keeps its own error text.\n- The 203 inbox scenarios and existing testids must stay green.\n\n**3. Constraint on 339, written as a design input, not a dictated decision**\n- Checked: `docs/roadmap/features/339-fix-symbol-page-alerts-ui/` has no design.md, its context.md has no key constraint, and `merge-order.md` has no 339 → 344 row.\n- The orchestrator adds this line to 339's `context.md` now, and the 339 → 344 merge-order row points to it:\n  - badge count on `ALERT_UNREAD_COUNT_KEY`;\n  - the drawer's stored-unread list under the `['alerts']` prefix;\n  - drawer mark-read through `useInvalidatingMutation` on the prefix;\n  - the stream `onMessage` path invalidates the count key (invalidate, not +1, because a reconnect re-delivers alerts).\n- 339 runs in this same batch, so the line may arrive after its design. The post-339 step is therefore conditional: it re-greps what 339 shipped and adapts to it rather than assuming the shape.\n\n**4. Post-339 blocked step (D-10, D-15)**\n- Move the bell to `PlatformHeaderInner` and the file to `components/shared/` (D-14, D-15).\n- Add the key, the invalidations, the inbox query and the drawer title link.\n- The swap must not drop 339's streamed-alert badge raise (339 `acceptance.feature:33-36`).\n\n**5. Tests (supersedes the two reopened D-12 clauses; the rest of D-12 stands)**\n- Badge asserted on the alert page itself, on two paths: direct `page.goto` of the alert URL, and client navigation from the inbox row title. No `page.goto('/trader')` step.\n- A delayed-first-`ListAlerts` case proves a stale response does not overwrite the refreshed count.\n- On `/accounts/notifications`, one \"Mark read\" click drops the inbox badge and the bell badge together.\n- After opening an alert from the drawer, the drawer no longer lists it as unread.\n- 339's \"streamed alert raises the badge\" scenario is re-asserted after the swap.\n- A failed MarkAlertRead on the alert page shows no global error banner.\n\n**6. Unchanged from round 3**\n- O-1 ruling (a): `context[\"error\"]` keeps raw `str(e)` (D-16).\n- Spec amendments: @AC-6, FR-8, @AC-10, Consumer Surface line (D-17).\n- Docs: UI-2 exception extension and the `PlatformHeader.tsx:43-44` drift entry (D-18); D-13 findings entry.\n- 640–1024px overflow check (D-19).\n\n**Build order**\nproto → notify getAlert + round-trip test → push url → ingest body → UI BFF + mock + fixture → helpers + page + nav + e2e → inbox title link → [after 339] bell move + file move + keys + invalidations + inbox query + drawer link + read-state/stream/width e2e → docs.",
+    "open_objections": [
+      {
+        "text": "O-5 (existing): the non-RPC fallback body 'Backfill job {job_id} failed: unexpected error — see the alert details' still needs operator confirmation. None of the relayed operator answers can be tied to it.",
+        "blocking": false
+      },
+      {
+        "text": "O-9 (existing): the 339 constraint is now fully worded (count key, drawer list under the ['alerts'] prefix, drawer mark-read on the prefix, stream onMessage invalidation), but it is not yet written. 339's context.md has no such line and merge-order.md has no 339 → 344 row. It stays open until the orchestrator writes both.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "344 @AC-6",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "344 @AC-10",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "344 @AC-8",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "339 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "165 @AC-9",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "165 @AC-4",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "165 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "203 @AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "203 @AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "203 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "203 @AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "203 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "242 @AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "242 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "270 @AC-9",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "270 @AC-12",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "271 @AC-5",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "334 @AC-20",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Invalidate only ALERT_UNREAD_COUNT_KEY (proposal r4) — lost: the drawer's stored-unread list and the inbox list stay stale after a mark-read; the ['alerts'] prefix refreshes all three with one call.",
+      "Keep the inbox on local state with invalidate plus manual refetch() (proposal r4) — lost: it syncs inbox → bell only; a drawer mark-read leaves the inbox rows and 'N unread' stale, and it keeps two refresh mechanisms.",
+      "setQueryData +1 on a streamed alert — lost: a stream reconnect re-delivers alerts and the increment would double-count; invalidate instead.",
+      "Derive the bell count from the drawer's stored-unread list query — deferred to 339's design: its fit depends on 339's query shape and it couples the count to list fetch size.",
+      "Dictate the 339 mechanism as a settled 344 decision — lost: 339 designs in parallel in this batch; the line is a design input and 344's post-339 step adapts to what shipped.",
+      "Record the drawer → inbox staleness as an accepted limitation — lost: the inbox query conversion is about 15 lines and removes the gap.",
+      "R-1..R-6 and R-8..R-10 stand."
+    ],
+    "open_risks": [
+      "339 may design or merge before its context.md line is written and ship a local-state badge. The post-339 step would then rework fresh code; the conditional wording limits this but does not remove it.",
+      "Moving the inbox list to useQuery changes its loading and error timing; the 203 inbox e2e and testids could be disturbed.",
+      "The bell now refetches on window focus and retries once; e2e with a delayed first response can be perturbed by focus events.",
+      "invalidateQueries cancelling an in-flight first fetch is taken from the adversary's reading of TanStack v5; I confirmed the factory calls invalidateQueries with defaults but did not test the race.",
+      "Every open tab in any segment holds a StreamAlerts stream and runs the count query.",
+      "Header width at 640–1024px with the bell in insights and accounts headers (covered by the D-19 check, not yet run).",
+      "Under ruling (a), raw exception text on broadcast backfill alerts is readable on demand by every authenticated user (accepted by the operator).",
+      "Cross-feature AC ids (165, 203, 242, 270, 271, 334) are as cited in earlier rounds; this round I re-read only 339's streamed-alert scenario.",
+      "No test covers the real notify (ts-proto) → BFF → browser (protobuf-es v2) path for context end to end."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "F-04",
+      "NOTIFY-7",
+      "NOTIFY-8",
+      "PLAT-4",
+      "UI-2"
+    ],
+    "rationale": "No Floor breach. The adversary's verdict was NEEDS WORK on the cache's coverage, not on the design.\n\n- **Register.** The operator steer reopens R-7, the D-10 clause and the two D-12 clauses. O-7 closes, and the replacement wording is recorded as new decisions that supersede exactly those clauses. Nothing else in the register is contradicted. R-8 (window event) is not reintroduced.\n- **Checked in code.**\n  - `useInvalidatingMutation.ts` takes `options.meta` and calls `invalidateQueries` per key.\n  - `queryClient.ts` reports every mutation error unless `meta.errorHandled` is true, and sets `staleTime: 5_000, retry: 1`.\n  - 339's `acceptance.feature:33-36` has \"A streamed alert raises the badge without a reload\".\n  - 339 has no design.md, no key constraint in context.md, and no merge-order row.\n- **Adversary points adopted.**\n  - Prefix invalidation, so the drawer list is not stale on the @AC-5 path.\n  - Stream-path invalidation plus a re-assert of 339's scenario, so the swap cannot drop it (fails.md 2026-10-07).\n  - Inbox list on `useQuery`, which answers O-8 in both directions with one mechanism.\n  - The `errorHandled` opt-out, which keeps D-7 true.\n  - \"Shared within a segment\" wording and the focus-refetch note.\n- **Proposer points kept.** The key name and home, the two badge paths, the race case, and 339's context.md as the home of the constraint.\n- **O-8 closes** on the inbox query conversion. The proposer's own runner-up was this design, so there is no unanswered counter.\n- **Still open, non-blocking.** O-5 wording, and O-9 until the 339 line and the merge-order row are written. No blocking objection remains.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Supersedes the reopened D-10 clause: 344 adds ALERTS_QUERY_KEY = ['alerts'] and ALERT_UNREAD_COUNT_KEY = ['alerts','unread-count'] in src/lib/alertShared.ts; the bell count is a useQuery on the count key; every mark-read path (alert page, inbox) invalidates the ['alerts'] prefix through useInvalidatingMutation. The cache is shared within one segment's provider.",
+          "evidence": "Operator steer round 4 reopening the D-10 clause; src/hooks/useInvalidatingMutation.ts:15-32; trader/providers.tsx:10 and QueryProviders.tsx:13 (one client per segment); adversary r4 prefix objection."
+        },
+        {
+          "text": "Supersedes the reopened D-12 clauses: the badge is asserted on the alert page itself on two paths (direct page.goto and client navigation from the inbox row title), with a delayed-first-ListAlerts race case and no page.goto('/trader') step; the refresh trigger is the prefix invalidation.",
+          "evidence": "Operator steer round 4 reopening the D-12 clauses; accounts/layout.tsx:24-27 (header does not remount); proposal r4 item 4, accepted by the adversary."
+        },
+        {
+          "text": "Both mark-read call sites pass meta { errorHandled: true }, and the inbox uses mutateAsync inside its existing try/catch; an e2e shows a failed page-open mark-read raises no global error banner.",
+          "evidence": "src/lib/queryClient.ts:15-20; mutationErrorStore.ts:36-38; AlertInbox.tsx:48-49; D-7."
+        },
+        {
+          "text": "The inbox list loads through useQuery(['alerts','list']) in place of local state and manual refetch, so a mark-read on any surface refreshes the bell, the inbox rows and the inbox 'N unread' badge; one e2e on /accounts/notifications asserts both badges drop together.",
+          "evidence": "AlertInbox.tsx:19-40,63-65; adversary r4 (drawer → inbox direction); the proposer's own runner-up; C-18."
+        },
+        {
+          "text": "The post-339 step keeps 339's streamed-alert badge raise: the stream onMessage path invalidates the count key (never +1), the step re-asserts 339's streamed-alert scenario and a drawer-list assertion after the swap, and it adapts to whatever refresh mechanism 339 actually shipped.",
+          "evidence": "339 acceptance.feature:33-36; 339 context.md:18; AlertStream.tsx:34 (reconnect re-delivers); fails.md:2773-2776; fails.md:412."
+        },
+        {
+          "text": "The 339 constraint is recorded in 339's context.md as a design input (count key, drawer list under the ['alerts'] prefix, drawer mark-read on the prefix, stream-path invalidation), and the 339 → 344 merge-order row points to it.",
+          "evidence": "339 directory has no design.md and no key constraint in context.md (grep); merge-order.md has no 339/344 row (grep); root CLAUDE.md makes context.md mandatory reading."
+        },
+        {
+          "text": "The spec names the bell's new refetch on window focus and its single retry as a behaviour change; badge tests assert values only.",
+          "evidence": "src/lib/queryClient.ts:26 (staleTime 5_000, retry 1; refetchOnWindowFocus default); D-12 'no call counting' clause."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Invalidate only ALERT_UNREAD_COUNT_KEY, leaving the drawer list and inbox list outside the shared prefix.",
+          "why": "The drawer's stored-unread list and the inbox go stale after a mark-read; the prefix refreshes every alert read model with one call."
+        },
+        {
+          "text": "Keep the inbox on local state with invalidate plus manual refetch().",
+          "why": "Syncs inbox → bell only and keeps two refresh mechanisms; a drawer mark-read leaves the inbox count stale."
+        },
+        {
+          "text": "Increment the cached count (setQueryData +1) on a streamed alert.",
+          "why": "A stream reconnect re-delivers alerts, so the count would double."
+        }
+      ],
+      "new_objections": [],
+      "closed_objections": [
+        {
+          "id": "O-7",
+          "how": "The operator steer (round 4) reopened the D-10 clause and the two D-12 clauses; the replacement wording is recorded as superseding decisions, using the ['alerts'] prefix."
+        },
+        {
+          "id": "O-8",
+          "how": "The inbox list moves to useQuery(['alerts','list']) and every mark-read path invalidates the ['alerts'] prefix, so the inbox count and the bell badge refresh on the same event in both directions; an e2e on /accounts/notifications asserts both drop together."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": [
+        "R-7",
+        "D-10",
+        "D-12"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
