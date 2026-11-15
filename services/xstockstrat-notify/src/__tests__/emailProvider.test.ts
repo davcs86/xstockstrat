@@ -63,6 +63,16 @@ describe('commsgunSettings', () => {
     }
     assert.equal(commsgunSettings(fakeConfig()).baseSet, false);
   });
+
+  it('@AC-1 (346) a URL that is not https counts as unset: empty url, base not set', () => {
+    for (const url of ['http://comms.example/v1/messages', 'HTTP://comms.example/x', 'ftp://comms.example/x', 'comms.example/v1', 'https//comms.example', 'not a url']) {
+      const settings = commsgunSettings(fakeConfig({ str: { ...BASE, 'commsgun.enqueue_url': url } }));
+      assert.equal(settings.url, '', url);
+      assert.equal(settings.baseSet, false, url);
+      assert.equal(dispatchAction('commsgun', settings.baseSet, 'key'), 'unconfigured', url);
+    }
+    assert.equal(commsgunSettings(fakeConfig({ str: { ...BASE, 'commsgun.enqueue_url': 'HTTPS://Comms.Example/x' } })).baseSet, true);
+  });
 });
 
 describe('dispatchAction', () => {

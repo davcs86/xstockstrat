@@ -248,11 +248,11 @@ export class CommsgunWorker {
     } else {
       this.pinnedAlertedAt = null;
     }
-    // auto quietly uses SendGrid while the key is missing or cannot be read: say so once commsgun is set up.
+    // Once commsgun is set up, a missing or unreadable key is an incident: auto quietly uses SendGrid, pinned rows stall.
     const failures = this.deps.secret.failures();
     const cause = keyKind === 'absent' ? 'absent' : keyKind === 'unknown' && failures.count >= 2 ? failures.statusClass : null;
-    if (mode === 'auto' && settings.baseSet && cause !== null) {
-      this.stalledAlertedAt = await this.raiseStanding(this.stalledAlertedAt, () => stalledKeyAlert(cause));
+    if (mode !== 'sendgrid' && settings.baseSet && cause !== null) {
+      this.stalledAlertedAt = await this.raiseStanding(this.stalledAlertedAt, () => stalledKeyAlert(cause, mode));
     } else {
       this.stalledAlertedAt = null;
     }
@@ -536,12 +536,13 @@ function pinnedAlert(settings: { url: string; appId: string; to: string }): Comm
     title: 'Alert email is pinned to commsgun, which is not configured',
     body:
       `notify.fanout.email_provider is commsgun, but ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} ` +
-      'empty. No alert email is being sent or queued. Set the missing keys, or change the provider.',
+      'empty (an enqueue URL that is not https counts as empty). No alert email is being sent or queued. ' +
+      'Set the missing keys, or change the provider.',
     sourceService: ALERT_SOURCE,
   };
 }
 
-function stalledKeyAlert(cause: string): CommsgunAlert {
+function stalledKeyAlert(cause: string, mode: 'auto' | 'commsgun'): CommsgunAlert {
   const why =
     cause === 'absent'
       ? 'notify.commsgun.app_key is not set (cause: absent)'
@@ -550,7 +551,10 @@ function stalledKeyAlert(cause: string): CommsgunAlert {
     severity: AlertSeverity.ALERT_SEVERITY_WARNING,
     category: ALERT_CATEGORY,
     title: 'Commsgun is set up but its app key is not available',
-    body: `${why}. In auto mode alert email goes through SendGrid until the key is available.`,
+    body:
+      mode === 'auto'
+        ? `${why}. In auto mode alert email goes through SendGrid until the key is available.`
+        : `${why}. Alert email is pinned to commsgun: it stays queued, retrying, until the key is available.`,
     sourceService: ALERT_SOURCE,
   };
 }

@@ -349,6 +349,7 @@ describe('attempts that make no request', () => {
     ['GetSecret has never succeeded', { secret: { kind: 'unknown' } as CommsgunKeyState }, 'secret_unresolved'],
     ['the app id is empty', { str: { 'commsgun.app_id': '' } }, 'no_endpoint'],
     ['the enqueue URL is empty', { str: { 'commsgun.enqueue_url': '' } }, 'no_endpoint'],
+    ['the enqueue URL is http, not https (346 @AC-1)', { str: { 'commsgun.enqueue_url': 'http://comms.example/v1/messages' } }, 'no_endpoint'],
   ] as const) {
     it(`@AC-38 in commsgun mode, when ${name}, the attempt is a retry classed ${errorClass} with its own outcome`, async () => {
       const reader = install();
@@ -373,7 +374,9 @@ describe('attempts that make no request', () => {
     assert.equal(t.client.calls.length, 0);
     assert.deepEqual(t.terminal()[0].params, ['o-1', 'none', 1, 'no_app_key']);
     assert.equal(t.sender.calls.length, 0);
-    assert.equal(t.alerts.length, 1);
+    // The standing key incident (346 @AC-3) plus the row's own undelivered alert.
+    assert.equal(t.alerts.length, 2);
+    assert.equal(t.alerts.filter((a) => a.title === 'Commsgun is set up but its app key is not available').length, 1);
   });
 });
 
@@ -930,6 +933,26 @@ describe('standing incidents', () => {
       await tick(t.worker);
       assert.equal(t.alerts.length, want);
       if (want) assert.ok(t.alerts[0].body.includes(text), t.alerts[0].body);
+      assert.ok(!JSON.stringify(t.alerts).includes(KEY));
+    });
+  }
+
+  for (const [name, state, failures, want, text] of [
+    ['the key is absent', { kind: 'absent' }, { count: 0, statusClass: '' }, 1, 'absent'],
+    ['two PERMISSION_DENIED failures', { kind: 'unknown' }, { count: 2, statusClass: 'PERMISSION_DENIED' }, 1, 'PERMISSION_DENIED'],
+    ['one UNAVAILABLE failure', { kind: 'unknown' }, { count: 1, statusClass: 'UNAVAILABLE' }, 0, ''],
+  ] as const) {
+    it(`@AC-3 (346) pinned to commsgun with the base, ${name}: ${want} stalled-key alert`, async () => {
+      const t = rig({ mode: 'commsgun', rows: [], secret: state as CommsgunKeyState });
+      t.secret.box.failures = { ...failures };
+      await tick(t.worker);
+      await tick(t.worker);
+      assert.equal(t.alerts.length, want);
+      if (want) {
+        assert.equal(t.alerts[0].title, 'Commsgun is set up but its app key is not available');
+        assert.ok(t.alerts[0].body.includes(text), t.alerts[0].body);
+        assert.ok(!t.alerts[0].body.includes('SendGrid'), 'pinned mode never falls back to SendGrid');
+      }
       assert.ok(!JSON.stringify(t.alerts).includes(KEY));
     });
   }

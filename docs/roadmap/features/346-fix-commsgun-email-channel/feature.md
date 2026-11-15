@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 6 findings-log rows (clustered triage; feature 338 is dev-only) |
+| 2026-11-15 | `draft` → `code-completed` | fix session | TDD fix on `feature/fix-commsgun-email-channel`, single integration PR to `main-dev` (no impl-spec; see context.md) |
 
 ---
 
@@ -21,7 +22,7 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-commsgun-email-channel`_
+- Implementation Spec — _not generated: design depth `skip`, fixed directly under the task's single-PR instruction (context.md)_
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -34,4 +35,4 @@ unsanitised subjects (commsgun 422 `invalid_subject`), no standing key incident 
 
 ## Next Action
 
-`/sdd-spec fix-commsgun-email-channel` — design depth `skip` (SEV-3, single service, no proto/migration/config key change, clear root cause)
+Review and merge the integration PR into `main-dev`; the fix rides the next `/promote` together with feature 338.
