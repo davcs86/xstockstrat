@@ -978,3 +978,43 @@ It is the same reply the sdd-design session recorded. It still does not say whic
 - [ ] **Step 5**: peer feature 340 edits `page.tsx:1095`; a textual merge conflict is expected.
 - [ ] **Feature 344** must adopt the `ALERT_UNREAD_COUNT_KEY` constraint and land after Step 15.
 - [ ] The design's other step-5 risks stand unchanged: a drain can stop partway, about 60 queries worst case on notify's single connection, `capped` when 50 or more alerts arrive after the click, FR-8 only up to 50 unread, and the default e2e badge of 5.
+
+## Session 2026-11-15 — sdd-review impl-spec
+
+- Mode B, advisory. Lifecycle unchanged (`implementation-ready`). Run by the sdd-batch workflow; the criteria and overlap verdicts were handed to this session, which edited `implementation-spec.md` and wrote this entry.
+- Result: 0 failures, 7 warnings, no Floor breach (PASS WITH WARNINGS). Overlap: WARN, soft file-level only.
+- Tree: `feature/fix-symbol-page-alerts-ui@ce8265cd0`.
+
+### Operator reply relayed to this session
+
+Verbatim, the same four items the sdd-design and sdd-spec sessions recorded:
+
+1. "Approved"
+2. "Confirmed"
+3. "Sign-off the change, amend it"
+4. "There are no production instances. Staging is enough."
+
+It still does not say which question each item answers, and it may cover the whole batch. This session did not map item 2 to O-12 or O-24 and treats neither as answered. Item 4 is read, as before, as a staging-only smoke test; no step depends on it.
+
+### Addressed (edits to `implementation-spec.md`)
+
+- [x] **Coverage threshold on every test step (warning 1).** Steps 2, 4, 6, 8, 10, 12, 13 and 15 each gained a Coverage line in Verification. Re-read: `vitest.config.ts:29-33` sets lines, functions and statements to 40 for `src/lib/**`; there is no branches threshold. Steps 4, 8 and 12 run `test:coverage`; the others add no `src/lib/**` code and say so.
+- [x] **e2e fallback is not a pass (warning 3).** "Running e2e in the execute sandbox" now requires a Deviation Log row headed "unverified AC" that names each unproven scenario: `@AC-3`, `@AC-4`, `@AC-7`, `@AC-8` have e2e as their only proof; `@AC-1`, `@AC-2`, `@AC-6` lose their layout or DOM half; `@AC-5`, `@AC-9`, `@AC-10` lose their end-to-end half. The row closes only on a green real Playwright run (local, or the `frontend-e2e` CI job).
+- [x] **Step 10, `renderToStaticMarkup` (part of warning 2).** Run in plain node against the installed `radix-ui`: the Radix `Switch.Root` with a `Switch.Thumb` emits `data-state="checked"` / `"unchecked"` on root and thumb. Recorded in Step 10. Not run: the same render through the app's `Switch` wrapper under Vitest.
+- [x] **Step 10, service-worker override (part of warning 2).** Step 10 now names it as the higher-risk part (`ready` is a prototype accessor) and says to stop and record a deviation, not weaken `@AC-6`.
+- [x] **Step 7 wiring is e2e-only (warning 5).** Stated in Step 8's Verification and in the fallback rule.
+- [x] **Operator questions made explicit (warning 7, and the O-24 part of warning 4).** New block "Operator questions `/sdd-execute` must ask" in the Execution Summary, with an `Operator gate` line in Steps 9, 11 and 14. A "yes" on O-12 or a listed-only answer on O-24 needs a re-spec first.
+
+### Open Threads
+
+Unresolved items carried into execution. `/sdd-execute` announces each one still unchecked at every checkpoint and at session end.
+
+- [ ] **Steps 9-10 — O-12 (operator, C-11).** Ask before the unit: do checkbox, field and questionnaire get the `data-state` fix? Unanswered; R-4 leaves them unchanged.
+- [ ] **Steps 11-15 — O-24 (operator, C-11, C-18).** Ask before the Steps 11-12 unit: confirm the capped drain (up to 1000 marks per click, no confirm, no undo), or choose listed-only. Unanswered. Listed-only needs a re-spec of Steps 11, 12, 14 and 15.
+- [ ] **Step 14 — size (C-18, warning 4).** One step changes the badge, the drawer list, per-row mark-read and Clear all, with seven pieces of state. Left as one step: the design settles it (D-8, D-13, D-21, D-23) and it is atomic with Step 15. Watch for surface beyond the instructions; the capped-drain surface depends on O-24.
+- [ ] **Step 2 — not run.** Whether the `GetPosition` stub alone renders the Position panel for LYFT.
+- [ ] **Step 10 — not run.** The `navigator.serviceWorker.ready` override in headless Chromium, and the wrapper render under Vitest. Real risk of a red step.
+- [ ] **Step 15 — not run.** A route handler that never settles, and the brief disconnected indicator after a fulfilled stream. Real risk of a red step.
+- [ ] **All e2e steps (2, 6, 8, 10, 13, 15).** If the scoped Playwright run is impractical in the sandbox, the fallback leaves the named scenarios unverified; record the unverified-AC row, do not report a pass.
+- [ ] **Steps 3, 7, 12 — names not operator-confirmed (warning 6).** The `fmtUsdCompact` output form (`$6.73B`), the source humanizer rule and the fixture names are this spec's choices. Left as they are; raise them with the operator at the first checkpoint.
+- [ ] **Overlap — feature 344 (`alert-detail-page`, `draft`).** Both features modify `src/components/trader/AlertStream.tsx` (Step 14). Soft, rebase-only: 339 lands first. `docs/roadmap/features/merge-order.md` has no row for this pair; this session may not edit that file, so the row is still to be added. No migration, proto field or config key collision.
