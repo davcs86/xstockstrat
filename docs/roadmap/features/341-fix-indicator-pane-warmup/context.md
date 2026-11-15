@@ -589,3 +589,333 @@ policy: halt). design.md is not written and status.md is unchanged. The register
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 4)
+
+`/sdd-design fix-indicator-pane-warmup` (full) is halted at its approval gate after round 4 (gate
+policy: halt). design.md is not written and status.md is unchanged. The register is in `debate.md`
+(D-1..D-24, R-1..R-15, O-1..O-29, P-1..P-3).
+
+### Open Threads
+
+- **Approach (D-1..D-4, D-6..D-14, D-16, D-17 stand; D-18..D-24 new).** The only change this
+  round is where the history depth D comes from. D becomes the global `ui`-namespace config key
+  `chart.indicator_history_bars` (int, default 200), seeded for staging and production by config
+  migration `050_ui_chart_history_bars` and write-bounded to [200, 1000]. DigitalOcean stays at
+  200; the homelab is raised to 1000 by `set_config`. The UI reads it one-shot through
+  `traderConfigClient.getConfig({ namespace: 'ui' })` and a pure `readHistoryBars` that falls
+  back to 200 on absence, wrong type, error or timeout and clamps to
+  [`CHART_WINDOW_BARS`, `MAX_HISTORY_BARS` = 1000]. `CHART_WINDOW_BARS = 200` (W), the proto
+  field, the analysis helper, the UI seam and the insufficient-history pane are unchanged from
+  round 3. The breach counter is now named `marketdata.ohlcv.out_of_memory_errors` and wraps
+  every returned error in the three reads and `InsertBars` (D-22). xstockstrat-marketdata and
+  xstockstrat-config join Affected Services (D-23).
+- **Strongest open objection (O-23, blocking, P-04/P-03).** The product-spec says "no new or
+  changed config key" and "no migration" in Fix Scope and again in Out of Scope. The seeded key
+  and migration 050 contradict both, and no recorded decision amends the product-spec. Before
+  approval the product-spec Fix Scope and Out of Scope must be amended, the operator's sanction
+  for the key and the migration recorded here, and the new-config-key approval (owner + config
+  team) noted. Otherwise the product-spec goes back for re-review.
+- **What each deployment gets (D-20).** On DigitalOcean at D = 200 a full page never shows 'Not
+  enough history', so SMA200 is still a single dot, with no notice. AC-2 and AC-4 hold on both
+  deployments. AC-1 and AC-3 hold only where D ≥ W + P − 1, which today means the homelab at
+  1000. This is recorded as an operator-accepted residual ("200 bars for DO is fine").
+- **The fix reaches the homelab only through three launch steps (D-21, O-25).** Migration 050
+  seeds 200 on the homelab too, where the defect was reported, so a deploy alone ships no fix.
+  The steps go in a new section of `docs/runbooks/ohlcv-lock-budget-tuning.md`: a read-only lock
+  gate (`SHOW` of three settings plus a chunk-width query; `mlpt ≥ 404` at 30-day chunks), then
+  `set_config` to 1000, then a LYFT SMA200 smoke test. A failed gate, or 1-day chunks, escalates
+  to the operator.
+- **Lock budget of record (D-24, closes O-12).** DigitalOcean at 200 is unchanged from today: at
+  most 2,400 locks per scan and 9,600 at 4 scans against 25,600. The homelab at 1000 on 30-day
+  chunks needs at most 404 per scan. If an admin set 1000 on DigitalOcean, 4 scans would need
+  32,200–46,720 against 25,600; the bound allows that edit and only the key description, the
+  runbook and the counter guard against it.
+- **Question for the operator (O-26).** The relayed request says "Use the mcp to read the
+  values." No connected tool can read the homelab DB settings: the homelab MCP has config tools
+  only, and Grafana Cloud has no SQL datasource and no `pg_settings_*` metrics. The design falls
+  back to `psql` in the runbook step. The operator can accept `psql` or name the tool they meant.
+  The MCP did confirm that the homelab `ui` namespace holds only the two `performance.*` keys.
+- **Trade-off the adversary asked the operator to see.** Branching on the existing
+  `HOST_PROVIDER` env (`homelab ? 1000 : 200`) needs no migration, no config read and no manual
+  `set_config`, and DigitalOcean could never be raised by accident. It was not adopted because it
+  turns an OTel resource attribute into behaviour and keeps a per-deployment value in source.
+- **Open, non-blocking.** O-24 (design.md must carry `maxValue: 1000`, not the proposal's 5000;
+  the proposer has not confirmed), O-25 (launch steps, above), O-26 (above), O-27 (the runbook
+  must say only the homelab `staging` row is set; a later homelab production starts at 200),
+  O-28 (short timeout and `staleTime: Infinity` on the config read; pass the clamped D), O-29
+  (`scripts/config-wiring.json` entry, UI `CLAUDE.md` update, reword AC-1 and AC-3 so the
+  precondition names the configured depth).
+- **Closed this round.** O-12, O-18, O-19, O-20, O-21, O-22.
+- **Floor status.** No Floor breach and no register violation in any round.
+- **Reopen petitions (P-1..P-3, verdict pending user).** D-5, D-15 and R-9 are marked reopened
+  on the operator steer. The steer names only D-5; D-15 (the `HISTORY_BARS = 1000` half) and R-9
+  rest on the same ruling and need the operator's confirmation at the gate.
+- **Uncovered @AC changes.** AC-2 and AC-4 are EXTEND and not covered by an operator decision, so
+  each needs sign-off at the gate. AC-1 and AC-3 are EXTEND and covered by the 200/1000 ruling.
+  Feature 153 `@AC-1` is PRESERVE on DigitalOcean and PRESERVE-at-risk wherever 1000 runs, with
+  operator sign-off. `opportunity-live-market-enrichment @AC-4` and the `platform.feature`
+  GetBars warm-set rule are PRESERVE.
+- **Operator rulings on record (relayed 2026-11-15).** "DO staging and production share a common
+  managed DB. The staging homelab instance is associated with a homelab DB." "200 bars for DO is
+  fine. I insist in 1000bars for homelab." "Use the mcp to read the values." The synthesis also
+  relies on an operator sign-off for feature 153 `@AC-1` at risk. Which numbered item of the
+  relayed request sanctions the config-key mechanism is not certain, and none is assumed (O-23).
+- **Not verified.** The mediator did not re-check the `path:line` citations against the tree.
+  The homelab's `max_locks_per_transaction`, `max_connections`, `max_prepared_transactions` and
+  chunk widths are unknown. Nobody has checked whether the `scripts/config-wiring.json` checker
+  accepts the new UI reader site.
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "Round 4 synthesis. D-1..D-4, D-6..D-14, D-16 and D-17 stand. The only change is where the history depth D comes from: it becomes a per-deployment config value, default 200, raised to 1000 on the homelab. The mediator did not re-verify the path:line citations; they are carried from the proposal and the adversary. Paths are relative to the feature worktree.\n\n**Mediator checks this round (read-only).**\n- The homelab MCP `get_config` for namespace `ui` returns only the two `performance.*` keys, environment `staging`. So the homelab config service is reachable and the new key does not exist yet.\n- No connected tool can read the homelab DB settings. The homelab MCP has config tools but no SQL or `SHOW` tool. Grafana Cloud has no SQL datasource and no `pg_settings_*` metrics. `max_locks_per_transaction`, `max_connections` and the chunk widths therefore stay a runbook step.\n\n**1. Proto, analysis, UI seam, UI state (unchanged from round 3).**\n- `int32 first_value_bars = 5` on `ComponentSeries` (`packages/proto/analysis/v1/analysis.proto:819-827`), with the comment and the rewrite of `:806-808`.\n- `first_value_bars(...)` in `services/xstockstrat-analysis/app/services/warmup.py` beside `:70`, computed directly, with the pytest pin (D-17).\n- The `warmups` out-param on `_formula_fundamentals` (`app/handlers/servicer.py:1914-1947`, D-9); the field is set at `servicer.py:4621-4625`.\n- `windowIndicatorSeries` in `services/xstockstrat-ui/src/lib/indicatorChart.ts`, called from `IndicatorSection` (`src/app/trader/positions/[symbol]/page.tsx:1324-1353`), per D-10 and D-14.\n- The insufficient-history pane through `Eyebrow` + `EmptyState`, testid `indicator-panel-insufficient` (D-12).\n- `CHART_WINDOW_BARS = 200` (W) stays an exported constant.\n\n**2. D as a seeded config key (replaces D-5 and the `HISTORY_BARS = 1000` half of D-15).**\n- Key: `chart.indicator_history_bars`, namespace `ui`, global scope, type int, default 200.\n- Seed: config migration `050_ui_chart_history_bars` (up and down), with staging and production rows at 200 and `ON CONFLICT … DO NOTHING`, so a re-run never overwrites the homelab value. Shape copied from `services/xstockstrat-config/migrations/023_ui_performance_keys.up.sql:17-32`. The last config migration is 049.\n- Write bound in `SCALAR_BOUNDS_REGISTRY` (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:114`): **`minValue: 200, maxValue: 1000`**. This corrects the proposal's 5000.\n  - 1000 is the largest depth the operator signed off for feature 153 `@AC-1` (\"on any deployment that runs the 1000-bar depth\").\n  - A higher bound would let one config edit exceed that sign-off on the shared DigitalOcean cluster.\n  - Going above 1000 needs a new design pass.\n- The key description (migration and the UI `CLAUDE.md` Config Keys Consumed row) states that DigitalOcean must stay at 200 and that raising it needs the runbook lock gate first.\n- Environment scoping is not used. Both deployments run `staging`; they differ in which config database they read.\n\n**3. How the UI reads D.**\n- One-shot `traderConfigClient.getConfig({ namespace: 'ui' })` (`src/lib/traderConfigClient.ts:7-8`), through the existing forward at `src/lib/traderBff.ts:168-169`. No new route, no cross-segment client, no `WatchConfig`.\n- A pure `readHistoryBars(values)` in `src/lib/indicatorChart.ts`:\n  - oneof-presence check, as in `src/lib/performanceMetrics.ts:192-195`;\n  - falls back to `DEFAULT_HISTORY_BARS = 200` when the key is absent, the wrong type, or the call errors or times out;\n  - clamps to `[CHART_WINDOW_BARS, MAX_HISTORY_BARS]`, where `MAX_HISTORY_BARS = 1000` is one exported constant, not a bare literal.\n- The config read uses a short timeout (the existing `{ timeoutMs }` option style) and `staleTime: Infinity`. A slow config service must not block the candlestick; it degrades to 200.\n- The bars effect (`page.tsx:331-334`) waits for the config query to settle, requests `pageSize: D` with no `range.start` (D-3), and has D in its deps. The 300 s poll (`:338-342`) reuses the same D.\n- `windowIndicatorSeries` receives `requestedBars` = the clamped D actually sent as `pageSize`, so `historyExhausted = series.times.length < D` (D-14) stays correct.\n\n**4. What a DigitalOcean user sees at D = 200, W = 200.**\n- The same bars as today, with no prefix.\n- On a full 200-bar page, D-11 forbids the 'Not enough history' state. A component with first-value P > 1 renders with leading gaps: values on the last 201 − P bars only. **SMA200 on DigitalOcean is still a single dot, with no notice.**\n- 'Not enough history' appears only when the page comes back short and P > H. Example: a symbol with 150 stored bars shows it for SMA200 while SMA20 still draws.\n- AC-2 and AC-4 hold on both deployments. AC-1 and AC-3 hold only where D ≥ W + P − 1, which means the homelab at 1000. design.md records this as an operator-accepted residual (\"200 bars for DO is fine\").\n\n**5. Launch on the homelab (the defect was reported there: `docs/reports/2026-11-15-indicator-panel-sma200-single-point-defect.md:6`).**\nA deploy alone seeds 200 on the homelab too, so it ships no fix. The spec carries three ordered, verifiable launch steps, recorded as a new section \"Homelab deep indicator history\" in `docs/runbooks/ohlcv-lock-budget-tuning.md` (there is no dedicated homelab runbook):\n1. Read-only gate, by `psql` per `operator-db-access.md`, since no MCP can read these:\n   - `SHOW max_locks_per_transaction; SHOW max_connections; SHOW max_prepared_transactions;`\n   - `SELECT count(*), min(range_end - range_start), max(range_end - range_start) FROM timescaledb_information.chunks WHERE hypertable_schema='marketdata' AND hypertable_name='ohlcv';`\n   - Compute `L_scan = ceil(3000 / chunk_days) × 4` and `budget = mlpt × (mc + mpt)`. Require `L_scan × c ≤ budget` with `c = mc` as the conservative bound. With 30-day chunks this reduces to `mlpt ≥ 404`. If it fails on `mlpt` alone, raise `max_locks_per_transaction` to 512 (a restart) and re-run the SHOW.\n   - If the chunk query shows 1-day chunks, stop and escalate to the operator. Do not silently ship 200.\n2. `set_config` namespace `ui`, key `chart.indicator_history_bars`, value 1000 through the homelab MCP, then `get_config` to confirm.\n3. Smoke test: the LYFT symbol page draws an SMA200 line, and `marketdata.ohlcv.out_of_memory_errors` does not increment over one readiness cycle.\nThe runbook also states that only the `staging` row is set today. A later homelab production deployment starts at 200 and needs the same three steps for its own row.\n\n**6. Lock arithmetic, recomputed for both deployments (answers O-12).**\nUses 4 relations per chunk (`ohlcv-lock-budget-tuning.md:20-24`, `:46-53`) and the implicit window D × 1d × 3 (`services/xstockstrat-marketdata/internal/service/marketdata_service.go:465-477`). Locks are per relation, so the write term is distinct chunks × 4, not rows; this corrects round 3's 8k figure.\n- **DigitalOcean, D = 200, unchanged from today.**\n  - Window 600 days: about 3 post-004 30-day chunks plus 357 (trading days) to 517 (calendar days) 1-day chunks.\n  - 1,440–2,080 locks per scan; 2,400 as an upper bound.\n  - Saturation: 2 environments × 2 marketdata connections = 4 scans, at most 9,600 locks against 1024 × 25 = 25,600 (`:63`). Passes.\n  - Write term (staleness refetch, `marketdata_service.go:337-350` into `InsertBars`, `internal/repository/marketdata_repo.go:63-95`): about 400 rows, at most 2,400 locks. Same as today.\n- **Homelab, D = 1000, own cluster, 30-day chunks if the deploy was fresh.**\n  - Window 3000 days: at most 101 chunks, at most 404 locks per scan. The write term is the same 404 for about 2,000 rows.\n  - At stock settings (64 × 100 = 6,400) that allows 15 concurrent scans. Staging plus a later production on the same cluster is 4. Passes.\n  - If the chunks are 1-day wide, one scan needs about 12,000 locks and the gate in section 5 blocks the raise.\n- **DigitalOcean if an admin raised the key to 1000** (allowed by the bound, forbidden by the runbook): round 3's figure applies, 32,200–46,720 locks at 4 scans against 25,600. It fails. This is the signed-off at-risk case, and the counter is the monitor.\n\n**7. Breach counter (D-16; answers O-19 and O-20).**\n- Instrument: `marketdata.ohlcv.out_of_memory_errors`, label `op` in {`bars`, `recent_bars`, `bars_batch`, `insert_bars`}. It is named for what it counts (SQLSTATE 53200). It stays in marketdata; feature 343 depends on it.\n- The marketdata `CLAUDE.md` § Observability states the assumption: on `marketdata.ohlcv` an increment is read as lock-table exhaustion per the runbook, and any other out-of-memory cause also counts.\n- One passthrough `observeLockBreach(ctx, op, err) error` in `internal/repository/marketdata_repo.go` wraps every returned error, including the `rows.Err()` path through `scanBars` (`:171-173`):\n  - `QueryBars`: `:119-121`, `:125-128`\n  - `QueryRecentBars`: `:190-192`, `:195-198`\n  - `QueryBarsBatch`: `:487-489`, `:492-494`\n  - `InsertBars`: `:67-69`, `:91-92`, `:95`\n- It classifies with `errors.As` to `*pgconn.PgError`, Code `53200`. The Go test injects 53200 through `rows.Err()` and checks that another error does not count.\n\n**8. Business-rule record (answers O-18).**\n- xstockstrat-marketdata and xstockstrat-config are added to Affected Services in the product-spec and recon.\n- Feature 153 `@AC-1` (`services/xstockstrat-marketdata/acceptance/fix-ohlcv-chunk-lock-oom.feature:11-15`) is PRESERVE on DigitalOcean at 200 and PRESERVE-at-risk wherever 1000 runs.\n- The operator sign-off (2026-11-15, round 3) is written to `context.md`, together with the reopen of D-5, D-15 and R-9.\n\n**9. Residuals recorded in design.md.**\n- The round-3 list stands: VWAP drift, transient false FR-2, analysis compute growing with D, `source_symbol` fail-open, the stale-cache one-bar lag.\n- DigitalOcean still shows the single dot (section 4).\n- Pool hold time on marketdata's 2-connection pool matters on the homelab only; the signal is `marketdata.db.pool.empty_acquire_wait`.\n- The pre-004 1-day chunks: unchanged on DigitalOcean, because D is not raised there.\n- Timeframe-aware slack in `defaultBarLookback` is out of scope: at 200 it is today's behaviour, and on the homelab 30-day chunks cap the cost at 101 chunks.\n- The counter detects a breach; it does not prevent one.\n\n**10. Tests.**\n- pytest and Go: as in round 3.\n- vitest (`src/lib/indicatorChart.test.ts`):\n  - the AC cases pass D explicitly (AC-1 and AC-3 at D = 1000);\n  - `readHistoryBars`: absent key, wrong type, below W, above 1000, valid 1000;\n  - a D = 200 full page gives leading gaps and no FR-2.\n- e2e: fixtures mock the `ui` config read at 1000 for the AC-1 path and leave it absent for the default path, with INVENTORY rows. Assert the outbound `pageSize` equals the resolved D.\n- Config: bounds test for the new registry entry; `scripts/config-wiring.json` gains the reader entry.\n\n**Build order.**\n1. Proto and buf-gen.\n2. Analysis helper and pytest.\n3. Marketdata counter and Go test.\n4. Config migration 050 and the bounds entry.\n5. UI reader, bars effect, seam and vitest.\n6. Insufficient-history pane.\n7. e2e and INVENTORY.\n8. Runbook section and `CLAUDE.md` updates.\n9. Homelab launch steps.\n\n**Touchpoints.** One additive proto field; one config migration; one new config key; one new marketdata counter. The UI gains a `/trader` read of the `ui` namespace (previously only `/insights` read it).",
+    "open_objections": [
+      {
+        "text": "Product-spec scope (P-04/P-03): the product-spec says 'no new or changed config key' and 'no migration' in Fix Scope and again in Out of Scope. The seeded key and migration 050 contradict both. The operator ruled that the depth is per-deployment and the steer names a seeded key as an example, but no recorded decision amends the product-spec. Before approval, the orchestrator must amend the product-spec Fix Scope and Out of Scope, record the operator's sanction in `context.md` (citing the ruling it relies on), and note the approval-flow requirement for a new config key (owner + config team). Otherwise the product-spec needs re-review.",
+        "blocking": true
+      },
+      {
+        "text": "Write bound (C-16): the proposal's `maxValue: 5000` would let one config edit on DigitalOcean widen the implicit window to as much as 15,000 days over 1-day chunks, beyond the operator's sign-off for feature 153 `@AC-1`. The synthesis sets `maxValue: 1000` and one exported `MAX_HISTORY_BARS = 1000` for the reader clamp. The proposer has not confirmed; design.md must carry 1000, not 5000.",
+        "blocking": false
+      },
+      {
+        "text": "Launch (C-15): migration 050 seeds 200 on the homelab, where the defect was reported (`docs/reports/2026-11-15-indicator-panel-sma200-single-point-defect.md:6`), so a deploy alone ships no fix. The spec must carry the three ordered launch steps (runbook lock gate, `set_config` to 1000, LYFT SMA200 smoke test) and the rule that a failed gate escalates to the operator. The synthesis adopts this; the proposer must confirm.",
+        "blocking": false
+      },
+      {
+        "text": "Reading the homelab DB values: the relayed request says to use the MCP to read the values, but no connected tool can. The homelab MCP has only config tools; Grafana Cloud has no SQL datasource and no `pg_settings_*` metrics (checked this round). The design falls back to `psql` in the runbook step. State this at the gate so the operator can either accept `psql` or name the tool they meant. The MCP is still used for `set_config` and the `get_config` confirmation.",
+        "blocking": false
+      },
+      {
+        "text": "Homelab production: migration 050 seeds a production row at 200, so a later homelab production deployment reverts to the single dot. The runbook section must say that only the `staging` row is set today and that production needs the same gate and `set_config`.",
+        "blocking": false
+      },
+      {
+        "text": "Config read on the chart path: waiting for `GetConfig` adds a serial round trip before the candlestick draws. Use a short timeout, `staleTime: Infinity`, and the fallback to 200 on timeout as well as on error. Pass the clamped D actually sent as `pageSize` into `windowIndicatorSeries`, not the raw config value.",
+        "blocking": false
+      },
+      {
+        "text": "Docs and tooling: add the reader entry to `scripts/config-wiring.json` after reading the checker (`scripts/config-wiring.test.mjs`); update `services/xstockstrat-ui/CLAUDE.md` to say `traderBff.ts:166-170` also forwards the `ui` namespace and that `/trader` now reads it; reword `acceptance.feature` AC-1 and AC-3 so their precondition names the configured depth (C-15).",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-4",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "opportunity-live-market-enrichment @AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "platform.feature GetBars warm-set rule",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "marketdata fix-ohlcv-chunk-lock-oom @AC-1 (feature 153) — PRESERVE on DigitalOcean at 200; PRESERVE-at-risk wherever 1000 runs (operator signed off 2026-11-15)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      }
+    ],
+    "rejected_alternatives": [
+      "R-1 to R-8, R-10 and R-11 stand unchanged.",
+      "R-9 (shrinking D below 1000) is reopened by the operator ruling: the default is now 200 and 1000 is the ceiling.",
+      "D as a UI constant (`HISTORY_BARS = 1000` everywhere, D-5 and D-15). The operator ruled 200 on DigitalOcean and 1000 on the homelab, so one constant cannot serve both.",
+      "Environment scoping to separate the two deployments. Both run `APPLICATION_ENV` staging, so the environment cannot tell them apart.",
+      "A new homelab-only env var or build arg. It puts a per-deployment value outside the config service, against root config governance, and needs deploy-file edits on both platforms.",
+      "Write bound `maxValue: 5000` (the `GetBars` page cap). It lets a config edit exceed the operator's sign-off on the shared DigitalOcean cluster; 1000 is the signed-off ceiling.",
+      "Reading the key through `insightsConfigClient`. The page is in the `/trader` segment and the trader forward already passes any namespace.",
+      "Timeframe-aware slack in `defaultBarLookback`. At 200 the slack is today's behaviour and on the homelab 30-day chunks cap the cost; it would change a shared helper for every implicit-window caller.",
+      "Not rejected, held for the gate: branching on the existing `HOST_PROVIDER` env (`homelab ? 1000 : 200`). It needs no migration, no config read and no manual `set_config`, and DigitalOcean could never be raised by accident. It loses on governance: it turns an OTel resource attribute into behaviour and keeps a per-deployment value in source. The adversary asked that the operator see this trade-off.",
+      "Not adopted: a full-page notice on DigitalOcean ('needs P bars, showing D'). It would need a reopen of D-11, and the defect was reported on the homelab, where 1000 makes it moot."
+    ],
+    "open_risks": [
+      "The fix reaches the homelab only after a manual `set_config`. If the launch steps are skipped, the homelab keeps the single dot.",
+      "DigitalOcean users still see SMA200 as a single dot on a full 200-bar page, with no notice.",
+      "The bound of 1000 cannot tell deployments apart. An admin could set 1000 on DigitalOcean through config-ui or the agent `set_config` tool. At 4 concurrent scans that needs 32,200–46,720 locks against 25,600. Only the key description, the runbook and the counter guard against it.",
+      "The homelab's `max_locks_per_transaction`, `max_connections` and `max_prepared_transactions` are unknown, and no connected tool can read them.",
+      "The homelab's 30-day chunks rest on the operator's fresh-deploy statement. If the chunks are 1-day wide, one scan needs about 12,000 locks and the raise is blocked.",
+      "The lock table is shared with every other transaction on the cluster. The inequality counts only ohlcv scans.",
+      "A 53200 from a cause other than lock-table exhaustion also increments the counter.",
+      "Feature 343's `backfill.max_concurrent_jobs` homelab pattern is not written into its docs; the design follows the steer's description of it.",
+      "Whether the `scripts/config-wiring.json` checker accepts the new UI reader site was not checked.",
+      "The config read adds a round trip before the first bars request.",
+      "Bars dropped for a missing `time` can make a full page look short and cause a false 'Not enough history'.",
+      "Analysis compute and the polled payload grow with D on the homelab.",
+      "Which numbered item of the relayed request sanctions the config-key mechanism is not certain; the mediator did not assume one.",
+      "The mediator did not re-verify the path:line citations against the tree."
+    ],
+    "constitution_rules_touched": [
+      "P-02",
+      "P-03",
+      "P-04",
+      "C-01",
+      "C-03",
+      "C-05",
+      "C-07",
+      "C-08",
+      "C-12",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-17",
+      "C-18",
+      "F-06",
+      "F-07",
+      "PLAT-N1"
+    ],
+    "rationale": "**Register.** The proposal keeps D-1..D-4, D-6..D-14, D-16 and D-17, and the adversary found no violation and no Floor breach.\n- The operator steer reopens D-5 by name.\n- The recorded operator decision also says it \"supersedes the earlier 'D = 1000 everywhere'\". That ruling is the whole evidence for D-15's `HISTORY_BARS = 1000` and the whole reason for R-9. I therefore list D-15 and R-9 as operator-reopened too.\n- The steer itself names only D-5, so the orchestrator should confirm D-15 and R-9 when it writes `context.md`. The proposer's three petitions are recorded with new evidence, and the adversary judged all three valid.\n- `CHART_WINDOW_BARS = 200` from D-15 stands.\n\n**Closed this round.** The adversary agreed each can close.\n- O-12: the inequality is recomputed for both deployments, including the write term and the concurrency bound.\n- O-18: marketdata is added, the rule is PRESERVE-at-risk where 1000 runs, and the operator has signed off. Writing the sign-off to `context.md` is the orchestrator's step.\n- O-19: one passthrough covers every error return, `InsertBars` and `rows.Err()`.\n- O-20: the instrument is named `out_of_memory_errors` and the assumption is documented.\n- O-21: both residuals are recorded.\n- O-22: the slack is out of scope, with the reason.\n\n**Corrections to the proposal.**\n- The write bound is 1000, not 5000. The operator's sign-off covers \"any deployment that runs the 1000-bar depth\", so 1000 is the largest value a config edit may reach without a new design pass.\n- The proposal's \"strongest risk\" was misframed. The defect was reported on the homelab, so the real gap is that a deploy alone does not deliver the fix there. The launch steps close it.\n- The config read gets a timeout and a fail-safe to 200, so it cannot block the chart.\n\n**Still blocking.** One item: the product-spec forbids a config key and a migration, and no recorded decision amends it. The steer's example points at a seeded key, which makes the mechanism likely acceptable, but the amendment and its sanction must be written down before approval.\n\n**Operator decisions.**\n- Root cause was located before the fix (D-1).\n- The breach metric is added and kept in marketdata.\n- The depth is 200 by default and 1000 on the homelab.\n- Feature 153 `@AC-1` is PRESERVE-at-risk where 1000 runs.\n- \"200 bars for DO is fine\" is what sanctions AC-1 and AC-3 holding only on the homelab.\n\n**MCP check.** The relayed request asks to use the MCP to read the values. I tried: the homelab MCP reads config only, and Grafana Cloud has no SQL datasource and no Postgres settings metrics. The database values therefore stay a `psql` runbook step, and that is flagged for the gate.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "D is the global `ui`-namespace config key `chart.indicator_history_bars` (int, default 200), seeded for staging and production by config migration `050_ui_chart_history_bars` with `ON CONFLICT … DO NOTHING`, write-bounded to [200, 1000]. The homelab sets 1000 through `set_config`; DigitalOcean stays at 200. Environment scoping is not used. Supersedes D-5 and the `HISTORY_BARS = 1000` half of D-15; `CHART_WINDOW_BARS = 200` stands.",
+          "evidence": "Operator ruling 2026-11-15, round 3 (200 on DigitalOcean, 1000 on the homelab; supersedes 'D = 1000 everywhere'); `migrations/023_ui_performance_keys.up.sql:17-32`; `configServiceImpl.ts:114`. The adversary required the 1000 ceiling. Subject to the open product-spec amendment objection."
+        },
+        {
+          "text": "The UI reads D one-shot through `traderConfigClient.getConfig({ namespace: 'ui' })` and a pure `readHistoryBars` in `src/lib/indicatorChart.ts` that falls back to `DEFAULT_HISTORY_BARS = 200` on absence, wrong type, error or timeout and clamps to [`CHART_WINDOW_BARS`, `MAX_HISTORY_BARS` = 1000]. The clamped D is the `pageSize` sent and the `requestedBars` given to `windowIndicatorSeries`.",
+          "evidence": "`traderConfigClient.ts:7-8`, `traderBff.ts:168-169`, `performanceMetrics.ts:14-16`, `:192-195`. The adversary found no F-07 breach in a one-shot `GetConfig`."
+        },
+        {
+          "text": "At D = 200 a full page never shows 'Not enough history' (D-11 unchanged); long-warm-up components render with leading gaps, so SMA200 on DigitalOcean stays a single dot. AC-1 and AC-3 hold only where D ≥ W + P − 1. Recorded in design.md as an operator-accepted residual.",
+          "evidence": "Operator ruling 2026-11-15 ('200 bars for DO is fine'); D-11. The adversary did not petition D-11."
+        },
+        {
+          "text": "The homelab raise to 1000 is a launch step in a new section of `docs/runbooks/ohlcv-lock-budget-tuning.md`: a read-only `SHOW` of `max_locks_per_transaction`, `max_connections` and `max_prepared_transactions` plus a chunk-width query, the lock inequality computed with them (`mlpt ≥ 404` at 30-day chunks), then `set_config`, then a LYFT SMA200 smoke test. A failed gate escalates to the operator.",
+          "evidence": "Operator steer for round 4; `ohlcv-lock-budget-tuning.md:41-53`, `:77-96`; defect report `:6` (homelab). No connected tool can read the DB values (checked this round)."
+        },
+        {
+          "text": "The breach counter is `marketdata.ohlcv.out_of_memory_errors` with `op` in {bars, recent_bars, bars_batch, insert_bars}. One `observeLockBreach(ctx, op, err) error` passthrough wraps every returned error in `QueryBars`, `QueryRecentBars`, `QueryBarsBatch` and `InsertBars`, including `rows.Err()`. The lock-table reading of 53200 is documented in the marketdata `CLAUDE.md` § Observability. The counter stays in marketdata.",
+          "evidence": "`marketdata_repo.go:13`, `:67-69`, `:91-95`, `:119-128`, `:171-173`, `:190-198`, `:487-494`; fails.md:3060; operator steer (feature 343 depends on it). The adversary said O-19 and O-20 can close."
+        },
+        {
+          "text": "Feature 153 `@AC-1` is PRESERVE on DigitalOcean at 200 and PRESERVE-at-risk wherever 1000 runs. xstockstrat-marketdata and xstockstrat-config join Affected Services. The operator sign-off is written to `context.md`.",
+          "evidence": "Operator sign-off 2026-11-15, round 3; `services/xstockstrat-marketdata/acceptance/fix-ohlcv-chunk-lock-oom.feature:11-15`."
+        },
+        {
+          "text": "Lock budget of record: DigitalOcean at 200 needs at most 2,400 locks per scan and 9,600 at 4 scans against 25,600 (unchanged from today). The homelab at 1000 with 30-day chunks needs at most 404 per scan. The write term is distinct chunks × 4, not rows.",
+          "evidence": "`ohlcv-lock-budget-tuning.md:20-24`, `:46-53`, `:63`; `marketdata_service.go:465-477`, `:337-350`. The adversary said O-12 can close."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Write bound `maxValue: 5000` (the `GetBars` page cap) on `chart.indicator_history_bars`.",
+          "why": "It lets one config edit exceed the operator's sign-off for feature 153 `@AC-1` on the shared DigitalOcean cluster. 1000 is the signed-off ceiling."
+        },
+        {
+          "text": "A new homelab-only env var or build arg carrying D.",
+          "why": "It keeps a per-deployment value outside the config service, against root config governance, and needs deploy-file edits on both platforms."
+        },
+        {
+          "text": "Environment scoping (staging vs production rows) to separate DigitalOcean from the homelab.",
+          "why": "Both deployments run `APPLICATION_ENV` staging, so the environment cannot tell them apart."
+        },
+        {
+          "text": "Timeframe-aware slack in `defaultBarLookback` as part of this fix.",
+          "why": "At 200 the slack is today's behaviour; on the homelab 30-day chunks cap the cost at 101 chunks. It would change a shared helper for every implicit-window caller."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "P-04/P-03: the product-spec's Fix Scope and Out of Scope forbid a config key and a migration. Amend both, record the operator's sanction for the seeded key and migration 050 in `context.md`, and note the new-config-key approval (owner + config team), or send the product-spec back for re-review.",
+          "blocking": true
+        },
+        {
+          "text": "C-16: design.md must carry `maxValue: 1000` and one exported `MAX_HISTORY_BARS = 1000` for the reader clamp, not the proposal's 5000. Adopted in the synthesis; the proposer has not confirmed.",
+          "blocking": false
+        },
+        {
+          "text": "C-15: the spec must carry the three ordered homelab launch steps (runbook lock gate, `set_config` to 1000, LYFT SMA200 smoke test) and the rule that a failed gate escalates to the operator, because a deploy alone seeds 200 where the defect was reported.",
+          "blocking": false
+        },
+        {
+          "text": "P-03: the relayed request says to read the values through the MCP, but no connected tool can read the homelab DB settings. State at the gate that the runbook uses `psql`, so the operator can accept that or name another tool.",
+          "blocking": false
+        },
+        {
+          "text": "The runbook section must say that only the homelab `staging` row is set, and that a later homelab production deployment starts at 200 and needs the same gate and `set_config`.",
+          "blocking": false
+        },
+        {
+          "text": "The config read must use a short timeout, `staleTime: Infinity` and the fallback to 200 on timeout, and `windowIndicatorSeries` must receive the clamped D actually sent as `pageSize`.",
+          "blocking": false
+        },
+        {
+          "text": "Add the reader entry to `scripts/config-wiring.json` after reading the checker; update the UI `CLAUDE.md` to name `traderBff.ts:166-170` as a `ui`-namespace forward and record that `/trader` now reads `ui`; reword `acceptance.feature` AC-1 and AC-3 so the precondition names the configured depth.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-12",
+          "how": "Recomputed for both deployments with the concurrency bound and the write term: DigitalOcean at 200 is unchanged and passes (at most 9,600 of 25,600); the homelab at 1000 needs at most 404 locks per scan on 30-day chunks, gated by the runbook SHOW and chunk query."
+        },
+        {
+          "id": "O-18",
+          "how": "xstockstrat-marketdata is added to Affected Services; feature 153 `@AC-1` is PRESERVE on DigitalOcean and PRESERVE-at-risk where 1000 runs; the operator signed off (2026-11-15) and the sign-off goes to `context.md`. The write bound is capped at the signed-off 1000."
+        },
+        {
+          "id": "O-19",
+          "how": "One `observeLockBreach` passthrough wraps every returned error in the three reads and `InsertBars`, including `rows.Err()`; the Go test injects 53200 through `rows.Err()`."
+        },
+        {
+          "id": "O-20",
+          "how": "The instrument is named `marketdata.ohlcv.out_of_memory_errors`, and the lock-table assumption is documented in the marketdata `CLAUDE.md` § Observability."
+        },
+        {
+          "id": "O-21",
+          "how": "Both residuals are recorded in design.md: pool hold time (homelab only, signal `marketdata.db.pool.empty_acquire_wait`) and the pre-004 chunks, unchanged on DigitalOcean because D is not raised there."
+        },
+        {
+          "id": "O-22",
+          "how": "design.md states that a timeframe-aware slack is out of scope, with the reason."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "D-5",
+          "evidence": "Proposer: the operator ruling of 2026-11-15, round 3 (shared DigitalOcean DB so 200; the homelab has its own DB so 1000) postdates D-5 and makes D a per-deployment value. The operator steer reopens D-5 by name.",
+          "is_new": true
+        },
+        {
+          "target": "D-15",
+          "evidence": "Proposer: the same operator ruling supersedes 'D = 1000 everywhere', which is D-15's only evidence for `HISTORY_BARS = 1000`. `CHART_WINDOW_BARS = 200` stays. The adversary judged the evidence new.",
+          "is_new": true
+        },
+        {
+          "target": "R-9",
+          "evidence": "Proposer: R-9 was locked on the superseded 'keep 1000' ruling; 200 on DigitalOcean is now the operator's own ruling. The adversary judged it valid for DigitalOcean only; the homelab stays at 1000.",
+          "is_new": true
+        }
+      ],
+      "reopened": [
+        "D-5",
+        "D-15",
+        "R-9"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
