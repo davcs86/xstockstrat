@@ -90,7 +90,8 @@ FR-6. **Roles stay in xstockstrat.** Roles remain `identity.users.roles` per env
 FR-7. **MCP identity and scope narrowing.** For every MCP request the agent stamps the **resolved `user_id`**, never the
 Authelia `sub`, and the **effective scope** onto the request claims that `_caller_user_id` / `_caller_access_scope`
 read (AGENT-3/3b/4, PLAT-4). The effective scope is
-`roles_to_access_scope(roles) & scopes_to_mask(token.scope)`, with these OAuth scopes:
+`roles_to_access_scope(roles) & scopes_to_mask(granted scopes)`. The granted scopes are the token's `scp` array (Authelia's
+form, confirmed by the spike), or a space-delimited `scope` string if `scp` is absent. The OAuth scopes are:
 - `xstockstrat.read` → READ 0x01
 - `xstockstrat.write` → WRITE 0x02
 - `xstockstrat.admin` → ADMIN 0x04
@@ -368,6 +369,22 @@ pinned release:
 
 If (a) or (b) fails, the design falls back to option F: keep the agent's OAuth server and delegate only its login to
 Authelia.
+
+**Spike result (2026-11-16, local Authelia v4.39.28, release checksum-verified; details in `context.md`):**
+- (a) and (c)–(e) behave as follows; option F is **not** needed:
+  - (a) Pre-registered public clients with `resource` work. A foreign `resource` gets `invalid_target`.
+  - (c) The `xstockstrat.*` scopes are granted, and a client can request only its configured scopes.
+  - (d) Group membership is **not** re-checked on refresh; disabling the user in Authelia does stop refresh.
+  - (e) `sub` is a stable per-user UUID across sessions and clients.
+- (b) holds with two qualifications:
+  - The granted scopes arrive as an `scp` array, not a `scope` string.
+  - `aud` is present without `resource` only when the client sets `requested_audience_mode: implicit`.
+- Authelia config requirements, owned by homelab-edge:
+  - an ID-token claims policy with `email`;
+  - an access-token claims policy with `email`;
+  - `requested_audience_mode: implicit` on the MCP clients.
+- Logout: Authelia 4.39 advertises no `end_session_endpoint`, so logout uses the portal branch.
+- Still unverified until cutover: the Claude.ai and Claude Code client side of (a), which the local spike cannot exercise.
 
 ## Acceptance Criteria
 

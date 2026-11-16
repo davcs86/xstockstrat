@@ -230,3 +230,38 @@
 - Notes carried into `/sdd-spec`:
   - `debate.md` D-36/D-48/D-57 still say `050`. D-94 governs; the impl-spec uses `051`.
   - AC-64 has no mode column. SSO-mode logout also returns `redirect`; unit tests cover the `verified`/`unverified`/`expired_too_old` reasons.
+
+## Session 2026-11-16 — Authelia v4.39.28 spike (gate for /sdd-spec)
+
+**Setup.**
+- Authelia release `authelia-v4.39.28-linux-amd64.tar.gz`, sha256 `e8ad9ff965cbf3b93138945e13cb4b7874c999c254772b2bb77952863177699c`, matching the release `checksums.sha256`. It ran locally inside the session sandbox; the owner granted permission.
+- Throwaway config:
+  - file user store with SQLite, self-signed TLS, issuer `https://auth.example.test:9091`;
+  - an RS256 JWK;
+  - group policy `group:xstockstrat-staging` with one_factor;
+  - clients `xstockstrat-staging-web` (confidential, `client_secret_basic`, PKCE), `xstockstrat-staging-mcp-claude` and `-ro` (public, PKCE, audience `https://xstockstrat-staging.example.test/agent`);
+  - scopes `xstockstrat.{read,write,admin,trade}`.
+- The flows were driven by a script against the real endpoints. The scripts and config were scratchpad-only and are not committed.
+
+**Results.**
+- **Discovery.** `issuer` has no trailing slash. `jwks_uri` is same-origin. There is **no `end_session_endpoint`**. The custom scopes are not listed in `scopes_supported`, but they are honoured.
+- **ID token (web).**
+  - Header `RS256`, `kid=k-rs256`, `typ=JWT`; the signature verifies against the JWKS.
+  - `aud=[client]` and `azp=client`. The authorization response carries `iss` (RFC 9207).
+  - **`email` is absent by default.** It is present (with `email_verified`) only with a claims policy `id_token: [email, email_verified]`. The email keeps its case (`Alice@Family.Example.Test`); identity lowercases it in SQL, as designed.
+- **(a) PASS.** The pre-registered public MCP clients complete code+PKCE with RFC 8707 `resource` on both the authorize and token requests, and also on authorize only. A foreign `resource` gets `invalid_target`. The client side of Claude.ai and Claude Code cannot be exercised locally, so it stays a cutover check.
+- **(b) PASS, with deviations.** Access-token header: `RS256`, `kid`, `typ=at+jwt`. Claims:
+  - `aud=["…/agent"]` and `email` (with an access-token claims policy);
+  - `sub`, `client_id`, `iss`, `exp`, `iat`, `nbf`, `jti`;
+  - **the scopes arrive as `scp` (array), not `scope` (string)**, which gives D-95;
+  - **with no `resource`, the token has no `aud`** unless `requested_audience_mode: implicit` is set, which gives D-96.
+  
+  The signature verifies against the JWKS, and a refresh keeps `aud`.
+- **(c) PASS.** The custom scopes are granted. The read-only client asking for `xstockstrat.write` gets `invalid_scope`.
+- **(d) Not re-checked.** Removing the user from the group: refresh still succeeds, twice in a row. Disabling the user: refresh fails (HTTP 500 `error`). This gives D-98.
+- **(e) PASS.** `sub` is the same UUID across two MCP sessions and the web ID token.
+- **Group refusal.** A user outside the group gets `error=access_denied`, which drives the D-58 `no_access` message.
+- **Consent.** MCP clients requesting `offline_access` hit the explicit consent page even with `consent_mode: implicit`. They were accepted through `/api/oidc/consent` in the test. This is UX only.
+- **Auth-code lifespan.** Exchanged at 25 s it works; at 70 s it gets `invalid_grant`. The lifespan is about 60 s, above D-73's 30 s pre-exchange budget.
+- **Portal logout.** The `portal.SignOut` bundle reads `rd`. `GET /logout?rd=…` needs no confirmation: the view calls `POST /api/logout {targetURL}` and redirects about 2 s later only if `safeTargetURL` is true. The test found `true` for the in-domain `https://xstockstrat-staging.example.test/auth/login` and `false` for `https://evil.other.test/x`. The session is cleared (`authentication_level` 1 → 0). This gives D-97. A bare `GET /logout` without JS does not log out; it is a SPA route.
+- **Verdict.** Option F is not needed. Design deltas D-95..D-98 are recorded, and FR-7 and the spike section of the spec are updated.

@@ -980,6 +980,12 @@ return p;
   - AC-60: unreadable config gives `failed` on start and callback (D-22). Tested in the route unit tests with the config client mocked to time out.
 - **Config migration renumbered from `050` to `051`** (D-94; feature 341 owns `050`).
 
+- **Spike results (2026-11-16): D-95..D-98.** The spike passed; option F is not needed.
+  - D-95: the agent reads the granted scopes from `scp` (an array), falling back to a `scope` string; the `typ` check `at+jwt` is enabled.
+  - D-96: the Authelia config requirements in homelab-edge: ID-token and access-token `email` claims policies, and `requested_audience_mode: implicit`.
+  - D-97: logout uses the portal branch, because 4.39 has no `end_session_endpoint`; `rd` is confirmed.
+  - D-98: group removal does not end an existing MCP connection (a runbook residual), and the auth-code lifespan is about 60 s.
+
 ### Consumer surfaces (C-14)
 
 - **UI** (`xstockstrat-ui`, all three segments): the login page (SSO button + checkbox per the D-54 table), `/api/auth/sso/{start,callback}`, logout + the shared-header Sign-out button, `/accounts/authorized-apps` (`SsoAppsCard`), and `/.well-known/oauth-*` via `src/app/api/oauth/*`.
@@ -1023,7 +1029,7 @@ return p;
 
 ## Open Risks
 
-- [ ] **The Authelia v4.39.28 spike gates `/sdd-spec`.** It must confirm items (a)–(e), the RS256 ID-token alg, and the end_session / portal `rd` / GET `/logout` behaviour (D-59). Plus the D-73 authorization-code lifespan of at least the pre-exchange budget, and the D-89 discovery `issuer` with no trailing slash. Fallback: option F. Addressed before `/sdd-spec`.
+- [x] **The Authelia v4.39.28 spike gates `/sdd-spec`.** Done 2026-11-16 on a local, checksum-verified v4.39.28 (D-95..D-98). The Claude.ai and Claude Code client side of (a) stays unverified until cutover. It must confirm items (a)–(e), the RS256 ID-token alg, and the end_session / portal `rd` / GET `/logout` behaviour (D-59). Plus the D-73 authorization-code lifespan of at least the pre-exchange budget, and the D-89 discovery `issuer` with no trailing slash. Fallback: option F. Addressed before `/sdd-spec`.
 - [ ] **Feature 319 (RevokeToken unverified decode) merges first or alongside** (D-52). Addressed at rollout ordering.
 - [ ] **D-93's first `tsc --noEmit` run may surface pre-existing errors.** The owner accepted fixing them in this PR. Addressed at the first UI step.
 - [ ] **Assumptions the spec must prove RED/GREEN:**
