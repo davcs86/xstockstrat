@@ -192,3 +192,10 @@
 - [ ] Re-derive the config migration number at Step 11 and at the integration PR.
 - [ ] Record a real paper-host response (are `X-RateLimit-*` headers sent?) at the integration PR.
 - [ ] The remaining design open risks are mapped to steps in the spec's § Step Dependencies.
+
+## Session 2026-11-16T07:00Z — defect filed
+
+- Operator confirmed filing the pre-existing `ReplaceOrder` defect (intent claimed before `validateTIF`):
+  `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md` (status: open).
+  Not fixed by this feature. Next: `/sdd-triage --from-report` on that file. The matching Open Thread
+  above is done.
