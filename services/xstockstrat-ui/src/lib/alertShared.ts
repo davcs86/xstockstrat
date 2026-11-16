@@ -35,6 +35,11 @@ export interface UnreadLike {
   createdAt?: ProtoTimestamp;
 }
 
+/** Every alert read model lives under this prefix; a mark-read invalidates it. */
+export const ALERTS_QUERY_KEY = ['alerts'] as const;
+/** Holds the stored-unread list, not a number: the badge is the merged list's length (339). */
+export const ALERT_UNREAD_COUNT_KEY = ['alerts', 'unread-count'] as const;
+
 /** The unread list limit, the streamed-buffer cap and the drain page size. */
 export const UNREAD_PAGE_SIZE = 50;
 

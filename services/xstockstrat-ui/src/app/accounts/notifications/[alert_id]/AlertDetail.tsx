@@ -4,7 +4,14 @@ import { useParams } from 'next/navigation';
 import { ConnectError, Code } from '@connectrpc/connect';
 import type { Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
-import { contextEntries, formatWhen, severityLabel, severityVariant } from '@/lib/alertShared';
+import {
+  ALERTS_QUERY_KEY,
+  contextEntries,
+  formatWhen,
+  severityLabel,
+  severityVariant,
+} from '@/lib/alertShared';
+import { useInvalidatingMutation } from '@/hooks/useInvalidatingMutation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,6 +25,11 @@ export function AlertDetail() {
   const [status, setStatus] = useState<Status>('loading');
   const [errorText, setErrorText] = useState('');
   const [markedRead, setMarkedRead] = useState(false);
+  const { mutate: markRead } = useInvalidatingMutation(
+    (alertIds: string[]) => notifyClient.markAlertRead({ alertIds }),
+    [ALERTS_QUERY_KEY],
+    { meta: { errorHandled: true } },
+  );
 
   useEffect(() => {
     if (!alertId) return;
@@ -31,12 +43,11 @@ export function AlertDetail() {
         setAlert(res);
         setStatus('ready');
         // Mark the server-returned id, never the URL param (D-7); a failure leaves the page as is.
-        notifyClient
-          .markAlertRead({ alertIds: [res.alertId] })
-          .then(() => {
+        markRead([res.alertId], {
+          onSuccess: () => {
             if (active) setMarkedRead(true);
-          })
-          .catch(() => {});
+          },
+        });
       })
       .catch((e: unknown) => {
         if (!active) return;
@@ -50,7 +61,7 @@ export function AlertDetail() {
     return () => {
       active = false;
     };
-  }, [alertId]);
+  }, [alertId, markRead]);
 
   if (status === 'ready' && alert) {
     const entries = contextEntries(alert.context);
