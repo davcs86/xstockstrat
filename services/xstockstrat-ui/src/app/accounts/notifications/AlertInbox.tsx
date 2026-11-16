@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
 import { formatWhen, severityLabel, severityVariant } from '@/lib/alertShared';
@@ -107,7 +108,11 @@ export function AlertInbox() {
                   </div>
                   <span className="text-xs text-muted-foreground">{formatWhen(a.createdAt)}</span>
                 </div>
-                <p className={a.read ? 'text-sm' : 'text-sm font-semibold'}>{a.title}</p>
+                <p className={a.read ? 'text-sm' : 'text-sm font-semibold'}>
+                  <Link href={`/accounts/notifications/${a.alertId}`} className="hover:underline">
+                    {a.title}
+                  </Link>
+                </p>
                 {a.body && (
                   <p className="text-xs text-muted-foreground" data-testid="alert-body">
                     {a.body}
