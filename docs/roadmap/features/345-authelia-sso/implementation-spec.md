@@ -555,7 +555,8 @@ grep -n "x-access-scope\|x-user-id\|x-internal-caller" src/grpc/externalIdentity
 - `services/xstockstrat-identity/src/__tests__/externalIdentity.test.ts` — create
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
 - `services/xstockstrat-identity/src/__tests__/telemetryAllowlist.test.ts` — modify
-- `services/xstockstrat-identity/src/__tests__/fixtures/sanCall.ts` — create (only if a second consumer appears; see C-13 below)
+- `services/xstockstrat-identity/src/__tests__/fixtures/sanCall.ts` — create
+- `services/xstockstrat-identity/src/__tests__/adminDirectory.test.ts` — modify (import `callWith` from the fixture; no behaviour change)
 
 **Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation
 
@@ -581,7 +582,7 @@ grep -n "x-access-scope\|x-user-id\|x-internal-caller" src/grpc/externalIdentity
    - The audit payload keys are exactly `{user_id, issuer, outcome}`.
 5. **Mint shape**: a frozen-clock (`mock.timers` / `Date.now` stub) deep-equal shows `authenticateUser` and `issueSessionForUser` claims are identical in shape. Neither has `aud`, and the refresh INSERT passes `client_id` null (`@AC-4 @feature-265` EXTEND).
 6. Allowlist: `telemetryAllowlist.test.ts` drives `recordAuditFailure('identity.external.created')` and asserts it is not bucketed as `other`.
-7. **C-13**: if `callWith` gains a second consumer (it already lives inline in `adminDirectory.test.ts`), move it to `src/__tests__/fixtures/sanCall.ts` in this step and import it from both. Otherwise keep it inline and record that verdict.
+7. **C-13**: `callWith` gains its second consumer here (`externalIdentity.test.ts`). Move it verbatim from `adminDirectory.test.ts:25-30` into `src/__tests__/fixtures/sanCall.ts`, import it from both files, and add the fixture to the identity test-data inventory per `docs/patterns/test-data-inventory.md`. `adminDirectory.test.ts` must keep every existing case green unchanged.
 
 **Verification**:
 ```bash
@@ -936,7 +937,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_jwks.py` — create
-- `services/xstockstrat-agent/tests/conftest.py` — modify (only if a second consumer of the JWK/key fixtures appears)
+- `services/xstockstrat-agent/tests/conftest.py` — modify (adds the shared `sso_keys` fixture)
 
 **Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness
 
@@ -948,7 +949,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 **Covers**: AC-61
 
 **Instructions**:
-1. Generate RSA keys with `cryptography` in the test, and mock discovery and JWKS with `respx`. Cases:
+1. In `conftest.py`, add the `sso_keys` fixture (C-13; consumers: this file and Step 23's three files): an RSA key pair generated with `cryptography`, its JWKS (`kid`, `alg=RS256`), and a `mint(**claims)` builder that signs RS256 with `kid` and `typ=at+jwt`. `test_jwks.py` uses `sso_keys` and mocks discovery and JWKS with `respx`. Cases:
    - fresh hit;
    - stale serve + background refresh;
    - beyond STALE_MAX treated as unknown;
@@ -964,10 +965,12 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
    - a JWK whose `alg` is `EdDSA` (an OKP key) or `none` is skipped with a WARN, and a JWKS holding only such keys fails the fetch → `'unavailable'` (alg not in the RS/PS/ES 256/384/512 allow-list);
    - a JWK without `alg` is skipped.
 2. A task that fails with no awaiter leaves no "exception was never retrieved" (`loop.set_exception_handler` + `gc.collect()`, D-35).
-3. The key literals have one consumer and stay inline unless Step 23 reuses them. If Step 23 reuses them, move them to `conftest.py` in Step 23 (C-13).
+3. No key material is generated inline in `test_jwks.py`; every key comes from `sso_keys` (C-13).
 
 **Verification**:
 ```bash
+cd services/xstockstrat-agent && grep -n "def sso_keys" tests/conftest.py && ! grep -n "generate_private_key" tests/test_jwks.py   # shared key fixture, none inline (C-13)
+cd ../..
 cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .
 ```
 
@@ -1161,9 +1164,9 @@ grep -n "x-trace-id" app/client.py | head -3   # resolve carries the trace id (C
 
 **Instructions**:
 1. **`conftest.py`** (C-13):
-   - Add an `sso_keys` fixture: an RSA key pair, a JWKS, and a `mint(**claims)` token builder with `kid`, `typ=at+jwt` and RS256.
+   - Reuse the `sso_keys` fixture added in Step 19 (do not redefine it).
    - Add `sso_mode_on(monkeypatch)`, which installs `agent`/`ui` issuer watchers and respx-mocks discovery and JWKS.
-   - These have at least two consumers (the three new files), so they belong in `conftest.py`.
+   - `sso_mode_on` has three consumers (the three new files), so it belongs in `conftest.py`.
    - Reset `sso_auth`/`jwks` state per test.
 2. **`test_sso_auth.py`** (unit level, `client.resolve_external_identity` mocked):
    - **@AC-10:** `aud` = a webhooks URL → 401.
