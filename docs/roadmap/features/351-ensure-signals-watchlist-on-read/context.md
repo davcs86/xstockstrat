@@ -38,3 +38,10 @@
 - Defects filed: `docs/reports/2026-11-16-portfolio-listwatchlists-page-token-skips-boundary-row-defect.md`, `docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md` (both status `open`; format check run: one SEV token, sidecar `open`).
 - Still operator-unconfirmed at the design gate: fail-open on ensure error (D-3 — settled by proposer/adversary, not yet by you).
 - Open next: round 2 (full mode mandates ≥2) before `design.md` can be approved.
+
+## Session 2026-11-16 — sdd-design (Phase 1, round 2 gate)
+
+- Round 2 run: proposer → adversary (no Floor breach; 7 objections: 5 adopted into D-9, 2 resolved at the gate). Register: D-1..D-10, R-1..R-6, O-1..O-15 (all closed).
+- Orchestrator-traced finding (O-9): until the `ListByUser` token defect is fixed, the system list creates a new page boundary — an analysis owner at exactly 100 manual lists loses one list's bindings from the live-loop universe each cycle; an agent 1-list user with `list_watchlists limit 1` loses a row in a small-page traversal.
+- **Operator decisions at the gate** (AskUserQuestion): (a) **351 merges after the token fix** (merge-order row at COMPLETION; no waiver); (b) **fail-open confirmed** (D-3); (c) **run round 3** instead of approving.
+- Characterization tests AC-3/AC-5/AC-8 require a recorded mutation-red during execution (D-9).
