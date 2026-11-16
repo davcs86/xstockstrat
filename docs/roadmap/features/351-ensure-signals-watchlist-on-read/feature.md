@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-16 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 2 rounds (round 1 FAIL: unresolved Open Questions; round 2 PASS WITH WARNINGS, all fixed; 2 author assumptions carried to the design gate) |
 
 ---
 
@@ -35,4 +36,4 @@ The per-user system-managed "Signals" watchlist (feature 127) exists only after 
 
 ## Next Action
 
-`/sdd-review ensure-signals-watchlist-on-read product-spec` — AI review of product spec before running /sdd-design
+`/sdd-design ensure-signals-watchlist-on-read quick` — quick design recommended (single service, no proto/DB/config change; overlaps are rebase-level only)

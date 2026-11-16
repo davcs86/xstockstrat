@@ -20,13 +20,13 @@ FR-3. The ensure runs only on the first page (empty `page_token`); continuation 
 FR-4. An ensure failure never fails the read: `ListWatchlists` returns the user's existing lists and logs a WARN carrying the original error (fail-open).
 FR-5. Existing behavior is unchanged: a user who already has a system list gets no new row, the delete guard (`FAILED_PRECONDITION`) still applies, and a same-named manual list coexists.
 FR-6. Existence, not page placement, is guaranteed: `ListByUser` orders by `watchlist_id` (a random UUID), so with a `page_size` smaller than the user's list count the system list may be returned on a later page; the ensure still ran on the first-page call.
-FR-7. Documentation that calls the agent `list_watchlists` tool "read-only" (`services/xstockstrat-agent/app/tools.py:33`, `docs/runbooks/mcp-tools.md:1382`) states that the call idempotently ensures the caller's system "Signals" list. No MCP tool contract (name, parameters, return shape) changes.
+FR-7. Documentation that calls the agent `list_watchlists` tool "read-only" (`services/xstockstrat-agent/app/tools.py:33` module header, the tool docstring at `tools.py:2154` that MCP clients see, and `docs/runbooks/mcp-tools.md:1382`) states that the call idempotently ensures the caller's system "Signals" list. No MCP tool contract (name, parameters, return shape) changes.
 
 ## Out of Scope
 
 - A migration or operator job that seeds lists for existing users (rejected: portfolio has no users table; migrations stay inside their schema).
 - Ensure on user creation (identity → portfolio dependency).
-- Any proto, config, UI, or agent-tool code change.
+- Any proto, config, or UI change, and any agent-tool behavior or contract change (name, parameters, return shape); FR-7 touches docstrings/runbook text only.
 - Counting the system list against `watchlist.max_per_user` (`EnsureSignalWatchlist` already bypasses it).
 - Changing `ListWatchlists` pagination order or guaranteeing the system list lands on page 1 (FR-6).
 
@@ -34,7 +34,7 @@ FR-7. Documentation that calls the agent `list_watchlists` tool "read-only" (`se
 
 - `xstockstrat-portfolio` — `ListWatchlists` (`internal/service/portfolio_service.go`) calls the existing `EnsureSystemManaged` store method.
 - `xstockstrat-agent` — docs/docstring wording only (FR-7); no tool-contract or code-path change.
-- `xstockstrat-analysis` — **unchanged caller, behavioral side effect**: `app/engine/live_loop.py` `_drain_watchlist` (~603) calls `ListWatchlists` per live-strategy owner with that owner's synthetic `x-user-id` (`owner_metadata(owner)`, C-03 — never the `system` identity), memoized per cycle. Each such owner will now get an empty system "Signals" list as a one-time side effect. The empty list adds no symbols, so the symbol set the loop reads is unchanged.
+- `xstockstrat-analysis` — **unchanged callers, behavioral side effect**: (1) `app/engine/live_loop.py` `_drain_watchlist` (~603) calls `ListWatchlists` per live-strategy owner with that owner's synthetic `x-user-id` (`owner_metadata(owner)`, C-03 — never the `system` identity), memoized per cycle; (2) `app/handlers/servicer.py` `_compute_opportunities` (~6008) calls it with the request user's forwarded `propagation_meta`. Each such owner will now get an empty system "Signals" list as a one-time side effect. The empty list adds no symbols, so the symbol set the loop reads is unchanged.
 
 ## Consumer Surface(s)
 

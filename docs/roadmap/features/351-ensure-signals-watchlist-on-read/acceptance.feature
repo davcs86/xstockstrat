@@ -52,10 +52,10 @@ Feature: ensure-signals-watchlist-on-read
 
   @AC-9 @FR-7
   Scenario: Agent docs no longer call list_watchlists purely read-only
-    Given docs/runbooks/mcp-tools.md section "list_watchlists" and the docstring at services/xstockstrat-agent/app/tools.py line 33
-    When either is read
+    Given docs/runbooks/mcp-tools.md section "list_watchlists", the module-header line (tools.py:33) and the list_watchlists tool docstring (tools.py:2154) in services/xstockstrat-agent/app/tools.py
+    When any of the three is read
     Then each states that the call idempotently ensures the caller's system "Signals" list
-    And neither contains the bare phrase "(read-only"
+    And none contains the bare phrase "(read-only)" for list_watchlists
 
   @AC-6 @FR-5
   Scenario: A same-named manual list coexists and delete stays guarded
