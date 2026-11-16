@@ -310,3 +310,36 @@
     re-apply notify count of 0. A fresh-DB notify count of 6 is asserted structurally (DISTINCT namespace, environment).
 - Referrer-Policy constraint (D-54): a future `no-referrer` policy would break `/api/auth/sso/start`. Step 34
   re-records it at execute.
+
+## Session 2026-11-16 — sdd-review impl-spec (advisory; looped to clean)
+
+- **Result:** 0 failures, 0 open warnings after **8 passes**.
+  - Pass 1: 3 failures, 15 warned steps.
+  - Pass 2: 0 failures, 3 warnings.
+  - Pass 3: 2 warnings. Pass 4: 3 warnings. Pass 5: 4 warnings.
+  - Pass 6: 2 warnings. Pass 7: 1 warning. Pass 8: clean.
+- **Major changes:**
+  - **Config seed renumbered to `052`** (D-99): feature 343 landed `051` on trunk.
+  - **The spec was split from 40 to 52 steps,** each touching at most 5 files.
+  - **The `chromium-sso` Playwright project** runs with `workers: 1` and `fullyParallel: false`. AC-32/44/45/46 moved into `e2e/sso/legacy-global-state.spec.ts`.
+  - **The typecheck step lists exact files.** The orchestrator measured `tsc --noEmit` at 0 errors twice, on the clean tree and at `45be5749`.
+  - **One `traceId` per request** is threaded through every config loader and identity call (C-03). The loaders require it, and `oidcConfig.ts` never generates one.
+  - **Shared test fixtures:** identity `fixtures/sanCall.ts` and agent `conftest.py` `sso_keys` (C-13).
+  - **Real-reader tests** for the seeded password flag and the client IDs (config wiring b).
+  - **`APP_URL` moves into local compose** with its first reader (Step 25).
+- **Accepted residuals** (not open; each is documented in its step):
+  - [x] Step 4: the seed lands before its readers (Steps 8/16/29, three surfaces). It is bridged by `check-config-wiring` PENDING and the `--final` gate at the integration PR.
+  - [x] Steps 14, 44, 45, 46: no coverage threshold exists for `scripts/` pytest or the Playwright harness.
+  - [x] Step 2: the generated proto paths are brace-grouped. Extra paths are logged per F-08.
+  - [x] Steps 39, 40, 42: UI service steps whose RED/GREEN is the Step 47 e2e (the UI has no jsdom unit layer).
+  - [x] Step 52: verification only, with no files (D-48). If the executor requires a commit, it folds into Step 51.
+- **Execute-time checks carried forward:**
+  - [ ] Step 12: `psql` must be present in the `xstockstrat-migrate-ci` image.
+  - [ ] Step 24: paste the fresh `pnpm run typecheck` output.
+  - [ ] Step 37: `pnpm run build` must tolerate the extra middleware exports, or they move to `src/lib/authPaths.ts`.
+  - [ ] Step 46: the per-shard `--list` must show every `chromium-sso` test.
+  - [ ] Merge time: re-check that config `052` and identity `007` are still free.
+- **Overlap:**
+  - Config `051` collided with 343 and was fixed by renumbering. No merge-order row is needed.
+  - Identity `007` is free.
+  - Shared file: `services/xstockstrat-identity/src/telemetry.ts` with 337 (in progress). Rebase only.
