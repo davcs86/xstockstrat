@@ -37,3 +37,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Ledger: read (fails 2026-10-07 ×2, 2026-11-16 ×2; insights 2026-10-07, 2026-11-16). No design-phase write — the trap is already recorded (fails 2026-10-07).
 - Open thread: pre-fix stranded intent rows are not repaired (design.md § Open Risks) — report at the integration PR.
 - Status: spec-ready → design-approved.
+
+## Session 2026-11-16T08:40Z — sdd-spec
+
+- Tree: `feature/fix-replace-tif-before-intent@747bcdb ≡ origin/feature/fix-replace-tif-before-intent (merged origin/main-dev@7eeab3d)`. The preflight found `origin/main-dev` ahead (`f61f76c..7eeab3d`: feature 345 docs, one fails.md entry and `.gitleaks.toml`; no service code); it was merged and the merge pushed, as `docs/sdd/tree-freshness.md` prescribes. No `trading.go` anchor moved.
+- Generated implementation-spec.md with 3 steps. Status → implementation-ready.
+- Steps 1+2 (test, then service) are one atomic unit: the tests are RED until the move lands, so Step 1 cannot pass its own Verification alone (step-constraints.md §C, F-05). The test step is numbered first (fails.md 2026-11-04, 2026-11-10). Step 3 is docs.
+- Key codebase findings:
+  - The block to move is `trading.go:1606-1618` (comment, `brokerReq` literal, TIF block); it reads only `req` and `entry`, both available after `resolveAccount` (`:1558-1561`). Target: above the `// Dedup insert:` comment (`:1563`).
+  - `fakeBroker` has no replace hook (`trading_bracket_test.go:26-34`, panic at `:53-55`); five `ReplaceOrder` methods exist on test doubles and the count stays five.
+  - `trading.go` is in the agent job's paths-filter (`.github/workflows/ci.yml:59`); the agent test reads only the offline `Unavailable` string at `trading.go:1008`, which the move does not touch.
+- Prototype (fails.md 2026-11-16 rule; scratch worktree of `747bcdb`, discarded, nothing committed): tests alone are RED for `@AC-1` (4 rows, `replace intent rows = 1`), `@AC-2` ("still pending") and `@AC-4` ("outcome is unknown"), and `@AC-3` passes; with the move, `go test ./... -race -count=1` is green service-wide with no existing test edited, coverage total 84.8%, `golangci-lint` v2.14.0 0 issues; the Step 3 edits pass `check-context-map.py` and markdownlint.
+- Governance read: constitution, reviewer registry, phase4-deviations, ledger (fails 2026-10-07 `order-time-in-force-enum` ×3, 2026-11-04 `enforce-config-key-wiring`, 2026-11-10 `fix-marketdata-dead-symbol-ingest`, 2026-11-16 ×2; insights 2026-10-07, 2026-11-16). No approval-flow, config-rollout or proto-versioning read: no proto, migration or config change.
+- Discovery was done inline (single service, recon.md present); no `codebase-discovery` subagent was spawned.
+- Assumptions made by this session:
+  - `@AC-1`'s table adds an Alpaca + explicit-UNSPECIFIED row to the three IBKR rows of D-5; basis: step-constraints.md §A broker coverage, and UNSPECIFIED is the only TIF Alpaca refuses.
+  - TRADING-7's Why cell gains one clause on the failure mode; basis: D-6 amends the row and every rule row states its failure mode.
+  - The executor needs `golangci-lint` v2.14.0 built with go1.27; the v2.5.0 binary on the session image refuses the module. Basis: observed in this session; 347's execute sessions did the same install.
+  - No PARTIALLY_FILLED test case; basis: the status gate is above the moved block and unchanged, and the scenarios name a NEW order.
+- Open threads (unchanged from design): stranded pre-fix intent rows are not repaired; D-3 is to be flagged to the operator in the integration PR.
