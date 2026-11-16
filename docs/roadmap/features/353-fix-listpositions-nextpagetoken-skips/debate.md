@@ -1,6 +1,6 @@
 # Debate Register: fix-listpositions-nextpagetoken-skips
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 bound counts this run only)
 
