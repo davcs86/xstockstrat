@@ -8833,7 +8833,7 @@ exports.GetIndicatorSeriesResponse = {
     },
 };
 function createBaseComponentSeries() {
-    return { refName: "", kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED, series: [], error: "" };
+    return { refName: "", kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED, series: [], error: "", firstValueBars: 0 };
 }
 exports.ComponentSeries = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -8848,6 +8848,9 @@ exports.ComponentSeries = {
         }
         if (message.error !== "") {
             writer.uint32(34).string(message.error);
+        }
+        if (message.firstValueBars !== 0) {
+            writer.uint32(40).int32(message.firstValueBars);
         }
         return writer;
     },
@@ -8886,6 +8889,13 @@ exports.ComponentSeries = {
                     message.error = reader.string();
                     continue;
                 }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.firstValueBars = reader.int32();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -8904,6 +8914,11 @@ exports.ComponentSeries = {
             kind: isSet(object.kind) ? componentKindFromJSON(object.kind) : ComponentKind.COMPONENT_KIND_UNSPECIFIED,
             series: globalThis.Array.isArray(object?.series) ? object.series.map((e) => exports.NamedSeries.fromJSON(e)) : [],
             error: isSet(object.error) ? globalThis.String(object.error) : "",
+            firstValueBars: isSet(object.firstValueBars)
+                ? globalThis.Number(object.firstValueBars)
+                : isSet(object.first_value_bars)
+                    ? globalThis.Number(object.first_value_bars)
+                    : 0,
         };
     },
     toJSON(message) {
@@ -8920,6 +8935,9 @@ exports.ComponentSeries = {
         if (message.error !== "") {
             obj.error = message.error;
         }
+        if (message.firstValueBars !== 0) {
+            obj.firstValueBars = Math.round(message.firstValueBars);
+        }
         return obj;
     },
     create(base) {
@@ -8931,6 +8949,7 @@ exports.ComponentSeries = {
         message.kind = object.kind ?? ComponentKind.COMPONENT_KIND_UNSPECIFIED;
         message.series = object.series?.map((e) => exports.NamedSeries.fromPartial(e)) || [];
         message.error = object.error ?? "";
+        message.firstValueBars = object.firstValueBars ?? 0;
         return message;
     },
 };
