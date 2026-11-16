@@ -328,7 +328,7 @@ C-12: no domain object is used (theme tokens only), so the test-data inventory d
 
 ### Step 6 — service: `isChartable` and `seriesSlots` in `indicatorChart.ts`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/indicatorChart.ts` — modify
@@ -567,3 +567,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Verification items 1-8, each in a fresh shell at the repo root; item 4 diffs against `feature/chart-series-palette`.
 - **Actual**: RED (item 1) ran alone. Items 2-8 ran in one log. Each item ran in its own `( cd services/xstockstrat-ui && … )` subshell, separated by `;` with a per-item `rc=` echo, because items 4 and 7 pass by printing `0` or nothing, and `grep` returns rc=1 for both. The executor's worktree is detached and has no local `feature/chart-series-palette` branch, so item 4 printed `fatal: bad revision` and a vacuous `0`. It was re-run against `origin/feature/chart-series-palette` (the same commit). That run printed `0` changed `--chart-` lines and `12` added `--series-` lines.
 - **Disposition**: mechanical. The commands are unchanged apart from the ref.
+
+### Step 6 — RED method and Verification run shape
+- **Spec said**: TDD `red-green required`; three Verification items, each in a fresh shell at the repo root. The paired unit tests for `seriesSlots` are Step 7's.
+- **Actual**: the three items ran in one log, each in its own `( cd services/xstockstrat-ui && … )` subshell joined with `&&`. RED was the same block run before the edit: item 1 printed the only definition at `src/components/trader/IndicatorPanels.tsx:19`, not in `src/lib/indicatorChart.ts`, so its pass condition failed. The behavioural red→green for `seriesSlots` is Step 7's 4 tests; Step 7's RED ("before Step 6") must restore the pre-Step-6 `indicatorChart.ts` from the Step 5 commit with `git checkout <commit> -- <file>`, as Step 9 does.
+- **Disposition**: mechanical. The commands are unchanged.

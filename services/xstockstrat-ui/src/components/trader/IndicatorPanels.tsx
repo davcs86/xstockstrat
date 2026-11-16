@@ -4,7 +4,7 @@ import type { IChartApi, ISeriesApi, MouseEventParams } from 'lightweight-charts
 import type { ComponentSeries } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { resolveChartColor } from '@/lib/chartColors';
-import { toLineData } from '@/lib/indicatorChart';
+import { isChartable, toLineData } from '@/lib/indicatorChart';
 import type { IndicatorSeriesInput } from '@/hooks/useIndicatorSeries';
 
 // Each chartable component draws as its own native lightweight-charts pane on the shared OHLCV chart
@@ -15,10 +15,6 @@ const INDICATOR_PANE_HEIGHT = 120;
 // Theme tokens per named sub-series; fallbacks are CSS named colors (no brand hex).
 const SERIES_TOKENS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5'] as const;
 const SERIES_FALLBACK = ['teal', 'slateblue', 'goldenrod', 'indianred', 'silver'] as const;
-
-function isChartable(c: ComponentSeries): boolean {
-  return !c.error && c.series.length > 0;
-}
 
 type ReadoutRow = { label: string; value: string };
 

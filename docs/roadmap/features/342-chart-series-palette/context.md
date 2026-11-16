@@ -65,6 +65,7 @@ Service/UI source (by step):
 - Step 2: `services/xstockstrat-ui/src/styles/themes/colorVision.test.ts` (created).
 - Step 3: none (it appends the gate record to `context.md` only).
 - Steps 4+5 (one unit): `services/xstockstrat-ui/src/lib/seriesPalette.ts` (created), `src/styles/themes/staging.css` and `production.css` (12 `--series-N` tokens each), `src/styles/themes/themes.test.ts` (modified), `src/lib/seriesPalette.test.ts` (created).
+- Step 6: `services/xstockstrat-ui/src/lib/indicatorChart.ts` (`ChartableComponent`, `isChartable`, `seriesSlots` added), `src/components/trader/IndicatorPanels.tsx` (local `isChartable` removed, import repointed).
 
 SDD artifacts, all under `docs/roadmap/features/342-chart-series-palette/`:
 
@@ -465,3 +466,15 @@ The `C` array literal that passed, byte for byte. Step 4 copies the 12 values fr
 - Config-key wiring gate: N/A. No config key is touched.
 - Files modified: `services/xstockstrat-ui/src/styles/themes/themes.test.ts`, `services/xstockstrat-ui/src/lib/seriesPalette.test.ts`
 - Deviations: the Verification run shape, and item 4 run against `origin/` because the worktree has no local branch. Full detail is in the Deviation Log.
+
+## Session 2026-11-16 — sdd-execute sequential (step 6)
+
+### Step 6 — service: `isChartable` and `seriesSlots` in `indicatorChart.ts` [done]
+- Added `ChartableComponent`, `isChartable` (body moved unchanged) and `seriesSlots` (whole-chart running index mod 12, a non-chartable component gets `[]` and consumes no index) to `indicatorChart.ts`. `IndicatorPanels.tsx` drops its local `isChartable` and imports it with `toLineData`; line 62, `SERIES_TOKENS` and `SERIES_FALLBACK` are unchanged. No colour literal in either file.
+- TDD:
+  - Red: the Verification block before the edit; item 1 printed `src/components/trader/IndicatorPanels.tsx:19:function isChartable(c: ComponentSeries): boolean {`, the definition not yet in `indicatorChart.ts` (exit=0, item 1 condition failed, `.sdd-logs/v-1.log`).
+  - Green: item 1 printed `src/lib/indicatorChart.ts:23:export function isChartable(c: ChartableComponent): boolean {` only; lint and tsc passed (warnings only in unrelated pre-existing files); `Test Files  80 passed (80)`, `Tests  636 passed | 2 skipped (638)` (exit=0, `.sdd-logs/v-2.log`). `seriesSlots` behaviour is asserted by Step 7's 4 tests.
+- Config-key wiring gate: N/A. No config key is touched.
+- Files modified: `services/xstockstrat-ui/src/lib/indicatorChart.ts`, `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`
+- Deviations: the RED method and the Verification run shape. Full detail is in the Deviation Log.
+- Still open: O-24. Step 7's RED must restore the pre-Step-6 `indicatorChart.ts` from the Step 5 commit (`c2c3e39d2`), since Step 6 is committed first.

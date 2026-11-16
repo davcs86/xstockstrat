@@ -2,6 +2,7 @@
 // line-series data. Single source of the "unset → gap, never a fabricated 0" contract (P-03).
 
 import type { LineData, UTCTimestamp, WhitespaceData } from 'lightweight-charts';
+import { SERIES_PALETTE, type PaletteEntry } from './seriesPalette';
 
 /** Minimal structural shape of a protobuf-es Timestamp (`{ seconds: bigint }`) — see chart.ts. */
 export interface ProtoTime {
@@ -11,6 +12,27 @@ export interface ProtoTime {
 /** Minimal structural shape of an analysis `IndicatorValue`: `value` absent = UNSET (a gap). */
 export interface IndicatorValueLike {
   value?: number;
+}
+
+/** Minimal structural shape of an analysis `ComponentSeries`: a non-empty `error` = failed. */
+export interface ChartableComponent {
+  error?: string;
+  series: readonly unknown[];
+}
+
+export function isChartable(c: ChartableComponent): boolean {
+  return !c.error && c.series.length > 0;
+}
+
+/**
+ * One palette row per component, in input order. The index runs across the whole chart, so colours
+ * stay unique up to 12 series; a non-chartable component gets `[]` and consumes no index.
+ */
+export function seriesSlots(components: readonly ChartableComponent[]): PaletteEntry[][] {
+  let n = 0;
+  return components.map((c) =>
+    isChartable(c) ? c.series.map(() => SERIES_PALETTE[n++ % SERIES_PALETTE.length]) : [],
+  );
 }
 
 /** A whitespace point `{ time }` breaks the line (a gap); `{ time, value }` draws it. */
