@@ -61,6 +61,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - Result: 0 failures, 1 warning, 1 note (advisory — did not block). No Floor risk.
 - Unresolved ✗ / ⚠ carried into execution:
-  - Step 2: the `git diff --numstat` expectation (15 added, 13 deleted) is sensitive to blank-line handling of the move (C-01) — [ ] unaddressed
+  - Step 2: the `git diff --numstat` expectation (15 added, 13 deleted) is sensitive to blank-line handling of the move (C-01) — [x] cleared at Steps 1+2: the move measured 15 added / 13 deleted
 - Note: Step 3 edits the long TRADING-7 row in place; keep its numstat at 1/1.
 - Overlap findings: none (CLEAN). 311/312/321 (spec-ready) touch other functions of `trading.go`.
+
+## Session 2026-11-16 — sdd-execute (sequential)
+
+- Mode entry (§5.1b) and the per-feature up-front plan (§5.4): confirmed by the operator's handover ("Execute mode: `sequential` … Treat this message as the mode-entry confirmation"); no live prompt was shown. Re-spec gate: every step's evidence re-verified on `feature/fix-replace-tif-before-intent@e998c6a` (`main-dev@7eeab3d` merged); no mismatch, no re-spec.
+- Tooling: Go 1.27.0; `golangci-lint` v2.14.0 built with go1.27.0 (installed into the session scratchpad); Node 22 for markdownlint. No database started.
+
+### Steps 1+2 — handler-level regression tests + validate the replace time-in-force before the intent claim [done]
+- Atomic unit, one commit. Tests written first; RED captured with only Step 1's files; then the 13-line block in `ReplaceOrder` moved above the intent claim plus one constraint comment.
+- RED (unfixed `trading.go`, `go test ./internal/service/ -race -count=1 -run 'F349_AC[1-4]$' -v`): `@AC-1` all four subtests `replace intent rows = 1, want none`; `@AC-2` `FailedPrecondition desc = replace on order ord-1 is still pending`; `@AC-4` `FailedPrecondition desc = replace intent for order ord-1 outcome is unknown; verify with the broker before retrying`; `@AC-3` passes — red N/A, guard: the allowed path is unchanged by the fix.
+- GREEN: `golangci-lint run --modules-download-mode=mod` → `0 issues.`; `go test ./... -race -count=1` exit 0 (all 8 packages `ok`, no existing test edited); coverage `total: 84.8%`; 4 top-level F349 tests PASS; `validateTIF(` sites 2; numstat `15 13`; `ReplaceOrder` test doubles still 5.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`, `internal/service/trading_replace_tif_test.go` (new), `internal/service/trading_bracket_test.go`
+- Deviations: none

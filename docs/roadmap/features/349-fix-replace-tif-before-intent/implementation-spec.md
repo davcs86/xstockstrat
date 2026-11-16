@@ -97,7 +97,7 @@ code and every UI, agent, proto and config surface are unchanged, so there is no
 
 ### Step 1 — test: handler-level regression tests for the replace TIF check
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_replace_tif_test.go` — create
@@ -237,7 +237,7 @@ grep -c "BROKER_TYPE_IBKR\|BROKER_TYPE_ALPACA" internal/service/trading_replace_
 
 ### Step 2 — service: validate the replace time-in-force before the intent claim
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify

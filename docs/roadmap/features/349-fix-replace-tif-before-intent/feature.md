@@ -16,6 +16,7 @@
 | 2026-11-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report (`--from-report`) |
 | 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings, all folded into the spec) |
 | 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved under the operator's handover; recon.md + debate.md + design.md written |
+| 2026-11-16 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1+2 done (sequential) |
 | 2026-11-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps |
 
 ---

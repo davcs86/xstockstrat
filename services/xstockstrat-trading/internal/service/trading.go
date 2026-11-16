@@ -1560,6 +1560,21 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		return nil, err
 	}
 
+	// Must stay above the intent claim: a refused time-in-force must leave no intent row (TRADING-7).
+	// Only the changed fields are sent to the broker (zero/empty/nil = leave unchanged).
+	brokerReq := broker.OrderRequest{
+		Qty:        req.Qty,
+		LimitPrice: req.LimitPrice,
+		StopPrice:  req.StopPrice,
+		Trail:      req.Trail,
+	}
+	if req.TimeInForce != nil {
+		if err := validateTIF(*req.TimeInForce, commonv1.BrokerType(entry.brokerType)); err != nil {
+			return nil, err
+		}
+		brokerReq.TimeInForce = tifToWireString(*req.TimeInForce)
+	}
+
 	// Dedup insert: server-derived intent ID (a content-identical replace on the same order collapses).
 	intentID, requestHashHex, err := deriveReplaceCancelIntentID(req)
 	if err != nil {
@@ -1603,19 +1618,6 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 	prevIntent := order.IntentState
 	order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING })
 
-	// Only the changed fields are sent to the broker (zero/empty/nil = leave unchanged).
-	brokerReq := broker.OrderRequest{
-		Qty:        req.Qty,
-		LimitPrice: req.LimitPrice,
-		StopPrice:  req.StopPrice,
-		Trail:      req.Trail,
-	}
-	if req.TimeInForce != nil {
-		if err := validateTIF(*req.TimeInForce, commonv1.BrokerType(entry.brokerType)); err != nil {
-			return nil, err
-		}
-		brokerReq.TimeInForce = tifToWireString(*req.TimeInForce)
-	}
 	if _, replaceErr := entry.client.ReplaceOrder(ctx, order.BrokerOrderId, brokerReq); replaceErr != nil {
 		if errors.Is(replaceErr, broker.ErrRateLimited) {
 			return nil, s.refuseRateLimitedMutation(ctx, "replace", order, intentID, prevIntent, replaceErr)
