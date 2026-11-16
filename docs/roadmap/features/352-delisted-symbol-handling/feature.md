@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-16 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after 4 rounds; 3 notes) |
 
 ---
 
@@ -49,4 +50,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review delisted-symbol-handling product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design delisted-symbol-handling` — full design recommended (6 services, additive proto on 3 contracts, new marketdata table, new inter-service direction, C-16 CHANGE to feature 282)

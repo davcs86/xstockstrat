@@ -106,3 +106,15 @@
   (AC-28); this wording is the reviewer's and mine, consistent with D-13, not a separate operator
   ruling. FR-9 defines `empty`; FR-11 and the consumer surface name `manage_watchlist` and
   `manage_watchlist_symbols`.
+- Round 4: PASS, no warnings. Notes left for design: alert wording when no system-managed list was
+  involved.
+
+## Session 2026-11-16 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: none (rounds 1–3 findings all addressed above).
+- Overlap findings: no FAIL-level collision; WARN-level same-file overlaps with 347, 348
+  (`marketdata_service.go`), 343 (`tools.py`), 340 (`marketdata.proto`, textual). No merge-order row.
+- Recommended design depth: full (6 services, additive proto on 3 contracts, new marketdata table, a
+  new marketdata → portfolio direction, C-16 CHANGE to feature 282).
+

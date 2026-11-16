@@ -67,8 +67,8 @@ Answers the operator gave when this story was filed; they bind the FRs below.
 | D-14 | Which symbols get a profile row | Written lazily: a row is created when the platform first has state to record for a symbol. No pre-population |
 | D-15 | Owner of the symbol profile | `xstockstrat-marketdata` |
 | D-16 | A source error on a flagged symbol, permanent or transient | Always `skipped`, with the error text as reason |
-| D-18 | Alert when a flagged symbol recovers | Yes, one alert per symbol on recovery |
 | D-17 | Flag of a symbol that is on no watchlist any more | Persists in the profile and keeps being re-evaluated; clears only on recovery |
+| D-18 | Alert when a flagged symbol recovers | Yes, one alert per symbol on recovery |
 
 ## Functional Requirements
 
