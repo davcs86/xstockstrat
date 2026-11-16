@@ -1,57 +1,53 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
-import type { Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
+import { useCallback, useState } from 'react';
+import Link from 'next/link';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
-import { severityLabel, severityVariant } from '@/lib/alertShared';
+import {
+  ALERTS_QUERY_KEY,
+  formatWhen,
+  invalidateAlertReadModels,
+  severityLabel,
+  severityVariant,
+} from '@/lib/alertShared';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 
-function formatWhen(alert: Alert): string {
-  const s = alert.createdAt?.seconds;
-  if (s == null) return '';
-  return new Date(Number(s) * 1000).toLocaleString();
-}
-
 export function AlertInbox() {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const refetch = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await notifyClient.listAlerts({});
-      setAlerts(res.alerts);
-      setUnreadCount(res.unreadCount);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
+  const listQuery = useQuery({
+    queryKey: [...ALERTS_QUERY_KEY, 'list'],
+    queryFn: () => notifyClient.listAlerts({}),
+  });
+  const [markError, setMarkError] = useState('');
+  const queryClient = useQueryClient();
+  const { mutateAsync: markAsync } = useMutation({
+    mutationFn: (alertIds: string[]) => notifyClient.markAlertRead({ alertIds }),
+    meta: { errorHandled: true },
+    onSuccess: () => {
+      void invalidateAlertReadModels(queryClient);
+    },
+  });
 
   const markRead = useCallback(
     async (alertIds: string[]) => {
       if (alertIds.length === 0) return;
+      setMarkError('');
       try {
-        await notifyClient.markAlertRead({ alertIds });
-        await refetch();
+        await markAsync(alertIds);
       } catch (e) {
-        setError((e as Error).message);
+        setMarkError((e as Error).message);
       }
     },
-    [refetch],
+    [markAsync],
   );
 
+  const alerts = listQuery.data?.alerts ?? [];
+  const unreadCount = listQuery.data?.unreadCount ?? 0;
+  const loading = listQuery.isLoading;
+  const error = markError || (listQuery.error?.message ?? '');
   const unreadIds = alerts.filter((a) => !a.read).map((a) => a.alertId);
 
   return (
@@ -111,9 +107,13 @@ export function AlertInbox() {
                       {a.category}
                     </span>
                   </div>
-                  <span className="text-xs text-muted-foreground">{formatWhen(a)}</span>
+                  <span className="text-xs text-muted-foreground">{formatWhen(a.createdAt)}</span>
                 </div>
-                <p className={a.read ? 'text-sm' : 'text-sm font-semibold'}>{a.title}</p>
+                <p className={a.read ? 'text-sm' : 'text-sm font-semibold'}>
+                  <Link href={`/accounts/notifications/${a.alertId}`} className="hover:underline">
+                    {a.title}
+                  </Link>
+                </p>
                 {a.body && (
                   <p className="text-xs text-muted-foreground" data-testid="alert-body">
                     {a.body}

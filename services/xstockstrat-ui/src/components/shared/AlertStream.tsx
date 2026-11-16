@@ -1,16 +1,27 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
 import type { Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { Bell, BellOff } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
-import { Separator } from '../ui/separator';
-import { CardNotice } from '../shared/CardNotice';
 import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '../ui/sheet';
+import { Separator } from '../ui/separator';
+import { CardNotice } from './CardNotice';
+import {
+  ALERT_UNREAD_COUNT_KEY,
   UNREAD_PAGE_SIZE,
   drainUnread,
+  invalidateAlertReadModels,
   mergeUnread,
   pruneStreamed,
   severityLabel,
@@ -19,32 +30,44 @@ import {
 import { useReconnectingStream } from '@/hooks/useReconnectingStream';
 
 export function AlertStream() {
-  const [stored, setStored] = useState<Alert[]>([]);
+  const queryClient = useQueryClient();
   const [streamed, setStreamed] = useState<{ alert: Alert; seq: number }[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
   const seqRef = useRef(0);
   const [pending, setPending] = useState(false);
-  const [fetchFailed, setFetchFailed] = useState(false);
   const [markNotice, setMarkNotice] = useState<null | 'capped' | 'error'>(null);
 
-  // The only fetch of the unread list; a superseded response is dropped (latest wins).
-  const refreshUnread = useCallback(async () => {
-    const seq = ++seqRef.current;
-    try {
+  // pruneStreamed needs the sequence of the fetch that produced the result.
+  const unreadQuery = useQuery({
+    queryKey: ALERT_UNREAD_COUNT_KEY,
+    queryFn: async () => {
+      const seq = ++seqRef.current;
       const res = await notifyClient.listAlerts({ unreadOnly: true, limit: UNREAD_PAGE_SIZE });
-      if (seq !== seqRef.current) return;
-      const resultIds = new Set(res.alerts.map((a) => a.alertId));
-      setStored(res.alerts);
-      setStreamed((prev) => pruneStreamed(prev, resultIds, seq));
-      setFetchFailed(false);
-    } catch {
-      if (seq === seqRef.current) setFetchFailed(true);
-    }
-  }, []);
+      return { alerts: res.alerts, seq };
+    },
+  });
+  const stored = unreadQuery.data?.alerts ?? [];
+  const fetchFailed = unreadQuery.isError;
 
   useEffect(() => {
-    void refreshUnread();
-  }, [refreshUnread]);
+    const data = unreadQuery.data;
+    if (!data) return;
+    const resultIds = new Set(data.alerts.map((a) => a.alertId));
+    setStreamed((prev) => pruneStreamed(prev, resultIds, data.seq));
+  }, [unreadQuery.data]);
+
+  const refreshUnread = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ALERT_UNREAD_COUNT_KEY }),
+    [queryClient],
+  );
+
+  const markReadMutation = useMutation({
+    mutationFn: (alertIds: string[]) => notifyClient.markAlertRead({ alertIds }),
+    meta: { errorHandled: true },
+    onSuccess: () => {
+      void invalidateAlertReadModels(queryClient);
+    },
+  });
 
   // A reconnect may re-deliver an alert; dedupe on alertId so React keys stay unique.
   const { disconnected } = useReconnectingStream<Alert>(
@@ -76,13 +99,13 @@ export function AlertStream() {
     setPending(true);
     setMarkNotice(null);
     try {
-      await notifyClient.markAlertRead({ alertIds: [alert.alertId] });
+      await markReadMutation.mutateAsync([alert.alertId]);
       setReadIds((prev) => new Set(prev).add(alert.alertId));
     } catch {
       setMarkNotice('error');
+      void refreshUnread();
     }
     setPending(false);
-    await refreshUnread();
   };
 
   const clearAll = async () => {
@@ -96,7 +119,7 @@ export function AlertStream() {
     setReadIds((prev) => new Set([...prev, ...result.markedIds]));
     setPending(false);
     if (result.outcome !== 'done') setMarkNotice(result.outcome);
-    await refreshUnread();
+    await invalidateAlertReadModels(queryClient);
   };
 
   return (
@@ -176,7 +199,16 @@ export function AlertStream() {
                     </Badge>
                     <span className="text-xs text-muted-foreground">{a.category}</span>
                   </div>
-                  <p className="text-sm font-medium">{a.title}</p>
+                  <p className="text-sm font-medium">
+                    <SheetClose asChild>
+                      <Link
+                        href={`/accounts/notifications/${a.alertId}`}
+                        className="hover:underline"
+                      >
+                        {a.title}
+                      </Link>
+                    </SheetClose>
+                  </p>
                   {a.body && <p className="text-xs text-muted-foreground">{a.body}</p>}
                   <Button
                     variant="ghost"

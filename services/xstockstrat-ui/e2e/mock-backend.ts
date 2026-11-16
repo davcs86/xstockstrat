@@ -32,6 +32,7 @@ import {
   ALERT_STREAM_HOLD_TRACE_ID,
   ALERT_LIST_WITH_READ_STATE,
   MOCK_UNREAD_COUNT,
+  ALERT_DETAILS,
 } from './fixtures/alerts';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
@@ -703,6 +704,14 @@ export async function startMockBackend(): Promise<void> {
         // page.route() for stateful assertions).
         async markAlertRead() {
           return {};
+        },
+        // feature 344 — the list fixtures resolve too, so inbox rows can link to their alert page.
+        async getAlert(req: { alertId?: string }) {
+          const found = [...ALERT_DETAILS, ...ALERT_LIST_WITH_READ_STATE].find(
+            (a) => a.alertId === req.alertId,
+          );
+          if (!found) throw new ConnectError('alert not found', Code.NotFound);
+          return found;
         },
         // Feature 165: echo the caller resolved from the propagated x-user-id header back as the
         // subscription id, so the e2e can assert the notify service derives the owner from the
