@@ -56,3 +56,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The executor needs `golangci-lint` v2.14.0 built with go1.27; the v2.5.0 binary on the session image refuses the module. Basis: observed in this session; 347's execute sessions did the same install.
   - No PARTIALLY_FILLED test case; basis: the status gate is above the moved block and unchanged, and the scenarios name a NEW order.
 - Open threads (unchanged from design): stranded pre-fix intent rows are not repaired; D-3 is to be flagged to the operator in the integration PR.
+
+## Session 2026-11-16 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 1 warning, 1 note (advisory — did not block). No Floor risk.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 2: the `git diff --numstat` expectation (15 added, 13 deleted) is sensitive to blank-line handling of the move (C-01) — [ ] unaddressed
+- Note: Step 3 edits the long TRADING-7 row in place; keep its numstat at 1/1.
+- Overlap findings: none (CLEAN). 311/312/321 (spec-ready) touch other functions of `trading.go`.
