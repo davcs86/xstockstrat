@@ -374,3 +374,10 @@ Feature: authelia-sso
     When a signed-in user logs out
     Then the session cookies are cleared and the refresh token is revoked
     And the browser is redirected to that end_session_endpoint with post_logout_redirect_uri "https://xstockstrat-staging.example.test/auth/login"
+
+  @AC-53 @FR-15
+  Scenario: Logout falls back to Authelia's portal logout
+    Given staging is in SSO mode and Authelia's discovery document advertises no end_session_endpoint
+    When a signed-in user logs out
+    Then the session cookies are cleared and the refresh token is revoked
+    And the browser is redirected to Authelia's portal logout with a return address of "https://xstockstrat-staging.example.test/auth/login"

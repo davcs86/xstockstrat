@@ -141,11 +141,11 @@ with the person's Authelia email before their first SSO login (cutover option B,
 given) so the next SSO login links by email again. This is the recovery path homelab-edge `docs/runbooks/sso.md` § 7
 and § 8 rely on (owner decision 2026-11-16).
 
-FR-15. **SSO logout and refusals.** In SSO mode, `/api/auth/logout` revokes the session exactly as today. Then, if
-Authelia's discovery document advertises an `end_session_endpoint`, it redirects there (RP-initiated logout, with
-`post_logout_redirect_uri = ${APP_URL}/auth/login`). Otherwise the deployment relies on a short Authelia session
-configured in homelab-edge, and the behaviour is documented (owner decision 2026-11-16; whether the endpoint exists is
-a spike item). When Authelia answers the authorization request with `error=access_denied` (the person is not in the
+FR-15. **SSO logout and refusals.** In SSO mode, `/api/auth/logout` revokes the session exactly as today. Then it always redirects
+the browser to Authelia's logout, which also ends the person's Authelia session for every other app. The target is
+the standard `end_session_endpoint` (RP-Initiated Logout, `post_logout_redirect_uri = ${APP_URL}/auth/login`) when
+Authelia's discovery document advertises one. Otherwise it is Authelia's portal logout, with a redirect back to
+`${APP_URL}/auth/login` (owner decision 2026-11-16, superseding the earlier "or documentation only" fallback). When Authelia answers the authorization request with `error=access_denied` (the person is not in the
 app's group), the login page shows "You don't have access to xstockstrat. Ask an admin." (owner decision 2026-11-16).
 Every other IdP error shows "Sign-in failed. Try again."
 

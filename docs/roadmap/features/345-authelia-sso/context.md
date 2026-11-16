@@ -150,3 +150,4 @@
 - Spec amended: FR-11, FR-12, new FR-15, two new config keys. AC-48..AC-52 added. The amended spec needs a re-run of `/sdd-review product-spec` after design approval.
 - C-16 label: identity 043 `@AC-2/3/6` are "CHANGE-by-config, pre-signed" (FR-9; context.md 2026-11-15 "seed true + guard").
 - Register: D-1..D-50, R-1..R-17, 0 open objections.
+- Owner steer during round 5: SSO logout ALWAYS redirects to Authelia's logout (end_session_endpoint if advertised, else the portal logout). Reopens D-45 → D-51 (P-1, user reopened). FR-15 amended; AC-53 added.
