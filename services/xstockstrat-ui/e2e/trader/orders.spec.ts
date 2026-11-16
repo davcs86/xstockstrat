@@ -1,7 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
 import { BROKER_ACCOUNT_ALPACA } from '../fixtures';
-import { expectFocusOnMarkedTrigger, expectRowMenuSettled, markTrigger } from '../helpers/rowMenu';
+import {
+  expectFocusOnMarkedTrigger,
+  expectRowMenuSettled,
+  openMarkedRowMenu,
+} from '../helpers/rowMenu';
 
 /**
  * E2E tests for the /trader/orders management page (feature 055).
@@ -78,10 +82,12 @@ const ORDERS = [
 
 test.describe('Orders management page', () => {
   let listOrdersCount = 0;
+  let accountScopedLists = 0;
   let cancelRequested = false;
 
   test.beforeEach(async ({ page }) => {
     listOrdersCount = 0;
+    accountScopedLists = 0;
     cancelRequested = false;
 
     await addAuthCookie(page);
@@ -99,6 +105,9 @@ test.describe('Orders management page', () => {
 
     await page.route('**/xstockstrat.trading.v1.TradingService/ListOrders', async (route) => {
       listOrdersCount += 1;
+      if ((route.request().postData() ?? '').includes(BROKER_ACCOUNT_ALPACA.id)) {
+        accountScopedLists += 1;
+      }
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -244,10 +253,15 @@ test.describe('Orders management page', () => {
     const dialogButton = (page: Page, name: string) =>
       page.getByRole('alertdialog').getByRole('button', { name, exact: true });
 
+    // The table remounts once when the selected account resolves and the list query is re-keyed;
+    // a row menu opened before that would be closed by the remount.
+    test.beforeEach(async () => {
+      await expect.poll(() => accountScopedLists).toBeGreaterThan(0);
+    });
+
     async function chooseCancel(page: Page) {
       const trigger = page.getByTestId('actions-ord-new');
-      await markTrigger(trigger);
-      await trigger.click({ timeout: 10000 });
+      await openMarkedRowMenu(trigger);
       await page.getByRole('menuitem', { name: 'Cancel', exact: true }).click();
     }
 

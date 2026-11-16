@@ -1,7 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie, addAdminCookie } from '../helpers/auth';
 import { FORMULAS, STRATEGY_DEFINITIONS, STRATEGY_DEF_LIVE } from '../fixtures';
-import { expectFocusOnMarkedTrigger, expectRowMenuSettled, markTrigger } from '../helpers/rowMenu';
+import {
+  expectFocusOnMarkedTrigger,
+  expectRowMenuSettled,
+  openMarkedRowMenu,
+} from '../helpers/rowMenu';
 
 /**
  * E2E coverage for the strategy creation flow (feature 050).
@@ -725,8 +729,7 @@ test.describe('Row menu confirm flow (feature 350)', () => {
     await addAdminCookie(page);
     await page.goto('/insights/strategies');
     const trigger = page.getByTestId('actions-strat-live-001');
-    await markTrigger(trigger);
-    await trigger.click();
+    await openMarkedRowMenu(trigger);
     await page.getByRole('menuitem', { name: 'Deactivate', exact: true }).click();
     deactivated = true;
     await page

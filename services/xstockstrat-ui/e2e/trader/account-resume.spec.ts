@@ -1,7 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAdminCookie, addAuthCookie } from '../helpers/auth';
 import { BROKER_ACCOUNT_HALTED, BROKER_ACCOUNT_ALPACA } from '../fixtures/accounts';
-import { expectFocusOnMarkedTrigger, expectRowMenuSettled, markTrigger } from '../helpers/rowMenu';
+import {
+  expectFocusOnMarkedTrigger,
+  expectRowMenuSettled,
+  openMarkedRowMenu,
+} from '../helpers/rowMenu';
 
 /**
  * Feature 179 — halt indicator + admin-gated Resume on the /trader/accounts surface.
@@ -182,8 +186,7 @@ test.describe('Row menu confirm flow (feature 350)', () => {
   }) => {
     await openAccounts(page, [BROKER_ACCOUNT_HALTED, BROKER_ACCOUNT_ALPACA]);
     const trigger = page.getByRole('button', { name: HALTED_TRIGGER });
-    await markTrigger(trigger);
-    await trigger.click();
+    await openMarkedRowMenu(trigger);
     await page.getByRole('menuitem', { name: 'Resume' }).click();
     await page
       .getByRole('alertdialog')
@@ -209,8 +212,7 @@ test.describe('Row menu confirm flow (feature 350)', () => {
     await expect(row.getByText('Halted', { exact: true })).toBeVisible({ timeout: 30000 });
 
     const trigger = page.getByRole('button', { name: HALTED_TRIGGER });
-    await markTrigger(trigger);
-    await trigger.click();
+    await openMarkedRowMenu(trigger);
     await page.getByRole('menuitem', { name: 'Resume' }).click();
     resumed = true;
     await page

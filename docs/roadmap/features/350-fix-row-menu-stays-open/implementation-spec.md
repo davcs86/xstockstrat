@@ -857,3 +857,10 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: the test marks the trigger through its kept test id `actions-strat-live-001` and asserts its accessible name "Actions for strat-live-001" after the focus assertion.
 **Reason**: on the pre-unit tree every trigger is named "Actions", so a name locator would fail before the flow starts and the RED would not be the focus assertion the step requires.
 **Disposition**: test-only; same behaviour asserted, RED captured for the right reason.
+
+### Deviation: Steps 2, 4, 6, 8 — the focus-marker helper and the orders load wait
+**Spec said**: `markTrigger(locator)` — "sets one marker attribute on the element (D-13)", called before the row menu is opened; the orders feature-350 block "shares `beforeEach`".
+**Actual**: the helper is `openMarkedRowMenu(trigger)`: it tags the trigger and opens the menu by clicking the tagged node. The orders feature-350 block adds its own `beforeEach` that waits for the first account-scoped `ListOrders` request.
+**Reason**: a full local e2e run passed (692 passed, 1 flaky): the orders confirm test failed once at the marker check and passed on retry. Reproduced under load (10 of 34 runs). The page snapshot showed focus on the correct trigger with the marker gone: the orders table remounts once at page load, when the selected account resolves and the list query is re-keyed (`useOrders` query key; `OrdersTable` renders the table only when not loading), so a marker set, or a menu opened, before that is lost. This is page-load behaviour that predates this feature and is not part of the confirm flow.
+**Disposition**: test-only fix at the root cause. After it: orders feature-350 tests 100 of 100 under load; all feature-350 tests ×4 (76 runs) passed; the five touched spec files pass with retries off. No production code changed.
+

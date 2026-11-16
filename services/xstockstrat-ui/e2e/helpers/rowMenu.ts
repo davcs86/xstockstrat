@@ -15,9 +15,13 @@ export async function expectRowMenuSettled(page: Page): Promise<void> {
   await expect(page.locator('body > [aria-hidden="true"]')).toHaveCount(0);
 }
 
-/** Tags the element so a later focus check proves it is the same node, not a remounted one. */
-export async function markTrigger(trigger: Locator): Promise<void> {
+/**
+ * Tags the trigger and opens its menu through the tagged node, so a later focus check proves it is
+ * the same node. A table that remounts in between leaves no tagged node and the click fails loudly.
+ */
+export async function openMarkedRowMenu(trigger: Locator): Promise<void> {
   await trigger.evaluate((el, attr) => el.setAttribute(attr, '1'), MARK);
+  await trigger.page().locator(`[${MARK}]`).click();
 }
 
 export async function expectFocusOnMarkedTrigger(page: Page): Promise<void> {

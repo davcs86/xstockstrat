@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { addAdminCookie } from '../helpers/auth';
-import { expectFocusOnMarkedTrigger, expectRowMenuSettled, markTrigger } from '../helpers/rowMenu';
+import {
+  expectFocusOnMarkedTrigger,
+  expectRowMenuSettled,
+  openMarkedRowMenu,
+} from '../helpers/rowMenu';
 import { STRATEGY_TEMPLATE_MEANREV, STRATEGY_TEMPLATE_SYSTEM } from '../fixtures';
 
 /**
@@ -85,8 +89,7 @@ test.describe('Row menu confirm flow (feature 350)', () => {
     const trigger = page.getByRole('button', {
       name: `Actions for template ${STRATEGY_TEMPLATE_MEANREV.meta.name}`,
     });
-    await markTrigger(trigger);
-    await trigger.click();
+    await openMarkedRowMenu(trigger);
     await page.getByRole('menuitem', { name: 'Retire', exact: true }).click();
     await page
       .getByRole('alertdialog')

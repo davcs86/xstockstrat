@@ -1,6 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
-import { expectFocusOnMarkedTrigger, expectRowMenuSettled, markTrigger } from '../helpers/rowMenu';
+import {
+  expectFocusOnMarkedTrigger,
+  expectRowMenuSettled,
+  openMarkedRowMenu,
+} from '../helpers/rowMenu';
 
 /**
  * E2E for the /accounts "My Authorized Apps" page (feature 051 — covers Steps 6 + 7).
@@ -185,8 +189,7 @@ test.describe('Row menu confirm flow (feature 350)', () => {
     await stubAgentHealth(page, false);
     await page.goto('/accounts/authorized-apps');
     const trigger = page.getByRole('button', { name: TRIGGER });
-    await markTrigger(trigger);
-    await trigger.click();
+    await openMarkedRowMenu(trigger);
     await page.getByRole('menuitem', { name: 'Disconnect' }).click();
     await page
       .getByRole('alertdialog')

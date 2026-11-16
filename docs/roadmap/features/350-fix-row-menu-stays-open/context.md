@@ -193,3 +193,10 @@ Accountability (P-03):
 - Unaddressed review warnings: none (the impl-spec review's Verification-block findings were fixed before execution).
 - Deviations: Playwright through the prebuilt path with dev-server first-run compile timeouts; the strategies `@AC-9` trigger located by test id (Deviation Log).
 - Unit tests: `pnpm run test:unit` 728 passed, 2 skipped. A full local e2e run on the production build was started after Step 8; its result is recorded in the PR.
+
+## Session 2026-11-16 — after PR #1565 opened (test hardening)
+
+- Local full e2e on the production build (started after Step 8): `692 passed, 1 flaky` — the orders `@AC-2/@AC-3/@AC-8` confirm test failed once at `expectFocusOnMarkedTrigger` and passed on retry.
+- Root cause (reproduced, 10 failures in 34 runs under 4 workers): the orders table remounts once at page load when the selected account resolves and `useOrders` is re-keyed; the test had marked the trigger before that. The failure snapshot showed focus on "Actions for order ord-new" with the marker missing. Not caused by the confirm flow or by this feature's code.
+- Fix (tests only): `markTrigger` → `openMarkedRowMenu` (tag + open through the tagged node, so a remount in between fails loudly instead of silently losing the marker); the orders feature-350 block waits for the first account-scoped `ListOrders` before opening a row menu. An intermediate attempt (marking after the menu was open) was wrong — an open menu hides the trigger from role lookups — and was replaced before any push.
+- Evidence after the fix: orders feature-350 tests 100/100 under load; all feature-350 tests ×4 = 76 passed; the five touched spec files pass with `--retries=0`. `tsc --noEmit` and `lint` exit 0. Deviation Log updated.
