@@ -113,6 +113,8 @@ router.service(NotifyService, {
   // Owner resolved from the x-user-id header (forward propagates it); the browser can't mark another
   // user's alerts read (feature 203).
   markAlertRead: forward((req, opts) => notifyClient.markAlertRead(req, opts)),
+  // Owner resolved from the x-user-id header; notify answers NOT_FOUND for an alert the caller can't see.
+  getAlert: forward((req, opts) => notifyClient.getAlert(req, opts)),
 });
 
 router.service(AnalysisService, {

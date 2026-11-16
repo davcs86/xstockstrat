@@ -417,7 +417,7 @@ Expected: coverage ≥ 40%; `TestBackfillFailureAlertBody` has three behaviour c
 
 ### Step 9 — service: UI BFF `getAlert`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify
@@ -1067,3 +1067,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Planned**: the three behaviour cases fail first, then pass; the Verification block's exit status is the pass signal.
 - **Actual**: Step 7 had already landed, so RED ran the step's Verification with `servicer.py` temporarily restored from `45a35cb69` (the commit before Step 7), then restored to the committed file; only the test file is staged. The block's last line is the `grep` with no `&&`, so the block printed `exit=0` on the RED run too (3 failed); pass/fail was judged from the pytest summary line in the log. Verification ran with the ingest `.venv/bin` first on `PATH`, as in Step 7.
 - **Disposition**: run verbatim, judged from the log; Verification text left unchanged (F-09).
+
+### Step 9 — Verification run in a container on the branch's TS stubs; RED probe held uncommitted (2026-11-15)
+- **Planned**: run the Verification block on the host; Step 10's BFF spec fails first with HTTP 404 and no JSON body.
+- **Actual**: the linked `services/xstockstrat-ui/node_modules` resolves `@xstockstrat/proto` to the main checkout's `packages/proto/gen/ts`, whose `dist/notify/v1/notify_pb.d.ts` has no `GetAlert` (0 matches; 7 on this branch), so a host `tsc --noEmit` cannot see `notifyClient.getAlert`. The block ran verbatim in the cached `xstockstrat-codegen` image (node 24, pnpm 9.15.9) with the main checkout mounted read-only, the worktree read-write, and this branch's `packages/proto/gen/ts/dist` mounted read-only over the main checkout's `dist`. Step 10's tests are Playwright and not yet written, so the RED/GREEN probe was a temporary vitest case (`src/lib/__tests__/traderBffGetAlert.test.ts`: POST `/trader/api/xstockstrat.notify.v1.NotifyService/GetAlert` through `dispatchConnect`, expects 200, one `notifyClient.getAlert` call, `x-user-id` forwarded), run RED and GREEN and then deleted; it is not committed. RED answered **501** (Connect `unimplemented`), not 404: with the regenerated descriptor the router knows the method but has no handler. Step 10's "HTTP 404" RED expectation describes a tree without the regenerated stubs.
+- **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
