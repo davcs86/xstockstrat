@@ -542,7 +542,7 @@ grep -n "__tests__/fixtures" src/__tests__/setConfigScalarBounds.test.ts   # non
 
 ### Step 11 — service: UI pure helpers — read D, window the series
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/indicatorChart.ts` — modify
@@ -588,7 +588,7 @@ node scripts/check-config-wiring.mjs --final      # exit 0: no STALE, no dynamic
 
 ### Step 12 — test: vitest for D, the window and the insufficient set
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/indicatorChart.test.ts` — modify
@@ -893,4 +893,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 10 — RED captured against a temporarily reverted Step 9 entry; block exits 1 on its last grep (2026-11-15)
 - **Spec said**: capture RED before Step 9's edit (Step Dependencies). Step 10's block ends with `grep -n "__tests__/fixtures" …   # none` (no match expected).
 - **Actual**: Step 9 was already on the branch, so RED was captured in this worktree by removing the `'ui.chart.indicator_history_bars'` registry line, uncommitted (`AssertionError [ERR_ASSERTION]: history depth 199 is out of [200, 1000]`, `tests 371 / pass 370 / fail 1`). The line was restored with `git checkout --` before GREEN, so `configServiceImpl.ts` is not in this step's commit. GREEN exited 1 only because its last command is the no-match fixtures grep; lint (0 errors), `tests 371 / pass 371 / fail 0` and `c8 check-coverage --lines 40` passed.
+- **Disposition**: no code change; read as passing.
+
+### Steps 11+12 — Verification block results read as specified (2026-11-15)
+- **Spec said**: Step 11's block expects each `check-config-wiring.mjs` line to exit 0; Step 12's block expects `pnpm run test:coverage` to exit 0.
+- **Actual**: neither block chains its later lines with `&&`, so each block's `exit=` is only its last line's (Step 11: `--final`; Step 12: the INVENTORY grep). The two checker lines were re-run alone, each with its own log (`--keys` exit 0, silent; `--final` exit 0, only the two pre-existing `REPORTED: … readers-disagree` lines). In Step 12's GREEN log `test:coverage` printed `Tests 563 passed | 2 skipped` and `All files | 78.56` statements with no threshold error and no `ELIFECYCLE`. `node --test scripts/config-wiring.test.mjs` was also run (75 pass), because `scripts/config-wiring.json` changed. RED was captured with the Step 12 block too: its lint and `tsc` passed, `test:unit` failed 9 tests, and the block still printed `exit=0` from its last grep. `ConfigValue.intVal` is `bigint` in the generated TS (`config_pb.ts`), so `readHistoryBars` converts with `Number(...)` and `UI_CHART_HISTORY_VALUES.init` uses `BigInt(bars)`; `wire` uses a decimal string.
 - **Disposition**: no code change; read as passing.

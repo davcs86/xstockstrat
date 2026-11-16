@@ -176,8 +176,8 @@ still live.
   Log entry — Step 6. Resolved: pgxmock v4.9.0 `CloseError` covers the `rows.Err()` path.
 - [ ] The chunk-width SQL is new text, checked by the operator on first use; runbook launch-step-1
   preconditions (O-31) and the homelab-edge playbook path the runbook cites (O-32) — Step 17.
-- [ ] Step 12 touches four files and many cases (one unit with Step 11); split only with a Deviation
-  Log entry — Step 12.
+- [x] Step 12 touches four files and many cases (one unit with Step 11); split only with a Deviation
+  Log entry — Step 12. Resolved: landed unsplit with Step 11 as one commit.
 - [ ] Peer 342 has no implementation spec yet; re-run the overlap scan when it reaches
   `implementation-ready`.
 - [ ] The product spec has no `## Config Key Changes` heading (the key sits under Fix Scope); not
@@ -223,6 +223,10 @@ still live.
   `services/xstockstrat-config/src/__tests__/uiChartHistoryBarsSeedMigration.test.ts`.
 - Step 9: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`.
 - Step 10: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`.
+- Steps 11+12: `services/xstockstrat-ui/src/lib/indicatorChart.ts`, `scripts/config-wiring.json`,
+  `services/xstockstrat-ui/src/lib/indicatorChart.test.ts`,
+  `services/xstockstrat-ui/e2e/fixtures/indicatorHistory.ts`,
+  `services/xstockstrat-ui/e2e/fixtures/configKeys.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.
 
 Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
@@ -762,3 +766,22 @@ Tooling setup (step 10): node ✓ · pnpm ✓ (linked main-checkout `node_module
 - Config-key wiring gate: not applicable (a `test` step, no migration in **Files**, no `## Config Key Changes` heading).
 - Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
 - Deviations: RED against a temporarily reverted Step 9 line; the block exits 1 on its last no-match grep (Deviation Log).
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, steps 11+12 (atomic unit)
+
+Tooling setup (steps 11+12): node ✓ · pnpm ✓ (linked main-checkout `node_modules`) · vitest ✓; no install.
+
+### Step 11 — service: UI pure helpers — read D, window the series [done]
+- Part of the Steps 11+12 unit. Added `CHART_WINDOW_BARS` / `DEFAULT_HISTORY_BARS` (200) / `MAX_HISTORY_BARS` (1000), `readHistoryBars(values)` (oneof `intVal` only; the `bigint` goes through `Number(...)`, clamped to [200, 1000]; anything else → 200) and `windowIndicatorSeries(series, requestedBars, windowBars)` (tail-slices times and every point list with `.slice`, builds `insufficient` from no error + H < requested + `firstValueBars > H`; 0 never qualifies; input not mutated) in `indicatorChart.ts`. `scripts/config-wiring.json`: receiver `indicatorChart.ts:values` → `ui` added, the Step 7 temporary `seeded-unread` finding removed. No new outbound call.
+- Wiring: `--keys ui.chart.indicator_history_bars` exit 0, silent (`.sdd-logs/v-4.log`); `--final` exit 0, only the two pre-existing `REPORTED: … readers-disagree` lines (`v-5.log`); `config-wiring.test.mjs` 75 pass (`v-6.log`).
+- Files modified: `services/xstockstrat-ui/src/lib/indicatorChart.ts`, `scripts/config-wiring.json`
+- Deviations: the block's `exit=` reflects only its last line; the checker lines were re-run alone (Deviation Log).
+
+### Step 12 — test: vitest for D, the window and the insufficient set [done]
+- Part of the Steps 11+12 unit. New fixture module `e2e/fixtures/indicatorHistory.ts` (`historyTimes`, `smaComponent`, `indicatorSeriesResponse`), `UI_CHART_HISTORY_VALUES` in `configKeys.ts` (`init` = `BigInt`, `wire` = decimal string; int64), two `INVENTORY.md` rows. New `describe('readHistoryBars')` (absent, `stringVal`/`floatVal`, 50 → 200, 5000 → 1000, 1000, 600, and the seed-to-reader case reading `*_ui_chart_history_bars.up.sql` from disk: `value_type` `int`, value 200 = `DEFAULT_HISTORY_BARS`) and `describe('windowIndicatorSeries')` (AC-1..AC-4, full page at the default, `firstValueBars` 0 and error never insufficient, tail-of-response times, no mutation, `toLineData` gap contract).
+- AC-1..AC-4 red (`.sdd-logs/v-1.log`, helpers as signatures returning the default / the input unchanged): `Tests 9 failed | 554 passed | 2 skipped`, e.g. `AC-1 … expected [ …(400) ] to have a length of 190 but got 400`, `AC-4 … expected [] to deeply equal [ 'sma200' ]` → green (`.sdd-logs/v-2.log`): lint no errors (pre-existing warnings only, none in these files), `tsc` clean, `Tests 563 passed | 2 skipped (565)`, coverage `All files | 78.56` statements, `80.97` functions, `79.75` lines (≥ 40).
+- Files modified: `services/xstockstrat-ui/src/lib/indicatorChart.test.ts`, `services/xstockstrat-ui/e2e/fixtures/indicatorHistory.ts`, `services/xstockstrat-ui/e2e/fixtures/configKeys.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: the block's `exit=` reflects only its last grep (Deviation Log). INVENTORY rows list the one current consumer; Step 14 adds the e2e consumers.
+- Commit trailer: this agent's `Co-Authored-By` line follows the session's attribution reminder (`Claude Opus 5.5`), not the workflow text's `Claude Fable 5.2`.

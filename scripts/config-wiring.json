@@ -8,12 +8,6 @@
       "key": "broker.paper",
       "kind": "read-unseeded",
       "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
-    },
-    {
-      "namespace": "ui",
-      "key": "chart.indicator_history_bars",
-      "kind": "seeded-unread",
-      "owner": "feature 341 fix-indicator-pane-warmup"
     }
   ],
   "registry": {
@@ -144,6 +138,7 @@
       "services/xstockstrat-trading/internal/service/trading.go:s.cfgW": "trading",
       "services/xstockstrat-trading/internal/service/trading.go:s.platformCfgW": "platform",
       "services/xstockstrat-ui/src/app/trader/positions/page.tsx:resp.values": "platform",
+      "services/xstockstrat-ui/src/lib/indicatorChart.ts:values": "ui",
       "services/xstockstrat-ui/src/lib/performanceMetrics.ts:values": "ui"
     }
   }
