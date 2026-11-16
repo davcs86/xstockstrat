@@ -36,6 +36,27 @@ Feature: ensure-signals-watchlist-on-read
     When "user-42" calls ListWatchlists with an empty page_token
     Then the response contains that watchlist with symbol "AAPL" and no second system-managed watchlist
 
+  @AC-7 @FR-6
+  Scenario: With a small page_size the system list exists but may be on a later page
+    Given user "user-42" owns watchlists "DB workload test" and "Test" and no system-managed watchlist
+    When "user-42" calls ListWatchlists with page_size 1 and an empty page_token
+    Then the response contains 1 watchlist and a non-empty next_page_token
+    And following next_page_token until it is empty yields 3 watchlists, exactly one with system_managed true
+
+  @AC-8 @FR-1
+  Scenario: A caller with no x-user-id is rejected before any ensure
+    Given a ListWatchlists request carrying no x-user-id header
+    When the request is processed
+    Then the call returns InvalidArgument "missing user identity"
+    And no watchlist is inserted
+
+  @AC-9 @FR-7
+  Scenario: Agent docs no longer call list_watchlists purely read-only
+    Given docs/runbooks/mcp-tools.md section "list_watchlists" and the docstring at services/xstockstrat-agent/app/tools.py line 33
+    When either is read
+    Then each states that the call idempotently ensures the caller's system "Signals" list
+    And neither contains the bare phrase "(read-only"
+
   @AC-6 @FR-5
   Scenario: A same-named manual list coexists and delete stays guarded
     Given user "user-42" owns a manual watchlist named "Signals"
