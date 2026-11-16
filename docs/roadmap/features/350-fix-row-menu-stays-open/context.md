@@ -180,3 +180,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - C-16 promotion (approved in advance at the round-1 and round-3 gates): `scenario-promoter` run on the feature-branch checkout (`ce006bfc`) — 10 NEW, 0 duplicates, nothing for `platform.feature`, no existing suite edited. Created `services/xstockstrat-ui/acceptance/fix-row-menu-stays-open.feature`, generated mechanically from `acceptance.feature`; a `diff` with the provenance tag stripped is empty. `@feature-350` is last on each tag line, after `@regression`, as in the 270 and 339 suites.
 - Promoter's durability notes, kept verbatim as instructed and listed in the PR: `@AC-9` example values are fixture names and exact message strings; `@AC-10` names the End key and the fixture account; `@AC-8`'s body asserts less than its title suggests; `@AC-7` covers two surfaces in one scenario.
 - Defect reports resolved by this feature (step 2.6): only the originating report, already `triaged` → `feature:350-fix-row-menu-stays-open`; no further stamp is due.
+
+## Session 2026-11-16 — sdd-execute (session end)
+**Steps this session**: 1, 2, 3, 4, 5, 6, 7, 8, 9
+**Progress**: 9 done / 9 total
+**Stopped at**: all complete — integration PR #1565 (`feature/fix-row-menu-stays-open` → `main-dev`) opened; not merged by the session (operator-reserved).
+**Next**: operator reviews and merges PR #1565 when `CI Gate` is green.
+
+Accountability (P-03):
+- Out-of-scope changes: none.
+- Open questions / items: none blocking. Reported in the PR: the mouse-path focus pair (D-16); strategies per-row disabled (O-10); two side defects not filed ("Edit keys" dialog focus; signal-sources Enable/Disable focus, O-18); file overlap with feature 345 on the authorized-apps page.
+- Unaddressed review warnings: none (the impl-spec review's Verification-block findings were fixed before execution).
+- Deviations: Playwright through the prebuilt path with dev-server first-run compile timeouts; the strategies `@AC-9` trigger located by test id (Deviation Log).
+- Unit tests: `pnpm run test:unit` 728 passed, 2 skipped. A full local e2e run on the production build was started after Step 8; its result is recorded in the PR.
