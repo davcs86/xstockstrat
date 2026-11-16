@@ -45,3 +45,10 @@
 - Orchestrator-traced finding (O-9): until the `ListByUser` token defect is fixed, the system list creates a new page boundary — an analysis owner at exactly 100 manual lists loses one list's bindings from the live-loop universe each cycle; an agent 1-list user with `list_watchlists limit 1` loses a row in a small-page traversal.
 - **Operator decisions at the gate** (AskUserQuestion): (a) **351 merges after the token fix** (merge-order row at COMPLETION; no waiver); (b) **fail-open confirmed** (D-3); (c) **run round 3** instead of approving.
 - Characterization tests AC-3/AC-5/AC-8 require a recorded mutation-red during execution (D-9).
+
+## Session 2026-11-16 — sdd-design (Phase 1, round 3 gate)
+
+- Round 3 run (operator-requested): proposer (consolidation + hunt for unexamined angles) → adversary (no Floor breach; verdict NEEDS WORK on two text-level items, both adopted as D-11). Register: D-1..D-11, R-1..R-6, O-1..O-20 all closed; P-1 pending user (D-10(a) timing clause).
+- Round-3 findings adopted: the D-10 landing gate becomes a numbered, verified build step 4 (fails.md:3307) — it must fail if the `ListByUser` token fix is absent from main-dev; the merge-order row reads "Merge order only — <fix-slug> need not be launched" (not `launched`); step 4 reuses the fix's dbtest helper instead of 351's inline copy.
+- Open Risks recorded (design.md): `list_opportunities` indirect write (wording unchanged, with reason); users never reached by any caller keep no Signals list; non-UUID legacy owners get an orphan empty list; `HOMELAB_STAGING_ENABLED` unverified (value not in repo); O-5's per-user-cap premise corrected.
+- Operator option, not a design change (O-18): a zero-code interim remedy for the Homelab staging symptom exists (`ingest_signal(direction="watchlist")` at low conviction, then remove the symbol; or `EnsureSignalWatchlist` over mTLS). Side effects: a stored signal row, an alert if conviction ≥ 0.6.
