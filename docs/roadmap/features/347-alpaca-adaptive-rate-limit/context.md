@@ -199,3 +199,26 @@
   `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md` (status: open).
   Not fixed by this feature. Next: `/sdd-triage --from-report` on that file. The matching Open Thread
   above is done.
+
+## Session 2026-11-16T08:10Z — sdd-review impl-spec (advisory; warning loop, operator-requested)
+
+- Tree: ccr-47ce6aaf-i0ffis, contains origin/main-dev@5730505 (harness-pinned branch, as before).
+- Pass 1: 2 failures, 9 warning groups, no Floor risk. Fixed in the spec:
+  - F1 (C-05): marketdata kill-switch reader is now the named helper `alpacaAdaptiveRateLimit` with a
+    snapshot-based test in `cmd/server/main_test.go` (Steps 3, 4).
+  - F2: CI `check-config-wiring.mjs --final` runs on every step PR, so Steps 3 and 7 each add a
+    temporary `read-unseeded` entry to `scripts/config-wiring.json` and Step 11 removes both.
+  - W1–W9: atomic units reduced to 1+2, 5+6, 9+10; `ci.yml` cite; `GOWORK=off` coverage command;
+    trading key test asserts the seeded value; test names `Test<Subject>_F347_AC<N>` with exact PASS
+    counts; anchors and trading-domain notes; `grep` exit codes; Docker-based stored-set regeneration
+    plus the heal dry-run; Step 11 six-file justification.
+  - Moves: the `alpaca-integration.md` edit went from Step 3 to Step 5; the trading `CLAUDE.md` edits
+    from Step 7 to Step 9.
+- Pass 2: 0 failures, 1 warning (Step 11's stored-set key count matched 6 lines, not 4). Fixed.
+- Pass 3: swept every Verification command and recomputed every count; nothing else found. Its only
+  item was that the pass 2 fix had not been applied (the edit had aborted); it is applied now
+  (`implementation-spec.md:795`), which is the condition the reviewer gave for "No failures, no warnings".
+- Result: 0 failures, 0 warnings. Unresolved ✗ / ⚠ carried into execution: none.
+- Overlap findings: no FAIL-level collision (migration 051, both keys and `internal/alpacapace/` are
+  unclaimed). Seven same-file overlaps (322, 323, 311, 312, 321, 341) recorded in
+  `docs/roadmap/features/merge-order.md`.
