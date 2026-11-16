@@ -63,3 +63,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Ledger: read (fails 2026-09-16, 2026-11-15, 2026-11-16 ×2, :793-801, :1647-1649; insights 2026-09-05). Writes (superseding entries, D-9, and the columns-remount trap) are Step 5 of the build order.
 - Open threads (design.md § Open Risks): React 19 ref dependency (Step 1); mouse-path focus pair, strategies per-row disabled, two side defects (integration PR); Radix-internal event name in the guard test (Step 1); `theme-bundle.spec.ts` run (Step 1).
 - Status: spec-ready → design-approved.
+
+## Session 2026-11-16 — sdd-spec
+
+- Tree: `feature/fix-row-menu-stays-open@e30da23 ≡ origin/feature/fix-row-menu-stays-open (merged origin/main-dev@78ab5ca)`. The preflight found `origin/main-dev` (2 docs commits of other features) not merged; it was merged and the merge commit pushed (`docs/sdd/tree-freshness.md` Sync). No file under `services/xstockstrat-ui/` changed, so recon.md's line numbers hold; every source and spec file cited was re-read on this tree.
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- Shape: D-19's four code units are each a `service` + `test` pair with `**Lands with**` (Steps 1+2, 3+4, 5+6, 7+8); Step 9 is the ledger append. No proto, migration, config key, env var or mock-backend change.
+- Key codebase findings:
+  - `composeEventHandlers` skips Radix's own `onCloseAutoFocus` handler once ours calls `preventDefault` (`react-dropdown-menu` `dist/index.mjs:114-118`, `react-dialog` `dist/index.mjs:154-157`), which is what the one-shot menu guard and the dialog focus rule rely on. `node_modules/.pnpm` is at the repo root, not under the service.
+  - Config templates: a failed retire shows "template is in use" twice — the page's `CardNotice` inside `<main>` and the global mutation fallback outside it (`useManageTemplate` sets no `meta`). The `@AC-9` test scopes its locator to `getByRole('main')`.
+  - Authorized apps: the page replaces the table with "Loading…" while it reloads (`page.tsx:39,242-251`), so a successful Disconnect always removes the trigger; a failed one does not reload, which is why the failed case is the `@AC-9` row.
+  - The orders spec's item and dialog test ids (`edit-<id>`, `cancel-<id>`, `cancel-<id>-confirm`, `cancel-<id>-dismiss`) are referenced only by `e2e/trader/orders.spec.ts:174-216`; `OrdersTable` has one consumer (`trader/orders/page.tsx:55`).
+  - `account-resume.spec.ts` already uses `@AC-1..@AC-6` (feature 179) and `orders.spec.ts` uses `@AC-10` (feature 270), so this feature's tests sit in `(feature 350)` describe blocks and are selected with `-g "feature 350.*@AC-N"`.
+- Assumptions made by this session (also listed in the spec's Execution Summary):
+  - `service` + `test` pairs instead of five single steps; basis: the spec template and the feature-339 spec.
+  - `@AC-7`'s source-filter line gets a guard test in `e2e/insights/opportunities.spec.ts` (Step 6); D-19 names only the orders spec there. Basis: C-15. No production file changes for it.
+  - The D-13 marker helpers share one new module with the D-7 settle helper (`e2e/helpers/rowMenu.ts`); basis: four specs use them.
+  - "No outline" on `<main>` is the `outline-none` class (precedent `alert-dialog.tsx:53`).
+  - Authorized-apps `@AC-4` serves its first list through the real BFF (`route.fallback()`) instead of copying the inline app literal; basis: C-12.
+  - No full local Playwright run is specified (fails.md 2026-08-10); scoped runs per step, full suite in the `frontend-e2e` CI job.
+- Open threads for `/sdd-execute`: the D-17 mutation run (Step 2) must fail 5/5 in dev and in the production build, or the unit stops for the operator; a permanent `body > [aria-hidden="true"]` node on any page is a deviation, not a reason to loosen the settle helper; integration PR obligations (durable-suite promotion `@feature-350`, the four reported residues) are listed in the spec's Execution Summary.
+- Not committed by this session: implementation-spec.md (new), status.md, feature.md, context.md.
