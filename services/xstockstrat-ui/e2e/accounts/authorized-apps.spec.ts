@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
-import { expectRowMenuSettled } from '../helpers/rowMenu';
+import { expectFocusOnMarkedTrigger, expectRowMenuSettled, markTrigger } from '../helpers/rowMenu';
 
 /**
  * E2E for the /accounts "My Authorized Apps" page (feature 051 — covers Steps 6 + 7).
@@ -174,5 +174,27 @@ test.describe('Row menu confirm flow (feature 350)', () => {
     await expect(page.getByRole('main')).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByRole('button', { name: 'Connect a new app' })).toBeFocused();
+  });
+
+  test('@AC-9 a failed Disconnect keeps focus on the same row trigger', async ({ page }) => {
+    await page.route(APPS_BFF, async (route) => {
+      if (route.request().method() === 'GET') return route.fallback();
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+    });
+    await addAuthCookie(page);
+    await stubAgentHealth(page, false);
+    await page.goto('/accounts/authorized-apps');
+    const trigger = page.getByRole('button', { name: TRIGGER });
+    await markTrigger(trigger);
+    await trigger.click();
+    await page.getByRole('menuitem', { name: 'Disconnect' }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Confirm', exact: true })
+      .click();
+
+    await expect(page.getByText('Failed to disconnect (500)')).toBeVisible();
+    await expectRowMenuSettled(page);
+    await expectFocusOnMarkedTrigger(page);
   });
 });

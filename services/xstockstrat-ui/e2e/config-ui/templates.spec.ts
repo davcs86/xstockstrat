@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { addAdminCookie } from '../helpers/auth';
-import { expectRowMenuSettled } from '../helpers/rowMenu';
+import { expectFocusOnMarkedTrigger, expectRowMenuSettled, markTrigger } from '../helpers/rowMenu';
 import { STRATEGY_TEMPLATE_MEANREV, STRATEGY_TEMPLATE_SYSTEM } from '../fixtures';
 
 /**
@@ -67,5 +67,34 @@ test.describe('Row menu confirm flow (feature 350)', () => {
     await expectRowMenuSettled(page);
     await page.getByRole('button', { name: 'New strategy template' }).click();
     await expect(page.getByRole('alertdialog', { name: 'New strategy template' })).toBeVisible();
+  });
+
+  test('@AC-9 a refused Retire keeps focus on the same row trigger', async ({ page }) => {
+    await addAdminCookie(page);
+    await page.route(
+      '**/config-ui/api/xstockstrat.analysis.v1.AnalysisService/ManageTemplate',
+      (route) =>
+        route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({ code: 'failed_precondition', message: 'template is in use' }),
+        }),
+    );
+    await page.goto('/config-ui/templates');
+    await page.getByRole('tab', { name: 'Strategy', exact: true }).click();
+    const trigger = page.getByRole('button', {
+      name: `Actions for template ${STRATEGY_TEMPLATE_MEANREV.meta.name}`,
+    });
+    await markTrigger(trigger);
+    await trigger.click();
+    await page.getByRole('menuitem', { name: 'Retire', exact: true }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Retire', exact: true })
+      .click();
+
+    await expect(page.getByRole('main').getByText('template is in use')).toBeVisible();
+    await expectRowMenuSettled(page);
+    await expectFocusOnMarkedTrigger(page);
   });
 });

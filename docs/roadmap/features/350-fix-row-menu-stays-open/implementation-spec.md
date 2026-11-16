@@ -381,7 +381,7 @@ coverage-gated. C-12: the new tests import domain data only from `e2e/fixtures` 
 
 ### Step 3 — service: stable actions cells on authorized apps and config templates; `DataTable` `columns` constraint
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/authorized-apps/page.tsx` — modify
@@ -461,7 +461,7 @@ pnpm run lint:dup
 
 ### Step 4 — test: focus stays on the same trigger when the page updates during the confirmation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts` — modify

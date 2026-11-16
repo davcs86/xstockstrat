@@ -25,12 +25,50 @@ function formatDate(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
 }
 
+function AppActionsCell({
+  app,
+  onDisconnect,
+}: {
+  app: AuthorizedApp;
+  onDisconnect: (app: AuthorizedApp) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <RowActionsMenu
+      triggerLabel={`Actions for ${app.clientName}`}
+      actions={[
+        {
+          label: 'Disconnect',
+          destructive: true,
+          disabled: busy,
+          onSelect: async () => {
+            setBusy(true);
+            try {
+              await onDisconnect(app);
+            } finally {
+              setBusy(false);
+            }
+          },
+          confirm: {
+            title: 'Disconnect app',
+            description: (
+              <>
+                Disconnect &quot;{app.clientName}&quot;? It will lose access until you re-authorize
+                it.
+              </>
+            ),
+          },
+        },
+      ]}
+    />
+  );
+}
+
 export default function AuthorizedAppsPage() {
   const agentUrl = useAgentUrl();
   const [apps, setApps] = useState<AuthorizedApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [revoking, setRevoking] = useState<string | null>(null);
   const [reachable, setReachable] = useState<boolean | null>(null);
   const [copied, setCopied] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
@@ -69,22 +107,22 @@ export default function AuthorizedAppsPage() {
     };
   }, []);
 
-  async function handleDisconnect(app: AuthorizedApp) {
-    setRevoking(app.clientId);
-    try {
-      const res = await apiFetch('/accounts/api/authorized-apps', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'revoke', clientId: app.clientId }),
-      });
-      if (!res.ok) throw new Error(`Failed to disconnect (${res.status})`);
-      await loadApps();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to disconnect');
-    } finally {
-      setRevoking(null);
-    }
-  }
+  const handleDisconnect = useCallback(
+    async (app: AuthorizedApp) => {
+      try {
+        const res = await apiFetch('/accounts/api/authorized-apps', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'revoke', clientId: app.clientId }),
+        });
+        if (!res.ok) throw new Error(`Failed to disconnect (${res.status})`);
+        await loadApps();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to disconnect');
+      }
+    },
+    [loadApps],
+  );
 
   const columns = useMemo<ColumnDef<AuthorizedApp>[]>(
     () => [
@@ -113,34 +151,10 @@ export default function AuthorizedAppsPage() {
         header: 'Actions',
         enableSorting: false,
         meta: { className: 'text-right' },
-        cell: ({ row }) => {
-          const app = row.original;
-          return (
-            <RowActionsMenu
-              triggerLabel={`Actions for ${app.clientName}`}
-              actions={[
-                {
-                  label: 'Disconnect',
-                  destructive: true,
-                  disabled: revoking === app.clientId,
-                  onSelect: () => handleDisconnect(app),
-                  confirm: {
-                    title: 'Disconnect app',
-                    description: (
-                      <>
-                        Disconnect &quot;{app.clientName}&quot;? It will lose access until you
-                        re-authorize it.
-                      </>
-                    ),
-                  },
-                },
-              ]}
-            />
-          );
-        },
+        cell: ({ row }) => <AppActionsCell app={row.original} onDisconnect={handleDisconnect} />,
       },
     ],
-    [revoking],
+    [handleDisconnect],
   );
 
   async function copyAgentUrl() {

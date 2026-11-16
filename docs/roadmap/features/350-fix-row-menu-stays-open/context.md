@@ -120,3 +120,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open risk closed: the trigger ref reaches the DOM button (AC-3 green) — the React 19 ref dependency holds today.
 - Files modified: `services/xstockstrat-ui/e2e/helpers/rowMenu.ts`, `e2e/trader/account-resume.spec.ts`, `e2e/accounts/authorized-apps.spec.ts`, `e2e/config-ui/templates.spec.ts`
 - Deviations: Playwright invoked through the prebuilt path; dev-server repeats lose the first run to route compilation (Deviation Log).
+
+### Step 3 — service: stable actions cells on authorized apps and config templates; `DataTable` `columns` constraint [done]
+- Unit with Step 4. Authorized apps: page-level `revoking` removed, module-level `AppActionsCell` with a local busy flag, `handleDisconnect` a `useCallback([loadApps])`, `columns` deps `[handleDisconnect]`. Templates: `errorMessage` at module scope, `mutate`/`isPending` destructured, `openEdit`/`retire` as `useCallback`s. `columns` constraint comment on `DataTableProps`; DataTable row of `ui-ux-governance.md` extended.
+- Files modified: `services/xstockstrat-ui/src/app/accounts/authorized-apps/page.tsx`, `src/app/config-ui/templates/page.tsx`, `src/components/ui/data-table.tsx`, `docs/patterns/ui-ux-governance.md`
+- Deviations: none
+
+### Step 4 — test: focus stays on the same trigger when the page updates during the confirmation [done]
+- Unit with Step 3. `@AC-9` tests for a failed Disconnect (POST 500) and a refused Retire (Connect `failed_precondition`).
+- RED on the tree with Steps 1–2 and without Step 3 (production build, `2 failed`): both at `expectFocusOnMarkedTrigger` — expected true, received false (the cell remounted, focus fell back to `<main>`). This is the evidence that D-10 is needed.
+- GREEN after Step 3 (production build): `authorized-apps.spec.ts` + `templates.spec.ts` `11 passed`, including the authorized-apps `@AC-4` re-run through its new path (cell mounted until the list reloads). `lint`, `tsc --noEmit`, `format:check`, `lint:dup` exit 0.
+- Files modified: `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts`, `e2e/config-ui/templates.spec.ts`
+- Deviations: Playwright through the prebuilt path (same as Step 2's Deviation Log entry).

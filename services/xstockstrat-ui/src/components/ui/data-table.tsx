@@ -50,6 +50,10 @@ export function isInteractiveTarget(target: ClosestTarget): boolean {
 }
 
 export interface DataTableProps<TData, TValue> {
+  /**
+   * Must stay referentially stable while any cell holds state (an open menu or dialog): a rebuilt
+   * array gives every function `cell` a new component type, so React remounts every cell.
+   */
   columns: ColumnDef<TData, TValue>[];
   /**
    * Must be a referentially-stable array (wrap in `useMemo` if computed inline every render) —

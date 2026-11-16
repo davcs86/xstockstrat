@@ -124,7 +124,7 @@ The platform has **no toast/notification library** — all feedback is inline an
 | Error notice | `src/components/shared/CardNotice.tsx` (`variant: 'error'`) or `ui/alert.tsx` | Error variant sets `role="alert"` + `text-destructive`. |
 | Mutation feedback | inline, via `src/hooks/useInvalidatingMutation.ts` | The canonical "call a BFF RPC then invalidate query keys" factory — build order/watchlist-style hooks on it, don't re-implement. |
 | Form / confirm modal | `src/components/shared/FormDialog.tsx` (built on `AlertDialog`) | Deliberately does **not** dismiss on outside-click/escape; the caller provides an in-body Cancel. Form fields use `ui/field.tsx` + `ui/label.tsx` + `ui/input-group.tsx`. |
-| Tabular data | `ui/data-table.tsx` `DataTable` (TanStack) | Built-in sortable headers, optional pagination, `emptyMessage`, and accessible `onRowClick` (`role="button"`, `tabIndex=0`, Enter/Space) guarded so nested links don't double-fire. Requires referentially-stable `data`. |
+| Tabular data | `ui/data-table.tsx` `DataTable` (TanStack) | Built-in sortable headers, optional pagination, `emptyMessage`, and accessible `onRowClick` (`role="button"`, `tabIndex=0`, Enter/Space) guarded so nested links don't double-fire. Requires referentially-stable `data`, and a `columns` array that does not rebuild while a cell holds state (an open menu or dialog) — a rebuilt array remounts every cell; keep the memo's deps stable or make the `cell` a module-level component. |
 
 Adoption is the governance point, not existence: the shared primitives exist but adoption is uneven
 (see the backlog, §9). New/changed UI **must** use them; hand-rolled `<p className="text-sm
