@@ -10,6 +10,7 @@ Feature: fix-replace-tif-before-intent (bug fix)
     And no replace intent is recorded for the order
     And the order's intent state is unchanged
     And no replace is sent to the broker
+    And no intent-reclaim event is emitted for the order, however long the caller waits
 
   @AC-2 @FR-1 @regression
   Scenario: The caller can correct the time-in-force and retry

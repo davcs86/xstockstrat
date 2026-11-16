@@ -54,7 +54,20 @@ needs comes from `resolveAccount`, which already runs before the intent insert.
 
 ## Affected Services
 
-- xstockstrat-trading (only). Consumer surface (C-14): internal — no UI, agent, proto or config surface changes.
+- xstockstrat-trading (only).
+
+## Consumer Surface(s)
+
+None — internal. The RPC, its error code for a disallowed time-in-force (`InvalidArgument`) and every
+UI, agent, proto and config surface are unchanged; only the side effects of the refused request go away (C-14).
+
+## Scope Notes
+
+- Broker: the check is broker-agnostic (`validateTIF` reads the per-broker allow-list). IBKR is the
+  reproduction because it disallows OPG and CLS; Alpaca requests take the same path. OFFLINE accounts
+  hold no broker order id and are refused earlier, as before.
+- Trading mode: independent of paper/live.
+- Order status: NEW and PARTIALLY_FILLED are both replaceable and behave the same here.
 
 ## Fix Scope
 

@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report (`--from-report`) |
+| 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings, all folded into the spec) |
 
 ---
 
@@ -34,4 +35,4 @@ reached the broker. The fix validates the TIF before any intent is claimed.
 
 ## Next Action
 
-`/sdd-review fix-replace-tif-before-intent product-spec`, then `/sdd-design fix-replace-tif-before-intent quick` — design depth chosen by the operator; see context.md
+`/sdd-design fix-replace-tif-before-intent quick` — quick design (single service, no proto/migration/config; operator-chosen depth)
