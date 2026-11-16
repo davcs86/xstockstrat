@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
 import { TEST_USER_ID } from '../fixtures/users';
+import { ALERT_LIST_WITH_READ_STATE, ALERT_UNREAD } from '../fixtures/alerts';
 
 /**
  * E2E for the /accounts "Notifications" push feature (feature 165).
@@ -129,5 +130,34 @@ test.describe('alert inbox (feature 203)', () => {
       .first()
       .click();
     await expect.poll(() => markReadIds?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  test('@AC-4 the inbox row title opens the alert page', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications');
+    const list = page.getByTestId('alert-inbox-list');
+    await expect(list).toBeVisible({ timeout: 10000 });
+    await list.getByRole('link', { name: ALERT_UNREAD.title }).click();
+    await expect(page).toHaveURL(new RegExp(`/accounts/notifications/${ALERT_UNREAD.alertId}$`));
+    await expect(page.getByTestId('alert-detail')).toContainText(ALERT_UNREAD.title);
+  });
+
+  test('@AC-6 @feature-203 the title link leaves every row intact and nests no button', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications');
+    const list = page.getByTestId('alert-inbox-list');
+    await expect(list).toBeVisible({ timeout: 10000 });
+    await expect(list.getByTestId('alert-row')).toHaveCount(ALERT_LIST_WITH_READ_STATE.length);
+    for (const a of ALERT_LIST_WITH_READ_STATE) {
+      const row = list.getByTestId('alert-row').filter({ hasText: a.title });
+      await expect(row.getByTestId('alert-module')).toHaveText(a.category);
+      await expect(row.getByTestId('alert-body')).toHaveText(a.body);
+      await expect(
+        row.getByRole('button', { name: `Mark notification ${a.title} read` }),
+      ).toHaveCount(a.read ? 0 : 1);
+    }
+    await expect(page.locator('a button')).toHaveCount(0);
   });
 });

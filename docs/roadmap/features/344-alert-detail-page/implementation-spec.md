@@ -711,7 +711,7 @@ pnpm exec playwright test e2e/accounts/notifications.spec.ts --project=chromium 
 
 ### Step 16 — test: inbox row title navigation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/accounts/notifications.spec.ts` — modify
@@ -1101,4 +1101,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 15 — RED probe held uncommitted; Verification run in a private namespace under CI mode (2026-11-15)
 - **Planned**: Step 16's click test fails first (the title is not a link); the Verification block runs on the host.
 - **Actual**: (1) Step 15 and Step 16 do not land together and `e2e/accounts/notifications.spec.ts` is Step 16's file, so Step 16's `@AC-4` case (click the "Order rejected" link inside `alert-inbox-list`, expect `/accounts/notifications/alert-002` and the title in `alert-detail`) was added to that file in the working tree, run RED and GREEN through the Verification block, then reverted with `git checkout`; only `AlertInbox.tsx` is staged. RED failed on `waiting for getByTestId('alert-inbox-list').getByRole('link', { name: 'Order rejected' })` (test timeout). (2) The linked `node_modules` resolve `@xstockstrat/proto` to the main checkout's stubs, which lack `GetAlert`, so each run went through `unshare -m` with this branch's `packages/proto/gen/ts/dist` bind-mounted (namespace-only) over the main checkout's `dist`. The production bundle was built on its own (`CI=1 NEXT_DISABLE_STANDALONE=1 pnpm build`, mount namespace only, since `next/font` fetches at build), once before and once after the edit; each Verification run used `CI=1 E2E_PREBUILT=1` inside `unshare -m -n` with loopback brought up by a `SIOCSIFFLAGS` ioctl. The block itself ran verbatim; its closing `)` sits on its own line because its last line ends in a `#` comment.
+- **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
+
+### Step 16 — RED against the pre-Step-15 `AlertInbox.tsx`; Verification run in a private mount namespace under CI mode (2026-11-15)
+- **Planned**: the `@AC-4` click test fails first (the title is not a link), then passes; the Verification block runs on the host.
+- **Actual**: (1) Step 15 had already landed, so RED ran the step's Verification with `src/app/accounts/notifications/AlertInbox.tsx` temporarily restored from `9352362ec^`, then restored to the committed file; only the spec file is staged. RED: `@AC-4` failed on `waiting for getByTestId('alert-inbox-list').getByRole('link', { name: 'Order rejected' })` (test timeout, and again on retry), `1 failed`, `9 passed`. The `@AC-6 @feature-203` EXTEND guard passed at RED too: it is a characterisation that the link nests no button and leaves every row's module, body and "Mark read" intact. (2) The linked `node_modules` resolve `@xstockstrat/proto` to the main checkout's stubs, which lack `GetAlert`, so each build and run went through `unshare -m` with this branch's `packages/proto/gen/ts/dist` bind-mounted (namespace-only) over the main checkout's `dist`. Ports 3000 and 9091 were free, so no network namespace was used. The bundle was built on its own (`CI=1 NEXT_DISABLE_STANDALONE=1 pnpm build`) before RED and again after the restore; each Verification run used `CI=1 E2E_PREBUILT=1`. The block itself ran verbatim. (3) The block's last line is the closing `grep`, so `exit=0` on RED too; pass/fail was judged from the Playwright summary in the log.
 - **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
