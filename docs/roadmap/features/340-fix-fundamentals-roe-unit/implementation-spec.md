@@ -557,7 +557,7 @@ git diff --stat HEAD -- services/xstockstrat-marketdata | grep -v "_test.go"   #
 
 ### Step 7 — proto: unit comment on `roe = 8` and `roe = 13`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/marketdata/v1/marketdata.proto` — modify
@@ -598,7 +598,7 @@ git diff -U0 -- packages/proto/marketdata/v1/marketdata.proto | grep '^[+-]' | g
 
 ### Step 8 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/` — modify (generated)
@@ -794,4 +794,10 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Instruction 4, a period whose `ROE` is nil served through `edgarSnapshotSvc`.
 - **Actual**: a period with only a nil `ROE` and no other core metric fails `hasCoreMetrics` (`internal/service/marketdata_service.go:1971`), so the snapshot is not producible and `GetFundamentals` returned `not_found: LYFT: no edgar snapshot and vendor fallback disabled` (`.sdd-logs/v-1.log`). Both table rows now also carry `DebtToEquity` 1.2, which keeps the period producible. The test still asserts served `roe` 0 with `roe` in `missing_metrics`, and served −0.25. Test-only; no production code changed.
 - **Disposition**: in-scope test fixture correction.
+- **SEV**: SEV-3
+
+### Steps 7+8 — Verification run inside the pinned codegen image, with a temporary local baseline ref
+- **Spec said**: the Step 7 and Step 8 Verification blocks, run from the repo root on the host, with the toolchain from `docs/runbooks/codegen-toolchain-host-setup.md` if the host lacks it.
+- **Actual**: the host has no `buf` and no `grpcio-tools`, and this worktree has no `packages/proto/gen/ts/node_modules` (the `tsc` step of `buf-gen.sh` needs it, and Node installs are forbidden in the batch worktree). Both blocks ran unchanged inside the pinned `xstockstrat-codegen` image (`Dockerfile.codegen`: buf 1.72.0, the CI-pinned Go plugins, grpcio-tools 1.80.0, Node 24.20.0, go1.27.4), with the worktree and the main checkout's `.git` mounted at their own paths, the main checkout's `node_modules` and `packages/proto/gen/ts/node_modules` mounted read-only, and the host Go module cache mounted. `buf breaking --against "${GIT_COMMON}#branch=feature/fix-fundamentals-roe-unit,..."` needs a local branch; `refs/heads/feature/fix-fundamentals-roe-unit` was created at `origin/feature/fix-fundamentals-roe-unit` (`423b85fc5`, the pre-unit tip), used for the run and deleted afterwards. Each block ends with a trailing `#` comment, so the wrapper's closing `)` went on its own line. Results: Step 7 `.sdd-logs/v-1.log` `exit=0` (lint and breaking silent; the diff shows exactly the two `roe` lines); Step 8 `.sdd-logs/v-2.log` `exit=0`. A pre-edit `buf-gen.sh` run in the same image left `packages/proto/gen/` clean, so the committed stubs were fresh before the edit.
+- **Disposition**: CI-equivalent fallback; no command text altered.
 - **SEV**: SEV-3

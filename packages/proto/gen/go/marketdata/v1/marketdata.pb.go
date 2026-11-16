@@ -1261,7 +1261,7 @@ type Fundamentals struct {
 	DividendYield float64                `protobuf:"fixed64,5,opt,name=dividend_yield,json=dividendYield,proto3" json:"dividend_yield,omitempty"`
 	Eps           float64                `protobuf:"fixed64,6,opt,name=eps,proto3" json:"eps,omitempty"`
 	Beta          float64                `protobuf:"fixed64,7,opt,name=beta,proto3" json:"beta,omitempty"`
-	Roe           float64                `protobuf:"fixed64,8,opt,name=roe,proto3" json:"roe,omitempty"`
+	Roe           float64                `protobuf:"fixed64,8,opt,name=roe,proto3" json:"roe,omitempty"` // a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points
 	DebtToEquity  float64                `protobuf:"fixed64,9,opt,name=debt_to_equity,json=debtToEquity,proto3" json:"debt_to_equity,omitempty"`
 	Price         float64                `protobuf:"fixed64,10,opt,name=price,proto3" json:"price,omitempty"`
 	YearHigh      float64                `protobuf:"fixed64,11,opt,name=year_high,json=yearHigh,proto3" json:"year_high,omitempty"`
@@ -1628,7 +1628,7 @@ type HistoricalFundamentalsPeriod struct {
 	DividendYield  float64            `protobuf:"fixed64,10,opt,name=dividend_yield,json=dividendYield,proto3" json:"dividend_yield,omitempty"`
 	Eps            float64            `protobuf:"fixed64,11,opt,name=eps,proto3" json:"eps,omitempty"`
 	Beta           float64            `protobuf:"fixed64,12,opt,name=beta,proto3" json:"beta,omitempty"`
-	Roe            float64            `protobuf:"fixed64,13,opt,name=roe,proto3" json:"roe,omitempty"`
+	Roe            float64            `protobuf:"fixed64,13,opt,name=roe,proto3" json:"roe,omitempty"` // a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points; a quarterly period uses trailing-twelve-month net income
 	DebtToEquity   float64            `protobuf:"fixed64,14,opt,name=debt_to_equity,json=debtToEquity,proto3" json:"debt_to_equity,omitempty"`
 	Price          float64            `protobuf:"fixed64,15,opt,name=price,proto3" json:"price,omitempty"`
 	YearHigh       float64            `protobuf:"fixed64,16,opt,name=year_high,json=yearHigh,proto3" json:"year_high,omitempty"`

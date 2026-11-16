@@ -42,7 +42,7 @@ Implementation spec (`/sdd-spec`, 10 steps, tree `feature/fix-fundamentals-roe-u
 - Both staging environments deploy on a push to `main-dev` (`.github/workflows/deploy-dev.yml` calls `deploy-homelab.yml`), so the pre-exports must be taken before the integration PR merges.
 - `DerivationVersion` 2 is free: `merge-order.md` names it only for the launched pair 222/223 (`:82`). `internal/edgar/testdata/` does not exist yet; the LYFT fixture creates it. `internal/repository` and `internal/service` are outside the CI coverage measurement; `internal/edgar`, `internal/source`, `internal/finnhub`, `internal/fmp` are measured.
 - The ingest concurrency-cap steer belongs to a peer feature; the repair stays sequential (one chunk polled to terminal before the next) and does not rely on it.
-- No SQL or config change has been executed in any session. Steps 1 to 6 are done.
+- No SQL or config change has been executed in any session. Steps 1 to 8 are done.
 
 ## Open Threads
 
@@ -55,7 +55,7 @@ Closed by the operator answers (see the verbatim session below): O-16, the `@AC-
 - [x] Existing edgar tests stayed green on the run; `edgar_client_test.go` and `ttm_roe_test.go` are unmodified — Step 5.
 - [x] The version-2 golden hash differs from version 1 — Step 5.
 - [x] Step 6 mutation proof was hand-run; every new guard failed on its mutation and the mutations were reverted (Step 6 entry below).
-- [ ] `buf breaking` against `feature/fix-fundamentals-roe-unit` needs that branch as a local ref in the main checkout; the command now uses `GIT_COMMON=$(git rev-parse --path-format=absolute --git-common-dir)` but `buf breaking` itself was never run — Step 7.
+- [x] `buf breaking` against `feature/fix-fundamentals-roe-unit` ran and passed in Step 7, against a temporary local ref at the pre-unit tip `423b85fc5` (created for the run, then deleted).
 - [ ] C-14: no `xstockstrat-ui` or `xstockstrat-agent` step and no follow-up feature is named; the surfaces are checked only post-deploy through the LYFT canary `query_fundamentals`. Decide whether a follow-up is needed — `/sdd-execute` checkpoint.
 - [ ] `max_connections` = 70 / PgBouncer pool 10 was confirmed by the operator but not verified against the live host; budget the Step 10 `psql` sessions against it (F-06) — Step 10 item 1.
 - [ ] The freeze blocks all staging fundamentals backfills in both environments and can collide with peer feature 343 testing (risk acknowledged) — Step 10 item 2.
@@ -81,6 +81,7 @@ Closed by the operator answers (see the verbatim session below): O-16, the `@AC-
 - Steps 2+3: `services/xstockstrat-marketdata/internal/{source/source.go,edgar/edgar_client.go,repository/marketdata_repo.go,repository/marketdata_repo_test.go,edgar/edgar_client_test.go}` — owned-key list and re-derive strip. No proto, migration or config change yet.
 - Steps 4+5: `services/xstockstrat-marketdata/internal/edgar/{edgar_client.go,derivation_version_test.go,own_period_test.go,testdata/lyft_companyfacts.json}` — own-period selection, `DerivationVersion` 2, the LYFT fixture and the version-2 golden.
 - Step 6: `services/xstockstrat-marketdata/internal/{finnhub/finnhub_client_test.go,fmp/fmp_client_test.go,edgar/own_period_test.go,service/marketdata_service_test.go}` — `@AC-2` vendor unit guards and `@AC-4` absent/negative guards; tests only.
+- Steps 7+8: `packages/proto/marketdata/v1/marketdata.proto` (comment-only, `roe = 8` and `roe = 13`) and the regenerated `packages/proto/gen/go/marketdata/v1/marketdata.pb.go`, `packages/proto/gen/ts/marketdata/v1/{marketdata.ts,marketdata_pb.ts}`, `packages/proto/gen/ts/dist/marketdata/v1/{marketdata.d.ts,marketdata_pb.d.ts}`.
 
 ---
 
@@ -524,3 +525,16 @@ Tooling setup (steps 2+3): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with
 - Config-key wiring gate: not applicable (no key, no migration, no `## Config Key Changes`).
 - Files modified: `services/xstockstrat-marketdata/internal/finnhub/finnhub_client_test.go`, `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go`, `services/xstockstrat-marketdata/internal/edgar/own_period_test.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
 - Deviations: Verification block run line by line from the repo root; the `@AC-4` served-value periods carry D/E 1.2 so a nil-roe period stays producible under `hasCoreMetrics` (Deviation Log).
+
+### Step 7 — proto: unit comment on `roe = 8` and `roe = 13` [done]
+- Atomic unit Steps 7+8. Trailing comments on `Fundamentals.roe = 8` ("a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points") and `HistoricalFundamentalsPeriod.roe = 13` (the same, plus "a quarterly period uses trailing-twelve-month net income"). No field, number, type, name or order changed. TDD: N/A (proto).
+- Verification (`.sdd-logs/v-1.log`, `exit=0`): `buf lint` and `buf breaking` against `feature/fix-fundamentals-roe-unit` printed nothing (pass); the diff shows exactly the two `roe` lines, comment text only. The baseline ref was a temporary local branch at `423b85fc5`, deleted after the run.
+- Files modified: `packages/proto/marketdata/v1/marketdata.proto`
+- Deviations: run inside the pinned codegen image with a temporary local baseline ref (Deviation Log).
+
+### Step 8 — proto-gen: regenerate stubs [done]
+- Atomic unit Steps 7+8. `./scripts/buf-gen.sh` changed five marketdata stubs only; the Go raw descriptor and the Python `_pb2` are unchanged (source comments are not in the serialized descriptor). No file hand-edited. TDD: N/A (proto-gen).
+- Verification (`.sdd-logs/v-2.log`, `exit=0`): both `buf-gen.sh` runs listed the same five files (`marketdata.pb.go`, `marketdata.ts`, `marketdata_pb.ts`, `dist/.../marketdata.d.ts`, `dist/.../marketdata_pb.d.ts`); the gen diff is comment lines only; `GOWORK=off go build ./...` in `services/xstockstrat-marketdata` printed nothing. A pre-edit `buf-gen.sh` run left `packages/proto/gen/` clean.
+- Config-key wiring gate: not applicable (no key, no migration, no `## Config Key Changes`).
+- Files modified: `packages/proto/gen/go/marketdata/v1/marketdata.pb.go`, `packages/proto/gen/ts/marketdata/v1/marketdata.ts`, `packages/proto/gen/ts/marketdata/v1/marketdata_pb.ts`, `packages/proto/gen/ts/dist/marketdata/v1/marketdata.d.ts`, `packages/proto/gen/ts/dist/marketdata/v1/marketdata_pb.d.ts`
+- Deviations: same as Step 7.
