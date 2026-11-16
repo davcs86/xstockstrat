@@ -548,3 +548,8 @@ Tooling setup (step 9): uv ✓ · Python 3.13.18 ✓ (agent venv, `uv sync --ext
 - Files modified: `services/xstockstrat-agent/tests/test_tools_endpoint.py`, `services/xstockstrat-agent/tests/test_tools.py`, `.github/workflows/ci.yml`
 - Deviations: RED against the pre-Step-8 tree because Step 8 had landed; Verification run per line because of the fence's chained `cd` (Deviation Log).
 - Still open from Step 8: the `client.py` `trigger_backfill` docstring body ("Everything else queues unconditionally") is outside Step 9's Files and was not changed.
+
+## Session 2026-11-16 — operator sign-off correction (orchestrator)
+
+- **Supersedes the "Expand it" reading above (header line and the Step 7 session).** The operator corrected it, verbatim: "No, \"expand\" was meant you explained more" — it was a request for more explanation, not an acceptance.
+- Asked again explicitly whether the range-cap key may be added as one Examples row on feature 244 `@AC-6` in `platform.feature` now, with the code, instead of at launch. **Operator, verbatim: "Accept now".** The Step 7 pre-launch edit therefore stands on the operator's own words; nothing needs reverting.
