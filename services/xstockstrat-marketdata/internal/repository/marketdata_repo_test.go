@@ -1087,3 +1087,148 @@ func TestGetPreviousDailyCloseBatch_BoundedShape(t *testing.T) {
 		t.Fatalf("pgxmock expectations unmet: %v", err)
 	}
 }
+
+// --- feature 348: ListHistoricalRows + ReplaceHistoricalFundamentals pgxmock pins ---
+
+func TestListHistoricalRows_feature348(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	cols := []string{"fiscal_period", "period_type", "period_end", "filed_date", "price", "market_cap", "pe_ratio", "pb_ratio", "dividend_yield", "currency", "derivation_version", "extra_metrics"}
+	const sel = `SELECT fiscal_period, period_type, period_end, filed_date, price, market_cap, pe_ratio, pb_ratio, dividend_yield, currency, derivation_version, extra_metrics\s+FROM marketdata.fundamentals_history\s+WHERE symbol=\$1\s+ORDER BY fiscal_period, period_type`
+	price, marketCap, pe, pb, dy := 310.25, 8.7e11, 71.3, 13.1, 0.0065
+	mock.ExpectQuery(sel).WithArgs("ORCL").WillReturnRows(pgxmock.NewRows(cols).
+		AddRow("Q1-2026", "quarterly", hfDay(2026, 9, 7), hfDay(2025, 9, 10), &price, &marketCap, &pe, &pb, &dy, "USD", int16(2), []byte(`{"stockholders_equity":66772000000}`)))
+
+	rows, err := repo.ListHistoricalRows(context.Background(), "ORCL")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows=%d err=%v, want 1 row", len(rows), err)
+	}
+	r := rows[0]
+	if r.FiscalPeriod != "Q1-2026" || r.PeriodType != "quarterly" || !r.PeriodEnd.Equal(hfDay(2026, 9, 7)) || !r.FiledDate.Equal(hfDay(2025, 9, 10)) {
+		t.Errorf("identity = %s %s %v %v", r.FiscalPeriod, r.PeriodType, r.PeriodEnd, r.FiledDate)
+	}
+	if r.Price == nil || *r.Price != price || r.MarketCap == nil || *r.MarketCap != marketCap || r.PERatio == nil || *r.PERatio != pe ||
+		r.PBRatio == nil || *r.PBRatio != pb || r.DividendYield == nil || *r.DividendYield != dy {
+		t.Errorf("price columns = %v %v %v %v %v", r.Price, r.MarketCap, r.PERatio, r.PBRatio, r.DividendYield)
+	}
+	if r.Currency != "USD" || r.DerivationVersion != 2 {
+		t.Errorf("currency %q version %d, want USD 2", r.Currency, r.DerivationVersion)
+	}
+	if got := r.ExtraMetrics["stockholders_equity"]; got != 66772000000 {
+		t.Errorf("extra_metrics stockholders_equity = %v, want 66772000000", got)
+	}
+
+	mock.ExpectQuery(sel).WithArgs("NONE").WillReturnRows(pgxmock.NewRows(cols))
+	rows, err = repo.ListHistoricalRows(context.Background(), "NONE")
+	if err != nil || rows == nil || len(rows) != 0 {
+		t.Fatalf("no row: rows=%v err=%v, want an empty slice and nil", rows, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestReplaceHistoricalFundamentals_feature348(t *testing.T) {
+	const del = `DELETE FROM marketdata.fundamentals_history\s+WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3 AND period_end=\$4::date AND filed_date=\$5::date AND derivation_version=\$6`
+	const ins = `INSERT INTO marketdata.fundamentals_history`
+	row := func(label string, end, filed time.Time) source.HistoricalPriceState {
+		return source.HistoricalPriceState{FiscalPeriod: label, PeriodType: "quarterly", PeriodEnd: end, FiledDate: filed, DerivationVersion: 2}
+	}
+	period := func(label string, end, filed time.Time) source.HistoricalFundamentalsPeriod {
+		return source.HistoricalFundamentalsPeriod{Symbol: "ORCL", FiscalPeriod: label, PeriodType: "quarterly", PeriodEnd: end, FiledDate: filed, Source: "edgar", Currency: "USD", DerivationVersion: 3}
+	}
+	collided := row("Q1-2026", hfDay(2026, 9, 7), hfDay(2025, 9, 10))
+	q1fy26 := period("Q1-2026", hfDay(2025, 8, 31), hfDay(2025, 9, 10))
+	q1fy27 := period("Q1-2027", hfDay(2026, 8, 31), hfDay(2026, 9, 11))
+	insertOf := func(mock pgxmock.PgxPoolIface, label string) *pgxmock.ExpectedExec {
+		args := make([]any, 21)
+		for i := range args {
+			args[i] = pgxmock.AnyArg()
+		}
+		args[0], args[1] = "ORCL", label
+		return mock.ExpectExec(ins).WithArgs(args...)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		deletes []source.HistoricalPriceState
+		inserts []source.HistoricalFundamentalsPeriod
+		expect  func(mock pgxmock.PgxPoolIface)
+		wantErr string
+	}{
+		{
+			// @AC-5: the collided row goes and both periods are stored, in one transaction.
+			name: "AC-5 plan", deletes: []source.HistoricalPriceState{collided}, inserts: []source.HistoricalFundamentalsPeriod{q1fy26, q1fy27},
+			expect: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectBegin()
+				mock.ExpectExec(del).WithArgs("ORCL", "Q1-2026", "quarterly", "2026-09-07", "2025-09-10", 2).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+				insertOf(mock, "Q1-2026").WillReturnResult(pgxmock.NewResult("INSERT", 1))
+				insertOf(mock, "Q1-2027").WillReturnResult(pgxmock.NewResult("INSERT", 1))
+				mock.ExpectCommit()
+				mock.ExpectRollback()
+			},
+		},
+		{
+			name:    "deletes run in sorted key order",
+			deletes: []source.HistoricalPriceState{row("Q3-2025", hfDay(2025, 2, 28), hfDay(2025, 3, 11)), row("Q1-2026", hfDay(2026, 9, 7), hfDay(2025, 9, 10))},
+			expect: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectBegin()
+				mock.ExpectExec(del).WithArgs("ORCL", "Q1-2026", "quarterly", "2026-09-07", "2025-09-10", 2).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+				mock.ExpectExec(del).WithArgs("ORCL", "Q3-2025", "quarterly", "2025-02-28", "2025-03-11", 2).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+				mock.ExpectCommit()
+				mock.ExpectRollback()
+			},
+		},
+		{
+			name: "a delete matching no row rolls back before any insert", deletes: []source.HistoricalPriceState{collided}, inserts: []source.HistoricalFundamentalsPeriod{q1fy26}, wantErr: "removed 0 rows, want 1",
+			expect: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectBegin()
+				mock.ExpectExec(del).WithArgs("ORCL", "Q1-2026", "quarterly", "2026-09-07", "2025-09-10", 2).WillReturnResult(pgxmock.NewResult("DELETE", 0))
+				mock.ExpectRollback()
+			},
+		},
+		{
+			name: "a delete matching two rows rolls back before any insert", deletes: []source.HistoricalPriceState{collided}, inserts: []source.HistoricalFundamentalsPeriod{q1fy26}, wantErr: "removed 2 rows, want 1",
+			expect: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectBegin()
+				mock.ExpectExec(del).WithArgs("ORCL", "Q1-2026", "quarterly", "2026-09-07", "2025-09-10", 2).WillReturnResult(pgxmock.NewResult("DELETE", 2))
+				mock.ExpectRollback()
+			},
+		},
+		{
+			name: "an insert error rolls back", deletes: []source.HistoricalPriceState{collided}, inserts: []source.HistoricalFundamentalsPeriod{q1fy26, q1fy27}, wantErr: "duplicate key value",
+			expect: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectBegin()
+				mock.ExpectExec(del).WithArgs("ORCL", "Q1-2026", "quarterly", "2026-09-07", "2025-09-10", 2).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+				insertOf(mock, "Q1-2026").WillReturnError(errors.New("duplicate key value violates unique constraint"))
+				mock.ExpectRollback()
+			},
+		},
+		{name: "an empty plan opens no transaction", expect: func(pgxmock.PgxPoolIface) {}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("pgxmock.NewPool: %v", err)
+			}
+			defer mock.Close()
+			tc.expect(mock)
+			err = (&MarketDataRepo{db: mock}).ReplaceHistoricalFundamentals(context.Background(), "ORCL", tc.deletes, tc.inserts)
+			if (err != nil) != (tc.wantErr != "") || (err != nil && !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("err = %v, want it to contain %q", err, tc.wantErr)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("pgxmock expectations unmet: %v", err)
+			}
+		})
+	}
+
+	if strings.Contains(histInsertStatement, "ON CONFLICT") {
+		t.Error("the shared insert statement must carry no ON CONFLICT clause: the replace inserts plainly")
+	}
+}

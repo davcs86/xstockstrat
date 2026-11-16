@@ -299,3 +299,16 @@ Three questions were put in one message after the PR was opened. The operator's 
 - GREEN: `go test ./internal/reconcile/... -race -count=1 -cover` → `ok … coverage: 97.3% of statements`; `go test ./... -race -count=1` → 17 packages `ok`; coverage `total 86.6`; `golangci-lint` v2.14.0 `0 issues.`; no `periodTypeWanted` left.
 - Files modified: `services/xstockstrat-marketdata/internal/reconcile/plan_test.go`
 - Deviations: none
+
+### Step 6 — service: repository list-all-rows read and transactional replace [done]
+- Atomic unit Steps 6+7. `histInsertStatement` + `histInsertArgs` hold the insert once; `InsertHistoricalFundamentals` appends its `ON CONFLICT` suffix. `ListHistoricalRows(ctx, symbol)` returns every row of the symbol ordered by (`fiscal_period`, `period_type`), an empty non-nil slice when there is none. `ReplaceHistoricalFundamentals(ctx, symbol, deletes, inserts)` sorts a copy of the deletes, marshals every insert before `Begin`, runs the pinned deletes (dates bound as `YYYY-MM-DD` text, S-9; exactly one row each) then the plain inserts, and commits last. An empty plan opens no transaction. No `SET`, no advisory lock.
+- TDD (unit): RED before the methods existed — build failure (`repo.ListHistoricalRows undefined`, `ReplaceHistoricalFundamentals undefined`, `undefined: histInsertStatement`). Assertion-level RED by mutation: with dates bound as `time.Time`, four replace cases fail on the delete arguments; with the row-count rule loosened to "0 rows only", the two-row case fails `want it to contain "removed 2 rows, want 1"`. Both mutations reverted. GREEN: see Step 7.
+- Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`
+- Deviations: none
+
+### Step 7 — test: pgxmock pins for the list read and the replace [done]
+- Atomic unit Steps 6+7. `TestListHistoricalRows_feature348` pins the projection, `WHERE symbol=$1`, the order, every scanned field and the decoded `stockholders_equity` 66,772,000,000, plus the empty result. `TestReplaceHistoricalFundamentals_feature348` has six cases (the `@AC-5` plan, sorted deletes, 0-row delete, 2-row delete, insert error, empty plan) and the no-`ON CONFLICT` check on the shared statement.
+- The first version of the 0-row and 2-row cases only asserted "an error": the mutation run showed the 2-row case still passed when the row-count rule was loosened, because pgxmock's own "unexpected Exec" error satisfied it. The cases now assert the error text (`removed N rows, want 1`), which is what proves no insert ran.
+- GREEN: the `-run 'ListHistoricalRows|ReplaceHistoricalFundamentals' -v` log has 2 top-level and 6 sub-test `--- PASS`; `go test ./... -race -count=1` → 17 packages `ok`; `golangci-lint` `0 issues.`; the `ON CONFLICT … DO NOTHING` text occurs once in `marketdata_repo.go`.
+- Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go`
+- Deviations: none

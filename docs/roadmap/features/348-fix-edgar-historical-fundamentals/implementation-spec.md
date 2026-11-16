@@ -655,7 +655,7 @@ test "$(grep -rn "periodTypeWanted" services/xstockstrat-marketdata --include="*
 
 ### Step 6 — service: repository list-all-rows read and transactional replace
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
@@ -712,7 +712,7 @@ test "$(grep -rn "periodTypeWanted" services/xstockstrat-marketdata --include="*
 
 ### Step 7 — test: pgxmock pins for the list read and the replace
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify
