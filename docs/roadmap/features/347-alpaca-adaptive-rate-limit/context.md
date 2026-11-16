@@ -489,7 +489,7 @@
 
 ### Open Items (carried to the PR)
 - [x] Owner + config-team approval for the two keys; DBA review of migration 052 — approved by the operator (see below).
-- [ ] Record a real paper-host response (are X-RateLimit-* headers sent by the Trading API?).
+- [x] Record a real paper-host response (are X-RateLimit-* headers sent by the Trading API?) — not recorded; the operator approved merging without it (see below).
 - [ ] Re-derive the migration number if another config migration lands on main-dev before merge;
   a renumber means regenerating scripts/config-wiring-stored.json.
 - [ ] ReleasePendingIntent has no DB-level test (accepted design risk).
@@ -507,3 +507,18 @@ PR still needed (`docs/runbooks/approval-flow.md`); the operator (davcs86) gives
 
 Not covered by this instruction and still open: recording a real paper-host response for the Trading
 API's rate-limit headers; the `ReleasePendingIntent` SQL has no DB-level test (accepted design risk).
+
+## Session 2026-11-16T08:02Z — approvals clarified (PR #1555)
+
+Operator clarification, verbatim: "I meant all of 3". The approval covers all three "needed from you
+before merge" items of the session summary, not only the role approvals logged above:
+
+1. Service-owner and config-team approval for the two new keys — approved (as logged above).
+2. DBA review of config migration `052_alpaca_adaptive_rate_limit_keys` — approved (as logged above).
+3. The recorded paper-host response for the Trading API's rate-limit headers — **the operator approves
+   merging without it**. No response was captured (the sandbox holds no Alpaca credentials). Accepted
+   consequence, unchanged from design.md § Open Risks: if those hosts send no `X-RateLimit-*` headers,
+   trading gets the 429 retry only and no pre-emptive pacing (FR-5 degradation, tested at Step 8).
+
+Still open and not an approval item: `ReleasePendingIntent`'s SQL has no DB-level test (accepted design
+risk, flagged for review on the PR).
