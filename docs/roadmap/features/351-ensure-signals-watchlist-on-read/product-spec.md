@@ -20,6 +20,7 @@ FR-3. The ensure runs only on the first page (empty `page_token`); continuation 
 FR-4. An ensure failure never fails the read: `ListWatchlists` returns the user's existing lists and logs a WARN carrying the original error (fail-open).
 FR-5. Existing behavior is unchanged: a user who already has a system list gets no new row, the delete guard (`FAILED_PRECONDITION`) still applies, and a same-named manual list coexists.
 FR-6. Existence, not page placement, is guaranteed: `ListByUser` orders by `watchlist_id` (a random UUID), so with a `page_size` smaller than the user's list count the system list may be returned on a later page; the ensure still ran on the first-page call.
+FR-8. The system list counts toward `watchlist.max_per_user`: `CountByUser` counts every row (`watchlist_repo.go:438-441`), so once the system list exists a user can create at most `max - 1` manual lists. No code change; the cap applies to every list the user sees.
 FR-7. Documentation that calls the agent `list_watchlists` tool "read-only" (`services/xstockstrat-agent/app/tools.py:33` module header, the tool docstring at `tools.py:2154` that MCP clients see, and `docs/runbooks/mcp-tools.md:1382`) states that the call idempotently ensures the caller's system "Signals" list. No MCP tool contract (name, parameters, return shape) changes.
 
 ## Out of Scope
@@ -27,8 +28,9 @@ FR-7. Documentation that calls the agent `list_watchlists` tool "read-only" (`se
 - A migration or operator job that seeds lists for existing users (rejected: portfolio has no users table; migrations stay inside their schema).
 - Ensure on user creation (identity → portfolio dependency).
 - Any proto, config, or UI change, and any agent-tool behavior or contract change (name, parameters, return shape); FR-7 touches docstrings/runbook text only.
-- Counting the system list against `watchlist.max_per_user` (`EnsureSignalWatchlist` already bypasses it).
+- Excluding the system list from the `watchlist.max_per_user` count (operator decision 2026-11-16: accept 49 manual — see FR-8).
 - Changing `ListWatchlists` pagination order or guaranteeing the system list lands on page 1 (FR-6).
+- Fixing the `next_page_token` look-ahead skip in `ListByUser` and its twin in `ListPositions` — filed as separate defects (`docs/reports/2026-11-16-portfolio-listwatchlists-page-token-skips-boundary-row-defect.md`, `docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md`). Until the `ListByUser` fix lands, a small-`page_size` traversal can omit a list; this feature neither relies on nor changes that.
 
 ## Affected Services
 
@@ -73,6 +75,6 @@ All items below are resolved for the spec gate. The two marked *assumption* are 
 
 - [x] **Design constraint (fails.md, feature 127):** `CreateWatchlist` collapses a `UNIQUE(user_id,name)` collision to `CodeInternal`; the ensure goes through `EnsureSystemManaged` only (never create-by-name) and logs the original error — carried by FR-2/FR-4.
 - [x] **Read-only DB connection:** no. `ListWatchlists` runs on the single shared pool; the only read-only transaction in portfolio is the `backfill-signal-expiry` subcommand (`internal/repository/signal_expiry_backfill.go:203`), a separate path. Tool annotation: none exists (see Consumer Surface).
-- [x] **`watchlist.max_per_user`:** *assumption* — the system list is not counted, matching `EnsureSignalWatchlist`; recorded as Out of Scope.
+- [x] **`watchlist.max_per_user`:** operator decision 2026-11-16 — accept 49 manual lists. The earlier assumption "not counted" was wrong in effect: `CountByUser` counts every row (`watchlist_repo.go:438-441`) and `CreateWatchlist` rejects at `count >= max` (`portfolio_service.go:2186-2192`), so the ensure-created system list occupies one slot for every user (FR-8, AC-10).
 - [x] **Fail-open on ensure error (FR-4):** *assumption* — a transient write failure must not break the watchlists page; the WARN carries the original gRPC/DB error.
 - [x] **analysis callers (`live_loop.py`, `servicer.py`):** verified at `live_loop.py:598-610` — they forward the owner's `x-user-id`, so the ensure targets the real user; the side effect is documented under Affected Services. `ListWatchlists` without a user still returns `InvalidArgument "missing user identity"` via `requireUserID` before any ensure.

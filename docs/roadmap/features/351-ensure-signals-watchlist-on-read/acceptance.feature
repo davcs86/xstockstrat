@@ -37,11 +37,19 @@ Feature: ensure-signals-watchlist-on-read
     Then the response contains that watchlist with symbol "AAPL" and no second system-managed watchlist
 
   @AC-7 @FR-6
-  Scenario: With a small page_size the system list exists but may be on a later page
+  Scenario: With a small page_size the system list is created exactly once but may not be in the response
     Given user "user-42" owns watchlists "DB workload test" and "Test" and no system-managed watchlist
     When "user-42" calls ListWatchlists with page_size 1 and an empty page_token
     Then the response contains 1 watchlist and a non-empty next_page_token
-    And following next_page_token until it is empty yields 3 watchlists, exactly one with system_managed true
+    And "user-42" owns exactly 1 system-managed watchlist afterwards
+    And a second call with page_size 1 and an empty page_token creates no further watchlist
+
+  @AC-10 @FR-8
+  Scenario: The system list occupies one slot of the per-user cap
+    Given watchlist.max_per_user is 50 and user "user-42" owns 49 manual watchlists and one system-managed watchlist
+    When "user-42" calls CreateWatchlist with name "Breakouts"
+    Then the call returns InvalidArgument "watchlist limit reached: 50"
+    And "user-42" still owns 50 watchlists
 
   @AC-8 @FR-1
   Scenario: A caller with no x-user-id is rejected before any ensure

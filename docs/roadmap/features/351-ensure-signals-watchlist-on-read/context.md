@@ -28,3 +28,13 @@
 - Post-Recon escalation (rubric: ≥2 services incl. named surfaces + overlap findings): **operator chose Upgrade to full** (was quick). Design runs as a full debate (min 2, cap 5 rounds).
 - **Operator decision (UI handling): No UI change.** The product spec's "no UI code change" stands. Operator-accepted consequences, recorded so they are not rediscovered as defects: (1) `/insights/watchlists` auto-selects Signals for a user with no other lists; (2) the "No watchlists yet" empty state is unreachable in production; (3) the screener "Add top N to…" picker lists Signals and can write MANUAL entries into the system list (provenance `source` stays first-writer-wins per feature 127).
 - Spec tension carried into the debate: FR-1 "returned in the result" vs FR-6 (uuid-order page placement) — presence on the first-page response must be deterministic; cost of the ensure on a polled read path (3+ round trips) is a design question.
+
+## Session 2026-11-16 — sdd-design (Phase 1, round 1 gate)
+
+- Round 1 run (full mode, round 1 of min 2): proposer → adversary (no Floor breach; 8 objections). Register written to `debate.md` (D-1..D-7, R-1..R-6, O-1..O-8).
+- Orchestrator-verified findings (all three confirmed in code): (1) `ListByUser` look-ahead token skips the boundary row (`watchlist_repo.go:138-141`); (2) `CountByUser` counts every row so the system list takes one cap slot (`watchlist_repo.go:438-441`); (3) `ListPositions` has the identical token bug plus a non-unique `symbol`-only keyset (`portfolio_repo.go:162,194`; unique key `migrations/003:10`).
+- **Operator decisions at the gate** (AskUserQuestion): (a) token bug → **split to a separate defect**, report filed, fix session launched immediately after filing; (b) cap → **accept 49 manual lists**; (c) ListPositions twin → **file report and launch a fix session**.
+- Spec amended to match: FR-8 + AC-10 (cap), AC-7 relaxed (exactly one system list; no traversal-completeness claim), Out of Scope lists the two defects, `watchlist.max_per_user` Open Question corrected. D-5's traversal dbtest case withdrawn (D-6); the agent docstring "Pagination is stable across pages" stays inaccurate until the defect lands.
+- Defects filed: `docs/reports/2026-11-16-portfolio-listwatchlists-page-token-skips-boundary-row-defect.md`, `docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md` (both status `open`; format check run: one SEV token, sidecar `open`).
+- Still operator-unconfirmed at the design gate: fail-open on ensure error (D-3 — settled by proposer/adversary, not yet by you).
+- Open next: round 2 (full mode mandates ≥2) before `design.md` can be approved.
