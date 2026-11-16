@@ -8,8 +8,9 @@ a running gRPC server or database.
 
 import asyncio
 import json
+import re
 from contextlib import ExitStack, contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
@@ -41,6 +42,7 @@ def make_servicer(
     chunk_window_days: int = 400,
     chunk_max_bars: int = 10_000_000,
     dedup_window_hours: int = 24,
+    self_serve_max_range_days: int = 730,
 ) -> IngestServicer:
     """Return an IngestServicer with fully mocked dependencies.
 
@@ -57,6 +59,7 @@ def make_servicer(
     cfg.backfill_chunk_window_days = chunk_window_days
     cfg.backfill_chunk_max_bars = chunk_max_bars
     cfg.dedup_window_hours = dedup_window_hours
+    cfg.backfill_self_serve_max_range_days = self_serve_max_range_days
     marketdata_ch = MagicMock()
     ledger_ch = MagicMock()
     svc = IngestServicer(cfg, marketdata_ch, ledger_ch, db_pool=db)
@@ -359,16 +362,12 @@ class TestTriggerBackfill:
             await svc.TriggerBackfill(req, context)
 
     @pytest.mark.asyncio
-    async def test_permission_denied_without_admin_scope(self):
-        """Feature 092 (F-11): the quota-spending backfill is admin-gated, like CancelBackfill.
-
-        RED before the gate: a no-admin caller previously queued a paid job unconditionally.
-        """
+    async def test_permission_denied_without_admin_scope(self, self_serve_denial_contract):
+        """Feature 092 (F-11) as narrowed by feature 343: a non-admin request outside the
+        self-serve envelope (here FULL fill mode) queues no paid job."""
         svc = make_servicer(db=MagicMock())
-        req = MagicMock()
-        req.symbols = ["AAPL"]
-        req.timeframe = "1d"
-        req.range = common_pb2.TimeRange()
+        req = _self_serve_req()
+        req.fill_mode = ingest_pb2.FILL_MODE_FULL
         ctx = _ctx("0")  # no ADMIN bit
         with (
             patch("asyncio.create_task") as spawn,
@@ -376,7 +375,10 @@ class TestTriggerBackfill:
         ):
             with pytest.raises(Exception, match="aborted"):
                 await svc.TriggerBackfill(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+        assert ctx.abort.await_args.args == (
+            grpc.StatusCode.PERMISSION_DENIED,
+            _denial_detail(self_serve_denial_contract, _FILL_MODE),
+        )
         insert.assert_not_awaited()  # no paid job queued
         spawn.assert_not_called()  # no runner spawned
 
@@ -416,6 +418,268 @@ class TestTriggerBackfill:
                 await svc.TriggerBackfill(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
         insert.assert_not_awaited()
+        spawn.assert_not_called()
+
+
+# Positions in the shared contract's token list (tests/fixtures/self_serve_denial.json);
+# the contract row below pins the servicer tuple to that list.
+_MULTI_SYMBOL, _DATA_KIND, _FILL_MODE, _OVERWRITE = 0, 1, 2, 3
+_RANGE_UNSET, _RANGE_TOO_LONG, _CALLBACK, _NO_USER = 4, 5, 6, 7
+_RANGE_END = datetime(2026, 1, 1, tzinfo=UTC)
+_UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+_LOCK_SQL = "SELECT pg_advisory_xact_lock(hashtext($1))"
+
+
+def _set_range_days(req, days: int) -> None:
+    req.range.end.FromDatetime(_RANGE_END)
+    req.range.start.FromDatetime(_RANGE_END - timedelta(days=days))
+
+
+def _self_serve_req() -> ingest_pb2.TriggerBackfillRequest:
+    """The in-envelope base request: one symbol, 1DAY, GAPS_ONLY, no overwrite, 300 days."""
+    req = ingest_pb2.TriggerBackfillRequest(
+        symbols=["AAPL"],
+        timeframe_enum=common_pb2.TIMEFRAME_1DAY,
+        fill_mode=ingest_pb2.FILL_MODE_GAPS_ONLY,
+        overwrite=False,
+    )
+    _set_range_days(req, 300)
+    return req
+
+
+def _denial_detail(contract, token_index: int, max_days: int | None = None) -> str:
+    detail = contract["prefix"] + contract["tokens"][token_index]
+    if max_days is not None:
+        detail += contract["range_too_long_suffix"].format(max_days=max_days)
+    return detail
+
+
+def _start_equals_end(req):
+    req.range.start.CopyFrom(req.range.end)
+
+
+# (token index, mutation, x-user-id); one row per way out of the envelope.
+_DENIAL_ROWS = {
+    "two_symbols": (_MULTI_SYMBOL, lambda r: r.symbols.append("MSFT"), "u1"),
+    "fundamentals": (
+        _DATA_KIND,
+        lambda r: setattr(r, "data_kind", ingest_pb2.BACKFILL_DATA_KIND_FUNDAMENTALS),
+        "u1",
+    ),
+    "full_fill": (
+        _FILL_MODE,
+        lambda r: setattr(r, "fill_mode", ingest_pb2.FILL_MODE_FULL),
+        "u1",
+    ),
+    "overwrite": (_OVERWRITE, lambda r: setattr(r, "overwrite", True), "u1"),
+    "range_cleared": (_RANGE_UNSET, lambda r: r.ClearField("range"), "u1"),
+    "start_equals_end": (_RANGE_UNSET, _start_equals_end, "u1"),
+    "731_days": (_RANGE_TOO_LONG, lambda r: _set_range_days(r, 731), "u1"),
+    "with_callback": (
+        _CALLBACK,
+        lambda r: setattr(r, "callback_url", "https://webhooks.ts.example.net/h"),
+        "u1",
+    ),
+    "no_user_header": (_NO_USER, lambda r: None, ""),
+    "system_user": (_NO_USER, lambda r: None, "system"),
+}
+
+
+@contextmanager
+def _self_serve_patches(*, active=False, insert_side_effect=None):
+    with (
+        patch("asyncio.create_task") as spawn,
+        patch(f"{_REPO}.insert_job", AsyncMock(side_effect=insert_side_effect)) as insert,
+        patch(f"{_REPO}.has_active_job", AsyncMock(return_value=active)) as has_active,
+    ):
+        yield spawn, insert, has_active
+
+
+class TestTriggerBackfillSelfServe:
+    """Feature 343: a non-admin trigger is accepted inside the self-serve envelope, denied with
+    the first failed condition's token outside it, and de-duplicated per symbol."""
+
+    def test_contract_matches_the_shared_fixture(self, self_serve_denial_contract):
+        contract = self_serve_denial_contract
+        assert IngestServicer._SELF_SERVE_DENIAL_TOKENS == tuple(contract["tokens"])
+        assert IngestServicer._SELF_SERVE_DENIAL_PREFIX == contract["prefix"]
+        token = contract["tokens"][_RANGE_TOO_LONG]
+        assert IngestServicer._self_serve_denial_detail(token, 730) == _denial_detail(
+            contract, _RANGE_TOO_LONG, 730
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("row", list(_DENIAL_ROWS), ids=list(_DENIAL_ROWS))
+    async def test_out_of_envelope_is_denied(self, row, self_serve_denial_contract):
+        """@AC-15 (every row) and @AC-12 (the 731-day row carries the span suffix)."""
+        token_index, mutate, user_id = _DENIAL_ROWS[row]
+        svc = make_servicer(db=MagicMock())
+        svc._notify = _notify_stub()
+        req = _self_serve_req()
+        mutate(req)
+        ctx = _ctx("0", user_id=user_id)
+        with _self_serve_patches() as (spawn, insert, _):
+            with pytest.raises(Exception, match="aborted"):
+                await svc.TriggerBackfill(req, ctx)
+        max_days = 730 if token_index == _RANGE_TOO_LONG else None
+        expected = _denial_detail(self_serve_denial_contract, token_index, max_days)
+        assert ctx.abort.await_args.args == (grpc.StatusCode.PERMISSION_DENIED, expected)
+        if max_days is not None:
+            assert expected.endswith(" (max 730 days)")
+        insert.assert_not_awaited()
+        spawn.assert_not_called()
+        svc._notify.FanoutWebhook.assert_not_awaited()
+
+    def test_every_contract_token_has_a_denial_row(self, self_serve_denial_contract):
+        covered = {index for index, _, _ in _DENIAL_ROWS.values()}
+        assert covered == set(range(len(self_serve_denial_contract["tokens"])))
+
+    @pytest.mark.asyncio
+    async def test_first_failed_condition_wins(self, self_serve_denial_contract):
+        svc = make_servicer(db=MagicMock())
+        req = _self_serve_req()
+        req.symbols.append("MSFT")
+        req.overwrite = True
+        ctx = _ctx("0")
+        with _self_serve_patches():
+            with pytest.raises(Exception, match="aborted"):
+                await svc.TriggerBackfill(req, ctx)
+        assert ctx.abort.await_args.args == (
+            grpc.StatusCode.PERMISSION_DENIED,
+            _denial_detail(self_serve_denial_contract, _MULTI_SYMBOL),
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("days", [300, 730], ids=["base", "at_cap"])
+    async def test_non_admin_in_envelope_is_queued(self, days):
+        """@AC-7: the lock, the de-dup read and the insert share one transaction connection."""
+        db, conn = transaction_conn()
+        svc = make_servicer(db=db)
+        req = _self_serve_req()
+        _set_range_days(req, days)
+        ctx = _ctx("0")
+        with _self_serve_patches() as (spawn, insert, has_active):
+            resp = await svc.TriggerBackfill(req, ctx)
+        ctx.abort.assert_not_called()
+        assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        assert resp.job_id != ""
+        conn.execute.assert_awaited_once_with(_LOCK_SQL, "backfill:AAPL")
+        has_active.assert_awaited_once_with(
+            conn,
+            "AAPL",
+            [ingest_pb2.BACKFILL_STATUS_QUEUED, ingest_pb2.BACKFILL_STATUS_RUNNING],
+        )
+        assert insert.await_args.args[0] is conn
+        assert insert.await_args.kwargs["symbols"] == ["AAPL"]
+        assert insert.await_args.kwargs["status"] == ingest_pb2.BACKFILL_STATUS_QUEUED
+        spawn.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_queued_event_forwards_the_caller_not_a_payload_user(self):
+        """D-11 / PLAT-4: the owner rides x-user-id metadata; the payload names no user."""
+        db, _ = transaction_conn()
+        svc = make_servicer(db=db)
+        with _self_serve_patches():
+            await svc.TriggerBackfill(_self_serve_req(), _ctx("0"))
+        call = svc._ledger.AppendEvent.await_args
+        assert call.args[0].event_type == "ingest.backfill.queued"
+        assert ("x-user-id", "u1") in call.kwargs["metadata"]
+        assert "user_id" not in MessageToDict(call.args[0].payload)
+
+    @pytest.mark.asyncio
+    async def test_admin_keeps_multi_symbol_full_without_the_de_dup(self):
+        """D-27: the admin row asserts QUEUED only."""
+        db = MagicMock()
+        svc = make_servicer(db=db)
+        req = _self_serve_req()
+        req.symbols.append("MSFT")
+        req.fill_mode = ingest_pb2.FILL_MODE_FULL
+        with _self_serve_patches() as (_, insert, has_active):
+            resp = await svc.TriggerBackfill(req, _ctx("4"))
+        assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        assert insert.await_args.args[0] is db
+        db.acquire.assert_not_called()
+        has_active.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_duplicate_is_already_exists_without_a_job_id(self):
+        """@AC-11."""
+        db, _ = transaction_conn()
+        svc = make_servicer(db=db)
+        ctx = _ctx("0")
+        with _self_serve_patches(active=True) as (spawn, insert, _):
+            with pytest.raises(Exception, match="aborted"):
+                await svc.TriggerBackfill(_self_serve_req(), ctx)
+        code, detail = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.ALREADY_EXISTS
+        assert "AAPL" in detail
+        assert "already queued or running" in detail
+        assert _UUID_RE.search(detail) is None
+        insert.assert_not_awaited()
+        svc._ledger.AppendEvent.assert_not_awaited()
+        spawn.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_self_serve_requests_queue_one_job(self):
+        """The advisory lock serializes the read-then-insert; without it both would queue."""
+        lock = asyncio.Lock()
+        inserted: set[str] = set()
+
+        def acquire():
+            conn = MagicMock()
+
+            async def take_lock(sql, key):
+                await lock.acquire()
+
+            async def release_lock(*exc):
+                lock.release()
+                return False
+
+            conn.execute = AsyncMock(side_effect=take_lock)
+            tx = MagicMock()
+            tx.__aenter__ = AsyncMock(return_value=None)
+            tx.__aexit__ = AsyncMock(side_effect=release_lock)
+            conn.transaction = MagicMock(return_value=tx)
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=conn)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            return cm
+
+        async def fake_has_active(conn, symbol, statuses):
+            await asyncio.sleep(0)
+            return symbol in inserted
+
+        async def fake_insert(conn, **kwargs):
+            await asyncio.sleep(0)
+            inserted.update(kwargs["symbols"])
+
+        db = MagicMock()
+        db.acquire = MagicMock(side_effect=acquire)
+        svc = make_servicer(db=db)
+        ctxs = [_ctx("0"), _ctx("0")]
+        with (
+            patch("asyncio.create_task"),
+            patch(f"{_REPO}.insert_job", AsyncMock(side_effect=fake_insert)),
+            patch(f"{_REPO}.has_active_job", AsyncMock(side_effect=fake_has_active)),
+        ):
+            results = await asyncio.gather(
+                *(svc.TriggerBackfill(_self_serve_req(), c) for c in ctxs),
+                return_exceptions=True,
+            )
+        queued = [r for r in results if isinstance(r, ingest_pb2.TriggerBackfillResponse)]
+        assert len(queued) == 1
+        assert queued[0].status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        aborted = [c.abort.await_args.args[0] for c in ctxs if c.abort.await_args]
+        assert aborted == [grpc.StatusCode.ALREADY_EXISTS]
+
+    @pytest.mark.asyncio
+    async def test_insert_failure_emits_nothing_and_spawns_nothing(self):
+        db, _ = transaction_conn()
+        svc = make_servicer(db=db)
+        with _self_serve_patches(insert_side_effect=RuntimeError("db down")) as (spawn, _, _):
+            with pytest.raises(RuntimeError, match="db down"):
+                await svc.TriggerBackfill(_self_serve_req(), _ctx("0"))
+        svc._ledger.AppendEvent.assert_not_awaited()
         spawn.assert_not_called()
 
 
@@ -591,13 +855,19 @@ class TestTriggerBackfillCallbackUrl:
         assert "webhooks.ts.example.net" not in ctx.abort.await_args.args[1]
 
     @pytest.mark.asyncio
-    async def test_validation_runs_after_the_admin_gate(self):
+    async def test_validation_runs_after_the_admin_gate(self, self_serve_denial_contract):
+        """334@AC-26 kept: a non-admin callback_url is denied by the envelope before notify."""
         svc = make_servicer(db=MagicMock())
         svc._notify = _notify_stub()
+        req = _self_serve_req()
+        req.callback_url = _CALLBACK_URL
         ctx = _ctx("0")  # no ADMIN bit
-        resp, insert, _ = await _trigger(svc, _callback_req(), ctx)
+        resp, insert, _ = await _trigger(svc, req, ctx)
         assert resp is None
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+        assert ctx.abort.await_args.args == (
+            grpc.StatusCode.PERMISSION_DENIED,
+            _denial_detail(self_serve_denial_contract, _CALLBACK),
+        )
         svc._notify.FanoutWebhook.assert_not_awaited()
         insert.assert_not_awaited()
 

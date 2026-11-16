@@ -40,7 +40,7 @@ Feature: xstockstrat-marketdata - historical fundamentals price-join re-derivati
     When a fundamentals backfill is re-run for that symbol without overwrite
     Then the period with missing columns has them derived from the now-available bars and persisted
     And the already-populated period's price-join columns are left unchanged
-    And every period's as-reported fields and earliest filed_date are unchanged
+    And every period's as-reported fields and earliest filed_date are left unchanged by the price-join fill
 
   @AC-4 @regression @feature-216
   Scenario: overwrite=true refreshes an already-populated price-join to the current derived value
@@ -48,7 +48,7 @@ Feature: xstockstrat-marketdata - historical fundamentals price-join re-derivati
     And the daily OHLCV bar at that period's stored filing date now resolves to a different adjusted close
     When a fundamentals backfill is re-run for that symbol with overwrite=true
     Then that period's price, market_cap, pe_ratio, and pb_ratio are recomputed from the current bar at the stored filing date and persisted
-    And the period's currency, eps, roe, debt_to_equity, and earliest filed_date are unchanged
+    And the period's currency, eps, roe, debt_to_equity, and earliest filed_date are left unchanged by the price-join refresh
     And a subsequent overwrite=true re-run against the same bars persists no further write
 
   @AC-5 @regression @feature-216

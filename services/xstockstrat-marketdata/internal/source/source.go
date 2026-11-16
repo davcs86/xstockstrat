@@ -110,6 +110,10 @@ type HistoricalFundamentalsPeriod struct {
 	DerivationVersion int
 }
 
+// DerivationOwnedExtraKeys are the extra_metrics keys the period builder owns: a re-derive replaces
+// them, never merges them, so a key the new derivation omits cannot keep a stale value.
+var DerivationOwnedExtraKeys = []string{"revenue", "net_income", "assets", "liabilities", "stockholders_equity", "stockholders_equity_usd", "total_debt"}
+
 // HistoricalPriceState is the stored price-join state of one fundamentals_history row, read by the
 // backfill recovery path (feature 216). Found=false when no row exists for the triple PK. FiledDate
 // is the stored earliest filing date; recovery derives against it (never the re-fetch's filed_date)

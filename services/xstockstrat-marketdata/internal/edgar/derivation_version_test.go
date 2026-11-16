@@ -15,6 +15,7 @@ import (
 // rows re-derive on the next backfill, then record the new hash here under the new version.
 var derivationGolden = map[int]string{
 	1: "ba944d741ff613bc26379e490c89788a35aa42abca2ceaaf56801f0254d2df8b",
+	2: "52430c204b3a5d1dc23beb628e7fdcb95266cfaa53867868e2e5c4120ad09d94",
 }
 
 func TestDerivationVersion_GoldenDriftGuard_feature223(t *testing.T) {
