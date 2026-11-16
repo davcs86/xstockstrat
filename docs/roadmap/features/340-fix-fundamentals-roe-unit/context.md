@@ -689,3 +689,8 @@ Feature: fix-fundamentals-roe-unit (bug fix)
 ### Coverage check
 - Source scenarios: 5. Planned: 5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT.
 ```
+
+## Session 2026-11-16 — operator confirmation of the regenerated promotion plan (orchestrator)
+
+- Asked: confirm the corrected plan above (5 scenarios, verbatim, tags kept, new file `services/xstockstrat-marketdata/acceptance/fix-fundamentals-roe-unit.feature`)? **Operator, verbatim: "Confirm (Recommended)".** This confirms the last `sdd-batch-promotion-plan` block (P-04).
+- Asked whether to clarify the three ambiguous existing wordings (222 `@AC-1`, 222 `@AC-3`, 216 `@AC-3`/`@AC-4`). **Operator, verbatim: "Clarify inside 340's PR".** The exact amended text needs the operator's sign-off before it is written; it is NOT part of the confirmed plan block and lands as a separate commit on this branch after that sign-off.
