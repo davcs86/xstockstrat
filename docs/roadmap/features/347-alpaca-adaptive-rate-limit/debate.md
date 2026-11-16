@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-16 | /sdd-design | 14 | 8 | 10 | 13 | 0 | yes |
 | 2 | 2026-11-16 | /sdd-design | 7 | 3 | 14 | 11 | 0 | yes |
 | 3 | 2026-11-16 | /sdd-design | 6 | 5 | 11 | 11 | 0 | yes |
+| 4 | 2026-11-16 | /sdd-design | 2 | 1 | 6 | 6 | 0 | yes |
 
 ## Settled Decisions
 
@@ -44,6 +45,8 @@
 | D-25 | 3 | User approval (gate): add one repository method `ReleasePendingIntent(ctx, intentID) (released bool, err error)` = `DELETE FROM trading.order_intents WHERE intent_id = $1 AND state = PENDING RETURNING intent_id`. `CancelOrder` and `ReplaceOrder` call it (on a context detached from caller cancellation) from one shared helper when the broker call returns `ErrRateLimited`, before any local state write, then return `Unavailable` ("refused by the broker rate limit; the order is unchanged"). Released: the in-memory intent state is restored to its prior value and an identical retry inserts a fresh intent. Not released (DB error, or the sweeper already reclaimed the row): the in-memory intent state is set to UNKNOWN to match the DB and the reply does not promise a retry. One WARN carries `order_id`, `broker_order_id`, `intent_id`. No ledger event. The rule "a dedup row is deleted only while PENDING and only after a definite broker non-processing (`ErrRateLimited`)" is written into the trading `CLAUDE.md` and `services/xstockstrat-trading/docs/context-constitution.md`. | `services/xstockstrat-trading/internal/repository/order_intent_repo.go:62-146`; `internal/service/order_intent.go:79-87`; `internal/service/trading.go:1330,1383-1429,1526-1589,2358`; `migrations/006_order_intents.up.sql:5-27`; context.md 2026-11-16 | settled |
 | D-26 | 3 | User steer (gate), replacing D-21: in marketdata's warm-quote and bar-ingest loops the interval deadline bounds **only the Alpaca calls** of a cycle (a fetch context created inside the cycle, with a per-symbol guard on it so no further fetch starts once it has expired; skipped symbols count as errors, never as empty); cache and bar writes keep the loop's own context as today. Trading's fill poller wraps `GetOrder` in a per-call `WithTimeout(ctx, brokerCallTimeout)` for Alpaca accounts only through one small helper; IBKR is untouched and there is no `brokerCallFloor`. | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1236-1276,1401-1431`; `internal/repository/marketdata_repo.go:63-71`; `internal/service/bar_hold.go:89-98`; `services/xstockstrat-trading/internal/service/trading.go:1803-1822,2079`; context.md 2026-11-16 | settled |
 | D-27 | 3 | User steer (gate): the best-effort bracket-leg cancels in `CancelOrder` use the same Alpaca-only per-call timeout helper (`broker.timeout_ms`), so they never wait or retry; a throttled leg cancel is a WARN as any leg failure is today. `CancelOrder` returns within about the budget plus two per-call timeouts. | `services/xstockstrat-trading/internal/service/trading.go:1397-1416`; context.md 2026-11-16 | settled |
+| D-28 | 4 | Wiring and contract rules that make D-6, D-7, D-13 and D-22 implementable: (a) the single live func on trading's `broker.ClientConfig` is `RateLimitBudget func() time.Duration` (nil or ≤ 0 = kill switch off = today's code); it is built in `instantiateBrokerLocked` from a small pure service helper returning 0 when `broker.adaptive_rate_limit_enabled` is false and otherwise `max(T, staleThreshold − 2T)`, because `internal/broker` cannot import `internal/service`; the helper has a table test. (b) A zero adaptive wait is never fit-tested and is always sent (marketdata's static limiter still applies); only a hold or a 429 wait can fail to fit — stated in the core's contract, pinned by a `pace_test.go` case and a client test for a call bounded by one `broker.timeout_ms`. (c) On a 429 the retry wait is `min(Reset − now, 60 s)` whenever `Reset` parses and is in the future, with no range filter (the D-4 65 s filter applies to pacing state only); otherwise backoff. (d) The Alpaca-only per-call timeout helper tests `!= BROKER_TYPE_IBKR`, mirroring the client dispatch, so an account of UNSPECIFIED type that gets an Alpaca client is bounded too. (e) The loop bounds, the per-call timeouts and the cancel reorder do not depend on the kill switch. | `services/xstockstrat-trading/internal/service/trading.go:2595-2620,3241-3273`; `internal/service/order_intent.go:100-108`; O-36..O-39 | settled |
+| D-29 | 4 | The amendment set of the round 4 proposal (FR-2, FR-3, FR-8, FR-9, new FR-11, Fixed Invariants, Out of Scope, AC-2/3/7/13/17/19/20/21 corrected, AC-23..AC-37 new) is adopted with the 13 corrections from the round 4 review. Worst-case `CancelOrder` duration at defaults is 35 s (parent ≤ budget, re-read ≤ T, two legs ≤ 2T); the cancel intent's lifetime is ≤ budget + T = 25 s. AC-32 is a guard scenario with an added assertion that the multi fetch carries the interval deadline; AC-36's red check runs after the trading client change has landed; AC-28 drives a real `broker.NewClient` against an HTTP test server; AC-37's description text is pinned at spec time. | round 4 review; D-24 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -66,6 +69,7 @@
 | R-14 | 3 | Keep the cancel/replace intent row (no delete) after a rate-limit refusal | Declined by the user (D-25): an identical retry would be refused as "still pending" and later blocked as "unknown". | locked |
 | R-15 | 3 | Apply the interval deadline to the whole marketdata cycle including DB writes | Declined by the user (D-26): a late fetch leaves writes on an expired context, giving a false `loop tick ok` or a rolled-back bar batch. | locked |
 | R-16 | 3 | Let bracket-leg cancels use the full retry budget | Declined by the user (D-27): `CancelOrder` could take about 60 s to return a cancel that already succeeded. | locked |
+| R-17 | 4 | Detect an Alpaca client in the per-call timeout helper by `== BROKER_TYPE_ALPACA` or by a type assertion on the client | `== ALPACA` leaves an UNSPECIFIED-type account's Alpaca client unbounded (`trading.go:2595-2620,3259`); a type assertion lets a service-test fake silently skip the bound. | locked |
 
 ## Objections
 
@@ -107,6 +111,12 @@
 | O-33 | 3 | AC-29 and AC-19 were ambiguous or untestable under a fake clock; AC-13 no longer pinned anything on its own. | no | closed @ round 3 (D-22, D-24) |
 | O-34 | 3 | The "budget + T < S" claim for the not-cancelable re-read fails at the clamp row (T 10 s, ×1.5) and leaves a 1 s margin at T 1 s, ×3.0. | no | closed @ round 3 (D-23 records the residual) |
 | O-35 | 3 | New FR-11 (loop bounds) adds a requirement to an approved spec (P-04). | no | closed @ round 3 (it makes the user's D-21 steer concrete; recorded at the gate) |
+| O-36 | 4 | Build step S7 named a bool func on `ClientConfig`, departing from D-6 ("nil or ≤ 0") and leaving D-13's budget with no source, since `internal/broker` cannot import `internal/service` (register violation, conform not reopen). | yes | closed @ round 4 (D-28a) |
+| O-37 | 4 | Amended FR-3 and FR-2 said a request is "never sent before `Reset`" while capping the wait at one window (contradicts AC-19 and D-22). | yes | closed @ round 4 (D-28c, D-29 corrections 1–2) |
+| O-38 | 4 | `alpacaCallContext` with `== ALPACA` leaves a reachable unbounded path for an UNSPECIFIED-type account (fails.md:3180). | no | closed @ round 4 (D-28d) |
+| O-39 | 4 | The "zero wait is always sent" rule was implied by D-3, D-15 and D-22 but never stated; applied wrongly it would refuse every call bounded by one timeout and stop fill detection. | no | closed @ round 4 (D-28b) |
+| O-40 | 4 | Scenario defects: AC-13 sits on an exact boundary with an over-exact timing phrase; AC-32 and AC-36 pass on today's code; AC-34/35/36 said "of client time" where the service tests cannot reach the client clock; AC-37's Then was not checkable; AC-28 with a fake broker would assert nothing about the hold (C-15; fails.md:3175). | no | closed @ round 4 (D-29) |
+| O-41 | 4 | The kill switch's scope was unstated: FR-6 promises "exactly as before" while the loop bounds and cancel reorder are unconditional; doc paths in the build table were not full paths. | no | closed @ round 4 (D-28e; D-29) |
 
 ## Reopen Petitions
 
