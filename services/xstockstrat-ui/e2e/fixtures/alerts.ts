@@ -58,7 +58,7 @@ export const ALERT_LIST_002 = {
   alertId: 'alert-002',
   severity: 4,
   category: 'SYSTEM',
-  title: 'Order rejected',
+  title: 'Buying power check failed',
   body: 'Insufficient buying power for TSLA order.',
   sourceService: 'trading',
 };
@@ -124,3 +124,59 @@ export const ALERT_DETAIL_BROADCAST = {
   context: {},
 };
 export const ALERT_DETAILS = [ALERT_DETAIL, ALERT_DETAIL_BROADCAST];
+
+// Feature 339 unread-only drawer — per-spec stubs only; never add these to the shared mock lists.
+// `createdAt` is Connect-JSON so the object can be a `page.route` body as is.
+export const DRAWER_ALERT_BASE_SECONDS = 1_794_736_800; // 2026-11-15T10:00:00Z
+const drawerCreatedAt = (offsetSeconds: number) =>
+  new Date((DRAWER_ALERT_BASE_SECONDS + offsetSeconds) * 1000).toISOString();
+
+export const DRAWER_ALERT_STORED_UNREAD = {
+  alertId: 'alert-drawer-stored-unread',
+  severity: 3,
+  category: 'SYSTEM',
+  title: 'Backfill 67276d1f failed',
+  body: 'Historical backfill job 67276d1f failed.',
+  sourceService: 'xstockstrat-marketdata',
+  read: false,
+  createdAt: drawerCreatedAt(0),
+};
+export const DRAWER_ALERT_STORED_READ = {
+  alertId: 'alert-drawer-stored-read',
+  severity: 1,
+  category: 'SYSTEM',
+  title: 'Backfill 11aa22bb done',
+  body: 'Historical backfill job 11aa22bb completed.',
+  sourceService: 'xstockstrat-marketdata',
+  read: true,
+  createdAt: drawerCreatedAt(-60),
+};
+export const DRAWER_ALERT_STREAMED = {
+  alertId: 'alert-drawer-streamed',
+  severity: 4,
+  category: 'SYSTEM',
+  title: 'Order rejected',
+  body: 'Insufficient buying power for TSLA order.',
+  sourceService: 'trading',
+  createdAt: drawerCreatedAt(60),
+};
+export const DRAWER_ALERT_CLEAR_A = {
+  alertId: 'alert-drawer-clear-a',
+  severity: 3,
+  category: 'SYSTEM',
+  title: 'Backfill 9f8e7d6c failed',
+  body: 'Historical backfill job 9f8e7d6c failed.',
+  sourceService: 'xstockstrat-marketdata',
+  read: false,
+  createdAt: drawerCreatedAt(10),
+};
+export const DRAWER_ALERT_CLEAR_B = {
+  alertId: 'alert-drawer-clear-b',
+  severity: 2,
+  category: 'RISK',
+  title: 'Daily loss limit reached',
+  body: 'Account daily loss limit reached; new entries are paused.',
+  sourceService: 'trading',
+  read: false,
+  createdAt: drawerCreatedAt(20),
+};

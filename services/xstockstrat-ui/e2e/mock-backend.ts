@@ -683,7 +683,15 @@ export async function startMockBackend(): Promise<void> {
             ctx.signal.addEventListener('abort', () => r(), { once: true }),
           );
         },
-        async listAlerts() {
+        async listAlerts(req) {
+          // feature 339 — unreadOnly must include ALERT_STREAM_ALL, or the drawer prunes streamed rows.
+          if (req.unreadOnly) {
+            const unread = [
+              ...ALERT_LIST_WITH_READ_STATE.filter((a) => !a.read),
+              ...ALERT_STREAM_ALL,
+            ];
+            return { alerts: unread, unreadCount: unread.length };
+          }
           // feature 203 — per-user read state + server-side unread count.
           return { alerts: ALERT_LIST_WITH_READ_STATE, unreadCount: MOCK_UNREAD_COUNT };
         },

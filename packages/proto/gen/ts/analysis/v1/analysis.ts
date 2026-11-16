@@ -2084,9 +2084,8 @@ export interface GetIndicatorSeriesRequest {
   strategyId: string;
   symbol: string;
   /**
-   * The caller's own already-fetched candlestick closes + their timestamps (the page passes the
-   * exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
-   * and times are index-aligned and equal length.
+   * The caller's drawn window plus a history prefix; closes and times are index-aligned and equal
+   * length. The server never re-fetches the evaluated symbol's bars.
    */
   closes: number[];
   times: Date[];
@@ -2108,6 +2107,11 @@ export interface ComponentSeries {
    * isolation — one bad component never fails the whole RPC.
    */
   error: string;
+  /**
+   * Bars of history needed for this component's first value (multi-series: its earliest series).
+   * 0 = no warm-up or unknown; a client never reports insufficient history for 0.
+   */
+  firstValueBars: number;
 }
 
 export interface NamedSeries {
@@ -10508,7 +10512,7 @@ export const GetIndicatorSeriesResponse: MessageFns<GetIndicatorSeriesResponse> 
 };
 
 function createBaseComponentSeries(): ComponentSeries {
-  return { refName: "", kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED, series: [], error: "" };
+  return { refName: "", kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED, series: [], error: "", firstValueBars: 0 };
 }
 
 export const ComponentSeries: MessageFns<ComponentSeries> = {
@@ -10524,6 +10528,9 @@ export const ComponentSeries: MessageFns<ComponentSeries> = {
     }
     if (message.error !== "") {
       writer.uint32(34).string(message.error);
+    }
+    if (message.firstValueBars !== 0) {
+      writer.uint32(40).int32(message.firstValueBars);
     }
     return writer;
   },
@@ -10567,6 +10574,14 @@ export const ComponentSeries: MessageFns<ComponentSeries> = {
           message.error = reader.string();
           continue;
         }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.firstValueBars = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -10586,6 +10601,11 @@ export const ComponentSeries: MessageFns<ComponentSeries> = {
       kind: isSet(object.kind) ? componentKindFromJSON(object.kind) : ComponentKind.COMPONENT_KIND_UNSPECIFIED,
       series: globalThis.Array.isArray(object?.series) ? object.series.map((e: any) => NamedSeries.fromJSON(e)) : [],
       error: isSet(object.error) ? globalThis.String(object.error) : "",
+      firstValueBars: isSet(object.firstValueBars)
+        ? globalThis.Number(object.firstValueBars)
+        : isSet(object.first_value_bars)
+        ? globalThis.Number(object.first_value_bars)
+        : 0,
     };
   },
 
@@ -10603,6 +10623,9 @@ export const ComponentSeries: MessageFns<ComponentSeries> = {
     if (message.error !== "") {
       obj.error = message.error;
     }
+    if (message.firstValueBars !== 0) {
+      obj.firstValueBars = Math.round(message.firstValueBars);
+    }
     return obj;
   },
 
@@ -10615,6 +10638,7 @@ export const ComponentSeries: MessageFns<ComponentSeries> = {
     message.kind = object.kind ?? ComponentKind.COMPONENT_KIND_UNSPECIFIED;
     message.series = object.series?.map((e) => NamedSeries.fromPartial(e)) || [];
     message.error = object.error ?? "";
+    message.firstValueBars = object.firstValueBars ?? 0;
     return message;
   },
 };
