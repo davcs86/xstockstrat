@@ -69,8 +69,8 @@ reverses a settled `D-n` or reopens an `R-n`.
 |---|---|---|
 | S-1 | The left-out WARN and the `marketdata.backfill.periods_left_out` increment are emitted by `FetchHistorical` (the backfill path). `DeriveHistorical` only returns the list. | D-19 names the counter `marketdata.backfill.*`; the audit must not count. |
 | S-2 | The planner takes the left-out list as an optional input. The service has only `FetchHistorical` (D-21), so it passes none: its INFO line reports `no_period_derived` for a row the audit reports as `left_out`. The WARN of the same run names the left-out period. | D-21 keeps the extra entry point outside the source interface; D-24 wants a category on the service log. The two cannot both hold exactly. |
-| S-3 | Category rules for a row deleted without a same-(type, `period_end`) replacement, first match wins: `left_out` (a left-out period of the same type has the row's `period_end` or `filed_date`); `merged` (a fresh period of the same type has the row's `filed_date`); `period_type_changed` (a fresh period of the other type has the row's `filed_date`); `no_period_derived`. | design.md § 2 names the four categories but not how a row gets one. |
-| S-4 | Under the literal D-24 rule a row whose only change is a cover-page `period_end` corrected to the balance-sheet date is also "deleted without a same-date replacement" (category `merged`). recon.md measures that as most rows of a lane, so the repair writes about one INFO line per stored row. | Literal reading of design.md § 2 and § 3; raised for the operator, not changed. |
+| S-3 | A deleted row is **replaced** when a fresh period of the same type with the row's `filed_date` is inserted or identical; each fresh period replaces at most one deleted row (deleted rows and fresh periods of one type and `filed_date` are paired in `period_end` order). Every other deleted row is **deleted without replacement** and gets a category, first match wins: `left_out` (a left-out period of the same type has the row's `period_end` or `filed_date`); `merged` (a fresh period of the same type has the row's `filed_date` but another deleted row took it); `period_type_changed` (a fresh period of the other type has the row's `filed_date`); `no_period_derived`. | design.md § 2 names the four categories; the pairing rule is the operator's answer of 2026-11-16 ("Narrow set", context.md). |
+| S-4 | Decided by the operator (2026-11-16, "Narrow set"): a row whose period is stored again under corrected dates or a corrected label is replaced, not "deleted without replacement", and gets no INFO line. Only rows whose period no longer exists in the table are listed and logged (S-3). | context.md, operator answers after the spec; narrows the literal D-24 wording in design.md § 2 and § 3. |
 | S-5 | An accession whose facts disagree on `filed` is handled like one whose facts disagree on `form`: no period, one WARN. | D-9 states the form case only; recon measured zero exceptions for both. |
 | S-6 | `year_end_quarter` is applied before `label_collision`, so a quarter left out for ending on a fiscal-year boundary never takes a label from another quarter. | D-19 and D-20 do not order the two rules. |
 | S-7 | `source.HistoricalPriceState` also gains `ExtraMetrics`. | D-18 compares stored `net_income`, `revenue`, `assets`, `liabilities` and `stockholders_equity`, which live in `extra_metrics`; design.md § 3 lists only label, type and `period_end` (ledger insight 2026-10-14, feature 216: a field an invariant needs must be in the enumerated type). |
@@ -78,7 +78,7 @@ reverses a settled `D-n` or reopens an `R-n`.
 | S-9 | The pinned delete binds `period_end` and `filed_date` as `YYYY-MM-DD` text cast with `::date`. | Under `QueryExecModeExec` a `time.Time` argument is sent as `timestamptz`; `date = timestamptz` depends on the session time zone, and a miss fails the symbol. |
 | S-10 | The replace transaction runs before the in-place updates of identical rows; `periods_written` counts inserted rows plus in-place changes. | D-13: a failed replace must leave the symbol unwritten. |
 | S-11 | Audit input is one JSON file per lane, `{"<SYMBOL>": [<period as query_fundamentals historical mode returns it>, ...]}`. The pre/post diff matches rows on (symbol, `period_type`, `filed_date`); a key with more than one row on either side is reported as ambiguous and not counted. | D-25 moves the input from a SQL export to MCP reads; design.md § 5 does not define the diff key. D-15: `price` and `dividend_yield` depend only on symbol and `filed_date`. |
-| S-12 | Lane symbol list: no MCP tool enumerates the symbols stored in `marketdata.fundamentals_history`. The main session builds the list from `get_backfill_status` list mode (union of `symbols` over jobs whose `data_kind` is fundamentals) and the operator confirms its size with one read-only count. A mismatch means the operator supplies the list. | design.md § Open Risks; context.md operator answer 5. |
+| S-12 | Lane symbol list, decided by the operator (2026-11-16): the main session reads every watchlist through the MCP (`list_watchlists`, then `get_watchlist` for each) and takes the union of their symbols. The operator's read-only `SELECT count(DISTINCT symbol)` is recorded beside the union's size; stored symbols outside the union are reported, not silently skipped. | context.md, operator answers after the spec ("Use the mcp to pull the symbols from all watchlists"). |
 | S-13 | `periodTypeWanted` moves from `internal/edgar` to `source.PeriodTypesWanted` so the planner and the derivation parse the requested types with one function. | DRY guard rail; the service does not import `internal/edgar`. |
 
 ### Open items carried from design (not resolved by this spec)
@@ -89,7 +89,7 @@ reverses a settled `D-n` or reopens an `R-n`.
 - Empty price-join columns on replaced rows are counted by the pre/post diff after the repair. The
   repair itself is run by the operator after deploy and is outside this spec (product-spec.md § Out
   of Scope).
-- S-2 and S-4 above need the operator's or the reviewer's word before Step 8 is executed.
+- S-2, S-4 and S-12 were answered by the operator on 2026-11-16 (context.md): S-2 agreed as written, S-4 the narrow set, S-12 the union of all watchlists.
 
 ## Step Dependencies
 
@@ -573,8 +573,8 @@ grep -rn "orcl_companyfacts\|crwd_companyfacts" services/xstockstrat-marketdata 
    - **Inserts (D-17)**: a fresh period of a requested type with no identical stored row, when
      (a) its `period_end` is inside the range, or (b) it shares (type, `period_end`) with a deleted
      row, or (c) the symbol has at least one deleted row below the current version.
-   - **Deleted without replacement (D-24)**: every delete with no inserted or identical row of the
-     same (type, `period_end`), with its category per S-3.
+   - **Deleted without replacement (D-24, S-3, S-4)**: every delete that no fresh period replaces
+     under the S-3 pairing rule, with its category.
 4. No config value is read or hardcoded here (F-07). No outbound call (§B header propagation not
    triggered).
 
@@ -628,9 +628,10 @@ Write table-driven cases; each names the decision it pins.
    24,154,000,000; fresh 100,000,000 and 900,000,000); stored rows holding none of the five values;
    a stored zero never counts as a match; fresh set empty; requested type absent from the fresh set;
    no stored row skips every guard, including with an empty fresh set.
-9. Categories (S-3): one case per category, including `left_out` only when the optional list is
-   given, and a row with a cover-page `period_end` whose corrected period shares its `filed_date`
-   (`merged`).
+9. Categories (S-3, S-4): one case per category, including `left_out` only when the optional list is
+   given; a row with a cover-page `period_end` whose corrected period shares its `filed_date` is
+   replaced and is NOT in the list; two deleted rows of one type with one `filed_date` and a single
+   fresh period give one replaced row and one `merged` row.
 10. Test data (C-13): the literals have one consumer and stay inline.
 
 **Verification** (union for the Steps 4+5 unit; run from the repo root):
@@ -1319,10 +1320,9 @@ grep -c "first-seen per (metric, unit)\|can be a cover-page date" services/xstoc
   (design.md § 6).
 - Gate key: `fundamentals.history.enabled`, namespace `marketdata`
   (`internal/service/marketdata_service.go:2290`).
-- Symbol source (S-12): `BackfillJob.symbols` and `data_kind` —
-  `packages/proto/ingest/v1/ingest.proto:35`, `:49`, returned by `get_backfill_status` list mode
-  (`docs/runbooks/mcp-tools.md` § `get_backfill_status`). **Not found**: an RPC or tool that lists
-  the symbols stored in `marketdata.fundamentals_history`
+- Symbol source (S-12): the MCP tools `list_watchlists` and `get_watchlist`
+  (`docs/runbooks/mcp-tools.md`), union over all watchlists. **Not found**: an RPC or tool that
+  lists the symbols stored in `marketdata.fundamentals_history`
   (`packages/proto/marketdata/v1/marketdata.proto:38-62` has none).
 - Report precedent: `docs/roadmap/features/340-fix-fundamentals-roe-unit/audit-lane-a-homelab.md`.
   Raw rows and exports are never committed (feature 340 design, R-16).
@@ -1341,13 +1341,14 @@ grep -c "first-seen per (metric, unit)\|can be a cover-page date" services/xstoc
    - The operator takes the full-row export and records the version histogram, the count of
      `period_end > filed_date`, the distinct symbol count, and that
      `fundamentals.history.backfill.period_types` reads `both` (design step 2).
-   - Build the symbol list (S-12) and compare its size with the operator's distinct count. On a
-     mismatch stop and ask the operator for the list.
+   - Build the symbol list (S-12: union of all watchlists) and record its size beside the
+     operator's distinct count. Report any difference; a stored symbol outside the union is named
+     for the operator once the per-symbol reads show which symbols returned rows.
    - Read every symbol's stored periods through `query_fundamentals` (`mode="historical"`, all
      pages) into a rows file in the session scratch directory, and run
      `fundamentals-audit plan` with stored version 2 at the feature branch's current commit.
    - Write `audit-lane-a-homelab.md`: the commit, the symbol and row counts, guard trips, the
-     deleted-without-replacement list by category (S-4: state its size against the row count),
+     deleted-without-replacement list by category (S-3, S-4),
      left-out periods by reason, single-metric anchors, derived periods with `period_end` after
      `filed_date`, and symbols whose derive failed. No raw rows.
    - Stop for the operator's review of the report. Record the answer.

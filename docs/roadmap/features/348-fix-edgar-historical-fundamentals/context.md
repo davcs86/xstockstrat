@@ -199,3 +199,30 @@ reads its input) and change no settled decision. They are recorded as D-24 and D
 - [ ] Run `/sdd-review fix-edgar-historical-fundamentals impl-spec` — not run yet.
 - [ ] S-2 and S-4 — ask the operator before Step 8.
 - [ ] S-12 — confirm the symbol-list method with the operator before Step 15.
+
+## Session 2026-11-16 — operator answers after the spec (orchestrator)
+
+Three questions were put in one message after the PR was opened. The operator's reply, verbatim:
+
+> Q1
+> Narrow set
+> Q2
+> Agreed
+> Q3
+> Use the mcp to pull the symbols from all watchlists
+
+- Q1 (INFO log volume; spec S-4): the narrow set. A row whose period is stored again under corrected
+  dates or label gets no INFO line; only rows whose period no longer exists in the table are logged
+  and listed. This narrows the literal wording of D-24 in design.md § 2 and § 3; the spec's S-3
+  pairing rule is the precise form.
+- Q2 (spec S-2): agreed. The service logs `no_period_derived` where the audit reports `left_out`.
+- Q3 (spec S-12): the main session pulls the symbols from all watchlists through the MCP.
+- The spec was edited in place (S-3, S-4, S-12, Steps 4, 5, 15 evidence and instructions). No step
+  has been executed, so the step bodies are not yet immutable (F-09 applies from execution).
+- Earlier in the session the operator asked, verbatim: "Create a PR with the artifacts you have so
+  far". PR #1558 (`feature/fix-edgar-historical-fundamentals` → `main-dev`) was opened for the docs.
+
+### Open Threads
+
+- [x] S-2, S-4, S-12 — answered above.
+- [ ] Run `/sdd-review fix-edgar-historical-fundamentals impl-spec`.
