@@ -221,6 +221,7 @@ still live.
 - Steps 7+8: `services/xstockstrat-config/migrations/050_ui_chart_history_bars.{up,down}.sql`,
   `scripts/config-wiring.json`, `scripts/config-wiring-stored.json`,
   `services/xstockstrat-config/src/__tests__/uiChartHistoryBarsSeedMigration.test.ts`.
+- Step 9: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`.
 
 Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
@@ -734,3 +735,16 @@ Tooling setup (steps 7+8): node 24 ✓ · pnpm ✓ (linked main-checkout `node_m
 - Files modified: `services/xstockstrat-config/src/__tests__/uiChartHistoryBarsSeedMigration.test.ts`
 - Deviations: the block exits 1 on its last line, the no-match fixtures grep (expected); see the Deviation Log.
 - Open Threads update: the scratch-Postgres thread and the "Step 7 alone passes `--final`" thread are resolved; the `050` claim shared with 330 stays open for the integration PR; owner + config-team approval for the key is still outstanding.
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, step 9
+
+Tooling setup (step 9): node ✓ · pnpm ✓ (linked main-checkout `node_modules`); no install.
+
+### Step 9 — service: write bound [200, 1000] for the history depth [done]
+- Added `'ui.chart.indicator_history_bars': { minValue: 200, maxValue: 1000 }` to `SCALAR_BOUNDS_REGISTRY` with a two-line constraint comment (floor = the 200-bar drawn window; ceiling = the operator-signed lock budget, raising it needs a new design pass). Write-side only; no new outbound call.
+- AC-1/AC-3 red (`.sdd-logs/v-1.log`, Step 10's `it` block written uncommitted before the edit, per Step Dependencies): `AssertionError [ERR_ASSERTION]: history depth 199 is out of [200, 1000]` (`undefined !== 3`), `tests 371 / pass 370 / fail 1` → green (`.sdd-logs/v-2.log`, `exit=0`): lint `0 errors`, `tests 371 / pass 371 / fail 0`, `✔ bounds the indicator history depth to [200, 1000] — AC-1, AC-3`, grep `181:  'ui.chart.indicator_history_bars': { minValue: 200, maxValue: 1000 },`. Step 9's block has no coverage gate; Step 10's runs `c8 check-coverage --lines 40`. The test edit was reverted after green; Step 10 writes and commits it (its RED is this run).
+- Config-key wiring gate: not applicable (a `service` step, no migration in **Files**, no `## Config Key Changes` heading; `check-config-wiring.mjs` does not read the bounds registry).
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: none

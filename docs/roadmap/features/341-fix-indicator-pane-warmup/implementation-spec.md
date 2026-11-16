@@ -477,7 +477,7 @@ grep -n "__tests__/fixtures" src/__tests__/uiChartHistoryBarsSeedMigration.test.
 
 ### Step 9 — service: write bound [200, 1000] for the history depth
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
