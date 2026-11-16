@@ -792,7 +792,7 @@ node scripts/check-config-wiring.mjs --keys marketdata.alpaca.adaptive_rate_limi
 node scripts/check-config-wiring.mjs --final        # exit 0: no STALE-STORED, no read-unseeded for the two keys, no type/default/metadata finding
 node scripts/check-config-wiring.mjs --doc-check    # exit 0
 node --test scripts/config-wiring.test.mjs
-grep -c "adaptive_rate_limit_enabled" scripts/config-wiring-stored.json   # 4
+grep -c '"key": "[a-z_.]*adaptive_rate_limit_enabled"' scripts/config-wiring-stored.json   # 4
 ! grep -q "adaptive_rate_limit_enabled" scripts/config-wiring.json        # both temporary baseline entries are gone
 git diff --exit-code scripts/config-heal/dryrun-fresh.tsv                 # after the fresh heal dry-run of Instruction 4: unchanged
 ```
