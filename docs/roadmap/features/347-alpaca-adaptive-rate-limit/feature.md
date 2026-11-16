@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-11-16 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
+| 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full; round cap waived by the operator) and approved; recon.md + debate.md + design.md written; product spec and scenarios amended (FR-11, AC-23..AC-37) |
 
 ---
 
@@ -19,6 +20,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
+- [Design](design.md) — approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec alpaca-adaptive-rate-limit`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -44,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design alpaca-adaptive-rate-limit` — full design recommended (two services plus a config migration, order-mutation path, file overlap with 322/323)
+`/sdd-spec alpaca-adaptive-rate-limit` — generate implementation spec from the approved design

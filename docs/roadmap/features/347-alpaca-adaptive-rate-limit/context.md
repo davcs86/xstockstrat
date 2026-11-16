@@ -68,7 +68,7 @@
 - Correction: the order-retry bound is 30 s at defaults, not the 15 s first quoted to the operator
   (`IBKRRequestTimeout` is 10 s and enters the `max`).
 
-## Session 2026-11-16T03:40Z — sdd-design (in progress)
+## Session 2026-11-16T03:40Z — sdd-design (gate log)
 
 - Phase 0 Recon: wrote recon.md (marketdata, trading, config; 40 existing business rules, none CHANGE).
 - Trading API reference pages (`/v2/orders`, `/v2/account`, overview) document no rate-limit headers
@@ -101,3 +101,34 @@
   verdict with no blocking objection. Override recorded per P-04; the Floor rule (F-11) is untouched.
 - Round 5 done: adversary verdict SOUND (no Floor breach, no blocking objection, no register violation,
   no C-16 regression). D-30, O-42. The operator's stop condition for the debate is met.
+
+## Session 2026-11-16T05:40Z — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: marketdata, trading, config; key reuse patterns: the single
+  `do` chokepoint in each Alpaca client; the byte-identical-copy governance of `check-watcher-copies`).
+- Phase 1 Grilling: 5 rounds (full; the operator waived the round cap and set "adversary verdict sound"
+  as the stop condition; met at round 5). Chosen approach: a pure pacing core copied into both services
+  behind each `do`; marketdata waits to the request deadline, trading fails fast inside a budget of
+  `max(T, S − 2T)`; order mutations detached from caller cancellation; rate-limited cancel/replace
+  release their intent; loops and per-call reads bounded. Rejected: a shared Go module, a cross-client
+  credential registry, anchoring the deadline at the intent seam (R-1..R-17 in debate.md).
+- Operator approved the design at the round 5 gate (2026-11-16).
+- Product spec and acceptance.feature amended as approved: FR-2, FR-3, FR-8, FR-9 reworded; FR-11 added;
+  fixed invariants listed; AC-2, 3, 7, 13, 17, 19, 20, 21 corrected; AC-23..AC-37 added (37 scenarios).
+- Business rules (C-16): no existing rule changed; three extended (294 @AC-13, 295 @AC-14, 282 @AC-27).
+- Constitution rules touched: C-01, C-05, C-07, C-08, C-10, C-13, C-14, C-15, C-16, C-18, P-03, P-04,
+  P-06, F-01, F-04, F-06, F-07. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks)
+
+- [ ] Trading pollers and reconciler always skip spreading — unit test at S8.
+- [ ] Clamp row (T 10 s, ×1.5): budget plus re-read 20 s > threshold 15 s; T 1 s, ×3.0 leaves 1 s —
+  budget table test at S10, documented at S9.
+- [ ] Trading API rate-limit headers undocumented — FR-5 test at S8; real paper-host response recorded
+  at the integration PR.
+- [ ] File the pre-existing `ReplaceOrder` defect (intent inserted before `validateTIF`) at `/sdd-spec`.
+- [ ] Config migration number re-derived at S11 and at the integration PR; regenerate
+  `scripts/config-wiring-stored.json`.
+- [ ] `ReleasePendingIntent` has no DB-level test — reviewed at S9; rule written into trading docs.
+- [ ] AC-37's new `backfill.rate_limit_rps` description text is fixed in the implementation spec.
