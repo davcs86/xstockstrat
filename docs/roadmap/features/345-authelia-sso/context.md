@@ -214,8 +214,11 @@
 
 ## Open Threads
 
-- [ ] Authelia v4.39.28 spike: items (a)–(e), RS256, end_session/portal/`rd`/GET `/logout`, auth-code lifespan, discovery issuer with no trailing slash. Due before /sdd-spec.
-- [ ] Re-run `/sdd-review authelia-sso product-spec` on the design-round amendments. Due before /sdd-spec.
+- [x] Authelia v4.39.28 spike: items (a)–(e), RS256, end_session/portal/`rd`/GET `/logout`, auth-code lifespan, discovery issuer with no trailing slash. Done 2026-11-16 (D-95..D-98).
+- [x] Re-run `/sdd-review authelia-sso product-spec` on the design-round amendments. Done 2026-11-16 (0 warnings).
+- [ ] Step 4 needs a scratch Postgres 16 (psql + migrate) to regenerate `scripts/config-wiring-stored.json`, or the CI artifact. Due at Step 4.
+- [ ] Step 12's DB tier needs two migrated databases locally, or the CI `identity-db-test` job. Due at Step 12.
+- [ ] `/sdd-review impl-spec` to rule on the spec-level choices listed in the sdd-spec session (JWKS fresh window, alg allow-list, `chromium-sso` project). Due before /sdd-execute.
 - [ ] Feature 319 merges first or alongside. Due at rollout.
 - [ ] First `tsc --noEmit` run; fix any pre-existing errors. Due at the first UI step.
 - [ ] homelab-edge PR #77 follow-ups (`sso.md` §7/§8 `unlink-sso`, logout / `rd`, post-logout redirect, back-channel reachability, rate-limit exemption). Due in a separate homelab-edge PR.
@@ -265,3 +268,45 @@
 - **Auth-code lifespan.** Exchanged at 25 s it works; at 70 s it gets `invalid_grant`. The lifespan is about 60 s, above D-73's 30 s pre-exchange budget.
 - **Portal logout.** The `portal.SignOut` bundle reads `rd`. `GET /logout?rd=…` needs no confirmation: the view calls `POST /api/logout {targetURL}` and redirects about 2 s later only if `safeTargetURL` is true. The test found `true` for the in-domain `https://xstockstrat-staging.example.test/auth/login` and `false` for `https://evil.other.test/x`. The session is cleared (`authentication_level` 1 → 0). This gives D-97. A bare `GET /logout` without JS does not log out; it is a SPA route.
 - **Verdict.** Option F is not needed. Design deltas D-95..D-98 are recorded, and FR-7 and the spike section of the spec are updated.
+
+## Session 2026-11-16 — sdd-spec
+
+- Generated implementation-spec.md with 40 steps. Status → implementation-ready.
+- Tree: `ccr-cb8f5383-len5a9@1ea8fe5` ≡ `origin/ccr-cb8f5383-len5a9`, containing `origin/main-dev@4aa55e9`. The tree-freshness
+  procedure resolved TARGET to `main-dev` (`feature/authelia-sso` does not exist on the remote). It did **not** switch,
+  because `main-dev` has no `345-authelia-sso` directory and all SDD artifacts live on this harness branch. This is a
+  deviation from `docs/sdd/tree-freshness.md`, raised to the owner.
+- Discovery was inline: no subagent tool was available in this session. Recon line numbers were re-verified for
+  identity, agent, proto and config. None of those changed between recon `bf7f6a96` and HEAD. UI line numbers were
+  re-read.
+- Key codebase findings:
+  - Next free migrations are config `051` (`050_ui_chart_history_bars` is 341's) and identity `007`.
+  - A config seed needs `scripts/config-wiring-stored.json` regenerated on a scratch Postgres 16. The CI
+    `config-wiring-stored` job diffs it (`ci.yml:1250-1292`). Step 4 is blocked without a DB (P-03), with the CI
+    artifact as the fallback (341 precedent).
+  - The wiring checker attributes a read by `file:receiver` only (`check-config-wiring.mjs:546-551`), and a Python
+    attribute call's receiver is `ast.unparse(func.value)` (`config-wiring-py-reads.py:143-147`).
+    - So `app/sso_mode.py` reads its two namespaces through two module aliases (`agent_config`, `ui_config`).
+    - `oidcConfig.ts` reads through three snapshot bindings (`ui.values`, `agent.values`, `identity.values`).
+    - Each binding gets a `registry.receivers` entry.
+  - The `bffMetrics` typed map breaks the bare `recordAuthEvent('logout')` at `logout/route.ts:11`, so the metric
+    change, `ssoErrors.ts`, the auth verify split and the logout rewrite are one step (30).
+  - The e2e mock `getConfig` answers unknown namespaces with `platform` (`mock-backend.ts:1552-1578`). The Playwright
+    suite is `fullyParallel` with 2 CI workers, so a global SSO-mode switch would race other specs.
+  - Identity test config mocks lack `getBool` at 7 sites. Steps 8 and 9 therefore land together.
+  - There is no identity `test:db` script or CI job yet. Step 12 clones `ledger-db-test` (`ci.yml:957-1014`) and adds
+    a second DB for AC-6.
+- **Spec-level choices not settled by the design (flag at `/sdd-review impl-spec` and at the step gate):**
+  - Step 17: `_JWKS_FRESH_S = 300` (D-13 names a "fresh window" with no value).
+  - Step 17: the asymmetric allow-list `{RS,PS,ES}{256,384,512}`, with EdDSA excluded (D-2 names no members).
+  - Step 38: SSO e2e specs run in a separate `chromium-sso` project with `dependencies: ['chromium']`, driven by a
+    stub-IdP control endpoint that shares state with the mock backend. Cost: a hard `chromium` failure skips the SSO
+    project.
+  - Step 38: the stub-IdP port is to be picked at execute.
+  - Step 23: per insights.md:2948, a bare `tsc --noEmit` may false-RED on `.next/types`. The execute gate decides
+    between `next build` first or excluding `.next/types`.
+  - Step 4: the down guards the secret row on `value_encrypted IS NULL`; confirm the column name from `045`/`049`.
+  - Step 5: a migration-rerun assertion file `scripts/migration-assertions/config-authelia-sso-keys.sql` asserts the
+    re-apply notify count of 0. A fresh-DB notify count of 6 is asserted structurally (DISTINCT namespace, environment).
+- Referrer-Policy constraint (D-54): a future `no-referrer` policy would break `/api/auth/sso/start`. Step 34
+  re-records it at execute.
