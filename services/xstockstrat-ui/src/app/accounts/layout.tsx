@@ -23,7 +23,9 @@ export default function AccountsLayout({ children }: { children: React.ReactNode
       <VapidKeyProvider value={vapidPublicKey}>
         <Providers>
           <PlatformHeader segment="accounts" subNav={PLATFORM_SUBNAV.accounts} />
-          <main className="p-4 pb-20 sm:p-6 sm:pb-6">{children}</main>
+          <main tabIndex={-1} className="p-4 pb-20 sm:p-6 sm:pb-6 outline-none">
+            {children}
+          </main>
         </Providers>
       </VapidKeyProvider>
     </AgentUrlProvider>

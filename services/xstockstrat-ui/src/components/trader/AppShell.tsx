@@ -23,7 +23,9 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         }
       />
-      <main className="flex-1 pb-20 sm:pb-0">{children}</main>
+      <main tabIndex={-1} className="flex-1 pb-20 sm:pb-0 outline-none">
+        {children}
+      </main>
     </div>
   );
 }

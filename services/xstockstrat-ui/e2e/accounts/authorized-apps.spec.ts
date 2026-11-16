@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import { expectRowMenuSettled } from '../helpers/rowMenu';
 
 /**
  * E2E for the /accounts "My Authorized Apps" page (feature 051 — covers Steps 6 + 7).
@@ -119,5 +120,59 @@ test.describe('Accounts — My Authorized Apps', () => {
     const html = await page.content();
     expect(html).not.toContain('test-refresh-token');
     expect(html.toLowerCase()).not.toContain('token_hash');
+  });
+});
+
+test.describe('Row menu confirm flow (feature 350)', () => {
+  const TRIGGER = 'Actions for Claude.ai (E2E)';
+
+  async function chooseDisconnect(page: Page) {
+    await addAuthCookie(page);
+    await stubAgentHealth(page, false);
+    await page.goto('/accounts/authorized-apps');
+    await page.getByRole('button', { name: TRIGGER }).click();
+    await page.getByRole('menuitem', { name: 'Disconnect' }).click();
+  }
+
+  test('@AC-6 dismissing Disconnect closes the menu and the page answers the first click', async ({
+    page,
+  }) => {
+    await chooseDisconnect(page);
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click();
+
+    await expectRowMenuSettled(page);
+    await page.getByRole('button', { name: 'Connect a new app' }).click();
+    await expect(page.getByLabel('MCP connector URL')).toBeVisible();
+  });
+
+  test('@AC-4 confirming Disconnect moves focus to the main content when the row disappears', async ({
+    page,
+  }) => {
+    // The first list comes from the real BFF; after the revoke the list is empty.
+    let listCalls = 0;
+    await page.route(APPS_BFF, async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      listCalls += 1;
+      if (listCalls === 1) return route.fallback();
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ apps: [] }),
+      });
+    });
+    await chooseDisconnect(page);
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Confirm', exact: true })
+      .click();
+
+    await expect(page.getByText("haven't authorized any apps")).toBeVisible();
+    await expectRowMenuSettled(page);
+    await expect(page.getByRole('main')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Connect a new app' })).toBeFocused();
   });
 });

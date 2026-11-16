@@ -1,6 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { addAdminCookie, addAuthCookie } from '../helpers/auth';
 import { BROKER_ACCOUNT_HALTED, BROKER_ACCOUNT_ALPACA } from '../fixtures/accounts';
+import { expectFocusOnMarkedTrigger, expectRowMenuSettled, markTrigger } from '../helpers/rowMenu';
 
 /**
  * Feature 179 — halt indicator + admin-gated Resume on the /trader/accounts surface.
@@ -76,10 +77,6 @@ test.describe('Account halt indicator + admin Resume', () => {
 
     // In place (never a reload): the halt indicator and the Resume action are gone.
     await expect(row.getByText('Halted', { exact: true })).toHaveCount(0, { timeout: 30000 });
-    // The confirm flow leaves the row menu open (select-preventDefault), blocking the trigger click.
-    // Escape reaches the menu only once the closing dialog has left the layer stack.
-    await expect(page.getByRole('alertdialog')).toHaveCount(0);
-    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Actions for Halted Alpaca' }).click();
     await expect(page.getByRole('menuitem', { name: 'Resume' })).toHaveCount(0);
     await page.keyboard.press('Escape');
@@ -150,5 +147,178 @@ test.describe('Account halt indicator + admin Resume', () => {
     await page.getByRole('button', { name: 'Cancel' }).click();
     await expect(row.getByText('Halted', { exact: true })).toBeVisible();
     expect(resumeRequests).toBe(0);
+  });
+});
+
+test.describe('Row menu confirm flow (feature 350)', () => {
+  const HALTED_TRIGGER = 'Actions for Halted Alpaca';
+  const ALPACA_TRIGGER = 'Actions for Alpaca Paper';
+
+  async function openAccounts(page: Page, accounts: unknown[]) {
+    await page.route(LIST, fulfillAccounts(accounts));
+    await addAdminCookie(page);
+    await page.goto('/trader/accounts');
+    await expect(page.getByRole('button', { name: ALPACA_TRIGGER })).toBeVisible({
+      timeout: 30000,
+    });
+  }
+
+  async function expectOtherRowMenuOpensOnOneClick(page: Page) {
+    await page.getByRole('button', { name: ALPACA_TRIGGER }).click();
+    await expect(page.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
+  }
+
+  test('@AC-1 choosing Resume closes the row menu and shows the dialog', async ({ page }) => {
+    await openAccounts(page, [BROKER_ACCOUNT_HALTED, BROKER_ACCOUNT_ALPACA]);
+    await page.getByRole('button', { name: HALTED_TRIGGER }).click();
+    await page.getByRole('menuitem', { name: 'Resume' }).click();
+
+    await expect(page.getByRole('alertdialog', { name: 'Resume account' })).toBeVisible();
+    await expect(page.locator('[role="menu"]')).toHaveCount(0);
+  });
+
+  test('@AC-2 @AC-3 dismissing Resume leaves the page usable and focus on the trigger', async ({
+    page,
+  }) => {
+    await openAccounts(page, [BROKER_ACCOUNT_HALTED, BROKER_ACCOUNT_ALPACA]);
+    const trigger = page.getByRole('button', { name: HALTED_TRIGGER });
+    await markTrigger(trigger);
+    await trigger.click();
+    await page.getByRole('menuitem', { name: 'Resume' }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click();
+
+    await expectRowMenuSettled(page);
+    await expectFocusOnMarkedTrigger(page);
+    await expectOtherRowMenuOpensOnOneClick(page);
+  });
+
+  test('@AC-2 @AC-3 confirming Resume leaves the page usable and focus on the trigger', async ({
+    page,
+  }) => {
+    let resumed = false;
+    await page.route(LIST, async (route) => {
+      const halted = resumed ? { ...BROKER_ACCOUNT_HALTED, halted: false } : BROKER_ACCOUNT_HALTED;
+      await fulfillAccounts([halted, BROKER_ACCOUNT_ALPACA])(route);
+    });
+    await addAdminCookie(page);
+    await page.goto('/trader/accounts');
+    const row = page.getByTestId('account-row-halted-001');
+    await expect(row.getByText('Halted', { exact: true })).toBeVisible({ timeout: 30000 });
+
+    const trigger = page.getByRole('button', { name: HALTED_TRIGGER });
+    await markTrigger(trigger);
+    await trigger.click();
+    await page.getByRole('menuitem', { name: 'Resume' }).click();
+    resumed = true;
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Confirm', exact: true })
+      .click();
+
+    await expect(row.getByText('Halted', { exact: true })).toHaveCount(0, { timeout: 30000 });
+    await expectRowMenuSettled(page);
+    await expectFocusOnMarkedTrigger(page);
+    await expectOtherRowMenuOpensOnOneClick(page);
+  });
+
+  test('@AC-4 confirming Remove moves focus to the main content when the trigger disappears', async ({
+    page,
+  }) => {
+    let removed = false;
+    await page.route(LIST, async (route) => {
+      const account = removed
+        ? { ...BROKER_ACCOUNT_ALPACA, isActive: false }
+        : BROKER_ACCOUNT_ALPACA;
+      await fulfillAccounts([account])(route);
+    });
+    await addAdminCookie(page);
+    await page.goto('/trader/accounts');
+    const trigger = page.getByRole('button', { name: ALPACA_TRIGGER });
+    await expect(trigger).toBeVisible({ timeout: 30000 });
+
+    await trigger.click();
+    await page.getByRole('menuitem', { name: 'Remove' }).click();
+    removed = true;
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Confirm', exact: true })
+      .click();
+
+    await expect(trigger).toHaveCount(0, { timeout: 30000 });
+    await expectRowMenuSettled(page);
+    await expect(page.getByRole('main')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Add account' })).toBeFocused();
+  });
+
+  test('@AC-6 dismissing Remove closes the menu and the page answers the first click', async ({
+    page,
+  }) => {
+    await openAccounts(page, [BROKER_ACCOUNT_ALPACA]);
+    await page.getByRole('button', { name: ALPACA_TRIGGER }).click();
+    await page.getByRole('menuitem', { name: 'Remove' }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click();
+
+    await expectRowMenuSettled(page);
+    await page.getByRole('button', { name: 'Add account' }).click();
+    await expect(page.getByRole('alertdialog', { name: 'Add account' })).toBeVisible();
+  });
+
+  test('@AC-10 keyboard: focus stays on the dialog while the row menu finishes closing', async ({
+    page,
+  }) => {
+    await openAccounts(page, [BROKER_ACCOUNT_ALPACA]);
+    await page.getByRole('button', { name: ALPACA_TRIGGER }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('menuitem', { name: 'Edit keys' })).toBeFocused();
+
+    await page.evaluate(() => {
+      const w = window as unknown as { __menuCloseFocusRan?: boolean; __focusLog?: string[] };
+      const name = (n: EventTarget | null) =>
+        n instanceof Element
+          ? (n.getAttribute('aria-label') ?? n.textContent ?? n.tagName)
+          : 'none';
+      w.__focusLog = [];
+      // Radix dispatches this on the menu element itself, after it is detached; it does not bubble.
+      document
+        .querySelector('[role="menu"]')
+        ?.addEventListener('focusScope.autoFocusOnUnmount', () => (w.__menuCloseFocusRan = true));
+      let armed = false;
+      for (const type of ['focusin', 'focusout'] as const) {
+        document.addEventListener(
+          type,
+          (e) => {
+            const fe = e as FocusEvent;
+            if (armed)
+              w.__focusLog?.push(`${type} ${name(fe.target)} <- ${name(fe.relatedTarget)}`);
+            else if (type === 'focusin' && (fe.target as Element).closest('[role="alertdialog"]'))
+              armed = true;
+          },
+          true,
+        );
+      }
+    });
+
+    await page.keyboard.press('End');
+    await expect(page.getByRole('menuitem', { name: 'Remove' })).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const dialog = page.getByRole('alertdialog', { name: 'Deregister account' });
+    const cancel = dialog.getByRole('button', { name: 'Cancel', exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(cancel).toBeFocused();
+    await page.waitForFunction(
+      () => (window as unknown as { __menuCloseFocusRan?: boolean }).__menuCloseFocusRan === true,
+    );
+    expect(
+      await page.evaluate(() => (window as unknown as { __focusLog?: string[] }).__focusLog),
+    ).toEqual([]);
+    await expect(cancel).toBeFocused();
   });
 });

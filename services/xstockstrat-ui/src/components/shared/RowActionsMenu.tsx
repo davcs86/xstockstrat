@@ -43,10 +43,8 @@ export interface RowAction {
 }
 
 /**
- * Canonical three-dots row-actions menu — an `EllipsisVertical` ghost trigger over a dropdown of
- * `actions`, mirroring the strategies-list actions cell so every table's row menu looks the same.
- * A destructive action carrying a `confirm` routes through a shared `AlertDialog`; the dialog is a
- * sibling of the dropdown (not nested inside it) so it survives the menu closing on select.
+ * A confirm item must let the menu close on select (never `preventDefault`), and the dialog must
+ * return focus to the row's trigger, or to the enclosing `<main>` once the trigger is gone.
  */
 export function RowActionsMenu({
   actions,
@@ -63,13 +61,26 @@ export function RowActionsMenu({
   testId?: string;
 }) {
   const [pending, setPending] = React.useState<RowAction | null>(null);
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const mainRef = React.useRef<HTMLElement | null>(null);
+  const skipMenuCloseFocus = React.useRef(false);
+
+  React.useLayoutEffect(() => {
+    const trigger = triggerRef.current;
+    mainRef.current = trigger?.closest('main') ?? null;
+    return () => {
+      if (trigger && document.activeElement === trigger) {
+        mainRef.current?.focus({ preventScroll: true });
+      }
+    };
+  }, []);
 
   if (actions.length === 0) return null;
 
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        <DropdownMenuTrigger asChild ref={triggerRef}>
           <Button
             type="button"
             variant="ghost"
@@ -81,18 +92,23 @@ export function RowActionsMenu({
             <EllipsisVertical className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align={align} className="min-w-40">
+        <DropdownMenuContent
+          align={align}
+          className="min-w-40"
+          onCloseAutoFocus={(event) => {
+            if (!skipMenuCloseFocus.current) return;
+            skipMenuCloseFocus.current = false;
+            event.preventDefault();
+          }}
+        >
           {actions.map((action) => (
             <DropdownMenuItem
               key={action.label}
               variant={action.destructive ? 'destructive' : 'default'}
               disabled={action.disabled}
-              onSelect={(e) => {
+              onSelect={() => {
                 if (action.confirm) {
-                  // Keep the dialog mounted: prevent the default select→close from racing the
-                  // AlertDialog opening, then defer the open to the next tick so the dropdown's
-                  // own close/focus-return finishes first.
-                  e.preventDefault();
+                  skipMenuCloseFocus.current = true;
                   setPending(action);
                 } else {
                   action.onSelect();
@@ -112,7 +128,14 @@ export function RowActionsMenu({
           if (!open) setPending(null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            const trigger = triggerRef.current;
+            const target = trigger?.isConnected && !trigger.disabled ? trigger : mainRef.current;
+            target?.focus({ preventScroll: true });
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>{pending?.confirm?.title ?? 'Are you sure?'}</AlertDialogTitle>
             <AlertDialogDescription>{pending?.confirm?.description}</AlertDialogDescription>

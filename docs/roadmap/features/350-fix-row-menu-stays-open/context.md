@@ -94,3 +94,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap findings (file-level, no config/proto/migration):
   - `src/app/accounts/authorized-apps/page.tsx` vs **345-authelia-sso** (implementation-ready, not executed): 345 moves the page body into a new `AuthorizedAppsList.tsx` and makes `page.tsx` a server component. Whichever lands second must carry the other's change; 350 lands first unless 345 is executed meanwhile. No merge-order row written (not a FAIL-level overlap) — reported to the operator at the integration PR.
   - `e2e/config-ui/templates.spec.ts` (339), `src/components/trader/AppShell.tsx` (344), `docs/patterns/ui-ux-governance.md` (342): all `code-completed`; text-level only.
+
+## Session 2026-11-16 — sdd-execute (sequential)
+
+- Mode entry and the per-feature up-front confirm (sequential-mode §5.1b/§5.4) were not asked: the operator's handover names `/sdd-execute fix-row-menu-stays-open sequential` and gives standing authorization for checkpoints that only report progress (authorization reference: the /sdd-triage session entry above). Checkpoint reports are written here and in the PR; operator-reserved gates were already answered (design, new scenarios, promotion) or remain (merge).
+- Re-spec gate: directive none; the spec was generated on this tree minutes earlier and only its Verification blocks were hardened before the loop (impl-spec review entry). No step mismatch.
+- Tooling setup (steps 1–9): node v24 ✓ (`/opt/node24/bin` first on PATH) · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile` ✓ · Chromium ✓ (pre-installed, `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`) · Docker e2e image not attempted (recorded fallback from the handover: host-native production build).
+- Tree at loop start: `feature/fix-row-menu-stays-open@dcb267aa` ≡ origin, `origin/main-dev@78ab5cac` merged.
+
+### Step 1 — service: `RowActionsMenu` closes on select and returns focus; focusable `<main>` [done]
+- Unit with Step 2. Confirm items no longer `preventDefault`; one-shot `skipMenuCloseFocus` on the menu's `onCloseAutoFocus`; the dialog's `onCloseAutoFocus` focuses the trigger or the enclosing `<main>`; layout-effect cleanup moves focus to `<main>` when the focused trigger unmounts; the four segment `<main>` got `tabIndex={-1}` + `outline-none`. Doc comment rewritten (2 lines); the "defer to the next tick" comment deleted.
+- Files modified: `services/xstockstrat-ui/src/components/shared/RowActionsMenu.tsx`, `src/components/trader/AppShell.tsx`, `src/components/insights/AppShell.tsx`, `src/app/accounts/layout.tsx`, `src/app/config-ui/layout.tsx`
+- Deviations: none
+
+### Step 2 — test: shared settle helper; accounts, authorized-apps and templates confirm flows; keyboard guard [done]
+- Unit with Step 1. New `e2e/helpers/rowMenu.ts`; feature-350 describe blocks in three specs; the feature-179 `@AC-3` workaround (comment, dialog wait, Escape) removed.
+- RED on the pre-unit tree (production build, 9 failed / 0 passed):
+  - AC-1 accounts Resume — `[role="menu"]` count: expected 0, received 1.
+  - AC-2/AC-3 Resume dismiss and confirm — settle helper, `[role="menu"]` expected 0, received 1.
+  - AC-4 accounts Remove and authorized-apps Disconnect — `expect(main).toBeFocused()`: received inactive.
+  - AC-6 accounts Remove, authorized-apps Disconnect, templates Retire (dismiss) — `[role="menu"]` expected 0, received 1.
+  - AC-10 — `page.waitForFunction` timed out (the menu never closes, so its close-focus never runs): RED for that reason only, as the spec states.
+- GREEN after Step 1 (production build): the three specs `21 passed`; neighbours (`account-selector`, `offline-accounts`, `signal-sources`, `theme-bundle`) `43 passed`.
+- D-17 mutation (guard branch deleted): production build `5 failed`, each on `expect(received).toEqual([])` with `"focusout Cancel <- Actions for Alpaca Paper", "focusin Cancel <- none"`; dev server `5 failed` (4 on that assertion, 1 on a `page.goto` compile timeout). Restored: production build `5 passed`; dev server `4 passed, 1 failed` (same first-navigation compile timeout). `lint`, `tsc --noEmit`, `format:check`, `lint:dup` exit 0.
+- Open risk closed: the trigger ref reaches the DOM button (AC-3 green) — the React 19 ref dependency holds today.
+- Files modified: `services/xstockstrat-ui/e2e/helpers/rowMenu.ts`, `e2e/trader/account-resume.spec.ts`, `e2e/accounts/authorized-apps.spec.ts`, `e2e/config-ui/templates.spec.ts`
+- Deviations: Playwright invoked through the prebuilt path; dev-server repeats lose the first run to route compilation (Deviation Log).
