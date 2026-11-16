@@ -18,7 +18,9 @@ Paths are relative to the repo root. Short forms used below: `marketdata/` =
 The work follows `design.md` § 7: the shared pacing core first (Steps 1-2), then the marketdata client
 and its loops (Steps 3-6), then the trading client and the trading service code around it (Steps 7-10),
 and the config seed last (Steps 11-12). The core comes first because both clients import it. The seed
-comes last so that both readers already exist when `check-config-wiring.mjs --final` runs. Trading's
+comes last so that both readers already exist when it lands; until then Steps 3 and 7 baseline their
+unseeded read in `scripts/config-wiring.json` and Step 11 removes both entries. Three service/test
+pairs are atomic units (1+2, 5+6, 9+10); the other three (3/4, 7/8, 11/12) are ordinary pairs. Trading's
 service changes (Step 9) come after the trading client (Step 7) because their tests drive a real
 `broker.NewClient` and because AC-36 only fails once the client retries.
 
@@ -40,9 +42,10 @@ a detail. None changes the Chosen Approach.
    deviation as the earlier sessions in `context.md`).
 2. **Discovery was done inline**, not by `codebase-discovery` subagents (this session cannot spawn
    them). `recon.md` evidence was reused and every cited line was re-read after the `main-dev` merge.
-3. **All six service/test pairs are atomic units** (`**Lands with**`), not only the three `design.md`
-   § 7 marks. Basis: `step-constraints.md` §C row 3 and the feature-341 precedent — a Go test that names
-   a symbol its service step creates cannot give a behavioral RED unless both land together.
+3. **Three of the six service/test pairs are atomic units** (1+2, 5+6, 9+10), the three where a
+   `step-constraints.md` §C trigger applies (copy-gate group naming the test file, signature change, new
+   interface method). Pairs 3/4, 7/8 and 11/12 are not units: the earlier step passes its own
+   Verification alone and the RED is captured per `tdd-gate.md`.
 4. **Step 11 is category `migration`** (reviewers: DBA + `xstockstrat-config` owner), where the design
    table says "config". Precedent: feature 341 Step 7. This adds the DBA to the reviewer snapshot.
 5. **`pace_test.go` is an in-package test** (`package alpacapace`). An external test package would
@@ -63,12 +66,23 @@ a detail. None changes the Chosen Approach.
 10. **Guards.** `design.md` lists AC-2, AC-7, AC-20, AC-24 and AC-36 as passing on today's code. Read
     against the code, AC-8, AC-9, AC-10 and AC-11 also describe behavior today's code already has.
     Each test step names the mutant that turns its guards red (ledger `insights.md` ~L4363).
-11. **Config-wiring mode.** Steps 3 and 7 run the step-time check (`--keys`), where a reader without a
-    seed is `PENDING`; Step 11 runs `--final`. No temporary `scripts/config-wiring.json` baseline entry
-    is added (feature 341 needed one because it seeded before it read).
-12. **Not done here:** the pre-existing `ReplaceOrder` defect report (intent inserted before
-    `validateTIF`). `.claude/skills/sdd-qa/reference/defect-filing.md` requires the user to confirm a
-    report before it is written. It stays an Open Thread in `context.md`.
+11. **Config-wiring mode.** CI runs `check-config-wiring.mjs --final` on every PR
+    (`.github/workflows/ci.yml:1239-1240`), and an unseeded read fails it
+    (`scripts/check-config-wiring.mjs:629-631`). Steps 3 and 7 therefore each add one temporary
+    `findings` entry to `scripts/config-wiring.json`
+    (`{"namespace": "marketdata", "key": "alpaca.adaptive_rate_limit_enabled", "kind": "read-unseeded", "owner": "feature 347 alpaca-adaptive-rate-limit"}`
+    and the `trading` / `broker.adaptive_rate_limit_enabled` equivalent). Step 11 removes both, so a
+    stale entry never reaches `--final`. Precedent: feature 341 Step 7 / Step 11.
+12. **Filed separately:** the pre-existing `ReplaceOrder` defect (intent inserted before `validateTIF`)
+    is recorded in `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md`
+    (operator-confirmed, 2026-11-16). It is not fixed by this feature.
+13. **The marketdata kill-switch reader is a named helper**, `alpacaAdaptiveRateLimit(cfgWatcher)` in
+    `cmd/server/main.go`, where `design.md` § 2 reads the key inline in the settings closure. A helper
+    is the only way a test can build a config snapshot and assert the real reader returns the seeded
+    value. Precedent: `fundamentalsProvider(cfgWatcher)` (`marketdata/cmd/server/main.go:215`).
+14. **Test names.** Every scenario test is named `Test<Subject>_F347_AC<N>`, ending in the scenario
+    number (a Go name cannot hold the hyphen), so `-run 'F347_AC(…)\b'` selects only this feature's
+    tests. A Scenario Outline (AC-13, AC-21) is one test with one subtest per Examples row.
 
 ## Scenario Coverage (C-15)
 
@@ -96,29 +110,30 @@ the client or service step listed beside it.
 - Steps 1+2 land together: the new `check-watcher-copies` groups name `pace_test.go`, which Step 2
   creates, and `scripts/tests/test_check_watcher_copies.py::test_the_real_tree_is_clean` reads the real
   tree (§C row 3). RED is captured with `pace.go` present as signatures returning zero values.
-- Steps 3+4 land together: `export_test.go` and the new tests name fields Step 3 creates (§C row 3).
-  RED is captured with the new fields present and `do` still running today's single attempt.
 - Steps 5+6 land together: Step 5 changes three method signatures in a package with `_test.go` files;
   the 11 existing call sites are edited in Step 6 (§C row 1).
-- Steps 7+8 land together: `export_test.go`, the client tests and the budget table test name symbols
-  Step 7 creates (§C row 3). RED is captured with `ErrRateLimited`, `RateLimitBudget`,
-  `rateLimitBudget` (returning 0) and the seams present and `do` unchanged.
 - Steps 9+10 land together: the new `OrderIntentRepository` method breaks the compile of
   `fakeReconciliationOrderIntentRepo` (`trading/internal/service/trading_reconciliation_test.go:865`),
   which Step 10 repairs (§C row 1).
-- Steps 11+12 land together: Step 12 reads the migration files Step 11 creates (precedent 341 Steps 7+8).
+- Steps 3/4, 7/8 and 11/12 are ordinary service/test pairs, not units: each earlier step passes its
+  own Verification alone. Their RED is captured per `tdd-gate.md` — Step 4 with Step 3's fields and
+  seams present and `do` still a single attempt; Step 8 with `ErrRateLimited`, `RateLimitBudget`,
+  `rateLimitBudget` (returning 0) and the seams present and `do` unchanged; Step 12 with Step 11's
+  files absent.
 - Step 3 requires Step 1. Step 7 requires Step 1. Step 5 requires Step 3 only for AC-33's meaning (a
   rate-limited fetch is an error); it compiles without it.
 - Step 9 requires Step 7 (`broker.ErrRateLimited`). Step 10 requires Step 8 (`trading_rate_limit_test.go`
   exists) and Step 7 (AC-36 fails only once the client retries).
 - Step 11 requires Steps 3 and 7: `node scripts/check-config-wiring.mjs --final` needs both readers.
-  Until Step 11 lands, `--final` reports two `read-unseeded` findings by design; Steps 3 and 7 use the
-  step-time mode.
+  Steps 3 and 7 baseline their `read-unseeded` finding in `scripts/config-wiring.json`; Step 11 removes
+  both.
+- The trading `CLAUDE.md` key row and default land in Step 9, before Step 11 seeds the key.
 - Step 11 needs a reachable Postgres 16 plus `psql` and `migrate` on `PATH` to **generate**
   `scripts/config-wiring-stored.json` (`scripts/config-wiring-stored.py:1-6`). This is artifact
   generation, not verification. On the spec-time sandbox `psql` is present and `migrate` is not; the CI
-  job builds `scripts/Dockerfile.migrate` for it (`.github/workflows/ci.yml:1274-1282`). If the set
-  cannot be generated the step is blocked (P-03); the JSON is never edited by hand.
+  job builds `scripts/Dockerfile.migrate` for it (`.github/workflows/ci.yml:1274-1282`) and then checks
+  the fresh heal dry-run (`:1284-1290`); Step 11 gives both commands. If the set cannot be generated the
+  step is blocked (P-03); the JSON is never edited by hand.
 - **Volatile at merge:** config `051` is the next free number on this tree
   (`ls config/migrations | tail -1` → `050_ui_chart_history_bars.up.sql`). Features 343 and 330 still
   name `050` on their branches (`docs/roadmap/features/merge-order.md:413-417`). Re-derive the number at
@@ -182,7 +197,7 @@ the client or service step listed beside it.
 6. `WarnOnce`: true the first time it is called for `k` in a throttled window ending at `until`, false for later calls until `now` passes that `until`.
 7. Copy the finished file byte for byte to `trading/internal/alpacapace/pace.go`.
 8. `scripts/check-watcher-copies.py`: add two groups to `COPIES` — `"go-alpacapace"` (the two `pace.go` paths) and `"go-alpacapace-test"` (the two `pace_test.go` paths). Update the one-line module docstring to name the pacing core.
-9. `.jscpd.json`: add the two `pace.go` paths to `ignore`, after the `watchcore.go` entries.
+9. `.jscpd.json`: add the two `pace.go` paths to `ignore`, after line 37 (the marketdata `watchcore.go` entry).
 10. `docs/patterns/dry-guard-rail.md`: add one exemption bullet after the watcher-core bullet (`:87-99`) naming the four files, the reason (each Go module builds on its own; R-1 rejected a shared module) and the gate (`scripts/check-watcher-copies.py`, groups `go-alpacapace` and `go-alpacapace-test`). End it with "This exemption names only these files."
 11. Comments: constraints only, two lines at most (root `CLAUDE.md` § How to Act #5).
 
@@ -211,7 +226,7 @@ grep -n "alpacapace" .jscpd.json docs/patterns/dry-guard-rail.md scripts/check-w
 **Codebase Evidence**:
 - `scripts/tests/test_check_watcher_copies.py` loads the script with `load_script("check-watcher-copies.py")` and already asserts drift, a missing copy and group independence generically over `wc.COPIES`; `test_the_real_tree_is_clean` runs `wc.problems` on the real tree.
 - Scripts tests run with `cd scripts && uv run --extra dev pytest` (`docs/patterns/script-tooling.md:33`); CI job at `.github/workflows/ci.yml:862-894`.
-- `internal/alpacapace` is a measured package: the coverage filter excludes only `cmd|handler|repository|telemetry|service` (`.github/workflows/ci.yml:376`).
+- `internal/alpacapace` is a measured package: the coverage filter excludes only `cmd|handler|repository|telemetry|service` (`.github/workflows/ci.yml:374`).
 - C-13: the tests use header values and instants only; no domain literal gets a second consumer.
 
 **Lands with**: `Step 1`
@@ -262,7 +277,7 @@ grep -c "^func Test" services/xstockstrat-marketdata/internal/alpacapace/pace_te
 - `services/xstockstrat-marketdata/cmd/server/main.go` — modify
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
 - `services/xstockstrat-marketdata/docs/context-constitution.md` — modify
-- `services/xstockstrat-marketdata/docs/alpaca-integration.md` — modify
+- `scripts/config-wiring.json` — modify (one temporary `read-unseeded` findings entry)
 
 **Reviewers**: `xstockstrat-marketdata` owner — OHLCV ingestion integrity, Alpaca feed idempotency
 
@@ -272,13 +287,12 @@ grep -c "^func Test" services/xstockstrat-marketdata/internal/alpacapace/pace_te
 - Eight `c.do(` call sites, all `GET` with a nil body and a fresh request: `:273`, `:336`, `:389`, `:431`, `:471`, `:519`, `:576`, `:623`. Callers format a non-200 as `"alpaca bars %d: %s"` (`:283`), `"alpaca quote %d: %s"` (`:399`) and so on; no call site changes.
 - Telemetry: outcome values `marketdata/internal/telemetry/otel.go:340-350` (`VendorHTTP429`, `VendorCtx`, `VendorThrottle`, `VendorTransport`); `RecordVendorRequest` `:398-406` forces `ctx` when the passed context has ended (`:399-401`) and records a duration only for a non-zero `sentAt` (`:403-405`).
 - Settings closure: `marketdata/cmd/server/main.go:82-99`, `RateLimitRPS: int(cfgWatcher.GetInt("backfill.rate_limit_rps", 200))` at `:94`. The watcher is built for namespace `marketdata` (`:64`).
-- Config-wiring receiver: `"services/xstockstrat-marketdata/cmd/server/main.go:cfgWatcher": "marketdata"` (`scripts/config-wiring.json:113`).
+- Config-wiring receiver: `"services/xstockstrat-marketdata/cmd/server/main.go:cfgWatcher": "marketdata"` (`scripts/config-wiring.json:113`). Baseline entries live in the `findings` array (`scripts/config-wiring.json:5-12`, shape `{"namespace", "key", "kind", "owner"}`); CI runs `--final` on every PR (`.github/workflows/ci.yml:1239-1240`) and an unbaselined unseeded read fails it (`scripts/check-config-wiring.mjs:629-631`).
+- Testable-reader precedent: `func fundamentalsProvider(cfgWatcher *config.Watcher) func() string` (`marketdata/cmd/server/main.go:215`), a `main.go` helper that takes the watcher as a parameter named `cfgWatcher`.
 - Explicit-true bool default precedent: `s.fundCfg.GetBool("edgar.enabled", true)` (recon § Patterns to REUSE).
-- Docs: the key row `marketdata/CLAUDE.md:62`; MARKETDATA-4 at `marketdata/docs/context-constitution.md:18`; the REST bullet at `marketdata/docs/alpaca-integration.md:3`.
+- Docs: the key row `marketdata/CLAUDE.md:62`; MARKETDATA-4 at `marketdata/docs/context-constitution.md:18`. (`marketdata/docs/alpaca-integration.md` is updated in Step 5.)
 - **Not found** — a clock, sleep or jitter seam, a logger, or any retry in `internal/alpaca` (recon § Risks).
-- Config-key contract (C-05): namespace `marketdata`; key `alpaca.adaptive_rate_limit_enabled`; `value_type` `bool`; code default `true`; reader `services/xstockstrat-marketdata/cmd/server/main.go:main` (the `alpaca.NewLiveClient` settings closure); seed: Step 11; live mechanism: the `WatchConfig`-backed watcher, read on every Alpaca request, so a `SetConfig` applies on the next call.
-
-**Lands with**: `Step 4`
+- Config-key contract (C-05): namespace `marketdata`; key `alpaca.adaptive_rate_limit_enabled`; `value_type` `bool`; code default `true`; reader `services/xstockstrat-marketdata/cmd/server/main.go:alpacaAdaptiveRateLimit` (called from the `alpaca.NewLiveClient` settings closure in `main`); seed: Step 11; live mechanism: the `WatchConfig`-backed watcher, read on every Alpaca request, so a `SetConfig` applies on the next call.
 
 **TDD**: `red-green required`
 
@@ -296,19 +310,19 @@ grep -c "^func Test" services/xstockstrat-marketdata/internal/alpacapace/pace_te
    - A wait that ends early records one point with a zero `sentAt`, passed as `VendorThrottle` on the **caller's** context, so it reads `ctx` when that context ended and `throttle` otherwise (D-16). A wait that completes records nothing extra.
    - Error: `fmt.Errorf("alpaca %s rate limited by %s: %w", op, host, cause)` where `cause` is the context error or the static limiter's error. At the 90 s bound there is no cause and the caller's context is live: return `fmt.Errorf("alpaca %s rate limited by %s", op, host)`.
    - One WARN per throttled window per host, gated by `WarnOnce`: `slog.WarnContext(ctx, "alpaca rate limit: throttled", "host", host, "wait_ms", wait.Milliseconds())`. Never log or label the API key.
-5. `main.go`: add `AdaptiveRateLimit: cfgWatcher.GetBool("alpaca.adaptive_rate_limit_enabled", true),` to the settings closure after `:94`.
+5. `main.go`: add `func alpacaAdaptiveRateLimit(cfgWatcher *config.Watcher) bool { return cfgWatcher.GetBool("alpaca.adaptive_rate_limit_enabled", true) }` (the parameter keeps the name `cfgWatcher` so the `main.go:cfgWatcher` receiver in `scripts/config-wiring.json:113` still attributes the read). In the settings closure after `:94` add `AdaptiveRateLimit: alpacaAdaptiveRateLimit(cfgWatcher),`.
 6. `marketdata/CLAUDE.md`: add a row for `alpaca.adaptive_rate_limit_enabled` (bool, `true`, explicit-true default, read live per request, off = exactly the pre-feature client, seeded by the `alpaca_adaptive_rate_limit_keys` config migration); reword the `backfill.rate_limit_rps` row (`:62`) as a ceiling ("the effective rate is the lower of this and what Alpaca's headers allow; `0` disables only this ceiling"); add a short "Adaptive rate limit — fixed invariants" paragraph listing the constants of `product-spec.md` § Fixed Invariants that apply to marketdata (window 60 s, slack 5 s, low-water ratio 10, backoff 1 s to 8 s, jitter under 500 ms, 90 s no-deadline bound, 1 s minimum attempt); in § Observability note that an Alpaca attempt answered 429 is its own `http_429` point and an early-ended wait is one `ctx` or `throttle` point with no duration.
 7. `marketdata/docs/context-constitution.md` MARKETDATA-4 (`:18`): add that `do()` is also the only place header pacing and the 429 retry run, and refresh its `(~L145)` pointer.
-8. `marketdata/docs/alpaca-integration.md`: one bullet after the REST bullet describing the adaptive behavior, the kill switch and "marketdata waits to the request deadline; an exhausted window holds an interactive quote or price fetch for its request budget".
+8. `scripts/config-wiring.json`: append one entry to the `findings` array — `{"namespace": "marketdata", "key": "alpaca.adaptive_rate_limit_enabled", "kind": "read-unseeded", "owner": "feature 347 alpaca-adaptive-rate-limit"}`. It is temporary: Step 11 removes it when the seed lands.
 9. Broker coverage: this is the marketdata data-API client; `internal/alpaca/stream.go`, FMP, Finnhub and EDGAR are not touched (FR-7). No env var, port or outbound gRPC call is added, so header propagation is unaffected.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go test ./internal/alpaca/... -race -count=1
-cd ../.. && node scripts/check-config-wiring.mjs --keys marketdata.alpaca.adaptive_rate_limit_enabled   # exit 0; one "PENDING: …:read-unseeded" line
-node scripts/check-config-wiring.mjs --doc-check                                                        # exit 0
-grep -n "httpClient.Do" services/xstockstrat-marketdata/internal/alpaca/client.go                       # only inside do / its attempt helper (MARKETDATA-4)
-grep -n "adaptive_rate_limit_enabled" services/xstockstrat-marketdata/cmd/server/main.go services/xstockstrat-marketdata/CLAUDE.md
+cd ../.. && node scripts/check-config-wiring.mjs --final      # exit 0: the read-unseeded finding is baselined
+node scripts/check-config-wiring.mjs --doc-check              # exit 0
+grep -n "httpClient.Do" services/xstockstrat-marketdata/internal/alpaca/client.go     # only inside do / its attempt helper (MARKETDATA-4)
+grep -n "alpacaAdaptiveRateLimit\|adaptive_rate_limit_enabled" services/xstockstrat-marketdata/cmd/server/main.go services/xstockstrat-marketdata/CLAUDE.md scripts/config-wiring.json
 ```
 
 ---
@@ -321,6 +335,7 @@ grep -n "adaptive_rate_limit_enabled" services/xstockstrat-marketdata/cmd/server
 - `services/xstockstrat-marketdata/internal/alpaca/export_test.go` — create
 - `services/xstockstrat-marketdata/internal/alpaca/client_test.go` — modify
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go` — modify
+- `services/xstockstrat-marketdata/cmd/server/main_test.go` — modify
 
 **Reviewers**: `xstockstrat-marketdata` owner — Alpaca feed idempotency
 
@@ -329,9 +344,9 @@ grep -n "adaptive_rate_limit_enabled" services/xstockstrat-marketdata/cmd/server
 - **Not found** — `marketdata/internal/alpaca/export_test.go` (`ls marketdata/internal/alpaca` → `client.go client_test.go stream.go stream_metrics_test.go stream_test.go`). It is new.
 - FMP: both test files are `package fmp`; `gatewayClient(rt, rps, dailyCap, now)` at `marketdata/internal/fmp/fmp_gateway_test.go:28-36`; the refund assertion pattern is `c.BudgetSnapshot()` in `TestGateway_BudgetRefundOn503_AC4` (`fmp_gateway_test.go:71-85`); `recordingRT` returns an empty header (`fmp_client_test.go:36-46`), so a 429 carrying `X-RateLimit-Reset` needs a local `RoundTripper`.
 - Op labels: `/v2/stocks/<sym>/quotes/latest` → `quotes_latest`, `/bars` → `bars`, `/assets` → `assets` (`client.go:171-185`).
+- Config-reader test precedent: `TestFundamentalsSource_ProviderSwitchIsLive_AC7` (`marketdata/cmd/server/main_test.go:193`) builds `config.MustSnapshotWatcher("marketdata", …)` (`:197`) and calls a `main.go` helper that takes `cfgWatcher` (`main.go:215`). `cmd` is excluded from the coverage threshold (`.github/workflows/ci.yml:374`).
+- Existing tests in this service already carry `_AC<n>` names from other features (e.g. `TestDo_RecordsOKOutcome_AC13`), so this feature's tests use the `_F347_AC<N>` suffix to be selectable on their own.
 - C-13: the tests use header values, symbols and instants as scenario one-offs; no domain literal gets a second consumer, so nothing moves to `internal/testdata/`.
-
-**Lands with**: `Step 3`
 
 **TDD**: `red-green required`
 
@@ -340,7 +355,7 @@ grep -n "adaptive_rate_limit_enabled" services/xstockstrat-marketdata/cmd/server
 **Instructions**:
 1. `export_test.go` (`package alpaca`): setters for the `now`, `sleep` and `jitter` seams and for `httpClient.Transport`. Nothing else is exported.
 2. In `client_test.go` add small local helpers: a fake clock with a recording sleep that advances it (and a variant that records without advancing, for "issued at the same moment"); a `RoundTripper` that keeps the request's URL host and answers from a script, recording each attempt's host, path and clock time; a WARN recorder installed with `slog.SetDefault` and restored in `t.Cleanup`.
-3. One test per scenario, named with its `AC-N`. Clients are built with `NewLiveClient` and `Settings{AdaptiveRateLimit: true, …}` unless stated. `DataURL` is `https://data.alpaca.markets` and `BaseURL` is `https://paper-api.alpaca.markets` behind the scripted transport.
+3. One test per scenario, named `Test<Subject>_F347_AC<N>` with the name ending in the scenario number (a Go name cannot hold the hyphen). AC-21 is one test with two subtests. Clients are built with `NewLiveClient` and `Settings{AdaptiveRateLimit: true, …}` unless stated. `DataURL` is `https://data.alpaca.markets` and `BaseURL` is `https://paper-api.alpaca.markets` behind the scripted transport.
    - **AC-1**: a first 200 carries `Limit 200`, `Remaining 0`, `Reset now+3 s`; a bars request with a 30 s deadline is sent no earlier than the reset on the client clock and returns bars.
    - **AC-2** (guard): data host recorded exhausted, trading API host recorded `Remaining 150`; `ListAssets` is sent with no sleep. Red under a "key by credential only" mutant.
    - **AC-3**: state `200 / 4 / now+4 s`; four bars requests at the same clock instant (non-advancing sleep), each with a 30 s deadline: recorded waits are none, ≥ 1 s, ≥ 2 s, ≥ 3 s, each under 4 s.
@@ -356,15 +371,18 @@ grep -n "adaptive_rate_limit_enabled" services/xstockstrat-marketdata/cmd/server
    - **AC-22**: `RateLimitRPS 0` with state `200 / 0 / now+3 s`: the bars request is sent no earlier than the reset.
    - **AC-24** (guard): state `200 / 4 / now+4 s`; after one bars request with a 30 s deadline, `GetLatestQuote("NVDA")` with a 500 ms deadline is sent with no sleep and succeeds. Red under a "refuse a caller that cannot wait for its slot" mutant (R-9).
    - Also pin the static-ceiling refusal: with `RateLimitRPS 1`, adaptive on and an already-expired deadline on the second call, the error contains `rate limited` and the host and the point reads `ctx`.
-4. **AC-11** in `fmp_client_test.go` (guard): a local `RoundTripper` answers a 429 with `X-RateLimit-Reset` 2 s ahead; with `gatewayClient(rt, 0, 3, nil)` one `FetchSector` call returns an error, the transport saw exactly 1 request and `BudgetSnapshot()` reports `used == 0`. Red if a retry is ever added to the FMP client.
-5. RED: with Step 3's fields and seams present and `do` still a single attempt, every non-guard test fails on an assertion (attempt counts, wait times, points or error text). Record the guards as "red N/A — pins unchanged behavior" with their mutant.
-6. Real-time cost of this step's tests: about 2.5 s (AC-6), 2 s (AC-7) and 3.5 s (AC-21); everything else runs on the fake clock.
+4. **AC-11** in `fmp_client_test.go` (guard, named with the same `_F347_AC11` suffix): a local `RoundTripper` answers a 429 with `X-RateLimit-Reset` 2 s ahead; with `gatewayClient(rt, 0, 3, nil)` one `FetchSector` call returns an error, the transport saw exactly 1 request and `BudgetSnapshot()` reports `used == 0`. Red if a retry is ever added to the FMP client.
+5. Config-key wiring, in `main_test.go`: add `TestAlpacaAdaptiveRateLimit_ReadsSeededKey_347`. Build `config.MustSnapshotWatcher("marketdata", …)` with `alpaca.adaptive_rate_limit_enabled` as a bool ConfigValue `true` and assert `alpacaAdaptiveRateLimit` returns true (this is the value migration 051 seeds). Repeat with `false`, which must return false, and with the key absent, which must return true (the code default).
+6. RED: with Step 3's fields and seams present and `do` still a single attempt, every non-guard test fails on an assertion (attempt counts, wait times, points or error text). Record the guards as "red N/A — pins unchanged behavior" with their mutant.
+7. Real-time cost of this step's tests: about 2.5 s (AC-6), 2 s (AC-7) and 3.5 s (AC-21); everything else runs on the fake clock.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # >= 40%
-GOWORK=off go test ./internal/alpaca/... ./internal/fmp/... -race -count=1 -run 'AC(1|2|3|4|5|6|7|8|9|11|14|19|21|22|24)\b' -v | grep -c "^--- PASS"   # non-zero: cases executed
+export GOWORK=off; COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//')
+go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # >= 40%
+GOWORK=off go test ./internal/alpaca/... ./internal/fmp/... -race -count=1 -run 'F347_AC(1|2|3|4|5|6|7|8|9|11|14|19|21|22|24)\b' -v | grep -c "^--- PASS"   # 15: one top-level test per scenario (subtests are indented and not counted)
+GOWORK=off go test ./cmd/server/... -race -count=1 -run 'TestAlpacaAdaptiveRateLimit_ReadsSeededKey_347' -v | grep -c "^--- PASS"   # 1
 grep -rn "func Set" internal/alpaca/export_test.go        # the four seams only
 ```
 
@@ -388,6 +406,7 @@ grep -rn "func Set" internal/alpaca/export_test.go        # the four seams only
 - `ingestRecentBarsForTimeframe` `:1393-1435`: `ms.GetBarsMulti(ctx, plan.requested, …)` `:1401`; `s.barsStore.InsertBars(ctx, bars)` `:1408` and `:1428`; per-symbol `src.GetBars(ctx, sym, …)` `:1418` with `out.errored[sym] = true` on error `:1420`; `barOutcome` at `marketdata/internal/service/bar_hold.go:25`; `applyBarCycle` `bar_hold.go:83` treats an errored symbol as an error, never as "no bars" (291 @AC-5).
 - Break radius: the three methods have 11 test call sites — `bar_hold_test.go:129`; `marketdata_service_test.go:1318`, `:1338`, `:1366`, `:5061`, `:5085`, `:5111`, `:5277`, `:5315`, `:5325`, `:5363` — and two production call sites (`:1220`, `:1313`). `ingestRecentBars` has no test call site.
 - Both loops are started from `marketdata/cmd/server/main.go:147` and `:149` on the main context, which has no deadline.
+- Docs: the REST bullet at `marketdata/docs/alpaca-integration.md:3`.
 
 **Lands with**: `Step 6`
 
@@ -401,7 +420,7 @@ grep -rn "func Set" internal/alpaca/export_test.go        # the four seams only
 3. Only the Alpaca calls use `fetchCtx`: `GetLatestQuotesMulti` (`:1236`), `GetLatestQuote` (`:1253`), `GetBarsMulti` (`:1401`) and `GetBars` (`:1418`). `cacheQuote`, `InsertBars`, every log line and `LogTickOK` keep the loop context `ctx` (D-26, R-15).
 4. Guards: at the top of each per-symbol fallback loop iteration, when `fetchCtx.Err() != nil` start no fetch for that symbol and count it as an error (`failed++` in the warm poller; `out.errored[sym] = true` in the bar ingester). In `ingestRecentBarsForTimeframe`, when `fetchCtx` has already expired before the multi fetch of a later timeframe, start no fetch and mark every `plan.requested` symbol errored. A skipped symbol is never "no bars" and never counts toward a hold.
 5. These bounds do not depend on the kill switch (D-28e).
-6. `marketdata/docs/alpaca-integration.md`: add to the warm-poller and bar-ingester bullets that a cycle's Alpaca calls run under a deadline equal to the loop's live interval, that writes keep the loop context, and that a symbol not fetched in time is an error for that cycle.
+6. `marketdata/docs/alpaca-integration.md`: (a) one bullet after the REST bullet (`:3`) describing the adaptive behavior of `do()` from Step 3 — the kill switch is `alpaca.adaptive_rate_limit_enabled`, and "marketdata waits to the request deadline; an exhausted window holds an interactive quote or price fetch for its request budget"; (b) add to the warm-poller and bar-ingester bullets that a cycle's Alpaca calls run under a deadline equal to the loop's live interval, that writes keep the loop context, and that a symbol not fetched in time is an error for that cycle.
 7. No config key, env var, port or outbound gRPC call is added.
 
 **Verification**:
@@ -428,7 +447,7 @@ grep -n "cacheQuote(ctx\|InsertBars(ctx\|LogTickOK(ctx" internal/service/marketd
 - Reusable fakes in `marketdata_service_test.go`: `fakeMultiSource` `:1445`, `perSymbolQuoteSource` `:5032-5044`, `warmQuotes` `:5046`, `fakeQuoteStore` `:3484`, `failingInsertStore` `:5007`, `installWarmLogRecorder` `:4997`, `fakeCfg` `:289-316`.
 - Bar-hold harness in `bar_hold_test.go`: `recordingBarsSource` `:44`, `newBarHoldService` `:115-119` (`budgetCfg` carries `barIngestBackoffKey`), `runCycles` `:122-131`, `holdEntry` `:133`.
 - `ingestRecentBars` needs a registry and the warm set: `s.registry.Get("")` (`marketdata_service.go:1371`) and `s.warmSnapshot()` (`:1367`); the registry pattern is `source.NewRegistry()` + `reg.Register("alpaca", src)` (`marketdata_service_test.go:5081-5082`).
-- `marketdata/internal/service` is excluded from the coverage threshold (`.github/workflows/ci.yml:376`).
+- `marketdata/internal/service` is excluded from the coverage threshold (`.github/workflows/ci.yml:374`).
 - C-13: symbols `AAA`/`BBB`/`CCC` are scenario one-offs already used inline in this file; no new shared literal.
 
 **Lands with**: `Step 5`
@@ -439,7 +458,7 @@ grep -n "cacheQuote(ctx\|InsertBars(ctx\|LogTickOK(ctx" internal/service/marketd
 
 **Instructions**:
 1. Update the 11 existing call sites listed in Step 5 to pass `context.Background()` for both contexts. No assertion in those tests changes.
-2. **AC-32** (`marketdata_service_test.go`): `svc.cfg` is a snapshot watcher with `stream.warm_interval_ms` 200; the quote store rejects a write whose context is done; the multi-quote fake returns all three quotes only once its context is done, with a 2 s safety timer so today's code fails on an assertion and does not hang. Its second and later calls block until their context is done. Run `StartWarmQuotePoller` in a goroutine, wait for the first cycle, cancel. Assert: three quotes cached; one `loop tick ok` record for `warm_quote`; no per-symbol quote request; the multi fetch's context carried a deadline 200 ms after the cycle began (50 ms tolerance). Count requests per fetch context so a second cycle cannot disturb the counts (O-42).
+2. Tests are named `Test<Subject>_F347_AC32` and `Test<Subject>_F347_AC33` (the name ends with the scenario number). **AC-32** (`marketdata_service_test.go`): `svc.cfg` is a snapshot watcher with `stream.warm_interval_ms` 200; the quote store rejects a write whose context is done; the multi-quote fake returns all three quotes only once its context is done, with a 2 s safety timer so today's code fails on an assertion and does not hang. Its second and later calls block until their context is done. Run `StartWarmQuotePoller` in a goroutine, wait for the first cycle, cancel. Assert: three quotes cached; one `loop tick ok` record for `warm_quote`; no per-symbol quote request; the multi fetch's context carried a deadline 200 ms after the cycle began (50 ms tolerance). Count requests per fetch context so a second cycle cannot disturb the counts (O-42).
 3. **AC-33** (`bar_hold_test.go`): `stream.bar_ingest_interval_ms` 200 on the snapshot watcher and `stream.bar_ingest_backoff_ms` 21600000 on `budgetCfg`; the multi-bars fetch fails at once; each per-symbol fetch returns an error only once its context is done or after 2 s. Run one cycle of `StartBarIngestPoller`. Assert: exactly 1 per-symbol bars request in that cycle; `holdEntry` shows that none of `AAA`, `BBB`, `CCC` started or extended a no-bars hold.
 4. Add one direct case for the later-timeframe guard: `ingestRecentBarsForTimeframe` called with an already-expired `fetchCtx` makes no vendor call and marks every requested symbol errored.
 5. RED: on today's loops the AC-32 fetch context has no deadline and AC-33 makes 3 per-symbol requests. RED is captured with the new signatures in place and the bodies still passing `ctx` everywhere.
@@ -448,8 +467,9 @@ grep -n "cacheQuote(ctx\|InsertBars(ctx\|LogTickOK(ctx" internal/service/marketd
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # >= 40%
-GOWORK=off go test ./internal/service/... -race -count=1 -run 'AC3[23]' -v | grep -c "^--- PASS"   # non-zero
+export GOWORK=off; COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//')
+go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # >= 40%
+GOWORK=off go test ./internal/service/... -race -count=1 -run 'F347_AC3[23]\b' -v | grep -c "^--- PASS"   # 2
 grep -rn '"AAA", "BBB", "CCC"' --include="*_test.go" internal/service | wc -l                      # inline one-offs only (C-13)
 ```
 
@@ -464,7 +484,7 @@ grep -rn '"AAA", "BBB", "CCC"' --include="*_test.go" internal/service | wc -l   
 - `services/xstockstrat-trading/internal/broker/alpaca.go` — modify
 - `services/xstockstrat-trading/internal/service/order_intent.go` — modify
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
-- `services/xstockstrat-trading/CLAUDE.md` — modify
+- `scripts/config-wiring.json` — modify (one temporary `read-unseeded` findings entry)
 
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only dev invariant
 
@@ -476,13 +496,10 @@ grep -rn '"AAA", "BBB", "CCC"' --include="*_test.go" internal/service | wc -l   
 - Classification: `isUncertainBrokerOutcome` `trading/internal/service/trading.go:2565-2569` (deadline exceeded, a `net.Error` timeout, or `ErrOutcomeUncertain`); a submit error that is not uncertain is REJECTED with `order.broker_rejected` (`:743-760`); `submitOutcome` maps it to `rejected` (`:3924-3935`), so no outcome value is added.
 - Staleness: `computeStaleThreshold` `trading/internal/service/order_intent.go:91-96`, `staleThreshold` `:100-108`; `brokerCallTimeout` `trading.go:2539-2545`.
 - Client construction: `instantiateBrokerLocked` `trading.go:3241-3273`; `broker.NewClient(broker.ClientConfig{…})` `:3264-3271` with `Paper: rec.IsPaper` and `Timeout: func() time.Duration { return brokerCallTimeout(s.cfgW) }` `:3270`; method-value precedent `Timing: s.ibkrTiming` `:3257`.
-- Config-wiring receiver: `"services/xstockstrat-trading/internal/service/trading.go:s.cfgW": "trading"` (`scripts/config-wiring.json:138`).
+- Config-wiring receiver: `"services/xstockstrat-trading/internal/service/trading.go:s.cfgW": "trading"` (`scripts/config-wiring.json:138`). Baseline entries live in the `findings` array (`scripts/config-wiring.json:5-12`); CI runs `--final` on every PR (`.github/workflows/ci.yml:1239-1240`).
 - `internal/broker` does not import `internal/service` and has no `log/slog` import in `alpaca.go` (`grep -ln "log/slog" trading/internal/broker/*.go` → `ibkr.go`, `ibkr_session.go`). Trading has no `golang.org/x/time` dependency and gains none (D-7).
 - Trading-domain survey: paper/live is resolved from `broker.paper` / `TRADING_MODE` (`trading.go:2730`, `:3739-3743`; `trading/internal/config/config.go:46`) and reaches the client only as `Paper` (`alpaca.go:79-84`); `TRADING_MODE` is set in `docker-compose.yml:17`, `.do/app.dev.yaml:30`, `.do/app.yaml:30` and is not touched.
-- Docs: `trading/CLAUDE.md:82` (`broker.timeout_ms` row, which still says "Read at account-client construction" although `timeout()` reads it before every request).
-- Config-key contract (C-05): namespace `trading`; key `broker.adaptive_rate_limit_enabled`; `value_type` `bool`; code default `true`; reader `services/xstockstrat-trading/internal/service/trading.go:(*TradingService).alpacaRateLimitBudget` (passed to `broker.ClientConfig.RateLimitBudget` in `instantiateBrokerLocked`); seed: Step 11; live mechanism: the `WatchConfig`-backed `trading` watcher, read on every Alpaca request.
-
-**Lands with**: `Step 8`
+- Config-key contract (C-05): namespace `trading`; key `broker.adaptive_rate_limit_enabled`; `value_type` `bool`; code default `true`; reader `services/xstockstrat-trading/internal/service/trading.go:(*TradingService).alpacaRateLimitBudget` (passed to `broker.ClientConfig.RateLimitBudget` in `instantiateBrokerLocked`); seed: Step 11; live mechanism: the `WatchConfig`-backed `trading` watcher, read on every Alpaca request. The key's row and default are declared in `trading/CLAUDE.md` in Step 9.
 
 **TDD**: `red-green required`
 
@@ -502,7 +519,7 @@ grep -rn '"AAA", "BBB", "CCC"' --include="*_test.go" internal/service | wc -l   
    - One WARN per throttled window per host, gated by `WarnOnce`: `slog.WarnContext(ctx, "alpaca broker rate limit: throttled", "host", host, "wait_ms", wait.Milliseconds())`. No metric. Never log the API key.
 5. `order_intent.go`, next to `computeStaleThreshold`: add the pure `rateLimitBudget(enabled bool, t, stale time.Duration) time.Duration` — 0 when disabled, otherwise `max(t, stale − 2*t)`.
 6. `trading.go`: add `func (s *TradingService) alpacaRateLimitBudget() time.Duration { return rateLimitBudget(s.cfgW.GetBool("broker.adaptive_rate_limit_enabled", true), brokerCallTimeout(s.cfgW), staleThreshold(s.cfgW)) }` after `brokerCallTimeout` (`:2539-2545`), and set `RateLimitBudget: s.alpacaRateLimitBudget` next to `Timeout` at `:3270`.
-7. `trading/CLAUDE.md`: add the `broker.adaptive_rate_limit_enabled` row (bool, `true`, explicit-true default, read live per request, off = single unpaced attempt, seeded by the `alpaca_adaptive_rate_limit_keys` config migration, Alpaca only); correct the `broker.timeout_ms` row (`:82`) to "read live before every request"; add an "Adaptive rate limit (Alpaca)" paragraph with the budget `max(T, S − 2T)` and its four-row table from `design.md` § 4, "trading fails fast", "mutations run detached from caller cancellation", and the recorded consequence that every call bounded by one `broker.timeout_ms` skips spreading.
+7. `scripts/config-wiring.json`: append one entry to the `findings` array — `{"namespace": "trading", "key": "broker.adaptive_rate_limit_enabled", "kind": "read-unseeded", "owner": "feature 347 alpaca-adaptive-rate-limit"}`. It is temporary: Step 11 removes it when the seed lands. (`trading/CLAUDE.md` is updated in Step 9.)
 8. Trading-domain constraints for this step:
    - Broker coverage: Alpaca only. `IBKR`: other broker unaffected — no `internal/broker/ibkr*.go` file changes (FR-7).
    - Trading mode gate: no order-placing call is added. A retried `POST /v2/orders` is the same request with the same `client_order_id`. Paper/live routing is the existing `baseURL()` gate (`alpaca.go:79-84`) fed by `Paper: rec.IsPaper` (`trading.go:3269`); pacing state is kept per host, so paper and live never share a window (FR-10).
@@ -516,9 +533,9 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go te
 grep -n "TRADING_MODE\|TradingMode\|paper\|PAPER\|Paper" internal/broker/alpaca.go | head     # baseURL() paper/live gate still present
 grep -n "RateLimitBudget\|alpacaRateLimitBudget" internal/broker/alpaca.go internal/service/trading.go
 git diff --stat -- internal/broker/ibkr.go internal/broker/ibkr_session.go                      # empty: IBKR untouched
-grep -c "golang.org/x/time" go.mod                                                              # 0
-cd ../.. && node scripts/check-config-wiring.mjs --keys trading.broker.adaptive_rate_limit_enabled   # exit 0; one "PENDING: …:read-unseeded" line
-node scripts/check-config-wiring.mjs --doc-check                                                     # exit 0
+! grep -q "golang.org/x/time" go.mod                                                             # absent
+cd ../.. && node scripts/check-config-wiring.mjs --final      # exit 0: the read-unseeded finding is baselined
+node scripts/check-config-wiring.mjs --doc-check              # exit 0
 ```
 
 ---
@@ -539,10 +556,9 @@ node scripts/check-config-wiring.mjs --doc-check                                
 - **Not found** — `trading/internal/broker/export_test.go` (`ls trading/internal/broker`). In-package test files do exist there (`ibkr_session_internal_test.go`), so a `package broker` test file is an accepted shape.
 - **Not found** — `trading/internal/service/trading_rate_limit_test.go`. It is new.
 - Service-test config seeding: `config.MustSnapshotWatcher("trading", map[string]*configv1.ConfigValue{…})` (`trading/internal/config/config.go:119`; used at `trading/internal/service/trading_order_state_audit_test.go:105-109`).
-- `internal/broker` and `internal/alpacapace` are measured packages; `internal/service` is excluded (`.github/workflows/ci.yml:376`).
+- `internal/broker` and `internal/alpacapace` are measured packages; `internal/service` is excluded (`.github/workflows/ci.yml:374`).
+- Existing trading tests already carry `_AC<n>` names from other features, so this feature's tests use the `_F347_AC<N>` suffix to be selectable on their own.
 - C-13: order ids, keys and header values are scenario one-offs; no literal gets a second consumer.
-
-**Lands with**: `Step 7`
 
 **TDD**: `red-green required`
 
@@ -551,7 +567,7 @@ node scripts/check-config-wiring.mjs --doc-check                                
 **Instructions**:
 1. `export_test.go` (`package broker`): setters for the `now`, `sleep` and `jitter` seams and for `httpClient.Transport`. Nothing else.
 2. In `alpaca_test.go` add local helpers matching Step 4's (fake clock with a recording sleep, a scripted `RoundTripper` that keeps the URL host and records method, path, body and clock time per attempt, a WARN recorder). Clients use `Timeout` and `RateLimitBudget` funcs returning fixed values.
-3. One test per scenario, named with its `AC-N`:
+3. One test per scenario, named `Test<Subject>_F347_AC<N>` with the name ending in the scenario number (a Go name cannot hold the hyphen). AC-13 is one table test with one subtest per Examples row:
    - **AC-10** (guard): `RateLimitBudget` nil, `GET /v2/account` answers 429: exactly 1 attempt and an error containing `status 429`; repeat with a func returning 0. Red under an "ignore the budget" mutant.
    - **AC-12** (client side): `POST /v2/orders` 429 with `Reset now+1 s`, then 200 `b-1`; a MARKET order with `ClientOrderID "c-42"` and then a LIMIT order at 150.00: both attempts carry `client_order_id "c-42"` and byte-identical JSON bodies; the caller gets `b-1`.
    - **AC-13** (four rows, table test): budget and timeout from the Examples (`T`/`B` = 5 s/20 s, 5 s/5 s, 10 s/10 s, 1 s/28 s), jitter 0, the clock advancing only by sleeps, every POST 429 with no reset header, no caller deadline: attempts are 5, 1, 1, 6, the last starting 15, 0, 0, 23 s after the first; the error satisfies `errors.Is(err, broker.ErrRateLimited)`, contains `rate limited`, and is returned at that same clock time. Row 1 pins the inclusive fit rule (`7 + 8 + 5 = 20`).
@@ -567,15 +583,18 @@ node scripts/check-config-wiring.mjs --doc-check                                
    - FR-5 degradation: responses with no rate-limit headers never cause a sleep; a 429 with no headers still retries on backoff.
    - A mutation whose caller cancels during a wait still sends its retry (the loop is detached); a read whose caller cancels during a wait returns `ErrRateLimited`, not `context.Canceled`.
    - `ErrRateLimited` is never `ErrInvalidCredentials`, and a 401 on a retry still returns `ErrInvalidCredentials` (TRADING-3).
-5. `trading_rate_limit_test.go` (`package service`): `TestRateLimitBudget` — table over `rateLimitBudget(enabled, t, stale)`: `(true, 5 s, 30 s) → 20 s`, `(true, 5 s, 15 s) → 5 s`, `(true, 10 s, 15 s) → 10 s`, `(true, 1 s, 30 s) → 28 s`, `(false, 5 s, 30 s) → 0`. `TestAlpacaRateLimitBudget_FollowsConfig` — with `MustSnapshotWatcher` values `broker.timeout_ms`/`order_intent.stale_multiplier` of 5000/3.0, 5000/1.5, 10000/1.5 and 1000/3.0 the method returns 20, 5, 10 and 28 s; with `broker.adaptive_rate_limit_enabled` false it returns 0; with the key absent it returns the enabled value.
+5. `trading_rate_limit_test.go` (`package service`): `TestRateLimitBudget` — table over `rateLimitBudget(enabled, t, stale)`: `(true, 5 s, 30 s) → 20 s`, `(true, 5 s, 15 s) → 5 s`, `(true, 10 s, 15 s) → 10 s`, `(true, 1 s, 30 s) → 28 s`, `(false, 5 s, 30 s) → 0`. `TestAlpacaRateLimitBudget_FollowsConfig` — with `MustSnapshotWatcher` values `broker.timeout_ms`/`order_intent.stale_multiplier` of 5000/3.0, 5000/1.5, 10000/1.5 and 1000/3.0 the method returns 20, 5, 10 and 28 s; with `broker.adaptive_rate_limit_enabled` false it returns 0; with the key absent it returns the enabled value; and with the key present as bool `true` (the value migration 051 seeds) it returns the enabled value (`20 s` at 5000/3.0).
 6. RED: with Step 7's symbols present, `do` a single attempt and `rateLimitBudget` returning 0, every non-guard test fails on an assertion. Guards (AC-10, AC-20) are recorded with their mutant.
 7. Real-time cost: about 2.5 s (AC-27); everything else runs on the fake clock.
+8. Trading-domain: Alpaca only, IBKR unaffected (no `ibkr*.go` test changes). Order types: AC-12 exercises MARKET and LIMIT; STOP, STOP_LIMIT and TRAILING_STOP use the same replayed body and are unaffected. Fill handling is unaffected (`PARTIALLY_FILLED` and `FILLED` processing is not touched by the client).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # >= 40%
-GOWORK=off go test ./internal/broker/... ./internal/service/... -race -count=1 -run 'AC(10|12|13|15|16|17|18|20|23|27)\b|RateLimitBudget' -v | grep -c "^--- PASS"   # non-zero
+export GOWORK=off; COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//')
+go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # >= 40%
+GOWORK=off go test ./internal/broker/... -race -count=1 -run 'F347_AC(10|12|13|15|16|17|18|20|23|27)\b' -v | grep -c "^--- PASS"   # 10: one top-level test per scenario
+GOWORK=off go test ./internal/service/... -race -count=1 -run 'RateLimitBudget' -v | grep -c "^--- PASS"   # 2: TestRateLimitBudget, TestAlpacaRateLimitBudget_FollowsConfig
 grep -rn "func Set" internal/broker/export_test.go      # the four seams only
 ```
 
@@ -603,10 +622,10 @@ grep -rn "func Set" internal/broker/export_test.go      # the four seams only
 - `ReplaceOrder` `:1473-1624`: `InsertIntent` `:1531`; PENDING mark `:1565`; `validateTIF` `:1575` (after the insert — the pre-existing defect, not fixed here); `entry.client.ReplaceOrder` `:1580`; the non-uncertain branch that finalizes Rejected `:1581-1587`; `codes.Internal` `:1589`.
 - Fill poller: `pollFills` `:1772`; `entry.client.GetOrder(ctx, order.BrokerOrderId)` `:1822` on the loop context with no per-call timeout; `s.logTick(ctx, telemetry.LoopFillPoller, …)` `:1831`; `logTick` writes no record when every reached item failed (`:1836-1848`).
 - Per-call timeout precedent: `reconcileTick` and `syncPositions` wrap each broker call in `WithTimeout(ctx, brokerCallTimeout(s.cfgW))` (`:2063`, `:2477`).
-- `flattenAndHalt` `:2908`: retry loop `:2986-3011`; `s.submitOrder(…)` `:2990`; a rejection re-mints `flattenReq.ClientOrderId` and `flattenOrderID` `:2994-3000`; the halt after the loop `:3014`. `submitOrder` returns `&brokerRejectedError{err: err}` (`:760`), whose `Unwrap` keeps `errors.Is(err, broker.ErrRateLimited)` true (`order_intent.go:57-60`). `haltAccount` short-circuits when already halted (`:2872-2878`).
+- `flattenAndHalt` `:2908`: retry loop `:2986-3011`; `s.submitOrder(…)` `:2990`; a rejection re-mints `flattenReq.ClientOrderId` and `flattenOrderID` `:2994-3000`; the halt after the loop `:3013`. `submitOrder` returns `&brokerRejectedError{err: err}` (`:760`), whose `Unwrap` keeps `errors.Is(err, broker.ErrRateLimited)` true (`order_intent.go:57-60`). `haltAccount` short-circuits when already halted (`:2872-2878`).
 - `brokerPoolEntry` carries `brokerType int32` (`:75-81`); the client dispatch treats everything that is not IBKR as Alpaca (`instantiateBrokerLocked` `default:` branch `:3259`).
 - Resize cancels (`:3603`, `:3608`) are IBKR-only (`:3539-3543`) and are not touched (D-23).
-- Docs: `trading/docs/context-constitution.md` rows `TRADING-1..7`, `TRADING-N1..N3` (TRADING-3 `:17`, TRADING-6 `:20`); `trading/docs/reconciliation.md` § Order Status Reconciliation `:3`.
+- Docs: `trading/CLAUDE.md:82` (`broker.timeout_ms` row, which still says "Read at account-client construction" although `timeout()` reads it before every request); `trading/docs/context-constitution.md` rows `TRADING-1..7`, `TRADING-N1..N3` (TRADING-3 `:17`, TRADING-6 `:20`); `trading/docs/reconciliation.md` § Order Status Reconciliation `:3`.
 
 **Lands with**: `Step 10`
 
@@ -634,7 +653,7 @@ grep -rn "func Set" internal/broker/export_test.go      # the four seams only
     - Order type handling is unaffected by this step.
     - Fill state: `applyBrokerOrderStatus` and the status mapping are unchanged, so `PARTIALLY_FILLED` and `FILLED` propagate as before; the poller only gains a per-call deadline. `CancelOrder` of a `PARTIALLY_FILLED` parent follows the same reordered path as a `NEW` one (Step 10 tests both).
     - No env var and no outbound gRPC call is added.
-11. `trading/CLAUDE.md`: document (a) a rate-limited submit is REJECTED with `order.broker_rejected`, its error carries "rate limited", and a caller reusing the same `client_order_id` replays that REJECTED; (b) a caller whose own deadline is shorter than a retry wait plus one attempt gets that REJECTED; (c) a rate-limited cancel or replace returns `Unavailable`, leaves the order unchanged and releases its intent; (d) the emergency flatten halts the account on the first rate-limited submit and keeps retrying, and under a hold each watchdog tick still records REJECTED flatten orders; (e) the cancel intent is finalized before the bracket-leg cancels, and the fill poller's `GetOrder`, the not-cancelable re-read and each leg cancel are bounded by one `broker.timeout_ms` on non-IBKR accounts; (f) worst case at defaults: `CancelOrder` ≤ 35 s, cancel-intent lifetime ≤ 25 s; (g) the clamp row: at `broker.timeout_ms` 10 s with the multiplier at 1.5, mutation budget plus re-read is 20 s against a 15 s threshold.
+11. `trading/CLAUDE.md`, config table and client behavior (from Step 7): add the `broker.adaptive_rate_limit_enabled` row (bool, `true`, explicit-true default, read live per request, off = single unpaced attempt, seeded by the `alpaca_adaptive_rate_limit_keys` config migration, Alpaca only); correct the `broker.timeout_ms` row (`:82`) to "read live before every request"; add an "Adaptive rate limit (Alpaca)" paragraph with the budget `max(T, S − 2T)` and its four-row table from `design.md` § 4, "trading fails fast", "mutations run detached from caller cancellation", and the recorded consequence that every call bounded by one `broker.timeout_ms` skips spreading. In the same paragraph document (a) a rate-limited submit is REJECTED with `order.broker_rejected`, its error carries "rate limited", and a caller reusing the same `client_order_id` replays that REJECTED; (b) a caller whose own deadline is shorter than a retry wait plus one attempt gets that REJECTED; (c) a rate-limited cancel or replace returns `Unavailable`, leaves the order unchanged and releases its intent; (d) the emergency flatten halts the account on the first rate-limited submit and keeps retrying, and under a hold each watchdog tick still records REJECTED flatten orders; (e) the cancel intent is finalized before the bracket-leg cancels, and the fill poller's `GetOrder`, the not-cancelable re-read and each leg cancel are bounded by one `broker.timeout_ms` on non-IBKR accounts; (f) worst case at defaults: `CancelOrder` ≤ 35 s, cancel-intent lifetime ≤ 25 s; (g) the clamp row: at `broker.timeout_ms` 10 s with the multiplier at 1.5, mutation budget plus re-read is 20 s against a 15 s threshold.
 12. `trading/docs/context-constitution.md`: add `TRADING-8` — "an `order_intents` row is deleted only by `ReleasePendingIntent`, only while PENDING, and only after `broker.ErrRateLimited`" with its failure mode (a deleted finalized row re-arms a duplicate mutation) and anchor. Add to TRADING-3 that `ErrRateLimited` is never `ErrInvalidCredentials` and never wraps a context error.
 13. `trading/docs/reconciliation.md` § Order Status Reconciliation: one paragraph — a throttled `GetOrder` is a failed poll for that order, a tick whose every poll failed writes no `loop tick ok`, and each poll is bounded by one `broker.timeout_ms` on non-IBKR accounts.
 
@@ -646,6 +665,7 @@ grep -n "TRADING_MODE\|TradingMode\|paper\|PAPER" internal/service/trading.go | 
 grep -n "func isUncertainBrokerOutcome" -A4 internal/service/trading.go   # unchanged: no ErrRateLimited
 grep -n "DELETE FROM trading.order_intents" internal/repository/order_intent_repo.go   # exactly one, guarded on intent_id and state
 grep -n "TRADING-8" docs/context-constitution.md
+grep -n "broker.adaptive_rate_limit_enabled" CLAUDE.md                     # the key row and default are declared before Step 11 seeds
 ```
 
 ---
@@ -671,7 +691,7 @@ grep -n "TRADING-8" docs/context-constitution.md
 - `fakeBroker` has `submitOrderFn`, `cancelOrderFn`, `getOrderFn` (`trading_bracket_test.go:26-34`) and no replace hook; wrappers that override `ReplaceOrder` exist (`replaceOKBroker` `trading_order_state_audit_test.go:68-72`, `replaceFailBroker` `:707-711`).
 - Log capture: `captureLogs` (`trading_sync_test.go:16`).
 - `trading_rate_limit_test.go` exists from Step 8.
-- `trading/internal/service` and `internal/repository` are excluded from the coverage threshold (`.github/workflows/ci.yml:376`). `NewOrderIntentRepo` takes a concrete pool (`order_intent_repo.go:58`), so `ReleasePendingIntent`'s SQL has no repository-level test home; it is checked by review (design § 7).
+- `trading/internal/service` and `internal/repository` are excluded from the coverage threshold (`.github/workflows/ci.yml:374`). `NewOrderIntentRepo` takes a concrete pool (`order_intent_repo.go:58`), so `ReleasePendingIntent`'s SQL has no repository-level test home; it is checked by review (design § 7).
 - C-13: order ids `ord-1`, `b-1`, `acct-1`, `user-1` are already inline in these files' own harnesses; the new file builds its own orders as scenario one-offs.
 
 **Lands with**: `Step 9`
@@ -682,7 +702,7 @@ grep -n "TRADING-8" docs/context-constitution.md
 
 **Instructions**:
 1. Fakes: `memIntentRepo` gains a map-backed `ReleasePendingIntent` (delete the record and return true only when its state is PENDING; false otherwise). `fakeReconciliationOrderIntentRepo` gains the method in its panic convention.
-2. Add one helper in `trading_rate_limit_test.go` that builds a service for the real-client scenarios: `cfgW` from `config.MustSnapshotWatcher("trading", …)`, a real `broker.NewClient` with `PaperURL` set to an `httptest` server, `Paper: true`, `Timeout: func() time.Duration { return brokerCallTimeout(svc.cfgW) }` and `RateLimitBudget: svc.alpacaRateLimitBudget`, placed in `svc.brokers` with `BROKER_TYPE_ALPACA`; `memIntentRepo` for intents; `ctxCapturingDB` for stored writes. These tests use the real clock.
+2. Tests are named `Test<Subject>_F347_AC<N>` with the name ending in the scenario number; AC-35's `NEW`-parent run is a subtest of the AC-35 test. Add one helper in `trading_rate_limit_test.go` that builds a service for the real-client scenarios: `cfgW` from `config.MustSnapshotWatcher("trading", …)`, a real `broker.NewClient` with `PaperURL` set to an `httptest` server, `Paper: true`, `Timeout: func() time.Duration { return brokerCallTimeout(svc.cfgW) }` and `RateLimitBudget: svc.alpacaRateLimitBudget`, placed in `svc.brokers` with `BROKER_TYPE_ALPACA`; `memIntentRepo` for intents; `ctxCapturingDB` for stored writes. These tests use the real clock.
 3. Real-client scenarios:
    - **AC-12**: first `POST /v2/orders` 429 with a reset 1 s ahead, then 200 `b-1`; a MARKET order for 10 `AAPL` with `client_order_id "c-42"`, then the same flow for a LIMIT order at 150.00: the caller gets `b-1`, and `memIntentRepo` holds exactly one intent for the order, finalized Completed.
    - **AC-25**: first POST 429 with no reset, then 200 `b-7`; the caller's context is cancelled 500 ms after the call starts: 2 POSTs with the same `client_order_id`; the order is persisted with `b-7` and is not REJECTED; the intent is Completed.
@@ -699,12 +719,14 @@ grep -n "TRADING-8" docs/context-constitution.md
 6. Existing tests in the four files keep their assertions; run the whole package to confirm the cancel reorder changes no existing expectation (`TestTrace_CancelOrder`, the `NotCancelable` cases, the `FinalWriteFailureLogged` cases).
 7. RED, captured on the tree that already holds Steps 7-8: AC-34, AC-35 and AC-36 fail on timing and request counts (the calls wait and retry); AC-28 fails on the halt order; AC-29, AC-30 and AC-31 fail on the status code and the local CANCELED / stored Rejected state; AC-25, AC-26 and AC-27 are expected to pass once Step 7 has landed — record them as "red captured at the Step 7+8 unit" if so, never silently.
 8. New logic is in excluded packages — no coverage threshold applies; these tests are the verification.
+9. Trading-domain: Alpaca only (`alpacaCallContext` returns the context unchanged for IBKR). Order types as in Step 8. Fill states: `PARTIALLY_FILLED` is exercised by AC-35 beside `NEW`; `FILLED` handling is unchanged (`applyBrokerOrderStatus` is not touched).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # >= 40%
-GOWORK=off go test ./internal/service/... -race -count=1 -run 'AC(12|25|26|27|28|29|30|31|34|35|36)\b' -v | grep -c "^--- PASS"   # non-zero
+export GOWORK=off; COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//')
+go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # >= 40%
+GOWORK=off go test ./internal/service/... -race -count=1 -run 'F347_AC(12|25|26|27|28|29|30|31|34|35|36)\b' -v | grep -c "^--- PASS"   # 11: one top-level test per scenario
 grep -rn "func (m \*memIntentRepo) ReleasePendingIntent\|func (f \*fakeReconciliationOrderIntentRepo) ReleasePendingIntent" internal/service
 grep -n "PARTIALLY_FILLED" internal/service/trading_rate_limit_test.go    # the partial-fill case exists beside the NEW case
 ```
@@ -719,6 +741,7 @@ grep -n "PARTIALLY_FILLED" internal/service/trading_rate_limit_test.go    # the 
 - `services/xstockstrat-config/migrations/051_alpaca_adaptive_rate_limit_keys.up.sql` — create
 - `services/xstockstrat-config/migrations/051_alpaca_adaptive_rate_limit_keys.down.sql` — create
 - `scripts/config-wiring-stored.json` — modify (generated by `scripts/config-wiring-stored.py`)
+- `scripts/config-wiring.json` — modify (remove the two Step 3 / Step 7 `read-unseeded` entries)
 - `docs/patterns/config-governance.md` — modify
 - `docs/roadmap/features/merge-order.md` — modify (only if the migration number moves)
 
@@ -735,9 +758,9 @@ grep -n "PARTIALLY_FILLED" internal/service/trading_rate_limit_test.go    # the 
 - Both keys are absent today: `grep -c "adaptive_rate_limit_enabled" scripts/config-wiring-stored.json` → 0.
 - Registered-keys log: `docs/patterns/config-governance.md:145`, newest first; the feature 341 entry is at `:151`.
 - Ledger: "a seed migration's down deletes only rows it can prove it wrote" (`fails.md:3841`); the insert-if-absent plus guarded-metadata pattern (`insights.md:4214`).
-- Config-key contract (C-05), both keys: `value_type` `bool`, code default `true`, live per request. `marketdata` / `alpaca.adaptive_rate_limit_enabled`, reader `services/xstockstrat-marketdata/cmd/server/main.go:main` (Step 3). `trading` / `broker.adaptive_rate_limit_enabled`, reader `services/xstockstrat-trading/internal/service/trading.go:(*TradingService).alpacaRateLimitBudget` (Step 7). Seed: this step.
-
-**Lands with**: `Step 12`
+- Config-key contract (C-05), both keys: `value_type` `bool`, code default `true`, live per request. `marketdata` / `alpaca.adaptive_rate_limit_enabled`, reader `services/xstockstrat-marketdata/cmd/server/main.go:alpacaAdaptiveRateLimit` (Step 3). `trading` / `broker.adaptive_rate_limit_enabled`, reader `services/xstockstrat-trading/internal/service/trading.go:(*TradingService).alpacaRateLimitBudget` (Step 7). Seed: this step.
+- The two temporary baseline entries added by Steps 3 and 7 are in the `findings` array of `scripts/config-wiring.json`; once the keys are seeded a left-over entry is `STALE` and fails `--final` (precedent: feature 341 Step 11 removes its Step 7 entry).
+- Regeneration in CI: the migrator image is built from `scripts/Dockerfile.migrate` and runs `scripts/config-wiring-stored.py` (`.github/workflows/ci.yml:1274-1282`), then `scripts/config-heal-dryrun.py --fresh` with `git diff --exit-code scripts/config-heal/dryrun-fresh.tsv` (`:1284-1290`), then `git diff --exit-code scripts/config-wiring-stored.json` (`:1292-1293`).
 
 **TDD**: `N/A (migration)`
 
@@ -754,9 +777,11 @@ grep -n "PARTIALLY_FILLED" internal/service/trading_rate_limit_test.go    # the 
    - `<NEW>` (exact; this is the text AC-37 names): ``Static ceiling on outbound Alpaca REST calls per second. The effective rate is the lower of this ceiling and what the X-RateLimit response headers allow (alpaca.adaptive_rate_limit_enabled). Read live per request into a token-bucket limiter the client waits on before every REST call; `0` disables only this ceiling.``
    - No description contains a single quote.
 3. `…down.sql`, two statements: (a) one `DELETE FROM config.config_values` restricted to `environment IN ('staging', 'production')`, `user_id IS NULL`, the sentinel `updated_by`, `value_data = 'true'` and a parenthesized `OR` of the two (namespace, key) pairs; (b) the reverse `UPDATE`, setting `<OLD>` where the description still equals `<NEW>`. A row an operator has changed is never deleted or rewritten.
-4. Regenerate the stored set: `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py`. Commit the result unedited. Precondition and blocked path: Step Dependencies.
-5. `docs/patterns/config-governance.md`: add a "feature 347 — alpaca-adaptive-rate-limit (`xstockstrat-marketdata` / `xstockstrat-trading` / `xstockstrat-config`)" entry above the 341 entry, modelled on it: what the keys do, seeded `true` in staging and production (global, non-secret, insert-if-absent) by `alpaca_adaptive_rate_limit_keys` with the number-free sentinel, the guarded down, the `backfill.rate_limit_rps` description change, no `SCALAR_BOUNDS_REGISTRY` entry (bool), no `scripts/config-wiring.json` baseline entry, approval owner + config team, and a two-row table (namespace, key, type, default, reader, notes).
+4. Regenerate the stored set against a scratch TimescaleDB/Postgres 16 on `:5432`, in the CI form: `docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .`, then `docker run --rm --network host -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" -v "$PWD:/repo" -w /repo --entrypoint python3 xstockstrat-migrate-ci scripts/config-wiring-stored.py`. On a host that has `migrate` and `psql`, `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py` is equivalent. Then, against the same database and in the same form, run `scripts/config-heal-dryrun.py --fresh` and confirm `git diff --exit-code scripts/config-heal/dryrun-fresh.tsv` (the second check of CI job `config-wiring-stored`). Commit the JSON unedited. If neither route is available the step is blocked (P-03).
+4a. Remove the two temporary `findings` entries (namespace `marketdata` / key `alpaca.adaptive_rate_limit_enabled`, and namespace `trading` / key `broker.adaptive_rate_limit_enabled`) from `scripts/config-wiring.json` in this step; a left-over entry is `STALE` and fails `--final`.
+5. `docs/patterns/config-governance.md`: add a "feature 347 — alpaca-adaptive-rate-limit (`xstockstrat-marketdata` / `xstockstrat-trading` / `xstockstrat-config`)" entry above the 341 entry, modelled on it: what the keys do, seeded `true` in staging and production (global, non-secret, insert-if-absent) by `alpaca_adaptive_rate_limit_keys` with the number-free sentinel, the guarded down, the `backfill.rate_limit_rps` description change, no `SCALAR_BOUNDS_REGISTRY` entry (bool), no remaining `scripts/config-wiring.json` baseline entry (the two temporary ones are removed here), approval owner + config team, and a two-row table (namespace, key, type, default, reader, notes).
 6. No env var, deployment file or `.do/app*.yaml` changes.
+7. Six files because the migration pair, the stored set generated from it, the baseline removal that the seed makes mandatory (else `STALE`) and the registry doc are one indivisible change; `merge-order.md` is touched only on a renumber.
 
 **Verification**:
 ```bash
@@ -768,6 +793,8 @@ node scripts/check-config-wiring.mjs --final        # exit 0: no STALE-STORED, n
 node scripts/check-config-wiring.mjs --doc-check    # exit 0
 node --test scripts/config-wiring.test.mjs
 grep -c "adaptive_rate_limit_enabled" scripts/config-wiring-stored.json   # 4
+! grep -q "adaptive_rate_limit_enabled" scripts/config-wiring.json        # both temporary baseline entries are gone
+git diff --exit-code scripts/config-heal/dryrun-fresh.tsv                 # after the fresh heal dry-run of Instruction 4: unchanged
 ```
 
 ---
@@ -788,8 +815,6 @@ grep -c "adaptive_rate_limit_enabled" scripts/config-wiring-stored.json   # 4
 - The old description is in `041_heal_config_keys_to_reader_catalog.up.sql:151`, reachable with `findOne('_heal_config_keys_to_reader_catalog', 'up')`.
 - C-13: the migration text is the only data; no fixture literal gets a second consumer.
 
-**Lands with**: `Step 11`
-
 **TDD**: `red-green required`
 
 **Covers**: `AC-37`
@@ -803,7 +828,7 @@ Load the pair with `findOne('_alpaca_adaptive_rate_limit_keys', …)` and `split
 5. `<OLD>` occurs verbatim in the `041_heal_config_keys_to_reader_catalog` up migration, so the guard matches the row a fresh database really holds and an operator-edited description is left unchanged.
 6. The down is two statements: a `DELETE` restricted to the sentinel actor, `user_id IS NULL`, `value_data = 'true'` and both (namespace, key) pairs; and an `UPDATE` back to `<OLD>` guarded on `description = '<NEW>'`.
 
-RED: with Step 11's files absent, `findOne` fails ("expected exactly one …").
+RED: run the test with Step 11's files absent (`findOne` fails: "expected exactly one …").
 
 The replay itself (the migration applied twice against a database) is proven by the CI `migration-rerun` job, not in this step.
 
@@ -811,7 +836,7 @@ The replay itself (the migration applied twice against a database) is proven by 
 ```bash
 cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
 grep -n "migrationSql" src/__tests__/alpacaAdaptiveRateLimitSeedMigration.test.ts        # uses the shared helper
-grep -c "__tests__/fixtures" src/__tests__/alpacaAdaptiveRateLimitSeedMigration.test.ts  # 0: no shared fixture needed (C-13)
+! grep -q "__tests__/fixtures" src/__tests__/alpacaAdaptiveRateLimitSeedMigration.test.ts   # no shared fixture needed (C-13)
 ```
 
 ---
