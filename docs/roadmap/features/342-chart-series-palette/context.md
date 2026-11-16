@@ -530,3 +530,79 @@ The `C` array literal that passed, byte for byte. Step 4 copies the 12 values fr
 - Files modified: `docs/patterns/ui-ux-governance.md`, `services/xstockstrat-ui/CLAUDE.md`
 - Deviations: the Verification run shape and item 3's `origin/` ref. Full detail is in the Deviation Log.
 - Still open: O-24; the operator has not seen the 12 values; the merge order with peer 341; the overlap scan for peers 340 and 343; the integration PR's CI e2e run decides @AC-2, @AC-3 and @AC-6 on both theme builds.
+
+## Session 2026-11-16 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — chart-series-palette (feature 342)
+
+Source: docs/roadmap/features/342-chart-series-palette/acceptance.feature, read from the working tree at /home/user/xstockstrat. I did not read origin/feature/chart-series-palette (no git access). The orchestrator should confirm the branch copy matches the six scenarios below.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-ui/acceptance/chart-series-palette.feature | CREATE | NEW | Observable subject is the UI theme bundles. |
+| AC-2 | same | CREATE | NEW | UI indicator chart rendering. |
+| AC-3 | same | CREATE | NEW | UI legend swatch. |
+| AC-4 | same | CREATE | NEW | UI theme tokens. |
+| AC-5 | same | CREATE | NEW | UI theme tokens. |
+| AC-6 | same | CREATE | NEW | UI chart color assignment. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/chart-series-palette.feature (CREATE) ---
+# Promoted from docs/roadmap/features/342-chart-series-palette/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-342` tag.
+# Durable business rules the ui service already guarantees — do not hand-edit to document new
+# behavior; a rule enters only by promotion from a reviewed feature acceptance.feature.
+
+Feature: chart-series-palette
+  As a trader, I want each indicator series drawn in its own clearly distinguishable color, so that I can read a multi-indicator chart and match every legend entry to its line.
+
+  @AC-1 @FR-1 @feature-342
+  Scenario: Both themes define twelve series colors
+    Given the staging and production theme bundles
+    When the categorical series palette tokens are read
+    Then each theme defines exactly 12 series color tokens
+    And the staging values of "--chart-1" through "--chart-5" are unchanged
+
+  @AC-2 @FR-2 @feature-342
+  Scenario: Five series across four indicators get five different colors
+    Given the indicator set "dip_buyer_vol_stop" with series "rsi.value", "px.value", "sma200.value", "vts.stop_line" and "vts.value"
+    When the indicator chart for "LYFT" is shown
+    Then the 5 series are drawn in 5 different colors
+
+  @AC-3 @FR-3 @feature-342
+  Scenario: Each legend swatch matches its line
+    Given the indicator chart for "LYFT" with the "dip_buyer_vol_stop" set
+    When the Indicators legend is shown
+    Then the swatch beside "sma200 value" has the same color as the SMA200 line
+
+  @AC-4 @FR-4 @feature-342
+  Scenario: Every series color meets the contrast floor in both themes
+    Given the 12 series colors and the chart surface color of the staging theme
+    When the contrast ratio of each color against the surface is computed
+    Then every ratio is at least 3.0
+    And the same holds against the production theme's chart surface
+
+  @AC-5 @FR-4 @feature-342
+  Scenario: Adjacent series colors stay distinguishable for red-green color blindness
+    Given the 12 series colors in palette order
+    When each adjacent pair is compared under deuteranopia and protanopia simulation
+    Then every adjacent pair differs by a CIEDE2000 distance of at least 10
+
+  @AC-6 @FR-5 @feature-342
+  Scenario: A thirteenth series reuses the first color
+    Given an indicator set that produces 13 series
+    When the indicator chart is shown
+    Then series 13 is drawn in the same color as series 1
+
+### Notes / ambiguities / conflicts
+- Service attribution: all six scenarios assert on UI-owned artifacts (theme token bundles, indicator chart, legend). feature.md's Reviewers table lists only xstockstrat-ui. No cross-service or repo-wide guarantee exists, so nothing goes to docs/sdd/business-rules/platform.feature.
+- Dedup: I grepped all services/*/acceptance/*.feature and platform.feature for --chart-, series color, legend swatch, CIEDE and @feature-342. The only hit is services/xstockstrat-ui/acceptance/ui-env-themed-bundles.feature:78 (feature 307 AC-12). It asserts that the equity-curve first series stroke resolves to the build's --chart-1. This is a different outcome, not an OVERLAP. It does not conflict with 342 AC-1, which keeps staging --chart-1..5 unchanged and adds tokens 6..12. Staging --chart-1..5 must stay unchanged, or 307 AC-12 and the 307 AC-2 Nocturne value check would break.
+- Possible tension to flag for a human: 307 AC-2 requires every Nocturne :root token to be present, and 342 adds 7 new staging tokens. I read this as additive and compatible, since 342 AC-1 freezes only the first five. I did not mark it CONFLICT.
+- Wording-only difference: tag lines gain @feature-342. Given/When/Then text is verbatim.
+- The acceptance/ directory already exists for xstockstrat-ui, so only the file is created.
+
+### Coverage check
+- Source scenarios: 6 (AC-1 to AC-6). Planned: 6 (NEW 6, DUP 0, OVERLAP 0, CONFLICT 0). None skipped.
+```
