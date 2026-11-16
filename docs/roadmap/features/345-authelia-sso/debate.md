@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (the owner authorized more than 5 rounds if necessary — context.md 2026-11-15)
-**Rounds run**: 5
+**Rounds run**: 6
 
 ## Rounds
 
@@ -12,7 +12,8 @@
 | 2 | 2026-11-16 | /sdd-design | 14 | 3 | 17 | 8 | 0 | yes |
 | 3 | 2026-11-16 | /sdd-design | 7 | 2 | 14 | 6 | 0 | yes |
 | 4 | 2026-11-16 | /sdd-design | 13 | 3 | 11 | 11 | 0 | yes |
-| 5 | 2026-11-16 | /sdd-design | 9 | 3 | 9 | 11 | 1 | yes |
+| 5 | 2026-11-16 | /sdd-design | 10 | 3 | 11 | 11 | 1 | yes |
+| 6 | 2026-11-16 | /sdd-design | 5 | 2 | 6 | 6 | 0 | yes |
 
 ## Settled Decisions
 
@@ -78,6 +79,11 @@
 | D-58 | 5 | **Callback `error` handling** (round 5 §8). The IdP `error` parameter is handled after the mode read and before txn decryption. Its own `sso_txn_<hash(state)>` is cleared when `state` is present. `access_denied` → `no_access`, any other error → `failed`. No session cookies are set. | — | settled |
 | D-59 | 5 | **Tests and spec hygiene** (O-53, round 5 §10).<br>• `middleware.test` asserts every path in the exact exempt Set has a `route.ts` under `src/app/`; lookalikes such as `/api/auth/logoutx` and `/api/auth/sso/startx` must redirect.<br>• Spec drift fixed: `/start` is POST; the `oidc.client_secret` readers are start, callback and logout (`config-wiring.json` matches).<br>• Spike checklist adds O-49: `end_session_endpoint` advertised, `client_id` + `post_logout_redirect_uri` honoured without `id_token_hint` or a confirmation page, the portal `rd` parameter name, and `GET /logout` without confirmation. If `end_session` needs a hint or confirmation, the portal branch goes first. **No ID-token storage.** Stub knobs: `endSession`, `requireHint`. | ledger fails.md:3542-3545 | settled |
 | D-60 | 5 | **Owner sign-offs (gate 5).** (1) The Sign-out button appears in the header in both modes, and an expired-session logout returns JSON instead of a 307 (same end state). Both are accepted as part of this feature (O-45); product-spec line 216 and FR-15 are amended. (2) In `'error'` mode, logout ends only the xstockstrat session and logs WARN `sso_logout_mode_unknown`; the Authelia session survives. Accepted (O-48). | context.md 2026-11-16 | settled |
+| D-61 | 6 | **D-52 amendment** (RF-1, RF-2, RF-3; O-60).<br>• `verifyAccessTokenForLogout` in `src/lib/auth.ts` shares a key-loading helper with `verifyAccessToken` (DRY). It accepts a valid signature, or a `JWTExpired` whose `exp` is ≤ `REMEMBER_ME_MAX_AGE_SECONDS` in the past. Other claim errors are rejected. Verified: jose 5.10.0 `jwt/verify.js:5-9` checks the signature before claims, and `errors.js:23-35` carries the payload.<br>• It returns a reason. The route records it as a closed `recordAuthEvent('logout', …)` label (`verified`, `unverified`, `expired_too_old`), pinned in `bffAllowlist.test.ts`.<br>• `revokeToken` gets `timeoutMs: REFRESH_TIMEOUT_MS` plus an `identity.test.ts` case.<br>• Revoke and the redirect lookup run in parallel and are both awaited (worst case ~10 s). The test asserts "revoke iff signature-valid".<br>• `raceDeadline` lives in `deadlines.ts` and clears its own timer.<br>• **Accepted residual:** a stolen access token that expired less than 14 days ago can force a "log out everywhere" for its owner. This matches the defect report's Expected section (`:19`). | `auth.ts:23-36`, `identity.ts:42-48`, `deadlines.ts:2-3` | settled |
+| D-62 | 6 | **Middleware sets.** Exported `SSO_PUBLIC_PATHS` and `COOKIE_GATED_PATHS` (logout passes only when an `access_token` or `refresh_token` cookie is present). `PUBLIC_HEALTH_PATHS` is exported too. The matcher is unchanged. A route-existence test covers every path in the union (D-59). | `middleware.ts:22,27-39` | settled |
+| D-63 | 6 | **SignOutButton details** (RF-4, RF-5; O-58, O-59).<br>• `size-11 sm:size-8`, `aria-label="Sign out"`.<br>• `fetch(..., {redirect:'manual'})` inside try/catch. A rejection, a non-ok response, or an `opaqueredirect` all go to `location.assign('/auth/login')`; `pending` never sticks.<br>• A mobile e2e at 375 px on `/trader` asserts `scrollWidth <= clientWidth` and that the button is in the viewport. If that fails, the button moves into the mobile offcanvas sheet below `sm`. | `PlatformHeader.tsx:202,246-253`, `button.tsx:35`, `trader/AppShell.tsx:20-26` | settled |
+| D-64 | 6 | **Test plan for logout and SSO forms** (O-55, RF-6, D-58).<br>• "RevokeToken called iff signature-valid" is asserted in the route unit test, with `revokeToken` mocked.<br>• e2e checks only that cookies are cleared and that navigation goes to the end-session or portal URL, via a `page.route()` intercept on the stub Authelia host. No cross-process counter (C-18).<br>• Stub discovery fixtures go in `e2e/fixtures/` and `INVENTORY.md` (C-12).<br>• The radix uncontrolled checkbox starts unchecked (`rcb index.mjs:35`). e2e intercepts the `/start` body: `remember=1` only when checked.<br>• `_mock_conn` gains a `fetchall` side effect (lookup rows, then DELETE RETURNING rows). | `e2e/global-setup.ts:29`, `test_manage_users.py:59-60` | settled |
+| D-65 | 6 | **Configuration cache and URLs** (O-56, O-57). `getOidcConfiguration` reads GetSecret with `AUTH_CONFIG_TIMEOUT_MS`. The cache stores only resolved Configurations and drops rejected promises (unit case: "rejected discovery is not cached"). Every app URL is built with `new URL('/auth/login', APP_URL).href`, both for `post_logout_redirect_uri` and in `autheliaPortalLogoutUrl`. | — | settled |
 | D-13 | 1 | **Fixed constants** (60 s role TTL, JWKS freshness, cooldown, fetch timeout) stay in code with the "Fixed invariant (F-07)" comment form. They are not config keys. | `client.py:39-47` | settled |
 
 ## Rejected Alternatives (locked)
@@ -104,6 +110,8 @@
 | R-18 | 5 | 303 redirect from `/api/auth/logout` in SSO mode | Fetch callers can't follow it, and the route would have two response shapes. | locked |
 | R-19 | 5 | Store the ID token (JWE cookie) for `id_token_hint` | A third long-lived cookie holding the email; `client_id` suffices unless the spike proves otherwise, and then the portal branch goes first (D-59). | locked |
 | R-20 | 5 | Exempt `/api/auth/logout` unconditionally | Exposes the open RevokeToken unverified-decode defect to the internet and adds a local-logout CSRF (O-44). | locked |
+| R-21 | 6 | `jwtVerify(..., {clockTolerance: 14d})` instead of catching `JWTExpired` | It also relaxes `nbf` by 14 days. The explicit `JWTExpired` + `exp` bound is clearer about intent. | locked |
+| R-22 | 6 | A cross-process e2e counter endpoint for RevokeToken | Scaffolding for an assertion the route unit test already makes (C-18). | locked |
 | R-7 | 1 | HS256-signed (JWS) SSO transaction cookie | `verifyAccessToken` accepts any HS256 `JWT_SECRET` JWS, so the cookie would also be a valid session token (type confusion). | locked |
 
 ## Objections
@@ -165,6 +173,12 @@
 | O-52 | 5 | SignOutButton placement, accessibility and resilience. (C-10/C-17) | no | closed @ round 5 (D-53) |
 | O-53 | 5 | The exempt Set needs a route-derived test. (ledger 3545) | no | closed @ round 5 (D-59) |
 | O-54 | 5 | Pin the whole PRM contract; assert the Origin-null case; safeRedirect URL test. | no | closed @ round 5 (D-54, D-55) |
+| O-55 | 6 | The e2e plan for AC-52/53 cannot observe a per-process mock counter, and lacks SSO-mode and discovery stubbing. (C-15/C-12) | no | closed @ round 6 (D-64) |
+| O-56 | 6 | The losing discovery branch can outlive the budget through GetSecret's 30 s default; a rejected promise could be cached. | no | closed @ round 6 (D-65) |
+| O-57 | 6 | Redirect URLs built by string concatenation (trailing-slash `//`). | no | closed @ round 6 (D-65) |
+| O-58 | 6 | SignOutButton has no rejection path, so `pending` sticks. | no | closed @ round 6 (D-63) |
+| O-59 | 6 | Possible mobile header overflow on `/trader`. (C-17) | no | closed @ round 6 (D-63) |
+| O-60 | 6 | Unverified or over-age logouts leave no trace. | no | closed @ round 6 (D-61) |
 
 ## Reopen Petitions
 

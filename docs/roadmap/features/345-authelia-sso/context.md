@@ -159,3 +159,4 @@
   - Accepted that `'error'`-mode logout ends only the xstockstrat session, with a WARN (D-60, O-48).
   - Chose to run round 6 on the round-5 additions.
 - Spec line 216 and FR-15 amended.
+- Round 6: the adversary rated it SOUND. O-55..O-60 were folded into D-61..D-65. The orchestrator verified jose 5.10.0 (JWTExpired.payload; signature checked before claims) and radix checkbox 1.3.11 (native form submission, unchecked by default). Accepted residual risk: a stolen access token that expired less than 14 days ago can force a 'log out everywhere' for its owner (matches the defect report's Expected section). Register: 65 decisions (D-45 superseded), 22 rejected alternatives, 0 open objections.
