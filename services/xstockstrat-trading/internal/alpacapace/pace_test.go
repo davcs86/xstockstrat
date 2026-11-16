@@ -347,3 +347,25 @@ func TestWarnOnce_OncePerThrottledWindow(t *testing.T) {
 		t.Fatalf("the first call after the window ended returned false")
 	}
 }
+
+// Hold tells the client a wait is a throttle (worth a WARN); a spread slot is not.
+func TestReserve_MarksOnlyAnExhaustedWindowAsAHold(t *testing.T) {
+	latest := t0.Add(30 * time.Second)
+	p, k := observedPacer(200, 0, t0.Add(3*time.Second))
+	if got := p.Reserve(k, t0, latest, 0); !got.Hold {
+		t.Fatalf("a fitting hold is not marked: %+v", got)
+	}
+	if got := p.Reserve(k, t0, t0, 0); !got.Hold || got.Fits {
+		t.Fatalf("a hold that does not fit is not marked: %+v", got)
+	}
+
+	p, k = observedPacer(200, 4, t0.Add(4*time.Second))
+	for i := 0; i < 4; i++ {
+		if got := p.Reserve(k, t0, latest, 0); got.Hold {
+			t.Fatalf("spread slot %d is marked as a hold: %+v", i+1, got)
+		}
+	}
+	if got := NewPacer().Reserve(k, t0, latest, 0); got.Hold {
+		t.Fatalf("a request with no state is marked as a hold: %+v", got)
+	}
+}

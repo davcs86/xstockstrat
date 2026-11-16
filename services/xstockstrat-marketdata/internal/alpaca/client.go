@@ -227,7 +227,7 @@ func (c *Client) doPaced(req *http.Request, cfg ClientConfig) (*http.Response, e
 	for attempt := 1; ; attempt++ {
 		jitter := c.jitter()
 		if r := c.pacer.Reserve(call.key, c.now(), call.end.Add(-jitter-minAttempt), jitter); r.Wait > 0 {
-			if err := c.pause(ctx, call, r.Wait, r.Fits); err != nil {
+			if err := c.pause(ctx, call, r.Wait, r.Fits, r.Hold); err != nil {
 				return nil, err
 			}
 		}
@@ -254,7 +254,7 @@ func (c *Client) doPaced(req *http.Request, cfg ClientConfig) (*http.Response, e
 		_ = resp.Body.Close()
 		now := c.now()
 		wait := alpacapace.RetryWait(attempt, now, reset, c.jitter())
-		if err := c.pause(ctx, call, wait, !now.Add(wait+minAttempt).After(call.end)); err != nil {
+		if err := c.pause(ctx, call, wait, !now.Add(wait+minAttempt).After(call.end), true); err != nil {
 			return nil, err
 		}
 	}
@@ -301,9 +301,10 @@ func (b *cancelOnClose) Close() error {
 }
 
 // pause sleeps one adaptive wait. A nil return is the only case in which the caller may send.
-func (c *Client) pause(ctx context.Context, call pacedCall, wait time.Duration, fits bool) error {
+// throttled is a hold or a 429 wait; a spread slot is not logged.
+func (c *Client) pause(ctx context.Context, call pacedCall, wait time.Duration, fits, throttled bool) error {
 	now := c.now()
-	if c.pacer.WarnOnce(call.key, now, now.Add(wait)) {
+	if throttled && c.pacer.WarnOnce(call.key, now, now.Add(wait)) {
 		slog.WarnContext(ctx, "alpaca rate limit: throttled", "host", call.host, "wait_ms", wait.Milliseconds())
 	}
 	if fits {

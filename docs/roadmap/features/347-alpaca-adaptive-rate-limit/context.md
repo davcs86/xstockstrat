@@ -321,3 +321,15 @@
 - Files modified: `services/xstockstrat-marketdata/internal/alpaca/export_test.go` (new),
   `internal/alpaca/client_test.go`, `internal/fmp/fmp_client_test.go`, `cmd/server/main_test.go`
 - Deviations: none
+
+### Checkpoint after Step 4 — operator decisions
+- (24) Proceed to Steps 5+6, 7, 8.
+- (25) Throttle WARN scope: **holds and 429 waits only**. Implemented as `Reservation.Hold` in the core
+  (both copies) and a `throttled` argument on the marketdata client's `pause`; supersedes the
+  "every non-zero wait" interpretation noted under Step 3. See the Deviation Log.
+- TDD: red — `pace_test.go` did not compile (`got.Hold undefined`) and `F347_AC3` failed on
+  "spreading logged a throttle WARN" → green — 19/19 core tests in both modules (coverage 100.0%),
+  16/16 `F347` tests in marketdata, whole service `go test ./... -race` exit 0, lint 0 issues, copy
+  gate clean.
+- Files modified: both `internal/alpacapace/pace.go` and `pace_test.go`,
+  `services/xstockstrat-marketdata/internal/alpaca/client.go`, `client_test.go`

@@ -38,9 +38,11 @@ type Headers struct {
 }
 
 // Reservation: a zero Wait is always sent; Fits is false only for a hold that ends after the caller's latest send time.
+// Hold marks the wait of an exhausted window (a throttle), as opposed to a spread slot.
 type Reservation struct {
 	Wait time.Duration
 	Fits bool
+	Hold bool
 }
 
 type window struct {
@@ -131,7 +133,7 @@ func (p *Pacer) Reserve(k Key, now, latest time.Time, jitter time.Duration) Rese
 	}
 	if w.remaining == 0 {
 		hold := min(w.reset.Sub(now), Window)
-		return Reservation{Wait: hold + jitter, Fits: !now.Add(hold).After(latest)}
+		return Reservation{Wait: hold + jitter, Fits: !now.Add(hold).After(latest), Hold: true}
 	}
 	if w.remaining*LowWaterRatio >= w.limit {
 		w.remaining--

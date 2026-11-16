@@ -844,3 +844,9 @@ grep -n "migrationSql" src/__tests__/alpacaAdaptiveRateLimitSeedMigration.test.t
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 1 — pacing core `internal/alpacapace` (and Step 3's WARN)
+**Spec said**: "`type Reservation struct{ Wait time.Duration; Fits bool }`" (Step 1) and "One WARN per throttled window per host, gated by `WarnOnce`" (Step 3).
+**Actual**: `Reservation` gained a third field, `Hold bool`, true only for the wait of an exhausted window. The marketdata client logs the throttle WARN for a hold or a 429 wait and never for a spread slot.
+**Reason**: the two-field result does not tell a spread slot from a hold, so the client could only log every non-zero wait (several WARNs a minute while quota is merely low). The design's situation tables mark WARN on the hold and 429 rows only. Operator decision at the Step 4 checkpoint (2026-11-16): "Holds and 429 waits only".
+**Disposition**: operator-approved follow-up commit after Step 4; both `pace.go` copies and `pace_test.go` stay byte-identical. Step 7 (trading client) uses the same field.

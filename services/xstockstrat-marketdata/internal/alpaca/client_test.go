@@ -1013,6 +1013,7 @@ func TestDoPaced_HostsAreIndependent_F347_AC2(t *testing.T) {
 
 // @AC-3: a low remaining count spreads requests instead of bursting.
 func TestDoPaced_LowRemainingSpreadsRequests_F347_AC3(t *testing.T) {
+	warns := f347RecordWarns(t)
 	clock := &f347Clock{now: f347Start}
 	rt := &f347RT{respond: func(n int, _ *http.Request) *http.Response {
 		if n == 0 {
@@ -1037,6 +1038,9 @@ func TestDoPaced_LowRemainingSpreadsRequests_F347_AC3(t *testing.T) {
 		if sleeps[i] < min || sleeps[i] >= 4*time.Second {
 			t.Fatalf("wait %d = %v, want >= %v and before the reset", i+2, sleeps[i], min)
 		}
+	}
+	if logged := warns(); len(logged) != 0 {
+		t.Fatalf("spreading logged a throttle WARN: %+v", logged)
 	}
 }
 
