@@ -3,6 +3,10 @@ import { addAuthCookie, addAdminCookie } from '../helpers/auth';
 import { FUNDAMENTALS_STALL_SYMBOL, STRATEGY_DEF_LIVE, UI_CHART_HISTORY_VALUES } from '../fixtures';
 import { historyBarsWire, indicatorSeriesWire } from '../fixtures/indicatorHistory';
 import { noCriteriaDataRow } from '../fixtures/screenResults';
+import {
+  INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP,
+  INDICATOR_COMPONENTS_PALETTE_13,
+} from '../fixtures/indicatorSeries';
 
 /**
  * Single-Position page (feature 096) — the dedicated `/trader/positions/[symbol]` view built from
@@ -512,6 +516,58 @@ test.describe('Single Position page', () => {
     await expect(readout).toBeVisible({ timeout: 10000 });
     await expect(readout).toContainText('price');
     await expect(readout).toContainText('macd.value');
+  });
+
+  test('five series across four indicators draw in five different colours, in palette order (feature 342 @AC-2)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/LYFT?strategy=dip_buyer_vol_stop');
+    const keys = seriesKeys(INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP);
+    await waitForDrawnLines(page, keys.length);
+
+    const colours = [];
+    for (const [refName, seriesName] of keys) {
+      colours.push(await seriesColours(page, refName, seriesName));
+    }
+    for (const c of colours) expect(c.line).toEqual(c.swatch);
+    expect(distinct(colours.map((c) => c.line))).toBe(keys.length);
+    // vts carries two series: stop_line and value must not share a colour.
+    expect(colours[3].line).not.toEqual(colours[4].line);
+    for (const [k, c] of colours.entries()) {
+      expect(c.swatch).toEqual(await seriesToken(page, k + 1));
+    }
+  });
+
+  test('each legend swatch matches the colour its line was drawn with (feature 342 @AC-3)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/LYFT?strategy=dip_buyer_vol_stop');
+    const keys = seriesKeys(INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP);
+    await waitForDrawnLines(page, keys.length);
+
+    // keys[2] is sma200.value; keys[3] is vts.stop_line, the first series of a multi-series panel.
+    for (const [refName, seriesName] of [keys[2], keys[3]]) {
+      const c = await seriesColours(page, refName, seriesName);
+      expect(c.swatch).toEqual(c.line);
+    }
+  });
+
+  test('a thirteenth series reuses the first colour (feature 342 @AC-6)', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/LYFT?strategy=series_palette_13');
+    const keys = seriesKeys(INDICATOR_COMPONENTS_PALETTE_13);
+    await waitForDrawnLines(page, keys.length);
+    await expect(page.getByRole('main').getByTestId('indicator-panel')).toHaveCount(keys.length);
+
+    const colours = [];
+    for (const [refName, seriesName] of keys) {
+      colours.push(await seriesColours(page, refName, seriesName));
+    }
+    for (const c of colours) expect(c.line).toEqual(c.swatch);
+    expect(distinct(colours.slice(0, 12).map((c) => c.line))).toBe(12);
+    expect(colours[12].line).toEqual(colours[0].line);
   });
 
   // feature 341 — one newest-page GetBars of the configured history depth; the whole history goes to
@@ -1051,6 +1107,60 @@ async function watchlist(
  *  this doesn't, since the testid attaches to exactly one element regardless. */
 function readinessCard(page: import('@playwright/test').Page) {
   return page.getByTestId('signal-readiness');
+}
+
+// feature 342 — series-palette e2e helpers.
+/** `[refName, seriesName]` for every series of a fixture's components, in draw order. */
+function seriesKeys(components: { refName: string; series: { name: string }[] }[]) {
+  return components.flatMap((c) => c.series.map((s) => [c.refName, s.name] as const));
+}
+
+/** The first three integers of an `rgb()`/`rgba()` string; lightweight-charts may normalise it. */
+function channels(text: string | null): number[] {
+  return (text?.match(/\d+/g) ?? []).slice(0, 3).map(Number);
+}
+
+function distinct(colours: number[][]): number {
+  return new Set(colours.map((c) => c.join(','))).size;
+}
+
+function indicatorPanel(page: import('@playwright/test').Page, refName: string) {
+  return page
+    .getByRole('main')
+    .getByTestId('indicator-panel')
+    .filter({ has: page.getByText(refName, { exact: true }) });
+}
+
+// `data-line-color` appears only once the line is drawn, so its count is the draw-readiness seam.
+async function waitForDrawnLines(page: import('@playwright/test').Page, count: number) {
+  await expect(page.locator('.tv-lightweight-charts').first()).toBeVisible({ timeout: 30000 });
+  await expect(
+    page.getByRole('main').getByTestId('indicator-panel').locator('[data-line-color]'),
+  ).toHaveCount(count, { timeout: 30000 });
+}
+
+/** The drawn line colour and the swatch's computed background of one series, as channels. */
+async function seriesColours(
+  page: import('@playwright/test').Page,
+  refName: string,
+  seriesName: string,
+) {
+  const panel = indicatorPanel(page, refName);
+  const names = ((await panel.getAttribute('data-series')) ?? '').split(',');
+  const swatch = panel.locator('[data-line-color]').nth(names.indexOf(seriesName));
+  const line = channels(await swatch.getAttribute('data-line-color'));
+  const swatchBg = channels(await swatch.evaluate((el) => getComputedStyle(el).backgroundColor));
+  expect(line, `${refName}.${seriesName} line colour`).toHaveLength(3);
+  return { line, swatch: swatchBg };
+}
+
+async function seriesToken(page: import('@playwright/test').Page, k: number): Promise<number[]> {
+  return channels(
+    await page.evaluate(
+      (n) => getComputedStyle(document.documentElement).getPropertyValue(`--series-${n}`),
+      k,
+    ),
+  );
 }
 
 // feature 095 — the Signal-detail live-market enrichment: header price/change/sparkline, the
