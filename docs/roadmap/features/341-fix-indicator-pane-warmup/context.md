@@ -929,3 +929,69 @@ Feature: Indicator pane renders long-lookback indicators across the charted wind
 
 - **Supersedes the "Expand that." reading above.** The operator corrected it, verbatim: "No, \"expand\" was meant you explained more" — it was a request for more explanation, not a sign-off.
 - Asked again explicitly: "do you sign off the two \"Not enough history\" scenarios (`@AC-2`, `@AC-4`)?" **Operator, verbatim: "Sign off".** The EXTEND of `@AC-2` and `@AC-4` therefore stands on the operator's own words; nothing landed under the earlier reading needs reverting.
+
+## Session 2026-11-16 — sdd-batch-execute promotion plan, regenerated from the feature branch (awaiting operator confirm)
+
+- **Supersedes the earlier `sdd-batch-promotion-plan` block.** That plan was built from the `main-dev` working-tree copy of `acceptance.feature` (2 scenarios, no `@FR-*` tags), not from this branch (4 scenarios). The integration step refused to apply it. The operator's "Confirm both" of 2026-11-16 was given on that stale plan and does not cover this one.
+- This plan was built by `scenario-promoter` from a checkout of `origin/feature/fix-indicator-pane-warmup` at `bc19e6dd7`.
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-indicator-pane-warmup (feature 341)
+
+Source: docs/roadmap/features/341-fix-indicator-pane-warmup/acceptance.feature at bc19e6dd7 — 4 scenarios.
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict |
+|---|---|---|---|
+| AC-1 (@FR-1 @regression) | services/xstockstrat-ui/acceptance/fix-indicator-pane-warmup.feature | CREATE | NEW |
+| AC-2 (@FR-2 @regression) | same | CREATE | NEW |
+| AC-3 (@FR-1) | same | CREATE | NEW |
+| AC-4 (@FR-2) | same | CREATE | NEW |
+
+### Ready-to-write blocks
+--- services/xstockstrat-ui/acceptance/fix-indicator-pane-warmup.feature (CREATE) ---
+# Promoted from docs/roadmap/features/341-fix-indicator-pane-warmup/acceptance.feature (Constitution C-16).
+# Provenance: @feature-341.
+
+Feature: fix-indicator-pane-warmup (bug fix)
+  Regression guard for docs/reports/2026-11-15-indicator-panel-sma200-single-point-defect.md.
+
+  @AC-1 @FR-1 @regression @feature-341
+  Scenario: A 200-period average renders across the whole charted window
+    Given "LYFT" has 400 ingested daily bars
+    And the configured history depth is 1000 bars
+    And the indicator chart window covers the latest 190 bars
+    When the indicator set containing SMA with period 200 is shown
+    Then the SMA200 series has a value on each of the 190 charted bars
+
+  @AC-2 @FR-2 @regression @feature-341
+  Scenario: An indicator without enough history says so instead of drawing a dot
+    Given "LYFT" has 150 ingested daily bars
+    When the indicator set containing SMA with period 200 is shown
+    Then the SMA200 pane shows "Not enough history" and draws no series
+
+  @AC-3 @FR-1 @feature-341
+  Scenario: History equal to the lookback yields a value on the last charted bar only
+    Given "LYFT" has 200 ingested daily bars
+    And the configured history depth is 1000 bars
+    And the indicator chart window covers the latest 190 bars
+    When the indicator set containing SMA with period 200 is shown
+    Then the SMA200 series has a value on the last charted bar and a gap on the 189 earlier bars
+    And the SMA200 pane does not show "Not enough history"
+
+  @AC-4 @FR-2 @feature-341
+  Scenario: Only the indicator lacking history reports it; the others still render
+    Given "LYFT" has 150 ingested daily bars
+    And the indicator chart window covers the latest 100 bars
+    When the indicator set containing SMA with period 200 and SMA with period 20 is shown
+    Then the SMA200 pane shows "Not enough history" and draws no series
+    And the SMA20 series has a value on each of the 100 charted bars
+
+### Notes
+- All four Then clauses assert on the UI indicator panes, so all go to the xstockstrat-ui suite; nothing goes to platform.feature.
+- No existing durable scenario covers the symbol-page indicator panes (recon.md:127-134; grep of every suite for "Not enough history" and @feature-341 found nothing). No OVERLAP, no CONFLICT.
+- The scenario bodies must be copied byte-for-byte from the source file at apply time; this block is the reviewed text.
+
+### Coverage check
+- Source scenarios: 4. Planned: 4 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT.
+```
