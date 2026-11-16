@@ -52,3 +52,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Round 2 ran: adversary verdict NEEDS WORK, no Floor breach, "third round not needed"; register delta D-10..D-14, R-8..R-10, O-12..O-18, petition P-1 (REOPEN O-8: the D-3 guard test cannot fail in Chromium).
 - Design approval: **"Run round 3"** — option text: "Another proposer/adversary round with the petition accepted." The design is NOT approved. P-1 → `user reopened`; O-8 → reopened @ round 3.
 - Button names: **"Unique names (Recommended)"** — orders "Actions for order {orderId}", strategies "Actions for {strategyId}" (closes O-15).
+
+## Session 2026-11-16 — sdd-design (approved)
+
+- Round-3 gate, operator answers (verbatim options): design — **"Approve (Recommended)"**; new scenarios — **"Add and promote (Recommended)"** (`@AC-9`, `@AC-10` and one sentence each on FR-1 and FR-3 are added and join the durable suite approved in advance).
+- Phase 1 Grilling: 3 rounds (quick, extended twice by the operator). Round 3: adversary verdict SOUND with amendments; register delta D-15..D-19, R-11..R-13, O-19..O-22 (all closed); O-8 and O-12 closed by D-17. No Floor breach in any round.
+- Chosen approach: close on select in the shared `RowActionsMenu`, focus back to the row's trigger (fallback: the page's `<main>`), keyboard focus kept inside the dialog while the menu closes, orders and strategies adopt the shared menu, a stable actions cell on every table. Rejected: deferring the dialog, `modal={false}`, hand-controlled menu state, hook-only sharing, a DataTable-level cell fix (R-1..R-13 in debate.md).
+- Measured before round 3 (recon.md addendum): keyboard path 0 focus events with the guard, 2 without; mouse path keeps one pair toward the closing menu's content.
+- Constitution rules touched: C-10, C-12, C-13, C-14, C-15, C-16, C-17, C-18, P-04, P-06, F-04, F-05, F-08. Floor breaches: none.
+- Ledger: read (fails 2026-09-16, 2026-11-15, 2026-11-16 ×2, :793-801, :1647-1649; insights 2026-09-05). Writes (superseding entries, D-9, and the columns-remount trap) are Step 5 of the build order.
+- Open threads (design.md § Open Risks): React 19 ref dependency (Step 1); mouse-path focus pair, strategies per-row disabled, two side defects (integration PR); Radix-internal event name in the guard test (Step 1); `theme-bundle.spec.ts` run (Step 1).
+- Status: spec-ready → design-approved.

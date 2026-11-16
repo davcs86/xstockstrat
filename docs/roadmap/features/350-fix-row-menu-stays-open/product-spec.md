@@ -29,14 +29,16 @@ user intends, and focus returns to the row's actions trigger.
 ## Functional Requirements
 
 - **FR-1** Choosing a confirm-type row action closes the row menu, and the confirmation dialog
-  opens every time (pointer and keyboard).
+  opens every time (pointer and keyboard). When the action is chosen from the keyboard, focus moves
+  into the dialog and does not leave it until the dialog is confirmed or cancelled.
 - **FR-2** After the dialog is confirmed or cancelled, nothing of the menu or dialog is left
   blocking the page: no `pointer-events: none` on `body`, no page content left hidden from
   assistive technology, and the first click or key press reaches its target.
 - **FR-3** After the dialog is confirmed or cancelled, keyboard focus is on the actions trigger of
   the row the action was chosen from. When that trigger no longer exists or is disabled (the row
   left the table), focus is not left on a removed element; the fallback target is fixed by the
-  design.
+  design. This holds when the page updates the table while the dialog is open, including after a
+  failed action.
 - **FR-4** FR-1..FR-3 hold for every confirm action on every table that uses the shared row menu,
   and for the orders table's Cancel and the strategies table's Deactivate (each has its own menu
   and dialog today), through one mechanism.

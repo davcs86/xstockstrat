@@ -90,3 +90,24 @@ Feature: fix-row-menu-stays-open (bug fix)
     Given the user chose "Cancel" from an order's actions menu
     When the user confirms the dialog
     Then no actions menu is shown without any further key press or click
+
+  @AC-9 @FR-3 @FR-4 @regression
+  Scenario Outline: Focus stays on the row's actions trigger when the page updates during the confirmation
+    Given the <table> table with a row whose actions trigger is named "<trigger>"
+    And the user chose "<action>" from that row's actions menu
+    When the user confirms the dialog and <outcome>
+    Then <shown>
+    And keyboard focus is on the actions trigger named "<trigger>"
+
+    Examples:
+      | table            | trigger                                     | action     | outcome                                                              | shown                                                             |
+      | strategies       | Actions for strat-live-001                  | Deactivate | the strategy list is reloaded with "strat-live-001" switched off     | the row for "strat-live-001" shows the state "Off"                |
+      | authorized apps  | Actions for Claude.ai (E2E)                 | Disconnect | the disconnect fails                                                 | the message "Failed to disconnect (500)" is shown above the table |
+      | config templates | Actions for template Mean Reversion Starter | Retire     | the server refuses the retire with the message "template is in use" | the message "template is in use" is shown above the templates     |
+
+  @AC-10 @FR-1 @regression
+  Scenario: Focus does not leave the confirmation dialog while the row menu finishes closing
+    Given the actions trigger of the "Alpaca Paper" account on the accounts table has keyboard focus
+    When the user opens the menu with Enter, moves to "Remove" with End and presses Enter
+    Then the "Deregister account" dialog is shown with focus on its "Cancel" button
+    And once the row's actions menu has finished closing, focus has stayed on "Cancel" without leaving it and coming back

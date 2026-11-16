@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report (`--from-report`) |
 | 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, all folded into the spec) |
+| 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, quick extended twice by the operator) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -22,6 +23,7 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) · [Debate Register](debate.md) · [Design](design.md)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-row-menu-stays-open`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -37,4 +39,4 @@ trigger, once the dialog resolves.
 
 ## Next Action
 
-`/sdd-design fix-row-menu-stays-open quick` — quick design recommended (single service, no proto/DB/config, no overlap) and chosen by the operator
+`/sdd-spec fix-row-menu-stays-open` — generate implementation spec from the approved design
