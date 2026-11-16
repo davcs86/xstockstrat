@@ -136,7 +136,7 @@ func TestPlan_PerSymbolReport(t *testing.T) {
 		},
 		"DOWN": func() (edgar.Derivation, error) { return edgar.Derivation{}, errors.New("edgar GET: status 503") },
 		"LATE": late,
-	}, rows, 2)
+	}, rows, 2, time.Time{}, time.Time{})
 
 	if got := fmt.Sprint(symbolNames(report)); got != "[DOWN LATE MOVED ORCL]" {
 		t.Fatalf("symbols = %s, want every symbol planned, in order", got)
@@ -203,11 +203,34 @@ func TestPostRepairVerdict_AC7_feature348(t *testing.T) {
 		"two rows of one type share a period_end":     {`{"ORCL": [` + repaired + `, ` + twin + `]}`, []string{"ORCL"}, false, "share a period_end"},
 		"a symbol outside the list cannot be planned": {`{"ORCL": [` + repaired + `], "DOWN": [` + twin + `]}`, nil, false, "DOWN could not be planned"},
 	} {
-		report := Plan(context.Background(), deriver, parse(t, tc.doc, 3), 3)
+		report := Plan(context.Background(), deriver, parse(t, tc.doc, 3), 3, time.Time{}, time.Time{})
 		v := PostRepairVerdict(report, tc.failed)
 		if v.Pass != tc.wantPass || (tc.reason != "" && !strings.Contains(strings.Join(v.Reasons, "; "), tc.reason)) || (tc.wantPass && len(v.Reasons) != 0) {
 			t.Errorf("%s: verdict = %+v, want pass=%v with a reason containing %q", name, v, tc.wantPass, tc.reason)
 		}
+	}
+}
+
+// A repaired symbol's audit over the repair's range plans nothing for SEC periods older than it;
+// over an open range it plans their insert.
+func TestPlan_RangeLimitsInsertsOfRepairedSymbol(t *testing.T) {
+	rows := parse(t, `{"ORCL": [
+	  {"fiscal_period": "Q1-2026", "period_type": "quarterly", "period_end": "2025-08-31T00:00:00Z", "filed_date": "2025-09-10T00:00:00Z", "extra_metrics": {"net_income": 2927000000}},
+	  {"fiscal_period": "Q1-2027", "period_type": "quarterly", "period_end": "2026-08-31T00:00:00Z", "filed_date": "2026-09-11T00:00:00Z", "extra_metrics": {"net_income": 4760000000}}]}`, 3)
+	deriver := stubDeriver{"ORCL": func() (edgar.Derivation, error) {
+		return edgar.Derivation{Periods: []source.HistoricalFundamentalsPeriod{
+			fresh("Q1-2015", "quarterly", "2014-08-31", "2014-09-18", map[string]float64{"net_income": 2184000000}),
+			fresh("Q1-2026", "quarterly", "2025-08-31", "2025-09-10", map[string]float64{"net_income": 2927000000}),
+			fresh("Q1-2027", "quarterly", "2026-08-31", "2026-09-11", map[string]float64{"net_income": 4760000000}),
+		}}, nil
+	}}
+	ranged := Plan(context.Background(), deriver, rows, 3, d("2025-08-31"), time.Time{})
+	if s := symbolReport(t, ranged, "ORCL"); s.Identical != 2 || s.Deletes != 0 || s.Inserts != 0 || !PostRepairVerdict(ranged, nil).Pass {
+		t.Errorf("from the lane minimum: %+v, want 2 identical, no change and a passing verdict", s)
+	}
+	open := Plan(context.Background(), deriver, rows, 3, time.Time{}, time.Time{})
+	if s := symbolReport(t, open, "ORCL"); s.Inserts != 1 || PostRepairVerdict(open, nil).Pass {
+		t.Errorf("open range: %+v, want the older period planned as an insert and a failing verdict", s)
 	}
 }
 

@@ -381,3 +381,26 @@ Three questions were put in one message after the PR was opened. The operator's 
 - Files modified: `services/xstockstrat-marketdata/docs/fundamentals.md`, `services/xstockstrat-marketdata/docs/context-constitution.md`, `services/xstockstrat-marketdata/docs/context-constitution-findings.md`, `services/xstockstrat-marketdata/CLAUDE.md`, `docs/runbooks/historical-backfill.md`
 - Deviations: none
 
+## Session 2026-11-16 — operator answers at the batched gate (sdd-execute)
+
+Asked once, four questions, through the question dialog. Answers verbatim:
+
+1. Audit range against the repair range → **"Add range flags (Recommended)"**. Closes the Open Item above.
+2. C-16 promotion plan (11 scenarios into a new `fix-edgar-historical-fundamentals.feature`; two leftovers named) → **"Approve, and fix the Q4-2019 name"**. This signs the edit of `@AC-3 @feature-198`.
+3. Lane A freeze (`marketdata/fundamentals.history.enabled` → `false`) → **"I set it now via MCP"**.
+4. SEC `User-Agent` for the audit → **"The lane's configured value (Recommended)"** (read `marketdata/edgar.user_agent` per lane with a read-only `get_config`).
+
+Not asked and therefore not authorized: any `trigger_backfill`, re-enabling the flag, any change on lane B, merging.
+
+### Follow-on to Step 10 — audit range flags [done]
+- `fundaudit.Plan` takes `from, to`; `plan` has `-from` / `-to` (`YYYY-MM-DD`, default open). New test `TestPlan_RangeLimitsInsertsOfRepairedSymbol`: from the lane minimum a repaired symbol plans nothing and the verdict passes; with an open range the older SEC period is a planned insert and the verdict fails. Runbook updated. Deviation logged.
+- Verification (exit codes read one by one): `go test ./internal/fundaudit/... -race -cover` → `ok`, 99.0%; the command builds; `golangci-lint` `0 issues.`; `go test ./... -race -count=1` exit 0.
+
+### C-16 promotion [done]
+- Planned by `scenario-promoter` on the feature-branch tree at `d733ceae`: 11 PROMOTE, 0 duplicate, 0 conflict; `@AC-4` partly restates `@AC-3 @feature-198` (strict `filed_date < as_of`) and is kept whole; `@AC-6` realises the EXTEND of `@AC-2 @feature-223` as a new scenario.
+- Written mechanically: `services/xstockstrat-marketdata/acceptance/fix-edgar-historical-fundamentals.feature` = the four-line promotion header + `acceptance.feature` verbatim with ` @feature-348` appended to each of the 11 tag lines (a `diff` with the tag removed is empty). Both `# guards:` lines kept.
+- `@AC-3 @feature-198`: `Q4-2019` → `Q1-2020` (operator answer 2).
+- Left as is, named to the operator in the question: the feature 216 header sentence "As-reported fields and the earliest filed_date are never overwritten", narrowed by the note added in Step 13.
+- `node scripts/check-config-wiring.mjs --final` → exit 0; two `REPORTED` baseline lines, both outside this feature (`analysis … marketdata/fundamentals.provider:readers-disagree`, `trading … platform/trading_state:readers-disagree`).
+- Merge-order gate: no row names this feature. `origin/main-dev` is 0 commits ahead of the branch.
+

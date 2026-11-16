@@ -181,6 +181,7 @@ GOWORK=off go run ./cmd/fundamentals-audit plan -rows A-rows-pre.json -stored-ve
 # after the repair: exits 1 when a pass condition fails
 GOWORK=off go run ./cmd/fundamentals-audit plan -rows A-rows-post.json -stored-version 3 \
   -user-agent "<SEC User-Agent with a contact>" -rate-limit-rps 5 \
+  -from "<the repair's start, YYYY-MM-DD>" \
   -post-repair-failed "<comma-separated failed_symbols, or empty>" > A-audit-post.json
 # rows whose price-join went from a value to null, per column
 GOWORK=off go run ./cmd/fundamentals-audit diff -pre A-rows-pre.json -post A-rows-post.json
@@ -191,8 +192,9 @@ value. The report lists, per symbol: a guard trip, the identical / delete / inse
 deleted without replacement with its category (`left_out`, `merged`, `period_type_changed`,
 `no_period_derived`), the left-out periods with their reason, and any derived period ending after its
 filing. The audit **cannot predict empty price columns**: it sees neither bar nor dividend coverage.
-It plans with an open range, so for a symbol whose stored rows are all already correct it also lists
-SEC periods older than the range a backfill was asked for.
+Without `-from`/`-to` it plans with an open range and so also lists, for a symbol whose stored rows
+are all already correct, SEC periods older than any backfill asked for. The post-repair run passes the
+repair's `start` as `-from`, so its verdict is what re-running the repair would do.
 
 **Repair after the version-3 deploy (feature 348), one pass per lane.** [RO] is read-only SQL by the
 operator (read paths and the query-file convention: `docs/runbooks/operator-db-access.md` and
@@ -229,8 +231,8 @@ Lane A — homelab staging (stored version 2, `fundamentals.history.enabled` = `
      lists only symbols the repair reported failed.
    - [RO] `SELECT symbol, period_type, period_end, count(*) FROM marketdata.fundamentals_history GROUP BY 1,2,3 HAVING count(*) > 1;`
      returns no row.
-   - [MCP] Read the stored periods again into `A-rows-post.json`; the audit `plan` with
-     `-post-repair-failed` plans no delete and no insert for every symbol the repair did not report
+   - [MCP] Read the stored periods again into `A-rows-post.json`; the audit `plan` with `-from` set
+     to the repair's `start` and `-post-repair-failed` plans no delete and no insert for every symbol the repair did not report
      failed.
    - [MCP] The audit `diff` reports the value → null counts per price-join column. They are reported,
      not a pass/fail figure: a replacement row has an unset column when no daily bar exists within

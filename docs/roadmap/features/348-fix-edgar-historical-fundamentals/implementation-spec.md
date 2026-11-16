@@ -1404,4 +1404,12 @@ test "$(git diff --cached --name-only | grep -Ev "audit-lane-|context.md|impleme
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 10 — service: no-write audit (`internal/fundaudit`, `cmd/fundamentals-audit`)
+**Spec said**: "plan one symbol: derive through the interface, run the planner with both period types and an open range"
+**Actual**: `plan` takes optional `-from` / `-to` flags (`fundaudit.Plan(…, from, to)`); with neither the range is open, as specified. The runbook's post-repair run passes the repair's `start` as `-from`.
+**Reason**: with an open range the post-repair verdict fails for a symbol whose stored rows were all already correct but whose SEC history starts before the repair's `start` (D-17 inserts only inside the range for such a symbol). Operator decision 2026-11-16: "Add range flags (Recommended)".
+
+### Deviation: C-16 promotion — feature 198 `@AC-3` period name
+**Spec said**: design.md § Business Rules Touched: "Its period name "Q4-2019" predates this fix and is left as is."
+**Actual**: `Q4-2019` changed to `Q1-2020` in `services/xstockstrat-marketdata/acceptance/historical-fundamentals-backtest.feature` (`@AC-3 @feature-198`); nothing else in that scenario changed.
+**Reason**: operator decision at the promotion gate, 2026-11-16: "Approve, and fix the Q4-2019 name". The label rule names the quarter ended 2019-12-28 `Q1-2020`, as `@AC-1` of the same file already does.

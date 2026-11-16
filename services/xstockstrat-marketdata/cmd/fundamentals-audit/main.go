@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/xstockstrat/marketdata/internal/edgar"
 	"github.com/xstockstrat/marketdata/internal/fundaudit"
@@ -25,7 +26,7 @@ const (
 )
 
 const usage = `usage:
-  fundamentals-audit plan -rows FILE -stored-version N -user-agent UA -rate-limit-rps N [-base-url URL] [-post-repair-failed SYM,SYM]
+  fundamentals-audit plan -rows FILE -stored-version N -user-agent UA -rate-limit-rps N [-from YYYY-MM-DD] [-to YYYY-MM-DD] [-base-url URL] [-post-repair-failed SYM,SYM]
   fundamentals-audit diff -pre FILE -post FILE
 
 A rows file is {"<SYMBOL>": [<period as query_fundamentals historical mode returns it>, ...]}.
@@ -62,6 +63,8 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	userAgent := fs.String("user-agent", "", "SEC fair-use User-Agent (required)")
 	rateLimit := fs.Int("rate-limit-rps", 0, "SEC requests per second (required, > 0)")
 	baseURL := fs.String("base-url", "", "SEC EDGAR base URL (default: the client's)")
+	fromFlag := fs.String("from", "", "period_end range start of the backfill being audited, YYYY-MM-DD (default: open)")
+	toFlag := fs.String("to", "", "period_end range end of the backfill being audited, YYYY-MM-DD (default: open)")
 	failed := fs.String("post-repair-failed", "", "post-repair run: comma-separated symbols the repair reported failed (may be empty)")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
@@ -72,12 +75,22 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		say(stderr, "plan: -rows, -stored-version, -user-agent and -rate-limit-rps are required\n"+usage)
 		return exitUsage
 	}
+	from, err := parseDay(*fromFlag)
+	if err != nil {
+		say(stderr, "plan: -from:", err)
+		return exitUsage
+	}
+	to, err := parseDay(*toFlag)
+	if err != nil {
+		say(stderr, "plan: -to:", err)
+		return exitUsage
+	}
 	rows, err := readRows(*rowsPath, *storedVersion)
 	if err != nil {
 		say(stderr, err)
 		return exitUsage
 	}
-	report := fundaudit.Plan(ctx, edgar.NewClient(*baseURL, *userAgent, *rateLimit), rows, *storedVersion)
+	report := fundaudit.Plan(ctx, edgar.NewClient(*baseURL, *userAgent, *rateLimit), rows, *storedVersion, from, to)
 	if postRepair {
 		var symbols []string
 		for _, s := range strings.Split(*failed, ",") {
@@ -126,6 +139,14 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	return exitOK
+}
+
+// parseDay returns the zero time for an empty flag.
+func parseDay(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.DateOnly, s)
 }
 
 func say(w io.Writer, a ...any) { _, _ = fmt.Fprintln(w, a...) }

@@ -143,9 +143,9 @@ type Report struct {
 
 func day(t time.Time) string { return t.Format(time.DateOnly) }
 
-// Plan audits every symbol of rows, in symbol order. A symbol that cannot be derived is reported
-// and the lane continues.
-func Plan(ctx context.Context, d Deriver, rows map[string][]source.HistoricalPriceState, storedVersion int) Report {
+// Plan audits every symbol of rows, in symbol order, for a backfill over the period_end range
+// from..to (a zero bound is open). A symbol that cannot be derived is reported and the lane continues.
+func Plan(ctx context.Context, d Deriver, rows map[string][]source.HistoricalPriceState, storedVersion int, from, to time.Time) Report {
 	report := Report{
 		StoredVersion: storedVersion, Totals: laneTotals(rows),
 		DeletedWithoutReplacementByCategory: map[string]int{}, LeftOutByReason: map[string]int{},
@@ -156,7 +156,7 @@ func Plan(ctx context.Context, d Deriver, rows map[string][]source.HistoricalPri
 	}
 	sort.Strings(symbols)
 	for _, symbol := range symbols {
-		sr := planSymbol(ctx, d, symbol, rows[symbol])
+		sr := planSymbol(ctx, d, symbol, rows[symbol], from, to)
 		for _, row := range sr.DeletedWithoutReplacement {
 			report.DeletedWithoutReplacementByCategory[row.Category]++
 		}
@@ -168,7 +168,7 @@ func Plan(ctx context.Context, d Deriver, rows map[string][]source.HistoricalPri
 	return report
 }
 
-func planSymbol(ctx context.Context, d Deriver, symbol string, stored []source.HistoricalPriceState) SymbolReport {
+func planSymbol(ctx context.Context, d Deriver, symbol string, stored []source.HistoricalPriceState, from, to time.Time) SymbolReport {
 	sr := SymbolReport{Symbol: symbol, Stored: len(stored), DeletedWithoutReplacement: []DeletedRow{}, LeftOut: []LeftOutPeriod{}}
 	derivation, err := d.DeriveHistorical(ctx, symbol)
 	if err != nil {
@@ -186,7 +186,7 @@ func planSymbol(ctx context.Context, d Deriver, symbol string, stored []source.H
 			FiscalPeriod: lo.FiscalPeriod, PeriodType: lo.PeriodType, PeriodEnd: day(lo.PeriodEnd), FiledDate: day(lo.FiledDate), Reason: lo.Reason,
 		})
 	}
-	plan, err := reconcile.Build(stored, derivation.Periods, reconcile.Request{LeftOut: derivation.LeftOut})
+	plan, err := reconcile.Build(stored, derivation.Periods, reconcile.Request{From: from, To: to, LeftOut: derivation.LeftOut})
 	if err != nil {
 		sr.Guard = err.Error()
 		return sr
