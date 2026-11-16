@@ -92,7 +92,8 @@ describe('AC-1 equity curve — cumulative realized P&L from base date', () => {
     const expected = windowed.reduce((a, t) => a + t.realizedPnl, 0);
     expect(curve[curve.length - 1].value).toBeCloseTo(expected, 6);
     // monotonic in time
-    for (let i = 1; i < curve.length; i++) expect(curve[i].t).toBeGreaterThanOrEqual(curve[i - 1].t);
+    for (let i = 1; i < curve.length; i++)
+      expect(curve[i].t).toBeGreaterThanOrEqual(curve[i - 1].t);
   });
 });
 
@@ -236,7 +237,11 @@ describe('AC-13 legacy event excluded from averages, still counted elsewhere', (
 describe('dailyReturns zero-base guard', () => {
   it('skips a step where the prior cumulative equity is 0', () => {
     // curve values: 0, 100, 150 → the 0→100 step is skipped (div-by-zero), 100→150 kept.
-    const trades: ClosedTrade[] = [trade('2026-01-01', 0), trade('2026-01-02', 100), trade('2026-01-03', 50)];
+    const trades: ClosedTrade[] = [
+      trade('2026-01-01', 0),
+      trade('2026-01-02', 100),
+      trade('2026-01-03', 50),
+    ];
     const rets = dailyReturns(buildEquityCurve(trades));
     expect(rets).toHaveLength(1);
     expect(rets[0]).toBeCloseTo(0.5, 6);
@@ -250,7 +255,9 @@ describe('readRiskFreeRate / readStartDateMs oneof-presence reads', () => {
     ({ value: { case: 'stringVal', value: v } }) as unknown as ConfigValue;
 
   it('reads a stored float, including a legitimate 0 (never value || default)', () => {
-    expect(readRiskFreeRate({ 'performance.risk_free_rate_annual': floatVal(0.03) })).toBeCloseTo(0.03);
+    expect(readRiskFreeRate({ 'performance.risk_free_rate_annual': floatVal(0.03) })).toBeCloseTo(
+      0.03,
+    );
     expect(readRiskFreeRate({ 'performance.risk_free_rate_annual': floatVal(0) })).toBe(0);
   });
   it('falls back to 0.045 when the key is absent', () => {
@@ -258,10 +265,12 @@ describe('readRiskFreeRate / readStartDateMs oneof-presence reads', () => {
   });
   it('reads a stored start date; empty / absent → earliest', () => {
     const earliest = day('2026-01-01');
-    expect(readStartDateMs({ 'performance.equity_curve_start_date': stringVal('2026-06-01') }, earliest)).toBe(
-      day('2026-06-01'),
-    );
-    expect(readStartDateMs({ 'performance.equity_curve_start_date': stringVal('') }, earliest)).toBe(earliest);
+    expect(
+      readStartDateMs({ 'performance.equity_curve_start_date': stringVal('2026-06-01') }, earliest),
+    ).toBe(day('2026-06-01'));
+    expect(
+      readStartDateMs({ 'performance.equity_curve_start_date': stringVal('') }, earliest),
+    ).toBe(earliest);
     expect(readStartDateMs({}, earliest)).toBe(earliest);
   });
 });

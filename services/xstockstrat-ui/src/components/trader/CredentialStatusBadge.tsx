@@ -21,14 +21,22 @@ export function CredentialStatusBadge({
   switch (status) {
     case CredentialStatus.INVALID:
       return (
-        <Badge variant="destructive" className="gap-1" title="The broker rejected these API secrets. Update them to resume trading.">
+        <Badge
+          variant="destructive"
+          className="gap-1"
+          title="The broker rejected these API secrets. Update them to resume trading."
+        >
           <AlertTriangle className="h-3 w-3" />
           Keys invalid
         </Badge>
       );
     case CredentialStatus.UNKNOWN:
       return (
-        <Badge variant="warning" className="gap-1" title="The last credential check could not complete (broker unreachable). Will retry automatically.">
+        <Badge
+          variant="warning"
+          className="gap-1"
+          title="The last credential check could not complete (broker unreachable). Will retry automatically."
+        >
           <HelpCircle className="h-3 w-3" />
           Keys unverified
         </Badge>

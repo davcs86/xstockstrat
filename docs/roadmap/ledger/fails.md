@@ -3995,6 +3995,11 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/337-metrics-host-provider-label/debate.md` O-17, O-18, D-12, D-17.
 - **Rule it implies**: When a design adds a label that an existing documented query already joins on, evaluate that query across the rollout window (old and new series together), and check promoted-suite headers and precedent supersede comments before planning any change to promoted scenarios.
 
+### 2026-11-15 — fix-symbol-page-alerts-ui — assumption
+- **Mistake**: shadcn primitives were added with `data-checked:` / `data-unchecked:` / `data-open:` class variants on the assumption that Tailwind maps them onto Radix `data-state`. That mapping is a set of `@custom-variant`s in `shadcn/tailwind.css`, which `globals.css` never imports, so the variants compile as attribute-presence selectors that never match and a checked switch rendered unchecked.
+- **Evidence**: `docs/roadmap/features/339-fix-symbol-page-alerts-ui/recon.md` § Risks (switch root cause); `debate.md` D-4, R-3, R-4, O-12; `services/xstockstrat-ui/src/components/ui/switch.tsx:20,27`.
+- **Rule it implies**: When adding or re-applying a shadcn primitive in `xstockstrat-ui`, check that every `data-<name>:` variant it uses is either declared in `globals.css` or written as `data-[state=…]:`, and assert the rendered state by geometry in a test, not by the `checked` attribute alone.
+
 ### 2026-11-16 — alpaca-adaptive-rate-limit — assumption
 - **Mistake**: Three times in one design debate a new acceptance scenario was written that passed on today's code (a single request on a fresh pacing window; a timeout the client already enforced; a 429 the caller already returned at once), and several Givens could not be set up from the test package that would run them (a client clock seam asserted from a service test; header state "recorded" with only one of three required headers). The product spec's operator-facing bound was also quoted from the config-key formula without reading the code that computes it (15 s stated, 30 s real).
 - **Evidence**: `docs/roadmap/features/347-alpaca-adaptive-rate-limit/debate.md` O-16, O-26, O-33, O-40, D-24, D-29, D-30; `services/xstockstrat-trading/internal/service/order_intent.go:91-108`.
