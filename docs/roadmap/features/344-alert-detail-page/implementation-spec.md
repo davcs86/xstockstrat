@@ -545,7 +545,7 @@ grep -rn "formatWhen" src   # one definition (alertShared.ts) and its importers;
 
 ### Step 12 — test: vitest for the alert helpers and the push click target
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/alertShared.test.ts` — create
@@ -1081,4 +1081,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 11 — RED probe held uncommitted; Verification run in a private namespace under CI mode (2026-11-15)
 - **Planned**: Step 12's vitest fails first (`contextEntries` not exported); the Verification block runs on the host.
 - **Actual**: (1) Step 11 and Step 12 do not land together and `alertShared.test.ts` is Step 12's file, so Step 12's `alertShared` cases were written in the working tree, run RED and GREEN, then deleted (as in Step 7); the commit stages Step 11's two files only. RED failed at `tsc --noEmit` with `TS2305 … has no exported member 'contextEntries'` / `'formatWhen'`, before vitest ran. (2) As in Step 10, each run went through `unshare -m -n` with this branch's `packages/proto/gen/ts/dist` bind-mounted over the main checkout's (the e2e mock's `getAlert` needs it for `tsc`) and the egress proxy relayed in over a unix socket, because another worktree's e2e run held port 3000. RED ran under `pnpm dev` and its `setup` warm-up timed out; GREEN ran with `CI=1` (production build) and the committed-tree re-run with `CI=1 E2E_PREBUILT=1`. (3) The block's last line is the closing `grep`, so `exit=0` on RED too; pass/fail was judged from the log.
+- **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
+
+### Step 12 — RED against the pre-Step-11 `alertShared.ts`; Verification run in a private mount namespace (2026-11-15)
+- **Planned**: `alertShared.test.ts` fails first (`contextEntries` not exported); the Verification block runs on the host.
+- **Actual**: (1) Step 11 had already landed, so RED ran the step's Verification with `src/lib/alertShared.ts` temporarily restored from `f22410b3c` (the commit before Step 11), then restored to the committed file; only the two test files are staged. RED failed at `tsc --noEmit` (`TS2305 … has no exported member 'contextEntries'` / `'formatWhen'`), before vitest ran. (2) The linked `node_modules` resolve `@xstockstrat/proto` to the main checkout's stubs, which lack `GetAlert` (needed by `e2e/mock-backend.ts` under `tsc`), so each run went through `unshare -m` with this branch's `packages/proto/gen/ts/dist` bind-mounted (namespace-only) over the main checkout's `dist`. No network namespace: the block has no e2e. The block itself ran verbatim.
 - **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
