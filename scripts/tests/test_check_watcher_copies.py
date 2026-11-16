@@ -49,3 +49,11 @@ def test_groups_are_independent(tmp_path):
 
 def test_the_real_tree_is_clean():
     assert wc.problems(str(SCRIPTS_DIR.parent)) == []
+
+
+def test_the_pacing_core_groups_pair_marketdata_with_trading():
+    for group in ("go-alpacapace", "go-alpacapace-test"):
+        paths = wc.COPIES[group]
+        assert len(paths) == 2
+        assert sum(p.startswith("services/xstockstrat-marketdata/") for p in paths) == 1
+        assert sum(p.startswith("services/xstockstrat-trading/") for p in paths) == 1

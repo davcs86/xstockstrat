@@ -3,7 +3,10 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -110,5 +113,33 @@ func TestCancelOrder_NotCancelable_ReReadFails_LeavesOrderForPoller(t *testing.T
 	}
 	if order.IntentState != tradingv1.IntentState_INTENT_STATE_UNKNOWN {
 		t.Fatalf("intent = %v, want UNKNOWN", order.IntentState)
+	}
+}
+
+// Feature 347 @AC-36: the not-cancelable re-read is bounded by one broker timeout (a guard until the
+// trading client retries: with a single-attempt client the 429 already fails the re-read at once).
+func TestCancelOrder_NotCancelableReReadIsBounded_F347_AC36(t *testing.T) {
+	h := newRateLimitHarness(t, 5000, rlWorkingOrder(tradingv1.OrderStatus_ORDER_STATUS_NEW), func(_ int, w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return
+		}
+		rlResetHeader(w, 10*time.Second)
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+	began := time.Now()
+	_, err := h.svc.CancelOrder(ctxAsUser("user-1"), &tradingv1.CancelOrderRequest{OrderId: "ord-1"})
+	if took := time.Since(began); took > time.Second {
+		t.Fatalf("CancelOrder took %v, want within 1 s", took)
+	}
+	if grpcstatus.Code(err) != codes.Unavailable || !strings.Contains(err.Error(), "could not be read") {
+		t.Fatalf("error = %v, want Unavailable containing \"could not be read\"", err)
+	}
+	if n := len(h.seen(http.MethodGet, "/v2/orders/b-1")); n != 1 {
+		t.Fatalf("GET /v2/orders/b-1 requests = %d, want exactly 1", n)
+	}
+	order := h.order("ord-1")
+	if order.IntentState != tradingv1.IntentState_INTENT_STATE_UNKNOWN || order.Status == tradingv1.OrderStatus_ORDER_STATUS_CANCELED {
+		t.Fatalf("order = %v / %v, want intent state UNKNOWN and not CANCELED", order.Status, order.IntentState)
 	}
 }

@@ -441,3 +441,22 @@ func allEqual(xs []string, want string) bool {
 	}
 	return true
 }
+
+// Feature 347: the kill-switch reader returns the value config migration 052 seeds, and defaults on.
+func TestAlpacaAdaptiveRateLimit_ReadsSeededKey_347(t *testing.T) {
+	const key = "alpaca.adaptive_rate_limit_enabled"
+	seeded := func(v bool) *config.Watcher {
+		return config.MustSnapshotWatcher("marketdata", map[string]*configv1.ConfigValue{
+			key: {Value: &configv1.ConfigValue_BoolVal{BoolVal: v}},
+		})
+	}
+	if !alpacaAdaptiveRateLimit(seeded(true)) {
+		t.Fatal("seeded true read as false")
+	}
+	if alpacaAdaptiveRateLimit(seeded(false)) {
+		t.Fatal("an operator's false read as true")
+	}
+	if !alpacaAdaptiveRateLimit(config.MustSnapshotWatcher("marketdata", map[string]*configv1.ConfigValue{})) {
+		t.Fatal("an absent key must read as the code default true")
+	}
+}

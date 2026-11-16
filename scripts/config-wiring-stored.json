@@ -2473,6 +2473,30 @@
             "consuming_service": "xstockstrat-ledger"
         },
         {
+            "key": "alpaca.adaptive_rate_limit_enabled",
+            "file": "052_alpaca_adaptive_rate_limit_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "bool",
+            "description": "Kill switch for adaptive Alpaca REST pacing in marketdata. When true the client paces requests from the X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset response headers and retries an HTTP 429 inside the call. When false it behaves as before feature 347: only the static backfill.rate_limit_rps limiter applies and a 429 is returned to the caller. Read live on every Alpaca request.",
+            "environment": "production",
+            "default_value": "true",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "alpaca.adaptive_rate_limit_enabled",
+            "file": "052_alpaca_adaptive_rate_limit_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "bool",
+            "description": "Kill switch for adaptive Alpaca REST pacing in marketdata. When true the client paces requests from the X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset response headers and retries an HTTP 429 inside the call. When false it behaves as before feature 347: only the static backfill.rate_limit_rps limiter applies and a 429 is returned to the caller. Read live on every Alpaca request.",
+            "environment": "staging",
+            "default_value": "true",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
             "key": "alpaca.adjustment",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -2647,7 +2671,7 @@
             "is_secret": false,
             "namespace": "marketdata",
             "value_type": "int",
-            "description": "Max outbound Alpaca REST calls per second. Read at startup into a token-bucket limiter the client waits on before every REST call; `0` disables rate limiting.",
+            "description": "Static ceiling on outbound Alpaca REST calls per second. The effective rate is the lower of this ceiling and what the X-RateLimit response headers allow (alpaca.adaptive_rate_limit_enabled). Read live per request into a token-bucket limiter the client waits on before every REST call; `0` disables only this ceiling.",
             "environment": "production",
             "default_value": "200",
             "consuming_service": "xstockstrat-marketdata"
@@ -2659,7 +2683,7 @@
             "is_secret": false,
             "namespace": "marketdata",
             "value_type": "int",
-            "description": "Max outbound Alpaca REST calls per second. Read at startup into a token-bucket limiter the client waits on before every REST call; `0` disables rate limiting.",
+            "description": "Static ceiling on outbound Alpaca REST calls per second. The effective rate is the lower of this ceiling and what the X-RateLimit response headers allow (alpaca.adaptive_rate_limit_enabled). Read live per request into a token-bucket limiter the client waits on before every REST call; `0` disables only this ceiling.",
             "environment": "staging",
             "default_value": "200",
             "consuming_service": "xstockstrat-marketdata"
@@ -4438,6 +4462,30 @@
             "description": "Order qty threshold for approval",
             "environment": "staging",
             "default_value": "500",
+            "consuming_service": "xstockstrat-trading"
+        },
+        {
+            "key": "broker.adaptive_rate_limit_enabled",
+            "file": "052_alpaca_adaptive_rate_limit_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "trading",
+            "value_type": "bool",
+            "description": "Kill switch for adaptive Alpaca broker pacing in trading. When true the Alpaca client paces requests from the X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset response headers and retries an HTTP 429 within a budget derived from broker.timeout_ms and order_intent.stale_multiplier. When false every broker call is one unpaced attempt, as before feature 347. Read live on every Alpaca request. IBKR is not affected.",
+            "environment": "production",
+            "default_value": "true",
+            "consuming_service": "xstockstrat-trading"
+        },
+        {
+            "key": "broker.adaptive_rate_limit_enabled",
+            "file": "052_alpaca_adaptive_rate_limit_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "trading",
+            "value_type": "bool",
+            "description": "Kill switch for adaptive Alpaca broker pacing in trading. When true the Alpaca client paces requests from the X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset response headers and retries an HTTP 429 within a budget derived from broker.timeout_ms and order_intent.stale_multiplier. When false every broker call is one unpaced attempt, as before feature 347. Read live on every Alpaca request. IBKR is not affected.",
+            "environment": "staging",
+            "default_value": "true",
             "consuming_service": "xstockstrat-trading"
         },
         {
@@ -5065,5 +5113,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "d946792db3d614f8b0f358a3eb86a922dd6ec253e4aaec83787659a43d71b12e"
+    "inputs_sha256": "bec16491b575fcec16baec16e3a902119cec3ee1740d1d40da10acf63423bcd8"
 }
