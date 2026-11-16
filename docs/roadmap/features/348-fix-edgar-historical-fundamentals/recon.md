@@ -113,6 +113,15 @@ Measured by a throwaway prototype outside the repo; payloads are not committed.
     there among the read flow tags (the latest is 2019-01-31), so "anchor must equal the latest
     matching flow end" does not hold on real data.
   - BMO: 8 annual periods from 40-F; its 22 quarterlies are filed on 6-K.
+- Measured during round 2 (round-2 rules: accession grouping, form classes with 6-K quarterly and
+  10-KT annual, anchor on or before `filed`, the D-10 label rule):
+  - Zero duplicate labels per type on all 14 filers, JEF and BMO included; no label change for the
+    calendar-year filers; BMO's 6-K quarterlies keep the labels their tags carried.
+  - Filings whose cover-page share count is dated after their own period end: ORCL 69 of 69, AAPL 70
+    of 71, JAZZ 62 of 62, AVGO 34 of 34, CLSK 60 of 61, UCTT 60 of 62, JEF 67 of 70, CARR 25 of 27,
+    SNOW 23 of 24, FLXS 46 of 61, CRWD 5 of 30, LYFT 5 of 32, HSY 5 of 70, BMO 0 of 31. Today the
+    stored `period_end` of those rows is the cover-page date, so most stored rows change
+    `period_end` under the fix, not only the 104 collided ones.
 - Not covered by the prototype: 6-K filers (BMO files quarterlies on 6-K, annual on 40-F), filers
   with no annual filing in range, fiscal-year-end changes (10-KT), 8-K facts.
 - Existing test fixtures use `"accn": "x"` for every fact and set `form` loosely
