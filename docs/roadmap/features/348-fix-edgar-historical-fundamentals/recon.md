@@ -102,6 +102,17 @@ Measured by a throwaway prototype outside the repo; payloads are not committed.
   no label changes for the calendar-year filers checked (AAPL, LYFT, JAZZ, HSY, CARR, AVGO, JEF);
   changes only where the filer's tag was wrong (ORCL 1, CRWD 10, CLSK 6, FLXS 7, UCTT 3, SNOW 1).
   ORCL's quarter ended 2026-08-31 becomes `Q1-2027`; the one ended 2025-08-31 stays `Q1-2026`.
+- Measured during round 1 of the debate (same payloads, the round-1 proposal's exact rules):
+  - Every accession has one `form` and one `filed` value across the read tags (0 exceptions in 14 filers).
+  - The same `(tag, start, end)` fact appears under several accessions (own filing and later comparatives).
+  - JEF changed its year end from December to November: 10-K for 2017-12-31, a `10-KT` filed
+    2019-01-29 for the eleven months ended 2018-11-30, then a 10-K for 2019-11-30. With the `10-KT`
+    left out of the fiscal-year ends, the quarters ended 2018-03-31, 06-30 and 09-30 and 2019-02-28
+    all receive the label `Q1-2019`. Using 2018-11-30 as a fiscal-year end gives Q1, Q2, Q3 of 2018.
+  - CRWD's 10-K filed 2021-03-18: balance-sheet anchor 2021-01-31, but no annual-length flow ending
+    there among the read flow tags (the latest is 2019-01-31), so "anchor must equal the latest
+    matching flow end" does not hold on real data.
+  - BMO: 8 annual periods from 40-F; its 22 quarterlies are filed on 6-K.
 - Not covered by the prototype: 6-K filers (BMO files quarterlies on 6-K, annual on 40-F), filers
   with no annual filing in range, fiscal-year-end changes (10-KT), 8-K facts.
 - Existing test fixtures use `"accn": "x"` for every fact and set `form` loosely
