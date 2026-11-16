@@ -343,3 +343,8 @@
   - Config `051` collided with 343 and was fixed by renumbering. No merge-order row is needed.
   - Identity `007` is free.
   - Shared file: `services/xstockstrat-identity/src/telemetry.ts` with 337 (in progress). Rebase only.
+
+## Session 2026-11-16 — pre-merge renumber
+
+- Merging the latest `main-dev` brought in feature 347's `052_alpaca_adaptive_rate_limit_keys`. The config seed is now `053_authelia_sso_keys` (D-100). This was applied in implementation-spec.md, design.md, product-spec.md and feature.md. Step 4 now takes the next free number at execute time, because trunk keeps consuming config numbers.
+- The `fails.md` merge conflict came from two end-of-file appends (347's two entries and ours). It was resolved by keeping both in date order, the same resolution the owner approved earlier.

@@ -108,7 +108,7 @@ resolution is refused (any FR-3 step-4 refusal) returns HTTP 403 and sends no ba
 
 FR-9. **Password login flag.** Password login (`AuthenticateUser` and the UI's password form) is gated by `identity` /
 `auth.password_login_enabled`.
-- The code default is `false` (fail closed). Migration `052` seeds `true` on every database, DigitalOcean and homelab
+- The code default is `false` (fail closed). Migration `053` seeds `true` on every database, DigitalOcean and homelab
   alike, so every deployment keeps password login until its own cutover.
 - With it `false` or missing, `AuthenticateUser` returns `PERMISSION_DENIED` "password login disabled".
   - In SSO mode the login page shows only "Sign in with SSO".
@@ -239,7 +239,7 @@ only the xstockstrat session: no redirect to Authelia, so the browser returns to
   `/api/oauth/{protected-resource,authorization-server}` discovery routes; the middleware public/cookie-gated path sets.
 - `xstockstrat-agent`: JWKS validation, protected-resource metadata, resolved-identity stamping, scope narrowing, the
   role cache.
-- `xstockstrat-config`: seed migration `052`, and a `SECRET_CALLER_ALLOWLIST` grant (`src/grpc/authz.ts`, PLAT-9):
+- `xstockstrat-config`: seed migration `053`, and a `SECRET_CALLER_ALLOWLIST` grant (`src/grpc/authz.ts`, PLAT-9):
   `{callerID: 'ui', namespace: 'ui', keys: ['oidc.client_secret'], peerSan: 'xstockstrat-ui'}`.
 - `packages/proto`: an additive `identity.proto` change.
 
@@ -274,8 +274,8 @@ Additive only (non-breaking), in `packages/proto/identity/v1/identity.proto`:
 
 ## Config Key Changes
 
-One seed migration: `services/xstockstrat-config/migrations/052_authelia_sso_keys` (up + down; last applied is `051` (feature 343;
-renumbered 050→051→052, D-94/D-99; re-check the next free number at merge), C-07). It seeds every key below for both `production` and `staging`. Operators then set the real values per
+One seed migration: `services/xstockstrat-config/migrations/053_authelia_sso_keys` (up + down; last applied is `052` (feature 347;
+renumbered 050→051→052→053, D-94/D-99/D-100; re-check the next free number at merge), C-07). It seeds every key below for both `production` and `staging`. Operators then set the real values per
 environment, because prod and staging are separate Authelia apps.
 
 - `identity.auth.password_login_enabled`
@@ -343,7 +343,7 @@ The seed migration and the new readers must leave `node scripts/check-config-wir
     identity.users(user_id) ON DELETE CASCADE, linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (issuer,
     subject), UNIQUE (issuer, user_id))`;
   - an index on `lower(identity.users.email)` for the case-insensitive match.
-- config migration `052_authelia_sso_keys` (above).
+- config migration `053_authelia_sso_keys` (above).
 - No applied migration is edited (F-01).
 
 ## Feature Workflow Notes

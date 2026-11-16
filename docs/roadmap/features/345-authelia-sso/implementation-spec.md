@@ -18,9 +18,9 @@ that composes them, then routes and pages, so each `service` step passes its own
 the next one starts. Every step touches at most five files.
 
 The step bodies cite the debate register (`D-n`), not the design-layer prose (design.md §Precedence).
-The config seed is **`052_authelia_sso_keys`**: renumbered `050`→`051` (D-94; feature 341 took `050`)
-and `051`→`052` (D-99; feature 343 took `051`). `debate.md` D-20, D-36, D-44, D-48 and D-57 still say
-`050` and D-94 says `051`; D-99 governs. Re-check the next free number at merge.
+The config seed is **`053_authelia_sso_keys`**: renumbered `050`→`051` (D-94; feature 341 took `050`)
+then `051`→`052` (D-99; feature 343 took `051`) and `052`→`053` (D-100; feature 347 took `052`). `debate.md` D-20, D-36, D-44, D-48 and D-57 still say
+`050`, D-94 says `051` and D-99 says `052`; D-100 governs. Re-check the next free number at merge.
 
 **Consumer surfaces (C-14):** UI. This covers the login page, `/api/auth/sso/{start,callback}`, logout
 plus the header Sign-out button, `/accounts/authorized-apps`, and the `.well-known` copies (Steps
@@ -69,7 +69,7 @@ in both modes (D-60, D-77, D-80). One rule is PRESERVE in legacy mode only: agen
   (`docs/patterns/config-governance.md:85-88`). `--final` runs only at the integration PR (the 338/341
   precedent).
 - Steps 3–4 (migrations) precede Step 12 (the identity DB tier applies them) and Step 5 (the seed test
-  reads 052).
+  reads 053).
 - Step 6 (config grant) precedes Step 29. `loadOidcClientSecret` is denied without the grant in any
   live run; the unit tests mock it.
 - Steps 10–11 precede Step 23: the agent resolve path calls `ResolveExternalIdentity`. Unit tests mock it.
@@ -88,8 +88,9 @@ in both modes (D-60, D-77, D-80). One rule is PRESERVE in legacy mode only: agen
   tree to record the RED. No `**Lands with**`: a docs-presence grep matches no §C trigger.
 - **Merge order (rollout, not steps):** feature 319 merges first or alongside (D-52; the RevokeToken
   unverified-decode defect). Rebase over 324 (`manage-users.py`, `ci.yml`), 331 and 323 (agent `main.py`).
-  Re-check that config `052` and identity `007` are still the next free numbers at merge (D-94, D-99:
-  050→051→052; 343's `051` has already landed).
+  Re-check that config `053` and identity `007` are still the next free numbers at merge (D-94, D-99, D-100:
+  050→051→052→053; 341's `050`, 343's `051` and 347's `052` have all landed). Trunk keeps taking config
+  numbers, so at execute time Step 4 uses the next free number shown by `ls services/xstockstrat-config/migrations | tail -2` and logs any further renumber in the Deviation Log.
 
 ---
 
@@ -214,13 +215,13 @@ grep -c "UNIQUE INDEX" services/xstockstrat-identity/migrations/007_external_ide
 
 ---
 
-### Step 4 — migration: config 052_authelia_sso_keys and the regenerated stored set
+### Step 4 — migration: config 053_authelia_sso_keys and the regenerated stored set
 
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/052_authelia_sso_keys.up.sql` — create
-- `services/xstockstrat-config/migrations/052_authelia_sso_keys.down.sql` — create
+- `services/xstockstrat-config/migrations/053_authelia_sso_keys.up.sql` — create
+- `services/xstockstrat-config/migrations/053_authelia_sso_keys.down.sql` — create
 - `scripts/config-wiring-stored.json` — modify (regenerated, never hand-written)
 
 **Reviewers**: DBA — migration NNN numbering, up+down pair, run order; `xstockstrat-config` owner — key naming, environment scoping, secret encryption + redaction
@@ -228,7 +229,7 @@ grep -c "UNIQUE INDEX" services/xstockstrat-identity/migrations/007_external_ide
 **§C acknowledgement (seed before readers)**: the seed's readers land in Steps 8 (identity), 16 (agent) and 29 (UI), three consumer surfaces, so no single `Lands with` can pair them. The gap is bridged mechanically: `check-config-wiring.mjs` reports these keys as `PENDING` (not a finding) at each intermediate step, and `--final` must pass at the integration PR (Step 52 / CI `config-wiring`). Every intermediate deployment stays legacy because the issuers are seeded empty and the flag is seeded `true` (D-48).
 
 **Codebase Evidence**:
-- `ls services/xstockstrat-config/migrations | tail -4` → `050_ui_chart_history_bars.{down,up}.sql` (feature 341) and `051_ingest_backfill_self_serve_keys.{down,up}.sql` (feature 343). So the next number is `052`: renumbered 050→051 (D-94) and 051→052 (D-99). Re-check the next free number at merge.
+- `ls services/xstockstrat-config/migrations | tail -4` → `050_ui_chart_history_bars.{down,up}.sql` (feature 341) `051_ingest_backfill_self_serve_keys.{down,up}.sql` (feature 343) and `052_alpaca_adaptive_rate_limit_keys.{down,up}.sql` (feature 347). So the next number is `053`: renumbered 050→051 (D-94), 051→052 (D-99) and 052→053 (D-100). Re-check the next free number at merge.
 - The seed row column order and conflict target come from `049_notify_commsgun_channel_keys.up.sql:4-55`: `(namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by, environment, user_id)` and `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
 - The seeded-empty secret comes from `049_*.up.sql:57-67`: `value_data '[redacted]'`, `is_secret TRUE`, ciphertext NULL, and the comment "Ciphertext stays NULL: a migration has no master key".
 - The notify CTE comes from `046_config_dead_rows_prune.up.sql:57-61`: `nt AS (SELECT pg_notify('config_changed', json_build_object('namespace', t.namespace, 'environment', t.environment)::text) AS sent FROM (SELECT DISTINCT namespace, environment FROM d) t) SELECT (SELECT count(*) FROM d) …, (SELECT count(*) FROM nt) AS notified;`
@@ -254,27 +255,27 @@ grep -c "UNIQUE INDEX" services/xstockstrat-identity/migrations/007_external_ide
    - It **never** deletes `identity` / `auth.password_login_enabled` (D-36: removing it would make the code default `false` lock out password login).
    - Confirm the ciphertext column's name at execute by reading `045` / `049`; `value_encrypted` is the name D-36 cites.
 3. Add a header comment of two lines at most to each file. It cites feature 345 and states the constraint **without naming any key**: in the up, that the identity flag row's seed differs from its code default (the config-constitution exception, D-20); in the down, that the identity flag row is deliberately kept. The literal `password_login_enabled` must not appear in the down file at all (the Verification below and Step 5's test assert its absence).
-4. Regenerate the stored set **after** the files carry their final `052_` name (its `inputs_sha256` hashes every config migration path and body, so a stored set generated before the rename reports `STALE-STORED`, `check-config-wiring.mjs:714-717`). Regenerate on a scratch Postgres 16 with `psql` + `migrate` (the generator creates and drops its own DB):
+4. Regenerate the stored set **after** the files carry their final `053_` name (its `inputs_sha256` hashes every config migration path and body, so a stored set generated before the rename reports `STALE-STORED`, `check-config-wiring.mjs:714-717`). Regenerate on a scratch Postgres 16 with `psql` + `migrate` (the generator creates and drops its own DB):
    `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py`. Commit `scripts/config-wiring-stored.json`.
    - The file is **never hand-written**.
    - If no scratch Postgres is reachable, block the step (P-03) and run the CI `config-wiring-stored` job. It uploads the regenerated file as an artifact (`ci.yml:1294-1300`); commit that artifact. This is the 341 precedent.
 
 **Verification**:
 ```bash
-ls services/xstockstrat-config/migrations/052_*.up.sql services/xstockstrat-config/migrations/052_*.down.sql
-ls services/xstockstrat-config/migrations | grep -c '^052_'   # 2: no other feature holds 052
+ls services/xstockstrat-config/migrations/053_*.up.sql services/xstockstrat-config/migrations/053_*.down.sql
+ls services/xstockstrat-config/migrations | grep -c '^053_'   # 2: no other feature holds 053
 # SQL only (comment lines stripped): the down never names the flag row; expect no match
-! grep -v '^[[:space:]]*--' services/xstockstrat-config/migrations/052_authelia_sso_keys.down.sql | grep -n "password_login_enabled"
+! grep -v '^[[:space:]]*--' services/xstockstrat-config/migrations/053_authelia_sso_keys.down.sql | grep -n "password_login_enabled"
 # The 14-tuple count (7 keys x 2 environments) is asserted by Step 5's test, not by a line count here.
 # Step-time wiring: declared keys whose reader is not written yet print PENDING and do not fail (exit 0)
-node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-config/migrations/052_authelia_sso_keys.up.sql
-git diff --stat scripts/config-wiring-stored.json   # regenerated after the 052 rename, non-empty
-! node scripts/check-config-wiring.mjs --final 2>&1 | grep STALE-STORED   # the stored set matches the 052 inputs
+node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-config/migrations/053_authelia_sso_keys.up.sql
+git diff --stat scripts/config-wiring-stored.json   # regenerated after the 053 rename, non-empty
+! node scripts/check-config-wiring.mjs --final 2>&1 | grep STALE-STORED   # the stored set matches the 053 inputs
 ```
 
 ---
 
-### Step 5 — test: Static seed test and migration-rerun assertion for 052
+### Step 5 — test: Static seed test and migration-rerun assertion for 053
 
 **Status**: `pending`
 **Service**: `xstockstrat-config`
@@ -305,7 +306,7 @@ git diff --stat scripts/config-wiring-stored.json   # regenerated after the 052 
 2. In `config-authelia-sso-keys.sql` (BEGIN … ROLLBACK, `DO $$ … RAISE EXCEPTION` on a mismatch, the notify-commsgun shape):
    - Assert that the 14 global rows exist.
    - Assert that the two `ui/oidc.client_secret` rows have `is_secret` true and NULL ciphertext.
-   - Re-run a copy of the 052 up statement and assert `inserted = 0 AND notified = 0`. The PREPARE body is a copy of the shipped statement; change both together.
+   - Re-run a copy of the 053 up statement and assert `inserted = 0 AND notified = 0`. The PREPARE body is a copy of the shipped statement; change both together.
 3. The domain literals have a single consumer (this test), so they stay inline (C-13).
 
 **Verification**:
@@ -2346,7 +2347,7 @@ grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth\|helpers/stubIdp" e
      3. Verify one web login, one MCP connection and one logout using the signal list: `wrong_audience`, `jwks_unavailable`, `account_refused`, `ui.auth.events{sso_login_failed,reason|sso_login_error|logout reason=cross_origin}`, ERRORs `sso_issuer_invalid` / `app_url_invalid`.
      4. Run `reset-password` on the staging seed row.
      5. Set the flag `false`.
-   - **Rollback:** config first (clear the issuers, flag `true`, verify AC-44), then code (identity first; `052` down is optional), then `reset-password` for CREATED users.
+   - **Rollback:** config first (clear the issuers, flag `true`, verify AC-44), then code (identity first; `053` down is optional), then `reset-password` for CREATED users.
    - **Residuals:** D-61, R-14, D-73, D-74, D-81, D-78, D-98 (group removal does not end an MCP connection; disable in Authelia and/or deactivate), plus trader `BackfillBars` and analysis 029.
    - Local docker-compose SSO is unsupported.
 
@@ -2385,7 +2386,7 @@ ls docs/runbooks/authelia-sso-cutover.md && grep -n "EdDSA" docs/runbooks/authel
    - The schema map gains `identity.external_identities` and `users_email_lower_idx`.
    - IDENTITY-15 note: new migrations resolve the seed owner by `SEED_USER_ID`, never by `admin@localhost`.
 3. **`inter-service-mtls.md`:** the new `ui` `GetSecret` grant and the two new SAN-gated identity RPCs.
-4. **`config-governance.md` § Per-Feature Registered Keys:** a row per key from 052, with type, default, reader and live mechanism.
+4. **`config-governance.md` § Per-Feature Registered Keys:** a row per key from 053, with type, default, reader and live mechanism.
 5. **Root `CLAUDE.md` § Inter-Service Dependencies:** add `xstockstrat-ui → xstockstrat-identity (ResolveExternalIdentity, IssueSessionForUser)`, `xstockstrat-agent → xstockstrat-identity (ResolveExternalIdentity)`, `xstockstrat-ui → xstockstrat-config (GetSecret, ui OIDC client secret)`, and the external HTTPS edges to Authelia from the UI and the agent.
 
 **Verification**:
@@ -2423,12 +2424,12 @@ grep -n "ResolveExternalIdentity" CLAUDE.md docs/patterns/inter-service-mtls.md 
    - Ports/RPCs gain the two new RPCs.
    - `context-constitution.md`: IDENTITY-12 is extended to the two new per-RPC SAN lists. IDENTITY-15 gains: "admin@localhost may be renamed by SSO cutover (FR-12); new migrations resolve the seed owner by SEED_USER_ID" (AC-36).
    - `operations.md`: `update-email` / `unlink-sso` usage.
-2. **Config constitution (`:30`):** record migration `052` as a seed≠default exception (the flag seeded `true`, code default `false`; D-20). Also record the CONFIG-4 `user_id` omission in its notify (D-36).
+2. **Config constitution (`:30`):** record migration `053` as a seed≠default exception (the flag seeded `true`, code default `false`; D-20). Also record the CONFIG-4 `user_id` omission in its notify (D-36).
 
 **Verification**:
 ```bash
 grep -n "SEED_USER_ID" services/xstockstrat-identity/docs/context-constitution.md
-grep -n "052" services/xstockstrat-config/docs/context-constitution.md && grep -n "unlink-sso" services/xstockstrat-identity/docs/operations.md
+grep -n "053" services/xstockstrat-config/docs/context-constitution.md && grep -n "unlink-sso" services/xstockstrat-identity/docs/operations.md
 ```
 
 ---
@@ -2515,3 +2516,4 @@ echo GREEN
 _Populated by /sdd-execute as implementation proceeds._
 
 - 2026-11-16, `/sdd-review impl-spec` pass 1: the config seed is renumbered a second time, `051_authelia_sso_keys` → `052_authelia_sso_keys` (feature 343 landed `051_ingest_backfill_self_serve_keys` on trunk; D-99, after D-94's 050 → 051). Step 4 regenerates `scripts/config-wiring-stored.json` against the `052` file. Re-check the next free number at merge.
+- 2026-11-16, before merging PR #1542: the config seed is renumbered a third time, `052_authelia_sso_keys` → `053_authelia_sso_keys` (feature 347 landed `052_alpaca_adaptive_rate_limit_keys` on trunk; D-100). Step 4 regenerates `scripts/config-wiring-stored.json` against the `053` file.

@@ -47,7 +47,7 @@ implementation-spec.md, per docs/runbooks/reviewer-registry.md. Stable unless `/
 |---|---|
 | Proto Reviewer | Field number uniqueness per message, additive-only `identity.proto` change, `buf lint` + `buf breaking` against the dev trunk |
 | `packages/proto` owner | Backward compatibility (no field removal or type change), naming conventions |
-| DBA | Migration NNN numbering, up+down pair, index correctness, run order per `scripts/db-migrate.sh` (identity `007`, config `052`; renumbered 050→051→052, D-94/D-99) |
+| DBA | Migration NNN numbering, up+down pair, index correctness, run order per `scripts/db-migrate.sh` (identity `007`, config `053`; renumbered 050→051→052→053, D-94/D-99/D-100) |
 | `xstockstrat-identity` owner | JWT expiry and rotation, secret store integration (never plaintext secrets in config) |
 | `xstockstrat-config` owner | Key naming, environment (`production`/`staging`) scoping, secret encryption + redaction |
 | `xstockstrat-agent` owner | OAuth 2.1 edge-auth correctness and statelessness (`instance_count > 1` safe), MCP tool contract stability, admin `x-access-scope` forwarded only by management tools |
