@@ -128,7 +128,7 @@ Feature: delisted-symbol-handling
     When get_watchlist is called for "Tech"
     Then the "ROKU" entry carries delisted true, reason "UNSERVABLE_REASON_NOT_TRADABLE" and first-unservable date 2026-11-09
     And list_watchlists reports the same state for "ROKU" on "Tech"
-    And the watchlist returned when "MSFT" is added to "Tech" carries the same state for "ROKU"
+    And the watchlist returned by manage_watchlist_symbols when "MSFT" is added to "Tech" carries the same state for "ROKU"
 
   @AC-17 @FR-12
   Scenario: One alert per transition
@@ -156,7 +156,7 @@ Feature: delisted-symbol-handling
     And "ATCH" is on the user-created watchlist "Smallcaps"
     And "ATCH" was first absent from the asset set on Friday 2026-11-13
     When the asset set is loaded on Wednesday 2026-11-18 without "ATCH"
-    Then "ATCH" is not flagged delisted, because only 4 trading days (13, 16, 17, 18 November) have passed
+    Then "ATCH" is not flagged delisted, because only 4 trading days (13, 16, 17, 18 November, counting 13 November as day 1) have elapsed
     And the load on Thursday 2026-11-19 without "ATCH" flags it with first-unservable date 2026-11-13
 
   @AC-21 @FR-13
@@ -213,3 +213,19 @@ Feature: delisted-symbol-handling
     When the asset set is loaded on the next trading day without "PSKY"
     Then "PSKY" is still flagged delisted in its symbol profile
     And a later load with "PSKY" as an active, tradable, non-OTC asset clears the flag
+
+  @AC-28 @FR-1
+  Scenario: A trading day with no successful load still counts as elapsed
+    Given the confirmation window is 5 trading days
+    And "ROKU" is on the user-created watchlist "Tech"
+    And "ROKU" was first absent from the asset set on Monday 2026-11-09
+    And no asset-set load succeeded on 2026-11-10 or 2026-11-11
+    When the asset set is loaded on Friday 2026-11-13 without "ROKU"
+    Then "ROKU" is flagged delisted with first-unservable date 2026-11-09
+
+  @AC-29 @FR-12 @FR-2
+  Scenario: Recovery emits one alert
+    Given "ATCH" is flagged delisted
+    When the asset set is loaded with "ATCH" as an active, tradable, non-OTC asset
+    Then one alert is emitted naming "ATCH" as servable again
+    And the next asset-set refresh, still with "ATCH", emits no further alert for "ATCH"

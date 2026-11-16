@@ -100,3 +100,9 @@
   first-unservable date before the flag (FR-1, FR-13, AC-21); a servable load resets it (AC-25).
 - Overlap scan: no FAIL-level collision. Rebase risks and the existing
   `marketdata.symbol_classification` table are listed in product-spec § Design Inputs.
+- Round 3: PASS WITH WARNINGS (4), all addressed. **D-18** (operator): a recovery also emits one
+  alert per symbol (AC-29). FR-1 counting rule made explicit — elapsed trading days, first-unservable
+  date is day 1, NYSE session date in America/New_York, a day with no successful load only passes
+  (AC-28); this wording is the reviewer's and mine, consistent with D-13, not a separate operator
+  ruling. FR-9 defines `empty`; FR-11 and the consumer surface name `manage_watchlist` and
+  `manage_watchlist_symbols`.

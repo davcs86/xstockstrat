@@ -67,6 +67,7 @@ Answers the operator gave when this story was filed; they bind the FRs below.
 | D-14 | Which symbols get a profile row | Written lazily: a row is created when the platform first has state to record for a symbol. No pre-population |
 | D-15 | Owner of the symbol profile | `xstockstrat-marketdata` |
 | D-16 | A source error on a flagged symbol, permanent or transient | Always `skipped`, with the error text as reason |
+| D-18 | Alert when a flagged symbol recovers | Yes, one alert per symbol on recovery |
 | D-17 | Flag of a symbol that is on no watchlist any more | Persists in the profile and keeps being re-evaluated; clears only on recovery |
 
 ## Functional Requirements
@@ -80,7 +81,13 @@ trading days, D-8, D-13) becomes flagged delisted. Days on which the market is c
 toward the window. The flag records the unservable reason and the date the symbol was first seen unservable. A
 symbol unservable for less than the window is not flagged: only its first-unservable date is recorded
 (FR-13), and its watchlists, requests and backfill outcomes are unchanged. A servable load inside the
-window resets the first-unservable date. Several loads on the same
+window resets the first-unservable date. The window is counted in trading days elapsed since the
+first-unservable date, and that date is day 1: a symbol is flagged by the first successful load on or
+after the Nth trading day, provided every successful load since the first-unservable date found it
+unservable. A trading day with no successful load neither resets nor moves the first-unservable date;
+it only passes. The trading day of a load is its NYSE session date in America/New_York; a load on a
+day the market is closed is not an observation, so the first-unservable date is always a trading day.
+Several loads on the same
 trading day count as one day of observation. A refresh that
 is rejected or has not loaded yet (feature 282's fail-open rules) counts as no observation: it neither
 starts, extends nor confirms an absence.
@@ -123,23 +130,28 @@ is still in `failed_symbols`, and still makes the job `PARTIAL` (or `FAILED`) un
 
 FR-9. **Per-symbol outcome and reason in the job status.** The backfill job status carries, for every
 symbol that was not written, its outcome (`empty`, `skipped`, `failed`) and the reason (for `skipped`
-and `failed`, the source's error). The reason no longer has to be read from the marketdata log.
+and `failed`, the source's error). `empty` means the attempt succeeded and wrote no rows (nothing in
+range, or already stored with overwrite false); it carries no reason and does not make the job
+`PARTIAL`. The reason no longer has to be read from the marketdata log.
 
 FR-10. **Visible in the UI.** The `/insights` watchlist detail page shows a delisted marker with the
 reason and the first-unservable date on every flagged symbol.
 
-FR-11. **Visible to the agent.** `get_watchlist` and `list_watchlists` return the delisted state of each
-flagged symbol; `get_backfill_status` returns the per-symbol outcomes and reasons of FR-9.
+FR-11. **Visible to the agent.** `get_watchlist`, `list_watchlists` and the watchlist returned by
+`manage_watchlist` and `manage_watchlist_symbols` return the delisted state of each flagged symbol; `get_backfill_status` returns the per-symbol outcomes and reasons of FR-9.
 
 FR-12. **Alert on transition.** One alert per symbol (D-10) is emitted through `xstockstrat-notify` when
 a symbol becomes flagged delisted, naming the symbol, the reason, and the system-managed watchlists it
-was removed from. The alert is emitted once per transition, not on every later refresh.
+was removed from. One alert per symbol is also emitted when a flag clears on recovery (FR-2, D-18),
+naming the symbol. Each alert is emitted once per transition, not on every later refresh.
 
 FR-13. **Symbol profile.** The delisted state (flag, reason, first-unservable date) is stored once per
 symbol, platform-wide, in a persisted symbol/company profile record owned by `xstockstrat-marketdata`
 (D-9, D-15), and survives a restart. A profile row is written lazily, on the first unservable
 observation of the symbol (it then holds the first-unservable date, not yet the flag); symbols are not
-pre-populated and a servable symbol has no row (D-14). Every
+pre-populated and a symbol never observed unservable has no row (D-14). After a reset or a recovery
+the profile holds no first-unservable date and no flag for the symbol; whether the row itself is kept
+is a design choice. Every
 watchlist that holds the symbol, whoever owns it, and every backfill read the same state. This feature
 stores only the delisted state in the profile.
 
@@ -167,7 +179,8 @@ Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-portfolio` — owns watchlists: returns the delisted state on entries (read from
   marketdata), removal from system-managed lists
 - `xstockstrat-ingest` — owns `BackfillJob`: per-symbol outcome and reason, terminal status rule
-- `xstockstrat-agent` — `get_watchlist`, `list_watchlists`, `get_backfill_status` response mapping
+- `xstockstrat-agent` — `get_watchlist`, `list_watchlists`, `manage_watchlist`,
+  `manage_watchlist_symbols`, `get_backfill_status` response mapping
 - `xstockstrat-ui` — `/insights` watchlist detail marker
 - `xstockstrat-notify` — receives the transition alert through the existing alert path (no change
   expected in the service itself)
@@ -183,8 +196,8 @@ _Constitution **C-14**._ The end-user-reachable surface(s) this capability is co
 - [x] **UI** — `xstockstrat-ui` segment `/insights`: the existing watchlist detail page gains a delisted
   marker (reason, first-unservable date) per flagged symbol. No new page or route, so no
   `PLATFORM_SUBNAV` change (**C-10**).
-- [x] **Agent** — `xstockstrat-agent` MCP tools `get_watchlist`, `list_watchlists` (delisted state per
-  symbol) and `get_backfill_status` (per-symbol outcome and reason). Changed response mapping only; no
+- [x] **Agent** — `xstockstrat-agent` MCP tools `get_watchlist`, `list_watchlists`, `manage_watchlist`,
+  `manage_watchlist_symbols` (delisted state per symbol) and `get_backfill_status` (per-symbol outcome and reason). Changed response mapping only; no
   new tool and no new argument.
 - **None** — not selected: UI and Agent are the consumer surfaces.
 
