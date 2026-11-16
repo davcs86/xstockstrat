@@ -188,7 +188,8 @@ config rows. Each deployment runs in exactly one mode, chosen by its own config,
   legacy login (AC-46). `POST /api/auth/sso/start` and the callback return "Sign-in failed. Try again." (`?error=failed`)
   and start no flow.
 - `/api/auth/sso/start` is POST-only (a GET returns 405 in every mode). In SSO mode, a POST whose `Origin` header is
-  missing or is not the app's origin returns "Sign-in failed. Try again." and starts no flow.
+  missing or is not the app's origin returns "Sign-in failed. Try again." and starts no flow. The configuration check
+  comes first: with an invalid configuration, every POST returns "SSO not configured" whatever its `Origin`.
 - **Cutover for one deployment** is a config change only: set the `ui.oidc.*` and `agent.oidc.issuer` keys, then set
   `auth.password_login_enabled` to `false`. Clearing the two issuers returns that deployment to legacy mode (the MCP
   rollback path; redeploying the previous release remains possible).
@@ -267,8 +268,8 @@ Additive only (non-breaking), in `packages/proto/identity/v1/identity.proto`:
 - Session tokens for the UI come from a new `rpc IssueSessionForUser(IssueSessionForUserRequest{ string user_id; })
   returns (AuthTokenResponse)`. It is SAN-gated to `xstockstrat-ui` only and refuses an inactive user. It reuses the
   `AuthenticateUser` mint path (env `JWT_SECRET`, `identity.refresh_tokens`).
-- Field numbers are fixed by design D-11: request fields 1–3, response fields 1–4, the next free numbers in the file
-  (`buf breaking` against `main-dev`).
+- Field numbers are fixed by design D-11. The messages are new, so their fields are numbered from 1: request fields 1–3,
+  response fields 1–4. `buf breaking` against `main-dev` stays green because the change is purely additive.
 
 ## Config Key Changes
 

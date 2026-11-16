@@ -257,7 +257,7 @@ Feature: authelia-sso
     Then the page shows a link to "https://auth.example.test" for managing connected apps
     And it lists no xstockstrat OAuth grants and offers no revoke button
 
-  @AC-35 @FR-1
+  @AC-35 @FR-1 @FR-14
   Scenario: Only the UI can read the OIDC client secret
     Given staging ui/oidc.client_secret is an encrypted is_secret row
     When GetSecret for namespace "ui" key "oidc.client_secret" is called by peer SAN "xstockstrat-ui" and by peer SAN "xstockstrat-agent"
@@ -444,3 +444,38 @@ Feature: authelia-sso
     When a client POSTs "/api/auth/sso/start" from the same origin and GETs "/api/auth/sso/callback?code=c1&state=s1"
     Then both redirect to the login page with error "failed"
     And no session cookie is set and ResolveExternalIdentity is not called
+
+  @AC-61 @FR-2
+  Scenario: The agent answers 503 when Authelia's signing keys cannot be fetched
+    Given staging is in SSO mode and Authelia's JWKS endpoint is unreachable
+    And the agent has no cached signing key with kid "k-new"
+    When an MCP client calls the staging agent with a well-formed token whose kid is "k-new" and whose iss is the staging issuer
+    Then the agent returns HTTP 503 with no WWW-Authenticate header
+    And the agent's auth-rejection metric records "jwks_unavailable"
+
+  @AC-62 @FR-15
+  Scenario: Logout with unreadable config ends only the xstockstrat session
+    Given staging is in SSO mode, a user is signed in, and the config service is unreachable
+    When the user clicks "Sign out" in the header
+    Then the session cookies are cleared and the refresh token is revoked
+    And the browser lands on "/auth/login" without being sent to Authelia
+    And the UI logs "sso_logout_mode_unknown"
+
+  @AC-63 @FR-15
+  Scenario Outline: The header Sign-out button ends the session in both modes
+    Given staging is in <mode> mode and a user is signed in on "/trader"
+    When the user clicks the "Sign out" button in the shared header
+    Then the session cookies are cleared
+    And the browser ends on <destination>
+
+    Examples:
+      | mode   | destination                                   |
+      | legacy | "/auth/login"                                 |
+      | SSO    | Authelia's logout, which returns to "/auth/login" |
+
+  @AC-64 @FR-15
+  Scenario: Logout with an expired session answers JSON instead of a redirect
+    Given a staging browser holds only an expired access_token cookie and a refresh_token cookie
+    When it POSTs "/api/auth/logout" from the same origin
+    Then the response is HTTP 200 JSON with "ok" true
+    And the session cookies are cleared
