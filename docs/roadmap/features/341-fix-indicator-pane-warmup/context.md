@@ -880,3 +880,47 @@ Tooling setup (step 17): node ✓ (for `check-config-wiring.mjs`); docs step, no
 - Deviations: none.
 - Ledger: no insights line (nothing generalizes beyond this feature).
 - Commit trailer: `Co-Authored-By` follows the session attribution reminder (`Claude Opus 5.5`).
+
+---
+
+## Session 2026-11-15 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-indicator-pane-warmup (feature 341)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-indicator-pane-warmup.feature | CREATE | NEW | Then asserts on the rendered SMA200 pane series across the charted window (UI indicator pane). |
+| AC-2 | /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-indicator-pane-warmup.feature | CREATE | NEW | Then asserts on the pane's "Not enough history" text and the absence of a series (UI). |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-indicator-pane-warmup.feature (CREATE) ---
+Feature: Indicator pane renders long-lookback indicators across the charted window (feature 341)
+  Regression guard promoted from feature 341's acceptance scenarios
+  (docs/reports/2026-11-15-indicator-panel-sma200-single-point-defect.md).
+
+  @AC-1 @regression @feature-341
+  Scenario: A 200-period average renders across the whole charted window
+    Given "LYFT" has 400 ingested daily bars
+    And the indicator chart window covers the latest 190 bars
+    When the indicator set containing SMA with period 200 is shown
+    Then the SMA200 series has a value on each of the 190 charted bars
+
+  @AC-2 @regression @feature-341
+  Scenario: An indicator without enough history says so instead of drawing a dot
+    Given "LYFT" has 150 ingested daily bars
+    When the indicator set containing SMA with period 200 is shown
+    Then the SMA200 pane shows "Not enough history" and draws no series
+
+### Notes / ambiguities / conflicts
+- Source scenarios carry no @FR-n tags (bug fix, C-15 regression scenarios), so none are added. The only existing tag besides @AC-n is @regression, which is kept. Only @feature-341 is added.
+- Service attribution: both Then clauses assert on what the UI indicator pane renders, so both go to xstockstrat-ui. The product-spec lists xstockstrat-analysis as a "candidate" because its series builder has not been traced. If /sdd-design or the fix puts the warm-up computation in analysis, AC-1 could also be argued to belong in services/xstockstrat-analysis/acceptance/. I did not split it. The observable outcome is the rendered pane, so a human can move it if the final design says otherwise.
+- Dedup: grep of every services/*/acceptance/*.feature and docs/sdd/business-rules/platform.feature found no @feature-341 or "Not enough history" matches. Existing SMA(200) scenarios in analysis/market-regime-benchmark-operand.feature are about benchmark operands, not pane rendering. indicators/fix-indicators-formula-correctness.feature mentions "warm-up positions are omitted", which is a different outcome (formula result omission, not pane rendering). Neither is an OVERLAP, and there is no CONFLICT.
+- The "Not enough history" literal is also unique across the suites, so a later change to the UI copy will surface here.
+- The services/xstockstrat-ui/acceptance/ directory already exists, so no lazy directory creation is needed.
+- Feature header wording is new. Existing UI suites use a descriptive Feature title plus "(feature NNN)" and a provenance comment, and this block follows that convention.
+
+### Coverage check
+- Source scenarios: 2 (AC-1, AC-2). Planned (NEW+DUP+OVERLAP): 2 (2 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Nothing was skipped.
+```
