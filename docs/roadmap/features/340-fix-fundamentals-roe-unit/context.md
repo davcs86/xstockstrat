@@ -554,3 +554,10 @@ Tooling setup (steps 2+3): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with
 - **Pre-freeze value** of `marketdata` / `fundamentals.history.enabled` (`get_config`, 2026-11-16 before the flip): homelab staging `true`; DO staging `true`.
 - **Freeze applied** (`set_config`, operator consent "Ok, agreed."): homelab staging at 2026-11-16T05:38:01Z, DO staging at 2026-11-16T05:38:02Z. **Confirmed** with `get_config` right after: `false` on both. Restore to `true` per lane after that lane's re-derive and audit.
 - **Still open in Step 10:** the per-lane pre-exports (Q-pre plus full Q-export, with each symbol's export row count equal to Q-pre's `n`) — operator, lane A then lane B.
+
+## Session 2026-11-16 — Step 10 operator gate: pre-exports (orchestrator)
+
+- **Lane B (DO staging) pre-export, taken after the freeze.** Operator ran Q-pre and full Q-export against `xstockstrat-staging` on the DO cluster, read-only session. Operator's output, verbatim: `q-pre exit=0`, `q-export-full exit=0`. Completeness check (export rows per symbol vs Q-pre `n`), operator's output, verbatim: `counts match`.
+- **Lane A (homelab staging) pre-export.** The operator's Q-pre and full Q-export outputs from the dry run are used as the pre-export. Completeness check, operator's output, verbatim: `counts match`. **Caveat:** these files were taken a few minutes before the freeze was applied at 05:38:01Z, not after it. They are a valid frozen baseline only if no fundamentals-history backfill wrote in that gap; the post-fix audit's Q-pre re-run (design § Step 5, sequence item 1) is where a breach would show.
+- The completeness check was a shell `diff` of per-symbol counts; it would also print `counts match` on an empty table. Row totals were not relayed.
+- All Step 10 operator actions are now recorded: dry run, pre-freeze values, freeze confirmed `false` on both lanes, pre-export count match on both lanes. Export files stay on the operator's machine (R-16).
