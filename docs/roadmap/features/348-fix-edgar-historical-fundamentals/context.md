@@ -72,3 +72,27 @@ unless it is marked as one.
 - The second defect report is recorded on the session brief's instruction ("if different, record
   them with `/sdd-qa defect`"); its severity (SEV-3: values missing, none wrong) is the session's
   classification.
+
+## Session 2026-11-16 — sdd-review product-spec
+
+- Tree: `feature/fix-edgar-historical-fundamentals@f426971 ≡ origin/feature/fix-edgar-historical-fundamentals`.
+- Product spec approved. Status: draft → spec-ready. Verdict: PASS WITH WARNINGS, no Floor breach.
+  Proceeded under the authorization reference above (a progress checkpoint, not a reserved gate).
+- Warnings:
+  - FR-7 is covered only for the EDGAR snapshot path (`@AC-6`); the agent tool, analysis
+    backtests/screens and UI readers have no scenario (C-15, C-14). Carried to recon: add scenarios
+    or narrow FR-7 once every reader is listed.
+  - FR-5's stale-label clause had no explicit assertion in `@AC-5` (C-15). Addressed in this
+    session: `@AC-5` gained `And no stored "ORCL" row has period_end 2026-09-07` (the scenario was
+    still a draft; its ID is unchanged).
+  - If design chooses a migration, the implementation spec must state the next `NNN`, the up and
+    down files and the run order (C-07, F-01). Marketdata migrations end at `009`; next free is `010`.
+  - FR-3's "as its own current period" is abstract; design must define it (own-period facts versus
+    comparative columns).
+- Overlap findings: no FAIL-level overlap. Feature 340 (`fix-fundamentals-roe-unit`, `code-completed`)
+  shares `internal/edgar/edgar_client.go`, the `DerivationVersion` gate, the golden in
+  `derivation_version_test.go` and the `marketdata.fundamentals_history` rows. 340's code is already on
+  `main-dev` (`8ccc152`, PR #1552) and this branch is based on it, so the order is fixed and no
+  merge-order row was written. Features 341, 343 and 347 touch other files.
+- Recommended design depth: full (row-key change with a stored-data repair, possible DB migration,
+  consumer surfaces `xstockstrat-ui` and `xstockstrat-agent`).

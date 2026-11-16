@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report |
+| 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 
 ---
 
@@ -35,4 +36,4 @@ The fix derives a row's identity, period end and filed date from the fact's own 
 
 ## Next Action
 
-`/sdd-review fix-edgar-historical-fundamentals product-spec`, then `/sdd-design fix-edgar-historical-fundamentals` — full design recommended by triage; see context.md
+`/sdd-design fix-edgar-historical-fundamentals` — full design recommended (row-key change with a stored-data repair, possible DB migration, two consumer surfaces, shared `DerivationVersion` gate with feature 340)

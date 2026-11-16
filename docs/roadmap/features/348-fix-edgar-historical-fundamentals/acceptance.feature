@@ -41,6 +41,7 @@ Feature: fix-edgar-historical-fundamentals (bug fix)
     When the fix is deployed and the fundamentals backfill re-derives "ORCL"
     Then every stored "ORCL" row carries derivation version 3
     And no stored "ORCL" row has a period_end later than its filed_date
+    And no stored "ORCL" row has period_end 2026-09-07
     And the stored quarterly row with period_end 2025-08-31 has shareholders' equity 24154000000
     And the stored quarterly row with period_end 2026-08-31 has filed_date 2026-09-11
 
