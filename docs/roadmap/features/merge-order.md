@@ -417,3 +417,11 @@ integration PR, and the later merger regenerates `scripts/config-wiring-stored.j
 `scripts/config-wiring-stored.json`. 347 also edits `services/xstockstrat-marketdata/internal/alpaca/client.go` (`do` and the
 limiter), which `fix-retired-surface-proto-cleanup` (322, `Paper` plumbing) and `fix-orphaned-code` (323, `AlpacaAsset`
 removal) edit in disjoint hunks; whichever merges second rebases and re-greps its anchors.
+
+Further same-file overlaps for 347, all textual and non-blocking (whichever merges second rebases and re-greps its anchors):
+`services/xstockstrat-marketdata/cmd/server/main.go` with 322 (adjacent hunks in the Alpaca settings closure);
+`services/xstockstrat-trading/internal/service/trading.go` with 311, 312 and 321, and
+`services/xstockstrat-trading/internal/service/order_intent.go` with 321 (the staleness floor, same line);
+`docs/patterns/config-governance.md` (registered-keys log, both prepend at the same anchor),
+`services/xstockstrat-marketdata/CLAUDE.md` and `scripts/config-wiring-stored.json` with 341 (already on trunk; 347
+regenerates the stored set after any renumber).
