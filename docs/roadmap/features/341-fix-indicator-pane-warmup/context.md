@@ -188,6 +188,8 @@ still live.
   Log entry — Step 6. Resolved: pgxmock v4.9.0 `CloseError` covers the `rows.Err()` path.
 - [ ] The chunk-width SQL is new text, checked by the operator on first use; runbook launch-step-1
   preconditions (O-31) and the homelab-edge playbook path the runbook cites (O-32) — Step 17.
+  Step 17: O-31 and O-32 are written into the runbook section; the chunk-width SQL is still
+  unchecked until its first run (homelab launch checkpoint).
 - [x] Step 12 touches four files and many cases (one unit with Step 11); split only with a Deviation
   Log entry — Step 12. Resolved: landed unsplit with Step 11 as one commit.
 - [ ] Peer 342 has no implementation spec yet; re-run the overlap scan when it reaches
@@ -246,6 +248,8 @@ still live.
 - Step 15: `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`,
   `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`.
 - Step 16: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`.
+- Step 17: `docs/runbooks/ohlcv-lock-budget-tuning.md`, `services/xstockstrat-ui/CLAUDE.md`,
+  `services/xstockstrat-marketdata/CLAUDE.md`, `docs/patterns/config-governance.md`.
 
 Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
@@ -859,4 +863,20 @@ Tooling setup (step 16): node ✓ · pnpm ✓ (linked main-checkout `node_module
 - Config-key wiring gate: not applicable (a `test` step, no migration in **Files**, no `## Config Key Changes` heading).
 - Files modified: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`
 - Deviations: every run used a temporary `tsconfig.json` `paths` entry to this worktree's proto stubs, restored before commit, and Playwright ran host-native targeted with `--no-deps` (Deviation Log).
+- Commit trailer: `Co-Authored-By` follows the session attribution reminder (`Claude Opus 5.5`).
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, step 17
+
+Tooling setup (step 17): node ✓ (for `check-config-wiring.mjs`); docs step, no install.
+
+### Step 17 — docs: runbook section, service docs, registered-keys log [done]
+- New runbook section "Homelab deep indicator history" after "Relationship to Piece B": what the key does, the budget-of-record table (DigitalOcean 200 → 600 days, unchanged; homelab 1000 → 3000 days, at most 404 locks per scan, 28,280 at c = 70 of 71,680), the feature 153 `@AC-1` PRESERVE-at-risk rule, three read-only preconditions (homelab-edge `verify` via `roles/db_host/tasks/verify.yml`; one `sudo -u postgres psql -d xstockstrat-staging` read of `max_connections`, `max_prepared_transactions` and the new chunk-width query, SSH path by reference to homelab-edge `docs/runbooks/db-host.md`; `list_config_keys ui`), recompute/escalate rule, three launch steps through the homelab MCP, and the DigitalOcean-admin line. UI `CLAUDE.md`: lead sentence names the `/trader` one-shot read through `traderConfigClient` (`traderBff.ts`), plus the key row (seed `050_ui_chart_history_bars`). Marketdata `CLAUDE.md` § Observability: the counter line. `config-governance.md`: feature 341 entry above 338. Each claim re-read against the code (`050_*.up/down.sql`, `configServiceImpl.ts:181`, `otel.go:372-380`, `marketdata_repo.go` wrap sites, `defaultBarLookback` slack 3, `traderConfigClient.ts`, page `staleTime: Infinity`).
+- TDD: N/A (docs). Verification (`.sdd-logs/v-1.log`, `exit=0`): the heading at runbook `:129`; the key in UI `CLAUDE.md:202`, `config-governance.md:158`, `:167` and runbook `:133`, `:188`, `:196`; the counter in marketdata `CLAUDE.md:142` and runbook `:202`; `--doc-check` silent.
+- All steps done: `node scripts/check-config-wiring.mjs --final` (`v-2.log`, `exit=0`) printed only the two pre-existing `REPORTED: … readers-disagree` lines (`fundsignal_loop.py:marketdata/fundamentals.provider`, `trading.go:platform/trading_state`). Status `in-progress` → `code-completed`.
+- Operator directives mapped: `max_locks_per_transaction` 1024 and `max_connections` 70 are the values of record from homelab-edge `roles/db_host/defaults/main.yml`; no `SHOW max_locks_per_transaction`. The specified `psql` read keeps `SHOW max_connections` (Step 17 Instruction 1(b)) as a cross-check of the value of record; the operator's "max_connections are now love" reading is the orchestrator's, so the read was not dropped. The config read/write goes through the MCP.
+- Files modified: `docs/runbooks/ohlcv-lock-budget-tuning.md`, `services/xstockstrat-ui/CLAUDE.md`, `services/xstockstrat-marketdata/CLAUDE.md`, `docs/patterns/config-governance.md`
+- Deviations: none.
+- Ledger: no insights line (nothing generalizes beyond this feature).
 - Commit trailer: `Co-Authored-By` follows the session attribution reminder (`Claude Opus 5.5`).

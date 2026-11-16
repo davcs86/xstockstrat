@@ -816,7 +816,7 @@ grep -n "from '../fixtures\|helpers/auth" e2e/trader/position-detail.spec.ts
 
 ### Step 17 — docs: runbook section, service docs, registered-keys log
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`, `docs/patterns/`, `services/*/CLAUDE.md`
 **Files**:
 - `docs/runbooks/ohlcv-lock-budget-tuning.md` — modify
