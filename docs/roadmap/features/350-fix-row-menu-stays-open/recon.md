@@ -108,6 +108,20 @@ Sampled: `body.style.pointerEvents`, count of `[role=menu]` / `[role=alertdialog
 | **A — drop `preventDefault`** (menu closes, dialog opens in the same update) | Dialog opened 4/4 with focus on its Cancel button. Menu removed ~140 ms later (its close animation); the menu's focus-return to the trigger at that moment is reclaimed by the dialog's focus trap (focus stays on Cancel). After the dialog: no menu, `pointer-events` cleared, 0 `aria-hidden`, the next click works. **Focus ends on `<body>`.** |
 | **A + focus rule** (`onCloseAutoFocus` on the dialog content focuses the menu trigger; a layout-effect cleanup moves focus to the enclosing `<main>` when the trigger is removed while focused) | As A, and focus is on the row's trigger after Cancel and after Confirm (4/4). With the row removed after Confirm: focus moved to `<main>`, and the next Tab landed on the first control inside the page content ("Add account"). |
 
+Addendum (before round 3; the settled mechanism D-1..D-3/D-12 prototyped, then reverted). A recorder
+armed on the first `focusin` inside the dialog logged every later `focusin`/`focusout` until the menu
+was gone plus one macrotask:
+
+| Path | With the menu-focus guard (D-3) | Guard removed |
+|---|---|---|
+| Keyboard (Enter, End, Enter) | **0 events**; focus on the dialog's Cancel | 2 events: `focusout` Cancel with `relatedTarget` = the menu trigger, then `focusin` Cancel |
+| Mouse | 2 events: `focusout` Cancel with `relatedTarget` = the menu **content**, then `focusin` Cancel | those 2, plus the 2 trigger events above |
+
+So the trigger itself never receives a focus event in Chromium (a `focusin`-on-trigger counter cannot
+fail), the keyboard path is clean only with the guard, and the mouse path keeps one bounce toward
+the closing menu's content that the guard does not address (pointer leaving the item as the dialog
+overlay appears). After Cancel, focus was on the row's trigger in all four runs.
+
 Not measured: a variant that defers the dialog until the menu has finished closing, and
 `modal={false}` on the menu. The orders table and the strategies list were read, not probed; their
 RED tests in execution are the measurement.
