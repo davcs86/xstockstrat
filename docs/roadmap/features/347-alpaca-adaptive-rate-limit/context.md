@@ -75,3 +75,8 @@
   and no 429; only the Market Data reference does.
 - Phase 1 round 1 done; register in debate.md (D-1..D-10 settled, R-1..R-3 locked, O-2/O-4/O-5/O-6/
   O-9/O-11 open). No Floor breach, no C-16 regression found.
+- Round 1 gate, operator steers (2026-11-16): (8) trading fails fast on a wait that cannot fit;
+  **marketdata keeps waiting to the request deadline** (fail-fast declined there); (9) a rate-limited
+  `flattenAndHalt` submit halts the account first, then keeps retrying the flatten; (10) order mutations
+  run detached from caller cancellation, still time-bounded; (11) trading retry budget is
+  `max(T, S − 2T)` (20 s at defaults). Recorded as D-11..D-14, R-4..R-8 in debate.md.
