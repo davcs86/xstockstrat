@@ -95,3 +95,7 @@
   cancels are bounded by `broker.timeout_ms`, no retry; (19) run round 4. D-25..D-27, R-14..R-16.
 - To file at spec/execute (pre-existing, not fixed here): `ReplaceOrder` inserts its intent before
   `validateTIF`, so a TIF validation failure leaves the intent PENDING then UNKNOWN.
+- Round 4 done (D-28, D-29, R-17; O-36..O-41 closed). Round 4 gate, operator steer (2026-11-16):
+  "keep rounds until adversary verdict is sound. I sign off to override the rounds cap." The debate may
+  run past the 5-round cap of `/sdd-design` full mode; rounds continue until the adversary returns a
+  verdict with no blocking objection. Override recorded per P-04; the Floor rule (F-11) is untouched.
