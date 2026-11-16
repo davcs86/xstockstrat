@@ -28,6 +28,14 @@ test.describe('Template authoring (/config-ui/templates)', () => {
     await page.goto('/config-ui/templates');
     await page.getByRole('tab', { name: 'Strategy', exact: true }).click();
 
+    // @AC-12: the selected tab carries a background the unselected one does not.
+    const unselectedFill = await page
+      .getByRole('tab', { name: 'Formula', exact: true })
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    const strategyTab = page.getByRole('tab', { name: 'Strategy', exact: true });
+    await expect(strategyTab).toHaveAttribute('aria-selected', 'true');
+    await expect(strategyTab).not.toHaveCSS('background-color', unselectedFill);
+
     const systemRow = page.getByRole('row', { name: /tpl-quality_dip_buyer/ });
     await expect(systemRow.getByText('System', { exact: true })).toBeVisible({ timeout: 10000 });
     await expect(systemRow.getByRole('button', { name: /Actions for template/ })).toHaveCount(0);

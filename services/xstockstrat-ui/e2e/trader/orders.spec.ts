@@ -218,6 +218,8 @@ test.describe('Orders management page', () => {
     const alert = page.getByRole('alert').filter({ hasText: 'cancel unavailable' });
     await expect(alert).toBeVisible();
     // The row's kebab menu stays open (modal) after the confirm; close it so the banner is clickable.
+    // Escape reaches the menu only once the closing dialog has left the layer stack.
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toHaveCount(0);
     await page.getByRole('button', { name: 'Dismiss error' }).click();

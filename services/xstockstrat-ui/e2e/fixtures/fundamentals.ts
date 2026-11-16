@@ -29,6 +29,28 @@ export const FUNDAMENTALS_AAPL = {
   stale: false,
 };
 
+// Feature 339 (@AC-1) — the reported LYFT market cap; `asOf` is the Connect-JSON RFC3339 form, so
+// this is a page.route body only (not a mock-backend message init).
+export const FUNDAMENTALS_LYFT = {
+  symbol: 'LYFT',
+  marketCap: 6726553623.93,
+  peRatio: 41.2,
+  pbRatio: 3.1,
+  dividendYield: 0,
+  eps: 0.4,
+  beta: 1.95,
+  roe: 0.12,
+  debtToEquity: 0.85,
+  price: 16.42,
+  yearHigh: 19.8,
+  yearLow: 9.66,
+  extraMetrics: {},
+  currency: 'USD',
+  source: 'fmp',
+  stale: false,
+  asOf: '2026-11-13T21:00:00Z',
+};
+
 // Feature 220 — sentinel symbol whose GetFundamentals never answers (stalled upstream), so the
 // trader BFF's bounded deadline must surface the card's error branch instead of loading forever.
 export const FUNDAMENTALS_STALL_SYMBOL = 'STALL';
