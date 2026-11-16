@@ -333,3 +333,23 @@
   gate clean.
 - Files modified: both `internal/alpacapace/pace.go` and `pace_test.go`,
   `services/xstockstrat-marketdata/internal/alpaca/client.go`, `client_test.go`
+
+### Step 5 — service: marketdata loops bound their Alpaca calls by the loop interval [done]
+- Atomic unit with Step 6. Both Start loops create `fetchCtx` from the live interval; only the four
+  vendor calls use it; a per-symbol guard and a later-timeframe guard start no fetch once it expired and
+  count the symbols as errors. `alpaca-integration.md` gained the adaptive bullet and the two loop notes.
+- Verification: build and vet ok; 17 `fetchCtx` lines; 17 write/tick sites still on `ctx`.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`,
+  `docs/alpaca-integration.md`
+- Addition not named by the spec: one WARN `bar ingest: cycle deadline passed, timeframe not fetched`
+  when the later-timeframe guard fires (otherwise that skip is silent apart from the heartbeat).
+- Deviations: none
+
+### Step 6 — test: loop bounds [done]
+- Atomic unit with Step 5. 11 existing call sites pass `context.Background()` twice; three new tests.
+- TDD red (new signatures, bodies still on `ctx`): AC-33 "per-symbol bars requests in the cycle = 6,
+  want exactly 1"; AC-32 "per-symbol quote requests in the cycle = 3, want 0"; the expired-fetch case
+  "vendor calls after the cycle deadline: multi = 1" → green: `F347_AC3[23]` → 2 PASS, the direct case
+  passes, whole service `go test ./... -race` exit 0, coverage total 85.1%, `golangci-lint` 0 issues.
+- Files modified: `internal/service/marketdata_service_test.go`, `internal/service/bar_hold_test.go`
+- Deviations: none

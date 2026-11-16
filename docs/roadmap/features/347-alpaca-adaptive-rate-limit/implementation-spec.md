@@ -390,7 +390,7 @@ grep -rn "func Set" internal/alpaca/export_test.go        # the four seams only
 
 ### Step 5 — service: marketdata loops bound their Alpaca calls by the loop interval
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -434,7 +434,7 @@ grep -n "cacheQuote(ctx\|InsertBars(ctx\|LogTickOK(ctx" internal/service/marketd
 
 ### Step 6 — test: loop bounds
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
