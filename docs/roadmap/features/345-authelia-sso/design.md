@@ -103,7 +103,7 @@ In both modes, identity stays the user and role store and keeps minting sessions
 
 #### Config
 
-**Migration `051_authelia_sso_keys`**: 7 keys × {production, staging} = 14 global rows [D-44, D-48, D-57].
+**Migration `052_authelia_sso_keys`**: 7 keys × {production, staging} = 14 global rows [D-44, D-48, D-57].
 
 | Key | Seed value | Code default |
 |---|---|---|
@@ -355,7 +355,7 @@ The whole SSO-mode PRM object is pinned by a two-sided contract test against `oa
 
 #### Rollout, cutover, rollback
 
-- **Order:** proto → `db-migrate` (config 051, identity 007) → identity → config grant → agent → UI [D-20].
+- **Order:** proto → `db-migrate` (config 052, identity 007) → identity → config grant → agent → UI [D-20].
   - Invariant: every intermediate state is legacy, because the issuers are empty and the flag is `true` [D-48].
   - Merge 319 first or alongside it (the RevokeToken defect) [D-52]. Rebase over 324, 331 and 323.
 - **Cutover, per deployment** [FR-14, D-42]:
@@ -364,7 +364,7 @@ The whole SSO-mode PRM object is pinned by a two-sided contract test against `oa
   3. Verify one web login, one MCP connection and one logout, using the signal list.
   4. Set the password flag to `false`.
 - **Config rollback:** clear both issuers and set the flag `true`.
-- **Code rollback:** revert identity, then optionally run 051 down. The order is recommended, not lockout-critical [D-20, D-36, D-48].
+- **Code rollback:** revert identity, then optionally run 052 down. The order is recommended, not lockout-critical [D-20, D-36, D-48].
 
 #### Cross-repo: homelab-edge
 
@@ -684,7 +684,7 @@ Add a matching spike-gate row: "authorization-code lifespan ≥ 30 s pre-exchang
 
 **xstockstrat cutover runbook (D-74).** The draft names no path. Proposal: new `docs/runbooks/authelia-sso-cutover.md`. Insert:
 - **Pre-check:** "From the app VM: `getent hosts auth.<domain>` and `curl -fsS https://auth.<domain>/.well-known/openid-configuration` succeed, and the JWKS URL in that document returns 200. The UI (discovery, token, JWKS) and the agent (discovery, JWKS) call Authelia server-side."
-- **Rollback, in this order:** "(1) Config: set `ui/oidc.issuer` and `agent/oidc.issuer` to `""` and `identity/auth.password_login_enabled` to `true`; verify AC-44. (2) Only then revert code (identity first; 051 down optional, D-36). (3) Every user with outcome CREATED (audit `identity.external.created`) has an unusable password (D-6): run `manage-users.py reset-password <email>` for each person who needs password login."
+- **Rollback, in this order:** "(1) Config: set `ui/oidc.issuer` and `agent/oidc.issuer` to `""` and `identity/auth.password_login_enabled` to `true`; verify AC-44. (2) Only then revert code (identity first; 052 down optional, D-36). (3) Every user with outcome CREATED (audit `identity.external.created`) has an unusable password (D-6): run `manage-users.py reset-password <email>` for each person who needs password login."
 - **Residual:** "On a cut-over deployment with the flag `false`, a config outage renders the legacy login (AC-46) where password login is refused. Restore config reachability; there is no in-app workaround."
 - **Signals** (D-42 list plus D-72): `ui.auth.events{event=sso_login_failed, reason}`, `{event=sso_login_error}`, `{event=logout, reason=cross_origin}`, and ERRORs `sso_issuer_invalid{reason}` and `app_url_invalid`.
 
@@ -978,7 +978,7 @@ return p;
   - AC-58: an invalid `APP_URL` gives `not_configured`, and the Origin check is skipped (D-66, (B) §D-68 `if_present`). Tested in the start/logout `route.test.ts` with `APP_URL` stubbed, plus `sameOrigin.test.ts`.
   - AC-59: `/start` GET returns 405; a cross-origin or Origin-less POST gives `failed` (D-54, D-68). Tested in the start `route.test.ts` and e2e.
   - AC-60: unreadable config gives `failed` on start and callback (D-22). Tested in the route unit tests with the config client mocked to time out.
-- **Config migration renumbered from `050` to `051`** (D-94; feature 341 owns `050`).
+- **Config migration renumbered from `050` to `051`** (D-94; feature 341 owns `050`), **then `051` to `052`** (D-99; feature 343 owns `051_ingest_backfill_self_serve_keys`). Re-check the next free number at merge.
 
 - **Spike results (2026-11-16): D-95..D-98.** The spike passed; option F is not needed.
   - D-95: the agent reads the granted scopes from `scp` (an array), falling back to a `scope` string; the `typ` check `at+jwt` is enabled.
@@ -1064,8 +1064,8 @@ return p;
 - `C-01` / `F-04`: honored. Every cited path was read or comes from recon; new files are named as new.
 - `C-03`: honored. Pre-auth calls carry `x-trace-id`; post-auth calls carry the trio. No resolve single-flight (D-30).
 - `C-04`: honored. `ExternalIdentityOutcome` has `_UNSPECIFIED=0`; refusal details are shared constants (D-24).
-- `C-05`: honored. Every key is relative and seeded by 051; readers are listed; `check-config-wiring --final` reports zero findings.
-- `C-07`: honored. Migrations `007` (identity) and `051` (config) are free (renumbered from 050, which feature 341 took; re-check the next free number at merge).
+- `C-05`: honored. Every key is relative and seeded by 052; readers are listed; `check-config-wiring --final` reports zero findings.
+- `C-07`: honored. Migrations `007` (identity) and `052` (config) are free (renumbered 050→051→052: feature 341 took `050`, feature 343 took `051`; re-check the next free number at merge).
 - `C-08` / `C-15` / `P-06`: honored. Every FR maps to ≥1 AC and every AC to a planned test (seam checks v2–v4).
 - `C-09`: honored. `buf lint`, `buf breaking`, `buf-gen`.
 - `C-10`: honored. Both agent scope sites are narrowed (D-3).

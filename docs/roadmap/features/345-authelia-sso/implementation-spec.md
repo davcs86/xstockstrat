@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-11-16
 **Feature**: `docs/roadmap/features/345-authelia-sso/feature.md`
-**Total Steps**: 40
+**Total Steps**: 52
 **Feature Branch**: `feature/authelia-sso`
 
 ---
@@ -15,15 +15,16 @@ config grant, the admin script, the agent, the UI, and the docs. Every intermedi
 mode. The two issuers stay `""` and the password flag is seeded `true` until a deployment cuts over,
 so no step can lock anyone out. Within each surface the order is leaf modules first, then the code
 that composes them, then routes and pages, so each `service` step passes its own Verification before
-the next one starts.
+the next one starts. Every step touches at most five files.
 
 The step bodies cite the debate register (`D-n`), not the design-layer prose (design.md §Precedence).
-The config seed is **`051_authelia_sso_keys`** (D-94; feature 341 took `050`). `debate.md` D-20, D-36,
-D-44, D-48 and D-57 still say `050`; D-94 governs.
+The config seed is **`052_authelia_sso_keys`**: renumbered `050`→`051` (D-94; feature 341 took `050`)
+and `051`→`052` (D-99; feature 343 took `051`). `debate.md` D-20, D-36, D-44, D-48 and D-57 still say
+`050` and D-94 says `051`; D-99 governs. Re-check the next free number at merge.
 
 **Consumer surfaces (C-14):** UI. This covers the login page, `/api/auth/sso/{start,callback}`, logout
 plus the header Sign-out button, `/accounts/authorized-apps`, and the `.well-known` copies (Steps
-23–38). The agent's authentication and effective scope for every MCP tool are in Steps 15–22. The
+24–47). The agent's authentication and effective scope for every MCP tool are in Steps 15–23. The
 script `manage-users.py update-email|unlink-sso` is in Steps 13–14. No new page or route segment is
 added, so no `PLATFORM_SUBNAV` registration is needed (C-10a). The new routes are API routes and the
 two changed pages already exist.
@@ -36,22 +37,22 @@ in both modes (D-60, D-77, D-80). One rule is PRESERVE in legacy mode only: agen
 
 | AC | Step(s) | AC | Step(s) | AC | Step(s) | AC | Step(s) |
 |---|---|---|---|---|---|---|---|
-| AC-1 | 12, 38 | AC-17 | 9, 38 | AC-33 | 12 | AC-49 | 37, 38 |
-| AC-2 | 12 | AC-18 | 14 | AC-34 | 38 | AC-50 | 12, 14 |
-| AC-3 | 12 | AC-19 | 14 | AC-35 | 5, 7 | AC-51 | 33, 38 |
-| AC-4 | 11, 12, 33 | AC-20 | 40 | AC-36 | 40 | AC-52 | 29, 31 |
-| AC-5 | 11, 12, 33 | AC-21 | 22 | AC-37 | 22 | AC-53 | 29, 31, 38 |
-| AC-6 | 12 | AC-22 | 20, 22 | AC-38 | 11 | AC-54 | 25, 27, 33, 37, 38 |
-| AC-7 | 11, 12, 33 | AC-23 | 22 | AC-39 | 11, 12, 33 | AC-55 | 16, 22 |
-| AC-8 | 12 | AC-24 | 29, 33 | AC-40 | 22 | AC-56 | 31, 38 |
-| AC-9 | 11, 12 | AC-25 | 12 | AC-41 | 5, 38 | AC-57 | 25, 31, 38 |
-| AC-10 | 22 | AC-26 | 11, 12, 33 | AC-42 | 22, 38 | AC-58 | 25, 31, 33, 38 |
-| AC-11 | 22, 37 | AC-27 | 11 | AC-43 | 22 | AC-59 | 25, 33, 38 |
-| AC-12 | 20 | AC-28 | 11, 12 | AC-44 | 22, 38 | AC-60 | 27, 33 |
-| AC-13 | 20 | AC-29 | 33, 38 | AC-45 | 31, 38 | AC-61 | 18, 22 |
-| AC-14 | 22 | AC-30 | 12, 22 | AC-46 | 27, 38 | AC-62 | 31 |
-| AC-15 | 22 | AC-31 | 9 | AC-47 | 33 | AC-63 | 38 |
-| AC-16 | 9, 31, 38 | AC-32 | 16, 22, 27, 38 | AC-48 | 38 | AC-64 | 31, 38 |
+| AC-1 | 12, 47 | AC-17 | 9, 47 | AC-33 | 12 | AC-49 | 43, 47 |
+| AC-2 | 12 | AC-18 | 14 | AC-34 | 47 | AC-50 | 12, 14 |
+| AC-3 | 12 | AC-19 | 14 | AC-35 | 5, 7 | AC-51 | 38, 47 |
+| AC-4 | 11, 12, 28, 38 | AC-20 | 52 | AC-36 | 52 | AC-52 | 32, 34 |
+| AC-5 | 11, 12, 28, 38 | AC-21 | 23 | AC-37 | 23 | AC-53 | 32, 34, 47 |
+| AC-6 | 12 | AC-22 | 21, 23 | AC-38 | 11 | AC-54 | 26, 30, 38, 43, 47 |
+| AC-7 | 11, 12, 28, 38 | AC-23 | 23 | AC-39 | 11, 12, 28, 38 | AC-55 | 17, 23 |
+| AC-8 | 12 | AC-24 | 32, 38 | AC-40 | 23 | AC-56 | 34, 47 |
+| AC-9 | 11, 12 | AC-25 | 12 | AC-41 | 5, 47 | AC-57 | 26, 34, 47 |
+| AC-10 | 23 | AC-26 | 11, 12, 28, 38 | AC-42 | 23, 47 | AC-58 | 26, 34, 38, 47 |
+| AC-11 | 23, 43 | AC-27 | 11 | AC-43 | 23 | AC-59 | 26, 38, 47 |
+| AC-12 | 21 | AC-28 | 11, 12 | AC-44 | 23, 47 | AC-60 | 30, 38 |
+| AC-13 | 21 | AC-29 | 38, 47 | AC-45 | 36, 47 | AC-61 | 19, 23 |
+| AC-14 | 23 | AC-30 | 12, 23 | AC-46 | 30, 47 | AC-62 | 34 |
+| AC-15 | 23 | AC-31 | 9 | AC-47 | 38 | AC-63 | 47 |
+| AC-16 | 9, 36, 47 | AC-32 | 17, 23, 30, 47 | AC-48 | 47 | AC-64 | 34, 47 |
 
 ## Step Dependencies
 
@@ -62,26 +63,32 @@ in both modes (D-60, D-77, D-80). One rule is PRESERVE in legacy mode only: agen
   test mocks have only `getInt` (`identityServiceImpl.test.ts:58,292,357,1141,1388`,
   `identityServiceImpl.otlp.test.ts:40`, `identityTelemetry.test.ts:13`; recon R-7), so every existing
   password-login test would throw at runtime until Step 9 adds `getBool`.
-- Steps 39 + 40 land together. AC-20/AC-36 are `grep -F` RED→GREEN checks over the docs Step 39 writes
-  (D-48).
-- Step 4 seeds the keys. Their readers land in Step 8 (identity), Step 15 (agent) and Step 26 (UI),
+- Step 4 seeds the keys. Their readers land in Step 8 (identity), Step 16 (agent) and Step 29 (UI),
   across three surfaces, so they cannot form one §C unit. The bridge is the step-time
   `check-config-wiring.mjs` mode: a missing leg prints `PENDING` and does not block
   (`docs/patterns/config-governance.md:85-88`). `--final` runs only at the integration PR (the 338/341
   precedent).
 - Steps 3–4 (migrations) precede Step 12 (the identity DB tier applies them) and Step 5 (the seed test
-  reads 051).
-- Step 6 (config grant) precedes Step 26. `loadOidcClientSecret` is denied without the grant in any
+  reads 052).
+- Step 6 (config grant) precedes Step 29. `loadOidcClientSecret` is denied without the grant in any
   live run; the unit tests mock it.
-- Steps 10–11 precede Step 22: the agent resolve path calls `ResolveExternalIdentity`. Unit tests mock it.
-- Step 17 precedes Step 21, and Step 19 precedes Step 21: `sso_auth.py` composes `jwks.py`, `scopes.py` and the client helper.
-- Step 23 (`typecheck` in CI) precedes Step 30. D-83's `@ts-expect-error` cases only go RED under a real `tsc` (D-93).
-- Step 24 precedes Steps 26/28/30/32; Step 26 precedes Steps 28/30/32/34/35; Step 28 precedes Steps 30/32.
-- Step 32 precedes Step 34: the login form posts to `/api/auth/sso/start`.
-- Step 38 (e2e) requires every UI step 23–37.
+- Steps 10–11 precede Step 23: the agent resolve path calls `ResolveExternalIdentity`. Unit tests mock it.
+- Step 15 precedes Step 16: the `sso_mode.py` receivers must be registered before its reads exist, or
+  step time gates them as `unattributed`. Step 15 also precedes Steps 17 and 26 (the issuer vector file).
+- Step 18 precedes Step 22, and Step 20 precedes Step 22: `sso_auth.py` composes `jwks.py`, `scopes.py` and the client helper.
+- Step 24 (`typecheck` in CI) precedes Step 33. D-83's `@ts-expect-error` cases only go RED under a real `tsc` (D-93); the RED is recorded in Step 34.
+- Step 25 precedes Steps 29/31/33/37; Step 27 precedes Steps 33/37 (`refusalCode`, `safeRedirect`); Step 29 precedes Steps 31/33/37/39/40/41; Step 31 precedes Steps 33/37.
+- Step 33 precedes Step 35 (the `login_disabled` `AuthEvent` member).
+- Step 37 precedes Step 39: the login form posts to `/api/auth/sso/start`.
+- Steps 44 → 45 → 46 → 47: the stub IdP and fixtures precede the mock backend that serves their state,
+  and the serialized `chromium-sso` project precedes the specs it runs. Step 47 (e2e) requires every UI
+  step 24–46.
+- Steps 48–51 (docs) precede Step 52. Step 48's first action runs Step 52's Verification on the pre-docs
+  tree to record the RED. No `**Lands with**`: a docs-presence grep matches no §C trigger.
 - **Merge order (rollout, not steps):** feature 319 merges first or alongside (D-52; the RevokeToken
   unverified-decode defect). Rebase over 324 (`manage-users.py`, `ci.yml`), 331 and 323 (agent `main.py`).
-  Re-check that config `051` and identity `007` are still the next free numbers at merge (D-94; 343 also plans a config seed).
+  Re-check that config `052` and identity `007` are still the next free numbers at merge (D-94, D-99:
+  050→051→052; 343's `051` has already landed).
 
 ---
 
@@ -120,7 +127,7 @@ in both modes (D-60, D-77, D-80). One rule is PRESERVE in legacy mode only: agen
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against "../../.git#branch=feature/authelia-sso,subdir=packages/proto"
+cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-dev,subdir=packages/proto'   # baseline = the dev trunk; the path is relative to packages/proto (ci.yml:240)
 ```
 
 ---
@@ -130,9 +137,10 @@ cd packages/proto && buf lint && buf breaking --against "../../.git#branch=featu
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/ts/**` — modify (generated)
-- `packages/proto/gen/python/**` — modify (generated)
-- `packages/proto/gen/go/**` — modify (generated)
+- `packages/proto/gen/ts/identity/v1/{identity.ts,identity_pb.ts,identity_connect.ts}` + `packages/proto/gen/ts/dist/identity/v1/{identity.js,identity.d.ts,identity_pb.js,identity_pb.d.ts}` — modify (generated)
+- `packages/proto/gen/python/identity/v1/{identity_pb2.py,identity_pb2_grpc.py}` — modify (generated)
+- `packages/proto/gen/go/identity/v1/{identity.pb.go,identity_grpc.pb.go,identityv1connect/identity.connect.go}` — modify (generated)
+- Any other path `buf-gen.sh` changes (e.g. an incidental WKT doc-comment refresh, insights.md:895) is committed too and recorded in the Deviation Log (F-08); generated output never counts toward the 5-file limit.
 
 **Reviewers**: Proto Reviewer — field number uniqueness, `buf lint` + `buf breaking`; `packages/proto` owner — backward compatibility; `xstockstrat-identity` owner — JWT expiry and rotation
 
@@ -155,6 +163,7 @@ cd packages/proto && buf lint && buf breaking --against "../../.git#branch=featu
 ./scripts/buf-gen.sh && git status --porcelain packages/proto/gen | head -5 && pnpm --filter @xstockstrat/proto run build
 # re-running buf-gen.sh must leave `git diff --exit-code packages/proto/gen/` empty
 ./scripts/buf-gen.sh && git diff --exit-code packages/proto/gen/
+(cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-dev,subdir=packages/proto')
 ```
 
 ---
@@ -204,19 +213,19 @@ grep -c "UNIQUE INDEX" services/xstockstrat-identity/migrations/007_external_ide
 
 ---
 
-### Step 4 — migration: config 051_authelia_sso_keys and the regenerated stored set
+### Step 4 — migration: config 052_authelia_sso_keys and the regenerated stored set
 
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/051_authelia_sso_keys.up.sql` — create
-- `services/xstockstrat-config/migrations/051_authelia_sso_keys.down.sql` — create
+- `services/xstockstrat-config/migrations/052_authelia_sso_keys.up.sql` — create
+- `services/xstockstrat-config/migrations/052_authelia_sso_keys.down.sql` — create
 - `scripts/config-wiring-stored.json` — modify (regenerated, never hand-written)
 
 **Reviewers**: DBA — migration NNN numbering, up+down pair, run order; `xstockstrat-config` owner — key naming, environment scoping, secret encryption + redaction
 
 **Codebase Evidence**:
-- `ls services/xstockstrat-config/migrations | tail -2` → `050_ui_chart_history_bars.{down,up}.sql`, owned by feature 341. So the next number is `051` (D-94).
+- `ls services/xstockstrat-config/migrations | tail -4` → `050_ui_chart_history_bars.{down,up}.sql` (feature 341) and `051_ingest_backfill_self_serve_keys.{down,up}.sql` (feature 343). So the next number is `052`: renumbered 050→051 (D-94) and 051→052 (D-99). Re-check the next free number at merge.
 - The seed row column order and conflict target come from `049_notify_commsgun_channel_keys.up.sql:4-55`: `(namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by, environment, user_id)` and `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
 - The seeded-empty secret comes from `049_*.up.sql:57-67`: `value_data '[redacted]'`, `is_secret TRUE`, ciphertext NULL, and the comment "Ciphertext stays NULL: a migration has no master key".
 - The notify CTE comes from `046_config_dead_rows_prune.up.sql:57-61`: `nt AS (SELECT pg_notify('config_changed', json_build_object('namespace', t.namespace, 'environment', t.environment)::text) AS sent FROM (SELECT DISTINCT namespace, environment FROM d) t) SELECT (SELECT count(*) FROM d) …, (SELECT count(*) FROM nt) AS notified;`
@@ -241,25 +250,28 @@ grep -c "UNIQUE INDEX" services/xstockstrat-identity/migrations/007_external_ide
 2. **Down** (D-36): a `WITH d AS (DELETE FROM config.config_values WHERE environment IN ('staging','production') AND user_id IS NULL AND updated_by = 'system:config-migration-feature-authelia-sso' AND ((namespace='ui' AND key IN ('oidc.issuer','oidc.client_id','oidc.mcp_client_id','oidc.mcp_client_id_readonly') AND value_data='') OR (namespace='ui' AND key='oidc.client_secret' AND value_data='[redacted]' AND value_encrypted IS NULL) OR (namespace='agent' AND key='oidc.issuer' AND value_data='')) RETURNING namespace, environment)` CTE feeding the same `pg_notify` select.
    - It **never** deletes `identity` / `auth.password_login_enabled` (D-36: removing it would make the code default `false` lock out password login).
    - Confirm the ciphertext column's name at execute by reading `045` / `049`; `value_encrypted` is the name D-36 cites.
-3. Add a header comment of two lines at most. It cites feature 345, states that the flag seed differs from the code default (the config-constitution exception, D-20), and states that the down keeps the flag row.
-4. Regenerate the stored set on a scratch Postgres 16 with `psql` + `migrate` (the generator creates and drops its own DB):
+3. Add a header comment of two lines at most to each file. It cites feature 345 and states the constraint **without naming any key**: in the up, that the identity flag row's seed differs from its code default (the config-constitution exception, D-20); in the down, that the identity flag row is deliberately kept. The literal `password_login_enabled` must not appear in the down file at all (the Verification below and Step 5's test assert its absence).
+4. Regenerate the stored set **after** the files carry their final `052_` name (its `inputs_sha256` hashes every config migration path and body, so a stored set generated before the rename reports `STALE-STORED`, `check-config-wiring.mjs:714-717`). Regenerate on a scratch Postgres 16 with `psql` + `migrate` (the generator creates and drops its own DB):
    `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py`. Commit `scripts/config-wiring-stored.json`.
    - The file is **never hand-written**.
    - If no scratch Postgres is reachable, block the step (P-03) and run the CI `config-wiring-stored` job. It uploads the regenerated file as an artifact (`ci.yml:1294-1300`); commit that artifact. This is the 341 precedent.
 
 **Verification**:
 ```bash
-ls services/xstockstrat-config/migrations/051_*.up.sql services/xstockstrat-config/migrations/051_*.down.sql
-grep -c "'staging'\|'production'" services/xstockstrat-config/migrations/051_authelia_sso_keys.up.sql   # 14 tuples
-grep -n "password_login_enabled" services/xstockstrat-config/migrations/051_authelia_sso_keys.down.sql  # expect no match
+ls services/xstockstrat-config/migrations/052_*.up.sql services/xstockstrat-config/migrations/052_*.down.sql
+ls services/xstockstrat-config/migrations | grep -c '^052_'   # 2: no other feature holds 052
+# SQL only (comment lines stripped): the down never names the flag row; expect no match
+! grep -v '^[[:space:]]*--' services/xstockstrat-config/migrations/052_authelia_sso_keys.down.sql | grep -n "password_login_enabled"
+# The 14-tuple count (7 keys x 2 environments) is asserted by Step 5's test, not by a line count here.
 # Step-time wiring: declared keys whose reader is not written yet print PENDING and do not fail (exit 0)
-node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-config/migrations/051_authelia_sso_keys.up.sql
-git diff --stat scripts/config-wiring-stored.json   # regenerated, non-empty
+node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-config/migrations/052_authelia_sso_keys.up.sql
+git diff --stat scripts/config-wiring-stored.json   # regenerated after the 052 rename, non-empty
+! node scripts/check-config-wiring.mjs --final 2>&1 | grep STALE-STORED   # the stored set matches the 052 inputs
 ```
 
 ---
 
-### Step 5 — test: Static seed test and migration-rerun assertion for 051
+### Step 5 — test: Static seed test and migration-rerun assertion for 052
 
 **Status**: `pending`
 **Service**: `xstockstrat-config`
@@ -290,7 +302,7 @@ git diff --stat scripts/config-wiring-stored.json   # regenerated, non-empty
 2. In `config-authelia-sso-keys.sql` (BEGIN … ROLLBACK, `DO $$ … RAISE EXCEPTION` on a mismatch, the notify-commsgun shape):
    - Assert that the 14 global rows exist.
    - Assert that the two `ui/oidc.client_secret` rows have `is_secret` true and NULL ciphertext.
-   - Re-run a copy of the 051 up statement and assert `inserted = 0 AND notified = 0`. The PREPARE body is a copy of the shipped statement; change both together.
+   - Re-run a copy of the 052 up statement and assert `inserted = 0 AND notified = 0`. The PREPARE body is a copy of the shipped statement; change both together.
 3. The domain literals have a single consumer (this test), so they stay inline (C-13).
 
 **Verification**:
@@ -406,12 +418,14 @@ cd services/xstockstrat-identity && pnpm run lint && node ../../scripts/check-co
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.otlp.test.ts` — modify
 - `services/xstockstrat-identity/src/__tests__/identityTelemetry.test.ts` — modify
 - `services/xstockstrat-identity/src/__tests__/telemetryAllowlist.test.ts` — modify
+- `services/xstockstrat-identity/src/__tests__/configWatcher.test.ts` — modify
 
 **Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation
 
 **Codebase Evidence**:
 - The config mocks have only `getInt`: `identityServiceImpl.test.ts:58,292,357,1141,1388`, `identityServiceImpl.otlp.test.ts:40`, `identityTelemetry.test.ts:13` (grep `getInt\|getBool` over `src/__tests__`).
 - `telemetryAllowlist.test.ts:46` drives `telemetry.recordAuditFailure('identity.user.created')`.
+- The real reader: `configWatcher.test.ts` patches `ConfigServiceClient`/`clientCredentials`/`getLogger` in `before` (`:63-67`), builds a `ConfigSnapshot` with `snap(values)` (`:84`) and feeds it to a real `ConfigWatcher` with `seeded(values)` (`:93-98`). `ConfigWatcher.getBool` is at `src/services/configWatcher.ts:222-226`. The cross-service model is `services/xstockstrat-ingest/tests/test_config_watcher.py:56,74`.
 
 **Lands with**: Step 8
 
@@ -426,7 +440,11 @@ cd services/xstockstrat-identity && pnpm run lint && node ../../scripts/check-co
    - **@AC-31:** `getBool` returns its default (the row is missing) → the same denial.
    - **@AC-17:** the flag is true → today's token pair.
 3. In `telemetryAllowlist.test.ts`, drive `recordLoginFailure('password_login_disabled')` and keep the label keys closed (`@AC-22 @feature-294` PRESERVE).
-4. The new literals have a single consumer and stay inline (C-13).
+4. **Seeded row → real reader** (`configWatcher.test.ts`): add `describe('auth.password_login_enabled gate reads the seeded row (feature 345)')`. In the existing `before`, after the module patches, also `await import('../grpc/identityServiceImpl')`.
+   - `seeded({ 'auth.password_login_enabled': { boolVal: false } })` → pass that real watcher as `config` to `new IdentityServiceImpl(recordingPool, w)` and call `authenticateUser` → code 7 "password login disabled" and zero `pool.query` calls (@AC-16).
+   - `seeded({ 'auth.password_login_enabled': { boolVal: true } })` → the gate passes and `pool.query` runs once (the empty fake pool then gives today's `unknown_or_inactive` reply) (@AC-17).
+   - A snapshot without the key → the code default `false` denies (@AC-31).
+5. The new literals have a single consumer and stay inline (C-13).
 
 **Verification**:
 ```bash
@@ -551,7 +569,7 @@ grep -n "x-access-scope\|x-user-id\|x-internal-caller" src/grpc/externalIdentity
    - `xstockstrat-ui` and `xstockstrat-agent` → allowed.
    - **@AC-38:** `IssueSessionForUser` from `xstockstrat-agent` → `PERMISSION_DENIED`, zero queries, so no refresh-token INSERT.
 2. **Decision table**: pure `decideExternalIdentity` rows for every D-49 N-4 branch (@AC-4 linked, @AC-5 ambiguous, @AC-7/@AC-26 inactive, @AC-39 email required, link, create, linked-existing).
-3. **Refusal contract**: assert `EXTERNAL_IDENTITY_REFUSALS` equals the four literal strings (D-24; the UI mirror test is Step 25).
+3. **Refusal contract**: assert `EXTERNAL_IDENTITY_REFUSALS` equals the four literal strings (D-24; the UI mirror test is Step 28).
 4. **Handler paths with a scripted fake pool**:
    - `23505` on LINK → re-classify → `LINKED_EXISTING`.
    - `mapDbError` is never called for that path.
@@ -712,22 +730,61 @@ cd scripts && uv run --no-sync ruff check . && uv run --no-sync ruff format --ch
 **Verification**:
 ```bash
 cd scripts && uv run --no-sync ruff check . && uv run --no-sync ruff format --check . && uv run --no-sync pytest tests/test_manage_users.py -q
+# Coverage: no coverage threshold — the scripts-python job has none (ci.yml:861-893 runs `uv run --no-sync pytest` with no --cov flag)
+grep -n "cov" pyproject.toml || echo "no coverage gate configured for scripts/"
 ```
 
 ---
 
-### Step 15 — service: Agent SSO-mode foundation (PyJWT, issuer grammar, mode, ui watcher)
+### Step 15 — config: Issuer vector file, CI change filters and the config-wiring receivers for the agent reads
+
+**Status**: `pending`
+**Service**: `scripts/` (shared test data, config-wiring registry) and `.github/workflows/ci.yml`
+**Files**:
+- `scripts/testdata/oidc-issuer-vectors.json` — create
+- `scripts/config-wiring.json` — modify
+- `.github/workflows/ci.yml` — modify
+
+**Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness; `xstockstrat-config` owner — key naming, environment scoping; Platform Lead — CI gate parity
+
+**Codebase Evidence**:
+- Config-wiring receivers:
+  - `config-wiring.json` registers the forwarder `"services/xstockstrat-agent/app/config/watcher.py:read_config_value": {"keyArg": 1}` (`:42-44`) and the receivers `"services/xstockstrat-agent/app/tools.py:read_config_value": "agent"` (`:88`).
+  - A Python forwarder call's receiver is the bare callee name, or `ast.unparse(func.value)` for an attribute call (`scripts/config-wiring-py-reads.py:143-147`).
+  - `attribute()` maps `file:receiver` to one namespace (`check-config-wiring.mjs:546-551`).
+  - `validateState` (`check-config-wiring.mjs:176-203`) checks only that each receiver maps to a namespace or a list; it never requires the file to exist. Step time gates every `unattributed` read (`GATED_UNLESS_BASELINED`, `:691`; `stepTime`, `:888-899`). So the receivers must land no later than the reader (Step 16), and landing them first is harmless.
+- CI and testdata:
+  - The `changes` filters are `xstockstrat-agent` at `ci.yml:59` and `xstockstrat-ui` at `ci.yml:64`; portfolio's out-of-tree entry at `:55` is the precedent.
+  - `scripts/testdata/` holds `rpc-status-vectors.json` (precedent, D-66).
+- The vector-file JSON is given in full in design.md (C) §1 (`:767-871`).
+
+**TDD**: N/A (test data and registry configuration; the vectors go RED→GREEN in Steps 17 and 26, the receivers in Step 16's attribution check)
+
+**Covers**: —
+
+**Instructions**:
+1. **Vector file.** Create `scripts/testdata/oidc-issuer-vectors.json` with exactly the JSON in design.md (C) §1: `issuer_pattern`, `app_url_pattern`, 66 `issuer`, 16 `app_url` and 10 `mode` rows (D-79, D-88).
+2. **`config-wiring.json`.** Under `registry.receivers` add `"services/xstockstrat-agent/app/sso_mode.py:agent_config": "agent"` and `"services/xstockstrat-agent/app/sso_mode.py:ui_config": "ui"`. Add no `findings` entry (fails.md:3830-3832).
+3. **`ci.yml`.** Append `'scripts/testdata/oidc-issuer-vectors.json'` to the `xstockstrat-agent` filter (`:59`) and the `xstockstrat-ui` filter (`:64`) (D-78).
+
+**Verification**:
+```bash
+python3 -c "import json;d=json.load(open('scripts/testdata/oidc-issuer-vectors.json'));print(len(d['issuer']),len(d['app_url']),len(d['mode']))"   # 66 16 10
+node --input-type=module -e "import {loadState} from './scripts/check-config-wiring.mjs'; const r=loadState(process.cwd()).registry.receivers; const f='services/xstockstrat-agent/app/sso_mode.py'; if (r[f+':agent_config']!=='agent'||r[f+':ui_config']!=='ui') process.exit(1); console.log('receivers registered')"
+grep -c "scripts/testdata/oidc-issuer-vectors.json" .github/workflows/ci.yml   # 2 (agent and ui filters)
+```
+
+---
+
+### Step 16 — service: Agent SSO-mode foundation (PyJWT, issuer grammar, mode, ui watcher)
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/pyproject.toml` — modify
 - `services/xstockstrat-agent/uv.lock` — modify
-- `scripts/testdata/oidc-issuer-vectors.json` — create
 - `services/xstockstrat-agent/app/sso_mode.py` — create
 - `services/xstockstrat-agent/app/config/watcher.py` — modify
-- `scripts/config-wiring.json` — modify
-- `.github/workflows/ci.yml` — modify
 
 **Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness; Security — auth scope correctness; Platform Lead — inter-service dependency graph (agent → config `ui` stream)
 
@@ -735,14 +792,8 @@ cd scripts && uv run --no-sync ruff check . && uv run --no-sync ruff format --ch
 - Dependencies and the namespace list:
   - `pyproject.toml:6-22` has no JWT library. `uv.lock:932` has `name = "pyjwt"` 2.15.0, transitive via `mcp` (`:607` `{ name = "pyjwt", extra = ["crypto"] }`).
   - `watcher.py:16` `WATCHED_NAMESPACES = ("agent", "indicators")`. `read_value(namespace, key)` is at `:68-77` and returns `None` for an unwatched namespace. `ConfigWatcher.__init__` derives the environment from `resolve_scope("")` (`:31-35`).
-- Config-wiring receivers:
-  - `config-wiring.json` registers the forwarder `"services/xstockstrat-agent/app/config/watcher.py:read_config_value": {"keyArg": 1}` (`:42-44`) and the receivers `"services/xstockstrat-agent/app/tools.py:read_config_value": "agent"` (`:88`).
-  - A Python forwarder call's receiver is the bare callee name, or `ast.unparse(func.value)` for an attribute call (`scripts/config-wiring-py-reads.py:143-147`).
-  - `attribute()` maps `file:receiver` to one namespace (`check-config-wiring.mjs:546-551`).
-- CI and testdata:
-  - The `changes` filters are `xstockstrat-agent` at `ci.yml:59` and `xstockstrat-ui` at `ci.yml:64`; portfolio's out-of-tree entry at `:55` is the precedent.
-  - `scripts/testdata/` holds `rpc-status-vectors.json` (precedent, D-66).
-- The vector-file JSON is given in full in design.md (C) §1 (`:767-871`).
+- The receivers `sso_mode.py:agent_config` → `agent` and `sso_mode.py:ui_config` → `ui` are registered in Step 15.
+- `check-config-wiring.mjs` has `--final` and `--json` (`parseArgs`, `:906-911`), but `--json` prints only `findings`/`results` (`:942`), not the per-read attribution. `--final` fails at step time on the UI keys whose reader lands in Step 29; it runs at the integration PR. The positive check below therefore imports the checker's own `extractReads` (`:512`) and registry (`loadState`, `:205`).
 
 **TDD**: red-green required
 
@@ -750,9 +801,8 @@ cd scripts && uv run --no-sync ruff check . && uv run --no-sync ruff format --ch
 
 **Instructions**:
 1. **Dependency.** Add `"pyjwt[crypto]>=2.15.0"` to `[project].dependencies` and run `uv lock` in `services/xstockstrat-agent` (D-2; root `CLAUDE.md` uv lock rule).
-2. **Vector file.** Create `scripts/testdata/oidc-issuer-vectors.json` with exactly the JSON in design.md (C) §1: `issuer_pattern`, `app_url_pattern`, 66 `issuer`, 16 `app_url` and 10 `mode` rows (D-79, D-88).
-3. **`app/sso_mode.py`** (D-1, D-66, D-78, D-86, D-90):
-   - `ISSUER_PATTERN = r"…"`, the literal from the vector file. `_ISSUER_RE = re.compile(ISSUER_PATTERN)` with no flags.
+2. **`app/sso_mode.py`** (D-1, D-66, D-78, D-86, D-90):
+   - `ISSUER_PATTERN = r"…"`, the literal from the vector file (Step 15). `_ISSUER_RE = re.compile(ISSUER_PATTERN)` with no flags.
    - `is_valid_issuer(v: object) -> bool`: `isinstance(v, str) and _ISSUER_RE.fullmatch(v) is not None`.
    - `@dataclass(frozen=True) class SsoMode: kind: Literal['legacy','sso']; valid: bool = False; agent_issuer: str = ''; reason: str = ''`.
    - `current_sso_mode() -> SsoMode`:
@@ -762,25 +812,27 @@ cd scripts && uv run --no-sync ruff check . && uv run --no-sync ruff format --ch
    - `_log_once(level, message, key, extra)` uses a module set. Add a `_reset_log_once()` for tests (D-90).
    - **Reads, with one receiver per namespace for the wiring checker:**
      - `from app.config import watcher as agent_config` and `from app.config import watcher as ui_config`, each read through an attribute call named after the registered forwarder.
+     - Directly above the two imports, write this constraint comment (two lines, C-18) and nothing else:
+       `# Two aliases of one module exist only so check-config-wiring attributes each read to one`
+       `# namespace (receivers sso_mode.py:agent_config / :ui_config, C-18); do not merge them.`
      - Concretely: add `read_config_value = read_value` at module level in `watcher.py` (an alias, no behaviour change; it also makes the existing forwarder registration `watcher.py:read_config_value` name a real symbol).
      - Then call `agent_config.read_config_value("agent", "oidc.issuer")` and `ui_config.read_config_value("ui", "oidc.issuer")`.
    - The agent has no `'error'` mode (an absent snapshot key reads as `""` = legacy, D-66).
-4. **`watcher.py`.** `WATCHED_NAMESPACES = ("agent", "indicators", "ui")` (D-1).
+3. **`watcher.py`.** `WATCHED_NAMESPACES = ("agent", "indicators", "ui")` (D-1).
    - Update the module docstring (`:1-4`).
    - Startup now waits for the `ui` snapshot (recon R-3); the `ui` namespace already has rows (config `023`).
-5. **`config-wiring.json`.** Under `registry.receivers` add `"services/xstockstrat-agent/app/sso_mode.py:agent_config": "agent"` and `"services/xstockstrat-agent/app/sso_mode.py:ui_config": "ui"`. Add no `findings` entry (fails.md:3830-3832).
-6. **`ci.yml`.** Append `'scripts/testdata/oidc-issuer-vectors.json'` to the `xstockstrat-agent` filter (`:59`) and the `xstockstrat-ui` filter (`:64`) (D-78).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-agent && uv lock --check && uv run ruff check . && uv run ruff format --check .
-python3 -c "import json;d=json.load(open('../../scripts/testdata/oidc-issuer-vectors.json'));print(len(d['issuer']),len(d['app_url']),len(d['mode']))"   # 66 16 10
-cd ../.. && node scripts/check-config-wiring.mjs --keys agent.oidc.issuer,ui.oidc.issuer   # no finding for the agent reads
+cd ../.. && node scripts/check-config-wiring.mjs --keys agent.oidc.issuer,ui.oidc.issuer   # exit 0: no unattributed read (PENDING lines only)
+# Positive attribution: both oidc.issuer reads in app/sso_mode.py resolve to agent and ui through the registry
+node --input-type=module -e "import {extractReads,loadState} from './scripts/check-config-wiring.mjs'; const root=process.cwd(); const rc=loadState(root).registry.receivers; const f='services/xstockstrat-agent/app/sso_mode.py'; const ns=extractReads(root).reads.filter((r)=>r.file===f&&r.key==='oidc.issuer').map((r)=>rc[r.file+':'+r.receiver]).sort().join(','); if (ns!=='agent,ui') { console.error('sso_mode.py oidc.issuer attribution: '+ns); process.exit(1) } console.log('agent/oidc.issuer and ui/oidc.issuer attributed to app/sso_mode.py')"
 ```
 
 ---
 
-### Step 16 — test: Issuer vectors and SSO-mode resolution in the agent
+### Step 17 — test: Issuer vectors and SSO-mode resolution in the agent
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -820,7 +872,7 @@ grep -n "conftest\|install_watcher" tests/test_sso_mode.py
 
 ---
 
-### Step 17 — service: Async JWKS and discovery cache (app/jwks.py)
+### Step 18 — service: Async JWKS and discovery cache (app/jwks.py)
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -840,9 +892,11 @@ grep -n "conftest\|install_watcher" tests/test_sso_mode.py
 
 **Instructions**:
 1. **Fixed invariants (F-07 comment form, D-13, D-37, D-49 N-14):**
-   - `_JWKS_FRESH_S = 300` — fixed by this spec; D-13 names "JWKS fresh window" without a value. Flagged in context.md.
+   - `_JWKS_FRESH_S = 300` — fixed by this spec; D-13 names "JWKS fresh window" without a value. Flagged in context.md. Write it with exactly this two-line F-07 constraint comment:
+     `# Fixed invariant (F-07, D-13): JWKS fresh window; 300 s is fixed by the feature-345 impl-spec.`
+     `# Not a config key; changing it needs a spec amendment.`
    - `_JWKS_COOLDOWN_S = 30`, `_JWKS_FETCH_TIMEOUT_S = 5`, `_JWKS_STALE_MAX_S = 86400`, `_JWKS_MAX_BYTES = 65536`, `_DISCOVERY_FRESH_S = 600`.
-   - `_ASYMMETRIC_ALGS = frozenset({"RS256","RS384","RS512","PS256","PS384","PS512","ES256","ES384","ES512"})` — the D-2 allow-list. Membership is fixed by this spec; flagged.
+   - `_ASYMMETRIC_ALGS = frozenset({"RS256","RS384","RS512","PS256","PS384","PS512","ES256","ES384","ES512"})` — the D-2 allow-list. Membership is fixed by this spec; flagged. `EdDSA` (OKP keys) and `none` are deliberately outside it, so a JWK or a token carrying either is rejected (Steps 19 and 23; recorded in the cutover runbook, Step 48).
 2. **Discovery** (D-18, D-27, D-35, D-89): `async def discovery(issuer) -> dict`, cached separately for `_DISCOVERY_FRESH_S`.
    - GET `f"{issuer}/.well-known/openid-configuration"` with `httpx.AsyncClient(follow_redirects=False, timeout=_JWKS_FETCH_TIMEOUT_S, headers={'Accept-Encoding':'identity'})`.
    - Reject a `Content-Length` above `_JWKS_MAX_BYTES` before reading, and cap the streamed body too.
@@ -871,7 +925,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 
 ---
 
-### Step 18 — test: JWKS state machine
+### Step 19 — test: JWKS state machine
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -902,9 +956,10 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
    - a redirect is not followed;
    - an oversized `Content-Length` → reject;
    - an unusable key is skipped with a WARN while the others are kept;
+   - a JWK whose `alg` is `EdDSA` (an OKP key) or `none` is skipped with a WARN, and a JWKS holding only such keys fails the fetch → `'unavailable'` (alg not in the RS/PS/ES 256/384/512 allow-list);
    - a JWK without `alg` is skipped.
 2. A task that fails with no awaiter leaves no "exception was never retrieved" (`loop.set_exception_handler` + `gc.collect()`, D-35).
-3. The key literals have one consumer and stay inline unless Step 22 reuses them. If Step 22 reuses them, move them to `conftest.py` in Step 22 (C-13).
+3. The key literals have one consumer and stay inline unless Step 23 reuses them. If Step 23 reuses them, move them to `conftest.py` in Step 23 (C-13).
 
 **Verification**:
 ```bash
@@ -913,7 +968,7 @@ cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q 
 
 ---
 
-### Step 19 — service: Effective scope, the resolve client helper and the new auth-rejection reasons
+### Step 20 — service: Effective scope, the resolve client helper and the new auth-rejection reasons
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -963,7 +1018,7 @@ grep -n "x-trace-id\|timeout=" app/client.py | grep -n "resolve" || grep -n "def
 
 ---
 
-### Step 20 — test: Scope narrowing at both sites, the resolve helper and the telemetry allow-list
+### Step 21 — test: Scope narrowing at both sites, the resolve helper and the telemetry allow-list
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -1002,7 +1057,7 @@ grep -n "from tests.conftest import\|conftest" tests/test_sso_scope.py
 
 ---
 
-### Step 21 — service: SSO token validator, role cache, the 401/403/503 map and mode-gated routes
+### Step 22 — service: SSO token validator, role cache, the 401/403/503 map and mode-gated routes
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -1010,6 +1065,7 @@ grep -n "from tests.conftest import\|conftest" tests/test_sso_scope.py
 - `services/xstockstrat-agent/app/sso_auth.py` — create
 - `services/xstockstrat-agent/app/main.py` — modify
 - `services/xstockstrat-agent/app/oauth_metadata.py` — modify
+- `services/xstockstrat-agent/app/client.py` — modify (public deadline accessor)
 
 **Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness (`instance_count > 1` safe), MCP tool contract stability; Security — JWT claims minimal, auth scope correctness
 
@@ -1022,6 +1078,7 @@ grep -n "from tests.conftest import\|conftest" tests/test_sso_scope.py
 - `oauth_metadata.py:16` reads `AGENT_PUBLIC_URL` at import (AGENT-8). `protected_resource_metadata` (`:19-26`) returns `{resource, authorization_servers:[AGENT_PUBLIC_URL]}`; `authorization_server_metadata` is at `:29-41`.
 - `auth.py:27` `IDENTITY_UNAVAILABLE = object()`. FR-8 says this sentinel is **not** reused for SSO.
 - `_new_trace_id()` is at `tools.py:181-183`.
+- `client.py:42-44`: `_RPC_TIMEOUT_S = 10.0` under the comment "Read at call time so tests can monkeypatch them". It has 119 references across `app/` and `tests/` (`grep -rnw`: `client.py`, `auth.py`, `tools.py` and four test modules), so it stays; a new module must not reach into the private name.
 
 **TDD**: red-green required
 
@@ -1031,10 +1088,10 @@ grep -n "from tests.conftest import\|conftest" tests/test_sso_scope.py
 1. **`app/sso_auth.py`** (new). Import `AGENT_PUBLIC_URL` from `app.oauth_metadata`; add no fifth independent env read (AGENT-8).
    - Fixed invariants: `_ROLE_TTL_S = 60.0` and `_CLOCK_SKEW_S = 30` (F-07 form, D-13, D-37).
    - `class SsoOutcome(enum.Enum)`: `OK`, `UNAUTHORIZED`, `FORBIDDEN`, `UNAVAILABLE`, `INTERNAL`, plus `@dataclass Verdict(outcome, claims: dict | None)`. This is an explicit refusal, not a truthy sentinel (FR-8).
-   - **`_precheck(token, agent_issuer) -> str | None`**: exactly design.md (C) §5 (D-84), plus the D-95 `typ` check: `str(header.get("typ","")).lower() == "at+jwt"`, else None.
+   - **`_precheck(token, agent_issuer) -> str | None`**: exactly design.md (C) §5 (D-84), plus the `typ` check (D-95 typ clause / D-26: the spike found `typ` = `at+jwt`, which enables D-26's conditional check): `str(header.get("typ","")).lower() == "at+jwt"`, else None.
    - **`async def authenticate(token, mode, trace_id) -> Verdict`**:
      1. `kid = _precheck(...)`. None → `record_auth_rejected("invalid_token")`, UNAUTHORIZED. This runs outside the deadline (D-69 step 3).
-     2. `deadline = loop.time() + client._RPC_TIMEOUT_S`, then `async with asyncio.timeout_at(deadline):` (D-18):
+     2. `deadline = loop.time() + client.rpc_timeout_s()`, then `async with asyncio.timeout_at(deadline):` (D-18):
         - a. `await jwks.discovery(mode.agent_issuer)`.
         - b. `jwks.key_for(...)`: `'unknown_kid'` → 401 `invalid_token`; `'unavailable'` → `record_auth_rejected("jwks_unavailable")`, UNAVAILABLE.
         - c. `jwt.decode(token, key, algorithms=[jwk_alg], audience=AGENT_PUBLIC_URL, issuer=mode.agent_issuer, leeway=_CLOCK_SKEW_S, options={"require":["exp","iss","aud","sub"]})`.
@@ -1059,7 +1116,8 @@ grep -n "from tests.conftest import\|conftest" tests/test_sso_scope.py
      - FORBIDDEN → a new `_send_forbidden` (403 text/plain, no WWW-Authenticate, no backend RPC);
      - UNAVAILABLE / INTERNAL / invalid config → `_send_identity_unavailable` (503, no WWW-Authenticate; AC-55, AC-61).
    - **Gate the legacy routes.** In SSO mode, `/oauth/{register,authorize,callback,token}` and `/.well-known/oauth-authorization-server` answer 404. Wrap each endpoint in a small `_legacy_only(endpoint)` that checks `current_sso_mode().kind == 'sso'` per request. In legacy mode the endpoints are called unchanged (byte-identical).
-3. **`oauth_metadata.py`** (D-10, D-78):
+3. **`client.py`**: next to `_RPC_TIMEOUT_S` (`:44`), add `def rpc_timeout_s() -> float: return _RPC_TIMEOUT_S`, the public read of the per-RPC deadline. It reads the module global at call time, so existing `monkeypatch.setattr(client, "_RPC_TIMEOUT_S", …)` tests keep steering it. Change nothing else in `client.py`.
+4. **`oauth_metadata.py`** (D-10, D-78):
    - `protected_resource_metadata` legacy: unchanged.
    - SSO valid: `JSONResponse({"resource": AGENT_PUBLIC_URL, "authorization_servers": [mode.agent_issuer], "scopes_supported": list(MCP_SCOPES_SUPPORTED)})`.
    - SSO invalid: `Response(status_code=503, headers={"Cache-Control": "no-store"})`.
@@ -1069,11 +1127,12 @@ grep -n "from tests.conftest import\|conftest" tests/test_sso_scope.py
 ```bash
 cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --check . && uv run pytest tests/test_oauth.py tests/test_streamable_http_auth.py tests/test_auth_deadline.py -q   # legacy regression net stays green
 grep -n "x-trace-id" app/client.py | head -3   # resolve carries the trace id (C-03)
+! grep -n "_RPC_TIMEOUT_S" app/sso_auth.py   # sso_auth uses the public client.rpc_timeout_s()
 ```
 
 ---
 
-### Step 22 — test: Agent SSO auth end-to-end (status map, deadline, routes, metadata)
+### Step 23 — test: Agent SSO auth end-to-end (status map, deadline, routes, metadata)
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -1106,6 +1165,7 @@ grep -n "x-trace-id" app/client.py | head -3   # resolve carries the trace id (C
    - **@AC-23**, one case per row: foreign `iss`, expired, foreign signature, identity HS256 → 401.
      - Rows 1 and 4 stay 401 while the JWKS mock raises, and the fetch is never awaited (D-69).
    - D-84 rows: non-JSON payload, `[1]` payload, list `alg`, integer `kid`, missing `kid` → 401.
+   - A token whose header `alg` is `EdDSA` or `none` → 401 from `_precheck`, with the JWKS mock never awaited (alg outside the RS/PS/ES 256/384/512 allow-list, Step 18).
    - `sub` `""` or `123` → 401. Missing `exp`/`aud`/`sub` → 401. `typ` other than `at+jwt` → 401.
    - `aud` `"X"` and `["X"]` both pass.
    - **@AC-21 / @AC-37 / @AC-40:** resolve `FAILED_PRECONDITION` → FORBIDDEN, metric `account_refused`, and no backend RPC.
@@ -1119,7 +1179,7 @@ grep -n "x-trace-id" app/client.py | head -3   # resolve carries the trace id (C
    - A pre-check reject consumes no budget.
 4. **`test_sso_routes.py`** (`TestClient(build_http_app())`):
    - **@AC-22 / @AC-30:** a valid token calls `list_strategies`, and the backend metadata carries the resolved `x-user-id` (never `sub`) and `x-access-scope` 3 (or 1 for the AC-30 viewer).
-   - **@AC-11:** in SSO mode the PRM equals `{"resource": AGENT_PUBLIC_URL, "authorization_servers": [issuer], "scopes_supported": ["xstockstrat.read","xstockstrat.write","xstockstrat.admin","xstockstrat.trade"]}`, pinned whole. The UI side of this contract is Step 37 (D-55).
+   - **@AC-11:** in SSO mode the PRM equals `{"resource": AGENT_PUBLIC_URL, "authorization_servers": [issuer], "scopes_supported": ["xstockstrat.read","xstockstrat.write","xstockstrat.admin","xstockstrat.trade"]}`, pinned whole. The UI side of this contract is Step 43 (D-55).
    - **@AC-43:** `/oauth/register` → 404, and an identity-minted HS256 token on MCP → 401.
    - **@AC-55:** ui `http://auth.example.test` → any bearer → 503 with no WWW-Authenticate, and the PRM → 503 `no-store`.
    - **@AC-32 / @AC-42 / @AC-44:** half-configured or cleared issuers → legacy. `validate_bearer_claims` is used, the `aud`-bound identity token is accepted, and `/oauth/register` is routed. The existing `test_oauth.py` stays green.
@@ -1132,61 +1192,62 @@ grep -n "def sso_keys\|def sso_mode_on" tests/conftest.py
 
 ---
 
-### Step 23 — service: UI typecheck script and CI step
+### Step 24 — service: UI typecheck script and CI step
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify
+- `services/xstockstrat-ui/tsconfig.json` — modify (add `".next"` to `exclude`)
 - `.github/workflows/ci.yml` — modify
-- `services/xstockstrat-ui/src/**` — modify (only files with pre-existing type errors the first run reports; list them in the Deviation Log)
 
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
 
 **Codebase Evidence**:
 - `package.json` scripts (`:6-19`) have no `typecheck`.
-- `tsconfig.json` has `"noEmit": true` and `"include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"]` (`:20-21`), so test files are type-checked.
+- `tsconfig.json` has `"noEmit": true`, `"include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"]` (`:21`) and `"exclude": ["node_modules"]` (`:22`). So test files, `e2e/**` and the `*.config.ts` files are type-checked.
+- **Measured at spec time (2026-11-16, this branch, no `.next/`):** `pnpm install --frozen-lockfile` (pnpm 9.15.9) at the root, then `npx tsc --noEmit -p tsconfig.json` (TypeScript 5.9.3) in `services/xstockstrat-ui` → exit 0, **0 errors in 0 files**. No pre-existing error needs fixing, so no `src/**` file is in scope.
+- `grep -rn "PageProps\|LayoutProps" services/xstockstrat-ui/src` → no hits. Nothing depends on the Next-generated `.next/types` globals, so excluding `.next` is safe and no `next build` is needed before the typecheck.
 - The `node-test` matrix entry for `xstockstrat-ui` is at `ci.yml:745-773`. Its steps are install (`:784-785`), proto build (`:787-788`) and `test with coverage` (`:790-792`).
-- **Ledger trap** (insights.md:2948): a bare `tsc --noEmit` can false-RED on a Next app because `.next/types` exists only after `next build`. D-93 still chooses `tsc`. Verify at execute whether the first run reports `.next/types`-related errors. If it does, run `next build` first in the CI step, or drop `.next/types/**/*.ts` from the typecheck. Record the choice in the Deviation Log.
+- **Ledger trap** (insights.md:2948): a bare `tsc --noEmit` can false-RED on a Next app because `.next/types` exists only after `next build`, and a stale local `.next/` can do the same. D-93 still chooses `tsc`; the `exclude` entry removes the trap.
 
-**TDD**: N/A (tooling gate; its RED proof is the D-83 `@ts-expect-error` removal in Step 31)
+**TDD**: N/A (tooling gate; its RED proof is the D-83 `@ts-expect-error` removal in Step 34)
 
 **Covers**: —
 
 **Instructions**:
 1. Add `"typecheck": "tsc --noEmit"` to `services/xstockstrat-ui/package.json` (D-93).
-2. In `node-test`, add a step `- name: typecheck (xstockstrat-ui)`, `if: matrix.service == 'xstockstrat-ui'`, `working-directory: services/xstockstrat-ui`, `run: pnpm run typecheck`. It goes **before** `test with coverage`.
-3. Run it once. Fix every pre-existing error in the same PR (owner-accepted widening, D-93), with no `@ts-ignore`. List each touched file in the Deviation Log (F-08: the files are covered by the `src/**` entry).
+2. In `tsconfig.json`, set `"exclude": ["node_modules", ".next"]`. Leave `include` unchanged; `exclude` filters the `.next/types/**/*.ts` include, so a local `next build` / `next dev` output can never feed the gate.
+3. In `node-test`, add a step `- name: typecheck (xstockstrat-ui)`, `if: matrix.service == 'xstockstrat-ui'`, `working-directory: services/xstockstrat-ui`, `run: pnpm run typecheck`. It goes **before** `test with coverage`.
+4. Run it once at execute. The spec-time run was clean. If trunk drift makes it report errors, fix each one in this PR (owner-accepted widening, D-93) with no `@ts-ignore`. In scope: `src/**`, `e2e/**` and the `*.config.ts` files. Log every additionally touched path in the Deviation Log **before** the commit (F-08).
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm install --frozen-lockfile=false && pnpm --filter @xstockstrat/proto run build && pnpm run typecheck && pnpm run lint
+cd services/xstockstrat-ui && grep -n '".next"' tsconfig.json && pnpm install --frozen-lockfile && pnpm --filter @xstockstrat/proto run build && pnpm run typecheck && pnpm run lint
+grep -n "typecheck (xstockstrat-ui)" ../../.github/workflows/ci.yml
 ```
 
 ---
 
-### Step 24 — service: UI leaf modules (issuer grammar, Origin check, safe redirect, refusal mirror, deadlines, log-once)
+### Step 25 — service: UI leaf modules (issuer grammar, Origin check, deadlines, log-once, internal-caller header)
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/oidcIssuer.ts` — create
 - `services/xstockstrat-ui/src/lib/sameOrigin.ts` — create
-- `services/xstockstrat-ui/src/lib/safeRedirect.ts` — create
-- `services/xstockstrat-ui/src/lib/ssoRefusals.ts` — create
 - `services/xstockstrat-ui/src/lib/deadlines.ts` — modify
 - `services/xstockstrat-ui/src/lib/serverLog.ts` — modify
 - `services/xstockstrat-ui/src/lib/headers.ts` — modify
-- `services/xstockstrat-ui/src/app/auth/login/page.tsx` — modify (import the extracted `safeRedirect`)
 
 **Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI, Connect-RPC call safety; Security — auth scope correctness
 
 **Codebase Evidence**:
-- `src/app/auth/login/page.tsx:7-18` holds the local `safeRedirect(target)` (allow-list `/trader` / `/insights` / `/config-ui`, else `/trader`).
 - `deadlines.ts:1-14` is a leaf module ("Leaf module (no imports)") with `REFRESH_TIMEOUT_MS = 10_000` at `:3`.
 - `serverLog.ts:37-41` `export const serverLog = { info, warn, error }`.
 - `headers.ts:5-7` holds `HEADER_USER_ID`, `HEADER_ACCESS_SCOPE`, `HEADER_TRACE_ID`. **Not found**: no UI constant for `x-internal-caller` (recon R-9). The config side is `HEADER_INTERNAL_CALLER='x-internal-caller'` at `services/xstockstrat-config/src/grpc/authz.ts:74`.
 - The vector file is `scripts/testdata/oidc-issuer-vectors.json` (Step 15).
+- `APP_URL` is already set on every deploy target: `.do/app.yaml:650-651`, `.do/app.dev.yaml:647-648` and `deploy/homelab/compose.yml:283` (`APP_URL: ${APP_URL:?APP_URL is required}`) (D-67). `appOrigin()` reads that existing variable, so this step adds no deployment env var; local compose and Playwright gain it in Step 46.
 
 **TDD**: red-green required
 
@@ -1202,35 +1263,29 @@ cd services/xstockstrat-ui && pnpm install --frozen-lockfile=false && pnpm --fil
    - `appOrigin()`: `parseAppOrigin(process.env.APP_URL)`. On null, `logOnce('error','app_url_invalid', 'app_url\0'+(APP_URL ?? '<unset>'), {reason:'app_url'})`, unset included (D-86).
    - `isSameOrigin(req, policy, origin = appOrigin())`, with the `required` / `if_present` semantics in design.md (B) §D-68.
    - `originHost(h)` per design.md (C) §2.
-3. **`safeRedirect.ts`**: move `safeRedirect` from `login/page.tsx:8-18` verbatim and import it in `page.tsx`. The behaviour is unchanged (D-46).
-4. **`ssoRefusals.ts`** (D-24):
-   - `SSO_REFUSAL_DETAILS = { 'email required': 'no_email', 'account inactive': 'inactive', 'account already linked': 'linked', 'ambiguous email': 'ambiguous' } as const`. The keys are identity's `EXTERNAL_IDENTITY_REFUSALS` values.
-   - Export a `refusalCode(detail): SsoErrorCode | null` mapper. To keep this leaf import-free, type the return as the string-literal union; Step 30 types it with `SsoErrorCode`.
-5. **`deadlines.ts`** (D-47, D-61; it stays a leaf):
+3. **`deadlines.ts`** (D-47, D-61; it stays a leaf):
    - `AUTH_CONFIG_TIMEOUT_MS = 10_000`, with a 2-line F-07 constraint comment.
    - `OIDC_TIMEOUT_S = 10` and `OIDC_DISCOVERY_FRESH_S = 600` (D-37, D-70).
    - `OIDC_ID_TOKEN_ALG = 'RS256'` (D-37; spike-confirmed RS256).
    - `raceDeadline<T>(p: Promise<T>, ms: number): Promise<T>`, which rejects on timeout and clears its own timer in `finally`.
-6. **`serverLog.ts`** (D-90): add `export function logOnce(level: 'warn'|'error', message: string, key: string, detail?: Record<string,string>)` over a module `Set`, plus `__resetLogOnce()` for tests.
-7. **`headers.ts`**: add `export const HEADER_INTERNAL_CALLER = 'x-internal-caller';`.
+4. **`serverLog.ts`** (D-90): add `export function logOnce(level: 'warn'|'error', message: string, key: string, detail?: Record<string,string>)` over a module `Set`, plus `__resetLogOnce()` for tests.
+5. **`headers.ts`**: add `export const HEADER_INTERNAL_CALLER = 'x-internal-caller';`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
-grep -n "safeRedirect" src/app/auth/login/page.tsx src/lib/safeRedirect.ts
+grep -n "APP_URL" ../../.do/app.yaml ../../.do/app.dev.yaml ../../deploy/homelab/compose.yml | grep -c "key: APP_URL\|APP_URL:"   # 3: every deploy target already sets it
 ```
 
 ---
 
-### Step 25 — test: UI leaf-module unit tests (vectors, Origin, redirect, refusal mirror, deadline)
+### Step 26 — test: UI leaf-module unit tests (vectors, Origin, deadline, log-once)
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/__tests__/oidcIssuerVectors.test.ts` — create
 - `services/xstockstrat-ui/src/lib/sameOrigin.test.ts` — create
-- `services/xstockstrat-ui/src/lib/safeRedirect.test.ts` — create
-- `services/xstockstrat-ui/src/lib/ssoRefusals.test.ts` — create
 - `services/xstockstrat-ui/src/lib/deadlines.test.ts` — create
 - `services/xstockstrat-ui/src/lib/serverLog.test.ts` — modify
 
@@ -1238,7 +1293,7 @@ grep -n "safeRedirect" src/app/auth/login/page.tsx src/lib/safeRedirect.ts
 
 **Codebase Evidence**:
 - The vector-load idiom is `fileURLToPath(new URL('../../../../../scripts/testdata/oidc-issuer-vectors.json', import.meta.url))`; `vitest.config.ts:16` uses `import.meta.url` (design.md (B) §D-66).
-- `vitest.config.ts:18-20` uses the node environment and `include: ['src/**/*.test.ts']`. Coverage covers `src/lib/**` with a threshold of 40 (`:22-35`).
+- `vitest.config.ts:19-20` uses the node environment and `include: ['src/**/*.test.ts']`. Coverage covers `src/lib/**` (`:25`) with thresholds `lines: 40, functions: 40, statements: 40` (`:29-33`).
 - `serverLog.test.ts` exists.
 
 **TDD**: red-green required
@@ -1256,20 +1311,83 @@ grep -n "safeRedirect" src/app/auth/login/page.tsx src/lib/safeRedirect.ts
    - `if_present`: absent, matching, sibling `https://dashboard.example.test` (@AC-57), `null`, and `appOrigin` null with a sibling header → true (@AC-58).
    - Unset or invalid `APP_URL` → one ERROR `app_url_invalid` (logOnce) for repeated calls.
    - @AC-59: no Origin under `required` → false.
-3. `safeRedirect.test.ts`: today's allow-list, plus `/trader/../..//evil.com` (D-54, D-71). Pin that case to whatever the current function returns; the behaviour is unchanged.
-4. `ssoRefusals.test.ts`: the map keys equal the four identity literals (D-24 contract; the identity side is Step 11).
-5. `deadlines.test.ts`: `raceDeadline` rejects after `ms` (fake timers), resolves when earlier, and clears its timer (`vi.getTimerCount() === 0`).
-6. `serverLog.test.ts`: `logOnce` emits once per key and `__resetLogOnce` resets it.
-7. **C-12**: these are scenario one-offs (issuer strings, origins) with no domain object, so they are exempt from the fixture inventory. State this in the test file header comment.
+3. `deadlines.test.ts`: `raceDeadline` rejects after `ms` (fake timers), resolves when earlier, and clears its timer (`vi.getTimerCount() === 0`).
+4. `serverLog.test.ts`: `logOnce` emits once per key and `__resetLogOnce` resets it.
+5. **C-12**: these are scenario one-offs (issuer strings, origins) with no domain object, so they are exempt from the fixture inventory. State this in the test file header comment.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
+# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 ```
 
 ---
 
-### Step 26 — service: Server-side config reads (oidcConfig.ts) and the MCP scope list
+### Step 27 — service: Extract safeRedirect and add the SSO refusal mirror
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/lib/safeRedirect.ts` — create
+- `services/xstockstrat-ui/src/lib/ssoRefusals.ts` — create
+- `services/xstockstrat-ui/src/app/auth/login/page.tsx` — modify (import the extracted `safeRedirect`)
+
+**Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI; Security — auth scope correctness
+
+**Codebase Evidence**:
+- `src/app/auth/login/page.tsx:7-18` holds the local `safeRedirect(target)` (allow-list `/trader` / `/insights` / `/config-ui`, else `/trader`).
+- Identity's `EXTERNAL_IDENTITY_REFUSALS` (Step 10) holds the four refusal literals the mirror keys on (D-24).
+
+**TDD**: red-green required
+
+**Covers**: —
+
+**Instructions**:
+1. **`safeRedirect.ts`**: move `safeRedirect` from `login/page.tsx:8-18` verbatim and import it in `page.tsx`. The behaviour is unchanged (D-46).
+2. **`ssoRefusals.ts`** (D-24):
+   - `SSO_REFUSAL_DETAILS = { 'email required': 'no_email', 'account inactive': 'inactive', 'account already linked': 'linked', 'ambiguous email': 'ambiguous' } as const`. The keys are identity's `EXTERNAL_IDENTITY_REFUSALS` values.
+   - Export a `refusalCode(detail): SsoErrorCode | null` mapper. To keep this leaf import-free, type the return as the string-literal union; Step 33 types it with `SsoErrorCode`.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
+grep -n "safeRedirect" src/app/auth/login/page.tsx src/lib/safeRedirect.ts
+```
+
+---
+
+### Step 28 — test: safeRedirect and the refusal-mirror unit tests
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/lib/safeRedirect.test.ts` — create
+- `services/xstockstrat-ui/src/lib/ssoRefusals.test.ts` — create
+
+**Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
+
+**Codebase Evidence**:
+- `vitest.config.ts:19-20` uses the node environment and `include: ['src/**/*.test.ts']`. Coverage covers `src/lib/**` (`:25`) with thresholds `lines: 40, functions: 40, statements: 40` (`:29-33`).
+- The identity side of the refusal contract is asserted in Step 11 (`EXTERNAL_IDENTITY_REFUSALS`).
+
+**TDD**: red-green required
+
+**Covers**: AC-4, AC-5, AC-7, AC-26, AC-39 (the UI refusal-mirror leg: each identity refusal detail maps to its `?error=` code)
+
+**Instructions**:
+1. `safeRedirect.test.ts`: today's allow-list, plus `/trader/../..//evil.com` (D-54, D-71). Pin that case to whatever the current function returns; the behaviour is unchanged.
+2. `ssoRefusals.test.ts`: the map keys equal the four identity literals (D-24 contract; the identity side is Step 11), and `refusalCode` maps `account already linked` → `linked` (@AC-4), `ambiguous email` → `ambiguous` (@AC-5), `account inactive` → `inactive` (@AC-7 / @AC-26), `email required` → `no_email` (@AC-39), and an unknown detail → `null`.
+3. **C-12**: scenario one-offs (redirect paths, refusal strings) with no domain object, so they are exempt from the fixture inventory. State this in the test file header comment.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
+# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
+```
+
+---
+
+### Step 29 — service: Server-side config reads (oidcConfig.ts) and the MCP scope list
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1323,7 +1441,7 @@ cd ../.. && node scripts/check-config-wiring.mjs --declared-from docs/roadmap/fe
 
 ---
 
-### Step 27 — test: oidcConfig mode, validity, environment and secret behaviour
+### Step 30 — test: oidcConfig mode, validity, environment and secret behaviour
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1356,11 +1474,12 @@ cd ../.. && node scripts/check-config-wiring.mjs --declared-from docs/roadmap/fe
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
+# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 ```
 
 ---
 
-### Step 28 — service: openid-client wiring, the Configuration cache and the logout URL builders
+### Step 31 — service: openid-client wiring, the Configuration cache and the logout URL builders
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1390,7 +1509,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
    - It ends with `.then((cfg) => assertDiscoveredMetadata(cfg, issuer))`: `serverMetadata().issuer === issuer` byte-exact, then a same-origin `jwks_uri`. A missing `jwks_uri` rejects.
    - A rejection clears the slot only if the slot still holds that promise.
    - Export `__resetOidcConfigurationCache()` for tests.
-   - Export thin helpers for Step 32:
+   - Export thin helpers for Step 37:
      - `buildSsoAuthorizationUrl(cfg, {redirectUri, state, nonce, codeChallenge})` with `scope: 'openid email'`, `response_mode: 'query'`, `code_challenge_method: 'S256'` (D-9, D-41);
      - `exchangeCode(cfg, currentUrl, {pkceCodeVerifier, expectedState, expectedNonce})` wrapping `authorizationCodeGrant(..., { pkceCodeVerifier, expectedState, expectedNonce, idTokenExpected: true })`, returning `claims()` `{ iss, sub, email }` only.
 3. **`ssoLogout.ts`** (D-51, D-65, D-97):
@@ -1409,7 +1528,7 @@ docker run --rm -d --name ui-smoke -p 3999:3000 -e JWT_SECRET=smoke-secret-min-3
 
 ---
 
-### Step 29 — test: oidcClient production path through a fetch stub, and the logout URLs
+### Step 32 — test: oidcClient production path through a fetch stub, and the logout URLs
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1439,16 +1558,17 @@ docker run --rm -d --name ui-smoke -p 3999:3000 -e JWT_SECRET=smoke-secret-min-3
    - **@AC-53:** no `end_session_endpoint` → `https://auth.example.test/logout?rd=https%3A%2F%2Fxstockstrat-staging.example.test%2Fauth%2Flogin`.
    - **@AC-52:** an advertised same-origin endpoint → that URL with `post_logout_redirect_uri` and `client_id`. A cross-origin endpoint → the portal URL.
    - A discovery throw or timeout → the portal URL plus one WARN `sso_logout_portal_fallback`.
-3. The stub discovery documents and JWKS are scenario one-offs, so they stay inline here. The e2e stub IdP's fixtures go to `e2e/fixtures/` in Step 38.
+3. The stub discovery documents and JWKS are scenario one-offs, so they stay inline here. The e2e stub IdP's fixtures go to `e2e/fixtures/` in Step 44.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
+# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 ```
 
 ---
 
-### Step 30 — service: Typed auth metrics, SSO error redirects, logout rewrite and the login 403
+### Step 33 — service: Typed auth metrics, SSO error redirects and the logout rewrite
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1457,22 +1577,17 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 - `services/xstockstrat-ui/src/lib/ssoErrors.ts` — create
 - `services/xstockstrat-ui/src/lib/ssoRefusals.ts` — modify (type the return as `SsoErrorCode`)
 - `services/xstockstrat-ui/src/lib/auth.ts` — modify
-- `services/xstockstrat-ui/src/lib/identity.ts` — modify
 - `services/xstockstrat-ui/src/app/api/auth/logout/route.ts` — modify
-- `services/xstockstrat-ui/src/app/api/auth/login/route.ts` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety, no secret values rendered in UI; Security — auth scope correctness
 
 **Codebase Evidence**:
 - `bffMetrics.ts`: `AuthEvent` (10 members) is at `:9-19`, `JwtRejectReason` at `:20`, and `recordAuthEvent(event, reason?: JwtRejectReason)` at `:47-49`.
-- Callers, from `grep -rn "recordAuthEvent(" src`: `auth.ts:27,33`, `identity.ts:22,32,35`, `login/route.ts:11,27,33,37`, `refresh/route.ts:9`, `logout/route.ts:11` (bare `'logout'`, which would fail the typed map) and `bffAllowlist.test.ts:48-49`.
+- Callers, from `grep -rn "recordAuthEvent(" src`: `auth.ts:27,33`, `identity.ts:22,32,35`, `login/route.ts:11,27,33,37`, `refresh/route.ts:9`, `logout/route.ts:11` (bare `'logout'`, which would fail the typed map) and `bffAllowlist.test.ts:48-49`. Only `logout/route.ts:11` breaks under the typed map, and it is rewritten in this step, so the step type-checks on its own (§C: the caller lands with the signature change).
 - `auth.ts`:
   - `verifyAccessToken` is at `:23-36`. It uses `jwtVerify(token, new TextEncoder().encode(secret))` and catches `errors.JWTExpired`.
   - `REMEMBER_ME_MAX_AGE_SECONDS = 1_209_600` is at `:17`. `clearSessionCookies` is at `:76-80`. `setSessionCookies` uses the base `{httpOnly, secure: isProduction, sameSite:'lax', path:'/'}` (`:53-54`).
-- `identity.ts:42-48` `revokeToken(token)` calls `identityClient.revokeToken({ token })` with no timeout.
-- Routes:
-  - `logout/route.ts:6-15` revokes any cookie token, records `'logout'`, clears the cookies and returns `{ok:true}`.
-  - `login/route.ts:29-44` maps `Unauthenticated` → 401 and everything else → 503 (recon R-8).
+- `logout/route.ts:6-15` revokes any cookie token, records `'logout'`, clears the cookies and returns `{ok:true}`. It calls the existing `revokeToken` (`identity.ts:42-48`); that helper's deadline is Step 35's (D-61).
 
 **TDD**: red-green required
 
@@ -1497,8 +1612,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
      - `'expired_too_old'` beyond that;
      - otherwise `'unverified'` (`no_secret` / `invalid` → `unverified`).
    - It never records `jwt_rejected`.
-5. **`identity.ts`**: `revokeToken` passes `{ timeoutMs: REFRESH_TIMEOUT_MS }` (D-61).
-6. **`logout/route.ts`**: rewrite as design.md (B) §D-68 + D-77, in this order:
+5. **`logout/route.ts`**: rewrite as design.md (B) §D-68 + D-77, in this order:
    1. `if (!isSameOrigin(req,'if_present'))`: `recordAuthEvent('logout','cross_origin')`, `serverLog.warn('logout_origin_mismatch', { origin_host: originHost(origin) })`, and return 403 `{error:'origin mismatch'}` with no Set-Cookie.
    2. `reason = await verifyAccessTokenForLogout(cookie)`, then `recordAuthEvent('logout', reason)`.
    3. Only when `'verified'`, run in parallel and await both: `revokeToken(token)` ‖ (`loadOidcConfig()` then, when SSO-valid, `loadOidcClientSecret` + `getOidcConfiguration` → `resolveLogoutRedirect`). The redirect side is bounded by `AUTH_CONFIG_TIMEOUT_MS`.
@@ -1509,17 +1623,16 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
       - SSO valid + verified → `{ok:true, redirect}`;
       - SSO `valid:false`, or not verified → `{ok:true}`.
    - Keep the `withBffMetrics('auth', '/api/auth/logout', …)` wrapper.
-7. **`login/route.ts`**: `Code.PermissionDenied` → `recordAuthEvent('login_disabled')` and 403 `{ error: 'password login disabled' }` (D-12). The other branches are unchanged.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:unit
-grep -rn "recordAuthEvent('sso_login" src | grep -v test   # exactly the 2 sites in ssoErrors.ts (+ sso_login_ok added in Step 32)
+grep -rn "recordAuthEvent('sso_login" src | grep -v test   # exactly the 2 sites in ssoErrors.ts (+ sso_login_ok added in Step 37)
 ```
 
 ---
 
-### Step 31 — test: Metric typing, logout route, auth verify and login 403
+### Step 34 — test: Metric typing, SSO error redirects, logout verify and the logout route
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1527,20 +1640,19 @@ grep -rn "recordAuthEvent('sso_login" src | grep -v test   # exactly the 2 sites
 - `services/xstockstrat-ui/src/lib/__tests__/bffAllowlist.test.ts` — modify
 - `services/xstockstrat-ui/src/lib/ssoErrors.test.ts` — create
 - `services/xstockstrat-ui/src/lib/auth.test.ts` — modify
-- `services/xstockstrat-ui/src/lib/identity.test.ts` — modify
 - `services/xstockstrat-ui/src/app/api/auth/logout/route.test.ts` — create
-- `services/xstockstrat-ui/src/app/api/auth/login/route.test.ts` — create
 
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
 
 **Codebase Evidence**:
 - `bffAllowlist.test.ts:18-27` holds `ALLOWED_KEYS['ui.auth.events'] = ['event','reason']`; `drive()` calls are at `:48-49`.
 - The route-test precedent is `src/app/config-ui/api/audit/route.test.ts`.
-- `auth.test.ts` and `identity.test.ts` exist.
+- `auth.test.ts` exists.
+- Coverage covers `src/lib/**` with thresholds `lines: 40, functions: 40, statements: 40` (`vitest.config.ts:29-33`).
 
 **TDD**: red-green required
 
-**Covers**: AC-16, AC-45, AC-52, AC-53, AC-56, AC-57, AC-58, AC-62, AC-64
+**Covers**: AC-52, AC-53, AC-56, AC-57, AC-58, AC-62, AC-64
 
 **Instructions**:
 1. **`bffAllowlist.test.ts`** (D-72, D-83, D-93):
@@ -1552,8 +1664,7 @@ grep -rn "recordAuthEvent('sso_login" src | grep -v test   # exactly the 2 sites
 3. **`auth.test.ts`**:
    - `verifyAccessTokenForLogout`: valid → verified; expired 1 day → verified; expired 15 days → expired_too_old; wrong key → unverified; no secret → unverified.
    - `vi.spyOn` proves `jwt_rejected` is never recorded on these paths.
-4. **`identity.test.ts`**: `revokeToken` passes `timeoutMs: 10_000`.
-5. **`logout/route.test.ts`** (mock `revokeToken`, `loadOidcConfig`, `loadOidcClientSecret`, `getOidcConfiguration`):
+4. **`logout/route.test.ts`** (mock `revokeToken`, `loadOidcConfig`, `loadOidcClientSecret`, `getOidcConfiguration`):
    - **@AC-57** (legacy and SSO): a sibling Origin with cookies → 403, no `revokeToken`, no `Set-Cookie`, no config read, and one WARN `logout_origin_mismatch`.
    - Revoke happens **iff** the token is signature-valid (D-64).
    - **@AC-53:** SSO valid → `{ok:true, redirect: <portal URL>}` and cleared cookies.
@@ -1563,20 +1674,82 @@ grep -rn "recordAuthEvent('sso_login" src | grep -v test   # exactly the 2 sites
    - **@AC-64:** only an expired-but-signed access cookie → 200 `{ok:true}`, cookies cleared.
    - **@AC-58:** an invalid `APP_URL` plus a sibling Origin → passes, cookies cleared.
    - Legacy → `{ok:true}`, byte-identical.
-6. **`login/route.test.ts`**:
-   - **@AC-16 / @AC-45:** `authenticateUser` rejects `PermissionDenied` → 403 `{error:'password login disabled'}` and `login_disabled` recorded.
-   - `Unauthenticated` → 401 as today.
-7. **C-12**: the route tests use scenario one-offs (cookies, origins) and `signTestJwt` / `TEST_JWT_SECRET` from `e2e/helpers/auth.ts` when signing session JWTs. They declare no new secret literal.
+5. **C-12**: the route and auth tests use scenario one-offs (cookies, origins) and `signTestJwt` / `TEST_JWT_SECRET` from `e2e/helpers/auth.ts` when signing session JWTs. They declare no new secret literal.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
+# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 grep -n "helpers/auth" src/app/api/auth/logout/route.test.ts src/lib/auth.test.ts
 ```
 
 ---
 
-### Step 32 — service: SSO start and callback routes, the transaction cookie and the middleware sets
+### Step 35 — service: Revoke deadline and the password-login 403
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/lib/identity.ts` — modify
+- `services/xstockstrat-ui/src/app/api/auth/login/route.ts` — modify
+
+**Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety; Security — auth scope correctness
+
+**Codebase Evidence**:
+- `identity.ts:42-48` `revokeToken(token)` calls `identityClient.revokeToken({ token })` with no timeout. `REFRESH_TIMEOUT_MS = 10_000` is at `deadlines.ts:3`.
+- `login/route.ts:29-44` maps `Unauthenticated` → 401 and everything else → 503 (recon R-8). Its `recordAuthEvent` calls are at `:11,27,33,37`.
+- The `'login_disabled'` `AuthEvent` member is added in Step 33.
+
+**TDD**: red-green required
+
+**Covers**: —
+
+**Instructions**:
+1. **`identity.ts`**: `revokeToken` passes `{ timeoutMs: REFRESH_TIMEOUT_MS }` (D-61).
+2. **`login/route.ts`**: `Code.PermissionDenied` → `recordAuthEvent('login_disabled')` and 403 `{ error: 'password login disabled' }` (D-12). The other branches are unchanged.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:unit
+grep -n "REFRESH_TIMEOUT_MS" src/lib/identity.ts && grep -n "login_disabled" src/app/api/auth/login/route.ts
+```
+
+---
+
+### Step 36 — test: Revoke deadline and the login 403
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/lib/identity.test.ts` — modify
+- `services/xstockstrat-ui/src/app/api/auth/login/route.test.ts` — create
+
+**Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
+
+**Codebase Evidence**:
+- `identity.test.ts` exists. The route-test precedent is `src/app/config-ui/api/audit/route.test.ts`.
+- `src/lib/identity.ts` is excluded from coverage (`vitest.config.ts:28`); the thresholds `lines: 40, functions: 40, statements: 40` (`:29-33`) still gate the `src/lib/**` total.
+
+**TDD**: red-green required
+
+**Covers**: AC-16, AC-45
+
+**Instructions**:
+1. **`identity.test.ts`**: `revokeToken` passes `timeoutMs: 10_000`.
+2. **`login/route.test.ts`**:
+   - **@AC-16 / @AC-45:** `authenticateUser` rejects `PermissionDenied` → 403 `{error:'password login disabled'}` and `login_disabled` recorded.
+   - `Unauthenticated` → 401 as today.
+3. **C-12**: scenario one-offs (credentials, error codes); no session JWT is signed and no new secret literal is declared.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
+# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
+```
+
+---
+
+### Step 37 — service: SSO start and callback routes, the transaction cookie and the middleware sets
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1655,7 +1828,7 @@ grep -n "export async function GET" src/app/api/auth/sso/start/route.ts || echo 
 
 ---
 
-### Step 33 — test: Start and callback routes, the txn cookie and the middleware exemptions
+### Step 38 — test: Start and callback routes, the txn cookie and the middleware exemptions
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1709,11 +1882,12 @@ grep -n "export async function GET" src/app/api/auth/sso/start/route.ts || echo 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
+# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 ```
 
 ---
 
-### Step 34 — service: Login page as a server component with the SSO form and the FR-9 banner
+### Step 39 — service: Login page as a server component with the SSO form and the FR-9 banner
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1730,7 +1904,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 - `src/components/ui/checkbox.tsx` exports `Checkbox` (`:29`).
 - `src/app/auth/layout.tsx` forces `dynamic = 'force-dynamic'` (UI `CLAUDE.md` § Auth + BFF).
 
-**TDD**: red-green required (RED/GREEN via the Step 38 e2e; no jsdom unit layer exists — `vitest.config.ts:19` node env)
+**TDD**: red-green required (RED/GREEN via the Step 47 e2e; no jsdom unit layer exists — `vitest.config.ts:19` node env)
 
 **Covers**: —
 
@@ -1770,7 +1944,7 @@ grep -n "'use client'" src/app/auth/login/page.tsx || echo "page is a server com
 
 ---
 
-### Step 35 — service: Authorized-apps pointer card and mode-aware discovery documents
+### Step 40 — service: Authorized-apps page split and the SSO pointer card
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1779,8 +1953,6 @@ grep -n "'use client'" src/app/auth/login/page.tsx || echo "page is a server com
 - `services/xstockstrat-ui/src/app/accounts/authorized-apps/AuthorizedAppsList.tsx` — create
 - `services/xstockstrat-ui/src/app/accounts/authorized-apps/SsoAppsCard.tsx` — create
 - `services/xstockstrat-ui/src/components/accounts/ConnectorUrlField.tsx` — create
-- `services/xstockstrat-ui/src/app/api/oauth/protected-resource/route.ts` — modify
-- `services/xstockstrat-ui/src/app/api/oauth/authorization-server/route.ts` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI, environment scope correctness
 
@@ -1790,9 +1962,8 @@ grep -n "'use client'" src/app/auth/login/page.tsx || echo "page is a server com
   - The connector field (an `input readOnly value={agentUrl} aria-label="MCP connector URL"` plus a Copy `Button`) is at `:195-213`.
   - The list `Card` is at `:229-253`.
 - `accounts/layout.tsx:18-20` reads `AGENT_PUBLIC_URL` server-side into `AgentUrlProvider`; the layout is untouched (D-28).
-- `api/oauth/protected-resource/route.ts:8-13` and `authorization-server/route.ts:8-19` take `export const dynamic = 'force-dynamic'` and return the agent-named documents. The `next.config.js:54-64` rewrites map `/.well-known/oauth-*/agent` to them.
 
-**TDD**: red-green required
+**TDD**: red-green required (RED/GREEN via the Step 47 e2e `sso-accounts.spec.ts` and the legacy `auth.spec.ts` AC-42 case)
 
 **Covers**: —
 
@@ -1807,11 +1978,39 @@ grep -n "'use client'" src/app/auth/login/page.tsx || echo "page is a server com
    - It links to `autheliaUrl`, the valid issuer; the link is omitted when `valid:false` (D-66).
    - It shows `ConnectorUrlField`, and a row for each **non-empty** client ID (full / read-only), with the instruction to paste them into the connector's advanced OAuth settings (FR-11, D-44).
    - It lists no grants and offers no revoke control (AC-34).
-5. **`protected-resource/route.ts`** (D-38, D-55, D-78):
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run build
+grep -n "'use client'" src/app/accounts/authorized-apps/page.tsx || echo "page is a server component"
+```
+
+---
+
+### Step 41 — service: Mode-aware discovery documents
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/app/api/oauth/protected-resource/route.ts` — modify
+- `services/xstockstrat-ui/src/app/api/oauth/authorization-server/route.ts` — modify
+
+**Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI, environment scope correctness
+
+**Codebase Evidence**:
+- `api/oauth/protected-resource/route.ts:8-13` and `authorization-server/route.ts:8-19` take `export const dynamic = 'force-dynamic'` and return the agent-named documents. The `next.config.js:54-64` rewrites map `/.well-known/oauth-*/agent` to them.
+- `MCP_SCOPES_SUPPORTED` is exported by `src/lib/mcpScopes.ts` (Step 29).
+
+**TDD**: red-green required (the paired unit tests are Step 43)
+
+**Covers**: —
+
+**Instructions**:
+1. **`protected-resource/route.ts`** (D-38, D-55, D-78):
    - legacy → byte-identical;
    - SSO valid → `{resource: AGENT_PUBLIC_URL, authorization_servers: [cfg.agentIssuer], scopes_supported: [...MCP_SCOPES_SUPPORTED]}`;
    - SSO invalid or `'error'` → `new NextResponse(null, {status: 503, headers: {'Cache-Control':'no-store'}})`.
-6. **`authorization-server/route.ts`**:
+2. **`authorization-server/route.ts`**:
    - legacy → byte-identical;
    - SSO (valid or not) → 404;
    - `'error'` → 503 `no-store`.
@@ -1823,7 +2022,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run bu
 
 ---
 
-### Step 36 — service: Sign-out button in the shared header
+### Step 42 — service: Sign-out button in the shared header
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1838,7 +2037,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run bu
 - `:246-248`: `<div className="flex items-center gap-2 ml-auto">{actions}<CopilotToggle />`, before the `sm:hidden` mobile sidebar block.
 - `Button` lives in `src/components/ui/button.tsx`; the icon-size convention is at `button.tsx:35` (D-63 evidence).
 
-**TDD**: red-green required (RED/GREEN via the Step 38 e2e)
+**TDD**: red-green required (RED/GREEN via the Step 47 e2e)
 
 **Covers**: —
 
@@ -1860,7 +2059,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run bu
 
 ---
 
-### Step 37 — test: Discovery-route and PRM contract unit tests
+### Step 43 — test: Discovery-route and PRM contract unit tests
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1872,7 +2071,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run bu
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
 
 **Codebase Evidence**:
-- The agent side of the PRM contract is pinned in Step 22 (`test_sso_routes.py`, AC-11) against `oauth_metadata.py`.
+- The agent side of the PRM contract is pinned in Step 23 (`test_sso_routes.py`, AC-11) against `oauth_metadata.py`.
 - The route-test precedent is `src/app/config-ui/api/audit/route.test.ts`.
 
 **TDD**: red-green required
@@ -1885,16 +2084,17 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run bu
    - **@AC-49 / @AC-11:** SSO valid → `{resource: AGENT_PUBLIC_URL, authorization_servers:['https://auth.example.test'], scopes_supported:['xstockstrat.read','xstockstrat.write','xstockstrat.admin','xstockstrat.trade']}`, pinned **whole** with the same literal object as the agent test (D-55 two-sided contract).
    - **@AC-54:** `valid:false` → 503 `no-store`. `'error'` → 503.
 2. `authorization-server/route.test.ts`: legacy → byte-identical; SSO → 404 (@AC-49); `'error'` → 503.
-3. `mcpScopes.test.ts`: `MCP_SCOPES_SUPPORTED` equals the four-literal list (mirrors agent `scopes.MCP_SCOPES_SUPPORTED`, Step 20/22).
+3. `mcpScopes.test.ts`: `MCP_SCOPES_SUPPORTED` equals the four-literal list (mirrors agent `scopes.MCP_SCOPES_SUPPORTED`, Step 21/23).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
+# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 ```
 
 ---
 
-### Step 38 — test: e2e harness (stub IdP, SSO project, APP_URL) and the SSO/legacy specs
+### Step 44 — test: e2e SSO fixtures and the stub IdP
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1903,204 +2103,361 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 - `services/xstockstrat-ui/e2e/fixtures/sso.ts` — create
 - `services/xstockstrat-ui/e2e/fixtures/index.ts` — modify
 - `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
+
+**Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
+
+**Codebase Evidence**:
+- The mock ports are `TRADER_MOCK_PORT = 9091` etc. (`mock-backend.ts:122-124`).
+- `e2e/helpers/auth.ts`: `TEST_JWT_SECRET` (`:20`), `signTestJwt` (`:29`), `addAuthCookie` (`:83`). `e2e/fixtures/users.ts` and `INVENTORY.md` exist.
+- The stub-IdP host is fixed by D-91 (`127.0.0.1`, an `http://` loopback issuer the grammar accepts).
+
+**TDD**: N/A (test harness with no assertions of its own; it is exercised RED→GREEN by the Step 47 specs)
+
+**Covers**: — (harness only; the scenarios it enables are covered by Step 47)
+
+**Instructions**:
+1. **Stub IdP** (`e2e/helpers/stubIdp.ts`; D-34, D-59, D-91). A `node:http` server on `127.0.0.1:<STUB_IDP_PORT>` (pick a free fixed port next to `9091-9093`; confirm it is unused at execute) serving:
+   - discovery (`issuer` = `http://127.0.0.1:<port>`, byte-exact; `jwks_uri` same-origin; `end_session_endpoint` only when the `endSession` knob is set);
+   - `/jwks`;
+   - `/authorize`, which redirects to `redirect_uri` with `code` and `state`, or `error=access_denied` under the knob;
+   - `/token`, which returns an RS256 ID token signed with jose: `aud` = client_id, the nonce from the authorize request, `email` / `sub` per knob, and `signWith:'foreign'` signing with a key absent from the JWKS;
+   - `/logout`, which records the call.
+   - Control: `POST /__test/state` sets the knobs plus the SSO config values the mock `getConfig` serves (Step 45), and `POST /__test/reset` restores legacy. Export the state object and `startStubIdp()` / `stopStubIdp()` so the mock backend and the global setup share one module instance.
+2. **Fixtures (C-12)**: `e2e/fixtures/sso.ts` holds the stub issuer, the client IDs `xstockstrat-staging-mcp-claude[-ro]`, the SSO user (reuse `users.ts`'s user id and spread overrides) and the discovery-document builder. Export them from `fixtures/index.ts` and add `INVENTORY.md` catalog rows.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
+grep -n "sso" e2e/fixtures/index.ts e2e/fixtures/INVENTORY.md
+grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/helpers/stubIdp.ts
+# e2e harness: no coverage threshold (Playwright); the vitest 40% gate covers src/lib/** only (vitest.config.ts:29-33)
+```
+
+---
+
+### Step 45 — test: Mock-backend SSO handlers and the stub-IdP lifecycle
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
 - `services/xstockstrat-ui/e2e/global-setup.ts` — modify
 - `services/xstockstrat-ui/e2e/global-teardown.ts` — modify
-- `services/xstockstrat-ui/playwright.config.ts` — modify
-- `services/xstockstrat-ui/e2e/sso/sso-login.spec.ts` — create
-- `services/xstockstrat-ui/e2e/sso/sso-logout.spec.ts` — create
-- `services/xstockstrat-ui/e2e/sso/sso-accounts.spec.ts` — create
-- `services/xstockstrat-ui/e2e/auth.spec.ts` — modify
-- `docker-compose.yml` — modify
 
-**Reviewers**: `xstockstrat-ui` owner — Trading UI correctness; Platform Lead — deploy config parity (`APP_URL`)
+**Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
 
 **Codebase Evidence**:
 - `mock-backend.ts`:
   - `identityHandlers` is at `:285-320`: `authenticateUser`, `refreshToken`, `revokeToken`, `listAuthorizedApps`.
   - `getConfig(req)` is at `:1552-1578`. It answers namespace `ui` with the `performance.*` values and **every other namespace with `platform`** (recon R-8).
-  - The mock ports are `TRADER_MOCK_PORT = 9091` etc. (`:122-124`).
+- `global-setup.ts` / `global-teardown.ts` start and stop the mock backend; the stub IdP (Step 44) starts in the same process so the shared state module is one instance.
+
+**TDD**: N/A (test harness with no assertions of its own; the default state is legacy, so the existing suite is its regression net and the Step 47 specs are its RED→GREEN)
+
+**Covers**: — (harness only; the scenarios it enables are covered by Step 47)
+
+**Instructions**:
+1. **`mock-backend.ts`**:
+   - `getConfig` answers namespaces `identity` (`auth.password_login_enabled`), `agent` (`oidc.issuer`) and `ui` (the existing `performance.*` plus `oidc.issuer`, `oidc.client_id`, `oidc.mcp_client_id`, `oidc.mcp_client_id_readonly`) from the shared stub state. The default state is legacy: issuers `""`, flag `true`. A `getConfigFails` knob makes `getConfig` throw (AC-46).
+   - Add `getSecret` for `ui/oidc.client_secret`. It returns `found` per the state and asserts `x-internal-caller: ui`.
+   - `identityHandlers` gains:
+     - `resolveExternalIdentity`, which returns the fixture user or throws `FailedPrecondition` with the refusal detail per the stub state;
+     - `issueSessionForUser`, which returns a `signTestJwt` session.
+2. Start the stub IdP in `global-setup.ts`, in the same process as the mock backend (shared module state), and stop it in `global-teardown.ts`.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
+pnpm exec playwright test e2e/auth.spec.ts --project=chromium   # the default (legacy) state keeps the existing suite green
+# e2e harness: no coverage threshold (Playwright); the vitest 40% gate covers src/lib/** only (vitest.config.ts:29-33)
+```
+
+---
+
+### Step 46 — test: Serialized `chromium-sso` Playwright project and the APP_URL wiring
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/playwright.config.ts` — modify
+- `docker-compose.yml` — modify
+
+**Reviewers**: `xstockstrat-ui` owner — Trading UI correctness; Platform Lead — deploy config parity (`APP_URL`)
+
+**Codebase Evidence**:
 - `playwright.config.ts`:
-  - `fullyParallel: true`, `workers: isCI ? 2 : undefined` (`:84-85`).
+  - `fullyParallel: true`, `workers: isCI ? 2 : undefined`, `retries: isCI ? 1 : 0` (`:84-86`).
   - `use.baseURL: 'http://localhost:3000'` (`:94`). `projects` setup / chromium is at `:98-125`.
   - `webServer.env` has `AGENT_PUBLIC_URL: 'http://127.0.0.1:9099'` (`:168`).
-- `e2e/helpers/auth.ts`: `TEST_JWT_SECRET` (`:20`), `signTestJwt` (`:29`), `addAuthCookie` (`:83`). `e2e/fixtures/users.ts` and `INVENTORY.md` exist.
-- `e2e/auth.spec.ts:300-312` holds the logout block; `page.request.post` sends no Origin (D-52).
+- `@playwright/test` is pinned at `1.62.1` (`package.json:67`). Its `TestProject` type has a project-level `workers?: number|string` ("workers limit for this project", `playwright/types/test.d.ts:735-752`). So the serialized project needs no separate CI invocation.
+- CI's `frontend-e2e` job runs the default `playwright test` in the e2e image (`ci.yml:631-634`, `--shard=N/2`), which includes every project. `ci.yml` is unchanged.
 - `docker-compose.yml:520` `AGENT_PUBLIC_URL: http://xstockstrat-agent:9000` and `:524-525` `ports: "3000:3000"` are in the UI block.
 - `.do/app.yaml:650-651`, `.do/app.dev.yaml:647-648` and `deploy/homelab/compose.yml:283` already set `APP_URL` (D-67), so they need no change.
+
+**TDD**: N/A (test configuration; the Step 47 specs are its RED→GREEN)
+
+**Covers**: — (harness only; the scenarios it enables are covered by Step 47)
+
+**Instructions**:
+1. **APP_URL wiring** (D-67):
+   - In `docker-compose.yml`, add `APP_URL: http://localhost:3000` after `:520`, with a 2-line constraint comment: it must equal the browser origin, and local compose SSO is unsupported (D-91).
+   - In `playwright.config.ts`, hoist `const BASE_URL = 'http://localhost:3000'`, use it for `use.baseURL`, and add `APP_URL: BASE_URL` to `webServer.env`.
+2. **Isolation from the parallel suite.** SSO mode, the password flag and the `getConfig` failure knob are global server state, so every spec that changes them runs serialized:
+   - Add a project `chromium-sso` with `testMatch: /e2e\/sso\/.*\.spec\.ts/`, `dependencies: ['chromium']`, `fullyParallel: false` and **`workers: 1`**, so it starts only after the whole default project and never runs two specs at once.
+   - The `chromium` project gains `testIgnore: /e2e\/sso\//`.
+   - Each spec in `e2e/sso/` also uses `test.describe.configure({ mode: 'serial' })` and resets the state in `afterAll`.
+   - This is a spec-level choice the design did not settle (D-91 fixes only the stub-IdP host). It is flagged in context.md.
+   - Known cost: a hard failure in `chromium` skips `chromium-sso`; CI `retries: 1` absorbs flakes.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
+grep -n "chromium-sso\|workers: 1\|testIgnore" playwright.config.ts
+pnpm exec playwright test --list > /dev/null   # the config loads with the new project
+grep -n "APP_URL" ../../docker-compose.yml playwright.config.ts
+# e2e harness: no coverage threshold (Playwright); the vitest 40% gate covers src/lib/** only (vitest.config.ts:29-33)
+```
+
+---
+
+### Step 47 — test: SSO and legacy global-state e2e specs
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/e2e/sso/sso-login.spec.ts` — create
+- `services/xstockstrat-ui/e2e/sso/sso-logout.spec.ts` — create
+- `services/xstockstrat-ui/e2e/sso/sso-accounts.spec.ts` — create
+- `services/xstockstrat-ui/e2e/sso/legacy-global-state.spec.ts` — create
+- `services/xstockstrat-ui/e2e/auth.spec.ts` — modify
+
+**Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
+
+**Codebase Evidence**:
+- `e2e/auth.spec.ts:300-312` holds the logout block; `page.request.post` sends no Origin (D-52).
+- The serialized `chromium-sso` project (Step 46) matches `e2e/sso/**`; the stub IdP, fixtures and mock handlers are Steps 44–45.
 
 **TDD**: red-green required
 
 **Covers**: AC-1, AC-16, AC-17, AC-29, AC-32, AC-34, AC-41, AC-42, AC-44, AC-45, AC-46, AC-48, AC-49, AC-51, AC-53, AC-54, AC-56, AC-57, AC-58, AC-59, AC-63, AC-64
 
 **Instructions**:
-1. **APP_URL wiring** (D-67):
-   - In `docker-compose.yml`, add `APP_URL: http://localhost:3000` after `:520`, with a 2-line constraint comment: it must equal the browser origin, and local compose SSO is unsupported (D-91).
-   - In `playwright.config.ts`, hoist `const BASE_URL = 'http://localhost:3000'`, use it for `use.baseURL`, and add `APP_URL: BASE_URL` to `webServer.env`.
-2. **Stub IdP** (`e2e/helpers/stubIdp.ts`; D-34, D-59, D-91). A `node:http` server on `127.0.0.1:<STUB_IDP_PORT>` (pick a free fixed port next to `9091-9093`; confirm it is unused at execute) serving:
-   - discovery (`issuer` = `http://127.0.0.1:<port>`, byte-exact; `jwks_uri` same-origin; `end_session_endpoint` only when the `endSession` knob is set);
-   - `/jwks`;
-   - `/authorize`, which redirects to `redirect_uri` with `code` and `state`, or `error=access_denied` under the knob;
-   - `/token`, which returns an RS256 ID token signed with jose: `aud` = client_id, the nonce from the authorize request, `email` / `sub` per knob, and `signWith:'foreign'` signing with a key absent from the JWKS;
-   - `/logout`, which records the call.
-   - Control: `POST /__test/state` sets the knobs plus the SSO config values the mock `getConfig` serves (below), and `POST /__test/reset` restores legacy.
-   - Start it in `global-setup.ts`, in the same process as the mock backend (shared module state), and stop it in `global-teardown.ts`.
-3. **`mock-backend.ts`**:
-   - `getConfig` answers namespaces `identity` (`auth.password_login_enabled`), `agent` (`oidc.issuer`) and `ui` (the existing `performance.*` plus `oidc.issuer`, `oidc.client_id`, `oidc.mcp_client_id`, `oidc.mcp_client_id_readonly`) from the shared stub state. The default state is legacy: issuers `""`, flag `true`.
-   - Add `getSecret` for `ui/oidc.client_secret`. It returns `found` per the state and asserts `x-internal-caller: ui`.
-   - `identityHandlers` gains:
-     - `resolveExternalIdentity`, which returns the fixture user or throws `FailedPrecondition` with the refusal detail per the stub state;
-     - `issueSessionForUser`, which returns a `signTestJwt` session.
-4. **Isolation from the parallel suite.** The mode is global server state, so:
-   - SSO specs live in `e2e/sso/` and run in a new project `chromium-sso` with `testMatch: /e2e\/sso\/.*\.spec\.ts/` and `dependencies: ['chromium']`, so they run only after the whole default project. The `chromium` project gains `testIgnore: /e2e\/sso\//`.
-   - Each SSO spec uses `test.describe.configure({ mode: 'serial' })` and resets the state in `afterAll`.
-   - This is a spec-level choice the design did not settle (D-91 fixes only the stub-IdP host). It is flagged in context.md.
-   - Known cost: a hard failure in `chromium` skips `chromium-sso`; CI `retries: 1` absorbs flakes.
-5. **Fixtures (C-12)**: `e2e/fixtures/sso.ts` holds the stub issuer, the client IDs `xstockstrat-staging-mcp-claude[-ro]`, the SSO user (reuse `users.ts`'s user id and spread overrides) and the discovery-document builder. Export them from `fixtures/index.ts` and add `INVENTORY.md` catalog rows.
-6. **Specs**:
-   - **`sso-login.spec.ts`**:
-     - **@AC-1:** sign in with SSO → lands on `/trader` with a session.
-     - **@AC-29:** checked → cookies `Max-Age=1209600` plus `remember_me=1`. Intercept the `/start` body with `page.route` to assert `remember=1` only when checked (D-64).
-     - **@AC-16:** flag off → only the SSO button and checkbox, no password field.
-     - **@AC-17:** flag on → both.
-     - **@AC-51:** access_denied → the no-access message.
-     - **@AC-59:** a cross-origin `page.request.post` with an `Origin` header → `?error=failed`; GET → 405.
-     - **@AC-54:** ui issuer `http://auth.example.test` → `?error=not_configured`, and `/.well-known/oauth-protected-resource/agent` → 503.
-     - **@AC-58:** state with an invalid APP_URL is not reachable in one webServer, so AC-58 is covered by Steps 25/31/33. Note this in the spec header.
-     - SSO-mode accessible names resolve uniquely (D-54).
-   - **`sso-logout.spec.ts`**:
-     - **@AC-53 / @AC-63 (SSO):** the header "Sign out" → cookies cleared and navigation to the stub `/logout?rd=…/auth/login`, caught with a `page.route()` intercept (D-64).
-     - **@AC-56:** an invalid issuer → lands on `/auth/login`, not the stub.
-     - **@AC-57 (SSO):** a cross-origin POST with cookies → 403, cookies unchanged.
-     - **@AC-64:** an expired access cookie plus a refresh cookie → 200 JSON `ok`.
-     - A mobile 375 px `/trader`: `scrollWidth <= clientWidth` and the button is in the viewport (D-63). If this fails, the fallback is the offcanvas sheet; log it in the Deviation Log.
-   - **`sso-accounts.spec.ts`**:
-     - **@AC-34 / @AC-48:** the Authelia link, the connector URL with copy, both client IDs, and no revoke button.
-     - **@AC-49:** the protected-resource document lists the stub issuer, and the authorization-server document → 404.
-   - **`auth.spec.ts`** (legacy, the default state):
-     - **@AC-41:** no SSO button, and the password login lands on `/trader`.
-     - **@AC-45:** flag off in legacy (via the state endpoint in a serial block) → the banner plus "password login disabled" on submit.
-     - **@AC-46:** a `getConfig` failure knob → the legacy login.
-     - **@AC-42:** `/accounts/authorized-apps` lists the grant with revoke.
-     - **@AC-32 / @AC-44:** half-configured or cleared → no SSO button.
-     - **@AC-57 (legacy):** a cross-origin POST with cookies → 403.
-     - **@AC-63 (legacy):** Sign out → `/auth/login`.
-     - The existing `:300-312` logout block stays green: `page.request.post` sends no Origin.
-     - Specs touching the global state live in `e2e/sso/` or a serial block inside `chromium-sso`.
+1. **`e2e/sso/sso-login.spec.ts`**:
+   - **@AC-1:** sign in with SSO → lands on `/trader` with a session.
+   - **@AC-29:** checked → cookies `Max-Age=1209600` plus `remember_me=1`. Intercept the `/start` body with `page.route` to assert `remember=1` only when checked (D-64).
+   - **@AC-16:** flag off → only the SSO button and checkbox, no password field.
+   - **@AC-17:** flag on → both.
+   - **@AC-51:** access_denied → the no-access message.
+   - **@AC-59:** a cross-origin `page.request.post` with an `Origin` header → `?error=failed`; GET → 405.
+   - **@AC-54:** ui issuer `http://auth.example.test` → `?error=not_configured`, and `/.well-known/oauth-protected-resource/agent` → 503.
+   - **@AC-58:** state with an invalid APP_URL is not reachable in one webServer, so AC-58 is covered by Steps 26/34/38. Note this in the spec header.
+   - SSO-mode accessible names resolve uniquely (D-54).
+2. **`e2e/sso/sso-logout.spec.ts`**:
+   - **@AC-53 / @AC-63 (SSO):** the header "Sign out" → cookies cleared and navigation to the stub `/logout?rd=…/auth/login`, caught with a `page.route()` intercept (D-64).
+   - **@AC-56:** an invalid issuer → lands on `/auth/login`, not the stub.
+   - **@AC-57 (SSO):** a cross-origin POST with cookies → 403, cookies unchanged.
+   - **@AC-64:** an expired access cookie plus a refresh cookie → 200 JSON `ok`.
+   - A mobile 375 px `/trader`: `scrollWidth <= clientWidth` and the button is in the viewport (D-63). If this fails, the fallback is the offcanvas sheet; log it in the Deviation Log.
+3. **`e2e/sso/sso-accounts.spec.ts`**:
+   - **@AC-34 / @AC-48:** the Authelia link, the connector URL with copy, both client IDs, and no revoke button.
+   - **@AC-49:** the protected-resource document lists the stub issuer, and the authorization-server document → 404.
+4. **`e2e/sso/legacy-global-state.spec.ts`** (legacy mode, but each case changes global stub state, so it runs in the serialized `chromium-sso` project and resets in `afterAll`):
+   - **@AC-45:** flag off in legacy → the banner plus "password login disabled" on submit.
+   - **@AC-46:** the `getConfig` failure knob → the legacy login.
+   - **@AC-32 / @AC-44:** half-configured or cleared issuers → no SSO button.
+5. **`e2e/auth.spec.ts`** keeps only cases that leave the global state at its default (legacy, flag on):
+   - **@AC-41:** no SSO button, and the password login lands on `/trader`.
+   - **@AC-42:** `/accounts/authorized-apps` lists the grant with revoke.
+   - **@AC-57 (legacy):** a cross-origin POST with cookies → 403.
+   - **@AC-63 (legacy):** Sign out → `/auth/login`.
+   - The existing `:300-312` logout block stays green: `page.request.post` sends no Origin.
+   - It never calls `/__test/state`; any case that would belongs in `e2e/sso/`.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm exec playwright test --list | grep -c "sso/"
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
+pnpm exec playwright test --list --project=chromium-sso | grep -c "\[chromium-sso\] › sso/"   # every SSO and legacy-global-state case is in the serialized project
+! pnpm exec playwright test --list --project=chromium | grep -q "\[chromium\] › sso/"   # none leaks into the parallel project
+! grep -n "__test/state\|@AC-32\|@AC-44\|@AC-45\|@AC-46" e2e/auth.spec.ts   # global-state cases are out of the parallel suite
 pnpm exec playwright test e2e/auth.spec.ts e2e/sso --project=chromium --project=chromium-sso
-grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth\|helpers/stubIdp" e2e/sso/*.spec.ts && grep -n "sso" e2e/fixtures/INVENTORY.md
-grep -n "APP_URL" ../../docker-compose.yml playwright.config.ts
+grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth\|helpers/stubIdp" e2e/sso/*.spec.ts
+# e2e: no coverage threshold (Playwright); the vitest 40% gate covers src/lib/** only (vitest.config.ts:29-33)
 ```
 
 ---
 
-### Step 39 — docs: FR-13 docs, the cutover runbook and constitution updates
+### Step 48 — docs: MCP connector runbook and the SSO cutover runbook
 
 **Status**: `pending`
-**Service**: `docs/`, service `CLAUDE.md` files and constitutions
+**Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
 - `docs/runbooks/authelia-sso-cutover.md` — create
-- `docs/patterns/frontend-auth.md` — modify
-- `docs/patterns/database.md` — modify
-- `docs/patterns/inter-service-mtls.md` — modify
-- `docs/patterns/config-governance.md` — modify
-- `CLAUDE.md` — modify (§ Inter-Service Dependencies)
-- `services/xstockstrat-identity/CLAUDE.md` — modify
-- `services/xstockstrat-identity/docs/context-constitution.md` — modify
-- `services/xstockstrat-identity/docs/operations.md` — modify
-- `services/xstockstrat-ui/CLAUDE.md` — modify
-- `services/xstockstrat-agent/CLAUDE.md` — modify
-- `services/xstockstrat-agent/docs/context-constitution.md` — modify
-- `services/xstockstrat-agent/docs/oauth.md` — modify
-- `services/xstockstrat-config/docs/context-constitution.md` — modify
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Constitution anchors:
-  - `services/xstockstrat-identity/docs/context-constitution.md:27` (IDENTITY-15: "the seed email `admin@localhost` are read by another service's migration … analysis `029`").
-  - The same file at `:25` (IDENTITY-12: `ListAdminUserIds` SAN-only).
-  - `services/xstockstrat-agent/docs/context-constitution.md:15` (AGENT-1: "the two lifespan `WatchConfig` channels (`agent`, `indicators`; …)").
-  - The same file at `:24` (AGENT-9: "only the `WATCHED_NAMESPACES` (`agent`, `indicators`) have a snapshot … Sites (N=5)").
-  - `services/xstockstrat-config/docs/context-constitution.md:30` ("Seed values must equal the code default … Migration `049` … is another deliberate exception").
-- Other anchors:
-  - `docs/patterns/config-governance.md:145` "## Per-Feature Registered Keys".
-  - Root `CLAUDE.md:283` "## Inter-Service Dependencies".
-  - `services/xstockstrat-ui/CLAUDE.md` § Environment Variables lists no `APP_URL`; § Auth + BFF lists the auth files.
-  - `services/xstockstrat-agent/CLAUDE.md:99` "## Config Keys Consumed".
-  - `services/xstockstrat-identity/CLAUDE.md:57` "## Config Keys Consumed".
 - `docs/runbooks/authelia-sso-cutover.md` does not exist (`ls`), so it is new (D-74, D-78).
+- `docs/runbooks/mcp-tools.md` documents today's DCR connector flow only.
+- The agent's JWS allow-list is `_ASYMMETRIC_ALGS` (Step 18): RS/PS/ES 256/384/512, with EdDSA and `none` excluded.
 
-**Lands with**: Step 40
-
-**TDD**: N/A (docs; the RED/GREEN for AC-20/AC-36 is Step 40)
+**TDD**: N/A (docs; the RED/GREEN for AC-20/AC-36 is Step 52, whose RED this step's first action captures)
 
 **Covers**: —
 
 **Instructions**:
-1. **`mcp-tools.md`** (FR-13, AC-20):
+1. **RED capture first.** Before any docs edit (this step or Steps 49–51), run Step 52's Verification block from the repo root against the unedited tree and record the non-zero exit in Step 52's TDD evidence.
+2. **`mcp-tools.md`** (FR-13, AC-20):
    - Connector setup for SSO mode, with the client IDs `xstockstrat-mcp-claude`, `xstockstrat-mcp-claude-ro`, `xstockstrat-staging-mcp-claude`, `xstockstrat-staging-mcp-claude-ro` and the redirect URI `https://claude.ai/api/mcp/auth_callback`.
    - The scope list (`xstockstrat.read|write|admin|trade`) and the narrowing rule.
    - Legacy mode keeps today's DCR flow.
-2. **`authelia-sso-cutover.md`** (D-42, D-49 N-8/N-9, D-73, D-74, D-91, D-96, D-97, D-98):
+3. **`authelia-sso-cutover.md`** (D-42, D-49 N-8/N-9, D-73, D-74, D-91, D-96, D-97, D-98):
    - **Pre-check:** the app VM reaches `auth.<domain>` for discovery and JWKS.
    - **APP_URL and issuer rules:** `APP_URL` has no trailing slash and matches the browser origin exactly. The issuer grammar covers trailing slashes, IP literals and IDN.
    - **Authelia requirements:** byte-exact redirect and audience; the ID-token and access-token `email` claims policies; `requested_audience_mode: implicit`.
+   - **Signing algorithms:** the agent accepts RS256/384/512, PS256/384/512 and ES256/384/512 only. EdDSA (and `none`) are excluded from the allow-list, so Authelia's JWKS must publish an RSA or EC key for the MCP access tokens; an EdDSA-only JWKS makes every MCP call 503 `jwks_unavailable`.
    - **Cutover steps** (FR-14):
      1. Set `ui.oidc.client_id`, the secret and the MCP client IDs.
      2. Set both issuers.
      3. Verify one web login, one MCP connection and one logout using the signal list: `wrong_audience`, `jwks_unavailable`, `account_refused`, `ui.auth.events{sso_login_failed,reason|sso_login_error|logout reason=cross_origin}`, ERRORs `sso_issuer_invalid` / `app_url_invalid`.
      4. Run `reset-password` on the staging seed row.
      5. Set the flag `false`.
-   - **Rollback:** config first (clear the issuers, flag `true`, verify AC-44), then code (identity first; `051` down is optional), then `reset-password` for CREATED users.
+   - **Rollback:** config first (clear the issuers, flag `true`, verify AC-44), then code (identity first; `052` down is optional), then `reset-password` for CREATED users.
    - **Residuals:** D-61, R-14, D-73, D-74, D-81, D-78, D-98 (group removal does not end an MCP connection; disable in Authelia and/or deactivate), plus trader `BackfillBars` and analysis 029.
    - Local docker-compose SSO is unsupported.
-3. **`frontend-auth.md`:** the SSO flow (start, callback, txn cookie, `IssueSessionForUser`), logout (step 0 Origin, verify, revoke, redirect) and the middleware sets.
-4. **`database.md`:**
-   - The schema map gains `identity.external_identities` and `users_email_lower_idx`.
-   - IDENTITY-15 note: new migrations resolve the seed owner by `SEED_USER_ID`, never by `admin@localhost`.
-5. **`inter-service-mtls.md`:** the new `ui` `GetSecret` grant and the two new SAN-gated identity RPCs.
-6. **`config-governance.md` § Per-Feature Registered Keys:** a row per key from 051, with type, default, reader and live mechanism.
-7. **Root `CLAUDE.md` § Inter-Service Dependencies:** add `xstockstrat-ui → xstockstrat-identity (ResolveExternalIdentity, IssueSessionForUser)`, `xstockstrat-agent → xstockstrat-identity (ResolveExternalIdentity)`, `xstockstrat-ui → xstockstrat-config (GetSecret, ui OIDC client secret)`, and the external HTTPS edges to Authelia from the UI and the agent.
-8. **Identity docs:**
-   - `CLAUDE.md` Config Keys gains `auth.password_login_enabled` (bool, default `false`, seeded `true`).
-   - Ports/RPCs gain the two new RPCs.
-   - `context-constitution.md`: IDENTITY-12 is extended to the two new per-RPC SAN lists. IDENTITY-15 gains: "admin@localhost may be renamed by SSO cutover (FR-12); new migrations resolve the seed owner by SEED_USER_ID" (AC-36).
-   - `operations.md`: `update-email` / `unlink-sso` usage.
-9. **UI `CLAUDE.md`:**
-   - Environment Variables gains the `APP_URL` line from design.md (B) §D-67.
-   - Config Keys Consumed gains `ui/oidc.*`, the `identity` / `agent` one-shot reads and the `GetSecret` read.
-   - The Auth + BFF table gains the SSO routes, `oidcConfig.ts`, `oidcClient.ts`, `ssoTxn.ts` and `sameOrigin.ts`.
-   - Testing: the `chromium-sso` project.
-10. **Agent docs:**
-    - `CLAUDE.md` Config Keys gains `agent/oidc.issuer` and the `ui/oidc.issuer` read.
-    - `context-constitution.md`:
-      - AGENT-1: the lifespan channels are now (`agent`, `indicators`, `ui`).
-      - AGENT-9: `WATCHED_NAMESPACES` is (`agent`, `indicators`, `ui`), and the sites now include `app/sso_mode.py#current_sso_mode` and the SSO validator (`app/sso_auth.py`) (AC-36).
-      - AGENT-8: `AGENT_PUBLIC_URL` is now read by `sso_auth.py` via `oauth_metadata`.
-    - `docs/oauth.md`: the SSO-mode resource-server path, the 404 legacy routes and path-insertion.
-11. **Config constitution (`:30`):** record migration `051` as a seed≠default exception (the flag seeded `true`, code default `false`; D-20). Also record the CONFIG-4 `user_id` omission in its notify (D-36).
 
 **Verification**:
 ```bash
 grep -c "xstockstrat-staging-mcp-claude-ro" docs/runbooks/mcp-tools.md
-ls docs/runbooks/authelia-sso-cutover.md
-node scripts/check-config-wiring.mjs --doc-check
+ls docs/runbooks/authelia-sso-cutover.md && grep -n "EdDSA" docs/runbooks/authelia-sso-cutover.md
 ```
 
 ---
 
-### Step 40 — test: AC-20 and AC-36 documentation assertions
+### Step 49 — docs: Pattern docs and the root dependency graph
+
+**Status**: `pending`
+**Service**: `docs/patterns/` and root `CLAUDE.md`
+**Files**:
+- `docs/patterns/frontend-auth.md` — modify
+- `docs/patterns/database.md` — modify
+- `docs/patterns/inter-service-mtls.md` — modify
+- `docs/patterns/config-governance.md` — modify
+- `CLAUDE.md` — modify (§ Inter-Service Dependencies)
+
+**Reviewers**: none
+
+**Codebase Evidence**:
+- `docs/patterns/config-governance.md:145` "## Per-Feature Registered Keys".
+- Root `CLAUDE.md:283` "## Inter-Service Dependencies".
+
+**TDD**: N/A (docs)
+
+**Covers**: —
+
+**Instructions**:
+1. **`frontend-auth.md`:** the SSO flow (start, callback, txn cookie, `IssueSessionForUser`), logout (step 0 Origin, verify, revoke, redirect) and the middleware sets.
+2. **`database.md`:**
+   - The schema map gains `identity.external_identities` and `users_email_lower_idx`.
+   - IDENTITY-15 note: new migrations resolve the seed owner by `SEED_USER_ID`, never by `admin@localhost`.
+3. **`inter-service-mtls.md`:** the new `ui` `GetSecret` grant and the two new SAN-gated identity RPCs.
+4. **`config-governance.md` § Per-Feature Registered Keys:** a row per key from 052, with type, default, reader and live mechanism.
+5. **Root `CLAUDE.md` § Inter-Service Dependencies:** add `xstockstrat-ui → xstockstrat-identity (ResolveExternalIdentity, IssueSessionForUser)`, `xstockstrat-agent → xstockstrat-identity (ResolveExternalIdentity)`, `xstockstrat-ui → xstockstrat-config (GetSecret, ui OIDC client secret)`, and the external HTTPS edges to Authelia from the UI and the agent.
+
+**Verification**:
+```bash
+node scripts/check-config-wiring.mjs --doc-check
+grep -n "ResolveExternalIdentity" CLAUDE.md docs/patterns/inter-service-mtls.md && grep -n "external_identities" docs/patterns/database.md
+```
+
+---
+
+### Step 50 — docs: Identity docs and the config constitution
+
+**Status**: `pending`
+**Service**: `xstockstrat-identity` and `xstockstrat-config` docs
+**Files**:
+- `services/xstockstrat-identity/CLAUDE.md` — modify
+- `services/xstockstrat-identity/docs/context-constitution.md` — modify
+- `services/xstockstrat-identity/docs/operations.md` — modify
+- `services/xstockstrat-config/docs/context-constitution.md` — modify
+
+**Reviewers**: none
+
+**Codebase Evidence**:
+- `services/xstockstrat-identity/docs/context-constitution.md:27` (IDENTITY-15: "the seed email `admin@localhost` are read by another service's migration … analysis `029`") and `:25` (IDENTITY-12: `ListAdminUserIds` SAN-only).
+- `services/xstockstrat-identity/CLAUDE.md:57` "## Config Keys Consumed".
+- `services/xstockstrat-config/docs/context-constitution.md:30` ("Seed values must equal the code default … Migration `049` … is another deliberate exception").
+
+**TDD**: N/A (docs; the AC-36 IDENTITY-15 RED/GREEN is Step 52)
+
+**Covers**: —
+
+**Instructions**:
+1. **Identity docs:**
+   - `CLAUDE.md` Config Keys gains `auth.password_login_enabled` (bool, default `false`, seeded `true`).
+   - Ports/RPCs gain the two new RPCs.
+   - `context-constitution.md`: IDENTITY-12 is extended to the two new per-RPC SAN lists. IDENTITY-15 gains: "admin@localhost may be renamed by SSO cutover (FR-12); new migrations resolve the seed owner by SEED_USER_ID" (AC-36).
+   - `operations.md`: `update-email` / `unlink-sso` usage.
+2. **Config constitution (`:30`):** record migration `052` as a seed≠default exception (the flag seeded `true`, code default `false`; D-20). Also record the CONFIG-4 `user_id` omission in its notify (D-36).
+
+**Verification**:
+```bash
+grep -n "SEED_USER_ID" services/xstockstrat-identity/docs/context-constitution.md
+grep -n "052" services/xstockstrat-config/docs/context-constitution.md && grep -n "unlink-sso" services/xstockstrat-identity/docs/operations.md
+```
+
+---
+
+### Step 51 — docs: UI and agent docs
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui` and `xstockstrat-agent` docs
+**Files**:
+- `services/xstockstrat-ui/CLAUDE.md` — modify
+- `services/xstockstrat-agent/CLAUDE.md` — modify
+- `services/xstockstrat-agent/docs/context-constitution.md` — modify
+- `services/xstockstrat-agent/docs/oauth.md` — modify
+
+**Reviewers**: none
+
+**Codebase Evidence**:
+- `services/xstockstrat-agent/docs/context-constitution.md:15` (AGENT-1: "the two lifespan `WatchConfig` channels (`agent`, `indicators`; …)") and `:24` (AGENT-9: "only the `WATCHED_NAMESPACES` (`agent`, `indicators`) have a snapshot … Sites (N=5)").
+- `services/xstockstrat-ui/CLAUDE.md` § Environment Variables lists no `APP_URL`; § Auth + BFF lists the auth files.
+- `services/xstockstrat-agent/CLAUDE.md:99` "## Config Keys Consumed".
+
+**TDD**: N/A (docs; the AC-36 AGENT-9 RED/GREEN is Step 52)
+
+**Covers**: —
+
+**Instructions**:
+1. **UI `CLAUDE.md`:**
+   - Environment Variables gains the `APP_URL` line from design.md (B) §D-67.
+   - Config Keys Consumed gains `ui/oidc.*`, the `identity` / `agent` one-shot reads and the `GetSecret` read.
+   - The Auth + BFF table gains the SSO routes, `oidcConfig.ts`, `oidcClient.ts`, `ssoTxn.ts` and `sameOrigin.ts`.
+   - Testing: the serialized `chromium-sso` project (`workers: 1`) and the rule that every global-state e2e case lives in `e2e/sso/`.
+2. **Agent docs:**
+   - `CLAUDE.md` Config Keys gains `agent/oidc.issuer` and the `ui/oidc.issuer` read.
+   - `context-constitution.md`:
+     - AGENT-1: the lifespan channels are now (`agent`, `indicators`, `ui`).
+     - AGENT-9: `WATCHED_NAMESPACES` is (`agent`, `indicators`, `ui`), and the sites now include `app/sso_mode.py#current_sso_mode` and the SSO validator (`app/sso_auth.py`) (AC-36).
+     - AGENT-8: `AGENT_PUBLIC_URL` is now read by `sso_auth.py` via `oauth_metadata`.
+   - `docs/oauth.md`: the SSO-mode resource-server path, the 404 legacy routes and path-insertion.
+
+**Verification**:
+```bash
+grep -n "APP_URL" services/xstockstrat-ui/CLAUDE.md && grep -n "chromium-sso" services/xstockstrat-ui/CLAUDE.md
+grep -n "AGENT-9" services/xstockstrat-agent/docs/context-constitution.md | grep -F '`ui`'
+```
+
+---
+
+### Step 52 — test: AC-20 and AC-36 documentation assertions
 
 **Status**: `pending`
 **Service**: `docs/`
 **Files**:
-- none. The check is the Verification block below: it runs RED before Step 39's edits and GREEN after (no file is created or changed).
+- (no file changes — verification-only step; the assertion is the Verification block below, run from the repo root)
 
 **Reviewers**: none
 
@@ -2108,15 +2465,13 @@ node scripts/check-config-wiring.mjs --doc-check
 - D-48: "AC-20/AC-36 are RED-assertion `grep -F` checks inside a named test step with `**Covers**: AC-20, AC-36`, accepted by the orchestrator as C-15 coverage."
 - Insights.md:2940-2946: a construct-scoped presence RED→GREEN is a named `**Covers**` step, not a permanent CI guard.
 
-**Lands with**: Step 39
-
-**TDD**: red-green required (RED on the pre-Step-39 tree, GREEN after)
+**TDD**: red-green required (RED captured on the pre-docs tree by Step 48's first action; GREEN here, after Steps 48–51)
 
 **Covers**: AC-20, AC-36
 
 **Instructions**:
-1. Run the Verification block before Step 39's edits and capture the RED (non-zero exit). Run it again after and capture the GREEN.
-2. Add no CI guard (C-18; insights.md:2940-2946).
+1. Confirm Step 48 recorded the RED (non-zero exit of the block below on the pre-docs tree). Run the block now and record the GREEN.
+2. Add no CI guard (C-18; insights.md:2940-2946). No coverage threshold applies: these are shell assertions over docs, with no code under test.
 
 **Verification**:
 ```bash
@@ -2132,3 +2487,5 @@ echo GREEN
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- 2026-11-16, `/sdd-review impl-spec` pass 1: the config seed is renumbered a second time, `051_authelia_sso_keys` → `052_authelia_sso_keys` (feature 343 landed `051_ingest_backfill_self_serve_keys` on trunk; D-99, after D-94's 050 → 051). Step 4 regenerates `scripts/config-wiring-stored.json` against the `052` file. Re-check the next free number at merge.
