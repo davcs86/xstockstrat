@@ -1315,7 +1315,7 @@ func TestIngestRecentBars_WarnsOncePerCycleForSymbolsWithoutBars(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := installWarnRecorder(t)
 			s := &MarketDataService{}
-			s.ingestRecentBarsForTimeframe(context.Background(), tc.src, []string{"ZZZ", "AAA"}, "1d", start, end)
+			s.ingestRecentBarsForTimeframe(context.Background(), context.Background(), tc.src, []string{"ZZZ", "AAA"}, "1d", start, end)
 			w := rec.find(msg)
 			if w == nil {
 				t.Fatalf("expected WARN %q", msg)
@@ -1335,7 +1335,7 @@ func TestIngestRecentBars_WarnsOncePerCycleForSymbolsWithoutBars(t *testing.T) {
 		for i := 0; i < barIngestNoBarsSample+2; i++ {
 			symbols = append(symbols, fmt.Sprintf("S%02d", i))
 		}
-		(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), &fakeBackfillSource{}, symbols, "1d", start, end)
+		(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), context.Background(), &fakeBackfillSource{}, symbols, "1d", start, end)
 		w := rec.find(msg)
 		if w == nil {
 			t.Fatalf("expected WARN %q", msg)
@@ -1363,7 +1363,7 @@ func TestIngestRecentBars_LogsHeartbeatEveryCycle(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			h := installLogRecorder(t, slog.LevelInfo)
-			(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), tc.src, tc.symbols, "1d", start, end)
+			(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), context.Background(), tc.src, tc.symbols, "1d", start, end)
 			if len(h.recs) != 1 || h.recs[0].msg != msg {
 				t.Fatalf("want exactly one %q INFO, got %v", msg, h.recs)
 			}
@@ -5095,7 +5095,7 @@ func TestWarmQuotesOnce_MultiPathCacheInsertFailureContinues(t *testing.T) {
 	svc := newQuoteSvc(fake, nil, nil)
 	svc.quoteStore = store
 
-	svc.warmQuotesOnce(context.Background(), []string{"AAA", "BBB", "CCC"})
+	svc.warmQuotesOnce(context.Background(), context.Background(), []string{"AAA", "BBB", "CCC"})
 
 	if got := store.insertedSymbols(); !slices.Equal(got, []string{"AAA", "CCC"}) {
 		t.Errorf("inserted = %v, want [AAA CCC] (the cycle continues past the failed insert)", got)
@@ -5119,7 +5119,7 @@ func TestWarmQuotesOnce_PerSymbolFallbackCacheInsertFailureContinues(t *testing.
 	reg.Register("alpaca", src)
 	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, quoteStore: store}
 
-	svc.warmQuotesOnce(context.Background(), []string{"AAA", "BBB", "CCC"})
+	svc.warmQuotesOnce(context.Background(), context.Background(), []string{"AAA", "BBB", "CCC"})
 
 	if got := store.insertedSymbols(); !slices.Equal(got, []string{"AAA", "CCC"}) {
 		t.Errorf("inserted = %v, want [AAA CCC] (the cycle continues past the failed insert)", got)
@@ -5145,7 +5145,7 @@ func TestWarmQuotesOnce_RegistryErrorEndsCycle(t *testing.T) {
 	reg.Register("not-alpaca", src) // the default "" lookup resolves to "alpaca" and errors
 	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, quoteStore: store}
 
-	svc.warmQuotesOnce(context.Background(), []string{"AAA"})
+	svc.warmQuotesOnce(context.Background(), context.Background(), []string{"AAA"})
 
 	if src.fakeMultiSource.calls != 0 || src.calls.Load() != 0 {
 		t.Errorf("source called (multi=%d single=%d), want no call", src.fakeMultiSource.calls, src.calls.Load())
@@ -5311,7 +5311,7 @@ func TestWarmQuotesOnce_CacheInsertFailuresAggregated_AC46(t *testing.T) {
 	svc := newQuoteSvc(&fakeMultiSource{quotes: warmQuotes(time.Now(), symbols...)}, nil, nil)
 	svc.quoteStore = store
 
-	svc.warmQuotesOnce(context.Background(), symbols)
+	svc.warmQuotesOnce(context.Background(), context.Background(), symbols)
 
 	agg := rec.withMsg("warm poller: cache insert failures")
 	if len(agg) != 1 || agg[0].level != slog.LevelWarn || agg[0].attrs["count"] != "8" {
@@ -5349,7 +5349,7 @@ func TestWarmQuotesOnce_NoTickWithoutProgress_AC7(t *testing.T) {
 		rec := installWarmLogRecorder(t)
 		reg := source.NewRegistry()
 		reg.Register("not-alpaca", &fakeMultiSource{})
-		(&MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}).warmQuotesOnce(context.Background(), []string{"AAA"})
+		(&MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}).warmQuotesOnce(context.Background(), context.Background(), []string{"AAA"})
 		if ticks := tickRecords(t, rec, telemetry.LoopWarmQuote); len(ticks) != 0 {
 			t.Fatalf("tick records = %+v, want none", ticks)
 		}
@@ -5359,7 +5359,7 @@ func TestWarmQuotesOnce_NoTickWithoutProgress_AC7(t *testing.T) {
 		src := &perSymbolQuoteSource{fakeMultiSource: &fakeMultiSource{err: errors.New("multi down")}}
 		reg := source.NewRegistry()
 		reg.Register("alpaca", src)
-		(&MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}).warmQuotesOnce(context.Background(), []string{"AAA"})
+		(&MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}).warmQuotesOnce(context.Background(), context.Background(), []string{"AAA"})
 		if ticks := tickRecords(t, rec, telemetry.LoopWarmQuote); len(ticks) != 0 {
 			t.Fatalf("tick records = %+v, want none", ticks)
 		}
@@ -5397,7 +5397,7 @@ func TestRunQuoteRetentionStep_TickRecords_AC7(t *testing.T) {
 func TestIngestRecentBars_NoSecondTickRecord_AC7(t *testing.T) {
 	rec := installWarmLogRecorder(t)
 	start, end := time.Now().Add(-48*time.Hour), time.Now()
-	(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), &fakeBackfillSource{}, []string{"AAA"}, "1d", start, end)
+	(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), context.Background(), &fakeBackfillSource{}, []string{"AAA"}, "1d", start, end)
 	if n := len(rec.withMsg("bar ingest: cycle complete")); n != 1 {
 		t.Fatalf("cycle complete records = %d, want 1", n)
 	}
@@ -5708,5 +5708,129 @@ func TestRecentReadStart_FloorsSmallWindowsOnly(t *testing.T) {
 	wide := monday.Add(-defaultBarLookback("1d", 500))
 	if got := recentReadStart(wide, monday); !got.Equal(wide) {
 		t.Fatalf("wide window narrowed: got %v, want %v", got, wide)
+	}
+}
+
+// ── feature 347: loop fetch bounds ──────────────────────────────────────────
+
+const f347LoopIntervalMs = 200
+
+func f347IntervalWatcher(key string) *config.Watcher {
+	return config.MustSnapshotWatcher("marketdata", map[string]*configv1.ConfigValue{
+		key: {Value: &configv1.ConfigValue_IntVal{IntVal: f347LoopIntervalMs}},
+	})
+}
+
+func f347CountLogs(h *warmLogRecorder, msg, attr, value string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := 0
+	for _, r := range h.recs {
+		if r.msg == msg && (attr == "" || r.attrs[attr] == value) {
+			n++
+		}
+	}
+	return n
+}
+
+// f347LateQuoteSource answers its first multi-quote call only once that call's context is done (2 s
+// safety); later calls block until their context is done. Per-symbol calls are counted per context.
+type f347LateQuoteSource struct {
+	*fakeBatchBarsSource
+	quotes map[string]*marketdatav1.Quote
+
+	mu          sync.Mutex
+	multiCtx    []context.Context
+	multiAt     []time.Time
+	perSymbolBy map[context.Context]int
+}
+
+func (f *f347LateQuoteSource) GetLatestQuotesMulti(ctx context.Context, _ []string) (map[string]*marketdatav1.Quote, error) {
+	f.mu.Lock()
+	first := len(f.multiCtx) == 0
+	f.multiCtx = append(f.multiCtx, ctx)
+	f.multiAt = append(f.multiAt, time.Now())
+	f.mu.Unlock()
+	if !first {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+	}
+	return f.quotes, nil
+}
+
+func (f *f347LateQuoteSource) GetLatestQuote(ctx context.Context, _ string) (*marketdatav1.Quote, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.perSymbolBy[ctx]++
+	return nil, errors.New("no quote")
+}
+
+// f347LiveCtxQuoteStore rejects a write whose context is already done.
+type f347LiveCtxQuoteStore struct{ *fakeQuoteStore }
+
+func (f *f347LiveCtxQuoteStore) InsertQuote(ctx context.Context, q *marketdatav1.Quote) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return f.fakeQuoteStore.InsertQuote(ctx, q)
+}
+
+func (f *f347LiveCtxQuoteStore) inserted() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.inserts)
+}
+
+// @AC-32: the cycle's Alpaca call carries the interval deadline; cache writes keep the loop context.
+func TestStartWarmQuotePoller_FetchBoundedWritesOnLoopContext_F347_AC32(t *testing.T) {
+	rec := installWarmLogRecorder(t)
+	src := &f347LateQuoteSource{
+		fakeBatchBarsSource: &fakeBatchBarsSource{},
+		quotes:              warmQuotes(time.Now(), "AAA", "BBB", "CCC"),
+		perSymbolBy:         map[context.Context]int{},
+	}
+	store := &f347LiveCtxQuoteStore{fakeQuoteStore: &fakeQuoteStore{}}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", src)
+	svc := &MarketDataService{
+		registry: reg, quoteStore: store, cfg: f347IntervalWatcher("stream.warm_interval_ms"),
+		warmSymbols: map[string]struct{}{"AAA": {}, "BBB": {}, "CCC": {}},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	began := time.Now()
+	go func() {
+		defer close(done)
+		svc.StartWarmQuotePoller(ctx)
+	}()
+	for store.inserted() < 3 && time.Since(began) < 5*time.Second {
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	if n := store.inserted(); n != 3 {
+		t.Fatalf("cached quotes = %d, want 3 (writes must run on the loop context)", n)
+	}
+	if n := f347CountLogs(rec, telemetry.LoopTickOKMsg, "loop", string(telemetry.LoopWarmQuote)); n != 1 {
+		t.Fatalf("loop tick ok records for warm_quote = %d, want 1", n)
+	}
+	src.mu.Lock()
+	defer src.mu.Unlock()
+	if n := src.perSymbolBy[src.multiCtx[0]]; n != 0 {
+		t.Fatalf("per-symbol quote requests in the cycle = %d, want 0", n)
+	}
+	deadline, ok := src.multiCtx[0].Deadline()
+	if !ok {
+		t.Fatal("the multi-symbol quote fetch carried no deadline")
+	}
+	want := f347LoopIntervalMs * time.Millisecond
+	if got := deadline.Sub(src.multiAt[0]); got < want-50*time.Millisecond || got > want+50*time.Millisecond {
+		t.Fatalf("fetch deadline = %v after the cycle began, want %v within 50 ms", got, want)
 	}
 }

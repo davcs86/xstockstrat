@@ -677,6 +677,7 @@ func TestPollFills_TickRecordUsesInjectedClock(t *testing.T) {
 	}}
 	svc := &TradingService{
 		now:     func() time.Time { return now },
+		cfgW:    &config.Watcher{},
 		brokers: map[string]brokerPoolEntry{"acc-6": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 		orders: map[string]*tradingv1.Order{"ord-6": {
 			OrderId: "ord-6", AccountId: "acc-6", BrokerOrderId: "bo-6", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW,

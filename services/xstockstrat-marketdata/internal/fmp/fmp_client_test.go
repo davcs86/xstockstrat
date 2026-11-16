@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -723,4 +724,33 @@ func TestVendorMetrics_FMPCapAndThrottleRecordNoDuration_AC13(t *testing.T) {
 			t.Fatalf("throttle exit: duration samples = %d, profile calls = %d, want 0 and 0", n, rt.count("/stable/profile"))
 		}
 	})
+}
+
+type f347ThrottledRT struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (rt *f347ThrottledRT) RoundTrip(*http.Request) (*http.Response, error) {
+	rt.mu.Lock()
+	rt.calls++
+	rt.mu.Unlock()
+	h := http.Header{}
+	h.Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(2*time.Second).Unix(), 10))
+	return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader(``)), Header: h}, nil
+}
+
+// Feature 347 @AC-11 (guard): the Alpaca 429 retry never reaches FMP. Red if a retry is added to the FMP client.
+func TestFetchSector_429IsNotRetried_F347_AC11(t *testing.T) {
+	rt := &f347ThrottledRT{}
+	c := gatewayClient(rt, 0, 3, nil)
+	if _, err := c.FetchSector(context.Background(), "XYZ"); err == nil {
+		t.Fatal("expected an error on HTTP 429")
+	}
+	if rt.calls != 1 {
+		t.Fatalf("FMP attempts = %d, want exactly 1", rt.calls)
+	}
+	if used, _ := c.BudgetSnapshot(); used != 0 {
+		t.Fatalf("used = %d after a 429, want 0 (reservation refunded)", used)
+	}
 }

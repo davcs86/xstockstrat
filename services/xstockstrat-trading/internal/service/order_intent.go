@@ -95,6 +95,15 @@ func computeStaleThreshold(floorMs int64, multiplier float64) time.Duration {
 	return time.Duration(float64(floorMs)*multiplier) * time.Millisecond
 }
 
+// rateLimitBudget bounds one Alpaca call's 429 retries: 0 (off) when disabled, else max(t, stale-2t), so a
+// retried mutation plus one more timeout still ends before the sweeper can reclaim its PENDING intent.
+func rateLimitBudget(enabled bool, t, stale time.Duration) time.Duration {
+	if !enabled {
+		return 0
+	}
+	return max(t, stale-2*t)
+}
+
 // staleThreshold derives the PENDING-intent staleness threshold live: floor = max(live
 // trading.broker.timeout_ms, IBKRRequestTimeout), multiplier clamped >=1.5 (never below the floor).
 func staleThreshold(cfgW *config.Watcher) time.Duration {
