@@ -146,3 +146,49 @@
   `internal/service/telemetry_allowlist_test.go`, the marketdata `CLAUDE.md`; config
   `src/grpc/configServiceImpl.ts`; `scripts/config-wiring*.json`; `docs/patterns/config-governance.md`).
   `/sdd-spec` re-discovers and cites current lines.
+
+## Session 2026-11-16T05:58Z — sdd-spec
+
+- Tree: `ccr-47ce6aaf-i0ffis@4e594d1 ≡ origin/ccr-47ce6aaf-i0ffis`, which contains
+  `origin/main-dev@5730505`. Same deviation from `docs/sdd/tree-freshness.md` as the earlier sessions:
+  `origin/feature/alpaca-adaptive-rate-limit` does not exist yet and the artifacts live only on the
+  harness branch, so the tree was not switched to `main-dev`.
+- Generated implementation-spec.md with 12 steps in six atomic units (1+2 core, 3+4 marketdata client,
+  5+6 marketdata loops, 7+8 trading client, 9+10 trading service, 11+12 config seed).
+  Status → implementation-ready. All 37 scenarios are covered (checked mechanically against
+  `acceptance.feature`).
+- Discovery was inline (no `codebase-discovery` subagent could be spawned from this session); recon
+  evidence was reused and every cited line re-read after the `main-dev` merge.
+- Key codebase findings:
+  - `trading.go` and both Alpaca clients were not moved by the `main-dev` merge; recon's line numbers
+    for them still hold. `marketdata/internal/telemetry/otel.go` moved (`RecordVendorRequest` is now
+    `:398-406`).
+  - Last config migration is `050_ui_chart_history_bars`; this feature uses `051`. The seed column list
+    now carries `updated_by` (050 pattern); a bool row stores `value_data` `'true'`.
+  - `scripts/check-config-wiring.mjs` reads seeds only from `scripts/config-wiring-stored.json`, which
+    needs Postgres, `psql` and `migrate` to regenerate. On this sandbox `psql` is present and `migrate`
+    is not, so Step 11 may need the `scripts/Dockerfile.migrate` image.
+  - `fakeReconciliationOrderIntentRepo` is the only intent-repo fake that implements every method
+    explicitly; the other four embed the interface.
+  - The marketdata Start loops read a concrete `*config.Watcher`; `config.MustSnapshotWatcher` exists in
+    the marketdata module too, so AC-32 and AC-33 can drive one loop cycle.
+- Spec-time decisions awaiting confirmation at `/sdd-review impl-spec` (full list in the spec's
+  § "Spec-time decisions"): every service/test pair is an atomic unit; Step 11 is category `migration`
+  (adds the DBA reviewer); `pace_test.go` is in-package so the copies stay byte-identical; both
+  `export_test.go` files also expose the HTTP transport; the trading budget closure is the named method
+  `alpacaRateLimitBudget`; the budget table test moved from Step 10 to Step 8; log messages, error
+  formats and the three config descriptions are fixed in the spec.
+- Finding against `design.md` § 7 test notes: it lists AC-2, AC-7, AC-20, AC-24 and AC-36 as the
+  guards. AC-8, AC-9, AC-10 and AC-11 also describe behavior today's code already has. The spec labels
+  all nine as guards and names a mutant for each.
+
+### Open Threads (after sdd-spec)
+
+- [x] AC-37's new `backfill.rate_limit_rps` description text is fixed in Step 11.
+- [ ] File the pre-existing `ReplaceOrder` defect (intent inserted before `validateTIF`,
+  `trading/internal/service/trading.go:1531` vs `:1575`). Not filed by `/sdd-spec`:
+  `.claude/skills/sdd-qa/reference/defect-filing.md` requires the user to confirm the report first.
+- [ ] Owner + config-team approval for the two new keys before the Step 11 unit merges.
+- [ ] Re-derive the config migration number at Step 11 and at the integration PR.
+- [ ] Record a real paper-host response (are `X-RateLimit-*` headers sent?) at the integration PR.
+- [ ] The remaining design open risks are mapped to steps in the spec's § Step Dependencies.

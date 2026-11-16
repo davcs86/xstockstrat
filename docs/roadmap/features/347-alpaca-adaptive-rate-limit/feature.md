@@ -13,6 +13,7 @@
 | 2026-11-16 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 | 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full; round cap waived by the operator) and approved; recon.md + debate.md + design.md written; product spec and scenarios amended (FR-11, AC-23..AC-37) |
+| 2026-11-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 
 ---
 
@@ -23,7 +24,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
 - [Design](design.md) — approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec alpaca-adaptive-rate-limit`_
+- [Implementation Spec](implementation-spec.md) — 12 numbered steps in six atomic units
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -36,16 +37,16 @@ clients in `xstockstrat-marketdata` and `xstockstrat-trading`; no other vendor i
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized by /sdd-spec on 2026-11-16 from docs/runbooks/reviewer-registry.md and the
+per-step `**Reviewers**` lines. Re-run /sdd-spec if the registry changes.)_
 
-| Role | Review Focus |
-|---|---|
-| `xstockstrat-marketdata` owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency |
-| `xstockstrat-trading` owner | Order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement |
-| `xstockstrat-config` owner | Config key naming (`<service>.<category>.<key>`), environment / global-per-user scoping, WatchConfig stream stability |
+| Role | Review Focus | Steps |
+|---|---|---|
+| `xstockstrat-marketdata` owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency | 1-6 |
+| `xstockstrat-trading` owner | Order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement | 1, 2, 7-10 |
+| `xstockstrat-config` owner | Config key naming (`<service>.<category>.<key>`), environment (`production`/`staging`) / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability | 11, 12 |
+| DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present, run-order compliance with `scripts/db-migrate.sh` | 11 |
 
 ## Next Action
 
-`/sdd-spec alpaca-adaptive-rate-limit` — generate implementation spec from the approved design
+`/sdd-review alpaca-adaptive-rate-limit impl-spec` — validate implementation spec, then `/sdd-execute alpaca-adaptive-rate-limit`
