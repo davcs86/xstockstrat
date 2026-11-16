@@ -92,3 +92,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Defect report closed: `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.status` → `resolved` / `ref: feature:349-fix-replace-tif-before-intent` (the failure mode is gone: `@AC-1`, `@AC-2`, `@AC-4` green).
 - Branch: `feature/fix-replace-tif-before-intent` accepted pushes; no harness-branch deviation.
 - Open threads for the operator: (1) intent rows already stranded by this defect in a deployed database are not repaired; (2) D-3 — a disallowed TIF is `InvalidArgument` even when an intent row for the same content exists — was decided in design without a live gate.
+
+## Session 2026-11-16 — sdd-execute (session end)
+**Steps this session**: 1, 2, 3
+**Progress**: 3 done / 3 total
+**Stopped at**: all complete — integration PR #1556 (`feature/fix-replace-tif-before-intent` → `main-dev`) open, CI watched; not merged (merge is the operator's call)
+**Next**: operator review and merge of #1556
