@@ -5,6 +5,7 @@ returns tool name/description/inputSchema, the same data already published in
 docs/runbooks/mcp-tools.md, never user data or credentials.
 """
 
+import json
 import re
 from pathlib import Path
 
@@ -109,6 +110,32 @@ def test_docs_and_skill_parity_with_backfill_callback_url():
         assert "https" in text, name
         assert "allowlist" in text, name
     assert "callback_url" in (skill / "SKILL.md").read_text()
+
+
+def test_docs_and_skill_parity_with_self_serve_backfill():
+    """feature 343 AC-7: the runbook, the strat-lab skill and the live tool description state the
+    self-serve envelope with the ingest denial tokens and no longer call the trigger admin-only."""
+    contract = json.loads(
+        (_REPO / "services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json").read_text()
+    )
+    prefix = contract["prefix"].rstrip(": ")
+    runbook = (_REPO / "docs/runbooks/mcp-tools.md").read_text()
+    section = runbook.split("### `trigger_backfill`", 1)[1].split("\n### `", 1)[0]
+    skill = _REPO / "plugins/strat-lab/skills/backtest"
+    reference = (skill / "reference/backfill.md").read_text()
+    description = _catalog()["trigger_backfill"]["description"]
+    for name, text in (
+        ("mcp-tools.md § trigger_backfill", section),
+        ("backfill.md", reference),
+        ("trigger_backfill description", description),
+    ):
+        assert "gaps_only" in text, name
+        assert prefix in text, name
+        assert "admin scope required" not in text, name
+    for name, text in (("mcp-tools.md § trigger_backfill", section), ("description", description)):
+        for token in contract["tokens"]:
+            assert token in text, (name, token)
+    assert "gaps_only" in (skill / "SKILL.md").read_text()
 
 
 def test_every_catalog_tool_has_a_runbook_section():

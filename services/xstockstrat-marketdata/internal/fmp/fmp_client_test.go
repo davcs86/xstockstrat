@@ -180,6 +180,46 @@ func TestGetFundamentalsMulti_OneQuoteCall(t *testing.T) {
 	}
 }
 
+// @AC-2 (feature 340): FMP's returnOnEquityTTM is already a fraction and is served unscaled on both paths.
+func TestFundamentals_ROEFractionUnscaled_AC2_feature340(t *testing.T) {
+	rt := &recordingRT{respond: func(path string) (int, string) {
+		switch path {
+		case "/stable/quote":
+			return 200, `[{"symbol":"LYFT","price":1}]`
+		case "/stable/ratios-ttm":
+			return 200, `[{"returnOnEquityTTM":0.0366}]`
+		case "/stable/profile":
+			return 200, `[{"currency":"USD"}]`
+		}
+		return 404, `[]`
+	}}
+	c := newTestClient([]string{"core", "extended"}, rt)
+	cases := []struct {
+		name  string
+		fetch func() (*source.Fundamentals, error)
+	}{
+		{"GetFundamentals", func() (*source.Fundamentals, error) { return c.GetFundamentals(context.Background(), "LYFT") }},
+		{"GetFundamentalsMulti", func() (*source.Fundamentals, error) {
+			out, err := c.GetFundamentalsMulti(context.Background(), []string{"LYFT"})
+			if err != nil || len(out) != 1 {
+				return nil, errors.Join(err, errors.New("want exactly one result"))
+			}
+			return out[0], nil
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f, err := tc.fetch()
+			if err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			if got := derefF(t, "ROE", f.ROE); got != 0.0366 {
+				t.Fatalf("roe = %v, want 0.0366 unscaled", got)
+			}
+		})
+	}
+}
+
 // The boot quota seed counts rows by source with as_of >= today, so AsOf must be the fetch instant.
 func TestToFundamentals_SourceAndAsOfIsFetchInstant(t *testing.T) {
 	rt := &recordingRT{respond: func(path string) (int, string) {

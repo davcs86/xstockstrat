@@ -9,6 +9,16 @@ export function fmtUsd(n: number | undefined | null): string {
   })}`;
 }
 
+/** `$6.73B` / `$3.45T` (compact notation), or `—` for null/NaN. */
+export function fmtUsdCompact(n: number | undefined | null): string {
+  if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';
+  return `$${Number(n).toLocaleString('en-US', {
+    notation: 'compact',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 /** Signed USD (`+$100.00` / `-$50.00`), or `—`. */
 export function fmtSignedUsd(n: number | undefined | null): string {
   if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
 import type { Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { Bell, BellOff } from 'lucide-react';
@@ -7,29 +7,44 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { Separator } from '../ui/separator';
-import { severityLabel, severityVariant } from '@/lib/alertShared';
+import { CardNotice } from '../shared/CardNotice';
+import {
+  UNREAD_PAGE_SIZE,
+  drainUnread,
+  mergeUnread,
+  pruneStreamed,
+  severityLabel,
+  severityVariant,
+} from '@/lib/alertShared';
 import { useReconnectingStream } from '@/hooks/useReconnectingStream';
 
 export function AlertStream() {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  // Server-side per-user unread count (feature 203) — the badge reflects this, not the in-memory
-  // stream length. limit:1 fetches just the count without loading the full list.
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [stored, setStored] = useState<Alert[]>([]);
+  const [streamed, setStreamed] = useState<{ alert: Alert; seq: number }[]>([]);
+  const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
+  const seqRef = useRef(0);
+  const [pending, setPending] = useState(false);
+  const [fetchFailed, setFetchFailed] = useState(false);
+  const [markNotice, setMarkNotice] = useState<null | 'capped' | 'error'>(null);
+
+  // The only fetch of the unread list; a superseded response is dropped (latest wins).
+  const refreshUnread = useCallback(async () => {
+    const seq = ++seqRef.current;
+    try {
+      const res = await notifyClient.listAlerts({ unreadOnly: true, limit: UNREAD_PAGE_SIZE });
+      if (seq !== seqRef.current) return;
+      const resultIds = new Set(res.alerts.map((a) => a.alertId));
+      setStored(res.alerts);
+      setStreamed((prev) => pruneStreamed(prev, resultIds, seq));
+      setFetchFailed(false);
+    } catch {
+      if (seq === seqRef.current) setFetchFailed(true);
+    }
+  }, []);
 
   useEffect(() => {
-    let active = true;
-    notifyClient
-      .listAlerts({ limit: 1 })
-      .then((res) => {
-        if (active) setUnreadCount(res.unreadCount);
-      })
-      .catch(() => {
-        // Count fetch failed — leave the badge at its last known value.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    void refreshUnread();
+  }, [refreshUnread]);
 
   // A reconnect may re-deliver an alert; dedupe on alertId so React keys stay unique.
   const { disconnected } = useReconnectingStream<Alert>(
@@ -39,17 +54,57 @@ export function AlertStream() {
         { categories: [], severities: [], includeAcknowledged: false },
         { signal },
       ),
-    (alert) =>
-      setAlerts((prev) =>
-        prev.some((a) => a.alertId === alert.alertId) ? prev : [alert, ...prev].slice(0, 50),
-      ),
+    (alert) => {
+      const seq = seqRef.current;
+      setStreamed((prev) =>
+        prev.some((e) => e.alert.alertId === alert.alertId)
+          ? prev
+          : [{ alert, seq }, ...prev].slice(0, UNREAD_PAGE_SIZE),
+      );
+    },
   );
 
-  const unread = unreadCount;
-  const hasHighSeverity = alerts.some((a) => a.severity >= 3);
+  const merged = mergeUnread(
+    stored,
+    streamed.map((e) => e.alert),
+    readIds,
+  );
+  const unread = merged.length;
+  const hasHighSeverity = merged.some((a) => a.severity >= 3);
+
+  const markRead = async (alert: Alert) => {
+    setPending(true);
+    setMarkNotice(null);
+    try {
+      await notifyClient.markAlertRead({ alertIds: [alert.alertId] });
+      setReadIds((prev) => new Set(prev).add(alert.alertId));
+    } catch {
+      setMarkNotice('error');
+    }
+    setPending(false);
+    await refreshUnread();
+  };
+
+  const clearAll = async () => {
+    setPending(true);
+    setMarkNotice(null);
+    const result = await drainUnread({
+      list: (req) => notifyClient.listAlerts(req),
+      mark: (req) => notifyClient.markAlertRead(req),
+      cutoff: merged[0],
+    });
+    setReadIds((prev) => new Set([...prev, ...result.markedIds]));
+    setPending(false);
+    if (result.outcome !== 'done') setMarkNotice(result.outcome);
+    await refreshUnread();
+  };
 
   return (
-    <Sheet>
+    <Sheet
+      onOpenChange={(open) => {
+        if (open) void refreshUnread();
+      }}
+    >
       {disconnected && (
         <span
           data-testid="alert-stream-disconnected"
@@ -80,11 +135,12 @@ export function AlertStream() {
         <SheetHeader>
           <div className="flex items-center justify-between pr-6">
             <SheetTitle>Alerts</SheetTitle>
-            {alerts.length > 0 && (
+            {merged.length > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setAlerts([])}
+                onClick={() => void clearAll()}
+                disabled={pending}
                 className="text-muted-foreground text-xs h-7"
               >
                 Clear all
@@ -93,15 +149,23 @@ export function AlertStream() {
           </div>
         </SheetHeader>
         <Separator className="my-4" />
-        <div className="overflow-y-auto max-h-[calc(100vh-8rem)]">
-          {alerts.length === 0 ? (
+        <div className="overflow-y-auto max-h-[calc(100vh-8rem)] space-y-2">
+          {(fetchFailed || markNotice === 'error') && (
+            <CardNotice variant="error">
+              {markNotice === 'error' ? 'Could not mark alerts read' : 'Could not load alerts'}
+            </CardNotice>
+          )}
+          {markNotice === 'capped' && (
+            <CardNotice variant="muted">Some alerts are still unread — Clear all again</CardNotice>
+          )}
+          {merged.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <Bell className="h-8 w-8 mb-2 opacity-30" />
               <p className="text-sm">No alerts</p>
             </div>
           ) : (
             <ul className="space-y-2">
-              {alerts.map((a) => (
+              {merged.map((a) => (
                 <li
                   key={a.alertId}
                   className="rounded-lg border border-border bg-card p-3 space-y-1"
@@ -114,6 +178,16 @@ export function AlertStream() {
                   </div>
                   <p className="text-sm font-medium">{a.title}</p>
                   {a.body && <p className="text-xs text-muted-foreground">{a.body}</p>}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => void markRead(a)}
+                    disabled={pending}
+                    aria-label={`Mark read: ${a.title}`}
+                  >
+                    Mark read
+                  </Button>
                 </li>
               ))}
             </ul>

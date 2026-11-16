@@ -35,6 +35,10 @@ dark-only, no light-mode toggle — theme values come entirely from the preset).
     its opacity-modifier fallback), a `var()` of a palette variable, or an arbitrary value — within ±1
     sRGB / ±0.01 alpha of a theme-specific token of either theme fails every build. Use the theme token.
   - A Next 16 / Turbopack switch needs the alias re-declared as `turbopack.resolveAlias`.
+  - **Series palette (feature 342).** `--series-1`…`--series-12` must stay byte-identical in
+    `staging.css` and `production.css`; that keeps them outside check (b) (`nonSharedTokens`). Changing
+    a value means rerunning the feasibility gate (feature 342 implementation-spec, Step 3) and the
+    series tests in `themes.test.ts`. Never put a colour literal in `src/lib/seriesPalette.ts`.
 
 - **Adding a primitive not yet in `src/components/ui/`**: `npx shadcn@latest add <name>`.
 - **Re-applying/updating the preset**: `printf 'y\n' | npx shadcn@latest apply --preset bLTl5gh6 --yes`
@@ -191,7 +195,7 @@ without re-checking that table. All other segments are stateless.
 
 ## Config Keys Consumed
 
-Namespace: `ui` (plus `platform` for the positions banner). Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
+Namespace: `ui` (plus `platform` for the positions banner). Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts`; `/trader` also reads namespace `ui` one-shot, through `traderConfigClient` (`traderBff.ts`) — the UI is a
 stateless BFF with **no `WatchConfig` subscription** (it cannot hold a server stream). Values are read
 with an oneof-presence check (never `value || default`), so a stored `0` / empty string survives.
 
@@ -199,6 +203,7 @@ with an oneof-presence check (never `value || default`), so a stored `0` / empty
 |---|---|---|---|
 | `performance.risk_free_rate_annual` | float | `0.045` | Annualized risk-free rate for the `/insights/performance` dashboard rolling-30d Sharpe (feature 031, FR-3). A stored `0` is legitimate. Seed migration `023_ui_performance_keys`. |
 | `performance.equity_curve_start_date` | string | `""` (auto = earliest closed-position date) | ISO date the cumulative-P&L equity curve starts from (feature 031, FR-1). Empty ⇒ the UI defaults to the earliest closed-position date. Seed migration `023_ui_performance_keys`. |
+| `chart.indicator_history_bars` | int | `200` | Bars of history the `/trader` symbol page fetches for its indicator panes (feature 341); the chart still draws the latest 200. Read by `readHistoryBars` (`src/lib/indicatorChart.ts`), clamped to [200, 1000]; absent, wrong type, error or timeout ⇒ 200. DigitalOcean stays at 200; a raise needs the gate in `docs/runbooks/ohlcv-lock-budget-tuning.md` § Homelab deep indicator history. Seed migration `050_ui_chart_history_bars`. |
 | `trading_state` (namespace `platform`) | string | *(none; owned by trading)* | Read one-shot by `/trader/positions` via `GetConfig(namespace: 'platform')` (`traderConfigClient`, polled every 30 s) to show the REDUCE_ONLY/HALTED banner; the UI never writes it. |
 
 ## Environment Variables
