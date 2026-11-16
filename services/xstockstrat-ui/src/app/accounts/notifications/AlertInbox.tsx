@@ -2,18 +2,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
-import { severityLabel, severityVariant } from '@/lib/alertShared';
+import { formatWhen, severityLabel, severityVariant } from '@/lib/alertShared';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
-
-function formatWhen(alert: Alert): string {
-  const s = alert.createdAt?.seconds;
-  if (s == null) return '';
-  return new Date(Number(s) * 1000).toLocaleString();
-}
 
 export function AlertInbox() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -111,7 +105,7 @@ export function AlertInbox() {
                       {a.category}
                     </span>
                   </div>
-                  <span className="text-xs text-muted-foreground">{formatWhen(a)}</span>
+                  <span className="text-xs text-muted-foreground">{formatWhen(a.createdAt)}</span>
                 </div>
                 <p className={a.read ? 'text-sm' : 'text-sm font-semibold'}>{a.title}</p>
                 {a.body && (

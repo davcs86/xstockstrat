@@ -508,7 +508,7 @@ No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:2
 
 ### Step 11 — service: shared alert helpers (`formatWhen`, `contextEntries`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/alertShared.ts` — modify
@@ -1076,4 +1076,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 10 — Verification run in a private namespace under CI mode; RED answered 501 (2026-11-15)
 - **Planned**: run the Verification block on the host (`pnpm dev` web server); RED is HTTP 404 with an empty body (both cases fail).
 - **Actual**: (1) the linked `node_modules` resolve `@xstockstrat/proto` to the main checkout's stubs, which lack `GetAlert`, and a concurrent e2e run from another worktree held ports 3000/9091–9093. Each run therefore went through `unshare -m -n`: loopback up, this branch's `packages/proto/gen/ts/dist` bind-mounted (namespace-only, read path) over the main checkout's `dist`, and the egress proxy relayed into the namespace over a unix socket. (2) Under `pnpm dev` the `setup` warm-up hit its 10 s timeout on cold compiles (runs 1–3, no spec case executed), so RED ran with `CI=1` (`pnpm build && pnpm start`, the CI `frontend-e2e` path) and GREEN with `CI=1 E2E_PREBUILT=1` on that build (the Next bundle does not include `e2e/mock-backend.ts`). The block itself ran verbatim. (3) RED answered **501** (Connect `unimplemented`: the mock had no `getAlert`), not 404 — the Step 9 entry above explains why. (4) The block's last line is the closing `grep`, so `exit=` is 0 on RED too; pass/fail was judged from the Playwright summary in the log.
+- **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
+
+### Step 11 — RED probe held uncommitted; Verification run in a private namespace under CI mode (2026-11-15)
+- **Planned**: Step 12's vitest fails first (`contextEntries` not exported); the Verification block runs on the host.
+- **Actual**: (1) Step 11 and Step 12 do not land together and `alertShared.test.ts` is Step 12's file, so Step 12's `alertShared` cases were written in the working tree, run RED and GREEN, then deleted (as in Step 7); the commit stages Step 11's two files only. RED failed at `tsc --noEmit` with `TS2305 … has no exported member 'contextEntries'` / `'formatWhen'`, before vitest ran. (2) As in Step 10, each run went through `unshare -m -n` with this branch's `packages/proto/gen/ts/dist` bind-mounted over the main checkout's (the e2e mock's `getAlert` needs it for `tsc`) and the egress proxy relayed in over a unix socket, because another worktree's e2e run held port 3000. RED ran under `pnpm dev` and its `setup` warm-up timed out; GREEN ran with `CI=1` (production build) and the committed-tree re-run with `CI=1 E2E_PREBUILT=1`. (3) The block's last line is the closing `grep`, so `exit=0` on RED too; pass/fail was judged from the log.
 - **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
