@@ -76,7 +76,11 @@ write into a stored column MUST bump `edgar.DerivationVersion` (the golden-hash 
 `internal/edgar/derivation_version_test.go` fails until you do). Stored rows with a lower
 `derivation_version` are upgraded in place on the next fundamentals backfill (statement-derived columns
 only) and the symbol's edgar snapshot cache is invalidated — see
-`docs/runbooks/historical-backfill.md` § Re-deriving stored periods.
+`docs/runbooks/historical-backfill.md` § Re-deriving stored periods. A re-derive **replaces** the
+builder-owned `extra_metrics` keys (`source.DerivationOwnedExtraKeys`) instead of merging them: they
+are stripped from the stored row before the new values are merged in, so a key the new derivation omits
+keeps no old value; keys outside that list survive. Every key `buildPeriod` writes must be in the list
+(parity test `TestDerivationOwnedExtraKeys_ParityWithBuilder_feature340`).
 
 **EDGAR period ratio bases (features 211/222).** `debt_to_equity` = financial debt / equity
 (`total_debt` in `extra_metrics`). `roe` on an **annual** row = annual net income / year-end equity; on
@@ -84,3 +88,12 @@ a **quarterly** row it is **trailing-twelve-month** net income / period-end equi
 quarters keyed by each fact's own period end (never the filing's fy/fp, which comparative columns
 share), Q4 derived as FY − Q1..Q3, only facts filed on/before the row's filing (PIT); with n < 4
 quarters available it is Σ × 4/n. This matches the TTM EPS behind the row's P/E.
+
+**EDGAR own-period selection (derivation version 2, feature 340).** A filing bucket (fiscal year +
+fiscal period) has one **balance-sheet anchor** date: the latest own period end among its
+`StockholdersEquity`, `Assets` and `Liabilities` facts. Instants (equity, assets, liabilities, the debt
+line items) and flows (net income, revenue, EPS) are taken only at that anchor date, per unit; among
+facts with the same date the earliest filing wins, and `Revenues` wins over the contract-revenue tag. A
+metric with no fact at the anchor is **absent**, never filled from a comparative column. A bucket with
+no anchor has no instants, and each flow is read at its own latest period end. The "period-end equity"
+above is the anchor-date equity. The `shares` count is not anchor-selected (see the findings log).

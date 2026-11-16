@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"strings"
 	"sync"
@@ -17,6 +19,7 @@ import (
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
+	"github.com/xstockstrat/marketdata/internal/alpacapace"
 	"github.com/xstockstrat/marketdata/internal/source"
 	"github.com/xstockstrat/marketdata/internal/telemetry"
 	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
@@ -24,6 +27,12 @@ import (
 
 // maxBarsLimit is the largest page size Alpaca's bars endpoint accepts (spec maximum).
 const maxBarsLimit = 10000
+
+// Operator-approved fixed invariants of the adaptive rate limit, not config keys (CLAUDE.md § Adaptive rate limit).
+const (
+	minAttempt      = time.Second
+	noDeadlineBound = 90 * time.Second
+)
 
 // ClientConfig holds Alpaca API credentials.
 type ClientConfig struct {
@@ -40,6 +49,9 @@ type ClientConfig struct {
 	// RateLimitRPS caps outbound REST calls per second (marketdata.backfill.rate_limit_rps).
 	// Zero/negative disables rate limiting.
 	RateLimitRPS int
+	// AdaptiveRateLimit is marketdata.alpaca.adaptive_rate_limit_enabled. The zero value must stay the
+	// pre-feature single attempt: NewClient callers and test literals rely on it.
+	AdaptiveRateLimit bool
 	// Adjustment applied to historical bars ("raw"|"split"|"dividend"|"all"); default "all"
 	// so splits/dividends do not distort backtest OHLCV. From marketdata.alpaca.adjustment.
 	Adjustment string
@@ -62,6 +74,8 @@ type Settings struct {
 	RateLimitRPS     int
 	ReconnectDelayMs int
 	MaxReconnects    int
+
+	AdaptiveRateLimit bool
 }
 
 // Client wraps Alpaca REST and streaming APIs.
@@ -72,6 +86,12 @@ type Client struct {
 
 	limiterMu sync.Mutex
 	limiter   *rate.Limiter
+
+	pacer *alpacapace.Pacer
+	// Test seams. Deadlines are derived from durations measured on now, never from a now timestamp.
+	now    func() time.Time
+	sleep  func(ctx context.Context, d time.Duration) error
+	jitter func() time.Duration
 
 	streamOnce sync.Once
 	stream     *streamManager
@@ -85,19 +105,35 @@ func NewClient(cfg ClientConfig) *Client {
 	if cfg.Adjustment == "" {
 		cfg.Adjustment = "all"
 	}
-	return &Client{
-		cfg:        cfg,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-	}
+	return newClient(cfg, nil)
 }
 
 // NewLiveClient returns an Alpaca client that re-reads settings on every request; the limiter
 // is resized in place when RateLimitRPS changes. paper is fixed for the client's lifetime.
 func NewLiveClient(settings func() Settings, paper bool) *Client {
+	return newClient(ClientConfig{Paper: paper}, settings)
+}
+
+func newClient(cfg ClientConfig, live func() Settings) *Client {
 	return &Client{
-		cfg:        ClientConfig{Paper: paper},
-		live:       settings,
+		cfg:        cfg,
+		live:       live,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
+		pacer:      alpacapace.NewPacer(),
+		now:        time.Now,
+		sleep:      sleepContext,
+		jitter:     func() time.Duration { return rand.N(alpacapace.MaxJitter) },
+	}
+}
+
+func sleepContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 
@@ -111,6 +147,7 @@ func (c *Client) conf() ClientConfig {
 		APIKey: s.APIKey, APISecret: s.APISecret, BaseURL: s.BaseURL, DataURL: s.DataURL,
 		Feed: s.Feed, Adjustment: s.Adjustment, BatchSize: s.BatchSize, RateLimitRPS: s.RateLimitRPS,
 		ReconnectDelayMs: s.ReconnectDelayMs, MaxReconnects: s.MaxReconnects, Paper: c.cfg.Paper,
+		AdaptiveRateLimit: s.AdaptiveRateLimit,
 	}
 }
 
@@ -146,6 +183,9 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	cfg := c.conf()
 	req.Header.Set("APCA-API-KEY-ID", cfg.APIKey)
 	req.Header.Set("APCA-API-SECRET-KEY", cfg.APISecret)
+	if cfg.AdaptiveRateLimit {
+		return c.doPaced(req, cfg)
+	}
 	ctx, op := req.Context(), alpacaOp(req.URL.Path)
 	if limiter := c.currentLimiter(cfg.RateLimitRPS); limiter != nil {
 		if err := limiter.Wait(ctx); err != nil {
@@ -165,6 +205,130 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	// Duration is time to headers; body read/decode failures happen in the callers and are not counted.
 	telemetry.RecordVendorRequest(ctx, telemetry.VendorAlpaca, op, outcome, sentAt)
 	return resp, err
+}
+
+// pacedCall is one adaptive do call. end is on the client clock: the caller's deadline, or start + noDeadlineBound.
+type pacedCall struct {
+	op, host    string
+	key         alpacapace.Key
+	end         time.Time
+	hasDeadline bool
+}
+
+// doPaced paces from Alpaca's rate-limit headers and retries a 429 only. Marketdata waits, it never fails
+// fast: a wait that cannot fit runs to the end of the call and no request is sent after it.
+func (c *Client) doPaced(req *http.Request, cfg ClientConfig) (*http.Response, error) {
+	ctx := req.Context()
+	call := pacedCall{op: alpacaOp(req.URL.Path), host: req.URL.Host, end: c.now().Add(noDeadlineBound)}
+	call.key = c.pacer.Key(call.host, cfg.APIKey)
+	if deadline, ok := ctx.Deadline(); ok {
+		call.end, call.hasDeadline = c.now().Add(time.Until(deadline)), true
+	}
+	for attempt := 1; ; attempt++ {
+		jitter := c.jitter()
+		if r := c.pacer.Reserve(call.key, c.now(), call.end.Add(-jitter-minAttempt), jitter); r.Wait > 0 {
+			if err := c.pause(ctx, call, r.Wait, r.Fits, r.Hold); err != nil {
+				return nil, err
+			}
+		}
+		if limiter := c.currentLimiter(cfg.RateLimitRPS); limiter != nil {
+			waitCtx, cancel := c.boundedContext(ctx, call)
+			err := limiter.Wait(waitCtx)
+			cancel()
+			if err != nil {
+				return nil, c.refuse(ctx, call, err)
+			}
+		}
+		resp, err := c.sendAttempt(ctx, req, call)
+		if err != nil {
+			return nil, err
+		}
+		if headers, ok := alpacapace.ParseHeaders(resp.Header); ok {
+			c.pacer.Observe(call.key, headers, c.now())
+		}
+		if resp.StatusCode != http.StatusTooManyRequests {
+			return resp, nil
+		}
+		reset, _ := alpacapace.ParseReset(resp.Header)
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		now := c.now()
+		wait := alpacapace.RetryWait(attempt, now, reset, c.jitter())
+		if err := c.pause(ctx, call, wait, !now.Add(wait+minAttempt).After(call.end), true); err != nil {
+			return nil, err
+		}
+	}
+}
+
+// sendAttempt records the attempt on the caller's context, so "ctx" is reported only when the caller ended it.
+func (c *Client) sendAttempt(ctx context.Context, req *http.Request, call pacedCall) (*http.Response, error) {
+	sendCtx, cancel := c.boundedContext(ctx, call)
+	sentAt := time.Now()
+	resp, err := c.httpClient.Do(req.Clone(sendCtx))
+	outcome := telemetry.VendorTransport
+	if err == nil {
+		outcome = telemetry.VendorOK
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			outcome = telemetry.HTTPErrorOutcome(resp.StatusCode)
+		}
+	}
+	telemetry.RecordVendorRequest(ctx, telemetry.VendorAlpaca, call.op, outcome, sentAt)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	resp.Body = &cancelOnClose{ReadCloser: resp.Body, cancel: cancel}
+	return resp, nil
+}
+
+// boundedContext caps a call that has no deadline at its end; the cancel must run once the wait or body is done.
+func (c *Client) boundedContext(ctx context.Context, call pacedCall) (context.Context, context.CancelFunc) {
+	if call.hasDeadline {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, max(call.end.Sub(c.now()), 0))
+}
+
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *cancelOnClose) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
+}
+
+// pause sleeps one adaptive wait. A nil return is the only case in which the caller may send.
+// throttled is a hold or a 429 wait; a spread slot is not logged.
+func (c *Client) pause(ctx context.Context, call pacedCall, wait time.Duration, fits, throttled bool) error {
+	now := c.now()
+	if throttled && c.pacer.WarnOnce(call.key, now, now.Add(wait)) {
+		slog.WarnContext(ctx, "alpaca rate limit: throttled", "host", call.host, "wait_ms", wait.Milliseconds())
+	}
+	if fits {
+		if err := c.sleep(ctx, wait); err != nil {
+			return c.refuse(ctx, call, err)
+		}
+		return nil
+	}
+	err := c.sleep(ctx, max(call.end.Sub(now), 0))
+	if err == nil && call.hasDeadline {
+		// The timer can beat the context by a scheduling tick; the outcome must still read as the caller's deadline.
+		<-ctx.Done()
+		err = ctx.Err()
+	}
+	return c.refuse(ctx, call, err)
+}
+
+// refuse records the one point of a wait that ended early: "ctx" when the caller's context ended it, else "throttle".
+func (c *Client) refuse(ctx context.Context, call pacedCall, cause error) error {
+	telemetry.RecordVendorRequest(ctx, telemetry.VendorAlpaca, call.op, telemetry.VendorThrottle, time.Time{})
+	if cause == nil {
+		return fmt.Errorf("alpaca %s rate limited by %s", call.op, call.host)
+	}
+	return fmt.Errorf("alpaca %s rate limited by %s: %w", call.op, call.host, cause)
 }
 
 // alpacaOp maps a REST path to its closed op label; the path itself (it can carry a symbol) is never a label.

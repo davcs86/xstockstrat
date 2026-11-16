@@ -18,7 +18,8 @@ Forty-five tools:
   manage_signal_source — registers/updates/reactivates/deactivates the caller's own signal sources
   set_strategy_live   — enables/disables live alert evaluation for a strategy
   run_fundamentals_scan — manually triggers the fundamentals signal producer (admin-scoped)
-  trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
+  trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin: any
+                        request; other callers: the self-serve envelope only)
   get_backfill_status — checks a backfill job / lists recent jobs (read-only)
   cancel_backfill     — cancels a queued/running backfill job (admin-scoped)
   test_formula        — dry-runs inline formula source in the sandbox, registers nothing (read-only)
@@ -1554,7 +1555,17 @@ def register_tools(server: MCPServer) -> None:
         data_kind: str = "bars",
         callback_url: str = "",
     ) -> dict:
-        """Trigger a historical backfill in xstockstrat-ingest (admin-scoped write).
+        """Trigger a historical backfill in xstockstrat-ingest (write; an admin may request
+        anything, any other signed-in caller only the self-serve envelope below).
+        Self-serve envelope (non-admin caller): exactly one symbol; data_kind='bars';
+            fill_mode='gaps_only'; overwrite=False; both start and end given with start < end;
+            a range no longer than the operator limit (backfill.self_serve_max_range_days in
+            namespace ingest, default 730 days); no callback_url. A request outside it is refused
+            PERMISSION_DENIED "self-serve backfill denied: <token>" naming the first failed rule,
+            one of multi_symbol, data_kind, fill_mode, overwrite, range_unset, range_too_long
+            (detail ends " (max N days)"), callback_url, no_user. A non-admin request for a symbol
+            that already has a QUEUED or RUNNING backfill is refused ALREADY_EXISTS; retry after
+            that job finishes (the other job's id is not returned).
         symbols: explicit ticker list, e.g. ["AAPL", "MSFT"]; max 50 per call.
         data_kind: 'bars' (daily OHLCV, default) or 'fundamentals' (point-in-time fundamentals
             filings history, feature 198 — needed before backtesting a strategy that uses a
@@ -1566,7 +1577,7 @@ def register_tools(server: MCPServer) -> None:
             omitted = the service default, a 365-day lookback ending now (range_end − 365d).
         overwrite: true re-fetches bars that already exist.
         fill_mode: 'full' | 'gaps_only'; omitted = server default FULL. 'gaps_only'
-            fetches only missing ranges (cheaper on provider quota).
+            fetches only missing ranges (cheaper on provider quota); a non-admin must pass it.
         Client-side guards raise a ToolError BEFORE anything is queued: empty symbols, > 50
             symbols, an unknown data_kind/timeframe/fill_mode, or start after end.
         callback_url: optional https URL whose origin is on the operator allowlist (empty by
@@ -1575,10 +1586,10 @@ def register_tools(server: MCPServer) -> None:
             invalid or non-allowlisted URL is an immediate INVALID_ARGUMENT, a validation outage
             an immediate UNAVAILABLE "no job was created" — in both cases no job exists; retry
             without callback_url and poll instead.
-        Returns {"job_id", "status"}. Apart from callback_url, ingest performs no synchronous
-        input validation — it queues unconditionally and bad input surfaces as a terminal
-        FAILED/PARTIAL job; poll get_backfill_status with the returned job_id to observe the
-        outcome (polling stays valid with a callback_url)."""
+        Returns {"job_id", "status"}. The self-serve refusals and the callback_url check are
+        synchronous and create no job; other bad input still surfaces as a terminal FAILED or
+        PARTIAL job. Poll get_backfill_status with the returned job_id to observe the outcome
+        (polling stays valid with a callback_url)."""
         access_scope = _caller_access_scope(ctx, "trigger_backfill")
         try:
             return await client.trigger_backfill(

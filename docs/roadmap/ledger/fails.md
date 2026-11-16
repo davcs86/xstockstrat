@@ -3999,3 +3999,23 @@ ambiguity is logged here).
 - **Mistake**: shadcn primitives were added with `data-checked:` / `data-unchecked:` / `data-open:` class variants on the assumption that Tailwind maps them onto Radix `data-state`. That mapping is a set of `@custom-variant`s in `shadcn/tailwind.css`, which `globals.css` never imports, so the variants compile as attribute-presence selectors that never match and a checked switch rendered unchecked.
 - **Evidence**: `docs/roadmap/features/339-fix-symbol-page-alerts-ui/recon.md` § Risks (switch root cause); `debate.md` D-4, R-3, R-4, O-12; `services/xstockstrat-ui/src/components/ui/switch.tsx:20,27`.
 - **Rule it implies**: When adding or re-applying a shadcn primitive in `xstockstrat-ui`, check that every `data-<name>:` variant it uses is either declared in `globals.css` or written as `data-[state=…]:`, and assert the rendered state by geometry in a test, not by the `checked` attribute alone.
+
+### 2026-11-16 — alpaca-adaptive-rate-limit — assumption
+- **Mistake**: Three times in one design debate a new acceptance scenario was written that passed on today's code (a single request on a fresh pacing window; a timeout the client already enforced; a 429 the caller already returned at once), and several Givens could not be set up from the test package that would run them (a client clock seam asserted from a service test; header state "recorded" with only one of three required headers). The product spec's operator-facing bound was also quoted from the config-key formula without reading the code that computes it (15 s stated, 30 s real).
+- **Evidence**: `docs/roadmap/features/347-alpaca-adaptive-rate-limit/debate.md` O-16, O-26, O-33, O-40, D-24, D-29, D-30; `services/xstockstrat-trading/internal/service/order_intent.go:91-108`.
+- **Nearest prior entry**: fails.md ~L3175 (a Then claiming more than the test asserts).
+- **Rule it implies**: For every new scenario, state in the design which test package drives it and through which seam, and run the "does it fail on today's code?" check per scenario; label the ones that cannot as guards with the reason. Quote a derived bound only after reading the function that computes it.
+
+### 2026-11-16 — alpaca-adaptive-rate-limit — assumption
+- **Mistake**: The implementation spec stated that reordering `CancelOrder` (CANCELED write and intent finalize ahead of the bracket-leg cancels) and adding a config read to the fill poller "changes no existing expectation". Two pre-existing tests broke: one built its service with a nil config watcher, the other with a nil order repository and swallowed the resulting panic with `recover()`, which silently pinned the old statement order (the panic used to fire after the leg cancels, then fired before them). The claim was written from reading assertions, not from running the package.
+- **Evidence**: `docs/roadmap/features/347-alpaca-adaptive-rate-limit/implementation-spec.md` Step 10 Instruction 6 and § Deviation Log (Step 10); `services/xstockstrat-trading/internal/service/trading_bracket_test.go` `TestCancelOrder_CancelsActiveBracketLegs`; `trading_telemetry_test.go` `TestPollFills_TickRecordUsesInjectedClock`.
+- **Rule it implies**: When a spec reorders statements in a handler or adds a dependency read to a loop, list the tests whose fixtures leave that dependency nil or that `recover()` around the handler (`grep -n "recover()" <pkg>/*_test.go`), and put those test files in the step's `**Files**`; never assert "no existing expectation changes" without a whole-package run on a prototype of the change.
+
+### 2026-11-16 — authelia-sso — assumption
+- **Mistake**: The design assumed that two security properties came from the toolchain, and neither did:
+  - D-83 pinned type-level guards in a `*.test.ts` file because "tsconfig includes tests". Next.js `next build` drops diagnostics for `__tests__/` and `*.test.*` files, and no `tsc` ran in CI.
+  - The design treated openid-client's discovery as enforcing exact issuer equality. openid-client 6.8.9 compares the normalised `new URL(..).href`, and skips the comparison for issuers containing `/.well-known/`.
+  
+  Both were caught in round 9.
+- **Evidence**: `docs/roadmap/features/345-authelia-sso/debate.md` O-79, O-80, D-89, D-93; `openid-client@6.8.9 build/index.js:264,287`.
+- **Rule it implies**: When a design relies on a tool to enforce a guarantee (a type check, an issuer/audience comparison, a lint), cite the line in that tool's source or CI config that performs the check, for the exact files and inputs in question. "The config includes it" or "the library validates it" is not evidence.

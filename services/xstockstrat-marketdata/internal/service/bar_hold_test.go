@@ -14,6 +14,7 @@ import (
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/xstockstrat/marketdata/internal/config"
+	"github.com/xstockstrat/marketdata/internal/source"
 )
 
 // Feature 291 fixtures: cycle k ends at bhEnd(k) (5-minute cycles from a Wednesday session) with a
@@ -126,7 +127,7 @@ func runCycles(s *MarketDataService, src *recordingBarsSource, symbols []string,
 		}
 		src.beginCycle(k)
 		end := bhEnd(k)
-		s.ingestRecentBarsForTimeframe(context.Background(), src, symbols, bhTF, end.Add(-bhWindow), end)
+		s.ingestRecentBarsForTimeframe(context.Background(), context.Background(), src, symbols, bhTF, end.Add(-bhWindow), end)
 	}
 }
 
@@ -680,4 +681,99 @@ func TestBarHold_StreakGapRestartsStreak(t *testing.T) {
 			t.Fatalf("want DEAD held at the first resumed cycle on the original streak, got %+v", e)
 		}
 	})
+}
+
+// f347SlowBarsSource fails the multi fetch at once; each per-symbol fetch errors only once its context is
+// done, or after 2 s. Requests are counted per fetch context.
+type f347SlowBarsSource struct {
+	*fakeBatchBarsSource
+	mu          sync.Mutex
+	multiCtx    []context.Context
+	perSymbolBy map[context.Context]int
+}
+
+func (f *f347SlowBarsSource) GetBarsMulti(ctx context.Context, _ []string, _ string, _, _ time.Time) (map[string][]*marketdatav1.Bar, error) {
+	f.mu.Lock()
+	f.multiCtx = append(f.multiCtx, ctx)
+	f.mu.Unlock()
+	return nil, errors.New("multi fetch failed")
+}
+
+func (f *f347SlowBarsSource) GetBars(ctx context.Context, _, _ string, _, _ time.Time) ([]*marketdatav1.Bar, error) {
+	f.mu.Lock()
+	f.perSymbolBy[ctx]++
+	f.mu.Unlock()
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+	}
+	return nil, errors.New("rate limited")
+}
+
+// @AC-33: bar ingest starts no fetch after the cycle deadline and never counts skipped symbols as empty.
+func TestStartBarIngestPoller_NoFetchAfterCycleDeadline_F347_AC33(t *testing.T) {
+	rec := installWarmLogRecorder(t)
+	symbols := []string{"AAA", "BBB", "CCC"}
+	src := &f347SlowBarsSource{fakeBatchBarsSource: &fakeBatchBarsSource{}, perSymbolBy: map[context.Context]int{}}
+	svc, _, _ := newBarHoldService(defaultBarIngestBackoffMs)
+	reg := source.NewRegistry()
+	reg.Register("alpaca", src)
+	svc.registry = reg
+	svc.cfg = f347IntervalWatcher("stream.bar_ingest_interval_ms")
+	svc.warmSymbols = map[string]struct{}{}
+	for _, sym := range symbols {
+		svc.warmSymbols[sym] = struct{}{}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	began := time.Now()
+	go func() {
+		defer close(done)
+		svc.StartBarIngestPoller(ctx)
+	}()
+	for f347CountLogs(rec, bhHeartbeatMsg, "", "") < 1 && time.Since(began) < 10*time.Second {
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	src.mu.Lock()
+	first := src.multiCtx[0]
+	requests := src.perSymbolBy[first]
+	src.mu.Unlock()
+	if requests != 1 {
+		t.Fatalf("per-symbol bars requests in the cycle = %d, want exactly 1", requests)
+	}
+	for _, sym := range symbols {
+		if e, ok := holdEntry(svc, sym); ok {
+			t.Fatalf("%s started or extended a no-bars hold: %+v", sym, e)
+		}
+	}
+	if n := f347CountLogs(rec, bhNoBarsMsg, "", ""); n != 0 {
+		t.Fatalf("skipped symbols were reported as returning no bars (%d records)", n)
+	}
+}
+
+// A later timeframe whose fetch context has already expired makes no vendor call; its symbols are errors, not empty.
+func TestIngestRecentBarsForTimeframe_ExpiredFetchContextStartsNoFetch_F347(t *testing.T) {
+	rec := installWarmLogRecorder(t)
+	src := newRecordingBarsSource(bhLive...)
+	svc, _, _ := newBarHoldService(bhDMs)
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	src.beginCycle(0)
+	end := bhEnd(0)
+	svc.ingestRecentBarsForTimeframe(context.Background(), expired, src, bhSymbols, bhTF, end.Add(-bhWindow), end)
+
+	if src.multiCalls != 0 || len(src.requested[0]) != 0 {
+		t.Fatalf("vendor calls after the cycle deadline: multi = %d, requested = %v", src.multiCalls, src.requested[0])
+	}
+	if n := f347CountLogs(rec, bhNoBarsMsg, "", ""); n != 0 {
+		t.Fatalf("unfetched symbols were reported as returning no bars (%d records)", n)
+	}
+	if n := f347CountLogs(rec, bhHeartbeatMsg, "", ""); n != 1 {
+		t.Fatalf("cycle heartbeat records = %d, want 1 (the loop context is still live)", n)
+	}
 }

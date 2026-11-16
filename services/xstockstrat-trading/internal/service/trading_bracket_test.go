@@ -28,6 +28,7 @@ type fakeBroker struct {
 	submitBracketLegsFn func(ctx context.Context, parentBrokerOrderID, parentClientOrderID string, legs broker.BracketLegsRequest) (*broker.BracketLegsResponse, error)
 	cancelOrderFn       func(ctx context.Context, brokerOrderID string) error
 	getOrderFn          func(ctx context.Context, brokerOrderID string) (*broker.BrokerOrder, error)
+	replaceOrderFn      func(ctx context.Context, brokerOrderID string, req broker.OrderRequest) (*broker.BrokerOrder, error)
 
 	mu               sync.Mutex
 	cancelOrderCalls []string
@@ -51,6 +52,9 @@ func (f *fakeBroker) CancelOrder(ctx context.Context, brokerOrderID string) erro
 }
 
 func (f *fakeBroker) ReplaceOrder(ctx context.Context, brokerOrderID string, req broker.OrderRequest) (*broker.BrokerOrder, error) {
+	if f.replaceOrderFn != nil {
+		return f.replaceOrderFn(ctx, brokerOrderID, req)
+	}
 	panic("fakeBroker.ReplaceOrder not implemented")
 }
 
@@ -690,6 +694,7 @@ func TestCancelOrder_CancelsActiveBracketLegs(t *testing.T) {
 
 	svc := &TradingService{
 		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: brokers, ledger: &fakeLedgerClient{},
+		repo:    repository.NewTradingRepoWithDB(execOnlyDB{}),
 		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 		orders: map[string]*tradingv1.Order{
 			"ord-1": {OrderId: "ord-1", UserId: "user-1", AccountId: "acct-1", BrokerOrderId: "brk-order-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},

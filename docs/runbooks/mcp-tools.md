@@ -964,9 +964,27 @@ manual trigger share the same `run_once` path, and this call never touches the d
 ### `trigger_backfill`
 
 Triggers a historical backfill via `xstockstrat-ingest` `TriggerBackfill` (feature 066).
-**Admin-scoped write** — forwards the **caller's real derived** `x-access-scope` (feature 092;
-was a hardcoded admin scope). `TriggerBackfill` is now admin-gated server-side, so a non-admin
-caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queuing a paid job.
+**Write** — forwards the **caller's real derived** `x-access-scope` (feature 092; was a hardcoded
+admin scope). Since feature 343 `TriggerBackfill` admits an admin with any request, and any other
+signed-in caller only inside the self-serve envelope below; a request outside it is refused
+synchronously and queues no paid job.
+
+**Non-admin callers (self-serve envelope)** — every rule must hold:
+
+- exactly one symbol in `symbols`;
+- `data_kind="bars"`;
+- `fill_mode="gaps_only"`;
+- `overwrite=false`;
+- both `start` and `end` given, with `start` before `end`;
+- a range no longer than the operator limit `backfill.self_serve_max_range_days` (namespace
+  `ingest`, default 730 days);
+- no `callback_url`.
+
+A refusal names the first rule that failed: `PERMISSION_DENIED: self-serve backfill denied: <token>`,
+where `<token>` is one of `multi_symbol`, `data_kind`, `fill_mode`, `overwrite`, `range_unset`,
+`range_too_long` (detail ends ` (max <N> days)`), `callback_url`, `no_user`. A non-admin request for a
+symbol that already has a `QUEUED` or `RUNNING` backfill is refused `ALREADY_EXISTS`; the other job's
+id is not returned.
 
 **Parameters**
 
@@ -977,7 +995,7 @@ caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queu
 | `timeframe` | `string` | No | `"1d"` default; `"1Day"` also accepted (canonicalized) — only daily bars are supported; ignored when `data_kind="fundamentals"` |
 | `start` / `end` | `string` (ISO 8601) | No | Optional range bounds; one-sided allowed; both omitted = service default range |
 | `overwrite` | `bool` | No | `false` default; `true` re-fetches bars that already exist |
-| `fill_mode` | `string` | No | `"full"` \| `"gaps_only"`; omitted → server default FULL (`gaps_only` fetches only missing ranges) |
+| `fill_mode` | `string` | No | `"full"` \| `"gaps_only"`; omitted → server default FULL (`gaps_only` fetches only missing ranges); a non-admin must pass `"gaps_only"` |
 | `callback_url` | `string` | No | Webhook for the job's terminal event. Must be `https` and its origin must be on the operator allowlist `notify.webhook.allowed_origins` (empty by default — every URL is rejected until an operator lists the origin). Validated **before** the job is queued. Not returned by this tool or by `get_backfill_status` |
 
 **Return**
@@ -1024,7 +1042,9 @@ callback.
 | `callback_url` not `https`, malformed, or its origin not on the allowlist | `INVALID_ARGUMENT: callback_url rejected: <reason>` (`too_long` \| `bad_characters` \| `unparseable` \| `scheme` \| `userinfo` \| `trailing_dot` \| `origin_not_allowed`) — **no job was created**; retry without `callback_url` and poll |
 | `callback_url` given but the validation service is down | `UNAVAILABLE: callback_url could not be validated; no job was created` — **no job was created**; retry later, or without `callback_url` and poll |
 | `callback_url` given but notify refuses ingest as a caller (platform misconfiguration) | `FAILED_PRECONDITION: callback_url could not be validated: … no job was created` — report it; retry without `callback_url` and poll |
-| Bad symbols / provider failures | **No synchronous error** — apart from `callback_url`, ingest queues unconditionally; surfaces as a terminal `FAILED`/`PARTIAL` job via `get_backfill_status` |
+| Non-admin request outside the self-serve envelope | `PERMISSION_DENIED: self-serve backfill denied: <token>` (first failed rule; `range_too_long` ends ` (max <N> days)`) — **no job was created**; fix the request (e.g. shorten the range) or ask an operator |
+| Non-admin request for a symbol with a `QUEUED`/`RUNNING` backfill | `ALREADY_EXISTS` — **no job was created**; poll `get_backfill_status` and retry after that job finishes |
+| Bad symbols / provider failures | **No synchronous error** — the self-serve refusals and the `callback_url` check are the only synchronous ingest refusals; other bad input surfaces as a terminal `FAILED`/`PARTIAL` job via `get_backfill_status` |
 | Ingest unreachable | gRPC error propagated |
 
 ---
@@ -1066,7 +1086,8 @@ or, in list mode:
 ### `cancel_backfill`
 
 Cancels a queued/running backfill job via ingest `CancelBackfill`. **Admin-scoped** (forwards
-`x-access-scope`) — unlike `trigger_backfill`, this RPC is checked server-side (feature 087).
+`x-access-scope`) and admin-only server-side (feature 087) — unlike `trigger_backfill`, it has no
+self-serve envelope.
 
 **Parameters**
 

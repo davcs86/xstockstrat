@@ -1217,13 +1217,16 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 				telemetry.LogTickOK(ctx, telemetry.LoopWarmQuote, time.Since(tickStart), "idle")
 				continue
 			}
-			s.warmQuotesOnce(ctx, symbols)
+			fetchCtx, cancel := context.WithTimeout(ctx, interval)
+			s.warmQuotesOnce(ctx, fetchCtx, symbols)
+			cancel()
 		}
 	}
 }
 
-// warmQuotesOnce runs one warm-poller cycle over symbols.
-func (s *MarketDataService) warmQuotesOnce(ctx context.Context, symbols []string) {
+// warmQuotesOnce runs one warm-poller cycle over symbols. Only the vendor fetches use fetchCtx (the cycle's
+// interval deadline); cache writes and the tick record must stay on ctx, or a late fetch drops its own writes.
+func (s *MarketDataService) warmQuotesOnce(ctx, fetchCtx context.Context, symbols []string) {
 	start := time.Now()
 	var insertFailed []string
 	since := s.quoteSince()
@@ -1233,7 +1236,7 @@ func (s *MarketDataService) warmQuotesOnce(ctx context.Context, symbols []string
 	}
 	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
 	if ms, ok := src.(source.MultiSymbolSource); ok {
-		if quotes, err := ms.GetLatestQuotesMulti(ctx, symbols); err == nil {
+		if quotes, err := ms.GetLatestQuotesMulti(fetchCtx, symbols); err == nil {
 			for _, q := range quotes {
 				if err := s.cacheQuote(ctx, q, since); err != nil {
 					slog.DebugContext(ctx, "warm poller: cache insert failed", "symbol", q.Symbol, "error", err)
@@ -1250,7 +1253,11 @@ func (s *MarketDataService) warmQuotesOnce(ctx context.Context, symbols []string
 	var fetched, failed int
 	var firstErr error
 	for _, sym := range symbols {
-		q, err := src.GetLatestQuote(ctx, sym)
+		err := fetchCtx.Err()
+		var q *marketdatav1.Quote
+		if err == nil {
+			q, err = src.GetLatestQuote(fetchCtx, sym)
+		}
 		if err != nil {
 			failed++
 			if firstErr == nil {
@@ -1310,7 +1317,9 @@ func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
 				interval = newInterval
 				ticker.Reset(interval)
 			}
-			s.ingestRecentBars(ctx)
+			fetchCtx, cancel := context.WithTimeout(ctx, interval)
+			s.ingestRecentBars(ctx, fetchCtx)
+			cancel()
 		}
 	}
 }
@@ -1363,7 +1372,7 @@ func minIngestLookback(canonicalTf string) time.Duration {
 
 // ingestRecentBars upserts the recent bar window for every warm symbol × configured timeframe.
 // Overlap is harmless (InsertBars upserts); each window is at least minIngestLookback(tf).
-func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
+func (s *MarketDataService) ingestRecentBars(ctx, fetchCtx context.Context) {
 	symbols := s.warmSnapshot()
 	if len(symbols) == 0 {
 		return
@@ -1384,21 +1393,29 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 		if floor := minIngestLookback(tf); floor > lookback {
 			lookback = floor
 		}
-		s.ingestRecentBarsForTimeframe(ctx, src, symbols, tf, end.Add(-lookback), end)
+		s.ingestRecentBarsForTimeframe(ctx, fetchCtx, src, symbols, tf, end.Add(-lookback), end)
 	}
 }
 
 // ingestRecentBarsForTimeframe is ingestRecentBars' per-timeframe body, split out so the
-// caller can size each timeframe's window independently (see minIngestLookback).
-func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, src source.DataSourceClient, symbols []string, tf string, start, end time.Time) {
+// caller can size each timeframe's window independently (see minIngestLookback). Only the vendor fetches use
+// fetchCtx; a symbol not fetched before it expired is an error for the cycle, never "no bars" (291 @AC-5).
+func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx, fetchCtx context.Context, src source.DataSourceClient, symbols []string, tf string, start, end time.Time) {
 	began := time.Now()
 	d := resolveBarIngestBackoff(s.budgetCfg)
 	plan := s.planBarRequest(symbols, tf, end, d)
 	out := barOutcome{got: map[string]bool{}, errored: map[string]bool{}}
 	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
 	fetched := len(plan.requested) == 0
+	if !fetched && fetchCtx.Err() != nil {
+		fetched = true
+		for _, sym := range plan.requested {
+			out.errored[sym] = true
+		}
+		slog.WarnContext(ctx, "bar ingest: cycle deadline passed, timeframe not fetched", "timeframe", tf, "symbols", len(plan.requested))
+	}
 	if ms, ok := src.(source.MultiSymbolSource); ok && !fetched {
-		if barsBySym, err := ms.GetBarsMulti(ctx, plan.requested, tf, start, end); err == nil {
+		if barsBySym, err := ms.GetBarsMulti(fetchCtx, plan.requested, tf, start, end); err == nil {
 			fetched = true
 			for sym, bars := range barsBySym {
 				if len(bars) == 0 {
@@ -1415,7 +1432,11 @@ func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, sr
 	}
 	if !fetched {
 		for _, sym := range plan.requested {
-			bars, err := src.GetBars(ctx, sym, tf, start, end)
+			err := fetchCtx.Err()
+			var bars []*marketdatav1.Bar
+			if err == nil {
+				bars, err = src.GetBars(fetchCtx, sym, tf, start, end)
+			}
 			if err != nil {
 				out.errored[sym] = true
 				slog.WarnContext(ctx, "bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)

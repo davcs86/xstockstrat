@@ -20,7 +20,13 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client, tools
 from app.tools import _EXTRACTOR_TOOL_MAP, register_tools
-from tests.conftest import ADMIN, HANG_GUARD_S, _ctx, _rpc_error  # feature 092: shared helpers
+from tests.conftest import (  # feature 092: shared helpers
+    ADMIN,
+    HANG_GUARD_S,
+    TRADER,
+    _ctx,
+    _rpc_error,
+)
 from tests.test_config_watcher import install_watcher
 
 
@@ -1664,6 +1670,31 @@ class TestTriggerBackfillTool:
         with patch.object(client, "trigger_backfill", AsyncMock(side_effect=err)):
             with pytest.raises(ToolError, match="boom"):
                 await _tool_fn(server, "trigger_backfill")(ctx=_ctx(ADMIN), symbols=["AAPL"])
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("code_name", "detail"),
+        [
+            ("PERMISSION_DENIED", "self-serve backfill denied: range_too_long (max 730 days)"),
+            ("ALREADY_EXISTS", "a backfill for AAPL is already queued or running"),
+        ],
+    )
+    async def test_self_serve_refusals_pass_through(self, code_name, detail):
+        """feature 343 AC-7: a non-admin's refusal reaches the caller with code and detail."""
+        import grpc  # noqa: PLC0415
+
+        server = _make_server()
+        err = _rpc_error(getattr(grpc.StatusCode, code_name), detail)
+        with patch.object(client, "trigger_backfill", AsyncMock(side_effect=err)):
+            with pytest.raises(ToolError) as exc_info:
+                await _tool_fn(server, "trigger_backfill")(
+                    ctx=_ctx(TRADER),
+                    symbols=["AAPL"],
+                    fill_mode="gaps_only",
+                    start="2023-01-01T00:00:00Z",
+                    end="2025-01-01T00:00:00Z",
+                )
+        assert str(exc_info.value) == f"{code_name}: {detail}"
 
     @pytest.mark.asyncio
     async def test_callback_url_is_forwarded_and_defaults_to_empty(self):

@@ -379,6 +379,48 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             access_scope = 0
         return bool(access_scope & 0x04)
 
+    # Wire contract read by the UI and the agent; pinned by tests/fixtures/self_serve_denial.json.
+    _SELF_SERVE_DENIAL_PREFIX = "self-serve backfill denied: "
+    _SELF_SERVE_DENIAL_TOKENS = (
+        "multi_symbol",
+        "data_kind",
+        "fill_mode",
+        "overwrite",
+        "range_unset",
+        "range_too_long",
+        "callback_url",
+        "no_user",
+    )
+
+    @classmethod
+    def _self_serve_denial_detail(cls, token: str, max_days: int | None = None) -> str:
+        suffix = f" (max {max_days} days)" if max_days is not None else ""
+        return f"{cls._SELF_SERVE_DENIAL_PREFIX}{token}{suffix}"
+
+    @classmethod
+    def _self_serve_denial(cls, request, context, max_days: int) -> str | None:
+        """The first self-serve envelope condition the request fails, or None when inside it."""
+        start, end = _ts_to_dt(request.range.start), _ts_to_dt(request.range.end)
+        range_unset = start is None or end is None or start >= end
+        user_id = dict(context.invocation_metadata()).get("x-user-id") or ""
+        failed = (
+            len(request.symbols) != 1,
+            request.data_kind
+            not in (
+                ingest_pb2.BACKFILL_DATA_KIND_UNSPECIFIED,
+                ingest_pb2.BACKFILL_DATA_KIND_BARS,
+            ),
+            request.fill_mode != ingest_pb2.FILL_MODE_GAPS_ONLY,
+            request.overwrite,
+            range_unset,
+            not range_unset and end - start > timedelta(days=max_days),
+            bool(request.callback_url),
+            user_id in ("", SYSTEM_OWNER),
+        )
+        return next(
+            (t for t, f in zip(cls._SELF_SERVE_DENIAL_TOKENS, failed, strict=True) if f), None
+        )
+
     @staticmethod
     def _propagation_meta(context):
         return [
@@ -428,11 +470,21 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        # Admin-gate this quota-spending op. After the _db check so an unconfigured DB still
-        # returns UNAVAILABLE.
+        # Quota-spending op: admin, or a non-admin inside the self-serve envelope. After the _db
+        # check so an unconfigured DB still returns UNAVAILABLE.
+        self_serve = False
         if not self._has_admin_scope(context):
-            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
-            return
+            max_days = self._cfg.backfill_self_serve_max_range_days
+            token = self._self_serve_denial(request, context, max_days)
+            if token is not None:
+                await context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    self._self_serve_denial_detail(
+                        token, max_days if token == "range_too_long" else None
+                    ),
+                )
+                return
+            self_serve = True
         job_id = str(uuid.uuid4())
         propagation_meta = self._propagation_meta(context)
         # feature 198: fundamentals ride a distinct data-kind axis, never the bar-timeframe axis.
@@ -460,8 +512,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             if rejection is not None:
                 await context.abort(*rejection)
                 return
-        await backfill_jobs.insert_job(
-            self._db,
+        job_fields = dict(
             job_id=job_id,
             symbols=list(request.symbols),
             timeframe=canonical_tf,
@@ -471,6 +522,16 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             data_kind=data_kind,
             callback_url=request.callback_url or None,
         )
+        if self_serve:
+            symbol = request.symbols[0]
+            if not await self._insert_self_serve_job(symbol, job_fields):
+                await context.abort(
+                    grpc.StatusCode.ALREADY_EXISTS,
+                    f"a backfill for {symbol} is already queued or running",
+                )
+                return
+        else:
+            await backfill_jobs.insert_job(self._db, **job_fields)
         await self._emit_backfill_event(
             "ingest.backfill.queued",
             job_id,
@@ -484,6 +545,19 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             job_id=job_id,
             status=ingest_pb2.BACKFILL_STATUS_QUEUED,
         )
+
+    async def _insert_self_serve_job(self, symbol, job_fields) -> bool:
+        """Insert unless a QUEUED/RUNNING job lists `symbol`; False on a duplicate."""
+        async with self._db.acquire() as conn, conn.transaction():
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"backfill:{symbol}")
+            if await backfill_jobs.has_active_job(
+                conn,
+                symbol,
+                [ingest_pb2.BACKFILL_STATUS_QUEUED, ingest_pb2.BACKFILL_STATUS_RUNNING],
+            ):
+                return False
+            await backfill_jobs.insert_job(conn, **job_fields)
+        return True
 
     async def _validate_callback_url(self, callback_url, propagation_meta):
         """Ask notify to judge the URL. Returns None when accepted, else the (code, detail) to
