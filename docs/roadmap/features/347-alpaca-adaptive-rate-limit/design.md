@@ -200,7 +200,7 @@ makes exactly its zero-wait first attempt and never waits or retries.
 
 ### 6. Config — `services/xstockstrat-config` (D-10)
 
-Migration `<NNN>_alpaca_adaptive_rate_limit_keys.{up,down}.sql` (050 today; re-derived at execute): four
+Migration `<NNN>_alpaca_adaptive_rate_limit_keys.{up,down}.sql` (051 since feature 341 landed 050 on `main-dev`; re-derived at execute): four
 global rows (two keys × staging, production), `value_type 'bool'`, value `'true'`,
 `updated_by 'system:config-migration-feature-alpaca-adaptive-rate-limit'`, `ON CONFLICT … DO NOTHING`;
 the `backfill.rate_limit_rps` description UPDATE guarded on the exact old text. Down deletes only
@@ -268,7 +268,7 @@ Test notes for `/sdd-spec`:
 - [ ] T 1 s, multiplier 3.0 leaves a 1 s margin — same S10 table.
 - [ ] Trading API rate-limit headers are undocumented; on those hosts only the 429 retry may be active — FR-5 degradation tested at S8; a real paper-host response recorded at the integration PR.
 - [ ] Pre-existing defect, not fixed here: `ReplaceOrder` inserts its intent before `validateTIF` — defect report filed at `/sdd-spec`.
-- [ ] Config migration number 050 is also named by 341, 343 and 330 — re-derived at S11 and at the integration PR; `scripts/config-wiring-stored.json` regenerated.
+- [ ] Config migration number: 341 took 050 on `main-dev`, so this feature uses 051; 343 and 330 may still claim the next number — re-derived at S11 and at the integration PR; `scripts/config-wiring-stored.json` regenerated.
 - [ ] In an exhausted window a marketdata quote or price fetch holds for its 2.5 s budget before returning the warm subset (a 429 used to fail at once) — recorded in context.md; bounds verified at S4 (AC-6, AC-21).
 - [ ] Under a hold, each watchdog tick still produces REJECTED flatten orders, as a raw 429 does today — documented at S9.
 - [ ] `ReleasePendingIntent` is the first delete path on `trading.order_intents` and has no DB-level test — reviewed at S9; the rule is written into the trading `CLAUDE.md` and service constitution.

@@ -132,3 +132,17 @@
   `scripts/config-wiring-stored.json`.
 - [ ] `ReleasePendingIntent` has no DB-level test — reviewed at S9; rule written into trading docs.
 - [ ] AC-37's new `backfill.rate_limit_rps` description text is fixed in the implementation spec.
+
+## Session 2026-11-16T06:10Z — branch sync before sdd-spec
+
+- `/sdd-spec` halted at its tree-freshness preflight: `origin/main-dev` had moved 57 commits
+  (9f88562 → 5730505) and merging it conflicted in `docs/roadmap/ledger/fails.md` (both sides appended).
+- Merged `origin/main-dev` into `ccr-47ce6aaf-i0ffis`; the ledger conflict was resolved by the repo's
+  allowlisted union rule (`scripts/merge-train-resolve.mjs`), base entry first. Merge commit c420b2a.
+- main-dev now carries `050_ui_chart_history_bars` (feature 341), so this feature's config migration is
+  **051**; product-spec.md, design.md and the merge-order note were updated.
+- recon.md `path:line` evidence predates the merge for files main-dev touched (marketdata
+  `internal/repository/marketdata_repo.go`, `internal/telemetry/otel.go`,
+  `internal/service/telemetry_allowlist_test.go`, the marketdata `CLAUDE.md`; config
+  `src/grpc/configServiceImpl.ts`; `scripts/config-wiring*.json`; `docs/patterns/config-governance.md`).
+  `/sdd-spec` re-discovers and cites current lines.
