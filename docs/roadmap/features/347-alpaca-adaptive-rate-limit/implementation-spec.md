@@ -1,6 +1,6 @@
 # Implementation Spec: alpaca-adaptive-rate-limit
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-16
 **Feature**: `docs/roadmap/features/347-alpaca-adaptive-rate-limit/feature.md`
 **Total Steps**: 12
@@ -801,7 +801,7 @@ git diff --exit-code scripts/config-heal/dryrun-fresh.tsv                 # afte
 
 ### Step 12 — test: seed migration shape
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/alpacaAdaptiveRateLimitSeedMigration.test.ts` — create

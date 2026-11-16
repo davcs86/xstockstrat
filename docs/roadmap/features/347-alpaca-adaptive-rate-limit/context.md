@@ -447,3 +447,24 @@
 - Files modified: `services/xstockstrat-config/migrations/052_alpaca_adaptive_rate_limit_keys.{up,down}.sql`,
   `scripts/config-wiring-stored.json`, `scripts/config-wiring.json`, `docs/patterns/config-governance.md`
 - Deviations: scratch Postgres for generation (Deviation Log)
+
+### Step 12 — test: seed migration shape [done]
+- `alpacaAdaptiveRateLimitSeedMigration.test.ts`: six cases over the pair through the shared
+  `migrationSql` helper (two statements up and down, four rows, relative keys, the exact guarded UPDATE,
+  the old text present in 041, the guarded down).
+- TDD (AC-37): red — with the two `052` files held outside the tree, 5 of 6 cases failed with
+  `expected exactly one *_alpaca_adaptive_rate_limit_keys.up.sql, got []` (the sixth reads only 041) →
+  green — 6 pass, 0 fail; whole service `pnpm run test:coverage` 377 pass, 0 fail, lines 92.25%;
+  `c8 check-coverage --lines 40` exit 0; `pnpm run lint` exit 0 (0 errors); prettier clean.
+- Run on Node v24.22.1. A platform-side shell outage delayed this step; no command was skipped.
+- Files modified: `services/xstockstrat-config/src/__tests__/alpacaAdaptiveRateLimitSeedMigration.test.ts`
+- Deviations: none
+
+### All steps done
+- `node scripts/check-config-wiring.mjs --final` → exit 0; output: two pre-existing `REPORTED …
+  readers-disagree` lines (analysis `fundamentals.provider`, trading `platform/trading_state`), no
+  finding for either 347 key, no `STALE` and no `STALE-STORED`.
+- Status: in-progress → code-completed.
+- Ledger: no `insights.md` entry written yet; one candidate for `fails.md` is raised at the feature-end
+  checkpoint (a spec claim "the reorder changes no existing expectation" that two `recover()`/nil
+  fixtures disproved).

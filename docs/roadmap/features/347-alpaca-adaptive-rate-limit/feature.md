@@ -16,6 +16,7 @@
 | 2026-11-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-11-16 | `implementation-ready` (unchanged) | /sdd-execute | Re-spec before execution: Steps 5, 6, 11 anchors aligned with `main-dev@b34dc48` (line numbers and one count; no instruction changed) |
 | 2026-11-16 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started (sequential); Steps 1+2 done |
+| 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done (sequential); integration PR pending |
 
 ---
 
