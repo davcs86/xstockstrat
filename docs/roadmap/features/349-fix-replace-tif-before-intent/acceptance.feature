@@ -25,3 +25,10 @@ Feature: fix-replace-tif-before-intent (bug fix)
     When its owner replaces it with time-in-force "DAY"
     Then exactly one replace intent is recorded for the order and it is completed
     And an identical replace returns the stored result without a second broker call
+
+  @AC-4 @FR-1 @regression
+  Scenario: A disallowed time-in-force is refused even when an intent for the same request exists
+    Given a NEW order on an IBKR account
+    And a replace intent with unknown outcome is already recorded for its replace with time-in-force "OPG"
+    When its owner replaces it with time-in-force "OPG"
+    Then the request is refused as an invalid argument, not as an unknown outcome
