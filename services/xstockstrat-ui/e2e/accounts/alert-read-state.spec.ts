@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
-import { badgeOf, stubNotify } from '../helpers/alertReadState';
+import { badgeOf, bellOf, stubNotify } from '../helpers/alertReadState';
 import { DRAWER_ALERT_CLEAR_A, DRAWER_ALERT_STORED_UNREAD } from '../fixtures/alerts';
 
 /**
@@ -82,5 +82,49 @@ test.describe('alert read state (feature 344)', () => {
     await expect(page.getByTestId('alert-read-state')).toHaveText('Unread');
     // Next's route announcer is an empty role="alert"; the global error banner has text.
     await expect(page.getByRole('alert').filter({ hasText: /\S/ })).toHaveCount(0);
+  });
+});
+
+test.describe('alert drawer link (feature 344)', () => {
+  test('@AC-5 the drawer row title opens the alert page, which then leaves the drawer empty', async ({
+    page,
+  }) => {
+    const notify = await stubNotify(page, [ALERT], 'held');
+    await addAuthCookie(page);
+    await page.goto('/trader');
+    await expect(badgeOf(page)).toHaveText('1', { timeout: 10000 });
+    await bellOf(page).click();
+    await page.getByRole('dialog').getByRole('link', { name: ALERT.title }).click();
+    await expect(page).toHaveURL(new RegExp(`${ALERT_PAGE}$`));
+    await expect(page.getByTestId('alert-detail')).toContainText(ALERT.title, { timeout: 10000 });
+
+    await expect.poll(() => notify.markedIds, { timeout: 10000 }).toEqual([ALERT.alertId]);
+    await expect(badgeOf(page)).toHaveCount(0, { timeout: 10000 });
+    await bellOf(page).click();
+    await expect(page.getByRole('dialog').getByText('No alerts')).toBeVisible({ timeout: 10000 });
+  });
+
+  test('the drawer closes on /accounts, where the header does not remount', async ({ page }) => {
+    await stubNotify(page, [ALERT], 'held');
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications');
+    await expect(badgeOf(page)).toHaveText('1', { timeout: 10000 });
+    await bellOf(page).click();
+    await page.getByRole('dialog').getByRole('link', { name: ALERT.title }).click();
+    await expect(page).toHaveURL(new RegExp(`${ALERT_PAGE}$`));
+    await expect(page.getByTestId('alert-detail')).toContainText(ALERT.title, { timeout: 10000 });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  test('the drawer row link nests no button and keeps the row "Mark read"', async ({ page }) => {
+    await stubNotify(page, [ALERT], 'held');
+    await addAuthCookie(page);
+    await page.goto('/trader');
+    await expect(badgeOf(page)).toHaveText('1', { timeout: 10000 });
+    await bellOf(page).click();
+    const drawer = page.getByRole('dialog');
+    await expect(drawer.getByRole('link', { name: ALERT.title })).toBeVisible();
+    await expect(drawer.locator('a button')).toHaveCount(0);
+    await expect(drawer.getByRole('button', { name: `Mark read: ${ALERT.title}` })).toBeVisible();
   });
 });

@@ -1017,7 +1017,7 @@ CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/trader/alert-stream
 
 ### Step 22 — test: drawer link e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/accounts/alert-read-state.spec.ts` — modify
@@ -1195,4 +1195,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 21 — RED/GREEN on an uncommitted probe; per-entry linked `node_modules` on this branch's TS stubs; one run lost to a full disk (2026-11-16)
 - **Planned**: Step 22's drawer-link cases fail first (TDD line); the Verification block runs on the host in its e2e fallback form.
 - **Actual**: (1) Step 21 and Step 22 do not land together and `e2e/accounts/alert-read-state.spec.ts` is Step 22's file, so a temporary probe (`e2e/accounts/alert-drawer-link-probe.spec.ts`: Step 22 cases 1 and 4 on `/trader`, and case 3 on `/accounts/notifications`, through `stubNotify(page, [DRAWER_ALERT_STORED_UNREAD], 'held')`) ran RED and GREEN with its own `CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test <probe>` command, then was deleted; it is not committed. (2) The main checkout's `@xstockstrat/proto` still lacks `GetAlert`, so, as in Steps 17–20, `services/xstockstrat-ui/node_modules` in this worktree is a directory of per-entry links to the main checkout's entries with `@xstockstrat/proto` linked to this worktree's `packages/proto/gen/ts` (its `node_modules` likewise per-entry linked); the `.vite` cache link was left out so no run writes under the main checkout. No install. (3) The first Verification run (`.sdd-logs/v-3.log`) failed at the Next build with `ENOSPC: no space left on device` on the shared host volume and wrote no `exit=` line; after this worktree's own `.next` and `test-results` were removed, the re-run (`.sdd-logs/v-4.log`) ran the block verbatim, `exit=0`.
+- **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
+
+### Step 22 — RED against the pre-Step-21 `AlertStream.tsx`; cases 1+2 in one test; build output on tmpfs in a private mount namespace (2026-11-16)
+- **Planned**: the drawer-link cases fail first against the pre-Step-21 commit, then pass; the Verification block runs on the host in its e2e fallback form.
+- **Actual**: (1) Step 21 had already landed, so RED ran the step's Verification with `src/components/shared/AlertStream.tsx` temporarily restored from `857aaa0a3^`, then restored to the committed file; only the spec file is staged. (2) Case 2 (the drawer no longer lists the opened alert) needs the state case 1 leaves, so it is the second half of the `@AC-5` test rather than its own test; cases 3 and 4 are separate tests in a new `alert drawer link (feature 344)` describe. (3) The host volume had 580 MB free and a Next build needs about 1 GB (Step 21 lost a run to `ENOSPC`), so each run went through `unshare -m` with a `/dev/shm` directory bind-mounted (namespace-only) over this worktree's `services/xstockstrat-ui/.next`. A first attempt that symlinked `.next` to `/dev/shm` failed at the build's page-data step (`Cannot find package '@connectrpc/connect' imported from /dev/shm/…/route.js`, `.sdd-logs/v-1.log`, no test ran) and is not a RED. (4) As in Steps 17–21, `services/xstockstrat-ui/node_modules` is a directory of per-entry links to the main checkout's entries with `@xstockstrat/proto` linked to this worktree's `packages/proto/gen/ts`; no install. The block ran verbatim.
 - **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
