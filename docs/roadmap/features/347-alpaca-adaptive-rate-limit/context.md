@@ -369,3 +369,20 @@
 - Files modified: `services/xstockstrat-trading/internal/broker/broker.go`, `internal/broker/alpaca.go`,
   `internal/service/order_intent.go`, `internal/service/trading.go`; `scripts/config-wiring.json`
 - Deviations: none
+
+### Step 8 — test: trading client retry, budget, refusal and the budget table [done]
+- 10 scenario tests in `alpaca_test.go` (fake clock, scripted `RoundTripper` recording method, host,
+  path, body and clock time, WARN recorder), four extra client cases (one-timeout read sends exactly
+  once; FR-5 degradation; caller cancel during a wait for a mutation and for a read; a 401 on a retry),
+  `export_test.go` with exactly four setters, and `trading_rate_limit_test.go` with the two budget tests.
+- TDD red (Step 7 symbols present, `do` a single attempt, `rateLimitBudget` returning 0): FAIL — AC-12,
+  AC-13, AC-15, AC-16, AC-17, AC-18, AC-23, AC-27, the four extra cases, `TestRateLimitBudget` and
+  `TestAlpacaRateLimitBudget_FollowsConfig`. Guards passed as designed: AC-10, AC-20. AC-10's mutant
+  ("ignore the budget") was run and turned it red; AC-20's keying is pinned in `pace_test.go`.
+- TDD green: `F347_AC(10|…|27)` → 10 top-level PASS; `RateLimitBudget` → 2 PASS; whole service
+  `go test ./... -race` exit 0; coverage total 84.7% (>= 40%); `golangci-lint` 0 issues.
+- Open risks closed by this step: pollers skip spreading (one-attempt test); FR-5 degradation on hosts
+  that send no headers; the clamp and 1 s margin rows of the budget table.
+- Files modified: `services/xstockstrat-trading/internal/broker/export_test.go` (new),
+  `internal/broker/alpaca_test.go`, `internal/service/trading_rate_limit_test.go` (new)
+- Deviations: none

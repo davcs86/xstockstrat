@@ -542,7 +542,7 @@ node scripts/check-config-wiring.mjs --doc-check              # exit 0
 
 ### Step 8 — test: trading client retry, budget, refusal and the budget table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/export_test.go` — create
