@@ -24,6 +24,12 @@ A full traversal of `ListPositions` drops positions. (1) `next_page_token` is th
 
 xstockstrat-portfolio (callers: xstockstrat-analysis `_drain_held` and servicer ListPositions drains; xstockstrat-agent `get_positions`)
 
+## Consumer Surface(s)
+
+- UI `/trader/positions` (`xstockstrat-ui`): paginates with `nextPageToken` (`src/app/trader/positions/page.tsx:54-55,548-551`); no code change expected — its Next button stops skipping rows once the server is fixed.
+- Agent tool `get_positions` / `get_positions_by_account_id` (`xstockstrat-agent`): opaque-token passthrough; no code change expected.
+- Internal: analysis held-symbol drains (`live_loop._drain_held`, `servicer._drain_held_symbols`), trading reconcile (first page).
+
 ## Fix Scope
 
 - [ ] No proto changes anticipated — `PageResponse.next_page_token` is already an opaque string (verify in design)
