@@ -67,3 +67,11 @@
   startup" to live per request (matches `cmd/server/main.go`).
 - Correction: the order-retry bound is 30 s at defaults, not the 15 s first quoted to the operator
   (`IBKRRequestTimeout` is 10 s and enters the `max`).
+
+## Session 2026-11-16T03:40Z — sdd-design (in progress)
+
+- Phase 0 Recon: wrote recon.md (marketdata, trading, config; 40 existing business rules, none CHANGE).
+- Trading API reference pages (`/v2/orders`, `/v2/account`, overview) document no rate-limit headers
+  and no 429; only the Market Data reference does.
+- Phase 1 round 1 done; register in debate.md (D-1..D-10 settled, R-1..R-3 locked, O-2/O-4/O-5/O-6/
+  O-9/O-11 open). No Floor breach, no C-16 regression found.

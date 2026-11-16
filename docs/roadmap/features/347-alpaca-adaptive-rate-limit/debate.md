@@ -1,0 +1,61 @@
+# Debate Register: alpaca-adaptive-rate-limit
+
+**State**: in-debate
+**Mode**: full
+**Rounds run**: 1 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+
+## Rounds
+
+| Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 2026-11-16 | /sdd-design | 10 | 3 | 7 | 13 | 0 | yes |
+
+## Settled Decisions
+
+<!-- Status: settled → superseded by D-m (only after a user-approved REOPEN) -->
+| ID | Round | Decision | Evidence | Status |
+|---|---|---|---|---|
+| D-1 | 1 | One pure pacing core package `internal/alpacapace` (no I/O, sleep or logging), copied byte-identical into marketdata and trading together with its `pace_test.go`; drift is blocked by a new group in `scripts/check-watcher-copies.py`, a `.jscpd.json` ignore and a `docs/patterns/dry-guard-rail.md` exemption. `pace_test.go` is the only test home of core arithmetic. No trading-specific variant of the core. | `scripts/check-watcher-copies.py:13-35`; `docs/patterns/dry-guard-rail.md:87-99`; `.jscpd.json:35-43`; `.github/workflows/ci.yml:167,1246` | settled |
+| D-2 | 1 | The behavior lives in a short attempt loop inside each existing `do`; no call site changes. Per attempt: adaptive `Reserve` → (marketdata) static `limiter.Wait` → send `req.Clone(ctx)` → `Observe` headers → record outcome → on 429 drain and close the body, then retry or stop. Only a 429 is retried; every other outcome returns at once. | `services/xstockstrat-marketdata/internal/alpaca/client.go:145-168`; `services/xstockstrat-trading/internal/broker/alpaca.go:57-77` | settled |
+| D-3 | 1 | Fixed constants: low-water when `remaining*10 < limit`; spreading `slot = max(now, nextSlot)`, `nextSlot = slot + (reset − slot)/remaining`, local `remaining--`; `Remaining` 0 holds until `reset`; backoff 1 s doubling, capped at 8 s; jitter add-only uniform `[0, 500ms)` applied **only to a non-zero adaptive wait** (a hold, a spread slot after the first, a 429 wait), never to a 0 wait or to the static limiter. | product-spec.md § Fixed Invariants; AC-3, AC-5, AC-7, AC-8 | settled |
+| D-4 | 1 | Pacing state changes only when all three headers parse (`Limit` > 0, `Remaining` ≥ 0, `Reset` > 0) and `Reset` is no further than one window plus slack ahead of `now`; a single hold never exceeds one window. Within one `reset` value `remaining = min(observed, local)`; state is replaced only when `reset` advances; `nextSlot` never moves backwards. On a 429, `Reset` alone is used when it parses and is in the future. | FR-1, FR-3, FR-5; recon.md Risks (Trading API headers undocumented) | settled |
+| D-5 | 1 | State lives on each `Client`, keyed by `(req.URL.Host, maphash fingerprint of the API key)` with a process-random seed; no key material is stored or logged; an empty key is valid; expired windows are pruned. No cross-client registry. | `services/xstockstrat-marketdata/internal/alpaca/client.go:105-115`; `services/xstockstrat-trading/internal/service/trading.go:3241-3273`; 295 @AC-16, 147 @AC-7 | settled |
+| D-6 | 1 | Kill switch is positive-sense, so a zero-value config means pre-feature behavior for `NewClient` and every existing test literal; production reads `GetBool(key, true)` per request. Marketdata: `Settings.AdaptiveRateLimit` + `ClientConfig.AdaptiveRateLimit`, read in the `main.go` settings closure. Trading: one live func on `broker.ClientConfig` wired in `instantiateBrokerLocked` (nil or ≤ 0 means today's code exactly). Off restores a single attempt and the raw 429 to the caller. | `services/xstockstrat-marketdata/cmd/server/main.go:82-99`; `services/xstockstrat-trading/internal/broker/alpaca.go:15-23`; `services/xstockstrat-trading/internal/service/trading.go:3270`; AC-9, AC-10 | settled |
+| D-7 | 1 | Trading gets a new sentinel `broker.ErrRateLimited`; a rate-limit refusal or exhaustion wraps only that sentinel and never a context error, so it is a definite (not "uncertain") outcome; a real attempt that times out is returned unwrapped and stays "uncertain". It is never `ErrInvalidCredentials`. Every attempt after the first is started only if `now + wait + T ≤ callDeadline`, so each attempt gets the full live `broker.timeout_ms`; the per-attempt context is capped at `callDeadline`; a retry uses `req.Clone` and calls `GetBody` only when non-nil. Trading does not add `golang.org/x/time`. | `services/xstockstrat-trading/internal/broker/broker.go:10-18`; `services/xstockstrat-trading/internal/service/trading.go:2565-2569`; `services/xstockstrat-trading/internal/broker/ibkr_session.go:412-417`; 267 @AC-1, 295 @AC-17, TRADING-3 | settled |
+| D-8 | 1 | Telemetry keeps the "`ctx` wins" precedence of `RecordVendorRequest`; no new instrument, label key or outcome value. One point per attempt plus one `throttle` point per refusal. Marketdata caps each attempt's context at the call deadline. | `services/xstockstrat-marketdata/internal/telemetry/otel.go:339-352,389-392`; 294 @AC-13, platform @AC-41 | settled |
+| D-9 | 1 | Time seams are unexported `now` and `sleep(ctx, d)` fields on each `Client`, defaulted in the constructors and set through an in-package `export_test.go`; core arithmetic is tested purely against a fixed `now`; client tests use `httptest`, a frozen clock and a recording sleep. Logging is `slog.WarnContext` (no logger field), once per throttled window per host, naming host and wait. | `services/xstockstrat-marketdata/internal/fmp/fmp_client.go:39-44`; `services/xstockstrat-marketdata/internal/alpaca/client_test.go:1,750`; FR-9 | settled |
+| D-10 | 1 | Config migration `050_alpaca_adaptive_rate_limit_keys` (number re-derived at execute): four global rows (two keys × staging, production), `value_type 'bool'`, value `'true'`, `updated_by 'system:config-migration-feature-alpaca-adaptive-rate-limit'`, `ON CONFLICT ... DO NOTHING`; `backfill.rate_limit_rps` description UPDATE guarded on the exact old text; down deletes only untouched global seed rows and swaps the description back guarded on the new text. Plus a per-migration test, regenerated `scripts/config-wiring-stored.json` and a registered-keys log entry. | `services/xstockstrat-config/migrations/049_notify_commsgun_channel_keys.up.sql:4-6,55`; `.../049_notify_commsgun_channel_keys.down.sql:5-18`; `.../032_analysis_zero_trap_descriptions.up.sql`; 293 @AC-4/@AC-7/@AC-9 | settled |
+
+## Rejected Alternatives (locked)
+
+<!-- Status: locked → reopened @ round N (user, context.md <ISO>) -->
+| ID | Round | Alternative | Why rejected | Status |
+|---|---|---|---|---|
+| R-1 | 1 | A new shared Go module holding the limiter for both services | Needs `replace` directives, a Docker build-context change in two services and `GOWORK=off` CI handling; the repo already governs byte-identical per-module copies with a CI hash check (`scripts/check-watcher-copies.py:13-35`, `docs/patterns/dry-guard-rail.md:87-99`). | locked |
+| R-2 | 1 | A package-level registry in trading that shares limiter state across clients holding the same credential | Global mutable state for an edge case (two accounts on one key); each client already adapts from the same account-wide headers (`trading.go:3241-3273`). | locked |
+| R-3 | 1 | In trading, retry 429s only, with no header tracking or pacing | FR-1 and FR-2 cover every Alpaca client, and FR-5 already degrades safely where the headers are absent. | locked |
+
+## Objections
+
+<!-- Status: open → closed @ round N (<how>) | waived @ round N (user) | reopened @ round N (user) -->
+| ID | Round | Objection | Blocking | Status |
+|---|---|---|---|---|
+| O-1 | 1 | The retry fit check reserved no time for the attempt itself, so a late retry could time out and turn a definite 429 into an "uncertain" outcome (FR-8; 267 @AC-1/@AC-4). | yes | closed @ round 1 (D-7: retry only if `now + wait + T ≤ callDeadline`) |
+| O-2 | 1 | Caller cancellation during an in-flight mutation retry yields `context.Canceled`, which `isUncertainBrokerOutcome` does not match, so the order is persisted REJECTED although Alpaca may have accepted it; the proposal widens that window from `T` to the whole budget (`trading.go:730`, `:743-760`, `:2565-2569`; fails.md:2609). An interrupted sleep must return `ErrRateLimited`, never a bare context error. | yes | open |
+| O-3 | 1 | "Jitter on every wait", read literally, delays 0-wait requests and breaks AC-2, AC-7 and AC-8 (P-03). | yes | closed @ round 1 (D-3: jitter only on a non-zero adaptive wait; core test asserts a 0 wait returns exactly 0) |
+| O-4 | 1 | Two departures from approved text need a user gate, not silent adoption (P-03, P-04): (a) fail-fast refusal of a wait that cannot fit replaces operator decision 3 and FR-3's "retries stop when the request context is done"; (b) FR-9 must be reworded ("a refused wait records `throttle`; a wait interrupted by cancellation records `ctx`"). | yes | open |
+| O-5 | 1 | `flattenAndHalt` treats a rate-limit error as a rejection, re-mints the intent id and retries; with in-client retries the unprotected position can stay open about 100 s against `risk.max_unprotected_seconds` 30 before the halt (`trading.go:2986-3013`, `:3056-3063`; fails.md:2627). The handling must be in scope and the order of halt versus retry decided. | yes | open |
+| O-6 | 1 | `budget = max(T, S − T)` meets FR-8 literally but leaves a margin of only `S − budget` (5 s at defaults), and the sweeper's clock starts at `InsertIntent`, before an undeadlined `UpsertOrder`, not at `do` start (`trading.go:623`, `:694`; `order_intent_repo.go:106-108`, `:139-141`). Options: anchor a deadline at the intent seam, or shrink the budget to `max(T, S − 2T)`. | no | open |
+| O-7 | 1 | `Observe` had no ordering rule: a late response could restore a higher `remaining` and forget reserved slots, bursting into a 429. | no | closed @ round 1 (D-4: `min(observed, local)` within a reset, replace only when reset advances; core test with an Observe during an in-flight reservation) |
+| O-8 | 1 | A hold trusts the server's `Reset`; a far-future or garbage value would block the host with no request able to correct it. | no | closed @ round 1 (D-4: a `Reset` beyond one window plus slack is unusable; a hold is capped at one window) |
+| O-9 | 1 | The fill poller calls `GetOrder` sequentially with no per-call deadline, so a throttled account can stall a tick for N × budget (`trading.go:1803-1822`; fails.md:3180). Give it a per-call timeout like `reconcileTick`, or record the stall as accepted. | no | open |
+| O-10 | 1 | The trading loop must drain and close each 429 body (the cancel is owned by `cancelOnClose`), clone the request, and handle a `GetBody` failure as IBKR does (fails.md:3317). | no | closed @ round 1 (D-2, D-7) |
+| O-11 | 1 | A rate-limited submit still emits `order.broker_rejected`, an ERROR "broker rejected order" log and a `rejected` outcome; a caller reusing the same `client_order_id` replays the stored REJECTED. Consider a `reason: rate_limited` payload field and document the replay. | no | open |
+| O-12 | 1 | Marketdata's worst case was 90 s plus one uncapped 30 s attempt per call. | no | closed @ round 1 (D-8: per-attempt context capped at the call deadline; the 90 s bound itself is still to be confirmed under O-4) |
+| O-13 | 1 | The core's host and fingerprint map does nothing in trading, where a client has one host and one credential (C-18). | no | closed @ round 1 (D-1: one byte-identical core is worth more than a slimmer trading copy) |
+
+## Reopen Petitions
+
+<!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
+| ID | Round | Target | New evidence | Verdict |
+|---|---|---|---|---|
