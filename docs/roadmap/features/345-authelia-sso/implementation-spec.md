@@ -80,6 +80,7 @@ in both modes (D-60, D-77, D-80). One rule is PRESERVE in legacy mode only: agen
 - Step 25 precedes Steps 29/31/33/37; Step 27 precedes Steps 33/37 (`refusalCode`, `safeRedirect`); Step 29 precedes Steps 31/33/37/39/40/41; Step 31 precedes Steps 33/37.
 - Step 33 precedes Step 35 (the `login_disabled` `AuthEvent` member).
 - Step 37 precedes Step 39: the login form posts to `/api/auth/sso/start`.
+- Step 41 → Step 43: the discovery routes' paired unit tests (AC-11 UI side, AC-49) are Step 43; Step 42 sits between them because it shares no file with either.
 - Steps 44 → 45 → 46 → 47: the stub IdP and fixtures precede the mock backend that serves their state,
   and the serialized `chromium-sso` project precedes the specs it runs. Step 47 (e2e) requires every UI
   step 24–46.
@@ -648,6 +649,7 @@ grep -n "__tests__/fixtures\|from './fixtures" src/__tests__/externalIdentity.te
 
 **Verification**:
 ```bash
+docker run --rm --entrypoint sh xstockstrat-migrate-ci -c 'command -v psql'   # the CREATE DATABASE line above needs psql in this image; if absent, run it via the postgres service container's psql instead and log it in the Deviation Log
 cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
 # DB tier: needs a migrated Postgres 16 (two databases). Without one, the CI identity-db-test job is the gate (block per P-03 until it is green).
 IDENTITY_DB_TEST_URL=<db-a> IDENTITY_DB_TEST_URL_B=<db-b> pnpm run test:db
@@ -825,6 +827,7 @@ grep -c "scripts/testdata/oidc-issuer-vectors.json" .github/workflows/ci.yml   #
 **Verification**:
 ```bash
 cd services/xstockstrat-agent && uv lock --check && uv run ruff check . && uv run ruff format --check .
+uv run pytest --cov=app --cov-fail-under=40 -q   # adding "ui" to WATCHED_NAMESPACES must leave every lifespan/snapshot test green here, not first at Step 17
 cd ../.. && node scripts/check-config-wiring.mjs --keys agent.oidc.issuer,ui.oidc.issuer   # exit 0: no unattributed read (PENDING lines only)
 # Positive attribution: both oidc.issuer reads in app/sso_mode.py resolve to agent and ui through the registry
 node --input-type=module -e "import {extractReads,loadState} from './scripts/check-config-wiring.mjs'; const root=process.cwd(); const rc=loadState(root).registry.receivers; const f='services/xstockstrat-agent/app/sso_mode.py'; const ns=extractReads(root).reads.filter((r)=>r.file===f&&r.key==='oidc.issuer').map((r)=>rc[r.file+':'+r.receiver]).sort().join(','); if (ns!=='agent,ui') { console.error('sso_mode.py oidc.issuer attribution: '+ns); process.exit(1) } console.log('agent/oidc.issuer and ui/oidc.issuer attributed to app/sso_mode.py')"
@@ -1238,16 +1241,15 @@ grep -n "typecheck (xstockstrat-ui)" ../../.github/workflows/ci.yml
 - `services/xstockstrat-ui/src/lib/sameOrigin.ts` — create
 - `services/xstockstrat-ui/src/lib/deadlines.ts` — modify
 - `services/xstockstrat-ui/src/lib/serverLog.ts` — modify
-- `services/xstockstrat-ui/src/lib/headers.ts` — modify
+- `docker-compose.yml` — modify
 
-**Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI, Connect-RPC call safety; Security — auth scope correctness
+**Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI, Connect-RPC call safety; Security — auth scope correctness; Platform Lead — deploy config parity (`APP_URL`)
 
 **Codebase Evidence**:
 - `deadlines.ts:1-14` is a leaf module ("Leaf module (no imports)") with `REFRESH_TIMEOUT_MS = 10_000` at `:3`.
 - `serverLog.ts:37-41` `export const serverLog = { info, warn, error }`.
-- `headers.ts:5-7` holds `HEADER_USER_ID`, `HEADER_ACCESS_SCOPE`, `HEADER_TRACE_ID`. **Not found**: no UI constant for `x-internal-caller` (recon R-9). The config side is `HEADER_INTERNAL_CALLER='x-internal-caller'` at `services/xstockstrat-config/src/grpc/authz.ts:74`.
 - The vector file is `scripts/testdata/oidc-issuer-vectors.json` (Step 15).
-- `APP_URL` is already set on every deploy target: `.do/app.yaml:650-651`, `.do/app.dev.yaml:647-648` and `deploy/homelab/compose.yml:283` (`APP_URL: ${APP_URL:?APP_URL is required}`) (D-67). `appOrigin()` reads that existing variable, so this step adds no deployment env var; local compose and Playwright gain it in Step 46.
+- `APP_URL` is already set on every deploy target: `.do/app.yaml:650-651`, `.do/app.dev.yaml:647-648` and `deploy/homelab/compose.yml:283` (`APP_URL: ${APP_URL:?APP_URL is required}`) (D-67). `appOrigin()` reads that existing variable. Root `docker-compose.yml` does not set it (UI block: `AGENT_PUBLIC_URL` at `:520`, `ports: "3000:3000"` at `:524-525`), so this step adds it there, keeping every service-env read wired on every target in the same step (D-67). Playwright's `webServer.env` gains it in Step 46.
 
 **TDD**: red-green required
 
@@ -1269,12 +1271,14 @@ grep -n "typecheck (xstockstrat-ui)" ../../.github/workflows/ci.yml
    - `OIDC_ID_TOKEN_ALG = 'RS256'` (D-37; spike-confirmed RS256).
    - `raceDeadline<T>(p: Promise<T>, ms: number): Promise<T>`, which rejects on timeout and clears its own timer in `finally`.
 4. **`serverLog.ts`** (D-90): add `export function logOnce(level: 'warn'|'error', message: string, key: string, detail?: Record<string,string>)` over a module `Set`, plus `__resetLogOnce()` for tests.
-5. **`headers.ts`**: add `export const HEADER_INTERNAL_CALLER = 'x-internal-caller';`.
+5. **`docker-compose.yml`** (D-67): in the `xstockstrat-ui` block, add `APP_URL: http://localhost:3000` after `:520`, with a 2-line constraint comment: it must equal the browser origin exactly, and local compose SSO is unsupported (D-91).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
 grep -n "APP_URL" ../../.do/app.yaml ../../.do/app.dev.yaml ../../deploy/homelab/compose.yml | grep -c "key: APP_URL\|APP_URL:"   # 3: every deploy target already sets it
+grep -n "APP_URL: http://localhost:3000" ../../docker-compose.yml   # 1: local compose wired in this step
+docker compose -f ../../docker-compose.yml config --quiet   # compose file still parses
 ```
 
 ---
@@ -1394,11 +1398,13 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Files**:
 - `services/xstockstrat-ui/src/lib/oidcConfig.ts` — create
 - `services/xstockstrat-ui/src/lib/mcpScopes.ts` — create
+- `services/xstockstrat-ui/src/lib/headers.ts` — modify
 - `scripts/config-wiring.json` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — environment (`production`/`staging`) scope correctness, no secret values rendered in UI; Security — secrets via `GetSecret` only
 
 **Codebase Evidence**:
+- `headers.ts:5-7` holds `HEADER_USER_ID`, `HEADER_ACCESS_SCOPE`, `HEADER_TRACE_ID`. **Not found**: no UI constant for `x-internal-caller` (recon R-9). The config side is `HEADER_INTERNAL_CALLER='x-internal-caller'` at `services/xstockstrat-config/src/grpc/authz.ts:74`. `loadOidcClientSecret()` below is its first UI consumer.
 - `connectClients.ts:109` `configClient`. Its transport defaults the timeout to `DEFAULT_UNARY_TIMEOUT_MS` unless one is passed (`:66-74`).
 - `deploymentEnv.ts:13-16` `nativeConfigEnvironment()`. The BFF precedent `insightsBff.ts:173-174` is `configClient.getConfig({ ...req, environment: nativeConfigEnvironment() }, opts)`.
 - `config.proto:103-108` `GetConfigRequest{namespace, environment, user_id}`; `:49-53` `ConfigSnapshot.values map<string, ConfigValue>`; `:110-120` `GetSecretRequest{namespace,key,environment,user_id}` / `GetSecretResponse{value, found}`.
@@ -1430,8 +1436,9 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
    - `configClient.getSecret({namespace:'ui', key:'oidc.client_secret', environment, userId:''}, {timeoutMs: AUTH_CONFIG_TIMEOUT_MS, headers: {[HEADER_INTERNAL_CALLER]: 'ui'}})`.
    - `found=false` or an empty value → `null`, which means `not_configured` (D-41, R-15).
    - Never log the value.
-6. **`mcpScopes.ts`**: `export const MCP_SCOPES_SUPPORTED = ['xstockstrat.read','xstockstrat.write','xstockstrat.admin','xstockstrat.trade'] as const;` (D-38).
-7. **`config-wiring.json`** `registry.receivers`: add `"services/xstockstrat-ui/src/lib/oidcConfig.ts:ui.values": "ui"`, `"…:agent.values": "agent"` and `"…:identity.values": "identity"`. Each binding resolves one namespace (product spec § Config Key Changes). No `findings` entries.
+6. **`headers.ts`**: add `export const HEADER_INTERNAL_CALLER = 'x-internal-caller';` (first consumer: item 5).
+7. **`mcpScopes.ts`**: `export const MCP_SCOPES_SUPPORTED = ['xstockstrat.read','xstockstrat.write','xstockstrat.admin','xstockstrat.trade'] as const;` (D-38).
+8. **`config-wiring.json`** `registry.receivers`: add `"services/xstockstrat-ui/src/lib/oidcConfig.ts:ui.values": "ui"`, `"…:agent.values": "agent"` and `"…:identity.values": "identity"`. Each binding resolves one namespace (product spec § Config Key Changes). No `findings` entries.
 
 **Verification**:
 ```bash
@@ -1470,6 +1477,8 @@ cd ../.. && node scripts/check-config-wiring.mjs --declared-from docs/roadmap/fe
    - The flag defaults to `false` when the row is absent.
    - A stored `false` is read as false, not as the default (oneof presence).
 2. These are scenario one-offs (config snapshots), so they stay inline and are exempt from C-12. Say so in the file header.
+
+- **Seeded client IDs reach the reader** (config-key wiring b): for a valid SSO snapshot with `ui` / `oidc.client_id`, `oidc.mcp_client_id` and `oidc.mcp_client_id_readonly` set to three distinct values, `loadOidcConfig()` returns `valid:true` with `clientId`, `mcpClientId` and `mcpClientIdReadonly` equal to them; with those keys absent from the snapshot each defaults to `''`.
 
 **Verification**:
 ```bash
@@ -1821,6 +1830,8 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 
 **Verification**:
 ```bash
+cd services/xstockstrat-ui && pnpm run build   # Next tolerates the extra middleware.ts exports (SSO_PUBLIC_PATHS, COOKIE_GATED_PATHS, PUBLIC_HEALTH_PATHS); a build error here means move them to src/lib/authPaths.ts
+cd ../..
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:unit
 grep -n "HEADER_TRACE_ID" src/app/api/auth/sso/callback/route.ts   # C-03: pre-auth identity calls carry x-trace-id
 grep -n "export async function GET" src/app/api/auth/sso/start/route.ts || echo "start is POST-only"
@@ -2180,7 +2191,6 @@ pnpm exec playwright test e2e/auth.spec.ts --project=chromium   # the default (l
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/playwright.config.ts` — modify
-- `docker-compose.yml` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness; Platform Lead — deploy config parity (`APP_URL`)
 
@@ -2191,7 +2201,7 @@ pnpm exec playwright test e2e/auth.spec.ts --project=chromium   # the default (l
   - `webServer.env` has `AGENT_PUBLIC_URL: 'http://127.0.0.1:9099'` (`:168`).
 - `@playwright/test` is pinned at `1.62.1` (`package.json:67`). Its `TestProject` type has a project-level `workers?: number|string` ("workers limit for this project", `playwright/types/test.d.ts:735-752`). So the serialized project needs no separate CI invocation.
 - CI's `frontend-e2e` job runs the default `playwright test` in the e2e image (`ci.yml:631-634`, `--shard=N/2`), which includes every project. `ci.yml` is unchanged.
-- `docker-compose.yml:520` `AGENT_PUBLIC_URL: http://xstockstrat-agent:9000` and `:524-525` `ports: "3000:3000"` are in the UI block.
+- Root `docker-compose.yml` gains `APP_URL` in Step 25 (with its first reader).
 - `.do/app.yaml:650-651`, `.do/app.dev.yaml:647-648` and `deploy/homelab/compose.yml:283` already set `APP_URL` (D-67), so they need no change.
 
 **TDD**: N/A (test configuration; the Step 47 specs are its RED→GREEN)
@@ -2199,8 +2209,7 @@ pnpm exec playwright test e2e/auth.spec.ts --project=chromium   # the default (l
 **Covers**: — (harness only; the scenarios it enables are covered by Step 47)
 
 **Instructions**:
-1. **APP_URL wiring** (D-67):
-   - In `docker-compose.yml`, add `APP_URL: http://localhost:3000` after `:520`, with a 2-line constraint comment: it must equal the browser origin, and local compose SSO is unsupported (D-91).
+1. **APP_URL wiring for Playwright** (D-67):
    - In `playwright.config.ts`, hoist `const BASE_URL = 'http://localhost:3000'`, use it for `use.baseURL`, and add `APP_URL: BASE_URL` to `webServer.env`.
 2. **Isolation from the parallel suite.** SSO mode, the password flag and the `getConfig` failure knob are global server state, so every spec that changes them runs serialized:
    - Add a project `chromium-sso` with `testMatch: /e2e\/sso\/.*\.spec\.ts/`, `dependencies: ['chromium']`, `fullyParallel: false` and **`workers: 1`**, so it starts only after the whole default project and never runs two specs at once.
@@ -2214,7 +2223,9 @@ pnpm exec playwright test e2e/auth.spec.ts --project=chromium   # the default (l
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
 grep -n "chromium-sso\|workers: 1\|testIgnore" playwright.config.ts
 pnpm exec playwright test --list > /dev/null   # the config loads with the new project
-grep -n "APP_URL" ../../docker-compose.yml playwright.config.ts
+grep -n "APP_URL" playwright.config.ts
+# shard check: chromium-sso tests are listed in the shard(s) CI runs, after that shard's chromium tests
+pnpm exec playwright test --list --shard=1/2 | grep -c 'chromium-sso' ; pnpm exec playwright test --list --shard=2/2 | grep -c 'chromium-sso'   # sum = total e2e/sso tests; none silently dropped
 # e2e harness: no coverage threshold (Playwright); the vitest 40% gate covers src/lib/** only (vitest.config.ts:29-33)
 ```
 
@@ -2472,6 +2483,8 @@ grep -n "AGENT-9" services/xstockstrat-agent/docs/context-constitution.md | grep
 **Instructions**:
 1. Confirm Step 48 recorded the RED (non-zero exit of the block below on the pre-docs tree). Run the block now and record the GREEN.
 2. Add no CI guard (C-18; insights.md:2940-2946). No coverage threshold applies: these are shell assertions over docs, with no code under test.
+
+**Execute note**: this step changes no files, so `/sdd-execute` records its Verification output in `context.md` instead of a commit (D-48). If the executor requires a commit per step, fold this Verification block and `Covers: AC-20, AC-36` into Step 51 and log the fold in the Deviation Log.
 
 **Verification**:
 ```bash
