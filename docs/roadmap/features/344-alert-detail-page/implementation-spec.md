@@ -5,13 +5,13 @@
 **Feature**: `docs/roadmap/features/344-alert-detail-page/feature.md`
 **Total Steps**: 23
 **Feature Branch**: `feature/alert-detail-page`
-**Tree**: `detached@5c62d0174 ≡ origin/feature/alert-detail-page` for every `path:line` below (later commits on the branch touch only this feature directory). `origin/main-dev@d1c97273b` is 4 commits ahead and **not merged** here: docs and `uv.lock` only, no source file cited below. It does change `services/xstockstrat-notify/docs/context-constitution.md` (adds NOTIFY-14..17), which Step 23 re-greps.
+**Tree**: `detached@5c62d0174 ≡ origin/feature/alert-detail-page` for every `path:line` below (later commits on the branch touch only this feature directory). `origin/main-dev@d1c97273b` is 4 commits ahead and **not merged** here: docs and `uv.lock` only, no source file cited below. It does change `services/xstockstrat-notify/docs/context-constitution.md` (adds NOTIFY-14..17), which Step 23 re-greps. **Steps 17–22 were re-specified on 2026-11-16 against `a900126ff`** (this branch with `origin/main-dev@573050534` merged, 339 included); their `path:line` references are that tree's.
 
 ---
 
 ## Execution Summary
 
-Backend first, so the UI has something real to call: the additive `GetAlert` proto (Steps 1–2), the notify handler and push deep link (Steps 3–6), then the ingest body (Steps 7–8). The UI follows in the design's build order: BFF and mock (9–10), shared helpers (11–12), the page and nav (13–14), the inbox title link (15–16). Steps 17–22 are **blocked on 339-fix-symbol-page-alerts-ui being merged**: they move the bell into the shared header, put the alert read models on one react-query prefix and add the drawer link. Step 23 is docs. Paths in the UI steps are relative to `services/xstockstrat-ui/` unless they start with `services/` or `packages/`.
+Backend first, so the UI has something real to call: the additive `GetAlert` proto (Steps 1–2), the notify handler and push deep link (Steps 3–6), then the ingest body (Steps 7–8). The UI follows in the design's build order: BFF and mock (9–10), shared helpers (11–12), the page and nav (13–14), the inbox title link (15–16). Steps 17–22 were blocked on 339-fix-symbol-page-alerts-ui; 339 merged at `573050534` (PR #1550) and they are re-specified against the post-339 tree: they move the bell into the shared header, put the alert read models on one react-query prefix and add the drawer link. Step 23 is docs. Paths in the UI steps are relative to `services/xstockstrat-ui/` unless they start with `services/` or `packages/`.
 
 No migration, no config key, no env var, no port and no new inter-service edge (recon.md:103-107). Consumer surface (C-14): **UI only** — Steps 9–22 land it on `xstockstrat-ui`. **Agent: none** — a decision recorded in the product spec ("An agent tool for reading alerts" is out of scope), not an omission.
 
@@ -34,8 +34,8 @@ No migration, no config key, no env var, no port and no new inter-service edge (
 
 1. **Spec artifacts amended in this session, per D-17 and the operator's sign-off.** `acceptance.feature`: `@AC-6` now asserts the badge "on that page"; `@AC-10 @FR-8` added. `product-spec.md`: FR-8 added, Consumer Surface line amended. `@AC-8` keeps its text; its code-only and non-RPC cases are test cases in Step 8.
 2. **The nav edit the design names is a no-op in the rendered shell.** The shell renders `NAV_GROUPS` (`src/components/shared/PlatformHeader.tsx:107-110,194`), whose `Notifications` entry has no `match` and so already matches by prefix (`src/components/shared/navGroups.tsx:12-13,89`). `PLATFORM_SUBNAV.accounts` (`PlatformHeader.tsx:94`, `match: 'exact'`) is passed as `subNav`, which `PlatformHeaderProps` documents as ignored (`:118-119`). Step 13 still makes the edit because design.md §5 requires it; the active-state assertion in Step 14 is therefore a guard that is already green for the nav part and red only because the page does not exist.
-3. **339's approved design and this design disagree on the badge value.** design.md §7 here says the bell count is `unreadCount` from `listAlerts({ limit: 1 })`. 339's design (`origin/feature/fix-symbol-page-alerts-ui@0442d300d`, design.md §5; status `design-approved`) makes the badge the length of a merged, de-duplicated unread list fed by `listAlerts({ unreadOnly: true, limit: 50 })`, keeps it off react-query, and leaves one `refreshUnread()` function. design.md §8 here already says the post-339 step adapts to what 339 shipped, so Step 19 carries a decision rule for both shapes. None of 339's symbols exist in this tree.
-4. **Steps 17–22 cannot cite post-339 line numbers.** Their anchors are today's lines plus a mandatory re-grep. Re-running `/sdd-spec alert-detail-page` after 339 merges would re-ground them and is the safer path.
+3. **(Resolved 2026-11-16: 339 shipped the merged-list badge; Step 19 follows it.) 339's approved design and this design disagree on the badge value.** design.md §7 here says the bell count is `unreadCount` from `listAlerts({ limit: 1 })`. 339's design (`origin/feature/fix-symbol-page-alerts-ui@0442d300d`, design.md §5; status `design-approved`) makes the badge the length of a merged, de-duplicated unread list fed by `listAlerts({ unreadOnly: true, limit: 50 })`, keeps it off react-query, and leaves one `refreshUnread()` function. design.md §8 here already says the post-339 step adapts to what 339 shipped, so Step 19 carries a decision rule for both shapes. None of 339's symbols exist in this tree.
+4. **(Resolved 2026-11-16 by the re-spec.) Steps 17–22 cannot cite post-339 line numbers.** Their anchors are today's lines plus a mandatory re-grep. Re-running `/sdd-spec alert-detail-page` after 339 merges would re-ground them and is the safer path.
 5. **Design's "one step blocked on 339" is written as one blocked group of six steps** (17–22), split along design.md §6, §7 and the drawer link so that each commit has its own red→green. The content is the same; the split is this spec's choice and is open to review.
 6. **O-5 is still open.** The non-RPC fallback body in Step 7 is the proposed wording. The operator answers relayed to this run ("Approved", "Confirmed", "Sign-off the change, amend it", "There are no production instances. Staging is enough.") arrived without their questions, so none is tied to O-5 here.
 7. **O-9 is half done.** 339's `context.md` (same ref, lines 894 and 918) records a constraint for 344 in 339's own words. `docs/roadmap/features/merge-order.md` on `origin/main-dev` still has no 339 → 344 row (grep).
@@ -59,7 +59,8 @@ Verdict: PASS WITH WARNINGS, no FAIL, no Floor breach. Re-checked on `origin/mai
 - Step 8 [test] covers Step 7 [service]. Step 10 covers 9, 12 covers 11, 14 covers 13, 16 covers 15, 18 covers 17, 20 covers 19, 22 covers 21.
 - Step 9 requires Step 2 (the generated `NotifyService` descriptor must carry `getAlert`).
 - Step 13 requires Steps 9 and 11. Step 15 requires Step 13 (the link target must exist).
-- Steps 17–22 are **blocked on 339-fix-symbol-page-alerts-ui merged into `main-dev` and merged into this branch** (operator decision: 339 lands first). Preconditions of execute for these steps, owned by the orchestrator (O-9): the 339 → 344 row in `docs/roadmap/features/merge-order.md`, and 339's `context.md` constraint line. Reviewed path: re-run `/sdd-spec alert-detail-page` after 339 merges, before Step 17 (review finding 1); a gate adaptation made without that re-spec goes in the Deviation Log (F-09).
+- Steps 17–22 were blocked on 339-fix-symbol-page-alerts-ui. **Unblocked 2026-11-16**: 339 merged into `main-dev` at `573050534` (PR #1550), `main-dev` merged into this branch at `a900126ff`, and Steps 17–22 re-specified against that tree (review finding 1). The 339 → 344 row is at `docs/roadmap/features/merge-order.md:126`; 339's constraint line is at its `context.md:30`. Two re-spec choices await the operator (see the 2026-11-16 `context.md` entry, "Open decisions"): the stream handler does not invalidate the query (Step 19), and 339's `stubNotify` moves into the shared helper (Steps 18, 20).
+- Step 20 requires Step 18 (`e2e/helpers/alertReadState.ts`). Steps 18 and 20 both edit `e2e/trader/alert-stream.spec.ts` (imports only).
 - Step 19 requires Step 17 (the bell must be in the shared header for the badge to be on the alert page). Step 21 requires Step 19 (the drawer no longer lists an opened alert only once the drawer list is under the `['alerts']` prefix).
 - Step 23 requires Steps 17–22 for its bell and read-model paragraphs.
 - No surface is deferred. If 339 is abandoned, Steps 17–22 need a re-spec, not a skip: `@AC-5`, `@AC-6` and `@AC-10` depend on them.
@@ -741,7 +742,7 @@ No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:2
 
 ---
 
-### Step 17 — service: [blocked on 339] the bell in the shared header
+### Step 17 — service: the bell in the shared header
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -753,80 +754,100 @@ No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:2
 
 **Reviewers**: Service owner `xstockstrat-ui` — trading UI correctness, Connect-RPC call safety
 
-**Codebase Evidence** (this tree, pre-339 — every anchor is re-grepped after 339 merges):
-- The only mount: `import { AlertStream } from './AlertStream';` (`src/components/trader/AppShell.tsx:5`) and `<AlertStream />` inside the `actions` prop (`:24`). `grep -rn "AlertStream" src --include=*.tsx --include=*.ts` finds no other importer.
-- Target: `<div className="flex items-center gap-2 ml-auto">{actions}<CopilotToggle />` in `PlatformHeaderInner` (`src/components/shared/PlatformHeader.tsx:246-248`).
-- `AlertStream.tsx` imports its primitives relatively (`'../ui/button'`, `'../ui/badge'`, `'../ui/sheet'`, `'../ui/separator'`, `:6-9`); `components/shared/` is a sibling of `components/trader/`, so those paths stay valid after the move.
-- Every `PlatformHeader` mount is inside a `QueryClientProvider`: trader (`src/app/trader/layout.tsx` → `providers.tsx:12`), insights (`src/app/insights/layout.tsx` → `src/components/shared/QueryProviders.tsx:15`), accounts (`src/app/accounts/layout.tsx:24-25`), config-ui (`src/app/config-ui/layout.tsx:12-13`).
-- The bell calls the root-relative `notifyClient` (`/trader/api`), which works from any segment for the four facts recorded at `services/xstockstrat-ui/docs/context-constitution.md:19`.
-- The disconnected label is `sr-only sm:not-sr-only` (`src/components/trader/AlertStream.tsx:53-59`), which is why the 640–1024px width check exists (D-19).
-- e2e that locate the bell on `/trader`: `e2e/trader/alert-stream.spec.ts:19-99`, `e2e/trader/stream-reconnect.spec.ts:111-128`. A header overflow at exactly 1024px on trader pages is a known, pre-existing edge (`e2e/mobile-overflow.spec.ts:76-83`).
-- 339's changes to `AlertStream.tsx`, its helpers in `src/lib/alertShared.ts` and its e2e: **Not found** in this tree.
-- Gate status at re-spec (2026-11-15, `origin/main-dev@9f8856229` merged): **the 339 gate fails, so Steps 17–22 stay blocked.** `origin/feature/fix-symbol-page-alerts-ui@4d1ee033f` is not an ancestor of this branch, `origin/main-dev` has no `fix-symbol-page-alerts-ui` merge commit, `grep unreadOnly src/components/trader/AlertStream.tsx` is empty, and 339's `status.md` on its branch is `implementation-ready`. The 339 → 344 row is now on `origin/main-dev` (`docs/roadmap/features/merge-order.md:126`) and says Steps 17–22 must be re-specified after 339 merges.
+**Codebase Evidence** (post-339 tree, `a900126ff`; confirmed via `cat -n` and `grep -rn "AlertStream" src e2e`):
+- 339 is merged: `origin/main-dev@573050534` is "feat(fix-symbol-page-alerts-ui) … (339) (#1550)", merged into this branch at `a900126ff`; `grep -n "unreadOnly" src/components/trader/AlertStream.tsx` → `:34`.
+- The only mount: `import { AlertStream } from './AlertStream';` (`src/components/trader/AppShell.tsx:5`) and `<AlertStream />` as the last child of the `actions` div (`:24`), after `<TradingModeBadge mode={environmentMode} />` (`:22`) and `<AccountSelector />` (`:23`). No other importer in `src` or `e2e`; the other hits are prose (`src/lib/alertShared.ts:1`, `e2e/mock-backend.ts:681`, `e2e/mobile-overflow.spec.ts:79`) and name no path.
+- Target: `function PlatformHeaderInner({ actions }: PlatformHeaderProps)` (`src/components/shared/PlatformHeader.tsx:191`) renders `<div className="flex items-center gap-2 ml-auto">` with `{actions}` (`:247`) and `<CopilotToggle />` (`:248`).
+- Imports of `AlertStream.tsx` as 339 shipped it: `'../ui/button'`, `'../ui/badge'`, `'../ui/sheet'`, `'../ui/separator'` (`:6-9`) stay valid from `components/shared/`. **`import { CardNotice } from '../shared/CardNotice';` (`:10`, added by 339) does not** — from `components/shared/` it is `'./CardNotice'` (`src/components/shared/CardNotice.tsx` exists). The `@/lib/…` and `@/hooks/…` imports (`:3`, `:11-19`) are alias paths and do not change.
+- Every `PlatformHeader` mount is inside a `QueryClientProvider`: trader (`src/app/trader/layout.tsx:10` → `providers.tsx:12`), insights (`src/app/insights/layout.tsx:10` → `src/app/insights/providers.tsx` re-exports `src/components/shared/QueryProviders.tsx:15`; header at `src/components/insights/AppShell.tsx:20`), accounts (`src/app/accounts/layout.tsx:24-25`), config-ui (`src/app/config-ui/layout.tsx:12-13`).
+- The bell calls the root-relative `notifyClient` (`makeBrowserTransport('/trader/api')`, `src/lib/browserClients/notifyClient.ts:5`); the sanctioned UI-2 exception is at `services/xstockstrat-ui/docs/context-constitution.md:19`.
+- The disconnected label is `sr-only sm:not-sr-only` (`src/components/trader/AlertStream.tsx:108-115`), which is why the 640–1024px width check exists (D-19).
+- e2e that locate the bell on `/trader`: `e2e/trader/alert-stream.spec.ts:23-24` (`bellOf`, `badgeOf`) and both of its suites (`:88-245`); `e2e/trader/stream-reconnect.spec.ts:73-96`; the shell aria snapshot `e2e/theme/theme-bundle.spec.ts-snapshots/shell.aria.yml:38` (`button "Alerts"`, taken on `/trader` by `e2e/theme/theme-bundle.spec.ts:73-79`). A header overflow at exactly 1024px on trader pages is a known, pre-existing edge (`e2e/mobile-overflow.spec.ts:69-84`).
 
 **TDD**: `red-green required` — Step 18's `@AC-10` cases fail first (no bell outside `/trader`).
 
 **Covers**: `—`
 
 **Instructions**:
-0. **Gate.** Confirm 339 is merged into this branch: `git log --oneline origin/main-dev | grep -i "fix-symbol-page-alerts-ui"` and `grep -n "unreadOnly" src/components/trader/AlertStream.tsx`. If either is empty, stop — this step is blocked. Then re-grep every anchor above and adapt to what 339 shipped; do not assume its shape (design.md §8).
-1. Move the file with `git mv src/components/trader/AlertStream.tsx src/components/shared/AlertStream.tsx`, as 339 left it. Change no behaviour in the move.
-2. Repoint every importer found by `grep -rn "AlertStream'" src e2e` (today: `AppShell.tsx:5` only; include any test 339 added).
-3. `src/components/trader/AppShell.tsx` — remove the `AlertStream` import and the `<AlertStream />` element from `actions`. `TradingModeBadge` and `AccountSelector` stay (`@AC-12 @feature-270` PRESERVE).
-4. `src/components/shared/PlatformHeader.tsx` — import `AlertStream` from `./AlertStream` and render `<AlertStream />` in `PlatformHeaderInner` directly after `{actions}` and before `<CopilotToggle />` (`:247-248`). One mount, so each page in every segment has exactly one `StreamAlerts` consumer (D-14).
-5. If the header overflows between 640px and 1024px on the insights or accounts routes Step 18 checks, fix it inside `AlertStream` (for example by keeping the disconnected label `sr-only` below `lg`), not by removing header content.
+0. 339 is merged at `573050534` (PR #1550) and is in this branch since `a900126ff`. Re-grep the anchors above only if the branch has moved past `a900126ff` in these four files.
+1. Move the file with `git mv src/components/trader/AlertStream.tsx src/components/shared/AlertStream.tsx`. The only content edit is the import at `:10`: `'../shared/CardNotice'` → `'./CardNotice'`. Change no behaviour in the move.
+2. `src/components/trader/AppShell.tsx` — remove the `AlertStream` import (`:5`) and the `<AlertStream />` element (`:24`). `TradingModeBadge` and `AccountSelector` stay (`@AC-12 @feature-270` PRESERVE).
+3. `src/components/shared/PlatformHeader.tsx` — import `AlertStream` from `./AlertStream` and render `<AlertStream />` in `PlatformHeaderInner` directly after `{actions}` (`:247`) and before `<CopilotToggle />` (`:248`). One mount, so each page in every segment has exactly one `StreamAlerts` consumer (D-14).
+4. If the header overflows between 640px and 1024px on the insights or accounts routes Step 18 checks, fix it inside `AlertStream` (for example by keeping the disconnected label `sr-only` below `lg`), not by removing header content.
+5. Do not refresh `shell.aria.yml` by hand. The bell keeps its place in the accessibility tree on `/trader` (after the account selector, before the copilot toggle); if the theme spec fails on that snapshot, stop and record it rather than re-recording it in this step.
 
-**Verification**:
+**Verification** (host e2e fallback form; CI's `frontend-e2e` is the confirming run):
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm run test:unit
-grep -rn "AlertStream" src --include=*.tsx --include=*.ts   # one definition under components/shared, one mount in PlatformHeader.tsx, none in components/trader
-pnpm exec playwright test e2e/trader/alert-stream.spec.ts e2e/trader/stream-reconnect.spec.ts e2e/mobile-overflow.spec.ts e2e/nav-reachability.spec.ts --project=chromium
+set -euo pipefail
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run format:check
+pnpm run test:unit
+test "$(grep -rln "export function AlertStream" src | tr '\n' ' ')" = "src/components/shared/AlertStream.tsx "
+test "$(grep -rn "<AlertStream />" src | cut -d: -f1 | tr '\n' ' ')" = "src/components/shared/PlatformHeader.tsx "
+if grep -rn "AlertStream" src/components/trader; then exit 1; fi
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/trader/alert-stream.spec.ts e2e/trader/stream-reconnect.spec.ts e2e/mobile-overflow.spec.ts e2e/nav-reachability.spec.ts e2e/accounts e2e/theme/theme-bundle.spec.ts --project=chromium --no-deps --trace off
 ```
 
 ---
 
-### Step 18 — test: [blocked on 339] the bell on every segment
+### Step 18 — test: the bell on every segment
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
+- `services/xstockstrat-ui/e2e/helpers/alertReadState.ts` — create
+- `services/xstockstrat-ui/e2e/trader/alert-stream.spec.ts` — modify (imports only)
 - `services/xstockstrat-ui/e2e/alert-bell.spec.ts` — create
 - `services/xstockstrat-ui/e2e/mobile-overflow.spec.ts` — modify
+- `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
 
 **Reviewers**: Service owner `xstockstrat-ui` — trading UI correctness
 
-**Codebase Evidence**:
-- The bell's accessible name is `Alerts` (`aria-label={disconnected ? 'Alerts — live alerts disconnected' : 'Alerts'}`, `src/components/trader/AlertStream.tsx:66` pre-339 — re-grep).
-- Badge locator used today: `page.locator('span[data-slot="badge"]').filter({ hasText: /^2$/ })` (`e2e/trader/alert-stream.spec.ts:39`).
-- Overflow helper and viewport pattern: `horizontalOverflow(page)` (`e2e/mobile-overflow.spec.ts:43-47`), `test.use({ viewport: { width: 1280, height: 900 } })` (`:86`), the `networkidle` wait is capped and caught because streams keep the network busy (`:40-41`, `:57`).
-- Dropped-stream indicator and reconnect: `e2e/trader/stream-reconnect.spec.ts:111-128` (`alert-stream-disconnected`).
-- `e2e/alert-bell.spec.ts`: **Not found** — created by this step.
-- Gate status at re-spec (2026-11-15): the 339 gate fails (see Step 17), so this step stays blocked.
+**Codebase Evidence** (post-339 tree, `a900126ff`):
+- The bell's accessible name: `aria-label={disconnected ? 'Alerts — live alerts disconnected' : 'Alerts'}` (`src/components/trader/AlertStream.tsx:121`). The badge is a `Badge` inside the trigger button, text `{unread > 9 ? '9+' : unread}` (`:124-131`).
+- 339's locators, local to its spec: `const bellOf = (page: Page) => page.getByRole('button', { name: /^Alerts/, includeHidden: true });` and `const badgeOf = (page: Page) => bellOf(page).locator('[data-slot="badge"]');`, with the Radix comment above them (`e2e/trader/alert-stream.spec.ts:22-24`). They are the shipped way to find the bell and its badge; a second copy in a new spec would break the DRY guard rail (`docs/patterns/dry-guard-rail.md`).
+- Under the shared mock the badge is stable: `listAlerts` with `unreadOnly` returns the 2 stored unread rows plus `ALERT_STREAM_ALL` (`e2e/mock-backend.ts:686-694`), and `streamAlerts` yields `ALERT_STREAM_ALL` then stays open until the client aborts (`:676-684`); 339 asserts `'5'` on `/trader` (`e2e/trader/alert-stream.spec.ts:100-110`).
+- The mock stream never ends on its own, so `useReconnectingStream` does not reconnect (`src/hooks/useReconnectingStream.ts:40-64`). A request count is still unstable outside CI mode: without `CI` the web server is `pnpm dev` (`playwright.config.ts:129`), where React strict mode mounts effects twice. The one-stream check is therefore structural (one bell), not a request count.
+- Overflow helper and viewport pattern: `NETWORK_IDLE_MS` (`e2e/mobile-overflow.spec.ts:41`), `horizontalOverflow(page)` (`:43-47`), the capped and caught `networkidle` wait (`:57`), `test.describe` + `test.use({ viewport: { width: 1280, height: 900 } })` (`:85-86`). The 390px sweep already covers `/insights/opportunities`, `/config-ui` and `/trader` (`:12-38`) and so re-checks the bell at phone width once Step 17 lands. `/config-ui` loads with `addAuthCookie` there (`:26`, no `admin` flag).
+- Dropped-stream indicator and reconnect on `/trader`: `e2e/trader/stream-reconnect.spec.ts:73-96` (`fulfillStream(route, [ALERT_STREAM_001], DROPPED)` on attempt 1, then `route.continue()` after a `gate()`; `alert-stream-disconnected` attaches, then has count 0). `fulfillStream` and `gate` are exported from `e2e/helpers/connectStream.ts:21-37`.
+- Helpers live in `e2e/helpers/` (`auth.ts`, `browser-resolution.ts`, `connectStream.ts`, `devCerts.ts`, `watchlistMock.ts`); a helper has an `INVENTORY.md` row (`e2e/fixtures/INVENTORY.md:47` for `watchlistMock`). The alert rows are `:53-55`.
+- `e2e/alert-bell.spec.ts`, `e2e/helpers/alertReadState.ts`: **Not found** — created by this step.
 
-**TDD**: `red-green required`
+**TDD**: `red-green required` — run the new spec against the pre-Step-17 commit first: the `/insights/opportunities`, `/config-ui` and `/accounts/notifications` cases fail (no bell).
 
 **Covers**: `AC-10`
 
 **Instructions**:
-0. **Gate** as in Step 17. Re-grep the bell's accessible name and the badge markup 339 shipped.
-1. Create `e2e/alert-bell.spec.ts`:
-   - **`@AC-10`** — a parametrised test over `/trader`, `/insights/opportunities`, `/config-ui`, `/accounts/notifications`: after `addAuthCookie(page)` and `page.goto(path)`, `page.getByRole('button', { name: 'Alerts' })` is visible, there is exactly one such button, and it shows an unread badge. Read the badge text on `/trader` first and assert the other three pages show the same value under the same mock (values only; no hard-coded count, no call counting — D-26).
-   - **One stream per page** — count requests to `**/NotifyService/StreamAlerts` with `page.on('request')` on `/accounts/notifications` and assert at least one and, after the page settles, that only one is open (assert via the single bell button and a single `Sheet` trigger rather than a request count if 339's reconnect logic makes the count unstable; state which one was used in `context.md`).
-   - **`@AC-9 @feature-270` EXTEND** — on `/accounts/notifications`, abort `StreamAlerts` as `e2e/trader/stream-reconnect.spec.ts:111-128` does; `alert-stream-disconnected` attaches, then detaches after the route is released.
-   - **`@AC-12 @feature-270` PRESERVE** — on `/trader` the trading-mode badge and the account selector are still in the header.
-2. `e2e/mobile-overflow.spec.ts` — add a `test.describe` for D-19 that checks `horizontalOverflow(page) <= 1` at widths 640, 768 and 1024 on `/insights/opportunities` and `/accounts/notifications` (six cases), using the same capped `networkidle` wait. The known 1024px trader edge (`:76-83`) is out of scope and stays documented there.
-3. C-12: no new domain data; the bell reads the existing alert fixtures through the mock.
+0. 339 is merged at `573050534` (PR #1550), in this branch since `a900126ff`.
+1. Create `e2e/helpers/alertReadState.ts` and move `bellOf` and `badgeOf` into it, exported, with their comment (`e2e/trader/alert-stream.spec.ts:22-24`). `e2e/trader/alert-stream.spec.ts` imports them from `../helpers/alertReadState`; no test body changes. Step 20 adds the stateful stub to the same file.
+2. Create `e2e/alert-bell.spec.ts`:
+   - **`@AC-10`** — a parametrised test over `/trader`, `/insights/opportunities`, `/config-ui`, `/accounts/notifications`: after `addAuthCookie(page)` and `page.goto(path)`, `bellOf(page)` is visible, `toHaveCount(1)`, and `badgeOf(page)` is visible. Read the badge text on `/trader` first (wait until it is stable, as `alert-stream.spec.ts:106` does with its timeout) and assert the other three pages show the same text under the same mock. Values only; no hard-coded count, no call counting (D-26).
+   - **One stream consumer per page** — on `/accounts/notifications`: at least one request to `**/xstockstrat.notify.v1.NotifyService/StreamAlerts` is seen (`page.on('request')`), and `bellOf(page)` has count 1. No upper bound on the request count (see Evidence).
+   - **`@AC-9 @feature-270` EXTEND** — on `/accounts/notifications`, drop the first `StreamAlerts` attempt exactly as `e2e/trader/stream-reconnect.spec.ts:77-86` does: `alert-stream-disconnected` attaches and the bell's accessible name matches `/disconnected/`; after the gate is released the name is `Alerts` and the indicator has count 0.
+   - **`@AC-12 @feature-270` PRESERVE** — on `/trader` the trading-mode badge and the account selector are still in the `banner`. Take both locators from an existing trader spec (grep `e2e/trader` for the selector's and the badge's locators at execute); do not add a testid for this.
+3. `e2e/mobile-overflow.spec.ts` — add a `test.describe` for D-19 that checks `horizontalOverflow(page) <= 1` at widths 640, 768 and 1024 on `/insights/opportunities` and `/accounts/notifications` (six cases), using the same capped `networkidle` wait and the 800 ms settle. The known 1024px trader edge (`:69-84`) is out of scope and stays documented there.
+4. `e2e/fixtures/INVENTORY.md` — add a row for `e2e/helpers/alertReadState.ts` (`bellOf`, `badgeOf`; consumers `e2e/alert-bell.spec.ts`, `e2e/trader/alert-stream.spec.ts`). C-12: no new domain data; the bell reads the existing alert fixtures through the mock.
 
-**Verification**:
+**Verification** (host e2e fallback form; CI's `frontend-e2e` is the confirming run):
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm exec playwright test e2e/alert-bell.spec.ts e2e/mobile-overflow.spec.ts --project=chromium
-pnpm test:e2e   # the bell is now on every page: run the whole suite once (fails.md 2026-11-04, fix-ui-trader-feedback)
+set -euo pipefail
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+grep -n "helpers/alertReadState" e2e/alert-bell.spec.ts e2e/trader/alert-stream.spec.ts
+grep -n "alertReadState" e2e/fixtures/INVENTORY.md
+if grep -n "const bellOf\|const badgeOf" e2e/trader/alert-stream.spec.ts e2e/alert-bell.spec.ts; then exit 1; fi
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/alert-bell.spec.ts e2e/mobile-overflow.spec.ts e2e/trader/alert-stream.spec.ts --project=chromium --no-deps --trace off
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test --project=chromium --no-deps --trace off
 ```
+The last line is the whole suite: the bell is now on every page (`fails.md`, fix-ui-trader-feedback — a shell change breaks specs far from it). If a spec fails on the host for a reason that also fails on the pre-Step-17 commit, record it in the Deviation Log as environmental; CI's `frontend-e2e` decides.
 No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:29` lists none for `frontend-e2e`); the `src/lib/**` vitest gate (≥ 40%) is checked in Step 12.
 
 ---
 
-### Step 19 — service: [blocked on 339] shared alert read models
+### Step 19 — service: shared alert read models
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -838,93 +859,123 @@ No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:2
 
 **Reviewers**: Service owner `xstockstrat-ui` — trading UI correctness, Connect-RPC call safety
 
-**Codebase Evidence** (this tree, pre-339):
-- `useInvalidatingMutation(mutationFn, invalidateKeys, options?: { mutationKey?, meta? })` invalidates each key on success (`src/hooks/useInvalidatingMutation.ts:15-32`).
-- `meta.errorHandled === true` is the only opt-out from the global mutation error fallback (`src/lib/mutationErrorStore.ts:36-38`; `src/lib/queryClient.ts:15-19`); the fallback renders `role="alert"` (`src/components/shared/MutationErrorFallback.tsx:28-36`).
-- Query defaults: `staleTime: 5_000, retry: 1` (`src/lib/queryClient.ts:22`); `refetchOnWindowFocus` is the library default (on).
-- One `QueryClient` per segment provider (`src/app/trader/providers.tsx:10`, `src/components/shared/QueryProviders.tsx:13`), so the cache is shared inside a segment and not across segments.
-- Bell count today: a one-shot effect, `notifyClient.listAlerts({ limit: 1 })` → `setUnreadCount(res.unreadCount)` (`src/components/trader/AlertStream.tsx:19-32`). Stream handler: `(alert) => setAlerts((prev) => prev.some(…) ? prev : [alert, ...prev].slice(0, 50))` (`:42-45`); a reconnect re-delivers alerts (`:34`).
-- Inbox today: local state plus `refetch()` (`src/app/accounts/notifications/AlertInbox.tsx:19-40`), `markRead` calls `notifyClient.markAlertRead` then `refetch()` inside `try/catch` with its own error text (`:42-53`), "N unread" badge from `unreadCount` (`:63-65`).
-- Alert page mark-read: the direct call added in Step 13.
-- **Not found in this tree — from 339's design.md §5 (`origin/feature/fix-symbol-page-alerts-ui@0442d300d`), to be confirmed by grep after the merge**: `refreshUnread()`, `mergeUnread`, `pruneStreamed`, `drainUnread`, a `readIds` set, a badge equal to the merged unread list length, a per-row drawer mark-read and a draining "Clear all". 339's `context.md:894` states its constraint for 344: "the `ALERT_UNREAD_COUNT_KEY` value is derived from the merged, de-duplicated unread list and is invalidated by mark-read and Clear all".
-- Gate status at re-spec (2026-11-15): the 339 gate fails (see Step 17). None of `refreshUnread`, `mergeUnread`, `pruneStreamed`, `drainUnread`, `readIds`, `unreadOnly` is in `src`, so neither Case A nor Case B can be confirmed; this step stays blocked.
+**Codebase Evidence** (post-339 tree, `a900126ff`; `AlertStream.tsx` lines are the file as 339 shipped it — Step 17 moves it and changes line 10 only):
+- **339 shipped the merged-list badge** (the old spec's Case A). `AlertStream.tsx`: state `stored`, `streamed: { alert; seq }[]`, `readIds`, `seqRef`, `pending`, `fetchFailed`, `markNotice` (`:22-28`); `refreshUnread` is the only fetch — `notifyClient.listAlerts({ unreadOnly: true, limit: UNREAD_PAGE_SIZE })`, a superseded response dropped by `seq !== seqRef.current`, then `setStored`, `setStreamed((prev) => pruneStreamed(prev, resultIds, seq))`, `setFetchFailed(false)`; the catch sets `fetchFailed` (`:30-43`). It runs on mount (`:45-47`) and on drawer open (`:103-107`).
+- Stream handler: stamps the entry with `seqRef.current` and adds it to `streamed` unless its `alertId` is already there, capped at `UNREAD_PAGE_SIZE` (`:57-64`). The badge is `mergeUnread(stored, streamed.map((e) => e.alert), readIds).length` (`:67-72`), shown as `9+` above 9 (`:129`). Nothing reads the server `unreadCount`.
+- Drawer mark-read: `notifyClient.markAlertRead({ alertIds: [alert.alertId] })`, add to `readIds`, `setMarkNotice('error')` on failure, then `await refreshUnread()` after success **and** failure (`:75-86`). Clear all: `drainUnread({ list, mark, cutoff: merged[0] })`, add `result.markedIds` to `readIds`, notice when the outcome is not `done`, then `await refreshUnread()` (`:88-100`). Notices: `:153-160`.
+- Helpers in `src/lib/alertShared.ts`: `UnreadLike` (`:33-36`), `UNREAD_PAGE_SIZE = 50` (`:39`), `mergeUnread` (`:50-60`), `pruneStreamed(streamed, resultIds, fetchSeq)` — keeps an entry that is in the result or has `seq >= fetchSeq` (`:62-68`), `drainUnread` (`:77-112`). `ALERTS_QUERY_KEY` / `ALERT_UNREAD_COUNT_KEY`: **Not found** in `src` or `e2e` (grep) — created by this step.
+- 339's constraint for this step, in its own words: "the value under `ALERT_UNREAD_COUNT_KEY` is derived from the merged, de-duplicated unread list (D-5), never the server `unreadCount` plus a streamed delta (R-5). Mark-read and Clear all must invalidate it." (`docs/roadmap/features/339-fix-symbol-page-alerts-ui/design.md:194-196`; also `context.md:30,61`). It leaves "the single `refreshUnread()`, which 344 can swap for a `useQuery` / `invalidateQueries` pair" (`design.md:192-193`).
+- A streamed alert that the stored-unread list does not return is dropped by the next fetch that starts after it arrived: `e2e/mock-backend.ts:687` says so ("unreadOnly must include ALERT_STREAM_ALL, or the drawer prunes streamed rows"). `ALERT_STREAM_HELD` is **not** in the mock's `unreadOnly` list (`e2e/mock-backend.ts:688-694`), and `e2e/trader/alert-stream.spec.ts:132-146` (`271 @AC-5`) needs its title visible in the open drawer after it streams in.
+- `useInvalidatingMutation(mutationFn, invalidateKeys, options?: { mutationKey?, meta? })` invalidates each key on success only (`src/hooks/useInvalidatingMutation.ts:15-32`).
+- `meta.errorHandled === true` is the only opt-out from the global mutation error fallback (`src/lib/mutationErrorStore.ts:37-39`; `src/lib/queryClient.ts:15-19`); the fallback renders `role="alert"` (`src/components/shared/MutationErrorFallback.tsx:30`).
+- Query defaults: `staleTime: 5_000, retry: 1` (`src/lib/queryClient.ts:22`); `refetchOnWindowFocus` is the library default (on). One `QueryClient` per segment provider, held in `useState` (`src/app/trader/providers.tsx:10`, `src/components/shared/QueryProviders.tsx:13`), so the cache is shared inside a segment and not across segments.
+- Inbox: local `alerts` / `unreadCount` / `loading` / `error` state and `refetch()` → `notifyClient.listAlerts({})` (`src/app/accounts/notifications/AlertInbox.tsx:14-35`); `markRead(alertIds)` calls `notifyClient.markAlertRead` then `refetch()` inside `try/catch`, error text into `error` (`:37-48`); "N unread" badge from `unreadCount` (`:58-60`); "Mark all read" (`:61-69`) and the per-row button (`:122-130`) both call `markRead`; skeleton on `loading` (`:74-79`).
+- Alert page: after `getAlert` resolves, `notifyClient.markAlertRead({ alertIds: [res.alertId] }).then(() => { if (active) setMarkedRead(true); }).catch(() => {})` (`src/app/accounts/notifications/[alert_id]/AlertDetail.tsx:33-39`); `markedRead` feeds `alert-read-state` (`:76`).
+- `markAlertRead` call sites in `src` today: `AlertStream.tsx:79`, `:93` (inside `drainUnread`), `AlertInbox.tsx:41`, `AlertDetail.tsx:35`.
 
 **TDD**: `red-green required` — Step 20's badge-drop cases fail first.
 
 **Covers**: `—`
 
 **Instructions**:
-0. **Gate** as in Step 17, then `grep -n "refreshUnread\|mergeUnread\|unreadOnly\|listAlerts" src/components/shared/AlertStream.tsx src/lib/alertShared.ts` and pick the case below. If what 339 shipped fits neither case, stop and escalate (P-03); do not improvise a third shape.
+0. 339 is merged at `573050534` (PR #1550), in this branch since `a900126ff`. The shape is the old spec's Case A; Case B (server-count badge) is dropped.
 1. `src/lib/alertShared.ts` — export `ALERTS_QUERY_KEY = ['alerts'] as const` and `ALERT_UNREAD_COUNT_KEY = ['alerts', 'unread-count'] as const` (D-20). No other key constant: the inbox key is written as `[...ALERTS_QUERY_KEY, 'list']`.
-2. **Bell read model** (`AlertStream.tsx`) — the server read that feeds the badge becomes a `useQuery` on `ALERT_UNREAD_COUNT_KEY`, replacing the mount effect or 339's fetch-on-trigger:
-   - **Case A — 339 shipped the merged-list badge** (its approved design): the query function is the stored-unread fetch 339 already makes (`listAlerts({ unreadOnly: true, limit: 50 })`); the badge keeps 339's derivation (merged, de-duplicated list length, `9+` display); `refreshUnread()` becomes one `queryClient.invalidateQueries({ queryKey: ALERT_UNREAD_COUNT_KEY })`; 339's merge, prune and `readIds` helpers stay. This is the shape 339's own constraint line asks for.
-   - **Case B — the badge is still the server count**: the query function is `listAlerts({ limit: 1 })` with `select: (res) => res.unreadCount` (design.md §7 as written).
-   - In both cases the stream `onMessage` path **invalidates** `ALERT_UNREAD_COUNT_KEY` and never increments a cached value, because a reconnect re-delivers alerts (D-24, R-13). 339's "a streamed alert raises the badge without a reload" behaviour must still hold (`@AC-5 @feature-339` PRESERVE).
-   - Drawer mark-read and "Clear all" (if 339 shipped them) go through `useInvalidatingMutation(…, [ALERTS_QUERY_KEY], { meta: { errorHandled: true } })` or, where 339's drain helper owns the calls, end with one `invalidateQueries({ queryKey: ALERTS_QUERY_KEY })`. Keep 339's own error notices.
-3. **Inbox** (`AlertInbox.tsx`) — replace the local `alerts` / `unreadCount` / `loading` state and `refetch()` with `useQuery({ queryKey: [...ALERTS_QUERY_KEY, 'list'], queryFn: () => notifyClient.listAlerts({}) })` (D-23). `markRead` becomes a `useInvalidatingMutation((alertIds: string[]) => notifyClient.markAlertRead({ alertIds }), [ALERTS_QUERY_KEY], { meta: { errorHandled: true } })` called with `mutateAsync` inside the existing `try/catch`, which keeps the inbox's own error text (D-22). Keep every testid, the skeleton, the two `EmptyState`s and the "N unread" badge; loading maps to `isLoading`, the error text to the query error or the mark error.
-4. **Alert page** (`AlertDetail.tsx`) — replace the direct `markAlertRead` call with the same `useInvalidatingMutation` (keys `[ALERTS_QUERY_KEY]`, `meta: { errorHandled: true }`), fired with `mutate([res.alertId])` after a successful `GetAlert`. Failure stays silent (D-7, D-22). The `GetAlert` fetch itself is unchanged.
-5. One invalidation of the `['alerts']` prefix now refreshes the bell, the drawer list, the inbox rows and the inbox "N unread" badge, whichever surface marked the alert read. Do not add a window event, a second refresh mechanism or a count-only invalidation (R-8, R-11, R-12).
-6. Behaviour change to carry into the PR body and Step 23: the bell now refetches on window focus and retries once (D-26).
-7. Mutation opt-out audit (`fails.md` 2026-11-04, fix-ui-trader-feedback): `grep -rn "markAlertRead" src` — every call site is one of the three above (inbox, alert page, drawer) and each passes `errorHandled`.
+2. **Bell read model** (`src/components/shared/AlertStream.tsx`) — swap `refreshUnread()` for the `useQuery` / `invalidateQueries` pair 339 left the seam for, and keep 339's derivation:
+   - The stored-unread fetch becomes `useQuery` on `ALERT_UNREAD_COUNT_KEY`. Its query function increments `seqRef` and makes the same call as today (`listAlerts({ unreadOnly: true, limit: UNREAD_PAGE_SIZE })`), returning the alerts together with that fetch's `seq`, because `pruneStreamed` needs the sequence of the fetch that produced the result. `stored` is the query data's alerts (empty while there is none); the `stored` state, the manual `seq !== seqRef.current` guard and the mount effect go. When the query data changes, prune `streamed` with `pruneStreamed(prev, resultIds, seq)` as `:36-38` does today.
+   - `fetchFailed` is the query's error state. With `retry: 1` the "Could not load alerts" notice appears after the retry, not at once.
+   - `refreshUnread()` becomes one `queryClient.invalidateQueries({ queryKey: ALERT_UNREAD_COUNT_KEY })`; the drawer's `onOpenChange` keeps calling it on open.
+   - The badge, `hasHighSeverity` and the drawer list keep `mergeUnread(stored, streamed, readIds)`; `readIds`, `pruneStreamed`, `drainUnread`, the `9+` display and the notices stay. The value under the key is the unread list, and the count is derived from the merged list (339's constraint).
+   - **Stream handler — conservative reading, see Open decisions (1).** The `onItem` handler stays as 339 shipped it (`:57-64`): it adds the alert to the `streamed` buffer, de-duplicated on `alertId`, and does **not** invalidate the query. No cached count is incremented (R-13 holds: a re-delivered alert is dropped by the `alertId` check and by `mergeUnread`). design.md §8 / D-24 asks for an invalidation on message; with 339's prune that would drop a streamed alert the stored list does not return (`271 @AC-5`, `ALERT_STREAM_HELD`). Do not add the invalidation unless the operator rules for it.
+   - Drawer per-row mark-read goes through `useInvalidatingMutation((alertIds: string[]) => notifyClient.markAlertRead({ alertIds }), [ALERTS_QUERY_KEY], { meta: { errorHandled: true } })`, called with `mutateAsync` inside the existing `try/catch`. Success adds the id to `readIds` and the mutation invalidates the prefix; the catch keeps `setMarkNotice('error')` and calls `refreshUnread()` so the list still re-syncs after a failure, as `:85` does today.
+   - Clear all keeps `drainUnread` with direct `notifyClient` calls (it is not a mutation, so nothing reaches the global fallback) and ends with one `queryClient.invalidateQueries({ queryKey: ALERTS_QUERY_KEY })` in place of `await refreshUnread()` (`:99`).
+3. **Inbox** (`AlertInbox.tsx`) — replace the local `alerts` / `unreadCount` / `loading` state and `refetch()` with `useQuery({ queryKey: [...ALERTS_QUERY_KEY, 'list'], queryFn: () => notifyClient.listAlerts({}) })` (D-23). `markRead` becomes a `useInvalidatingMutation((alertIds: string[]) => notifyClient.markAlertRead({ alertIds }), [ALERTS_QUERY_KEY], { meta: { errorHandled: true } })` called with `mutateAsync` inside the existing `try/catch`, which keeps the inbox's own error text (D-22); the empty-list early return (`:39`) stays. Keep every testid, the skeleton, the two `EmptyState`s, "Mark all read" and the "N unread" badge (from the query's `unreadCount`). The skeleton maps to `isLoading`, so it shows on the first load only and no longer flashes after a mark-read; the error text is the query error or the mark error.
+4. **Alert page** (`AlertDetail.tsx`) — replace the direct `markAlertRead` call (`:34-39`) with the same `useInvalidatingMutation` (keys `[ALERTS_QUERY_KEY]`, `meta: { errorHandled: true }`), fired with `mutate([res.alertId], { onSuccess })` after a successful `GetAlert`; `onSuccess` sets `markedRead` under the same `active` guard. Failure stays silent (D-7, D-22). The `GetAlert` fetch itself is unchanged.
+5. One invalidation of the `['alerts']` prefix now refreshes the bell badge, the drawer list, the inbox rows and the inbox "N unread" badge, whichever surface marked the alert read. Do not add a window event, a second refresh mechanism or a count-only invalidation for mark-read (R-8, R-11, R-12).
+6. Behaviour changes to carry into the PR body and Step 23: the bell refetches on window focus and retries once (D-26); a focus refetch prunes streamed alerts the stored list does not return, as a drawer open already does; the inbox no longer shows its skeleton on a refetch.
+7. Mutation opt-out audit (`fails.md`, fix-ui-trader-feedback): every `markAlertRead` call in `src` is either inside a `useInvalidatingMutation` that passes `errorHandled` (inbox, alert page, drawer row) or the `drainUnread` `mark` callback.
 
-**Verification**:
+**Verification** (host e2e fallback form; CI's `frontend-e2e` is the confirming run):
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm run test:unit
-grep -rn "ALERTS_QUERY_KEY\|ALERT_UNREAD_COUNT_KEY" src   # one definition each; bell, inbox and alert page use them
-grep -rn "markAlertRead" src   # every call site sits in a mutation that passes meta.errorHandled
-pnpm exec playwright test e2e/accounts/notifications.spec.ts e2e/accounts/alert-detail.spec.ts e2e/trader/alert-stream.spec.ts e2e/trader/stream-reconnect.spec.ts e2e/alert-bell.spec.ts --project=chromium
+set -euo pipefail
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run format:check
+pnpm run test:coverage
+test "$(grep -rn "export const ALERTS_QUERY_KEY\|export const ALERT_UNREAD_COUNT_KEY" src | cut -d: -f1 | sort -u)" = "src/lib/alertShared.ts"
+grep -n "ALERT_UNREAD_COUNT_KEY" src/components/shared/AlertStream.tsx
+grep -n "ALERTS_QUERY_KEY" src/components/shared/AlertStream.tsx src/app/accounts/notifications/AlertInbox.tsx "src/app/accounts/notifications/[alert_id]/AlertDetail.tsx"
+test "$(grep -rn "errorHandled: true" src/components/shared/AlertStream.tsx src/app/accounts/notifications | wc -l)" -eq 3
+test "$(grep -rn "markAlertRead" src --include=*.tsx | wc -l)" -eq 4
+if grep -n "unreadCount" src/components/shared/AlertStream.tsx; then exit 1; fi
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/accounts/notifications.spec.ts e2e/accounts/alert-detail.spec.ts e2e/trader/alert-stream.spec.ts e2e/trader/stream-reconnect.spec.ts e2e/alert-bell.spec.ts --project=chromium --no-deps --trace off
 ```
+The 339 suite in `e2e/trader/alert-stream.spec.ts` (`@AC-3`, `@AC-4`, `@AC-5`, `@AC-9`, `@AC-10`) and `271 @AC-5` are the PRESERVE guard for the swap: all must pass unchanged.
 
 ---
 
-### Step 20 — test: [blocked on 339] read-state e2e and the stateful fixture
+### Step 20 — test: read-state e2e and the stateful fixture
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/e2e/helpers/alertReadState.ts` — create
+- `services/xstockstrat-ui/e2e/helpers/alertReadState.ts` — modify
+- `services/xstockstrat-ui/e2e/trader/alert-stream.spec.ts` — modify (the stub moves out)
 - `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
 - `services/xstockstrat-ui/e2e/accounts/alert-read-state.spec.ts` — create
 
 **Reviewers**: Service owner `xstockstrat-ui` — trading UI correctness, Connect-RPC call safety
 
-**Codebase Evidence**:
-- The shared mock cannot prove a badge drop: `listAlerts` returns a fixed `MOCK_UNREAD_COUNT` and `markAlertRead` stores nothing (`e2e/mock-backend.ts:685-693`); its own comment sends stateful assertions to `page.route()` (`:689-690`).
-- `page.route()` fulfil pattern: `e2e/accounts/notifications.spec.ts:120-123`. Helpers live in `e2e/helpers/` (`auth.ts`, `browser-resolution.ts`, `devCerts.ts`, `watchlistMock.ts`).
-- Fixtures: `ALERT_DETAIL`, `ALERT_DETAIL_ID` (Step 10), `ALERT_UNREAD` (`e2e/fixtures/alerts.ts:82`).
+**Codebase Evidence** (post-339 tree, `a900126ff`):
+- The shared mock cannot prove a badge drop: `markAlertRead` stores nothing and its comment sends stateful assertions to `page.route()` (`e2e/mock-backend.ts:698-702`).
+- **339 already shipped the stateful stub this step was going to write**: `stubNotify(page, stored, stream: 'held' | 'gated')` and its `DrawerAlert` type, local to `e2e/trader/alert-stream.spec.ts:26-86`. It routes `ListAlerts` (answers the unread set for `unreadOnly`, else every alert with `read`, and `unreadCount`, `:58-67`), `MarkAlertRead` (records `markedIds`, `:68-71`) and `StreamAlerts` (held, or one gated delivery, `:73-84`), and returns its state (`stored`, `streamed`, `markedIds`, `listCalls`, `streamAttempts`, `release`). It has no `GetAlert` route. A second stub with the same three routes would break the DRY guard rail — see Open decisions (2).
+- Request shapes the stub must answer after Step 19: the bell and the drain send `{ unreadOnly: true, limit: 50 }` (`src/components/trader/AlertStream.tsx:34`; `src/lib/alertShared.ts:93`), the inbox sends `{}` (`AlertInbox.tsx:23`), the alert page sends `GetAlert { alertId }` then `MarkAlertRead { alertIds }` (`AlertDetail.tsx:27-35`).
+- Fixtures that can be a `page.route` body as they are (Connect-JSON `createdAt`): `DRAWER_ALERT_STORED_UNREAD` (`alertId: 'alert-drawer-stored-unread'`, title "Backfill 67276d1f failed", `read: false`), `DRAWER_ALERT_STREAMED` (`e2e/fixtures/alerts.ts:128-162`). `ALERT_DETAIL` cannot: its `createdAt` is a bigint and needs the `alertJson` conversion (`e2e/accounts/alert-detail.spec.ts:43-50`). This step therefore seeds `DRAWER_ALERT_STORED_UNREAD`, not `ALERT_DETAIL`.
+- Route paths and the error body shape: `GET_ALERT` / `MARK_READ` (`e2e/accounts/alert-detail.spec.ts:11-12`); a not-found answer is HTTP 404 with `code: 'not_found'` (`:30-39`).
+- The inbox row and badge locators: `getByTestId('alert-row')` with `data-read`, `getByLabel('Unread count')`, the per-row button `Mark notification <title> read` (`AlertInbox.tsx:58,89-90,127`); the title link `list.getByRole('link', { name })` (`e2e/accounts/notifications.spec.ts:194-202`). The alert page: `getByTestId('alert-detail')`, `alert-read-state` (`AlertDetail.tsx:58,76`).
 - The accounts header is rendered by the layout and does not remount on list → detail navigation (`src/app/accounts/layout.tsx:24-27`), so only an invalidation can refresh the badge there.
-- 339's streamed-alert scenario: `@AC-5` "A streamed alert raises the badge without a reload" (339 `acceptance.feature`, same ref). 339's e2e file names: **Not found** in this tree — re-grep after the merge.
-- `e2e/helpers/alertReadState.ts`, `e2e/accounts/alert-read-state.spec.ts`: **Not found** — created by this step.
-- Gate status at re-spec (2026-11-15): the 339 gate fails (see Step 17) and 339's e2e files are not in this tree; this step stays blocked.
+- 339's streamed-alert scenario is `@AC-5` "A streamed alert raises the badge without a reload" (`services/xstockstrat-ui/acceptance/fix-symbol-page-alerts-ui.feature:45-46`), tested at `e2e/trader/alert-stream.spec.ts:183-199`; the drawer-list case after a mark-read is `@AC-4` (`:164-181`).
+- `e2e/helpers/alertReadState.ts` exists after Step 18 (`bellOf`, `badgeOf`). `e2e/accounts/alert-read-state.spec.ts`: **Not found** — created by this step.
 
-**TDD**: `red-green required`
+**TDD**: `red-green required` — run the new spec against the pre-Step-19 commit first: the client-navigation, delayed-list and inbox-and-bell cases fail (the bell does not refresh).
 
 **Covers**: `AC-6`
 
 **Instructions**:
-0. **Gate** as in Step 17. Grep the `ListAlerts` request shapes the bell and the drawer send after 339 (`unreadOnly`, `limit`) so the helper answers each one consistently.
-1. `e2e/helpers/alertReadState.ts` — export `routeAlertReadState(page, alerts)`: it installs `page.route()` handlers for `ListAlerts`, `GetAlert` and `MarkAlertRead` on the `/trader/api/…NotifyService/` paths, holds the set of read ids in a closure, and answers `ListAlerts` from that state (rows with `read`, the `unreadOnly` filter, and `unreadCount`), so the count drops to 0 once `MarkAlertRead` is called for the only unread alert. It returns `{ markedIds(): string[] }`. Optional argument: a delay for the first `ListAlerts` response. Add an `INVENTORY.md` row for it (D-12, C-12).
-2. `e2e/accounts/alert-read-state.spec.ts` — all cases seed one unread alert (`ALERT_DETAIL`) and assert badge **values only**, never request counts (D-26):
-   - **`@AC-6` direct open** — `page.goto('/accounts/notifications/' + ALERT_DETAIL_ID)`: the bell on that page ends with no unread badge. Then `page.reload()` and `page.goto('/accounts/notifications')`: the row for the alert has `data-read="true"`.
+0. 339 is merged at `573050534` (PR #1550), in this branch since `a900126ff`.
+1. `e2e/helpers/alertReadState.ts` — move `stubNotify` and `DrawerAlert` out of `e2e/trader/alert-stream.spec.ts:26-86` into this file, exported, behaviour unchanged for the existing callers; `alert-stream.spec.ts` imports them and keeps every test body. Then extend it:
+   - a `GetAlert` route answering the stored or streamed alert with that `alertId` (with its current `read`), else HTTP 404 `{ code: 'not_found' }`;
+   - an optional options argument: `holdFirstList` (the first `ListAlerts` response waits on a `gate()`; the state gains `releaseList()`), and `failMarkRead` (`MarkAlertRead` answers HTTP 500 and records nothing).
+   The name `stubNotify` stays (339's callers); the old spec's `routeAlertReadState` name is not introduced.
+2. `e2e/fixtures/INVENTORY.md` — extend the Step 18 helper row with `stubNotify` / `DrawerAlert` and their consumers, and add `e2e/accounts/alert-read-state.spec.ts` to the consumers of the 339 drawer-fixture row (`:55`) (D-12, C-12). No new fixture.
+3. `e2e/accounts/alert-read-state.spec.ts` — every case seeds one unread alert (`DRAWER_ALERT_STORED_UNREAD`) through `stubNotify(page, [...], 'held')` unless it says otherwise, finds the bell with `bellOf` / `badgeOf`, and asserts badge **values only**, never request counts (D-26):
+   - **`@AC-6` direct open** — `page.goto('/accounts/notifications/' + DRAWER_ALERT_STORED_UNREAD.alertId)`: the alert page renders and the bell on that page ends with no badge (`toHaveCount(0)`). Then `page.reload()` and `page.goto('/accounts/notifications')`: the row for the alert has `data-read="true"`.
    - **`@AC-6` client navigation** — `page.goto('/accounts/notifications')`, assert the bell badge is `1`, click the row title link; on the alert page the bell badge disappears without a reload. There is no `page.goto('/trader')` step (D-21).
-   - **Delayed first `ListAlerts`** — the first response is held until after `MarkAlertRead` returns; the badge must end at no badge, not at the stale `1`. Keep the page focused and do not blur the window, so the focus refetch does not mask a failure.
-   - **Inbox and bell together (D-23)** — on `/accounts/notifications`, one "Mark read" click drops the inbox "0 unread" badge and the bell badge together.
-   - **Failed page-open mark-read (D-22)** — `MarkAlertRead` answers HTTP 500: the alert page stays rendered and `page.getByRole('alert')` has count 0 (no global error banner).
-   - **339's streamed-alert raise, re-asserted (D-24)** — with one stored unread alert and the drawer closed, a streamed alert raises the badge without a reload. Reuse 339's own stream stub for this; if 339's spec already covers it unchanged, run that spec here instead of duplicating it and record which was done.
-   - **`@AC-1`/`@AC-3 @feature-203` PRESERVE** — `MarkAlertRead` is the only write the page-open path sends (the helper records no other mutation).
+   - **Delayed first `ListAlerts`** — with `holdFirstList`, open the alert page directly; wait until `markedIds` holds the id, then `releaseList()`; the bell must end with no badge, not at the stale `1`. Keep the page focused and do not blur the window, so the focus refetch does not mask a failure.
+   - **Inbox and bell together (D-23)** — on `/accounts/notifications`, one "Mark read" click on the row takes the inbox badge to "0 unread" and removes the bell badge.
+   - **Failed page-open mark-read (D-22)** — with `failMarkRead`: the alert page stays rendered, `alert-read-state` reads "Unread", and `page.getByRole('alert')` has count 0 (no global error banner).
+   - **`@AC-1`/`@AC-3 @feature-203` PRESERVE** — on the direct-open path `markedIds` equals exactly `[DRAWER_ALERT_STORED_UNREAD.alertId]`: the page-open path sends no other mark.
+4. **339's streamed-alert raise and drawer list (D-24)** are not duplicated here: `e2e/trader/alert-stream.spec.ts` `@AC-5` (`:183-199`) and `@AC-4` (`:164-181`) already assert them through the same stub and now run against the swapped read model. They are in this step's Verification; record in `context.md` that the re-assertion was done by running 339's own cases.
 
-**Verification**:
+**Verification** (host e2e fallback form; CI's `frontend-e2e` is the confirming run):
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm exec playwright test e2e/accounts/alert-read-state.spec.ts --project=chromium --repeat-each=3
-pnpm test:e2e
-grep -n "from '../fixtures\|helpers/auth\|helpers/alertReadState" e2e/accounts/alert-read-state.spec.ts && grep -n "alertReadState" e2e/fixtures/INVENTORY.md
+set -euo pipefail
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+grep -n "helpers/alertReadState" e2e/accounts/alert-read-state.spec.ts e2e/trader/alert-stream.spec.ts
+grep -n "from '../fixtures/alerts'" e2e/accounts/alert-read-state.spec.ts
+grep -n "stubNotify" e2e/fixtures/INVENTORY.md
+test "$(grep -rln "async function stubNotify" e2e | tr '\n' ' ')" = "e2e/helpers/alertReadState.ts "
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/accounts/alert-read-state.spec.ts --project=chromium --no-deps --trace off --repeat-each=3
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/trader/alert-stream.spec.ts e2e/trader/stream-reconnect.spec.ts e2e/accounts e2e/alert-bell.spec.ts --project=chromium --no-deps --trace off
 ```
-`--repeat-each=3` guards the delayed-response case against flake.
+`--repeat-each=3` guards the delayed-response case against flake. The whole suite is CI's `frontend-e2e`.
 No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:29` lists none for `frontend-e2e`); the `src/lib/**` vitest gate (≥ 40%) is checked in Step 12.
 
 ---
 
-### Step 21 — service: [blocked on 339] drawer row title links to the alert page
+### Step 21 — service: drawer row title links to the alert page
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -933,32 +984,38 @@ No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:2
 
 **Reviewers**: Service owner `xstockstrat-ui` — trading UI correctness
 
-**Codebase Evidence**:
-- Drawer row today (pre-339, pre-move): `<li key={a.alertId} className="rounded-lg border border-border bg-card p-3 space-y-1">` with the title `<p className="text-sm font-medium">{a.title}</p>` (`src/components/trader/AlertStream.tsx:104-117`, title `:115`). No `Link` / `href` (grep).
-- 339's design keeps drawer rows a plain `<li>` "so feature 344 can wrap them later" and adds a per-row mark-read button (339 design.md §5, same ref). The shipped markup: **Not found** in this tree — re-grep.
-- The link goes on the title, as in the inbox (Step 15), so no button is nested in an anchor (D-9, R-4).
-- `SheetClose` is exported from `src/components/ui/sheet.tsx` (`:18`, `:124`).
-- Gate status at re-spec (2026-11-15): the 339 gate fails (see Step 17), so the drawer markup 339 ships cannot be re-grepped yet; this step stays blocked.
+**Codebase Evidence** (post-339 tree, `a900126ff`; lines are the file as 339 shipped it, before Steps 17 and 19 edit it — re-grep `a.title`):
+- Drawer row: `<li key={a.alertId} className="rounded-lg border border-border bg-card p-3 space-y-1">` (`src/components/trader/AlertStream.tsx:169-172`), title `<p className="text-sm font-medium">{a.title}</p>` (`:179`), then 339's per-row button `aria-label={\`Mark read: ${a.title}\`}` (`:181-190`). The row is a plain `<li>`; the file has no `Link` / `href` (grep).
+- "Clear all" is in the `SheetHeader` (`:139-147`); the empty state is the text "No alerts" (`:161-165`).
+- The `Sheet` is **uncontrolled**: `<Sheet onOpenChange={(open) => { if (open) void refreshUnread(); }}>` with no `open` prop (`:103-107`). `SheetClose` is defined and exported by `src/components/ui/sheet.tsx` (`:18`, export block `:121`); `AlertStream.tsx` does not import it yet (`:8`).
+- The link goes on the title, as in the inbox (`AlertInbox.tsx:111-115`), so no button is nested in an anchor (D-9, R-4).
+- 339's tests find the title with `drawer.getByText(title)` and the button by its accessible name (`e2e/trader/alert-stream.spec.ts:157,171-173,215`); a link inside the `<p>` keeps both.
 
 **TDD**: `red-green required` — Step 22 fails first (the drawer title is not a link).
 
 **Covers**: `—`
 
 **Instructions**:
-0. **Gate** as in Step 17; re-grep the drawer row markup.
-1. Import `Link` from `next/link` and wrap the title text of each drawer row: `<Link href={\`/accounts/notifications/${a.alertId}\`} className="hover:underline">{a.title}</Link>`, inside the existing title element.
-2. Leave the row element, 339's mark-read button and its accessible name, and the "Clear all" control unchanged.
-3. Navigating away closes the drawer with the page change on `/trader` and `/insights` (the shell remounts). On `/accounts/*` the header persists, so close the `Sheet` on link click if it would otherwise stay open over the alert page (use the `Sheet`'s controlled `open` state only if 339 already made it controlled; otherwise wrap the link in `SheetClose asChild` if `src/components/ui/sheet.tsx` exports it — grep first, and if neither exists, stop and record it rather than adding a new primitive).
+0. 339 is merged at `573050534` (PR #1550), in this branch since `a900126ff`.
+1. Import `Link` from `next/link` and add `SheetClose` to the existing `'../ui/sheet'` import. Wrap the title text of each drawer row, inside the existing `<p>`: `<SheetClose asChild><Link href={\`/accounts/notifications/${a.alertId}\`} className="hover:underline">{a.title}</Link></SheetClose>`.
+2. `SheetClose asChild` is used on every segment, not only `/accounts/*`: the `Sheet` is uncontrolled, the `/accounts` header does not remount on navigation (`src/app/accounts/layout.tsx:24-27`), and closing on click is harmless where the shell remounts anyway. Do not make the `Sheet` controlled.
+3. Leave the `<li>`, 339's "Mark read" button and its accessible name, "Clear all" and the notices unchanged.
 
-**Verification**:
+**Verification** (host e2e fallback form; CI's `frontend-e2e` is the confirming run):
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
-pnpm exec playwright test e2e/trader/alert-stream.spec.ts e2e/alert-bell.spec.ts --project=chromium
+set -euo pipefail
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run format:check
+grep -n "SheetClose asChild" src/components/shared/AlertStream.tsx
+grep -n 'href={`/accounts/notifications/${a.alertId}`}' src/components/shared/AlertStream.tsx
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/trader/alert-stream.spec.ts e2e/alert-bell.spec.ts e2e/accounts/alert-read-state.spec.ts --project=chromium --no-deps --trace off
 ```
 
 ---
 
-### Step 22 — test: [blocked on 339] drawer link e2e
+### Step 22 — test: drawer link e2e
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -967,27 +1024,34 @@ pnpm exec playwright test e2e/trader/alert-stream.spec.ts e2e/alert-bell.spec.ts
 
 **Reviewers**: Service owner `xstockstrat-ui` — trading UI correctness
 
-**Codebase Evidence**:
-- The drawer is opened today by clicking the bell (`e2e/trader/alert-stream.spec.ts:50-55`); after Step 18 the bell is `page.getByRole('button', { name: 'Alerts' })`.
-- `routeAlertReadState` and `e2e/accounts/alert-read-state.spec.ts` exist after Step 20.
-- 339's `@AC-3` "The Alerts drawer shows a stored unread alert that was not streamed" (339 `acceptance.feature`, same ref) is what makes a stored alert appear in the drawer.
-- Gate status at re-spec (2026-11-15): the 339 gate fails (see Step 17), so this step stays blocked.
+**Codebase Evidence** (post-339 tree, `a900126ff`):
+- The drawer is opened by `bellOf(page).click()` and read through `page.getByRole('dialog')` (`e2e/trader/alert-stream.spec.ts:155-156`); its rows are `getByRole('listitem')` (`:195`). After Step 18 `bellOf` / `badgeOf` come from `e2e/helpers/alertReadState.ts`; after Step 20 so does `stubNotify`, with a `GetAlert` route.
+- 339's `@AC-3` "The Alerts drawer shows a stored unread alert that was not streamed" (`services/xstockstrat-ui/acceptance/fix-symbol-page-alerts-ui.feature:28-29`; test at `e2e/trader/alert-stream.spec.ts:150-162`) is what makes a stored alert appear in the drawer.
+- The empty drawer shows the text "No alerts" (`src/components/trader/AlertStream.tsx:164`), asserted by 339 as `drawer.getByText('No alerts')` (`e2e/trader/alert-stream.spec.ts:174`).
+- `e2e/accounts/alert-read-state.spec.ts` exists after Step 20 and seeds `DRAWER_ALERT_STORED_UNREAD`.
 
-**TDD**: `red-green required`
+**TDD**: `red-green required` — run case 1 against the pre-Step-21 commit first: there is no link in the drawer row.
 
 **Covers**: `AC-5`
 
 **Instructions**:
-0. **Gate** as in Step 17.
-1. **`@AC-5`** — with one stored unread alert (`ALERT_DETAIL`) through `routeAlertReadState`, on `/trader`: open the bell, click the drawer row's title link, assert the URL is `/accounts/notifications/<ALERT_DETAIL_ID>` and `getByTestId('alert-detail')` shows the title.
-2. **Drawer no longer lists it (D-24)** — after the alert page has marked it read, open the bell on that page: the drawer shows "No alerts" (or 339's empty state — use the text 339 shipped) and the bell has no badge.
-3. **No nested interactive** — inside the open drawer, `page.locator('a button')` has count 0.
+0. 339 is merged at `573050534` (PR #1550), in this branch since `a900126ff`.
+1. **`@AC-5`** — with one stored unread alert (`DRAWER_ALERT_STORED_UNREAD`) through `stubNotify(page, [...], 'held')`, on `/trader`: wait for the badge `1`, open the bell, click `page.getByRole('dialog').getByRole('link', { name: DRAWER_ALERT_STORED_UNREAD.title })`; assert the URL ends with `/accounts/notifications/alert-drawer-stored-unread` and `getByTestId('alert-detail')` contains the title.
+2. **Drawer no longer lists it (D-24)** — on that alert page, after `markedIds` holds the id: the bell has no badge; open the bell and the drawer shows "No alerts".
+3. **The drawer closes on `/accounts`** — start on `/accounts/notifications`, open the bell, click the drawer row's title link: the alert page is shown and `page.getByRole('dialog')` has count 0 (the header did not remount; `SheetClose` closed it).
+4. **No nested interactive** — inside the open drawer, `page.getByRole('dialog').locator('a button')` has count 0, and the row still has its `Mark read: <title>` button.
 
-**Verification**:
+**Verification** (host e2e fallback form; CI's `frontend-e2e` is the confirming run):
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm exec playwright test e2e/accounts/alert-read-state.spec.ts --project=chromium
-pnpm test:e2e
+set -euo pipefail
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+grep -n "@AC-5" e2e/accounts/alert-read-state.spec.ts
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/accounts/alert-read-state.spec.ts e2e/trader/alert-stream.spec.ts --project=chromium --no-deps --trace off
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test --project=chromium --no-deps --trace off
 ```
+The last line is the whole suite, run once more now that Steps 17–22 are complete; the Step 18 note on host-only failures applies, and CI's `frontend-e2e` decides.
 No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:29` lists none for `frontend-e2e`); the `src/lib/**` vitest gate (≥ 40%) is checked in Step 12.
 
 ---
