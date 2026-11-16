@@ -546,3 +546,112 @@ Left as is, for the Step 23 executor: Step 23's anchors are pre-merge (for examp
 - Final gate (last step): `node scripts/check-config-wiring.mjs --final` `.sdd-logs/v-2.log` `exit=0`; two baseline `REPORTED:` lines unrelated to 344 (`analysis fundsignal_loop.py marketdata/fundamentals.provider:readers-disagree`, `trading trading.go platform/trading_state:readers-disagree`). All 23 steps done → `status.md` `code-completed`. No `insights.md` line: the reusable trap (TanStack `invalidateQueries` reusing an in-flight first fetch) is now in `pwa-push.md` and the helper comment.
 - Files modified: `services/xstockstrat-ui/docs/pwa-push.md`, `services/xstockstrat-ui/docs/context-constitution.md`, `services/xstockstrat-ui/docs/context-constitution-findings.md`, `services/xstockstrat-notify/docs/context-constitution.md`, `services/xstockstrat-notify/docs/context-constitution-findings.md`
 - Deviations: the R-3 entry is worded from the code (the response is `{}` either way, so not an existence probe); anchors re-grepped — full detail in Deviation Log
+
+## Session 2026-11-16 — sdd-batch-execute promotion plan, built from the feature branch (awaiting operator confirm)
+
+- Built by `scenario-promoter` on a checkout of this branch at `06db03339`; scenario bodies generated mechanically from `acceptance.feature` (only `@feature-344` added to each tag line). Merge-order: feature 339 merged into main-dev on 2026-11-16 (PR #1550) and main-dev is merged into this branch (a900126ff), so the 344-after-339 row is satisfied.
+
+```sdd-batch-promotion-plan
+## Promotion plan — alert-detail-page (feature 344)
+
+Source: docs/roadmap/features/344-alert-detail-page/acceptance.feature at 06db03339 — 10 scenarios (@AC-1..@AC-10; @AC-10 is a Scenario Outline).
+
+### Verdicts
+- @AC-1, 2, 3, 4, 5, 6, 7, 9, 10 → services/xstockstrat-ui/acceptance/alert-detail-page.feature, CREATE, NEW (9).
+- @AC-8 → services/xstockstrat-ingest/acceptance/alert-detail-page.feature, CREATE, NEW (1).
+- No DUP, OVERLAP or CONFLICT. No existing durable scenario is edited by this plan.
+
+### Ready-to-write blocks
+--- services/xstockstrat-ui/acceptance/alert-detail-page.feature (CREATE) ---
+# Promoted from docs/roadmap/features/344-alert-detail-page/acceptance.feature (Constitution C-16).
+# Provenance: @feature-344.
+
+Feature: alert-detail-page (ui)
+
+  @AC-1 @FR-1 @FR-2 @FR-5 @feature-344
+  Scenario: The alert page shows every detail of the alert
+    Given an alert "a1f3" visible to the user with severity "ERROR", category "backfill", source service "xstockstrat-ingest", correlation id "c-77" and context field "job_id" = "67276d1f"
+    When the page "/accounts/notifications/a1f3" is opened
+    Then it shows "ERROR", "backfill", "xstockstrat-ingest", the created time, the title and the full body
+    And it shows "c-77" and the context row "job_id" with "67276d1f"
+    And it shows the alert as read
+
+  @AC-2 @FR-3 @feature-344
+  Scenario: Another user's alert cannot be opened
+    Given an alert "b2e4" targeted at a different user
+    When the page "/accounts/notifications/b2e4" is opened
+    Then it shows "Alert not found"
+
+  @AC-3 @FR-3 @feature-344
+  Scenario: A broadcast alert can be opened by any user
+    Given a broadcast alert "c9d0" with no target user
+    When the page "/accounts/notifications/c9d0" is opened
+    Then it shows the alert's title and body
+
+  @AC-4 @FR-4 @feature-344
+  Scenario: A Notifications list row links to the alert page
+    Given the Notifications list shows the alert "a1f3"
+    When its row is activated
+    Then the page "/accounts/notifications/a1f3" is shown
+
+  @AC-5 @FR-4 @feature-344
+  Scenario: A drawer row links to the alert page
+    Given the header Alerts drawer lists the alert "a1f3"
+    When its row is activated
+    Then the page "/accounts/notifications/a1f3" is shown
+
+  @AC-6 @FR-5 @feature-344
+  Scenario: Opening an unread alert marks it read
+    Given the unread alert "a1f3" and a bell badge of "1"
+    When the page "/accounts/notifications/a1f3" is opened
+    Then the bell on that page shows no unread badge
+    And after a reload the Notifications list shows the alert "a1f3" as read
+
+  @AC-7 @FR-6 @feature-344
+  Scenario: A push notification opens its alert page
+    Given a delivered push notification for the alert "a1f3"
+    When the notification is activated
+    Then the app opens "/accounts/notifications/a1f3"
+
+  @AC-9 @FR-3 @feature-344
+  Scenario: An alert targeted at the user can be opened
+    Given an alert "d4a7" targeted at the user
+    When the page "/accounts/notifications/d4a7" is opened
+    Then it shows the alert's title and body
+
+  @AC-10 @FR-8 @feature-344
+  Scenario Outline: The header bell is on every page of every segment
+    Given a signed-in user with unread alerts
+    When the page "<page>" is opened
+    Then the header shows the Alerts bell
+    And the bell shows the user's unread badge
+
+    Examples:
+      | page                    |
+      | /trader                 |
+      | /insights/opportunities |
+      | /config-ui              |
+      | /accounts/notifications |
+
+--- services/xstockstrat-ingest/acceptance/alert-detail-page.feature (CREATE) ---
+# Promoted from docs/roadmap/features/344-alert-detail-page/acceptance.feature (Constitution C-16).
+# Provenance: @feature-344.
+
+Feature: alert-detail-page (ingest backfill-failure alert body)
+
+  @AC-8 @FR-7 @feature-344
+  Scenario: A backfill failure alert reads in plain language
+    Given a backfill job "67276d1f" that failed with gRPC status FAILED_PRECONDITION and details "marketdata.fundamentals.history.enabled is false"
+    When the failure alert is emitted
+    Then its body is "Backfill job 67276d1f failed: FAILED_PRECONDITION — marketdata.fundamentals.history.enabled is false"
+    And its body does not contain "AioRpcError"
+    And its context field "error" holds the raw exception text
+
+### Notes
+- Attribution: @AC-2, @AC-3 and @AC-9 assert the page's text, so they go to ui although notify's GetAlert enforces the visibility rule; @AC-8 asserts the alert body ingest writes.
+- Existing rules checked and still literally true: 271 @AC-5, 270 @AC-9, 165 @AC-9 (ui), 165 @AC-4/@AC-5 (notify), 203 @AC-1..@AC-6, 242 @AC-2/@AC-5, 334 @AC-20/@AC-30, 339 @AC-3/4/5/9/10.
+- design.md describes extra cases that have no scenario in acceptance.feature and are therefore NOT promoted: the code-only and non-RPC fallback bodies for @AC-8, the every-segment variants of 270 @AC-9 and 271 @AC-5, and the notify push payload url.
+
+### Coverage check
+- Source scenarios: 10. Planned: 10 NEW (ui 9, ingest 1), 0 DUP, 0 OVERLAP, 0 CONFLICT.
+```
