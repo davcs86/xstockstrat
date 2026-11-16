@@ -2,7 +2,6 @@
 import React from 'react';
 import { PlatformHeader, PLATFORM_SUBNAV } from '../shared/PlatformHeader';
 import { AccountSelector } from './AccountSelector';
-import { AlertStream } from './AlertStream';
 import { TradingModeBadge } from '../shared/TradingModeBadge';
 import { useAccountContext } from '@/context/AccountContext';
 
@@ -21,7 +20,6 @@ export function AppShell({ children }: AppShellProps) {
           <div className="flex items-center gap-2">
             <TradingModeBadge mode={environmentMode} />
             <AccountSelector />
-            <AlertStream />
           </div>
         }
       />

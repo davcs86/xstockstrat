@@ -7,7 +7,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { Separator } from '../ui/separator';
-import { CardNotice } from '../shared/CardNotice';
+import { CardNotice } from './CardNotice';
 import {
   UNREAD_PAGE_SIZE,
   drainUnread,

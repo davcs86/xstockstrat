@@ -10,6 +10,7 @@ import { ChromeProvider, useChrome } from '@/context/ChromeContext';
 import { CopilotRail } from '../copilot/CopilotRail';
 import { BottomTabBar } from '../mobile/BottomTabBar';
 import { NAV_GROUPS, HOME_HREF, type SubNavItem, type NavItem, type NavGroup } from './navGroups';
+import { AlertStream } from './AlertStream';
 import {
   SidebarProvider,
   Sidebar,
@@ -245,6 +246,7 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
 
         <div className="flex items-center gap-2 ml-auto">
           {actions}
+          <AlertStream />
           <CopilotToggle />
           {/* Override SidebarProvider's default `flex min-h-svh w-full` page-root sizing — here it's
               scoped to just the Row 1 trigger+panel, not the page. */}

@@ -744,7 +744,7 @@ No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:2
 
 ### Step 17 — service: the bell in the shared header
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/AlertStream.tsx` — delete (moved)
@@ -1170,4 +1170,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 16 — RED against the pre-Step-15 `AlertInbox.tsx`; Verification run in a private mount namespace under CI mode (2026-11-15)
 - **Planned**: the `@AC-4` click test fails first (the title is not a link), then passes; the Verification block runs on the host.
 - **Actual**: (1) Step 15 had already landed, so RED ran the step's Verification with `src/app/accounts/notifications/AlertInbox.tsx` temporarily restored from `9352362ec^`, then restored to the committed file; only the spec file is staged. RED: `@AC-4` failed on `waiting for getByTestId('alert-inbox-list').getByRole('link', { name: 'Order rejected' })` (test timeout, and again on retry), `1 failed`, `9 passed`. The `@AC-6 @feature-203` EXTEND guard passed at RED too: it is a characterisation that the link nests no button and leaves every row's module, body and "Mark read" intact. (2) The linked `node_modules` resolve `@xstockstrat/proto` to the main checkout's stubs, which lack `GetAlert`, so each build and run went through `unshare -m` with this branch's `packages/proto/gen/ts/dist` bind-mounted (namespace-only) over the main checkout's `dist`. Ports 3000 and 9091 were free, so no network namespace was used. The bundle was built on its own (`CI=1 NEXT_DISABLE_STANDALONE=1 pnpm build`) before RED and again after the restore; each Verification run used `CI=1 E2E_PREBUILT=1`. The block itself ran verbatim. (3) The block's last line is the closing `grep`, so `exit=0` on RED too; pass/fail was judged from the Playwright summary in the log.
+- **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
+
+### Step 17 — RED probe held uncommitted; per-entry linked `node_modules` on this branch's TS stubs; production build (2026-11-16)
+- **Planned**: Step 18's `@AC-10` cases fail first (no bell outside `/trader`); the Verification block runs on the host in its e2e fallback form.
+- **Actual**: (1) Step 17 and Step 18 do not land together and `e2e/alert-bell.spec.ts` is Step 18's file, so a temporary probe (`e2e/alert-bell-probe.spec.ts`: on `/trader`, `/insights/opportunities`, `/config-ui` and `/accounts/notifications`, the `banner` holds a visible bell `/^Alerts/` and the page has exactly one) ran RED and GREEN, then was deleted; it is not committed. RED: the three non-trader cases failed on `element(s) not found`, `3 failed`, `1 passed`; GREEN: `4 passed`. Each probe run used a separately built bundle (`CI=1 NEXT_DISABLE_STANDALONE=1 pnpm build`) and `CI=1 E2E_PREBUILT=1`. (2) The main checkout's `@xstockstrat/proto` lacks `getAlert`, so per the operator note `services/xstockstrat-ui/node_modules` in this worktree is a directory of per-entry links to the main checkout's entries, with `@xstockstrat/proto` linked to this worktree's `packages/proto/gen/ts` (its `node_modules` likewise per-entry linked); no namespace or bind mount. The Verification block ran verbatim (its `CI=1` line built and started the bundle itself). (3) The disconnected label and the 640–1024px header width were left as is: Step 18 adds the width check; Instruction 4 applies only if it fails there.
 - **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
