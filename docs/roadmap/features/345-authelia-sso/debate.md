@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (the owner authorized more than 5 rounds if necessary — context.md 2026-11-15)
-**Rounds run**: 8
+**Rounds run**: 9
 
 ## Rounds
 
@@ -16,6 +16,7 @@
 | 6 | 2026-11-16 | /sdd-design | 5 | 2 | 6 | 6 | 0 | yes |
 | 7 | 2026-11-16 | /sdd-design | 12 | 0 | 9 | 9 | 1 | yes |
 | 8 | 2026-11-16 | /sdd-design | 10 | 0 | 9 | 9 | 0 | yes |
+| 9 | 2026-11-16 | /sdd-design | 6 | 0 | 6 | 6 | 1 | yes |
 
 ## Settled Decisions
 
@@ -108,6 +109,12 @@
 | D-85 | 8 | **AC split by observability** (O-76, R-22). AC-54 is the UI scenario and AC-55 is the agent scenario. "No request reaches the IdP" is asserted in the route unit test, where the `fetch` mock is never called. The e2e asserts only what the browser can see. | `playwright.config.ts:168` | settled |
 | D-86 | 8 | **One ERROR per fault** (O-77). `loadOidcConfig` calls `appOrigin()`, and the `app_url` reason does not log a second time. Both languages dedup per (reason, value). | — | settled |
 | D-87 | 8 | **The `jwks_uri` check runs inside the cached promise** (O-78): `p = discovery(...).then(assertJwksSameOrigin)`. A failure rejects `p` and the slot clears. Unit case: a cross-origin `jwks_uri` is not cached. | — | settled |
+| D-88 | 9 | **Round-9 final text adopted** for D-79 and D-81..D-87 (`scratchpad/345/round9-proposal.md` → design.md).<br>• **One regex**, `ISSUER_PATTERN` / `APP_URL_PATTERN`. It is built from explicit ASCII classes: no `\d`, no flags, `$` with `fullmatch`. The port bound and the default-port refusal are inside the regex. RFC 3986 pchar paths, with no `%`/`@`, no empty or dot segments. `xn--` and reserved-LDH labels are refused. Loopback is derived from the `http://` prefix. The literals live in `oidc-issuer-vectors.json` (66 issuer, 16 app_url and 10 mode rows), and each language asserts its constant equals the JSON literal. **Orchestrator-verified:** Python `re.fullmatch` and Node 22 `RegExp` with the WHATWG round-trip match every row, and the round-trip never changes an outcome.<br>• **Refinements:** D-79's path class is narrower than "printable ASCII minus 5". A trailing slash or empty segment in an issuer is invalid. An unset `APP_URL` also logs. For the `APP_URL` reason, D-66's single ERROR is `app_url_invalid`, and `sso_issuer_invalid` applies to issuer reasons only.<br>• **Shapes:** `originHost` is called only on a present Origin. `ssoErrorRedirect(code, appOrigin, {fault, clearTxnCookie}): NextResponse`. Agent `_precheck` uses `except jwt.InvalidTokenError` and the load-bearing `isinstance(alg, str)` (PyJWT 2.15.0 verified: `api_jws.py:343-382,446-461`, `api_jwt.py:82-89,297-302`). The `dict` guard is redundant but harmless. | round9-proposal.md; vectors.json | settled |
+| D-89 | 9 | **Exact discovery issuer** (O-80; conformance with D-27/D-35). openid-client 6.8.9 compares `new URL(as.issuer).href`, which is normalised (`oc689 index.js:287`, `o4w index.js:309`). It skips the check for issuers containing `/.well-known/` (`:264`) and for `*.b2clogin.com` (`:181-186`). D-87's `.then` becomes `assertDiscoveredMetadata`: `cfg.serverMetadata().issuer === issuer` byte-exact, **then** a same-origin `jwks_uri`; a failure rejects and is not cached. Unit cases: a trailing-slash issuer in the document rejects; a configured `/.well-known/openid-configuration` issuer rejects. Spike item: Authelia 4.39.28's discovery `issuer` has no trailing slash. | `oc689 index.js:264,287` (orchestrator-verified) | settled |
+| D-90 | 9 | **One log-once helper per language** (O-81). `logOnce(level, message, key, detail)` lives in `serverLog.ts`, and `_log_once` in `app/sso_mode.py`. Both serve D-1's `sso_mode_misconfigured` and D-86's ERRORs. Tests isolate the module-level sets with an exported reset or a pytest fixture. | D-1 | settled |
+| D-91 | 9 | **Operator-facing grammar and e2e reachability** (O-82, O-84).<br>• FR-14's invalid-configuration bullet and the cutover runbook pre-check spell out the trailing-slash, IP-literal and IDN rules.<br>• An e2e path that needs a server-side discovery uses a `http://127.0.0.1:<port>` stub IdP. `auth.example.test` is used only where no server fetch happens (AC-54/56/57).<br>• Local docker-compose SSO is documented as unsupported, because a loopback issuer is unreachable inside the container. | homelab-edge `main.yml:3-5,45`; `sso.md:50` | settled |
+| D-92 | 9 | **Spec text F1–F7 applied** (O-83, O-84).<br>• FR-14's legacy bullet lists the both-mode changes non-exhaustively, including FR-9's fail-closed default and 319's verified-only revoke.<br>• The invalid-configuration rule moves from FR-15 to FR-14, with references from FR-1, FR-2 and FR-15.<br>• Agent reader paths become `app/sso_mode.py:current_sso_mode`.<br>• `client_secret`'s empty-value effect is corrected.<br>• AC-56 is tagged `@FR-14`.<br>• `/sdd-review product-spec` re-runs. | — | settled |
+| D-93 | 9 | **D-83 amendment, pending owner (P-3).** The three `@ts-expect-error` cases and the D-72 type-map assertions move from `bffAllowlist.test.ts` into `src/lib/authEvents.typecheck.ts`, a non-test source file that is exported and never imported, so that `next build` (the `e2e-build` path) type-checks it. RED proof: delete one directive and `pnpm build` fails with TS2578. Rejected runner-up: a repo-wide `tsc --noEmit` step, which would type-check every test and e2e file for the first time (out of scope). | `vitest.config.ts:18-35`; `Dockerfile.e2e:68` | pending user (P-3) |
 | D-13 | 1 | **Fixed constants** (60 s role TTL, JWKS freshness, cooldown, fetch timeout) stay in code with the "Fixed invariant (F-07)" comment form. They are not config keys. | `client.py:39-47` | settled |
 
 ## Rejected Alternatives (locked)
@@ -221,6 +228,12 @@
 | O-76 | 8 | AC-54 bundles three services and one assertion cannot be observed. (R-22) | no | closed @ round 8 (D-85) |
 | O-77 | 8 | One `APP_URL` fault logs two ERRORs; dedup differs by language. | no | closed @ round 8 (D-86) |
 | O-78 | 8 | Placement of the UI `jwks_uri` check relative to the cache. | no | closed @ round 8 (D-87) |
+| O-79 | 9 | D-83/D-72 type assertions are unenforced: `next build` filters test-file diagnostics; no `tsc` in CI. (P-03, fails.md:2225) | yes | closed @ round 9 (D-93, pending P-3) |
+| O-80 | 9 | openid-client normalises or skips the discovery issuer equality. (D-27) | yes | closed @ round 9 (D-89) |
+| O-81 | 9 | Two log-once mechanisms; test isolation. (C-18) | no | closed @ round 9 (D-90) |
+| O-82 | 9 | Operator grammar understated; Authelia trailing-slash risk. | no | closed @ round 9 (D-91, D-89 spike) |
+| O-83 | 9 | F1's exhaustive list contradicts @AC-31 and D-61. (C-16) | no | closed @ round 9 (D-92) |
+| O-84 | 9 | `originHost` null typing; dead dict guard; F5 omissions. | no | closed @ round 9 (D-88, D-92) |
 
 ## Reopen Petitions
 
@@ -229,3 +242,4 @@
 |---|---|---|---|---|
 | P-1 | 5 | D-45 | Owner steer during round 5: "Redirect to the authelia's logout endpoint seems the most logical solution." | user reopened |
 | P-2 | 7 | D-52 | Adversary round 7: D-51 requires the Authelia session-cookie domain to cover the `APP_URL` host, so sibling homelab apps on `*.<domain>` are same-site and their POSTs carry Lax cookies. A compromised sibling could force a logout plus a "log out everywhere" revoke. O-44/D-52 only considered cross-site. Proposed fix: reject logout only when an Origin header is present and differs from the `APP_URL` origin (`auth.spec.ts:307` sends none). Nuisance-level. | user reopened |
+| P-3 | 9 | D-83 | Adversary round 9: Next.js `runTypeCheck` drops diagnostics for files under `__tests__/` and named `*.test.*` (not verifiable locally because `next` is not installed, so the spec must prove it RED). `vitest.config.ts:18-35` has no typecheck, and `ci.yml` has no `tsc`. D-83's evidence (`tsconfig.json:21`) did not account for the filter. Proposal: D-93. | pending user |
