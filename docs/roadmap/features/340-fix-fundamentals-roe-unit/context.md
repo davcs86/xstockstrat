@@ -42,7 +42,7 @@ Implementation spec (`/sdd-spec`, 10 steps, tree `feature/fix-fundamentals-roe-u
 - Both staging environments deploy on a push to `main-dev` (`.github/workflows/deploy-dev.yml` calls `deploy-homelab.yml`), so the pre-exports must be taken before the integration PR merges.
 - `DerivationVersion` 2 is free: `merge-order.md` names it only for the launched pair 222/223 (`:82`). `internal/edgar/testdata/` does not exist yet; the LYFT fixture creates it. `internal/repository` and `internal/service` are outside the CI coverage measurement; `internal/edgar`, `internal/source`, `internal/finnhub`, `internal/fmp` are measured.
 - The ingest concurrency-cap steer belongs to a peer feature; the repair stays sequential (one chunk polled to terminal before the next) and does not rely on it.
-- No SQL or config change has been executed in any session. Steps 1 to 8 are done.
+- No SQL or config change has been executed in any session. Steps 1 to 9 are done.
 
 ## Open Threads
 
@@ -67,7 +67,7 @@ Closed by the operator answers (see the verbatim session below): O-16, the `@AC-
 - [ ] The TTM sample can false-fail or skip (PIT cutoff, FY-fact-keyed Q4, anchor-miss nil quarters) — Post-Deploy Procedure (design.md § Step 5 item 6).
 - [ ] Thresholds (5% nil'd, 1% identity, 0.1% TTM, 20-symbol sample) are proposals the operator may tune — Post-Deploy Procedure.
 - [ ] Uniform flow keying moves stored EPS, revenue, TTM EPS and P/E for every EDGAR filer; PIT backtests and screens drift — record in the lane audit reports.
-- [ ] P/B and P/E stay stale on anchor-miss rows — the findings entry (design.md § Step 4).
+- [x] P/B and P/E stay stale on anchor-miss rows — the findings entry was written in Step 9 (with the `shares` and cover-page `period_end` residuals).
 - [ ] File-level rebase overlap with 317 (`internal/service/marketdata_service.go`), 320 (`internal/fmp/fmp_client.go`, `internal/finnhub/finnhub_client.go`) and 322 (`packages/proto/marketdata/v1/marketdata.proto`, comment-only) — integration.
 - Accepted, no action: lane A roles are superusers, so `default_transaction_read_only` is a guard, not a barrier; rewrites are in place, so rollback is another version bump plus a full re-backfill; a corrected LYFT ROE of 0.94 still looks implausible to a trader; the homelab `xstockstrat_production` database is not repaired (operator ruling).
 
@@ -82,6 +82,7 @@ Closed by the operator answers (see the verbatim session below): O-16, the `@AC-
 - Steps 4+5: `services/xstockstrat-marketdata/internal/edgar/{edgar_client.go,derivation_version_test.go,own_period_test.go,testdata/lyft_companyfacts.json}` — own-period selection, `DerivationVersion` 2, the LYFT fixture and the version-2 golden.
 - Step 6: `services/xstockstrat-marketdata/internal/{finnhub/finnhub_client_test.go,fmp/fmp_client_test.go,edgar/own_period_test.go,service/marketdata_service_test.go}` — `@AC-2` vendor unit guards and `@AC-4` absent/negative guards; tests only.
 - Steps 7+8: `packages/proto/marketdata/v1/marketdata.proto` (comment-only, `roe = 8` and `roe = 13`) and the regenerated `packages/proto/gen/go/marketdata/v1/marketdata.pb.go`, `packages/proto/gen/ts/marketdata/v1/{marketdata.ts,marketdata_pb.ts}`, `packages/proto/gen/ts/dist/marketdata/v1/{marketdata.d.ts,marketdata_pb.d.ts}`.
+- Step 9: `services/xstockstrat-marketdata/docs/{fundamentals.md,context-constitution-findings.md}` — own-period selection and re-derive replace rules; three latent-bug residual rows.
 
 ---
 
@@ -538,3 +539,10 @@ Tooling setup (steps 2+3): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with
 - Config-key wiring gate: not applicable (no key, no migration, no `## Config Key Changes`).
 - Files modified: `packages/proto/gen/go/marketdata/v1/marketdata.pb.go`, `packages/proto/gen/ts/marketdata/v1/marketdata.ts`, `packages/proto/gen/ts/marketdata/v1/marketdata_pb.ts`, `packages/proto/gen/ts/dist/marketdata/v1/marketdata.d.ts`, `packages/proto/gen/ts/dist/marketdata/v1/marketdata_pb.d.ts`
 - Deviations: same as Step 7.
+
+### Step 9 — docs: fundamentals doc and residuals [done]
+- `fundamentals.md`: the derivation-versioning paragraph now states that a re-derive replaces the builder-owned `extra_metrics` keys (`source.DerivationOwnedExtraKeys`) and that every `buildPeriod` key must be in the list; a new "EDGAR own-period selection (derivation version 2)" paragraph after the ratio bases states the anchor rule, absent-on-miss, the no-anchor rule and that `shares` is not anchor-selected. Findings `## Latent bugs`: three rows — `shares` first-seen (D-9), cover-page `period_end` (D-31), stale `pe_ratio`/`pb_ratio` on a nil `eps`/equity because `mergePrice` never writes nil (R-9). Evidence lines re-read on the post-Step-5 tree (`edgar_client.go:434-436`, `:441-450`, `:645`; `marketdata_service.go:2419`, `:2449`). TDD: N/A (docs).
+- Verification (`.sdd-logs/v-1.log`, `exit=0`): `DerivationOwnedExtraKeys` at `fundamentals.md:80`, `:83`, `anchor` at `:93-99`; findings rows at `:29-31`. Both edits re-read against `edgar_client.go` (`selectOwnPeriod`, `FetchHistorical`) and `marketdata_repo.go` (`RederiveHistoricalFundamentals` strip SQL `:797`).
+- Config-key wiring gate: not applicable (no key, no migration, no `## Config Key Changes`).
+- Files modified: `services/xstockstrat-marketdata/docs/fundamentals.md`, `services/xstockstrat-marketdata/docs/context-constitution-findings.md`
+- Deviations: none

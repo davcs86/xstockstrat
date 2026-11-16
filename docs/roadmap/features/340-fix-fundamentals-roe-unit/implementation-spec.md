@@ -642,7 +642,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./...
 
 ### Step 9 — docs: fundamentals doc and residuals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata` (docs)
 **Files**:
 - `services/xstockstrat-marketdata/docs/fundamentals.md` — modify
