@@ -113,3 +113,61 @@ unless it is marked as one.
 - NOT approved. The approval gate, the feature-216 `@AC-5` text, the label-collision residual, the
   deletion categories and the audit runner are put to the operator in one message. Nothing in
   design.md, status.md or acceptance.feature is written until the operator answers.
+
+## Session 2026-11-16 — sdd-design (approved)
+
+- Phase 0 Recon: wrote recon.md (services: marketdata; readers analysis, ingest, agent, ui; key
+  reuse patterns: the feature-340 balance-sheet anchor and `candSet`, the `DerivationVersion` gate
+  with its golden, feature 340's lane procedure).
+- Phase 1 Grilling: 3 rounds (full). Chosen approach: one period per filing identified by form
+  class and its own balance-sheet date; labels computed from dates in the existing format; a
+  per-symbol reconcile in the backfill (rows the derivation reproduces are upgraded in place, all
+  others deleted and re-inserted in one transaction); guards, a no-write audit, export and restore;
+  version 3; no migration, proto or config change. Rejected: R-1..R-16 (debate.md).
+- Constitution rules touched: C-01, C-08, C-13, C-14, C-15, C-16, C-18, P-01..P-06, F-01, F-04,
+  F-06, F-07. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Operator answers at the approval gate (2026-11-16)
+
+The five questions were put in one message (design approval; the feature-216 `@AC-5` text; the
+label-collision gap; rows deleted without a same-date replacement; who runs the audit). The
+operator's reply, verbatim:
+
+> 1. Yes
+> 2. As recommended
+> 3. Acknowledged
+> 4. Acknowledged, but add a info log for them.
+> 5. You can get the symbols using the MCO, and run the fetches
+
+Follow-up message, verbatim: "in the #5, MCO = MCP".
+
+How each is applied:
+
+1. Design approved as summarized (D-1..D-23). That summary included running the repair with
+   `overwrite=true` and that any admin-triggered fundamentals backfill runs the reconcile once a
+   lane is enabled.
+2. C-16 CHANGE signed: feature 216 `@AC-5` gains the `Given`
+   `And the current EDGAR derivation reproduces that period's fiscal_period, period_type, period_end and filed_date`
+   (Option 1, the recommended one), with this feature's `@AC-11` promoted in the same PR.
+3. "Acknowledged" to "Accept one known gap in labels?". The mechanism (D-19) is inside the design
+   approved under answer 1. The session treats the gap as accepted and told the operator so in its
+   next message; the word recorded is the operator's, not "accepted".
+4. Deletions without a same-date replacement: acknowledged, with a condition — an INFO log for
+   them (D-24).
+5. The main session obtains the symbols through the staging MCP and runs the SEC fetches (D-25).
+   This is the operator's standing word for the read-only MCP reads the audit needs; it is not
+   consent for `set_config`, `trigger_backfill` or any other staging change, which stay per-step.
+
+Deviation from the grilling protocol, flagged: answers 4 and 5 add constraints at the gate. The
+protocol's "inject a constraint" path runs another round. No fourth round was run: the operator
+chose approval in the same reply, and both constraints are additive (a log line; where the audit
+reads its input) and change no settled decision. They are recorded as D-24 and D-25.
+
+### Open Threads (from design.md § Open Risks)
+
+- [ ] How the main session lists a lane's stored symbol universe through the MCP — target: `/sdd-spec` discovery; if no tool lists it, ask the operator for the list.
+- [ ] Read MARKETDATA-13 (`services/xstockstrat-marketdata/docs/context-constitution.md:27`), findings `:29-31`, `docs/runbooks/historical-backfill.md:148+` — target: `/sdd-spec`, before the docs step.
+- [ ] Label-collision left-out periods, deleted-without-replacement rows, guard-failed symbols, single-metric anchors, 6-K half-year rows — target: the pre-enable audit report (procedure step 3), reviewed by the operator per lane.
+- [ ] Empty price-join columns on replaced rows — target: the pre/post diff (procedure step 8).
+- [ ] The acceptance restatement (`@AC-1..@AC-11`, FR-6) is applied in the first implementation step.

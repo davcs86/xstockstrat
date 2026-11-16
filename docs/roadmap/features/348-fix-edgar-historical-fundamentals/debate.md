@@ -1,6 +1,6 @@
 # Debate Register: fix-edgar-historical-fundamentals
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
 
@@ -10,7 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-16 | /sdd-design | 8 | 6 | 0 | 18 | 0 | yes |
 | 2 | 2026-11-16 | /sdd-design | 8 | 4 | 12 | 9 | 0 | yes |
-| 3 | 2026-11-16 | /sdd-design | 7 | 6 | 21 | 6 | 0 | yes |
+| 3 | 2026-11-16 | /sdd-design | 9 | 6 | 21 | 6 | 0 | yes |
 
 ## Settled Decisions
 
@@ -40,6 +40,8 @@
 | D-21 | 3 | Packages. The pure reconcile planner and the audit logic (export parsing, pass conditions, pre/post diff) live in internal packages that count toward coverage; a thin command wraps them and is not built into the service image. The derivation exposes one extra entry point on the EDGAR client, outside the source interface, that returns the periods together with the left-out periods and anchor statistics; `FetchHistorical` wraps it. | `.github/workflows/ci.yml:374`; `services/xstockstrat-marketdata/Dockerfile:7`; `internal/source/source.go:139-141` | settled |
 | D-22 | 3 | The repair is run with `overwrite=true`, as in feature 340. An identical row re-derived in place then has its price-join refreshed from its fresh statement by the existing overwrite path; the price-join gate is not changed. | `marketdata_service.go:2398-2413`, `:2449-2466`; `services/xstockstrat-marketdata/acceptance/fix-historical-fundamentals-price-join.feature:45-52` | settled |
 | D-23 | 3 | Lane pass conditions, all read-only: zero rows with `period_end > filed_date`; rows below version 3 only for symbols the repair reported failed; no two rows of one symbol and type with the same `period_end`; the audit on a post-repair export plans no change for non-failed symbols; value → null counts per price-join column between the pre and post exports are reported; the lane's `fundamentals.history.backfill.period_types` reads `both`. Restore, if needed, deletes the listed symbols' rows and loads only those symbols' lines from the pre-repair export in one transaction. The audit is run at a pinned commit and re-run if the derivation or planner changes before merge. | feature 340 `design.md:106-251`; `marketdata_service.go:2289-2292` | settled |
+| D-24 | 3 | Operator steer at the approval gate: each row deleted without a same-(type, `period_end`) replacement is logged at INFO, once per row, with symbol, label, type, dates and category; the planner returns that list and the audit reports it. | context.md, operator answer 4 (2026-11-16) | settled |
+| D-25 | 3 | Operator steer at the approval gate: the audit's stored rows and symbol list come from read-only MCP calls made by the main session, which also runs the SEC fetches; the audit takes the lane's stored derivation version as a parameter (the proto does not carry it). The operator's SQL export is for the restore step only. | context.md, operator answer 5 and its correction (2026-11-16); `services/xstockstrat-agent/app/client.py:2048` | settled |
 
 ## Rejected Alternatives (locked)
 

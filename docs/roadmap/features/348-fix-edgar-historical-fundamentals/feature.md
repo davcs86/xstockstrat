@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report |
 | 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
+| 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -22,6 +23,9 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier and data findings
+- [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections
+- [Design](design.md) — approved approach, operator procedure, business rules touched
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-edgar-historical-fundamentals`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -36,4 +40,4 @@ The fix derives a row's identity, period end and filed date from the fact's own 
 
 ## Next Action
 
-`/sdd-design fix-edgar-historical-fundamentals` — full design recommended (row-key change with a stored-data repair, possible DB migration, two consumer surfaces, shared `DerivationVersion` gate with feature 340)
+`/sdd-spec fix-edgar-historical-fundamentals` — generate implementation spec from the approved design
