@@ -47,7 +47,7 @@ function toLab(srgb) {
 }
 
 const RAD = Math.PI / 180;
-const hueDeg = (b, a) => (a === 0 && b === 0 ? 0 : ((Math.atan2(b, a) / RAD) % 360 + 360) % 360);
+const hueDeg = (b, a) => (a === 0 && b === 0 ? 0 : (((Math.atan2(b, a) / RAD) % 360) + 360) % 360);
 
 function ciede2000([L1, a1, b1], [L2, a2, b2]) {
   const Cbar = (Math.hypot(a1, b1) + Math.hypot(a2, b2)) / 2;
