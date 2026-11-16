@@ -537,3 +537,14 @@ Tooling setup (step 8): uv ✓ · Python 3.13.18 ✓ (agent venv, `uv sync --ext
 - Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/CLAUDE.md`, `docs/runbooks/mcp-tools.md`, `plugins/strat-lab/skills/backtest/SKILL.md`, `plugins/strat-lab/skills/backtest/reference/backfill.md`
 - Deviations: RED/GREEN via a scratch copy of Step 9's parity test (Step 9's files are outside this step); Verification run per line because of the fence's chained `cd` (Deviation Log).
 - Not changed, noted: the `client.py` `trigger_backfill` docstring body still says "Everything else queues unconditionally"; Instruction 1 names only its first line, so the body was left as is — open for Step 9 or a follow-up.
+
+## Session 2026-11-15 — sdd-execute sequential (sdd-batch-execute), Step 9
+
+Tooling setup (step 9): uv ✓ · Python 3.13.18 ✓ (agent venv, `uv sync --extra dev`) · ruff ✓ (host) · pytest ✓ (venv).
+
+### Step 9 — test: Agent docs parity and refusal pass-through [done]
+- Added `test_docs_and_skill_parity_with_self_serve_backfill` (loads `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json` through `_REPO`; the runbook `trigger_backfill` section, `reference/backfill.md` and the live catalog description carry `gaps_only` and the prefix and no "admin scope required"; the section and description name all eight tokens; `SKILL.md` carries `gaps_only`) and `TestTriggerBackfillTool.test_self_serve_refusals_pass_through` (non-admin `TRADER` ctx; `PERMISSION_DENIED` range_too_long detail and `ALREADY_EXISTS` "a backfill for AAPL is already queued or running" reach the caller as `CODE: detail` unchanged). Added the fixture path to the `xstockstrat-agent` CI filter (`ci.yml:59`, one-line array kept).
+- TDD (AC-7 Agent surface): red `v-2` against the pre-Step-8 files (checked out from `d494abc61^`, restored before commit) exit=1 — `AssertionError: mcp-tools.md § trigger_backfill` (`'self-serve backfill denied'` absent), `1 failed, 147 passed`; the two pass-through cases passed there (red N/A — no behavior change; characterization test added). Green: `v-5` `148 passed`; `v-6` `765 passed`, `Required test coverage of 40% reached. Total coverage: 88.11%`; `v-7` `"multi_symbol"` in agent tests → `0`, filter line `59:` matches; ruff `All checks passed!`, `75 files already formatted` (`v-4`). No config key touched, so no wiring gate.
+- Files modified: `services/xstockstrat-agent/tests/test_tools_endpoint.py`, `services/xstockstrat-agent/tests/test_tools.py`, `.github/workflows/ci.yml`
+- Deviations: RED against the pre-Step-8 tree because Step 8 had landed; Verification run per line because of the fence's chained `cd` (Deviation Log).
+- Still open from Step 8: the `client.py` `trigger_backfill` docstring body ("Everything else queues unconditionally") is outside Step 9's Files and was not changed.
