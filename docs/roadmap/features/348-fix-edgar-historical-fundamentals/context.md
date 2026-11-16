@@ -424,3 +424,9 @@ Not asked and therefore not authorized: any `trigger_backfill`, re-enabling the 
 - Report: `audit-lane-a-homelab.md`. Headline: 116 stored rows end after their filing date and 8 duplicate `period_end` groups today; 4,878 of 6,060 rows would be replaced, 1,182 upgraded in place; 20 rows in 18 symbols have no replacement; 10 derived periods are left out; no derived period ends after its filing.
 - Waiting on the operator: review of the report; the lane A SQL figures and export; lane B (run or defer).
 
+### Step 15 — operator instruction after the lane A report [done]
+- Operator, verbatim, 2026-11-16: **"Merge it, then 20minutes later enable the fundamentals.history.enabled config in homelab and DO"**.
+- Taken as: (1) the explicit word to merge PR #1558 (the brief's "do not merge" is lifted by the operator for this PR); (2) the explicit word for two `set_config` calls, `marketdata/fundamentals.history.enabled` = `true` on homelab staging and on DO staging, 20 minutes after the merge.
+- lane B deferred: no pre-enable audit was run on DO staging and the operator's instruction enables it without one (design D-16 asked for the audit first). The operator did not state a review verdict on the lane A report in words; the merge instruction came after it was delivered. The lane A SQL figures and export were not received. All three points are stated back to the operator in the reply, before the 20 minutes run out.
+- Not instructed, so not done: any `trigger_backfill`, the canary, the pass-condition checks.
+

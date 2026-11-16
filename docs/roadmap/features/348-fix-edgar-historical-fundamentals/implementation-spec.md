@@ -1324,7 +1324,7 @@ test "$(grep -c "DerivationVersion.*3\|version 3" services/xstockstrat-marketdat
 
 ### Step 15 — docs: operator gate — freeze lane A and record the pre-enable audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/348-fix-edgar-historical-fundamentals/`
 **Files**:
 - `docs/roadmap/features/348-fix-edgar-historical-fundamentals/audit-lane-a-homelab.md` — create
@@ -1413,3 +1413,8 @@ test "$(git diff --cached --name-only | grep -Ev "audit-lane-|context.md|impleme
 **Spec said**: design.md § Business Rules Touched: "Its period name "Q4-2019" predates this fix and is left as is."
 **Actual**: `Q4-2019` changed to `Q1-2020` in `services/xstockstrat-marketdata/acceptance/historical-fundamentals-backtest.feature` (`@AC-3 @feature-198`); nothing else in that scenario changed.
 **Reason**: operator decision at the promotion gate, 2026-11-16: "Approve, and fix the Q4-2019 name". The label rule names the quarter ended 2019-12-28 `Q1-2020`, as `@AC-1` of the same file already does.
+
+### Deviation: Step 15 — docs: operator gate — freeze lane A and record the pre-enable audit
+**Spec said**: "Stop for the operator's review of the report. Record the answer." and "Lane B. … the main session then does the same list, read and audit with stored version 1 and write `audit-lane-b-do-staging.md`."
+**Actual**: after the lane A report was delivered the operator instructed the merge and the enabling of both lanes; no lane B audit was run and no `audit-lane-b-do-staging.md` exists (lane B deferred — waived by the operator's instruction).
+**Reason**: operator instruction 2026-11-16, verbatim: "Merge it, then 20minutes later enable the fundamentals.history.enabled config in homelab and DO".
