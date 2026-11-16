@@ -140,3 +140,4 @@
 - The orchestrator verified the `openid-client` v6 API against the published package (D-29). ID-token signatures are NOT validated by default; `enableNonRepudiationChecks` is mandatory for FR-1.
 - C-16 note: `@AC-19 @feature-294` (local auth fault → 401) is reclassified PRESERVE (legacy mode). SSO mode returns 503 per D-17. This is not a change to existing behaviour.
 - Gate 2 owner decisions: run round 3; drop resolve single-flight in favour of trace fidelity (D-30, closes O-21).
+- Round 3: the adversary verdict was SOUND (approvable). It closed every open objection, raised six low/medium ones (O-27..O-32), and the synthesis folded those into D-31..D-37. The orchestrator verified the openid-client 6.8.9 API against 6.9.0 (closes O-30). The register now has 0 open objections, 37 decisions and 14 locked alternatives. No Floor breach.
