@@ -1102,7 +1102,7 @@ test "$(grep -c "fundamentals-audit" services/xstockstrat-marketdata/Dockerfile)
 
 ### Step 12 — test: replace SQL against a real database (`dbtest` tag) and CI job `marketdata-db-test`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/fundamentals_replace_dbtest_test.go` — create
