@@ -4,14 +4,14 @@ import { useParams } from 'next/navigation';
 import { ConnectError, Code } from '@connectrpc/connect';
 import type { Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ALERTS_QUERY_KEY,
   contextEntries,
   formatWhen,
+  invalidateAlertReadModels,
   severityLabel,
   severityVariant,
 } from '@/lib/alertShared';
-import { useInvalidatingMutation } from '@/hooks/useInvalidatingMutation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,11 +25,14 @@ export function AlertDetail() {
   const [status, setStatus] = useState<Status>('loading');
   const [errorText, setErrorText] = useState('');
   const [markedRead, setMarkedRead] = useState(false);
-  const { mutate: markRead } = useInvalidatingMutation(
-    (alertIds: string[]) => notifyClient.markAlertRead({ alertIds }),
-    [ALERTS_QUERY_KEY],
-    { meta: { errorHandled: true } },
-  );
+  const queryClient = useQueryClient();
+  const { mutate: markRead } = useMutation({
+    mutationFn: (alertIds: string[]) => notifyClient.markAlertRead({ alertIds }),
+    meta: { errorHandled: true },
+    onSuccess: () => {
+      void invalidateAlertReadModels(queryClient);
+    },
+  });
 
   useEffect(() => {
     if (!alertId) return;

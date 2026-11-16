@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
 import type { Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { Bell, BellOff } from 'lucide-react';
@@ -10,17 +10,16 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../u
 import { Separator } from '../ui/separator';
 import { CardNotice } from './CardNotice';
 import {
-  ALERTS_QUERY_KEY,
   ALERT_UNREAD_COUNT_KEY,
   UNREAD_PAGE_SIZE,
   drainUnread,
+  invalidateAlertReadModels,
   mergeUnread,
   pruneStreamed,
   severityLabel,
   severityVariant,
 } from '@/lib/alertShared';
 import { useReconnectingStream } from '@/hooks/useReconnectingStream';
-import { useInvalidatingMutation } from '@/hooks/useInvalidatingMutation';
 
 export function AlertStream() {
   const queryClient = useQueryClient();
@@ -54,11 +53,13 @@ export function AlertStream() {
     [queryClient],
   );
 
-  const markReadMutation = useInvalidatingMutation(
-    (alertIds: string[]) => notifyClient.markAlertRead({ alertIds }),
-    [ALERTS_QUERY_KEY],
-    { meta: { errorHandled: true } },
-  );
+  const markReadMutation = useMutation({
+    mutationFn: (alertIds: string[]) => notifyClient.markAlertRead({ alertIds }),
+    meta: { errorHandled: true },
+    onSuccess: () => {
+      void invalidateAlertReadModels(queryClient);
+    },
+  });
 
   // A reconnect may re-deliver an alert; dedupe on alertId so React keys stay unique.
   const { disconnected } = useReconnectingStream<Alert>(
@@ -110,7 +111,7 @@ export function AlertStream() {
     setReadIds((prev) => new Set([...prev, ...result.markedIds]));
     setPending(false);
     if (result.outcome !== 'done') setMarkNotice(result.outcome);
-    await queryClient.invalidateQueries({ queryKey: ALERTS_QUERY_KEY });
+    await invalidateAlertReadModels(queryClient);
   };
 
   return (

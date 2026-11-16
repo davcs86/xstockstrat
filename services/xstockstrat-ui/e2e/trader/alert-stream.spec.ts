@@ -1,7 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
-import { fulfillStream, gate } from '../helpers/connectStream';
-import { bellOf, badgeOf } from '../helpers/alertReadState';
+import { bellOf, badgeOf, stubNotify } from '../helpers/alertReadState';
 import {
   ALERT_STREAM_HELD,
   ALERT_STREAM_HOLD_MS,
@@ -19,68 +18,6 @@ import { DEFAULT_UNARY_TIMEOUT_MS } from '../../src/lib/deadlines';
  * (ListAlerts with unreadOnly returns its 2 stored unread rows plus the 3 streamed ones). The
  * feature-339 scenarios stub ListAlerts, MarkAlertRead and StreamAlerts per test.
  */
-
-type DrawerAlert = { alertId: string; createdAt: string; read?: boolean };
-
-const NOTIFY = '**/xstockstrat.notify.v1.NotifyService/';
-
-/** Stateful notify stubs; `stream: 'gated'` delivers `streamed` once on `release()`, then holds. */
-async function stubNotify(page: Page, stored: DrawerAlert[], stream: 'held' | 'gated') {
-  const state = {
-    stored: [...stored],
-    streamed: [] as DrawerAlert[],
-    markedIds: [] as string[],
-    listCalls: 0,
-    streamAttempts: 0,
-    release: () => {},
-  };
-  const unreadSet = () => {
-    const byId = new Map<string, DrawerAlert>();
-    for (const a of [...state.stored.filter((s) => !s.read), ...state.streamed]) {
-      if (!state.markedIds.includes(a.alertId) && !byId.has(a.alertId)) byId.set(a.alertId, a);
-    }
-    return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  };
-  const everyAlert = () => {
-    const byId = new Map<string, DrawerAlert>();
-    for (const a of [...state.stored, ...state.streamed]) {
-      if (!byId.has(a.alertId)) byId.set(a.alertId, a);
-    }
-    return [...byId.values()].map((a) => ({
-      ...a,
-      read: a.read === true || state.markedIds.includes(a.alertId),
-    }));
-  };
-
-  await page.route(NOTIFY + 'ListAlerts', (route) => {
-    state.listCalls += 1;
-    const unread = unreadSet();
-    const alerts = route.request().postDataJSON()?.unreadOnly ? unread : everyAlert();
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ alerts, unreadCount: unread.length }),
-    });
-  });
-  await page.route(NOTIFY + 'MarkAlertRead', (route) => {
-    state.markedIds.push(...(route.request().postDataJSON()?.alertIds ?? []));
-    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
-
-  const opened = gate();
-  state.release = opened.release;
-  const never = new Promise<void>(() => {});
-  await page.route(NOTIFY + 'StreamAlerts', async (route) => {
-    state.streamAttempts += 1;
-    if (stream === 'gated' && state.streamAttempts === 1) {
-      await opened.wait;
-      await fulfillStream(route, state.streamed);
-      return;
-    }
-    await never;
-  });
-  return state;
-}
 
 test.describe('AlertStream', () => {
   test('bell icon is visible on the page', async ({ page }) => {

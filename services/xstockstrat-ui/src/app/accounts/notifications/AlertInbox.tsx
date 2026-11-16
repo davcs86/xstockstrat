@@ -1,10 +1,15 @@
 'use client';
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
-import { ALERTS_QUERY_KEY, formatWhen, severityLabel, severityVariant } from '@/lib/alertShared';
-import { useInvalidatingMutation } from '@/hooks/useInvalidatingMutation';
+import {
+  ALERTS_QUERY_KEY,
+  formatWhen,
+  invalidateAlertReadModels,
+  severityLabel,
+  severityVariant,
+} from '@/lib/alertShared';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,11 +22,14 @@ export function AlertInbox() {
     queryFn: () => notifyClient.listAlerts({}),
   });
   const [markError, setMarkError] = useState('');
-  const { mutateAsync: markAsync } = useInvalidatingMutation(
-    (alertIds: string[]) => notifyClient.markAlertRead({ alertIds }),
-    [ALERTS_QUERY_KEY],
-    { meta: { errorHandled: true } },
-  );
+  const queryClient = useQueryClient();
+  const { mutateAsync: markAsync } = useMutation({
+    mutationFn: (alertIds: string[]) => notifyClient.markAlertRead({ alertIds }),
+    meta: { errorHandled: true },
+    onSuccess: () => {
+      void invalidateAlertReadModels(queryClient);
+    },
+  });
 
   const markRead = useCallback(
     async (alertIds: string[]) => {
