@@ -1,13 +1,13 @@
 # xstockstrat-ui — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` (2026-07-24; last refreshed 2026-11-13 @ `52f6d5a`). For triage/fixing, not governance.
+Defects and drift surfaced by `/context-constitution` (2026-07-24; last refreshed 2026-11-15 @ `d5de836`). For triage/fixing, not governance.
 
 ## Documentation that lies (docs claim behavior the code lacks)
 
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
 | `CLAUDE.md` env block lists `OTEL_EXPORTER_OTLP_ENDPOINT` with no value or note (found 2026-10-19) | `src/telemetry.ts` sets no default and builds the exporter with no args, so with `OTEL_ENABLED=true` and the var unset the SDK falls back to its spec default (`localhost:4318`) — effectively required | `services/xstockstrat-ui/CLAUDE.md` env block (~L302) vs `src/telemetry.ts#initTelemetry` (`process.env.OTEL_EXPORTER_OTLP_ENDPOINT` ~L36; `new OTLPTraceExporter()` ~L52) | Mark it required when `OTEL_ENABLED=true` |
-| `CLAUDE.md` § Segments / Auth + BFF omit the REST routes `trader/api/ledger/export` and `accounts/api/profile` (found 2026-11-04) | Both exist; `ledger/export` is a raw REST route inside `/trader` | `src/app/trader/api/ledger/export/route.ts`, `src/app/accounts/api/profile/route.ts` | Add them |
+| `CLAUDE.md#Role` / `#Auth + BFF` omit the REST routes `trader/api/ledger/export` and `accounts/api/profile` (found 2026-11-04) | Both exist; `ledger/export` is a raw REST route inside `/trader` | `src/app/trader/api/ledger/export/route.ts`, `src/app/accounts/api/profile/route.ts` | Add them |
 | `CLAUDE.md` § Styling sidebar re-apply bullet names one `// app-specific` `sidebar.tsx` edit (`data-active={isActive || undefined}`) to re-apply after `apply --preset` (found 2026-11-13, refresh) | `src/components/ui/sidebar.tsx` carries three `// app-specific` edits: the oklch shadow `shadow-[0_0_0_1px_var(--sidebar-border)]` (feature 307) plus the two `isActive || undefined` fixes; a preset re-apply drops the shadow fix, caught only after the fact by `noColorLiterals.test.ts` | `src/components/ui/sidebar.tsx` (`// app-specific` ×3); `src/styles/noColorLiterals.test.ts#"keeps the sidebar shadow on the oklch token"` | Name all three edits in the re-apply bullet |
 
 | `CLAUDE.md` § Testing says coverage is scoped "with `coverage.all: false`, so the **40%** threshold applies only to files a unit test actually exercises" (found 2026-11-13, context-scrubber) | `vitest.config.ts#coverage` sets `include: ['src/lib/**']`, an `exclude` list and thresholds — there is no `all` key; with an explicit `include`, untested files likely count too | `vitest.config.ts#coverage` (~L21-34); `package.json` `vitest ^5.0.3` | Re-describe the real coverage scope, or add the setting if the narrower floor is intended |
