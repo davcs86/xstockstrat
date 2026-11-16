@@ -210,6 +210,46 @@ func TestGetFundamentalsMulti_ThreeCallsPerSymbol(t *testing.T) {
 	}
 }
 
+// @AC-2 (feature 340): Finnhub's percentage-point roeTTM is served as a fraction on both fetch paths.
+func TestFundamentals_ROEPercentPointsToFraction_AC2_feature340(t *testing.T) {
+	rt := &recordingRT{respond: func(path string) (int, string) {
+		switch path {
+		case "/stock/metric":
+			return 200, `{"metric":{"roeTTM":3.66}}`
+		case "/quote":
+			return 200, `{"c":1}`
+		case "/stock/profile2":
+			return 200, `{"currency":"USD"}`
+		}
+		return 404, `{}`
+	}}
+	c := newTestClient(rt)
+	cases := []struct {
+		name  string
+		fetch func() (*source.Fundamentals, error)
+	}{
+		{"GetFundamentals", func() (*source.Fundamentals, error) { return c.GetFundamentals(context.Background(), "LYFT") }},
+		{"GetFundamentalsMulti", func() (*source.Fundamentals, error) {
+			out, err := c.GetFundamentalsMulti(context.Background(), []string{"LYFT"})
+			if err != nil || len(out) != 1 {
+				return nil, errors.Join(err, errors.New("want exactly one result"))
+			}
+			return out[0], nil
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f, err := tc.fetch()
+			if err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			if got := derefF(t, "ROE", f.ROE); !closeEnough(got, 0.0366) {
+				t.Fatalf("roe = %v, want 0.0366 (roeTTM 3.66 percentage points)", got)
+			}
+		})
+	}
+}
+
 // TestHTTPError_DoesNotLeakAPIKey mirrors fmp_client_test.go's equivalent exactly,
 // substituting Finnhub's "token" param for FMP's "apikey".
 func TestHTTPError_DoesNotLeakAPIKey(t *testing.T) {

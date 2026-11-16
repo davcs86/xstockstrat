@@ -10,7 +10,7 @@ Feature: xstockstrat-marketdata — EDGAR quarterly ROE is trailing-twelve-month
   @AC-1 @regression @feature-222
   Scenario: A quarterly EDGAR period reports ROE on a trailing-twelve-month basis
     Given AXP quarterly net income of 2,500M, 2,600M, 2,700M and 2,885M for the last four quarters
-    And AXP stockholders' equity of 30,264M at the Q2-2026 period end
+    And AXP stockholders' equity of 30,264M reported for the Q2-2026 period-end balance-sheet date
     When the Q2-2026 quarterly period is built from EDGAR company facts
     Then its roe is 10,685 / 30,264 ≈ 0.353
     And it is not the single-quarter ratio 2,885 / 30,264 ≈ 0.095
@@ -25,4 +25,4 @@ Feature: xstockstrat-marketdata — EDGAR quarterly ROE is trailing-twelve-month
   Scenario: Annual periods are unchanged
     Given AXP FY2025 annual net income and year-end equity
     When the FY2025 annual period is built
-    Then its roe is annual net income / equity, unchanged from today's derivation
+    Then its roe is annual net income / year-end equity, with no trailing-twelve-month annualization
