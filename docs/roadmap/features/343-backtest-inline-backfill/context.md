@@ -91,6 +91,7 @@ Outside the feature directory:
 - `services/xstockstrat-ui/src/lib/backtestBackfill.ts`, `src/lib/backtestBackfill.test.ts`, `.github/workflows/ci.yml` (`xstockstrat-ui` filter) — Steps 10+11 (UI helper and its vitest).
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`, `e2e/trader/position-detail.spec.ts`, `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md` — Steps 12+13 (inline backfill on the Backtests card and its e2e).
 - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` — Step 14 (strategy-page backfill button builds its request with `gapToBackfillRequest`; non-admins send GAPS_ONLY).
+- `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts` — Step 15 (non-admin GAPS_ONLY and admin no-`fillMode` request tests).
 
 Feature-directory artifacts:
 
@@ -603,3 +604,13 @@ Tooling setup (step 14): node ✓ · pnpm ✓ 9.15.9 · vitest ✓ 5.0.3 · tsc 
 - TDD (AC-10 page surface, via an uncommitted scratch e2e, because Step 15 holds the committed test): red `v-2` exit=1 — `Expected: "FILL_MODE_GAPS_ONLY"`, `Received: undefined` for the non-admin body (the admin no-`fillMode` case passed: characterization) → green `v-3` `2 passed`, exit=0. Verification: `v-4` lint (warnings only in untouched files), `All matched files use Prettier code style!`, tsc silent, `Tests  593 passed | 2 skipped (595)`; per line from the repo root `v-5` `26:` import and `545:` the one call, `v-6` empty `git diff --stat` for `insights/backfills/page.tsx`. All exit=0. No config key touched, so no wiring gate.
 - Files modified: `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx`
 - Deviations: RED/GREEN via a scratch e2e (Step 15's files are outside this step); Verification run per line because of the fence's `cd` (Deviation Log).
+
+## Session 2026-11-16 — sdd-execute sequential (sdd-batch-execute), Step 15
+
+Tooling setup (step 15): node ✓ · pnpm ✓ · tsc ✓ · prettier ✓ · Playwright ✓ with Chromium in `/opt/pw-browsers` (linked main-checkout `node_modules`; no install).
+
+### Step 15 — test: e2e for the insights strategy button by role [done]
+- Added a local `captureStrategyBackfill(page)` helper (runs the `strat-high-001` insufficient-data backtest, clicks `backfill-action`, returns the requested start and the `TriggerBackfill` body) and two tests: non-admin (`addAuthCookie`) asserts `fillMode` `FILL_MODE_GAPS_ONLY`, `range.end` = requested start, `range.start` earlier and `job-e2e-1` in `backfill-confirmation`; admin (`addAdminCookie`) asserts no `fillMode` (or UNSPECIFIED) and the same exact-gap range (198@AC-7). The two existing tests are unchanged; `INVENTORY.md` needed no change.
+- TDD (AC-10 page surface): RED `v-1` against the pre-Step-14 page (checked out from `34ebb5635^`, restored before commit) exit=1 — non-admin test `Expected: "FILL_MODE_GAPS_ONLY"`, `Received: undefined`; the admin test passed (characterization). GREEN `v-5` (`--reporter=list --timeout=90000 --retries=1`) exit=0 — `13 passed`, `2 flaky` (the two unchanged existing gap tests on a cold compile, passed on retry; both new tests passed first time). `v-2` fence verbatim: lint (warnings only in untouched files) and tsc clean; `v-3` grep `:2` `../helpers/auth`, `:3` `../fixtures`, exit=0; `v-4` unchanged Playwright line failed only the 10 s warmup project. Prettier `--check` on the spec clean. No config key touched, so no wiring gate.
+- Files modified: `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts`
+- Deviations: RED against the pre-Step-14 page; Verification run per line and Playwright diagnosed with added flags; the helper is used by the new tests only (Deviation Log).
