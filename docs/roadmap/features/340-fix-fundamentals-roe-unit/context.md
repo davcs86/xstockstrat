@@ -699,3 +699,10 @@ Feature: fix-fundamentals-roe-unit (bug fix)
 
 - The exact before/after text of four lines was shown to the operator: feature 222 `@AC-1` (equity "reported for the Q2-2026 period-end balance-sheet date"), feature 222 `@AC-3` ("annual net income / year-end equity, with no trailing-twelve-month annualization"), feature 216 `@AC-3` ("left unchanged by the price-join fill") and `@AC-4` ("left unchanged by the price-join refresh"). **Operator, verbatim: "Signoff".**
 - Wording only: no behaviour, test, title or tag changes. Files: `services/xstockstrat-marketdata/acceptance/fix-edgar-quarterly-roe.feature`, `fix-historical-fundamentals-price-join.feature`.
+
+## Session 2026-11-16 — post-deploy repair, lane A (homelab staging) closed (orchestrator)
+
+- Lane A ran end to end: 362 symbols re-derived to `derivation_version` 2, Q-v1 returned 0 rows, no audit rule tripped, canary hard checks met. Report: `audit-lane-a-homelab.md` (this directory).
+- The audit found a separate defect — 104 rows whose `period_end` is after their `filed_date` (period-label collision; pre-existing dates, but look-ahead content at version 2). Recorded as `docs/reports/2026-11-16-marketdata-edgar-period-label-collision-defect.md` (`open`).
+- **Operator decisions, verbatim** (asked with the 104-row count shown): close the homelab lane — "Accept with the defect filed (Recommended)"; DO staging — "Hold until the label fix (Recommended)"; homelab key — "Restore to true (Recommended)".
+- End state: homelab `marketdata/fundamentals.history.enabled` = `true` (restored 07:20:35Z); DO staging = `false`, still at version 1, lane B not run.
