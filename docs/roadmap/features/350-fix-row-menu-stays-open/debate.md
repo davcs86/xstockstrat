@@ -2,13 +2,14 @@
 
 **State**: in-debate
 **Mode**: quick
-**Rounds run**: 1 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-16 | /sdd-design | 9 | 7 | 9 | 11 | 0 | yes |
+| 2 | 2026-11-16 | /sdd-design | 5 | 3 | 7 | 7 | 1 | yes |
 
 ## Settled Decisions
 
@@ -24,6 +25,11 @@
 | D-7 | 1 | Tests are Playwright specs only, extend the existing per-table specs, and share one helper for the "settled" checks. "Menu not shown" uses a locator that includes hidden elements (`[role="menu"]`), "not hidden from assistive technology" is `body > [aria-hidden="true"]` count 0, pointer blocking is the computed `pointer-events` of `body`; dialog buttons are located by exact name inside the `alertdialog`. Waits are on the closing surface (count 0 / focus) — no sleeps, no animation override. Each scenario is labelled RED or guard after running it on today's code. | recon.md § Patterns to REUSE; `@radix-ui/react-dialog` `dist/index.mjs:143-146` (`hideOthers`) | settled |
 | D-8 | 1 | The two workaround blocks are removed: `e2e/trader/orders.spec.ts` `@AC-10` keeps a real "no menu" assertion and clicks "Dismiss error" directly; `e2e/trader/account-resume.spec.ts` `@AC-3` drops its comment, dialog wait and Escape. Escapes that close a menu the test opened on purpose stay. | `e2e/trader/orders.spec.ts:219-226`; `e2e/trader/account-resume.spec.ts:78-85` | settled |
 | D-9 | 1 | Docs: the `RowActionsMenu` doc comment is rewritten as a ≤2-line constraint and the "defer to the next tick" comment is deleted; the ledger gets appended superseding entries for `fails.md` 2026-09-16 and `insights.md` 2026-09-05 (their "stays mounted / Escape-reset" halves), never an in-place edit. | `RowActionsMenu.tsx:45-50,92-94`; recon.md § Risks | settled |
+| D-10 | 2 | D-5 per site. Orders: stable, `columns` deps become `[cancelOrder]`. Strategies: the actions column's `cell` becomes a module-level component that reads `useIsAdmin`, `useRouter` and its own `useManageStrategy` (the memo deps cannot be stabilised — `scoreById` changes on every scores poll). Authorized apps: page-level `revoking` is replaced by a module-level cell with a local busy flag; `handleDisconnect` is a `useCallback`. Config templates (corrects D-5's "check and pin": it is unstable today): `openEdit`/`retire` become `useCallback`s over a destructured stable `mutate`; `errorMessage` moves to module scope. Signal sources (no confirm action) and accounts (not a DataTable, already stable) are not changed. Existing `actions-<id>` trigger test ids are kept. | `data-table.tsx:169-191`; `strategies/page.tsx:45,58,153-161,190`; `authorized-apps/page.tsx:33,38-51,72-87,143`; `config-ui/templates/page.tsx:309,346,360-377`; `useInvalidatingMutation.ts:21`; `useStrategyDefinitions.ts:54-58`; `queryClient.ts:15` | settled |
+| D-11 | 2 | The trigger is reached by a ref passed to `DropdownMenuTrigger` (Radix composes it with the ref it uses for its own focus return). It reaches the DOM button only because the App Router runs Next's vendored React 19 (ref-as-prop); if that changes, the `@AC-3` tests fail loudly. | `@radix-ui/react-dropdown-menu` `dist/index.mjs:63,115`; `dropdown-menu.tsx:19-23`; `button.tsx:48` | settled |
+| D-12 | 2 | D-3 is a one-shot flag set only by a confirm choice and consumed by the menu's next `onCloseAutoFocus` (a dialog dismissed inside the menu's close animation must still get its own focus return). All hooks sit above the `actions.length === 0` return. Fallback focus uses `preventScroll`. The `!disabled` clause on the trigger implements FR-3's wording and is not exercised by any caller or test. | `@radix-ui/react-dropdown-menu` `dist/index.mjs:114-118`; `@radix-ui/react-focus-scope` `dist/index.mjs:92-103`; `RowActionsMenu.tsx:67` | settled |
+| D-13 | 2 | Test matrix. RED on today's code: `@AC-1`, `@AC-2`, `@AC-3`, `@AC-4`, `@AC-5`, `@AC-8`, every `@AC-6` "dismisses" row, and a new `@AC-9` (focus stays on the same trigger node when the table refreshes during the confirmation: strategies confirm; authorized apps confirm with a failed disconnect; templates confirm with a failed retire). Guards: `@AC-6` Deactivate "confirms", `@AC-7`. Focus assertions after a Confirm first wait for something the refresh renders (error text, status, item gone), then check focus and a marker attribute placed on the trigger before the flow. | recon.md § Patterns to REUSE; `authorized-apps/page.tsx:80,241`; `config-ui/templates/page.tsx:417` | settled |
+| D-14 | 2 | The "rebuilding `columns` remounts every cell" constraint is recorded in two places only: a ≤2-line comment on `DataTable`'s `columns` prop and the DataTable row of `docs/patterns/ui-ux-governance.md`. No new context-constitution ID. | `docs/patterns/ui-ux-governance.md:127`; `data-table.tsx:191` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -37,6 +43,9 @@
 | R-5 | 1 | Fallback: leave focus on `<body>` when the trigger has gone. | Fails FR-3 — a keyboard user restarts from the top of the page. | locked |
 | R-6 | 1 | Fallback: the next row's actions trigger. | May not exist (last row removed); needs per-table code. | locked |
 | R-7 | 1 | A `contentRef` branch in the unmount cleanup for "focus still inside the closing dialog". | `onCloseAutoFocus` fires on every dialog unmount, so D-2's connected-or-`<main>` rule covers it without a second ref. | locked |
+| R-8 | 2 | Fix the remount once in `DataTable` by calling function cells directly instead of through `flexRender`. | Breaks any cell component that uses hooks (including the strategies cell of D-10). | locked |
+| R-9 | 2 | Strategies: a context provider or a DataTable `meta` prop carrying admin/deactivate/pending to an inline cell. | Needs new DataTable plumbing; the module-level cell is smaller. | locked |
+| R-10 | 2 | Find the trigger by overriding its `id`, through the menu content's `aria-labelledby`, or with a wrapping `<span>` ref. | Overriding `id` breaks the content's labelling; the content is unmounted once the menu is closed; a wrapper adds DOM to every cell. | locked |
 
 ## Objections
 
@@ -46,17 +55,25 @@
 | O-1 | 1 | A rebuilt `columns` memo remounts every actions cell, so on strategies (deps rebuild every render) and authorized apps (`revoking` in deps) the confirm flow loses its dialog/trigger and FR-3 fails (FR-4, C-10). | yes | closed @ round 1 (D-5) |
 | O-2 | 1 | Same remount unmounts the dialog without its closing animation — 339 `@AC-12` (C-16). | no | closed @ round 1 (D-5 keeps the cell mounted, so the dialog closes through its closing state) |
 | O-3 | 1 | `@AC-1`'s "menu not shown" can pass on today's code: the open dialog marks the menu `aria-hidden` and role queries skip it; `getByRole('main')` count is not a valid assistive-technology check (P-06). | yes | closed @ round 1 (D-7) |
-| O-4 | 1 | `@AC-6` strategies "confirms" may already pass today because the remount removes the stuck menu (P-06). | no | open — execution runs it on today's code and labels it RED or guard |
+| O-4 | 1 | `@AC-6` strategies "confirms" may already pass today because the remount removes the stuck menu (P-06). | no | closed @ round 2 (D-13: "menu closed" after Confirm on strategies and authorized apps is a guard; the RED assertion is the trigger focus, `@AC-9`) |
 | O-5 | 1 | A new "Deactivate strategy" title duplicates the description's opening words and breaks `e2e/insights/strategy-authoring.spec.ts:123` (strict mode). | no | closed @ round 1 (D-7: locators scoped to the dialog; the spec is in the change list) |
 | O-6 | 1 | Dropped test ids are also used by the "Edit is enabled…" test (`orders.spec.ts:174-184`); "Dismiss" without `exact` also matches "Dismiss error". | no | closed @ round 1 (D-7) |
 | O-7 | 1 | Two premises were wrong: refs reach `Button`/`AlertDialogContent` only because the App Router runs Next's vendored React 19 (`ref` is a prop); and `onCloseAutoFocus` does fire when the dialog unmounts with the row. | no | closed @ round 1 (D-2 drops the `contentRef`; the React 19 dependency is recorded as an open risk) |
 | O-8 | 1 | The menu-focus guard (D-3) had no test (C-18). | no | closed @ round 1 (D-3 `focusin` test) |
 | O-9 | 1 | `tabIndex={-1}` on `<main>` may draw a focus ring around the page content (C-17). | no | closed @ round 1 (D-6) |
-| O-10 | 1 | Strategies loses "buttons disabled while deactivating"; the shared dialog holds a stale action if the actions list changes while it is open. | no | open — accepted as a documented risk (the dialog closes at once on Confirm, so the double-submit window stays closed) |
-| O-11 | 1 | `AccountRow` is used by both `AccountsModule` and `AccountManagementPanel`; if both mount on `/trader/accounts`, trigger names and the Tab target are ambiguous. | no | open — `/sdd-spec` discovery checks it |
+| O-10 | 1 | Strategies loses "buttons disabled while deactivating"; the shared dialog holds a stale action if the actions list changes while it is open. | no | closed @ round 2 (no code: the confirm handler nulls `pending` before calling, `RowActionsMenu.tsx:126-128`; behaviour change recorded — Deactivate is disabled only on the row being deactivated) |
+| O-11 | 1 | `AccountRow` is used by both `AccountsModule` and `AccountManagementPanel`; if both mount on `/trader/accounts`, trigger names and the Tab target are ambiguous. | no | closed @ round 2 (`AccountManagementPanel` has no importer; `/trader/accounts` mounts only `AccountsModule`; no `sm:hidden` duplicate of the five tables) |
+| O-12 | 2 | The D-3 guard test as settled (count `focusin` on the trigger) can never fail in Chromium: the dialog's trapped focus scope refocuses its own control during the blur, so the trigger never receives a focus event (P-06, C-18). | yes | open — P-1 pending user |
+| O-13 | 2 | `waitForResponse` → `toBeFocused()` can pass before the re-render that remounts the cell (P-06). | no | closed @ round 2 (D-13: wait on a rendered outcome first) |
+| O-14 | 2 | Templates: `retire` closing over the mutation result object is not stable and trips `exhaustive-deps`. | no | closed @ round 2 (D-10: destructured `mutate`) |
+| O-15 | 2 | After adoption every orders and strategies trigger is still named just "Actions"; changed UI inherits C-17's unique-accessible-name rule. | no | open — operator decides the label text at the gate |
+| O-16 | 2 | Fallback `focus()` on `<main>` can scroll a long page. | no | closed @ round 2 (D-12: `preventScroll`) |
+| O-17 | 2 | The remount constraint would be documented in three places (C-18). | no | closed @ round 2 (D-14) |
+| O-18 | 2 | Signal sources' Enable/Disable remounts its cell and drops focus to `<body>` — an existing defect on a non-confirm action. | no | open — out of scope (FR-5); reported to the operator as a side finding |
 
 ## Reopen Petitions
 
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
+| P-1 | 2 | O-8 (and D-3's test clause) | `@radix-ui/react-focus-scope` `dist/index.mjs:47-53` (trapped scope refocuses inside the dialog during the blur, cancelling the trigger focus) and `:94` (close-focus fires from `setTimeout(0)`). Requested: replace "records `focusin` on the trigger" with a recorder that counts every focus event after the dialog first takes focus, sampled one macrotask after the menu is gone. D-3's behaviour unchanged. | pending user |
