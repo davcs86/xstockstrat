@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -726,56 +728,114 @@ func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, src 
 // histFundamentalsColumns is the shared SELECT/scan order for a fundamentals_history row.
 const histFundamentalsColumns = `symbol, fiscal_period, period_type, period_end, filed_date, accepted_date, source, currency, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe, debt_to_equity, price, year_high, year_low, extra_metrics`
 
-// InsertHistoricalFundamentals persists one point-in-time period. ON CONFLICT DO NOTHING keeps the
-// original as-reported filing (earliest filed_date) — the triple PK is the @AC-1 idempotency guard,
-// so a same-range re-backfill never duplicates and a later 10-K comparative never overwrites.
-func (r *MarketDataRepo) InsertHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) error {
-	extraJSON, err := json.Marshal(p.ExtraMetrics)
-	if err != nil {
-		return fmt.Errorf("marshal extra_metrics: %w", err)
-	}
-	if len(extraJSON) == 0 {
-		extraJSON = []byte("{}")
-	}
-	const q = `
+// histInsertStatement is a plain insert: a key that already exists fails the replace transaction.
+const histInsertStatement = `
 		INSERT INTO marketdata.fundamentals_history
 		  (symbol, fiscal_period, period_type, period_end, filed_date, accepted_date, source, currency,
 		   market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe, debt_to_equity, price,
 		   year_high, year_low, extra_metrics, derivation_version)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21)
-		ON CONFLICT (symbol, fiscal_period, period_type) DO NOTHING`
-	// jsonb bound as string so the ::jsonb cast is a text parse (not bytea) under DB_PGBOUNCER.
-	_, err = r.db.Exec(ctx, q,
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21)`
+
+// histInsertArgs binds extra_metrics as a string so the ::jsonb cast is a text parse (not bytea)
+// under DB_PGBOUNCER.
+func histInsertArgs(p source.HistoricalFundamentalsPeriod) ([]any, error) {
+	extraJSON, err := json.Marshal(p.ExtraMetrics)
+	if err != nil {
+		return nil, fmt.Errorf("marshal extra_metrics: %w", err)
+	}
+	if len(extraJSON) == 0 {
+		extraJSON = []byte("{}")
+	}
+	return []any{
 		p.Symbol, p.FiscalPeriod, p.PeriodType, p.PeriodEnd, p.FiledDate, p.AcceptedDate, p.Source, p.Currency,
 		p.MarketCap, p.PERatio, p.PBRatio, p.DividendYield, p.EPS, p.Beta, p.ROE, p.DebtToEquity, p.Price,
-		p.YearHigh, p.YearLow, string(extraJSON), p.DerivationVersion)
-	if err != nil {
-		return fmt.Errorf("insert fundamentals_history %s %s: %w", p.Symbol, p.FiscalPeriod, err)
-	}
-	return nil
+		p.YearHigh, p.YearLow, string(extraJSON), p.DerivationVersion,
+	}, nil
 }
 
-// GetHistoricalPriceState reads the stored price-join state for one fundamentals_history row
-// (feature 216). Returns Found=false (never an error) when no row matches the triple PK — mirrors
-// CloseAt's no-rows fail-closed pattern. Uses r.db so tests can pin the query with pgxmock.
-func (r *MarketDataRepo) GetHistoricalPriceState(ctx context.Context, symbol, fiscalPeriod, periodType string) (*source.HistoricalPriceState, error) {
-	const q = `SELECT filed_date, price, market_cap, pe_ratio, pb_ratio, dividend_yield, currency, derivation_version
+// ListHistoricalRows returns every stored fundamentals_history row of a symbol, ordered by
+// (fiscal_period, period_type); no row is an empty slice.
+func (r *MarketDataRepo) ListHistoricalRows(ctx context.Context, symbol string) ([]source.HistoricalPriceState, error) {
+	const q = `SELECT fiscal_period, period_type, period_end, filed_date, price, market_cap, pe_ratio, pb_ratio, dividend_yield, currency, derivation_version, extra_metrics
 		FROM marketdata.fundamentals_history
-		WHERE symbol=$1 AND fiscal_period=$2 AND period_type=$3`
-	var state source.HistoricalPriceState
-	var version int16
-	err := r.db.QueryRow(ctx, q, symbol, fiscalPeriod, periodType).Scan(
-		&state.FiledDate, &state.Price, &state.MarketCap, &state.PERatio, &state.PBRatio, &state.DividendYield, &state.Currency, &version,
-	)
+		WHERE symbol=$1
+		ORDER BY fiscal_period, period_type`
+	rows, err := r.db.Query(ctx, q, symbol)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return &source.HistoricalPriceState{Found: false}, nil
-		}
-		return nil, fmt.Errorf("get price state %s %s %s: %w", symbol, fiscalPeriod, periodType, err)
+		return nil, fmt.Errorf("list fundamentals_history %s: %w", symbol, err)
 	}
-	state.Found = true
-	state.DerivationVersion = int(version)
-	return &state, nil
+	defer rows.Close()
+	out := []source.HistoricalPriceState{}
+	for rows.Next() {
+		var (
+			state   source.HistoricalPriceState
+			version int16
+			extra   []byte
+		)
+		if err := rows.Scan(&state.FiscalPeriod, &state.PeriodType, &state.PeriodEnd, &state.FiledDate, &state.Price, &state.MarketCap,
+			&state.PERatio, &state.PBRatio, &state.DividendYield, &state.Currency, &version, &extra); err != nil {
+			return nil, fmt.Errorf("scan fundamentals_history %s: %w", symbol, err)
+		}
+		state.DerivationVersion = int(version)
+		state.ExtraMetrics = decodeExtraMetrics(ctx, symbol, extra)
+		out = append(out, state)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list fundamentals_history %s: %w", symbol, err)
+	}
+	return out, nil
+}
+
+// ReplaceHistoricalFundamentals deletes and inserts a symbol's rows in one transaction. Each delete
+// is pinned to the row as it was read and must remove exactly one row, else nothing is written.
+func (r *MarketDataRepo) ReplaceHistoricalFundamentals(ctx context.Context, symbol string, deletes []source.HistoricalPriceState, inserts []source.HistoricalFundamentalsPeriod) error {
+	if len(deletes) == 0 && len(inserts) == 0 {
+		return nil
+	}
+	sorted := slices.Clone(deletes)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].FiscalPeriod != sorted[j].FiscalPeriod {
+			return sorted[i].FiscalPeriod < sorted[j].FiscalPeriod
+		}
+		return sorted[i].PeriodType < sorted[j].PeriodType
+	})
+	insertArgs := make([][]any, 0, len(inserts))
+	for _, p := range inserts {
+		args, err := histInsertArgs(p)
+		if err != nil {
+			return err
+		}
+		insertArgs = append(insertArgs, args)
+	}
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("replace fundamentals_history %s: begin: %w", symbol, err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// Dates are bound as text: under DB_PGBOUNCER a time.Time is sent as timestamptz, and
+	// date = timestamptz depends on the session time zone.
+	const del = `DELETE FROM marketdata.fundamentals_history
+		WHERE symbol=$1 AND fiscal_period=$2 AND period_type=$3 AND period_end=$4::date AND filed_date=$5::date AND derivation_version=$6`
+	for _, d := range sorted {
+		tag, err := tx.Exec(ctx, del, symbol, d.FiscalPeriod, d.PeriodType, d.PeriodEnd.Format(time.DateOnly), d.FiledDate.Format(time.DateOnly), d.DerivationVersion)
+		if err != nil {
+			return fmt.Errorf("replace fundamentals_history %s: delete %s %s: %w", symbol, d.FiscalPeriod, d.PeriodType, err)
+		}
+		if n := tag.RowsAffected(); n != 1 {
+			return fmt.Errorf("replace fundamentals_history %s: delete %s %s removed %d rows, want 1", symbol, d.FiscalPeriod, d.PeriodType, n)
+		}
+	}
+	for i, args := range insertArgs {
+		if _, err := tx.Exec(ctx, histInsertStatement, args...); err != nil {
+			return fmt.Errorf("replace fundamentals_history %s: insert %s %s: %w", symbol, inserts[i].FiscalPeriod, inserts[i].PeriodType, err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("replace fundamentals_history %s: commit: %w", symbol, err)
+	}
+	return nil
 }
 
 // UpdateHistoricalPriceJoin overwrites the 5 price-join columns of an existing
