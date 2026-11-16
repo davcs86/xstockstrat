@@ -1,0 +1,14 @@
+{
+  "prefix": "self-serve backfill denied: ",
+  "tokens": [
+    "multi_symbol",
+    "data_kind",
+    "fill_mode",
+    "overwrite",
+    "range_unset",
+    "range_too_long",
+    "callback_url",
+    "no_user"
+  ],
+  "range_too_long_suffix": " (max {max_days} days)"
+}

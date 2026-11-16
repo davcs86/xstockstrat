@@ -33,14 +33,18 @@ reference is `docs/runbooks/mcp-tools.md`.
 
 Tool refusals are raised as `ToolError` with a `CODE: body` message so the MCP caller sees why a call was refused (constitution **AGENT-5**).
 
-The management tools that hit a backend **admin** gate — `trigger_backfill`, `cancel_backfill`,
+The management tools that hit a backend **admin** gate — `cancel_backfill`,
 `run_fundamentals_scan`, and a **global** (`user_id` omitted) `set_config` write — forward the **real
 calling user's** derived `x-access-scope` on their backend gRPC calls (feature 092;
 `set_config` has done this since feature 073). The scope is derived from the caller's identity roles
 by `app/scopes.py` `roles_to_access_scope` (a port of the UI's `rolesToAccessScope`) via the shared
 `app/tools.py` `_caller_access_scope(ctx, tool)` helper, so a **non-admin operator is rejected
-`PERMISSION_DENIED`** by the backend gate (ingest `TriggerBackfill` checks the ADMIN bit `0x04`)
-rather than silently succeeding under a hardcoded admin override. `manage_signal_source` is
+`PERMISSION_DENIED`** by the backend gate rather than silently succeeding under a hardcoded admin
+override. `trigger_backfill` still forwards the caller's real scope the same way, but since feature
+343 ingest `TriggerBackfill` admits an admin (ADMIN bit `0x04`) **or** a non-admin request inside
+its self-serve envelope; a request outside it is refused `PERMISSION_DENIED`
+("self-serve backfill denied: <token>"), and a duplicate for a symbol already in flight
+`ALREADY_EXISTS`. `manage_signal_source` is
 **owner-gated** since feature 224: any caller manages their own sources (ingest resolves the owner
 from `x-user-id`), and platform `system` sources are read-only to everyone. The claims come from `app/main.py` `_authorized`, which
 publishes them on the request's ASGI scope under `MCP_CLAIMS_SCOPE_KEY`; each tool reads them via its

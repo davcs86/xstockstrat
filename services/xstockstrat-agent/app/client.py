@@ -2071,7 +2071,8 @@ async def trigger_backfill(
     access_scope: int = 0,
     callback_url: str = "",
 ) -> dict[str, Any]:
-    """Trigger a historical backfill via gRPC TriggerBackfill (admin-scoped write).
+    """Trigger a historical backfill via gRPC TriggerBackfill (write; an admin may request
+    anything, any other signed-in caller only ingest's self-serve envelope).
 
     ``data_kind`` selects what is backfilled: ``"bars"`` (daily OHLCV, the default — requires a
     valid ``timeframe``) or ``"fundamentals"`` (point-in-time fundamentals filings history, feature

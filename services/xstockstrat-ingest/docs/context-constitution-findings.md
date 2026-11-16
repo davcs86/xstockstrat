@@ -36,7 +36,7 @@ governance. The config zero-trap was resolved by feature 244 (root CF-N10), and 
 - `poll_one_source` discards the namespace half of `credentials_ref` (`_namespace, key = split_credentials_ref(...)`) and `resolve_secret` hardcodes `self.namespace`, so a non-`ingest` prefix silently resolves under `ingest` — intended? `app/engine/mcp_client_loop.py#poll_one_source`, `app/config/watcher.py#resolve_secret` — status: **open**
 - `signal_sources.py#owner_scope_predicate` interpolates the `SYSTEM_OWNER` constant into SQL as a literal — does INGEST-2's "never interpolate" exempt module constants? — status: **open**
 - The `mcp_client` loop drives `_ingest_external_signal` with **no `propagation_meta`** (`mcp_client_loop.py#poll_one_source` ~L148), so loop-emitted `ingest.signal.ingested` ledger events carry empty `x-user-id`/`x-trace-id` (`servicer.py#_ingest_external_signal` `AppendEvent(… metadata=propagation_meta)` ~L1143-1150). Likely intentional (server-initiated, no inbound request) — confirm whether ledger/analysis expect a trace id on these rows. — status: **open**
-- `ListBackfillJobs` and `GetBackfillStatus` carry no admin or owner gate (`servicer.py` ~L849-885, no `_resolve_owner`), while `TriggerBackfill` and `CancelBackfill` are admin-only — is platform-wide read of backfill jobs intended for every authenticated caller? — status: **open** (found 2026-11-04)
+- `ListBackfillJobs` and `GetBackfillStatus` carry no admin or owner gate (`servicer.py` ~L849-885, no `_resolve_owner`), while `TriggerBackfill` is admin or the self-serve envelope (since feature 343) and `CancelBackfill` is admin-only — is platform-wide read of backfill jobs intended for every authenticated caller? — status: **open** (found 2026-11-04)
 
 ## Resolved
 
