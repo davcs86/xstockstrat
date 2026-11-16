@@ -21,3 +21,10 @@
 - Overlap findings (WARN, rebase-only, no merge-order row): `portfolio_service.go` shared with specs 311, 312, 315, 317, 323, 326. Design must check: 326 (CreateWatchlist duplicate-name mapping, same watchlist domain), 312 (read-path identity — must not change the `EnsureSystemManaged` caller id), 323 (must not delete `EnsureSystemManaged`/watchlist repo helpers).
 - **Carried to the design gate (author assumptions, NOT operator decisions):** (1) system list not counted against `watchlist.max_per_user`; (2) ensure failure is fail-open (WARN + list returned).
 - Recommended design depth: quick (single service, no proto/DB/config change; overlaps rebase-level only).
+
+## Session 2026-11-16 — sdd-design (Phase 0)
+
+- Phase 0 Recon: wrote recon.md (services: portfolio, agent docs-only, analysis callers, ui consumer; key reuse: `EnsureSystemManaged` as used by `EnsureSignalWatchlist`, `refuseUnservable` fail-open WARN pattern, `fakeWatchlistStore`/`newSvc` test scaffolding). Business rules: 1 EXTEND (agent 148 @AC-1), 0 CHANGE, rest PRESERVE.
+- Post-Recon escalation (rubric: ≥2 services incl. named surfaces + overlap findings): **operator chose Upgrade to full** (was quick). Design runs as a full debate (min 2, cap 5 rounds).
+- **Operator decision (UI handling): No UI change.** The product spec's "no UI code change" stands. Operator-accepted consequences, recorded so they are not rediscovered as defects: (1) `/insights/watchlists` auto-selects Signals for a user with no other lists; (2) the "No watchlists yet" empty state is unreachable in production; (3) the screener "Add top N to…" picker lists Signals and can write MANUAL entries into the system list (provenance `source` stays first-writer-wins per feature 127).
+- Spec tension carried into the debate: FR-1 "returned in the result" vs FR-6 (uuid-order page placement) — presence on the first-page response must be deterministic; cost of the ensure on a polled read path (3+ round trips) is a design question.
