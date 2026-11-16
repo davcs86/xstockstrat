@@ -976,7 +976,7 @@ tests above are the verification. The threshold command still runs for the rest 
 
 ### Step 10 — service: no-write audit (`internal/fundaudit`, `cmd/fundamentals-audit`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fundaudit/audit.go` — create
@@ -1044,7 +1044,7 @@ tests above are the verification. The threshold command still runs for the rest 
 
 ### Step 11 — test: audit parsing, per-symbol report, pass conditions, pre/post diff
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fundaudit/audit_test.go` — create
