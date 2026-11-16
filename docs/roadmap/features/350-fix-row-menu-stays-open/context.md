@@ -20,3 +20,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The strategies Deactivate item is in scope as a third site of the same defect; basis: identical code shape. Recon confirms or the design drops it.
   - The focus fallback when the row has gone (FR-3, @AC-4) is stated as an outcome only ("not on a removed element; Tab reaches the page"); the exact target is a design decision for the operator's gate.
 - Development branch: feature/fix-row-menu-stays-open
+
+## Session 2026-11-16 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Tree: `feature/fix-row-menu-stays-open@d10eb257` == origin, `origin/main-dev@87c504bf` is an ancestor.
+- A1b: not a re-attempt of any demoted feature (session's own judgement — none of the 22 concerns a row menu or a confirmation dialog).
+- Warnings (all addressed in this session): AC-5/6/7 named no concrete table or action → concrete values and Examples added; FR-2's assistive-technology clause had no `Then` → added to @AC-2; FR-4 left out the strategies Deactivate menu although the surface list named it → FR-4 and @AC-6 now include it; @AC-3 carried a state check in `When` → moved to `Given`; the "key pressed right after Confirm" case had no scenario → @AC-8 appended. Still open for design: the FR-3 fallback focus target (@AC-4 states the outcome only).
+- Overlap findings: none (CLEAN). 339 (`code-completed`) is behavioural context only (its PR #1550 enabled the dialog close animation); no merge-order entry needed.
+- Recommended design depth: quick (single service, browser UI only, no proto/DB/config, no overlap).
+- Recon lead found while fixing the Examples: `accountShared.tsx` "Edit keys" and `OrdersTable` "Edit" already open a dialog from a menu item WITHOUT `preventDefault` — a working in-repo instance of "menu closes, dialog opens" to measure before choosing the mechanism.

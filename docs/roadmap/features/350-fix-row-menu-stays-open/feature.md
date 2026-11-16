@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report (`--from-report`) |
+| 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, all folded into the spec) |
 
 ---
 
@@ -36,4 +37,4 @@ trigger, once the dialog resolves.
 
 ## Next Action
 
-`/sdd-design fix-row-menu-stays-open quick` — design depth chosen by the operator; see context.md
+`/sdd-design fix-row-menu-stays-open quick` — quick design recommended (single service, no proto/DB/config, no overlap) and chosen by the operator

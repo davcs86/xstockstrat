@@ -38,7 +38,8 @@ user intends, and focus returns to the row's actions trigger.
   left the table), focus is not left on a removed element; the fallback target is fixed by the
   design.
 - **FR-4** FR-1..FR-3 hold for every confirm action on every table that uses the shared row menu,
-  and for the orders table's Cancel action, through one mechanism.
+  and for the orders table's Cancel and the strategies table's Deactivate (each has its own menu
+  and dialog today), through one mechanism.
 - **FR-5** Row actions that do not ask for confirmation, and menu items that deliberately keep
   their menu open (the multi-select source filter on opportunities), behave as they do today.
 
@@ -65,8 +66,9 @@ xstockstrat-ui
 ## Consumer Surface(s)
 
 Browser UI only (C-14): every table with a three-dots row menu whose action asks for confirmation —
-`/trader/orders`, `/trader/accounts`, `/accounts/authorized-apps`, `/config-ui/templates`,
-`/insights/strategies`. No MCP tool, RPC or CLI surface changes.
+`/trader/orders` (Cancel), `/trader/accounts` (Resume, Remove), `/accounts/authorized-apps`
+(Disconnect), `/config-ui/templates` (Retire), `/insights/strategies` (Deactivate). `/insights/signal-sources`
+uses the shared row menu without a confirm action and is covered by FR-5. No MCP tool, RPC or CLI surface changes.
 
 ## Fix Scope
 

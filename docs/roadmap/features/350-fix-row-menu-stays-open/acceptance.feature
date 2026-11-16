@@ -20,6 +20,7 @@ Feature: fix-row-menu-stays-open (bug fix)
     When the user <resolution> the confirmation dialog
     Then no actions menu and no dialog is shown
     And the page is not blocked from pointer input
+    And no page content is left hidden from assistive technology
     And a single click on another control on the page performs that control's action
 
     Examples:
@@ -32,8 +33,8 @@ Feature: fix-row-menu-stays-open (bug fix)
   @AC-3 @FR-3 @regression
   Scenario Outline: Focus returns to the row's actions trigger after the dialog is resolved
     Given the user chose "<action>" from a row's actions menu on the <table> table
+    And the row stays in the table after the action
     When the user <resolution> the confirmation dialog
-    And the row is still in the table
     Then keyboard focus is on that row's actions trigger
 
     Examples:
@@ -51,20 +52,35 @@ Feature: fix-row-menu-stays-open (bug fix)
 
   @AC-5 @FR-1 @regression
   Scenario: The confirmation flow works from the keyboard alone
-    Given a row's actions trigger has keyboard focus
-    When the user opens the menu with Enter, moves to an action that asks for confirmation and presses Enter
+    Given the actions trigger of a cancellable order on the orders table has keyboard focus
+    When the user opens the menu with Enter, moves to "Cancel" and presses Enter
     Then the confirmation dialog is shown with focus inside it
-    And pressing Escape closes the dialog and returns focus to the row's actions trigger
+    And pressing Escape closes the dialog and returns focus to that order's actions trigger
 
   @AC-6 @FR-4 @regression
-  Scenario: Every confirm action on the shared row menu behaves the same
-    Given a table that uses the shared row menu with an action that asks for confirmation
-    When the user chooses that action and confirms or cancels the dialog
-    Then the row's actions menu is closed and the page responds to the first click
+  Scenario Outline: Every confirm action behaves the same on every table
+    Given the <table> table with a row whose "<action>" action asks for confirmation
+    When the user chooses "<action>" from that row's actions menu and <resolution> the dialog
+    Then the row's actions menu is closed
+    And the page responds to the first click
+
+    Examples:
+      | table            | action     | resolution |
+      | accounts         | Remove     | dismisses  |
+      | authorized apps  | Disconnect | dismisses  |
+      | config templates | Retire     | dismisses  |
+      | strategies       | Deactivate | dismisses  |
+      | strategies       | Deactivate | confirms   |
 
   @AC-7 @FR-5
   Scenario: Actions without confirmation and keep-open items are unchanged
-    Given a row action that does not ask for confirmation
-    When the user chooses it
-    Then the action runs at once and the menu closes
+    Given the orders table with a row whose "Edit" action does not ask for confirmation
+    When the user chooses "Edit" from that row's actions menu
+    Then the edit dialog opens at once and the row's actions menu closes
     And on the opportunities source filter, ticking a source keeps the filter menu open
+
+  @AC-8 @FR-2 @regression
+  Scenario: A key pressed right after confirming is not swallowed by a leftover menu
+    Given the user chose "Cancel" from an order's actions menu
+    When the user confirms the dialog
+    Then no actions menu is shown without any further key press or click
