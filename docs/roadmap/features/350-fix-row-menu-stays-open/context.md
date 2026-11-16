@@ -29,3 +29,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap findings: none (CLEAN). 339 (`code-completed`) is behavioural context only (its PR #1550 enabled the dialog close animation); no merge-order entry needed.
 - Recommended design depth: quick (single service, browser UI only, no proto/DB/config, no overlap).
 - Recon lead found while fixing the Examples: `accountShared.tsx` "Edit keys" and `OrdersTable` "Edit" already open a dialog from a menu item WITHOUT `preventDefault` — a working in-repo instance of "menu closes, dialog opens" to measure before choosing the mechanism.
+
+## Session 2026-11-16 — sdd-design (at the approval gate)
+
+- Tree: `feature/fix-row-menu-stays-open@689a6c73` ≡ origin, `origin/main-dev@87c504bf` merged.
+- Phase 0 Recon: wrote recon.md. Every existing durable scenario is PRESERVE (no CHANGE, no EXTEND). No escalation signal; stayed `quick`. The defect and two candidate fixes were measured in headless Chromium (recon.md § Browser measurements); the prototype edits and the scratch probe were reverted and deleted.
+- `preventDefault` sites classified: `RowActionsMenu`, `OrdersTable`, strategies Deactivate = same defect; opportunities source filter = deliberate keep-open.
+- Phase 1 Grilling: round 1 run (proposer + adversary). Adversary verdict NEEDS WORK, no Floor breach; 11 objections, 9 closed in synthesis (debate.md). The decisive finding: a rebuilt `columns` memo remounts every actions cell (D-5), so strategies and authorized apps need a stable cell for the focus rule to hold.
+- Waiting on the operator (P-04; the handover reserves design approval): approve the design; adopt the shared menu in orders and strategies and the dialog text that makes visible; the focus fallback target; the C-16 promotion plan. Nothing is recorded as decided until the operator answers.
+- Side defect found, out of scope, not filed: the "Edit keys" `FormDialog` opened from the row menu never receives focus (recon.md § Risks).
