@@ -132,7 +132,6 @@ var DerivationOwnedExtraKeys = []string{"revenue", "net_income", "assets", "liab
 // *float64 (nil = column is NULL / never derived); Currency is the stored as-reported currency used
 // to gate native pe/pb recovery (fail closed on a mismatch).
 type HistoricalPriceState struct {
-	Found         bool
 	FiscalPeriod  string
 	PeriodType    string
 	PeriodEnd     time.Time

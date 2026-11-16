@@ -766,7 +766,7 @@ here and the real-database job of Step 12 are the verification.
 
 ### Step 8 — service: backfill write path reconciles through the planner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -867,7 +867,7 @@ here and the real-database job of Step 12 are the verification.
 
 ### Step 9 — test: backfill reconcile tests, migrated fakes, read and snapshot cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify

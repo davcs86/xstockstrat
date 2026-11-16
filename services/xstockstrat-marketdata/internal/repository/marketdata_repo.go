@@ -728,7 +728,7 @@ func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, src 
 // histFundamentalsColumns is the shared SELECT/scan order for a fundamentals_history row.
 const histFundamentalsColumns = `symbol, fiscal_period, period_type, period_end, filed_date, accepted_date, source, currency, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe, debt_to_equity, price, year_high, year_low, extra_metrics`
 
-// histInsertStatement carries no conflict clause; a caller that wants one appends it.
+// histInsertStatement is a plain insert: a key that already exists fails the replace transaction.
 const histInsertStatement = `
 		INSERT INTO marketdata.fundamentals_history
 		  (symbol, fiscal_period, period_type, period_end, filed_date, accepted_date, source, currency,
@@ -751,21 +751,6 @@ func histInsertArgs(p source.HistoricalFundamentalsPeriod) ([]any, error) {
 		p.MarketCap, p.PERatio, p.PBRatio, p.DividendYield, p.EPS, p.Beta, p.ROE, p.DebtToEquity, p.Price,
 		p.YearHigh, p.YearLow, string(extraJSON), p.DerivationVersion,
 	}, nil
-}
-
-// InsertHistoricalFundamentals persists one point-in-time period. ON CONFLICT DO NOTHING keeps the
-// original as-reported filing (earliest filed_date) — the triple PK is the @AC-1 idempotency guard,
-// so a same-range re-backfill never duplicates and a later 10-K comparative never overwrites.
-func (r *MarketDataRepo) InsertHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) error {
-	args, err := histInsertArgs(p)
-	if err != nil {
-		return err
-	}
-	if _, err = r.db.Exec(ctx, histInsertStatement+`
-		ON CONFLICT (symbol, fiscal_period, period_type) DO NOTHING`, args...); err != nil {
-		return fmt.Errorf("insert fundamentals_history %s %s: %w", p.Symbol, p.FiscalPeriod, err)
-	}
-	return nil
 }
 
 // ListHistoricalRows returns every stored fundamentals_history row of a symbol, ordered by
@@ -851,29 +836,6 @@ func (r *MarketDataRepo) ReplaceHistoricalFundamentals(ctx context.Context, symb
 		return fmt.Errorf("replace fundamentals_history %s: commit: %w", symbol, err)
 	}
 	return nil
-}
-
-// GetHistoricalPriceState reads the stored price-join state for one fundamentals_history row
-// (feature 216). Returns Found=false (never an error) when no row matches the triple PK — mirrors
-// CloseAt's no-rows fail-closed pattern. Uses r.db so tests can pin the query with pgxmock.
-func (r *MarketDataRepo) GetHistoricalPriceState(ctx context.Context, symbol, fiscalPeriod, periodType string) (*source.HistoricalPriceState, error) {
-	const q = `SELECT filed_date, price, market_cap, pe_ratio, pb_ratio, dividend_yield, currency, derivation_version
-		FROM marketdata.fundamentals_history
-		WHERE symbol=$1 AND fiscal_period=$2 AND period_type=$3`
-	var state source.HistoricalPriceState
-	var version int16
-	err := r.db.QueryRow(ctx, q, symbol, fiscalPeriod, periodType).Scan(
-		&state.FiledDate, &state.Price, &state.MarketCap, &state.PERatio, &state.PBRatio, &state.DividendYield, &state.Currency, &version,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return &source.HistoricalPriceState{Found: false}, nil
-		}
-		return nil, fmt.Errorf("get price state %s %s %s: %w", symbol, fiscalPeriod, periodType, err)
-	}
-	state.Found = true
-	state.DerivationVersion = int(version)
-	return &state, nil
 }
 
 // UpdateHistoricalPriceJoin overwrites the 5 price-join columns of an existing
