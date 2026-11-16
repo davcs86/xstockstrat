@@ -40,15 +40,21 @@ Feature: fix-row-menu-stays-open (bug fix)
     Examples:
       | table    | action | resolution |
       | orders   | Cancel | dismisses  |
+      | orders   | Cancel | confirms   |
       | accounts | Resume | confirms   |
       | accounts | Resume | dismisses  |
 
   @AC-4 @FR-3 @regression
-  Scenario: Focus is not lost when the row leaves the table
-    Given the user chose "Cancel" from an order's actions menu
-    When the user confirms and the order leaves the table
-    Then keyboard focus is not on a removed element
-    And the next Tab press moves focus to a control on the page
+  Scenario Outline: Focus is not lost when the row's actions trigger disappears
+    Given the user chose "<action>" from a row's actions menu on the <table> table
+    When the user confirms and the row's actions trigger is removed from the page
+    Then keyboard focus is on the page's main content region
+    And the next Tab press moves focus to the first control inside the main content region
+
+    Examples:
+      | table           | action     |
+      | authorized apps | Disconnect |
+      | accounts        | Remove     |
 
   @AC-5 @FR-1 @regression
   Scenario: The confirmation flow works from the keyboard alone
