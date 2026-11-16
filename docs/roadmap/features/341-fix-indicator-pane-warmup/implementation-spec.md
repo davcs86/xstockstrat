@@ -647,7 +647,7 @@ grep -n "indicatorHistory\|UI_CHART_HISTORY_VALUES" e2e/fixtures/INVENTORY.md   
 
 ### Step 13 — service: symbol page fetches D bars, draws W, windows the panes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -899,3 +899,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 11's block expects each `check-config-wiring.mjs` line to exit 0; Step 12's block expects `pnpm run test:coverage` to exit 0.
 - **Actual**: neither block chains its later lines with `&&`, so each block's `exit=` is only its last line's (Step 11: `--final`; Step 12: the INVENTORY grep). The two checker lines were re-run alone, each with its own log (`--keys` exit 0, silent; `--final` exit 0, only the two pre-existing `REPORTED: … readers-disagree` lines). In Step 12's GREEN log `test:coverage` printed `Tests 563 passed | 2 skipped` and `All files | 78.56` statements with no threshold error and no `ELIFECYCLE`. `node --test scripts/config-wiring.test.mjs` was also run (75 pass), because `scripts/config-wiring.json` changed. RED was captured with the Step 12 block too: its lint and `tsc` passed, `test:unit` failed 9 tests, and the block still printed `exit=0` from its last grep. `ConfigValue.intVal` is `bigint` in the generated TS (`config_pb.ts`), so `readHistoryBars` converts with `Number(...)` and `UI_CHART_HISTORY_VALUES.init` uses `BigInt(bars)`; `wire` uses a decimal string.
 - **Disposition**: no code change; read as passing.
+
+### Step 13 — `tsc` run against the branch's own stubs; RED/GREEN by a temporary e2e probe (2026-11-15)
+- **Spec said**: run `pnpm exec tsc --noEmit` in `services/xstockstrat-ui`; Step 13 is `red-green required` with no paired test of its own (Step 14's e2e covers it).
+- **Actual**: the worktree's linked `node_modules` resolves `@xstockstrat/proto` to the main checkout's `packages/proto/gen/ts` (`main-dev`), whose `ComponentSeries` has no `firstValueBars` (Steps 1+2). The verbatim `tsc` therefore failed only on `page.tsx` `windowIndicatorSeries(series, …)`: `Property 'firstValueBars' is missing in type 'ComponentSeries'`, plus the follow-on `$typeName` error (`.sdd-logs/v-3.log`). The block printed `exit=0` anyway, because its last line is a grep. `tsc` was re-run with a temporary `.sdd-logs/tsconfig.step13.json` that extends the UI tsconfig and maps `@xstockstrat/proto/*` to this worktree's `packages/proto/gen/ts/dist/*`. That is what CI resolves after `pnpm install` on the branch. It was clean (`v-5.log`). RED and GREEN came from an uncommitted Playwright probe, run with `--no-deps` because the local `warmup.setup.ts` hit its 10 s timeout on a cold `pnpm dev`. The probe routed `GetConfig(ui)` to `UI_CHART_HISTORY_VALUES.wire(1000)` and asserted that `GetBars` sends `page.pageSize` 1000 with no `range`. The probe file was deleted after GREEN; Step 14 writes the real e2e.
+- **Disposition**: CI-equivalent fallback (`tsc` module resolution); no code change.

@@ -1,6 +1,6 @@
 'use client';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AppShell } from '@/components/trader/AppShell';
@@ -11,6 +11,9 @@ import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 import { type Timeframe, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
 import { resolveChartColor } from '@/lib/chartColors';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
+import { traderConfigClient } from '@/lib/browserClients/traderConfigClient';
+import { HISTORY_CONFIG_TIMEOUT_MS } from '@/lib/deadlines';
+import { CHART_WINDOW_BARS, readHistoryBars, windowIndicatorSeries } from '@/lib/indicatorChart';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { PNL_UNAVAILABLE_LABEL } from '@/lib/portfolioTotals';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
@@ -129,8 +132,8 @@ function PositionDetailInner() {
   const { containerRef, seriesRef, chartRef } = useCandlestickChart(260);
   const timeframe: Timeframe = '1Day';
   const [barsError, setBarsError] = useState<string | null>(null);
-  // Retain the drawn bars' closes+times so the indicator overlays reuse the exact series (parity
-  // x-axis, no second bars fetch).
+  // Every fetched bar's closes+times (D bars) feed the indicator overlays; the candlestick draws only
+  // their tail, so the drawn window must stay the tail of this series (no second bars fetch).
   const [barSeries, setBarSeries] = useState<{
     closes: number[];
     times: IndicatorSeriesInput['times'];
@@ -242,18 +245,34 @@ function PositionDetailInner() {
   const ohlcBars = useOhlcBars(ohlcSymbols);
   const headerOhlc = ohlcBars.get(symbol);
 
+  // History depth D: an error, timeout or absent key reads as the default, so it never blocks the chart.
+  const historyConfig = useQuery({
+    queryKey: ['ui-chart-history-config'],
+    queryFn: async () => {
+      const resp = await traderConfigClient.getConfig(
+        { namespace: 'ui' },
+        { timeoutMs: HISTORY_CONFIG_TIMEOUT_MS },
+      );
+      return resp.values;
+    },
+    staleTime: Infinity,
+    retry: false,
+  });
+  const historyConfigSettled = !historyConfig.isPending;
+  const historyBars = readHistoryBars(historyConfig.data ?? {});
+
   // loadBars is held in a ref so the poll interval runs the latest closure; latestReqRef discards
   // stale responses from a superseded load.
   const latestReqRef = useRef(0);
   const loadBars = () => {
-    if (!symbol) return;
+    if (!symbol || !historyConfigSettled) return;
     const reqId = ++latestReqRef.current;
     marketDataClient
       .getBars({
         symbol,
         timeframe,
         timeframeEnum: TIMEFRAME_ENUM[timeframe],
-        page: { pageSize: 200 },
+        page: { pageSize: historyBars },
       })
       .then((res) => {
         if (reqId !== latestReqRef.current) return; // superseded by a newer load
@@ -266,7 +285,7 @@ function PositionDetailInner() {
         setBarsError(null);
         const series = seriesRef.current;
         if (!series) return;
-        series.setData(mapBars(res.bars));
+        series.setData(mapBars(res.bars).slice(-CHART_WINDOW_BARS));
         chartRef.current?.timeScale().fitContent();
         for (const line of priceLinesRef.current) series.removePriceLine(line);
         priceLinesRef.current = [];
@@ -331,7 +350,7 @@ function PositionDetailInner() {
   useEffect(() => {
     loadBarsRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, timeframe, avg, stop, oppTarget, oppStop]);
+  }, [symbol, timeframe, avg, stop, oppTarget, oppStop, historyConfigSettled, historyBars]);
 
   // Poll keyed on [symbol] only, so the timer isn't reset on every avg/stop tick; cleared on symbol
   // change / unmount.
@@ -532,6 +551,7 @@ function PositionDetailInner() {
             onStrategyChange={handleStrategyChange}
             closes={barSeries.closes}
             times={barSeries.times}
+            requestedBars={historyBars}
             chartRef={chartRef}
             containerRef={containerRef}
           />
@@ -1306,6 +1326,7 @@ function IndicatorSection({
   onStrategyChange,
   closes,
   times,
+  requestedBars,
   chartRef,
   containerRef,
 }: {
@@ -1314,6 +1335,7 @@ function IndicatorSection({
   onStrategyChange: (id: string) => void;
   closes: number[];
   times: IndicatorSeriesInput['times'];
+  requestedBars: number;
   chartRef: React.RefObject<IChartApi | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }) {
@@ -1327,6 +1349,10 @@ function IndicatorSection({
     closes,
     times,
   });
+  const windowed = useMemo(
+    () => (series ? windowIndicatorSeries(series, requestedBars) : undefined),
+    [series, requestedBars],
+  );
 
   // Stable Card shell: the "Indicators" title + strategy picker persist on every branch so the user
   // can select a strategy even from the empty / no-strategy state.
@@ -1346,8 +1372,8 @@ function IndicatorSection({
   } else {
     body = (
       <IndicatorPanels
-        components={series!.components}
-        times={times}
+        components={windowed!.components}
+        times={windowed!.times}
         chartRef={chartRef}
         containerRef={containerRef}
       />

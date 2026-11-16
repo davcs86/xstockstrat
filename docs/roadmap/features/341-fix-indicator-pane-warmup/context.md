@@ -170,7 +170,12 @@ still live.
 - [ ] Step 7 alone must pass `node scripts/check-config-wiring.mjs --final` with the temporary
   `seeded-unread` finding — confirm from the command output at execute.
 - [ ] Confirm `HISTORY_CONFIG_TIMEOUT_MS = 3_000` (spec author's number; a wrong value falls back to
-  200, PLAT-N1) — Step 13 gate.
+  200, PLAT-N1) — Step 13 gate. Landed at 3 000 in Step 13 (sequential mode, no Phase-2 prompt);
+  still awaits the operator's confirmation at the checkpoint.
+- [ ] Steps 14 and 16 (e2e): in a batch worktree the linked `node_modules` resolves
+  `@xstockstrat/proto` to the main checkout's stubs, which have no `firstValueBars`. Both the
+  browser bundle and the mock backend then lack the field until the main checkout carries Steps 1+2.
+  Plan a CI-equivalent run (`scripts/run-e2e.py` in Docker, or the main checkout updated).
 - [ ] Show the pin-formula deviation to the operator — Step 4 gate.
 - [x] pgxmock row-error injection has no in-repo use; fallback is `WillReturnError` plus a Deviation
   Log entry — Step 6. Resolved: pgxmock v4.9.0 `CloseError` covers the `rows.Err()` path.
@@ -227,6 +232,8 @@ still live.
   `services/xstockstrat-ui/src/lib/indicatorChart.test.ts`,
   `services/xstockstrat-ui/e2e/fixtures/indicatorHistory.ts`,
   `services/xstockstrat-ui/e2e/fixtures/configKeys.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.
+- Step 13: `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`,
+  `services/xstockstrat-ui/src/hooks/useIndicatorSeries.ts`, `services/xstockstrat-ui/src/lib/deadlines.ts`.
 
 Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
@@ -785,3 +792,17 @@ Tooling setup (steps 11+12): node ✓ · pnpm ✓ (linked main-checkout `node_mo
 - Files modified: `services/xstockstrat-ui/src/lib/indicatorChart.test.ts`, `services/xstockstrat-ui/e2e/fixtures/indicatorHistory.ts`, `services/xstockstrat-ui/e2e/fixtures/configKeys.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
 - Deviations: the block's `exit=` reflects only its last grep (Deviation Log). INVENTORY rows list the one current consumer; Step 14 adds the e2e consumers.
 - Commit trailer: this agent's `Co-Authored-By` line follows the session's attribution reminder (`Claude Opus 5.5`), not the workflow text's `Claude Fable 5.2`.
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, step 13
+
+Tooling setup (step 13): node ✓ · pnpm ✓ (linked main-checkout `node_modules`) · vitest ✓ · Playwright + Chromium ✓ (`/opt/pw-browsers`, host-native single spec); no install.
+
+### Step 13 — service: symbol page fetches D bars, draws W, windows the panes [done]
+- Added `HISTORY_CONFIG_TIMEOUT_MS = 3_000` to `deadlines.ts`. The symbol page reads `ui` config once through `traderConfigClient` (`staleTime: Infinity`, `retry: false`, per-call `timeoutMs`) and derives `historyBars = readHistoryBars(data ?? {})`. `loadBars` waits for that query to settle, then requests `pageSize: historyBars` with no `range`. It keeps every timestamped bar in `barSeries` and draws `mapBars(res.bars).slice(-CHART_WINDOW_BARS)`. `IndicatorSection` takes `requestedBars` and passes the memoised `windowIndicatorSeries(series, requestedBars)` components and times to `IndicatorPanels`; `insufficient` is not read yet (Step 15). The `useIndicatorSeries` query key gains the last bar's time as a string. No new backend edge.
+- AC-1 red (`.sdd-logs/v-2.log`; an uncommitted probe spec routed `GetConfig(ui)` to `UI_CHART_HISTORY_VALUES.wire(1000)`): `Expected: 1000` / `Received: 200`, with GetBars sent `"page":{"pageSize":200}` → green (`v-6.log`): GetBars sent `"page":{"pageSize":1000}`, no `range`, `1 passed`. The probe was then deleted; Step 14 writes the real e2e.
+- Verification (`v-5.log`, `exit=0`): lint clean for the touched files, `tsc` clean against the branch stubs, `Tests 563 passed | 2 skipped (565)`. The `pageSize: 200` grep found nothing. The helper grep matched `:16` (import), `:262`, `:288` and `:1353`, and `namespace: 'ui'` matched once (`:253`). The wiring check was not required (no migration, no `## Config Key Changes`) and was run anyway (`v-7.log`): `--keys` exit 0, silent; `--final` exit 0, printing only the two pre-existing `REPORTED: … readers-disagree` lines.
+- Files modified: `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`, `services/xstockstrat-ui/src/hooks/useIndicatorSeries.ts`, `services/xstockstrat-ui/src/lib/deadlines.ts`
+- Deviations: `tsc` ran against the branch's own `@xstockstrat/proto` stubs, because the linked `node_modules` resolves to the main checkout's `main-dev` stubs. The probe ran with `--no-deps` (Deviation Log).
+- Commit trailer: `Co-Authored-By` follows the session attribution reminder (`Claude Opus 5.5`).
