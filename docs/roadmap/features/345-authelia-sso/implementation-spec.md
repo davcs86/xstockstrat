@@ -1232,7 +1232,7 @@ grep -n "typecheck (xstockstrat-ui)" ../../.github/workflows/ci.yml
 
 ---
 
-### Step 25 — service: UI leaf modules (issuer grammar, Origin check, deadlines, log-once, internal-caller header)
+### Step 25 — service: UI leaf modules (issuer grammar, Origin check, deadlines, log-once, compose APP_URL)
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1418,7 +1418,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 
 **Instructions**:
 1. **`oidcConfig.ts`** (D-22, D-27, D-39, D-47, D-66, D-78). All reads:
-   - are header-less (no `x-user-id`), with `user_id: ''`;
+   - are header-less for identity (no `x-user-id` / `x-access-scope`), with `user_id: ''`, but forward the request's `x-trace-id` (`HEADER_TRACE_ID`, or a fresh `generateTraceId()` when absent) so pre-auth config reads stay traceable (C-03). Each loader (`loadOidcConfig`, `loadPasswordLoginEnabled`, `loadOidcClientSecret`) takes an optional trailing `traceId?: string`; callers pass the inbound `x-trace-id` when they have one;
    - pass `environment: nativeConfigEnvironment()` and `{ timeoutMs: AUTH_CONFIG_TIMEOUT_MS }`;
    - read values through a oneof-presence check.
 2. Export the `OidcConfigResult` discriminated union exactly as in design.md (B) §D-66.
@@ -1472,13 +1472,12 @@ cd ../.. && node scripts/check-config-wiring.mjs --declared-from docs/roadmap/fe
    - **@AC-46 / @AC-60:** a `getConfig` rejection or timeout → `{mode:'error'}`.
    - **@AC-54:** ui `http://auth.example.test` → `valid:false, reason:'ui_issuer'` and one ERROR `sso_issuer_invalid`.
    - An invalid `APP_URL` → `reason:'app_url'` with exactly one ERROR, `app_url_invalid` (no `sso_issuer_invalid`).
-   - Every call passes `environment: Environment.PRODUCTION` when `APPLICATION_ENV=production` (D-39), `userId: ''`, no `x-user-id` header, and `timeoutMs: 10_000`.
+   - Every call passes `environment: Environment.PRODUCTION` when `APPLICATION_ENV=production` (D-39), `userId: ''`, no `x-user-id` header, an `x-trace-id` header, and `timeoutMs: 10_000`.
    - `getSecret` sends `x-internal-caller: ui`. `found:false` → null, and `''` → null.
    - The flag defaults to `false` when the row is absent.
    - A stored `false` is read as false, not as the default (oneof presence).
+   - **Seeded client IDs reach the reader** (config-key wiring b): for a valid SSO snapshot with `ui` / `oidc.client_id`, `oidc.mcp_client_id` and `oidc.mcp_client_id_readonly` set to three distinct values, `loadOidcConfig()` returns `valid:true` with `clientId`, `mcpClientId` and `mcpClientIdReadonly` equal to them; with those keys absent from the snapshot each defaults to `''`.
 2. These are scenario one-offs (config snapshots), so they stay inline and are exempt from C-12. Say so in the file header.
-
-- **Seeded client IDs reach the reader** (config-key wiring b): for a valid SSO snapshot with `ui` / `oidc.client_id`, `oidc.mcp_client_id` and `oidc.mcp_client_id_readonly` set to three distinct values, `loadOidcConfig()` returns `valid:true` with `clientId`, `mcpClientId` and `mcpClientIdReadonly` equal to them; with those keys absent from the snapshot each defaults to `''`.
 
 **Verification**:
 ```bash
@@ -2192,7 +2191,7 @@ pnpm exec playwright test e2e/auth.spec.ts --project=chromium   # the default (l
 **Files**:
 - `services/xstockstrat-ui/playwright.config.ts` — modify
 
-**Reviewers**: `xstockstrat-ui` owner — Trading UI correctness; Platform Lead — deploy config parity (`APP_URL`)
+**Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
 
 **Codebase Evidence**:
 - `playwright.config.ts`:
