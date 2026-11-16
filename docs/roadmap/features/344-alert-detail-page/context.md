@@ -663,3 +663,7 @@ Feature: alert-detail-page (ingest backfill-failure alert body)
 - Re-spec open decision 1 (stream `onMessage` does not invalidate the unread query; 339's buffer behaviour kept): **Operator, verbatim: "Keep as built (Recommended)".** D-24's invalidate-on-message is superseded for this handler.
 - Merge-order gate: feature 339 merged into main-dev (PR #1550) and main-dev is merged into this branch (a900126ff).
 - Orchestrator decisions made under the standing authorization and reported to the operator (not operator words): Step 18 header change was the operator's ("Fix the header now"); Step 20's cancel-before-invalidate helper and its two test deviations were the orchestrator's.
+
+## Session 2026-11-16 — wording of feature 271 `@AC-5` (orchestrator)
+
+- Shown to the operator: `Given a signed-in trader with the alert stream open` → `Given a signed-in user on any segment page with the alert stream open` (first line only; title, tags and the other steps unchanged). **Operator, verbatim: "Signoff".** File: `services/xstockstrat-ui/acceptance/fix-ui-transport-hardening.feature`. Wording only; no test or behaviour change.
