@@ -427,3 +427,23 @@
   `trading_cancel_not_cancelable_test.go`, `trading_reconciliation_test.go`; by deviation
   `trading_telemetry_test.go`, `trading_bracket_test.go`
 - Deviations: fixture edits in two files outside `**Files**` (Deviation Log)
+
+### Step 11 — migration: seed the two kill switches, update the ceiling description, regenerate the stored set [done]
+- Number re-derived: last on the branch and on `origin/main-dev@1148c53` is `051`, so `052` holds; no
+  `merge-order.md` edit. Pair written: one INSERT of four global rows (two keys × staging, production,
+  `bool`, `'true'`, sentinel actor, insert-if-absent) and one description UPDATE guarded on the exact
+  old text; the down deletes only untouched sentinel rows (parenthesized OR) and swaps the description
+  back under the mirror guard.
+- TDD: N/A (migration). Offline check: both files exist with the highest prefix, no duplicate; the old
+  description occurs verbatim in `041_heal_config_keys_to_reader_catalog.up.sql`.
+- Stored set generated on a throwaway Postgres 16 (Deviation Log). Baseline proof first: without `052`
+  the generator reproduced the committed file with an empty diff. With `052`: 4 new key rows and the two
+  reworded `backfill.rate_limit_rps` descriptions. `config-heal-dryrun.py --fresh` left
+  `scripts/config-heal/dryrun-fresh.tsv` unchanged. The database was stopped and its directory removed.
+- Verification: `check-config-wiring --keys …` silent, exit 0; `--final` exit 0 (two pre-existing
+  REPORTED lines, no finding for either key); `--doc-check` exit 0; `--declared-from … --declared-migration`
+  exit 0; `node --test scripts/config-wiring.test.mjs` 75 pass, 0 fail; both temporary baseline entries
+  removed from `scripts/config-wiring.json`; registered-keys entry added at the top of the log.
+- Files modified: `services/xstockstrat-config/migrations/052_alpaca_adaptive_rate_limit_keys.{up,down}.sql`,
+  `scripts/config-wiring-stored.json`, `scripts/config-wiring.json`, `docs/patterns/config-governance.md`
+- Deviations: scratch Postgres for generation (Deviation Log)

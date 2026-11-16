@@ -8,18 +8,6 @@
       "key": "broker.paper",
       "kind": "read-unseeded",
       "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
-    },
-    {
-      "namespace": "marketdata",
-      "key": "alpaca.adaptive_rate_limit_enabled",
-      "kind": "read-unseeded",
-      "owner": "feature 347 alpaca-adaptive-rate-limit"
-    },
-    {
-      "namespace": "trading",
-      "key": "broker.adaptive_rate_limit_enabled",
-      "kind": "read-unseeded",
-      "owner": "feature 347 alpaca-adaptive-rate-limit"
     }
   ],
   "registry": {
