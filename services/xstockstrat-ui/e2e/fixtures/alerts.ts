@@ -57,7 +57,7 @@ export const ALERT_LIST_002 = {
   alertId: 'alert-002',
   severity: 4,
   category: 'SYSTEM',
-  title: 'Order rejected',
+  title: 'Buying power check failed',
   body: 'Insufficient buying power for TSLA order.',
   sourceService: 'trading',
 };

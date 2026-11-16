@@ -1,5 +1,6 @@
-import { test, expect, type Route } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import { fulfillStream, gate } from '../helpers/connectStream';
 import { ORDER_WORKING, ORDER_WORKING_FILLED_AT, ORDER_WORKING_STREAMED_AT } from '../fixtures';
 import { ALERT_STREAM_001, ALERT_STREAM_002 } from '../fixtures/alerts';
 
@@ -9,39 +10,6 @@ import { ALERT_STREAM_001, ALERT_STREAM_002 } from '../fixtures/alerts';
  * attempt 2 waits on a test-controlled gate. A fulfilled route cannot stay open, so the orders
  * attempt 2 ends cleanly and later attempts continue to the held-open mock.
  */
-
-// Connect streaming framing: 1-byte flag (0x00 message, 0x02 end-stream), 4-byte BE length, JSON.
-function connectStreamBody(messages: object[], error?: { code: string; message: string }): Buffer {
-  const frame = (flag: number, payload: object) => {
-    const json = Buffer.from(JSON.stringify(payload));
-    const head = Buffer.alloc(5);
-    head.writeUInt8(flag, 0);
-    head.writeUInt32BE(json.length, 1);
-    return Buffer.concat([head, json]);
-  };
-  return Buffer.concat([
-    ...messages.map((m) => frame(0x00, m)),
-    frame(0x02, error ? { error } : {}),
-  ]);
-}
-
-function fulfillStream(
-  route: Route,
-  messages: object[],
-  error?: { code: string; message: string },
-) {
-  return route.fulfill({
-    status: 200,
-    contentType: 'application/connect+json',
-    body: connectStreamBody(messages, error),
-  });
-}
-
-function gate(): { wait: Promise<void>; release: () => void } {
-  let release!: () => void;
-  const wait = new Promise<void>((r) => (release = r));
-  return { wait, release };
-}
 
 const DROPPED = { code: 'unavailable', message: 'stream dropped in test' };
 

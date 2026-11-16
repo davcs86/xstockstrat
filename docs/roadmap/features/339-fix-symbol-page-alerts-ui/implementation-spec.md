@@ -983,7 +983,7 @@ Coverage: `src/lib/**` lines, functions and statements must stay >= 40% under
 
 ### Step 13 — test: e2e groundwork for the unread-only drawer (no behaviour change)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/helpers/connectStream.ts` — create
@@ -1343,3 +1343,20 @@ _Populated by /sdd-execute as implementation proceeds._
   in-scope choices, no spec change.
 - **`mergeUnread` keeps the stored copy on a duplicate id** (stored before streamed); the spec
   named de-duplication only. **Disposition**: in-scope choice.
+
+### Step 13 — e2e groundwork for the unread-only drawer (2026-11-15, SEV-3)
+
+- **Harness timeouts in the unchanged command.** The Verification's Playwright command failed 6 of
+  24 tests, all on the harness 10 s local test timeout during cold dev-server compiles (`page.goto`
+  on `/accounts/notifications`, the inbox list and the `^2$` badge waits, and the orders
+  disconnected-indicator wait); none failed on an assertion that outlived the timeout. The same
+  command with `--timeout=90000` passed 24 of 24. **Disposition**: CI-equivalent fallback (as in
+  Steps 1+2 through 9+10); the `frontend-e2e` CI job is the confirming run.
+- **Block exit status is the trailing `grep`'s.** As in Steps 7+8 and 11+12, both runs printed
+  `exit=0`; each was judged from its log. **Disposition**: recorded; no spec change.
+- **Moved helpers re-wrapped, `Route` import dropped.** The `export` prefix pushes the
+  `connectStreamBody` signature past the print width, so it is wrapped as Prettier formats it; the
+  bodies are unchanged. `stream-reconnect.spec.ts` no longer names `Route`, so its
+  `@playwright/test` import drops `type Route`. **Disposition**: in-scope formatting.
+- **`INVENTORY.md` fails `prettier --check` before and after this step** (the base file warns
+  too). Not reformatted: out of scope. **Disposition**: pre-existing, recorded.
