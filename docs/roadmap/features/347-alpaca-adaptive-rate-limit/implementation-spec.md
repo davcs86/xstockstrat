@@ -270,7 +270,7 @@ grep -c "^func Test" services/xstockstrat-marketdata/internal/alpacapace/pace_te
 
 ### Step 3 — service: marketdata Alpaca client paces from headers and retries a 429
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/client.go` — modify

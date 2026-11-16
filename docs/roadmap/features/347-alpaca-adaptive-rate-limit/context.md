@@ -286,3 +286,20 @@
   `check-watcher-copies: all groups byte-identical`.
 - Files modified: both `internal/alpacapace/pace_test.go`, `scripts/tests/test_check_watcher_copies.py`
 - Deviations: none
+
+### Step 3 — service: marketdata Alpaca client paces from headers and retries a 429 [done]
+- `do` keeps today's body when `AdaptiveRateLimit` is false and otherwise calls `doPaced` (Reserve →
+  static limiter → attempt → Observe → 429 retry). Seams `now`/`sleep`/`jitter`, one `newClient`
+  helper for both constructors, the named reader `alpacaAdaptiveRateLimit`, docs, and one temporary
+  `read-unseeded` entry in `scripts/config-wiring.json` (Step 11 removes it).
+- Verification: build ok; existing `internal/alpaca` and `cmd/server` tests pass; `check-config-wiring
+  --final` exit 0, `--doc-check` exit 0, `--declared-from` prints `PENDING … read-unseeded` (non-blocking
+  at step time); `httpClient.Do` appears only in `do` and its attempt helper `sendAttempt`.
+- TDD: paired with Step 4 (red captured there with these fields and seams present and the loop off).
+- Files modified: `services/xstockstrat-marketdata/internal/alpaca/client.go`, `cmd/server/main.go`,
+  `CLAUDE.md`, `docs/context-constitution.md`; `scripts/config-wiring.json`
+- Interpretation recorded (spec was silent): the throttle WARN is emitted for every non-zero adaptive
+  wait — a spread slot as well as a hold or a 429 wait — gated by `WarnOnce` with the wait's end as
+  the window. `Reservation` does not say whether a wait is a slot or a hold, so the client cannot log
+  holds only without widening the core API. Raised at the Step 4 checkpoint.
+- Deviations: none
