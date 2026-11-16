@@ -189,3 +189,4 @@
   - FR-15 gains the both-modes Origin 403 and the "invalid configuration fails closed" behaviour, and the FR-14 legacy-exception list gains the 403;
   - new acceptance scenarios: AC-54 (UI, invalid issuer), AC-55 (agent, invalid issuer), AC-56 (logout with an invalid issuer), AC-57 (cross-origin logout Outline over legacy and SSO).
 - The owner still needs to confirm that D-77 applies in both modes. The evidence: DigitalOcean declares no extra domains, and each homelab app has a single hostname.
+- Owner gate (round 8): confirmed that D-77 applies in **both modes** (D-80), and chose to **run round 9**.
