@@ -171,3 +171,31 @@ reads its input) and change no settled decision. They are recorded as D-24 and D
 - [ ] Label-collision left-out periods, deleted-without-replacement rows, guard-failed symbols, single-metric anchors, 6-K half-year rows — target: the pre-enable audit report (procedure step 3), reviewed by the operator per lane.
 - [ ] Empty price-join columns on replaced rows — target: the pre/post diff (procedure step 8).
 - [ ] The acceptance restatement (`@AC-1..@AC-11`, FR-6) is applied in the first implementation step.
+
+## Session 2026-11-16 — sdd-spec
+
+- Tree: `feature/fix-edgar-historical-fundamentals@15da035 ≡ origin/feature/fix-edgar-historical-fundamentals (merged origin/main-dev@f3f02c7)`.
+  The merge moved `internal/service/marketdata_service.go` by +21 lines against recon.md and
+  design.md; the spec cites the current numbers.
+- Implementation spec generated: 15 steps (atomic units 2+3, 4+5, 6+7, 8+9, 10+11; Step 15 is the
+  operator gate). No migration, proto or config change.
+- The skill ran as a forked run that was cut off by a usage limit after it wrote
+  `implementation-spec.md` and before its closing bookkeeping. The main session completed the
+  bookkeeping (status.md, feature.md, this entry) from the file on disk. The main session read the
+  spec's summary sections only; the step bodies have NOT been re-verified by it. The impl-spec
+  review has not run yet.
+- Status: design-approved → implementation-ready.
+- Choices the spec makes where the design is silent are listed in the spec as S-1..S-13. Two need
+  the operator's or the reviewer's word before Step 8 is executed:
+  - S-2: the service's INFO line reports `no_period_derived` for a row the audit reports as
+    `left_out`, because the service only has `FetchHistorical`.
+  - S-4: read literally, D-24 logs one INFO line for every row whose only change is a cover-page
+    `period_end` corrected to the balance-sheet date, which recon measured as most rows of a lane.
+- S-12: no MCP tool lists the symbols stored in `marketdata.fundamentals_history`; the spec builds
+  the list from `get_backfill_status` and has the operator confirm its size with one read-only count.
+
+### Open Threads
+
+- [ ] Run `/sdd-review fix-edgar-historical-fundamentals impl-spec` — not run yet.
+- [ ] S-2 and S-4 — ask the operator before Step 8.
+- [ ] S-12 — confirm the symbol-list method with the operator before Step 15.

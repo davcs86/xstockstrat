@@ -16,6 +16,7 @@
 | 2026-11-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report |
 | 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 | 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 
 ---
 
@@ -26,7 +27,7 @@
 - [Recon](recon.md) — grounded codebase dossier and data findings
 - [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections
 - [Design](design.md) — approved approach, operator procedure, business rules touched
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-edgar-historical-fundamentals`_
+- [Implementation Spec](implementation-spec.md) — 15 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -40,4 +41,4 @@ The fix derives a row's identity, period end and filed date from the fact's own 
 
 ## Next Action
 
-`/sdd-spec fix-edgar-historical-fundamentals` — generate implementation spec from the approved design
+`/sdd-review fix-edgar-historical-fundamentals impl-spec`, then `/sdd-execute fix-edgar-historical-fundamentals sequential`
