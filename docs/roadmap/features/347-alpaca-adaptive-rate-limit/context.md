@@ -262,3 +262,27 @@
   extension), CI's `config-wiring-stored` job is the cross-check; approvals (owner, config team, DBA)
   are obtained by the operator on the integration PR; the paper-host header check needs Alpaca
   credentials this sandbox does not hold and stays open.
+- Tooling setup (steps 1-12): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.27.0) · uv ✓ ·
+  ruff/pytest ✓ (uv) · pnpm ✓ 9.15.9 · Node 24 ✓ (`/opt/node24`, for Step 12) · `migrate` ⬇ v4.17.1 and
+  local Postgres 16 binaries ✓ (Step 11 stored-set generation only).
+
+### Step 1 — service: pacing core `internal/alpacapace` in both services, with copy governance [done]
+- Atomic unit with Step 2. `pace.go` written in marketdata and copied byte for byte to trading; groups
+  `go-alpacapace` and `go-alpacapace-test` added to `check-watcher-copies.py`; `.jscpd.json` ignore and
+  the `dry-guard-rail.md` exemption added.
+- Files modified: both `internal/alpacapace/pace.go`, `scripts/check-watcher-copies.py`, `.jscpd.json`,
+  `docs/patterns/dry-guard-rail.md`
+- Implementation note: the window keeps the header's raw `Reset` beside the clamped one, so "replace
+  only when Reset advances" compares header values and a clamped 60-65 s reset is not re-replaced by
+  every later response of the same window.
+- Deviations: none
+
+### Step 2 — test: core arithmetic and the copy gate [done]
+- Atomic unit with Step 1. 18 in-package tests; one new pytest for the two groups.
+- TDD (AC-1, 3, 5, 13, 19, 24 core arithmetic): red — with `pace.go` as zero-value stubs all 18 tests
+  failed on assertions (`FAIL github.com/xstockstrat/marketdata/internal/alpacapace`), and the new
+  pytest failed with `KeyError` (groups absent) → green — 18/18 pass with `-race` in both modules,
+  coverage 100.0% of statements; pytest 6 passed; `golangci-lint` 0 issues in both services; ruff clean;
+  `check-watcher-copies: all groups byte-identical`.
+- Files modified: both `internal/alpacapace/pace_test.go`, `scripts/tests/test_check_watcher_copies.py`
+- Deviations: none

@@ -156,7 +156,7 @@ the client or service step listed beside it.
 
 ### Step 1 — service: pacing core `internal/alpacapace` in both services, with copy governance
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`, `xstockstrat-trading`, `scripts/`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpacapace/pace.go` — create
@@ -214,7 +214,7 @@ grep -n "alpacapace" .jscpd.json docs/patterns/dry-guard-rail.md scripts/check-w
 
 ### Step 2 — test: core arithmetic and the copy gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`, `xstockstrat-trading`, `scripts/`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpacapace/pace_test.go` — create
