@@ -1912,14 +1912,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return out
 
     async def _formula_fundamentals(
-        self, definition, propagation_meta, *, cache=None, failures=None
+        self, definition, propagation_meta, *, cache=None, failures=None, warmups=None
     ):
         """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for the definition's
         custom-formula components that declare fundamentals inputs, via one ``GetFormula`` per
         distinct formula id (``cache`` dedups across a pass — mirrors ``_load_fundamentals``'s
         cache). An empty result means the definition has no fundamentals-formula operand. A
         refused ``GetFormula`` (NOT_FOUND/PERMISSION_DENIED) is "not a fundamentals formula" and
-        records no failure; an outage records UNKNOWN. Either caches ``[]``."""
+        records no failure; an outage records UNKNOWN. Either caches ``[]``. When ``warmups`` is
+        given, each fetched formula's declared ``warmup_period`` is recorded in it (feature 341)."""
         out: dict[str, list] = {}
         for comp in definition.components:
             if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA or not comp.formula_id:
@@ -1936,6 +1937,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         metadata=propagation_meta,
                     )
                     metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
+                    if warmups is not None:
+                        warmups[fid] = int(getattr(formula, "warmup_period", 0) or 0)
                 except grpc.RpcError as e:
                     metrics = []
                     if failures is not None and _rpc_code(e) not in UNREADABLE_FORMULA_CODES:
@@ -4545,7 +4548,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         closes = list(request.closes)
         component_series = []
         # feature 200 — fundamentals-only formula routing map (one GetFormula pass per RPC).
-        formula_fund_map = await self._formula_fundamentals(definition, propagation_meta)
+        formula_warmups: dict[str, int] = {}
+        formula_fund_map = await self._formula_fundamentals(
+            definition, propagation_meta, warmups=formula_warmups
+        )
         # Sequential loop (no gather) so the singleton semaphore bounds cross-request compute.
         # Benchmark components compute on the benchmark's own bars, aligned onto request.times.
         # Fundamental operands (feature 198) and fundamentals-only formulas (feature 200) also need
@@ -4620,7 +4626,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 ]
                 component_series.append(
                     analysis_pb2.ComponentSeries(
-                        ref_name=comp.ref_name, kind=comp.kind, series=named
+                        ref_name=comp.ref_name,
+                        kind=comp.kind,
+                        series=named,
+                        first_value_bars=warmup.first_value_bars(
+                            comp, formula_warmups, formula_fund_map
+                        ),
                     )
                 )
             # Per-component fault isolation: catches FormulaExecutionError + any sandbox/RPC error

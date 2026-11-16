@@ -38,6 +38,7 @@ var forbiddenLabelKeys = []string{
 var minInstruments = []string{
 	"marketdata.vendor.requests", "marketdata.vendor.request.duration", "marketdata.stream.reconnects",
 	"marketdata.backfill.symbols", "marketdata.stream.last_message_age",
+	"marketdata.ohlcv.out_of_memory_errors",
 }
 
 var rpcServerKeys = []string{"rpc.system", "rpc.service", "rpc.method", "rpc.grpc.status_code"}
@@ -48,6 +49,7 @@ func driveAllInstruments(ctx context.Context) {
 	telemetry.RecordVendorRequest(ctx, telemetry.VendorEdgar, "filings", telemetry.VendorCap, time.Time{})
 	telemetry.RecordStreamReconnect(ctx, telemetry.StreamReconnected)
 	telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillWritten)
+	telemetry.RecordOhlcvOutOfMemory(ctx, telemetry.OhlcvOpRecentBars)
 	telemetry.RegisterStreamLastMessageAge(func() (time.Time, bool) { return time.Now(), true }, nil)
 }
 

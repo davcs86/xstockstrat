@@ -152,7 +152,7 @@ Stored keys are namespace-relative from migration `044` (feature 296): the key n
 
 Caps the range a non-admin may request through ingest's self-serve `TriggerBackfill` envelope. The key is
 **seeded** (staging + production, global, non-secret, insert-if-absent) by config migration
-`050_ingest_backfill_self_serve_keys`; its down deletes only the global rows the migration wrote that still
+`051_ingest_backfill_self_serve_keys`; its down deletes only the global rows the migration wrote that still
 hold the seeded value. No `SCALAR_BOUNDS_REGISTRY` entries were added — the bound below is reader-side only.
 No `scripts/config-wiring.json` baseline entry. `backfill.max_concurrent_jobs` keeps its default and seed of
 3; the homelab alone sets 8 through `SetConfig` (see `docs/runbooks/config-rollout.md`). Approval: owner +
@@ -161,6 +161,24 @@ config team.
 | Namespace | Key | Type | Default | Reader | Notes |
 |---|---|---|---|---|---|
 | `ingest` | `backfill.self_serve_max_range_days` | int | `730` | `app/config/watcher.py:backfill_self_serve_max_range_days` | `≤ 0` → `730`. Read on every non-admin `TriggerBackfill`. |
+
+### feature 341 — fix-indicator-pane-warmup (`xstockstrat-ui` / `xstockstrat-config`)
+
+Sets how many bars of history the `/trader` symbol page fetches for its indicator panes (it draws the
+latest 200). The key is **seeded** (staging + production, global, non-secret, insert-if-absent) at `200`
+by config migration `050_ui_chart_history_bars`, with the number-free actor sentinel
+`system:config-migration-feature-fix-indicator-pane-warmup`; the down deletes only a global row that still
+carries that sentinel and still holds `200`, so a row an admin has set survives a rollback. Write bound
+`SCALAR_BOUNDS_REGISTRY['ui.chart.indicator_history_bars']` = [200, 1000]. Read one-shot (no
+`WatchConfig`) through `/trader/api` (`traderConfigClient.getConfig({ namespace: 'ui' })`, `traderBff.ts`
+forward). Per deployment: `200` on DigitalOcean (staging and production share one database); `1000` on the
+homelab `staging` row only, set by `set_config` after the gate in `docs/runbooks/ohlcv-lock-budget-tuning.md`
+§ Homelab deep indicator history passes. No `scripts/config-wiring.json` baseline entry remains. Approval:
+owner + config team.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `ui` | `chart.indicator_history_bars` | int | `200` | `src/lib/indicatorChart.ts:readHistoryBars` | `intVal` only, clamped to [200, 1000]; absent, wrong type, error or timeout → `200`. Read once per page load (`staleTime: Infinity`), so an open tab keeps the depth it read. |
 
 ### feature 338 — notify-commsgun-channel (`xstockstrat-notify` / `xstockstrat-config`)
 

@@ -1,4 +1,4 @@
--- Migration: 050_ingest_backfill_self_serve_keys.up.sql
+-- Migration: 051_ingest_backfill_self_serve_keys.up.sql
 -- Service: xstockstrat-config, feature backtest-inline-backfill. Stored keys are namespace-relative (045 CHECK).
 
 INSERT INTO config.config_values

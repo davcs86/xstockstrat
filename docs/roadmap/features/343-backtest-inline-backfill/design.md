@@ -43,7 +43,7 @@ Line references are the ones recorded in recon.md, except where marked "debate",
 ### Config (D-4, D-14, D-17, D-28)
 
 - New key: namespace `ingest`, key `backfill.self_serve_max_range_days`, int, code default and seed 730, `int_positive` reader, live through `WatchConfig`.
-- Seeded by config migration `050_ingest_backfill_self_serve_keys`. The number is re-checked at /sdd-spec.
+- Seeded by config migration `051_ingest_backfill_self_serve_keys`. The number is re-checked at /sdd-spec.
 - The 730 default covers the span a 200-bar warmup needs: `prefix_calendar_days(200)` = 300 days plus the 366-day card window (`page.tsx:1190`) = 666 days.
 - A 1000-bar warmup needs 1,825 days. The homelab is set to 1830 through `set_config`.
 - `backfill.max_concurrent_jobs` (`servicer.py:348`) keeps default and seed 3. Only the homelab is set to 8 (option B). DigitalOcean is unchanged.

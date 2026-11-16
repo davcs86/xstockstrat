@@ -2282,7 +2282,7 @@
         },
         {
             "key": "backfill.self_serve_max_range_days",
-            "file": "050_ingest_backfill_self_serve_keys.up.sql",
+            "file": "051_ingest_backfill_self_serve_keys.up.sql",
             "global": true,
             "is_secret": false,
             "namespace": "ingest",
@@ -2294,7 +2294,7 @@
         },
         {
             "key": "backfill.self_serve_max_range_days",
-            "file": "050_ingest_backfill_self_serve_keys.up.sql",
+            "file": "051_ingest_backfill_self_serve_keys.up.sql",
             "global": true,
             "is_secret": false,
             "namespace": "ingest",
@@ -4993,6 +4993,30 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
+            "key": "chart.indicator_history_bars",
+            "file": "050_ui_chart_history_bars.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "int",
+            "description": "The number of bars of history the trader symbol page fetches for its indicator panes (the chart still draws the latest 200). Raising it gives long-lookback indicators a full line and widens every marketdata bars read to three times this many intervals. Keep 200 on a database shared between environments (DigitalOcean). Raise it, to at most 1000, only after the lock-budget gate in docs/runbooks/ohlcv-lock-budget-tuning.md section \"Homelab deep indicator history\" passes.",
+            "environment": "production",
+            "default_value": "200",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "chart.indicator_history_bars",
+            "file": "050_ui_chart_history_bars.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "int",
+            "description": "The number of bars of history the trader symbol page fetches for its indicator panes (the chart still draws the latest 200). Raising it gives long-lookback indicators a full line and widens every marketdata bars read to three times this many intervals. Keep 200 on a database shared between environments (DigitalOcean). Raise it, to at most 1000, only after the lock-budget gate in docs/runbooks/ohlcv-lock-budget-tuning.md section \"Homelab deep indicator history\" passes.",
+            "environment": "staging",
+            "default_value": "200",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
             "key": "performance.equity_curve_start_date",
             "file": "023_ui_performance_keys.up.sql",
             "global": true,
@@ -5041,5 +5065,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "288ada4dbc9ffe3871003819686e5ad0b73f1aecffa682af010a3f379be580f1"
+    "inputs_sha256": "d946792db3d614f8b0f358a3eb86a922dd6ec253e4aaec83787659a43d71b12e"
 }

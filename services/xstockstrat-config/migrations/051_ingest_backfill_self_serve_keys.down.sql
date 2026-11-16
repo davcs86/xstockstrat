@@ -1,4 +1,4 @@
--- Migration: 050_ingest_backfill_self_serve_keys.down.sql
+-- Migration: 051_ingest_backfill_self_serve_keys.down.sql
 -- Service: xstockstrat-config, feature backtest-inline-backfill. Deletes only the seeded rows, never an operator-changed value.
 
 DELETE FROM config.config_values

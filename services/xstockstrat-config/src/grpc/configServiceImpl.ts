@@ -176,6 +176,9 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'indicators.sandbox.timeout_ms': { minValue: 100, maxValue: 33000 },
   'indicators.sandbox.startup_grace_ms': { minValue: 1000, maxValue: 10000 },
   'analysis.compute.max_worker_threads': { minValue: 1, maxValue: 16 },
+  // feature 341: floor = the 200-bar drawn window; ceiling = the operator-signed ohlcv lock budget —
+  // raising it needs a new design pass (docs/runbooks/ohlcv-lock-budget-tuning.md).
+  'ui.chart.indicator_history_bars': { minValue: 200, maxValue: 1000 },
 };
 
 function lookupScalarBounds(namespace: string, key: string) {
