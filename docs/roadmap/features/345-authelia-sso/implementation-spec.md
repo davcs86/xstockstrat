@@ -1404,7 +1404,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Reviewers**: `xstockstrat-ui` owner — environment (`production`/`staging`) scope correctness, no secret values rendered in UI; Security — secrets via `GetSecret` only
 
 **Codebase Evidence**:
-- `headers.ts:5-7` holds `HEADER_USER_ID`, `HEADER_ACCESS_SCOPE`, `HEADER_TRACE_ID`. **Not found**: no UI constant for `x-internal-caller` (recon R-9). The config side is `HEADER_INTERNAL_CALLER='x-internal-caller'` at `services/xstockstrat-config/src/grpc/authz.ts:74`. `loadOidcClientSecret()` below is its first UI consumer.
+- `headers.ts:5-7` holds `HEADER_USER_ID`, `HEADER_ACCESS_SCOPE`, `HEADER_TRACE_ID`. **Not found**: no UI constant for `x-internal-caller` (recon R-9). The config side is `HEADER_INTERNAL_CALLER='x-internal-caller'` at `services/xstockstrat-config/src/grpc/authz.ts:74`. `loadOidcClientSecret()` below is its first UI consumer. `HEADER_TRACE_ID` is `headers.ts:7`; `generateTraceId` is exported from `auth.ts:104-106` and used only by the callers, not by `oidcConfig.ts`.
 - `connectClients.ts:109` `configClient`. Its transport defaults the timeout to `DEFAULT_UNARY_TIMEOUT_MS` unless one is passed (`:66-74`).
 - `deploymentEnv.ts:13-16` `nativeConfigEnvironment()`. The BFF precedent `insightsBff.ts:173-174` is `configClient.getConfig({ ...req, environment: nativeConfigEnvironment() }, opts)`.
 - `config.proto:103-108` `GetConfigRequest{namespace, environment, user_id}`; `:49-53` `ConfigSnapshot.values map<string, ConfigValue>`; `:110-120` `GetSecretRequest{namespace,key,environment,user_id}` / `GetSecretResponse{value, found}`.
@@ -1418,11 +1418,11 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 
 **Instructions**:
 1. **`oidcConfig.ts`** (D-22, D-27, D-39, D-47, D-66, D-78). All reads:
-   - are header-less for identity (no `x-user-id` / `x-access-scope`), with `user_id: ''`, but forward the request's `x-trace-id` (`HEADER_TRACE_ID`, or a fresh `generateTraceId()` when absent) so pre-auth config reads stay traceable (C-03). Each loader (`loadOidcConfig`, `loadPasswordLoginEnabled`, `loadOidcClientSecret`) takes an optional trailing `traceId?: string`; callers pass the inbound `x-trace-id` when they have one;
+   - are header-less for identity (no `x-user-id` / `x-access-scope`), with `user_id: ''`, and send `{[HEADER_TRACE_ID]: traceId}` so pre-auth config reads stay traceable (C-03). Each loader (`loadOidcConfig`, `loadPasswordLoginEnabled`, `loadOidcClientSecret`) takes a **required** `traceId: string`. `oidcConfig.ts` never generates one, so it does not import `@/lib/auth`. Callers compute it once per request: route handlers use `req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()` (the middleware normally sets it); server components and discovery routes (Steps 39–41) use `generateTraceId()`;
    - pass `environment: nativeConfigEnvironment()` and `{ timeoutMs: AUTH_CONFIG_TIMEOUT_MS }`;
    - read values through a oneof-presence check.
 2. Export the `OidcConfigResult` discriminated union exactly as in design.md (B) §D-66.
-3. **`loadOidcConfig()`**:
+3. **`loadOidcConfig(traceId)`**:
    - `Promise.all` of `getConfig({namespace:'ui'})` and `getConfig({namespace:'agent'})`. Bind each snapshot to its own receiver: `const ui = …; ui.values['oidc.issuer']`, `const agent = …; agent.values['oidc.issuer']`.
    - Any rejection → `{mode:'error'}`.
    - Either issuer `''` → `'legacy'`. If exactly one is set, `logOnce('warn','sso_mode_misconfigured', …)`.
@@ -1431,8 +1431,8 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
      - An `app_url` failure logs only through `appOrigin()` (D-86).
    - Return `valid:false, reason`, or `valid:true` with `issuer`, `clientId` (`ui.values['oidc.client_id']`), `agentIssuer` and `appOrigin`.
    - Both variants carry `mcpClientId` / `mcpClientIdReadonly`, from `ui.values['oidc.mcp_client_id']` / `['oidc.mcp_client_id_readonly']`, default `''`.
-4. **`loadPasswordLoginEnabled()`**: `getConfig({namespace:'identity'})`, `const identity = …; identity.values['auth.password_login_enabled']`, oneof `boolVal`, default `false` (FR-9). A rejection propagates so the page can treat it as `'error'`.
-5. **`loadOidcClientSecret()`**:
+4. **`loadPasswordLoginEnabled(traceId)`**: `getConfig({namespace:'identity'})`, `const identity = …; identity.values['auth.password_login_enabled']`, oneof `boolVal`, default `false` (FR-9). A rejection propagates so the page can treat it as `'error'`.
+5. **`loadOidcClientSecret(traceId)`**:
    - `configClient.getSecret({namespace:'ui', key:'oidc.client_secret', environment, userId:''}, {timeoutMs: AUTH_CONFIG_TIMEOUT_MS, headers: {[HEADER_INTERNAL_CALLER]: 'ui'}})`.
    - `found=false` or an empty value → `null`, which means `not_configured` (D-41, R-15).
    - Never log the value.
@@ -1472,11 +1472,12 @@ cd ../.. && node scripts/check-config-wiring.mjs --declared-from docs/roadmap/fe
    - **@AC-46 / @AC-60:** a `getConfig` rejection or timeout → `{mode:'error'}`.
    - **@AC-54:** ui `http://auth.example.test` → `valid:false, reason:'ui_issuer'` and one ERROR `sso_issuer_invalid`.
    - An invalid `APP_URL` → `reason:'app_url'` with exactly one ERROR, `app_url_invalid` (no `sso_issuer_invalid`).
-   - Every call passes `environment: Environment.PRODUCTION` when `APPLICATION_ENV=production` (D-39), `userId: ''`, no `x-user-id` header, an `x-trace-id` header, and `timeoutMs: 10_000`.
+   - Every call passes `environment: Environment.PRODUCTION` when `APPLICATION_ENV=production` (D-39), `userId: ''`, no `x-user-id` header, and `timeoutMs: 10_000`.
+   - **Trace id forwarded verbatim (C-03):** every `getConfig` / `getSecret` call made by `loadOidcConfig('t-1')`, `loadPasswordLoginEnabled('t-1')` and `loadOidcClientSecret('t-1')` carries `x-trace-id: t-1`; `oidcConfig.ts` never calls `generateTraceId` (assert `vi.mock('@/lib/auth')`'s `generateTraceId` is not called).
    - `getSecret` sends `x-internal-caller: ui`. `found:false` → null, and `''` → null.
    - The flag defaults to `false` when the row is absent.
    - A stored `false` is read as false, not as the default (oneof presence).
-   - **Seeded client IDs reach the reader** (config-key wiring b): for a valid SSO snapshot with `ui` / `oidc.client_id`, `oidc.mcp_client_id` and `oidc.mcp_client_id_readonly` set to three distinct values, `loadOidcConfig()` returns `valid:true` with `clientId`, `mcpClientId` and `mcpClientIdReadonly` equal to them; with those keys absent from the snapshot each defaults to `''`.
+   - **Seeded client IDs reach the reader** (config-key wiring b): for a valid SSO snapshot with `ui` / `oidc.client_id`, `oidc.mcp_client_id` and `oidc.mcp_client_id_readonly` set to three distinct values, `loadOidcConfig('t-1')` returns `valid:true` with `clientId`, `mcpClientId` and `mcpClientIdReadonly` equal to them; with those keys absent from the snapshot each defaults to `''`.
 2. These are scenario one-offs (config snapshots), so they stay inline and are exempt from C-12. Say so in the file header.
 
 **Verification**:
@@ -1620,10 +1621,10 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
      - `'expired_too_old'` beyond that;
      - otherwise `'unverified'` (`no_secret` / `invalid` → `unverified`).
    - It never records `jwt_rejected`.
-5. **`logout/route.ts`**: rewrite as design.md (B) §D-68 + D-77, in this order:
+5. **`logout/route.ts`**: rewrite as design.md (B) §D-68 + D-77. At the top, `const traceId = req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()`, computed once and passed to every loader call below. Order:
    1. `if (!isSameOrigin(req,'if_present'))`: `recordAuthEvent('logout','cross_origin')`, `serverLog.warn('logout_origin_mismatch', { origin_host: originHost(origin) })`, and return 403 `{error:'origin mismatch'}` with no Set-Cookie.
    2. `reason = await verifyAccessTokenForLogout(cookie)`, then `recordAuthEvent('logout', reason)`.
-   3. Only when `'verified'`, run in parallel and await both: `revokeToken(token)` ‖ (`loadOidcConfig()` then, when SSO-valid, `loadOidcClientSecret` + `getOidcConfiguration` → `resolveLogoutRedirect`). The redirect side is bounded by `AUTH_CONFIG_TIMEOUT_MS`.
+   3. Only when `'verified'`, run in parallel and await both: `revokeToken(token)` ‖ (`loadOidcConfig(traceId)` then, when SSO-valid, `loadOidcClientSecret(traceId)` + `getOidcConfiguration` → `resolveLogoutRedirect`). The redirect side is bounded by `AUTH_CONFIG_TIMEOUT_MS`.
    4. `clearSessionCookies`.
    5. Respond:
       - legacy → `{ok:true}`;
@@ -1791,17 +1792,17 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
    - `TXN_COOKIE_OPTS = { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/api/auth/sso/callback', maxAge: 600 }`.
    - `clearAllTxnCookies(req, res)` clears every `sso_txn_*` with the same path.
    - Never an HS256 JWS (R-7).
-2. **`start/route.ts`**: export `POST` only, so GET → 405 (D-46, D-54). Wrap it in `withBffMetrics('auth', '/api/auth/sso/start', …)`. Order (S-2 amended, design.md (B)):
-   1. `cfg = await loadOidcConfig()`:
+2. **`start/route.ts`**: export `POST` only, so GET → 405 (D-46, D-54). Wrap it in `withBffMetrics('auth', '/api/auth/sso/start', …)`. At the top, `const traceId = req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()`. Order (S-2 amended, design.md (B)):
+   1. `cfg = await loadOidcConfig(traceId)`:
       - `'legacy'` → 404;
       - `'error'` → `ssoErrorRedirect('failed', appOrigin(), {fault:true})`;
       - `valid:false` → `ssoErrorRedirect('not_configured', appOrigin())`.
    2. `!isSameOrigin(req,'required')` → `failed`.
-   3. `secret = await loadOidcClientSecret()`. Null → `not_configured`; a throw → `failed` with fault.
+   3. `secret = await loadOidcClientSecret(traceId)`. Null → `not_configured`; a throw → `failed` with fault.
    4. Read `remember` and `redirect` from `req.formData()`. `redirect` goes through `safeRedirect`.
    5. Generate `state`, `nonce` and `code_verifier`. `getOidcConfiguration`; a throw → `failed` with fault.
    6. Respond 303 to `buildSsoAuthorizationUrl(...)` with `redirect_uri = new URL('/api/auth/sso/callback', cfg.appOrigin).href`, setting the txn cookie.
-3. **`callback/route.ts`**: export `GET`. Canonical order (S-3, D-41, D-58, D-66, D-82):
+3. **`callback/route.ts`**: export `GET`. At the top, `const traceId = req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()`: one id for the whole login, passed to `loadOidcConfig(traceId)`, `loadOidcClientSecret(traceId)`, `resolveExternalIdentity` and `issueSessionForUser` (C-03, D-30). Canonical order (S-3, D-41, D-58, D-66, D-82):
    1. Mode:
       - `'legacy'` → 404;
       - `'error'` → `failed` with fault;
@@ -1832,7 +1833,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 cd services/xstockstrat-ui && pnpm run build   # Next tolerates the extra middleware.ts exports (SSO_PUBLIC_PATHS, COOKIE_GATED_PATHS, PUBLIC_HEALTH_PATHS); a build error here means move them to src/lib/authPaths.ts
 cd ../..
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:unit
-grep -n "HEADER_TRACE_ID" src/app/api/auth/sso/callback/route.ts   # C-03: pre-auth identity calls carry x-trace-id
+grep -n "HEADER_TRACE_ID" src/app/api/auth/sso/callback/route.ts src/app/api/auth/sso/start/route.ts src/app/api/auth/logout/route.ts   # C-03: each handler derives one traceId and forwards it
 grep -n "export async function GET" src/app/api/auth/sso/start/route.ts || echo "start is POST-only"
 ```
 
@@ -1921,7 +1922,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Instructions**:
 1. Move today's client `LoginForm` and `LoginSkeleton` verbatim into `LoginForm.tsx` (`'use client'`). `CredentialsForm` is untouched (D-54).
 2. **`page.tsx`** becomes a server component (FR-9, D-22, D-47):
-   - Read `loadOidcConfig()` and `loadPasswordLoginEnabled()` together with `Promise.allSettled`. Any rejection, or `mode:'error'`, means legacy rendering (AC-46).
+   - `const traceId = generateTraceId()`; read `loadOidcConfig(traceId)` and `loadPasswordLoginEnabled(traceId)` together with `Promise.allSettled`. Any rejection, or `mode:'error'`, means legacy rendering (AC-46).
    - Read `searchParams.error` and `searchParams.redirect` (Next 15 async `searchParams`).
    - Render per the D-54 table:
      - legacy or `'error'` + flag on → `LoginForm` only;
@@ -1980,7 +1981,7 @@ grep -n "'use client'" src/app/auth/login/page.tsx || echo "page is a server com
 **Instructions**:
 1. Extract `ConnectorUrlField` (`'use client'`; `useAgentUrl` + copy state) from `page.tsx:195-213` (D-55).
 2. Move the current page body verbatim into `AuthorizedAppsList.tsx` (`'use client'`), using `ConnectorUrlField` in its dialog.
-3. **`page.tsx`** becomes a server component calling `loadOidcConfig()` (D-28, D-49 N-12):
+3. **`page.tsx`** becomes a server component calling `loadOidcConfig(generateTraceId())` (D-28, D-49 N-12):
    - `'sso'` → `SsoAppsCard`;
    - `'legacy'` or `'error'` (including a rejection) → `AuthorizedAppsList`.
 4. **`SsoAppsCard.tsx`** (`'use client'`, props `{ autheliaUrl: string | null; mcpClientId: string; mcpClientIdReadonly: string }`), built from `Card` primitives (C-17):
@@ -2016,6 +2017,8 @@ grep -n "'use client'" src/app/accounts/authorized-apps/page.tsx || echo "page i
 **Covers**: —
 
 **Instructions**:
+Both routes call `loadOidcConfig(req.headers.get(HEADER_TRACE_ID) ?? generateTraceId())` once per request (C-03).
+
 1. **`protected-resource/route.ts`** (D-38, D-55, D-78):
    - legacy → byte-identical;
    - SSO valid → `{resource: AGENT_PUBLIC_URL, authorization_servers: [cfg.agentIssuer], scopes_supported: [...MCP_SCOPES_SUPPORTED]}`;
