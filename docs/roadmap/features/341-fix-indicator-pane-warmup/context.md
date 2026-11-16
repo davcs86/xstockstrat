@@ -181,6 +181,8 @@ still live.
   `scripts/run-e2e.py` cannot run from a batch worktree, because the repo has no `.dockerignore` and
   the build would copy the `node_modules` symlink. Step 16 needs the field: still open for it.
   Step 15 also hit it: its RED/GREEN came from an uncommitted vitest render probe, not the e2e.
+  Step 16: resolved for the step run by a temporary `tsconfig.json` `paths` entry to this
+  worktree's stubs (restored before commit; Deviation Log). CI resolves the branch stubs itself.
 - [ ] Show the pin-formula deviation to the operator — Step 4 gate.
 - [x] pgxmock row-error injection has no in-repo use; fallback is `WillReturnError` plus a Deviation
   Log entry — Step 6. Resolved: pgxmock v4.9.0 `CloseError` covers the `rows.Err()` path.
@@ -243,6 +245,7 @@ still live.
   `services/xstockstrat-ui/e2e/fixtures/indicatorHistory.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.
 - Step 15: `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`,
   `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`.
+- Step 16: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`.
 
 Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
@@ -842,4 +845,18 @@ Tooling setup (step 15): node ✓ · pnpm ✓ (linked main-checkout `node_module
 - Config-key wiring gate: not applicable (a `service` step, no migration in **Files**, no `## Config Key Changes` heading).
 - Files modified: `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`, `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`
 - Deviations: RED/GREEN came from a temporary vitest probe, not an e2e, and `tsc` ran against the branch stubs (Deviation Log). The spec's caller cite `page.tsx:1348-1353` now reads `:1374-1380` (line drift only).
+- Commit trailer: `Co-Authored-By` follows the session attribution reminder (`Claude Opus 5.5`).
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, step 16
+
+Tooling setup (step 16): node ✓ · pnpm ✓ (linked main-checkout `node_modules`) · Playwright + Chromium ✓ (`/opt/pw-browsers`, host-native single spec) · Docker e2e runner ✗ (no `.dockerignore`, as in Step 14); no install.
+
+### Step 16 — test: e2e — only the indicator lacking history reports it [done]
+- Three tests in the Step 14 block of `position-detail.spec.ts`, all scoped to `getByRole('main')`. `@AC-2`: depth 1000, 150 bars, `[200]` → one `indicator-panel-insufficient` with `sma200` and "Not enough history", zero `indicator-panel` and zero `indicator-panel-error`. `@AC-4`: depth 1000, 150 bars, `[200, 20]` → one insufficient pane (`sma200`) and one `indicator-panel` (`sma20`, `data-series-count` 1); the crosshair readout lists `sma20.value` and not `sma200.value`. Full page: no override (depth 200), 200 bars, `[250]` → one `indicator-panel`, no notice. `INVENTORY.md` is unchanged, because its consumer lists already name this spec.
+- AC-2/AC-4 red (`.sdd-logs/v-3.log`; Step 15's two files temporarily at `HEAD~1`): `expect(notice).toHaveCount(1)` gave `Expected: 1` / `Received: 0` for both, and the full-page test passed → green (`v-5.log`, `exit=0`): `3 passed`. Full spec (`v-6.log`, `exit=0`): `47 passed`, `2 flaky`, the flaky ones being Step 14's two pre-existing first-run tests. Verbatim block (`v-4.log`, `exit=0`): lint and `tsc` passed, and `warmup.setup.ts` timed out at 10 s (`49 did not run`), as in Step 14. Prettier is clean on the spec. Playwright has no coverage gate; the gate is Step 12's.
+- Config-key wiring gate: not applicable (a `test` step, no migration in **Files**, no `## Config Key Changes` heading).
+- Files modified: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`
+- Deviations: every run used a temporary `tsconfig.json` `paths` entry to this worktree's proto stubs, restored before commit, and Playwright ran host-native targeted with `--no-deps` (Deviation Log).
 - Commit trailer: `Co-Authored-By` follows the session attribution reminder (`Claude Opus 5.5`).

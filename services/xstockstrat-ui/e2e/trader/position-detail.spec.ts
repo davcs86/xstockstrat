@@ -569,6 +569,61 @@ test.describe('Single Position page', () => {
     await expect(page.getByText('Not enough history')).toHaveCount(0);
   });
 
+  test('@AC-2 an indicator whose lookback exceeds the available history reports it', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await routeIndicatorHistory(page, 'AAPL', { depth: 1000, bars: 150, periods: [200] });
+    await page.goto('/trader/positions/AAPL');
+
+    const main = page.getByRole('main');
+    const notice = main.getByTestId('indicator-panel-insufficient');
+    await expect(notice).toHaveCount(1, { timeout: 30000 });
+    await expect(notice).toContainText('sma200');
+    await expect(notice).toContainText('Not enough history');
+    await expect(main.getByTestId('indicator-panel')).toHaveCount(0);
+    await expect(main.getByTestId('indicator-panel-error')).toHaveCount(0);
+  });
+
+  test('@AC-4 only the indicator lacking history reports it; the others draw', async ({ page }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await routeIndicatorHistory(page, 'AAPL', { depth: 1000, bars: 150, periods: [200, 20] });
+    await page.goto('/trader/positions/AAPL');
+
+    const main = page.getByRole('main');
+    const notice = main.getByTestId('indicator-panel-insufficient');
+    await expect(notice).toHaveCount(1, { timeout: 30000 });
+    await expect(notice).toContainText('sma200');
+    const panel = main.getByTestId('indicator-panel');
+    await expect(panel).toHaveCount(1);
+    await expect(panel).toContainText('sma20');
+    await expect(panel).toHaveAttribute('data-series-count', '1');
+    // Canvas has no per-line DOM: the crosshair readout lists exactly the drawn series.
+    const chart = page.locator('.tv-lightweight-charts').first();
+    await expect(chart).toBeVisible({ timeout: 30000 });
+    await chart.hover({ position: { x: 200, y: 40 } });
+    const readout = page.getByTestId('chart-crosshair-readout');
+    await expect(readout).toBeVisible({ timeout: 10000 });
+    await expect(readout).toContainText('sma20.value');
+    await expect(readout).not.toContainText('sma200.value');
+  });
+
+  test('a full page at the default depth shows no notice, even when a lookback exceeds it', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await routeIndicatorHistory(page, 'AAPL', { bars: 200, periods: [250] });
+    await page.goto('/trader/positions/AAPL');
+
+    const main = page.getByRole('main');
+    await expect(main.getByTestId('indicator-panel')).toHaveCount(1, { timeout: 30000 });
+    await expect(main.getByTestId('indicator-panel')).toContainText('sma250');
+    await expect(main.getByTestId('indicator-panel-insufficient')).toHaveCount(0);
+  });
+
   test('the indicator panels show a no-data state (and skip the RPC) when no strategy resolves (FR-6)', async ({
     page,
   }) => {
