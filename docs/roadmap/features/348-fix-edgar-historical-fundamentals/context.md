@@ -96,3 +96,20 @@ unless it is marked as one.
   merge-order row was written. Features 341, 343 and 347 touch other files.
 - Recommended design depth: full (row-key change with a stored-data repair, possible DB migration,
   consumer surfaces `xstockstrat-ui` and `xstockstrat-agent`).
+
+## Session 2026-11-16 — sdd-design (in progress: waiting at the approval gate)
+
+- Tree: `feature/fix-edgar-historical-fundamentals@9728776 ≡ origin/feature/fix-edgar-historical-fundamentals`.
+- Phase 0 Recon: wrote recon.md (writer: marketdata; readers reconned: analysis, ingest, agent, ui).
+  No consumer parses or sorts by the label; analysis selects by `filed_date` only.
+- Phase 1 Grilling: 3 rounds (full). Register: debate.md (D-1..D-23, R-1..R-16, O-1..O-33 all
+  closed, no petitions). Floor breaches: none in any round.
+- Rounds 2 and 3 were started without asking: round 2 is mandatory in full mode, and after round 2
+  four blocking objections remained that only a further round could settle. Both are progress
+  checkpoints under the authorization reference, not operator decisions.
+- Measurements added to recon.md by the orchestrator during the debate (live SEC payloads, 14
+  filers): the filer's `fp` is unreliable too; JEF's year-end change; most stored rows carry a
+  cover-page `period_end`, so most rows are rewritten by the repair.
+- NOT approved. The approval gate, the feature-216 `@AC-5` text, the label-collision residual, the
+  deletion categories and the audit runner are put to the operator in one message. Nothing in
+  design.md, status.md or acceptance.feature is written until the operator answers.
