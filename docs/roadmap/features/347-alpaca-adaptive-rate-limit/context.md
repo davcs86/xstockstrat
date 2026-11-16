@@ -99,3 +99,5 @@
   "keep rounds until adversary verdict is sound. I sign off to override the rounds cap." The debate may
   run past the 5-round cap of `/sdd-design` full mode; rounds continue until the adversary returns a
   verdict with no blocking objection. Override recorded per P-04; the Floor rule (F-11) is untouched.
+- Round 5 done: adversary verdict SOUND (no Floor breach, no blocking objection, no register violation,
+  no C-16 regression). D-30, O-42. The operator's stop condition for the debate is met.

@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -12,6 +12,7 @@
 | 2 | 2026-11-16 | /sdd-design | 7 | 3 | 14 | 11 | 0 | yes |
 | 3 | 2026-11-16 | /sdd-design | 6 | 5 | 11 | 11 | 0 | yes |
 | 4 | 2026-11-16 | /sdd-design | 2 | 1 | 6 | 6 | 0 | yes |
+| 5 | 2026-11-16 | /sdd-design | 1 | 0 | 1 | 1 | 0 | yes |
 
 ## Settled Decisions
 
@@ -47,6 +48,7 @@
 | D-27 | 3 | User steer (gate): the best-effort bracket-leg cancels in `CancelOrder` use the same Alpaca-only per-call timeout helper (`broker.timeout_ms`), so they never wait or retry; a throttled leg cancel is a WARN as any leg failure is today. `CancelOrder` returns within about the budget plus two per-call timeouts. | `services/xstockstrat-trading/internal/service/trading.go:1397-1416`; context.md 2026-11-16 | settled |
 | D-28 | 4 | Wiring and contract rules that make D-6, D-7, D-13 and D-22 implementable: (a) the single live func on trading's `broker.ClientConfig` is `RateLimitBudget func() time.Duration` (nil or ≤ 0 = kill switch off = today's code); it is built in `instantiateBrokerLocked` from a small pure service helper returning 0 when `broker.adaptive_rate_limit_enabled` is false and otherwise `max(T, staleThreshold − 2T)`, because `internal/broker` cannot import `internal/service`; the helper has a table test. (b) A zero adaptive wait is never fit-tested and is always sent (marketdata's static limiter still applies); only a hold or a 429 wait can fail to fit — stated in the core's contract, pinned by a `pace_test.go` case and a client test for a call bounded by one `broker.timeout_ms`. (c) On a 429 the retry wait is `min(Reset − now, 60 s)` whenever `Reset` parses and is in the future, with no range filter (the D-4 65 s filter applies to pacing state only); otherwise backoff. (d) The Alpaca-only per-call timeout helper tests `!= BROKER_TYPE_IBKR`, mirroring the client dispatch, so an account of UNSPECIFIED type that gets an Alpaca client is bounded too. (e) The loop bounds, the per-call timeouts and the cancel reorder do not depend on the kill switch. | `services/xstockstrat-trading/internal/service/trading.go:2595-2620,3241-3273`; `internal/service/order_intent.go:100-108`; O-36..O-39 | settled |
 | D-29 | 4 | The amendment set of the round 4 proposal (FR-2, FR-3, FR-8, FR-9, new FR-11, Fixed Invariants, Out of Scope, AC-2/3/7/13/17/19/20/21 corrected, AC-23..AC-37 new) is adopted with the 13 corrections from the round 4 review. Worst-case `CancelOrder` duration at defaults is 35 s (parent ≤ budget, re-read ≤ T, two legs ≤ 2T); the cancel intent's lifetime is ≤ budget + T = 25 s. AC-32 is a guard scenario with an added assertion that the multi fetch carries the interval deadline; AC-36's red check runs after the trading client change has landed; AC-28 drives a real `broker.NewClient` against an HTTP test server; AC-37's description text is pinned at spec time. | round 4 review; D-24 | settled |
+| D-30 | 5 | The proposer's 20 round 5 deltas and the round 5 review's corrections N-1..N-7 are adopted (adversary verdict: SOUND, no blocking objection). Scenario set: AC-1..AC-37; guards that pass on today's code by design are AC-2, AC-7, AC-20, AC-24 and AC-36 (AC-36 goes red once the trading client change has landed); every other scenario fails today. The fit rule is inclusive (`now + wait + T ≤ call end`). Trading service tests seed config with `config.MustSnapshotWatcher`, build a real `broker.NewClient` against an HTTP test server from the same closures as `instantiateBrokerLocked`, assert intent state through `memIntentRepo` and stored writes through `ctxCapturingDB`. The pure `rateLimitBudget(enabled, t, stale)` helper is the budget's single home. Attempt and loop contexts are derived from durations measured on the `now` seam, never from a seam timestamp. Poller scenarios drive one cycle of the Start loop and count requests per fetch context. | `services/xstockstrat-trading/internal/config/config.go:116-134`; `internal/service/trading_order_state_audit_test.go:39-51,105-117`; `internal/service/trading_flatten_rejection_test.go:26-112`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1189-1201,1294-1305`; round 5 review | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -117,6 +119,7 @@
 | O-39 | 4 | The "zero wait is always sent" rule was implied by D-3, D-15 and D-22 but never stated; applied wrongly it would refuse every call bounded by one timeout and stop fill detection. | no | closed @ round 4 (D-28b) |
 | O-40 | 4 | Scenario defects: AC-13 sits on an exact boundary with an over-exact timing phrase; AC-32 and AC-36 pass on today's code; AC-34/35/36 said "of client time" where the service tests cannot reach the client clock; AC-37's Then was not checkable; AC-28 with a fake broker would assert nothing about the hold (C-15; fails.md:3175). | no | closed @ round 4 (D-29) |
 | O-41 | 4 | The kill switch's scope was unstated: FR-6 promises "exactly as before" while the loop bounds and cancel reorder are unconditional; doc paths in the build table were not full paths. | no | closed @ round 4 (D-28e; D-29) |
+| O-42 | 5 | Round 5 review, non-blocking only: the stated reason for the pure budget helper was wrong (service tests can seed config); one-cycle poller tests can observe a second cycle; AC-32 is no longer a guard; intent assertions need a stateful repo; a recording DB fake already exists; attempt contexts must not be built from a fake-clock timestamp; three wording fixes. | no | closed @ round 5 (D-30) |
 
 ## Reopen Petitions
 
