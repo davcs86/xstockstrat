@@ -56,7 +56,7 @@ Design (settled; full text in `design.md` and `debate.md` — D-1..D-26, R-1..R-
 
 ## Files Modified
 
-Steps 1+2: `packages/proto/notify/v1/notify.proto` and the regenerated notify stubs under `packages/proto/gen/{go,python,ts}/notify/v1/` and `packages/proto/gen/ts/dist/notify/v1/`. Steps 3+4: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`, `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`. Steps 5+6: `services/xstockstrat-notify/src/fanout/webPush.ts`, `services/xstockstrat-notify/src/__tests__/webPush.test.ts`. Feature-directory artifacts:
+Steps 1+2: `packages/proto/notify/v1/notify.proto` and the regenerated notify stubs under `packages/proto/gen/{go,python,ts}/notify/v1/` and `packages/proto/gen/ts/dist/notify/v1/`. Steps 3+4: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`, `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`. Steps 5+6: `services/xstockstrat-notify/src/fanout/webPush.ts`, `services/xstockstrat-notify/src/__tests__/webPush.test.ts`. Step 7: `services/xstockstrat-ingest/app/handlers/servicer.py`. Feature-directory artifacts:
 - `feature.md`, `status.md` — draft → spec-ready → design-approved → implementation-ready.
 - `product-spec.md` — review rewordings (nav highlight, `buf breaking` path, FR-7 bullet, bell badge in the consumer surface); FR-8 added and the Consumer Surface line amended per D-17 (sdd-spec).
 - `acceptance.feature` — `@AC-1` tagged `@FR-5`; `@AC-6` now reads "the bell on that page shows no unread badge"; `@AC-10 @FR-8` added (D-17). `@AC-8` text unchanged.
@@ -410,3 +410,8 @@ _(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-disti
   the push-notification link extends two existing notify rules and leaves two others unchanged; the
   extension is that a push notification now carries a link to the alert's page — sign off? Signed off.
   `271 @AC-5` (Step 18, bell in every segment) was not part of that question and stays open.
+
+### Step 7 — service: ingest plain-language backfill-failure body [done]
+- Added `_BACKFILL_FAILURE_FALLBACK` and `_backfill_failure_detail(exc)` above `IngestServicer` (`<CODE> — <details>`, the code alone when details are empty, else the fallback); `_emit_backfill_alert` takes `detail=None` and uses it in the body; only the `_run_backfill` exception caller passes it. `context["error"]`, the job-row `error` and the ledger payload keep raw `str(e)`; the two fixed-string callers are unchanged. TDD (AC-8, Step 8's cases held uncommitted): red `.sdd-logs/v-1.log` `3 failed, 136 deselected` (body was `Backfill job 67276d1f failed: <AioRpcError of RPC that terminated with:` / `… failed: boom at /srv/x.py:12`), green `.sdd-logs/v-3.log` `3 passed`; Verification `.sdd-logs/v-2.log` `All checks passed!`, `57 files already formatted`, `506 passed`, `Total coverage: 86.63%`, `exit=0`; re-run on the committed tree `.sdd-logs/v-4.log` `503 passed`, `Total coverage: 86.53%`, `exit=0`. Config-key wiring gate: not applicable (no key).
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`
+- Deviations: body expression reordered for E501; Step 8's test written and reverted for red→green; Verification run with the ingest venv on PATH — full detail in Deviation Log

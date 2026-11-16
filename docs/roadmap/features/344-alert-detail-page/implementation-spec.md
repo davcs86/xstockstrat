@@ -330,7 +330,7 @@ Expected: line coverage ≥ 40%; the two extended tests pass.
 
 ### Step 7 — service: ingest plain-language backfill-failure body
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -1057,3 +1057,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Planned**: Step 4's Verification ends with `grep -n "__tests__/fixtures" src/__tests__/notifyServiceImpl.test.ts`, to list the existing fixture imports.
 - **Actual**: the test file imports its fixtures as `./fixtures/…` (`:23-24,28-29`), so the pattern matches nothing and the block exits 1 on that last line. Lint (0 errors), `test:coverage` (414 pass, 0 fail) and `c8 check-coverage --lines 40` all passed earlier in the same block. A supplementary `grep -n "fixtures/"` lists the four existing imports, and the diff adds 0 fixture imports.
 - **Disposition**: run verbatim, intent met by the supplementary check; Verification text left unchanged (F-09).
+
+### Step 7 — body expression, RED test held uncommitted, Verification run form (2026-11-15)
+- **Planned**: body line `f"Backfill job {job_id} {label}: {detail if detail is not None else error}"`; Step 8's test fails first (TDD gate); Verification block run as written.
+- **Actual**: the planned line is 101 characters (ruff E501, limit 100), so the step's own line reads `{error if detail is None else detail}` — same value for every input. Step 7 and Step 8 do not land together and the test file is Step 8's, so Step 8's three behaviour cases (AC-8, code only, non-RPC fallback) were written in the working tree, run RED (3 failed on the body text) and GREEN (3 passed), then reverted; the commit stages `servicer.py` only and Step 8 still owns the test. Verification ran with the ingest `.venv/bin` first on `PATH` (bare `pytest` resolves to a user-level install without the service deps); its closing `)` sits on its own line because the block's last line ends in a `#` comment. Verification re-run on the committed tree: 503 passed, 86.53% coverage.
+- **Disposition**: lint fix of the step's own line (in scope); TDD red/green evidence in `context.md` (F-09).
