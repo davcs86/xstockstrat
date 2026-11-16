@@ -488,8 +488,22 @@
 **Next**: review and merge PR #1555 (squash into main-dev)
 
 ### Open Items (carried to the PR)
-- [ ] Owner + config-team approval for the two keys; DBA review of migration 052.
+- [x] Owner + config-team approval for the two keys; DBA review of migration 052 — approved by the operator (see below).
 - [ ] Record a real paper-host response (are X-RateLimit-* headers sent by the Trading API?).
 - [ ] Re-derive the migration number if another config migration lands on main-dev before merge;
   a renumber means regenerating scripts/config-wiring-stored.json.
 - [ ] ReleasePendingIntent has no DB-level test (accepted design risk).
+
+## Session 2026-11-16T08:01Z — approvals logged (PR #1555)
+
+Operator instruction, verbatim: "Log my approval on the 3". Read as the three approvals the integration
+PR still needed (`docs/runbooks/approval-flow.md`); the operator (davcs86) gives all three:
+
+| # | Approval | Covers | Given by | When |
+|---|---|---|---|---|
+| 1 | Service owner | new keys `marketdata` / `alpaca.adaptive_rate_limit_enabled` and `trading` / `broker.adaptive_rate_limit_enabled` | operator (davcs86) | 2026-11-16T08:01Z |
+| 2 | Config team | the same two keys (naming, scoping, seed) | operator (davcs86) | 2026-11-16T08:01Z |
+| 3 | DBA | config migration `052_alpaca_adaptive_rate_limit_keys` (number, up/down pair, run order) | operator (davcs86) | 2026-11-16T08:01Z |
+
+Not covered by this instruction and still open: recording a real paper-host response for the Trading
+API's rate-limit headers; the `ReleasePendingIntent` SQL has no DB-level test (accepted design risk).
