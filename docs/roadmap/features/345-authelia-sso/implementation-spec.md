@@ -225,6 +225,8 @@ grep -c "UNIQUE INDEX" services/xstockstrat-identity/migrations/007_external_ide
 
 **Reviewers**: DBA — migration NNN numbering, up+down pair, run order; `xstockstrat-config` owner — key naming, environment scoping, secret encryption + redaction
 
+**§C acknowledgement (seed before readers)**: the seed's readers land in Steps 8 (identity), 16 (agent) and 29 (UI), three consumer surfaces, so no single `Lands with` can pair them. The gap is bridged mechanically: `check-config-wiring.mjs` reports these keys as `PENDING` (not a finding) at each intermediate step, and `--final` must pass at the integration PR (Step 52 / CI `config-wiring`). Every intermediate deployment stays legacy because the issuers are seeded empty and the flag is seeded `true` (D-48).
+
 **Codebase Evidence**:
 - `ls services/xstockstrat-config/migrations | tail -4` → `050_ui_chart_history_bars.{down,up}.sql` (feature 341) and `051_ingest_backfill_self_serve_keys.{down,up}.sql` (feature 343). So the next number is `052`: renumbered 050→051 (D-94) and 051→052 (D-99). Re-check the next free number at merge.
 - The seed row column order and conflict target come from `049_notify_commsgun_channel_keys.up.sql:4-55`: `(namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by, environment, user_id)` and `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
@@ -1209,7 +1211,7 @@ grep -n "def sso_keys\|def sso_mode_on" tests/conftest.py
 **Codebase Evidence**:
 - `package.json` scripts (`:6-19`) have no `typecheck`.
 - `tsconfig.json` has `"noEmit": true`, `"include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"]` (`:21`) and `"exclude": ["node_modules"]` (`:22`). So test files, `e2e/**` and the `*.config.ts` files are type-checked.
-- **Measured at spec time (2026-11-16, this branch, no `.next/`):** `pnpm install --frozen-lockfile` (pnpm 9.15.9) at the root, then `npx tsc --noEmit -p tsconfig.json` (TypeScript 5.9.3) in `services/xstockstrat-ui` → exit 0, **0 errors in 0 files**. No pre-existing error needs fixing, so no `src/**` file is in scope.
+- **Measured at spec time (2026-11-16, this branch, no `.next/`):** `pnpm install --frozen-lockfile` (pnpm 9.15.9) at the root, then `npx tsc --noEmit -p tsconfig.json` (TypeScript 5.9.3) in `services/xstockstrat-ui` → exit 0, **0 errors in 0 files**. Re-measured at `/sdd-review impl-spec` pass 5 on commit `45be5749` (`tsc` 5.9.3, no `.next/`): `npx tsc --noEmit -p tsconfig.json` printed nothing and exited 0. No pre-existing error needs fixing, so no `src/**` file is in scope. The executor re-runs `pnpm run typecheck` and pastes its exit code and output into this step's TDD evidence; any error that trunk drift introduced is fixed in this step and its file logged in the Deviation Log (F-08).
 - `grep -rn "PageProps\|LayoutProps" services/xstockstrat-ui/src` → no hits. Nothing depends on the Next-generated `.next/types` globals, so excluding `.next` is safe and no `next build` is needed before the typecheck.
 - The `node-test` matrix entry for `xstockstrat-ui` is at `ci.yml:745-773`. Its steps are install (`:784-785`), proto build (`:787-788`) and `test with coverage` (`:790-792`).
 - **Ledger trap** (insights.md:2948): a bare `tsc --noEmit` can false-RED on a Next app because `.next/types` exists only after `next build`, and a stale local `.next/` can do the same. D-93 still chooses `tsc`; the `exclude` entry removes the trap.
@@ -1591,6 +1593,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety, no secret values rendered in UI; Security — auth scope correctness
 
 **Codebase Evidence**:
+- `HEADER_TRACE_ID` is `services/xstockstrat-ui/src/lib/headers.ts:7`; `generateTraceId` is exported from `services/xstockstrat-ui/src/lib/auth.ts:104`; the idiom `req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()` already exists at `src/middleware.ts:43` and `src/lib/restBackendHeaders.ts:13` (C-03).
 - `bffMetrics.ts`: `AuthEvent` (10 members) is at `:9-19`, `JwtRejectReason` at `:20`, and `recordAuthEvent(event, reason?: JwtRejectReason)` at `:47-49`.
 - Callers, from `grep -rn "recordAuthEvent(" src`: `auth.ts:27,33`, `identity.ts:22,32,35`, `login/route.ts:11,27,33,37`, `refresh/route.ts:9`, `logout/route.ts:11` (bare `'logout'`, which would fail the typed map) and `bffAllowlist.test.ts:48-49`. Only `logout/route.ts:11` breaks under the typed map, and it is rewritten in this step, so the step type-checks on its own (§C: the caller lands with the signature change).
 - `auth.ts`:
@@ -1683,6 +1686,7 @@ grep -rn "recordAuthEvent('sso_login" src | grep -v test   # exactly the 2 sites
    - **@AC-64:** only an expired-but-signed access cookie → 200 `{ok:true}`, cookies cleared.
    - **@AC-58:** an invalid `APP_URL` plus a sibling Origin → passes, cookies cleared.
    - Legacy → `{ok:true}`, byte-identical.
+   - **Trace id (C-03):** with inbound `x-trace-id: t-in`, `loadOidcConfig` and `loadOidcClientSecret` are called with `'t-in'`; with no inbound header, both receive the same non-empty generated id.
 5. **C-12**: the route and auth tests use scenario one-offs (cookies, origins) and `signTestJwt` / `TEST_JWT_SECRET` from `e2e/helpers/auth.ts` when signing session JWTs. They declare no new secret literal.
 
 **Verification**:
@@ -1873,6 +1877,7 @@ grep -n "export async function GET" src/app/api/auth/sso/start/route.ts || echo 
    - **@AC-58:** an invalid `APP_URL` → a relative `Location: /auth/login?error=not_configured`, whatever the Origin.
    - **@AC-59:** a sibling Origin or no Origin → `failed`, with `fetch` never called.
    - Secret `found=false` → `not_configured`.
+   - **Trace id (C-03):** with inbound `x-trace-id: t-in`, `loadOidcConfig` and `loadOidcClientSecret` receive `'t-in'`.
    - Happy path → a 303 to the authorize URL with `scope=openid email`, `response_mode=query`, `code_challenge_method=S256` and `redirect_uri=http://localhost:3000/api/auth/sso/callback`, plus a txn cookie whose content has `remember=true` when the form has `remember=1`.
 3. **`callback/route.test.ts`** (mock `exchangeCode` / identity client):
    - **@AC-47 / @AC-60:** legacy 404, and `'error'` → `failed` with no resolve.
@@ -1881,7 +1886,7 @@ grep -n "export async function GET" src/app/api/auth/sso/start/route.ts || echo 
    - **@AC-4 / @AC-5 / @AC-7 / @AC-26 / @AC-39:** each refusal detail maps to `linked` / `ambiguous` / `inactive` / `inactive` / `no_email`, with no session cookies.
    - `IssueSessionForUser` `FailedPrecondition` → `inactive`.
    - **@AC-29:** with remember → session cookies `Max-Age=1209600` and `remember_me=1`. Without it → session cookies. On success every `sso_txn_*` is cleared.
-   - The resolve call carries `x-trace-id`.
+   - **One trace per login (C-03, D-30):** with inbound `x-trace-id: t-in`, `loadOidcConfig`, `loadOidcClientSecret`, `resolveExternalIdentity` and `issueSessionForUser` all receive `t-in` (the loaders as their argument, the identity calls as the `x-trace-id` header); with no inbound header, all four receive the same generated id.
    - Sentinels (`CODE-SENTINEL`, `IDTOKEN-SENTINEL`, `sentinel@example.test`) never appear in any `serverLog` or console argument (D-75).
 4. **`middleware.test.ts`** (D-40, D-59, D-62):
    - Every path in `SSO_PUBLIC_PATHS ∪ COOKIE_GATED_PATHS ∪ PUBLIC_HEALTH_PATHS` has a `route.ts` under `src/app/`, checked with `fs.existsSync`.
@@ -1910,6 +1915,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness, no secret values rendered in UI
 
 **Codebase Evidence**:
+- `HEADER_TRACE_ID` is `services/xstockstrat-ui/src/lib/headers.ts:7`; `generateTraceId` is exported from `services/xstockstrat-ui/src/lib/auth.ts:104`; the idiom `req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()` already exists at `src/middleware.ts:43` and `src/lib/restBackendHeaders.ts:13` (C-03).
 - `login/page.tsx:1-55` is a `'use client'` page. It holds `LoginForm` (`useRouter` + `useSearchParams`, `CredentialsForm submitLabel="Sign in" … showRememberMe onSuccess=…`) inside `AuthCardShell`, with a `Suspense` fallback `LoginSkeleton`.
 - `AuthForm.tsx`: `CredentialsForm` shows `data.error` from the login response (`:58-67`) and renders `{error && <p className="text-sm text-destructive">…}` (`:121`). Its remember-me control is `id="rememberMe"` (`:105-114`).
 - `src/components/ui/checkbox.tsx` exports `Checkbox` (`:29`).
@@ -1968,6 +1974,7 @@ grep -n "'use client'" src/app/auth/login/page.tsx || echo "page is a server com
 **Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI, environment scope correctness
 
 **Codebase Evidence**:
+- `HEADER_TRACE_ID` is `services/xstockstrat-ui/src/lib/headers.ts:7`; `generateTraceId` is exported from `services/xstockstrat-ui/src/lib/auth.ts:104`; the idiom `req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()` already exists at `src/middleware.ts:43` and `src/lib/restBackendHeaders.ts:13` (C-03).
 - `authorized-apps/page.tsx`:
   - It is a 256-line `'use client'` page. It uses `useAgentUrl()` (`:29`), `apiFetch('/accounts/api/authorized-apps')` (`:42-47`) and `copyAgentUrl` (`:146-153`).
   - The connector field (an `input readOnly value={agentUrl} aria-label="MCP connector URL"` plus a Copy `Button`) is at `:195-213`.
@@ -2009,6 +2016,7 @@ grep -n "'use client'" src/app/accounts/authorized-apps/page.tsx || echo "page i
 **Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI, environment scope correctness
 
 **Codebase Evidence**:
+- `HEADER_TRACE_ID` is `services/xstockstrat-ui/src/lib/headers.ts:7`; `generateTraceId` is exported from `services/xstockstrat-ui/src/lib/auth.ts:104`; the idiom `req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()` already exists at `src/middleware.ts:43` and `src/lib/restBackendHeaders.ts:13` (C-03).
 - `api/oauth/protected-resource/route.ts:8-13` and `authorization-server/route.ts:8-19` take `export const dynamic = 'force-dynamic'` and return the agent-named documents. The `next.config.js:54-64` rewrites map `/.well-known/oauth-*/agent` to them.
 - `MCP_SCOPES_SUPPORTED` is exported by `src/lib/mcpScopes.ts` (Step 29).
 
@@ -2096,6 +2104,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run bu
    - legacy → `{resource, authorization_servers:[AGENT_PUBLIC_URL]}`, byte-identical.
    - **@AC-49 / @AC-11:** SSO valid → `{resource: AGENT_PUBLIC_URL, authorization_servers:['https://auth.example.test'], scopes_supported:['xstockstrat.read','xstockstrat.write','xstockstrat.admin','xstockstrat.trade']}`, pinned **whole** with the same literal object as the agent test (D-55 two-sided contract).
    - **@AC-54:** `valid:false` → 503 `no-store`. `'error'` → 503.
+   - **Trace id (C-03):** `loadOidcConfig` is called once, with the inbound `x-trace-id` when present, else a non-empty string.
 2. `authorization-server/route.test.ts`: legacy → byte-identical; SSO → 404 (@AC-49); `'error'` → 503.
 3. `mcpScopes.test.ts`: `MCP_SCOPES_SUPPORTED` equals the four-literal list (mirrors agent `scopes.MCP_SCOPES_SUPPORTED`, Step 21/23).
 
