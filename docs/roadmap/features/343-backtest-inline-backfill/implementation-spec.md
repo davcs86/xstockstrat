@@ -505,7 +505,7 @@ grep -n "xstockstrat-agent:.*self_serve_denial.json" .github/workflows/ci.yml   
 
 ### Step 10 — service: UI helper `src/lib/backtestBackfill.ts`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/backtestBackfill.ts` — create
@@ -567,7 +567,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run format:check && pnpm exe
 
 ### Step 11 — test: vitest for the helper, pinned to the shared denial fixture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/backtestBackfill.test.ts` — create
@@ -855,3 +855,5 @@ _Populated by /sdd-execute as implementation proceeds._
 
 - **Step 9 (2026-11-15) — RED captured against the pre-Step-8 tree.** Step 8 had already landed, so Instruction 4's RED ("before Step 8's edit") was taken by checking out the four Step 8 files the parity test reads (`app/tools.py`, `mcp-tools.md`, `SKILL.md`, `reference/backfill.md`) from `d494abc61^` into the worktree, running the tests (`v-2`: `1 failed, 147 passed`, `AssertionError: mcp-tools.md § trigger_backfill`, `'self-serve backfill denied'` absent), then restoring them from `HEAD` before any commit (`git status` showed only the two test files). The two `test_self_serve_refusals_pass_through` cases passed in that RED run: the agent already passed `PERMISSION_DENIED` and `ALREADY_EXISTS` through (`_PASS_THROUGH_CODES`), so they are characterization tests (red N/A for that test). The CI-filter grep matched nothing before the edit (`v-3`). **Disposition**: TDD evidence only; no spec change.
 - **Step 9 (2026-11-15) — Verification run per line.** Same execution-form defect as Steps 4, 6 and 8: run verbatim as one subshell (`v-4`, exit=2), only the ruff line ran (`All checks passed!`, `75 files already formatted`); the later `cd` and the repo-relative `grep`s fail. The remaining lines were run unchanged from the repo root (`v-5` `148 passed`, `v-6` `765 passed`, `Total coverage: 88.11%`, `v-7` `0` and the `:59` filter line), all exit=0, with the agent's `uv sync --extra dev` venv on `PATH`. **Disposition**: execution form only, no command changed.- **Step 2 (2026-11-16) — migration renumbered 050 → 051 after 341 merged.** Feature 341's `050_ui_chart_history_bars` reached `main-dev` first, so when `main-dev` was merged into this branch the seed was moved with `git mv` to `051_ingest_backfill_self_serve_keys.{up,down}.sql` (content unchanged apart from the header line). Every reference to the file name was updated, in the done steps and in the pending ones, and `scripts/config-wiring-stored.json` was regenerated with `scripts/config-wiring-stored.py`, not hand-merged. The migration had not been applied to any deployed database.
+- **Steps 10+11 (2026-11-16) — Verification run per line.** Same execution-form defect as Steps 4, 6, 8 and 9: Step 11's fence chains `cd services/xstockstrat-ui && …` on three lines of one block. Run verbatim as one subshell (`v-2`, exit=1), only the first line ran (lint, `All matched files use Prettier code style!`, tsc silent); the second and third `cd` fail and the repo-relative `grep`s and `node --test` resolve under the service. Each line was then run unchanged from the repo root (`v-3` … `v-8`, all exit=0). Step 10's Verification is the same command as Step 11's first line (`v-3`). Fence lines ending in a `#` comment got the closing `)` on its own line in the run script. **Disposition**: execution form only, no command changed.
+- **Steps 10+11 (2026-11-16) — choices the instructions left open.** `backfillJobMessage` sends any status outside COMPLETED/FAILED/PARTIAL/CANCELED (QUEUED, RUNNING and UNSPECIFIED) to the running rows. `noVendorDataMessage` prints `?` for an unset gap bound. `triggerErrorMessage` reads the token as the text after the prefix up to the first space. **Disposition**: within the step's instructions; noted for review.

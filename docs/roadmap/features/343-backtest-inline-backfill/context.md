@@ -88,6 +88,7 @@ Outside the feature directory:
 - `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json`, `tests/conftest.py`, `tests/test_ingest_servicer.py`, `tests/test_backfill_jobs.py` — Step 6.
 - `services/xstockstrat-ingest/CLAUDE.md`, `services/xstockstrat-ingest/docs/context-constitution-findings.md`, `docs/patterns/config-governance.md`, `docs/sdd/business-rules/platform.feature` — Step 7 (gate wording, key row, registered-keys entry, `244@AC-6` row).
 - `services/xstockstrat-agent/app/tools.py`, `app/client.py`, `services/xstockstrat-agent/CLAUDE.md`, `docs/runbooks/mcp-tools.md`, `plugins/strat-lab/skills/backtest/SKILL.md`, `plugins/strat-lab/skills/backtest/reference/backfill.md` — Step 8 (self-serve envelope wording for `trigger_backfill`).
+- `services/xstockstrat-ui/src/lib/backtestBackfill.ts`, `src/lib/backtestBackfill.test.ts`, `.github/workflows/ci.yml` (`xstockstrat-ui` filter) — Steps 10+11 (UI helper and its vitest).
 
 Feature-directory artifacts:
 
@@ -560,3 +561,18 @@ Tooling setup (step 9): uv ✓ · Python 3.13.18 ✓ (agent venv, `uv sync --ext
 - PR #1548 (prettier applied to the seven failing UI files) merged into `main-dev` as `44e14364d`.
 - `origin/main-dev` was merged into `feature/backtest-inline-backfill` with a merge commit (no rebase, no force-push). Conflicts: `docs/patterns/config-governance.md` (the 343 and 341 registered-keys entries are both kept, newest first) and `scripts/config-wiring-stored.json` (regenerated with `scripts/config-wiring-stored.py`, not hand-merged).
 - Config migration renumbered `050` → `051_ingest_backfill_self_serve_keys`. Feature 341 merged first and holds `050_ui_chart_history_bars`, and two migrations cannot share a number. This branch's migration had not been applied to any deployed database, so it was moved with `git mv` and every reference to the file name was updated, including the earlier session entries above, which now show `051`.
+
+## Session 2026-11-16 — sdd-execute sequential (sdd-batch-execute), Steps 10+11
+
+Tooling setup (steps 10+11): node ✓ v24.22.1 · pnpm ✓ 9.15.9 · vitest ✓ 5.0.3 · tsc ✓ 5.9.3 · prettier ✓ 3.8.3 (linked main-checkout `node_modules`; no install).
+
+### Step 10 — service: UI helper `src/lib/backtestBackfill.ts` [done]
+- Atomic unit 10+11. Created the pure helper: `SELF_SERVE_DENIAL_PREFIX` and the eight `SELF_SERVE_DENIAL_TOKENS` in ingest order; `gapToBackfillRequest` (range = gap start → `rangeEnd ?? gap end`, `fillMode` only when given, `overwrite: false`); `backfillSpanDays`; `gapKey`; `backfillJobMessage` (the nine-row table; int64 as bigint, string or number; empty `error` counts as unset); `triggerErrorMessage` (ALREADY_EXISTS copy, `range_too_long` span copy with `max` parsed from ` (max N days)`, generic copy for every other or unparsable denial, `Could not start backfill: …` otherwise, via `errMessage`); `noVendorDataMessage` (UTC `YYYY-MM-DD`). RED and GREEN are recorded under Step 11. Verification (`v-3`, exit=0): lint (warnings only in untouched files), `All matched files use Prettier code style!`, tsc clean.
+- Files modified: `services/xstockstrat-ui/src/lib/backtestBackfill.ts`
+- Deviations: Verification run per line (Deviation Log); three open choices noted there (status fallback, `?` for an unset bound, token parse).
+
+### Step 11 — test: vitest for the helper, pinned to the shared denial fixture [done]
+- Atomic unit 10+11. Created `src/lib/backtestBackfill.test.ts`: contract pin against `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json` read through `ROOT` (prefix, token order, 730 parsed from the fixture's suffix template); `gapToBackfillRequest` AC-2 and AC-10 (both forms); `backfillJobMessage` one case per row (AC-3 string and bigint, AC-14, COMPLETED, AC-6, AC-16, neither, both AC-9 PARTIAL rows, CANCELED); `triggerErrorMessage` AC-11, AC-12 (1825 / 730), each other token → generic with no token, unparsable `range_too_long`, unknown token, prefix-less denial, non-Connect error; AC-13, `gapKey`, `backfillSpanDays`. Gap and job inputs come from `e2e/fixtures/backtests.ts` and `backfillJobs.ts` (C-12); `ConnectError`s stay inline. Added the fixture path to the `xstockstrat-ui` CI filter (`ci.yml:64`).
+- TDD: RED `v-1` (helper exported as signatures-only stubs) exit=1 — `Tests  30 failed (30)`, each an `AssertionError` (e.g. `expected '' to be 'self-serve backfill denied: '`, `expected {} to deeply equal { symbols: [ 'LYFT' ], …(4) }`) → GREEN `v-4` `Tests  30 passed (30)`; `v-5` `Tests  593 passed | 2 skipped (595)`, `All files 79.54 | 75.61 | 81.54 | 80.76`, `...stBackfill.ts 100 | 89.13 | 100 | 100`; `v-6` both C-12 imports (`:6`, `:7`); `v-7` `ci.yml:59` (agent) and `ci.yml:64` (ui) plus the test's read at `:21`; `v-8` `node --test` 75 pass, 0 fail. All exit=0. No config key touched, so no wiring gate.
+- Files modified: `services/xstockstrat-ui/src/lib/backtestBackfill.test.ts`, `.github/workflows/ci.yml`
+- Deviations: Verification run per line because of the fence's chained `cd` (Deviation Log).

@@ -61,7 +61,7 @@ jobs:
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
             xstockstrat-identity:   ['services/xstockstrat-identity/**']
             xstockstrat-notify:     ['services/xstockstrat-notify/**']
-            xstockstrat-ui:         ['services/xstockstrat-ui/**', '.do/**']
+            xstockstrat-ui:         ['services/xstockstrat-ui/**', '.do/**', 'services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json']
             dockerfiles:
               - '**/Dockerfile*'
               - '.hadolint.yaml'
