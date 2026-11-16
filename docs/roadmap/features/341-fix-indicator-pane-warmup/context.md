@@ -924,3 +924,8 @@ Feature: Indicator pane renders long-lookback indicators across the charted wind
 ### Coverage check
 - Source scenarios: 2 (AC-1, AC-2). Planned (NEW+DUP+OVERLAP): 2 (2 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Nothing was skipped.
 ```
+
+## Session 2026-11-16 — operator sign-off correction (orchestrator)
+
+- **Supersedes the "Expand that." reading above.** The operator corrected it, verbatim: "No, \"expand\" was meant you explained more" — it was a request for more explanation, not a sign-off.
+- Asked again explicitly: "do you sign off the two \"Not enough history\" scenarios (`@AC-2`, `@AC-4`)?" **Operator, verbatim: "Sign off".** The EXTEND of `@AC-2` and `@AC-4` therefore stands on the operator's own words; nothing landed under the earlier reading needs reverting.
