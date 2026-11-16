@@ -480,3 +480,16 @@
 - `origin/main-dev@1148c53` (docs only) merged into the feature branch; `ledger-guard` clean; config
   migration number unchanged at `052`.
 - Defect reports resolved by this feature: none. The `ReplaceOrder` TIF report stays open.
+
+## Session 2026-11-16T07:58Z — sdd-execute (sequential)
+**Steps this session**: 1-12 (units 1+2, 5+6, 9+10)
+**Progress**: 12 done / 12 total
+**Stopped at**: all complete; integration PR https://github.com/davcs86/xstockstrat/pull/1555 opened, CI watch subscribed
+**Next**: review and merge PR #1555 (squash into main-dev)
+
+### Open Items (carried to the PR)
+- [ ] Owner + config-team approval for the two keys; DBA review of migration 052.
+- [ ] Record a real paper-host response (are X-RateLimit-* headers sent by the Trading API?).
+- [ ] Re-derive the migration number if another config migration lands on main-dev before merge;
+  a renumber means regenerating scripts/config-wiring-stored.json.
+- [ ] ReleasePendingIntent has no DB-level test (accepted design risk).
