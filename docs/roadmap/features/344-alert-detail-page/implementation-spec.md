@@ -378,7 +378,7 @@ grep -n "_emit_backfill_alert" app/handlers/servicer.py   # one definition, thre
 
 ### Step 8 — test: ingest backfill-failure body
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -1062,3 +1062,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Planned**: body line `f"Backfill job {job_id} {label}: {detail if detail is not None else error}"`; Step 8's test fails first (TDD gate); Verification block run as written.
 - **Actual**: the planned line is 101 characters (ruff E501, limit 100), so the step's own line reads `{error if detail is None else detail}` — same value for every input. Step 7 and Step 8 do not land together and the test file is Step 8's, so Step 8's three behaviour cases (AC-8, code only, non-RPC fallback) were written in the working tree, run RED (3 failed on the body text) and GREEN (3 passed), then reverted; the commit stages `servicer.py` only and Step 8 still owns the test. Verification ran with the ingest `.venv/bin` first on `PATH` (bare `pytest` resolves to a user-level install without the service deps); its closing `)` sits on its own line because the block's last line ends in a `#` comment. Verification re-run on the committed tree: 503 passed, 86.53% coverage.
 - **Disposition**: lint fix of the step's own line (in scope); TDD red/green evidence in `context.md` (F-09).
+
+### Step 8 — RED against the pre-Step-7 servicer; block exit set by its closing grep (2026-11-15)
+- **Planned**: the three behaviour cases fail first, then pass; the Verification block's exit status is the pass signal.
+- **Actual**: Step 7 had already landed, so RED ran the step's Verification with `servicer.py` temporarily restored from `45a35cb69` (the commit before Step 7), then restored to the committed file; only the test file is staged. The block's last line is the `grep` with no `&&`, so the block printed `exit=0` on the RED run too (3 failed); pass/fail was judged from the pytest summary line in the log. Verification ran with the ingest `.venv/bin` first on `PATH`, as in Step 7.
+- **Disposition**: run verbatim, judged from the log; Verification text left unchanged (F-09).

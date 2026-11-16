@@ -715,6 +715,10 @@ class TestRunBackfill:
         assert (
             svc._notify.EmitAlert.await_args.args[0].severity == notify_pb2.ALERT_SEVERITY_WARNING
         )
+        assert (
+            svc._notify.EmitAlert.await_args.args[0].body
+            == "Backfill job job-2 partial: some chunks/symbols failed to backfill"
+        )
 
     @pytest.mark.asyncio
     async def test_all_chunks_fail_emits_failed_and_error_alert(self):
@@ -735,6 +739,10 @@ class TestRunBackfill:
         )
         m["mark_failed"].assert_awaited_once()
         assert svc._notify.EmitAlert.await_args.args[0].severity == notify_pb2.ALERT_SEVERITY_ERROR
+        assert (
+            svc._notify.EmitAlert.await_args.args[0].body
+            == "Backfill job job-3 failed: all backfill chunks failed"
+        )
 
     @pytest.mark.asyncio
     async def test_retry_on_failure_retries_failed_symbols(self):
@@ -1015,6 +1023,51 @@ class TestWebhookWakeUp:
             await svc._finalize_backfill("job-1", state, 1, ())
         assert seen == []
         assert not svc._webhook_wake.is_set()
+
+
+class TestBackfillFailureAlertBody:
+    async def _fail_job(self, err):
+        svc = _wake_servicer()
+        svc._marketdata.BackfillFundamentals = AsyncMock(side_effect=err)
+        update_job = AsyncMock()
+        with patch(f"{_REPO}.update_job", update_job):
+            await svc._run_backfill("67276d1f", _make_fund_req(["LYFT"]))
+        return svc, update_job, svc._notify.EmitAlert.await_args.args[0]
+
+    @pytest.mark.asyncio
+    async def test_ac8_rpc_error_body_is_plain_language(self):
+        err = rpc_error(
+            grpc.StatusCode.FAILED_PRECONDITION, "marketdata.fundamentals.history.enabled is false"
+        )
+        svc, update_job, alert = await self._fail_job(err)
+        assert alert.body == (
+            "Backfill job 67276d1f failed: FAILED_PRECONDITION — "
+            "marketdata.fundamentals.history.enabled is false"
+        )
+        assert "AioRpcError" not in alert.body
+        assert alert.context["error"] == str(err)
+        assert "AioRpcError" in alert.context["error"]
+        assert update_job.await_args_list[-1].kwargs["error"] == str(err)
+        failed = [
+            c.args[0]
+            for c in svc._ledger.AppendEvent.call_args_list
+            if c.args[0].event_type == "ingest.backfill.failed"
+        ]
+        assert [e.payload["error"] for e in failed] == [str(err)]
+
+    @pytest.mark.asyncio
+    async def test_rpc_error_without_details_uses_the_code(self):
+        _, _, alert = await self._fail_job(rpc_error(grpc.StatusCode.UNAVAILABLE))
+        assert alert.body == "Backfill job 67276d1f failed: UNAVAILABLE"
+
+    @pytest.mark.asyncio
+    async def test_non_rpc_error_uses_the_fallback(self):
+        _, _, alert = await self._fail_job(ValueError("boom at /srv/x.py:12"))
+        assert alert.body == (
+            "Backfill job 67276d1f failed: unexpected error — see the alert details"
+        )
+        assert "ValueError" not in alert.body
+        assert alert.context["error"] == "boom at /srv/x.py:12"
 
 
 # ---------------------------------------------------------------------------
