@@ -110,6 +110,16 @@ type HistoricalFundamentalsPeriod struct {
 	DerivationVersion int
 }
 
+// LeftOutPeriod is a filed period the derivation does not return: its label collides with an
+// earlier-ending period's, or it is a quarterly filing that ends on a fiscal-year boundary.
+type LeftOutPeriod struct {
+	FiscalPeriod string
+	PeriodType   string
+	PeriodEnd    time.Time
+	FiledDate    time.Time
+	Reason       string
+}
+
 // DerivationOwnedExtraKeys are the extra_metrics keys the period builder owns: a re-derive replaces
 // them, never merges them, so a key the new derivation omits cannot keep a stale value.
 var DerivationOwnedExtraKeys = []string{"revenue", "net_income", "assets", "liabilities", "stockholders_equity", "stockholders_equity_usd", "total_debt"}

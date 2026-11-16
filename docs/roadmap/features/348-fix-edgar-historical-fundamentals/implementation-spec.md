@@ -262,7 +262,7 @@ test "$(grep -c "strictly before D" $F/product-spec.md)" = 1
 
 ### Step 2 — service: EDGAR period identity per filing, date-derived labels, `DerivationVersion` 3
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client.go` — modify
@@ -368,7 +368,7 @@ test "$(grep -c "strictly before D" $F/product-spec.md)" = 1
 
 ### Step 3 — test: ORCL and CRWD fixtures, period-identity tests, fixture migration, version-3 golden
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/testdata/orcl_companyfacts.json` — create

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"math"
-	"os"
 	"testing"
 	"time"
 
@@ -16,20 +15,7 @@ import (
 // lyftPeriods loads LYFT's SEC companyfacts (CIK0001759509, trimmed by tag only) and derives it.
 func lyftPeriods(t *testing.T) []source.HistoricalFundamentalsPeriod {
 	t.Helper()
-	b, err := os.ReadFile("testdata/lyft_companyfacts.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var cf map[string]any
-	if err := json.Unmarshal(b, &cf); err != nil {
-		t.Fatal(err)
-	}
-	// newTestClientCF211 resolves only the AAPL ticker; the payload is LYFT's.
-	periods, err := newTestClientCF211(cf).FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, nil)
-	if err != nil {
-		t.Fatalf("FetchHistorical: %v", err)
-	}
-	return periods
+	return deriveFixture(t, "lyft").Periods
 }
 
 func assertROE(t *testing.T, p source.HistoricalFundamentalsPeriod, want float64, rounded string) {
@@ -62,11 +48,11 @@ func TestLYFT_AnnualROE_OwnPeriodEquity_AC3_feature340(t *testing.T) {
 	assertROE(t, periodByFP(t, lyftPeriods(t), "FY2025"), 2844008000.0/3273523000.0, "0.868791")
 }
 
-// @AC-5: every period carries version 2, which re-derives a stored version-1 row.
-func TestLYFT_PeriodsStampedVersion2_AC5_feature340(t *testing.T) {
+// @AC-5: every period carries the current version, which re-derives a row stored below it.
+func TestLYFT_PeriodsStampedCurrentVersion_AC5_feature340(t *testing.T) {
 	for _, p := range lyftPeriods(t) {
-		if p.DerivationVersion != 2 {
-			t.Fatalf("%s stamped version %d, want 2", p.FiscalPeriod, p.DerivationVersion)
+		if p.DerivationVersion != DerivationVersion {
+			t.Fatalf("%s stamped version %d, want %d", p.FiscalPeriod, p.DerivationVersion, DerivationVersion)
 		}
 	}
 }

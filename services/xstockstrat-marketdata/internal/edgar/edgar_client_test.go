@@ -50,11 +50,12 @@ type period struct {
 func cannedCompanyFacts(periods []period) map[string]any {
 	var niUnits, epsUnits []map[string]any
 	for _, p := range periods {
+		accn := "accn-" + p.filed // one accession per filing
 		niUnits = append(niUnits, map[string]any{
-			"start": p.start, "end": p.end, "val": p.ni, "accn": "x", "fy": p.fy, "fp": p.fp, "form": p.form, "filed": p.filed,
+			"start": p.start, "end": p.end, "val": p.ni, "accn": accn, "fy": p.fy, "fp": p.fp, "form": p.form, "filed": p.filed,
 		})
 		epsUnits = append(epsUnits, map[string]any{
-			"start": p.start, "end": p.end, "val": p.eps, "accn": "x", "fy": p.fy, "fp": p.fp, "form": p.form, "filed": p.filed,
+			"start": p.start, "end": p.end, "val": p.eps, "accn": accn, "fy": p.fy, "fp": p.fp, "form": p.form, "filed": p.filed,
 		})
 	}
 	return map[string]any{
@@ -110,14 +111,32 @@ func TestFetchHistorical_MapsFiledPeriod_AC1(t *testing.T) {
 	if p.PeriodType != "quarterly" {
 		t.Errorf("period_type = %q, want quarterly", p.PeriodType)
 	}
-	if p.FiscalPeriod != "Q1-2020" {
-		t.Errorf("fiscal_period = %q, want Q1-2020", p.FiscalPeriod)
+	// No annual filing in the payload: the quarter is labelled against Dec 31 of its own year.
+	if p.FiscalPeriod != "Q4-2019" {
+		t.Errorf("fiscal_period = %q, want Q4-2019", p.FiscalPeriod)
 	}
 	if p.Source != "edgar" {
 		t.Errorf("source = %q, want edgar", p.Source)
 	}
 	if p.EPS == nil || *p.EPS != 4.99 {
 		t.Errorf("eps = %v, want 4.99", p.EPS)
+	}
+}
+
+// The same quarter, with Apple's annual filings present, is the first quarter of fiscal 2020.
+func TestFetchHistorical_MapsFiledPeriod_WithAnnualBoundaries_feature348(t *testing.T) {
+	c := newTestClient([]period{
+		{fy: 2020, fp: "Q1", start: "2019-09-29", end: "2019-12-28", filed: "2020-01-29", form: "10-Q", ni: 22236e6, eps: 4.99},
+		{fy: 2018, fp: "FY", start: "2017-10-01", end: "2018-09-29", filed: "2018-11-05", form: "10-K", eps: 11.9},
+		{fy: 2019, fp: "FY", start: "2018-09-30", end: "2019-09-28", filed: "2019-10-31", form: "10-K", eps: 11.8},
+		{fy: 2020, fp: "FY", start: "2019-09-29", end: "2020-09-26", filed: "2020-10-30", form: "10-K", eps: 3.28},
+	})
+	periods, err := c.FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, []string{"quarterly"})
+	if err != nil {
+		t.Fatalf("FetchHistorical: %v", err)
+	}
+	if len(periods) != 1 || periods[0].FiscalPeriod != "Q1-2020" || periods[0].PeriodEnd.Format("2006-01-02") != "2019-12-28" {
+		t.Fatalf("periods = %+v, want one Q1-2020 ending 2019-12-28", periods)
 	}
 }
 
