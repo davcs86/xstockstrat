@@ -253,9 +253,9 @@ reverses a settled `D-n` or reopens an `R-n`.
 ```bash
 F=docs/roadmap/features/348-fix-edgar-historical-fundamentals
 test "$(grep -c '^  Scenario:' $F/acceptance.feature)" = 11
-for n in 1 2 3 4 5 6 7 8 9 10 11; do test "$(grep -c "^  @AC-$n " $F/acceptance.feature)" = 1 || echo "AC-$n missing or repeated"; done
-grep -c "on or before D" $F/product-spec.md   # expect 0
-grep -n "strictly before D" $F/product-spec.md   # expect one line in FR-6
+for n in 1 2 3 4 5 6 7 8 9 10 11; do test "$(grep -c "^  @AC-$n " $F/acceptance.feature)" = 1 || { echo "AC-$n missing or repeated"; exit 1; }; done
+test "$(grep -c "on or before D" $F/product-spec.md)" = 0
+test "$(grep -c "strictly before D" $F/product-spec.md)" = 1
 ```
 
 ---
@@ -289,7 +289,7 @@ grep -n "strictly before D" $F/product-spec.md   # expect one line in FR-6
 - Interface assertion `var _ source.HistoricalFundamentalsSource = (*Client)(nil)` — `:715`;
   the interface — `internal/source/source.go:139-141`.
 - Counter pattern: `backfillSymbols = NewCounter("marketdata.backfill.symbols")`
-  (`internal/telemetry/otel.go:369`), `RecordBackfillSymbol` (`:412-414`), label keys `KeyVendor` …
+  (`internal/telemetry/otel.go:371`), `RecordBackfillSymbol` (`:412-414`), label keys `KeyVendor` …
   `KeyKind` (`:311-315`), closed label values as constants (`:360-366`).
 - **Not found**: a `reason` label key, a left-out counter, a per-accession grouping, a label function,
   `DeriveHistorical`. All are created here.
@@ -425,7 +425,7 @@ grep -n "strictly before D" $F/product-spec.md   # expect one line in FR-6
 **Instructions**:
 
 1. **Fixtures (D-8).** Fetch `https://data.sec.gov/api/xbrl/companyfacts/CIK0001341439.json` (ORCL)
-   and CRWD's companyfacts (CIK from the ticker map) with a fair-use `User-Agent`. Trim **by tag
+   and CRWD's companyfacts (CIK from the ticker map) with a generic fair-use `User-Agent` that names the tool only (no personal name, email or project detail). Trim **by tag
    only**: keep every fact of the tags in `flowTags` and `instantTags` (`edgar_client.go:187-210`),
    drop all other tags, keep `cik` and `entityName`. Do not drop or edit a fact. If a fetch is
    blocked, the step is blocked: do not hand-write either file and do not guess CRWD's CIK.
@@ -501,14 +501,19 @@ grep -n "strictly before D" $F/product-spec.md   # expect one line in FR-6
 
 ```bash
 ls services/xstockstrat-marketdata/internal/edgar/testdata/orcl_companyfacts.json services/xstockstrat-marketdata/internal/edgar/testdata/crwd_companyfacts.json
-cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/edgar/... -race -count=5   # count=5: no result may depend on map order
-cd services/xstockstrat-marketdata && GOWORK=off go test ./... -race -count=1
-cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
-cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -n "const DerivationVersion = 3" services/xstockstrat-marketdata/internal/edgar/edgar_client.go
-grep -n "^	3: " services/xstockstrat-marketdata/internal/edgar/derivation_version_test.go
-grep -c "FP \|periodKey\|classifyPeriodType" services/xstockstrat-marketdata/internal/edgar/edgar_client.go   # expect 0
-grep -rn "orcl_companyfacts\|crwd_companyfacts" services/xstockstrat-marketdata --include="*_test.go"   # one consumer each (C-13)
+GOWORK=off go -C services/xstockstrat-marketdata test ./internal/edgar/... -race -count=5
+GOWORK=off go -C services/xstockstrat-marketdata test ./... -race -count=1
+COVERPKGS=$(GOWORK=off go -C services/xstockstrat-marketdata list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//')
+GOWORK=off go -C services/xstockstrat-marketdata test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}"
+GOWORK=off go -C services/xstockstrat-marketdata tool cover -func=coverage.out | awk '/^total:/ { sub("%","",$3); print "total " $3; if ($3 + 0 < 40) exit 1 }'
+(cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod)
+test "$(grep -c "const DerivationVersion = 3" services/xstockstrat-marketdata/internal/edgar/edgar_client.go)" = 1
+test "$(grep -c "^	3: " services/xstockstrat-marketdata/internal/edgar/derivation_version_test.go)" = 1
+test "$(grep -c "FP \|periodKey\|classifyPeriodType" services/xstockstrat-marketdata/internal/edgar/edgar_client.go)" = 0
+test "$(grep -c "0001193125-25-200095" services/xstockstrat-marketdata/internal/edgar/testdata/orcl_companyfacts.json)" -ge 1   # the real 10-Q filed 2025-09-10
+test "$(grep -c "0001193125-26-389274" services/xstockstrat-marketdata/internal/edgar/testdata/orcl_companyfacts.json)" -ge 1   # the real 10-Q filed 2026-09-11
+test "$(grep -rl "orcl_companyfacts" services/xstockstrat-marketdata --include="*_test.go" | wc -l)" -eq 1   # one consumer (C-13)
+test "$(grep -rl "crwd_companyfacts" services/xstockstrat-marketdata --include="*_test.go" | wc -l)" -eq 1
 ```
 
 ---
@@ -637,11 +642,13 @@ Write table-driven cases; each names the decision it pins.
 **Verification** (union for the Steps 4+5 unit; run from the repo root):
 
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/reconcile/... -race -count=1 -cover   # the new package is covered by its own tests
-cd services/xstockstrat-marketdata && GOWORK=off go test ./... -race -count=1
-cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
-cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -rn "periodTypeWanted" services/xstockstrat-marketdata --include="*.go"   # expect no hit
+GOWORK=off go -C services/xstockstrat-marketdata test ./internal/reconcile/... -race -count=1 -cover   # the new package is covered by its own tests
+GOWORK=off go -C services/xstockstrat-marketdata test ./... -race -count=1
+COVERPKGS=$(GOWORK=off go -C services/xstockstrat-marketdata list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//')
+GOWORK=off go -C services/xstockstrat-marketdata test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}"
+GOWORK=off go -C services/xstockstrat-marketdata tool cover -func=coverage.out | awk '/^total:/ { sub("%","",$3); print "total " $3; if ($3 + 0 < 40) exit 1 }'
+(cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod)
+test "$(grep -rn "periodTypeWanted" services/xstockstrat-marketdata --include="*.go" | wc -l)" -eq 0
 ```
 
 ---
@@ -745,10 +752,11 @@ grep -rn "periodTypeWanted" services/xstockstrat-marketdata --include="*.go"   #
 **Verification** (union for the Steps 6+7 unit; run from the repo root):
 
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/repository/... -race -count=1 -run 'ListHistoricalRows|ReplaceHistoricalFundamentals' -v | grep -E "^(=== RUN|--- (PASS|FAIL)|ok|FAIL)"   # the new cases ran
-cd services/xstockstrat-marketdata && GOWORK=off go test ./... -race -count=1
-cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -c "ON CONFLICT (symbol, fiscal_period, period_type) DO NOTHING" services/xstockstrat-marketdata/internal/repository/marketdata_repo.go   # expect 1 until Step 8
+GOWORK=off go -C services/xstockstrat-marketdata test ./internal/repository/... -race -count=1 -run 'ListHistoricalRows|ReplaceHistoricalFundamentals' -v > /tmp/348-step7.log
+test "$(grep -c '^--- PASS' /tmp/348-step7.log)" -ge 2   # the new cases ran, not "no tests to run"
+GOWORK=off go -C services/xstockstrat-marketdata test ./... -race -count=1
+(cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod)
+test "$(grep -c "ON CONFLICT (symbol, fiscal_period, period_type) DO NOTHING" services/xstockstrat-marketdata/internal/repository/marketdata_repo.go)" = 1   # until Step 8
 ```
 
 New logic is in an excluded package (`repository`) — no coverage threshold applies; the pgxmock pins
@@ -821,7 +829,10 @@ here and the real-database job of Step 12 are the verification.
      nothing is written.
 3. **TTM EPS.** Run `accumulateTTM` once over the full chronological fresh set and keep each period's
    TTM value for the paths below.
-4. **Inserted rows (D-15).** For each planned insert, before any transaction:
+4. **Inserted rows (D-15).** For each planned insert, before any transaction (where a stored
+   row supplies `price` or `dividend_yield`, it is a stored row of the same period type and
+   `filed_date`; with several, the first in `period_end` order — every such row holds the same
+   bar date, D-15):
    - split `derivePriceMetrics` into the close lookup (`:2559-2566`) and the ratio half
      (`:2567-2591`); `derivePriceMetrics` keeps its behaviour by calling both, so the in-place path
      and `priceJoin` are unchanged;
@@ -943,14 +954,19 @@ here and the real-database job of Step 12 are the verification.
 **Verification** (union for the Steps 8+9 unit; run from the repo root):
 
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... -race -count=1 -run 'BackfillFundamentals|GetHistoricalFundamentals|EdgarSnapshot|PriceJoin' -v | grep -E "^(--- (PASS|FAIL)|ok|FAIL)"   # the named cases ran, none skipped
-cd services/xstockstrat-marketdata && GOWORK=off go test ./... -race -count=1   # all packages, cmd included
-cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
-cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -rn "InsertHistoricalFundamentals\|GetHistoricalPriceState\|\.Found\b\|Found:" services/xstockstrat-marketdata/internal --include="*.go"   # expect no hit
-grep -c "ON CONFLICT (symbol, fiscal_period, period_type)" services/xstockstrat-marketdata/internal/repository/marketdata_repo.go   # expect 0
-grep -n "fundamentals.history.backfill.max_lookback_years" services/xstockstrat-marketdata/internal/service/marketdata_service.go   # still read (D-17)
-node scripts/check-config-wiring.mjs   # exit 0: no key added, none orphaned
+GOWORK=off go -C services/xstockstrat-marketdata test ./internal/service/... -race -count=1 -run 'BackfillFundamentals|GetHistoricalFundamentals|EdgarSnapshot|PriceJoin' -v > /tmp/348-step9.log
+test "$(grep -c 'feature348' /tmp/348-step9.log)" -ge 1   # the new cases ran
+test "$(grep -c '^--- SKIP' /tmp/348-step9.log)" -eq 0
+GOWORK=off go -C services/xstockstrat-marketdata test ./... -race -count=1   # all packages, cmd included
+COVERPKGS=$(GOWORK=off go -C services/xstockstrat-marketdata list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//')
+GOWORK=off go -C services/xstockstrat-marketdata test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}"
+GOWORK=off go -C services/xstockstrat-marketdata tool cover -func=coverage.out | awk '/^total:/ { sub("%","",$3); print "total " $3; if ($3 + 0 < 40) exit 1 }'
+(cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod)
+test "$(grep -rn "InsertHistoricalFundamentals\|GetHistoricalPriceState" services/xstockstrat-marketdata/internal services/xstockstrat-marketdata/cmd --include="*.go" | wc -l)" -eq 0
+test "$(grep -rn "state\.Found\|HistoricalPriceState{Found" services/xstockstrat-marketdata/internal --include="*.go" | wc -l)" -eq 0
+test "$(grep -c "ON CONFLICT (symbol, fiscal_period, period_type)" services/xstockstrat-marketdata/internal/repository/marketdata_repo.go)" = 0
+test "$(grep -c "fundamentals.history.backfill.max_lookback_years" services/xstockstrat-marketdata/internal/service/marketdata_service.go)" -ge 1   # still read (D-17)
+node scripts/check-config-wiring.mjs
 ```
 
 New logic is in an excluded package (`service`) — no coverage threshold applies to it; the service
@@ -1055,7 +1071,9 @@ tests above are the verification. The threshold command still runs for the rest 
    0 for the omitted non-missing column, the reported values and the version parameter. A malformed
    date is an error naming the symbol.
 2. Per-symbol report with a stub deriver returning the two corrected ORCL periods: one delete, two
-   inserts, the deleted row listed under its category; a stub returning another filer's values
+   inserts, and NO deleted-without-replacement entry (the collided row is replaced by the fresh
+   period with its `filed_date`, S-3/S-4); a second stored annual row whose `filed_date` no fresh
+   annual period has is listed under `no_period_derived`; a stub returning another filer's values
    reports the guard; a stub error is reported and the next symbol is still planned.
 3. `@AC-7`: the post-repair verdict fails with one stored row whose `period_end` is after its
    `filed_date`; fails with two rows of one symbol and type on one `period_end`; fails when a symbol
@@ -1069,12 +1087,15 @@ tests above are the verification. The threshold command still runs for the rest 
 **Verification** (union for the Steps 10+11 unit; run from the repo root):
 
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/fundaudit/... -race -count=1 -cover
-cd services/xstockstrat-marketdata && GOWORK=off go build ./cmd/fundamentals-audit && rm -f fundamentals-audit
-cd services/xstockstrat-marketdata && GOWORK=off go test ./... -race -count=1
-cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
-cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -n "cmd/server" services/xstockstrat-marketdata/Dockerfile   # the image still builds only ./cmd/server
+GOWORK=off go -C services/xstockstrat-marketdata test ./internal/fundaudit/... -race -count=1 -cover
+GOWORK=off go -C services/xstockstrat-marketdata build -o /dev/null ./cmd/fundamentals-audit
+GOWORK=off go -C services/xstockstrat-marketdata test ./... -race -count=1
+COVERPKGS=$(GOWORK=off go -C services/xstockstrat-marketdata list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//')
+GOWORK=off go -C services/xstockstrat-marketdata test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}"
+GOWORK=off go -C services/xstockstrat-marketdata tool cover -func=coverage.out | awk '/^total:/ { sub("%","",$3); print "total " $3; if ($3 + 0 < 40) exit 1 }'
+(cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod)
+test "$(grep -c "cmd/server" services/xstockstrat-marketdata/Dockerfile)" -ge 1
+test "$(grep -c "fundamentals-audit" services/xstockstrat-marketdata/Dockerfile)" = 0   # the image still builds only ./cmd/server
 ```
 
 ---
@@ -1145,13 +1166,15 @@ characterization on a real database. State that in the PR body and context.md (`
 **Verification** (run from the repo root):
 
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go vet -tags dbtest ./internal/repository/...
-cd services/xstockstrat-marketdata && GOWORK=off go test -tags dbtest ./internal/repository/... -count=1 -run 'Replace' -v | grep -E "SKIP|PASS|FAIL"   # SKIP locally (no URL)
-cd services/xstockstrat-marketdata && CI=true GOWORK=off go test -tags dbtest ./internal/repository/... -count=1 -run 'Replace' ; test $? -ne 0   # fails closed without the URL
-cd services/xstockstrat-marketdata && GOWORK=off go test ./... -race -count=1   # untagged run unaffected
+GOWORK=off go -C services/xstockstrat-marketdata vet -tags dbtest ./internal/repository/...
+GOWORK=off go -C services/xstockstrat-marketdata test -tags dbtest ./internal/repository/... -count=1 -run 'Replace' -v > /tmp/348-step12.log
+test "$(grep -c '^--- SKIP' /tmp/348-step12.log)" -ge 1   # the dbtest cases exist and skip locally (no URL)
+! CI=true GOWORK=off go -C services/xstockstrat-marketdata test -tags dbtest ./internal/repository/... -count=1 -run 'Replace'   # fails closed without the URL
+GOWORK=off go -C services/xstockstrat-marketdata test ./... -race -count=1   # untagged run unaffected
 test "$(grep -c 'marketdata-db-test' .github/workflows/ci.yml)" -ge 3   # job, ci-gate needs, echo line
-grep -n "MARKETDATA_DB_TEST_URL" .github/workflows/ci.yml services/xstockstrat-marketdata/internal/repository/fundamentals_replace_dbtest_test.go
-grep -n "marketdata-db-test" docs/patterns/ci-overview.md
+test "$(grep -c "MARKETDATA_DB_TEST_URL" .github/workflows/ci.yml)" -ge 1
+test "$(grep -c "MARKETDATA_DB_TEST_URL" services/xstockstrat-marketdata/internal/repository/fundamentals_replace_dbtest_test.go)" -ge 1
+test "$(grep -c "marketdata-db-test" docs/patterns/ci-overview.md)" -ge 1
 # after the push: the PR's "Marketdata DB test" job is green and its log shows the cases ran (no SKIP) — recorded in context.md
 ```
 
@@ -1204,11 +1227,12 @@ verification is sufficient.
 
 ```bash
 A=services/xstockstrat-marketdata/acceptance
-grep -n "the current EDGAR derivation reproduces that period's fiscal_period, period_type, period_end and filed_date" $A/fix-historical-fundamentals-price-join.feature   # one line, inside @AC-5
+test "$(grep -c "    And the current EDGAR derivation reproduces that period's fiscal_period, period_type, period_end and filed_date" $A/fix-historical-fundamentals-price-join.feature)" = 1
 test "$(grep -c '^  Scenario' $A/fix-historical-fundamentals-price-join.feature)" = 5
 test "$(grep -c '^  Scenario' $A/fix-stored-edgar-periods.feature)" = 2
-grep -n "348" $A/fix-historical-fundamentals-price-join.feature $A/fix-stored-edgar-periods.feature
-git diff --stat -- services/xstockstrat-marketdata/acceptance   # only these two files
+test "$(grep -c "348" $A/fix-historical-fundamentals-price-join.feature)" -ge 1
+test "$(grep -c "348" $A/fix-stored-edgar-periods.feature)" -ge 1
+test "$(git diff --name-only HEAD -- services/xstockstrat-marketdata/acceptance | wc -l)" -eq 2
 ```
 
 ---
@@ -1289,11 +1313,11 @@ git diff --stat -- services/xstockstrat-marketdata/acceptance   # only these two
 python3 scripts/check-context-map.py
 python3 scripts/check-otel-produced-signals.py
 npx --yes markdownlint-cli2 --config .markdownlint.yaml services/xstockstrat-marketdata/CLAUDE.md
-grep -n "ON CONFLICT DO NOTHING" services/xstockstrat-marketdata/docs/context-constitution.md services/xstockstrat-marketdata/docs/fundamentals.md docs/runbooks/historical-backfill.md   # no line presents it as current behaviour
-grep -n "periods_left_out" services/xstockstrat-marketdata/CLAUDE.md
-grep -n "period_end > filed_date" docs/runbooks/historical-backfill.md
-grep -n "fundamentals-audit" docs/runbooks/historical-backfill.md
-grep -c "first-seen per (metric, unit)\|can be a cover-page date" services/xstockstrat-marketdata/docs/context-constitution-findings.md   # each remaining hit is under ## Resolved
+test "$(grep -c "periods_left_out" services/xstockstrat-marketdata/CLAUDE.md)" -ge 1
+test "$(grep -c "period_end > filed_date" docs/runbooks/historical-backfill.md)" -ge 1
+test "$(grep -c "fundamentals-audit" docs/runbooks/historical-backfill.md)" -ge 1
+test "$(grep -c "DerivationVersion.*3\|version 3" services/xstockstrat-marketdata/docs/fundamentals.md)" -ge 1
+# read by eye and recorded in context.md: no line of the three docs presents ON CONFLICT DO NOTHING, first-seen shares or a cover-page period_end as current behaviour
 ```
 
 ---
@@ -1342,8 +1366,9 @@ grep -c "first-seen per (metric, unit)\|can be a cover-page date" services/xstoc
      `period_end > filed_date`, the distinct symbol count, and that
      `fundamentals.history.backfill.period_types` reads `both` (design step 2).
    - Build the symbol list (S-12: union of all watchlists) and record its size beside the
-     operator's distinct count. Report any difference; a stored symbol outside the union is named
-     for the operator once the per-symbol reads show which symbols returned rows.
+     operator's distinct count. Report the difference in counts; the MCP cannot name a stored symbol
+     that is in no watchlist, so a non-zero difference is put to the operator, who can name them
+     with one read-only query.
    - Read every symbol's stored periods through `query_fundamentals` (`mode="historical"`, all
      pages) into a rows file in the session scratch directory, and run
      `fundamentals-audit plan` with stored version 2 at the feature branch's current commit.
@@ -1352,7 +1377,10 @@ grep -c "first-seen per (metric, unit)\|can be a cover-page date" services/xstoc
      left-out periods by reason, single-metric anchors, derived periods with `period_end` after
      `filed_date`, and symbols whose derive failed. No raw rows.
    - Stop for the operator's review of the report. Record the answer.
-3. **Lane B.** The flag is already `false` and stays so. Run the same export, list, read and audit
+   - Lane A's flag stays `false` from the freeze until the operator enables it after deploy
+     (design.md § 6, step 5).
+3. **Lane B.** The flag is already `false` and stays so. The operator takes the full-row export
+   and records the same figures; the main session then does the same list, read and audit
    with stored version 1 and write `audit-lane-b-do-staging.md`. Lane B's report blocks only lane
    B's enable; if the operator defers it, record the deferral and its condition in context.md and
    say so in the report file.
@@ -1365,10 +1393,11 @@ grep -c "first-seen per (metric, unit)\|can be a cover-page date" services/xstoc
 
 ```bash
 F=docs/roadmap/features/348-fix-edgar-historical-fundamentals
-ls $F/audit-lane-a-homelab.md $F/audit-lane-b-do-staging.md
-grep -n "commit\|guard\|left out\|deleted without" $F/audit-lane-a-homelab.md
-grep -n "fundamentals.history.enabled" $F/context.md   # the freeze and the operator's words are recorded
-git status --short | grep -v "^ M\|^A \|^M " ; git diff --cached --name-only | grep -Ev "audit-lane-|context.md|implementation-spec.md|feature.md|status.md"   # no raw rows staged
+test -f $F/audit-lane-a-homelab.md
+test -f $F/audit-lane-b-do-staging.md || grep -q "lane B deferred" $F/context.md
+test "$(grep -c "commit" $F/audit-lane-a-homelab.md)" -ge 1
+test "$(grep -c "fundamentals.history.enabled" $F/context.md)" -ge 1   # the freeze and the operator's words are recorded
+test "$(git diff --cached --name-only | grep -Ev "audit-lane-|context.md|implementation-spec.md|feature.md|status.md" | wc -l)" -eq 0   # no raw rows staged
 ```
 
 ---

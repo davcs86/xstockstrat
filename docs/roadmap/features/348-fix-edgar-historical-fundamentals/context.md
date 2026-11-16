@@ -226,3 +226,27 @@ Three questions were put in one message after the PR was opened. The operator's 
 
 - [x] S-2, S-4, S-12 — answered above.
 - [ ] Run `/sdd-review fix-edgar-historical-fundamentals impl-spec`.
+
+## Session 2026-11-16 — sdd-review impl-spec (advisory)
+
+- Tree: `feature/fix-edgar-historical-fundamentals@d43cce3 ≡ origin/feature/fix-edgar-historical-fundamentals`.
+  `origin/main-dev` had moved by one commit (#1557, UI only, none of the cited files); it was not
+  merged during the review so the reviewers read a still tree. BRANCH SYNC in `/sdd-execute` merges it.
+- Result: 7 failures, about 24 warnings (advisory — did not block). No Floor breach. About 40
+  citations spot-checked; two off by a few lines.
+- The spec was edited in place before execution (no step had started), commit follows this entry:
+  - [x] Steps 1, 3, 5, 9: `grep` expectations that exit non-zero on success → `test "$(grep -c …)" = N`.
+  - [x] Steps 7, 9, 12: `go test … | grep` pipelines that hide a failure → output to a log, then `test` on it.
+  - [x] Step 9: the `Found:` pattern matched `internal/config/config_test.go` → narrowed.
+  - [x] Step 11 instruction 2 contradicted S-3/S-4 (a replaced row asserted as deleted without replacement) → corrected, plus a case that does produce a category.
+  - [x] Coverage ≥ 40% now asserted in Steps 3, 5, 9, 11; `cd`-chains replaced by `go -C`.
+  - [x] Step 3: the fixture must contain the two real ORCL accession numbers; the SEC `User-Agent` is generic.
+  - [x] Step 8 item 4: which stored row supplies a carried price.
+  - [x] Step 15: lane B export is the operator's; counts only for symbols outside the watchlist union; lane A's flag stays `false` until the operator enables it; `otel.go:371`.
+- Unresolved ⚠ carried into execution:
+  - Steps 4+5, 6+7, 10+11: `**Lands with**` folds that step-constraints §C does not strictly require (a new package does not break the tree) — [ ] unaddressed (kept: each pair is one commit either way in sequential mode)
+  - Step 3 touches 8 files — [ ] unaddressed (fixture migration is one compile unit)
+  - Step 12: "the CI job ran with no SKIP" is checked by eye on the PR — [ ] unaddressed (the job fails closed without its database)
+  - Step 14: one docs check is by eye — [ ] unaddressed
+  - C-14: no UI or agent step by decision; the note sits in the spec's Consumer Surfaces section, verified on the canary after deploy — [ ] unaddressed
+- Overlap findings: no migration, proto or config collision. File-level WARN only: `internal/telemetry/otel.go` and `telemetry_allowlist_test.go` (337, 341), `marketdata_repo.go` and its test (341), `marketdata_service.go` and its test (347), `services/xstockstrat-marketdata/CLAUDE.md` (341, 347), `docs/context-constitution.md` (347), `.github/workflows/ci.yml` (343, 345). No merge-order row written (no FAIL-level overlap).
