@@ -582,7 +582,7 @@ grep -n "x-access-scope\|x-user-id\|x-internal-caller" src/grpc/externalIdentity
    - The audit payload keys are exactly `{user_id, issuer, outcome}`.
 5. **Mint shape**: a frozen-clock (`mock.timers` / `Date.now` stub) deep-equal shows `authenticateUser` and `issueSessionForUser` claims are identical in shape. Neither has `aud`, and the refresh INSERT passes `client_id` null (`@AC-4 @feature-265` EXTEND).
 6. Allowlist: `telemetryAllowlist.test.ts` drives `recordAuditFailure('identity.external.created')` and asserts it is not bucketed as `other`.
-7. **C-13**: `callWith` gains its second consumer here (`externalIdentity.test.ts`). Move it verbatim from `adminDirectory.test.ts:25-30` into `src/__tests__/fixtures/sanCall.ts`, import it from both files, and add the fixture to the identity test-data inventory per `docs/patterns/test-data-inventory.md`. `adminDirectory.test.ts` must keep every existing case green unchanged.
+7. **C-13**: `callWith` gains its second consumer here (`externalIdentity.test.ts`). Move it verbatim from `adminDirectory.test.ts:25-30` into `src/__tests__/fixtures/sanCall.ts`, import it from both files. The fixture needs its own `import * as grpc from '@grpc/grpc-js'`; `adminDirectory.test.ts` keeps its `grpc` import for `ServiceError`, and its `ReturnType<typeof callWith>` uses (`:37`, `:48`) work unchanged with the import. `callWith` is a call-builder helper, not domain data, so no identity `INVENTORY.md` is required (`docs/patterns/test-data-inventory.md:70-76`); the fixture file's header says so. `adminDirectory.test.ts` must keep every existing case green unchanged.
 
 **Verification**:
 ```bash
@@ -970,8 +970,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 **Verification**:
 ```bash
 cd services/xstockstrat-agent && grep -n "def sso_keys" tests/conftest.py && ! grep -n "generate_private_key" tests/test_jwks.py   # shared key fixture, none inline (C-13)
-cd ../..
-cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .
+uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .
 ```
 
 ---
