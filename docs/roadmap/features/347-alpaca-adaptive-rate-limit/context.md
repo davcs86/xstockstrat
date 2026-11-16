@@ -49,3 +49,21 @@
   - `trading.broker.*` namespace shared with 321 (`fix-trading-config-plumbing`); different keys.
 - Trading API hosts: rate-limit headers are not documented (`reference/postorder`); FR-5 covers it.
 - Recommended design depth: full (two services, order-mutation path, overlap findings).
+
+## Session 2026-11-16T02:30Z — sdd-review product-spec (warning loop, operator-requested)
+
+- Operator asked to loop the review until every warning was addressed. Passes 3 to 5; pass 5 returned
+  PASS with no warnings and no blockers. Status unchanged (`spec-ready`).
+- Spec changes: FR-2 pins "Remaining 4 of 200 is low" and the cut-short-wait error; FR-3 adds
+  add-only jitter, "Reset is used whenever it parses", and a fixed total-wait bound for callers with no
+  deadline (60 to 300 s marketdata; below the FR-8 threshold in trading); FR-5 ignores a response when
+  any of the three headers is unusable; FR-9 adds no instrument and maps a cut-short wait to `throttle`;
+  new § Fixed Invariants records why the pacing constants are not config keys.
+- Scenarios: AC-7, AC-8, AC-9, AC-12, AC-13 tightened; AC-19 (no-deadline bound), AC-20 (per-credential
+  state), AC-21 (throttle outcome), AC-22 (rps 0) added. 22 scenarios.
+- Shared files touched: `docs/roadmap/features/merge-order.md` gained a non-blocking 347 section (config
+  seed 050 shared with 341/343/330; `alpaca/client.go` overlap with 322/323).
+  `services/xstockstrat-marketdata/CLAUDE.md` row for `backfill.rate_limit_rps` corrected from "read at
+  startup" to live per request (matches `cmd/server/main.go`).
+- Correction: the order-retry bound is 30 s at defaults, not the 15 s first quoted to the operator
+  (`IBKRRequestTimeout` is 10 s and enters the `max`).
