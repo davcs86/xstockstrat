@@ -148,6 +148,24 @@ Append-only log — one entry per feature that registered new keys. Newest first
 
 Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
 
+### feature 341 — fix-indicator-pane-warmup (`xstockstrat-ui` / `xstockstrat-config`)
+
+Sets how many bars of history the `/trader` symbol page fetches for its indicator panes (it draws the
+latest 200). The key is **seeded** (staging + production, global, non-secret, insert-if-absent) at `200`
+by config migration `050_ui_chart_history_bars`, with the number-free actor sentinel
+`system:config-migration-feature-fix-indicator-pane-warmup`; the down deletes only a global row that still
+carries that sentinel and still holds `200`, so a row an admin has set survives a rollback. Write bound
+`SCALAR_BOUNDS_REGISTRY['ui.chart.indicator_history_bars']` = [200, 1000]. Read one-shot (no
+`WatchConfig`) through `/trader/api` (`traderConfigClient.getConfig({ namespace: 'ui' })`, `traderBff.ts`
+forward). Per deployment: `200` on DigitalOcean (staging and production share one database); `1000` on the
+homelab `staging` row only, set by `set_config` after the gate in `docs/runbooks/ohlcv-lock-budget-tuning.md`
+§ Homelab deep indicator history passes. No `scripts/config-wiring.json` baseline entry remains. Approval:
+owner + config team.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `ui` | `chart.indicator_history_bars` | int | `200` | `src/lib/indicatorChart.ts:readHistoryBars` | `intVal` only, clamped to [200, 1000]; absent, wrong type, error or timeout → `200`. Read once per page load (`staleTime: Infinity`), so an open tab keeps the depth it read. |
+
 ### feature 338 — notify-commsgun-channel (`xstockstrat-notify` / `xstockstrat-config`)
 
 Selects the provider of notify's alert email (SendGrid or the homelab commsgun hub) and bounds commsgun

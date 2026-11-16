@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { READINESS_CUE, IN_QUEUE_CUE } from './readinessCue';
 import type { ReadinessState } from './readinessRollup';
 import { UnservableReason } from '@xstockstrat/proto/common/v1/common_pb';
-import { UNSERVABLE_REASON } from './opportunityShared';
+import { UNSERVABLE_REASON, opportunityChipLabel } from './opportunityShared';
 
 // Data-only contract for the shared readiness/queue cue maps (feature 155, FR-1). The rendered
 // icon + a11y/testid hooks are asserted by the Playwright e2e steps; here we prove the map data.
@@ -60,5 +60,24 @@ describe('UNSERVABLE_REASON', () => {
     expect(UNSERVABLE_REASON[UnservableReason.OTC]).not.toBe(
       UNSERVABLE_REASON[UnservableReason.NOT_TRADABLE],
     );
+  });
+});
+
+describe('opportunityChipLabel', () => {
+  it('uses the strategy id when present, over the source', () => {
+    expect(opportunityChipLabel({ strategyId: 'dip_buyer_vol_stop', source: 'fundamentals' })).toBe(
+      'dip_buyer_vol_stop',
+    );
+  });
+
+  it('humanizes the source when the strategy id is empty', () => {
+    expect(opportunityChipLabel({ strategyId: '', source: 'fundamentals' })).toBe('Fundamentals');
+    expect(opportunityChipLabel({ strategyId: '', source: 'unusual_whales' })).toBe(
+      'Unusual whales',
+    );
+  });
+
+  it('falls back to "No strategy" when both are empty', () => {
+    expect(opportunityChipLabel({ strategyId: '', source: '' })).toBe('No strategy');
   });
 });

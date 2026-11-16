@@ -96,7 +96,11 @@ import { LINEAGE_ORDERS, LINEAGE_LIST_PAGE_SIZE } from './fixtures/orders';
 import { copilotStreamKey } from '../src/lib/copilot';
 import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
-import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
+import {
+  INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP,
+  INDICATOR_COMPONENTS_PALETTE_13,
+  INDICATOR_SERIES_AAPL,
+} from './fixtures/indicatorSeries';
 import { PNL_PATTERNS_AAPL } from './fixtures/pnlPatterns';
 import { SOURCE_ATTRIBUTION } from './fixtures/attribution';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
@@ -682,7 +686,15 @@ export async function startMockBackend(): Promise<void> {
             ctx.signal.addEventListener('abort', () => r(), { once: true }),
           );
         },
-        async listAlerts() {
+        async listAlerts(req) {
+          // feature 339 — unreadOnly must include ALERT_STREAM_ALL, or the drawer prunes streamed rows.
+          if (req.unreadOnly) {
+            const unread = [
+              ...ALERT_LIST_WITH_READ_STATE.filter((a) => !a.read),
+              ...ALERT_STREAM_ALL,
+            ];
+            return { alerts: unread, unreadCount: unread.length };
+          }
           // feature 203 — per-user read state + server-side unread count.
           return { alerts: ALERT_LIST_WITH_READ_STATE, unreadCount: MOCK_UNREAD_COUNT };
         },
@@ -1417,6 +1429,14 @@ export async function startMockBackend(): Promise<void> {
         async getIndicatorSeries(req) {
           if (req.symbol === 'AAPL') {
             return INDICATOR_SERIES_AAPL;
+          }
+          // feature 342 — whole-chart series palette: 5 series (@AC-2/@AC-3) or 13 (@AC-6).
+          if (req.symbol === 'LYFT') {
+            const components =
+              req.strategyId === 'series_palette_13'
+                ? INDICATOR_COMPONENTS_PALETTE_13
+                : INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP;
+            return { times: req.times, components };
           }
           return { times: req.times, components: [] };
         },
