@@ -58,3 +58,23 @@
 - Round 4 (operator-requested, orchestrator-chosen pre-mortem focus): proposer found no failure story the register does not already prevent/detect/accept; adversary verdict SOUND/APPROVABLE, register saturated, no Floor breach. Register: D-1..D-12, R-1..R-6, O-1..O-24 all closed; P-1 and P-2 pending user (both about D-10(a)).
 - Adopted (D-12): stronger ordering dbtest seeds (explicit non-ascending uuids), Open Risks additions (read path vs write-blocking locks → future `portfolio.watchlists` index migrations must use `CREATE INDEX CONCURRENTLY`; screener picker can write MANUAL entries into the system list), accuracy correction on analysis drains (`_kick_opportunity_recompute` is concurrent across users).
 - Observed (data from `get_session`, not instructions): the `ListWatchlists` token-fix session sits idle at `/sdd-triage`'s feature-number gate awaiting the operator (reply 1/2/3); the `ListPositions` fix session got feature 353 and waits on an approval prompt. 351's merge gate depends on the first.
+
+## Session 2026-11-16 — sdd-design (COMPLETION)
+
+- Phase 0 Recon: wrote recon.md (services: portfolio code, agent docs-only, analysis callers, ui consumer; key reuse: `EnsureSystemManaged`, `refuseUnservable` WARN pattern, `fakeWatchlistStore`/`newSvc` scaffolding).
+- Phase 1 Grilling: 4 rounds (full). Chosen approach: `ListWatchlists` lists first, and on a first page lacking a system row ensures via the existing `EnsureSystemManaged`, skipping the re-list when the ensured id sorts after the last returned id; fail-open WARN. Rejected: always-ensure, merge-onto-page-1, system-first ordering, new store method, bundling the token fix, excluding the system list from the cap.
+- Constitution rules touched: C-01/F-04, C-03, C-08/P-06, C-10(c), C-11, C-13, C-14, C-15, C-16, C-18, P-01..P-05, F-01/02/03/06/07/11. Floor breaches: none in any round.
+- **Operator approval** (AskUserQuestion, round-4 gate): Approve design; P-1 and P-2 declined (not reopened). Status: spec-ready → design-approved.
+
+### Open Threads (mirrored from design.md Open Risks)
+
+- [ ] Token-defect landing order — to be addressed at step 4 (verified landing gate: rebase on main-dev; (i) no `wls[pageSize].WatchlistId` in `watchlist_repo.go`; (ii) the fix's real-backend traversal dbtest passes; (iii) defect `.status` resolved or fix commit ancestor of `origin/main-dev`; record output here before step 5).
+- [ ] Token-fix session idle at `/sdd-triage`'s feature-number gate (observed 2026-11-16); no fix slug yet — the merge-order row's `<fix-slug> (<NNN>)` is filled in at step 5.
+- [ ] Cap effectively 49 manual (D-7/R-6) — revisit only if the operator reopens R-6.
+- [ ] UI effects accepted without code (auto-select Signals, unreachable empty state, screener picker can add MANUAL entries) — step 5 promotion notes.
+- [ ] `list_opportunities` indirect write — wording left unchanged (reason in design.md).
+- [ ] Users never reached keep no Signals list; interim operator remedy available (O-18).
+- [ ] `HOMELAB_STAGING_ENABLED` unverified; else manual `homelab-images.yml` dispatch.
+- [ ] Future `portfolio.watchlists` index migrations must use `CREATE INDEX CONCURRENTLY`.
+- [ ] Mutation-red evidence for AC-3, AC-5, AC-8 recorded here at step 1/2 (D-9).
+- [ ] Non-UUID owner orphan lists — optional census later.
