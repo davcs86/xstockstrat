@@ -2,7 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { tradingClient } from '@/lib/browserClients/tradingClient';
 import { portfolioClient } from '@/lib/browserClients/portfolioClient';
 
-type BrokerAccount = Awaited<ReturnType<typeof tradingClient.listBrokerAccounts>>['accounts'][number];
+type BrokerAccount = Awaited<
+  ReturnType<typeof tradingClient.listBrokerAccounts>
+>['accounts'][number];
 type Portfolio = Awaited<ReturnType<typeof portfolioClient.listPortfolios>>['portfolios'][number];
 
 export function useAccountPortfolios(accountId: string) {
