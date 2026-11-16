@@ -77,9 +77,15 @@ export function closedTradesFromEvents(events: LedgerEvent[]): ClosedTrade[] {
 }
 
 /** Inclusive date-window filter; either bound may be omitted. */
-export function filterByWindow(trades: ClosedTrade[], startMs?: number, endMs?: number): ClosedTrade[] {
+export function filterByWindow(
+  trades: ClosedTrade[],
+  startMs?: number,
+  endMs?: number,
+): ClosedTrade[] {
   return trades.filter(
-    (t) => (startMs === undefined || t.occurredAtMs >= startMs) && (endMs === undefined || t.occurredAtMs <= endMs),
+    (t) =>
+      (startMs === undefined || t.occurredAtMs >= startMs) &&
+      (endMs === undefined || t.occurredAtMs <= endMs),
   );
 }
 
@@ -139,7 +145,8 @@ export function rollingSharpe(returns: number[], riskFreeAnnual: number): number
   const std = populationStd(returns);
   if (std === 0) return null;
   const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
-  const sharpe = ((mean - riskFreeAnnual / TRADING_DAYS_PER_YEAR) / std) * Math.sqrt(TRADING_DAYS_PER_YEAR);
+  const sharpe =
+    ((mean - riskFreeAnnual / TRADING_DAYS_PER_YEAR) / std) * Math.sqrt(TRADING_DAYS_PER_YEAR);
   return Number.isFinite(sharpe) ? sharpe : null;
 }
 
