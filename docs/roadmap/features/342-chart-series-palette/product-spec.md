@@ -15,16 +15,17 @@ As a trader, I want each indicator series drawn in its own clearly distinguishab
 ## Functional Requirements
 
 FR-1. A dedicated categorical series palette of **12** color tokens exists in both the staging and production themes, separate from `--chart-1`…`--chart-5` (whose frozen staging values are not changed).
-FR-2. Indicator chart series take colors from that palette by their position across the **whole chart** (all components of the indicator set), so no two series in a chart of ≤12 series share a color.
+FR-2. Indicator chart series take colors from that palette by their position across the **whole chart** (all components of the indicator set), so no two series in a chart of ≤12 series share a color. Position order is the component order of the indicator set, then the series order within each component; two series of one indicator therefore get different colors.
 FR-3. Each legend swatch uses the same color as its series line.
-FR-4. Every palette color has a contrast ratio of at least 3:1 against the chart surface in each theme, and adjacent palette entries remain distinguishable under deuteranopia and protanopia simulation.
-FR-5. A chart with more than 12 series reuses palette colors in order, starting again from the first.
+FR-4. Every palette color has a contrast ratio of at least 3:1 against the chart surface in each theme — the `--card` token (the chart canvas is transparent inside a card), and also `--background`, matching the chart-series pairs of the contrast baseline in `docs/patterns/ui-ux-governance.md` §5 — and the palette stays distinguishable: under deuteranopia and protanopia simulation each adjacent pair (including entry 12 with entry 1) differs by a CIEDE2000 distance of at least 10 and every other pair by at least 5; under normal vision every pair differs by at least 10.
+FR-5. A chart with more than 12 series reuses palette colors in order, starting again from the first. Known limitation: series 13 and beyond share a color with an earlier series, so color alone does not tell those pairs apart; no second differentiator is added.
 
 ## Out of Scope
 
 - Changing the frozen `--chart-1`…`--chart-5` values or the feature 307 theme-freeze rule
 - Recoloring non-indicator charts (price candles, equity curves, insights charts)
 - A user-configurable palette
+- A second differentiator (dash style, markers) for charts with more than 12 series
 
 ## Affected Services
 
@@ -66,7 +67,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] Token naming and whether the 12 tokens are registered in `themes.test.ts` / `checkThemeBundle` pins (design).
-- [ ] Whether the two themes share one set of 12 values or carry per-theme values; the staging chart surface is the binding contrast case (design).
-- [ ] FR-5 only cycles colors; whether a second differentiator (dash style) is wanted beyond 12 series — operator did not ask for it.
+- [x] Token naming and how the 12 tokens are registered in the `themes.test.ts` / `checkThemeBundle` pins — **deferred to design**. Binding here: the tokens are new names (not `--chart-N`), and AC-1, AC-4 and AC-5 are asserted by a theme test in both themes.
+- [x] Shared vs per-theme values — **decided**: each theme defines its own 12 values and each theme's set must meet FR-4 on that theme's `--card` and `--background`; the staging surface is the binding contrast case. Design may give both themes the same values if one set passes in both.
+- [x] Dash style beyond 12 series — **decided: no**. The operator did not ask for it; FR-5 cycles colors only and records the limitation (see Out of Scope).
 - Known trap (ledger, 2026-11-10 `ui-env-themed-bundles`, and `docs/patterns/ui-ux-governance.md:263`): staging chart token values are frozen and pinned by tests; any hardcoded color within ±1 sRGB of a theme token fails the build. Operator decision 2026-11-15: add a separate series set rather than unfreeze.
