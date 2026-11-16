@@ -76,7 +76,8 @@ FR-1. **Detection with a confirmation window.** A symbol that is on at least one
 unservable in every successfully loaded asset set for a configurable confirmation window (default 5
 trading days, D-8, D-13) becomes flagged delisted. Days on which the market is closed do not count
 toward the window. The flag records the unservable reason and the date the symbol was first seen unservable. A
-symbol unservable for less than the window is not flagged and nothing about it changes. A refresh that
+symbol unservable for less than the window is not flagged and nothing about it changes. Several loads on the same
+trading day count as one day of observation. A refresh that
 is rejected or has not loaded yet (feature 282's fail-open rules) counts as no observation: it neither
 starts, extends nor confirms an absence.
 
@@ -91,11 +92,12 @@ unchanged, so a later `ingest_signal` for the same symbol is still refused while
 
 FR-4. **User-created watchlists: keep and mark.** On a watchlist that is not system-managed, a flagged
 symbol stays on the list and carries the delisted state: flag, reason and first-unservable date. The
-user can still remove it by hand.
+user can still remove it by hand. Every portfolio RPC that returns watchlist entries carries the state.
 
 FR-5. **No watchlist-driven requests for a flagged symbol.** Work that derives its symbol set from
-watchlists (keeping symbols warm, bar and quote ingestion, watchlist-driven backfills and scans) does
-not request a flagged symbol. This closes feature 282's residual R2 without waiting for a restart.
+watchlists (keeping symbols warm, bar and quote ingestion, watchlist opportunity scans, and any
+scheduled watchlist-driven backfill) does not request a flagged symbol. A backfill that names its
+symbols explicitly is governed by FR-7, not by this rule. This closes feature 282's residual R2 without waiting for a restart.
 
 FR-6. **Stored data and held positions are untouched.** Flagging a symbol or removing it from a
 watchlist deletes no stored bars and no stored fundamentals; both stay readable for backtests. A flagged
@@ -199,6 +201,11 @@ count of trading days with code default 5. Its key name is not declared here yet
 name it and state the full config-key contract (namespace, key, `value_type`, code default, reader `path:symbol`,
 seed migration, live mechanism — C-05).
 
+Fixed here: the stored key is namespace-relative `<category>.<key>` under namespace `marketdata` (the
+FQN is display-only); `value_type` int; code default 5; read live, so a change applies without a
+restart. The reader `path:symbol` and the seed migration number are stated in `design.md`, and design
+does not close without them. The seed is a new migration in `services/xstockstrat-config/migrations/`.
+
 ## Database Changes
 
 Expected, exact shape for design:
@@ -209,6 +216,14 @@ Expected, exact shape for design:
 - Persisted per-symbol outcome and reason for backfill jobs, if `BackfillJob` rows do not already hold
   them.
 - A config migration seeding the confirmation-window key.
+
+Migration strategy: each schema change ships as a new `NNN_<name>.up.sql` and `.down.sql` pair in the
+owning service's `migrations/` directory — `xstockstrat-marketdata` (profile table),
+`xstockstrat-ingest` (per-symbol job outcome, only if needed), `xstockstrat-config` (key seed). `NNN`
+is the next free number at spec time; on `main-dev` today the last applied are marketdata `009`, ingest
+`016` and config `052`, and config `053` is claimed by feature 345. The three are independent of each
+other and run through `scripts/db-migrate.sh` in its normal order. No applied migration is edited and
+none reaches outside its own schema.
 
 ## Feature Workflow Notes
 
@@ -222,6 +237,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 skill and `docs/runbooks/mcp-tools.md` must be updated in the same PR as the tool change
 (`docs/patterns/strat-lab-plugin.md`).
 
+Trading-domain notes: detection reads only the feature-282 Alpaca asset set, which is not specific to
+paper or live, so the behavior is the same in both. IBKR accounts and order routing are unaffected.
+Order types, order submission and fill handling are not touched.
+
 ## Acceptance Criteria
 
 See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance truth (Constitution
@@ -229,28 +248,48 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
+Decided by the operator:
+
 - [x] **Confirmation-window default** — 5 days (D-8).
 - [x] **Where the delisted state lives** — platform-wide symbol profile (D-9, FR-13).
 - [x] **Alert volume** — one alert per symbol (D-10).
 - [x] **Existing business rules (C-16)** — the change to feature 282's "only the first asset-set load
-  prunes the warm set" guarantee is signed off by the operator (D-11). `/sdd-design` still lists the
-  affected scenarios in `services/xstockstrat-marketdata/acceptance/filter-otc-symbols.feature` and the
-  portfolio and agent `filter-otc-symbols.feature` as CHANGE.
+  prunes the warm set" guarantee is signed off by the operator (D-11).
 - [x] **Unit of the confirmation window** — trading days (D-13).
 - [x] **Which service owns the symbol profile** — `xstockstrat-marketdata` (D-15).
 - [x] **Which symbols get a profile row** — lazy write (D-14).
 - [x] **Record of the automatic removal** — alert only, no ledger event (D-12).
-- [ ] **Trading-day source** (FR-1, D-13). Which market calendar counts trading days (weekends and
-  exchange holidays), and whether marketdata already has one. Recon to find it.
-- [ ] **Lazy write and symbols on no watchlist** (FR-1, FR-7, D-14). FR-1 observes watchlist symbols.
-  Whether a backfill that names an unservable symbol on no watchlist also starts its profile row, so a
-  later backfill can report it `skipped`, is for design; the first such backfill still reports `failed`.
-- [ ] **How portfolio learns of a transition** (FR-3). Marketdata owns the state and portfolio owns the
+
+No story-level question is open. The items below are inputs for `/sdd-design` (see § Design Inputs).
+
+## Design Inputs
+
+Not story decisions; `/sdd-design` Phase 0 recon resolves each. Interim assumption where one exists.
+
+- **Trading-day source** (FR-1, D-13). Which market calendar counts trading days. Interim: marketdata's
+  existing market calendar if it has one.
+- **Lazy write and symbols on no watchlist** (FR-1, FR-7, D-14). Whether a backfill that names an
+  unservable symbol on no watchlist also starts its profile row. Interim: it does not; such a symbol
+  reports `failed`.
+- **How portfolio learns of a transition** (FR-3). Marketdata owns the state and portfolio owns the
   watchlists; today portfolio calls marketdata, not the reverse.
-- [ ] **Which components request watchlist symbols** (FR-5). Recon must list every watchlist-driven
-  requester (warm set, bar ingester, scans, the agent's watchlist-driven backfills) so none is missed.
-- [ ] **Symbols on "Signals" with an unexpired signal** (FR-3). Removal also drops the entry's
-  `portfolio.watchlist_signal_expiry` row; confirm nothing else depends on it.
-- [ ] **Known trap (ledger `fails.md`, agent docs drift).** `tools.py` docstrings,
-  `docs/runbooks/mcp-tools.md` and the `strat-lab` skill drift from the code unless updated in the same
-  PR; the implementation spec needs an explicit step for all three.
+- **Watchlist-driven requesters** (FR-5). Recon lists every one (warm set, bar ingester, opportunity
+  scans, any scheduled backfill) so none is missed.
+- **"Signals" entries with an unexpired signal** (FR-3). Removal also drops the entry's
+  `portfolio.watchlist_signal_expiry` row (`services/xstockstrat-portfolio/internal/repository/signal_expiry_repo.go`).
+- **Existing symbol-metadata table.** `marketdata.symbol_classification` (feature 217, migration `009`)
+  already holds per-symbol sector history. Design decides whether the profile extends it, sits beside
+  it, or stays separate.
+- **Ingest job status rule and webhook payload.** `services/xstockstrat-ingest/app/handlers/servicer.py`
+  derives `PARTIAL` from `failed_symbols`, and
+  `services/xstockstrat-ingest/acceptance/webhook-fanout-callback.feature` fixes the webhook payload's
+  exact keys. FR-7 and FR-9 change the first and may change the second (C-16 CHANGE to classify).
+- **Feature 282's durable scenarios** (D-11). `/sdd-design` lists the scenarios in the marketdata,
+  portfolio and agent `filter-otc-symbols.feature` suites as CHANGE; the "Asset-set servability"
+  section of `services/xstockstrat-marketdata/CLAUDE.md` changes in the same PR.
+- **Docs that drift** (ledger `fails.md`). The implementation spec carries explicit steps for the
+  `tools.py` docstrings, `docs/runbooks/mcp-tools.md` and the `strat-lab` `backtest` skill.
+- **Rebase risk** (overlap scan 2026-11-16). Features 347 and 348 (code-completed) edit
+  `services/xstockstrat-marketdata/internal/service/marketdata_service.go`; 343 edits
+  `services/xstockstrat-agent/app/tools.py`; 317 (spec-ready) changes miss-path WARNs for delisted
+  symbols.

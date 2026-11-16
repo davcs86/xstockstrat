@@ -65,6 +65,7 @@ Feature: delisted-symbol-handling
     When "ROKU" becomes flagged delisted
     Then "ROKU" is no longer in the warm set, with no service restart
     And the next bar-ingest cycle requests "AAPL" and does not request "ROKU"
+    And the next opportunity scan of "Tech" evaluates "AAPL" and does not evaluate "ROKU"
 
   @AC-9 @FR-6
   Scenario: Stored history of a flagged symbol stays readable
@@ -169,3 +170,19 @@ Feature: delisted-symbol-handling
     When "KPTI" becomes flagged delisted and is removed from "Signals"
     Then one alert names the removal
     And no ledger event is appended for the removal
+
+  @AC-23 @FR-7
+  Scenario: An unresolvable flagged symbol is skipped in a bars backfill
+    Given "PSKY" is flagged delisted
+    And the bars source answers an error for "PSKY"
+    When a bars backfill runs for "AAPL" and "PSKY" from 2026-01-01 to 2026-11-16
+    Then the job ends "COMPLETED"
+    And "PSKY" has outcome "skipped" and is not in failed_symbols
+    And "marketdata.backfill.symbols" with kind "bars" increases by 1 for "skipped" and 0 for "failed"
+
+  @AC-24 @FR-9
+  Scenario: A symbol with no data in range is reported empty
+    Given "AAPL" is servable and its fundamentals from 2021-01-01 are already stored
+    When a fundamentals backfill runs for "AAPL" with start 2021-01-01 and overwrite false and writes 0 periods
+    Then get_backfill_status lists "AAPL" with outcome "empty" and no reason
+    And the job ends "COMPLETED"
