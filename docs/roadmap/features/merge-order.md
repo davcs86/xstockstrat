@@ -412,3 +412,19 @@ second rebases and re-greps its anchors. 343 also shares `src/app/insights/strat
 disjoint and the second merger rebases. Config seed number: 341 and 343 each name `050` as next free, as does
 `fix-live-enrich-ttl-seed` (330) on its branch; the trunk tip is `049`, so each re-derives its number at execute and at its
 integration PR, and the later merger regenerates `scripts/config-wiring-stored.json`.
+
+## Config seed number and Alpaca client overlap: 347 ↔ 341, 343, 330, 322, 323 (2026-11-16, non-blocking)
+
+`alpaca-adaptive-rate-limit` (347) names config migration `052` (341 landed `050_ui_chart_history_bars` and 343 landed
+`051_ingest_backfill_self_serve_keys` on 2026-11-16; 330 still names `050` on its branch), so 347 re-derives its number at execute and at its integration PR, and the later merger regenerates
+`scripts/config-wiring-stored.json`. 347 also edits `services/xstockstrat-marketdata/internal/alpaca/client.go` (`do` and the
+limiter), which `fix-retired-surface-proto-cleanup` (322, `Paper` plumbing) and `fix-orphaned-code` (323, `AlpacaAsset`
+removal) edit in disjoint hunks; whichever merges second rebases and re-greps its anchors.
+
+Further same-file overlaps for 347, all textual and non-blocking (whichever merges second rebases and re-greps its anchors):
+`services/xstockstrat-marketdata/cmd/server/main.go` with 322 (adjacent hunks in the Alpaca settings closure);
+`services/xstockstrat-trading/internal/service/trading.go` with 311, 312 and 321, and
+`services/xstockstrat-trading/internal/service/order_intent.go` with 321 (the staleness floor, same line);
+`docs/patterns/config-governance.md` (registered-keys log, both prepend at the same anchor),
+`services/xstockstrat-marketdata/CLAUDE.md` and `scripts/config-wiring-stored.json` with 341 (already on trunk; 347
+regenerates the stored set after any renumber).

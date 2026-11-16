@@ -846,6 +846,9 @@ func (f *fakeReconciliationOrderIntentRepo) FinalizeIntent(ctx context.Context, 
 func (f *fakeReconciliationOrderIntentRepo) SweepStalePending(ctx context.Context, staleBefore time.Time, limit int) ([]*repository.OrderIntentRecord, error) {
 	panic("fakeReconciliationOrderIntentRepo.SweepStalePending not implemented")
 }
+func (f *fakeReconciliationOrderIntentRepo) ReleasePendingIntent(ctx context.Context, intentID string) (bool, error) {
+	panic("fakeReconciliationOrderIntentRepo.ReleasePendingIntent not implemented")
+}
 func (f *fakeReconciliationOrderIntentRepo) ListUnknownForAccount(ctx context.Context, brokerAccountID string) ([]*repository.OrderIntentRecord, error) {
 	if f.listUnknownFn != nil {
 		return f.listUnknownFn(ctx, brokerAccountID)

@@ -13,6 +13,12 @@ order settles to its true terminal state (`expired` or `filled`). It must **not*
 stopped and never captured the eventual `expired` (UI showed CANCELED while the broker showed
 expired).
 
+Feature 347: on every non-IBKR account each `GetOrder` poll runs under a deadline of one
+`trading.broker.timeout_ms`, so the Alpaca client makes exactly one attempt per order. A throttled
+`GetOrder` (HTTP 429, or a refusal while the account's rate-limit window is exhausted) is a failed
+poll for that order, logged as `fill poll: broker GetOrder failed`; a tick whose every poll failed
+writes no `loop tick ok` record, and the order is polled again on the next tick.
+
 ## Broker State Reconciliation
 
 `StartReconciliationPoller`/`reconcileTick` (feature 102) periodically compares open orders and

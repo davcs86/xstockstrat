@@ -3,8 +3,13 @@ package alpaca_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -778,5 +783,589 @@ func TestLiveClient_RateLimitFollowsSettings_AC32(t *testing.T) {
 	bars()
 	if got := c.Limit(); got != rate.Limit(50) {
 		t.Fatalf("Limit() = %v after the next request, want 50", got)
+	}
+}
+
+// ── feature 347: adaptive rate limit at do() ────────────────────────────────
+
+const (
+	f347DataHost    = "data.alpaca.markets"
+	f347TradingHost = "paper-api.alpaca.markets"
+	f347APIKey      = "KEY-F347"
+	f347BarsBody    = `{"bars":[{"t":"2024-01-02T10:00:00Z","o":1,"h":1,"l":1,"c":1,"v":1}],"next_page_token":""}`
+	f347QuoteBody   = `{"quote":{"t":"2024-01-02T10:00:00Z","ap":1,"bp":1}}`
+)
+
+var f347Start = time.Unix(1_800_000_000, 0)
+
+// f347Clock is the client clock; advance=false keeps every request "at the same moment".
+type f347Clock struct {
+	mu      sync.Mutex
+	now     time.Time
+	advance bool
+	sleeps  []time.Duration
+}
+
+func (c *f347Clock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *f347Clock) Sleep(ctx context.Context, d time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.sleeps = append(c.sleeps, d)
+	if c.advance {
+		c.now = c.now.Add(d)
+	}
+	return nil
+}
+
+func (c *f347Clock) recorded() []time.Duration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]time.Duration(nil), c.sleeps...)
+}
+
+type f347Attempt struct {
+	host, path string
+	at         time.Time
+}
+
+// f347RT answers from a script and keeps the request's real Alpaca host.
+type f347RT struct {
+	mu       sync.Mutex
+	now      func() time.Time
+	attempts []f347Attempt
+	respond  func(n int, req *http.Request) *http.Response
+}
+
+func (rt *f347RT) RoundTrip(req *http.Request) (*http.Response, error) {
+	rt.mu.Lock()
+	n := len(rt.attempts)
+	rt.attempts = append(rt.attempts, f347Attempt{host: req.URL.Host, path: req.URL.Path, at: rt.now()})
+	rt.mu.Unlock()
+	return rt.respond(n, req), nil
+}
+
+func (rt *f347RT) seen() []f347Attempt {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return append([]f347Attempt(nil), rt.attempts...)
+}
+
+func f347Resp(status int, body string, headers ...string) *http.Response {
+	h := http.Header{}
+	for i := 0; i+1 < len(headers); i += 2 {
+		h.Set(headers[i], headers[i+1])
+	}
+	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: h}
+}
+
+func f347RateHeaders(limit, remaining int, reset time.Time) []string {
+	return []string{
+		"X-RateLimit-Limit", strconv.Itoa(limit),
+		"X-RateLimit-Remaining", strconv.Itoa(remaining),
+		"X-RateLimit-Reset", strconv.FormatInt(reset.Unix(), 10),
+	}
+}
+
+func f347ResetOnly(reset time.Time) []string {
+	return []string{"X-RateLimit-Reset", strconv.FormatInt(reset.Unix(), 10)}
+}
+
+// f347Client builds a live client behind rt. A nil clock keeps the real clock and sleep.
+func f347Client(rt *f347RT, clock *f347Clock, jitter time.Duration, edit func(*alpaca.Settings)) *alpaca.Client {
+	s := alpaca.Settings{
+		APIKey: f347APIKey, APISecret: "s", BaseURL: "https://" + f347TradingHost, DataURL: "https://" + f347DataHost,
+		AdaptiveRateLimit: true,
+	}
+	if edit != nil {
+		edit(&s)
+	}
+	c := alpaca.NewLiveClient(func() alpaca.Settings { return s }, true)
+	alpaca.SetTransport(c, rt)
+	alpaca.SetJitter(c, func() time.Duration { return jitter })
+	rt.now = time.Now
+	if clock != nil {
+		alpaca.SetNow(c, clock.Now)
+		alpaca.SetSleep(c, clock.Sleep)
+		rt.now = clock.Now
+	}
+	return c
+}
+
+func f347Bars(ctx context.Context, c *alpaca.Client, symbol string) (int, error) {
+	bars, err := c.GetBars(ctx, symbol, "1Day", f347Start.Add(-24*time.Hour), f347Start)
+	return len(bars), err
+}
+
+func f347Deadline(t *testing.T, d time.Duration) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	t.Cleanup(cancel)
+	return ctx
+}
+
+type f347Warn struct {
+	msg   string
+	attrs map[string]string
+}
+
+type f347WarnHandler struct {
+	mu    *sync.Mutex
+	warns *[]f347Warn
+}
+
+func (h f347WarnHandler) Enabled(_ context.Context, l slog.Level) bool { return l >= slog.LevelWarn }
+func (h f347WarnHandler) WithAttrs([]slog.Attr) slog.Handler           { return h }
+func (h f347WarnHandler) WithGroup(string) slog.Handler                { return h }
+func (h f347WarnHandler) Handle(_ context.Context, r slog.Record) error {
+	w := f347Warn{msg: r.Message, attrs: map[string]string{}}
+	r.Attrs(func(a slog.Attr) bool {
+		w.attrs[a.Key] = a.Value.String()
+		return true
+	})
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	*h.warns = append(*h.warns, w)
+	return nil
+}
+
+func f347RecordWarns(t *testing.T) func() []f347Warn {
+	t.Helper()
+	var mu sync.Mutex
+	var warns []f347Warn
+	prev := slog.Default()
+	slog.SetDefault(slog.New(f347WarnHandler{mu: &mu, warns: &warns}))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return func() []f347Warn {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]f347Warn(nil), warns...)
+	}
+}
+
+func f347WantRateLimited(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected a rate-limited error, got nil")
+	}
+	for _, want := range []string{"rate limited", f347DataHost} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not contain %q", err, want)
+		}
+	}
+}
+
+// @AC-1: an exhausted window holds the next request until the reset time.
+func TestDoPaced_ExhaustedWindowHoldsUntilReset_F347_AC1(t *testing.T) {
+	clock := &f347Clock{now: f347Start, advance: true}
+	reset := f347Start.Add(3 * time.Second)
+	rt := &f347RT{respond: func(n int, _ *http.Request) *http.Response {
+		if n == 0 {
+			return f347Resp(200, f347BarsBody, f347RateHeaders(200, 0, reset)...)
+		}
+		return f347Resp(200, f347BarsBody)
+	}}
+	c := f347Client(rt, clock, 0, nil)
+	if _, err := f347Bars(context.Background(), c, "MSFT"); err != nil {
+		t.Fatalf("priming request: %v", err)
+	}
+	n, err := f347Bars(f347Deadline(t, 30*time.Second), c, "AAPL")
+	if err != nil || n != 1 {
+		t.Fatalf("bars = %d, err = %v; want 1 bar and no error", n, err)
+	}
+	if got := rt.seen()[1].at; got.Before(reset) {
+		t.Fatalf("request sent %v before the reset", reset.Sub(got))
+	}
+}
+
+// @AC-2 (guard): hosts are tracked independently. Red under a "key by credential only" mutant.
+func TestDoPaced_HostsAreIndependent_F347_AC2(t *testing.T) {
+	clock := &f347Clock{now: f347Start, advance: true}
+	rt := &f347RT{respond: func(_ int, req *http.Request) *http.Response {
+		if req.URL.Host == f347DataHost {
+			return f347Resp(200, f347BarsBody, f347RateHeaders(200, 0, f347Start.Add(5*time.Second))...)
+		}
+		return f347Resp(200, `[]`, f347RateHeaders(200, 150, f347Start.Add(30*time.Second))...)
+	}}
+	c := f347Client(rt, clock, 0, nil)
+	if _, err := f347Bars(context.Background(), c, "AAPL"); err != nil {
+		t.Fatalf("data-host priming request: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := c.ListAssets(context.Background(), "us_equity"); err != nil {
+			t.Fatalf("assets request %d: %v", i+1, err)
+		}
+	}
+	if sleeps := clock.recorded(); len(sleeps) != 0 {
+		t.Fatalf("assets request waited %v for the data host's reset", sleeps)
+	}
+	if got := rt.seen(); len(got) != 3 || got[2].host != f347TradingHost {
+		t.Fatalf("attempts = %+v, want the third on %s", got, f347TradingHost)
+	}
+}
+
+// @AC-3: a low remaining count spreads requests instead of bursting.
+func TestDoPaced_LowRemainingSpreadsRequests_F347_AC3(t *testing.T) {
+	warns := f347RecordWarns(t)
+	clock := &f347Clock{now: f347Start}
+	rt := &f347RT{respond: func(n int, _ *http.Request) *http.Response {
+		if n == 0 {
+			return f347Resp(200, f347BarsBody, f347RateHeaders(200, 4, f347Start.Add(4*time.Second))...)
+		}
+		return f347Resp(200, f347BarsBody)
+	}}
+	c := f347Client(rt, clock, 100*time.Millisecond, nil)
+	if _, err := f347Bars(context.Background(), c, "MSFT"); err != nil {
+		t.Fatalf("priming request: %v", err)
+	}
+	for i := 0; i < 4; i++ {
+		if _, err := f347Bars(f347Deadline(t, 30*time.Second), c, "AAPL"); err != nil {
+			t.Fatalf("request %d: %v", i+1, err)
+		}
+	}
+	sleeps := clock.recorded()
+	if len(sleeps) != 3 {
+		t.Fatalf("waits = %v, want the first request unwaited and three waits", sleeps)
+	}
+	for i, min := range []time.Duration{time.Second, 2 * time.Second, 3 * time.Second} {
+		if sleeps[i] < min || sleeps[i] >= 4*time.Second {
+			t.Fatalf("wait %d = %v, want >= %v and before the reset", i+2, sleeps[i], min)
+		}
+	}
+	if logged := warns(); len(logged) != 0 {
+		t.Fatalf("spreading logged a throttle WARN: %+v", logged)
+	}
+}
+
+// @AC-4: a 429 is retried after the reset and the caller sees success.
+func TestDoPaced_RetriesA429AfterReset_F347_AC4(t *testing.T) {
+	clock := &f347Clock{now: f347Start, advance: true}
+	reset := f347Start.Add(2 * time.Second)
+	threeBars := `{"bars":[{"t":"2024-01-02T10:00:00Z"},{"t":"2024-01-03T10:00:00Z"},{"t":"2024-01-04T10:00:00Z"}],"next_page_token":""}`
+	rt := &f347RT{respond: func(n int, _ *http.Request) *http.Response {
+		if n == 0 {
+			return f347Resp(429, `{"message":"too many requests"}`, f347ResetOnly(reset)...)
+		}
+		return f347Resp(200, threeBars)
+	}}
+	c := f347Client(rt, clock, 0, nil)
+	n, err := f347Bars(f347Deadline(t, 30*time.Second), c, "MSFT")
+	if err != nil || n != 3 {
+		t.Fatalf("bars = %d, err = %v; want 3 bars and no error", n, err)
+	}
+	got := rt.seen()
+	if len(got) != 2 || got[1].at.Before(reset) {
+		t.Fatalf("attempts = %+v, want a second attempt no earlier than the reset", got)
+	}
+}
+
+// @AC-5: a 429 without a reset header backs off exponentially, jitter added.
+func TestDoPaced_BacksOffWithoutReset_F347_AC5(t *testing.T) {
+	const jitter = 250 * time.Millisecond
+	clock := &f347Clock{now: f347Start, advance: true}
+	rt := &f347RT{respond: func(n int, _ *http.Request) *http.Response {
+		if n < 3 {
+			return f347Resp(429, `{}`)
+		}
+		return f347Resp(200, f347BarsBody)
+	}}
+	c := f347Client(rt, clock, jitter, nil)
+	if _, err := f347Bars(f347Deadline(t, 60*time.Second), c, "AAPL"); err != nil {
+		t.Fatalf("GetBars: %v", err)
+	}
+	want := []time.Duration{time.Second + jitter, 2*time.Second + jitter, 4*time.Second + jitter}
+	sleeps := clock.recorded()
+	if len(sleeps) != len(want) {
+		t.Fatalf("waits = %v, want %v", sleeps, want)
+	}
+	for i := range want {
+		if sleeps[i] != want[i] {
+			t.Fatalf("wait before attempt %d = %v, want backoff plus jitter %v", i+2, sleeps[i], want[i])
+		}
+	}
+}
+
+// @AC-6: retries stop at the caller's deadline.
+func TestDoPaced_RetriesStopAtDeadline_F347_AC6(t *testing.T) {
+	rt := &f347RT{respond: func(int, *http.Request) *http.Response {
+		return f347Resp(429, `{}`, f347ResetOnly(time.Now().Add(10*time.Second))...)
+	}}
+	c := f347Client(rt, nil, 0, nil)
+	began := time.Now()
+	_, err := c.GetLatestQuote(f347Deadline(t, 2500*time.Millisecond), "NVDA")
+	if took := time.Since(began); took > 3*time.Second {
+		t.Fatalf("returned after %v, want within 3 s", took)
+	}
+	f347WantRateLimited(t, err)
+}
+
+// @AC-7 (guard): the static ceiling still caps the rate. Red under a "skip the static limiter when adaptive" mutant.
+func TestDoPaced_StaticCeilingStillCaps_F347_AC7(t *testing.T) {
+	rt := &f347RT{respond: func(int, *http.Request) *http.Response {
+		return f347Resp(200, f347BarsBody, f347RateHeaders(10000, 10000, time.Now().Add(60*time.Second))...)
+	}}
+	c := f347Client(rt, nil, 0, func(s *alpaca.Settings) { s.RateLimitRPS = 5 })
+	var wg sync.WaitGroup
+	for i := 0; i < 15; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := f347Bars(context.Background(), c, "AAPL"); err != nil {
+				t.Errorf("GetBars: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	got := rt.seen()
+	if len(got) != 15 {
+		t.Fatalf("attempts = %d, want 15", len(got))
+	}
+	sort.Slice(got, func(i, j int) bool { return got[i].at.Before(got[j].at) })
+	const tolerance = 100 * time.Millisecond
+	atOnce := 0
+	for _, a := range got {
+		if a.at.Sub(got[0].at) < tolerance {
+			atOnce++
+		}
+	}
+	if atOnce != 5 {
+		t.Fatalf("%d requests sent at once, want exactly 5", atOnce)
+	}
+	if d := got[9].at.Sub(got[0].at); d < time.Second-tolerance {
+		t.Fatalf("10th request sent %v after the first, want >= 1.0 s", d)
+	}
+	if d := got[14].at.Sub(got[0].at); d < 2*time.Second-tolerance {
+		t.Fatalf("15th request sent %v after the first, want >= 2.0 s", d)
+	}
+}
+
+// @AC-8 (guard): missing or malformed headers change nothing. Red under a "missing header reads as Remaining 0" mutant.
+func TestDoPaced_UnusableHeadersChangeNothing_F347_AC8(t *testing.T) {
+	clock := &f347Clock{now: f347Start, advance: true}
+	rt := &f347RT{respond: func(n int, _ *http.Request) *http.Response {
+		switch n {
+		case 1:
+			return f347Resp(200, f347BarsBody, "X-RateLimit-Remaining", "abc")
+		case 2:
+			return f347Resp(200, f347BarsBody, "X-RateLimit-Remaining", "0")
+		}
+		return f347Resp(200, f347BarsBody)
+	}}
+	c := f347Client(rt, clock, 0, nil)
+	for i := 0; i < 4; i++ {
+		if n, err := f347Bars(context.Background(), c, "AAPL"); err != nil || n != 1 {
+			t.Fatalf("request %d: bars = %d, err = %v", i+1, n, err)
+		}
+	}
+	if sleeps := clock.recorded(); len(sleeps) != 0 {
+		t.Fatalf("a request was delayed: %v", sleeps)
+	}
+}
+
+// @AC-9 (guard): the kill switch restores the single attempt. Red under an "ignore the switch" mutant.
+func TestDo_KillSwitchOffIsASingleAttempt_F347_AC9(t *testing.T) {
+	rt := &f347RT{respond: func(int, *http.Request) *http.Response {
+		return f347Resp(429, `{}`, f347ResetOnly(time.Now().Add(2*time.Second))...)
+	}}
+	c := f347Client(rt, nil, 0, func(s *alpaca.Settings) { s.AdaptiveRateLimit = false })
+	began := time.Now()
+	_, err := f347Bars(f347Deadline(t, 30*time.Second), c, "AAPL")
+	if err == nil || !strings.HasPrefix(err.Error(), "alpaca bars 429") {
+		t.Fatalf("error = %v, want one starting with \"alpaca bars 429\"", err)
+	}
+	if took := time.Since(began); took > time.Second {
+		t.Fatalf("returned after %v, want within 1 s", took)
+	}
+	if n := len(rt.seen()); n != 1 {
+		t.Fatalf("attempts = %d, want exactly 1", n)
+	}
+}
+
+// @AC-14: throttling is visible in telemetry and logs.
+func TestDoPaced_ThrottleIsObservable_F347_AC14(t *testing.T) {
+	reader := vendorMetricReader(t)
+	warns := f347RecordWarns(t)
+	clock := &f347Clock{now: f347Start, advance: true}
+	rt := &f347RT{respond: func(n int, _ *http.Request) *http.Response {
+		if n == 0 {
+			return f347Resp(429, `{}`, f347ResetOnly(f347Start.Add(2*time.Second))...)
+		}
+		return f347Resp(200, f347BarsBody)
+	}}
+	c := f347Client(rt, clock, 0, nil)
+	if _, err := f347Bars(f347Deadline(t, 30*time.Second), c, "AAPL"); err != nil {
+		t.Fatalf("GetBars: %v", err)
+	}
+	got := collectVendorMetrics(t, reader)
+	if got.requests["alpaca/bars/http_429"] != 1 || got.requests["alpaca/bars/ok"] != 1 {
+		t.Fatalf("vendor.requests = %v, want one http_429 and one ok for alpaca/bars", got.requests)
+	}
+	assertNoAttrContains(t, got, f347APIKey, "AAPL", f347DataHost)
+	logged := warns()
+	if len(logged) != 1 {
+		t.Fatalf("WARN logs = %+v, want exactly one", logged)
+	}
+	if logged[0].attrs["host"] != f347DataHost || logged[0].attrs["wait_ms"] != "2000" {
+		t.Fatalf("WARN attrs = %v, want host %s and wait_ms 2000", logged[0].attrs, f347DataHost)
+	}
+	for k, v := range logged[0].attrs {
+		if strings.Contains(v, f347APIKey) {
+			t.Fatalf("WARN attr %s carries the API key", k)
+		}
+	}
+}
+
+// @AC-19: retries are bounded when the caller has no deadline.
+func TestDoPaced_NoDeadlineIsBounded_F347_AC19(t *testing.T) {
+	reader := vendorMetricReader(t)
+	clock := &f347Clock{now: f347Start, advance: true}
+	rt := &f347RT{respond: func(int, *http.Request) *http.Response {
+		return f347Resp(429, `{}`, f347ResetOnly(clock.Now().Add(3600*time.Second))...)
+	}}
+	c := f347Client(rt, clock, 0, nil)
+	_, err := f347Bars(context.Background(), c, "AAPL")
+	f347WantRateLimited(t, err)
+	got := rt.seen()
+	if len(got) != 2 || got[1].at.Sub(got[0].at) < 60*time.Second {
+		t.Fatalf("attempts = %+v, want exactly 2 with the second >= 60 s after the first", got)
+	}
+	if took := clock.Now().Sub(f347Start); took > 90*time.Second {
+		t.Fatalf("returned %v after the call began on the client clock, want <= 90 s", took)
+	}
+	m := collectVendorMetrics(t, reader)
+	if m.requests["alpaca/bars/http_429"] != 2 || m.requests["alpaca/bars/throttle"] != 1 {
+		t.Fatalf("vendor.requests = %v, want 2 http_429 and 1 throttle", m.requests)
+	}
+	if m.durations["alpaca/bars"] != 2 {
+		t.Fatalf("duration samples = %d, want 2 (the throttle point has none)", m.durations["alpaca/bars"])
+	}
+}
+
+// @AC-21: a wait ended by the request context is recorded as ctx.
+func TestDoPaced_WaitEndedByContextIsCtx_F347_AC21(t *testing.T) {
+	for name, tc := range map[string]struct {
+		cancelAfter time.Duration
+		want        error
+	}{
+		"the deadline passes":               {want: context.DeadlineExceeded},
+		"the caller cancels after 1 second": {cancelAfter: time.Second, want: context.Canceled},
+	} {
+		t.Run(name, func(t *testing.T) {
+			reader := vendorMetricReader(t)
+			rt := &f347RT{respond: func(n int, _ *http.Request) *http.Response {
+				if n == 0 {
+					return f347Resp(200, f347BarsBody, f347RateHeaders(200, 0, time.Now().Add(10*time.Second))...)
+				}
+				return f347Resp(200, f347QuoteBody)
+			}}
+			c := f347Client(rt, nil, 0, nil)
+			if _, err := f347Bars(context.Background(), c, "MSFT"); err != nil {
+				t.Fatalf("priming request: %v", err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
+			defer cancel()
+			if tc.cancelAfter > 0 {
+				time.AfterFunc(tc.cancelAfter, cancel)
+			}
+			_, err := c.GetLatestQuote(ctx, "NVDA")
+			f347WantRateLimited(t, err)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("error %q does not wrap %v", err, tc.want)
+			}
+			for _, a := range rt.seen() {
+				if strings.Contains(a.path, "NVDA") {
+					t.Fatalf("a request for NVDA reached the data host: %+v", a)
+				}
+			}
+			m := collectVendorMetrics(t, reader)
+			if m.requests["alpaca/quotes_latest/ctx"] != 1 || m.durations["alpaca/quotes_latest"] != 0 {
+				t.Fatalf("requests = %v, durations = %v; want exactly one quotes_latest ctx point and no duration", m.requests, m.durations)
+			}
+			for k, n := range m.requests {
+				if strings.HasPrefix(k, "alpaca/quotes_latest/") && k != "alpaca/quotes_latest/ctx" && n != 0 {
+					t.Fatalf("unexpected point %s = %d", k, n)
+				}
+			}
+		})
+	}
+}
+
+// @AC-22: a zero static ceiling disables only the ceiling.
+func TestDoPaced_ZeroCeilingKeepsPacing_F347_AC22(t *testing.T) {
+	clock := &f347Clock{now: f347Start, advance: true}
+	reset := f347Start.Add(3 * time.Second)
+	rt := &f347RT{respond: func(n int, _ *http.Request) *http.Response {
+		if n == 0 {
+			return f347Resp(200, f347BarsBody, f347RateHeaders(200, 0, reset)...)
+		}
+		return f347Resp(200, f347BarsBody)
+	}}
+	c := f347Client(rt, clock, 0, func(s *alpaca.Settings) { s.RateLimitRPS = 0 })
+	if _, err := f347Bars(context.Background(), c, "MSFT"); err != nil {
+		t.Fatalf("priming request: %v", err)
+	}
+	if _, err := f347Bars(f347Deadline(t, 30*time.Second), c, "AAPL"); err != nil {
+		t.Fatalf("GetBars: %v", err)
+	}
+	if got := rt.seen()[1].at; got.Before(reset) {
+		t.Fatalf("request sent %v before the reset", reset.Sub(got))
+	}
+}
+
+// @AC-24 (guard): a caller that cannot wait for its spread slot is sent at once. Red under a
+// "refuse a caller that cannot wait for its slot" mutant (R-9).
+func TestDoPaced_ShortDeadlineSkipsItsSlot_F347_AC24(t *testing.T) {
+	clock := &f347Clock{now: f347Start}
+	rt := &f347RT{respond: func(n int, req *http.Request) *http.Response {
+		if n == 0 {
+			return f347Resp(200, f347BarsBody, f347RateHeaders(200, 4, f347Start.Add(4*time.Second))...)
+		}
+		if strings.HasSuffix(req.URL.Path, "/quotes/latest") {
+			return f347Resp(200, f347QuoteBody)
+		}
+		return f347Resp(200, f347BarsBody)
+	}}
+	c := f347Client(rt, clock, 0, nil)
+	if _, err := f347Bars(context.Background(), c, "MSFT"); err != nil {
+		t.Fatalf("priming request: %v", err)
+	}
+	if _, err := f347Bars(f347Deadline(t, 30*time.Second), c, "AAPL"); err != nil {
+		t.Fatalf("first-slot request: %v", err)
+	}
+	if _, err := c.GetLatestQuote(f347Deadline(t, 500*time.Millisecond), "NVDA"); err != nil {
+		t.Fatalf("GetLatestQuote: %v", err)
+	}
+	if sleeps := clock.recorded(); len(sleeps) != 0 {
+		t.Fatalf("the NVDA request waited: %v", sleeps)
+	}
+	if got := rt.seen(); len(got) != 3 || !strings.Contains(got[2].path, "NVDA") {
+		t.Fatalf("attempts = %+v, want the NVDA request sent third", got)
+	}
+}
+
+// A static ceiling that cannot fit the caller's deadline is a rate-limit refusal, recorded as ctx.
+func TestDoPaced_StaticCeilingRefusal_F347(t *testing.T) {
+	reader := vendorMetricReader(t)
+	rt := &f347RT{respond: func(int, *http.Request) *http.Response { return f347Resp(200, f347BarsBody) }}
+	c := f347Client(rt, nil, 0, func(s *alpaca.Settings) { s.RateLimitRPS = 1 })
+	if _, err := f347Bars(context.Background(), c, "AAPL"); err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+	expired, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	_, err := f347Bars(expired, c, "AAPL")
+	f347WantRateLimited(t, err)
+	if n := len(rt.seen()); n != 1 {
+		t.Fatalf("attempts = %d, want the refused request never sent", n)
+	}
+	if m := collectVendorMetrics(t, reader); m.requests["alpaca/bars/ctx"] != 1 {
+		t.Fatalf("vendor.requests = %v, want one alpaca/bars ctx point", m.requests)
 	}
 }
