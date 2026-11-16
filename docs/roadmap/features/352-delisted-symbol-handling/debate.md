@@ -8,7 +8,7 @@
 
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 2026-11-16 | /sdd-design | 9 | 9 | 0 | 16 | 0 | yes |
+| 1 | 2026-11-16 | /sdd-design | 11 | 10 | 3 | 16 | 0 | yes |
 
 ## Settled Decisions
 
@@ -24,6 +24,8 @@
 | D-6 | 1 | Backfill outcomes: shared `BackfillSymbolOutcome` enum (with `_UNSPECIFIED = 0`) and `BackfillSymbolResult {symbol, outcome, reason}` in `common/v1`; `symbol_results` added to `BackfillBarsResponse` (4), `BackfillFundamentalsResponse` (3) and `BackfillJob` (16), listing non-written symbols only. `failed_symbols` keeps today's meaning and never holds a skipped symbol, so ingest's PARTIAL rule needs no change. Ingest stores them in a new JSONB column (migration `017`). The webhook payload stays at its 8 keys. | `packages/proto/ingest/v1/ingest.proto:33-50`; `packages/proto/marketdata/v1/marketdata.proto:161,316`; `services/xstockstrat-ingest/app/handlers/servicer.py:705-707,827-833`; `services/xstockstrat-ingest/app/engine/webhook_handoff_loop.py:41-62` | settled |
 | D-7 | 1 | Config key: namespace `marketdata`, key `assets.delisting_confirmation_trading_days`, int, default 5, read nil/≤0 → 5 and >30 → 30, SetConfig bounds [1,30]; reader `resolveDelistingConfirmationDays` in `asset_servability.go` on the same watcher as `resolveAssetRefreshInterval`, re-read at each load; seed config migration `054` in the same commit as the reader. | `services/xstockstrat-marketdata/internal/service/asset_servability.go:169-173`; `services/xstockstrat-config/migrations/052_alpaca_adaptive_rate_limit_keys.up.sql:4-19`; fails.md:3772 | settled |
 | D-8 | 1 | Portfolio keeps an in-memory map of flagged symbols refreshed on its existing prune tick. One service-layer helper decorates `WatchlistBinding.delisted` (field 4, a `common.v1.DelistedState` message; presence = flagged) on every watchlist-returning RPC; `ListAllWatchlistSymbols` drops flagged symbols; analysis skips flagged bindings at `_drain_watchlist_bindings` and `_drain_watchlist`. An empty or stale cache never removes anything. Portfolio stores nothing in its DB. | `services/xstockstrat-portfolio/internal/service/signal_prune.go:37`; `packages/proto/portfolio/v1/portfolio.proto:243`; `services/xstockstrat-analysis/app/handlers/servicer.py:5995`; `services/xstockstrat-analysis/app/engine/live_loop.py:592` | settled |
+| D-10 | 1 (gate) | The flag alert is emitted by portfolio after its removal has run, and states how many system-managed lists the symbol was removed from (zero if none). Once-only across restarts and instances is decided by a conditional update on the marketdata profile row. Operator ruling at the round-1 gate. | context.md 2026-11-16 sdd-design round-1 gate; spec D-12, FR-12 | settled |
+| D-11 | 1 (gate) | A held flagged symbol leaves the warm set at each load and is re-warmed by the next quote read; quote and price paths are unchanged. C-16 CHANGE to platform `@AC-17 @feature-282` for flagged symbols only, signed off by the operator. | context.md 2026-11-16 sdd-design round-1 gate; `docs/sdd/business-rules/platform.feature:1314-1319` | settled |
 | D-9 | 1 | Only an error from the data source turns a flagged symbol into `skipped`. A failure writing to our own database stays `failed` in both backfill kinds. | spec D-16 ("the source returns any error"); `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1561-1565,2344` | settled |
 
 ## Rejected Alternatives (locked)
@@ -39,6 +41,7 @@
 | R-6 | 1 | Per-symbol outcomes or reasons in the fan-out webhook payload | Changes 334 `@AC-30` (exact 8 keys, no error text) | locked |
 | R-7 | 1 | N1: make `markWarm` skip flagged symbols | Not needed for FR-5 (every watchlist-driven warm-add is already gated); contradicts FR-6; regresses 282 `@AC-16` and `@AC-26`; would pass the textual guard test `marketdata_service_test.go:5358-5363` while defeating it | locked |
 | R-8 | 1 | Delete the profile row on reset or recovery | Same cost as nulling the state; spec D-9 wants the profile to hold further metadata | locked |
+| R-10 | 1 (gate) | N2: a replace-all `UpdateWatchlist` keeps a stored flagged symbol | Declined by the operator: portfolio `@AC-19 @feature-282` stays as is. Accepted consequence: a flagged symbol on a user list is dropped, and reported in `refused_symbols`, by a replace-all update such as a name-only agent update | locked |
 | R-9 | 1 | Seed `_resume_job` state from the row's `failed_symbols` | A successfully re-run failed chunk would stay in the set and finalize PARTIAL (`servicer.py:909-912,981-987,830`); also scope creep into a known separate defect | locked |
 
 ## Objections
@@ -46,9 +49,9 @@
 <!-- Status: open → closed @ round N (<how>) | waived @ round N (user) | reopened @ round N (user) -->
 | ID | Round | Objection | Blocking | Status |
 |---|---|---|---|---|
-| O-1 | 1 | With R-7, a held flagged symbol leaves the warm set at each load and is re-warmed by the next quote read. That changes platform `@AC-17 @feature-282` ("stays … warm across later refreshes") for flagged symbols and needs operator sign-off (C-16, P-03). | yes | open |
-| O-2 | 1 | N2: keeping a stored flagged symbol through a replace-all `UpdateWatchlist` changes portfolio `@AC-19 @feature-282`; without it an agent rename silently drops a flagged symbol (FR-4, AC-7). Needs operator sign-off (C-16). | yes | open |
-| O-3 | 1 | FR-12 / AC-17: marketdata cannot know which system-managed lists a symbol was removed from, and would alert before portfolio removes anything. Either portfolio emits the flag alert after its removal (once-only via a marketdata conditional update) or the operator accepts wording that states the removal as upcoming. | yes | open |
+| O-1 | 1 | With R-7, a held flagged symbol leaves the warm set at each load and is re-warmed by the next quote read. That changes platform `@AC-17 @feature-282` ("stays … warm across later refreshes") for flagged symbols and needs operator sign-off (C-16, P-03). | yes | closed @ round 1 (operator signed off, D-11) |
+| O-2 | 1 | N2: keeping a stored flagged symbol through a replace-all `UpdateWatchlist` changes portfolio `@AC-19 @feature-282`; without it an agent rename silently drops a flagged symbol (FR-4, AC-7). Needs operator sign-off (C-16). | yes | closed @ round 1 (operator declined the change, R-10) |
+| O-3 | 1 | FR-12 / AC-17: marketdata cannot know which system-managed lists a symbol was removed from, and would alert before portfolio removes anything. Either portfolio emits the flag alert after its removal (once-only via a marketdata conditional update) or the operator accepts wording that states the removal as upcoming. | yes | closed @ round 1 (operator: portfolio emits after removal, D-10) |
 | O-4 | 1 | The reused `pruneListTx` deletes only `source = 2` (`signal_expiry_repo.go:87-91`); FR-3 needs removal from a system-managed list whatever the entry's source, without leaking into the expiry path (281 `@AC-5`). The flag cause needs its own lock-and-delete branch. | yes | open |
 | O-5 | 1 | The existing cleanup deletes only due expiry rows (`signal_expiry_repo.go:126-134,150-152`); a flag-removed entry with an unexpired expiry row leaves an orphan that can prune a later re-add early. The flag branch must delete the expiry rows of the symbols it removed, locked with SKIP LOCKED. | yes | open |
 | O-6 | 1 | Ingest writes `failed_symbols` only at finalize (`servicer.py:835-843`); per-symbol results must be persisted per chunk in the locked `update_job` if they are to survive a restart, and resume must not seed failed symbols (R-9). | yes | open |

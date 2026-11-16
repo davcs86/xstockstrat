@@ -118,3 +118,21 @@
 - Recommended design depth: full (6 services, additive proto on 3 contracts, new marketdata table, a
   new marketdata → portfolio direction, C-16 CHANGE to feature 282).
 
+## Session 2026-11-16 — sdd-design (Phase 0 recon, round 1 and its gate)
+
+- Tree: `claude/story-delisted-symbol-handling` (contains `origin/main-dev@78ab5ca`); same deviation
+  from `docs/sdd/tree-freshness.md` as the review (story PR #1563 unmerged). Mode: full.
+- Phase 0: wrote recon.md. Recon added `xstockstrat-analysis` as a watchlist reader. The spec's Design
+  Input expecting CHANGE scenarios in the portfolio and agent 282 suites did not hold; only marketdata
+  `@AC-15` changes under spec D-11.
+- Round 1 (debate.md): pull direction (portfolio → marketdata), `marketdata.symbol_profile`,
+  transitions by conditional `UPDATE … RETURNING`, shared NYSE calendar, outcome model in `common/v1`.
+- **Round-1 gate, operator rulings (2026-11-16):**
+  - **C-16 sign-off**: platform `@AC-17 @feature-282` ("a held offline unservable symbol stays valued
+    and warm across later refreshes") changes for flagged symbols only — a held flagged symbol leaves
+    the warm set at each load and the next quote read re-warms it; it stays valued (debate D-11).
+  - **Declined**: changing portfolio `@AC-19 @feature-282`. A replace-all update still drops a stored
+    unservable symbol, flagged or not (debate R-10). FR-4 "kept and marked" therefore holds until a
+    replace-all update of that list.
+  - **Flag alert emitter**: portfolio, after its removal, stating how many system-managed lists the
+    symbol was removed from (debate D-10).
