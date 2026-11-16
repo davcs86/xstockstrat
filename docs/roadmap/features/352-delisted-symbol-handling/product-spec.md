@@ -58,14 +58,14 @@ Answers the operator gave when this story was filed; they bind the FRs below.
 | D-5 | A backfill that explicitly names a delisted symbol | Still attempted; `skipped` only when the source cannot serve it and the symbol is flagged delisted |
 | D-6 | Ticker renamed or reused after a delisting | Out of scope; recorded as a follow-up |
 | D-7 | Where the state is visible | Agent watchlist and backfill tools, the `/insights` watchlists page, and an alert on each transition. No separate servability-check tool |
-| D-8 | Confirmation-window default | 5 days |
+| D-8 | Confirmation-window default | 5 days (trading days, D-13) |
 | D-9 | Where the delisted state lives | Platform-wide, per symbol, in a new symbol/company profile record. The profile is meant to hold further symbol metadata later; this feature stores only the delisted state in it |
 | D-10 | Alert volume | One alert per symbol |
+| D-11 | Change to feature 282's "only the first asset-set load prunes the warm set" rule | Signed off (C-16 CHANGE) |
 | D-12 | Record of the automatic removal from "Signals" | The FR-12 alert is enough; no ledger event |
 | D-13 | Unit of the confirmation window | Trading days |
 | D-14 | Which symbols get a profile row | Written lazily: a row is created when the platform first has state to record for a symbol. No pre-population |
 | D-15 | Owner of the symbol profile | `xstockstrat-marketdata` |
-| D-11 | Change to feature 282's "only the first asset-set load prunes the warm set" rule | Signed off (C-16 CHANGE) |
 
 ## Functional Requirements
 

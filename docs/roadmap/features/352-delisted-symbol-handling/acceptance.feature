@@ -3,19 +3,19 @@ Feature: delisted-symbol-handling
   watchlist-driven work and reported with its reason, so that backfill jobs stop ending PARTIAL because
   of dead symbols and I no longer have to find and remove them by hand.
 
-  # The confirmation window is the 5-day default (D-8), read as calendar days (unit is an open question).
+  # The confirmation window is the default of 5 trading days (D-8, D-13). 2026-11-09 is a Monday.
 
   @AC-1 @FR-1
   Scenario: A symbol unservable for the whole confirmation window is flagged delisted
-    Given the confirmation window is 5 days
+    Given the confirmation window is 5 trading days
     And "ROKU" is on the user-created watchlist "Tech"
-    And "ROKU" has been absent from every loaded asset set since 2026-11-07
-    When the asset set is loaded on 2026-11-12 without "ROKU"
-    Then "ROKU" is flagged delisted with reason "UNSERVABLE_REASON_NOT_TRADABLE" and first-unservable date 2026-11-07
+    And "ROKU" has been absent from every loaded asset set since Monday 2026-11-09
+    When the asset set is loaded on Friday 2026-11-13 without "ROKU"
+    Then "ROKU" is flagged delisted with reason "UNSERVABLE_REASON_NOT_TRADABLE" and first-unservable date 2026-11-09
 
   @AC-2 @FR-1
   Scenario: A symbol unservable for less than the window is not flagged
-    Given the confirmation window is 5 days
+    Given the confirmation window is 5 trading days
     And "SHPH" is on the user-created watchlist "Biotech"
     And "SHPH" was first absent from the asset set on 2026-11-16
     When the asset set is loaded on 2026-11-17 without "SHPH"
@@ -53,9 +53,9 @@ Feature: delisted-symbol-handling
   @AC-7 @FR-4
   Scenario: A flagged symbol stays on a user-created watchlist, marked
     Given "ROKU" is on the user-created watchlist "Tech"
-    When "ROKU" becomes flagged delisted with first-unservable date 2026-11-07
+    When "ROKU" becomes flagged delisted with first-unservable date 2026-11-09
     Then "ROKU" is still on "Tech"
-    And the "Tech" entry for "ROKU" carries delisted true, reason "UNSERVABLE_REASON_NOT_TRADABLE" and first-unservable date 2026-11-07
+    And the "Tech" entry for "ROKU" carries delisted true, reason "UNSERVABLE_REASON_NOT_TRADABLE" and first-unservable date 2026-11-09
     And the owner can remove "ROKU" from "Tech"
 
   @AC-8 @FR-5
@@ -115,16 +115,16 @@ Feature: delisted-symbol-handling
 
   @AC-15 @FR-10
   Scenario: The watchlist page marks a flagged symbol
-    Given "ROKU" is flagged delisted with reason "UNSERVABLE_REASON_NOT_TRADABLE" and first-unservable date 2026-11-07 on the watchlist "Tech"
+    Given "ROKU" is flagged delisted with reason "UNSERVABLE_REASON_NOT_TRADABLE" and first-unservable date 2026-11-09 on the watchlist "Tech"
     When the owner opens "Tech" on the /insights watchlists page
-    Then the "ROKU" row shows a delisted marker with the text "not an active, tradable US equity" and the date 2026-11-07
+    Then the "ROKU" row shows a delisted marker with the text "not an active, tradable US equity" and the date 2026-11-09
     And the "AAPL" row shows no delisted marker
 
   @AC-16 @FR-11
   Scenario: The agent watchlist tools return the delisted state
-    Given "ROKU" is flagged delisted with first-unservable date 2026-11-07 on the watchlist "Tech"
+    Given "ROKU" is flagged delisted with first-unservable date 2026-11-09 on the watchlist "Tech"
     When get_watchlist is called for "Tech"
-    Then the "ROKU" entry carries delisted true, reason "UNSERVABLE_REASON_NOT_TRADABLE" and first-unservable date 2026-11-07
+    Then the "ROKU" entry carries delisted true, reason "UNSERVABLE_REASON_NOT_TRADABLE" and first-unservable date 2026-11-09
     And list_watchlists reports the same state for "ROKU" on "Tech"
 
   @AC-17 @FR-12
@@ -143,6 +143,29 @@ Feature: delisted-symbol-handling
   @AC-19 @FR-13
   Scenario: The delisted state is one record per symbol, shared by every watchlist
     Given "ROKU" is on the watchlist "Tech" owned by user A and the watchlist "Media" owned by user B
-    When "ROKU" becomes flagged delisted with first-unservable date 2026-11-07
-    Then the "ROKU" entries on "Tech" and on "Media" both carry delisted true and first-unservable date 2026-11-07
+    When "ROKU" becomes flagged delisted with first-unservable date 2026-11-09
+    Then the "ROKU" entries on "Tech" and on "Media" both carry delisted true and first-unservable date 2026-11-09
     And the same state is returned after the owning service restarts
+
+  @AC-20 @FR-1
+  Scenario: Days the market is closed do not count toward the window
+    Given the confirmation window is 5 trading days
+    And "ATCH" is on the user-created watchlist "Smallcaps"
+    And "ATCH" was first absent from the asset set on Friday 2026-11-13
+    When the asset set is loaded on Wednesday 2026-11-18 without "ATCH"
+    Then "ATCH" is not flagged delisted, because only 4 trading days (13, 16, 17, 18 November) have passed
+    And the load on Thursday 2026-11-19 without "ATCH" flags it with first-unservable date 2026-11-13
+
+  @AC-21 @FR-13
+  Scenario: A profile row is written lazily
+    Given "AAPL" and "ROKU" are on the user-created watchlist "Tech" and neither has a symbol profile row
+    When the asset set is loaded with "AAPL" and without "ROKU"
+    Then a symbol profile row exists for "ROKU" with its first-unservable date
+    And no symbol profile row is created for "AAPL"
+
+  @AC-22 @FR-3
+  Scenario: Removal from a system-managed watchlist writes no ledger event
+    Given "KPTI" is on the system-managed watchlist "Signals"
+    When "KPTI" becomes flagged delisted and is removed from "Signals"
+    Then one alert names the removal
+    And no ledger event is appended for the removal

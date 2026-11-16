@@ -70,3 +70,17 @@
 - The operator answered four of the five open items. "Record of the automatic removal" (ledger event
   or not) was not answered and stays open. Mapping of the answer "Per symbol" to the alert-volume
   question is my reading.
+
+## Session 2026-11-16 — sdd-story (second operator follow-up)
+
+- **D-12** Removal from "Signals": "Alert is enough" — no ledger event. Added AC-22.
+- **D-13** Window unit: trading days. Scenario dates reworked (first-unservable 2026-11-09, a Monday);
+  added AC-20. This supersedes the calendar-day reading noted under D-8 above.
+- **D-14** Profile rows: "Lazy write is fine". My reading: a row is created the first time there is
+  state to record for a symbol (first unservable observation); nothing is pre-populated. Whether a
+  backfill naming an unservable symbol on no watchlist also starts a row is left open for design.
+  Added AC-21.
+- **D-15** Profile owner: `xstockstrat-marketdata` ("marketdata makes more sense to me"). Consequence
+  recorded as an open question: portfolio must learn of a transition from marketdata, a direction
+  that does not exist today.
+- "Per symbol" = alert volume (D-10) was my reading; the operator saw it restated and did not correct it.
