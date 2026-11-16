@@ -1,8 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page, type Route } from '@playwright/test';
+import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { addAuthCookie, addAdminCookie } from '../helpers/auth';
 import { FUNDAMENTALS_STALL_SYMBOL, STRATEGY_DEF_LIVE, UI_CHART_HISTORY_VALUES } from '../fixtures';
+import { backfillJob } from '../fixtures/backfillJobs';
 import { historyBarsWire, indicatorSeriesWire } from '../fixtures/indicatorHistory';
 import { noCriteriaDataRow } from '../fixtures/screenResults';
+
+const fulfillJson = (route: Route, body: unknown) =>
+  route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
 /**
  * Single-Position page (feature 096) — the dedicated `/trader/positions/[symbol]` view built from
@@ -335,7 +340,11 @@ test.describe('Single Position page', () => {
     const notice = page.getByTestId('backtest-insufficient');
     await expect(notice).toBeVisible({ timeout: 10000 });
     await expect(notice).toContainText(/Insufficient data/);
-    await expect(notice).toContainText(/Backfill coverage panel/);
+    // @AC-1: the gap's bar counts and an enabled inline backfill action, no panel pointer.
+    await expect(notice).toContainText('has 53, needs 200 bars');
+    const action = page.getByTestId('backtest-backfill-action');
+    await expect(action).toBeVisible();
+    await expect(action).toBeEnabled();
   });
 
   // ── Signal-detail readiness, relocated from the retired insights/market/[symbol] page (Step 25).
@@ -919,6 +928,150 @@ test.describe('Single Position page', () => {
   });
 });
 
+// feature 343 — inline backfill on the symbol-page Backtests card. The `strat-insufficient-001`
+// sentinel reports a pre-window gap; the mock's GetBackfillStatus answers COMPLETED unless routed.
+test.describe('inline backfill from the Backtests card', () => {
+  const RUN_BACKTEST = '**/xstockstrat.analysis.v1.AnalysisService/RunBacktest';
+  const TRIGGER_BACKFILL = '**/xstockstrat.ingest.v1.IngestService/TriggerBackfill';
+  const BACKFILL_STATUS = '**/xstockstrat.ingest.v1.IngestService/GetBackfillStatus';
+  const STRATEGY = 'strat-insufficient-001';
+
+  /** Run the sentinel backtest as a non-admin and return the inline backfill action. */
+  async function runInsufficient(page: Page) {
+    await addAuthCookie(page);
+    await page.goto(`/trader/positions/ZZZZ?strategy=${STRATEGY}`);
+    const run = page.getByRole('main').getByTestId('run-backtest');
+    await expect(run).toBeVisible({ timeout: 30000 });
+    await run.click();
+    await expect(page.getByTestId('backtest-insufficient')).toBeVisible({ timeout: 10000 });
+    return page.getByTestId('backtest-backfill-action');
+  }
+
+  /** Capture every RunBacktest body; from the second call on, `rerun` answers it when given. */
+  async function captureRuns(page: Page, rerun?: unknown) {
+    const runs: Record<string, unknown>[] = [];
+    await page.route(RUN_BACKTEST, async (route) => {
+      runs.push(route.request().postDataJSON() as Record<string, unknown>);
+      if (rerun === undefined || runs.length === 1) return route.fallback();
+      await fulfillJson(route, rerun);
+    });
+    return runs;
+  }
+
+  const routeJob = (page: Page, over: Record<string, unknown>) =>
+    page.route(BACKFILL_STATUS, (route) =>
+      fulfillJson(route, backfillJob({ jobId: 'job-e2e-1', symbols: ['ZZZZ'], ...over })),
+    );
+
+  test('@AC-2 requests the gap start through the backtest window end under GAPS_ONLY', async ({
+    page,
+  }) => {
+    const runs = await captureRuns(page);
+    let backfill: Record<string, unknown> | undefined;
+    await page.route(TRIGGER_BACKFILL, async (route) => {
+      backfill = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fallback();
+    });
+    await (await runInsufficient(page)).click();
+    await expect.poll(() => backfill).toBeDefined();
+    const runRange = runs[0].range as { start: string; end: string };
+    const range = backfill!.range as { start: string; end: string };
+    expect(Date.parse(range.start)).toBeLessThan(Date.parse(runRange.start));
+    expect(range.end).toBe(runRange.end);
+    expect(backfill!.fillMode).toBe('FILL_MODE_GAPS_ONLY');
+    expect(backfill!.overwrite).toBeFalsy();
+    expect(backfill!.symbols).toEqual(['ZZZZ']);
+  });
+
+  test('@AC-7 a non-admin trigger is accepted and shows the status line', async ({ page }) => {
+    await (await runInsufficient(page)).click();
+    await expect(page.getByTestId('backtest-backfill-status')).toBeVisible();
+    await expect(page.getByTestId('backtest-backfill-error')).toHaveCount(0);
+  });
+
+  test('@AC-3 a running job shows its bar progress and disables the action', async ({ page }) => {
+    await routeJob(page, {
+      status: BackfillStatus.RUNNING,
+      barsProcessed: '120',
+      barsTotal: '200',
+    });
+    const action = await runInsufficient(page);
+    await action.click();
+    await expect(page.getByTestId('backtest-backfill-status')).toHaveText(
+      'Backfilling… 120 / 200 bars',
+    );
+    await expect(action).toBeDisabled();
+  });
+
+  test('@AC-4 a completed job shows Data ready and a re-run action, with no automatic re-run', async ({
+    page,
+  }) => {
+    const runs = await captureRuns(page);
+    await (await runInsufficient(page)).click();
+    await expect(page.getByTestId('backtest-backfill-status')).toHaveText('Data ready');
+    await expect(page.getByTestId('backtest-rerun')).toBeVisible();
+    expect(runs).toHaveLength(1);
+  });
+
+  test('@AC-5 the re-run replaces the insufficient result and keeps the strategy reference', async ({
+    page,
+  }) => {
+    const runs = await captureRuns(page, {
+      backtestId: 'bt-rerun-ok',
+      strategyId: STRATEGY,
+      status: 1, // BACKTEST_STATUS_OK
+      totalReturn: 0.05,
+      totalTrades: 3,
+    });
+    await (await runInsufficient(page)).click();
+    await page.getByTestId('backtest-rerun').click();
+    await expect(page.getByTestId('backtest-ok')).toBeVisible();
+    await expect(page.getByTestId('backtest-insufficient')).toHaveCount(0);
+    expect(runs).toHaveLength(2);
+    expect(runs[1]).toMatchObject({ strategyId: STRATEGY, strategyIdRef: STRATEGY });
+  });
+
+  test('@AC-13 the same gap after a completed backfill reports no vendor data', async ({
+    page,
+  }) => {
+    await (await runInsufficient(page)).click();
+    await page.getByTestId('backtest-rerun').click();
+    await expect(page.getByTestId('backtest-no-vendor-data')).toContainText('No vendor data for');
+    await expect(page.getByTestId('backtest-backfill-action')).toHaveCount(0);
+  });
+
+  test('@AC-6 a failed job shows its error and re-enables the action', async ({ page }) => {
+    await routeJob(page, { status: BackfillStatus.FAILED, error: 'vendor rate limit exceeded' });
+    const action = await runInsufficient(page);
+    await action.click();
+    await expect(page.getByTestId('backtest-backfill-status')).toHaveText(
+      'Backfill failed: vendor rate limit exceeded',
+    );
+    await expect(action).toBeEnabled();
+  });
+
+  test('@AC-11 an in-flight backfill for the symbol is reported and the action stays enabled', async ({
+    page,
+  }) => {
+    await page.route(TRIGGER_BACKFILL, (route) =>
+      route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 'already_exists',
+          message: 'a backfill for ZZZZ is already queued or running',
+        }),
+      }),
+    );
+    const action = await runInsufficient(page);
+    await action.click();
+    await expect(page.getByTestId('backtest-backfill-error')).toHaveText(
+      'A backfill for ZZZZ is already queued or running. Try again when it finishes.',
+    );
+    await expect(action).toBeEnabled();
+  });
+});
+
 // @AC-15 (feature 215): SCHD is absent from the queue fixture, so the badge can only come from the
 // symbol-filtered request this test waits for.
 test.describe('Signal-detail fundamentals skip row (feature 215)', () => {
@@ -984,8 +1137,6 @@ async function routeIndicatorHistory(
 ): Promise<HistoryRequests> {
   const captured: HistoryRequests = {};
   const { depth, bars, periods = [] } = opts;
-  const fulfillJson = (route: import('@playwright/test').Route, body: unknown) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   if (depth !== undefined) {
     // The glob matches every namespace; only `ui` is answered here.
     await page.route('**/xstockstrat.config.v1.ConfigService/GetConfig', async (route) => {

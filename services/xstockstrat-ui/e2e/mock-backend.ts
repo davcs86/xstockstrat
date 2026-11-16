@@ -51,6 +51,7 @@ import {
   STRATEGY_DEF_LIVE,
   STRATEGY_DEFINITIONS,
   insufficientDataResult,
+  prefixGapRange,
   PORTFOLIO_EQUITY_CURVE,
   SIZING_MODE_LEGACY,
   SIZING_MODE_PORTFOLIO,
@@ -1071,9 +1072,8 @@ export async function startMockBackend(): Promise<void> {
         // the backtest view renders the gap panel + "backfill this range" action (AC-4).
         async runBacktest(req) {
           if (req.strategyId === 'strat-insufficient-001') {
-            // A data-less symbol: RunBacktest returns a *successful* RPC with INSUFFICIENT_DATA and a
-            // per-symbol coverage gap (never an error). The symbol page surfaces this inline instead
-            // of discarding it (UI-operability pass).
+            // A short-history symbol: a *successful* INSUFFICIENT_DATA result whose gap is the
+            // pre-window prefix, distinct from the requested window (never an error).
             return {
               backtestId: 'bt-insufficient-1',
               strategyId: req.strategyId,
@@ -1084,12 +1084,11 @@ export async function startMockBackend(): Promise<void> {
               coverageGaps: [
                 {
                   symbol: req.symbols[0] ?? 'ZZZZ',
-                  barsHave: BigInt(0),
+                  timeframe: 4, // TIMEFRAME_1DAY
+                  requestedRange: req.range,
+                  barsHave: BigInt(53),
                   barsNeed: BigInt(200),
-                  gap: {
-                    start: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
-                    end: { seconds: BigInt(1735603200), nanos: 0 }, // 2024-12-31
-                  },
+                  gap: prefixGapRange(req.range),
                 },
               ],
               diagnostics: [],
@@ -1580,6 +1579,15 @@ export async function startMockBackend(): Promise<void> {
         // job id so the confirmation can be asserted (AC-4).
         async triggerBackfill() {
           return { jobId: 'job-e2e-1', status: 1 /* BACKFILL_STATUS_QUEUED */ };
+        },
+        // The symbol-page Backtests card polls the job its trigger returned; a successful real job
+        // ends COMPLETED. Non-default states are page.route overrides in position-detail.spec.ts.
+        async getBackfillStatus(req) {
+          return {
+            ...backfillJob({ jobId: req.jobId, status: BackfillStatus.COMPLETED }),
+            barsProcessed: BigInt(200),
+            barsTotal: BigInt(200),
+          };
         },
         // feature 125: the Symbol-page Backfill coverage section lists jobs for one symbol. AAPL has
         // one COMPLETED job carrying a covered range (2024-01-01 → 2024-06-01); any other symbol has

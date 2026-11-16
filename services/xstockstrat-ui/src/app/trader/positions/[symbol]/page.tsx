@@ -31,11 +31,19 @@ import { useFundamentals } from '@/hooks/useFundamentals';
 import { MuteForStrategy } from '@/components/insights/MuteForStrategy';
 import { useBacktestHistory } from '@/hooks/useStrategies';
 import { useRunBacktest } from '@/hooks/useBacktest';
-import { useBackfillJobs, useTriggerBackfill } from '@/hooks/useBackfills';
+import { useBackfillJobs, useBackfillStatus, useTriggerBackfill } from '@/hooks/useBackfills';
+import {
+  gapToBackfillRequest,
+  backfillJobMessage,
+  triggerErrorMessage,
+  backfillSpanDays,
+  gapKey,
+  noVendorDataMessage,
+} from '@/lib/backtestBackfill';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import { useGetStrategy } from '@/hooks/useStrategyDefinitions';
 import { useIndicatorSeries, type IndicatorSeriesInput } from '@/hooks/useIndicatorSeries';
-import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+import { BackfillStatus, FillMode } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import {
   BacktestStatus,
   OpportunityActionTag,
@@ -1162,6 +1170,15 @@ function BacktestsSection({
   const queryClient = useQueryClient();
   const { data: history, isLoading } = useBacktestHistory(strategyId || undefined);
   const { mutate: runBacktest, isPending, data: runResult, error } = useRunBacktest();
+  // Local only (D-2): jobs have no owner, so the card follows just the id its own trigger returned.
+  const [backfillJobId, setBackfillJobId] = useState<string>();
+  const [filledGapKey, setFilledGapKey] = useState<string>();
+  const {
+    mutate: triggerBackfill,
+    isPending: triggerPending,
+    error: triggerError,
+  } = useTriggerBackfill();
+  const { data: backfillJob } = useBackfillStatus(backfillJobId);
 
   const runs = useMemo(
     () => (history?.runs ?? []).filter((r) => r.symbols.includes(symbol)),
@@ -1216,6 +1233,30 @@ function BacktestsSection({
     );
   }
 
+  const gap = runResult?.coverageGaps[0];
+  const gapFilled = gap !== undefined && filledGapKey === gapKey(gap);
+  const jobMessage =
+    backfillJobId && backfillJob ? backfillJobMessage(backfillJob, symbol) : undefined;
+  const backfillBusy =
+    triggerPending || (!!backfillJobId && (!jobMessage || jobMessage.state === 'running'));
+
+  function handleBackfill() {
+    if (!gap) return;
+    triggerBackfill(
+      gapToBackfillRequest(gap, {
+        fillMode: FillMode.GAPS_ONLY,
+        rangeEnd: gap.requestedRange?.end,
+      }),
+      { onSuccess: (res) => setBackfillJobId(res.jobId) },
+    );
+  }
+
+  function handleRerun() {
+    if (gap) setFilledGapKey(gapKey(gap));
+    setBackfillJobId(undefined);
+    handleRun();
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -1242,7 +1283,7 @@ function BacktestsSection({
         </div>
         {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
         {/* A data-less symbol returns a successful RPC with status INSUFFICIENT_DATA + coverage_gaps,
-            not an error — surface it inline and point at the Backfill panel to ingest the history. */}
+            not an error — surface it inline with a backfill of the reported gap. */}
         {runResult && runResult.status === BacktestStatus.INSUFFICIENT_DATA && (
           <div
             className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
@@ -1251,11 +1292,38 @@ function BacktestsSection({
             <Badge variant="warning">Insufficient data</Badge>
             <span>
               No ingested history for {symbol} in this window
-              {runResult.coverageGaps[0]
-                ? ` — has ${runResult.coverageGaps[0].barsHave}, needs ${runResult.coverageGaps[0].barsNeed} bars`
-                : ''}
-              . Ingest it from the Backfill coverage panel, then re-run.
+              {gap ? ` — has ${gap.barsHave}, needs ${gap.barsNeed} bars` : ''}.
             </span>
+            {gap && gapFilled && (
+              <span data-testid="backtest-no-vendor-data">{noVendorDataMessage(gap)}</span>
+            )}
+            {gap && !gapFilled && (
+              <Button
+                size="sm"
+                onClick={handleBackfill}
+                disabled={backfillBusy}
+                data-testid="backtest-backfill-action"
+              >
+                Backfill missing data
+              </Button>
+            )}
+            {jobMessage && <span data-testid="backtest-backfill-status">{jobMessage.text}</span>}
+            {jobMessage?.state === 'ready' && (
+              <Button size="sm" onClick={handleRerun} data-testid="backtest-rerun">
+                Re-run backtest
+              </Button>
+            )}
+            {triggerError && (
+              <span className="text-destructive" data-testid="backtest-backfill-error">
+                {triggerErrorMessage(triggerError, {
+                  symbol,
+                  spanDays: backfillSpanDays({
+                    start: gap?.gap?.start,
+                    end: gap?.requestedRange?.end,
+                  }),
+                })}
+              </span>
+            )}
           </div>
         )}
         {runResult && runResult.status === BacktestStatus.OK && (
