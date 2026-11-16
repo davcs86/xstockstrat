@@ -546,3 +546,11 @@ Tooling setup (steps 2+3): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with
 - Config-key wiring gate: not applicable (no key, no migration, no `## Config Key Changes`).
 - Files modified: `services/xstockstrat-marketdata/docs/fundamentals.md`, `services/xstockstrat-marketdata/docs/context-constitution-findings.md`
 - Deviations: none
+
+## Session 2026-11-16 — Step 10 operator gate: dry run and freeze (orchestrator)
+
+- **Split chosen by the operator** (verbatim: "Split it now"): the operator runs the SQL; the main session records `get_config` and sets the freeze through the staging MCP tools.
+- **Lane A dry run — passed.** The operator ran Q-pre, Q-export (full), Q-export (per chunk, `syms=LYFT,AXP,AAPL`) and Q-ttm once on the homelab DB host, database `xstockstrat-staging`, read-only session (`default_transaction_read_only=on`, `ON_ERROR_STOP=1`). Operator's output, verbatim: `q-pre exit=0`, `q-export-full exit=0`, `q-export-chunk exit=0`, `q-ttm exit=0`. This is the first execution of the design § Step 5 SQL (closes O-38 for these four queries); no text fix to design.md was needed. Query outputs stay on the operator's machine (R-16).
+- **Pre-freeze value** of `marketdata` / `fundamentals.history.enabled` (`get_config`, 2026-11-16 before the flip): homelab staging `true`; DO staging `true`.
+- **Freeze applied** (`set_config`, operator consent "Ok, agreed."): homelab staging at 2026-11-16T05:38:01Z, DO staging at 2026-11-16T05:38:02Z. **Confirmed** with `get_config` right after: `false` on both. Restore to `true` per lane after that lane's re-derive and audit.
+- **Still open in Step 10:** the per-lane pre-exports (Q-pre plus full Q-export, with each symbol's export row count equal to Q-pre's `n`) — operator, lane A then lane B.
