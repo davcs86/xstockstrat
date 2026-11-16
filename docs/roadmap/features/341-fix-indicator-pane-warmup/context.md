@@ -180,6 +180,7 @@ still live.
   resolve, so the main checkout's drop `firstValueBars`). They passed host-native with `--no-deps`.
   `scripts/run-e2e.py` cannot run from a batch worktree, because the repo has no `.dockerignore` and
   the build would copy the `node_modules` symlink. Step 16 needs the field: still open for it.
+  Step 15 also hit it: its RED/GREEN came from an uncommitted vitest render probe, not the e2e.
 - [ ] Show the pin-formula deviation to the operator — Step 4 gate.
 - [x] pgxmock row-error injection has no in-repo use; fallback is `WillReturnError` plus a Deviation
   Log entry — Step 6. Resolved: pgxmock v4.9.0 `CloseError` covers the `rows.Err()` path.
@@ -240,6 +241,8 @@ still live.
   `services/xstockstrat-ui/src/hooks/useIndicatorSeries.ts`, `services/xstockstrat-ui/src/lib/deadlines.ts`.
 - Step 14: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`,
   `services/xstockstrat-ui/e2e/fixtures/indicatorHistory.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.
+- Step 15: `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`,
+  `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`.
 
 Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
@@ -825,4 +828,18 @@ Tooling setup (step 14): node ✓ · pnpm ✓ (linked main-checkout `node_module
 - Config-key wiring gate: not applicable (a `test` step, no migration in **Files**, no `## Config Key Changes` heading).
 - Files modified: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/indicatorHistory.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
 - Deviations: Playwright ran host-native with `--no-deps --timeout=30000` (and `--retries=1`), because the verbatim block's `warmup.setup.ts` times out at 10 s on a cold dev server. `tsc` ran against the branch stubs. `INVENTORY.md` already failed `prettier --check` at `HEAD` and was not reformatted (Deviation Log).
+- Commit trailer: `Co-Authored-By` follows the session attribution reminder (`Claude Opus 5.5`).
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, step 15
+
+Tooling setup (step 15): node ✓ · pnpm ✓ (linked main-checkout `node_modules`) · vitest ✓; no install.
+
+### Step 15 — service: "Not enough history" pane [done]
+- `IndicatorPanels` takes a required `insufficient: ReadonlySet<string>`. `isChartable(c, insufficient)` drops those components from the drawn panes, so the pane count, the `total` height and the crosshair labels agree, and `insufficient` joins the effect dependencies. A component with no `error` that is in the set renders `data-testid="indicator-panel-insufficient"` with `<Eyebrow>{refName}</Eyebrow>` and `<EmptyState title="Not enough history" />`. The error branch keeps precedence, and `indicator-panel-error` and `ComponentSeries.error` are not reused. `IndicatorSection` passes `windowed.insufficient`. No new primitive and no new outbound call.
+- AC-4 red (`.sdd-logs/v-3.log`): with an uncommitted vitest render probe (`renderToStaticMarkup`, explicit set `{sma200}` over `sma200` + `sma20`), `AssertionError: expected [] to have a length of 1 but got +0` on the `indicator-panel-insufficient` count, `Tests 1 failed | 1 passed (2)`. Green (`v-4.log`): `Tests 2 passed (2)`. The probe was deleted before verification. Verbatim block (`v-5.log`, `exit=0`): lint clean (pre-existing warnings in other files only). The grep found `:5` (EmptyState import), `:183` (`indicator-panel-insufficient`) and `:185` (`Not enough history`), and the copy count in `src` was `1`. `tsc` against the branch stubs was clean, and `test:unit` gave `Tests 563 passed | 2 skipped (565)` (`v-6.log`, `exit=0`). Prettier was clean on both files. This step has no coverage gate: the component sits outside `src/lib/**`, and the gate is Step 12's.
+- Config-key wiring gate: not applicable (a `service` step, no migration in **Files**, no `## Config Key Changes` heading).
+- Files modified: `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`, `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`
+- Deviations: RED/GREEN came from a temporary vitest probe, not an e2e, and `tsc` ran against the branch stubs (Deviation Log). The spec's caller cite `page.tsx:1348-1353` now reads `:1374-1380` (line drift only).
 - Commit trailer: `Co-Authored-By` follows the session attribution reminder (`Claude Opus 5.5`).

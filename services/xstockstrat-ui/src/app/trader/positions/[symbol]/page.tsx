@@ -1376,6 +1376,7 @@ function IndicatorSection({
         times={windowed!.times}
         chartRef={chartRef}
         containerRef={containerRef}
+        insufficient={windowed!.insufficient}
       />
     );
   }
