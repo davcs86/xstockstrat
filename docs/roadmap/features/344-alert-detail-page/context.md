@@ -655,3 +655,11 @@ Feature: alert-detail-page (ingest backfill-failure alert body)
 ### Coverage check
 - Source scenarios: 10. Planned: 10 NEW (ui 9, ingest 1), 0 DUP, 0 OVERLAP, 0 CONFLICT.
 ```
+
+## Session 2026-11-16 — operator confirmations before the integration PR (orchestrator)
+
+- Asked: confirm the promotion plan above (10 scenarios verbatim, tags kept: 9 in `services/xstockstrat-ui/acceptance/alert-detail-page.feature`, 1 in `services/xstockstrat-ingest/acceptance/alert-detail-page.feature`)? **Operator, verbatim: "Confirm (Recommended)".** This confirms the last `sdd-batch-promotion-plan` block (P-04).
+- `271 @AC-5` EXTEND (the alert stream now runs in the header on every segment): **Operator, verbatim: "Reword it in 344's PR".** This closes the missing sign-off on the wider behaviour. The exact reworded line still needs the operator's sign-off before it is written; it is NOT part of the confirmed plan block and lands as a separate commit on this branch.
+- Re-spec open decision 1 (stream `onMessage` does not invalidate the unread query; 339's buffer behaviour kept): **Operator, verbatim: "Keep as built (Recommended)".** D-24's invalidate-on-message is superseded for this handler.
+- Merge-order gate: feature 339 merged into main-dev (PR #1550) and main-dev is merged into this branch (a900126ff).
+- Orchestrator decisions made under the standing authorization and reported to the operator (not operator words): Step 18 header change was the operator's ("Fix the header now"); Step 20's cancel-before-invalidate helper and its two test deviations were the orchestrator's.
