@@ -42,7 +42,7 @@ Implementation spec (`/sdd-spec`, 10 steps, tree `feature/fix-fundamentals-roe-u
 - Both staging environments deploy on a push to `main-dev` (`.github/workflows/deploy-dev.yml` calls `deploy-homelab.yml`), so the pre-exports must be taken before the integration PR merges.
 - `DerivationVersion` 2 is free: `merge-order.md` names it only for the launched pair 222/223 (`:82`). `internal/edgar/testdata/` does not exist yet; the LYFT fixture creates it. `internal/repository` and `internal/service` are outside the CI coverage measurement; `internal/edgar`, `internal/source`, `internal/finnhub`, `internal/fmp` are measured.
 - The ingest concurrency-cap steer belongs to a peer feature; the repair stays sequential (one chunk polled to terminal before the next) and does not rely on it.
-- No SQL or config change has been executed in any session. Steps 1 to 9 are done.
+- Steps 1 to 10 are done. Step 10 (2026-11-16, operator and orchestrator): lane A dry run of four read-only queries; `marketdata.fundamentals.history.enabled` frozen to `false` on both stagings (pre-freeze `true` on both, to be restored per lane); pre-exports taken on both lanes. No re-derive or write SQL has run.
 
 ## Open Threads
 
@@ -57,10 +57,10 @@ Closed by the operator answers (see the verbatim session below): O-16, the `@AC-
 - [x] Step 6 mutation proof was hand-run; every new guard failed on its mutation and the mutations were reverted (Step 6 entry below).
 - [x] `buf breaking` against `feature/fix-fundamentals-roe-unit` ran and passed in Step 7, against a temporary local ref at the pre-unit tip `423b85fc5` (created for the run, then deleted).
 - [ ] C-14: no `xstockstrat-ui` or `xstockstrat-agent` step and no follow-up feature is named; the surfaces are checked only post-deploy through the LYFT canary `query_fundamentals`. Decide whether a follow-up is needed — `/sdd-execute` checkpoint.
-- [ ] `max_connections` = 70 / PgBouncer pool 10 was confirmed by the operator but not verified against the live host; budget the Step 10 `psql` sessions against it (F-06) — Step 10 item 1.
-- [ ] The freeze blocks all staging fundamentals backfills in both environments and can collide with peer feature 343 testing (risk acknowledged) — Step 10 item 2.
-- [ ] O-38: the design's SQL has never been run, and the proposer never saw the mediator's corrections (server-side `COPY`, `LEFT JOIN` in Q-ttm, `-v syms` inside the ssh command, the SOPS password on the fallback) — Step 10 item 3, the read-only dry run on lane A, before the freeze.
-- [ ] If v2 reaches a lane before its pre-export, that lane's audit cannot be rebuilt; both stagings deploy on the `main-dev` push, so the pre-exports come before the integration PR merges — Step 10.
+- [ ] `max_connections` = 70 / PgBouncer pool 10 was confirmed by the operator but not verified against the live host; no F-06 budget check of the Step 10 `psql` sessions is recorded — re-check before the post-deploy sessions.
+- [x] The freeze blocks all staging fundamentals backfills in both environments and can collide with peer feature 343 testing — the window is the operator's, who ran the Step 10 dry run after being told the freeze stops fundamentals-history backfills on both stagings.
+- [x] O-38 for Q-pre, both Q-export forms and Q-ttm: the lane A dry run passed (`exit=0` each), no design.md fix needed (Step 10). Q-v1 has still never run — Post-Deploy Procedure.
+- [x] Pre-exports taken on both lanes before the integration PR merges (Step 10); lane A's predates the freeze by minutes, so the post-deploy Q-pre re-run is where a gap write would show.
 - [ ] Step 10 verification is a grep on context.md; it proves the entries exist, not that the freeze or export state is correct. The operator confirms the state — Step 10.
 - [ ] LYFT, AXP and AAPL may not all be stored in each lane — Post-Deploy Procedure (design.md § Step 5 item 1).
 - [ ] Another admin backfill can rewrite rows while a lane is enabled; the subset check only detects it (accepted) — Post-Deploy Procedure (design.md § Step 5 item 4).
@@ -83,6 +83,7 @@ Closed by the operator answers (see the verbatim session below): O-16, the `@AC-
 - Step 6: `services/xstockstrat-marketdata/internal/{finnhub/finnhub_client_test.go,fmp/fmp_client_test.go,edgar/own_period_test.go,service/marketdata_service_test.go}` — `@AC-2` vendor unit guards and `@AC-4` absent/negative guards; tests only.
 - Steps 7+8: `packages/proto/marketdata/v1/marketdata.proto` (comment-only, `roe = 8` and `roe = 13`) and the regenerated `packages/proto/gen/go/marketdata/v1/marketdata.pb.go`, `packages/proto/gen/ts/marketdata/v1/{marketdata.ts,marketdata_pb.ts}`, `packages/proto/gen/ts/dist/marketdata/v1/{marketdata.d.ts,marketdata_pb.d.ts}`.
 - Step 9: `services/xstockstrat-marketdata/docs/{fundamentals.md,context-constitution-findings.md}` — own-period selection and re-derive replace rules; three latent-bug residual rows.
+- Step 10: `docs/roadmap/features/340-fix-fundamentals-roe-unit/context.md` — operator gate record (dry run, freeze, pre-exports); no repository file outside the feature directory.
 
 ---
 
@@ -561,3 +562,12 @@ Tooling setup (steps 2+3): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with
 - **Lane A (homelab staging) pre-export.** The operator's Q-pre and full Q-export outputs from the dry run are used as the pre-export. Completeness check, operator's output, verbatim: `counts match`. **Caveat:** these files were taken a few minutes before the freeze was applied at 05:38:01Z, not after it. They are a valid frozen baseline only if no fundamentals-history backfill wrote in that gap; the post-fix audit's Q-pre re-run (design § Step 5, sequence item 1) is where a breach would show.
 - The completeness check was a shell `diff` of per-symbol counts; it would also print `counts match` on an empty table. Row totals were not relayed.
 - All Step 10 operator actions are now recorded: dry run, pre-freeze values, freeze confirmed `false` on both lanes, pre-export count match on both lanes. Export files stay on the operator's machine (R-16).
+
+## Session 2026-11-16 — sdd-execute sequential (sdd-batch-execute)
+
+### Step 10 — docs: operator gate before the `main-dev` merge (dry run, freeze, pre-export) [done]
+- Evidence is the two orchestrator sessions above (operator's "Split it now"): item 1 met by "Acknowledged" (O-16) and "I confirm it" (`max_connections`); item 2, the 343 freeze window, is the operator's, who ran the dry run after being told the freeze stops fundamentals-history backfills on both stagings; items 3 to 6 recorded there. The executor ran no SQL and no config change. TDD: N/A (docs).
+- Verification (`.sdd-logs/v-3.log`, `exit=0`; re-run of `v-1` after a line-citation fix in this entry): the grep matched O-16 (`:424-427`), `max_connections` (`:432-433`), the pre-freeze `fundamentals.history.enabled` values (`:555`) and both lanes' pre-export lines (`:561-562`); the dry run (`:554`) and the freeze with its `get_config` confirmation (`:556`) were read in the same sessions.
+- Config-key wiring gate `--final` (`.sdd-logs/v-2.log`, `exit=0`): two `REPORTED: … readers-disagree` lines for analysis `marketdata/fundamentals.provider` and trading `platform/trading_state`, neither a key of this feature. status.md → `code-completed`.
+- Files modified: `docs/roadmap/features/340-fix-fundamentals-roe-unit/context.md`
+- Deviations: lane A pre-export taken minutes before the freeze; gate run split between operator and main session (Deviation Log).

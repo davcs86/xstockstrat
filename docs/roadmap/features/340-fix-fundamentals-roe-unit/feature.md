@@ -5,7 +5,7 @@
 **GitHub Issue**: n/a (Issues disabled) — report `docs/reports/2026-11-15-marketdata-roe-value-implausible-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-11-15
-**Last Updated**: 2026-11-15
+**Last Updated**: 2026-11-16
 
 ---
 
@@ -18,6 +18,7 @@
 | 2026-11-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full; rounds cap lifted by the operator) and approved; recon.md + debate.md + design.md written |
 | 2026-11-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 | 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute (sdd-batch-execute setup) | main-dev 9f8856229 merged; steps 1,4 re-spec'd (line drift only); 10 steps pending |
+| 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute (sdd-batch-execute) | Step 10 operator gate recorded (lane A dry run, freeze on both stagings, pre-exports on both lanes); 10/10 steps done; `check-config-wiring.mjs --final` exit 0 |
 
 ---
 

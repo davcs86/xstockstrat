@@ -690,7 +690,7 @@ Then re-read both edits against `edgar_client.go` and `marketdata_repo.go` as th
 
 ### Step 10 — docs: operator gate before the `main-dev` merge (dry run, freeze, pre-export)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: staging operations (homelab staging and DO staging); recorded in `docs/roadmap/features/340-fix-fundamentals-roe-unit/context.md`
 **Files**:
 - `docs/roadmap/features/340-fix-fundamentals-roe-unit/context.md` — modify (append)
@@ -800,4 +800,10 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: the Step 7 and Step 8 Verification blocks, run from the repo root on the host, with the toolchain from `docs/runbooks/codegen-toolchain-host-setup.md` if the host lacks it.
 - **Actual**: the host has no `buf` and no `grpcio-tools`, and this worktree has no `packages/proto/gen/ts/node_modules` (the `tsc` step of `buf-gen.sh` needs it, and Node installs are forbidden in the batch worktree). Both blocks ran unchanged inside the pinned `xstockstrat-codegen` image (`Dockerfile.codegen`: buf 1.72.0, the CI-pinned Go plugins, grpcio-tools 1.80.0, Node 24.20.0, go1.27.4), with the worktree and the main checkout's `.git` mounted at their own paths, the main checkout's `node_modules` and `packages/proto/gen/ts/node_modules` mounted read-only, and the host Go module cache mounted. `buf breaking --against "${GIT_COMMON}#branch=feature/fix-fundamentals-roe-unit,..."` needs a local branch; `refs/heads/feature/fix-fundamentals-roe-unit` was created at `origin/feature/fix-fundamentals-roe-unit` (`423b85fc5`, the pre-unit tip), used for the run and deleted afterwards. Each block ends with a trailing `#` comment, so the wrapper's closing `)` went on its own line. Results: Step 7 `.sdd-logs/v-1.log` `exit=0` (lint and breaking silent; the diff shows exactly the two `roe` lines); Step 8 `.sdd-logs/v-2.log` `exit=0`. A pre-edit `buf-gen.sh` run in the same image left `packages/proto/gen/` clean, so the committed stubs were fresh before the edit.
 - **Disposition**: CI-equivalent fallback; no command text altered.
+- **SEV**: SEV-3
+
+### Step 10 — lane A pre-export taken before the freeze, and the gate run split
+- **Spec said**: Instructions 3 to 6 in order: dry run, record the pre-freeze value, freeze, then the per-lane pre-export with the key frozen (design.md § Step 5, item 1 "Pre-export, frozen").
+- **Actual**: on the operator's choice "Split it now", the operator ran the SQL and the main session ran `get_config` / `set_config`. Lane A's pre-export reuses the dry-run Q-pre and full Q-export files, taken a few minutes before the freeze at 2026-11-16T05:38:01Z; lane B's was taken after the freeze. Both completeness checks printed `counts match`; row totals were not relayed, and the check also passes on an empty table. The executor ran no SQL and no config change; the evidence is the two orchestrator sessions of 2026-11-16 in context.md.
+- **Disposition**: accepted with the caveat recorded in context.md; a write in the lane A gap would show in the post-deploy Q-pre re-run (Post-Deploy Procedure).
 - **SEV**: SEV-3
