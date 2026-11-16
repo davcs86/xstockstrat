@@ -136,7 +136,7 @@ message is in Step 5 (O-27). O-24 is not closed; see Step Dependencies.
 
 ### Step 2 — test: 49 reference tests for the colour-vision helper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/styles/themes/colorVision.test.ts` — create
@@ -540,4 +540,15 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 1 — Verification run shape
 - **Spec said**: three Verification items, each in a fresh shell at the repo root.
 - **Actual**: the three items ran in one log, each in its own `( cd services/xstockstrat-ui && … )` subshell, joined with `&&`. Item 1's printed line was checked against the expected `MACHADO,ciede2000,pairDistances,simulate,toLab function 3`.
+- **Disposition**: mechanical. The commands are unchanged.
+
+### Step 2 — Lab pin source (D-21)
+- **Spec said**: take the four sRGB→Lab pins from Bruce Lindbloom's CIE Color Calculator (sRGB, D65, no adaptation); if the source disagrees with the cross-check values by more than 0.01, stop and ask the operator.
+- **Actual**: the calculator cannot be operated from this environment, so Step 2 blocked. Under the operator's 2026-11-16 choice "colour-science 0.4.7 (Recommended)", the orchestrator picked Option A (an orchestrator decision inside that choice, not the operator's words): keep D-21 and use colour-science 0.4.7 as the computing source, called with the spec's Lindbloom sRGB/D65 matrix and its row-sum white: `colour.XYZ_to_Lab(M @ colour.models.eotf_sRGB(rgb/255), illuminant=colour.XYZ_to_xy(M.sum(axis=1)))`. The executor ran that call (colour-science 0.4.7 from PyPI via `uv run --with`). It gave `53.2408 80.0925 67.2032`, `87.7347 -86.1827 83.1793`, `32.2970 79.1875 -107.8602` and `53.5850 0.0000 0.0000`, which equal the spec's cross-check values to 4 decimals. The test pins these at tolerance 0.01, and its source comment names the package, version and call.
+- **Measured gap against the package default**: colour-science's default sRGB path (`RGB_COLOURSPACE_sRGB`, IEC 61966-2-1 4-decimal matrix `0.4124 0.3576 0.1805 / 0.2126 0.7152 0.0722 / 0.0193 0.1192 0.9505`, whitepoint xy `0.3127, 0.3290`) differs from the pins by up to 0.0205 (red: `53.2329 80.1112 67.2237`; green max 0.0085; blue max 0.0106; grey max 0.0046). The cause is the rounded 4-decimal matrix and the rounded xy white, which is not the matrix's row sum. That gap exceeds the 0.01 tolerance, so the pins must come from the Lindbloom-matrix call above, never from the package default.
+- **Disposition**: orchestrator-decided source substitution under the operator's colour-science choice. No Step 1 change.
+
+### Step 2 — RED method and Verification run shape
+- **Spec said**: RED with `ciede2000` stubbed to return 0 (Step 1's file already exists); Verification items 2-4 each in a fresh shell at the repo root.
+- **Actual**: RED stubbed `ciede2000` with a temporary `return 0;` in `colorVision.cjs`, ran item 1, then restored the file with `git checkout --`; the stub was never committed. Items 2-4 ran in one log, each in its own `( cd services/xstockstrat-ui && … )` subshell joined with `&&`.
 - **Disposition**: mechanical. The commands are unchanged.

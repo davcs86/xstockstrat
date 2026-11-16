@@ -42,9 +42,10 @@ Targets marked "design step" use the design's numbering; see the map in Decision
 - [ ] The feasibility gate may fail (one shared 12-value set clearing five distance floors and 3:1 on two dark cards is tight); stop and escalate to the operator, no per-theme fallback, no lowered floor; only a reorder of the same 12 values is allowed — target: Step 3 (design step 2).
 - [ ] The 12 colour values are the spec author's pick, not the operator's; the operator has not seen or chosen them. If no order passes, the feature is blocked until the operator decides — target: Step 3.
 - [ ] The gate has only been dry-run against the probe's maths, not the real `colorVision.cjs` — target: Step 3.
-- [ ] Machado matrices and the four Lab pins are not transcribed from source (D-21); the authors' page reset the connection in two sessions. The executor transcribes from the source or stops and asks the operator (P-03); probe numbers are advisory until then — target: Steps 1-2.
+- [x] Machado matrices and the four Lab pins are not transcribed from source (D-21); the authors' page reset the connection in two sessions. The executor transcribes from the source or stops and asks the operator (P-03); probe numbers are advisory until then — target: Steps 1-2.
   - Step 1 (2026-11-15): the Machado half is done. Under the operator's Option B, both matrices were transcribed from colour-science 0.4.7 `machado2010.py`, and they equal the cross-check values. The four Lab pins remain open, target: Step 2.
-- [ ] `colorVision.cjs` is outside vitest coverage scope; its 49 reference tests are its only guard — target: Steps 1-2 (design step 1).
+  - Step 2 (2026-11-16): the Lab pins are done. They were computed with colour-science 0.4.7 using the Lindbloom matrix and its row-sum white. This was the orchestrator's Option A, under the operator's "colour-science 0.4.7 (Recommended)" choice. The values match the cross-check values; see the Deviation Log entry "Step 2 — Lab pin source (D-21)". D-21 transcription is closed for Steps 1-2.
+- [x] `colorVision.cjs` is outside vitest coverage scope; its 49 reference tests are its only guard — target: Steps 1-2 (design step 1). Step 2 landed the 49 tests (2026-11-16).
 - [ ] `line.options().color` may be normalized by lightweight-charts v5; compare numeric channels — target: Steps 8-9 (design step 5).
 - [ ] The cleanup reset relies on `components` being reference-stable (`page.tsx:1349`) — target: Steps 8-9 (design step 5).
 - [ ] Check (a) needs a real `pnpm build` for both `UI_THEME` values plus the browser e2e (`fails.md:1462`) — target: Verification of Steps 5 and 9 (design step 6).
@@ -61,6 +62,7 @@ Targets marked "design step" use the design's numbering; see the map in Decision
 Service/UI source (by step):
 
 - Step 1: `services/xstockstrat-ui/src/styles/themes/colorVision.cjs` (created), `services/xstockstrat-ui/src/styles/themes/checkThemeBundle.cjs` (`nonSharedTokens` added to `module.exports`).
+- Step 2: `services/xstockstrat-ui/src/styles/themes/colorVision.test.ts` (created).
 
 SDD artifacts, all under `docs/roadmap/features/342-chart-series-palette/`:
 
@@ -385,3 +387,26 @@ Unresolved items carried into execution. `/sdd-execute` announces each one still
 - Files modified: `services/xstockstrat-ui/src/styles/themes/colorVision.cjs`, `services/xstockstrat-ui/src/styles/themes/checkThemeBundle.cjs`.
 - Deviations: Machado source substitution (operator-approved) and the Verification run shape. Full detail is in the Deviation Log.
 - Still open: O-24, which needs the operator to confirm the "Confirmed"/"Agreed" mapping. It does not affect Step 1, which carries no floor numbers, but it still gates Steps 3 and 5.
+
+## Session 2026-11-16 — sdd-execute sequential (step 2)
+
+- **Lab pin source (blocker at Step 2):** the orchestrator chose Option A. This is the orchestrator's decision, made inside the operator's 2026-11-16 choice "colour-science 0.4.7 (Recommended)"; the operator did not say it. D-21 stands, and colour-science 0.4.7 is the computing source, called with the spec's Lindbloom sRGB/D65 matrix and its row-sum white. There is no Step 1 change.
+
+### Step 2 — test: 49 reference tests for the colour-vision helper [done]
+- Created `colorVision.test.ts` with exactly 49 tests:
+  - 34 Sharma (2005) CIEDE2000 rows. They are copied verbatim from the authors' data file, which was re-fetched this session (sha256 `44aebb39…a4b8` matches).
+  - 2 Machado matrix pins.
+  - 4 white and black fixed points.
+  - 4 Lab pins, recomputed this session with colour-science 0.4.7. They match the cross-check values.
+  - 4 red-column simulation pins.
+  - 1 `pairDistances` shape pin.
+- TDD results (AC-5 maths):
+  - Red: `ciede2000` was stubbed to return 0, and vitest reported `Tests  35 failed | 14 passed (49)`. The first failure was `AssertionError: expected +0 to be close to 2.0425` (exit=1, `.sdd-logs/v-1.log`). The stub was then reverted.
+  - Green: `Tests  49 passed (49)`. `next lint` and `tsc --noEmit` were clean apart from pre-existing warnings in unrelated files. `test:coverage` reported `Tests  599 passed | 2 skipped (601)` and `Lines : 79.36%` (40% or higher) (exit=0, `.sdd-logs/v-2.log`).
+- Config-key wiring gate: N/A. No config key is touched.
+- Files modified: `services/xstockstrat-ui/src/styles/themes/colorVision.test.ts`.
+- Deviations:
+  - The Lab pin source substitution. colour-science's default IEC 4-decimal sRGB path is off by up to 0.0205, so the pins use the Lindbloom-matrix call.
+  - The RED method and the Verification run shape.
+  - Full detail is in the Deviation Log.
+- Still open: O-24, which gates Steps 3 and 5.
