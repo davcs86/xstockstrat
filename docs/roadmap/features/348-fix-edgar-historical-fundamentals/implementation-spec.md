@@ -120,7 +120,7 @@ reverses a settled `D-n` or reopens an `R-n`.
 
 ### Step 1 — docs: restate acceptance.feature (`@AC-1..@AC-11`) and FR-6
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/348-fix-edgar-historical-fundamentals/`
 **Files**:
 - `docs/roadmap/features/348-fix-edgar-historical-fundamentals/acceptance.feature` — modify

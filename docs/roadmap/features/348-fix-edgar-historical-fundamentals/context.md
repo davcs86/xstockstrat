@@ -250,3 +250,22 @@ Three questions were put in one message after the PR was opened. The operator's 
   - Step 14: one docs check is by eye — [ ] unaddressed
   - C-14: no UI or agent step by decision; the note sits in the spec's Consumer Surfaces section, verified on the canary after deploy — [ ] unaddressed
 - Overlap findings: no migration, proto or config collision. File-level WARN only: `internal/telemetry/otel.go` and `telemetry_allowlist_test.go` (337, 341), `marketdata_repo.go` and its test (341), `marketdata_service.go` and its test (347), `services/xstockstrat-marketdata/CLAUDE.md` (341, 347), `docs/context-constitution.md` (347), `.github/workflows/ci.yml` (343, 345). No merge-order row written (no FAIL-level overlap).
+
+## Session 2026-11-16 — sdd-execute (sequential)
+
+- Mode entry and the per-feature up-front confirmation were not asked again: the operator's brief
+  names `/sdd-execute <slug> sequential` as the command to run, and the authorization reference
+  covers progress checkpoints. Reserved gates still stop the run: the C-16 promotion plan, Step 15's
+  staging actions, merging.
+- Re-spec gate: `origin/main-dev` merged into the branch (`2e603f21`; #1557, UI only); ledger-guard
+  clean. The impl-spec review had just re-checked about 40 citations on this tree; no step mismatched,
+  no re-spec.
+- Tooling setup (steps 1–15): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 built with go1.27.0 (at
+  `$(go env GOPATH)/bin`; the 2.5.0 binary on PATH is not used) · node v22.23.4 (root tooling only;
+  no UI step) · python3 ✓ · no database installed or started.
+
+### Step 1 — docs: restate acceptance.feature (`@AC-1..@AC-11`) and FR-6 [done]
+- `acceptance.feature` `@AC-3..@AC-11` written mechanically from the Gherkin block in the step body;
+  `@AC-1`, `@AC-2` untouched. FR-6 restated to the strict rule. TDD: N/A (docs).
+- Files modified: `docs/roadmap/features/348-fix-edgar-historical-fundamentals/acceptance.feature`, `docs/roadmap/features/348-fix-edgar-historical-fundamentals/product-spec.md`
+- Deviations: none

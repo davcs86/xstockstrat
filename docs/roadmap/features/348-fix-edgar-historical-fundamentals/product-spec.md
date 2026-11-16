@@ -78,8 +78,8 @@ date D never returns values filed after D.
   row carries a pre-fix derivation version, no row has `period_end > filed_date`, and no row
   remains under a label the fixed derivation no longer produces for that symbol.
 - **FR-6** — `GetHistoricalFundamentals` with an as-of date D returns, for each period, only values
-  whose filing date is on or before D (no look-ahead), including for filers whose filings repeat
-  `fy`/`fp`.
+  whose filing date is strictly before D (a filing is visible from the day after it was filed; no
+  look-ahead), including for filers whose filings repeat `fy`/`fp`.
 - **FR-7** — Readers that pick "the newest period" or address a period by label keep working
   against the corrected identity: the EDGAR snapshot path (`GetFundamentals` /
   `GetFundamentalsMulti` under `snapshot_source=edgar`), the agent `query_fundamentals` tool,
