@@ -1537,7 +1537,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run build
 cd ../.. && grep -n '"openid-client": "6.8.9"' services/xstockstrat-ui/package.json
 docker compose build --no-cache xstockstrat-ui   # D-50: standalone image builds with the ESM-only dependency
-docker run --rm -d --name ui-smoke -p 3999:3000 -e JWT_SECRET=smoke-secret-min-32-characters-long $(docker compose config --images xstockstrat-ui) && sleep 8 && curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3999/auth/login; docker rm -f ui-smoke   # boot smoke: the standalone server answers (any HTTP status, not a crash)
+docker run --rm -d --name ui-smoke -p 3999:3000 -e JWT_SECRET="$(openssl rand -hex 32)" $(docker compose config --images xstockstrat-ui) && sleep 8 && curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3999/auth/login; docker rm -f ui-smoke   # boot smoke: the standalone server answers (any HTTP status, not a crash)
 ```
 
 ---
