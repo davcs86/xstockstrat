@@ -329,7 +329,7 @@ grep -n "alpacaAdaptiveRateLimit\|adaptive_rate_limit_enabled" services/xstockst
 
 ### Step 4 — test: marketdata client pacing, retry, telemetry and the FMP guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/export_test.go` — create

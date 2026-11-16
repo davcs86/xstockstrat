@@ -303,3 +303,21 @@
   the window. `Reservation` does not say whether a wait is a slot or a hold, so the client cannot log
   holds only without widening the core API. Raised at the Step 4 checkpoint.
 - Deviations: none
+
+### Step 4 — test: marketdata client pacing, retry, telemetry and the FMP guard [done]
+- 14 scenario tests plus the static-ceiling refusal case in `client_test.go` (fake clock, scripted
+  `RoundTripper` that keeps the Alpaca host, WARN recorder), the FMP guard, and the kill-switch reader
+  test in `main_test.go`. `export_test.go` exposes exactly four setters.
+- TDD red (Step 3 fields and seams present, `do` a single attempt): FAIL — AC-1, AC-3, AC-4, AC-5,
+  AC-6, AC-14, AC-19, AC-21, AC-22 and the static-ceiling refusal case, each on an assertion. Guards
+  passed as designed ("red N/A — pins unchanged behavior"): AC-2, AC-7, AC-8, AC-9, AC-24, AC-11.
+- Guard mutants run this session, each turning its test red: AC-2 key by credential only; AC-8 a
+  missing header read as `Remaining 0`; AC-24 refuse a caller that cannot wait for its slot; AC-7 skip
+  the static limiter when adaptive; AC-9 ignore the switch. AC-11's mutant (a retry in the FMP client)
+  was not run: it needs an edit to FMP production code outside this step.
+- TDD green: 15/15 scenario tests pass with `-race` (`F347_AC(1|…|24)` → 15 top-level PASS); the
+  reader test passes (1); whole service `go test ./... -race` exit 0; coverage total 85.1% (>= 40%);
+  `golangci-lint` 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/alpaca/export_test.go` (new),
+  `internal/alpaca/client_test.go`, `internal/fmp/fmp_client_test.go`, `cmd/server/main_test.go`
+- Deviations: none
