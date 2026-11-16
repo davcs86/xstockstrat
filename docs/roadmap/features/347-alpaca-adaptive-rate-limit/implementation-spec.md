@@ -134,7 +134,7 @@ the client or service step listed beside it.
   job builds `scripts/Dockerfile.migrate` for it (`.github/workflows/ci.yml:1274-1282`) and then checks
   the fresh heal dry-run (`:1284-1290`); Step 11 gives both commands. If the set cannot be generated the
   step is blocked (P-03); the JSON is never edited by hand.
-- **Volatile at merge:** config `051` is the next free number on this tree
+- **Volatile at merge:** config `052` is the next free number on this tree (341 landed `050`, 343 landed `051`)
   (`ls config/migrations | tail -1` → `050_ui_chart_history_bars.up.sql`). Features 343 and 330 still
   name `050` on their branches (`docs/roadmap/features/merge-order.md:413-417`). Re-derive the number at
   Step 11 and at the integration PR; a renumber means regenerating `scripts/config-wiring-stored.json`.
@@ -372,7 +372,7 @@ grep -n "alpacaAdaptiveRateLimit\|adaptive_rate_limit_enabled" services/xstockst
    - **AC-24** (guard): state `200 / 4 / now+4 s`; after one bars request with a 30 s deadline, `GetLatestQuote("NVDA")` with a 500 ms deadline is sent with no sleep and succeeds. Red under a "refuse a caller that cannot wait for its slot" mutant (R-9).
    - Also pin the static-ceiling refusal: with `RateLimitRPS 1`, adaptive on and an already-expired deadline on the second call, the error contains `rate limited` and the host and the point reads `ctx`.
 4. **AC-11** in `fmp_client_test.go` (guard, named with the same `_F347_AC11` suffix): a local `RoundTripper` answers a 429 with `X-RateLimit-Reset` 2 s ahead; with `gatewayClient(rt, 0, 3, nil)` one `FetchSector` call returns an error, the transport saw exactly 1 request and `BudgetSnapshot()` reports `used == 0`. Red if a retry is ever added to the FMP client.
-5. Config-key wiring, in `main_test.go`: add `TestAlpacaAdaptiveRateLimit_ReadsSeededKey_347`. Build `config.MustSnapshotWatcher("marketdata", …)` with `alpaca.adaptive_rate_limit_enabled` as a bool ConfigValue `true` and assert `alpacaAdaptiveRateLimit` returns true (this is the value migration 051 seeds). Repeat with `false`, which must return false, and with the key absent, which must return true (the code default).
+5. Config-key wiring, in `main_test.go`: add `TestAlpacaAdaptiveRateLimit_ReadsSeededKey_347`. Build `config.MustSnapshotWatcher("marketdata", …)` with `alpaca.adaptive_rate_limit_enabled` as a bool ConfigValue `true` and assert `alpacaAdaptiveRateLimit` returns true (this is the value migration 052 seeds). Repeat with `false`, which must return false, and with the key absent, which must return true (the code default).
 6. RED: with Step 3's fields and seams present and `do` still a single attempt, every non-guard test fails on an assertion (attempt counts, wait times, points or error text). Record the guards as "red N/A — pins unchanged behavior" with their mutant.
 7. Real-time cost of this step's tests: about 2.5 s (AC-6), 2 s (AC-7) and 3.5 s (AC-21); everything else runs on the fake clock.
 
@@ -583,7 +583,7 @@ node scripts/check-config-wiring.mjs --doc-check              # exit 0
    - FR-5 degradation: responses with no rate-limit headers never cause a sleep; a 429 with no headers still retries on backoff.
    - A mutation whose caller cancels during a wait still sends its retry (the loop is detached); a read whose caller cancels during a wait returns `ErrRateLimited`, not `context.Canceled`.
    - `ErrRateLimited` is never `ErrInvalidCredentials`, and a 401 on a retry still returns `ErrInvalidCredentials` (TRADING-3).
-5. `trading_rate_limit_test.go` (`package service`): `TestRateLimitBudget` — table over `rateLimitBudget(enabled, t, stale)`: `(true, 5 s, 30 s) → 20 s`, `(true, 5 s, 15 s) → 5 s`, `(true, 10 s, 15 s) → 10 s`, `(true, 1 s, 30 s) → 28 s`, `(false, 5 s, 30 s) → 0`. `TestAlpacaRateLimitBudget_FollowsConfig` — with `MustSnapshotWatcher` values `broker.timeout_ms`/`order_intent.stale_multiplier` of 5000/3.0, 5000/1.5, 10000/1.5 and 1000/3.0 the method returns 20, 5, 10 and 28 s; with `broker.adaptive_rate_limit_enabled` false it returns 0; with the key absent it returns the enabled value; and with the key present as bool `true` (the value migration 051 seeds) it returns the enabled value (`20 s` at 5000/3.0).
+5. `trading_rate_limit_test.go` (`package service`): `TestRateLimitBudget` — table over `rateLimitBudget(enabled, t, stale)`: `(true, 5 s, 30 s) → 20 s`, `(true, 5 s, 15 s) → 5 s`, `(true, 10 s, 15 s) → 10 s`, `(true, 1 s, 30 s) → 28 s`, `(false, 5 s, 30 s) → 0`. `TestAlpacaRateLimitBudget_FollowsConfig` — with `MustSnapshotWatcher` values `broker.timeout_ms`/`order_intent.stale_multiplier` of 5000/3.0, 5000/1.5, 10000/1.5 and 1000/3.0 the method returns 20, 5, 10 and 28 s; with `broker.adaptive_rate_limit_enabled` false it returns 0; with the key absent it returns the enabled value; and with the key present as bool `true` (the value migration 052 seeds) it returns the enabled value (`20 s` at 5000/3.0).
 6. RED: with Step 7's symbols present, `do` a single attempt and `rateLimitBudget` returning 0, every non-guard test fails on an assertion. Guards (AC-10, AC-20) are recorded with their mutant.
 7. Real-time cost: about 2.5 s (AC-27); everything else runs on the fake clock.
 8. Trading-domain: Alpaca only, IBKR unaffected (no `ibkr*.go` test changes). Order types: AC-12 exercises MARKET and LIMIT; STOP, STOP_LIMIT and TRAILING_STOP use the same replayed body and are unaffected. Fill handling is unaffected (`PARTIALLY_FILLED` and `FILLED` processing is not touched by the client).
@@ -738,8 +738,8 @@ grep -n "PARTIALLY_FILLED" internal/service/trading_rate_limit_test.go    # the 
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/051_alpaca_adaptive_rate_limit_keys.up.sql` — create
-- `services/xstockstrat-config/migrations/051_alpaca_adaptive_rate_limit_keys.down.sql` — create
+- `services/xstockstrat-config/migrations/052_alpaca_adaptive_rate_limit_keys.up.sql` — create
+- `services/xstockstrat-config/migrations/052_alpaca_adaptive_rate_limit_keys.down.sql` — create
 - `scripts/config-wiring-stored.json` — modify (generated by `scripts/config-wiring-stored.py`)
 - `scripts/config-wiring.json` — modify (remove the two Step 3 / Step 7 `read-unseeded` entries)
 - `docs/patterns/config-governance.md` — modify
@@ -748,7 +748,7 @@ grep -n "PARTIALLY_FILLED" internal/service/trading_rate_limit_test.go    # the 
 **Reviewers**: DBA — migration NNN numbering, up+down pair present, run-order compliance with `scripts/db-migrate.sh`; `xstockstrat-config` owner — config key naming, environment / global-per-user scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Last config migration on this tree: `050_ui_chart_history_bars` (`ls config/migrations | tail -2`). Next free is `051`. Claims on other branches: `merge-order.md:413-417`.
+- Last config migration on this tree: `051_ingest_backfill_self_serve_keys` (`ls config/migrations | tail -2`). Next free is `052`. Claims on other branches: `docs/roadmap/features/merge-order.md` § "Config seed number and Alpaca client overlap: 347".
 - Seed shape with the actor sentinel: `config/migrations/050_ui_chart_history_bars.up.sql` — columns `(namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by, environment, user_id)`, one row per environment, `user_id` NULL, ending `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
 - A bool row stores `value_data` `'true'`: `config/migrations/001_config_tables.up.sql:65`; the server parses it as `row.value_data === 'true'` (`config/src/__tests__/configValueRoundtrip.test.ts:157`).
 - Guarded down: `config/migrations/050_ui_chart_history_bars.down.sql` (sentinel actor, `user_id IS NULL`, key and seeded `value_data`); multi-key form with load-bearing outer parentheses: `049_notify_commsgun_channel_keys.down.sql:5-18`.
@@ -767,7 +767,7 @@ grep -n "PARTIALLY_FILLED" internal/service/trading_rate_limit_test.go    # the 
 **Covers**: —
 
 **Instructions**:
-1. Re-derive the number first (`ls services/xstockstrat-config/migrations | tail -2`). If `051` is taken, use the next free number, update `merge-order.md` § "Config seed number and Alpaca client overlap" and record the renumber in the Deviation Log. Step 12's lookup is number-free.
+1. Re-derive the number first (`ls services/xstockstrat-config/migrations | tail -2`). If `052` is taken, use the next free number, update `merge-order.md` § "Config seed number and Alpaca client overlap" and record the renumber in the Deviation Log. Step 12's lookup is number-free.
 2. `…_alpaca_adaptive_rate_limit_keys.up.sql`, two-line header in the 050 style, then two statements.
    - Statement 1: one `INSERT INTO config.config_values` in the 050 column list with four rows — (`marketdata`, `alpaca.adaptive_rate_limit_enabled`) and (`trading`, `broker.adaptive_rate_limit_enabled`), each for `staging` and `production` — `value_type` `'bool'`, `value_data` `'true'`, `default_value` `'true'`, `consuming_service` `'xstockstrat-marketdata'` / `'xstockstrat-trading'`, `updated_by` `'system:config-migration-feature-alpaca-adaptive-rate-limit'`, `user_id` `NULL`, ending `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
    - Description, marketdata key (same on both rows): `Kill switch for adaptive Alpaca REST pacing in marketdata. When true the client paces requests from the X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset response headers and retries an HTTP 429 inside the call. When false it behaves as before feature 347: only the static backfill.rate_limit_rps limiter applies and a 429 is returned to the caller. Read live on every Alpaca request.`

@@ -222,3 +222,16 @@
 - Overlap findings: no FAIL-level collision (migration 051, both keys and `internal/alpacapace/` are
   unclaimed). Seven same-file overlaps (322, 323, 311, 312, 321, 341) recorded in
   `docs/roadmap/features/merge-order.md`.
+
+## Session 2026-11-16T08:40Z — branch sync before merging the docs PR
+
+- `origin/main-dev` moved again (340, 343 merged); merged into `ccr-47ce6aaf-i0ffis` with no conflict.
+- Feature 343 landed `051_ingest_backfill_self_serve_keys`, so this feature's config migration is now
+  **052** (`052_alpaca_adaptive_rate_limit_keys`). product-spec.md, design.md, implementation-spec.md
+  and the merge-order note were updated. The number is still re-derived at Step 11.
+- main-dev also changed files the implementation spec cites by line:
+  `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`,
+  `internal/fmp/fmp_client_test.go`, `internal/repository/marketdata_repo.go`,
+  `scripts/config-wiring-stored.json`, `docs/patterns/config-governance.md`. The spec's line anchors in
+  those files were NOT re-verified after this merge; `/sdd-execute` discovery must re-read them
+  (Step 4, Step 6, Step 11).

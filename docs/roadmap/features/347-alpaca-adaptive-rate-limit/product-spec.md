@@ -185,8 +185,8 @@ Two new keys. Both are bools with an explicit `true` code default (a missing key
 disabled). Live mechanism for both: the service's `WatchConfig`-backed watcher, read with
 `GetBool(key, true)` on every Alpaca request, so a `SetConfig` takes effect on the next call with no
 restart. Both are seeded `true` as global rows for staging and production by one new `xstockstrat-config`
-migration pair, `051_alpaca_adaptive_rate_limit_keys.up.sql` / `.down.sql` (051 is the next free number on `main-dev` since
-feature 341 landed `050_ui_chart_history_bars`; features 343 and 330 still name 050 on their branches; the rule is recorded in `docs/roadmap/features/merge-order.md`
+migration pair, `052_alpaca_adaptive_rate_limit_keys.up.sql` / `.down.sql` (052 is the next free number on `main-dev`: feature 341
+landed `050_ui_chart_history_bars` and feature 343 landed `051_ingest_backfill_self_serve_keys`; feature 330 still names 050 on its branch; the rule is recorded in `docs/roadmap/features/merge-order.md`
 § "Config seed number and Alpaca client overlap: 347 ↔ 341, 343, 330, 322, 323 (2026-11-16,
 non-blocking)": the number is re-derived at execute and at the
 integration PR, and the later merger regenerates `scripts/config-wiring-stored.json`).
@@ -201,7 +201,7 @@ integration PR, and the later merger regenerates `scripts/config-wiring-stored.j
   to the existing `Timeout: func() ... brokerCallTimeout(s.cfgW)` at the `broker.NewClient` call.
 
 Existing key with changed meaning: `marketdata.backfill.rate_limit_rps` becomes a ceiling over the
-adaptive rate (FR-4). Its type, default and bounds are unchanged. The same migration 051 updates its
+adaptive rate (FR-4). Its type, default and bounds are unchanged. The same migration 052 updates its
 seeded description. `services/xstockstrat-marketdata/CLAUDE.md` already states the key is read live per
 request (stale "read at startup" wording corrected 2026-11-16); its row gains the ceiling wording when FR-4 lands.
 
