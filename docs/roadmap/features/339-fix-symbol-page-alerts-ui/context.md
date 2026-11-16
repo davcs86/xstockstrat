@@ -599,3 +599,19 @@ Asked directly, answered verbatim by the operator (2026-11-15):
 - TDD: AC-6/AC-11/AC-12 red: Vitest 12 failed / 132 passed (e.g. `expected '.data-checked\:bg-primary[data-checke…' to contain '[data-state="checked"]'`; the questionnaire row passes). e2e: `@AC-11` failed on `not.toHaveCSS` (`oklab(1 0 0 / 0.135)` both ways); with `--timeout=90000`, `@AC-6` failed at the thumb-position poll (`aria-checked="true"` held), the `@AC-12` tab failed on `not.toHaveCSS` (`rgba(0, 0, 0, 0)` both ways), and `@AC-7` passed ("red N/A — no behaviour change; characterization test added", as for the questionnaire row). Green: Vitest 144 passed (5 files), prettier, lint and `tsc --noEmit` clean. The Playwright command with `--timeout=90000` passed 85 of 86, including all four new or extended tests and every `theme-bundle` aria snapshot. Coverage: no `src/lib/**` code was added, so the 40% gate is unaffected.
 - Deviations: CI-equivalent fallback (`--timeout=90000`; the unchanged command had 22 harness timeouts, none an assertion). `mobile-sidebar.spec.ts:77` is a pre-existing cold-start flake: it fails the same way on the base `globals.css`. Full detail in Deviation Log. Config-key wiring gate N/A.
 - Closed: the Step 10 "not run" item. The `navigator.serviceWorker.ready` override works in headless Chromium. The open thread on the OS colour scheme deciding the thumb colour is unchanged (no colour is asserted).
+
+## Session 2026-11-15 — sdd-execute sequential, Steps 11+12 (atomic unit)
+
+- O-24 operator gate: already answered "Confirmed" (operator-answers session above); no re-spec, the capped drain stands.
+
+### Step 11 — service: unread-alert helpers in `alertShared.ts` [done]
+- Unit 11+12. `alertShared.ts` gains the `UnreadLike` type, exported `UNREAD_PAGE_SIZE = 50`, a private newest-first `compareCreatedAt` (missing timestamp first), `mergeUnread` (de-dup on `alertId`, stored copy kept, `readIds` dropped, sorted), `pruneStreamed` (keep if in the result or `seq >= fetchSeq`) and `drainUnread` (injected `list`/`mark`, cutoff ties eligible, unexported cap `MAX_DRAIN_BATCHES = 20` with its load-note constraint comment; `done` on a short page, `capped` on a full page with no eligible id or at the cap, `error` with the ids marked so far). No React or client import.
+- Files modified: `services/xstockstrat-ui/src/lib/alertShared.ts`
+- TDD: red/green recorded under Step 12 (one cycle for the unit). Step 11 Verification (`pnpm run lint && pnpm exec tsc --noEmit`): exit=0, pre-existing lint warnings only, none in touched files.
+- Deviations: none for this step (see Step 12).
+
+### Step 12 — test: unread-alert helpers [done]
+- Unit 11+12. Fixtures `DRAWER_ALERT_BASE_SECONDS`, `DRAWER_ALERT_STORED_UNREAD`, `DRAWER_ALERT_STORED_READ`, `DRAWER_ALERT_STREAMED`, `DRAWER_ALERT_CLEAR_A`, `DRAWER_ALERT_CLEAR_B` (Connect-JSON `createdAt`, not in the shared mock lists) with one `INVENTORY.md` row; `src/lib/alertShared.test.ts` with 4 `mergeUnread`, 1 `pruneStreamed` and 7 `drainUnread` cases against an in-memory notify.
+- Files modified: `services/xstockstrat-ui/src/lib/alertShared.test.ts`, `services/xstockstrat-ui/e2e/fixtures/{alerts.ts,INVENTORY.md}`
+- TDD: AC-5/AC-9/AC-10 red against signature-only helpers: 12 failed / 12 (e.g. `expected [] to deeply equal [ 'alert-drawer-streamed', …(1) ]`, `expected 'done' to be 'capped'`) → green: 12 passed; `test:coverage` 81 files, 582 passed / 2 skipped, Statements 79.29%, Functions 81.38%, Lines 80.44% (≥ 40%; `alertShared.ts` 97.22% statements); lint (pre-existing warnings only) and `tsc --noEmit` clean; `grep` lists the `DRAWER_ALERT_` row.
+- Deviations: block exit status is the trailing `grep`'s; INVENTORY row line drift; fixture details the spec left open — full detail in Deviation Log. Config-key wiring gate N/A (no key touched).

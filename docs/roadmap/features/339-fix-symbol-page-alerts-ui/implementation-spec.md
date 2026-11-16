@@ -851,7 +851,7 @@ Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
 
 ### Step 11 — service: unread-alert helpers in `alertShared.ts`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/alertShared.ts` — modify
@@ -915,7 +915,7 @@ The union with Step 12. On its own: `cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 12 — test: unread-alert helpers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/alertShared.test.ts` — create
@@ -1327,3 +1327,19 @@ _Populated by /sdd-execute as implementation proceeds._
   failed on `not.toHaveCSS` (`rgba(0, 0, 0, 0)` both ways) and `@AC-7` passed (characterization).
   **Disposition**: recorded; no unverified AC — `@AC-6`, `@AC-7`, `@AC-11` and the `@AC-12` tab
   passed in a real Playwright run.
+
+### Steps 11+12 — unread-alert helpers and their Vitest (2026-11-15, SEV-3)
+
+- **Block exit status is the trailing `grep`'s.** As in Steps 7+8, the Step 12 Verification block
+  ends with `grep`, so its `exit=0` alone proves nothing; the RED run also printed `exit=0`. Both
+  runs were judged on their logs (RED 12 failed / 12, GREEN 12 passed, the chain reaching `tsc`).
+  **Disposition**: recorded; no spec change.
+- **`INVENTORY.md` alerts row is at `:53`, not `:50`.** Line drift from earlier steps; the new
+  `DRAWER_ALERT_*` row sits directly below it. **Disposition**: recorded.
+- **Fixture details the spec left open.** Ids `alert-drawer-*`; severity 3 for the two "failed"
+  backfills, 1 for the read one, 2 for "Daily loss limit reached"; `DRAWER_ALERT_STREAMED` carries
+  no `read` field, like the existing stream fixtures. The unit test converts each fixture's ISO
+  `createdAt` back to seconds (`Date.parse`) instead of re-stating the offsets. **Disposition**:
+  in-scope choices, no spec change.
+- **`mergeUnread` keeps the stored copy on a duplicate id** (stored before streamed); the spec
+  named de-duplication only. **Disposition**: in-scope choice.
