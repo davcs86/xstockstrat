@@ -582,7 +582,7 @@ Expected: the `src/lib/**` thresholds (lines, functions, statements ≥ 40%) hol
 
 ### Step 13 — service: the alert page and the nav match
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/notifications/[alert_id]/page.tsx` — create
@@ -1086,4 +1086,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 12 — RED against the pre-Step-11 `alertShared.ts`; Verification run in a private mount namespace (2026-11-15)
 - **Planned**: `alertShared.test.ts` fails first (`contextEntries` not exported); the Verification block runs on the host.
 - **Actual**: (1) Step 11 had already landed, so RED ran the step's Verification with `src/lib/alertShared.ts` temporarily restored from `f22410b3c` (the commit before Step 11), then restored to the committed file; only the two test files are staged. RED failed at `tsc --noEmit` (`TS2305 … has no exported member 'contextEntries'` / `'formatWhen'`), before vitest ran. (2) The linked `node_modules` resolve `@xstockstrat/proto` to the main checkout's stubs, which lack `GetAlert` (needed by `e2e/mock-backend.ts` under `tsc`), so each run went through `unshare -m` with this branch's `packages/proto/gen/ts/dist` bind-mounted (namespace-only) over the main checkout's `dist`. No network namespace: the block has no e2e. The block itself ran verbatim.
+- **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
+
+### Step 13 — RED probe held uncommitted; Verification run in a private namespace under CI mode (2026-11-15)
+- **Planned**: Step 14's page spec fails first (the route is a 404); the Verification block runs on the host.
+- **Actual**: (1) Step 13 and Step 14 do not land together and the page cases are Step 14's, so a temporary spec (`e2e/accounts/alert-page-probe.spec.ts`: `@AC-1` details, context rows and `Read`, `@AC-3` "No context fields", `@AC-2` "Alert not found") was run RED and GREEN, then deleted; it is not committed. RED failed on `getByTestId('alert-detail')` `element(s) not found` (3 failed). (2) The linked `node_modules` resolve `@xstockstrat/proto` to the main checkout's stubs, which lack `GetAlert`, and another worktree's e2e held port 9091 (first RED attempt: `EADDRINUSE 127.0.0.1:9091`), so each run went through `unshare -m -n`: loopback up, this branch's `packages/proto/gen/ts/dist` bind-mounted (namespace-only) over the main checkout's `dist`, and the egress proxy relayed in over a unix socket (`next/font` fetches Roboto at build). RED and GREEN ran with `CI=1` (production build), the Verification block with `CI=1 E2E_PREBUILT=1` on that build. The block itself ran verbatim; its closing `)` sits on its own line because its last line ends in a `#` comment. (3) The `PlatformHeader.tsx:94` edit was made as written (design.md §5); the operator keep/drop question on it (C-18) was not raised, under the standing "do not stop at checkpoints" authorization, and stays listed as unaddressed.
 - **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
