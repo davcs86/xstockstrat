@@ -123,3 +123,85 @@ operationally risky (see feature 153 `design.md` § Rejected Alternatives).
 
 If 53200 ever recurs after both pieces are in place, check assumption 1 above (protocol/plan change)
 and the concurrency term before re-tuning — do not re-guess.
+
+---
+
+## Homelab deep indicator history
+
+**Feature:** 341 (`fix-indicator-pane-warmup`) · **Applies to:** the homelab `staging` deployment only
+
+Config key `ui` / `chart.indicator_history_bars` (int, default `200`, write bound [200, 1000]) sets how
+many bars the `/trader` symbol page fetches for its indicator panes. The chart still draws the latest
+200. A deeper fetch gives long-lookback indicators (SMA200) a full line, and it widens the implicit
+marketdata `GetBars` window to three times the bar count, so every page load and 300 s poll scans more
+`marketdata.ohlcv` chunks.
+
+- **DigitalOcean stays at 200.** Staging and production share one managed database, so their scans
+  add up against one lock table.
+- **The homelab runs 1000.** It has its own database. Only its `staging` row is set; there is no
+  homelab production deployment.
+- Nothing but the key description, this runbook and the breach counter below stops an admin from
+  setting 1000 on DigitalOcean. The write bound allows it.
+
+### Budget of record
+
+Same invariant as above; a window not aligned to chunk boundaries touches one chunk more than
+`⌈window ÷ chunk_interval⌉`.
+
+| Deployment | Depth | Implicit window | Locks per scan | Budget | Result |
+|---|---|---|---|---|---|
+| DigitalOcean (shared DB) | 200 | 600 days | at most 2,400 (1-day chunks) | 9,600 at 4 scans of 25,600 | unchanged from before feature 341 |
+| Homelab (own DB) | 1000 | 3000 days | at most 404 (101 thirty-day chunks × 4) | 28,280 at c = 70 of 71,680 | passes |
+
+- Homelab budget: `max_locks_per_transaction` 1024 × (`max_connections` 70 +
+  `max_prepared_transactions` 0) = 71,680. Values of record: `homelab-edge`
+  `roles/db_host/defaults/main.yml` (`max_connections`, `max_locks_per_transaction`);
+  `max_prepared_transactions` is not set there, so it is the stock 0.
+- The homelab gate certifies at c = `max_connections`, the worst case.
+- 1-day chunks fail it: 8,280–12,000 locks per scan at a 3000-day window. A homelab database gets
+  them only if it was restored from a DigitalOcean dump; a fresh deploy runs migration `004` before
+  the first insert and creates 30-day chunks.
+- **Rule:** feature 153 `@AC-1` (`services/xstockstrat-marketdata/acceptance/fix-ohlcv-chunk-lock-oom.feature`)
+  is PRESERVE on DigitalOcean at 200 and **PRESERVE-at-risk** on any deployment that runs the
+  1000-bar depth (operator sign-off 2026-11-15).
+
+### Preconditions (read-only, in order)
+
+1. **`homelab-edge` `verify` is green** with its PR #79 applied. Its task
+   `roles/db_host/tasks/verify.yml` asserts `max_locks_per_transaction` = 1024. It does not assert
+   `max_connections` or `max_prepared_transactions`, hence step 2. A rename of that task in
+   `homelab-edge` silently removes this check.
+2. **One `psql` read over SSH** against the staging database. For the SSH path and the database
+   name (`xstockstrat-<env>`) see `homelab-edge` `docs/runbooks/db-host.md` § Manual access; for the
+   general rules see `docs/runbooks/operator-db-access.md` § Safety. On the database host:
+
+   ```sh
+   sudo -u postgres psql -X -d xstockstrat-staging \
+     -c "SHOW max_connections;" \
+     -c "SHOW max_prepared_transactions;" \
+     -c "SELECT range_end - range_start AS width, count(*) FROM timescaledb_information.chunks WHERE hypertable_schema = 'marketdata' AND hypertable_name = 'ohlcv' GROUP BY 1 ORDER BY 1;"
+   ```
+
+   Expected: `70`, `0`, and only `30 days` chunks. The chunk query is new; check its output by eye
+   on first use.
+3. **The key is seeded.** `list_config_keys` with namespace `ui` on the homelab MCP lists
+   `chart.indicator_history_bars` (config migration `050_ui_chart_history_bars` is applied).
+
+**A differing value** means recompute the inequality with the observed numbers. Any failure
+escalates to the operator. Never ship 200 silently and never lower the gate.
+
+### Launch steps
+
+1. On the homelab MCP, with an admin session: `set_config` namespace `ui`, key
+   `chart.indicator_history_bars`, `value_type` `int`, value `1000`, `create_key` left `false`, and a
+   `reason`. Then `get_config` namespace `ui` and confirm `1000`. A `NOT_FOUND` means the seed
+   migration is missing: do not create the key by hand.
+2. Reload the LYFT symbol page (an open tab keeps the depth it read, 200) and confirm the SMA200
+   line draws.
+3. Observation, not a pass/fail load test: after loading several deep-history symbol pages, check
+   that `marketdata.ohlcv.out_of_memory_errors{op="recent_bars"}` shows no increase or is absent.
+   Positive control: `GetBars` spans or `marketdata.db.pool.empty_acquire_wait` show the reads ran.
+   A readiness cycle is not this check: it uses the fixed 400-day window.
+
+The counter counts every SQLSTATE 53200 on the bar paths, so it detects a breach; it does not
+prevent one.

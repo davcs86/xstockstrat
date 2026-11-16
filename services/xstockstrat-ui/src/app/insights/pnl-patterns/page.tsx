@@ -101,7 +101,10 @@ export default function PnLPatternsPage() {
                 <p className="text-sm text-muted-foreground">No positive factors yet.</p>
               )}
               {positive.map((f) => (
-                <FactorCard key={`pos-${f.factorType}-${f.factorName}-${f.valueRangeLow}`} factor={f} />
+                <FactorCard
+                  key={`pos-${f.factorType}-${f.factorName}-${f.valueRangeLow}`}
+                  factor={f}
+                />
               ))}
             </CardContent>
           </Card>
@@ -116,7 +119,10 @@ export default function PnLPatternsPage() {
                 <p className="text-sm text-muted-foreground">No negative factors yet.</p>
               )}
               {negative.map((f) => (
-                <FactorCard key={`neg-${f.factorType}-${f.factorName}-${f.valueRangeLow}`} factor={f} />
+                <FactorCard
+                  key={`neg-${f.factorType}-${f.factorName}-${f.valueRangeLow}`}
+                  factor={f}
+                />
               ))}
             </CardContent>
           </Card>

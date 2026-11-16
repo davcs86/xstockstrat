@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import type { IChartApi, ISeriesApi, MouseEventParams } from 'lightweight-charts';
 import type { ComponentSeries } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { resolveChartColor } from '@/lib/chartColors';
 import { toLineData } from '@/lib/indicatorChart';
@@ -16,8 +17,8 @@ const INDICATOR_PANE_HEIGHT = 120;
 const SERIES_TOKENS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5'] as const;
 const SERIES_FALLBACK = ['teal', 'slateblue', 'goldenrod', 'indianred', 'silver'] as const;
 
-function isChartable(c: ComponentSeries): boolean {
-  return !c.error && c.series.length > 0;
+function isChartable(c: ComponentSeries, insufficient: ReadonlySet<string>): boolean {
+  return !c.error && c.series.length > 0 && !insufficient.has(c.refName);
 }
 
 type ReadoutRow = { label: string; value: string };
@@ -40,11 +41,14 @@ export function IndicatorPanels({
   times,
   chartRef,
   containerRef,
+  insufficient,
 }: {
   components: ComponentSeries[];
   times: IndicatorSeriesInput['times'];
   chartRef: React.RefObject<IChartApi | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  /** refNames whose first value lies before the returned history; they get no pane and no series. */
+  insufficient: ReadonlySet<string>;
 }) {
   // Unified crosshair readout: one combined price + per-indicator value at the hovered bar.
   const [readout, setReadout] = useState<ReadoutRow[] | null>(null);
@@ -59,7 +63,7 @@ export function IndicatorPanels({
     let usedContainer: HTMLDivElement | null = null;
     let crosshairHandler: ((param: MouseEventParams) => void) | null = null;
     const added: ISeriesApi<'Line'>[] = [];
-    const chartable = components.filter(isChartable);
+    const chartable = components.filter((c) => isChartable(c, insufficient));
     // The parity times are protobuf-es Timestamps ({ seconds: bigint }); the request-input type is
     // a wider union incl. undefined — narrow to the mapper's shape.
     const paneTimes = (times ?? []) as { seconds: bigint | number }[];
@@ -150,7 +154,7 @@ export function IndicatorPanels({
         // chart already disposed by useCandlestickChart teardown — nothing to clean up.
       }
     };
-  }, [components, times, chartRef, containerRef]);
+  }, [components, times, chartRef, containerRef, insufficient]);
 
   if (components.length === 0) return null;
   return (
@@ -174,6 +178,11 @@ export function IndicatorPanels({
             <p className="text-sm text-muted-foreground">
               Couldn&apos;t compute this indicator — {comp.error}
             </p>
+          </div>
+        ) : insufficient.has(comp.refName) ? (
+          <div key={comp.refName} className="space-y-1" data-testid="indicator-panel-insufficient">
+            <Eyebrow>{comp.refName}</Eyebrow>
+            <EmptyState title="Not enough history" />
           </div>
         ) : (
           <div
