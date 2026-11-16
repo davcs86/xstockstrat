@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
 import { TEST_USER_ID } from '../fixtures/users';
 
@@ -86,6 +86,65 @@ test.describe('push notifications page', () => {
     await expect(page.getByRole('heading', { name: 'Push notifications' })).toBeVisible();
     // The control carries a unique accessible name (C-17).
     await expect(page.getByRole('switch', { name: 'Enable push notifications' })).toBeVisible();
+  });
+
+  async function thumbAndTrackCentres(page: Page) {
+    const track = page.getByRole('switch', { name: 'Enable push notifications' });
+    const trackBox = await track.boundingBox();
+    const thumbBox = await track.locator('[data-slot="switch-thumb"]').boundingBox();
+    if (!trackBox || !thumbBox) throw new Error('switch track or thumb not rendered');
+    return {
+      thumb: thumbBox.x + thumbBox.width / 2,
+      track: trackBox.x + trackBox.width / 2,
+    };
+  }
+
+  test('@AC-6 a checked switch is displayed with its thumb at the trailing end', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Notification, 'permission', {
+        configurable: true,
+        get: () => 'granted',
+      });
+      // `ready` is a prototype accessor, so it is overridden on the prototype, not assigned.
+      Object.defineProperty(ServiceWorkerContainer.prototype, 'ready', {
+        configurable: true,
+        get: () =>
+          Promise.resolve({
+            pushManager: {
+              getSubscription: () => Promise.resolve({ endpoint: 'https://push.example/e2e' }),
+            },
+          }),
+      });
+    });
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications');
+    const toggle = page.getByRole('switch', { name: 'Enable push notifications' });
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expect
+      .poll(async () => {
+        const c = await thumbAndTrackCentres(page);
+        return c.thumb > c.track;
+      })
+      .toBe(true);
+  });
+
+  test('@AC-7 an unchecked switch is displayed with its thumb at the leading end', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Notification, 'permission', {
+        configurable: true,
+        get: () => 'granted',
+      });
+    });
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications');
+    const toggle = page.getByRole('switch', { name: 'Enable push notifications' });
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    const c = await thumbAndTrackCentres(page);
+    expect(c.thumb).toBeLessThan(c.track);
   });
 });
 

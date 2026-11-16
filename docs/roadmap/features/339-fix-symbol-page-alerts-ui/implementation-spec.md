@@ -576,7 +576,7 @@ The Step 7 wiring at `page.tsx:444` has no unit test; the `@AC-2` e2e is its onl
 
 ### Step 9 — service: import the stock `shadcn/tailwind.css` so the primitives' state variants resolve
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/globals.css` — modify
@@ -692,7 +692,7 @@ cd services/xstockstrat-ui && sed -n 3p src/app/globals.css \
 
 ### Step 10 — test: compiled-CSS guard, switch `@AC-6`/`@AC-7`, checkbox `@AC-11` and tab `@AC-12` e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/checkedVariants.test.ts` — create
@@ -1296,3 +1296,34 @@ _Populated by /sdd-execute as implementation proceeds._
   assertion. The same command with `--timeout=90000` passed 4/4. **Disposition**: CI-equivalent
   fallback (as in Steps 1+2 and 5+6); the `frontend-e2e` CI job is the confirming run. No unverified
   AC — `@AC-2` passed in a real Playwright run.
+
+### Steps 9+10 — `shadcn/tailwind.css` import and the state-variant tests (2026-11-15, SEV-3)
+
+- **Harness timeouts in the GREEN chain.** The Step 10 Playwright command, unchanged, failed 22 of
+  86 tests, all on the harness 10 s local test timeout (`page.goto`, `locator.click`,
+  `page.waitForTimeout`) during cold dev-server compiles; none failed on an assertion. The same
+  command with `--timeout=90000` passed 85 of 86, including `@AC-6`, `@AC-7`, `@AC-11`, the `@AC-12`
+  tab and every `theme-bundle.spec.ts` aria snapshot. **Disposition**: CI-equivalent fallback (as
+  in Steps 1+2, 5+6 and 7+8); the `frontend-e2e` CI job is the confirming run.
+- **`mobile-sidebar.spec.ts:77` cold-start flake, pre-existing.** The one remaining failure,
+  "clicking a nav link navigates and closes the panel", times out on `toHaveURL(/\/trader\/positions$/)`
+  at the 5 s expect while the URL is still `/insights/opportunities`. With `--repeat-each=3
+  --timeout=90000` it failed only its first, cold repeat and passed both warm repeats. On the base
+  `globals.css` (import removed) the same command failed the same test the same way (first repeat
+  only). The import did not cause it, and it is not the overlay strict-mode risk the step names, so
+  no wait was added. **Disposition**: pre-existing, out of scope; no spec changed.
+- **`@AC-6` service-worker override worked.** Defining `ready` on
+  `ServiceWorkerContainer.prototype` in the init script reached `aria-checked="true"` in headless
+  Chromium (RED failed on the thumb position, not on `aria-checked`). Closes the Step 10 "not run"
+  item. The thumb-position check is an `expect.poll`, because the thumb has `transition-transform`.
+  **Disposition**: in-scope test detail.
+- **Step 9 `git diff --stat -- src/components` printed nothing.** The spec expected it to list
+  `checkedVariants.test.ts`; an untracked new file is not in `git diff`. An empty output still
+  shows no component file changed. **Disposition**: recorded; no spec change.
+- **RED capture.** The `&&` chain stops at the red Vitest run (12 failed / 132 passed; every
+  questionnaire row passes). The e2e RED was captured by running its Playwright sub-command alone
+  for the four new or extended tests. `@AC-11` failed on `not.toHaveCSS` (`oklab(1 0 0 / 0.135)`
+  both ways). With `--timeout=90000`, `@AC-6` failed at the thumb-position poll, the `@AC-12` tab
+  failed on `not.toHaveCSS` (`rgba(0, 0, 0, 0)` both ways) and `@AC-7` passed (characterization).
+  **Disposition**: recorded; no unverified AC — `@AC-6`, `@AC-7`, `@AC-11` and the `@AC-12` tab
+  passed in a real Playwright run.
