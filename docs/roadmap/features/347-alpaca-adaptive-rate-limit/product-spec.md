@@ -146,19 +146,18 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 - [ ] **Does the Trading API host send them?** Still unverified for `paper-api.alpaca.markets` /
   `api.alpaca.markets` (marketdata `/v2/assets`, every trading call). Recon must confirm from the Trading
   API reference or real responses. If it does not, FR-5 makes the feature a 429-retry-only change there.
-- [ ] **Kill-switch default.** Spec says `true` (on) for both services. Confirm, or seed trading `false`
-  and enable it after marketdata has run in staging.
-- [ ] **Order mutations and 429 retry (FR-8).** A 429 means Alpaca did not process the request, and
-  submits carry a `client_order_id`, so a retry is expected to be safe. Design must prove it against the
-  order-intent seam and choose the total retry budget for trading. `trading.go` already has callers that
-  retry through that seam (`flattenAndHalt`).
+- [x] **Kill-switch default.** Operator (2026-11-16): both keys seed `true`.
+- [x] **Order mutations and 429 retry (FR-8).** Operator (2026-11-16): submit, replace and cancel are
+  retried on 429 like every other broker call, bounded by the intent-staleness bound. Design must still
+  prove the retry against the order-intent seam; `trading.go` already has callers that retry through that
+  seam (`flattenAndHalt`).
 - [ ] **Shared code.** The two services are separate Go modules (CI runs `GOWORK=off`). Design must choose
   between one shared limiter package and two copies, under the DRY guard rail.
 - [ ] **Per-credential state in trading.** Broker clients are built per account; accounts sharing one
   Alpaca key share one quota. Design decides whether limiter state is keyed by client or by key.
-- [ ] **Interactive deadlines (marketdata).** Quote and price RPCs run on about 2.5s budgets, so a wait
-  for `Reset` will usually exceed them and the call fails as today. Confirm this is acceptable, or decide
-  whether background loops should yield quota to interactive reads.
+- [x] **Interactive deadlines (marketdata).** Operator (2026-11-16): accepted. All callers share the
+  quota first-come; quote and price RPCs on about 2.5s budgets fail fast in an exhausted window, as today.
+  Reserving quota for interactive reads is out of scope.
 
 **Known traps (Ledger `fails.md`):**
 

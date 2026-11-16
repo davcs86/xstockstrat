@@ -21,4 +21,7 @@
   host and per process, in memory; no proto, DB or consumer-surface change; kill switches default `true`.
 - Data host verified (operator-supplied <https://docs.alpaca.markets/us/reference/stockbars>): all three
   `X-RateLimit-*` headers on 200/400/429, per-minute window, `Reset` in Unix epoch seconds.
+- Operator decisions, second round: (5) both kill switches seed `true`; (6) order mutations retry on 429,
+  bounded by `broker.timeout_ms` × `order_intent.stale_multiplier`; (7) no quota reservation for
+  interactive reads, they fail fast in an exhausted window.
 - Unverified: that the Trading API hosts return `X-RateLimit-*` headers. Recon item.
