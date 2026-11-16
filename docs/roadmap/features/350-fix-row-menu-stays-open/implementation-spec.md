@@ -1,6 +1,6 @@
 # Implementation Spec: fix-row-menu-stays-open
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-11-16
 **Feature**: `docs/roadmap/features/350-fix-row-menu-stays-open/feature.md`
 **Total Steps**: 9
@@ -792,7 +792,7 @@ C-12: the `active: false` spread is a scenario one-off; no domain literal is add
 
 ### Step 9 — docs: ledger entries superseding the "menu stays mounted" guidance
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/ledger/`
 **Files**:
 - `docs/roadmap/ledger/fails.md` — modify (append)

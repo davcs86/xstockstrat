@@ -167,3 +167,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - GREEN after Step 7 (production build): `strategy-authoring.spec.ts` + `strategy-ownership.spec.ts` `34 passed`. `lint`, `tsc --noEmit`, `format:check`, `lint:dup` and the `! grep` exit 0.
 - Files modified: `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts`
 - Deviations: the `@AC-9` test marks the trigger by test id and asserts its name afterwards (Deviation Log).
+
+### Step 9 — docs: ledger entries superseding the "menu stays mounted" guidance [done]
+- Appended two entries to `fails.md` (the `preventDefault` guard that was never a race fix; the `columns`-rebuild remount trap) and one to `insights.md` (reuse `RowActionsMenu` and `e2e/helpers/rowMenu.ts`; supersedes the Escape-reset advice). No existing entry edited. TDD: N/A (docs).
+- Verification: append-only check exit 0; heading count `-eq 3` exit 0; `scripts/ledger-guard.py --own-slug fix-row-menu-stays-open --base origin/main-dev` → `ledger-guard: clean`.
+- `node scripts/check-config-wiring.mjs --final` exit 0 (two pre-existing `REPORTED:` lines for other services; this feature declares no config key).
+- Files modified: `docs/roadmap/ledger/fails.md`, `docs/roadmap/ledger/insights.md`
+- Deviations: none

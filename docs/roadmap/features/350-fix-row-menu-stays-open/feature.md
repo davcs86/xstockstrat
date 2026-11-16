@@ -18,6 +18,7 @@
 | 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, quick extended twice by the operator) and approved; recon.md + debate.md + design.md written |
 | 2026-11-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-11-16 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1+2 done (sequential) |
+| 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done; integration PR to `main-dev` |
 
 ---
 
@@ -50,4 +51,4 @@ per-step `**Reviewers**` lines. Re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review fix-row-menu-stays-open impl-spec` — validate implementation spec, then `/sdd-execute fix-row-menu-stays-open`
+Integration PR `feature/fix-row-menu-stays-open` → `main-dev` — merge when CI passes and the owner approves.
