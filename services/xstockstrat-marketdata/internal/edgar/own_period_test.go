@@ -15,7 +15,7 @@ import (
 // lyftPeriods loads LYFT's SEC companyfacts (CIK0001759509, trimmed by tag only) and derives it.
 func lyftPeriods(t *testing.T) []source.HistoricalFundamentalsPeriod {
 	t.Helper()
-	return deriveFixture(t, "lyft").Periods
+	return deriveFixture(t, fixtureLYFT).Periods
 }
 
 func assertROE(t *testing.T, p source.HistoricalFundamentalsPeriod, want float64, rounded string) {

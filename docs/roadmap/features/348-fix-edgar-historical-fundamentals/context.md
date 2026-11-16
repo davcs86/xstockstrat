@@ -331,3 +331,10 @@ Three questions were put in one message after the PR was opened. The operator's 
 - GREEN: `-run 'BackfillFundamentals|GetHistoricalFundamentals|EdgarSnapshot|PriceJoin' -v` → 28 top-level `--- PASS` (8 `feature348`), 0 `--- SKIP`, 0 FAIL; `go test ./... -race -count=1` → 17 packages `ok`; coverage `total 86.6`; `golangci-lint` `0 issues.`; the four `test` greps passed; `node scripts/check-config-wiring.mjs` → `exit=0` (no output).
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`, `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go`
 - Deviations: none
+
+### Correction — verification runs of Steps 2–9 re-checked (2026-11-16)
+- Found while verifying Steps 10+11: this shell ignores `set -e` (`set -e; false; echo survived` prints `survived`). The earlier Verification blocks were run as one script ending in an `echo`, so their closing "all passed" line proved only that the script reached its end. The `go test`, coverage and `golangci-lint` results were read from their own output and stand. The `test "$(grep …)"` lines were not individually confirmed.
+- Every such check of Steps 2–9 was re-run with a runner that prints PASS/FAIL per command. Result: all pass except two of Step 3 — `grep -rl "orcl_companyfacts" … | wc -l` and the CRWD twin returned 0, not 1, because the tests named the fixtures `"orcl"` / `"crwd"` and built the file name. The Step 3 entry's "the seven `test` checks … passed" was therefore wrong for those two.
+- Fix (Step 3 files only): `period_identity_test.go` now names the three fixture files in constants (`fixtureORCL`, `fixtureCRWD`, `fixtureLYFT`) and `own_period_test.go` uses the constant. Both checks now return 1; `go test ./internal/edgar/... -race -count=5` → `ok`. The C-13 intent (one consuming test file) held before and after.
+- From here on every Verification command is run through the PASS/FAIL runner.
+

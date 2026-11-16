@@ -19,10 +19,16 @@ import (
 
 // --- feature 348: period identity from the filing's own period ---
 
-// Real SEC companyfacts, trimmed by tag only: ORCL CIK0001341439, CRWD CIK0001535527, LYFT CIK0001759509.
+// Real SEC companyfacts under testdata/, trimmed by tag only.
+const (
+	fixtureORCL = "orcl_companyfacts.json" // CIK0001341439
+	fixtureCRWD = "crwd_companyfacts.json" // CIK0001535527
+	fixtureLYFT = "lyft_companyfacts.json" // CIK0001759509
+)
+
 func loadFixture(t *testing.T, name string) map[string]any {
 	t.Helper()
-	b, err := os.ReadFile("testdata/" + name + "_companyfacts.json")
+	b, err := os.ReadFile("testdata/" + name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +69,7 @@ func periodEnding(t *testing.T, periods []source.HistoricalFundamentalsPeriod, p
 
 // @AC-1: both 10-Qs carry fy 2026 / fp Q1; each quarter is its own period with its own values.
 func TestORCL_SameFyFpTwoFilings_TwoPeriods_AC1_feature348(t *testing.T) {
-	periods := deriveFixture(t, "orcl").Periods
+	periods := deriveFixture(t, fixtureORCL).Periods
 	for _, w := range []struct {
 		end, filed string
 		ni, eq     float64
@@ -86,7 +92,7 @@ func TestORCL_SameFyFpTwoFilings_TwoPeriods_AC1_feature348(t *testing.T) {
 
 // @AC-2: the cover-page share count (dated 2026-09-07) never dates the period.
 func TestRealFilers_NoPeriodEndsAfterItWasFiled_AC2_feature348(t *testing.T) {
-	orcl := deriveFixture(t, "orcl").Periods
+	orcl := deriveFixture(t, fixtureORCL).Periods
 	found := false
 	for _, p := range orcl {
 		if p.PeriodType == periodQuarterly && day(p.FiledDate) == "2026-09-11" {
@@ -99,7 +105,7 @@ func TestRealFilers_NoPeriodEndsAfterItWasFiled_AC2_feature348(t *testing.T) {
 	if !found {
 		t.Error("no quarterly period filed 2026-09-11")
 	}
-	for _, name := range []string{"orcl", "crwd", "lyft"} {
+	for _, name := range []string{fixtureORCL, fixtureCRWD, fixtureLYFT} {
 		for _, p := range deriveFixture(t, name).Periods {
 			if p.PeriodEnd.After(p.FiledDate) {
 				t.Errorf("%s %s %s: period_end %s after filed_date %s", name, p.FiscalPeriod, p.PeriodType, day(p.PeriodEnd), day(p.FiledDate))
@@ -118,14 +124,14 @@ func identityList(periods []source.HistoricalFundamentalsPeriod) []string {
 
 // @AC-3: labels come from dates, are unique per type and do not depend on map order.
 func TestRealFilers_LabelsUniqueAndDeterministic_AC3_feature348(t *testing.T) {
-	orcl := deriveFixture(t, "orcl").Periods
+	orcl := deriveFixture(t, fixtureORCL).Periods
 	if got := periodEnding(t, orcl, periodQuarterly, "2025-08-31").FiscalPeriod; got != "Q1-2026" {
 		t.Errorf("quarter ended 2025-08-31 labelled %q, want Q1-2026", got)
 	}
 	if got := periodEnding(t, orcl, periodQuarterly, "2026-08-31").FiscalPeriod; got != "Q1-2027" {
 		t.Errorf("quarter ended 2026-08-31 labelled %q, want Q1-2027", got)
 	}
-	for _, name := range []string{"orcl", "crwd", "lyft"} {
+	for _, name := range []string{fixtureORCL, fixtureCRWD, fixtureLYFT} {
 		first := deriveFixture(t, name)
 		seen := map[string]string{}
 		for _, p := range first.Periods {
@@ -157,7 +163,7 @@ func newestQuarter(periods []source.HistoricalFundamentalsPeriod, filedBefore ti
 // @AC-4: what was public before 2025-10-01 is the quarter ended 2025-08-31, not the 2026 one.
 func TestORCL_NewestQuarterFiledBeforeAsOf_AC4_feature348(t *testing.T) {
 	asOf := time.Date(2025, 10, 1, 0, 0, 0, 0, time.UTC)
-	p, ok := newestQuarter(deriveFixture(t, "orcl").Periods, asOf)
+	p, ok := newestQuarter(deriveFixture(t, fixtureORCL).Periods, asOf)
 	if !ok || day(p.PeriodEnd) != "2025-08-31" || p.ExtraMetrics["stockholders_equity"] != 24154000000 {
 		t.Fatalf("newest quarter filed before 2025-10-01 = %s equity %v, want 2025-08-31 with 24154000000", day(p.PeriodEnd), p.ExtraMetrics["stockholders_equity"])
 	}
@@ -165,7 +171,7 @@ func TestORCL_NewestQuarterFiledBeforeAsOf_AC4_feature348(t *testing.T) {
 
 // @AC-6: the newest period is the quarter ended 2026-08-31 under its own filing date.
 func TestORCL_NewestQuarterIsItsOwnFiling_AC6_feature348(t *testing.T) {
-	p, ok := newestQuarter(deriveFixture(t, "orcl").Periods, time.Time{})
+	p, ok := newestQuarter(deriveFixture(t, fixtureORCL).Periods, time.Time{})
 	if !ok || day(p.PeriodEnd) != "2026-08-31" || day(p.FiledDate) != "2026-09-11" || p.ExtraMetrics["stockholders_equity"] != 66772000000 {
 		t.Fatalf("newest quarter = %s filed %s equity %v, want 2026-08-31 / 2026-09-11 / 66772000000", day(p.PeriodEnd), day(p.FiledDate), p.ExtraMetrics["stockholders_equity"])
 	}
@@ -173,7 +179,7 @@ func TestORCL_NewestQuarterIsItsOwnFiling_AC6_feature348(t *testing.T) {
 
 // The cover-page share count belongs to its filing and still feeds market cap.
 func TestORCL_SharesFromOwnFilingCoverPage_feature348(t *testing.T) {
-	cf := loadFixture(t, "orcl")
+	cf := loadFixture(t, fixtureORCL)
 	units := cf["facts"].(map[string]any)["dei"].(map[string]any)["EntityCommonStockSharesOutstanding"].(map[string]any)["units"].(map[string]any)["shares"].([]any)
 	want, found := 0.0, false
 	for _, u := range units {
@@ -185,7 +191,7 @@ func TestORCL_SharesFromOwnFilingCoverPage_feature348(t *testing.T) {
 	if !found {
 		t.Fatal("fixture has no cover-page share fact dated 2026-09-07 for the 10-Q filed 2026-09-11")
 	}
-	p := periodEnding(t, deriveFixture(t, "orcl").Periods, periodQuarterly, "2026-08-31")
+	p := periodEnding(t, deriveFixture(t, fixtureORCL).Periods, periodQuarterly, "2026-08-31")
 	if p.SharesOutstanding == nil || *p.SharesOutstanding != want {
 		t.Fatalf("shares = %v, want the cover-page count %v", p.SharesOutstanding, want)
 	}
@@ -194,7 +200,7 @@ func TestORCL_SharesFromOwnFilingCoverPage_feature348(t *testing.T) {
 // Labels are computed before the type and range filters.
 func TestORCL_FiltersApplyAfterLabelling_feature348(t *testing.T) {
 	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	periods, err := newTestClientCF211(loadFixture(t, "orcl")).FetchHistorical(context.Background(), "AAPL", from, time.Time{}, []string{"quarterly"})
+	periods, err := newTestClientCF211(loadFixture(t, fixtureORCL)).FetchHistorical(context.Background(), "AAPL", from, time.Time{}, []string{"quarterly"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +216,7 @@ func TestORCL_FiltersApplyAfterLabelling_feature348(t *testing.T) {
 
 // CRWD: two 10-Ks tagged fy 2022; a 10-K with no annual-length flow at its balance-sheet date.
 func TestCRWD_AnnualPeriodsKeepTheirOwnIdentity_feature348(t *testing.T) {
-	periods := deriveFixture(t, "crwd").Periods
+	periods := deriveFixture(t, fixtureCRWD).Periods
 	for _, w := range []struct{ end, filed, label string }{
 		{"2022-01-31", "2022-03-16", "FY2022"},
 		{"2023-01-31", "2023-03-09", "FY2023"},
