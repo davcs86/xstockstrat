@@ -96,7 +96,11 @@ import { LINEAGE_ORDERS, LINEAGE_LIST_PAGE_SIZE } from './fixtures/orders';
 import { copilotStreamKey } from '../src/lib/copilot';
 import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
-import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
+import {
+  INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP,
+  INDICATOR_COMPONENTS_PALETTE_13,
+  INDICATOR_SERIES_AAPL,
+} from './fixtures/indicatorSeries';
 import { PNL_PATTERNS_AAPL } from './fixtures/pnlPatterns';
 import { SOURCE_ATTRIBUTION } from './fixtures/attribution';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
@@ -1425,6 +1429,14 @@ export async function startMockBackend(): Promise<void> {
         async getIndicatorSeries(req) {
           if (req.symbol === 'AAPL') {
             return INDICATOR_SERIES_AAPL;
+          }
+          // feature 342 — whole-chart series palette: 5 series (@AC-2/@AC-3) or 13 (@AC-6).
+          if (req.symbol === 'LYFT') {
+            const components =
+              req.strategyId === 'series_palette_13'
+                ? INDICATOR_COMPONENTS_PALETTE_13
+                : INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP;
+            return { times: req.times, components };
           }
           return { times: req.times, components: [] };
         },
