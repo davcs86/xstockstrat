@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie, addAdminCookie } from '../helpers/auth';
-import { FORMULAS } from '../fixtures';
+import { FORMULAS, STRATEGY_DEFINITIONS, STRATEGY_DEF_LIVE } from '../fixtures';
+import { expectFocusOnMarkedTrigger, expectRowMenuSettled, markTrigger } from '../helpers/rowMenu';
 
 /**
  * E2E coverage for the strategy creation flow (feature 050).
@@ -120,8 +121,9 @@ test.describe('Strategy authoring — insights BFF', () => {
     );
     await page.getByTestId('actions-strat-live-001').click();
     await page.getByRole('menuitem', { name: 'Deactivate' }).click();
-    await expect(page.getByText(/Deactivate strategy/)).toBeVisible();
-    await page.getByRole('button', { name: 'Confirm' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog.getByRole('heading', { name: 'Deactivate strategy' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
     const body = (await reqPromise).postData() ?? '';
     expect(body).toContain('DEACTIVATE');
   });
@@ -678,5 +680,65 @@ test.describe('Strategies list — handoff fidelity (feature 083)', () => {
     const firstRow = page.getByRole('row').filter({ hasText: '62%' }).first();
     await expect(firstRow).toContainText('42');
     await expect(firstRow).toContainText('+0.35');
+  });
+});
+
+test.describe('Row menu confirm flow (feature 350)', () => {
+  const LIST_DEFINITIONS =
+    '**/insights/api/xstockstrat.analysis.v1.AnalysisService/ListStrategyDefinitions';
+
+  async function expectOtherRowMenuOpensOnOneClick(page: Page) {
+    await page.getByTestId('actions-strat-live-002').click();
+    await expect(page.getByRole('menuitem', { name: 'Edit', exact: true })).toBeVisible();
+  }
+
+  test('@AC-6 dismissing Deactivate closes the menu and the page answers the first click', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await page.goto('/insights/strategies');
+    await page.getByTestId('actions-strat-live-001').click();
+    await page.getByRole('menuitem', { name: 'Deactivate', exact: true }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click();
+
+    await expectRowMenuSettled(page);
+    await expectOtherRowMenuOpensOnOneClick(page);
+  });
+
+  test('@AC-6 @AC-9 confirming Deactivate keeps focus on the same row trigger while the list reloads', async ({
+    page,
+  }) => {
+    let deactivated = false;
+    await page.route(LIST_DEFINITIONS, (route) => {
+      const definitions = STRATEGY_DEFINITIONS.map((d) =>
+        deactivated && d === STRATEGY_DEF_LIVE ? { ...d, active: false } : d,
+      );
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ definitions, totalCount: definitions.length }),
+      });
+    });
+    await addAdminCookie(page);
+    await page.goto('/insights/strategies');
+    const trigger = page.getByTestId('actions-strat-live-001');
+    await markTrigger(trigger);
+    await trigger.click();
+    await page.getByRole('menuitem', { name: 'Deactivate', exact: true }).click();
+    deactivated = true;
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Confirm', exact: true })
+      .click();
+
+    const row = page.getByRole('row', { name: /strat-live-001/ });
+    await expect(row.getByText('Off', { exact: true })).toBeVisible();
+    await expectRowMenuSettled(page);
+    await expectFocusOnMarkedTrigger(page);
+    await expect(trigger).toHaveAccessibleName('Actions for strat-live-001');
+    await expectOtherRowMenuOpensOnOneClick(page);
   });
 });

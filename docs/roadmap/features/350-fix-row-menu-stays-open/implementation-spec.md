@@ -665,7 +665,7 @@ C-12: no fixture is added, INVENTORY.md is unchanged.
 
 ### Step 7 — service: the strategies list adopts `RowActionsMenu` through a module-level cell
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/page.tsx` — modify
@@ -729,7 +729,7 @@ pnpm run lint:dup
 
 ### Step 8 — test: strategies Deactivate confirm flow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — modify
@@ -851,3 +851,9 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: every production-build line was run as `NEXT_DISABLE_STANDALONE=1 pnpm build` once per code state followed by `CI=1 E2E_PREBUILT=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test …` (the config's own prebuilt path, `playwright.config.ts:129-133`). Production build: mutation 5/5 failed on the empty-log assertion, restored 5/5 passed. Dev server: mutation 5/5 failed (4 on the empty-log assertion, 1 on `page.goto` exceeding the 10 s local test timeout while the route compiled); restored 4/5 passed, 1 failed on the same first-navigation compile timeout — in three consecutive dev runs the first repeat timed out at `page.goto` and no repeat ever failed or passed on the guard for the wrong reason.
 **Reason**: rebuilding inside every Playwright command costs ~2 minutes each; the dev server compiles a route on its first hit (the flake `playwright.config.ts` documents), which the local 10 s test timeout does not absorb.
 **Disposition**: CI-equivalent fallback — the production build is the mode `frontend-e2e` runs; the dev-server evidence is recorded as 4 right-reason failures / 4 passes with the first repeat lost to route compilation. No mutation repeat passed in either mode (D-17's stop condition did not fire).
+
+### Deviation: Step 8 — how the `@AC-9` strategies test finds the trigger
+**Spec said**: "Mark the button named \"Actions for strat-live-001\", choose Deactivate, click \"Confirm\" …"
+**Actual**: the test marks the trigger through its kept test id `actions-strat-live-001` and asserts its accessible name "Actions for strat-live-001" after the focus assertion.
+**Reason**: on the pre-unit tree every trigger is named "Actions", so a name locator would fail before the flow starts and the RED would not be the focus assertion the step requires.
+**Disposition**: test-only; same behaviour asserted, RED captured for the right reason.

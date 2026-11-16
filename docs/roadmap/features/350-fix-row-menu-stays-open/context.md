@@ -153,3 +153,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ### Checkpoint — steps 1–6 done (surface: ui), 3 pending
 - Committed to `feature/fix-row-menu-stays-open` (no PR yet). Reported here under the standing authorization (progress-only checkpoint); next surface is still `ui` (Steps 7–8), then docs (Step 9).
 - Out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none. Deviations: one (Playwright prebuilt path / dev first-navigation compile timeout).
+
+### Step 7 — service: the strategies list adopts `RowActionsMenu` through a module-level cell [done]
+- Unit with Step 8. `StrategyActionsCell` is now the column's `cell` itself (module level, own `useIsAdmin`/`useRouter`/`useManageStrategy`), rendering the "Open →" link for a non-admin and one `RowActionsMenu` for an admin (trigger "Actions for {strategyId}", dialog title "Deactivate strategy", existing text). Page-level `manage`/`handleDeactivate` removed; `columns` deps `[scoreById, isAdmin]`.
+- Files modified: `services/xstockstrat-ui/src/app/insights/strategies/page.tsx`
+- Deviations: none
+
+### Step 8 — test: strategies Deactivate confirm flow [done]
+- Unit with Step 7. Existing Deactivate test scoped to the dialog; feature-350 block added with a stateful `ListStrategyDefinitions` route.
+- On the pre-unit tree (production build, `2 failed`):
+  - AC-6 dismiss — RED: settle helper, `[role="menu"]` expected 0, received 1.
+  - AC-6/AC-9 confirm — RED at `expectFocusOnMarkedTrigger` (expected true, received false). The lines before it (row shows "Off", menu/dialog gone, page unblocked) passed on today's markup: "menu closed after Confirm" is a guard here, as O-4 predicted.
+- GREEN after Step 7 (production build): `strategy-authoring.spec.ts` + `strategy-ownership.spec.ts` `34 passed`. `lint`, `tsc --noEmit`, `format:check`, `lint:dup` and the `! grep` exit 0.
+- Files modified: `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts`
+- Deviations: the `@AC-9` test marks the trigger by test id and asserts its name afterwards (Deviation Log).
