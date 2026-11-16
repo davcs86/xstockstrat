@@ -644,3 +644,80 @@ Asked directly, answered verbatim by the operator (2026-11-15):
 ### Feature code-completed
 - All 15 steps are done. `node scripts/check-config-wiring.mjs --final`: `exit=0`. It printed two `REPORTED:` lines outside this feature (`services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`). Status `in-progress` → `code-completed`. No insights ledger entry: nothing here generalizes beyond the Deviation Log.
 - Still open for the integration PR: the `frontend-e2e` CI job confirms the `--timeout=90000` fallbacks; `merge-order.md` still has no 339/344 row; feature 344 must adopt the `ALERT_UNREAD_COUNT_KEY` constraint; the header `## Files Modified` block still describes the pre-execute state.
+
+## Session 2026-11-15 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-symbol-page-alerts-ui (feature 339)
+
+Source: docs/roadmap/features/339-fix-symbol-page-alerts-ui/acceptance.feature, read from the working tree at /home/user/xstockstrat. I did not read it on origin/feature/fix-symbol-page-alerts-ui, because the environment is not a git repo. The affected service is xstockstrat-ui only, since all six scenarios assert on UI-rendered output.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-ui/acceptance/fix-symbol-page-alerts-ui.feature | CREATE | NEW | Market-cap tile at mobile width. No existing suite covers it. |
+| AC-2 | same | CREATE | NEW | Strategy-less opportunity chip is labelled by its source. Nearest existing suite is watchlist-opportunity-signal-cues.feature:68 (a source chip on a watchlist signal), which is a different subject. |
+| AC-3 | same | CREATE | NEW | Header Alerts drawer lists a stored unread alert. alert-read-unread-persistence.feature (@AC-6 @feature-203) covers the /accounts/notifications inbox page, not the drawer. |
+| AC-4 | same | CREATE | NEW | Marking an alert read in the drawer clears it and the badge. |
+| AC-5 | same | CREATE | NEW | A streamed alert raises the badge without a reload. |
+| AC-6 | same | CREATE | NEW | A checked switch renders in the checked position. aria-checked and switch thumb position are not covered anywhere. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-symbol-page-alerts-ui.feature (CREATE) ---
+Feature: fix-symbol-page-alerts-ui (ui)
+  Promoted from feature 339 (@AC-1..@AC-6). Regression guard for the trader symbol page Fundamentals
+  tile and opportunity chips, the header Alerts drawer (stored unread, mark-read, streamed), and the
+  checked Switch rendering.
+
+  @AC-1 @regression @feature-339
+  Scenario: A multi-billion market cap fits its Fundamentals tile at mobile width
+    Given the symbol page for "LYFT" at a 384px-wide viewport
+    And fundamentals with a market cap of 6726553623.93
+    When the Research tab is shown
+    Then the market cap tile shows "$6.73B"
+    And the market cap value does not overlap the P/E value
+
+  @AC-2 @regression @feature-339
+  Scenario: A strategy-less opportunity chip is labelled by its source
+    Given opportunities for "LYFT" from strategy "dip_buyer_vol_stop" and one with an empty strategy id and source "fundamentals"
+    When the Research tab is shown at mobile width
+    Then the chip row shows "dip_buyer_vol_stop" and "Fundamentals"
+    And no chip is labelled "LYFT"
+
+  @AC-3 @regression @feature-339
+  Scenario: The Alerts drawer shows a stored unread alert that was not streamed
+    Given one stored unread alert titled "Backfill 67276d1f failed" and no alert streamed since page load
+    When the header bell showing badge "1" is opened
+    Then the drawer lists "Backfill 67276d1f failed"
+
+  @AC-4 @regression @feature-339
+  Scenario: Marking an alert read in the drawer clears it and the badge
+    Given the drawer lists one unread alert and the badge shows "1"
+    When the alert is marked read in the drawer
+    Then the drawer shows "No alerts"
+    And the bell shows no unread badge
+
+  @AC-5 @regression @feature-339
+  Scenario: A streamed alert raises the badge without a reload
+    Given the badge shows "1" and the drawer is closed
+    When an alert titled "Order rejected" is streamed
+    Then the badge shows "2"
+    And the drawer lists "Order rejected" above the stored alert
+
+  @AC-6 @regression @feature-339
+  Scenario: A checked switch renders in the checked position
+    Given push notifications are enabled on this device
+    When the Notifications page is shown
+    Then the push switch has aria-checked "true"
+    And its thumb is rendered at the checked (right) position with the primary fill
+
+### Notes / ambiguities / conflicts
+- The services/xstockstrat-ui/acceptance/ directory already exists, so no lazy directory creation is needed. The file is new and named after the source slug.
+- The source scenarios carry no @FR-* tags, because this is a bug fix. Per the verbatim and no-invention rules I did not add any. Each scenario keeps its @AC-n and @regression tags and gains @feature-339.
+- AC-6 (Switch primitive on the Notifications page) could arguably be a shared-component rule. I attributed it to xstockstrat-ui because the Then asserts on rendered DOM there and no other service owns it.
+- I found no OVERLAP or CONFLICT. docs/sdd/business-rules/platform.feature was not read directly. A grep over docs/sdd/business-rules for @feature-339, drawer and aria-checked returned nothing.
+- alert-read-unread-persistence.feature (@AC-6 @feature-203) is a related but distinct guarantee: the inbox page shows level, module, body and an unread count badge. It is a possible later consolidation reference only.
+
+### Coverage check
+- Source scenarios: 6. Planned: 6 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing was skipped.
+```
