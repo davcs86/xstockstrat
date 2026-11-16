@@ -14,6 +14,7 @@
 | 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings, after 4 passes) |
 | 2026-11-15 | `spec-ready` → `draft` | owner | FR-14 added: backwards compatible with DigitalOcean until cutover; re-review required |
 | 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec re-approved after FR-14 (0 warnings, after 6 passes) |
+| 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (9 rounds, full) and approved; recon.md + debate.md + design.md written. Spec amended during design; `/sdd-review product-spec` re-run required |
 
 ---
 
@@ -21,6 +22,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Debate Register](debate.md) — D-1..D-93, R-1..R-22, O-1..O-84
+- [Design](design.md) — approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec authelia-sso`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -51,4 +55,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design authelia-sso` — full design recommended (4 services + additive proto + identity/config migrations + two-mode security-critical auth path; the Authelia v4.39.28 spike gates `/sdd-spec`)
+`/sdd-review authelia-sso product-spec` (re-review of the design-round amendments: FR-1/2/9/14/15, AC-24/29/47/54..57), then the Authelia v4.39.28 spike, then `/sdd-spec authelia-sso`. Generate the implementation spec from the approved design.

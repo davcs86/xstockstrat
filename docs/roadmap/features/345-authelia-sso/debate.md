@@ -1,6 +1,6 @@
 # Debate Register: authelia-sso
 
-**State**: in-debate
+**State**: approved
 **Mode**: full (the owner authorized more than 5 rounds if necessary — context.md 2026-11-15)
 **Rounds run**: 9
 
@@ -114,7 +114,7 @@
 | D-90 | 9 | **One log-once helper per language** (O-81). `logOnce(level, message, key, detail)` lives in `serverLog.ts`, and `_log_once` in `app/sso_mode.py`. Both serve D-1's `sso_mode_misconfigured` and D-86's ERRORs. Tests isolate the module-level sets with an exported reset or a pytest fixture. | D-1 | settled |
 | D-91 | 9 | **Operator-facing grammar and e2e reachability** (O-82, O-84).<br>• FR-14's invalid-configuration bullet and the cutover runbook pre-check spell out the trailing-slash, IP-literal and IDN rules.<br>• An e2e path that needs a server-side discovery uses a `http://127.0.0.1:<port>` stub IdP. `auth.example.test` is used only where no server fetch happens (AC-54/56/57).<br>• Local docker-compose SSO is documented as unsupported, because a loopback issuer is unreachable inside the container. | homelab-edge `main.yml:3-5,45`; `sso.md:50` | settled |
 | D-92 | 9 | **Spec text F1–F7 applied** (O-83, O-84).<br>• FR-14's legacy bullet lists the both-mode changes non-exhaustively, including FR-9's fail-closed default and 319's verified-only revoke.<br>• The invalid-configuration rule moves from FR-15 to FR-14, with references from FR-1, FR-2 and FR-15.<br>• Agent reader paths become `app/sso_mode.py:current_sso_mode`.<br>• `client_secret`'s empty-value effect is corrected.<br>• AC-56 is tagged `@FR-14`.<br>• `/sdd-review product-spec` re-runs. | — | settled |
-| D-93 | 9 | **D-83 amendment, pending owner (P-3).** The three `@ts-expect-error` cases and the D-72 type-map assertions move from `bffAllowlist.test.ts` into `src/lib/authEvents.typecheck.ts`, a non-test source file that is exported and never imported, so that `next build` (the `e2e-build` path) type-checks it. RED proof: delete one directive and `pnpm build` fails with TS2578. Rejected runner-up: a repo-wide `tsc --noEmit` step, which would type-check every test and e2e file for the first time (out of scope). | `vitest.config.ts:18-35`; `Dockerfile.e2e:68` | pending user (P-3) |
+| D-93 | 9 | **D-83 amendment** (P-3, owner decision 2026-11-16). Enforcement comes from a real type check, not the build: the UI `package.json` gains `"typecheck": "tsc --noEmit"`, and the UI's CI node job runs it (gated by the existing `xstockstrat-ui` filter, before vitest). The D-83 `@ts-expect-error` cases and the D-72 type-map assertions stay in `bffAllowlist.test.ts`. RED proof: delete one directive and `pnpm --filter xstockstrat-ui typecheck` fails with TS2578. **Accepted widening:** the first run type-checks every included file for the first time (`tsconfig.json:21`). The spec runs it first and fixes any pre-existing errors in the same PR; the owner accepted the wider diff. Rejected: the `authEvents.typecheck.ts` file move (narrower, but leaves test files unchecked). | `vitest.config.ts:18-35`; `tsconfig.json:21` | settled |
 | D-13 | 1 | **Fixed constants** (60 s role TTL, JWKS freshness, cooldown, fetch timeout) stay in code with the "Fixed invariant (F-07)" comment form. They are not config keys. | `client.py:39-47` | settled |
 
 ## Rejected Alternatives (locked)
@@ -228,7 +228,7 @@
 | O-76 | 8 | AC-54 bundles three services and one assertion cannot be observed. (R-22) | no | closed @ round 8 (D-85) |
 | O-77 | 8 | One `APP_URL` fault logs two ERRORs; dedup differs by language. | no | closed @ round 8 (D-86) |
 | O-78 | 8 | Placement of the UI `jwks_uri` check relative to the cache. | no | closed @ round 8 (D-87) |
-| O-79 | 9 | D-83/D-72 type assertions are unenforced: `next build` filters test-file diagnostics; no `tsc` in CI. (P-03, fails.md:2225) | yes | closed @ round 9 (D-93, pending P-3) |
+| O-79 | 9 | D-83/D-72 type assertions are unenforced: `next build` filters test-file diagnostics; no `tsc` in CI. (P-03, fails.md:2225) | yes | closed @ round 9 (D-93, owner chose the tsc step) |
 | O-80 | 9 | openid-client normalises or skips the discovery issuer equality. (D-27) | yes | closed @ round 9 (D-89) |
 | O-81 | 9 | Two log-once mechanisms; test isolation. (C-18) | no | closed @ round 9 (D-90) |
 | O-82 | 9 | Operator grammar understated; Authelia trailing-slash risk. | no | closed @ round 9 (D-91, D-89 spike) |
@@ -242,4 +242,4 @@
 |---|---|---|---|---|
 | P-1 | 5 | D-45 | Owner steer during round 5: "Redirect to the authelia's logout endpoint seems the most logical solution." | user reopened |
 | P-2 | 7 | D-52 | Adversary round 7: D-51 requires the Authelia session-cookie domain to cover the `APP_URL` host, so sibling homelab apps on `*.<domain>` are same-site and their POSTs carry Lax cookies. A compromised sibling could force a logout plus a "log out everywhere" revoke. O-44/D-52 only considered cross-site. Proposed fix: reject logout only when an Origin header is present and differs from the `APP_URL` origin (`auth.spec.ts:307` sends none). Nuisance-level. | user reopened |
-| P-3 | 9 | D-83 | Adversary round 9: Next.js `runTypeCheck` drops diagnostics for files under `__tests__/` and named `*.test.*` (not verifiable locally because `next` is not installed, so the spec must prove it RED). `vitest.config.ts:18-35` has no typecheck, and `ci.yml` has no `tsc`. D-83's evidence (`tsconfig.json:21`) did not account for the filter. Proposal: D-93. | pending user |
+| P-3 | 9 | D-83 | Adversary round 9: Next.js `runTypeCheck` drops diagnostics for files under `__tests__/` and named `*.test.*` (not verifiable locally because `next` is not installed, so the spec must prove it RED). `vitest.config.ts:18-35` has no typecheck, and `ci.yml` has no `tsc`. D-83's evidence (`tsconfig.json:21`) did not account for the filter. Proposal: D-93. | user reopened (owner chose a `tsc --noEmit` CI step over the file move) |

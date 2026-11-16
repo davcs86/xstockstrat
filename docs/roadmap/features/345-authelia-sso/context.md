@@ -199,3 +199,23 @@
   - O-79: `next build` does not type-check test files, so D-83 is unenforced. P-3 petitions to reopen D-83 and move the type assertions into `src/lib/authEvents.typecheck.ts` (D-93, pending owner).
   - O-81..O-84 were folded into D-90..D-92.
 - Spec changes: the invalid-configuration rule moved to FR-14, with references from FR-1, FR-2 and FR-15; FR-14's legacy bullet now lists the both-mode changes non-exhaustively; reader paths and `client_secret` text were fixed; AC-56 gained `@FR-14`.
+
+## Session 2026-11-16 — sdd-design (completion)
+
+- Phase 0 Recon: recon.md (services identity, ui, agent, config, plus proto and the script; reuse patterns: the identity mint path `sessionResponse`, the config seed CTE 046/047, and the vector-file precedent `rpc-status-vectors.json`).
+- Phase 1 Grilling: 9 rounds (full; the owner authorised more than 5).
+  - Chosen approach: Authelia is the OIDC provider. Identity stays the user and role store and mints sessions via `ResolveExternalIdentity` + `IssueSessionForUser`. The agent becomes a JWKS-validating resource server. Each deployment's legacy or SSO mode is chosen by config.
+  - Rejected: R-1..R-22 (e.g. PyJWKClient, a unique `lower(email)` index, ID-token storage, unconditional logout exemption).
+- Owner gate (round 9):
+  - **approved the design**;
+  - P-3 → **D-93: add a `tsc --noEmit` typecheck script and CI step** for the UI. The owner accepted fixing any pre-existing type errors in this feature's PR.
+- Constitution rules touched: C-01, C-03..C-05, C-07..C-13, C-15..C-18, F-01, F-04, F-06, F-07, F-11. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Authelia v4.39.28 spike: items (a)–(e), RS256, end_session/portal/`rd`/GET `/logout`, auth-code lifespan, discovery issuer with no trailing slash. Due before /sdd-spec.
+- [ ] Re-run `/sdd-review authelia-sso product-spec` on the design-round amendments. Due before /sdd-spec.
+- [ ] Feature 319 merges first or alongside. Due at rollout.
+- [ ] First `tsc --noEmit` run; fix any pre-existing errors. Due at the first UI step.
+- [ ] homelab-edge PR #77 follow-ups (`sso.md` §7/§8 `unlink-sso`, logout / `rd`, post-logout redirect, back-channel reachability, rate-limit exemption). Due in a separate homelab-edge PR.

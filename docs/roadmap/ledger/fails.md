@@ -3994,3 +3994,12 @@ ambiguity is logged here).
 - **Mistake**: Round 2 of the design consolidated a plan that edited promoted scenario text in suites headed "Verbatim; do not edit by hand" and kept the documented join unchanged, missing that the new label makes `group_left (host_provider)` error while old and new series coexist. Both were caught only by the round-2 adversary, not by recon or the proposer.
 - **Evidence**: `docs/roadmap/features/337-metrics-host-provider-label/debate.md` O-17, O-18, D-12, D-17.
 - **Rule it implies**: When a design adds a label that an existing documented query already joins on, evaluate that query across the rollout window (old and new series together), and check promoted-suite headers and precedent supersede comments before planning any change to promoted scenarios.
+
+### 2026-11-16 — authelia-sso — assumption
+- **Mistake**: The design assumed that two security properties came from the toolchain, and neither did:
+  - D-83 pinned type-level guards in a `*.test.ts` file because "tsconfig includes tests". Next.js `next build` drops diagnostics for `__tests__/` and `*.test.*` files, and no `tsc` ran in CI.
+  - The design treated openid-client's discovery as enforcing exact issuer equality. openid-client 6.8.9 compares the normalised `new URL(..).href`, and skips the comparison for issuers containing `/.well-known/`.
+  
+  Both were caught in round 9.
+- **Evidence**: `docs/roadmap/features/345-authelia-sso/debate.md` O-79, O-80, D-89, D-93; `openid-client@6.8.9 build/index.js:264,287`.
+- **Rule it implies**: When a design relies on a tool to enforce a guarantee (a type check, an issuer/audience comparison, a lint), cite the line in that tool's source or CI config that performs the check, for the exact files and inputs in question. "The config includes it" or "the library validates it" is not evidence.
