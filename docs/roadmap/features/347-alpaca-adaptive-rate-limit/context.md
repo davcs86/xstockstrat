@@ -19,4 +19,6 @@
   4. Tunables: one kill-switch key per service only; thresholds and backoff are fixed in code.
 - Assumptions recorded (not yet confirmed by the operator): REST only, no WebSocket; limiter state per
   host and per process, in memory; no proto, DB or consumer-surface change; kill switches default `true`.
-- Unverified: that the data and Trading API hosts return `X-RateLimit-*` headers. Recon item.
+- Data host verified (operator-supplied <https://docs.alpaca.markets/us/reference/stockbars>): all three
+  `X-RateLimit-*` headers on 200/400/429, per-minute window, `Reset` in Unix epoch seconds.
+- Unverified: that the Trading API hosts return `X-RateLimit-*` headers. Recon item.

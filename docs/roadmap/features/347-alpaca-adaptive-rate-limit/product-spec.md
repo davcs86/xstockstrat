@@ -137,10 +137,15 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Do the hosts we call send these headers?** The cited page covers the Broker API only. Recon must
-  confirm from real responses that `data.alpaca.markets` and `paper-api.alpaca.markets` /
-  `api.alpaca.markets` return `X-RateLimit-Limit/Remaining/Reset`, and with what window. If a host does
-  not, FR-5 makes the feature a 429-retry-only change there.
+- [x] **Does the data host send these headers?** Yes. The Market Data API reference for
+  `GET /v2/stocks/bars` (<https://docs.alpaca.markets/us/reference/stockbars>, host
+  `data.alpaca.markets`) declares all three headers on the 200, 400 and 429 responses: `X-RateLimit-Limit`
+  "Request limit per minute", `X-RateLimit-Remaining` "Request limit per minute remaining",
+  `X-RateLimit-Reset` "The UNIX epoch when the remaining quota changes". The window is one minute. The
+  spec lists none on 401, 403 or 500, which FR-5 already covers.
+- [ ] **Does the Trading API host send them?** Still unverified for `paper-api.alpaca.markets` /
+  `api.alpaca.markets` (marketdata `/v2/assets`, every trading call). Recon must confirm from the Trading
+  API reference or real responses. If it does not, FR-5 makes the feature a 429-retry-only change there.
 - [ ] **Kill-switch default.** Spec says `true` (on) for both services. Confirm, or seed trading `false`
   and enable it after marketdata has run in staging.
 - [ ] **Order mutations and 429 retry (FR-8).** A 429 means Alpaca did not process the request, and
