@@ -3,19 +3,19 @@ Feature: delisted-symbol-handling
   watchlist-driven work and reported with its reason, so that backfill jobs stop ending PARTIAL because
   of dead symbols and I no longer have to find and remove them by hand.
 
-  # The confirmation window of 3 days is an example value; the default is an open question.
+  # The confirmation window is the 5-day default (D-8), read as calendar days (unit is an open question).
 
   @AC-1 @FR-1
   Scenario: A symbol unservable for the whole confirmation window is flagged delisted
-    Given the confirmation window is 3 days
+    Given the confirmation window is 5 days
     And "ROKU" is on the user-created watchlist "Tech"
     And "ROKU" has been absent from every loaded asset set since 2026-11-07
-    When the asset set is loaded on 2026-11-10 without "ROKU"
+    When the asset set is loaded on 2026-11-12 without "ROKU"
     Then "ROKU" is flagged delisted with reason "UNSERVABLE_REASON_NOT_TRADABLE" and first-unservable date 2026-11-07
 
   @AC-2 @FR-1
   Scenario: A symbol unservable for less than the window is not flagged
-    Given the confirmation window is 3 days
+    Given the confirmation window is 5 days
     And "SHPH" is on the user-created watchlist "Biotech"
     And "SHPH" was first absent from the asset set on 2026-11-16
     When the asset set is loaded on 2026-11-17 without "SHPH"
@@ -133,3 +133,16 @@ Feature: delisted-symbol-handling
     When "KPTI" becomes flagged delisted
     Then one alert is emitted naming "KPTI", the reason "UNSERVABLE_REASON_NOT_TRADABLE" and the removal from "Signals"
     And the next asset-set refresh, still without "KPTI", emits no further alert for "KPTI"
+
+  @AC-18 @FR-12
+  Scenario: Two symbols flagged in the same refresh produce two alerts
+    Given "ROKU" and "NWE" are on the system-managed watchlist "Signals"
+    When one asset-set refresh flags both "ROKU" and "NWE" delisted
+    Then two alerts are emitted, one naming "ROKU" and one naming "NWE"
+
+  @AC-19 @FR-13
+  Scenario: The delisted state is one record per symbol, shared by every watchlist
+    Given "ROKU" is on the watchlist "Tech" owned by user A and the watchlist "Media" owned by user B
+    When "ROKU" becomes flagged delisted with first-unservable date 2026-11-07
+    Then the "ROKU" entries on "Tech" and on "Media" both carry delisted true and first-unservable date 2026-11-07
+    And the same state is returned after the owning service restarts

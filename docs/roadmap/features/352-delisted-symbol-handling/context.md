@@ -40,7 +40,6 @@
   `ingest_signal`; a new signal re-adds it through the normal path.
 - The UI marker reuses the existing `UNSERVABLE_REASON` texts of
   `services/xstockstrat-ui/src/lib/opportunityShared.tsx` (AC-15).
-- The 3-day confirmation window in the scenarios is an example value only.
 - Story artifacts are filed from `claude/story-delisted-symbol-handling` into `main-dev`;
   `feature/delisted-symbol-handling` is created when design starts.
 
@@ -56,3 +55,18 @@
   `error`, `BACKFILL_STATUS_PARTIAL`).
 - Not verified here: the list of watchlist-driven requesters (FR-5) and how `xstockstrat-ingest`
   derives `PARTIAL` from marketdata's response — left to `/sdd-design` recon.
+
+## Session 2026-11-16 — sdd-story (operator follow-up on the open questions)
+
+- **D-8** Confirmation-window default: 5 days. The unit (calendar or trading days) was not stated;
+  the scenarios read it as calendar days and the unit stays an open question.
+- **D-9** Delisted state is platform-wide, per symbol, in a new symbol/company profile record. Operator:
+  "create something like a symbol/company profile. It will be useful for additional metadata." This
+  feature stores only the delisted state in it; other metadata is out of scope (my reading, to keep
+  the feature minimal). Added FR-13 and AC-19.
+- **D-10** Alerts: one per symbol. Added AC-18.
+- **D-11** **C-16 sign-off**: the operator signed off changing feature 282's "only the first
+  asset-set load prunes the warm set" guarantee (FR-5).
+- The operator answered four of the five open items. "Record of the automatic removal" (ledger event
+  or not) was not answered and stays open. Mapping of the answer "Per symbol" to the alert-volume
+  question is my reading.

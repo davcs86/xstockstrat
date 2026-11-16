@@ -58,6 +58,10 @@ Answers the operator gave when this story was filed; they bind the FRs below.
 | D-5 | A backfill that explicitly names a delisted symbol | Still attempted; `skipped` only when the source cannot serve it and the symbol is flagged delisted |
 | D-6 | Ticker renamed or reused after a delisting | Out of scope; recorded as a follow-up |
 | D-7 | Where the state is visible | Agent watchlist and backfill tools, the `/insights` watchlists page, and an alert on each transition. No separate servability-check tool |
+| D-8 | Confirmation-window default | 5 days |
+| D-9 | Where the delisted state lives | Platform-wide, per symbol, in a new symbol/company profile record. The profile is meant to hold further symbol metadata later; this feature stores only the delisted state in it |
+| D-10 | Alert volume | One alert per symbol |
+| D-11 | Change to feature 282's "only the first asset-set load prunes the warm set" rule | Signed off (C-16 CHANGE) |
 
 ## Functional Requirements
 
@@ -65,8 +69,8 @@ In this spec a symbol is **flagged delisted** when the platform has confirmed it
 "Unservable" keeps its feature-282 meaning (`UNSERVABLE_REASON_NOT_TRADABLE` or `UNSERVABLE_REASON_OTC`).
 
 FR-1. **Detection with a confirmation window.** A symbol that is on at least one watchlist and is
-unservable in every successfully loaded asset set for a configurable confirmation window becomes flagged
-delisted. The flag records the unservable reason and the date the symbol was first seen unservable. A
+unservable in every successfully loaded asset set for a configurable confirmation window (default 5
+days, D-8) becomes flagged delisted. The flag records the unservable reason and the date the symbol was first seen unservable. A
 symbol unservable for less than the window is not flagged and nothing about it changes. A refresh that
 is rejected or has not loaded yet (feature 282's fail-open rules) counts as no observation: it neither
 starts, extends nor confirms an absence.
@@ -111,9 +115,14 @@ reason and the first-unservable date on every flagged symbol.
 FR-11. **Visible to the agent.** `get_watchlist` and `list_watchlists` return the delisted state of each
 flagged symbol; `get_backfill_status` returns the per-symbol outcomes and reasons of FR-9.
 
-FR-12. **Alert on transition.** One alert is emitted through `xstockstrat-notify` when a symbol becomes
-flagged delisted, naming the symbol, the reason, and the system-managed watchlists it was removed from.
-The alert is emitted once per transition, not on every later refresh.
+FR-12. **Alert on transition.** One alert per symbol (D-10) is emitted through `xstockstrat-notify` when
+a symbol becomes flagged delisted, naming the symbol, the reason, and the system-managed watchlists it
+was removed from. The alert is emitted once per transition, not on every later refresh.
+
+FR-13. **Symbol profile.** The delisted state (flag, reason, first-unservable date) is stored once per
+symbol, platform-wide, in a persisted symbol/company profile record (D-9), and survives a restart. Every
+watchlist that holds the symbol, whoever owns it, and every backfill read the same state. This feature
+stores only the delisted state in the profile.
 
 ## Out of Scope
 
@@ -127,6 +136,8 @@ The alert is emitted once per transition, not on every later refresh.
   age). Detection uses only the feature-282 asset set plus the confirmation window (D-4).
 - The ADBT / HONA failures of the same 2026-11-16 run (a false positive of feature 348's filer guard on
   version-1 rows). Separate bug.
+- Any symbol/company profile metadata other than the delisted state (name, exchange, sector, CIK,
+  successor). D-9 names the profile as the future home for it; none is added here.
 - The bar ingester's dead-symbol hold (feature 291, `stream.bar_ingest_backoff_ms`) is not changed.
 
 ## Affected Services
@@ -142,7 +153,8 @@ Exact service names from CLAUDE.md Service Registry:
   expected in the service itself)
 - `packages/proto` — contract additions below
 
-Which service detects the transition and holds the delisted state is a design decision (Open Questions).
+Which service detects the transition and owns the symbol profile (FR-13) is a design decision (Open
+Questions).
 
 ## Consumer Surface(s)
 
@@ -163,7 +175,10 @@ Additive only; exact messages and field numbers are for `/sdd-design` and `/sdd-
 - `packages/proto/ingest/v1/ingest.proto` `BackfillJob` — per-symbol outcome and reason (FR-9).
 - `packages/proto/marketdata/v1/marketdata.proto` `BackfillFundamentalsResponse` and
   `BackfillBarsResponse` — skipped symbols and per-symbol reasons (FR-7, FR-9).
-- `packages/proto/portfolio/v1/portfolio.proto` — delisted state on a watchlist entry (FR-4).
+- `packages/proto/portfolio/v1/portfolio.proto` — delisted state on a watchlist entry as returned to
+  callers (FR-4); the stored state is the symbol profile's (FR-13).
+- A read contract for the symbol profile's delisted state, in the proto of the service that owns it
+  (FR-13).
 - The per-symbol outcome is a closed set and must be an enum with a `_UNSPECIFIED = 0` value; the reason
   reuses `xstockstrat.common.v1.UnservableReason` where it is the unservable reason, and is a string
   where it is a source error text.
@@ -173,14 +188,15 @@ Additive only; exact messages and field numbers are for `/sdd-design` and `/sdd-
 One new key is expected: the confirmation window of FR-1. Its namespace follows the service that owns
 detection, which is a design decision, so the key is not declared here yet. `/sdd-design` must name it
 and state the full config-key contract (namespace, key, `value_type`, code default, reader `path:symbol`,
-seed migration, live mechanism — C-05). The default value is an Open Question.
+seed migration, live mechanism — C-05). The default is 5 days (D-8).
 
 ## Database Changes
 
 Expected, exact shape for design:
 
-- Persisted delisted state for watchlist entries (flag, reason, first-unservable date), so the state
-  survives a restart — the asset set itself is in memory only.
+- A new symbol/company profile table, one row per symbol, holding the delisted state (flag, reason,
+  first-unservable date) so it survives a restart — the asset set itself is in memory only (FR-13).
+  Owning schema follows the owning service.
 - Persisted per-symbol outcome and reason for backfill jobs, if `BackfillJob` rows do not already hold
   them.
 - A config migration seeding the confirmation-window key.
@@ -204,23 +220,26 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Confirmation-window default and unit** (FR-1). The operator chose a configurable window but no
-  value. The acceptance scenarios use 3 days as an example value only. Operator to confirm the default.
-- [ ] **Where the delisted state lives.** Per watchlist entry (portfolio) or per symbol platform-wide
-  (marketdata). FR-7 needs the state for a symbol named in a backfill; whether a symbol that is on no
-  watchlist can be flagged, and therefore `skipped`, is not settled.
+- [x] **Confirmation-window default** — 5 days (D-8).
+- [x] **Where the delisted state lives** — platform-wide symbol profile (D-9, FR-13).
+- [x] **Alert volume** — one alert per symbol (D-10).
+- [x] **Existing business rules (C-16)** — the change to feature 282's "only the first asset-set load
+  prunes the warm set" guarantee is signed off by the operator (D-11). `/sdd-design` still lists the
+  affected scenarios in `services/xstockstrat-marketdata/acceptance/filter-otc-symbols.feature` and the
+  portfolio and agent `filter-otc-symbols.feature` as CHANGE.
+- [ ] **Unit of the confirmation window** (FR-1). "5 days" is read as calendar days in the acceptance
+  scenarios; trading days would make a Friday absence confirm a week later. Operator to confirm.
+- [ ] **Which service owns the symbol profile** (FR-13). `xstockstrat-marketdata` owns the asset set;
+  `xstockstrat-portfolio` owns watchlists. A migration stays inside its owner's schema.
+- [ ] **Which symbols get a profile row** (FR-13, FR-7). Only symbols on a watchlist (FR-1 as written),
+  or every symbol the platform has stored data for. This decides whether a symbol on no watchlist can
+  be flagged and therefore `skipped` in a backfill.
 - [ ] **Which components request watchlist symbols** (FR-5). Recon must list every watchlist-driven
   requester (warm set, bar ingester, scans, the agent's watchlist-driven backfills) so none is missed.
 - [ ] **Record of the automatic removal** (FR-3). Whether removing a symbol from a "Signals" watchlist
   also writes a ledger event, beyond the FR-12 alert. Not decided by the operator.
-- [ ] **Alert volume** (FR-12). One alert per symbol, or one per detection pass listing every symbol
-  that transitioned. On first rollout several symbols (ROKU, NWE, KPTI, ATCH) transition at once.
 - [ ] **Symbols on "Signals" with an unexpired signal** (FR-3). Removal also drops the entry's
   `portfolio.watchlist_signal_expiry` row; confirm nothing else depends on it.
 - [ ] **Known trap (ledger `fails.md`, agent docs drift).** `tools.py` docstrings,
   `docs/runbooks/mcp-tools.md` and the `strat-lab` skill drift from the code unless updated in the same
   PR; the implementation spec needs an explicit step for all three.
-- [ ] **Existing business rules (C-16).** Feature 282's durable suites
-  (`services/xstockstrat-marketdata/acceptance/filter-otc-symbols.feature`, the portfolio and agent
-  `filter-otc-symbols.feature`) state that only the first asset-set load prunes the warm set. FR-5
-  changes that guarantee; `/sdd-design` must classify the affected scenarios as CHANGE and get sign-off.
