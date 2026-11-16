@@ -84,3 +84,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: none
 - `node scripts/check-config-wiring.mjs --final` → exit 0 (two `REPORTED:` baseline lines, neither from this feature: `fundsignal_loop.py:marketdata/fundamentals.provider`, `trading.go:platform/trading_state`).
 - Status: in-progress → code-completed. No insights.md entry: the lesson (validate before an idempotency claim, test at the handler) is already fails.md 2026-10-07.
+
+### Integration (sequential §5.6)
+- Feature-end checkpoint: steps 1–3 done (surface: backend), 0 pending. Out-of-scope changes: none. Deviations: none. Unaddressed review warnings: none (the Step 2 numstat warning is cleared). No live checkpoint prompt — delegated by the operator's handover.
+- Merge-order gate: no entry for this feature in `merge-order.md`.
+- C-16 promotion (approved in advance in the handover): `@AC-1`..`@AC-4` → `services/xstockstrat-trading/acceptance/fix-replace-tif-before-intent.feature`, each tagged `@feature-349`. All four state a caller-observable guarantee; none is kept feature-local. No dedup hit (recon: no durable scenario covered the replace TIF check). Written directly, without the `scenario-promoter` subagent — one new single-service suite file.
+- Defect report closed: `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.status` → `resolved` / `ref: feature:349-fix-replace-tif-before-intent` (the failure mode is gone: `@AC-1`, `@AC-2`, `@AC-4` green).
+- Branch: `feature/fix-replace-tif-before-intent` accepted pushes; no harness-branch deviation.
+- Open threads for the operator: (1) intent rows already stranded by this defect in a deployed database are not repaired; (2) D-3 — a disallowed TIF is `InvalidArgument` even when an intent row for the same content exists — was decided in design without a live gate.
