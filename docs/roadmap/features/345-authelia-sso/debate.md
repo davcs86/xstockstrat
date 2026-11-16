@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (the owner authorized more than 5 rounds if necessary — context.md 2026-11-15)
-**Rounds run**: 7
+**Rounds run**: 8
 
 ## Rounds
 
@@ -15,6 +15,7 @@
 | 5 | 2026-11-16 | /sdd-design | 10 | 3 | 11 | 11 | 1 | yes |
 | 6 | 2026-11-16 | /sdd-design | 5 | 2 | 6 | 6 | 0 | yes |
 | 7 | 2026-11-16 | /sdd-design | 12 | 0 | 9 | 9 | 1 | yes |
+| 8 | 2026-11-16 | /sdd-design | 10 | 0 | 9 | 9 | 0 | yes |
 
 ## Settled Decisions
 
@@ -97,6 +98,16 @@
 | D-75 | 7 | **Security nits** (O-69). The txn cookie sets `secure: isProduction` like `setSessionCookies` (`auth.ts:53-54`). The callback's error path logs only the error class, never the `code`, the ID token, the token-response body or the email; a unit test asserts it. | `auth.ts:53-54` | settled |
 | D-76 | 7 | **Seam check v2 adopted** (S-1..S-4, S-8, S-9, S-11). The SSO checkbox label is "Keep me signed in for 14 days (SSO)" (S-1). The canonical `/start` and callback orders are fixed (S-2, S-3). AC-24 gains the foreign-key row (S-4). D-62 governs the exempt sets (S-9). The product-spec and acceptance text was fixed this round; `/sdd-review product-spec` re-runs (P-03). | — | settled |
 | D-77 | 7 | **D-52 amendment: logout Origin check** (P-2, owner decision 2026-11-16). The logout route returns 403 with no revoke and no cookie change when an `Origin` header is **present** and differs from `new URL(APP_URL).origin` (D-68 `isSameOrigin` in a "present-only" mode). A request with no Origin header still passes (`auth.spec.ts:307`). Unit cases: absent, matching, sibling `*.<domain>` origin, `null`. | `auth.spec.ts:307` | settled |
+| D-78 | 8 | **Round-8 mechanism adopted** (D-66..D-77). Validity is a discriminated union: the `valid:false` variant carries no issuer, it is computed only when both issuers are non-empty, and a whitespace-only issuer counts as `valid:false`. New modules: `src/lib/{oidcConfig,oidcIssuer,oidcClient,sameOrigin,ssoErrors}.ts` and `app/sso_mode.py`. The agent validates **both** issuers (accepted trade-off: a UI-issuer typo also makes MCP answer 503). `isSameOrigin(req, 'required' / 'if_present')`: `if_present` fails open on an invalid `APP_URL`, which is logged as an ERROR. The D-77 check is step 0 of logout, in both modes. The agent answers 503 before the bearer check when the config is invalid; its header/`iss` pre-checks run outside the D-18 deadline. The Configuration cache has a single slot. `recordAuthEvent` is a generic rest-tuple, and `LogoutReason` gains `cross_origin`. `scripts/testdata/oidc-issuer-vectors.json` is added to the agent and UI `changes` filters (`ci.yml:59,64`). The cutover runbook is the new `docs/runbooks/authelia-sso-cutover.md`.<br>Register acknowledgements: the D-52 "no `isSameOrigin`" bullet is deleted (D-77); a relative `Location` is used only when `APP_URL` is invalid (an exception to D-41); `APP_URL` must equal its own origin, so a trailing slash is invalid (refines D-68); D-38 gains the row "SSO `valid:false` → PRM 503, AS 404". | `ci.yml:55,59,64`; `bffMetrics.ts:9-20,47`; `compose.yml:283-284` | settled |
+| D-79 | 8 | **One issuer grammar** (O-70). Both languages use the same regex and the same port bound:<br>• only printable ASCII `[\x21-\x7e]`, with no `%`, `\`, `@`, `?` or `#`;<br>• the host is lowercase LDH labels whose last label starts with a letter, a canonical dotted quad, or `[::1]`;<br>• the port, if present, is `[1-9][0-9]{0,4}`, ≤ 65535, and not the scheme's default;<br>• an optional path;<br>• `http` only for loopback.<br>TS also asserts a `new URL` round-trip. Vector rows cover every known divergence: IDN, `%2e`, `:08443`, an empty port, `:65536`, non-canonical IPv6, hex IPv4, a numeric last label and `\x00`. Non-loopback IP literals and IDN issuers are rejected by design. | — | settled |
+| D-80 | 8 | **D-77 applies in both modes** (O-71). FR-14's legacy-exception list and FR-15 are amended, and AC-57 is an Outline over legacy and SSO. Verified: `.do/app*.yaml` declare no `domains:`; `APP_URL` is the default `*.ondigitalocean.app` URL (fails.md:2436); each homelab app has a single hostname (homelab-edge `Caddyfile.j2:262-306`). **Owner confirmation pending at the round-8 gate.** | `.do/app.yaml:12` | settled (owner confirm) |
+| D-81 | 8 | **A 403 logout is a sign-out that did not happen** (O-72). The route logs WARN `logout_origin_mismatch`, with the Origin host as a log field and never as a metric label. The runbook and the UI `CLAUDE.md` state that `APP_URL` must be the exact browser origin, local compose included. Accepted residual: the user lands on `/auth/login` with a live session. A visible error would need a REOPEN of D-63, which was not filed. | `middleware.ts:22` | settled |
+| D-82 | 8 | **`ssoErrorRedirect` returns a `NextResponse`** (O-73): `new NextResponse(null,{status:303,headers:{location}})`, so it can clear the `sso_txn_*` cookie. Unit case: `appOrigin` null gives `Location: /auth/login?error=not_configured`, and the txn cookie is cleared. | `auth.ts:47,76` | settled |
+| D-83 | 8 | **Literal events only** (O-74). `ssoErrorRedirect` has two literal `recordAuthEvent` call sites. `bffAllowlist.test.ts` gains `// @ts-expect-error` cases: a reason on `login_ok`, a missing reason on `logout`, and a `JwtRejectReason` on `logout`. `tsconfig.json:21` type-checks test files. | `tsconfig.json:21` | settled |
+| D-84 | 8 | **Garbage tokens get 401** (O-75). All of agent step 3 is wrapped in `except jwt.InvalidTokenError`, plus an `isinstance(payload, dict)` guard; both answer 401 `invalid_token`. `test_sso_auth.py` has one case for a non-JSON payload and one for a non-dict payload. | — | settled |
+| D-85 | 8 | **AC split by observability** (O-76, R-22). AC-54 is the UI scenario and AC-55 is the agent scenario. "No request reaches the IdP" is asserted in the route unit test, where the `fetch` mock is never called. The e2e asserts only what the browser can see. | `playwright.config.ts:168` | settled |
+| D-86 | 8 | **One ERROR per fault** (O-77). `loadOidcConfig` calls `appOrigin()`, and the `app_url` reason does not log a second time. Both languages dedup per (reason, value). | — | settled |
+| D-87 | 8 | **The `jwks_uri` check runs inside the cached promise** (O-78): `p = discovery(...).then(assertJwksSameOrigin)`. A failure rejects `p` and the slot clears. Unit case: a cross-origin `jwks_uri` is not cached. | — | settled |
 | D-13 | 1 | **Fixed constants** (60 s role TTL, JWKS freshness, cooldown, fetch timeout) stay in code with the "Fixed invariant (F-07)" comment form. They are not config keys. | `client.py:39-47` | settled |
 
 ## Rejected Alternatives (locked)
@@ -201,6 +212,15 @@
 | O-67 | 7 | Rollback order, CREATED-user passwords, config-outage residual, and Risks text. | no | closed @ round 7 (D-74; Risks text fixed) |
 | O-68 | 7 | Back-channel reachability and the shared source IP vs the rate limit. | no | closed @ round 7 (D-74) |
 | O-69 | 7 | Txn cookie `secure`; callback error logging. | no | closed @ round 7 (D-75) |
+| O-70 | 8 | The TS and Python issuer validators accept different strings. (D-66, C-18) | yes | closed @ round 8 (D-79) |
+| O-71 | 8 | D-77 in legacy mode was not in the FR-14 exception list. (C-16, P-03) | yes | closed @ round 8 (D-80; owner confirm at gate) |
+| O-72 | 8 | A 403 logout leaves a live session behind the login page. | no | closed @ round 8 (D-81) |
+| O-73 | 8 | `ssoErrorRedirect` returning `Response` cannot clear cookies. | no | closed @ round 8 (D-82) |
+| O-74 | 8 | A union-typed event bypasses the reason typing. | no | closed @ round 8 (D-83) |
+| O-75 | 8 | Payload decode errors in the pre-check give 503. | no | closed @ round 8 (D-84) |
+| O-76 | 8 | AC-54 bundles three services and one assertion cannot be observed. (R-22) | no | closed @ round 8 (D-85) |
+| O-77 | 8 | One `APP_URL` fault logs two ERRORs; dedup differs by language. | no | closed @ round 8 (D-86) |
+| O-78 | 8 | Placement of the UI `jwks_uri` check relative to the cache. | no | closed @ round 8 (D-87) |
 
 ## Reopen Petitions
 

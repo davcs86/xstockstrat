@@ -382,3 +382,38 @@ Feature: authelia-sso
     When a signed-in user logs out
     Then the session cookies are cleared and the refresh token is revoked
     And the browser is redirected to Authelia's portal logout with a return address of "https://xstockstrat-staging.example.test/auth/login"
+
+  @AC-54 @FR-1 @FR-14
+  Scenario: An invalid configured issuer fails SSO sign-in closed
+    Given staging ui/oidc.issuer is "http://auth.example.test" and agent/oidc.issuer is "https://auth.example.test"
+    When a user clicks "Sign in with SSO" on the staging login page
+    Then the browser returns to the login page with error "not_configured" and no session cookie is set
+    And fetching "/.well-known/oauth-protected-resource/agent" from the staging UI returns HTTP 503
+    And the UI logs "sso_issuer_invalid"
+
+  @AC-55 @FR-2 @FR-14
+  Scenario: The agent refuses MCP calls while the issuer configuration is invalid
+    Given staging ui/oidc.issuer is "http://auth.example.test" and agent/oidc.issuer is "https://auth.example.test"
+    When an MCP client calls the staging agent with any bearer token
+    Then the agent returns HTTP 503 with no WWW-Authenticate header
+    And the agent's protected-resource metadata returns HTTP 503
+    And the agent logs "sso_issuer_invalid"
+
+  @AC-56 @FR-15
+  Scenario: Logout with an invalid issuer ends only the xstockstrat session
+    Given staging ui/oidc.issuer is "http://auth.example.test" and agent/oidc.issuer is "https://auth.example.test"
+    When a signed-in user logs out
+    Then the session cookies are cleared and the refresh token is revoked
+    And the browser lands on "/auth/login" without being sent to "auth.example.test"
+
+  @AC-57 @FR-14 @FR-15
+  Scenario Outline: A logout posted from another origin changes nothing
+    Given staging is in <mode> mode and a user is signed in
+    When a page on "https://dashboard.example.test" POSTs "/api/auth/logout" with the user's cookies
+    Then the response is HTTP 403
+    And the session cookies are unchanged and RevokeToken is not called
+
+    Examples:
+      | mode   |
+      | legacy |
+      | SSO    |

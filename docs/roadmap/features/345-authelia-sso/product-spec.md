@@ -149,7 +149,13 @@ Authelia's discovery document advertises one. Otherwise it is Authelia's portal 
 app's group), the login page shows "You don't have access to xstockstrat. Ask an admin." (owner decision 2026-11-16).
 Every other IdP error shows "Sign-in failed. Try again." The UI gains a "Sign out" button in the shared header, in both modes; before this feature nothing in the UI called
 logout. If the UI cannot read its config at logout time, logout ends only the xstockstrat session and logs a warning
-`sso_logout_mode_unknown`; the Authelia session survives (owner decision 2026-11-16).
+`sso_logout_mode_unknown`; the Authelia session survives (owner decision 2026-11-16). In **both modes**, a logout request
+whose `Origin` header is present and is not the app's own origin (`APP_URL`) is refused with 403 and changes nothing:
+no revoke, no cookie change (owner decision 2026-11-16, P-2). A request with no `Origin` header is unaffected.
+**Invalid configuration fails closed.** When both issuers are set but either is not a valid issuer URL, or `APP_URL` is
+not exactly a `scheme://host[:port]` origin, the deployment stays in SSO mode with a configuration error. SSO sign-in
+returns "SSO not configured", the protected-resource documents and every MCP call answer 503, and logout ends only the
+xstockstrat session with no redirect. Both services log `sso_issuer_invalid`.
 
 FR-13. **Documentation.** The same PR as each behaviour change updates:
 - `docs/runbooks/mcp-tools.md`: connector setup with the pre-registered client IDs `xstockstrat-mcp-claude` (full) and
@@ -217,7 +223,7 @@ config rows. Each deployment runs in exactly one mode, chosen by its own config,
 
 ## Consumer Surface(s)
 
-- [x] **UI** (`xstockstrat-ui`), SSO mode unless noted (legacy mode is otherwise unchanged, FR-14; the exceptions, owner sign-off 2026-11-16, are a "Sign out" button in the shared header in both modes, and logout with an expired session answering JSON instead of a redirect):
+- [x] **UI** (`xstockstrat-ui`), SSO mode unless noted (legacy mode is otherwise unchanged, FR-14; the exceptions, owner sign-off 2026-11-16, are a "Sign out" button in the shared header in both modes, logout with an expired session answering JSON instead of a redirect, and a cookie-bearing logout from a foreign `Origin` answering 403):
   - The login page (`src/app/auth/login`, shared by `/trader`, `/insights` and `/config-ui`) gets a "Sign in with SSO" button next to a "Keep me signed in for 14 days (SSO)" checkbox. The password form is shown only when the flag
     is on.
   - The page reads the mode and the flag server-side (today it is a `'use client'` page rendering `CredentialsForm`).
