@@ -174,3 +174,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `node scripts/check-config-wiring.mjs --final` exit 0 (two pre-existing `REPORTED:` lines for other services; this feature declares no config key).
 - Files modified: `docs/roadmap/ledger/fails.md`, `docs/roadmap/ledger/insights.md`
 - Deviations: none
+
+### Integration PR preparation (ALL-DONE path)
+- Merge-order gate: no entry for `fix-row-menu-stays-open` in `merge-order.md`.
+- C-16 promotion (approved in advance at the round-1 and round-3 gates): `scenario-promoter` run on the feature-branch checkout (`ce006bfc`) — 10 NEW, 0 duplicates, nothing for `platform.feature`, no existing suite edited. Created `services/xstockstrat-ui/acceptance/fix-row-menu-stays-open.feature`, generated mechanically from `acceptance.feature`; a `diff` with the provenance tag stripped is empty. `@feature-350` is last on each tag line, after `@regression`, as in the 270 and 339 suites.
+- Promoter's durability notes, kept verbatim as instructed and listed in the PR: `@AC-9` example values are fixture names and exact message strings; `@AC-10` names the End key and the fixture account; `@AC-8`'s body asserts less than its title suggests; `@AC-7` covers two surfaces in one scenario.
+- Defect reports resolved by this feature (step 2.6): only the originating report, already `triaged` → `feature:350-fix-row-menu-stays-open`; no further stamp is due.
