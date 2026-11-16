@@ -235,3 +235,30 @@
   `scripts/config-wiring-stored.json`, `docs/patterns/config-governance.md`. The spec's line anchors in
   those files were NOT re-verified after this merge; `/sdd-execute` discovery must re-read them
   (Step 4, Step 6, Step 11).
+
+## Session 2026-11-16T06:47Z — sdd-execute (sequential): boot, validation, re-spec
+
+- Operator decisions (asked and answered this session): (20) run `/sdd-execute` in **sequential** mode,
+  all 12 steps; (21) the step commits go to `feature/alpaca-adaptive-rate-limit`, which the operator
+  authorized this cloud session to create and push (the harness pins it to `ccr-f38bde65-c8sy8s`
+  otherwise); (22) Step 11 may start a throwaway Postgres 16 **only to generate**
+  `scripts/config-wiring-stored.json` and the fresh heal dry-run — the migration itself is still verified
+  offline; (23) re-spec Steps 5, 6 and 11 before executing.
+- Tree: `feature/alpaca-adaptive-rate-limit@b34dc48 ≡ origin/main-dev` at branch creation.
+- Validation (three `codebase-discovery` runs, all stamped with the tree above): every cited file and
+  symbol exists. Steps 1-4, 7-10 and 12: no drift. Steps 5, 6: `marketdata_service_test.go` anchors from
+  `fakeQuoteStore` down moved +37 lines. Step 11: stored-set lines +24; a feature 343 entry now tops the
+  registered-keys log. `052` is still the next free config migration number.
+- Re-spec (the sole sanctioned step-body edit, sequential-mode §5.3), no instruction changed:
+  - Step 5: seven test call-site lines updated; "two production call sites" corrected to three
+    (`marketdata_service.go:1387`, the call inside `ingestRecentBars`, was not counted).
+  - Step 6: lines of the Start-loop comment, five fakes and the registry pattern updated.
+  - Step 11: stored-set lines updated; the 347 registered-keys entry goes at the top of the log, above
+    the 343 entry, still modelled on the 341 entry.
+- Not re-spec'd, recorded here: `sweepIntentRepo` (`trading/internal/service/trading_telemetry_test.go:98`)
+  also embeds `OrderIntentRepository` and is not in Step 9's implementer list. It compiles unchanged.
+- Assumptions stated to the operator at the up-front confirm: checkpoints after Step 4 and Step 8 (no
+  atomic unit is split); plain Postgres 16 is enough for the stored set (config migrations use no
+  extension), CI's `config-wiring-stored` job is the cross-check; approvals (owner, config team, DBA)
+  are obtained by the operator on the integration PR; the paper-host header check needs Alpaca
+  credentials this sandbox does not hold and stays open.
