@@ -1,7 +1,9 @@
 /** Shared alert severity rendering — extracted from AlertStream.tsx (feature 203) for reuse
  *  across the notifications inbox and the trader bell badge. */
 
-import type { ProtoTimestamp } from './protoTime';
+import type { JsonObject } from '@bufbuild/protobuf';
+import type { QueryClient } from '@tanstack/react-query';
+import { timestampToDate, type ProtoTimestamp } from './protoTime';
 
 // AlertSeverity enum: 1=INFO, 2=WARNING, 3=ERROR, 4=CRITICAL
 export const severityLabel: Record<number, string> = {
@@ -18,9 +20,33 @@ export const severityVariant: Record<number, 'info' | 'warning' | 'destructive'>
   4: 'destructive',
 };
 
+export function formatWhen(createdAt: ProtoTimestamp | undefined): string {
+  return timestampToDate(createdAt)?.toLocaleString() ?? '';
+}
+
+export function contextEntries(context: JsonObject | undefined): { key: string; value: string }[] {
+  return Object.entries(context ?? {}).map(([key, value]) => ({
+    key,
+    value: typeof value === 'string' ? value : JSON.stringify(value),
+  }));
+}
+
 export interface UnreadLike {
   alertId: string;
   createdAt?: ProtoTimestamp;
+}
+
+/** Every alert read model lives under this prefix; a mark-read invalidates it. */
+export const ALERTS_QUERY_KEY = ['alerts'] as const;
+/** Holds the stored-unread list, not a number: the badge is the merged list's length (339). */
+export const ALERT_UNREAD_COUNT_KEY = ['alerts', 'unread-count'] as const;
+
+export async function invalidateAlertReadModels(
+  queryClient: Pick<QueryClient, 'cancelQueries' | 'invalidateQueries'>,
+): Promise<void> {
+  // invalidateQueries reuses an in-flight fetch that has no data yet, and that fetch predates the mark.
+  await queryClient.cancelQueries({ queryKey: ALERTS_QUERY_KEY });
+  await queryClient.invalidateQueries({ queryKey: ALERTS_QUERY_KEY });
 }
 
 /** The unread list limit, the streamed-buffer cap and the drain page size. */

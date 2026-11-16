@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: notify/v1/notify.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NotifyServiceClient = exports.NotifyServiceService = exports.FanoutWebhookResponse = exports.FanoutWebhookRequest = exports.UnregisterPushSubscriptionResponse = exports.UnregisterPushSubscriptionRequest = exports.RegisterPushSubscriptionResponse = exports.RegisterPushSubscriptionRequest = exports.MarkAlertReadResponse = exports.MarkAlertReadRequest = exports.ListAlertsResponse = exports.ListAlertsRequest = exports.AcknowledgeAlertResponse = exports.AcknowledgeAlertRequest = exports.StreamAlertsRequest = exports.EmitAlertResponse = exports.EmitAlertRequest = exports.Alert = exports.AlertSeverity = exports.protobufPackage = void 0;
+exports.NotifyServiceClient = exports.NotifyServiceService = exports.FanoutWebhookResponse = exports.FanoutWebhookRequest = exports.UnregisterPushSubscriptionResponse = exports.UnregisterPushSubscriptionRequest = exports.RegisterPushSubscriptionResponse = exports.RegisterPushSubscriptionRequest = exports.GetAlertRequest = exports.MarkAlertReadResponse = exports.MarkAlertReadRequest = exports.ListAlertsResponse = exports.ListAlertsRequest = exports.AcknowledgeAlertResponse = exports.AcknowledgeAlertRequest = exports.StreamAlertsRequest = exports.EmitAlertResponse = exports.EmitAlertRequest = exports.Alert = exports.AlertSeverity = exports.protobufPackage = void 0;
 exports.alertSeverityFromJSON = alertSeverityFromJSON;
 exports.alertSeverityToJSON = alertSeverityToJSON;
 exports.alertSeverityToNumber = alertSeverityToNumber;
@@ -1203,6 +1203,63 @@ exports.MarkAlertReadResponse = {
         return message;
     },
 };
+function createBaseGetAlertRequest() {
+    return { alertId: "" };
+}
+exports.GetAlertRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.alertId !== "") {
+            writer.uint32(10).string(message.alertId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetAlertRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.alertId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            alertId: isSet(object.alertId)
+                ? globalThis.String(object.alertId)
+                : isSet(object.alert_id)
+                    ? globalThis.String(object.alert_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.alertId !== "") {
+            obj.alertId = message.alertId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetAlertRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetAlertRequest();
+        message.alertId = object.alertId ?? "";
+        return message;
+    },
+};
 function createBaseRegisterPushSubscriptionRequest() {
     return { endpoint: "", p256dh: "", auth: "", userAgent: "" };
 }
@@ -1686,6 +1743,19 @@ exports.NotifyServiceService = {
         requestDeserialize: (value) => exports.MarkAlertReadRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.MarkAlertReadResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.MarkAlertReadResponse.decode(value),
+    },
+    /**
+     * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+     * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+     */
+    getAlert: {
+        path: "/xstockstrat.notify.v1.NotifyService/GetAlert",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetAlertRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetAlertRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.Alert.encode(value).finish()),
+        responseDeserialize: (value) => exports.Alert.decode(value),
     },
     /**
      * Register (or upsert) a Web Push subscription for the calling user.

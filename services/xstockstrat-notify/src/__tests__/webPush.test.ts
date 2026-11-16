@@ -227,6 +227,8 @@ describe('WebPushDispatcher.dispatch', () => {
       ]);
       assert.equal(d.sent[0].payload.title, 'Order filled');
       assert.equal(d.sent[0].payload.body, 'AAPL 10 @ 190.00');
+      assert.equal(d.sent[0].payload.url, '/accounts/notifications/a1');
+      assert.ok(d.sent.every((s) => s.payload.url === '/accounts/notifications/a1'));
       // Targeted query used the user id.
       assert.match(pool.calls[0].sql.replace(/\s+/g, ' '), /WHERE user_id = \$1/);
       assert.deepEqual(pool.calls[0].params, ['user-42']);
@@ -247,6 +249,7 @@ describe('WebPushDispatcher.dispatch', () => {
         ['https://push.example/admin'],
       );
       assert.equal(d.sent[0].payload.title, 'portfolio risk limit breach');
+      assert.equal(d.sent[0].payload.url, '/accounts/notifications/a1');
       assert.match(pool.calls[0].sql.replace(/\s+/g, ' '), /WHERE user_id = ANY\(\$1::text\[\]\)/);
       assert.deepEqual(pool.calls[0].params, [['user-99']]);
     });

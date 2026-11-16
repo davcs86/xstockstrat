@@ -330,6 +330,16 @@ def job_row_to_proto(row: dict) -> ingest_pb2.BackfillJob:
     return job
 
 
+_BACKFILL_FAILURE_FALLBACK = "unexpected error — see the alert details"
+
+
+def _backfill_failure_detail(exc: Exception) -> str:
+    if isinstance(exc, grpc.aio.AioRpcError):
+        details = exc.details()
+        return f"{exc.code().name} — {details}" if details else exc.code().name
+    return _BACKFILL_FAILURE_FALLBACK
+
+
 class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
     def __init__(
         self,
@@ -590,7 +600,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         except Exception as e:
             log.warning("failed to emit %s for job %s: %s", event_type, job_id, e)
 
-    async def _emit_backfill_alert(self, job_id, status, failed_symbols, error, propagation_meta):
+    async def _emit_backfill_alert(
+        self, job_id, status, failed_symbols, error, propagation_meta, detail=None
+    ):
         """Emit a notify alert on FAILED (ERROR) or PARTIAL (WARNING). Guarded + non-fatal."""
         if self._notify is None:
             return
@@ -607,7 +619,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     severity=severity,
                     category="backfill",
                     title=f"Backfill {job_id} {label}",
-                    body=f"Backfill job {job_id} {label}: {error}",
+                    body=f"Backfill job {job_id} {label}: {error if detail is None else detail}",
                     source_service="xstockstrat-ingest",
                     tags=[f"job_id:{job_id}"],
                     context=ctx,
@@ -663,7 +675,12 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 "ingest.backfill.failed", job_id, {"error": str(e)}, propagation_meta
             )
             await self._emit_backfill_alert(
-                job_id, ingest_pb2.BACKFILL_STATUS_FAILED, symbols, str(e), propagation_meta
+                job_id,
+                ingest_pb2.BACKFILL_STATUS_FAILED,
+                symbols,
+                str(e),
+                propagation_meta,
+                detail=_backfill_failure_detail(e),
             )
 
     async def _execute_fundamentals_backfill(self, job_id, request, symbols, propagation_meta):

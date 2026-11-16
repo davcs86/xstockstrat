@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import {
   ALERT_STREAM_001,
   DRAWER_ALERT_BASE_SECONDS,
@@ -7,12 +8,53 @@ import {
   DRAWER_ALERT_STREAMED,
 } from '../../e2e/fixtures/alerts';
 import {
+  ALERT_UNREAD_COUNT_KEY,
+  contextEntries,
   drainUnread,
+  formatWhen,
+  invalidateAlertReadModels,
   mergeUnread,
   pruneStreamed,
   UNREAD_PAGE_SIZE,
   type UnreadLike,
 } from './alertShared';
+
+describe('contextEntries', () => {
+  it('shows a string value as is (@AC-1)', () => {
+    expect(contextEntries({ job_id: '67276d1f' })).toEqual([{ key: 'job_id', value: '67276d1f' }]);
+  });
+
+  it('shows a list as JSON', () => {
+    expect(contextEntries({ failed_symbols: ['AAPL', 'TSLA'] })).toEqual([
+      { key: 'failed_symbols', value: '["AAPL","TSLA"]' },
+    ]);
+  });
+
+  it('shows a number as JSON', () => {
+    expect(contextEntries({ attempts: 3 })).toEqual([{ key: 'attempts', value: '3' }]);
+  });
+
+  it('gives no rows for an empty or missing context', () => {
+    expect(contextEntries({})).toEqual([]);
+    expect(contextEntries(undefined)).toEqual([]);
+  });
+
+  it('keeps insertion order', () => {
+    expect(contextEntries({ c: '1', a: '2', b: '3' }).map((e) => e.key)).toEqual(['c', 'a', 'b']);
+  });
+});
+
+describe('formatWhen', () => {
+  it('gives an empty string for a missing timestamp', () => {
+    expect(formatWhen(undefined)).toBe('');
+  });
+
+  it('formats a bigint-seconds timestamp as a local date-time', () => {
+    expect(formatWhen({ seconds: BigInt(1_763_200_000), nanos: 0 })).toBe(
+      new Date(1_763_200_000_000).toLocaleString(),
+    );
+  });
+});
 
 type Fixture = { alertId: string; createdAt: string };
 type TestAlert = UnreadLike & { title?: string };
@@ -166,5 +208,30 @@ describe('drainUnread', () => {
     expect(result.outcome).toBe('capped');
     expect(result.markedIds).toHaveLength(UNREAD_PAGE_SIZE);
     expect(server.listCalls).toBe(2);
+  });
+});
+
+describe('invalidateAlertReadModels', () => {
+  it('@AC-6 a first fetch still in flight cannot overwrite the post-mark refetch', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let answerFirst: (value: string) => void = () => {};
+    let calls = 0;
+    const observer = new QueryObserver(client, {
+      queryKey: ALERT_UNREAD_COUNT_KEY,
+      queryFn: () => {
+        calls += 1;
+        if (calls === 1) return new Promise<string>((resolve) => (answerFirst = resolve));
+        return Promise.resolve('after-mark');
+      },
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await invalidateAlertReadModels(client);
+    answerFirst('before-mark');
+
+    await vi.waitFor(() => expect(client.getQueryData(ALERT_UNREAD_COUNT_KEY)).toBe('after-mark'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(client.getQueryData(ALERT_UNREAD_COUNT_KEY)).toBe('after-mark');
+    unsubscribe();
   });
 });

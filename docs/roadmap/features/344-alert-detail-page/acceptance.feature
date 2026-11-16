@@ -1,12 +1,13 @@
 Feature: alert-detail-page
   As a trader, I want to open any alert on its own page and see all of its details, so that I can understand what happened and share or return to it.
 
-  @AC-1 @FR-1 @FR-2
+  @AC-1 @FR-1 @FR-2 @FR-5
   Scenario: The alert page shows every detail of the alert
     Given an alert "a1f3" visible to the user with severity "ERROR", category "backfill", source service "xstockstrat-ingest", correlation id "c-77" and context field "job_id" = "67276d1f"
     When the page "/accounts/notifications/a1f3" is opened
     Then it shows "ERROR", "backfill", "xstockstrat-ingest", the created time, the title and the full body
     And it shows "c-77" and the context row "job_id" with "67276d1f"
+    And it shows the alert as read
 
   @AC-2 @FR-3
   Scenario: Another user's alert cannot be opened
@@ -36,8 +37,8 @@ Feature: alert-detail-page
   Scenario: Opening an unread alert marks it read
     Given the unread alert "a1f3" and a bell badge of "1"
     When the page "/accounts/notifications/a1f3" is opened
-    Then the alert is stored as read for that user
-    And the bell shows no unread badge
+    Then the bell on that page shows no unread badge
+    And after a reload the Notifications list shows the alert "a1f3" as read
 
   @AC-7 @FR-6
   Scenario: A push notification opens its alert page
@@ -52,3 +53,23 @@ Feature: alert-detail-page
     Then its body is "Backfill job 67276d1f failed: FAILED_PRECONDITION — marketdata.fundamentals.history.enabled is false"
     And its body does not contain "AioRpcError"
     And its context field "error" holds the raw exception text
+
+  @AC-9 @FR-3
+  Scenario: An alert targeted at the user can be opened
+    Given an alert "d4a7" targeted at the user
+    When the page "/accounts/notifications/d4a7" is opened
+    Then it shows the alert's title and body
+
+  @AC-10 @FR-8
+  Scenario Outline: The header bell is on every page of every segment
+    Given a signed-in user with unread alerts
+    When the page "<page>" is opened
+    Then the header shows the Alerts bell
+    And the bell shows the user's unread badge
+
+    Examples:
+      | page                    |
+      | /trader                 |
+      | /insights/opportunities |
+      | /config-ui              |
+      | /accounts/notifications |
