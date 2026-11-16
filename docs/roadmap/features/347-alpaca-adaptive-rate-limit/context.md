@@ -468,3 +468,15 @@
 - Ledger: no `insights.md` entry written yet; one candidate for `fails.md` is raised at the feature-end
   checkpoint (a spec claim "the reorder changes no existing expectation" that two `recover()`/nil
   fixtures disproved).
+
+### Feature-end checkpoint — operator decisions
+- (28) Promote 32 scenarios into three new per-service suites and open the integration PR. Kept
+  feature-local under D-24 (hard-coded jitter or core arithmetic): AC-3, AC-5, AC-13, AC-19, AC-24.
+  Promotion is verbatim plus `@feature-347`; no existing suite scenario was edited (the three
+  "EXTEND" rules of design.md are expressed by the new scenarios). Known consequences: the `throttle`
+  outcome has no durable scenario (AC-19 is local; its test exists); AC-37's Then refers to "the
+  implementation spec", which dangles once the spec is archived.
+- (29) Add the `fails.md` entry about fixtures that hide a nil dependency behind `recover()`.
+- `origin/main-dev@1148c53` (docs only) merged into the feature branch; `ledger-guard` clean; config
+  migration number unchanged at `052`.
+- Defect reports resolved by this feature: none. The `ReplaceOrder` TIF report stays open.
