@@ -176,6 +176,10 @@ still live.
   `@xstockstrat/proto` to the main checkout's stubs, which have no `firstValueBars`. Both the
   browser bundle and the mock backend then lack the field until the main checkout carries Steps 1+2.
   Plan a CI-equivalent run (`scripts/run-e2e.py` in Docker, or the main checkout updated).
+  Step 14: its tests do not depend on the field (the `*Wire` bodies are encoded with whichever stubs
+  resolve, so the main checkout's drop `firstValueBars`). They passed host-native with `--no-deps`.
+  `scripts/run-e2e.py` cannot run from a batch worktree, because the repo has no `.dockerignore` and
+  the build would copy the `node_modules` symlink. Step 16 needs the field: still open for it.
 - [ ] Show the pin-formula deviation to the operator — Step 4 gate.
 - [x] pgxmock row-error injection has no in-repo use; fallback is `WillReturnError` plus a Deviation
   Log entry — Step 6. Resolved: pgxmock v4.9.0 `CloseError` covers the `rows.Err()` path.
@@ -234,6 +238,8 @@ still live.
   `services/xstockstrat-ui/e2e/fixtures/configKeys.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.
 - Step 13: `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`,
   `services/xstockstrat-ui/src/hooks/useIndicatorSeries.ts`, `services/xstockstrat-ui/src/lib/deadlines.ts`.
+- Step 14: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`,
+  `services/xstockstrat-ui/e2e/fixtures/indicatorHistory.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.
 
 Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
@@ -805,4 +811,18 @@ Tooling setup (step 13): node ✓ · pnpm ✓ (linked main-checkout `node_module
 - Verification (`v-5.log`, `exit=0`): lint clean for the touched files, `tsc` clean against the branch stubs, `Tests 563 passed | 2 skipped (565)`. The `pageSize: 200` grep found nothing. The helper grep matched `:16` (import), `:262`, `:288` and `:1353`, and `namespace: 'ui'` matched once (`:253`). The wiring check was not required (no migration, no `## Config Key Changes`) and was run anyway (`v-7.log`): `--keys` exit 0, silent; `--final` exit 0, printing only the two pre-existing `REPORTED: … readers-disagree` lines.
 - Files modified: `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`, `services/xstockstrat-ui/src/hooks/useIndicatorSeries.ts`, `services/xstockstrat-ui/src/lib/deadlines.ts`
 - Deviations: `tsc` ran against the branch's own `@xstockstrat/proto` stubs, because the linked `node_modules` resolves to the main checkout's `main-dev` stubs. The probe ran with `--no-deps` (Deviation Log).
+- Commit trailer: `Co-Authored-By` follows the session attribution reminder (`Claude Opus 5.5`).
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, step 14
+
+Tooling setup (step 14): node ✓ · pnpm ✓ (linked main-checkout `node_modules`) · vitest ✓ · Playwright + Chromium ✓ (`/opt/pw-browsers`, host-native single spec) · Docker e2e runner ✗ (no `.dockerignore`, so the build would copy the worktree's `node_modules` symlink; not used); no install.
+
+### Step 14 — test: e2e — the page requests the configured depth [done]
+- `indicatorHistory.ts` gained `historyBarsWire(symbol, n)` and `indicatorSeriesWire(n, periods)`, the Connect-JSON bodies built with protobuf-es `toJson(create(...))`. `position-detail.spec.ts` gained three tests beside the FR-6 block and one module-level `routeIndicatorHistory` helper (request capture, plus the `GetConfig` guard that answers only `namespace === 'ui'`). The tests: default depth (no override; `GetBars` `page.pageSize` 200, no `range`), `@AC-1` (depth 1000 and 400 bars → `pageSize` 1000, no `range`, 400 closes and 400 times sent to `GetIndicatorSeries`, one `sma200` `indicator-panel`, no error panel) and `@AC-3` (200 bars → the `sma200` pane draws; "Not enough history" absent). The two `INVENTORY.md` rows list the new consumer. The existing FR-6 test is unchanged and still passes.
+- AC-1 red (`.sdd-logs/v-3.log`; Step 13's `page.tsx` temporarily reverted to `HEAD~1`, uncommitted): `@AC-1 …` failed on `expect.poll(() => requests.getBars).toMatchObject({ page: { pageSize: 1000 } })` with `- "pageSize": 1000, + "pageSize": 200`. The default-depth and `@AC-3` tests passed there, as expected before Step 13. → green (`v-10.log`, `exit=0`): the default-depth, `@AC-1`, `@AC-3` and FR-6 tests passed, `4 passed`. Full spec `v-8.log`: `44 passed`, plus `2 failed` in the two pre-existing first-run tests. Those two report `2 flaky` on the clean branch tip (`v-9.log`) and with this step's changes (`v-10.log`). `tsc` against the branch stubs: clean (`v-6.log`). `test:coverage`: `Tests 563 passed | 2 skipped (565)`, `All files | 78.58` statements (≥ 40) (`v-11.log`). Prettier is clean on both changed `.ts` files (`v-12.log`).
+- Config-key wiring gate: not applicable (a `test` step, no migration in **Files**, no `## Config Key Changes` heading).
+- Files modified: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/indicatorHistory.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: Playwright ran host-native with `--no-deps --timeout=30000` (and `--retries=1`), because the verbatim block's `warmup.setup.ts` times out at 10 s on a cold dev server. `tsc` ran against the branch stubs. `INVENTORY.md` already failed `prettier --check` at `HEAD` and was not reformatted (Deviation Log).
 - Commit trailer: `Co-Authored-By` follows the session attribution reminder (`Claude Opus 5.5`).
