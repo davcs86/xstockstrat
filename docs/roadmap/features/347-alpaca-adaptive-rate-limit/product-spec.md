@@ -78,6 +78,17 @@ existing vendor-request telemetry (marketdata `marketdata.vendor.requests` outco
 `throttle`), and one WARN log per throttled window names the host and the wait. Trading emits the same
 WARN log (host and wait); it gets no new metric in this feature.
 
+## Fixed Invariants (not config keys)
+
+The FR-2 low-water threshold and spreading rule, and the FR-3 backoff base (1s), doubling factor, cap and
+jitter, are constants in code. Reasons: the operator chose a kill switch as the only new tunable
+(2026-11-16); the backoff shape is the vendor's published guidance, not a deployment preference; the
+adaptive rate itself comes from Alpaca's headers at run time, so there is no per-environment number to
+set; and the two live controls an operator needs already exist as config (the kill switch per service,
+and the static ceiling `marketdata.backfill.rate_limit_rps`). This follows the existing "fixed
+invariants, operator-approved" precedent in `services/xstockstrat-marketdata/CLAUDE.md` (asset-set
+refresher, quote retention). `/sdd-design` sets the values and lists them in each service's `CLAUDE.md`.
+
 ## Out of Scope
 
 - The Alpaca WebSocket stream (no request-rate headers apply to it).
@@ -116,8 +127,9 @@ disabled). Live mechanism for both: the service's `WatchConfig`-backed watcher, 
 `GetBool(key, true)` on every Alpaca request, so a `SetConfig` takes effect on the next call with no
 restart. Both are seeded `true` as global rows for staging and production by one new `xstockstrat-config`
 migration, `050_alpaca_adaptive_rate_limit_keys` (050 is the next free number on `main-dev` today;
-features 341 and 343 also name 050, so whichever merges later renumbers above the trunk tip and
-regenerates `scripts/config-wiring-stored.json`).
+features 341, 343 and 330 also name 050; the rule is recorded in `docs/roadmap/features/merge-order.md`
+§ "Config seed number and Alpaca client overlap: 347": the number is re-derived at execute and at the
+integration PR, and the later merger regenerates `scripts/config-wiring-stored.json`).
 
 - `marketdata.alpaca.adaptive_rate_limit_enabled` — namespace `marketdata`, stored key
   `alpaca.adaptive_rate_limit_enabled`, `value_type` bool, code default `true`. Reader:
@@ -130,7 +142,8 @@ regenerates `scripts/config-wiring-stored.json`).
 
 Existing key with changed meaning: `marketdata.backfill.rate_limit_rps` becomes a ceiling over the
 adaptive rate (FR-4). Its type, default and bounds are unchanged. The same migration 050 updates its
-seeded description, and `services/xstockstrat-marketdata/CLAUDE.md` is updated to match.
+seeded description. `services/xstockstrat-marketdata/CLAUDE.md` already states the key is read live per
+request (stale "read at startup" wording corrected 2026-11-16); its row gains the ceiling wording when FR-4 lands.
 
 The defaults of both new keys are declared in the marketdata and trading `CLAUDE.md` config tables.
 

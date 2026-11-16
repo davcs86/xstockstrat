@@ -52,6 +52,7 @@ Feature: alpaca-adaptive-rate-limit
     And the data host reports "X-RateLimit-Remaining: 10000" on every response
     When 15 bars requests are issued at the same moment
     Then no more than 10 of them are sent within the first second
+    And the 15th is sent no earlier than 2 seconds after the first
 
   @AC-8 @FR-5
   Scenario: Missing or malformed headers leave behavior unchanged

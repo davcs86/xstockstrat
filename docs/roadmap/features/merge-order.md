@@ -409,3 +409,11 @@ overlap textually only. `chart-series-palette` (342) and `fix-indicator-pane-war
 second rebases and re-greps its anchors. Config seed number: 341 and 343 each name `050` as next free, as does
 `fix-live-enrich-ttl-seed` (330) on its branch; the trunk tip is `049`, so each re-derives its number at execute and at its
 integration PR, and the later merger regenerates `scripts/config-wiring-stored.json`.
+
+## Config seed number and Alpaca client overlap: 347 ↔ 341, 343, 330, 322, 323 (2026-11-16, non-blocking)
+
+`alpaca-adaptive-rate-limit` (347) names config migration `050` as next free, as do 341, 343 and 330; the trunk tip is `049`,
+so 347 re-derives its number at execute and at its integration PR, and the later merger regenerates
+`scripts/config-wiring-stored.json`. 347 also edits `services/xstockstrat-marketdata/internal/alpaca/client.go` (`do` and the
+limiter), which `fix-retired-surface-proto-cleanup` (322, `Paper` plumbing) and `fix-orphaned-code` (323, `AlpacaAsset`
+removal) edit in disjoint hunks; whichever merges second rebases and re-greps its anchors.
