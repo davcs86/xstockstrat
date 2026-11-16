@@ -1365,6 +1365,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 				"cancel on order %s is still pending", req.OrderId)
 		}
 	}
+	prevIntent := order.IntentState
 	order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING })
 
 	// Cancel at broker if we have a broker order ID. Fail-open: the order is marked canceled
@@ -1384,6 +1385,8 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 				if resp, done, rErr := s.reconcileNotCancelable(ctx, order, entry, intentID); done {
 					return resp, rErr
 				}
+			} else if errors.Is(err, broker.ErrRateLimited) {
+				return nil, s.refuseRateLimitedMutation(ctx, "cancel", order, intentID, prevIntent, err)
 			} else if err != nil {
 				slog.WarnContext(ctx, "broker cancel failed", "order_id", req.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
 				// Continue with internal cancellation — broker may have already filled/canceled.
@@ -1392,29 +1395,8 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		}
 	}
 
-	// Bracket-leg cancellation on close: best-effort — log failures, never block the close.
-	// Cancelling an already-filled leg is a broker no-op.
-	if haveEntry {
-		if bracket, bErr := s.bracketRepo.GetBracketByOrderID(ctx, req.OrderId); bErr != nil {
-			slog.WarnContext(ctx, "cancel: bracket lookup failed", "order_id", req.OrderId, "error", bErr)
-		} else if bracket != nil && bracket.Status == bracketStatusActive {
-			if bracket.StopLegOrderID != "" {
-				if err := resolvedEntry.client.CancelOrder(ctx, bracket.StopLegOrderID); err != nil {
-					slog.WarnContext(ctx, "cancel: bracket stop leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.StopLegOrderID, "error", err)
-				}
-			}
-			if bracket.TakeProfitLegOrderID != "" {
-				if err := resolvedEntry.client.CancelOrder(ctx, bracket.TakeProfitLegOrderID); err != nil {
-					slog.WarnContext(ctx, "cancel: bracket take-profit leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.TakeProfitLegOrderID, "error", err)
-				}
-			}
-			if uErr := s.bracketRepo.UpdateBracketStatus(ctx, bracket.ID, bracketStatusCanceled, bracket.StopLegOrderID, bracket.TakeProfitLegOrderID, ""); uErr != nil {
-				slog.WarnContext(ctx, "cancel: update bracket status failed", "order_id", req.OrderId, "error", uErr)
-			}
-			go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", req.OrderId, order.UserId, bracketUpdatedPayload(order, "", ""))
-		}
-	}
-
+	// The CANCELED write and the intent finalize come before the leg cancels, so one intent covers
+	// exactly one broker mutation and never ages past the staleness threshold behind a slow leg.
 	order = s.updateOrder(order, func(o *tradingv1.Order) {
 		o.Status = tradingv1.OrderStatus_ORDER_STATUS_CANCELED
 		o.UpdatedAt = timestamppb.New(time.Now())
@@ -1428,6 +1410,35 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 	s.persistOrderBestEffort(ctx, order, "cancel_final")
 	s.finalizeCancelIntent(ctx, intentID, order, finalIntentState)
 
+	// Bracket-leg cancellation on close: best-effort — log failures, never block the close.
+	// Cancelling an already-filled leg is a broker no-op.
+	if haveEntry {
+		if bracket, bErr := s.bracketRepo.GetBracketByOrderID(ctx, req.OrderId); bErr != nil {
+			slog.WarnContext(ctx, "cancel: bracket lookup failed", "order_id", req.OrderId, "error", bErr)
+		} else if bracket != nil && bracket.Status == bracketStatusActive {
+			if bracket.StopLegOrderID != "" {
+				legCtx, cancelLeg := s.alpacaCallContext(ctx, resolvedEntry)
+				err := resolvedEntry.client.CancelOrder(legCtx, bracket.StopLegOrderID)
+				cancelLeg()
+				if err != nil {
+					slog.WarnContext(ctx, "cancel: bracket stop leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.StopLegOrderID, "error", err)
+				}
+			}
+			if bracket.TakeProfitLegOrderID != "" {
+				legCtx, cancelLeg := s.alpacaCallContext(ctx, resolvedEntry)
+				err := resolvedEntry.client.CancelOrder(legCtx, bracket.TakeProfitLegOrderID)
+				cancelLeg()
+				if err != nil {
+					slog.WarnContext(ctx, "cancel: bracket take-profit leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.TakeProfitLegOrderID, "error", err)
+				}
+			}
+			if uErr := s.bracketRepo.UpdateBracketStatus(ctx, bracket.ID, bracketStatusCanceled, bracket.StopLegOrderID, bracket.TakeProfitLegOrderID, ""); uErr != nil {
+				slog.WarnContext(ctx, "cancel: update bracket status failed", "order_id", req.OrderId, "error", uErr)
+			}
+			go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", req.OrderId, order.UserId, bracketUpdatedPayload(order, "", ""))
+		}
+	}
+
 	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.canceled", req.OrderId, order.UserId, map[string]interface{}{
 		"order_id": req.OrderId, "user_id": middleware.FromContext(ctx).UserID,
 	})
@@ -1440,7 +1451,9 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 // state. done=false means the broker confirms CANCELED and the normal cancel path proceeds; an
 // order is never recorded CANCELED locally unless the broker says so, or pollFills would skip it.
 func (s *TradingService) reconcileNotCancelable(ctx context.Context, order *tradingv1.Order, entry brokerPoolEntry, intentID string) (*tradingv1.CancelOrderResponse, bool, error) {
-	brokerOrder, err := entry.client.GetOrder(ctx, order.BrokerOrderId)
+	readCtx, cancelRead := s.alpacaCallContext(ctx, entry)
+	brokerOrder, err := entry.client.GetOrder(readCtx, order.BrokerOrderId)
+	cancelRead()
 	if err != nil {
 		slog.WarnContext(ctx, "cancel: order not cancelable and broker re-read failed", "order_id", order.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
 		order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_UNKNOWN })
@@ -1456,6 +1469,31 @@ func (s *TradingService) reconcileNotCancelable(ctx context.Context, order *trad
 	order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED })
 	s.finalizeCancelIntent(ctx, intentID, order, repository.IntentStateCompleted)
 	return &tradingv1.CancelOrderResponse{Success: false, Order: order}, true, nil
+}
+
+// alpacaCallContext bounds one broker call by broker.timeout_ms on every non-IBKR account. The test is
+// != IBKR, mirroring the client dispatch, so an UNSPECIFIED-type account's Alpaca client is bounded too.
+func (s *TradingService) alpacaCallContext(ctx context.Context, entry brokerPoolEntry) (context.Context, context.CancelFunc) {
+	if commonv1.BrokerType(entry.brokerType) == commonv1.BrokerType_BROKER_TYPE_IBKR {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, brokerCallTimeout(s.cfgW))
+}
+
+// refuseRateLimitedMutation undoes a cancel/replace the broker definitely did not process: it must run
+// before any local order-state write, and it releases the dedup row so an identical retry really retries.
+func (s *TradingService) refuseRateLimitedMutation(ctx context.Context, op string, order *tradingv1.Order, intentID string, prevIntent tradingv1.IntentState, cause error) error {
+	released, relErr := s.orderIntentRepo.ReleasePendingIntent(context.WithoutCancel(ctx), intentID)
+	slog.WarnContext(ctx, "broker rate limit refused order mutation", "op", op, "order_id", order.OrderId,
+		"broker_order_id", order.BrokerOrderId, "intent_id", intentID, "released", released && relErr == nil, "error", errors.Join(cause, relErr))
+	if released && relErr == nil {
+		s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = prevIntent })
+		return grpcstatus.Errorf(codes.Unavailable,
+			"%s on order %s was refused by the broker rate limit; the order is unchanged", op, order.OrderId)
+	}
+	s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_UNKNOWN })
+	return grpcstatus.Errorf(codes.Unavailable,
+		"%s on order %s was refused by the broker rate limit and its %s intent could not be released; verify with the broker before retrying", op, order.OrderId, op)
 }
 
 func (s *TradingService) finalizeCancelIntent(ctx context.Context, intentID string, order *tradingv1.Order, state int16) {
@@ -1522,6 +1560,21 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		return nil, err
 	}
 
+	// Must stay above the intent claim: a refused time-in-force must leave no intent row (TRADING-7).
+	// Only the changed fields are sent to the broker (zero/empty/nil = leave unchanged).
+	brokerReq := broker.OrderRequest{
+		Qty:        req.Qty,
+		LimitPrice: req.LimitPrice,
+		StopPrice:  req.StopPrice,
+		Trail:      req.Trail,
+	}
+	if req.TimeInForce != nil {
+		if err := validateTIF(*req.TimeInForce, commonv1.BrokerType(entry.brokerType)); err != nil {
+			return nil, err
+		}
+		brokerReq.TimeInForce = tifToWireString(*req.TimeInForce)
+	}
+
 	// Dedup insert: server-derived intent ID (a content-identical replace on the same order collapses).
 	intentID, requestHashHex, err := deriveReplaceCancelIntentID(req)
 	if err != nil {
@@ -1562,22 +1615,13 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 				"replace on order %s is still pending", req.OrderId)
 		}
 	}
+	prevIntent := order.IntentState
 	order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING })
 
-	// Only the changed fields are sent to the broker (zero/empty/nil = leave unchanged).
-	brokerReq := broker.OrderRequest{
-		Qty:        req.Qty,
-		LimitPrice: req.LimitPrice,
-		StopPrice:  req.StopPrice,
-		Trail:      req.Trail,
-	}
-	if req.TimeInForce != nil {
-		if err := validateTIF(*req.TimeInForce, commonv1.BrokerType(entry.brokerType)); err != nil {
-			return nil, err
-		}
-		brokerReq.TimeInForce = tifToWireString(*req.TimeInForce)
-	}
 	if _, replaceErr := entry.client.ReplaceOrder(ctx, order.BrokerOrderId, brokerReq); replaceErr != nil {
+		if errors.Is(replaceErr, broker.ErrRateLimited) {
+			return nil, s.refuseRateLimitedMutation(ctx, "replace", order, intentID, prevIntent, replaceErr)
+		}
 		if !isUncertainBrokerOutcome(replaceErr) && ownsIntent {
 			if marshaled, mErr := proto.Marshal(order); mErr == nil {
 				if fErr := s.orderIntentRepo.FinalizeIntent(context.WithoutCancel(ctx), intentID, req.OrderId, repository.IntentStateRejected, marshaled); fErr != nil {
@@ -1819,7 +1863,9 @@ func (s *TradingService) pollFills(ctx context.Context) {
 		}
 
 		polled++
-		brokerOrder, err := entry.client.GetOrder(ctx, order.BrokerOrderId)
+		pollCtx, cancelPoll := s.alpacaCallContext(ctx, entry)
+		brokerOrder, err := entry.client.GetOrder(pollCtx, order.BrokerOrderId)
+		cancelPoll()
 		if err != nil {
 			slog.WarnContext(ctx, "fill poll: broker GetOrder failed", "order_id", order.OrderId, "error", err)
 			failed++
@@ -2544,6 +2590,12 @@ func brokerCallTimeout(cfgW *config.Watcher) time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+// alpacaRateLimitBudget is the sole reader of trading.broker.adaptive_rate_limit_enabled (explicit true
+// default); the Alpaca client calls it before every request, so the kill switch is live.
+func (s *TradingService) alpacaRateLimitBudget() time.Duration {
+	return rateLimitBudget(s.cfgW.GetBool("broker.adaptive_rate_limit_enabled", true), brokerCallTimeout(s.cfgW), staleThreshold(s.cfgW))
+}
+
 // ibkrTiming is the IBKR LST session lifecycle from the ibkr.* keys, read live on every use (≤0 → default).
 func (s *TradingService) ibkrTiming() broker.IBKRTiming {
 	ms := func(key string, def int64) time.Duration {
@@ -2990,6 +3042,12 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 		placed, err := s.submitOrder(ctx, flattenReq, accountEntry, mode, bracket.AccountID, flattenOrderID, false,
 			requestHashHex, false, 0, 0)
 		lastErr = err
+		if errors.Is(err, broker.ErrRateLimited) {
+			// Halt first, keep retrying: a halt does not close the position, a later attempt may.
+			s.haltAccount(context.Background(), bracket.AccountID,
+				fmt.Sprintf("flatten rate limited by the broker after protection window expiry: order %s: %v", bracket.OrderID, err),
+				int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
+		}
 		var rejected *brokerRejectedError
 		if errors.As(err, &rejected) || (err == nil && placed != nil && placed.Status == tradingv1.OrderStatus_ORDER_STATUS_REJECTED) {
 			if lastErr == nil {
@@ -3268,6 +3326,8 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 			LiveURL:   "https://api.alpaca.markets",
 			Paper:     rec.IsPaper,
 			Timeout:   func() time.Duration { return brokerCallTimeout(s.cfgW) },
+			// A method value, so service tests build their client from the same budget code.
+			RateLimitBudget: s.alpacaRateLimitBudget,
 		}), nil
 	}
 }

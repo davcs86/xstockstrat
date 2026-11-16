@@ -49,6 +49,10 @@ useDefault = true
 # key literals (`k-0123456789abcdef…`, `<old|new|prod|stag>-key-0123456789abcdef…`, `SG.test-key-0123456789`)
 # to assert that the key reaches only the Authorization header and never a log. Scoped to those exact
 # literals. Sites: services/xstockstrat-notify/src/__tests__/{commsgun*,fanout,deliveryChannelsLog,sendgridSender}.test.ts.
+#
+# False positive (feature 345): the implementation spec's first revision (commit 7dd23be) put a
+# placeholder JWT_SECRET for a throwaway local `docker run` boot smoke test inline in a shell line;
+# it signs nothing real. The spec now generates one at run time. Scoped to that exact literal for the history scan.
 [allowlist]
 paths = [
   '''services/xstockstrat-trading/internal/testdata/ibkr/vectors\.json''',
@@ -65,4 +69,5 @@ regexes = [
   '''k-0123456789abcdef0123456789abcdef''',
   '''(old|new|prod|stag)-key-0123456789abcdef0123456789''',
   '''SG\.test-key-0123456789''',
+  '''smoke\-secret\-min\-32\-characters\-long''',
 ]

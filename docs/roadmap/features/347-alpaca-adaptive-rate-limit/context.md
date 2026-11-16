@@ -235,3 +235,290 @@
   `scripts/config-wiring-stored.json`, `docs/patterns/config-governance.md`. The spec's line anchors in
   those files were NOT re-verified after this merge; `/sdd-execute` discovery must re-read them
   (Step 4, Step 6, Step 11).
+
+## Session 2026-11-16T06:47Z — sdd-execute (sequential): boot, validation, re-spec
+
+- Operator decisions (asked and answered this session): (20) run `/sdd-execute` in **sequential** mode,
+  all 12 steps; (21) the step commits go to `feature/alpaca-adaptive-rate-limit`, which the operator
+  authorized this cloud session to create and push (the harness pins it to `ccr-f38bde65-c8sy8s`
+  otherwise); (22) Step 11 may start a throwaway Postgres 16 **only to generate**
+  `scripts/config-wiring-stored.json` and the fresh heal dry-run — the migration itself is still verified
+  offline; (23) re-spec Steps 5, 6 and 11 before executing.
+- Tree: `feature/alpaca-adaptive-rate-limit@b34dc48 ≡ origin/main-dev` at branch creation.
+- Validation (three `codebase-discovery` runs, all stamped with the tree above): every cited file and
+  symbol exists. Steps 1-4, 7-10 and 12: no drift. Steps 5, 6: `marketdata_service_test.go` anchors from
+  `fakeQuoteStore` down moved +37 lines. Step 11: stored-set lines +24; a feature 343 entry now tops the
+  registered-keys log. `052` is still the next free config migration number.
+- Re-spec (the sole sanctioned step-body edit, sequential-mode §5.3), no instruction changed:
+  - Step 5: seven test call-site lines updated; "two production call sites" corrected to three
+    (`marketdata_service.go:1387`, the call inside `ingestRecentBars`, was not counted).
+  - Step 6: lines of the Start-loop comment, five fakes and the registry pattern updated.
+  - Step 11: stored-set lines updated; the 347 registered-keys entry goes at the top of the log, above
+    the 343 entry, still modelled on the 341 entry.
+- Not re-spec'd, recorded here: `sweepIntentRepo` (`trading/internal/service/trading_telemetry_test.go:98`)
+  also embeds `OrderIntentRepository` and is not in Step 9's implementer list. It compiles unchanged.
+- Assumptions stated to the operator at the up-front confirm: checkpoints after Step 4 and Step 8 (no
+  atomic unit is split); plain Postgres 16 is enough for the stored set (config migrations use no
+  extension), CI's `config-wiring-stored` job is the cross-check; approvals (owner, config team, DBA)
+  are obtained by the operator on the integration PR; the paper-host header check needs Alpaca
+  credentials this sandbox does not hold and stays open.
+- Tooling setup (steps 1-12): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.27.0) · uv ✓ ·
+  ruff/pytest ✓ (uv) · pnpm ✓ 9.15.9 · Node 24 ✓ (`/opt/node24`, for Step 12) · `migrate` ⬇ v4.17.1 and
+  local Postgres 16 binaries ✓ (Step 11 stored-set generation only).
+
+### Step 1 — service: pacing core `internal/alpacapace` in both services, with copy governance [done]
+- Atomic unit with Step 2. `pace.go` written in marketdata and copied byte for byte to trading; groups
+  `go-alpacapace` and `go-alpacapace-test` added to `check-watcher-copies.py`; `.jscpd.json` ignore and
+  the `dry-guard-rail.md` exemption added.
+- Files modified: both `internal/alpacapace/pace.go`, `scripts/check-watcher-copies.py`, `.jscpd.json`,
+  `docs/patterns/dry-guard-rail.md`
+- Implementation note: the window keeps the header's raw `Reset` beside the clamped one, so "replace
+  only when Reset advances" compares header values and a clamped 60-65 s reset is not re-replaced by
+  every later response of the same window.
+- Deviations: none
+
+### Step 2 — test: core arithmetic and the copy gate [done]
+- Atomic unit with Step 1. 18 in-package tests; one new pytest for the two groups.
+- TDD (AC-1, 3, 5, 13, 19, 24 core arithmetic): red — with `pace.go` as zero-value stubs all 18 tests
+  failed on assertions (`FAIL github.com/xstockstrat/marketdata/internal/alpacapace`), and the new
+  pytest failed with `KeyError` (groups absent) → green — 18/18 pass with `-race` in both modules,
+  coverage 100.0% of statements; pytest 6 passed; `golangci-lint` 0 issues in both services; ruff clean;
+  `check-watcher-copies: all groups byte-identical`.
+- Files modified: both `internal/alpacapace/pace_test.go`, `scripts/tests/test_check_watcher_copies.py`
+- Deviations: none
+
+### Step 3 — service: marketdata Alpaca client paces from headers and retries a 429 [done]
+- `do` keeps today's body when `AdaptiveRateLimit` is false and otherwise calls `doPaced` (Reserve →
+  static limiter → attempt → Observe → 429 retry). Seams `now`/`sleep`/`jitter`, one `newClient`
+  helper for both constructors, the named reader `alpacaAdaptiveRateLimit`, docs, and one temporary
+  `read-unseeded` entry in `scripts/config-wiring.json` (Step 11 removes it).
+- Verification: build ok; existing `internal/alpaca` and `cmd/server` tests pass; `check-config-wiring
+  --final` exit 0, `--doc-check` exit 0, `--declared-from` prints `PENDING … read-unseeded` (non-blocking
+  at step time); `httpClient.Do` appears only in `do` and its attempt helper `sendAttempt`.
+- TDD: paired with Step 4 (red captured there with these fields and seams present and the loop off).
+- Files modified: `services/xstockstrat-marketdata/internal/alpaca/client.go`, `cmd/server/main.go`,
+  `CLAUDE.md`, `docs/context-constitution.md`; `scripts/config-wiring.json`
+- Interpretation recorded (spec was silent): the throttle WARN is emitted for every non-zero adaptive
+  wait — a spread slot as well as a hold or a 429 wait — gated by `WarnOnce` with the wait's end as
+  the window. `Reservation` does not say whether a wait is a slot or a hold, so the client cannot log
+  holds only without widening the core API. Raised at the Step 4 checkpoint.
+- Deviations: none
+
+### Step 4 — test: marketdata client pacing, retry, telemetry and the FMP guard [done]
+- 14 scenario tests plus the static-ceiling refusal case in `client_test.go` (fake clock, scripted
+  `RoundTripper` that keeps the Alpaca host, WARN recorder), the FMP guard, and the kill-switch reader
+  test in `main_test.go`. `export_test.go` exposes exactly four setters.
+- TDD red (Step 3 fields and seams present, `do` a single attempt): FAIL — AC-1, AC-3, AC-4, AC-5,
+  AC-6, AC-14, AC-19, AC-21, AC-22 and the static-ceiling refusal case, each on an assertion. Guards
+  passed as designed ("red N/A — pins unchanged behavior"): AC-2, AC-7, AC-8, AC-9, AC-24, AC-11.
+- Guard mutants run this session, each turning its test red: AC-2 key by credential only; AC-8 a
+  missing header read as `Remaining 0`; AC-24 refuse a caller that cannot wait for its slot; AC-7 skip
+  the static limiter when adaptive; AC-9 ignore the switch. AC-11's mutant (a retry in the FMP client)
+  was not run: it needs an edit to FMP production code outside this step.
+- TDD green: 15/15 scenario tests pass with `-race` (`F347_AC(1|…|24)` → 15 top-level PASS); the
+  reader test passes (1); whole service `go test ./... -race` exit 0; coverage total 85.1% (>= 40%);
+  `golangci-lint` 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/alpaca/export_test.go` (new),
+  `internal/alpaca/client_test.go`, `internal/fmp/fmp_client_test.go`, `cmd/server/main_test.go`
+- Deviations: none
+
+### Checkpoint after Step 4 — operator decisions
+- (24) Proceed to Steps 5+6, 7, 8.
+- (25) Throttle WARN scope: **holds and 429 waits only**. Implemented as `Reservation.Hold` in the core
+  (both copies) and a `throttled` argument on the marketdata client's `pause`; supersedes the
+  "every non-zero wait" interpretation noted under Step 3. See the Deviation Log.
+- TDD: red — `pace_test.go` did not compile (`got.Hold undefined`) and `F347_AC3` failed on
+  "spreading logged a throttle WARN" → green — 19/19 core tests in both modules (coverage 100.0%),
+  16/16 `F347` tests in marketdata, whole service `go test ./... -race` exit 0, lint 0 issues, copy
+  gate clean.
+- Files modified: both `internal/alpacapace/pace.go` and `pace_test.go`,
+  `services/xstockstrat-marketdata/internal/alpaca/client.go`, `client_test.go`
+
+### Step 5 — service: marketdata loops bound their Alpaca calls by the loop interval [done]
+- Atomic unit with Step 6. Both Start loops create `fetchCtx` from the live interval; only the four
+  vendor calls use it; a per-symbol guard and a later-timeframe guard start no fetch once it expired and
+  count the symbols as errors. `alpaca-integration.md` gained the adaptive bullet and the two loop notes.
+- Verification: build and vet ok; 17 `fetchCtx` lines; 17 write/tick sites still on `ctx`.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`,
+  `docs/alpaca-integration.md`
+- Addition not named by the spec: one WARN `bar ingest: cycle deadline passed, timeframe not fetched`
+  when the later-timeframe guard fires (otherwise that skip is silent apart from the heartbeat).
+- Deviations: none
+
+### Step 6 — test: loop bounds [done]
+- Atomic unit with Step 5. 11 existing call sites pass `context.Background()` twice; three new tests.
+- TDD red (new signatures, bodies still on `ctx`): AC-33 "per-symbol bars requests in the cycle = 6,
+  want exactly 1"; AC-32 "per-symbol quote requests in the cycle = 3, want 0"; the expired-fetch case
+  "vendor calls after the cycle deadline: multi = 1" → green: `F347_AC3[23]` → 2 PASS, the direct case
+  passes, whole service `go test ./... -race` exit 0, coverage total 85.1%, `golangci-lint` 0 issues.
+- Files modified: `internal/service/marketdata_service_test.go`, `internal/service/bar_hold_test.go`
+- Deviations: none
+
+### Step 7 — service: trading Alpaca client paces, retries within the budget and refuses with `ErrRateLimited` [done]
+- `broker.ErrRateLimited`; `ClientConfig.RateLimitBudget`; `do` keeps today's body when the budget is
+  nil or non-positive and otherwise runs `doPaced` (fail fast, inclusive fit rule, mutations on
+  `context.WithoutCancel`, per-attempt timeout `min(T, end − now)`, `GetBody` replay). Pure
+  `rateLimitBudget` beside `computeStaleThreshold`; the method `alpacaRateLimitBudget` wired in
+  `instantiateBrokerLocked`; one temporary `read-unseeded` entry in `scripts/config-wiring.json`.
+- The WARN follows operator decision 25 (holds and 429 waits only), using `Reservation.Hold`.
+- Verification: build ok; existing `internal/broker` tests pass with `-race`; `baseURL()` paper/live
+  gate present; no diff in `ibkr.go` / `ibkr_session.go`; `golang.org/x/time` absent from `go.mod`;
+  `check-config-wiring --final` exit 0 and `--doc-check` exit 0.
+- TDD: paired with Step 8 (red captured there with these symbols present, the loop off and
+  `rateLimitBudget` returning 0).
+- Files modified: `services/xstockstrat-trading/internal/broker/broker.go`, `internal/broker/alpaca.go`,
+  `internal/service/order_intent.go`, `internal/service/trading.go`; `scripts/config-wiring.json`
+- Deviations: none
+
+### Step 8 — test: trading client retry, budget, refusal and the budget table [done]
+- 10 scenario tests in `alpaca_test.go` (fake clock, scripted `RoundTripper` recording method, host,
+  path, body and clock time, WARN recorder), four extra client cases (one-timeout read sends exactly
+  once; FR-5 degradation; caller cancel during a wait for a mutation and for a read; a 401 on a retry),
+  `export_test.go` with exactly four setters, and `trading_rate_limit_test.go` with the two budget tests.
+- TDD red (Step 7 symbols present, `do` a single attempt, `rateLimitBudget` returning 0): FAIL — AC-12,
+  AC-13, AC-15, AC-16, AC-17, AC-18, AC-23, AC-27, the four extra cases, `TestRateLimitBudget` and
+  `TestAlpacaRateLimitBudget_FollowsConfig`. Guards passed as designed: AC-10, AC-20. AC-10's mutant
+  ("ignore the budget") was run and turned it red; AC-20's keying is pinned in `pace_test.go`.
+- TDD green: `F347_AC(10|…|27)` → 10 top-level PASS; `RateLimitBudget` → 2 PASS; whole service
+  `go test ./... -race` exit 0; coverage total 84.7% (>= 40%); `golangci-lint` 0 issues.
+- Open risks closed by this step: pollers skip spreading (one-attempt test); FR-5 degradation on hosts
+  that send no headers; the clamp and 1 s margin rows of the budget table.
+- Files modified: `services/xstockstrat-trading/internal/broker/export_test.go` (new),
+  `internal/broker/alpaca_test.go`, `internal/service/trading_rate_limit_test.go` (new)
+- Deviations: none
+
+### Checkpoint after Step 8 — operator decision
+- (26) Proceed with Steps 9+10, then 11 and 12.
+
+### Step 9 — service: trading handles the rate-limit outcome and bounds its Alpaca-only calls [done]
+- Atomic unit with Step 10. `ReleasePendingIntent` (interface + guarded DELETE); `alpacaCallContext`
+  at exactly three kinds of site (fill poller `GetOrder`, the not-cancelable re-read, both leg cancels;
+  5 occurrences with the definition); `refuseRateLimitedMutation`; `CancelOrder` captures `prevIntent`,
+  refuses on `ErrRateLimited` before any local write, and writes CANCELED + finalizes the intent before
+  the leg block; `ReplaceOrder` refuses the same way; `flattenAndHalt` halts on the first rate-limited
+  submit and keeps retrying. `isUncertainBrokerOutcome` is unchanged. Docs: the key row and the
+  corrected `broker.timeout_ms` row, § Adaptive rate limit (budget table and outcomes a–g), `TRADING-8`,
+  the TRADING-3 addition, and the reconciliation paragraph.
+- Files modified: `services/xstockstrat-trading/internal/repository/order_intent_repo.go`,
+  `internal/service/trading.go`, `CLAUDE.md`, `docs/context-constitution.md`, `docs/reconciliation.md`
+- Open risk carried, unchanged: `ReleasePendingIntent`'s SQL has no DB-level test; it is one statement,
+  `DELETE … WHERE intent_id = $1 AND state = $2 RETURNING intent_id`, for review.
+- Deviations: none
+
+### Step 10 — test: trading service rate-limit outcomes and bounds [done]
+- Atomic unit with Step 9. Real-client harness (`newRateLimitHarness`: snapshot watcher, a real
+  `broker.NewClient` against an `httptest` server built from `brokerCallTimeout` and
+  `svc.alpacaRateLimitBudget`, `memIntentRepo`, `ctxCapturingDB`), a fake-broker harness, 11 scenario
+  tests, `memIntentRepo.ReleasePendingIntent`, and the panic-convention method on
+  `fakeReconciliationOrderIntentRepo`.
+- TDD red, on the tree holding Steps 7-8: AC-36 "CancelOrder took 9.35s, want within 1 s"; AC-34 "tick
+  took 9.75s, want within 100 ms"; AC-35 "CancelOrder took 19.55s / 20.17s" (both parents); AC-28 "halted
+  at each submit = [false false false false]"; AC-29 and AC-30 "error = <nil>, want Unavailable …";
+  AC-31 "code = Internal desc = broker replace failed". AC-26 and AC-27 already passed: **red captured
+  at the Step 7+8 unit** (they are client behavior). AC-12 and AC-25 first failed on a test-side
+  assertion only (the service sends `client_order_id` with its `xss-` prefix); with the assertion
+  corrected they pass on the Step 7-8 tree for the same reason as AC-26/27.
+- TDD green: `F347_AC(12|…|36)` → 11 top-level PASS with `-race`; whole service `go test ./... -race`
+  exit 0; coverage total 84.8%; `golangci-lint` 0 issues; `check-config-wiring --final` and
+  `--doc-check` exit 0.
+- Blocker raised and resolved (operator decision 27, "Fix the two fixtures"): two pre-existing tests
+  broke on nil fixture fields; one line added to each. See the Deviation Log.
+- Files modified: `internal/service/trading_rate_limit_test.go`, `trading_flatten_rejection_test.go`,
+  `trading_cancel_not_cancelable_test.go`, `trading_reconciliation_test.go`; by deviation
+  `trading_telemetry_test.go`, `trading_bracket_test.go`
+- Deviations: fixture edits in two files outside `**Files**` (Deviation Log)
+
+### Step 11 — migration: seed the two kill switches, update the ceiling description, regenerate the stored set [done]
+- Number re-derived: last on the branch and on `origin/main-dev@1148c53` is `051`, so `052` holds; no
+  `merge-order.md` edit. Pair written: one INSERT of four global rows (two keys × staging, production,
+  `bool`, `'true'`, sentinel actor, insert-if-absent) and one description UPDATE guarded on the exact
+  old text; the down deletes only untouched sentinel rows (parenthesized OR) and swaps the description
+  back under the mirror guard.
+- TDD: N/A (migration). Offline check: both files exist with the highest prefix, no duplicate; the old
+  description occurs verbatim in `041_heal_config_keys_to_reader_catalog.up.sql`.
+- Stored set generated on a throwaway Postgres 16 (Deviation Log). Baseline proof first: without `052`
+  the generator reproduced the committed file with an empty diff. With `052`: 4 new key rows and the two
+  reworded `backfill.rate_limit_rps` descriptions. `config-heal-dryrun.py --fresh` left
+  `scripts/config-heal/dryrun-fresh.tsv` unchanged. The database was stopped and its directory removed.
+- Verification: `check-config-wiring --keys …` silent, exit 0; `--final` exit 0 (two pre-existing
+  REPORTED lines, no finding for either key); `--doc-check` exit 0; `--declared-from … --declared-migration`
+  exit 0; `node --test scripts/config-wiring.test.mjs` 75 pass, 0 fail; both temporary baseline entries
+  removed from `scripts/config-wiring.json`; registered-keys entry added at the top of the log.
+- Files modified: `services/xstockstrat-config/migrations/052_alpaca_adaptive_rate_limit_keys.{up,down}.sql`,
+  `scripts/config-wiring-stored.json`, `scripts/config-wiring.json`, `docs/patterns/config-governance.md`
+- Deviations: scratch Postgres for generation (Deviation Log)
+
+### Step 12 — test: seed migration shape [done]
+- `alpacaAdaptiveRateLimitSeedMigration.test.ts`: six cases over the pair through the shared
+  `migrationSql` helper (two statements up and down, four rows, relative keys, the exact guarded UPDATE,
+  the old text present in 041, the guarded down).
+- TDD (AC-37): red — with the two `052` files held outside the tree, 5 of 6 cases failed with
+  `expected exactly one *_alpaca_adaptive_rate_limit_keys.up.sql, got []` (the sixth reads only 041) →
+  green — 6 pass, 0 fail; whole service `pnpm run test:coverage` 377 pass, 0 fail, lines 92.25%;
+  `c8 check-coverage --lines 40` exit 0; `pnpm run lint` exit 0 (0 errors); prettier clean.
+- Run on Node v24.22.1. A platform-side shell outage delayed this step; no command was skipped.
+- Files modified: `services/xstockstrat-config/src/__tests__/alpacaAdaptiveRateLimitSeedMigration.test.ts`
+- Deviations: none
+
+### All steps done
+- `node scripts/check-config-wiring.mjs --final` → exit 0; output: two pre-existing `REPORTED …
+  readers-disagree` lines (analysis `fundamentals.provider`, trading `platform/trading_state`), no
+  finding for either 347 key, no `STALE` and no `STALE-STORED`.
+- Status: in-progress → code-completed.
+- Ledger: no `insights.md` entry written yet; one candidate for `fails.md` is raised at the feature-end
+  checkpoint (a spec claim "the reorder changes no existing expectation" that two `recover()`/nil
+  fixtures disproved).
+
+### Feature-end checkpoint — operator decisions
+- (28) Promote 32 scenarios into three new per-service suites and open the integration PR. Kept
+  feature-local under D-24 (hard-coded jitter or core arithmetic): AC-3, AC-5, AC-13, AC-19, AC-24.
+  Promotion is verbatim plus `@feature-347`; no existing suite scenario was edited (the three
+  "EXTEND" rules of design.md are expressed by the new scenarios). Known consequences: the `throttle`
+  outcome has no durable scenario (AC-19 is local; its test exists); AC-37's Then refers to "the
+  implementation spec", which dangles once the spec is archived.
+- (29) Add the `fails.md` entry about fixtures that hide a nil dependency behind `recover()`.
+- `origin/main-dev@1148c53` (docs only) merged into the feature branch; `ledger-guard` clean; config
+  migration number unchanged at `052`.
+- Defect reports resolved by this feature: none. The `ReplaceOrder` TIF report stays open.
+
+## Session 2026-11-16T07:58Z — sdd-execute (sequential)
+**Steps this session**: 1-12 (units 1+2, 5+6, 9+10)
+**Progress**: 12 done / 12 total
+**Stopped at**: all complete; integration PR https://github.com/davcs86/xstockstrat/pull/1555 opened, CI watch subscribed
+**Next**: review and merge PR #1555 (squash into main-dev)
+
+### Open Items (carried to the PR)
+- [x] Owner + config-team approval for the two keys; DBA review of migration 052 — approved by the operator (see below).
+- [x] Record a real paper-host response (are X-RateLimit-* headers sent by the Trading API?) — not recorded; the operator approved merging without it (see below).
+- [ ] Re-derive the migration number if another config migration lands on main-dev before merge;
+  a renumber means regenerating scripts/config-wiring-stored.json.
+- [ ] ReleasePendingIntent has no DB-level test (accepted design risk).
+
+## Session 2026-11-16T08:01Z — approvals logged (PR #1555)
+
+Operator instruction, verbatim: "Log my approval on the 3". Read as the three approvals the integration
+PR still needed (`docs/runbooks/approval-flow.md`); the operator (davcs86) gives all three:
+
+| # | Approval | Covers | Given by | When |
+|---|---|---|---|---|
+| 1 | Service owner | new keys `marketdata` / `alpaca.adaptive_rate_limit_enabled` and `trading` / `broker.adaptive_rate_limit_enabled` | operator (davcs86) | 2026-11-16T08:01Z |
+| 2 | Config team | the same two keys (naming, scoping, seed) | operator (davcs86) | 2026-11-16T08:01Z |
+| 3 | DBA | config migration `052_alpaca_adaptive_rate_limit_keys` (number, up/down pair, run order) | operator (davcs86) | 2026-11-16T08:01Z |
+
+Not covered by this instruction and still open: recording a real paper-host response for the Trading
+API's rate-limit headers; the `ReleasePendingIntent` SQL has no DB-level test (accepted design risk).
+
+## Session 2026-11-16T08:02Z — approvals clarified (PR #1555)
+
+Operator clarification, verbatim: "I meant all of 3". The approval covers all three "needed from you
+before merge" items of the session summary, not only the role approvals logged above:
+
+1. Service-owner and config-team approval for the two new keys — approved (as logged above).
+2. DBA review of config migration `052_alpaca_adaptive_rate_limit_keys` — approved (as logged above).
+3. The recorded paper-host response for the Trading API's rate-limit headers — **the operator approves
+   merging without it**. No response was captured (the sandbox holds no Alpaca credentials). Accepted
+   consequence, unchanged from design.md § Open Risks: if those hosts send no `X-RateLimit-*` headers,
+   trading gets the 429 retry only and no pre-emptive pacing (FR-5 degradation, tested at Step 8).
+
+Still open and not an approval item: `ReleasePendingIntent`'s SQL has no DB-level test (accepted design
+risk, flagged for review on the PR).

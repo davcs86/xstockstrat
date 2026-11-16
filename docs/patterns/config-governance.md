@@ -148,6 +148,26 @@ Append-only log — one entry per feature that registered new keys. Newest first
 
 Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
 
+### feature 347 — alpaca-adaptive-rate-limit (`xstockstrat-marketdata` / `xstockstrat-trading` / `xstockstrat-config`)
+
+Two kill switches for adaptive Alpaca pacing: each service's Alpaca REST client paces itself from the
+`X-RateLimit-Limit` / `Remaining` / `Reset` response headers and retries an HTTP 429; `false` restores the
+pre-feature single attempt. Both keys are **seeded** `true` (staging + production, global, non-secret,
+insert-if-absent) by config migration `052_alpaca_adaptive_rate_limit_keys`, with the number-free actor
+sentinel `system:config-migration-feature-alpaca-adaptive-rate-limit`; the down deletes only a global row
+that still carries that sentinel and still holds `true`, so a switch an operator has turned off survives a
+rollback. The same migration rewords the description of `marketdata` / `backfill.rate_limit_rps` (now a
+ceiling over the adaptive rate), guarded on the exact old text so an operator-edited description is left
+alone; the down swaps it back under the mirror guard. No `SCALAR_BOUNDS_REGISTRY` entry (both are bool). No
+`scripts/config-wiring.json` baseline entry remains (the two temporary `read-unseeded` entries were removed
+with the seed). The pacing constants are fixed invariants in code, not keys (each service's `CLAUDE.md`).
+Approval: owner + config team.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `marketdata` | `alpaca.adaptive_rate_limit_enabled` | bool | `true` | `cmd/server/main.go:alpacaAdaptiveRateLimit` | Explicit-true code default. Read live on every Alpaca request. Off = static `backfill.rate_limit_rps` limiter only; a 429 goes to the caller. |
+| `trading` | `broker.adaptive_rate_limit_enabled` | bool | `true` | `internal/service/trading.go:(*TradingService).alpacaRateLimitBudget` | Explicit-true code default. Read live on every Alpaca request. Off = one unpaced attempt per broker call. Alpaca only; the loop bounds and the cancel reorder do not depend on it. |
+
 ### feature 343 — backtest-inline-backfill (`xstockstrat-ingest`)
 
 Caps the range a non-admin may request through ingest's self-serve `TriggerBackfill` envelope. The key is

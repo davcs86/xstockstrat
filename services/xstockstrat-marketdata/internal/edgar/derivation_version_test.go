@@ -16,13 +16,14 @@ import (
 var derivationGolden = map[int]string{
 	1: "ba944d741ff613bc26379e490c89788a35aa42abca2ceaaf56801f0254d2df8b",
 	2: "52430c204b3a5d1dc23beb628e7fdcb95266cfaa53867868e2e5c4120ad09d94",
+	3: "52430c204b3a5d1dc23beb628e7fdcb95266cfaa53867868e2e5c4120ad09d94",
 }
 
 func TestDerivationVersion_GoldenDriftGuard_feature223(t *testing.T) {
 	cf := axpFacts()
 	gaap := cf["facts"].(map[string]any)["us-gaap"].(map[string]any)
 	inst := func(end, filed string, fy int, fp string, v float64) map[string]any {
-		return map[string]any{"end": end, "val": v, "accn": "x", "fy": fy, "fp": fp, "form": "10-Q", "filed": filed}
+		return map[string]any{"end": end, "val": v, "accn": axpAccn(filed), "fy": fy, "fp": fp, "form": axpForm(filed), "filed": filed}
 	}
 	gaap["LongTermDebt"] = map[string]any{"units": map[string]any{"USD": []map[string]any{inst("2026-06-30", "2026-07-24", 2026, "Q2", 51000e6)}}}
 	gaap["ShortTermBorrowings"] = map[string]any{"units": map[string]any{"USD": []map[string]any{inst("2026-06-30", "2026-07-24", 2026, "Q2", 1458e6)}}}

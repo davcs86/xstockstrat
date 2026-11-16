@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AcknowledgeAlertRequest, AcknowledgeAlertResponse, Alert, EmitAlertRequest, EmitAlertResponse, FanoutWebhookRequest, FanoutWebhookResponse, ListAlertsRequest, ListAlertsResponse, MarkAlertReadRequest, MarkAlertReadResponse, RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse, StreamAlertsRequest, UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse } from "./notify_pb.js";
+import { AcknowledgeAlertRequest, AcknowledgeAlertResponse, Alert, EmitAlertRequest, EmitAlertResponse, FanoutWebhookRequest, FanoutWebhookResponse, GetAlertRequest, ListAlertsRequest, ListAlertsResponse, MarkAlertReadRequest, MarkAlertReadResponse, RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse, StreamAlertsRequest, UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse } from "./notify_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -70,6 +70,18 @@ export const NotifyService = {
       name: "MarkAlertRead",
       I: MarkAlertReadRequest,
       O: MarkAlertReadResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+     * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+     *
+     * @generated from rpc xstockstrat.notify.v1.NotifyService.GetAlert
+     */
+    getAlert: {
+      name: "GetAlert",
+      I: GetAlertRequest,
+      O: Alert,
       kind: MethodKind.Unary,
     },
     /**

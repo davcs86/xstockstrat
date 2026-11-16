@@ -1,6 +1,6 @@
 # Implementation Spec: alpaca-adaptive-rate-limit
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-16
 **Feature**: `docs/roadmap/features/347-alpaca-adaptive-rate-limit/feature.md`
 **Total Steps**: 12
@@ -156,7 +156,7 @@ the client or service step listed beside it.
 
 ### Step 1 — service: pacing core `internal/alpacapace` in both services, with copy governance
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`, `xstockstrat-trading`, `scripts/`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpacapace/pace.go` — create
@@ -214,7 +214,7 @@ grep -n "alpacapace" .jscpd.json docs/patterns/dry-guard-rail.md scripts/check-w
 
 ### Step 2 — test: core arithmetic and the copy gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`, `xstockstrat-trading`, `scripts/`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpacapace/pace_test.go` — create
@@ -270,7 +270,7 @@ grep -c "^func Test" services/xstockstrat-marketdata/internal/alpacapace/pace_te
 
 ### Step 3 — service: marketdata Alpaca client paces from headers and retries a 429
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/client.go` — modify
@@ -329,7 +329,7 @@ grep -n "alpacaAdaptiveRateLimit\|adaptive_rate_limit_enabled" services/xstockst
 
 ### Step 4 — test: marketdata client pacing, retry, telemetry and the FMP guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/export_test.go` — create
@@ -390,7 +390,7 @@ grep -rn "func Set" internal/alpaca/export_test.go        # the four seams only
 
 ### Step 5 — service: marketdata loops bound their Alpaca calls by the loop interval
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -404,7 +404,7 @@ grep -rn "func Set" internal/alpaca/export_test.go        # the four seams only
 - `StartBarIngestPoller` `:1292-1316`: interval re-read `:1305-1312`, cycle `s.ingestRecentBars(ctx)` `:1313`.
 - `ingestRecentBars` `:1366-1389` loops the timeframes and calls `s.ingestRecentBarsForTimeframe(ctx, src, symbols, tf, …)` `:1387`.
 - `ingestRecentBarsForTimeframe` `:1393-1435`: `ms.GetBarsMulti(ctx, plan.requested, …)` `:1401`; `s.barsStore.InsertBars(ctx, bars)` `:1408` and `:1428`; per-symbol `src.GetBars(ctx, sym, …)` `:1418` with `out.errored[sym] = true` on error `:1420`; `barOutcome` at `marketdata/internal/service/bar_hold.go:25`; `applyBarCycle` `bar_hold.go:83` treats an errored symbol as an error, never as "no bars" (291 @AC-5).
-- Break radius: the three methods have 11 test call sites — `bar_hold_test.go:129`; `marketdata_service_test.go:1318`, `:1338`, `:1366`, `:5061`, `:5085`, `:5111`, `:5277`, `:5315`, `:5325`, `:5363` — and two production call sites (`:1220`, `:1313`). `ingestRecentBars` has no test call site.
+- Break radius: the three methods have 11 test call sites — `bar_hold_test.go:129`; `marketdata_service_test.go:1318`, `:1338`, `:1366`, `:5098`, `:5122`, `:5148`, `:5314`, `:5352`, `:5362`, `:5400` — and three production call sites (`:1220`, `:1313`, and `:1387` inside `ingestRecentBars`). `ingestRecentBars` has no test call site.
 - Both loops are started from `marketdata/cmd/server/main.go:147` and `:149` on the main context, which has no deadline.
 - Docs: the REST bullet at `marketdata/docs/alpaca-integration.md:3`.
 
@@ -434,7 +434,7 @@ grep -n "cacheQuote(ctx\|InsertBars(ctx\|LogTickOK(ctx" internal/service/marketd
 
 ### Step 6 — test: loop bounds
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -443,10 +443,10 @@ grep -n "cacheQuote(ctx\|InsertBars(ctx\|LogTickOK(ctx" internal/service/marketd
 **Reviewers**: `xstockstrat-marketdata` owner — OHLCV ingestion integrity
 
 **Codebase Evidence**:
-- The Start loops read `s.cfg`, a `*config.Watcher` (`marketdata_service.go:41`); a test builds one with `config.MustSnapshotWatcher("marketdata", …)` (`marketdata/internal/config/config.go:136`). No existing test drives either Start loop (`grep -rn "StartWarmQuotePoller\|StartBarIngestPoller" marketdata/internal --include=*_test.go` → one comment at `marketdata_service_test.go:3729`).
-- Reusable fakes in `marketdata_service_test.go`: `fakeMultiSource` `:1445`, `perSymbolQuoteSource` `:5032-5044`, `warmQuotes` `:5046`, `fakeQuoteStore` `:3484`, `failingInsertStore` `:5007`, `installWarmLogRecorder` `:4997`, `fakeCfg` `:289-316`.
+- The Start loops read `s.cfg`, a `*config.Watcher` (`marketdata_service.go:41`); a test builds one with `config.MustSnapshotWatcher("marketdata", …)` (`marketdata/internal/config/config.go:136`). No existing test drives either Start loop (`grep -rn "StartWarmQuotePoller\|StartBarIngestPoller" marketdata/internal --include=*_test.go` → one comment at `marketdata_service_test.go:3766`).
+- Reusable fakes in `marketdata_service_test.go`: `fakeMultiSource` `:1445`, `perSymbolQuoteSource` `:5069-5081`, `warmQuotes` `:5083`, `fakeQuoteStore` `:3521`, `failingInsertStore` `:5044`, `installWarmLogRecorder` `:5034`, `fakeCfg` `:289-316`.
 - Bar-hold harness in `bar_hold_test.go`: `recordingBarsSource` `:44`, `newBarHoldService` `:115-119` (`budgetCfg` carries `barIngestBackoffKey`), `runCycles` `:122-131`, `holdEntry` `:133`.
-- `ingestRecentBars` needs a registry and the warm set: `s.registry.Get("")` (`marketdata_service.go:1371`) and `s.warmSnapshot()` (`:1367`); the registry pattern is `source.NewRegistry()` + `reg.Register("alpaca", src)` (`marketdata_service_test.go:5081-5082`).
+- `ingestRecentBars` needs a registry and the warm set: `s.registry.Get("")` (`marketdata_service.go:1371`) and `s.warmSnapshot()` (`:1367`); the registry pattern is `source.NewRegistry()` + `reg.Register("alpaca", src)` (`marketdata_service_test.go:5118-5119`).
 - `marketdata/internal/service` is excluded from the coverage threshold (`.github/workflows/ci.yml:374`).
 - C-13: symbols `AAA`/`BBB`/`CCC` are scenario one-offs already used inline in this file; no new shared literal.
 
@@ -477,7 +477,7 @@ grep -rn '"AAA", "BBB", "CCC"' --include="*_test.go" internal/service | wc -l   
 
 ### Step 7 — service: trading Alpaca client paces, retries within the budget and refuses with `ErrRateLimited`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify
@@ -542,7 +542,7 @@ node scripts/check-config-wiring.mjs --doc-check              # exit 0
 
 ### Step 8 — test: trading client retry, budget, refusal and the budget table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/export_test.go` — create
@@ -602,7 +602,7 @@ grep -rn "func Set" internal/broker/export_test.go      # the four seams only
 
 ### Step 9 — service: trading handles the rate-limit outcome and bounds its Alpaca-only calls
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/order_intent_repo.go` — modify
@@ -672,7 +672,7 @@ grep -n "broker.adaptive_rate_limit_enabled" CLAUDE.md                     # the
 
 ### Step 10 — test: trading service rate-limit outcomes and bounds
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_rate_limit_test.go` — modify
@@ -735,7 +735,7 @@ grep -n "PARTIALLY_FILLED" internal/service/trading_rate_limit_test.go    # the 
 
 ### Step 11 — migration: seed the two kill switches, update the ceiling description, regenerate the stored set
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/052_alpaca_adaptive_rate_limit_keys.up.sql` — create
@@ -753,10 +753,10 @@ grep -n "PARTIALLY_FILLED" internal/service/trading_rate_limit_test.go    # the 
 - A bool row stores `value_data` `'true'`: `config/migrations/001_config_tables.up.sql:65`; the server parses it as `row.value_data === 'true'` (`config/src/__tests__/configValueRoundtrip.test.ts:157`).
 - Guarded down: `config/migrations/050_ui_chart_history_bars.down.sql` (sentinel actor, `user_id IS NULL`, key and seeded `value_data`); multi-key form with load-bearing outer parentheses: `049_notify_commsgun_channel_keys.down.sql:5-18`.
 - Description-only UPDATE guarded on the exact old text: `config/migrations/032_analysis_zero_trap_descriptions.up.sql` (each `UPDATE … SET description = … WHERE namespace = … AND key = … AND description = '<old>'`).
-- The current `backfill.rate_limit_rps` description, identical in both environments: `scripts/config-wiring-stored.json:2626` and `:2638`; it was written by `041_heal_config_keys_to_reader_catalog.up.sql:151`.
+- The current `backfill.rate_limit_rps` description, identical in both environments: `scripts/config-wiring-stored.json:2650` and `:2662`; it was written by `041_heal_config_keys_to_reader_catalog.up.sql:151`.
 - The checker reads seeds only from `scripts/config-wiring-stored.json`; `--final` fails `STALE-STORED` when `inputs_sha256` no longer matches the migration set (`scripts/check-config-wiring.mjs:226-231`, `:714-717`). It also reports `metadata-missing`, `type-mismatch` and `default-mismatch` for a seeded, read key (`:645-652`), so each row needs a description, a `consuming_service`, `value_type` `bool` and `default_value` `'true'`.
 - Both keys are absent today: `grep -c "adaptive_rate_limit_enabled" scripts/config-wiring-stored.json` → 0.
-- Registered-keys log: `docs/patterns/config-governance.md:145`, newest first; the feature 341 entry is at `:151`.
+- Registered-keys log: `docs/patterns/config-governance.md:145`, newest first; the newest entry (feature 343) is at `:151` and the feature 341 entry at `:165`.
 - Ledger: "a seed migration's down deletes only rows it can prove it wrote" (`fails.md:3841`); the insert-if-absent plus guarded-metadata pattern (`insights.md:4214`).
 - Config-key contract (C-05), both keys: `value_type` `bool`, code default `true`, live per request. `marketdata` / `alpaca.adaptive_rate_limit_enabled`, reader `services/xstockstrat-marketdata/cmd/server/main.go:alpacaAdaptiveRateLimit` (Step 3). `trading` / `broker.adaptive_rate_limit_enabled`, reader `services/xstockstrat-trading/internal/service/trading.go:(*TradingService).alpacaRateLimitBudget` (Step 7). Seed: this step.
 - The two temporary baseline entries added by Steps 3 and 7 are in the `findings` array of `scripts/config-wiring.json`; once the keys are seeded a left-over entry is `STALE` and fails `--final` (precedent: feature 341 Step 11 removes its Step 7 entry).
@@ -779,7 +779,7 @@ grep -n "PARTIALLY_FILLED" internal/service/trading_rate_limit_test.go    # the 
 3. `…down.sql`, two statements: (a) one `DELETE FROM config.config_values` restricted to `environment IN ('staging', 'production')`, `user_id IS NULL`, the sentinel `updated_by`, `value_data = 'true'` and a parenthesized `OR` of the two (namespace, key) pairs; (b) the reverse `UPDATE`, setting `<OLD>` where the description still equals `<NEW>`. A row an operator has changed is never deleted or rewritten.
 4. Regenerate the stored set against a scratch TimescaleDB/Postgres 16 on `:5432`, in the CI form: `docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .`, then `docker run --rm --network host -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" -v "$PWD:/repo" -w /repo --entrypoint python3 xstockstrat-migrate-ci scripts/config-wiring-stored.py`. On a host that has `migrate` and `psql`, `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py` is equivalent. Then, against the same database and in the same form, run `scripts/config-heal-dryrun.py --fresh` and confirm `git diff --exit-code scripts/config-heal/dryrun-fresh.tsv` (the second check of CI job `config-wiring-stored`). Commit the JSON unedited. If neither route is available the step is blocked (P-03).
 4a. Remove the two temporary `findings` entries (namespace `marketdata` / key `alpaca.adaptive_rate_limit_enabled`, and namespace `trading` / key `broker.adaptive_rate_limit_enabled`) from `scripts/config-wiring.json` in this step; a left-over entry is `STALE` and fails `--final`.
-5. `docs/patterns/config-governance.md`: add a "feature 347 — alpaca-adaptive-rate-limit (`xstockstrat-marketdata` / `xstockstrat-trading` / `xstockstrat-config`)" entry above the 341 entry, modelled on it: what the keys do, seeded `true` in staging and production (global, non-secret, insert-if-absent) by `alpaca_adaptive_rate_limit_keys` with the number-free sentinel, the guarded down, the `backfill.rate_limit_rps` description change, no `SCALAR_BOUNDS_REGISTRY` entry (bool), no remaining `scripts/config-wiring.json` baseline entry (the two temporary ones are removed here), approval owner + config team, and a two-row table (namespace, key, type, default, reader, notes).
+5. `docs/patterns/config-governance.md`: add a "feature 347 — alpaca-adaptive-rate-limit (`xstockstrat-marketdata` / `xstockstrat-trading` / `xstockstrat-config`)" entry at the top of the log, above the 343 entry (`:151`), modelled on the 341 entry (`:165`): what the keys do, seeded `true` in staging and production (global, non-secret, insert-if-absent) by `alpaca_adaptive_rate_limit_keys` with the number-free sentinel, the guarded down, the `backfill.rate_limit_rps` description change, no `SCALAR_BOUNDS_REGISTRY` entry (bool), no remaining `scripts/config-wiring.json` baseline entry (the two temporary ones are removed here), approval owner + config team, and a two-row table (namespace, key, type, default, reader, notes).
 6. No env var, deployment file or `.do/app*.yaml` changes.
 7. Six files because the migration pair, the stored set generated from it, the baseline removal that the seed makes mandatory (else `STALE`) and the registry doc are one indivisible change; `merge-order.md` is touched only on a renumber.
 
@@ -801,7 +801,7 @@ git diff --exit-code scripts/config-heal/dryrun-fresh.tsv                 # afte
 
 ### Step 12 — test: seed migration shape
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/alpacaAdaptiveRateLimitSeedMigration.test.ts` — create
@@ -844,3 +844,22 @@ grep -n "migrationSql" src/__tests__/alpacaAdaptiveRateLimitSeedMigration.test.t
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 1 — pacing core `internal/alpacapace` (and Step 3's WARN)
+**Spec said**: "`type Reservation struct{ Wait time.Duration; Fits bool }`" (Step 1) and "One WARN per throttled window per host, gated by `WarnOnce`" (Step 3).
+**Actual**: `Reservation` gained a third field, `Hold bool`, true only for the wait of an exhausted window. The marketdata client logs the throttle WARN for a hold or a 429 wait and never for a spread slot.
+**Reason**: the two-field result does not tell a spread slot from a hold, so the client could only log every non-zero wait (several WARNs a minute while quota is merely low). The design's situation tables mark WARN on the hold and 429 rows only. Operator decision at the Step 4 checkpoint (2026-11-16): "Holds and 429 waits only".
+**Disposition**: operator-approved follow-up commit after Step 4; both `pace.go` copies and `pace_test.go` stay byte-identical. Step 7 (trading client) uses the same field.
+
+### Deviation: Step 10 — trading service rate-limit outcomes and bounds
+**Spec said**: "Existing tests in the four files keep their assertions; run the whole package to confirm the cancel reorder changes no existing expectation" and a `**Files**` list of four test files.
+**Actual**: two more test files were edited, one line each, fixtures only: `trading_telemetry_test.go` (`TestPollFills_TickRecordUsesInjectedClock` now sets `cfgW: &config.Watcher{}`) and `trading_bracket_test.go` (`TestCancelOrder_CancelsActiveBracketLegs` now sets an in-memory `repo`). No assertion changed.
+**Reason**: both fixtures left a field nil. The poller now reads `broker.timeout_ms` for its per-call bound, and the cancel reorder moves the persist ahead of the leg cancels, where that test's `recover()` had been hiding a nil-repository panic. Neither state can occur in a running service.
+**Disposition**: operator-approved scope expansion at the Steps 9+10 blocker (2026-11-16, "Fix the two fixtures"). Production code untouched.
+
+### Deviation: Step 11 — migration: seed the two kill switches
+**Spec said**: "Regenerate the stored set against a scratch TimescaleDB/Postgres 16 on `:5432`, in the CI form: `docker build -f scripts/Dockerfile.migrate …`" (Instruction 4), while `/sdd-execute` forbids starting a database to verify a step.
+**Actual**: a throwaway local Postgres 16 (`initdb` + `pg_ctl`, port 55432, trust auth) was started only to run `scripts/config-wiring-stored.py` and `scripts/config-heal-dryrun.py --fresh` with `migrate` v4.17.1 (the `scripts/Dockerfile.migrate` pin) on `PATH`, then stopped and deleted. The migration itself was verified offline by reading the pair.
+**Reason**: the stored set can only be generated by applying the config migrations; hand-editing it is forbidden. Plain Postgres is equivalent here: with `052` held aside, the generator reproduced the committed file byte for byte (`git diff` empty) before `052` was added.
+**Disposition**: operator-approved at the sequential mode entry (decision 22, generation only); CI job `config-wiring-stored` re-derives the file on the TimescaleDB image and is the cross-check.
+

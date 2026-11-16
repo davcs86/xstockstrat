@@ -97,3 +97,9 @@ When the rail flags a duplicate, consolidate into the existing home instead of r
   each group is enforced by
   `scripts/check-watcher-copies.py` in the CI `config-wiring` job. The shared watcher
   library is a named follow-up. This exemption names only these files.
+- Alpaca pacing core (feature 347): `internal/alpacapace/pace.go` and its `pace_test.go` in
+  `services/xstockstrat-marketdata/` and `services/xstockstrat-trading/` (the two `pace.go` files are
+  ignored in `.jscpd.json`; `*_test.go` already is). They stay per-service because each Go module
+  builds on its own (`GOWORK=off`) and a shared module was rejected at design (347 `R-1`).
+  Byte-identity is enforced by `scripts/check-watcher-copies.py`, groups `go-alpacapace` and
+  `go-alpacapace-test`. This exemption names only these files.

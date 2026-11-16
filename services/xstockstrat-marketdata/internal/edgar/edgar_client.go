@@ -12,6 +12,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
+	"math"
 	"net/http"
 	"sort"
 	"strings"
@@ -147,8 +149,6 @@ type unitDatum struct {
 	End   string  `json:"end"`   // "YYYY-MM-DD"
 	Val   float64 `json:"val"`
 	Accn  string  `json:"accn"`
-	FY    int     `json:"fy"`
-	FP    string  `json:"fp"`   // "Q1".."Q3","FY"
 	Form  string  `json:"form"` // "10-Q","10-K",...
 	Filed string  `json:"filed"`
 }
@@ -218,8 +218,8 @@ const (
 )
 
 type periodAgg struct {
-	fy         int
-	fp         string
+	accn       string
+	label      string
 	periodType string
 	periodEnd  time.Time
 	filed      time.Time
@@ -367,26 +367,74 @@ func parseDate(s string) (time.Time, bool) {
 	return t, true
 }
 
-func periodKey(fy int, fp string) string { return fmt.Sprintf("%d-%s", fy, fp) }
+const (
+	periodQuarterly = source.PeriodQuarterly
+	periodAnnual    = source.PeriodAnnual
+	sharesKey       = "shares"
+	deiTaxonomy     = "dei"
+)
 
-// FetchHistorical implements source.HistoricalFundamentalsSource: one companyfacts fetch yields the
-// full point-in-time series; callers filter by period_end range + as_of at read time.
-func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to time.Time, periodTypes []string) ([]source.HistoricalFundamentalsPeriod, error) {
-	cik, err := c.resolveCIK(ctx, symbol)
-	if err != nil {
-		return nil, err
+// formClass maps a periodic-report form to its period type; a form not listed yields no period.
+var formClass = map[string]string{
+	"10-K": periodAnnual, "10-K/A": periodAnnual, "10-KT": periodAnnual, "10-KT/A": periodAnnual,
+	"20-F": periodAnnual, "20-F/A": periodAnnual, "40-F": periodAnnual, "40-F/A": periodAnnual,
+	"10-Q": periodQuarterly, "10-Q/A": periodQuarterly, "6-K": periodQuarterly, "6-K/A": periodQuarterly,
+}
+
+// Derivation is the full derived history of one filer plus what the audit reports about it.
+type Derivation struct {
+	Periods             []source.HistoricalFundamentalsPeriod
+	LeftOut             []source.LeftOutPeriod
+	SingleMetricAnchors int
+}
+
+type shareFact struct {
+	end time.Time
+	dei bool
+	val float64
+}
+
+// filing is one accession's facts of the read tags.
+type filing struct {
+	accn     string
+	form     string
+	filedRaw string
+	filed    time.Time
+	mixed    bool // facts disagree on form or filed
+	flows    candSet
+	instants candSet
+	shares   map[string]shareFact // unit → chosen cover-page or balance-sheet share count
+}
+
+func (f *filing) addShares(unit string, c shareFact) {
+	cur, ok := f.shares[unit]
+	switch {
+	case !ok, c.end.After(cur.end):
+	case !c.end.Equal(cur.end):
+		return
+	case c.dei != cur.dei:
+		if !c.dei {
+			return
+		}
+	case c.val <= cur.val:
+		return
 	}
-	var cf companyFacts
-	url := fmt.Sprintf("%s/api/xbrl/companyfacts/CIK%s.json", c.baseURL(), cik)
-	if err := c.get(ctx, url, &cf); err != nil {
-		return nil, fmt.Errorf("companyfacts %s: %w", symbol, err)
+	f.shares[unit] = c
+}
+
+func inClassDuration(class string, start, end time.Time) bool {
+	days := int(end.Sub(start).Hours()/24) + 1
+	if class == periodAnnual {
+		return days >= annualMinDays && days <= annualMaxDays
 	}
+	return days >= quarterMinDays && days <= quarterMaxDays
+}
 
-	wantQuarterly, wantAnnual := periodTypeWanted(periodTypes)
-	aggs := map[string]*periodAgg{}
-	var niFacts []niFact // every NetIncomeLoss flow fact, for the quarterly TTM ROE (feature 222)
-
-	for _, tags := range cf.Facts { // us-gaap, dei, ...
+// collectFilings groups the read facts by accession and returns every NetIncomeLoss flow fact.
+func collectFilings(cf companyFacts) (map[string]*filing, []niFact) {
+	filings := map[string]*filing{}
+	var niFacts []niFact
+	for taxonomy, tags := range cf.Facts {
 		for tag, entry := range tags {
 			flowKey, isFlow := flowTags[tag]
 			instKey, isInstant := instantTags[tag]
@@ -396,22 +444,9 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 			for unitKey, unit := range entry.Units {
 				for _, d := range unit {
 					if flowKey == "net_income" && isFlow {
-						if f, ok := toNIFact(d, unitKey); ok {
-							niFacts = append(niFacts, f)
+						if nf, ok := toNIFact(d, unitKey); ok {
+							niFacts = append(niFacts, nf)
 						}
-					}
-					if d.FP == "" || d.FY == 0 {
-						continue
-					}
-					ptype := classifyPeriodType(d)
-					if ptype == "" {
-						continue // wrong-duration flow point (YTD 6mo/9mo) or unclassifiable
-					}
-					if ptype == "quarterly" && !wantQuarterly {
-						continue
-					}
-					if ptype == "annual" && !wantAnnual {
-						continue
 					}
 					end, ok := parseDate(d.End)
 					if !ok {
@@ -421,51 +456,239 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 					if !ok {
 						continue
 					}
-					key := periodKey(d.FY, d.FP)
-					agg := aggs[key]
-					if agg == nil {
-						agg = &periodAgg{fy: d.FY, fp: d.FP, periodType: ptype, periodEnd: end, filed: filed, vals: map[string]map[string]float64{}, flows: candSet{}, instants: candSet{}}
-						aggs[key] = agg
+					f := filings[d.Accn]
+					if f == nil {
+						f = &filing{accn: d.Accn, form: d.Form, filedRaw: d.Filed, filed: filed, flows: candSet{}, instants: candSet{}, shares: map[string]shareFact{}}
+						filings[d.Accn] = f
 					}
-					// Keep the earliest filing (original as-reported) — @AC-1 idempotency.
-					if filed.Before(agg.filed) {
-						agg.filed = filed
+					if d.Form != f.form || d.Filed != f.filedRaw {
+						f.mixed = true
+						continue
 					}
-					if end.After(agg.periodEnd) {
-						agg.periodEnd = end
-					}
+					class := formClass[f.form]
 					switch {
+					case class == "":
 					case isFlow:
-						agg.flows.add(flowKey, unitKey, tag, end, filed, d.Val)
-					case instKey != "shares":
-						agg.instants.add(instKey, unitKey, tag, end, filed, d.Val)
+						if start, ok := parseDate(d.Start); ok && inClassDuration(class, start, end) {
+							f.flows.add(flowKey, unitKey, tag, end, filed, d.Val)
+						}
+					case end.After(filed):
+					case instKey == sharesKey:
+						f.addShares(unitKey, shareFact{end: end, dei: taxonomy == deiTaxonomy, val: d.Val})
 					default:
-						// shares keeps first-seen per unit (D-9).
-						if agg.vals[instKey] == nil {
-							agg.vals[instKey] = map[string]float64{}
-						}
-						if _, seen := agg.vals[instKey][unitKey]; !seen {
-							agg.vals[instKey][unitKey] = d.Val
-						}
+						f.instants.add(instKey, unitKey, tag, end, filed, d.Val)
 					}
 				}
 			}
 		}
 	}
-	for _, a := range aggs {
-		selectOwnPeriod(a)
-	}
+	return filings, niFacts
+}
 
-	out := make([]source.HistoricalFundamentalsPeriod, 0, len(aggs))
-	for _, a := range aggs {
-		if !from.IsZero() && a.periodEnd.Before(from) {
+func metricKeys(s candSet) []string {
+	keys := make([]string, 0, len(s))
+	for k := range s {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// ownPeriod turns a filing into its own period; ok=false when it has neither an anchor nor a flow.
+func (f *filing) ownPeriod() (a *periodAgg, singleMetricAnchor, ok bool) {
+	end, anchored := latestEnd(f.instants, anchorKeys...)
+	if !anchored {
+		if end, ok = latestEnd(f.flows, metricKeys(f.flows)...); !ok {
+			return nil, false, false
+		}
+	}
+	a = &periodAgg{accn: f.accn, periodType: formClass[f.form], periodEnd: end, filed: f.filed, vals: map[string]map[string]float64{}, flows: f.flows, instants: f.instants}
+	selectOwnPeriod(a)
+	for unit, sf := range f.shares {
+		if a.vals[sharesKey] == nil {
+			a.vals[sharesKey] = map[string]float64{}
+		}
+		a.vals[sharesKey][unit] = sf.val
+	}
+	atAnchor := 0
+	for _, k := range anchorKeys {
+		for _, byEnd := range f.instants[k] {
+			if _, has := byEnd[end]; has {
+				atAnchor++
+				break
+			}
+		}
+	}
+	return a, anchored && atAnchor == 1, true
+}
+
+const (
+	daysPerQuarter  = 91.3125
+	fiscalYearShift = -15 // days: a 52/53-week year ending in early January belongs to the prior year
+)
+
+func fiscalYear(boundary time.Time) int { return boundary.AddDate(0, 0, fiscalYearShift).Year() }
+
+func quartersBetween(from, to time.Time) int {
+	return int(math.Round(to.Sub(from).Hours() / 24 / daysPerQuarter))
+}
+
+// quarterLabel labels a quarter ending at end against the sorted fiscal-year boundaries; atBoundary
+// reports that the quarter ends on a real boundary (never true for the Dec-31 fallback).
+func quarterLabel(end time.Time, bounds []time.Time) (label string, atBoundary bool) {
+	ref, fromBounds := time.Date(end.Year(), time.December, 31, 0, 0, 0, 0, time.UTC), false
+	for _, b := range bounds {
+		if !b.Before(end) && quartersBetween(end, b) <= 3 {
+			ref, fromBounds = b, true
+			break
+		}
+	}
+	if !fromBounds && len(bounds) > 0 {
+		ref, fromBounds = bounds[0], true
+		for _, b := range bounds[1:] {
+			if absDuration(b.Sub(end)) < absDuration(ref.Sub(end)) {
+				ref = b
+			}
+		}
+	}
+	r := quartersBetween(end, ref)
+	mod := ((r % 4) + 4) % 4 // floor arithmetic: Go's % and / truncate toward zero
+	div := (r - mod) / 4
+	return fmt.Sprintf("Q%d-%d", 4-mod, fiscalYear(ref)-div), fromBounds && ref.Equal(end)
+}
+
+func absDuration(d time.Duration) time.Duration {
+	if d < 0 {
+		return -d
+	}
+	return d
+}
+
+type periodID struct {
+	periodType string
+	end        time.Time
+}
+
+func leftOut(a *periodAgg, reason string) source.LeftOutPeriod {
+	return source.LeftOutPeriod{FiscalPeriod: a.label, PeriodType: a.periodType, PeriodEnd: a.periodEnd, FiledDate: a.filed, Reason: reason}
+}
+
+// labelPeriods labels every period and returns the kept ones plus those left out.
+func labelPeriods(byID map[periodID]*periodAgg) (kept []*periodAgg, out []source.LeftOutPeriod) {
+	all := make([]*periodAgg, 0, len(byID))
+	var bounds []time.Time
+	for id, a := range byID {
+		all = append(all, a)
+		if id.periodType == periodAnnual {
+			bounds = append(bounds, id.end)
+		}
+	}
+	sort.Slice(bounds, func(i, j int) bool { return bounds[i].Before(bounds[j]) })
+	sort.Slice(all, func(i, j int) bool {
+		if !all[i].periodEnd.Equal(all[j].periodEnd) {
+			return all[i].periodEnd.Before(all[j].periodEnd)
+		}
+		return all[i].periodType < all[j].periodType
+	})
+	taken := map[string]bool{}
+	for _, a := range all {
+		if a.periodType == periodAnnual {
+			a.label = fmt.Sprintf("FY%d", fiscalYear(a.periodEnd))
+		} else {
+			var atBoundary bool
+			if a.label, atBoundary = quarterLabel(a.periodEnd, bounds); atBoundary {
+				out = append(out, leftOut(a, telemetry.LeftOutYearEndQuarter))
+				continue
+			}
+		}
+		if key := a.periodType + "|" + a.label; taken[key] {
+			out = append(out, leftOut(a, telemetry.LeftOutLabelCollision))
+			continue
+		} else {
+			taken[key] = true
+		}
+		kept = append(kept, a)
+	}
+	return kept, out
+}
+
+// DeriveHistorical derives a filer's whole history: one period per filing's own (type, end), the
+// earliest filing supplying values and filed_date. It logs and counts nothing about left-out periods.
+func (c *Client) DeriveHistorical(ctx context.Context, symbol string) (Derivation, error) {
+	cik, err := c.resolveCIK(ctx, symbol)
+	if err != nil {
+		return Derivation{}, err
+	}
+	var cf companyFacts
+	url := fmt.Sprintf("%s/api/xbrl/companyfacts/CIK%s.json", c.baseURL(), cik)
+	if err := c.get(ctx, url, &cf); err != nil {
+		return Derivation{}, fmt.Errorf("companyfacts %s: %w", symbol, err)
+	}
+	filings, niFacts := collectFilings(cf)
+	accns := make([]string, 0, len(filings))
+	for accn := range filings {
+		accns = append(accns, accn)
+	}
+	sort.Strings(accns)
+
+	var d Derivation
+	byID := map[periodID]*periodAgg{}
+	for _, accn := range accns {
+		f := filings[accn]
+		if f.mixed {
+			slog.WarnContext(ctx, "edgar: accession with mixed form or filed date yields no period", "symbol", symbol, "accession", accn)
 			continue
 		}
-		if !to.IsZero() && a.periodEnd.After(to) {
+		if formClass[f.form] == "" {
 			continue
 		}
+		a, single, ok := f.ownPeriod()
+		if !ok {
+			continue
+		}
+		if single {
+			d.SingleMetricAnchors++
+		}
+		id := periodID{a.periodType, a.periodEnd}
+		// accns is sorted, so on an equal filed date the smaller accession is already in place.
+		if cur := byID[id]; cur == nil || a.filed.Before(cur.filed) {
+			byID[id] = a
+		}
+	}
+	kept, out := labelPeriods(byID)
+	d.LeftOut = out
+	d.Periods = make([]source.HistoricalFundamentalsPeriod, 0, len(kept))
+	for _, a := range kept {
 		p := buildPeriod(symbol, a)
 		annualizeQuarterlyROE(&p, a, niFacts)
+		d.Periods = append(d.Periods, p)
+	}
+	return d, nil
+}
+
+// FetchHistorical implements source.HistoricalFundamentalsSource: one companyfacts fetch yields the
+// full point-in-time series; the type and period_end range filters apply after labelling.
+func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to time.Time, periodTypes []string) ([]source.HistoricalFundamentalsPeriod, error) {
+	d, err := c.DeriveHistorical(ctx, symbol)
+	if err != nil {
+		return nil, err
+	}
+	for _, lo := range d.LeftOut {
+		slog.WarnContext(ctx, "edgar: period left out", "symbol", symbol, "fiscal_period", lo.FiscalPeriod, "period_type", lo.PeriodType,
+			"period_end", lo.PeriodEnd.Format(time.DateOnly), "filed_date", lo.FiledDate.Format(time.DateOnly), "reason", lo.Reason)
+		telemetry.RecordPeriodLeftOut(ctx, lo.Reason)
+	}
+	wantQuarterly, wantAnnual := source.PeriodTypesWanted(periodTypes)
+	out := make([]source.HistoricalFundamentalsPeriod, 0, len(d.Periods))
+	for _, p := range d.Periods {
+		if (p.PeriodType == periodQuarterly && !wantQuarterly) || (p.PeriodType == periodAnnual && !wantAnnual) {
+			continue
+		}
+		if !from.IsZero() && p.PeriodEnd.Before(from) {
+			continue
+		}
+		if !to.IsZero() && p.PeriodEnd.After(to) {
+			continue
+		}
 		out = append(out, p)
 	}
 	return out, nil
@@ -581,52 +804,23 @@ func annualizeQuarterlyROE(p *source.HistoricalFundamentalsPeriod, a *periodAgg,
 	p.ROE = &roe
 }
 
-// classifyPeriodType returns "quarterly"/"annual"/"" for a data point. Instant facts (no Start)
-// take their type from fp; flow facts must have a matching duration (rejecting YTD 6mo/9mo rollups).
-func classifyPeriodType(d unitDatum) string {
-	isAnnualFP := d.FP == "FY"
-	if d.Start == "" { // instant fact (balance-sheet / shares)
-		if isAnnualFP {
-			return "annual"
-		}
-		return "quarterly"
-	}
-	start, ok1 := parseDate(d.Start)
-	end, ok2 := parseDate(d.End)
-	if !ok1 || !ok2 {
-		return ""
-	}
-	days := int(end.Sub(start).Hours()/24) + 1
-	switch {
-	case isAnnualFP && days >= annualMinDays && days <= annualMaxDays:
-		return "annual"
-	case !isAnnualFP && days >= quarterMinDays && days <= quarterMaxDays:
-		return "quarterly"
-	default:
-		return "" // e.g. a YTD 6-month NetIncomeLoss on a Q2 filing
-	}
-}
-
 // DerivationVersion MUST be bumped whenever buildPeriod / annualizeQuarterlyROE change a stored
 // column's semantics — stored rows re-derive only when their version is lower (feature 223).
 // 1 = feature 211 financial-debt D/E + feature 222 TTM quarterly ROE.
 // 2 = feature 340 own-period instants and flows (balance-sheet anchor, no first-seen comparatives).
-const DerivationVersion = 2
+const DerivationVersion = 3
 
 func buildPeriod(symbol string, a *periodAgg) source.HistoricalFundamentalsPeriod {
 	p := source.HistoricalFundamentalsPeriod{
 		DerivationVersion: DerivationVersion,
 		Symbol:            symbol,
-		FiscalPeriod:      fmt.Sprintf("%s-%d", a.fp, a.fy),
+		FiscalPeriod:      a.label,
 		PeriodType:        a.periodType,
 		PeriodEnd:         a.periodEnd,
 		FiledDate:         a.filed,
 		ExtraMetrics:      map[string]float64{},
 		Currency:          "USD",
 		Source:            "edgar",
-	}
-	if a.fp == "FY" {
-		p.FiscalPeriod = fmt.Sprintf("FY%d", a.fy)
 	}
 	// Row currency: the unit covering the most monetary facts (per-share/shares excluded), lexical
 	// tiebreak — @AC-1. Absolute facts below are read in this native currency only (single-currency).
@@ -693,23 +887,6 @@ func buildPeriod(symbol string, a *periodAgg) source.HistoricalFundamentalsPerio
 		p.ExtraMetrics["stockholders_equity_usd"] = v
 	}
 	return p
-}
-
-func periodTypeWanted(periodTypes []string) (quarterly, annual bool) {
-	if len(periodTypes) == 0 {
-		return true, true
-	}
-	for _, pt := range periodTypes {
-		switch strings.ToLower(strings.TrimSpace(pt)) {
-		case "quarterly":
-			quarterly = true
-		case "annual":
-			annual = true
-		case "both":
-			quarterly, annual = true, true
-		}
-	}
-	return quarterly, annual
 }
 
 var _ source.HistoricalFundamentalsSource = (*Client)(nil)

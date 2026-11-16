@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when the per-service copies of a config watcher core or live-limits module differ.
+"""Fail when the per-service copies of a config watcher core, live-limits module or Alpaca pacing core differ.
 
 Usage: check-watcher-copies.py [ROOT]
 Each group's files must be byte-identical; the exemption is recorded in docs/patterns/dry-guard-rail.md.
@@ -31,6 +31,14 @@ COPIES = {
         "services/xstockstrat-ledger/src/services/configWatcher.ts",
         "services/xstockstrat-identity/src/services/configWatcher.ts",
         "services/xstockstrat-notify/src/services/configWatcher.ts",
+    ),
+    "go-alpacapace": (
+        "services/xstockstrat-marketdata/internal/alpacapace/pace.go",
+        "services/xstockstrat-trading/internal/alpacapace/pace.go",
+    ),
+    "go-alpacapace-test": (
+        "services/xstockstrat-marketdata/internal/alpacapace/pace_test.go",
+        "services/xstockstrat-trading/internal/alpacapace/pace_test.go",
     ),
 }
 
