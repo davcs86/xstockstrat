@@ -147,7 +147,9 @@ the standard `end_session_endpoint` (RP-Initiated Logout, `post_logout_redirect_
 Authelia's discovery document advertises one. Otherwise it is Authelia's portal logout, with a redirect back to
 `${APP_URL}/auth/login` (owner decision 2026-11-16, superseding the earlier "or documentation only" fallback). When Authelia answers the authorization request with `error=access_denied` (the person is not in the
 app's group), the login page shows "You don't have access to xstockstrat. Ask an admin." (owner decision 2026-11-16).
-Every other IdP error shows "Sign-in failed. Try again."
+Every other IdP error shows "Sign-in failed. Try again." The UI gains a "Sign out" button in the shared header, in both modes; before this feature nothing in the UI called
+logout. If the UI cannot read its config at logout time, logout ends only the xstockstrat session and logs a warning
+`sso_logout_mode_unknown`; the Authelia session survives (owner decision 2026-11-16).
 
 FR-13. **Documentation.** The same PR as each behaviour change updates:
 - `docs/runbooks/mcp-tools.md`: connector setup with the pre-registered client IDs `xstockstrat-mcp-claude` (full) and
@@ -213,7 +215,7 @@ config rows. Each deployment runs in exactly one mode, chosen by its own config,
 
 ## Consumer Surface(s)
 
-- [x] **UI** (`xstockstrat-ui`), SSO mode only (legacy mode is unchanged, FR-14):
+- [x] **UI** (`xstockstrat-ui`), SSO mode unless noted (legacy mode is otherwise unchanged, FR-14; the exceptions, owner sign-off 2026-11-16, are a "Sign out" button in the shared header in both modes, and logout with an expired session answering JSON instead of a redirect):
   - The login page (`src/app/auth/login`, shared by `/trader`, `/insights` and `/config-ui`) gets a "Sign in with SSO" button next to the "Remember me" checkbox. The password form is shown only when the flag
     is on.
   - The page reads the mode and the flag server-side (today it is a `'use client'` page rendering `CredentialsForm`).

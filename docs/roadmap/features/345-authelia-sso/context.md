@@ -151,3 +151,11 @@
 - C-16 label: identity 043 `@AC-2/3/6` are "CHANGE-by-config, pre-signed" (FR-9; context.md 2026-11-15 "seed true + guard").
 - Register: D-1..D-50, R-1..R-17, 0 open objections.
 - Owner steer during round 5: SSO logout ALWAYS redirects to Authelia's logout (end_session_endpoint if advertised, else the portal logout). Reopens D-45 → D-51 (P-1, user reopened). FR-15 amended; AC-53 added.
+- Round 5 (new surface + logout steer):
+  - Adversary O-44 (confirmed against the defect report): an unconditional logout exemption would expose the RevokeToken unverified-decode defect. Fixed in D-52: the route verifies the signature before revoking, the exemption applies only when a session cookie is present, and 319 merges first or alongside.
+  - D-52..D-59 settled.
+- Gate 5 owner decisions:
+  - Accepted the Sign-out button in both modes, and the expired-session logout returning JSON (D-60, O-45).
+  - Accepted that `'error'`-mode logout ends only the xstockstrat session, with a WARN (D-60, O-48).
+  - Chose to run round 6 on the round-5 additions.
+- Spec line 216 and FR-15 amended.

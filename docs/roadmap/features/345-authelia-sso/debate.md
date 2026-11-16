@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (the owner authorized more than 5 rounds if necessary — context.md 2026-11-15)
-**Rounds run**: 4
+**Rounds run**: 5
 
 ## Rounds
 
@@ -12,6 +12,7 @@
 | 2 | 2026-11-16 | /sdd-design | 14 | 3 | 17 | 8 | 0 | yes |
 | 3 | 2026-11-16 | /sdd-design | 7 | 2 | 14 | 6 | 0 | yes |
 | 4 | 2026-11-16 | /sdd-design | 13 | 3 | 11 | 11 | 0 | yes |
+| 5 | 2026-11-16 | /sdd-design | 9 | 3 | 9 | 11 | 1 | yes |
 
 ## Settled Decisions
 
@@ -68,6 +69,15 @@
 | D-49 | 4 | **Accepted seam refinements.**<br>• N-1a: the spec reader contract for the secret covers both `start` and `callback`.<br>• N-3: lowercasing happens in SQL only.<br>• N-4: decision table.<br>• N-5: `IssueSessionForUser` failure → `inactive`/`failed`; no cookies; the link stays.<br>• N-6: SSO claims have no `email`/`sub`; cache holds successes only, never stale.<br>• N-7b: refresh is unchanged.<br>• N-8: no URL normalisation; runbook rules for `APP_URL`/redirect/audience.<br>• N-9: `reset-password` of the staging seed row is a mandatory cutover step.<br>• N-10a: doc list extended (also agent `docs/oauth.md` §path-insertion, UI `CLAUDE.md` Auth table, homelab-edge `sso.md` §7/§8).<br>• N-12: authorized-apps shows the list on `'error'`.<br>• N-13: cookie clears use the same path.<br>• N-14: `_DISCOVERY_FRESH_S=600` joins the D-37 list. | round4-proposal.md §B | settled |
 | D-50 | 4 | **Build verification for the UI step.** `docker compose build --no-cache xstockstrat-ui` plus a boot smoke of the `output:'standalone'` server, because openid-client is ESM-only and brings `jose ^6` (ledger fails.md:373/470). The D-8 JWE imports the UI's own `jose ^5`. | `ui/package.json:46` | settled |
 | D-51 | 5 | **SSO logout always redirects to Authelia** (owner steer, reopening D-45). Logout revokes as today, then redirects to Authelia's logout: the standard `end_session_endpoint` with `post_logout_redirect_uri=${APP_URL}/auth/login` if discovery advertises one, else Authelia's portal logout with a redirect back to `${APP_URL}/auth/login`. This also ends the person's Authelia session for other apps. No documentation-only fallback. Legacy logout is unchanged. FR-15, AC-52, AC-53. | context.md 2026-11-16 | settled |
+| D-52 | 5 | **Logout route** (round-5 delta; O-44 fix; O-47).<br>• Order: verify the `access_token` cookie with jose against `JWT_SECRET`, accepting an expired-but-signed token via `JWTExpired.payload`. Call `revokeToken` **only** for a signature-valid token (`REFRESH_TIMEOUT_MS`). Then `clearSessionCookies`.<br>• Response by mode: legacy and `'error'` return `{ok:true}`, byte-identical. SSO with a verified token returns `{ok:true, redirect}` (D-51; `buildEndSessionUrl(...).href` when `end_session_endpoint` is same-origin and advertised, otherwise `autheliaPortalLogoutUrl(ui/oidc.issuer, APP_URL)`). The mode read plus discovery share one overall `AUTH_CONFIG_TIMEOUT_MS` deadline, falling back to the portal URL.<br>• The middleware exempts `/api/auth/logout` (exact Set, D-40) **only when an `access_token` or `refresh_token` cookie is present**; otherwise today's path runs, so cross-site Lax POSTs behave as now.<br>• No `isSameOrigin` check here, because `auth.spec.ts:307` sends no Origin.<br>• Merge order: feature 319 lands first or alongside (defect `2026-10-19-identity-revoketoken-unverified-decode-defect`). | `identityServiceImpl.ts:279-296`, defect report `:14-16`, `middleware.ts:72-83,91-96`, `oc689 index.js:508-512,1129-1141` | settled |
+| D-53 | 5 | **SignOutButton** (round 5; O-52).<br>• Client component in `PlatformHeader` row 1 (`:202`), so it shows on both breakpoints.<br>• Accessible name "Sign out", tap target ≥44px, guarded against double clicks.<br>• POSTs `/api/auth/logout`, then `location.assign(body.redirect ?? '/auth/login')`. Any non-JSON or error response also goes to `/auth/login`.<br>• e2e at a mobile viewport. | `PlatformHeader.tsx:202,251-253,325` | settled |
+| D-54 | 5 | **SSO sign-in form** (round 5 §3; O-46, O-54).<br>• `SsoSignInForm` is a native `<form method=post action=/api/auth/sso/start>` with a hidden `redirect` and its own checkbox from the `ui/checkbox` primitive (`name/value` set), labelled **"Keep me signed in for 14 days (SSO)"** with a distinct id.<br>• `CredentialsForm` is untouched. An SSO-mode e2e asserts both accessible names resolve uniquely.<br>• `/start`: POST only (GET 405), an `isSameOrigin` check where a missing or `null` Origin fails (asserted), then 303 to Authelia.<br>• `Location`s are built as `new URL(redirect, APP_URL)`. `safeRedirect` gets a unit case for `/trader/../..//evil.com`. | `AuthForm.tsx:32-127` | settled |
+| D-55 | 5 | **Discovery documents and connector card** (round 5 §4–§5; O-54).<br>• UI `.well-known` routes per the mode table. In SSO mode the PRM object is pinned **whole** by a two-sided contract test against the agent's `oauth_metadata.py`.<br>• `ConnectorUrlField` is extracted and shared by `AuthorizedAppsList` and `SsoAppsCard`. `SsoAppsCard` shows the client-ID rows, each hidden when empty. | `next.config.js:54-64`, `authorized-apps/page.tsx:194-214` | settled |
+| D-56 | 5 | **`unlink-sso`** (round 5 §7; O-50).<br>• `lower(email)` lookup: 0 matches → not found; more than one → "ambiguous email — fix with update-email".<br>• `DELETE … [AND issuer] RETURNING issuer, subject`; 0 rows deleted → exit 1.<br>• **Asks for confirmation; `--force/-f` skips it** (mirrors `delete-user`, `manage-users.py:418-423`). Prints the email the person must have in Authelia to relink.<br>• Tests cover the declined confirmation, and the AC-50 relink in identity-db-test. | `manage-users.py:418-443`, `tests/test_manage_users.py:47,446` | settled |
+| D-57 | 5 | **Migration 050 precision** (O-51).<br>• 14 rows. The secret row seeds `value_data='[redacted]'`, `is_secret TRUE`, ciphertext NULL (the 049 sentinel), and the D-36 down guard keys on that sentinel.<br>• Notifies: 6 on a fresh DB (identity/ui/agent × 2 environments), 0 on re-apply. The migration test asserts both counts. | `049_*.up.sql:61-66`, `047_*.up.sql:57-60`, `secretsAndScope.test.ts:240` | settled |
+| D-58 | 5 | **Callback `error` handling** (round 5 §8). The IdP `error` parameter is handled after the mode read and before txn decryption. Its own `sso_txn_<hash(state)>` is cleared when `state` is present. `access_denied` → `no_access`, any other error → `failed`. No session cookies are set. | — | settled |
+| D-59 | 5 | **Tests and spec hygiene** (O-53, round 5 §10).<br>• `middleware.test` asserts every path in the exact exempt Set has a `route.ts` under `src/app/`; lookalikes such as `/api/auth/logoutx` and `/api/auth/sso/startx` must redirect.<br>• Spec drift fixed: `/start` is POST; the `oidc.client_secret` readers are start, callback and logout (`config-wiring.json` matches).<br>• Spike checklist adds O-49: `end_session_endpoint` advertised, `client_id` + `post_logout_redirect_uri` honoured without `id_token_hint` or a confirmation page, the portal `rd` parameter name, and `GET /logout` without confirmation. If `end_session` needs a hint or confirmation, the portal branch goes first. **No ID-token storage.** Stub knobs: `endSession`, `requireHint`. | ledger fails.md:3542-3545 | settled |
+| D-60 | 5 | **Owner sign-offs (gate 5).** (1) The Sign-out button appears in the header in both modes, and an expired-session logout returns JSON instead of a 307 (same end state). Both are accepted as part of this feature (O-45); product-spec line 216 and FR-15 are amended. (2) In `'error'` mode, logout ends only the xstockstrat session and logs WARN `sso_logout_mode_unknown`; the Authelia session survives. Accepted (O-48). | context.md 2026-11-16 | settled |
 | D-13 | 1 | **Fixed constants** (60 s role TTL, JWKS freshness, cooldown, fetch timeout) stay in code with the "Fixed invariant (F-07)" comment form. They are not config keys. | `client.py:39-47` | settled |
 
 ## Rejected Alternatives (locked)
@@ -91,6 +101,9 @@
 | R-15 | 4 | The UI PRM route returns 404 in SSO mode and relies on the agent's `WWW-Authenticate` pointer | Loses for clients that probe the RFC 9728 canonical location first (O-33). | locked |
 | R-16 | 4 | Fold unlink into `update-email --unlink` | Merges two responsibilities (C-18); a separate command is clearer. | locked |
 | R-17 | 4 | Single-DB "viewer" case as AC-6 coverage | It is AC-1 with a viewer; the independence property is untested (fake coverage). | locked |
+| R-18 | 5 | 303 redirect from `/api/auth/logout` in SSO mode | Fetch callers can't follow it, and the route would have two response shapes. | locked |
+| R-19 | 5 | Store the ID token (JWE cookie) for `id_token_hint` | A third long-lived cookie holding the email; `client_id` suffices unless the spike proves otherwise, and then the portal branch goes first (D-59). | locked |
+| R-20 | 5 | Exempt `/api/auth/logout` unconditionally | Exposes the open RevokeToken unverified-decode defect to the internet and adds a local-logout CSRF (O-44). | locked |
 | R-7 | 1 | HS256-signed (JWS) SSO transaction cookie | `verifyAccessToken` accepts any HS256 `JWT_SECRET` JWS, so the cookie would also be a valid session token (type confusion). | locked |
 
 ## Objections
@@ -141,6 +154,17 @@
 | O-41 | 4 | Login-page config reads must run concurrently under one budget. | no | closed @ round 4 (D-47) |
 | O-42 | 4 | N-11 rewords settled D-20; the rollout order should be stated as an invariant. | no | closed @ round 4 (D-48) |
 | O-43 | 4 | The callback must reject a missing txn before any expensive call; edge rate limits. | no | closed @ round 4 (D-41; a staging rate-limit zone is an optional homelab-edge follow-up) |
+| O-44 | 5 | The logout exemption removes the UI-side mitigation for the RevokeToken unverified-decode defect (anyone could revoke any user's sessions) and adds a local-logout CSRF. (C-16, P-03; defect 2026-10-19) | yes | closed @ round 5 (D-52) |
+| O-45 | 5 | Legacy is no longer byte-identical: an expired-token logout becomes 200 JSON instead of 307, and the Sign-out button appears in legacy mode too. Needs owner sign-off. Spec line 216/FR-15 must be amended and re-reviewed. (C-16/FR-14, P-03) | yes | closed @ round 5 (owner: D-60) |
+| O-46 | 5 | Duplicate "Remember me" controls (id/name collision; `@AC-1 @feature-153` locator). (C-17) | no | closed @ round 5 (D-54) |
+| O-47 | 5 | Logout pulls GetSecret/discovery onto an anonymous path, and the logout budget is unbounded. (C-18) | no | closed @ round 5 (D-52) |
+| O-48 | 5 | In `'error'` mode logout keeps the Authelia session without a redirect, narrowing D-51's "always". Needs owner acknowledgement plus WARN `sso_logout_mode_unknown`. (P-03) | no | closed @ round 5 (owner: D-60) |
+| O-49 | 5 | `end_session` without `id_token_hint` may be refused or show a confirmation page. Spike item. | no | closed @ round 5 (D-59) |
+| O-50 | 5 | `unlink-sso` "reversible, no confirm" is false in general. | no | closed @ round 5 (D-56) |
+| O-51 | 5 | 050 secret sentinel and notify count. | no | closed @ round 5 (D-57) |
+| O-52 | 5 | SignOutButton placement, accessibility and resilience. (C-10/C-17) | no | closed @ round 5 (D-53) |
+| O-53 | 5 | The exempt Set needs a route-derived test. (ledger 3545) | no | closed @ round 5 (D-59) |
+| O-54 | 5 | Pin the whole PRM contract; assert the Origin-null case; safeRedirect URL test. | no | closed @ round 5 (D-54, D-55) |
 
 ## Reopen Petitions
 
