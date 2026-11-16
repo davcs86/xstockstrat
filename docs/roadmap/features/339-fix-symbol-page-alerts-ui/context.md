@@ -855,3 +855,7 @@ Feature: fix-symbol-page-alerts-ui (bug fix)
 ### Coverage check
 - Source scenarios: 12. Planned: 12 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT.
 ```
+
+## Session 2026-11-16 — operator confirmation of the regenerated promotion plan (orchestrator)
+
+- Asked: confirm the corrected plan above (12 scenarios, verbatim, tags kept, new file under `services/xstockstrat-ui/acceptance/`)? **Operator, verbatim: "Confirm both (Recommended)".** This confirms the last `sdd-batch-promotion-plan` block (P-04).
