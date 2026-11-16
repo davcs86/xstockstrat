@@ -405,7 +405,7 @@ C-12: no domain object is used (theme tokens only), so the test-data inventory d
 
 ### Step 8 — service: whole-chart colours and the line-colour seam in `IndicatorPanels`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx` — modify
@@ -576,4 +576,14 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 7 — RED method and Verification run shape
 - **Spec said**: Verification item 1 is RED "before Step 6"; items 2-4 each in a fresh shell at the repo root.
 - **Actual**: Step 6 was already committed, so RED restored the pre-Step-6 `indicatorChart.ts` from the Step 5 commit (`git checkout c2c3e39d2 -- <file>`), ran item 1 unchanged, then restored it with `git checkout HEAD -- <file>`; the old file was never committed. Items 2-4 ran in one log, each in its own `( cd services/xstockstrat-ui && … )` subshell separated by `;` with a per-item `rc=` echo.
+- **Disposition**: mechanical. The commands are unchanged.
+
+### Step 8 — Verification item 4: e2e runner fallback
+- **Spec said**: item 4 runs `python3 scripts/run-e2e.py e2e/trader/position-detail.spec.ts --grep "indicator"`.
+- **Actual**: the Docker daemon was up, but the `Dockerfile.e2e` build failed in both runs at `RUN corepack enable && corepack prepare pnpm@9.15.9 --activate` with `Internal Error: Error when performing the request to https://registry.npmjs.org/pnpm/-/pnpm-9.15.9.tgz` (in-container egress), so item 4 printed rc=1 before any test ran. Per the spec's Verification conventions, the scoped host fallback (`fails.md:981`) was used. The dev-server run (`--project=chromium --no-deps`) failed on first-compile timeouts (`page.goto: net::ERR_ABORTED`, then `Test timeout of 10000ms exceeded`), with and without `--retries=1`. The run that decided item 4 was CI-mode on the host against a production bundle, as CI serves it: `CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/trader/position-detail.spec.ts --grep "indicator" --project=chromium --no-deps --reporter=list`, which reported `3 passed`, including the AAPL test at `:473`.
+- **Disposition**: CI-equivalent fallback. The integration PR's CI e2e run (Docker image) remains the deciding signal.
+
+### Step 8 — RED method and Verification run shape
+- **Spec said**: TDD `red-green required`; Step 8 adds no unit test, and its behavioural red-green pair is Step 9's items 1-3.
+- **Actual**: RED was the Verification block run before the edit: item 1 printed the four `SERIES_TOKENS`/`SERIES_FALLBACK`/`% 5` lines (`:16`, `:17`, `:91`, `:190`) and item 2 printed nothing (rc=1), so both pass conditions failed. Items 1-4 ran in one log, each in its own subshell separated by `;` with a per-item `rc=` echo, because item 1 passes by printing nothing. The behavioural RED/GREEN for @AC-2, @AC-3 and @AC-6 is recorded at Step 9.
 - **Disposition**: mechanical. The commands are unchanged.

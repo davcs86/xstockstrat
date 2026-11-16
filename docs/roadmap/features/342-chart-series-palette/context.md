@@ -67,6 +67,7 @@ Service/UI source (by step):
 - Steps 4+5 (one unit): `services/xstockstrat-ui/src/lib/seriesPalette.ts` (created), `src/styles/themes/staging.css` and `production.css` (12 `--series-N` tokens each), `src/styles/themes/themes.test.ts` (modified), `src/lib/seriesPalette.test.ts` (created).
 - Step 6: `services/xstockstrat-ui/src/lib/indicatorChart.ts` (`ChartableComponent`, `isChartable`, `seriesSlots` added), `src/components/trader/IndicatorPanels.tsx` (local `isChartable` removed, import repointed).
 - Step 7: `services/xstockstrat-ui/src/lib/indicatorChart.test.ts` (`describe('seriesSlots')`, 4 tests), `e2e/fixtures/indicatorSeries.ts` (`INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP`, `INDICATOR_COMPONENTS_PALETTE_13`), `e2e/fixtures/INVENTORY.md` (two rows).
+- Step 8: `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx` (`SERIES_TOKENS`/`SERIES_FALLBACK` removed; `slots` memo, `lineColors` state, `data-line-color` on swatches).
 
 SDD artifacts, all under `docs/roadmap/features/342-chart-series-palette/`:
 
@@ -491,3 +492,16 @@ The `C` array literal that passed, byte for byte. Step 4 copies the 12 values fr
 - Files modified: `services/xstockstrat-ui/src/lib/indicatorChart.test.ts`, `services/xstockstrat-ui/e2e/fixtures/indicatorSeries.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
 - Deviations: the RED method and the Verification run shape. Full detail is in the Deviation Log.
 - Still open: O-24.
+
+## Session 2026-11-16 — sdd-execute sequential (step 8)
+
+### Step 8 — service: whole-chart colours and the line-colour seam in `IndicatorPanels` [done]
+- Removed `SERIES_TOKENS`/`SERIES_FALLBACK`. `slots = useMemo(() => seriesSlots(components), [components])` (added to the effect deps) drives both the line colour (`resolveChartColor(token, fallback)`, iterating `components` with `ci` and skipping non-chartable ones) and the legend swatch (`var(${slots[ci][si].token})`). Each drawn line's `line.options().color` is stored under `refName.seriesName` and exposed as `data-line-color` on its swatch; the map is reset in cleanup before the `!chart` early return (D-14). The `chartable` filter and the pane-height use stay (D-15). No colour literal added.
+- TDD: the behavioural red-green pair is Step 9 (spec item 5).
+  - Structural RED: the Verification block before the edit. Item 1 printed `16:const SERIES_TOKENS …`, `17:const SERIES_FALLBACK …`, `91:… resolveChartColor(SERIES_TOKENS[si % 5], SERIES_FALLBACK[si % 5]);` and `190:… var(${SERIES_TOKENS[si % 5]})`; item 2 printed nothing, `item2 rc=1` (exit=0, `.sdd-logs/v-1.log`).
+  - GREEN: item 1 printed nothing (`item1 rc=1`); item 2 printed `94:` `resolveChartColor(token, fallback)`, `103:` `line.options().color` and `197:` `data-line-color`; item 3 lint (warnings only in unrelated pre-existing files) and tsc rc=0, `Test Files  80 passed (80)`, `Tests  640 passed | 2 skipped (642)` (exit=0, `.sdd-logs/v-2.log`). No coverage line applies: the component is outside `src/lib/**`.
+  - Item 4: the Docker e2e build failed on in-container corepack egress (`item4 rc=1` in both logs). The CI-mode host run against a production bundle reported `3 passed (1.5m)`, including `position-detail.spec.ts:473` (exit=0, `.sdd-logs/v-5.log`).
+- Config-key wiring gate: N/A. No config key is touched.
+- Files modified: `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`
+- Deviations: the item 4 e2e runner fallback (CI-equivalent), the RED method and the Verification run shape. Full detail is in the Deviation Log.
+- Still open: O-24. Step 9 compares `line.options().color` by channels and should retry the Docker e2e; if the in-container egress still fails, the integration PR's CI run decides @AC-2, @AC-3 and @AC-6.
