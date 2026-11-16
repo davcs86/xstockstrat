@@ -222,6 +222,7 @@ still live.
   `scripts/config-wiring.json`, `scripts/config-wiring-stored.json`,
   `services/xstockstrat-config/src/__tests__/uiChartHistoryBarsSeedMigration.test.ts`.
 - Step 9: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`.
+- Step 10: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`.
 
 Feature-directory artifacts (`docs/roadmap/features/341-fix-indicator-pane-warmup/`):
 
@@ -748,3 +749,16 @@ Tooling setup (step 9): node ✓ · pnpm ✓ (linked main-checkout `node_modules
 - Config-key wiring gate: not applicable (a `service` step, no migration in **Files**, no `## Config Key Changes` heading; `check-config-wiring.mjs` does not read the bounds registry).
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
 - Deviations: none
+
+---
+
+## Session 2026-11-15 — sdd-execute sequential, step 10
+
+Tooling setup (step 10): node ✓ · pnpm ✓ (linked main-checkout `node_modules`); no install.
+
+### Step 10 — test: bounds on the history depth [done]
+- Added one `it` block to `setConfigScalarBounds.test.ts` for `ui` / `chart.indicator_history_bars`: `intVal` 199 and 1001 → `INVALID_ARGUMENT`, `/\[200, 1000\]/`, no INSERT; 200 and 1000 → accepted, INSERT runs, no `create_key`. The key literal stays inline (one consumer, C-13).
+- AC-1/AC-3 red (`.sdd-logs/v-1.log`, Step 9's registry line removed uncommitted in this worktree): `AssertionError [ERR_ASSERTION]: history depth 199 is out of [200, 1000]`, `tests 371 / pass 370 / fail 1` → green (`.sdd-logs/v-2.log`, line restored): lint `0 errors`, `✔ bounds the indicator history depth to [200, 1000] — AC-1, AC-3`, `tests 371 / pass 371 / fail 0`, `All files | 92.25` lines, `c8 check-coverage --lines 40` passed.
+- Config-key wiring gate: not applicable (a `test` step, no migration in **Files**, no `## Config Key Changes` heading).
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: RED against a temporarily reverted Step 9 line; the block exits 1 on its last no-match grep (Deviation Log).
