@@ -63,13 +63,20 @@ are unchanged.
 
 FR-8. **Order safety (trading).** A retried order mutation (submit, replace, cancel) must never create a
 second order or a second cancel/replace effect, and the total time one broker call can take, retries
-included, must stay inside the bound the order-intent staleness check already assumes
-(`trading.broker.timeout_ms` × `trading.order_intent.stale_multiplier`).
+included, must stay below the order-intent staleness threshold computed by
+`services/xstockstrat-trading/internal/service/order_intent.go` (`max(trading.broker.timeout_ms,
+IBKRRequestTimeout)` × `trading.order_intent.stale_multiplier`, multiplier floor 1.5). Order types, fill
+detection and the order status lifecycle are not changed.
+
+FR-10. **Paper and live behave the same.** The behavior is mode-agnostic: the same code path serves the
+paper host (`paper-api.alpaca.markets`) and the live host (`api.alpaca.markets`), with limiter state kept
+per host (FR-1). It adds no order-placing call of its own, so it is paper-safe to test; staging exercises
+it against the paper host only.
 
 FR-9. **Observability.** Time spent waiting for a rate-limit reset and each 429 retry are visible in the
 existing vendor-request telemetry (marketdata `marketdata.vendor.requests` outcomes `http_429` /
-`throttle`), and one WARN log per throttled window names the host and the wait. Trading gets the
-equivalent signal (design decides the instrument).
+`throttle`), and one WARN log per throttled window names the host and the wait. Trading emits the same
+WARN log (host and wait); it gets no new metric in this feature.
 
 ## Out of Scope
 
@@ -104,19 +111,28 @@ _Constitution **C-14**._
 
 ## Config Key Changes
 
-Two new keys, both live-read bools with an explicit `true` code default (a missing key must not read as
-disabled), seeded for staging and production by one new `xstockstrat-config` migration. Reader symbols are
-fixed at `/sdd-spec`.
+Two new keys. Both are bools with an explicit `true` code default (a missing key must not read as
+disabled). Live mechanism for both: the service's `WatchConfig`-backed watcher, read with
+`GetBool(key, true)` on every Alpaca request, so a `SetConfig` takes effect on the next call with no
+restart. Both are seeded `true` as global rows for staging and production by one new `xstockstrat-config`
+migration, `050_alpaca_adaptive_rate_limit_keys` (050 is the next free number on `main-dev` today;
+features 341 and 343 also name 050, so whichever merges later renumbers above the trunk tip and
+regenerates `scripts/config-wiring-stored.json`).
 
-- `marketdata.alpaca.adaptive_rate_limit_enabled` — namespace `marketdata`, key
-  `alpaca.adaptive_rate_limit_enabled`, `value_type` bool, code default `true`, read per request by the
-  marketdata Alpaca client settings in `services/xstockstrat-marketdata/cmd/server/main.go:main`.
-- `trading.broker.adaptive_rate_limit_enabled` — namespace `trading`, key
-  `broker.adaptive_rate_limit_enabled`, `value_type` bool, code default `true`, read per request by the
-  trading Alpaca adapter in `services/xstockstrat-trading/internal/broker/alpaca.go`.
+- `marketdata.alpaca.adaptive_rate_limit_enabled` — namespace `marketdata`, stored key
+  `alpaca.adaptive_rate_limit_enabled`, `value_type` bool, code default `true`. Reader:
+  `services/xstockstrat-marketdata/cmd/server/main.go:main` (the `alpaca.NewLiveClient` settings closure,
+  which the client calls on every request, alongside `backfill.rate_limit_rps`).
+- `trading.broker.adaptive_rate_limit_enabled` — namespace `trading`, stored key
+  `broker.adaptive_rate_limit_enabled`, `value_type` bool, code default `true`. Reader: a per-request
+  func on `broker.ClientConfig`, built in `services/xstockstrat-trading/internal/service/trading.go` next
+  to the existing `Timeout: func() ... brokerCallTimeout(s.cfgW)` at the `broker.NewClient` call.
 
 Existing key with changed meaning: `marketdata.backfill.rate_limit_rps` becomes a ceiling over the
-adaptive rate (FR-4); its type, default and bounds are unchanged, its description is updated.
+adaptive rate (FR-4). Its type, default and bounds are unchanged. The same migration 050 updates its
+seeded description, and `services/xstockstrat-marketdata/CLAUDE.md` is updated to match.
+
+The defaults of both new keys are declared in the marketdata and trading `CLAUDE.md` config tables.
 
 ## Database Changes
 
@@ -143,18 +159,24 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
   "Request limit per minute", `X-RateLimit-Remaining` "Request limit per minute remaining",
   `X-RateLimit-Reset` "The UNIX epoch when the remaining quota changes". The window is one minute. The
   spec lists none on 401, 403 or 500, which FR-5 already covers.
-- [ ] **Does the Trading API host send them?** Still unverified for `paper-api.alpaca.markets` /
-  `api.alpaca.markets` (marketdata `/v2/assets`, every trading call). Recon must confirm from the Trading
-  API reference or real responses. If it does not, FR-5 makes the feature a 429-retry-only change there.
+- [x] **Does the Trading API host send them?** Not documented: the Trading API reference for
+  `POST /v2/orders` (<https://docs.alpaca.markets/us/reference/postorder>, hosts
+  `paper-api.alpaca.markets` / `api.alpaca.markets`) lists no rate-limit headers and no 429 response. The
+  feature does not depend on the answer: where the headers are absent FR-5 applies and only the 429 retry
+  (FR-3) is active on that host. Recon records what a real paper-host response returns.
 - [x] **Kill-switch default.** Operator (2026-11-16): both keys seed `true`.
 - [x] **Order mutations and 429 retry (FR-8).** Operator (2026-11-16): submit, replace and cancel are
   retried on 429 like every other broker call, bounded by the intent-staleness bound. Design must still
   prove the retry against the order-intent seam; `trading.go` already has callers that retry through that
   seam (`flattenAndHalt`).
-- [ ] **Shared code.** The two services are separate Go modules (CI runs `GOWORK=off`). Design must choose
-  between one shared limiter package and two copies, under the DRY guard rail.
-- [ ] **Per-credential state in trading.** Broker clients are built per account; accounts sharing one
-  Alpaca key share one quota. Design decides whether limiter state is keyed by client or by key.
+- [x] **Shared code** — handed to `/sdd-design`, not a product question. The two services are separate Go
+  modules (CI runs `GOWORK=off`); design chooses between one shared limiter package and two copies, under
+  the DRY guard rail. Either choice satisfies every FR here.
+- [x] **Per-credential state in trading** — handed to `/sdd-design`. FR-1 already requires state per host
+  and per credential; design chooses the keying (per account client or per API key), since broker clients
+  are built per account and accounts sharing one Alpaca key share one quota.
+- [x] **Fixed constants** — handed to `/sdd-design`: record why the FR-2 threshold and the FR-3 backoff
+  base and cap are code constants and not config keys (operator decision 4: kill switch only).
 - [x] **Interactive deadlines (marketdata).** Operator (2026-11-16): accepted. All callers share the
   quota first-come; quote and price RPCs on about 2.5s budgets fail fast in an exhausted window, as today.
   Reserving quota for interactive reads is out of scope.

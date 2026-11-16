@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-16 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review alpaca-adaptive-rate-limit product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design alpaca-adaptive-rate-limit` — full design recommended (two services plus a config migration, order-mutation path, file overlap with 322/323)

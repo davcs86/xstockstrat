@@ -88,16 +88,16 @@ Feature: alpaca-adaptive-rate-limit
     Given the broker host answers the first "POST /v2/orders" with 429 and a reset 1 second in the future
     And it answers the second attempt with 200 and broker order id "b-1"
     When an order with client_order_id "c-42" is submitted
-    Then both attempts carry client_order_id "c-42"
+    Then both attempts carry client_order_id "c-42" and an identical JSON body
     And the caller receives broker order id "b-1"
     And exactly one order intent is finalized for "c-42"
 
   @AC-13 @FR-8
   Scenario: A broker call never outlives the order-intent staleness bound
-    Given "trading.broker.timeout_ms" is 5000 and "trading.order_intent.stale_multiplier" is 3.0
+    Given the order-intent staleness threshold is 30 seconds ("trading.broker.timeout_ms" 5000, IBKRRequestTimeout 10 seconds, "trading.order_intent.stale_multiplier" 3.0)
     And the broker host answers every "POST /v2/orders" attempt with 429 and a reset 60 seconds in the future
     When an order is submitted
-    Then the caller receives a rate-limit error in less than 15 seconds
+    Then the caller receives a rate-limit error in less than 30 seconds
 
   @AC-14 @FR-9
   Scenario: Throttling is visible in telemetry and logs
@@ -106,3 +106,32 @@ Feature: alpaca-adaptive-rate-limit
     Then "marketdata.vendor.requests" has one point with vendor "alpaca", op "bars", outcome "http_429"
     And one point with vendor "alpaca", op "bars", outcome "ok"
     And one WARN log names the data host and the wait duration
+
+  @AC-15 @FR-8
+  Scenario: A rate-limited cancel takes effect exactly once
+    Given the broker host answers the first "DELETE /v2/orders/b-1" with 429 and a reset 1 second in the future
+    And it answers the second attempt with 204
+    When order "b-1" is canceled
+    Then exactly 2 DELETE attempts are sent for "b-1"
+    And the caller receives no error
+
+  @AC-16 @FR-8
+  Scenario: A rate-limited replace is retried with the same body
+    Given the broker host answers the first "PATCH /v2/orders/b-1" with 429 and a reset 1 second in the future
+    And it answers the second attempt with 200 and broker order id "b-2"
+    When order "b-1" is replaced with quantity 7
+    Then both PATCH attempts carry an identical JSON body with qty "7"
+    And the caller receives broker order id "b-2"
+
+  @AC-17 @FR-10
+  Scenario: Paper and live hosts are handled the same and tracked separately
+    Given a paper broker client recorded "X-RateLimit-Remaining: 0" with a reset 5 seconds in the future for "paper-api.alpaca.markets"
+    When a live broker client fetches the account from "api.alpaca.markets" and the host answers 429 then 200
+    Then the live request is sent without waiting for the paper host's reset
+    And the live caller receives the account after exactly 2 attempts
+
+  @AC-18 @FR-9
+  Scenario: Trading logs a throttled window
+    Given the broker host answers "GET /v2/positions" with 429 and a reset 2 seconds in the future, then 200
+    When positions are fetched
+    Then one WARN log names host "paper-api.alpaca.markets" and the wait duration
