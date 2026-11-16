@@ -417,3 +417,10 @@ Not asked and therefore not authorized: any `trigger_backfill`, re-enabling the 
 - Step 12 proof, stated exactly: the job ran with `CI=true` and `MARKETDATA_DB_TEST_URL` set, and `dbtestRepo` can skip only when that variable is empty, so the two real-database tests executed. The job's command has no `-v`, so the log shows no per-test line and **an executed-test count cannot be read from it**. The impl-spec review warning "Step 12: no SKIP is checked by eye" stays open in that form.
 - Commits after `d733ceae` (range flags, promotion, the Step 15 note): CI was still running when this was written.
 
+### Step 15 — lane A audit run (2026-11-16)
+- Operator, on the row source: **"Keep the mcp route"**.
+- Rows: a 3-symbol pilot, then 11 read-only workers of 32 symbols each, `query_fundamentals(mode="historical", limit=50)`; every response had an empty `next_page_token`. The rows file was rebuilt by script from the workers' raw tool results (no retyping): 355 of 355 symbols, 6,060 rows, none incomplete.
+- Audit at `21e3f7f7`, stored version 2, open range, the lane's `edgar.user_agent`: 1 min 52 s, exit 0, 355 symbols planned, 0 derive errors, 0 guard trips. This is also the first live run of `fundamentals-audit plan` that derived symbols.
+- Report: `audit-lane-a-homelab.md`. Headline: 116 stored rows end after their filing date and 8 duplicate `period_end` groups today; 4,878 of 6,060 rows would be replaced, 1,182 upgraded in place; 20 rows in 18 symbols have no replacement; 10 derived periods are left out; no derived period ends after its filing.
+- Waiting on the operator: review of the report; the lane A SQL figures and export; lane B (run or defer).
+
