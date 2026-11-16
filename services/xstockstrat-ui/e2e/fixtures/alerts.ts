@@ -1,4 +1,5 @@
 import { DEFAULT_UNARY_TIMEOUT_MS } from '../../src/lib/deadlines';
+import { TEST_USER_ID } from './users';
 
 /**
  * Alert fixtures (feature 203) — centralized from mock-backend.ts once the notifications inbox
@@ -93,3 +94,33 @@ export const ALERT_ACKNOWLEDGED_UNREAD = {
 // The list the ListAlerts mock returns for read/unread specs. Two of the three are unread.
 export const ALERT_LIST_WITH_READ_STATE = [ALERT_READ, ALERT_UNREAD, ALERT_ACKNOWLEDGED_UNREAD];
 export const MOCK_UNREAD_COUNT = 2;
+
+// Feature 344 — GetAlert detail fixtures. The mock never resolves ALERT_DETAIL_UNKNOWN_ID.
+export const ALERT_DETAIL_ID = 'a1f3c0de-0000-4000-8000-000000000001';
+export const ALERT_DETAIL_BROADCAST_ID = 'c9d0c0de-0000-4000-8000-000000000002';
+export const ALERT_DETAIL_UNKNOWN_ID = 'b2e4c0de-0000-4000-8000-000000000003';
+export const ALERT_DETAIL = {
+  alertId: ALERT_DETAIL_ID,
+  severity: 3,
+  category: 'backfill',
+  title: 'Backfill 67276d1f failed',
+  body: 'Backfill job 67276d1f failed: FAILED_PRECONDITION — marketdata.fundamentals.history.enabled is false',
+  sourceService: 'xstockstrat-ingest',
+  targetUserId: TEST_USER_ID,
+  correlationId: 'c-77',
+  createdAt: { seconds: BigInt(1_763_200_000), nanos: 0 },
+  context: {
+    job_id: '67276d1f',
+    failed_symbols: ['LYFT'],
+    error: '<AioRpcError of RPC that terminated with: status = StatusCode.FAILED_PRECONDITION>',
+  },
+  read: false,
+};
+export const ALERT_DETAIL_BROADCAST = {
+  ...ALERT_DETAIL,
+  alertId: ALERT_DETAIL_BROADCAST_ID,
+  targetUserId: '',
+  title: 'Broadcast notice',
+  context: {},
+};
+export const ALERT_DETAILS = [ALERT_DETAIL, ALERT_DETAIL_BROADCAST];

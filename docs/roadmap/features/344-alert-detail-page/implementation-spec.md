@@ -453,7 +453,7 @@ grep -n "getAlert: forward" src/lib/traderBff.ts   # the call goes through forwa
 
 ### Step 10 — test: mock `getAlert`, alert-detail fixtures and the BFF contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/alerts.ts` — modify
@@ -1071,4 +1071,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 9 — Verification run in a container on the branch's TS stubs; RED probe held uncommitted (2026-11-15)
 - **Planned**: run the Verification block on the host; Step 10's BFF spec fails first with HTTP 404 and no JSON body.
 - **Actual**: the linked `services/xstockstrat-ui/node_modules` resolves `@xstockstrat/proto` to the main checkout's `packages/proto/gen/ts`, whose `dist/notify/v1/notify_pb.d.ts` has no `GetAlert` (0 matches; 7 on this branch), so a host `tsc --noEmit` cannot see `notifyClient.getAlert`. The block ran verbatim in the cached `xstockstrat-codegen` image (node 24, pnpm 9.15.9) with the main checkout mounted read-only, the worktree read-write, and this branch's `packages/proto/gen/ts/dist` mounted read-only over the main checkout's `dist`. Step 10's tests are Playwright and not yet written, so the RED/GREEN probe was a temporary vitest case (`src/lib/__tests__/traderBffGetAlert.test.ts`: POST `/trader/api/xstockstrat.notify.v1.NotifyService/GetAlert` through `dispatchConnect`, expects 200, one `notifyClient.getAlert` call, `x-user-id` forwarded), run RED and GREEN and then deleted; it is not committed. RED answered **501** (Connect `unimplemented`), not 404: with the regenerated descriptor the router knows the method but has no handler. Step 10's "HTTP 404" RED expectation describes a tree without the regenerated stubs.
+- **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
+
+### Step 10 — Verification run in a private namespace under CI mode; RED answered 501 (2026-11-15)
+- **Planned**: run the Verification block on the host (`pnpm dev` web server); RED is HTTP 404 with an empty body (both cases fail).
+- **Actual**: (1) the linked `node_modules` resolve `@xstockstrat/proto` to the main checkout's stubs, which lack `GetAlert`, and a concurrent e2e run from another worktree held ports 3000/9091–9093. Each run therefore went through `unshare -m -n`: loopback up, this branch's `packages/proto/gen/ts/dist` bind-mounted (namespace-only, read path) over the main checkout's `dist`, and the egress proxy relayed into the namespace over a unix socket. (2) Under `pnpm dev` the `setup` warm-up hit its 10 s timeout on cold compiles (runs 1–3, no spec case executed), so RED ran with `CI=1` (`pnpm build && pnpm start`, the CI `frontend-e2e` path) and GREEN with `CI=1 E2E_PREBUILT=1` on that build (the Next bundle does not include `e2e/mock-backend.ts`). The block itself ran verbatim. (3) RED answered **501** (Connect `unimplemented`: the mock had no `getAlert`), not 404 — the Step 9 entry above explains why. (4) The block's last line is the closing `grep`, so `exit=` is 0 on RED too; pass/fail was judged from the Playwright summary in the log.
 - **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
