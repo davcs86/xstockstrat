@@ -1,11 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { IChartApi, ISeriesApi, MouseEventParams } from 'lightweight-charts';
 import type { ComponentSeries } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { resolveChartColor } from '@/lib/chartColors';
-import { toLineData } from '@/lib/indicatorChart';
+import { isChartable, seriesSlots, toLineData } from '@/lib/indicatorChart';
 import type { IndicatorSeriesInput } from '@/hooks/useIndicatorSeries';
 
 // Each chartable component draws as its own native lightweight-charts pane on the shared OHLCV chart
@@ -13,13 +13,6 @@ import type { IndicatorSeriesInput } from '@/hooks/useIndicatorSeries';
 
 const PRICE_PANE_HEIGHT = 260;
 const INDICATOR_PANE_HEIGHT = 120;
-// Theme tokens per named sub-series; fallbacks are CSS named colors (no brand hex).
-const SERIES_TOKENS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5'] as const;
-const SERIES_FALLBACK = ['teal', 'slateblue', 'goldenrod', 'indianred', 'silver'] as const;
-
-function isChartable(c: ComponentSeries, insufficient: ReadonlySet<string>): boolean {
-  return !c.error && c.series.length > 0 && !insufficient.has(c.refName);
-}
 
 type ReadoutRow = { label: string; value: string };
 
@@ -52,6 +45,9 @@ export function IndicatorPanels({
 }) {
   // Unified crosshair readout: one combined price + per-indicator value at the hovered bar.
   const [readout, setReadout] = useState<ReadoutRow[] | null>(null);
+  const slots = useMemo(() => seriesSlots(components, insufficient), [components, insufficient]);
+  // `refName.seriesName` → the colour the drawn line actually got; empty until the draw runs.
+  const [lineColors, setLineColors] = useState<Map<string, string>>(new Map());
 
   // Draws one pane per chartable component on the shared chart. Disposal-safe: never calls into a
   // disposed chart, so a strategy switch can't crash it.
@@ -93,10 +89,13 @@ export function IndicatorPanels({
           | undefined;
         if (priceSeries) labels.set(priceSeries, 'price');
 
+        const drawnColors = new Map<string, string>();
         let paneIndex = 1;
-        for (const comp of chartable) {
+        components.forEach((comp, ci) => {
+          if (!isChartable(comp, insufficient)) return;
           comp.series.forEach((s, si) => {
-            const color = resolveChartColor(SERIES_TOKENS[si % 5], SERIES_FALLBACK[si % 5]);
+            const { token, fallback } = slots[ci][si];
+            const color = resolveChartColor(token, fallback);
             const line = chart.addSeries(
               LineSeries,
               { color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false },
@@ -105,9 +104,11 @@ export function IndicatorPanels({
             line.setData(toLineData(s.values, paneTimes));
             added.push(line);
             labels.set(line, `${comp.refName}.${s.name}`);
+            drawnColors.set(`${comp.refName}.${s.name}`, line.options().color);
           });
           paneIndex++;
-        }
+        });
+        if (!cancelled) setLineColors(drawnColors);
         // Price pane taller than each indicator pane (stretch factors are relative weights).
         chart
           .panes()
@@ -138,6 +139,7 @@ export function IndicatorPanels({
 
     return () => {
       cancelled = true;
+      setLineColors(new Map());
       const chart = usedChart;
       const container = usedContainer;
       if (!chart) return;
@@ -154,7 +156,7 @@ export function IndicatorPanels({
         // chart already disposed by useCandlestickChart teardown — nothing to clean up.
       }
     };
-  }, [components, times, chartRef, containerRef, insufficient]);
+  }, [components, slots, times, chartRef, containerRef, insufficient]);
 
   if (components.length === 0) return null;
   return (
@@ -171,7 +173,7 @@ export function IndicatorPanels({
           ))}
         </div>
       )}
-      {components.map((comp) =>
+      {components.map((comp, ci) =>
         comp.error ? (
           <div key={comp.refName} className="space-y-1" data-testid="indicator-panel-error">
             <Eyebrow>{comp.refName}</Eyebrow>
@@ -200,7 +202,8 @@ export function IndicatorPanels({
               >
                 <span
                   className="inline-block h-2 w-2 rounded-full"
-                  style={{ background: `var(${SERIES_TOKENS[si % 5]})` }}
+                  style={{ background: `var(${slots[ci][si].token})` }}
+                  data-line-color={lineColors.get(`${comp.refName}.${s.name}`)}
                 />
                 {s.name}
               </span>

@@ -82,6 +82,16 @@ export const HALT_SOURCE: Record<HaltSource, EnumRender> = {
   [HaltSource.RECONCILIATION]: { label: 'Reconciliation', role: 'sell' },
 };
 
+/** Chip label for an opportunity row: its strategy id, else its humanized source; never the symbol. */
+export function opportunityChipLabel(o: { strategyId: string; source: string }): string {
+  if (o.strategyId) return o.strategyId;
+  if (o.source) {
+    const words = o.source.replace(/[_-]/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+  return 'No strategy';
+}
+
 /**
  * Render an EnumRender as a Badge. Any icon is a leading direct-child svg (span-wrapping breaks the
  * Badge `[&>svg]` slot) with `role="img"` + an aria-label, since Phosphor svgs have no accessible name.

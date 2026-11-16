@@ -3,6 +3,7 @@
 
 import type { LineData, UTCTimestamp, WhitespaceData } from 'lightweight-charts';
 import type { ConfigValue } from '@xstockstrat/proto/config/v1/config_pb';
+import { SERIES_PALETTE, type PaletteEntry } from './seriesPalette';
 
 /** W — bars the symbol chart draws. */
 export const CHART_WINDOW_BARS = 200;
@@ -19,6 +20,39 @@ export interface ProtoTime {
 /** Minimal structural shape of an analysis `IndicatorValue`: `value` absent = UNSET (a gap). */
 export interface IndicatorValueLike {
   value?: number;
+}
+
+/** Minimal structural shape of an analysis `ComponentSeries`: a non-empty `error` = failed. */
+export interface ChartableComponent {
+  refName: string;
+  error?: string;
+  series: readonly unknown[];
+}
+
+const NONE_INSUFFICIENT: ReadonlySet<string> = new Set();
+
+/** `insufficient` = refNames lacking history (`windowIndicatorSeries`): no pane, no series. */
+export function isChartable(
+  c: ChartableComponent,
+  insufficient: ReadonlySet<string> = NONE_INSUFFICIENT,
+): boolean {
+  return !c.error && c.series.length > 0 && !insufficient.has(c.refName);
+}
+
+/**
+ * One palette row per component, in input order. The index runs across the whole chart, so colours
+ * stay unique up to 12 series; a non-chartable component gets `[]` and consumes no index.
+ */
+export function seriesSlots(
+  components: readonly ChartableComponent[],
+  insufficient: ReadonlySet<string> = NONE_INSUFFICIENT,
+): PaletteEntry[][] {
+  let n = 0;
+  return components.map((c) =>
+    isChartable(c, insufficient)
+      ? c.series.map(() => SERIES_PALETTE[n++ % SERIES_PALETTE.length])
+      : [],
+  );
 }
 
 /** A whitespace point `{ time }` breaks the line (a gap); `{ time, value }` draws it. */
