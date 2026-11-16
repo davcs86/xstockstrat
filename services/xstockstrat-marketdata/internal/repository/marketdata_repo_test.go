@@ -3,6 +3,7 @@ package repository
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -10,11 +11,17 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pashagolub/pgxmock/v4"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 	"github.com/xstockstrat/marketdata/internal/testdata"
 )
 
@@ -889,6 +896,107 @@ func TestQueryRecentBars_BoundedWindowShape(t *testing.T) {
 	}
 	if len(got) != 2 || !got[0].GetTime().AsTime().Equal(older) {
 		t.Fatalf("expected 2 bars ascending (oldest first), got %v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// installMetricReader swaps in a manual-reader MeterProvider for the test's lifetime. No t.Parallel():
+// the MeterProvider is process-global.
+func installMetricReader(t *testing.T) *sdkmetric.ManualReader {
+	t.Helper()
+	prev := otel.GetMeterProvider()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(mp)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(prev)
+		_ = mp.Shutdown(context.Background())
+	})
+	return reader
+}
+
+// ohlcvOOMCount sums marketdata.ohlcv.out_of_memory_errors for one op label.
+func ohlcvOOMCount(t *testing.T, reader *sdkmetric.ManualReader, op string) int64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	var n int64
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != "marketdata.ohlcv.out_of_memory_errors" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			if !ok {
+				t.Fatalf("%s data is %T, want Sum[int64]", m.Name, m.Data)
+			}
+			for _, dp := range sum.DataPoints {
+				if v, ok := dp.Attributes.Value(attribute.Key(telemetry.KeyOp)); ok && v.AsString() == op {
+					n += dp.Value
+				}
+			}
+		}
+	}
+	return n
+}
+
+func TestObserveLockBreach(t *testing.T) {
+	lockOOM := fmt.Errorf("query recent bars: %w", &pgconn.PgError{Code: "53200"})
+	cancelled := &pgconn.PgError{Code: "57014"}
+	plain := errors.New("boom")
+	cases := []struct {
+		name      string
+		err       error
+		wantCount int64
+	}{
+		{"wrapped 53200 counts", lockOOM, 1},
+		{"other SQLSTATE does not count", cancelled, 0},
+		{"plain error does not count", plain, 0},
+		{"nil returns nil", nil, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := installMetricReader(t)
+			got := observeLockBreach(context.Background(), telemetry.OhlcvOpBars, tc.err)
+			if got != tc.err { //nolint:errorlint // identity: the error must be returned unchanged
+				t.Fatalf("returned %v, want the input %v unchanged", got, tc.err)
+			}
+			if n := ohlcvOOMCount(t, reader, telemetry.OhlcvOpBars); n != tc.wantCount {
+				t.Fatalf("out_of_memory_errors{op=bars} = %d, want %d", n, tc.wantCount)
+			}
+		})
+	}
+}
+
+// A 53200 surfacing from row iteration (rows.Err()) counts once under op=recent_bars.
+func TestQueryRecentBars_CountsLockBreachFromRows(t *testing.T) {
+	reader := installMetricReader(t)
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	end := time.Now()
+	start := end.Add(-30 * 24 * time.Hour)
+
+	mock.ExpectQuery(`(?s)FROM marketdata\.ohlcv.*ORDER BY time DESC`).
+		WithArgs(pgx.QueryExecModeExec, "AAPL", "1d", start, end, 2).
+		WillReturnRows(pgxmock.NewRows([]string{"time", "symbol", "timeframe", "open", "high", "low", "close", "volume", "vwap", "trade_count", "source"}).
+			AddRow(end.Add(-24*time.Hour), "AAPL", "1d", 1.0, 2.0, 0.5, 1.5, int64(10), 1.2, int32(3), "alpaca").
+			CloseError(&pgconn.PgError{Code: "53200"}))
+
+	_, err = repo.QueryRecentBars(context.Background(), "AAPL", "1d", start, end, 2)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "53200" {
+		t.Fatalf("QueryRecentBars err = %v, want a *pgconn.PgError 53200", err)
+	}
+	if n := ohlcvOOMCount(t, reader, telemetry.OhlcvOpRecentBars); n != 1 {
+		t.Fatalf("out_of_memory_errors{op=recent_bars} = %d, want 1", n)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock expectations unmet: %v", err)

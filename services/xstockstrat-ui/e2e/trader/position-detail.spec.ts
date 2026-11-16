@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie, addAdminCookie } from '../helpers/auth';
-import { FUNDAMENTALS_STALL_SYMBOL, STRATEGY_DEF_LIVE } from '../fixtures';
+import { FUNDAMENTALS_STALL_SYMBOL, STRATEGY_DEF_LIVE, UI_CHART_HISTORY_VALUES } from '../fixtures';
+import { historyBarsWire, indicatorSeriesWire } from '../fixtures/indicatorHistory';
 import { noCriteriaDataRow } from '../fixtures/screenResults';
 import {
   INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP,
@@ -569,6 +570,116 @@ test.describe('Single Position page', () => {
     expect(colours[12].line).toEqual(colours[0].line);
   });
 
+  // feature 341 — one newest-page GetBars of the configured history depth; the whole history goes to
+  // GetIndicatorSeries while the chart draws only its tail.
+  test('the symbol page requests the default history depth when the key is absent', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    const requests = await routeIndicatorHistory(page, 'AAPL');
+    await page.goto('/trader/positions/AAPL');
+
+    // GetBars races the async chart init; wait for the chart first.
+    await expect(page.locator('.tv-lightweight-charts').first()).toBeVisible({ timeout: 30000 });
+    await expect.poll(() => requests.getBars).toMatchObject({ page: { pageSize: 200 } });
+    expect(requests.getBars).not.toHaveProperty('range');
+  });
+
+  test('@AC-1 the symbol page fetches the configured history depth and sends it all to the series', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    const requests = await routeIndicatorHistory(page, 'AAPL', {
+      depth: 1000,
+      bars: 400,
+      periods: [200],
+    });
+    await page.goto('/trader/positions/AAPL');
+
+    await expect(page.locator('.tv-lightweight-charts').first()).toBeVisible({ timeout: 30000 });
+    await expect.poll(() => requests.getBars).toMatchObject({ page: { pageSize: 1000 } });
+    expect(requests.getBars).not.toHaveProperty('range');
+    await expect.poll(() => requests.series?.closes?.length, { timeout: 30000 }).toBe(400);
+    expect(requests.series?.times).toHaveLength(400);
+    const main = page.getByRole('main');
+    await expect(main.getByTestId('indicator-panel')).toHaveCount(1);
+    await expect(main.getByTestId('indicator-panel')).toContainText('sma200');
+    await expect(main.getByTestId('indicator-panel-error')).toHaveCount(0);
+  });
+
+  test('@AC-3 a history exactly as long as the lookback draws the indicator pane', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await routeIndicatorHistory(page, 'AAPL', { depth: 1000, bars: 200, periods: [200] });
+    await page.goto('/trader/positions/AAPL');
+
+    await expect(page.locator('.tv-lightweight-charts').first()).toBeVisible({ timeout: 30000 });
+    const main = page.getByRole('main');
+    await expect(main.getByTestId('indicator-panel')).toHaveCount(1, { timeout: 30000 });
+    await expect(main.getByTestId('indicator-panel')).toContainText('sma200');
+    await expect(main.getByTestId('indicator-panel-error')).toHaveCount(0);
+    await expect(page.getByText('Not enough history')).toHaveCount(0);
+  });
+
+  test('@AC-2 an indicator whose lookback exceeds the available history reports it', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await routeIndicatorHistory(page, 'AAPL', { depth: 1000, bars: 150, periods: [200] });
+    await page.goto('/trader/positions/AAPL');
+
+    const main = page.getByRole('main');
+    const notice = main.getByTestId('indicator-panel-insufficient');
+    await expect(notice).toHaveCount(1, { timeout: 30000 });
+    await expect(notice).toContainText('sma200');
+    await expect(notice).toContainText('Not enough history');
+    await expect(main.getByTestId('indicator-panel')).toHaveCount(0);
+    await expect(main.getByTestId('indicator-panel-error')).toHaveCount(0);
+  });
+
+  test('@AC-4 only the indicator lacking history reports it; the others draw', async ({ page }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await routeIndicatorHistory(page, 'AAPL', { depth: 1000, bars: 150, periods: [200, 20] });
+    await page.goto('/trader/positions/AAPL');
+
+    const main = page.getByRole('main');
+    const notice = main.getByTestId('indicator-panel-insufficient');
+    await expect(notice).toHaveCount(1, { timeout: 30000 });
+    await expect(notice).toContainText('sma200');
+    const panel = main.getByTestId('indicator-panel');
+    await expect(panel).toHaveCount(1);
+    await expect(panel).toContainText('sma20');
+    await expect(panel).toHaveAttribute('data-series-count', '1');
+    // Canvas has no per-line DOM: the crosshair readout lists exactly the drawn series.
+    const chart = page.locator('.tv-lightweight-charts').first();
+    await expect(chart).toBeVisible({ timeout: 30000 });
+    await chart.hover({ position: { x: 200, y: 40 } });
+    const readout = page.getByTestId('chart-crosshair-readout');
+    await expect(readout).toBeVisible({ timeout: 10000 });
+    await expect(readout).toContainText('sma20.value');
+    await expect(readout).not.toContainText('sma200.value');
+  });
+
+  test('a full page at the default depth shows no notice, even when a lookback exceeds it', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await routeIndicatorHistory(page, 'AAPL', { bars: 200, periods: [250] });
+    await page.goto('/trader/positions/AAPL');
+
+    const main = page.getByRole('main');
+    await expect(main.getByTestId('indicator-panel')).toHaveCount(1, { timeout: 30000 });
+    await expect(main.getByTestId('indicator-panel')).toContainText('sma250');
+    await expect(main.getByTestId('indicator-panel-insufficient')).toHaveCount(0);
+  });
+
   test('the indicator panels show a no-data state (and skip the RPC) when no strategy resolves (FR-6)', async ({
     page,
   }) => {
@@ -914,6 +1025,53 @@ test.describe('Signal-detail formula not readable (feature 289)', () => {
     await expect(notice).toContainText('readable by your account');
   });
 });
+
+type HistoryRequests = {
+  getBars?: Record<string, unknown>;
+  series?: { closes?: unknown[]; times?: unknown[] };
+};
+
+/** Capture `symbol`'s GetBars and the GetIndicatorSeries request bodies. `depth` answers GetConfig(ui)
+ *  with that history depth; `bars` answers GetBars and GetIndicatorSeries with that much history. */
+async function routeIndicatorHistory(
+  page: import('@playwright/test').Page,
+  symbol: string,
+  opts: { depth?: number; bars?: number; periods?: readonly number[] } = {},
+): Promise<HistoryRequests> {
+  const captured: HistoryRequests = {};
+  const { depth, bars, periods = [] } = opts;
+  const fulfillJson = (route: import('@playwright/test').Route, body: unknown) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  if (depth !== undefined) {
+    // The glob matches every namespace; only `ui` is answered here.
+    await page.route('**/xstockstrat.config.v1.ConfigService/GetConfig', async (route) => {
+      const req = route.request().postDataJSON() as { namespace?: string };
+      if (req.namespace !== 'ui') return route.fallback();
+      await fulfillJson(route, {
+        namespace: 'ui',
+        version: '1',
+        values: UI_CHART_HISTORY_VALUES.wire(depth),
+      });
+    });
+  }
+  await page.route('**/xstockstrat.marketdata.v1.MarketDataService/GetBars', async (route) => {
+    const req = route.request().postDataJSON() as Record<string, unknown>;
+    if (req.symbol !== symbol) return route.fallback();
+    captured.getBars = req;
+    if (bars === undefined) return route.fallback();
+    await fulfillJson(route, historyBarsWire(symbol, bars));
+  });
+  if (bars !== undefined) {
+    await page.route(
+      '**/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries',
+      async (route) => {
+        captured.series = route.request().postDataJSON() as HistoryRequests['series'];
+        await fulfillJson(route, indicatorSeriesWire(bars, periods));
+      },
+    );
+  }
+  return captured;
+}
 
 /** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to
  *  `strategyId`), so the FR-11 gate takes the watchlisted branch and the resolved strategy is known. */

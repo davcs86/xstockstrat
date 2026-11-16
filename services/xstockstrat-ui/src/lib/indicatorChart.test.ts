@@ -1,14 +1,23 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { create } from '@bufbuild/protobuf';
+import { ConfigValueSchema, type ConfigValue } from '@xstockstrat/proto/config/v1/config_pb';
 import { describe, expect, it } from 'vitest';
+import { UI_CHART_HISTORY_VALUES } from '../../e2e/fixtures/configKeys';
+import { indicatorSeriesResponse, smaComponent } from '../../e2e/fixtures/indicatorHistory';
 import {
   INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP,
   INDICATOR_COMPONENTS_PALETTE_13,
   INDICATOR_SERIES_AAPL,
 } from '../../e2e/fixtures/indicatorSeries';
 import {
+  DEFAULT_HISTORY_BARS,
   isChartable,
   normalizeAscendingUnique,
+  readHistoryBars,
   seriesSlots,
   toLineData,
+  windowIndicatorSeries,
   type IndicatorLinePoint,
 } from './indicatorChart';
 import { SERIES_PALETTE } from './seriesPalette';
@@ -100,5 +109,140 @@ describe('seriesSlots', () => {
     expect(isChartable(broken)).toBe(false);
     expect(isChartable({ ...macd, error: 'boom' })).toBe(false);
     expect(isChartable({ ...macd, series: [] })).toBe(false);
+  });
+
+  it('an indicator lacking history gets [] and consumes no index (341 × 342)', () => {
+    const out = windowIndicatorSeries(indicatorSeriesResponse(150, [200, 20]), 1000, 100);
+    expect(out.components.map((c) => c.refName)).toEqual(['sma200', 'sma20']);
+    expect(isChartable(out.components[0], out.insufficient)).toBe(false);
+    expect(seriesSlots(out.components, out.insufficient)).toEqual([[], [SERIES_PALETTE[0]]]);
+  });
+});
+
+const CONFIG_MIGRATIONS = fileURLToPath(
+  new URL('../../../xstockstrat-config/migrations/', import.meta.url),
+);
+const HISTORY_KEY = 'chart.indicator_history_bars';
+
+const asConfig = (init: Record<string, { value: ConfigValue['value'] }>) =>
+  Object.fromEntries(
+    Object.entries(init).map(([k, v]) => [k, create(ConfigValueSchema, v)]),
+  ) as Record<string, ConfigValue>;
+
+describe('readHistoryBars', () => {
+  it('falls back to the default when the key is absent', () => {
+    expect(readHistoryBars({})).toBe(200);
+  });
+
+  it('falls back to the default on a wrong value type', () => {
+    const asString = { [HISTORY_KEY]: { value: { case: 'stringVal' as const, value: '600' } } };
+    const asFloat = { [HISTORY_KEY]: { value: { case: 'floatVal' as const, value: 600 } } };
+    expect(readHistoryBars(asConfig(asString))).toBe(200);
+    expect(readHistoryBars(asConfig(asFloat))).toBe(200);
+  });
+
+  it('clamps below the drawn window up to W and above the ceiling down to 1000', () => {
+    expect(readHistoryBars(asConfig(UI_CHART_HISTORY_VALUES.init(50)))).toBe(200);
+    expect(readHistoryBars(asConfig(UI_CHART_HISTORY_VALUES.init(5000)))).toBe(1000);
+  });
+
+  it('returns a valid configured depth unchanged', () => {
+    expect(readHistoryBars(asConfig(UI_CHART_HISTORY_VALUES.init(1000)))).toBe(1000);
+    expect(readHistoryBars(asConfig(UI_CHART_HISTORY_VALUES.init(600)))).toBe(600);
+  });
+
+  it('reads the seeded value through the real reader (seed-to-reader, C-05 / F-07)', () => {
+    const files = readdirSync(CONFIG_MIGRATIONS).filter((f) =>
+      f.endsWith('_ui_chart_history_bars.up.sql'),
+    );
+    expect(files).toHaveLength(1);
+    const sql = readFileSync(CONFIG_MIGRATIONS + files[0], 'utf8');
+    const row = /'chart\.indicator_history_bars',\s*'([^']*)',\s*'([^']*)'/.exec(sql);
+    expect(row).not.toBeNull();
+    const [, valueType, valueData] = row!;
+    expect(valueType).toBe('int');
+    const seeded = Number(valueData);
+    const read = readHistoryBars(asConfig(UI_CHART_HISTORY_VALUES.init(seeded)));
+    expect(read).toBe(seeded);
+    expect(read).toBe(DEFAULT_HISTORY_BARS);
+  });
+});
+
+const hasValue = (v: { value?: number }) => v.value !== undefined;
+
+describe('windowIndicatorSeries', () => {
+  it('AC-1: a 200-period average over a 190-bar window has a value on every drawn bar', () => {
+    const out = windowIndicatorSeries(indicatorSeriesResponse(400, [200]), 1000, 190);
+    expect(out.times).toHaveLength(190);
+    const sma = out.components.find((c) => c.refName === 'sma200')!;
+    expect(sma.series[0].values).toHaveLength(190);
+    expect(sma.series[0].values.every(hasValue)).toBe(true);
+    expect(out.insufficient.size).toBe(0);
+  });
+
+  it('AC-2: history shorter than the period reports the indicator as lacking history', () => {
+    const out = windowIndicatorSeries(indicatorSeriesResponse(150, [200]), 1000, 190);
+    expect(out.insufficient.has('sma200')).toBe(true);
+  });
+
+  it('AC-3: exactly the period of history gives a value on the last bar only', () => {
+    const out = windowIndicatorSeries(indicatorSeriesResponse(200, [200]), 1000, 190);
+    const drawn = out.components[0].series[0].values;
+    expect(drawn).toHaveLength(190);
+    expect(hasValue(drawn[189])).toBe(true);
+    expect(drawn.slice(0, 189).some(hasValue)).toBe(false);
+    expect(out.insufficient.size).toBe(0);
+  });
+
+  it('AC-4: only the indicator lacking history is reported; the other draws in full', () => {
+    const out = windowIndicatorSeries(indicatorSeriesResponse(150, [200, 20]), 1000, 100);
+    expect([...out.insufficient]).toEqual(['sma200']);
+    const sma20 = out.components.find((c) => c.refName === 'sma20')!;
+    expect(sma20.series[0].values).toHaveLength(100);
+    expect(sma20.series[0].values.every(hasValue)).toBe(true);
+  });
+
+  it('a full page at the default depth never reports insufficient history (leading gaps only)', () => {
+    const out = windowIndicatorSeries(indicatorSeriesResponse(200, [250]), 200, 200);
+    expect(out.times).toHaveLength(200);
+    expect(out.components[0].series[0].values.some(hasValue)).toBe(false);
+    expect(out.insufficient.size).toBe(0);
+  });
+
+  it('a short page never reports a component with firstValueBars 0 or an error', () => {
+    const page = {
+      times: indicatorSeriesResponse(50, []).times,
+      components: [
+        { ...smaComponent('unknownP', 200, 50), firstValueBars: 0 },
+        { ...smaComponent('broken', 200, 50), error: 'formula failed', series: [] },
+        smaComponent('short', 200, 50),
+      ],
+    };
+    const out = windowIndicatorSeries(page, 1000, 200);
+    expect([...out.insufficient]).toEqual(['short']);
+  });
+
+  it('returns the tail of the response times, so each value keeps its own time', () => {
+    const resp = indicatorSeriesResponse(300, [20]);
+    const out = windowIndicatorSeries(resp, 1000, 200);
+    expect(out.times).toEqual(resp.times.slice(100));
+    expect(out.components[0].series[0].values).toEqual(
+      resp.components[0].series[0].values.slice(100),
+    );
+  });
+
+  it('does not mutate the input', () => {
+    const resp = indicatorSeriesResponse(300, [200]);
+    const before = structuredClone(resp);
+    windowIndicatorSeries(resp, 1000, 190);
+    expect(resp).toEqual(before);
+  });
+
+  it('a windowed series keeps the gap contract through toLineData', () => {
+    const out = windowIndicatorSeries(indicatorSeriesResponse(200, [200]), 1000, 190);
+    const pts = toLineData(out.components[0].series[0].values, out.times);
+    expect(pts).toHaveLength(190);
+    expect('value' in pts[0]).toBe(false);
+    expect('value' in pts[189]).toBe(true);
   });
 });

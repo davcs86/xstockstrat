@@ -678,3 +678,33 @@ Feature: chart-series-palette
 ### Coverage check
 - Source scenarios: 6. Planned: 6 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT.
 ```
+
+## Session 2026-11-16 — operator answers and main-dev merge (orchestrator)
+
+### Operator answers (verbatim)
+
+1. **O-24 closed.** Asked whether the earlier "Confirmed" (floors) and "Agreed" (design approval) applied to this feature and whether the 12 colour values stand as picked; operator: "Accept both (Recommended)".
+2. Asked to confirm the regenerated 6-scenario promotion plan (the last `sdd-batch-promotion-plan` block); operator: "Confirm (Recommended)" (P-04).
+3. Merge order: operator chose "Merge both (Recommended)" for PRs #1548 and #1549, so 341 merged first and 342 merges main-dev here.
+
+### Merge of `origin/main-dev` (341 `fix-indicator-pane-warmup`, squash `5fad24f9c`) — a merge commit, no rebase
+
+- `src/lib/indicatorChart.ts` — both sides kept: 341's `CHART_WINDOW_BARS` / `DEFAULT_HISTORY_BARS` / `MAX_HISTORY_BARS`, `readHistoryBars`, `windowIndicatorSeries`, and 342's `isChartable` / `seriesSlots`. `isChartable` and `seriesSlots` gained an optional second argument `insufficient` (default: empty set), and `ChartableComponent` gained `refName`, so 341's "lacks history" set reaches the slot helper. Every 342 call with one argument behaves as before.
+- `src/components/trader/IndicatorPanels.tsx` — 341's local two-argument `isChartable` and the old `SERIES_TOKENS` / `SERIES_FALLBACK` are gone (342 Step 8 removed the latter; the former is now the lib function). The canvas-sizing filter, the draw-loop skip and `seriesSlots` all receive `insufficient`; the effect deps hold both `slots` and `insufficient`. 341's "Not enough history" branch and 342's legend swatch (`slots[ci][si]`, `data-line-color`) are both kept.
+- `src/lib/indicatorChart.test.ts` — both sides' tests kept (imports merged into one block per module); one test added for the interaction (below). 26 tests in the file.
+- `e2e/trader/position-detail.spec.ts` — both sides' tests kept: 342's three palette tests, then 341's six history tests. Imports merged.
+- `e2e/fixtures/INVENTORY.md` — both sides' rows kept: 342's two rows, then 341's row.
+
+### Slot interaction decision — OPEN for the operator to confirm
+
+- **Decision taken:** an indicator that shows "Not enough history" draws no series and **consumes no colour slot**. The next drawn series takes the next palette entry.
+- **Basis:** 342's design (D-2/D-15, "`[]` for a non-chartable one") and implementation-spec Step 6 ("A non-chartable component gets `[]` and consumes no index") tie a slot to a drawn series. 341 defines its insufficient component as not chartable (its own `isChartable` excluded it: no pane, no series). Neither design names the other feature, so this is a reading, not a stated rule.
+- **Consequence to accept or reject:** when history later becomes sufficient for that indicator (or it fails), the colours of the series after it shift by its series count. A failed component already behaves this way in 342. The alternative (reserve the slot while the notice shows) keeps colours stable but spends palette entries on lines nobody sees, and brings the wrap at 12 closer.
+- **Coverage:** unit test `an indicator lacking history gets [] and consumes no index (341 × 342)` in `src/lib/indicatorChart.test.ts`. No acceptance scenario of either feature combines the two cases; both features' scenarios pass unchanged.
+
+### Verification (this session, host fallback, Node 24)
+
+- `pnpm exec tsc --noEmit` rc=0; `pnpm run lint` rc=0 (warnings only, none in the touched files); `pnpm run test:coverage` rc=0 — 80 files, 655 passed, 2 skipped.
+- `e2e/trader/position-detail.spec.ts`, chromium: 52 passed on the staging build and 52 passed with `UI_THEME=production`.
+- `pnpm run format:check` reports one file, `src/styles/themes/colorVision.cjs` (342 Step 1, unchanged by this merge; one redundant-parentheses line). Not fixed here: outside the merge, and no CI job runs `format:check`.
+- Still open: the slot decision above; the `colorVision.cjs` prettier line; the O-24 checkbox under "Open Threads" above is superseded by item 1.

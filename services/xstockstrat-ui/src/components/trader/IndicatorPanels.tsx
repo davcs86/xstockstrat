@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { IChartApi, ISeriesApi, MouseEventParams } from 'lightweight-charts';
 import type { ComponentSeries } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { resolveChartColor } from '@/lib/chartColors';
 import { isChartable, seriesSlots, toLineData } from '@/lib/indicatorChart';
@@ -33,15 +34,18 @@ export function IndicatorPanels({
   times,
   chartRef,
   containerRef,
+  insufficient,
 }: {
   components: ComponentSeries[];
   times: IndicatorSeriesInput['times'];
   chartRef: React.RefObject<IChartApi | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  /** refNames whose first value lies before the returned history; they get no pane and no series. */
+  insufficient: ReadonlySet<string>;
 }) {
   // Unified crosshair readout: one combined price + per-indicator value at the hovered bar.
   const [readout, setReadout] = useState<ReadoutRow[] | null>(null);
-  const slots = useMemo(() => seriesSlots(components), [components]);
+  const slots = useMemo(() => seriesSlots(components, insufficient), [components, insufficient]);
   // `refName.seriesName` → the colour the drawn line actually got; empty until the draw runs.
   const [lineColors, setLineColors] = useState<Map<string, string>>(new Map());
 
@@ -55,7 +59,7 @@ export function IndicatorPanels({
     let usedContainer: HTMLDivElement | null = null;
     let crosshairHandler: ((param: MouseEventParams) => void) | null = null;
     const added: ISeriesApi<'Line'>[] = [];
-    const chartable = components.filter(isChartable);
+    const chartable = components.filter((c) => isChartable(c, insufficient));
     // The parity times are protobuf-es Timestamps ({ seconds: bigint }); the request-input type is
     // a wider union incl. undefined — narrow to the mapper's shape.
     const paneTimes = (times ?? []) as { seconds: bigint | number }[];
@@ -88,7 +92,7 @@ export function IndicatorPanels({
         const drawnColors = new Map<string, string>();
         let paneIndex = 1;
         components.forEach((comp, ci) => {
-          if (!isChartable(comp)) return;
+          if (!isChartable(comp, insufficient)) return;
           comp.series.forEach((s, si) => {
             const { token, fallback } = slots[ci][si];
             const color = resolveChartColor(token, fallback);
@@ -152,7 +156,7 @@ export function IndicatorPanels({
         // chart already disposed by useCandlestickChart teardown — nothing to clean up.
       }
     };
-  }, [components, slots, times, chartRef, containerRef]);
+  }, [components, slots, times, chartRef, containerRef, insufficient]);
 
   if (components.length === 0) return null;
   return (
@@ -176,6 +180,11 @@ export function IndicatorPanels({
             <p className="text-sm text-muted-foreground">
               Couldn&apos;t compute this indicator — {comp.error}
             </p>
+          </div>
+        ) : insufficient.has(comp.refName) ? (
+          <div key={comp.refName} className="space-y-1" data-testid="indicator-panel-insufficient">
+            <Eyebrow>{comp.refName}</Eyebrow>
+            <EmptyState title="Not enough history" />
           </div>
         ) : (
           <div

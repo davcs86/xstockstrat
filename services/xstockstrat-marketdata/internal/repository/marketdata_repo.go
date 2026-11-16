@@ -59,6 +59,19 @@ func (r *MarketDataRepo) PoolStats() telemetry.DBPoolStats {
 	}
 }
 
+// sqlstateOutOfMemory on marketdata.ohlcv is read as lock-table exhaustion; any other
+// out-of-memory cause also counts.
+const sqlstateOutOfMemory = "53200"
+
+// observeLockBreach returns err unchanged; the counter is best-effort (PLAT-N1).
+func observeLockBreach(ctx context.Context, op string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == sqlstateOutOfMemory {
+		telemetry.RecordOhlcvOutOfMemory(ctx, op)
+	}
+	return err
+}
+
 // InsertBars bulk-upserts OHLCV bars into the marketdata.ohlcv hypertable.
 func (r *MarketDataRepo) InsertBars(ctx context.Context, bars []*marketdatav1.Bar) error {
 	if len(bars) == 0 {
@@ -66,7 +79,7 @@ func (r *MarketDataRepo) InsertBars(ctx context.Context, bars []*marketdatav1.Ba
 	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
+		return observeLockBreach(ctx, telemetry.OhlcvOpInsertBars, fmt.Errorf("begin tx: %w", err))
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
@@ -89,10 +102,10 @@ func (r *MarketDataRepo) InsertBars(ctx context.Context, bars []*marketdatav1.Ba
 			b.Source,
 		)
 		if err != nil {
-			return fmt.Errorf("insert bar %s: %w", b.Symbol, err)
+			return observeLockBreach(ctx, telemetry.OhlcvOpInsertBars, fmt.Errorf("insert bar %s: %w", b.Symbol, err))
 		}
 	}
-	return tx.Commit(ctx)
+	return observeLockBreach(ctx, telemetry.OhlcvOpInsertBars, tx.Commit(ctx))
 }
 
 // QueryBars returns paginated OHLCV bars for a symbol/timeframe in a time range.
@@ -118,13 +131,13 @@ func (r *MarketDataRepo) QueryBars(ctx context.Context, symbol, timeframe string
 
 	rows, err := r.pool.Query(ctx, q, symbol, timeframe, cursor, end, pageSize+1)
 	if err != nil {
-		return nil, "", fmt.Errorf("query bars: %w", err)
+		return nil, "", observeLockBreach(ctx, telemetry.OhlcvOpBars, fmt.Errorf("query bars: %w", err))
 	}
 	defer rows.Close()
 
 	bars, err := scanBars(rows)
 	if err != nil {
-		return nil, "", err
+		return nil, "", observeLockBreach(ctx, telemetry.OhlcvOpBars, err)
 	}
 
 	nextToken := ""
@@ -189,12 +202,12 @@ func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe 
 		LIMIT $5`
 	rows, err := r.db.Query(ctx, q, pgx.QueryExecModeExec, symbol, timeframe, start, end, pageSize)
 	if err != nil {
-		return nil, fmt.Errorf("query recent bars: %w", err)
+		return nil, observeLockBreach(ctx, telemetry.OhlcvOpRecentBars, fmt.Errorf("query recent bars: %w", err))
 	}
 	defer rows.Close()
 	bars, err := scanBars(rows)
 	if err != nil {
-		return nil, err
+		return nil, observeLockBreach(ctx, telemetry.OhlcvOpRecentBars, err)
 	}
 	// Reverse newest-first → oldest-first (ascending) for chart display.
 	for i, j := 0, len(bars)-1; i < j; i, j = i+1, j-1 {
@@ -486,12 +499,12 @@ func (r *MarketDataRepo) QueryBarsBatch(ctx context.Context, symbols []string, t
 		) b`
 	rows, err := r.pool.Query(ctx, q, symbols, tf, start, end, maxBarsPerSymbol)
 	if err != nil {
-		return nil, fmt.Errorf("query bars batch: %w", err)
+		return nil, observeLockBreach(ctx, telemetry.OhlcvOpBarsBatch, fmt.Errorf("query bars batch: %w", err))
 	}
 	defer rows.Close()
 	bars, err := scanBars(rows)
 	if err != nil {
-		return nil, err
+		return nil, observeLockBreach(ctx, telemetry.OhlcvOpBarsBatch, err)
 	}
 	for _, b := range bars {
 		out[b.Symbol] = append(out[b.Symbol], b)

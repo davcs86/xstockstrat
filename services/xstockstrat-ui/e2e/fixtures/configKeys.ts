@@ -255,3 +255,19 @@ export const PLATFORM_TRADING_STATE_VALUES = {
   }),
   wire: (state: PlatformTradingState) => ({ trading_state: { stringVal: state } }),
 };
+
+/**
+ * `ui` `GetConfig` values for the symbol page's indicator history depth (feature 341), keyed by the
+ * namespace-relative stored key `chart.indicator_history_bars`. `int_val` is `int64`: `init` carries
+ * a `bigint` (protobuf-es), `wire` a decimal string (Connect-JSON).
+ *
+ * Shape source: `xstockstrat.config.v1.GetConfigResponse`.
+ *
+ * Registered in e2e/fixtures/INVENTORY.md — update it when this file changes.
+ */
+export const UI_CHART_HISTORY_VALUES = {
+  init: (bars: number) => ({
+    'chart.indicator_history_bars': { value: { case: 'intVal' as const, value: BigInt(bars) } },
+  }),
+  wire: (bars: number) => ({ 'chart.indicator_history_bars': { intVal: String(bars) } }),
+};
