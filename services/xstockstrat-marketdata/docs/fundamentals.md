@@ -71,29 +71,78 @@ where these were `FMP_API_KEY` / `FINNHUB_API_KEY` `type: SECRET` env vars; thos
 removed. Every other knob (`enabled`, `base_url`, cache/quota settings) remains an ordinary config
 key.
 
-**Derivation versioning (feature 223).** Any change to what `buildPeriod` / `annualizeQuarterlyROE`
-write into a stored column MUST bump `edgar.DerivationVersion` (the golden-hash test in
-`internal/edgar/derivation_version_test.go` fails until you do). Stored rows with a lower
-`derivation_version` are upgraded in place on the next fundamentals backfill (statement-derived columns
-only) and the symbol's edgar snapshot cache is invalidated — see
-`docs/runbooks/historical-backfill.md` § Re-deriving stored periods. A re-derive **replaces** the
-builder-owned `extra_metrics` keys (`source.DerivationOwnedExtraKeys`) instead of merging them: they
-are stripped from the stored row before the new values are merged in, so a key the new derivation omits
-keeps no old value; keys outside that list survive. Every key `buildPeriod` writes must be in the list
-(parity test `TestDerivationOwnedExtraKeys_ParityWithBuilder_feature340`).
+**Derivation versioning (features 223, 348).** Any change to what the period builder
+(`collectFilings`, `ownPeriod`, `labelPeriods`, `buildPeriod`, `annualizeQuarterlyROE`) writes into a
+stored column, or to a period's identity (label, type, `period_end`, `filed_date`), MUST bump
+`edgar.DerivationVersion` and add a golden entry (the golden-hash test in
+`internal/edgar/derivation_version_test.go` fails until you do). The current value is **version 3**.
+The bump reaches stored rows only through a fundamentals backfill — see "Backfill reconcile" below and
+`docs/runbooks/historical-backfill.md` § Re-deriving stored periods. An in-place re-derive
+**replaces** the builder-owned `extra_metrics` keys (`source.DerivationOwnedExtraKeys`) instead of
+merging them: they are stripped from the stored row before the new values are merged in, so a key the
+new derivation omits keeps no old value; keys outside that list survive. Every key `buildPeriod` writes
+must be in the list (parity test `TestDerivationOwnedExtraKeys_ParityWithBuilder_feature340`).
+
+**EDGAR period identity (derivation version 3, feature 348).** A period is **one filing's own
+period**. SEC companyfacts copies `fy`/`fp` from each filing's cover page and filers repeat them across
+years, so they are not read at all.
+
+- Facts are grouped by **accession number**. The filing's form gives the period type: annual for
+  `10-K`, `10-KT`, `20-F`, `40-F` and their `/A` amendments; quarterly for `10-Q`, `6-K` and their
+  `/A` amendments. Any other form, and an accession whose facts disagree on form or filing date,
+  yields no period.
+- The filing's **own end** (`period_end`) is its latest balance-sheet anchor (`StockholdersEquity`,
+  `Assets`, `Liabilities`) dated on or before its filing date; with no anchor, the latest end of a flow
+  whose duration fits the form class. A cover-page share count never sets or moves `period_end`, so
+  no period ends after it was filed.
+- Filings with the same type and own end are one period: the earliest filing supplies `filed_date`
+  and the values (on a tie, the smallest accession number).
+- **Labels come from dates.** Annual: `FY<year(period_end − 15 days)>`. Quarterly: take the fiscal-year
+  boundary `b` (the own end of an annual filing, `10-KT` included) that is the smallest one on or after
+  the quarter end `e` within three quarters, else the nearest one, else December 31 of `year(e)`; with
+  `r = round((b − e) / 91.3125 days)` the label is `Q<4 − (r mod 4)>-<year(b − 15 days) − floor(r / 4)>`.
+  Labels are computed over the whole payload before the request's range or type filter.
+- **Left-out periods.** A quarterly filing whose own end is a real fiscal-year boundary is left out
+  (`year_end_quarter`). When two periods of one type still get the same label (a fiscal year end moved
+  later within one calendar year), the earlier-ending one keeps it and the later one is left out
+  (`label_collision`). Each is logged at WARN (`edgar: period left out`) and counted by
+  `marketdata.backfill.periods_left_out{reason}` during a backfill; the audit command lists them.
+- **Shares.** A period's share count is the share fact of the filing that supplies its values with the
+  latest date on or before that filing's date; on equal dates the `dei` cover-page fact wins.
+
+**Backfill reconcile (feature 348).** `BackfillFundamentals` derives a symbol's full period set and
+compares it with every stored row of the requested period types (`internal/reconcile`):
+
+- A stored row equal to a derived period on (label, type, `period_end`, `filed_date`) is **identical**:
+  it is upgraded in place when its version is lower, and its price-join is filled or, with
+  `overwrite=true`, refreshed. Identical rows outside the request range are not touched.
+- Every other stored row of a requested type is **deleted**, and derived periods are **inserted**, in
+  one transaction per symbol (`ReplaceHistoricalFundamentals`): each delete is pinned to the row's
+  key, dates and version and must remove exactly one row, inserts are plain, anything else rolls back
+  and fails the symbol. A derived period is inserted when its `period_end` is inside the request
+  range, or it has the type and `period_end` of a deleted row, or the symbol has a deleted row below
+  the current version (the range then does not limit that symbol in that run).
+- An inserted row is priced at its own filing date from its own statement. Only `price` and
+  `dividend_yield` may be carried, from a stored row of the same type and `filed_date`; `market_cap`,
+  `pe_ratio` and `pb_ratio` are always recomputed.
+- **Guards** fail the symbol with no write: the derivation returns nothing; a requested type with
+  stored rows has no derived period; or no stored non-zero `net_income`, `revenue`, `assets`,
+  `liabilities` or `stockholders_equity` equals the same metric of any derived period (the ticker now
+  resolves to another filer).
+- A deleted row whose period is not stored again is logged at INFO (`fundamentals backfill: stored
+  period deleted without replacement`, with a `category`). The EDGAR snapshot cache is invalidated
+  whenever a row was re-derived or replaced.
 
 **EDGAR period ratio bases (features 211/222).** `debt_to_equity` = financial debt / equity
 (`total_debt` in `extra_metrics`). `roe` on an **annual** row = annual net income / year-end equity; on
 a **quarterly** row it is **trailing-twelve-month** net income / period-end equity — the last four
-quarters keyed by each fact's own period end (never the filing's fy/fp, which comparative columns
-share), Q4 derived as FY − Q1..Q3, only facts filed on/before the row's filing (PIT); with n < 4
-quarters available it is Σ × 4/n. This matches the TTM EPS behind the row's P/E.
+quarters keyed by each fact's own period end, Q4 derived as FY − Q1..Q3, only facts filed on/before
+the row's filing (PIT); with n < 4 quarters available it is Σ × 4/n. This matches the TTM EPS behind
+the row's P/E.
 
-**EDGAR own-period selection (derivation version 2, feature 340).** A filing bucket (fiscal year +
-fiscal period) has one **balance-sheet anchor** date: the latest own period end among its
-`StockholdersEquity`, `Assets` and `Liabilities` facts. Instants (equity, assets, liabilities, the debt
-line items) and flows (net income, revenue, EPS) are taken only at that anchor date, per unit; among
-facts with the same date the earliest filing wins, and `Revenues` wins over the contract-revenue tag. A
-metric with no fact at the anchor is **absent**, never filled from a comparative column. A bucket with
-no anchor has no instants, and each flow is read at its own latest period end. The "period-end equity"
-above is the anchor-date equity. The `shares` count is not anchor-selected (see the findings log).
+**EDGAR own-period selection (features 340, 348).** Within a filing, instants (equity, assets,
+liabilities, the debt line items) and flows (net income, revenue, EPS) are taken only at the filing's
+own end, per unit; among facts with the same date the earliest filing wins, and `Revenues` wins over the
+contract-revenue tag. A metric with no fact at the own end is **absent**, never filled from a
+comparative column. A filing with no balance-sheet anchor has no instants, and each flow is read at its
+own latest period end. The "period-end equity" above is the equity at the own end.

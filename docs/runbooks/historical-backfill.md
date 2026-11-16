@@ -145,24 +145,108 @@ existing `marketdata.fmp.daily_request_cap`, so it silently degrades — never b
 cap is spent). A strategy operand only resolves when `analysis.backtest.fundamentals.enabled` is ON
 (default OFF); while OFF the operand reads hold on every surface.
 
-#### Re-deriving stored periods after a period-builder change (feature 223)
+#### Re-deriving stored periods after a period-builder change (features 223, 348)
 
 Every `fundamentals_history` row carries `derivation_version` (the EDGAR builder's
-`edgar.DerivationVersion` when it was written; `0` = pre-versioning). The earliest-filing pin means a
-plain re-insert never changes a stored row, so a builder change (e.g. feature 211's financial-debt D/E,
-feature 222's TTM quarterly ROE) reaches existing rows **only** through this upgrade path:
+`edgar.DerivationVersion` when it was written; `0` = pre-versioning). A builder change reaches stored
+rows **only** through a fundamentals backfill run on a build with the bumped version. Per symbol the
+backfill derives the full period set from SEC and reconciles it with the stored rows of the requested
+period types:
 
-1. Deploy the marketdata build carrying the bumped `DerivationVersion`.
-2. Re-run a fundamentals backfill for the affected symbols (`trigger_backfill(symbols=[...],
-   data_kind="fundamentals")`; no `overwrite` needed). Each stored row whose version is lower has
-   its **statement-derived columns** (`eps`, `roe`, `debt_to_equity`, `extra_metrics` keys) rewritten
-   in place and its version stamped; `filed_date`, `currency` and the price-join columns are untouched.
-   The symbol's cached `snapshot_source=edgar` row is deleted so the next read rebuilds it.
-3. Verify: `SELECT derivation_version, count(*) FROM marketdata.fundamentals_history GROUP BY 1;` —
-   no rows below the current version for the backfilled symbols — and spot-check a ratio (e.g. AXP
-   Q2-2026 `debt_to_equity ≈ 1.73`, quarterly `roe` ≈ FY level).
+- A stored row with the same label, type, `period_end` and `filed_date` as a derived period is
+  upgraded **in place** when its version is lower: `eps`, `roe`, `debt_to_equity` and the
+  builder-owned `extra_metrics` keys are rewritten and the version stamped; `filed_date`, `currency`
+  and the price-join columns are untouched unless `overwrite=true`, which also refreshes the
+  price-join of every such row from its fresh statement.
+- Every other stored row of a requested type is **replaced**: deleted, and the derived periods
+  inserted, in one transaction per symbol. A replacement row is priced at its own filing date; only
+  `price` and `dividend_yield` are carried from a stored row with the same `filed_date`.
+- A symbol fails with **no write** when the derivation returns nothing, returns no period of a type
+  that has stored rows, or shares no reported value with the stored rows (the ticker now resolves to
+  another filer). A failed symbol keeps its rows and its version; decide per symbol from the audit.
+- The symbol's cached `snapshot_source=edgar` row is deleted whenever a row was re-derived or replaced.
 
-A same-version re-run is a no-op. Run it **once** after both 222 and 223 are deployed.
+A same-version re-run on a repaired symbol is a no-op.
+
+**The audit command** reports what a backfill would do, without writing. It needs no database
+connection: its input is a rows file `{"<SYMBOL>": [<period>, ...]}` built from
+`query_fundamentals(symbol, mode="historical")` responses (every page), and it fetches SEC
+companyfacts itself. Run it at the commit under test:
+
+```bash
+cd services/xstockstrat-marketdata
+# what the repair would change (stored version of the lane: 2 on homelab staging, 1 on DO staging)
+GOWORK=off go run ./cmd/fundamentals-audit plan -rows A-rows-pre.json -stored-version 2 \
+  -user-agent "<SEC User-Agent with a contact>" -rate-limit-rps 5 > A-audit-pre.json
+# after the repair: exits 1 when a pass condition fails
+GOWORK=off go run ./cmd/fundamentals-audit plan -rows A-rows-post.json -stored-version 3 \
+  -user-agent "<SEC User-Agent with a contact>" -rate-limit-rps 5 \
+  -post-repair-failed "<comma-separated failed_symbols, or empty>" > A-audit-post.json
+# rows whose price-join went from a value to null, per column
+GOWORK=off go run ./cmd/fundamentals-audit diff -pre A-rows-pre.json -post A-rows-post.json
+```
+
+SEC answers 403 to a `User-Agent` that declares no contact; use the lane's `marketdata/edgar.user_agent`
+value. The report lists, per symbol: a guard trip, the identical / delete / insert counts, every row
+deleted without replacement with its category (`left_out`, `merged`, `period_type_changed`,
+`no_period_derived`), the left-out periods with their reason, and any derived period ending after its
+filing. The audit **cannot predict empty price columns**: it sees neither bar nor dividend coverage.
+It plans with an open range, so for a symbol whose stored rows are all already correct it also lists
+SEC periods older than the range a backfill was asked for.
+
+**Repair after the version-3 deploy (feature 348), one pass per lane.** [RO] is read-only SQL by the
+operator (read paths and the query-file convention: `docs/runbooks/operator-db-access.md` and
+`docs/roadmap/features/340-fix-fundamentals-roe-unit/design.md` § Step 5), [CFG] a config change,
+[OP-W] a write by the operator, [MCP] an MCP call made on the operator's word.
+
+Lane A — homelab staging (stored version 2, `fundamentals.history.enabled` = `true` before the repair):
+
+1. [CFG] Before the merge, set `marketdata/fundamentals.history.enabled` to `false`.
+2. [RO] Full-row export for restore:
+   `\copy (SELECT * FROM marketdata.fundamentals_history ORDER BY 1,3,2) TO 'A-pre.csv' CSV HEADER`.
+   Record `SELECT derivation_version, count(*) FROM marketdata.fundamentals_history GROUP BY 1;`, the
+   count of `period_end > filed_date` (query below), `SELECT count(DISTINCT symbol) FROM
+   marketdata.fundamentals_history;`, and that `marketdata/fundamentals.history.backfill.period_types`
+   reads `both`.
+3. [MCP] Symbol list = the union of every watchlist's symbols (`list_watchlists`, then
+   `get_watchlist` for each). Compare its size with the distinct-symbol count of step 2; a stored
+   symbol outside the union is reported, not skipped silently. Read each symbol's stored periods into
+   `A-rows-pre.json` and run the audit `plan`. Review the guard trips, the rows deleted without
+   replacement and the left-out periods. Re-run it if the derivation or the planner changes before
+   the merge.
+4. [OP-W] Merge and deploy. Confirm the build stamps version 3.
+5. [CFG] Set the flag to `true`.
+6. [MCP] Canary: `trigger_backfill(symbols=["ORCL","CRWD","JEF","BMO","AAPL","LYFT","AXP"],
+   data_kind="fundamentals", start="<lane minimum period_end>", overwrite=True)`, polled with
+   `get_backfill_status`. Check the served values with `query_fundamentals`: ORCL `Q1-2026` has
+   `period_end` 2025-08-31, `filed_date` 2025-09-10 and `stockholders_equity` 24,154,000,000; ORCL
+   `Q1-2027` has 2026-08-31, 2026-09-11 and 66,772,000,000; LYFT `Q3-2026` has `roe` 0.942632.
+7. [MCP] The remaining symbols in chunks of at most 50, same `start` and `overwrite=True`. Collect
+   every job's `failed_symbols`.
+8. Pass conditions:
+   - [RO] `SELECT count(*) FROM marketdata.fundamentals_history WHERE period_end > filed_date;` is 0.
+   - [RO] `SELECT symbol, count(*) FROM marketdata.fundamentals_history WHERE derivation_version < 3 GROUP BY 1;`
+     lists only symbols the repair reported failed.
+   - [RO] `SELECT symbol, period_type, period_end, count(*) FROM marketdata.fundamentals_history GROUP BY 1,2,3 HAVING count(*) > 1;`
+     returns no row.
+   - [MCP] Read the stored periods again into `A-rows-post.json`; the audit `plan` with
+     `-post-repair-failed` plans no delete and no insert for every symbol the repair did not report
+     failed.
+   - [MCP] The audit `diff` reports the value → null counts per price-join column. They are reported,
+     not a pass/fail figure: a replacement row has an unset column when no daily bar exists within
+     14 days before its `filed_date`, when its trailing-12-month dividend window predates the dividend
+     fetch, or when its statement lacks the input.
+9. Lane A ends with the flag `true`.
+10. Restore, only if a pass condition fails and the operator decides so [OP-W]: flag `false`; in one
+    transaction delete the listed symbols' rows from `marketdata.fundamentals_history`, load only
+    those symbols' lines of `A-pre.csv`, and delete their `marketdata.fundamentals` rows with
+    `source='edgar'`.
+
+Lane B — DigitalOcean staging (stored version 1, flag `false` before and after): the flag stays
+`false` through merge and deploy. Run steps 2–3 on lane B's data (`-stored-version 1`), then steps
+5–8, then set the flag back to `false`. One pass takes version-1 rows to version 3: rows the
+derivation reproduces are re-derived in place and their price-join refreshed by `overwrite=True`; all
+others are replaced.
 
 ---
 

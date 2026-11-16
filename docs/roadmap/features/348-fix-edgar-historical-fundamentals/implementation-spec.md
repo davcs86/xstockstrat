@@ -1239,7 +1239,7 @@ test "$(git diff --name-only HEAD -- services/xstockstrat-marketdata/acceptance 
 
 ### Step 14 — docs: derivation and reconcile docs, MARKETDATA-13, findings, observability, runbook procedure
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata` docs, `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-marketdata/docs/fundamentals.md` — modify
