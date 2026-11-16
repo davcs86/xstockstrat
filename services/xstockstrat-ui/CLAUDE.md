@@ -35,6 +35,10 @@ dark-only, no light-mode toggle — theme values come entirely from the preset).
     its opacity-modifier fallback), a `var()` of a palette variable, or an arbitrary value — within ±1
     sRGB / ±0.01 alpha of a theme-specific token of either theme fails every build. Use the theme token.
   - A Next 16 / Turbopack switch needs the alias re-declared as `turbopack.resolveAlias`.
+  - **Series palette (feature 342).** `--series-1`…`--series-12` must stay byte-identical in
+    `staging.css` and `production.css`; that keeps them outside check (b) (`nonSharedTokens`). Changing
+    a value means rerunning the feasibility gate (feature 342 implementation-spec, Step 3) and the
+    series tests in `themes.test.ts`. Never put a colour literal in `src/lib/seriesPalette.ts`.
 
 - **Adding a primitive not yet in `src/components/ui/`**: `npx shadcn@latest add <name>`.
 - **Re-applying/updating the preset**: `printf 'y\n' | npx shadcn@latest apply --preset bLTl5gh6 --yes`

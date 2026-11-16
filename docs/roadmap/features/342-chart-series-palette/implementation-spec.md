@@ -495,7 +495,7 @@ C-12: no domain object is used (theme tokens only), so the test-data inventory d
 
 ### Step 10 — docs: series palette in the governance doc and the service `CLAUDE.md`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`, `services/xstockstrat-ui/`
 **Files**:
 - `docs/patterns/ui-ux-governance.md` — modify
@@ -597,3 +597,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: items 1-8, each in a fresh shell at the repo root; instruction 1 imports the two fixtures "on the `:99` import line".
 - **Actual**: item 1 ran alone; items 2-4 ran in one log and items 5-8 in another, each item in its own `( cd services/xstockstrat-ui && … )` subshell separated by `;` with a per-item `rc=` echo. The fixture import is one import statement that Prettier wraps over lines 99-103 (`from './fixtures/indicatorSeries'` is at `:103`), so item 6's grep still matches it.
 - **Disposition**: mechanical. The commands are unchanged.
+
+### Step 10 — Verification run shape and item 3's ref
+- **Spec said**: three Verification items, each in a fresh shell at the repo root; item 3 diffs against `feature/chart-series-palette`.
+- **Actual**: items 1-3 ran in one log, each in its own subshell separated by `;` with a per-item `rc=` echo, because item 3's count passes by printing `0` and `grep -c` then returns rc=1. The worktree is detached and has no local `feature/chart-series-palette` branch, so item 3 printed `fatal: bad revision` and a vacuous `0`. It was re-run against `origin/feature/chart-series-palette` (the same commit), which showed the real diff (`12 insertions(+), 2 deletions(-)`) and printed `0` fence lines changed.
+- **Disposition**: mechanical. The commands are unchanged apart from the ref.
