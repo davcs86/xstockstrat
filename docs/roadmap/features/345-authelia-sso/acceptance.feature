@@ -417,3 +417,30 @@ Feature: authelia-sso
       | mode   |
       | legacy |
       | SSO    |
+
+  @AC-58 @FR-14
+  Scenario: An invalid APP_URL fails SSO sign-in closed and skips the logout Origin check
+    Given staging is in SSO mode with valid issuers and the UI's APP_URL is "https://xstockstrat-staging.example.test/"
+    When a user clicks "Sign in with SSO" on the staging login page
+    Then the browser returns to the login page with error "not_configured" and no session cookie is set
+    And the UI logs "app_url_invalid"
+    And a signed-in user's logout carrying Origin "https://dashboard.example.test" clears the session cookies
+
+  @AC-59 @FR-1 @FR-14
+  Scenario Outline: The SSO start route accepts only a same-origin POST
+    Given staging is in SSO mode
+    When a client sends <request> to "/api/auth/sso/start"
+    Then the response is <result> and no request is sent to Authelia
+
+    Examples:
+      | request                                                     | result                                              |
+      | a GET                                                       | HTTP 405                                            |
+      | a POST with Origin "https://dashboard.example.test"         | a redirect to the login page with error "failed"    |
+      | a POST with no Origin header                                | a redirect to the login page with error "failed"    |
+
+  @AC-60 @FR-1 @FR-14
+  Scenario: SSO start and callback fail cleanly when config is unreadable
+    Given staging is in SSO mode and the config service is unreachable
+    When a client POSTs "/api/auth/sso/start" from the same origin and GETs "/api/auth/sso/callback?code=c1&state=s1"
+    Then both redirect to the login page with error "failed"
+    And no session cookie is set and ResolveExternalIdentity is not called

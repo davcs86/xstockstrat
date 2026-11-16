@@ -143,19 +143,6 @@ with the person's Authelia email before their first SSO login (cutover option B,
 given) so the next SSO login links by email again. This is the recovery path homelab-edge `docs/runbooks/sso.md` § 7
 and § 8 rely on (owner decision 2026-11-16).
 
-FR-15. **SSO logout and refusals.** In SSO mode, `/api/auth/logout` revokes the session exactly as today. Then it always redirects
-the browser to Authelia's logout, which also ends the person's Authelia session for every other app. The target is
-the standard `end_session_endpoint` (RP-Initiated Logout, `post_logout_redirect_uri = ${APP_URL}/auth/login`) when
-Authelia's discovery document advertises one. Otherwise it is Authelia's portal logout, with a redirect back to
-`${APP_URL}/auth/login` (owner decision 2026-11-16, superseding the earlier "or documentation only" fallback). When Authelia answers the authorization request with `error=access_denied` (the person is not in the
-app's group), the login page shows "You don't have access to xstockstrat. Ask an admin." (owner decision 2026-11-16).
-Every other IdP error shows "Sign-in failed. Try again." The UI gains a "Sign out" button in the shared header, in both modes; before this feature nothing in the UI called
-logout. If the UI cannot read its config at logout time, logout ends only the xstockstrat session and logs a warning
-`sso_logout_mode_unknown`; the Authelia session survives (owner decision 2026-11-16). In **both modes**, a logout request
-whose `Origin` header is present and is not the app's own origin (`APP_URL`) is refused with 403 and changes nothing:
-no revoke, no cookie change (owner decision 2026-11-16, P-2). A request with no `Origin` header is unaffected, and a cookie-less cross-origin POST is redirected to the login page
-as today (middleware). With an invalid configuration (FR-14), logout ends only the xstockstrat session, with no redirect.
-
 FR-13. **Documentation.** The same PR as each behaviour change updates:
 - `docs/runbooks/mcp-tools.md`: connector setup with the pre-registered client IDs `xstockstrat-mcp-claude` (full) and
   `xstockstrat-mcp-claude-ro` (read-only), and `xstockstrat-staging-mcp-claude` / `xstockstrat-staging-mcp-claude-ro`
@@ -197,6 +184,11 @@ config rows. Each deployment runs in exactly one mode, chosen by its own config,
     `WWW-Authenticate`;
   - the UI logs `sso_issuer_invalid` (issuer) or `app_url_invalid` (`APP_URL`); the agent logs `sso_issuer_invalid`.
     Each is logged once per distinct value.
+- **SSO mode with unreadable configuration** (the config service is unreachable or times out): the login page renders the
+  legacy login (AC-46). `POST /api/auth/sso/start` and the callback return "Sign-in failed. Try again." (`?error=failed`)
+  and start no flow.
+- `/api/auth/sso/start` is POST-only (a GET returns 405 in every mode). In SSO mode, a POST whose `Origin` header is
+  missing or is not the app's origin returns "Sign-in failed. Try again." and starts no flow.
 - **Cutover for one deployment** is a config change only: set the `ui.oidc.*` and `agent.oidc.issuer` keys, then set
   `auth.password_login_enabled` to `false`. Clearing the two issuers returns that deployment to legacy mode (the MCP
   rollback path; redeploying the previous release remains possible).
@@ -205,6 +197,21 @@ config rows. Each deployment runs in exactly one mode, chosen by its own config,
   mode.
 - A half-configured deployment (exactly one issuer set) is treated as legacy mode on both surfaces, and the agent and
   UI each log `sso_mode_misconfigured` once per process start.
+
+FR-15. **SSO logout and refusals.** In SSO mode, `/api/auth/logout` revokes the session exactly as today. Then it always redirects
+the browser to Authelia's logout, which also ends the person's Authelia session for every other app. The target is
+the standard `end_session_endpoint` (RP-Initiated Logout, `post_logout_redirect_uri = ${APP_URL}/auth/login`) when
+Authelia's discovery document advertises one. Otherwise it is Authelia's portal logout, with a redirect back to
+`${APP_URL}/auth/login` (owner decision 2026-11-16, superseding the earlier "or documentation only" fallback). When Authelia answers the authorization request with `error=access_denied` (the person is not in the
+app's group), the login page shows "You don't have access to xstockstrat. Ask an admin." (owner decision 2026-11-16).
+Every other IdP error shows "Sign-in failed. Try again." The UI gains a "Sign out" button in the shared header, in both modes; before this feature nothing in the UI called
+logout. If the UI cannot read its config at logout time, logout ends only the xstockstrat session and logs a warning
+`sso_logout_mode_unknown`; the Authelia session survives (owner decision 2026-11-16). In **both modes**, a logout request
+whose `Origin` header is present and is not the app's own origin (`APP_URL`) is refused with 403 and changes nothing:
+no revoke, no cookie change (owner decision 2026-11-16, P-2). A request with no `Origin` header is unaffected, and a cookie-less cross-origin POST is redirected to the login page
+as today (middleware). The Origin check is skipped, with the `app_url_invalid` error logged, when `APP_URL` itself is
+invalid, because there is then no app origin to compare against. With an invalid configuration (FR-14), logout ends
+only the xstockstrat session: no redirect to Authelia, so the browser returns to the login page.
 
 ## Out of Scope
 
@@ -260,8 +267,8 @@ Additive only (non-breaking), in `packages/proto/identity/v1/identity.proto`:
 - Session tokens for the UI come from a new `rpc IssueSessionForUser(IssueSessionForUserRequest{ string user_id; })
   returns (AuthTokenResponse)`. It is SAN-gated to `xstockstrat-ui` only and refuses an inactive user. It reuses the
   `AuthenticateUser` mint path (env `JWT_SECRET`, `identity.refresh_tokens`).
-- Field numbers come from the next free numbers in the file and are confirmed at `/sdd-design` (`buf breaking` against
-  `main-dev`).
+- Field numbers are fixed by design D-11: request fields 1–3, response fields 1–4, the next free numbers in the file
+  (`buf breaking` against `main-dev`).
 
 ## Config Key Changes
 

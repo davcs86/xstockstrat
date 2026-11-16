@@ -974,6 +974,12 @@ return p;
 - **D-91, operator grammar spelled out in FR-14 and the runbook.** The e2e stub IdP is on `http://127.0.0.1:<port>`. Local docker-compose SSO is unsupported.
 - **D-93, `tsc --noEmit`.** The UI gains a `typecheck` script plus a CI step; the type assertions stay in `bffAllowlist.test.ts`. The spec runs it first and fixes pre-existing errors in the same PR (the owner accepted this).
 
+- **Post-approval review (`/sdd-review` re-run): AC-58..AC-60.** These are new scenarios for behaviour the design already settles; no new mechanism.
+  - AC-58: an invalid `APP_URL` gives `not_configured`, and the Origin check is skipped (D-66, (B) §D-68 `if_present`). Tested in the start/logout `route.test.ts` with `APP_URL` stubbed, plus `sameOrigin.test.ts`.
+  - AC-59: `/start` GET returns 405; a cross-origin or Origin-less POST gives `failed` (D-54, D-68). Tested in the start `route.test.ts` and e2e.
+  - AC-60: unreadable config gives `failed` on start and callback (D-22). Tested in the route unit tests with the config client mocked to time out.
+- **Config migration renumbered from `050` to `051`** (D-94; feature 341 owns `050`).
+
 ### Consumer surfaces (C-14)
 
 - **UI** (`xstockstrat-ui`, all three segments): the login page (SSO button + checkbox per the D-54 table), `/api/auth/sso/{start,callback}`, logout + the shared-header Sign-out button, `/accounts/authorized-apps` (`SsoAppsCard`), and `/.well-known/oauth-*` via `src/app/api/oauth/*`.
