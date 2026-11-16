@@ -367,3 +367,9 @@ Three questions were put in one message after the PR was opened. The operator's 
 - Files modified: `services/xstockstrat-marketdata/internal/repository/fundamentals_replace_dbtest_test.go`, `.github/workflows/ci.yml`, `docs/patterns/ci-overview.md`
 - Deviations: none
 
+### Step 13 — docs: signed CHANGE to feature 216 `@AC-5` and two prose notes in the durable suites [done]
+- `fix-historical-fundamentals-price-join.feature`: the one `And` line the operator signed (answer 2, 2026-11-16) added to `@AC-5 @feature-216` between its second given and its `When`; a header note that `@AC-3`, `@AC-4`, `@AC-5` are about rows the current derivation reproduces and that any other row is replaced (feature 348 `@AC-5`, `@AC-11`). `fix-stored-edgar-periods.feature`: one sentence in the feature description. No scenario added, none edited besides the signed line. TDD: N/A (docs).
+- Verification (PASS/FAIL runner): the six checks pass (added line present once; 5 and 2 scenarios; both files cite 348; exactly two files changed).
+- Files modified: `services/xstockstrat-marketdata/acceptance/fix-historical-fundamentals-price-join.feature`, `services/xstockstrat-marketdata/acceptance/fix-stored-edgar-periods.feature`
+- Deviations: none
+

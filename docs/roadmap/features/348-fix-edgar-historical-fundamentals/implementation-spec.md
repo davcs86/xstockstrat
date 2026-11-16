@@ -1185,7 +1185,7 @@ verification is sufficient.
 
 ### Step 13 — docs: signed CHANGE to feature 216 `@AC-5` and two prose notes in the durable suites
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-marketdata/acceptance/`
 **Files**:
 - `services/xstockstrat-marketdata/acceptance/fix-historical-fundamentals-price-join.feature` — modify

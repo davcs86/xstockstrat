@@ -9,6 +9,11 @@
 # row overwritten by a later fetch"). As-reported fields and the earliest filed_date are never
 # overwritten; the default (overwrite=false) stays fill-if-null.
 #
+# C-16 CHANGE (operator sign-off 2026-11-16, 348 context.md): @AC-3, @AC-4 and @AC-5 are about rows the
+# current EDGAR derivation reproduces (same fiscal_period, period_type, period_end and filed_date). A
+# stored row it does not reproduce is replaced by the fundamentals backfill and priced at its own
+# filing date from its own statement (feature 348 @AC-5, @AC-11).
+#
 # Test-fidelity caveat: the shipped unit tests for @AC-1..@AC-5 are weaker than these scenarios in
 # places (see docs/roadmap/features/216-fix-historical-fundamentals-price-join/context.md).
 
@@ -55,6 +60,7 @@ Feature: xstockstrat-marketdata - historical fundamentals price-join re-derivati
   Scenario: overwrite=true never nulls a pre-existing dividend_yield whose trailing-12-month window predates the current fetch lookback
     Given a fundamentals_history period with a non-null dividend_yield derived when its trailing-12-month window was covered
     And the current dividend fetch lookback no longer reaches back to that period's trailing-12-month window
+    And the current EDGAR derivation reproduces that period's fiscal_period, period_type, period_end and filed_date
     When a fundamentals backfill is re-run for that symbol with overwrite=true
     Then the period's dividend_yield retains its stored value
     And no price-join column for that period transitions from a value to null
