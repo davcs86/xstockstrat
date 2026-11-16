@@ -18,6 +18,7 @@
 | 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 | 2026-11-16 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Step 1 done; 14 steps pending |
+| 2026-11-16 | `in-progress` | /sdd-execute (sequential) | Steps 1–14 done; scenarios promoted; Step 15 (operator gate) open — lane A frozen, audit pending |
 
 ---
 
@@ -42,4 +43,4 @@ The fix derives a row's identity, period end and filed date from the fact's own 
 
 ## Next Action
 
-`/sdd-review fix-edgar-historical-fundamentals impl-spec`, then `/sdd-execute fix-edgar-historical-fundamentals sequential`
+Step 15 (operator gate): the operator supplies the lane A export figures and chooses the audit row source; then `/sdd-execute fix-edgar-historical-fundamentals 15`. Do not merge PR #1558 before the lane A audit report is reviewed.

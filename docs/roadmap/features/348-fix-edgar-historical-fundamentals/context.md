@@ -412,3 +412,8 @@ Not asked and therefore not authorized: any `trigger_backfill`, re-enabling the 
 - Still needed from the operator for lane A (design § 6 step 2): the full-row export, the version histogram, the `period_end > filed_date` count, the distinct symbol count.
 - Lane B: nothing done.
 
+### CI results (PR #1558)
+- Commit `d733ceae` (Steps 1–14): run https://github.com/davcs86/xstockstrat/actions/runs/43857432247 — all 48 jobs `success`, including "Go lint and test (xstockstrat-marketdata)", "CLAUDE.md lint (markdownlint)", "Marketdata DB test (TimescaleDB)" (job 133265548239, step `go test -tags dbtest` `success`) and "CI Gate".
+- Step 12 proof, stated exactly: the job ran with `CI=true` and `MARKETDATA_DB_TEST_URL` set, and `dbtestRepo` can skip only when that variable is empty, so the two real-database tests executed. The job's command has no `-v`, so the log shows no per-test line and **an executed-test count cannot be read from it**. The impl-spec review warning "Step 12: no SKIP is checked by eye" stays open in that form.
+- Commits after `d733ceae` (range flags, promotion, the Step 15 note): CI was still running when this was written.
+
