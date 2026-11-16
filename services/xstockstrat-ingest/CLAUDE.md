@@ -34,7 +34,7 @@ the **first** condition that fails, in this order:
 | 7 | no `callback_url` | `callback_url` |
 | 8 | `x-user-id` is set and is not `system` | `no_user` |
 
-The detail is `self-serve backfill denied: <token>`; for `range_too_long` it ends ` (max <N> days)`,
+The detail is `self-serve backfill denied: <token>`; for `range_too_long` it ends with a space and `(max <N> days)`,
 where `<N>` is the configured cap. The token set and format are a wire contract read by the UI and the
 agent, pinned by `tests/fixtures/self_serve_denial.json`. A self-serve request is also **de-duplicated
 per symbol**: when a QUEUED or RUNNING job already lists the symbol, it aborts `ALREADY_EXISTS`
