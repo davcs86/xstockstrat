@@ -368,8 +368,8 @@ func parseDate(s string) (time.Time, bool) {
 }
 
 const (
-	periodQuarterly = "quarterly"
-	periodAnnual    = "annual"
+	periodQuarterly = source.PeriodQuarterly
+	periodAnnual    = source.PeriodAnnual
 	sharesKey       = "shares"
 	deiTaxonomy     = "dei"
 )
@@ -677,7 +677,7 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 			"period_end", lo.PeriodEnd.Format(time.DateOnly), "filed_date", lo.FiledDate.Format(time.DateOnly), "reason", lo.Reason)
 		telemetry.RecordPeriodLeftOut(ctx, lo.Reason)
 	}
-	wantQuarterly, wantAnnual := periodTypeWanted(periodTypes)
+	wantQuarterly, wantAnnual := source.PeriodTypesWanted(periodTypes)
 	out := make([]source.HistoricalFundamentalsPeriod, 0, len(d.Periods))
 	for _, p := range d.Periods {
 		if (p.PeriodType == periodQuarterly && !wantQuarterly) || (p.PeriodType == periodAnnual && !wantAnnual) {
@@ -887,23 +887,6 @@ func buildPeriod(symbol string, a *periodAgg) source.HistoricalFundamentalsPerio
 		p.ExtraMetrics["stockholders_equity_usd"] = v
 	}
 	return p
-}
-
-func periodTypeWanted(periodTypes []string) (quarterly, annual bool) {
-	if len(periodTypes) == 0 {
-		return true, true
-	}
-	for _, pt := range periodTypes {
-		switch strings.ToLower(strings.TrimSpace(pt)) {
-		case "quarterly":
-			quarterly = true
-		case "annual":
-			annual = true
-		case "both":
-			quarterly, annual = true, true
-		}
-	}
-	return quarterly, annual
 }
 
 var _ source.HistoricalFundamentalsSource = (*Client)(nil)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
@@ -132,6 +133,9 @@ var DerivationOwnedExtraKeys = []string{"revenue", "net_income", "assets", "liab
 // to gate native pe/pb recovery (fail closed on a mismatch).
 type HistoricalPriceState struct {
 	Found         bool
+	FiscalPeriod  string
+	PeriodType    string
+	PeriodEnd     time.Time
 	FiledDate     time.Time
 	Price         *float64
 	MarketCap     *float64
@@ -141,6 +145,30 @@ type HistoricalPriceState struct {
 	Currency      string
 	// DerivationVersion is the stored row's derivation_version (feature 223); 0 = pre-versioning.
 	DerivationVersion int
+	ExtraMetrics      map[string]float64
+}
+
+const (
+	PeriodQuarterly = "quarterly"
+	PeriodAnnual    = "annual"
+)
+
+// PeriodTypesWanted parses a backfill's requested period types; an empty list means both.
+func PeriodTypesWanted(periodTypes []string) (quarterly, annual bool) {
+	if len(periodTypes) == 0 {
+		return true, true
+	}
+	for _, pt := range periodTypes {
+		switch strings.ToLower(strings.TrimSpace(pt)) {
+		case PeriodQuarterly:
+			quarterly = true
+		case PeriodAnnual:
+			annual = true
+		case "both":
+			quarterly, annual = true, true
+		}
+	}
+	return quarterly, annual
 }
 
 // HistoricalFundamentalsSource fetches a point-in-time historical fundamentals time series for a

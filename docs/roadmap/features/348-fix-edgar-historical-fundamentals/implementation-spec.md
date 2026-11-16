@@ -520,7 +520,7 @@ test "$(grep -rl "crwd_companyfacts" services/xstockstrat-marketdata --include="
 
 ### Step 4 — service: pure reconcile planner (`internal/reconcile`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/reconcile/plan.go` — create
@@ -589,7 +589,7 @@ test "$(grep -rl "crwd_companyfacts" services/xstockstrat-marketdata --include="
 
 ### Step 5 — test: reconcile planner cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/reconcile/plan_test.go` — create
