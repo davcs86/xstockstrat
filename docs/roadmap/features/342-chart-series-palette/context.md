@@ -48,7 +48,7 @@ Targets marked "design step" use the design's numbering; see the map in Decision
 - [x] `colorVision.cjs` is outside vitest coverage scope; its 49 reference tests are its only guard — target: Steps 1-2 (design step 1). Step 2 landed the 49 tests (2026-11-16).
 - [ ] `line.options().color` may be normalized by lightweight-charts v5; compare numeric channels — target: Steps 8-9 (design step 5).
 - [ ] The cleanup reset relies on `components` being reference-stable (`page.tsx:1349`) — target: Steps 8-9 (design step 5).
-- [ ] Check (a) needs a real `pnpm build` for both `UI_THEME` values plus the browser e2e (`fails.md:1462`) — target: Verification of Steps 5 and 9 (design step 6).
+- [ ] Check (a) needs a real `pnpm build` for both `UI_THEME` values plus the browser e2e (`fails.md:1462`) — target: Verification of Steps 5 and 9 (design step 6). Steps 4+5 (2026-11-16): both builds printed `checkThemeBundle: <theme> bundle OK`; the Step 9 half remains.
 - [ ] Docker may be unavailable at Step 9; then the fallback in `fails.md:981` applies, the deviation is logged, and the integration PR's CI run is the deciding signal for @AC-2, @AC-3 and @AC-6 on both theme builds — target: Step 9.
 - [ ] `seriesPalette.ts` and `indicatorChart.ts` are Tailwind-scanned; no `rgb()` literal or utility-shaped string there (`fails.md:3983`) — target: Steps 4-7 (design steps 3-4).
 - [ ] The feature-307 @AC-2 title ("exactly the Nocturne palette") no longer describes the staging file, though its Then-clauses hold; Step 10 records it; a wording change needs its own operator sign-off — target: Step 10 (design step 7).
@@ -64,6 +64,7 @@ Service/UI source (by step):
 - Step 1: `services/xstockstrat-ui/src/styles/themes/colorVision.cjs` (created), `services/xstockstrat-ui/src/styles/themes/checkThemeBundle.cjs` (`nonSharedTokens` added to `module.exports`).
 - Step 2: `services/xstockstrat-ui/src/styles/themes/colorVision.test.ts` (created).
 - Step 3: none (it appends the gate record to `context.md` only).
+- Steps 4+5 (one unit): `services/xstockstrat-ui/src/lib/seriesPalette.ts` (created), `src/styles/themes/staging.css` and `production.css` (12 `--series-N` tokens each), `src/styles/themes/themes.test.ts` (modified), `src/lib/seriesPalette.test.ts` (created).
 
 SDD artifacts, all under `docs/roadmap/features/342-chart-series-palette/`:
 
@@ -444,3 +445,23 @@ The `C` array literal that passed, byte for byte. Step 4 copies the 12 values fr
 - Verification: exit=0. The gate printed `GATE PASS` and the collisions line read `0`. The heading was found at `context.md:417`, the array matched byte for byte, and `git status --porcelain services/` was empty (`.sdd-logs/v-2.log`).
 - Files modified: `docs/roadmap/features/342-chart-series-palette/context.md`.
 - Deviations: the Verification run shape, which is mechanical. Full detail is in the Deviation Log.
+
+## Session 2026-11-16 — sdd-execute sequential (steps 4+5)
+
+- **jscpd blocker at Steps 4+5:** an earlier attempt at this unit was rejected at commit, because jscpd flagged the identical `--series-*` block in the two theme files as a clone. The orchestrator chose Option B: wrap only the `--series-*` block in each theme file with `/* jscpd:ignore-start */` and `/* jscpd:ignore-end */`, and leave `.jscpd.json` and `dry-guard-rail.md` alone. This is the orchestrator's decision under the operator's standing "do not stop at checkpoints unless it's necessary", not the operator's words, and it is to be reported to the operator. The grounds are D-1 (the values are byte-identical in both themes, enforced by `themes.test.ts`) and R-1.
+- O-24 assumption: this unit ran with O-24 still open, and its 11-test series describe implements the confirmed floors (D-27..D-30). If O-24 resolves to adjacent-only floors, the three non-adjacent and normal-vision rows must be reworked (8 tests).
+
+### Step 4 — service: `SERIES_PALETTE` and the 12 series tokens in both themes [done] (unit: Steps 4+5)
+- Created `seriesPalette.ts` with 12 `{ token, fallback }` entries and no colour value. Added `--series-1` … `--series-12` to `staging.css` and `production.css`, after `--chart-grid`, using the Step 3 gate bytes in order. The two blocks are identical and are wrapped in jscpd ignore markers. `--chart-1..5`, `globals.css` and `CHART_COLOR_TOKENS` are untouched.
+- Files modified: `services/xstockstrat-ui/src/lib/seriesPalette.ts`, `services/xstockstrat-ui/src/styles/themes/staging.css`, `services/xstockstrat-ui/src/styles/themes/production.css`
+- Deviations: the jscpd markers (orchestrator Option B) and the Verification run shape. Full detail is in the Deviation Log.
+
+### Step 5 — test: theme pins, contrast rows and the 11 series tests [done] (unit: Steps 4+5)
+- Split the staging pin into a filtered Nocturne `toEqual` and a key-set test. Added 24 series rows to `PAIRS`. Added `describe('series palette (feature 342)')` with 11 tests. Created `seriesPalette.test.ts` with 1 test.
+- TDD (AC-1, AC-4, AC-5):
+  - Red: `Error: Cannot find module '../../lib/seriesPalette'` and `Test Files  2 failed (2)` (exit=1, `.sdd-logs/v-1.log`).
+  - Green: item 2 `Tests  11 passed | 62 skipped (73)`; item 3 `Test Files  80 passed (80)` and `Tests  636 passed | 2 skipped (638)`; item 5 printed `12` with an empty diff; item 6 printed `checkThemeBundle: staging bundle OK (3 css files)` and `checkThemeBundle: production bundle OK (3 css files)`; item 7 printed nothing; lint and tsc rc=0; coverage `Lines : 79.39% ( 578/728 )` (exit=0, `.sdd-logs/v-2.log`).
+  - Item 4: re-run against `origin/feature/chart-series-palette`, it printed `0` changed `--chart-` lines and `12` added `--series-` lines (`.sdd-logs/v-3.log`).
+- Config-key wiring gate: N/A. No config key is touched.
+- Files modified: `services/xstockstrat-ui/src/styles/themes/themes.test.ts`, `services/xstockstrat-ui/src/lib/seriesPalette.test.ts`
+- Deviations: the Verification run shape, and item 4 run against `origin/` because the worktree has no local branch. Full detail is in the Deviation Log.

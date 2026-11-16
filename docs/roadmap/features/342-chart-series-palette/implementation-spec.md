@@ -237,7 +237,7 @@ C-12: this file uses no domain object (colours and published constants only), so
 
 ### Step 4 — service: `SERIES_PALETTE` and the 12 series tokens in both themes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/seriesPalette.ts` — create
@@ -274,7 +274,7 @@ C-12: this file uses no domain object (colours and published constants only), so
 
 ### Step 5 — test: theme pins, contrast rows and the 11 series tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/styles/themes/themes.test.ts` — modify
@@ -557,3 +557,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: three Verification items, each in a fresh shell at the repo root.
 - **Actual**: the three items ran in one log, each in its own subshell, joined with `&&`. Item 1's gate command was unchanged, and items 2 and 3 ran from the repo root. Item 2's byte-identity check was a separate `grep -cxF` of the run's `C` literal against `context.md`, which matched exactly 1 line.
 - **Disposition**: mechanical. The commands are unchanged.
+
+### Steps 4+5 — jscpd markers around the `--series-*` block (D-1, R-1)
+- **Spec said**: Step 4 item 2 adds `--series-1` … `--series-12`, byte-identical in `staging.css` and `production.css`, with one comment of at most 2 lines above the block.
+- **Actual**: an earlier attempt at this unit was rejected at commit by the pre-commit jscpd gate (`scripts/check-duplication.py`, threshold 0), because the identical 12-line block is a clone across the two theme files. Under the orchestrator's decision (Option B, made under the operator's standing "do not stop at checkpoints unless it's necessary"; not the operator's words, to be reported to the operator), the block in each file is wrapped in `/* jscpd:ignore-start */` and `/* jscpd:ignore-end */`. The duplication is required: D-1 fixes the same 12 values in both themes and `themes.test.ts` enforces it, and R-1 rejects a shared `globals.css` `:root` declaration. `.jscpd.json` and `docs/patterns/dry-guard-rail.md` are untouched. With the markers in place, `check-duplication.py services/xstockstrat-ui/src` reported `Found 0 clones`.
+- **Disposition**: orchestrator-decided in-scope workaround; to be reported to the operator.
+
+### Steps 4+5 — Verification run shape and item 4's ref
+- **Spec said**: Verification items 1-8, each in a fresh shell at the repo root; item 4 diffs against `feature/chart-series-palette`.
+- **Actual**: RED (item 1) ran alone. Items 2-8 ran in one log. Each item ran in its own `( cd services/xstockstrat-ui && … )` subshell, separated by `;` with a per-item `rc=` echo, because items 4 and 7 pass by printing `0` or nothing, and `grep` returns rc=1 for both. The executor's worktree is detached and has no local `feature/chart-series-palette` branch, so item 4 printed `fatal: bad revision` and a vacuous `0`. It was re-run against `origin/feature/chart-series-palette` (the same commit). That run printed `0` changed `--chart-` lines and `12` added `--series-` lines.
+- **Disposition**: mechanical. The commands are unchanged apart from the ref.
