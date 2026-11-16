@@ -38,3 +38,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Phase 1 Grilling: round 1 run (proposer + adversary). Adversary verdict NEEDS WORK, no Floor breach; 11 objections, 9 closed in synthesis (debate.md). The decisive finding: a rebuilt `columns` memo remounts every actions cell (D-5), so strategies and authorized apps need a stable cell for the focus rule to hold.
 - Waiting on the operator (P-04; the handover reserves design approval): approve the design; adopt the shared menu in orders and strategies and the dialog text that makes visible; the focus fallback target; the C-16 promotion plan. Nothing is recorded as decided until the operator answers.
 - Side defect found, out of scope, not filed: the "Edit keys" `FormDialog` opened from the row menu never receives focus (recon.md § Risks).
+
+## Session 2026-11-16 — sdd-design round-1 gate (operator answers, verbatim options)
+
+- Design approval: **"Run another round"** — the design is NOT approved; round 2 runs.
+- Shared menu: **"Adopt, specific text (Recommended)"** — orders dialog: title "Cancel order", text "Cancel this {symbol} order?", buttons Dismiss / Confirm; strategies dialog: title "Deactivate strategy", existing text kept; Confirm buttons styled as destructive (D-4).
+- Focus fallback: **"Main content region (Recommended)"** (D-6).
+- C-16 promotion: **"Approve in advance (Recommended)"** — a new durable suite `services/xstockstrat-ui/acceptance/fix-row-menu-stays-open.feature`, tagged `@feature-350`, no existing suite edited; the plan is generated from the feature branch after execution and the exact text listed in the PR.
+- No steer text was given with "Run another round"; round 2 takes the open objections (O-4, O-10, O-11), the per-site shape of D-5 and the React 19 ref dependency.
