@@ -1,6 +1,6 @@
 # Implementation Spec: fix-replace-tif-before-intent
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-16
 **Feature**: `docs/roadmap/features/349-fix-replace-tif-before-intent/feature.md`
 **Total Steps**: 3
@@ -324,7 +324,7 @@ Lint and the coverage command run in Step 1's `**Verification**` (same unit).
 
 ### Step 3 — docs: TRADING-7 and the Order Replace section
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-trading/` (docs)
 **Files**:
 - `services/xstockstrat-trading/docs/context-constitution.md` — modify

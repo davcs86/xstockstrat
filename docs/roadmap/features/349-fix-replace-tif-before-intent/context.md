@@ -76,3 +76,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - GREEN: `golangci-lint run --modules-download-mode=mod` → `0 issues.`; `go test ./... -race -count=1` exit 0 (all 8 packages `ok`, no existing test edited); coverage `total: 84.8%`; 4 top-level F349 tests PASS; `validateTIF(` sites 2; numstat `15 13`; `ReplaceOrder` test doubles still 5.
 - Files modified: `services/xstockstrat-trading/internal/service/trading.go`, `internal/service/trading_replace_tif_test.go` (new), `internal/service/trading_bracket_test.go`
 - Deviations: none
+
+### Step 3 — TRADING-7 and the Order Replace section [done]
+- TRADING-7 now says the check runs before any order-intent claim, names the `ReplaceOrder` position and the precedence, and its Why cell names the failure mode; `CLAUDE.md` § Order Replace gained one caller-facing sentence. TDD: N/A (docs).
+- Verification: both greps `1`; `CLAUDE.md:160` match; numstat `1 1`; `check-context-map.py` → `OK - all context-map and doc references resolve.`; `markdownlint-cli2` → `0 issues`.
+- Files modified: `services/xstockstrat-trading/docs/context-constitution.md`, `services/xstockstrat-trading/CLAUDE.md`
+- Deviations: none
+- `node scripts/check-config-wiring.mjs --final` → exit 0 (two `REPORTED:` baseline lines, neither from this feature: `fundsignal_loop.py:marketdata/fundamentals.provider`, `trading.go:platform/trading_state`).
+- Status: in-progress → code-completed. No insights.md entry: the lesson (validate before an idempotency claim, test at the handler) is already fails.md 2026-10-07.

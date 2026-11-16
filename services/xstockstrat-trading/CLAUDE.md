@@ -156,6 +156,9 @@ an order with no `broker_order_id` yet are rejected with `FailedPrecondition`. F
 the new total/remaining per its adapter. A successful replace persists the order, emits the
 `order.replaced` ledger event, and broadcasts to `StreamOrderUpdates` subscribers.
 
+A `time_in_force` the order's broker does not allow is rejected with `InvalidArgument` and has no
+side effect, so the caller can correct it and resend (TRADING-7).
+
 ### Per-broker replaceable-field matrix
 
 | Field (proto) | Alpaca — `PATCH /v2/orders/{id}` | IBKR — modify `POST /iserver/account/{acct}/order/{id}` |

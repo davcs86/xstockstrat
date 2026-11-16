@@ -17,6 +17,7 @@
 | 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings, all folded into the spec) |
 | 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved under the operator's handover; recon.md + debate.md + design.md written |
 | 2026-11-16 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1+2 done (sequential) |
+| 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute | All 3 steps done; integration PR to `main-dev` |
 | 2026-11-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps |
 
 ---
@@ -48,4 +49,4 @@ per-step `**Reviewers**` lines. Re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review fix-replace-tif-before-intent impl-spec` — validate implementation spec, then `/sdd-execute fix-replace-tif-before-intent`
+Review and merge the integration PR into `main-dev` (operator); the fix rides the next `/promote`.
