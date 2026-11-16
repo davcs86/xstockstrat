@@ -792,3 +792,8 @@ Feature: xstockstrat-ingest - TriggerBackfill admits a bounded self-serve backfi
 ### Coverage check
 - Source scenarios: 15. Planned: 15 NEW (ui 13, ingest 2), 0 DUP, 0 OVERLAP, 0 CONFLICT.
 ```
+
+## Session 2026-11-16 — operator confirmation of the promotion plan (orchestrator)
+
+- Asked: confirm the plan above (15 scenarios verbatim, tags kept: 13 in `services/xstockstrat-ui/acceptance/backtest-inline-backfill.feature`, 2 in `services/xstockstrat-ingest/acceptance/backtest-inline-backfill.feature`)? **Operator, verbatim: "Confirm (Recommended)".** This confirms the last `sdd-batch-promotion-plan` block (P-04).
+- Merge-order gate: feature 341 merged into main-dev (PR #1549, 5fad24f9c) and main-dev is merged into this branch (090f12d0a); the 343-after-341 row is satisfied.
