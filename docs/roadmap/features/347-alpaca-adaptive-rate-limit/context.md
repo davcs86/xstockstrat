@@ -88,3 +88,10 @@
 - D-14 supersedes operator decision 7 for marketdata: in an exhausted window a detached quote or price
   fetch now holds for its full budget (2.5 s) before returning the warm subset, where a 429 used to fail
   in milliseconds. Time bounds are unchanged.
+- Round 3 done (D-22..D-24; O-25..O-35). Round 3 gate, operator steers: (16) **approved** one new
+  repository method `ReleasePendingIntent` (guarded DELETE of a PENDING intent row after a rate-limit
+  refusal) — the first delete path on `trading.order_intents`; (17) the marketdata cycle deadline bounds
+  only the Alpaca calls, DB writes keep the loop context (D-26 supersedes D-21); (18) bracket-leg
+  cancels are bounded by `broker.timeout_ms`, no retry; (19) run round 4. D-25..D-27, R-14..R-16.
+- To file at spec/execute (pre-existing, not fixed here): `ReplaceOrder` inserts its intent before
+  `validateTIF`, so a TIF validation failure leaves the intent PENDING then UNKNOWN.
