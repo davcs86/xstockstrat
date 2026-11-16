@@ -353,3 +353,19 @@
   passes, whole service `go test ./... -race` exit 0, coverage total 85.1%, `golangci-lint` 0 issues.
 - Files modified: `internal/service/marketdata_service_test.go`, `internal/service/bar_hold_test.go`
 - Deviations: none
+
+### Step 7 — service: trading Alpaca client paces, retries within the budget and refuses with `ErrRateLimited` [done]
+- `broker.ErrRateLimited`; `ClientConfig.RateLimitBudget`; `do` keeps today's body when the budget is
+  nil or non-positive and otherwise runs `doPaced` (fail fast, inclusive fit rule, mutations on
+  `context.WithoutCancel`, per-attempt timeout `min(T, end − now)`, `GetBody` replay). Pure
+  `rateLimitBudget` beside `computeStaleThreshold`; the method `alpacaRateLimitBudget` wired in
+  `instantiateBrokerLocked`; one temporary `read-unseeded` entry in `scripts/config-wiring.json`.
+- The WARN follows operator decision 25 (holds and 429 waits only), using `Reservation.Hold`.
+- Verification: build ok; existing `internal/broker` tests pass with `-race`; `baseURL()` paper/live
+  gate present; no diff in `ibkr.go` / `ibkr_session.go`; `golang.org/x/time` absent from `go.mod`;
+  `check-config-wiring --final` exit 0 and `--doc-check` exit 0.
+- TDD: paired with Step 8 (red captured there with these symbols present, the loop off and
+  `rateLimitBudget` returning 0).
+- Files modified: `services/xstockstrat-trading/internal/broker/broker.go`, `internal/broker/alpaca.go`,
+  `internal/service/order_intent.go`, `internal/service/trading.go`; `scripts/config-wiring.json`
+- Deviations: none

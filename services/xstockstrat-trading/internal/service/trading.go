@@ -2544,6 +2544,12 @@ func brokerCallTimeout(cfgW *config.Watcher) time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+// alpacaRateLimitBudget is the sole reader of trading.broker.adaptive_rate_limit_enabled (explicit true
+// default); the Alpaca client calls it before every request, so the kill switch is live.
+func (s *TradingService) alpacaRateLimitBudget() time.Duration {
+	return rateLimitBudget(s.cfgW.GetBool("broker.adaptive_rate_limit_enabled", true), brokerCallTimeout(s.cfgW), staleThreshold(s.cfgW))
+}
+
 // ibkrTiming is the IBKR LST session lifecycle from the ibkr.* keys, read live on every use (≤0 → default).
 func (s *TradingService) ibkrTiming() broker.IBKRTiming {
 	ms := func(key string, def int64) time.Duration {
@@ -3268,6 +3274,8 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 			LiveURL:   "https://api.alpaca.markets",
 			Paper:     rec.IsPaper,
 			Timeout:   func() time.Duration { return brokerCallTimeout(s.cfgW) },
+			// A method value, so service tests build their client from the same budget code.
+			RateLimitBudget: s.alpacaRateLimitBudget,
 		}), nil
 	}
 }

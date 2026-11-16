@@ -477,7 +477,7 @@ grep -rn '"AAA", "BBB", "CCC"' --include="*_test.go" internal/service | wc -l   
 
 ### Step 7 — service: trading Alpaca client paces, retries within the budget and refuses with `ErrRateLimited`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify
