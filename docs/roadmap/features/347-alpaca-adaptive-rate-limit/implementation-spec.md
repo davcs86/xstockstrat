@@ -602,7 +602,7 @@ grep -rn "func Set" internal/broker/export_test.go      # the four seams only
 
 ### Step 9 — service: trading handles the rate-limit outcome and bounds its Alpaca-only calls
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/order_intent_repo.go` — modify
@@ -672,7 +672,7 @@ grep -n "broker.adaptive_rate_limit_enabled" CLAUDE.md                     # the
 
 ### Step 10 — test: trading service rate-limit outcomes and bounds
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_rate_limit_test.go` — modify
@@ -850,3 +850,10 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: `Reservation` gained a third field, `Hold bool`, true only for the wait of an exhausted window. The marketdata client logs the throttle WARN for a hold or a 429 wait and never for a spread slot.
 **Reason**: the two-field result does not tell a spread slot from a hold, so the client could only log every non-zero wait (several WARNs a minute while quota is merely low). The design's situation tables mark WARN on the hold and 429 rows only. Operator decision at the Step 4 checkpoint (2026-11-16): "Holds and 429 waits only".
 **Disposition**: operator-approved follow-up commit after Step 4; both `pace.go` copies and `pace_test.go` stay byte-identical. Step 7 (trading client) uses the same field.
+
+### Deviation: Step 10 — trading service rate-limit outcomes and bounds
+**Spec said**: "Existing tests in the four files keep their assertions; run the whole package to confirm the cancel reorder changes no existing expectation" and a `**Files**` list of four test files.
+**Actual**: two more test files were edited, one line each, fixtures only: `trading_telemetry_test.go` (`TestPollFills_TickRecordUsesInjectedClock` now sets `cfgW: &config.Watcher{}`) and `trading_bracket_test.go` (`TestCancelOrder_CancelsActiveBracketLegs` now sets an in-memory `repo`). No assertion changed.
+**Reason**: both fixtures left a field nil. The poller now reads `broker.timeout_ms` for its per-call bound, and the cancel reorder moves the persist ahead of the leg cancels, where that test's `recover()` had been hiding a nil-repository panic. Neither state can occur in a running service.
+**Disposition**: operator-approved scope expansion at the Steps 9+10 blocker (2026-11-16, "Fix the two fixtures"). Production code untouched.
+

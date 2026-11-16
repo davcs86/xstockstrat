@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -60,6 +61,16 @@ func (m *memIntentRepo) GetIntentByID(_ context.Context, id string) (*repository
 	defer m.mu.Unlock()
 	cp := *m.recs[id]
 	return &cp, nil
+}
+
+func (m *memIntentRepo) ReleasePendingIntent(_ context.Context, id string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if rec, ok := m.recs[id]; !ok || rec.State != repository.IntentStatePending {
+		return false, nil
+	}
+	delete(m.recs, id)
+	return true, nil
 }
 
 func (m *memIntentRepo) FinalizeIntent(_ context.Context, id, _ string, state int16, resp []byte) error {
@@ -206,5 +217,71 @@ func TestFlattenAndHalt_ScopesPositionToBracketAccount(t *testing.T) {
 	h.run(t)
 	if pf.got == nil || pf.got.GetAccountId() != "acct-1" {
 		t.Fatalf("flatten GetPosition must be scoped to the bracket account acct-1, got %+v", pf.got)
+	}
+}
+
+// haltRecordingBroker records each flatten submit's client order id and whether the account was already halted.
+type haltRecordingBroker struct {
+	broker.Broker
+	svc    *TradingService
+	mu     sync.Mutex
+	ids    []string
+	halted []bool
+}
+
+func (b *haltRecordingBroker) SubmitOrder(ctx context.Context, req broker.OrderRequest) (*broker.BrokerOrder, error) {
+	b.mu.Lock()
+	b.ids = append(b.ids, req.ClientOrderID)
+	b.halted = append(b.halted, b.svc.isAccountHalted("acct-1"))
+	b.mu.Unlock()
+	return b.Broker.SubmitOrder(ctx, req)
+}
+
+// Feature 347 @AC-28: a rate-limited emergency flatten halts the account first and keeps retrying.
+func TestFlattenAndHalt_RateLimitedHaltsFirstAndKeepsRetrying_F347_AC28(t *testing.T) {
+	h := newRateLimitHarness(t, 5000, map[string]*tradingv1.Order{"ord-1": {
+		OrderId: "ord-1", UserId: "user-1", AccountId: "acct-1", Symbol: "AAPL",
+		TradingMode: commonv1.TradingMode_TRADING_MODE_PAPER,
+	}}, func(_ int, w http.ResponseWriter, _ *http.Request) {
+		rlExhaustedHeaders(w, 50*time.Second)
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+	h.svc.portfolio, h.svc.accountRepo = flattenPortfolio{}, &fakeAccountRepo{}
+	rec := &haltRecordingBroker{Broker: h.client, svc: h.svc}
+	h.svc.brokers["acct-1"] = brokerPoolEntry{client: rec, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "user-1"}
+	bracket := &repository.OrderBracketRecord{AccountID: "acct-1", OrderID: "ord-1", Status: bracketStatusSubmitting}
+	_ = h.bracket.CreateBracket(context.Background(), bracket)
+
+	h.svc.flattenAndHalt(context.Background(), bracket)
+
+	if len(rec.ids) != 4 {
+		t.Fatalf("flatten submits = %d, want 4", len(rec.ids))
+	}
+	if rec.halted[0] || !rec.halted[1] {
+		t.Fatalf("halted at each submit = %v, want the account halted before the second submit", rec.halted)
+	}
+	distinct := map[string]bool{}
+	for _, id := range rec.ids {
+		distinct[id] = true
+	}
+	if len(distinct) != 4 {
+		t.Fatalf("client order ids = %v, want 4 distinct", rec.ids)
+	}
+	rejected := 0
+	h.svc.mu.Lock()
+	for id, o := range h.svc.orders {
+		if id != "ord-1" && o.Status == tradingv1.OrderStatus_ORDER_STATUS_REJECTED {
+			rejected++
+		}
+	}
+	h.svc.mu.Unlock()
+	if rejected != 4 {
+		t.Fatalf("REJECTED flatten orders = %d, want 4", rejected)
+	}
+	if n := len(h.seen(http.MethodPost, "/v2/orders")); n != 1 {
+		t.Fatalf("POSTs that reached the broker host = %d, want exactly 1", n)
+	}
+	if !h.svc.isAccountHalted("acct-1") {
+		t.Fatal("account not halted after the flatten attempts")
 	}
 }

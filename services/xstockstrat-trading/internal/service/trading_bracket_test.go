@@ -690,6 +690,7 @@ func TestCancelOrder_CancelsActiveBracketLegs(t *testing.T) {
 
 	svc := &TradingService{
 		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: brokers, ledger: &fakeLedgerClient{},
+		repo:    repository.NewTradingRepoWithDB(execOnlyDB{}),
 		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 		orders: map[string]*tradingv1.Order{
 			"ord-1": {OrderId: "ord-1", UserId: "user-1", AccountId: "acct-1", BrokerOrderId: "brk-order-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},

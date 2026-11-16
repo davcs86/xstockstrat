@@ -386,3 +386,44 @@
 - Files modified: `services/xstockstrat-trading/internal/broker/export_test.go` (new),
   `internal/broker/alpaca_test.go`, `internal/service/trading_rate_limit_test.go` (new)
 - Deviations: none
+
+### Checkpoint after Step 8 — operator decision
+- (26) Proceed with Steps 9+10, then 11 and 12.
+
+### Step 9 — service: trading handles the rate-limit outcome and bounds its Alpaca-only calls [done]
+- Atomic unit with Step 10. `ReleasePendingIntent` (interface + guarded DELETE); `alpacaCallContext`
+  at exactly three kinds of site (fill poller `GetOrder`, the not-cancelable re-read, both leg cancels;
+  5 occurrences with the definition); `refuseRateLimitedMutation`; `CancelOrder` captures `prevIntent`,
+  refuses on `ErrRateLimited` before any local write, and writes CANCELED + finalizes the intent before
+  the leg block; `ReplaceOrder` refuses the same way; `flattenAndHalt` halts on the first rate-limited
+  submit and keeps retrying. `isUncertainBrokerOutcome` is unchanged. Docs: the key row and the
+  corrected `broker.timeout_ms` row, § Adaptive rate limit (budget table and outcomes a–g), `TRADING-8`,
+  the TRADING-3 addition, and the reconciliation paragraph.
+- Files modified: `services/xstockstrat-trading/internal/repository/order_intent_repo.go`,
+  `internal/service/trading.go`, `CLAUDE.md`, `docs/context-constitution.md`, `docs/reconciliation.md`
+- Open risk carried, unchanged: `ReleasePendingIntent`'s SQL has no DB-level test; it is one statement,
+  `DELETE … WHERE intent_id = $1 AND state = $2 RETURNING intent_id`, for review.
+- Deviations: none
+
+### Step 10 — test: trading service rate-limit outcomes and bounds [done]
+- Atomic unit with Step 9. Real-client harness (`newRateLimitHarness`: snapshot watcher, a real
+  `broker.NewClient` against an `httptest` server built from `brokerCallTimeout` and
+  `svc.alpacaRateLimitBudget`, `memIntentRepo`, `ctxCapturingDB`), a fake-broker harness, 11 scenario
+  tests, `memIntentRepo.ReleasePendingIntent`, and the panic-convention method on
+  `fakeReconciliationOrderIntentRepo`.
+- TDD red, on the tree holding Steps 7-8: AC-36 "CancelOrder took 9.35s, want within 1 s"; AC-34 "tick
+  took 9.75s, want within 100 ms"; AC-35 "CancelOrder took 19.55s / 20.17s" (both parents); AC-28 "halted
+  at each submit = [false false false false]"; AC-29 and AC-30 "error = <nil>, want Unavailable …";
+  AC-31 "code = Internal desc = broker replace failed". AC-26 and AC-27 already passed: **red captured
+  at the Step 7+8 unit** (they are client behavior). AC-12 and AC-25 first failed on a test-side
+  assertion only (the service sends `client_order_id` with its `xss-` prefix); with the assertion
+  corrected they pass on the Step 7-8 tree for the same reason as AC-26/27.
+- TDD green: `F347_AC(12|…|36)` → 11 top-level PASS with `-race`; whole service `go test ./... -race`
+  exit 0; coverage total 84.8%; `golangci-lint` 0 issues; `check-config-wiring --final` and
+  `--doc-check` exit 0.
+- Blocker raised and resolved (operator decision 27, "Fix the two fixtures"): two pre-existing tests
+  broke on nil fixture fields; one line added to each. See the Deviation Log.
+- Files modified: `internal/service/trading_rate_limit_test.go`, `trading_flatten_rejection_test.go`,
+  `trading_cancel_not_cancelable_test.go`, `trading_reconciliation_test.go`; by deviation
+  `trading_telemetry_test.go`, `trading_bracket_test.go`
+- Deviations: fixture edits in two files outside `**Files**` (Deviation Log)
