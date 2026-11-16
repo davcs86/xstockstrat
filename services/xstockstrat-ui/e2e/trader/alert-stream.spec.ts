@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
 import { fulfillStream, gate } from '../helpers/connectStream';
+import { bellOf, badgeOf } from '../helpers/alertReadState';
 import {
   ALERT_STREAM_HELD,
   ALERT_STREAM_HOLD_MS,
@@ -18,10 +19,6 @@ import { DEFAULT_UNARY_TIMEOUT_MS } from '../../src/lib/deadlines';
  * (ListAlerts with unreadOnly returns its 2 stored unread rows plus the 3 streamed ones). The
  * feature-339 scenarios stub ListAlerts, MarkAlertRead and StreamAlerts per test.
  */
-
-// While the drawer is open Radix hides the rest of the page from the accessibility tree.
-const bellOf = (page: Page) => page.getByRole('button', { name: /^Alerts/, includeHidden: true });
-const badgeOf = (page: Page) => bellOf(page).locator('[data-slot="badge"]');
 
 type DrawerAlert = { alertId: string; createdAt: string; read?: boolean };
 

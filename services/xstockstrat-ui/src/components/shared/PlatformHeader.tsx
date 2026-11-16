@@ -235,7 +235,8 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
                   >
                     <Link href={group.items[0].href}>
                       {group.icon}
-                      {group.label}
+                      {/* Icon-only below md so the header row fits the alert bell from 640px. */}
+                      <span className="sr-only md:not-sr-only">{group.label}</span>
                     </Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
