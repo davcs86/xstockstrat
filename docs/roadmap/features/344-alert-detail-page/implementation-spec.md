@@ -1058,7 +1058,7 @@ No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:2
 
 ### Step 23 — docs: alert page, bell on every page, findings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-ui/docs/`, `services/xstockstrat-notify/docs/`
 **Files**:
 - `services/xstockstrat-ui/docs/pwa-push.md` — modify
@@ -1201,3 +1201,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Planned**: the drawer-link cases fail first against the pre-Step-21 commit, then pass; the Verification block runs on the host in its e2e fallback form.
 - **Actual**: (1) Step 21 had already landed, so RED ran the step's Verification with `src/components/shared/AlertStream.tsx` temporarily restored from `857aaa0a3^`, then restored to the committed file; only the spec file is staged. (2) Case 2 (the drawer no longer lists the opened alert) needs the state case 1 leaves, so it is the second half of the `@AC-5` test rather than its own test; cases 3 and 4 are separate tests in a new `alert drawer link (feature 344)` describe. (3) The host volume had 580 MB free and a Next build needs about 1 GB (Step 21 lost a run to `ENOSPC`), so each run went through `unshare -m` with a `/dev/shm` directory bind-mounted (namespace-only) over this worktree's `services/xstockstrat-ui/.next`. A first attempt that symlinked `.next` to `/dev/shm` failed at the build's page-data step (`Cannot find package '@connectrpc/connect' imported from /dev/shm/…/route.js`, `.sdd-logs/v-1.log`, no test ran) and is not a RED. (4) As in Steps 17–21, `services/xstockstrat-ui/node_modules` is a directory of per-entry links to the main checkout's entries with `@xstockstrat/proto` linked to this worktree's `packages/proto/gen/ts`; no install. The block ran verbatim.
 - **Disposition**: CI-equivalent fallback; TDD red/green evidence in `context.md` (F-09).
+
+### Step 23 — R-3 finding worded from the code; anchors re-grepped (2026-11-16)
+- **Planned**: the notify findings entry calls `markAlertRead`'s missing visibility check "an existence probe"; anchors as cited in **Codebase Evidence** (`PlatformHeader.tsx:42-45`, `notifyServiceImpl.ts:113,121-124`, `:355-357`, `:211-217`).
+- **Actual**: `markAlertRead` answers `{}` whether or not the id exists (`notifyServiceImpl.ts#markAlertRead` ~L213-224), so the entry records that it writes read rows for alerts the caller cannot see and that no content leaks through the response, not an existence probe. The three notify entries (D-13, O-1 ruling (a), R-3) sit in the "Latent bugs" table. Anchors were re-grepped on this tree: the `PlatformHeader.tsx` comment is at ~L44-45, `emitAlert` writes `context` at ~L114 and fans out at ~L122-125, the broadcast match is ~L386-388; NOTIFY-14..17 are present, so NOTIFY-7 was amended in place. `pwa-push.md`'s "registered in both" sentence was fully corrected, so it gets no findings row.
+- **Disposition**: wording follows the code (the step's Verification asks for a re-read against it); no step text changed (F-09).
