@@ -39,19 +39,25 @@ and per credential, because each has its own quota window.
 FR-2. **Pre-emptive pacing.** When the recorded `Remaining` for a host is 0 and its `Reset` is in the
 future, the next request to that host is not sent before `Reset`. While `Remaining` is low, requests are
 spread over the time left in the window instead of being sent as a burst. The low-water threshold and the
-spreading rule are fixed in code (design decides the values).
+spreading rule are fixed in code (design decides the values). Whatever threshold design sets, it treats a
+`Remaining` of 4 with a `Limit` of 200 as low (AC-3).
 
 FR-3. **429 retry.** A 429 response is retried inside the client: wait until `X-RateLimit-Reset` (when
 present and in the future), otherwise back off exponentially from 1s doubling to a fixed cap, with random
-jitter in both cases. Retries stop when the request context is done; the caller then gets an error that
-identifies the rate limit. A retried request is sent with the same method, URL and body.
+jitter in both cases. Jitter is only ever added to the wait, never subtracted, so a retry is never sent
+before `Reset` or before the backoff base. `Reset` is used whenever it parses, whatever the other two
+headers hold. A retried request is sent with the same method, URL and body. Retries stop when the request
+context is done. When the context has no deadline they still stop at a fixed total wait (design sets it:
+at least 60 seconds, one Alpaca window, and at most 300 seconds in marketdata; below the FR-8 threshold
+in trading). In both cases the caller gets an error whose message contains "rate limited" and the Alpaca
+host name.
 
 FR-4. **Static ceiling kept (marketdata).** `marketdata.backfill.rate_limit_rps` stays as a ceiling: the
 effective rate is the lower of the static limit and what the headers allow. A value of `0` still disables
 only the static ceiling.
 
-FR-5. **Degrade without headers.** A response with missing or unparseable rate-limit headers changes no
-adaptive state and causes no error. With no usable header state the client behaves as it does today
+FR-5. **Degrade without headers.** A response where any of the three rate-limit headers is missing or
+unparseable is ignored for pacing: it changes no adaptive state and causes no error. With no usable header state the client behaves as it does today
 (marketdata: static limiter only; trading: unpaced), except that FR-3 still applies to a 429.
 
 FR-6. **Kill switch.** One live-read bool key per service turns the adaptive behavior (FR-1 to FR-3) off
@@ -68,15 +74,16 @@ included, must stay below the order-intent staleness threshold computed by
 IBKRRequestTimeout)` × `trading.order_intent.stale_multiplier`, multiplier floor 1.5). Order types, fill
 detection and the order status lifecycle are not changed.
 
+FR-9. **Observability.** No new instrument is added. In marketdata each 429 is recorded as one
+`marketdata.vendor.requests` point with outcome `http_429` and each retry as its own point; a rate-limit
+wait that ends because the request context is done records outcome `throttle`. One WARN log per
+throttled window names the host and the wait. Trading emits the same WARN log (host and wait) and no
+metric.
+
 FR-10. **Paper and live behave the same.** The behavior is mode-agnostic: the same code path serves the
 paper host (`paper-api.alpaca.markets`) and the live host (`api.alpaca.markets`), with limiter state kept
 per host (FR-1). It adds no order-placing call of its own, so it is paper-safe to test; staging exercises
 it against the paper host only.
-
-FR-9. **Observability.** Time spent waiting for a rate-limit reset and each 429 retry are visible in the
-existing vendor-request telemetry (marketdata `marketdata.vendor.requests` outcomes `http_429` /
-`throttle`), and one WARN log per throttled window names the host and the wait. Trading emits the same
-WARN log (host and wait); it gets no new metric in this feature.
 
 ## Fixed Invariants (not config keys)
 
@@ -126,9 +133,10 @@ Two new keys. Both are bools with an explicit `true` code default (a missing key
 disabled). Live mechanism for both: the service's `WatchConfig`-backed watcher, read with
 `GetBool(key, true)` on every Alpaca request, so a `SetConfig` takes effect on the next call with no
 restart. Both are seeded `true` as global rows for staging and production by one new `xstockstrat-config`
-migration, `050_alpaca_adaptive_rate_limit_keys` (050 is the next free number on `main-dev` today;
+migration pair, `050_alpaca_adaptive_rate_limit_keys.up.sql` / `.down.sql` (050 is the next free number on `main-dev` today;
 features 341, 343 and 330 also name 050; the rule is recorded in `docs/roadmap/features/merge-order.md`
-§ "Config seed number and Alpaca client overlap: 347": the number is re-derived at execute and at the
+§ "Config seed number and Alpaca client overlap: 347 ↔ 341, 343, 330, 322, 323 (2026-11-16,
+non-blocking)": the number is re-derived at execute and at the
 integration PR, and the later merger regenerates `scripts/config-wiring-stored.json`).
 
 - `marketdata.alpaca.adaptive_rate_limit_enabled` — namespace `marketdata`, stored key
@@ -137,7 +145,7 @@ integration PR, and the later merger regenerates `scripts/config-wiring-stored.j
   which the client calls on every request, alongside `backfill.rate_limit_rps`).
 - `trading.broker.adaptive_rate_limit_enabled` — namespace `trading`, stored key
   `broker.adaptive_rate_limit_enabled`, `value_type` bool, code default `true`. Reader: a per-request
-  func on `broker.ClientConfig`, built in `services/xstockstrat-trading/internal/service/trading.go` next
+  func on `broker.ClientConfig`, built in `services/xstockstrat-trading/internal/service/trading.go:(*TradingService).instantiateBrokerLocked` next
   to the existing `Timeout: func() ... brokerCallTimeout(s.cfgW)` at the `broker.NewClient` call.
 
 Existing key with changed meaning: `marketdata.backfill.rate_limit_rps` becomes a ceiling over the

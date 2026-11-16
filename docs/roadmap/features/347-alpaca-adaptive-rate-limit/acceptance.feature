@@ -44,22 +44,23 @@ Feature: alpaca-adaptive-rate-limit
     Given the data host answers every attempt with 429 and "X-RateLimit-Reset" 10 seconds in the future
     When a latest-quote request for "NVDA" is made with a 2500 millisecond deadline
     Then the caller receives an error within 3 seconds
-    And the error names the Alpaca rate limit
+    And the error message contains "rate limited" and "data.alpaca.markets"
 
   @AC-7 @FR-4
   Scenario: The static ceiling still caps the rate when headers allow more
     Given "marketdata.backfill.rate_limit_rps" is 5
     And the data host reports "X-RateLimit-Remaining: 10000" on every response
     When 15 bars requests are issued at the same moment
-    Then no more than 10 of them are sent within the first second
-    And the 15th is sent no earlier than 2 seconds after the first
+    Then exactly 5 are sent at once
+    And the 10th is sent no earlier than 1.0 second after the first, within a 100 millisecond tolerance
+    And the 15th is sent no earlier than 2.0 seconds after the first, within a 100 millisecond tolerance
 
   @AC-8 @FR-5
   Scenario: Missing or malformed headers leave behavior unchanged
-    Given the data host answers 200 with no "X-RateLimit-*" headers, then 200 with "X-RateLimit-Remaining: abc"
-    When two bars requests are made
-    Then both callers receive their bars with no error
-    And neither request is delayed beyond the static limiter
+    Given the data host answers 200 with no "X-RateLimit-*" headers, then 200 with "X-RateLimit-Remaining: abc", then 200 with "X-RateLimit-Remaining: 0" and no "X-RateLimit-Reset"
+    When four bars requests are made one after another
+    Then all four callers receive their bars with no error
+    And no request is delayed beyond the static limiter
 
   @AC-9 @FR-6
   Scenario: The marketdata kill switch restores the previous behavior
@@ -67,7 +68,7 @@ Feature: alpaca-adaptive-rate-limit
     And the data host answers a bars request with 429 and "X-RateLimit-Reset" 2 seconds in the future
     When a bars request is made with a 30 second deadline
     Then exactly 1 attempt is sent
-    And the caller receives the error "alpaca bars 429" immediately
+    And the caller receives an error starting with "alpaca bars 429" within 1 second
 
   @AC-10 @FR-6
   Scenario: The trading kill switch restores the previous behavior
@@ -88,17 +89,18 @@ Feature: alpaca-adaptive-rate-limit
   Scenario: A rate-limited order submit creates exactly one order
     Given the broker host answers the first "POST /v2/orders" with 429 and a reset 1 second in the future
     And it answers the second attempt with 200 and broker order id "b-1"
-    When an order with client_order_id "c-42" is submitted
+    When a MARKET order for 10 shares of "AAPL" with client_order_id "c-42" is submitted
     Then both attempts carry client_order_id "c-42" and an identical JSON body
     And the caller receives broker order id "b-1"
     And exactly one order intent is finalized for "c-42"
+    And the same flow with a LIMIT order for 10 shares of "AAPL" at 150.00 also yields exactly one order
 
   @AC-13 @FR-8
   Scenario: A broker call never outlives the order-intent staleness bound
     Given the order-intent staleness threshold is 30 seconds ("trading.broker.timeout_ms" 5000, IBKRRequestTimeout 10 seconds, "trading.order_intent.stale_multiplier" 3.0)
     And the broker host answers every "POST /v2/orders" attempt with 429 and a reset 60 seconds in the future
-    When an order is submitted
-    Then the caller receives a rate-limit error in less than 30 seconds
+    When a MARKET order for 10 shares of "AAPL" is submitted on a context with no deadline
+    Then the caller receives an error containing "rate limited" in less than 30 seconds
 
   @AC-14 @FR-9
   Scenario: Throttling is visible in telemetry and logs
@@ -133,6 +135,33 @@ Feature: alpaca-adaptive-rate-limit
 
   @AC-18 @FR-9
   Scenario: Trading logs a throttled window
-    Given the broker host answers "GET /v2/positions" with 429 and a reset 2 seconds in the future, then 200
+    Given a paper broker client, and the broker host answers "GET /v2/positions" with 429 and a reset 2 seconds in the future, then 200
     When positions are fetched
     Then one WARN log names host "paper-api.alpaca.markets" and the wait duration
+
+  @AC-19 @FR-3
+  Scenario: Retries are bounded when the caller has no deadline
+    Given the data host answers every attempt with 429 and "X-RateLimit-Reset" 3600 seconds in the future
+    When a bars request for "AAPL" is made on a context with no deadline
+    Then the caller receives an error containing "rate limited" and "data.alpaca.markets" within 300 seconds
+
+  @AC-20 @FR-1
+  Scenario: Credentials are tracked independently on the same host
+    Given broker client "A" with API key "KEY-A" recorded "X-RateLimit-Remaining: 0" with a reset 5 seconds in the future for "paper-api.alpaca.markets"
+    And broker client "B" uses API key "KEY-B" on the same host
+    When broker client "B" fetches the account
+    Then the account request from "B" is sent without waiting for "A"'s reset
+
+  @AC-21 @FR-9
+  Scenario: A wait cut short by the deadline is recorded as throttle
+    Given the marketdata Alpaca client recorded "X-RateLimit-Limit: 200", "X-RateLimit-Remaining: 0" and a reset 10 seconds in the future for the data host
+    When a latest-quote request for "NVDA" is made with a 2500 millisecond deadline
+    Then "marketdata.vendor.requests" has one point with vendor "alpaca", op "quotes_latest", outcome "throttle"
+    And no request for "NVDA" reaches the data host
+
+  @AC-22 @FR-4
+  Scenario: A zero static ceiling disables only the ceiling
+    Given "marketdata.backfill.rate_limit_rps" is 0
+    And the marketdata Alpaca client recorded "X-RateLimit-Limit: 200", "X-RateLimit-Remaining: 0" and a reset 3 seconds in the future for the data host
+    When a bars request for "AAPL" is made with a 30 second deadline
+    Then the request reaches the data host no earlier than the reset time
