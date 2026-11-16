@@ -57,7 +57,7 @@ Feature: alpaca-adaptive-rate-limit
 
   @AC-8 @FR-5
   Scenario: Missing or malformed headers leave behavior unchanged
-    Given the data host answers 200 with no "X-RateLimit-*" headers, then 200 with "X-RateLimit-Remaining: abc", then 200 with "X-RateLimit-Remaining: 0" and no "X-RateLimit-Reset"
+    Given the data host answers 200 with no "X-RateLimit-*" headers, then 200 with "X-RateLimit-Remaining: abc", then 200 with "X-RateLimit-Remaining: 0" and no "X-RateLimit-Reset", then 200 with no "X-RateLimit-*" headers
     When four bars requests are made one after another
     Then all four callers receive their bars with no error
     And no request is delayed beyond the static limiter
@@ -158,6 +158,7 @@ Feature: alpaca-adaptive-rate-limit
     When a latest-quote request for "NVDA" is made with a 2500 millisecond deadline
     Then "marketdata.vendor.requests" has one point with vendor "alpaca", op "quotes_latest", outcome "throttle"
     And no request for "NVDA" reaches the data host
+    And the caller receives an error containing "rate limited" and "data.alpaca.markets"
 
   @AC-22 @FR-4
   Scenario: A zero static ceiling disables only the ceiling

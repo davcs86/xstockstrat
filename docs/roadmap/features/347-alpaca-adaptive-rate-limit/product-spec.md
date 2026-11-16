@@ -40,7 +40,8 @@ FR-2. **Pre-emptive pacing.** When the recorded `Remaining` for a host is 0 and 
 future, the next request to that host is not sent before `Reset`. While `Remaining` is low, requests are
 spread over the time left in the window instead of being sent as a burst. The low-water threshold and the
 spreading rule are fixed in code (design decides the values). Whatever threshold design sets, it treats a
-`Remaining` of 4 with a `Limit` of 200 as low (AC-3).
+`Remaining` of 4 with a `Limit` of 200 as low (AC-3). A pre-emptive wait that is cut short by the request
+context returns the same "rate limited" error as FR-3, and the request is not sent.
 
 FR-3. **429 retry.** A 429 response is retried inside the client: wait until `X-RateLimit-Reset` (when
 present and in the future), otherwise back off exponentially from 1s doubling to a fixed cap, with random
