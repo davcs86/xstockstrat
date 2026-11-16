@@ -446,7 +446,7 @@ C-12: no domain object is used (theme tokens only), so the test-data inventory d
 
 ### Step 9 — test: LYFT mock branch, browser e2e for lines and swatches, both theme builds
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
@@ -586,4 +586,14 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 8 — RED method and Verification run shape
 - **Spec said**: TDD `red-green required`; Step 8 adds no unit test, and its behavioural red-green pair is Step 9's items 1-3.
 - **Actual**: RED was the Verification block run before the edit: item 1 printed the four `SERIES_TOKENS`/`SERIES_FALLBACK`/`% 5` lines (`:16`, `:17`, `:91`, `:190`) and item 2 printed nothing (rc=1), so both pass conditions failed. Items 1-4 ran in one log, each in its own subshell separated by `;` with a per-item `rc=` echo, because item 1 passes by printing nothing. The behavioural RED/GREEN for @AC-2, @AC-3 and @AC-6 is recorded at Step 9.
+- **Disposition**: mechanical. The commands are unchanged.
+
+### Step 9 — Verification items 1-4: e2e runner fallback
+- **Spec said**: item 1 (RED), item 2 (staging GREEN) and item 4 run `python3 scripts/run-e2e.py …`; item 3 builds `Dockerfile.e2e` with `--build-arg UI_THEME=production` and runs the image.
+- **Actual**: the Docker daemon was up, but the `Dockerfile.e2e` build failed again at `RUN corepack enable && corepack prepare pnpm@9.15.9 --activate` with `Internal Error: Error when performing the request to https://registry.npmjs.org/pnpm/-/pnpm-9.15.9.tgz` (in-container egress), so item 1 printed `item1 rc=1` before any test ran (`.sdd-logs/v-1.log`). Item 3 uses the same Dockerfile and cannot build either. Per the spec's Verification conventions, the scoped host fallback (`fails.md:981`) was used, in CI mode against a production bundle, as Step 8 did: `cd services/xstockstrat-ui && CI=1 NEXT_DISABLE_STANDALONE=1 [UI_THEME=production] pnpm exec playwright test <same spec/grep args> --project=chromium --no-deps --reporter=list`. Item 3 sets `UI_THEME=production` in the environment, which Playwright's `webServer` inherits for its `pnpm build && pnpm start`. Item 1 kept its checkout/restore of the pre-Step-8 component (`82030dd18`) around the fallback run.
+- **Disposition**: CI-equivalent fallback. The integration PR's CI e2e run (Docker image) remains the deciding signal for @AC-2, @AC-3 and @AC-6 on both theme builds.
+
+### Step 9 — Verification run shape and the mock import line
+- **Spec said**: items 1-8, each in a fresh shell at the repo root; instruction 1 imports the two fixtures "on the `:99` import line".
+- **Actual**: item 1 ran alone; items 2-4 ran in one log and items 5-8 in another, each item in its own `( cd services/xstockstrat-ui && … )` subshell separated by `;` with a per-item `rc=` echo. The fixture import is one import statement that Prettier wraps over lines 99-103 (`from './fixtures/indicatorSeries'` is at `:103`), so item 6's grep still matches it.
 - **Disposition**: mechanical. The commands are unchanged.

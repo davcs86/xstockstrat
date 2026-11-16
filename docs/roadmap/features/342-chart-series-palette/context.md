@@ -46,10 +46,10 @@ Targets marked "design step" use the design's numbering; see the map in Decision
   - Step 1 (2026-11-15): the Machado half is done. Under the operator's Option B, both matrices were transcribed from colour-science 0.4.7 `machado2010.py`, and they equal the cross-check values. The four Lab pins remain open, target: Step 2.
   - Step 2 (2026-11-16): the Lab pins are done. They were computed with colour-science 0.4.7 using the Lindbloom matrix and its row-sum white. This was the orchestrator's Option A, under the operator's "colour-science 0.4.7 (Recommended)" choice. The values match the cross-check values; see the Deviation Log entry "Step 2 — Lab pin source (D-21)". D-21 transcription is closed for Steps 1-2.
 - [x] `colorVision.cjs` is outside vitest coverage scope; its 49 reference tests are its only guard — target: Steps 1-2 (design step 1). Step 2 landed the 49 tests (2026-11-16).
-- [ ] `line.options().color` may be normalized by lightweight-charts v5; compare numeric channels — target: Steps 8-9 (design step 5).
+- [x] `line.options().color` may be normalized by lightweight-charts v5; compare numeric channels — target: Steps 8-9 (design step 5). Step 9 (2026-11-16): the e2e compares the first three integers (`channels`) of the line colour, the swatch's computed background and `--series-k`.
 - [ ] The cleanup reset relies on `components` being reference-stable (`page.tsx:1349`) — target: Steps 8-9 (design step 5).
-- [ ] Check (a) needs a real `pnpm build` for both `UI_THEME` values plus the browser e2e (`fails.md:1462`) — target: Verification of Steps 5 and 9 (design step 6). Steps 4+5 (2026-11-16): both builds printed `checkThemeBundle: <theme> bundle OK`; the Step 9 half remains.
-- [ ] Docker may be unavailable at Step 9; then the fallback in `fails.md:981` applies, the deviation is logged, and the integration PR's CI run is the deciding signal for @AC-2, @AC-3 and @AC-6 on both theme builds — target: Step 9.
+- [ ] Check (a) needs a real `pnpm build` for both `UI_THEME` values plus the browser e2e (`fails.md:1462`) — target: Verification of Steps 5 and 9 (design step 6). Steps 4+5 (2026-11-16): both builds printed `checkThemeBundle: <theme> bundle OK`; the Step 9 half remains. Step 9 (2026-11-16): both builds printed the OK line again after the wiring, and the browser e2e passed on a staging and a production bundle (host CI-mode fallback).
+- [ ] Docker may be unavailable at Step 9; then the fallback in `fails.md:981` applies, the deviation is logged, and the integration PR's CI run is the deciding signal for @AC-2, @AC-3 and @AC-6 on both theme builds — target: Step 9. Step 9 (2026-11-16): the `Dockerfile.e2e` build failed on in-container corepack egress, so the host CI-mode fallback ran; the integration PR's CI run stays the deciding signal.
 - [ ] `seriesPalette.ts` and `indicatorChart.ts` are Tailwind-scanned; no `rgb()` literal or utility-shaped string there (`fails.md:3983`) — target: Steps 4-7 (design steps 3-4).
 - [ ] The feature-307 @AC-2 title ("exactly the Nocturne palette") no longer describes the staging file, though its Then-clauses hold; Step 10 records it; a wording change needs its own operator sign-off — target: Step 10 (design step 7).
 - [ ] Merge order with peer 341 (`fix-indicator-pane-warmup`) is an operator decision: `merge-order.md` has no row for 341 or 342; the overlap reviewer recommends a soft, rebase-only row putting 342 after 341. Not written.
@@ -68,6 +68,7 @@ Service/UI source (by step):
 - Step 6: `services/xstockstrat-ui/src/lib/indicatorChart.ts` (`ChartableComponent`, `isChartable`, `seriesSlots` added), `src/components/trader/IndicatorPanels.tsx` (local `isChartable` removed, import repointed).
 - Step 7: `services/xstockstrat-ui/src/lib/indicatorChart.test.ts` (`describe('seriesSlots')`, 4 tests), `e2e/fixtures/indicatorSeries.ts` (`INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP`, `INDICATOR_COMPONENTS_PALETTE_13`), `e2e/fixtures/INVENTORY.md` (two rows).
 - Step 8: `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx` (`SERIES_TOKENS`/`SERIES_FALLBACK` removed; `slots` memo, `lineColors` state, `data-line-color` on swatches).
+- Step 9: `services/xstockstrat-ui/e2e/mock-backend.ts` (LYFT branch in `getIndicatorSeries`), `e2e/trader/position-detail.spec.ts` (3 feature-342 tests + helpers), `e2e/fixtures/INVENTORY.md` (consumers on the two feature-342 rows).
 
 SDD artifacts, all under `docs/roadmap/features/342-chart-series-palette/`:
 
@@ -505,3 +506,15 @@ The `C` array literal that passed, byte for byte. Step 4 copies the 12 values fr
 - Files modified: `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`
 - Deviations: the item 4 e2e runner fallback (CI-equivalent), the RED method and the Verification run shape. Full detail is in the Deviation Log.
 - Still open: O-24. Step 9 compares `line.options().color` by channels and should retry the Docker e2e; if the in-container egress still fails, the integration PR's CI run decides @AC-2, @AC-3 and @AC-6.
+
+## Session 2026-11-16 — sdd-execute sequential (step 9)
+
+### Step 9 — test: LYFT mock branch, browser e2e for lines and swatches, both theme builds [done]
+- `getIndicatorSeries` gained a LYFT branch (`series_palette_13` → `INDICATOR_COMPONENTS_PALETTE_13`, else `INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP`); the AAPL branch is byte-identical. `position-detail.spec.ts` has three `(feature 342 @AC-N)` tests after the FR-6 panel test, with spec-local helpers (`seriesKeys`, `channels`, `distinct`, `indicatorPanel`, `waitForDrawnLines`, `seriesColours`, `seriesToken`); the series keys come from the fixtures, not inline literals (C-12). `INVENTORY.md` lists the mock and the spec as consumers of both feature-342 rows.
+- TDD (AC-2, AC-3, AC-6; also Step 8's behavioural pair):
+  - Red: with the pre-Step-8 `IndicatorPanels.tsx` restored from `82030dd18`, all 3 tests failed at `waitForDrawnLines` with `Expected: 5` / `Received: 0` (AC-6: 13 / 0) for `[data-line-color]` while the `rsi`/`sma200`/`vts` panels rendered; `3 failed`, `item1 rc=1`, then the component was restored and `restore-check rc=0` with empty porcelain (exit=0, `.sdd-logs/v-2.log`). The Docker attempt (`.sdd-logs/v-1.log`) failed at the image build before any test.
+  - Green: item 2 staging `3 passed (1.3m)`; item 3 `UI_THEME=production` `3 passed (1.7m)`; item 4 `55 passed (2.6m)` incl. `e2e/theme/theme-bundle.spec.ts` (exit=0, `.sdd-logs/v-3.log`). Item 5 `checkThemeBundle: staging bundle OK (3 css files)` and `checkThemeBundle: production bundle OK (3 css files)`; item 6 greps matched (`103:} from './fixtures/indicatorSeries';`, `2:import { addAuthCookie, …} from '../helpers/auth';`, both INVENTORY rows); item 7 lint (warnings only in unrelated pre-existing files) and tsc rc=0; item 8 `Tests  640 passed | 2 skipped (642)`, `Lines        : 79.5% ( 582/732 )` (exit=0, `.sdd-logs/v-4.log`).
+- Config-key wiring gate: N/A. No config key is touched.
+- Files modified: `services/xstockstrat-ui/e2e/mock-backend.ts`, `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: the items 1-4 e2e runner fallback (CI-equivalent; Docker image build failed on corepack egress) and the Verification run shape. Full detail is in the Deviation Log.
+- Still open: O-24. The integration PR's CI e2e run decides @AC-2, @AC-3 and @AC-6 on both theme builds.
