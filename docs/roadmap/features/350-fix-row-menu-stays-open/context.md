@@ -84,3 +84,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - No full local Playwright run is specified (fails.md 2026-08-10); scoped runs per step, full suite in the `frontend-e2e` CI job.
 - Open threads for `/sdd-execute`: the D-17 mutation run (Step 2) must fail 5/5 in dev and in the production build, or the unit stops for the operator; a permanent `body > [aria-hidden="true"]` node on any page is a deviation, not a reason to loosen the settle helper; integration PR obligations (durable-suite promotion `@feature-350`, the four reported residues) are listed in the spec's Execution Summary.
 - Not committed by this session: implementation-spec.md (new), status.md, feature.md, context.md.
+
+## Session 2026-11-16 — sdd-review impl-spec (advisory)
+
+- Tree: `feature/fix-row-menu-stays-open@a80fd740` ≡ origin, `origin/main-dev@78ab5cac` merged.
+- Result: 1 failure, 11 warnings (advisory — did not block). All twelve were Verification-block form (chained `cd`/`&&`, greps that cannot fail, expected-fail commands not marked). No content finding, no Floor risk; anchors, copy, `@AC` coverage, atomic units and Files lists verified.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Steps 1–9: Verification blocks — [x] rewritten before execution started (one command per line, `! grep` / `test … -eq N`, the mutation lines `!`-wrapped, `format:check` and `lint:dup` added, Playwright lines use the recorded production-build fallback). The step Instructions, Evidence and Files are untouched.
+- Overlap findings (file-level, no config/proto/migration):
+  - `src/app/accounts/authorized-apps/page.tsx` vs **345-authelia-sso** (implementation-ready, not executed): 345 moves the page body into a new `AuthorizedAppsList.tsx` and makes `page.tsx` a server component. Whichever lands second must carry the other's change; 350 lands first unless 345 is executed meanwhile. No merge-order row written (not a FAIL-level overlap) — reported to the operator at the integration PR.
+  - `e2e/config-ui/templates.spec.ts` (339), `src/components/trader/AppShell.tsx` (344), `docs/patterns/ui-ux-governance.md` (342): all `code-completed`; text-level only.

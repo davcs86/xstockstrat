@@ -227,7 +227,13 @@ stays open until the spec file is green in a real run.
    not open the dialog from the menu's `onCloseAutoFocus` (R-1).
 
 **Verification**:
-The union with Step 2. On its own: `cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit`.
+The union with Step 2. On its own — Run from `services/xstockstrat-ui` with Node 24 first on `PATH`; one command per line, each must exit 0.
+```bash
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run format:check
+pnpm run lint:dup
+```
 
 ---
 
@@ -342,32 +348,34 @@ mutation run in **Verification**.
    alpaca-adaptive-rate-limit).
 
 **Verification**:
+Run from `services/xstockstrat-ui` with Node 24 first on `PATH`; one command per line, each must exit 0.
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit \
-  && pnpm exec playwright test e2e/trader/account-resume.spec.ts \
-       e2e/accounts/authorized-apps.spec.ts e2e/config-ui/templates.spec.ts \
-       --project=chromium --no-deps \
-  && pnpm exec playwright test e2e/trader/account-selector.spec.ts \
-       e2e/trader/offline-accounts.spec.ts e2e/insights/signal-sources.spec.ts \
-       e2e/theme/theme-bundle.spec.ts --project=chromium --no-deps
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run format:check
+pnpm run lint:dup
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/trader/account-resume.spec.ts e2e/accounts/authorized-apps.spec.ts e2e/config-ui/templates.spec.ts --project=chromium --no-deps --trace off
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/trader/account-selector.spec.ts e2e/trader/offline-accounts.spec.ts e2e/insights/signal-sources.spec.ts e2e/theme/theme-bundle.spec.ts --project=chromium --no-deps --trace off
+test "$(grep -c 'helpers/rowMenu' e2e/trader/account-resume.spec.ts)" -ge 1
 ```
 Then the D-17 mutation run. Temporarily delete the `skipMenuCloseFocus` branch added by Step 1
-instruction 5 and run both:
+instruction 5 and run both (the leading `!` makes each line pass only when Playwright fails):
 ```bash
-cd services/xstockstrat-ui \
-  && pnpm exec playwright test e2e/trader/account-resume.spec.ts -g "feature 350.*@AC-10" \
-       --project=chromium --no-deps --repeat-each=5 --retries=0
-cd services/xstockstrat-ui \
-  && CI=1 pnpm exec playwright test e2e/trader/account-resume.spec.ts -g "feature 350.*@AC-10" \
-       --project=chromium --no-deps --repeat-each=5 --retries=0
+! pnpm exec playwright test e2e/trader/account-resume.spec.ts -g "feature 350.*@AC-10" --project=chromium --no-deps --trace off --repeat-each=5 --retries=0
+! CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/trader/account-resume.spec.ts -g "feature 350.*@AC-10" --project=chromium --no-deps --trace off --repeat-each=5 --retries=0
 ```
-Both must fail in all five repeats (dev server, then production build). Restore the branch; both
-must then pass 5/5. Paste the three outputs (today's-code RED, mutation RED ×2) into `context.md`.
-If the mutation run passes in any repeat, stop: the guard is unproven (D-17) — record a deviation
-and ask the operator; do not commit.
+Read each output: all five repeats must fail (dev server, then production build) — a run with any
+passing repeat is a stop, even though the `!` line exits 0. Restore the branch, then:
+```bash
+pnpm exec playwright test e2e/trader/account-resume.spec.ts -g "feature 350.*@AC-10" --project=chromium --no-deps --trace off --repeat-each=5 --retries=0
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/trader/account-resume.spec.ts -g "feature 350.*@AC-10" --project=chromium --no-deps --trace off --repeat-each=5 --retries=0
+git diff --exit-code -- src/components/shared/RowActionsMenu.tsx
+```
+The last line runs after the unit's commit and proves the mutation was reverted. Paste the outputs
+(today's-code RED, mutation RED ×2, restored GREEN ×2) into `context.md`. If the mutation run passes
+in any repeat, stop: the guard is unproven (D-17) — record a deviation and ask the operator; do not commit.
 Coverage: no `src/lib/**` code is added, so the 40% Vitest threshold is unaffected; e2e is not
-coverage-gated.
-C-12 check: `grep -n "from '../fixtures\|helpers/auth\|helpers/rowMenu" e2e/trader/account-resume.spec.ts e2e/accounts/authorized-apps.spec.ts e2e/config-ui/templates.spec.ts`.
+coverage-gated. C-12: the new tests import domain data only from `e2e/fixtures` and `e2e/helpers`.
 
 ---
 
@@ -441,7 +449,13 @@ C-12 check: `grep -n "from '../fixtures\|helpers/auth\|helpers/rowMenu" e2e/trad
 5. Do not change `DataTable`'s rendering (R-8) and add no `meta`/context plumbing (R-9).
 
 **Verification**:
-The union with Step 4. On its own: `cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit`.
+The union with Step 4. On its own — Run from `services/xstockstrat-ui` with Node 24 first on `PATH`; one command per line, each must exit 0.
+```bash
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run format:check
+pnpm run lint:dup
+```
 
 ---
 
@@ -494,14 +508,17 @@ menu closes but the cell remounts, so focus ends on `<main>` (D-18).
    mounted until the list reloads) and must stay green (O-22).
 
 **Verification**:
+Run from `services/xstockstrat-ui` with Node 24 first on `PATH`; one command per line, each must exit 0.
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit \
-  && pnpm exec playwright test e2e/accounts/authorized-apps.spec.ts \
-       e2e/config-ui/templates.spec.ts --project=chromium --no-deps
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run format:check
+pnpm run lint:dup
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/accounts/authorized-apps.spec.ts e2e/config-ui/templates.spec.ts --project=chromium --no-deps --trace off
 ```
 RED before Step 3: both `@AC-9` tests fail at `expectFocusOnMarkedTrigger`.
 Coverage: no `src/lib/**` code is added; e2e is not coverage-gated.
-C-12 check: `grep -n "from '../fixtures\|helpers/auth\|helpers/rowMenu" e2e/accounts/authorized-apps.spec.ts e2e/config-ui/templates.spec.ts`; the 500 and `failed_precondition` bodies are error-path one-offs.
+C-12: the 500 and `failed_precondition` bodies are error-path one-offs; no domain literal is added.
 
 ---
 
@@ -560,8 +577,14 @@ C-12 check: `grep -n "from '../fixtures\|helpers/auth\|helpers/rowMenu" e2e/acco
    cancellable and FILLED stays disabled, through the unchanged `TERMINAL` set.
 
 **Verification**:
-The union with Step 6. On its own: `cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit`
-and `grep -n "preventDefault\|AlertDialog\|cancelling" src/components/trader/OrdersTable.tsx` returns nothing.
+The union with Step 6. On its own — Run from `services/xstockstrat-ui` with Node 24 first on `PATH`; one command per line, each must exit 0.
+```bash
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run format:check
+pnpm run lint:dup
+! grep -nE "preventDefault|AlertDialog|cancelling" src/components/trader/OrdersTable.tsx
+```
 
 ---
 
@@ -622,19 +645,21 @@ and `grep -n "preventDefault\|AlertDialog\|cancelling" src/components/trader/Ord
 5. Record RED or guard per test in `context.md`.
 
 **Verification**:
+Run from `services/xstockstrat-ui` with Node 24 first on `PATH`; one command per line, each must exit 0.
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit \
-  && pnpm exec playwright test e2e/trader/orders.spec.ts e2e/insights/opportunities.spec.ts \
-       --project=chromium --no-deps \
-  && pnpm exec playwright test e2e/trader/order-parity.spec.ts e2e/trader/stream-reconnect.spec.ts \
-       e2e/trader/signal-confidence-ticket.spec.ts --project=chromium --no-deps
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run format:check
+pnpm run lint:dup
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/trader/orders.spec.ts e2e/insights/opportunities.spec.ts --project=chromium --no-deps --trace off
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/trader/order-parity.spec.ts e2e/trader/stream-reconnect.spec.ts e2e/trader/signal-confidence-ticket.spec.ts --project=chromium --no-deps --trace off
+test "$(grep -c 'disabled: isTerminal' src/components/trader/OrdersTable.tsx)" -eq 2
 ```
-RED before Step 5: every feature-350 orders test except `@AC-7`.
-Trading-domain check: `grep -n "TERMINAL" src/components/trader/OrdersTable.tsx` still shows the set
-and both `disabled: isTerminal` uses; the repointed "Edit is enabled…" test covers NEW,
-PARTIALLY_FILLED and FILLED.
+RED before Step 5: every feature-350 orders test except `@AC-7`; record each failing assertion in `context.md`.
+Trading-domain check: the last line pins both `disabled: isTerminal` uses; the repointed
+"Edit is enabled…" test covers NEW, PARTIALLY_FILLED and FILLED.
 Coverage: no `src/lib/**` code is added; e2e is not coverage-gated.
-C-12 check: `grep -n "from '../fixtures\|helpers/auth\|helpers/rowMenu" e2e/trader/orders.spec.ts e2e/insights/opportunities.spec.ts`; no fixture is added, INVENTORY.md is unchanged.
+C-12: no fixture is added, INVENTORY.md is unchanged.
 
 ---
 
@@ -691,8 +716,14 @@ C-12 check: `grep -n "from '../fixtures\|helpers/auth\|helpers/rowMenu" e2e/trad
 5. No context provider and no `DataTable` `meta` prop (R-9); no change to the other columns.
 
 **Verification**:
-The union with Step 8. On its own: `cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit`
-and `grep -n "preventDefault\|AlertDialog\|DropdownMenu" src/app/insights/strategies/page.tsx` returns nothing.
+The union with Step 8. On its own — Run from `services/xstockstrat-ui` with Node 24 first on `PATH`; one command per line, each must exit 0.
+```bash
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run format:check
+pnpm run lint:dup
+! grep -nE "preventDefault|AlertDialog|DropdownMenu" src/app/insights/strategies/page.tsx
+```
 
 ---
 
@@ -745,14 +776,17 @@ the trigger-focus assertion of `@AC-9` is the RED.
 3. Record RED or guard per assertion in `context.md`.
 
 **Verification**:
+Run from `services/xstockstrat-ui` with Node 24 first on `PATH`; one command per line, each must exit 0.
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit \
-  && pnpm exec playwright test e2e/insights/strategy-authoring.spec.ts \
-       e2e/insights/strategy-ownership.spec.ts --project=chromium --no-deps
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run format:check
+pnpm run lint:dup
+CI=1 NEXT_DISABLE_STANDALONE=1 pnpm exec playwright test e2e/insights/strategy-authoring.spec.ts e2e/insights/strategy-ownership.spec.ts --project=chromium --no-deps --trace off
 ```
 RED before Step 7: the `@AC-6` dismiss test (menu still open) and the `@AC-9` focus assertion.
 Coverage: no `src/lib/**` code is added; e2e is not coverage-gated.
-C-12 check: `grep -n "from '../fixtures\|helpers/auth\|helpers/rowMenu" e2e/insights/strategy-authoring.spec.ts`; the `active: false` spread is a scenario one-off.
+C-12: the `active: false` spread is a scenario one-off; no domain literal is added.
 
 ---
 
@@ -797,13 +831,14 @@ C-12 check: `grep -n "from '../fixtures\|helpers/auth\|helpers/rowMenu" e2e/insi
    (fails.md 2026-11-10, ui-env-themed-bundles).
 
 **Verification**:
+Run from the repo root before the commit; one command per line, each must exit 0.
 ```bash
-git diff HEAD --stat -- docs/roadmap/ledger/ \
-  && ! git diff HEAD -- docs/roadmap/ledger/ | grep -q '^-[^-]' \
-  && git diff HEAD -- docs/roadmap/ledger/ | grep -c '^+### .*fix-row-menu-stays-open'
+git diff HEAD --stat -- docs/roadmap/ledger/
+! git diff HEAD -- docs/roadmap/ledger/ | grep -q '^-[^-]'
+test "$(git diff HEAD -- docs/roadmap/ledger/ | grep -c '^+### .*fix-row-menu-stays-open')" -eq 3
 ```
-Run before the commit. The second command proves the change is append-only; the third prints `3`
-(two headings in `fails.md`, one in `insights.md`).
+The second line proves the change is append-only; the third counts the three new headings (two in
+`fails.md`, one in `insights.md`).
 
 ---
 
