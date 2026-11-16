@@ -42,6 +42,7 @@ Feature: delisted-symbol-handling
     Given "ATCH" was removed from the system-managed watchlist "Signals" when it was flagged delisted
     When the asset set is loaded with "ATCH" as an active, tradable, non-OTC asset
     Then "ATCH" is not on "Signals"
+    And "ATCH" is no longer flagged delisted
 
   @AC-6 @FR-3
   Scenario: A flagged symbol is removed from a system-managed watchlist
@@ -64,8 +65,8 @@ Feature: delisted-symbol-handling
     And both symbols are warm in marketdata
     When "ROKU" becomes flagged delisted
     Then "ROKU" is no longer in the warm set, with no service restart
-    And the next bar-ingest cycle requests "AAPL" and does not request "ROKU"
-    And the next opportunity scan of "Tech" evaluates "AAPL" and does not evaluate "ROKU"
+    And the bars stored by the next bar-ingest cycle include "AAPL" and no new bar for "ROKU"
+    And the opportunities listed after the next scan of "Tech" include "AAPL" and none for "ROKU"
 
   @AC-9 @FR-6
   Scenario: Stored history of a flagged symbol stays readable
@@ -127,6 +128,7 @@ Feature: delisted-symbol-handling
     When get_watchlist is called for "Tech"
     Then the "ROKU" entry carries delisted true, reason "UNSERVABLE_REASON_NOT_TRADABLE" and first-unservable date 2026-11-09
     And list_watchlists reports the same state for "ROKU" on "Tech"
+    And the watchlist returned when "MSFT" is added to "Tech" carries the same state for "ROKU"
 
   @AC-17 @FR-12
   Scenario: One alert per transition
@@ -146,7 +148,7 @@ Feature: delisted-symbol-handling
     Given "ROKU" is on the watchlist "Tech" owned by user A and the watchlist "Media" owned by user B
     When "ROKU" becomes flagged delisted with first-unservable date 2026-11-09
     Then the "ROKU" entries on "Tech" and on "Media" both carry delisted true and first-unservable date 2026-11-09
-    And the same state is returned after the owning service restarts
+    And after xstockstrat-marketdata restarts, the "ROKU" entries on "Tech" and "Media" still carry delisted true and first-unservable date 2026-11-09
 
   @AC-20 @FR-1
   Scenario: Days the market is closed do not count toward the window
@@ -160,8 +162,8 @@ Feature: delisted-symbol-handling
   @AC-21 @FR-13
   Scenario: A profile row is written lazily
     Given "AAPL" and "ROKU" are on the user-created watchlist "Tech" and neither has a symbol profile row
-    When the asset set is loaded with "AAPL" and without "ROKU"
-    Then a symbol profile row exists for "ROKU" with its first-unservable date
+    When the asset set is loaded on Monday 2026-11-09 with "AAPL" and without "ROKU"
+    Then a symbol profile row exists for "ROKU" with first-unservable date 2026-11-09, reason "UNSERVABLE_REASON_NOT_TRADABLE" and delisted false
     And no symbol profile row is created for "AAPL"
 
   @AC-22 @FR-3
@@ -186,3 +188,28 @@ Feature: delisted-symbol-handling
     When a fundamentals backfill runs for "AAPL" with start 2021-01-01 and overwrite false and writes 0 periods
     Then get_backfill_status lists "AAPL" with outcome "empty" and no reason
     And the job ends "COMPLETED"
+
+  @AC-25 @FR-1
+  Scenario: A symbol that reappears inside the window restarts the count
+    Given the confirmation window is 5 trading days
+    And "SHPH" is on the user-created watchlist "Biotech"
+    And "SHPH" was absent from the asset set on 2026-11-16 and 2026-11-17
+    When the asset set is loaded on 2026-11-18 with "SHPH" as an active, tradable, non-OTC asset
+    And the asset set is loaded without "SHPH" on every trading day from 2026-11-19
+    Then "SHPH" is not flagged delisted on 2026-11-24
+    And the load on Wednesday 2026-11-25 flags "SHPH" delisted with first-unservable date 2026-11-19
+
+  @AC-26 @FR-7
+  Scenario: A transient source error on a flagged symbol is skipped
+    Given "PSKY" is flagged delisted
+    And the fundamentals source answers HTTP 429 for "PSKY"
+    When a fundamentals backfill runs for "AAPL" and "PSKY" with start 2021-01-01
+    Then "PSKY" has outcome "skipped" with a reason containing "429"
+    And the job ends "COMPLETED"
+
+  @AC-27 @FR-2 @FR-13
+  Scenario: A flag outlives the symbol's last watchlist entry
+    Given "PSKY" was flagged delisted and removed from "Signals", its only watchlist
+    When the asset set is loaded on the next trading day without "PSKY"
+    Then "PSKY" is still flagged delisted in its symbol profile
+    And a later load with "PSKY" as an active, tradable, non-OTC asset clears the flag

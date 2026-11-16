@@ -66,6 +66,8 @@ Answers the operator gave when this story was filed; they bind the FRs below.
 | D-13 | Unit of the confirmation window | Trading days |
 | D-14 | Which symbols get a profile row | Written lazily: a row is created when the platform first has state to record for a symbol. No pre-population |
 | D-15 | Owner of the symbol profile | `xstockstrat-marketdata` |
+| D-16 | A source error on a flagged symbol, permanent or transient | Always `skipped`, with the error text as reason |
+| D-17 | Flag of a symbol that is on no watchlist any more | Persists in the profile and keeps being re-evaluated; clears only on recovery |
 
 ## Functional Requirements
 
@@ -76,14 +78,18 @@ FR-1. **Detection with a confirmation window.** A symbol that is on at least one
 unservable in every successfully loaded asset set for a configurable confirmation window (default 5
 trading days, D-8, D-13) becomes flagged delisted. Days on which the market is closed do not count
 toward the window. The flag records the unservable reason and the date the symbol was first seen unservable. A
-symbol unservable for less than the window is not flagged and nothing about it changes. Several loads on the same
+symbol unservable for less than the window is not flagged: only its first-unservable date is recorded
+(FR-13), and its watchlists, requests and backfill outcomes are unchanged. A servable load inside the
+window resets the first-unservable date. Several loads on the same
 trading day count as one day of observation. A refresh that
 is rejected or has not loaded yet (feature 282's fail-open rules) counts as no observation: it neither
 starts, extends nor confirms an absence.
 
 FR-2. **Automatic recovery.** When a flagged symbol is servable again in a successfully loaded asset
 set, the flag clears and the symbol behaves as a normal watchlist symbol. A symbol that was removed
-from a "Signals" watchlist under FR-3 is not re-added by the recovery itself.
+from a "Signals" watchlist under FR-3 is not re-added by the recovery itself. A flag persists, and is
+re-evaluated by every successful asset-set load, whether or not the symbol is still on any watchlist;
+it clears only on recovery (D-17).
 
 FR-3. **System-managed watchlists: remove.** When a symbol becomes flagged delisted it is removed from
 every system-managed (`system_managed = true`) watchlist that holds it. The removal is reported by the
@@ -101,14 +107,16 @@ symbols explicitly is governed by FR-7, not by this rule. This closes feature 28
 
 FR-6. **Stored data and held positions are untouched.** Flagging a symbol or removing it from a
 watchlist deletes no stored bars and no stored fundamentals; both stay readable for backtests. A flagged
-symbol held in a position is still valued as it is today (MARKETDATA-16, R11): quote and price readers
-are not filtered.
+symbol held in a position is still valued as it is today (MARKETDATA-16, R11), from its last stored
+close: quote and price readers are not filtered, and FR-5 removes only watchlist-driven requests.
 
 FR-7. **Backfill outcome `skipped`.** A backfill that names a flagged symbol still attempts it. When the
 attempt succeeds the symbol is reported as today (`written` or `empty`). When the source cannot serve it
 (for example EDGAR `no CIK for ticker`), the symbol is reported `skipped`, not `failed`: it is not in
 `failed_symbols`, it does not make the job `PARTIAL`, and `marketdata.backfill.symbols` records outcome
-`skipped`. This applies to every backfill data kind.
+`skipped`. "The source cannot serve it" means the attempt for that symbol returns any error, permanent
+(EDGAR `no CIK for ticker`) or transient (timeout, HTTP 429, 5xx); for a flagged symbol every such
+error is `skipped`, with the error text as the reason (D-16). This applies to every backfill data kind.
 
 FR-8. **Real failures unchanged.** A symbol that is not flagged delisted and fails is still `failed`,
 is still in `failed_symbols`, and still makes the job `PARTIAL` (or `FAILED`) under today's rules.
@@ -129,8 +137,9 @@ was removed from. The alert is emitted once per transition, not on every later r
 
 FR-13. **Symbol profile.** The delisted state (flag, reason, first-unservable date) is stored once per
 symbol, platform-wide, in a persisted symbol/company profile record owned by `xstockstrat-marketdata`
-(D-9, D-15), and survives a restart. A profile row is written lazily, the first time there is state to
-record for the symbol; symbols are not pre-populated (D-14). Every
+(D-9, D-15), and survives a restart. A profile row is written lazily, on the first unservable
+observation of the symbol (it then holds the first-unservable date, not yet the flag); symbols are not
+pre-populated and a servable symbol has no row (D-14). Every
 watchlist that holds the symbol, whoever owns it, and every backfill read the same state. This feature
 stores only the delisted state in the profile.
 
@@ -177,7 +186,7 @@ _Constitution **C-14**._ The end-user-reachable surface(s) this capability is co
 - [x] **Agent** — `xstockstrat-agent` MCP tools `get_watchlist`, `list_watchlists` (delisted state per
   symbol) and `get_backfill_status` (per-symbol outcome and reason). Changed response mapping only; no
   new tool and no new argument.
-- [ ] **None**
+- **None** — not selected: UI and Agent are the consumer surfaces.
 
 ## Proto Contract Changes
 
@@ -203,8 +212,13 @@ seed migration, live mechanism — C-05).
 
 Fixed here: the stored key is namespace-relative `<category>.<key>` under namespace `marketdata` (the
 FQN is display-only); `value_type` int; code default 5; read live, so a change applies without a
-restart. The reader `path:symbol` and the seed migration number are stated in `design.md`, and design
-does not close without them. The seed is a new migration in `services/xstockstrat-config/migrations/`.
+restart: live through marketdata's `WatchConfig` subscription and re-read on each asset-set load. The
+reader is in `services/xstockstrat-marketdata/internal/service/asset_servability.go` (symbol named in
+`design.md`). The seed is a new `NNN_<name>.up.sql` + `.down.sql` pair in
+`services/xstockstrat-config/migrations/` with global `production` and `staging` rows; `NNN` is the next
+free number after feature 345's `053`, re-checked at spec time. The config-key table in
+`services/xstockstrat-marketdata/CLAUDE.md` gains the row in the same PR. `/sdd-design` does not close
+without the key name, the reader `path:symbol` and the `NNN`.
 
 ## Database Changes
 
@@ -230,7 +244,7 @@ none reaches outside its own schema.
 Branch to create: `feature/delisted-symbol-handling` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (non-breaking proto or config change)
-- [ ] 2 service owners + platform lead (breaking proto change)
+- n/a: 2 service owners + platform lead (breaking proto change) — every proto change is additive.
 - [x] DBA review + service owner (schema migration)
 
 `get_backfill_status` and `trigger_backfill` behavior changes, so the `strat-lab` plugin's `backtest`

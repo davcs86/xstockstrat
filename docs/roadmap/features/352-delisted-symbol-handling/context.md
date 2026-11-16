@@ -84,3 +84,19 @@
   recorded as an open question: portfolio must learn of a transition from marketdata, a direction
   that does not exist today.
 - "Per symbol" = alert volume (D-10) was my reading; the operator saw it restated and did not correct it.
+
+## Session 2026-11-16 — sdd-review product-spec (rounds 1 and 2, findings addressed)
+
+- Tree: `claude/story-delisted-symbol-handling` (contains `origin/main-dev@78ab5ca`). Deviation from
+  `docs/sdd/tree-freshness.md`: the target would be `main-dev`, but the story PR #1563 is not merged,
+  so the review ran on the story branch, which holds the feature directory.
+- Round 1: FAIL — unchecked open questions; no migration strategy. Fixed: design-work items moved to
+  § Design Inputs, migration strategy and config-key obligations added, trading-domain notes added,
+  AC-23 and AC-24 added.
+- Round 2: PASS WITH WARNINGS (8 warnings, 3 notes), all addressed. Two needed the operator:
+  - **D-16** any source error on a flagged symbol, permanent or transient, is `skipped` (AC-26).
+  - **D-17** a flag persists and is re-evaluated when the symbol is on no watchlist (AC-27).
+- Clarified from D-14: the profile row is written on the first unservable observation and holds the
+  first-unservable date before the flag (FR-1, FR-13, AC-21); a servable load resets it (AC-25).
+- Overlap scan: no FAIL-level collision. Rebase risks and the existing
+  `marketdata.symbol_classification` table are listed in product-spec § Design Inputs.
