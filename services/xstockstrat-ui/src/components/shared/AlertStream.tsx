@@ -1,12 +1,20 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
 import type { Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { Bell, BellOff } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '../ui/sheet';
 import { Separator } from '../ui/separator';
 import { CardNotice } from './CardNotice';
 import {
@@ -191,7 +199,16 @@ export function AlertStream() {
                     </Badge>
                     <span className="text-xs text-muted-foreground">{a.category}</span>
                   </div>
-                  <p className="text-sm font-medium">{a.title}</p>
+                  <p className="text-sm font-medium">
+                    <SheetClose asChild>
+                      <Link
+                        href={`/accounts/notifications/${a.alertId}`}
+                        className="hover:underline"
+                      >
+                        {a.title}
+                      </Link>
+                    </SheetClose>
+                  </p>
                   {a.body && <p className="text-xs text-muted-foreground">{a.body}</p>}
                   <Button
                     variant="ghost"
