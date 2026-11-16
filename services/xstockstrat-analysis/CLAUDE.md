@@ -1,7 +1,7 @@
 # xstockstrat-analysis — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (tail-align indicator results, empirical-Bayes evidence-weighted scoring, definition-json fingerprint eligibility, custom-formula `len==n` requirement) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (gross-vs-net P&L basis) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (tail-align indicator results, empirical-Bayes evidence-weighted scoring, definition-json fingerprint eligibility, custom-formula `len==n` requirement) live in this service's `docs/` folder (**`context-constitution.md`**); defects (gross-vs-net P&L basis) in this service's `docs/` folder (**`context-constitution-findings.md`**). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -31,64 +31,10 @@ deferred to feature 132's `resolve_universe` (this feature is identity-only).
 
 ### Owner-keyed evidence, identity threading & templates (feature 224)
 
-- **Migration `026_owner_dimension_templates`** (`-- requires-env: SEED_USER_ID`): backfills
-  `backtest_runs.user_id` (a legacy run gets its strategy's owner when exactly one owner holds that
-  `strategy_id`, else `SEED_USER_ID`; `027` re-applies it and sets NOT NULL), adds `user_id` to
-  `backtest_run_symbols`/`backtest_details`, creates `strategy_scores_v2` (SQL-seeded only for
-  unambiguous ids; ambiguous `(user_id, strategy_id)` pairs are recomputed at boot, at most
-  `_BOOT_RECOMPUTE_MAX_PAIRS` = 50 per pass), `strategy_templates`, `template_intents`, and the
-  strategy `origin_template_*` columns.
-- **Evidence and run history are owner-scoped** (eligibility, `ListBacktests`,
-  `GetStrategyAnalytics`). `GetBacktest` of a run the caller does not own (or an ownerless run) →
-  `PERMISSION_DENIED` for every caller, admins included. ADMIN foreign reads of strategies emit
-  `audit.admin_read` and fail closed `UNAVAILABLE` if the ledger append fails.
-- **Identity threading.** Every analysis → ingest / indicators call carries a non-empty owner
-  `x-user-id`, or the SAN-bound `system` identity (fundsignal: `analysis-fundsignal`; the live loop's
-  system-signal drain: `analysis-system-read`). The former whole-channel `x-internal-caller: analysis`
-  interceptor is gone.
-- **Unreadable formula.** An indicators refusal of a formula is `UNREADABLE_FORMULA_CODES`
-  (`NOT_FOUND` **or** `PERMISSION_DENIED` on `ExecuteFormula`), logged once per evaluator
-  (`unreadable_formulas`).
-  - A backtest raises `FormulaExecutionError` (`FORMULA_ERROR`, excluded from evidence), with the
-    run warning `backtest symbol <SYM> not evaluated: <CODE>`. Unchanged.
-  - Every non-backtest path that traces readiness (`_compute_opportunities`, `EvaluateReadiness`,
-    the kick / `GetWatchlistReadiness`, the materializer, the daily refresh, the heal) passes a
-    private per-call sink. A refused formula that the traced rule references yields a RESOLVED
-    0-of-0 `formula_unreadable` verdict (`bar_epoch >= 0`; feature 289). An unreferenced refused
-    component is skipped. A real `FormulaExecutionError` or outage `RpcError` still propagates.
-  - The live loop has no sink: `NOT_FOUND` skips the component and `PERMISSION_DENIED` isolates the
-    pair. On an OR rule it may therefore fire while the queue shows "formula not readable"
-    (recorded Open Risk, `@AC-5 @feature-224`). Outage batch loss in the kick / materializer / heal
-    is the open defect `docs/reports/2026-11-05-analysis-readiness-batch-loss-on-indicator-outage-defect.md`.
-- **Blend-id guard.** `_require_admin_for_blend_id` refuses a non-admin REGISTER or
-  `InstantiateTemplate` of the configured blend id (`FAILED_PRECONDITION`, checked on the final id);
-  `blend_strategy_id(cfg)` is the sole reader of `analysis.engine.fundamentals_blend_strategy_id`.
-- **Seeded templates and the seeded blend (feature 335).** `028_seed_strategy_templates` seeds 14
-  `created_by = 'system'` strategy templates whose formula components name formula **template** ids
-  seeded by indicators `008` (its down runs before that one's). System templates are read-only:
-  `ManageTemplate` refuses UPDATE / RETIRE (`PERMISSION_DENIED`) even for admins, and
-  `TemplateMeta.read_only` reports it; a catalog change ships as a new version-guarded migration, never
-  a `DELETE`. The blend template instantiates as `fundamentals_macd_blend_copy` — an ordinary strategy,
-  not governed by the fundamentals universe.
-  `029_seed_fundamentals_blend_strategy` inserts `fundamentals_macd_blend` for the user
-  `admin@localhost`, active and not live, and nothing when that user is missing or already owns it; its
-  down is a no-op. It reads `identity.users(email, user_id)` — the one migration-time cross-schema
-  read, so identity must migrate first. Consequences to know before touching that row: it can never be
-  deactivated through the API (the blend protection), one `SetStrategyLive(true)` by that account makes a
-  second permanently-live governed blend (only SQL or `engine.fundamentals_blend_enabled` undoes it),
-  and while two users hold the id it is "ambiguous" for the boot recompute, which is harmless.
-- **Strategy templates + saga.** `ListTemplates` / `ManageTemplate` (ADMIN only; system templates are
-  read-only to admins too) /
-  `InstantiateTemplate` over `analysis.strategy_templates`; a caller-chosen `strategy_id` the caller
-  already owns → `ALREADY_EXISTS` before anything is written. A template with formula components runs a
-  saga: a `template_intents` row (`PENDING`) → indicators `InstantiateTemplate` copies the formula
-  templates as hidden pending rows → CAS `PENDING→COMMITTED` inside the strategy transaction → indicators
-  `ResolveTemplateIntent` un-hides them; on failure `ABORTING` and the copies are hard-deleted. Saga
-  calls to indicators carry `x-internal-caller: analysis-template-saga` (`_TEMPLATE_SAGA_CALLER` — a
-  dedicated grant that outlives the `analysis` reader bypass). A `DurableSchedule` sweep
-  (`run_template_intent_sweep_forever`, every `_INTENT_SWEEP_SECONDS` = 300) resolves `ABORTING`/
-  `COMMITTED` intents and `PENDING` ones older than `_INTENT_STALE_SECONDS` = 900 (fixed invariants,
-  not config keys).
+Evidence and run history are owner-scoped (cross-owner `GetBacktest` → `PERMISSION_DENIED`, admins included).
+Identity threading, unreadable-formula verdicts (`formula_unreadable`), the blend-id guard, the seeded
+templates / seeded blend and the template saga → this service's `docs/` folder (**`ownership-and-templates.md`**).
+System templates are read-only (root PLAT-19).
 
 ### Fail-closed identity & contract (feature 225)
 
@@ -104,22 +50,8 @@ deferred to feature 132's `resolve_universe` (this feature is identity-only).
 
 ### Strategy Score Persistence (feature 064)
 
-> **Feature 065 update**: the headline `StrategyScore` is now **derived** from per-symbol evidence
-> cells rather than the latest run (see **Cross-Stock Score Derivation** below). The write-through +
-> hydrate-at-boot mechanics described here are unchanged; `strategy_scores_v2` stays a materialized cache
-> (now with `n_symbols`/`total_trading_days`/`provisional` provenance columns and a `delete` for
-> clearing a stale grade). `ScoreStrategy` is repurposed as the manual recompute-from-cells refresh.
-
-`ScoreStrategy` persists the latest `StrategyScore` per strategy to the `analysis.strategy_scores_v2`
-table (upsert on `(user_id, strategy_id)`) in addition to the in-memory
-`self._strategies` dict. The write is **best-effort** (FR-7): it mirrors the ledger-emit `try/except →
-log.warning`, so a DB failure never fails scoring. Reads stay in-memory — `ListStrategies` /
-`GetStrategyReport` still serve `self._strategies`; at boot `main.py` calls `servicer.hydrate_scores()`
-(best-effort) to load persisted rows back into memory, so scores **survive a service restart**. Reuses
-the existing asyncpg pool — no new pool (budget stays 2).
-
-A `math.isfinite` guard drops non-finite component values before the JSONB write. The score
-table (`strategy_scores_v2` since feature 224) has no retention or pagination yet (deactivated and ad-hoc-`strategy_id` scores persist and hydrate).
+`ScoreStrategy` write-through to `analysis.strategy_scores_v2` (best-effort) and boot-time `hydrate_scores()`
+→ this service's `docs/` folder (**`scoring.md`**) § Strategy Score Persistence.
 
 ### Backtest Auto-Scoring & Run History
 
@@ -144,21 +76,10 @@ in-memory `latest_backtest`; the history table stays a compact summary. All pers
 
 ### Fundamentals Signal Producer (feature 062)
 
-A second asyncio background loop (`app/engine/fundsignal_loop.py`) runs a daily **fundamentals signal producer**. Each cycle it builds a deduplicated symbol universe, reads cached fundamentals **only** via marketdata `GetFundamentalsMulti` (never FMP directly — the single FMP chokepoint lives in marketdata, feature 059), scores each symbol (built-in deterministic default, or a 063 scoring formula when `analysis.fundsignal.scoring_formula_id` is set), maps the score to a `buy`/`sell`/`hold` direction by cross-sectional quantile, and emits an `ExternalSignal` per surviving symbol through ingest `IngestSignal`.
-
-- **Universe (feature 154)**: `_resolve_universe` resolves `analysis.fundsignal.universe_source` — `watchlists` = the cross-user union of user watchlist symbols via portfolio `ListAllWatchlistSymbols` (gated by the `x-internal-caller` allow-list, grant `analysis-fundsignal`), `both` = that union ∪ the `explicit_symbols` CSV, `explicit` = the CSV only. The feature-062 "falls back to explicit" behavior is gone. The `max_symbols_per_run` truncation is **FMP-gated**: it applies only when `marketdata.fundamentals.provider == "fmp"` (an FMP-budget guard), read **boot-frozen** via a **second `ConfigWatcher(namespace="marketdata")`** the loop is constructed with (`main.py` `md_config_watcher`) — WatchConfig is per-namespace, so a cross-namespace read needs its own subscription (mirrors marketdata's own boot-freeze; see `docs/patterns/config-governance.md`). Under FMP the cut uses a stateless rotating offset (no permanent per-user starvation); a non-FMP or unknown provider takes the whole union (unknown → conservative capped path). New dependency: **analysis → portfolio read** (`ListAllWatchlistSymbols`, reuses the existing `PORTFOLIO_ENDPOINT` stub — no new channel/env var).
-- **Cache-only FMP discipline**: the producer imports no FMP client; all fundamentals come through marketdata's 24h cache. Chunked fetches are bounded by `analysis.fundsignal.daily_call_budget`; when the budget is exhausted the run is marked `budget_deferred`, a notify warning is emitted, and remaining symbols resume on the next cycle. A `GetFundamentalsMulti` chunk that raises counts its symbols in `deferred_count` and ends the run `partial` (feature 260); `partial` wins over `budget_deferred`, and one warning names both causes.
-- **Idempotency**: analysis owns the producer's day guard in `analysis.fundsignal_emitted` (PK `(symbol, source, as_of_date)`), and ingest also dedups per owner (`ingest.signal_dedup_claims`, `services/xstockstrat-ingest/app/handlers/servicer.py`). A same-day re-run emits nothing new for already-emitted symbols, but re-fetches unscored symbols (they write no row), bounded by `analysis.fundsignal.daily_call_budget`; `force=true` re-emits by clearing the day's rows first. Feature 260 rules:
-  - Ingest's dedup is per `(user_id, source, symbol, direction)` and holds only while conviction and `valid_until` are unchanged inside `ingest.signals.dedup_window_hours`.
-  - A row with `signal_id IS NULL` is an in-flight claim. A failed, aborted or cancelled emit releases it (`_release_claim`, a run_id-scoped DELETE), so the symbol retries the same day; the confirming UPDATE is run_id-scoped too. Only accepted signals count in `signals_emitted`.
-  - Non-force `valid_until` = `as_of_date` 00:00 UTC + `analysis.fundsignal.valid_days`, so a lost-response retry dedups at ingest. `force=true` keeps `now + valid_days` and re-emits fresh.
-  - A crash between claim and confirm leaves a NULL row, which is skipped until the next `as_of_date` or a `force=true` run. A release DELETE that itself fails is logged and swallowed, leaving the same NULL row with the same recovery.
-  - Direction cuts include the day's stored scores, including on a `budget_deferred` resume and a non-force `symbols`-override scan.
-- **Run state**: `analysis.fundsignal_runs` tracks per-cycle status and budget accounting.
-- **Source registration**: the producer idempotently registers its source via ingest `ManageSignalSource` as `source_type='derived'` (a generic bucket for internally-produced, non-extraction signals — added by ingest migration `006_signal_source_type_derived`), `extractor_module='app.extractors.noop'`. **Since feature 224** it does so — and scores and emits — as the reserved **`system` identity**: at the top of `run_once`, on both the loop and the `RunFundamentalsScan` path, `sys_meta` = the trace id + `x-user-id: system` + `x-internal-caller: analysis-fundsignal` (`SYSTEM_IDENTITY`, `_FUNDSIGNAL_CALLER`), which ingest and indicators honour only from the `xstockstrat-analysis` mTLS peer SAN. No admin bit is injected; marketdata and portfolio calls keep the caller's metadata.
-- **Fail-closed scoring (feature 224)**: a non-empty `analysis.fundsignal.scoring_formula_id` is pre-flighted via `GetFormula` and must be a `system`-authored formula (`_scoring_formula_is_system`); otherwise the cycle is aborted (`_abort_cycle`: run `failed`, nothing emitted, `ERROR`-severity notify alert). A symbol whose formula scoring fails is skipped — there is no per-symbol fallback to the built-in scorer; an empty id still uses the built-in scorer.
-- **Unscored symbols (feature 246)**: absence is read from `Fundamentals.missing_metrics`, never from a zero value. A row missing all five built-in metrics (`pe_ratio`, `pb_ratio`, `roe`, `debt_to_equity`, `eps`) or, under a scoring formula, all six formula inputs, is not scored, ranked or emitted; one WARN per cycle `fundsignal run <run_id>: N of M symbols unscored (no fundamentals): <symbols>` (M = fetched). `symbols_processed` still counts them; a partial formula row still sends wire 0.0 for its missing inputs (`@AC-8 @feature-201`).
-- **Manual trigger**: the admin-scoped `RunFundamentalsScan` RPC invokes the same `run_once` code path (`force`, `dry_run`, explicit `symbols` override) so the scheduled loop and manual trigger never diverge.
+A daily asyncio loop (`app/engine/fundsignal_loop.py`) scores cached fundamentals (marketdata
+`GetFundamentalsMulti` only, never FMP directly) and emits `ExternalSignal`s through ingest as the SAN-bound
+`system` identity; `RunFundamentalsScan` runs the same `run_once`. Universe, idempotency, budget and
+fail-closed scoring → this service's `docs/` folder (**`fundsignal.md`**).
 
 ### Shared durable scheduler (feature 158)
 
@@ -177,111 +98,23 @@ durable per-cycle row). No lease/CAS fencing is added (`instance_count:1` trap, 
 `run_opportunity_refresh_forever`, `run_readiness_materializer_forever`,
 `run_template_intent_sweep_forever`) seed via `app/supervision.py#retry_until_ok` and tick under
 `run_supervised`: a failed seed, tick or schedule seam logs ERROR and sleeps
-`_LOOP_ERROR_BACKOFF_SECONDS` = 30 (a fixed invariant, not a config key), and the backoff never
+`_LOOP_ERROR_BACKOFF_SECONDS`, and the backoff never
 advances the schedule. Every boot task in `app/main.py` is started with `supervision.spawn` (retained
 in `_BACKGROUND_TASKS`; an exception exit logs ERROR naming the task). Peers adding a boot task reuse
 `spawn` — never a bare `create_task`.
 
 ### P&L pattern consumer (feature 042)
 
-A third background task (`app/engine/pnl_pattern_consumer.py`, `PnLPatternConsumer.run_forever`,
-registered in `app/main.py`) drives order-snapshot capture and realized-P&L attribution off the
-ledger. It opens **one broad** `StreamEvents(from_sequence=cursor)` with **both filters null** so the
-ledger's **global** sequence order is preserved across stream keys (matching the fixed
-`LedgerEvent.sequence` contract). Per event, strictly in order: (1) short-circuit any
-`sequence <= cursor` before any mutation (kills replay phantom-opens); (2) never self-consume
-`analysis.*` emissions; (3) on `order.*` events (`order.created`/`filled`/`partially_filled`/
-`canceled` — note trading's American one-`l` `order.canceled`) compose the snapshot **before** the DB
-txn — best-effort gRPC reads to marketdata/indicators/ingest bounded by
-`analysis.snapshot.indicator_timeout_ms` / `signal_timeout_ms`; a timeout degrades to a **partial**
-snapshot (empty map/list), never an abort (FR-6); (4) in ONE txn, insert the snapshot, open/seal the
-`pnl_positions` window, and advance `ledger_stream_cursor` (atomic — a crash never advances past
-unwritten data); on `portfolio.position.closed`, seal the matching open window from the enriched
-payload's `realized_pnl` (gross) and `fees_total` (absent ⇒ `0.0`, migration 021) and write one
-`pnl_pattern_samples` row per factor; (5) after commit, emit
-best-effort `analysis.snapshot.captured` / `.degraded` / `analysis.pattern.sealed` audit events.
-`QueryPnLPatterns` reads `pnl_pattern_samples` and buckets **at query time** (indicator quantile
-buckets + signal-by-presence, `min_sample_count` drop, ranked positive/negative). Reuses the shared
-pool + existing gRPC stubs (**no new pool, no new edge, no new env var** — F-06).
-`GetAttribution` (feature 029) aggregates the sealed `pnl_positions` per signal source, owner-scoped via
-`x-user-id`: **net = `realized_pnl − fees_total`**, computed only there (the stored `realized_pnl` stays
-gross), and a win is `net > 0`.
-
-- **Migration-016 tables**: `order_snapshots` (Timescale hypertable on `event_ts`, dedup on
-  `(event_id, event_ts)`), `pnl_positions` (synthesized open→close window, one open per identity key),
-  `pnl_pattern_samples` (raw factor store — **no factor UNIQUE**, buckets computed at query time),
-  `ledger_stream_cursor` (per-consumer committed global sequence).
-- **Snapshot retention is v1-absent and MUST be position-lifecycle-keyed** when added — drop snapshots
-  only **after** their position seals, never a time-based Timescale retention policy (a time policy
-  would evict an entry snapshot before its position closes and silently corrupt attribution).
-- **Named v1 limitations**: the snapshot indicator set is the default `RSI`/`ATR` (strategy-component
-  resolution is the v2 refinement); `position_id` is synthesized from the identity key (`Order` has no
-  `position_id`), so multiple open→close cycles for one identity share a `position_id` — the v2
-  reconciliation (rebuild an incomplete window from the ledger via `QueryEvents`) is the tracked
-  follow-up in the feature's `context.md`.
-- **Per-event retry and park (feature 259).** A failed event is never skipped: `_process_with_retry`
-  retries it in place (`_EVENT_MAX_ATTEMPTS` = 3, `_EVENT_RETRY_BACKOFF_SECONDS` = 1.0). On exhaustion
-  an error in the positive `_is_poison` allow-list (`ValueError`, `TypeError`, `KeyError`, protobuf
-  `DecodeError`/`ParseError`, asyncpg `DataError`/`IntegrityConstraintViolationError`) parks at once
-  (`reason=non-transient`). It is deliberately **not** `is_transient_db_error`: anything unlisted (OOM,
-  class 40, disk-full, timeouts, gRPC) is replayed, because misclassifying a transient error as poison
-  loses P&L data permanently. A non-poison exhaustion re-raises to the outer handler, which reconnects
-  from the unadvanced cursor (replay); `_replay_seq`/`_replay_count` count consecutive replays of one
-  sequence (WARNING, ERROR from the 5th) and reset only when an event with `sequence >= _replay_seq` is
-  processed (the re-delivered cursor row never resets it) or on park. At `_REPLAY_ESCALATE_AFTER` = 5
-  replays a bounded DB probe (`_probe_db`, `_PROBE_TIMEOUT_SECONDS` = 5) runs: probe down → ERROR,
-  no park, keep replaying; probe up → park (`reason=transient-persistent`, attempts = replays × 3).
-  Consecutive stream failures escalate WARNING → ERROR at the 5th. Park order is **log → idempotent
-  emit → advance**: ERROR log with the identity read straight from the payload `Struct`, then
-  `analysis.pnl.event_parked` (idempotency key `pnl_park:<seq>`, `_PARK_EMIT_TIMEOUT_SECONDS` = 5),
-  then the cursor advance. Every DB wait in an attempt is bounded by `_ATTEMPT_DB_TIMEOUT_SECONDS` =
-  10 (`pool.acquire(timeout=…)` + asyncpg per-query `timeout=`), so a pool-exhaustion hang becomes a
-  non-poison `TimeoutError` instead of a silent stall. All six are fixed invariants, not config keys.
-- **Accepted limitations (feature 259)**: under DB contention the single probe confirmation can park
-  a still-transient event (~25-30 s of replays); an unlisted deterministic error parks after
-  ~25-30 s, not ~2 s (keep the allow-list narrow); a parked `order.created`/`filled` opens no window,
-  so its later close no-ops, and a parked `position.closed` leaves its window open (reconcile from the
-  park payload); the replay and stream-fail counters are in-memory (`instance_count: 1`), so a restart
-  delays escalation by up to 5 replays. The existing snapshot/sealed emits carry the source event's
-  `correlation_id` as the request field and `x-trace-id` (empty when the source event has none —
-  never minted).
+`PnLPatternConsumer` (`app/engine/pnl_pattern_consumer.py`) reads one broad global-order `StreamEvents`: events in
+order; short-circuit `sequence <= cursor`; snapshot before the txn; cursor advance atomic with the writes; audit
+emits after commit. Retry in place, park only `_is_poison` allow-listed errors (never `is_transient_db_error`);
+park order is log → idempotent emit → advance. Detail → this service's `docs/` folder (**`pnl-consumer.md`**).
 
 ### Decide-surface RPCs (feature 083, materialized by feature 097)
 
-Three read RPCs back the opportunities-first UI, all over the existing evaluator (`app/services/evaluator.py`) — no new pool:
-
-- **`ListOpportunities`** — a **pure read** of the materialized per-user queue (`analysis.opportunities`, migration `011`) LEFT JOIN the persisted dispositions (`analysis.opportunity_actions`, migration `010`). The Universe = `active signals (QuerySignals) ∪ held positions (ListPositions) ∪ watchlist (symbol, strategy) bindings (ListWatchlists)` — held positions and watchlisted symbols now **add rows**, not merely flip a signal row's action. Each row carries **real `passing/total`** wherever a strategy is attributed: entry-rule trace for entry candidates, **exit-rule trace** (`evaluate_conditions_traced(..., rule="exit")`) for held+attributed candidates → a held position whose `exit_rule` fires is a `REDUCE` row **with no sell signal** (FR-8). Attribution is **watchlist-binding-first, else unattributed** (`strategy_id=""`, no trace, `0/0`) — held positions carry no portfolio strategy, so none is fabricated (P-03). `conviction` is the deterministic readiness ordinal; a signal is a **separate ranking axis** (`signal_axis`), counted exactly once and never folded into readiness (Option 2 / FR-3). The key `user|symbol_norm|strategy_id` (action is a stored annotation, not in the key) is server-authoritative; the client echoes it to `SetOpportunityAction`. Freshness is **lazy compute-on-read + stale-while-revalidate + a configured daily refresh** (`run_opportunity_refresh_forever`, `analysis.opportunity.refresh_hour_utc`): a cold (never-materialized) read is **non-blocking** (feature 185 FR-4) — it kicks a background recompute and returns an empty page with a response-level `computing` pending signal (or `compute_failed` after `_OPPORTUNITY_COMPUTE_MAX_ATTEMPTS` consecutive failures), never a synchronous compute under the per-user lock; a stale read serves the old rows and kicks a background recompute (surface `computed_at` as "as of"). **Feature 177 (FR-3):** a *legitimately-empty* universe is no longer recomputed every poll — an empty compute stamps `analysis.opportunity_compute_state` (migration `023`) with an `analysis.opportunity.empty_recompute_ttl_seconds` window; within it the `count==0` branch serves empty and kicks a **background** self-heal (an empty→non-empty transition heals within ≈ one poll) instead of recomputing synchronously. The **three** empty-yielding `replace_for_user` sites (cold materialize, `_kick` recompute, daily refresh tick) route through `_replace_and_stamp_compute_state`, which stamps only on empty and leaves the daily tick's `schedule.advance` untouched (feature-158 `@AC-8/@AC-9`). **Feature 177 (FR-4):** read-time `_enrich_opportunities_live` memoizes each symbol's live quote (no sparkline — the enrichment fetches no bars) for `analysis.opportunity.live_enrich_ttl_seconds` — **success-only** (a failed/unavailable fetch is never cached, so a stale price is never served as current), so a warm re-read skips `BatchGetLatestPrice`. **Feature 185:** a per-symbol bars/indicator fetch failure during the compute is a **terminal data-unavailable sentinel** (`Opportunity.data_unavailable`, derived at read from the `"unavailable"` provenance marker — no column; conviction+signal_axis zeroed so it sinks) — distinct from an evaluated `0/N` quiet row; an indicators `grpc.RpcError` marks only that candidate unavailable instead of aborting the whole compute (a `FormulaExecutionError` still propagates). The compute bars-fetch fan-out runs on the background `_readiness_materializer_bars_sem` (FR-3, no new key). A served data-unavailable row older than `_OPPORTUNITY_UNAVAILABLE_RETRY_SECONDS` (300s) triggers a **surgical per-symbol read-time recovery** (`_kick_opportunity_retry` → `_retry_unavailable_symbols` → `opportunities.replace_symbols` heal-only UPDATE, never resurrecting a dropped row) that restores both ranking axes and upserts the readiness-cache subset for a recovered watchlist×strategy entry pair (success-only); the read `ORDER BY` gains an `opportunity_key ASC` tiebreak for paging stability. No migration. The known-user set the daily pass iterates is `opportunities ∪ opportunity_actions` (analysis can't enumerate all users — strategies are global). `max_universe_size` bounds the traced set with watchlist/held ranked **above the cut** (FR-1). **Feature 132 (deny list + owner universe):** a live strategy's coverage is now `resolve_universe(definition, watchlist, held, signals).union` — a non-empty `signal_params.symbols` allowlist is an explicit **override**, else `watchlist ∪ held ∪ (signals iff signal_eligible)`, all **minus** the strategy's `denied_symbols` (entry-only: a held-denied position keeps its exit trace). A denied `(symbol, strategy)` pair within that coverage surfaces as an explicit **muted** row — `Opportunity.muted`, carried by the `"denied"` provenance marker (no `muted` column; survives the DB round-trip) — held-denied flags its existing exit row, non-held-denied is a `0/0` `UNSPECIFIED` placeholder, **never `conviction=0` as a classifier**. The cut is three disjoint buckets (`curated`/`muted_only`/`speculative`) so a muted row is never truncated for a higher-conviction signal, and the read query exempts muted rows from the conviction floor (`OR provenance ? 'denied'`, — feature 185 — `OR provenance ? 'unavailable'` for the data-unavailable sentinel, — feature 215 — `OR provenance ? 'fundamentals_unavailable'` for the skip row, and — feature 289 — `OR provenance ? 'formula_unreadable'` for the formula-unreadable row). The three new proto fields (`denied_symbols`, `signal_eligible`, `Opportunity.muted`) all ride existing JSONB/rows — **no migration**. `signal_eligible` defaults **false**; setting it true alongside a non-empty allowlist is rejected `INVALID_ARGUMENT` at write time. The live loop (`live_loop.py`) evaluates the same `resolve_universe` universe under a **fair-share rotating scheduler** (all `(strategy, symbol)` pairs globally ordered by `created_at`, ≤ `max_strategies_per_cycle` per cycle) and fetches each owner's watchlist/held from portfolio (read-only) memoized per cycle.
-  - **Fundamentals skip row + symbol filter (feature 215).** See § Fundamentals availability guard.
-    `ListOpportunitiesRequest.symbol` (normalized, empty = all) filters both the fresh and the stale
-    read, so Signal-detail finds a symbol's row whatever its queue rank.
-  - **Formula-unreadable row (feature 289).** A `formula_unreadable` trace (see § Owner-keyed
-    evidence, "Unreadable formula") adds the `"formula_unreadable"` provenance token, read back as
-    `Opportunity.formula_unreadable`. The token is structural (`_PROVENANCE_STRUCTURAL_MARKERS`,
-    never a source, facet or `available_sources` chip) and exempt from the conviction floor. A
-    refusal is not data-unavailable, so a sibling's symbol-wide `fetch_failed` cannot flip the row.
-    - Non-held: action UNSPECIFIED, conviction and signal axis 0, NULL composite.
-    - Held: keeps its resolved action (REDUCE / ADD) and signal axis; conviction 0, composite from
-      the signal axis alone.
-    - Terminal until the next recompute: the 300s heal selector stays keyed on `"unavailable"`, and
-      a heal whose re-trace is marked rewrites the row to the marker (a held row keeps its stored
-      action via `COALESCE`).
-  - **Bounded read (feature 227).** The read DB phase runs **strictly sequentially on one budgeted
-    connection** (`budgeted_read`, `app/repositories/read_budget.py`: `pool.acquire(timeout=…)`, a
-    read-only transaction, `SET LOCAL statement_timeout` re-armed to the remaining budget before every
-    statement) — never `asyncio.gather` statements on it. The recompute/retry kicks fire only **after**
-    the connection is released. A transient DB error → `UNAVAILABLE` "opportunities store unavailable;
-    retry"; any other error re-raises. The live enrichment runs after release under its own deadline
-    and degrades to unenriched rows. Budget keys: `analysis.opportunity.read_db_budget_ms` /
-    `live_enrich_timeout_ms` (§ Config Keys). `_READ_DB_BACKSTOP_GRACE_S` = 2.0 (hard backstop at
-    budget + grace → terminate), `_RELEASE_TIMEOUT_S` = 1.0 (success-path release), `_ROLLBACK_WINDOW_S`
-    = 1.0 (body-error rollback + release) and `_RELEASE_FLOOR_S` = 0.05 (minimum release timeout after
-    rollback) are fixed invariants, not config keys.
-- **`SetOpportunityAction`** — persist a per-user disposition (SNOOZE/DISMISS/TAKE) against the server-issued `opportunity_key`. SNOOZE without an explicit `snooze_until` defaults to `now + analysis.opportunity.snooze_default_hours`. User-visible write → a DB failure surfaces as `UNAVAILABLE` (not swallowed).
-- **`EvaluateReadiness`** — per-symbol traced condition leaves (`ConditionState` PASS/SOFT/FAIL) + a deterministic conviction ordinal (passing/total leaves, never a probability) for an explicit `strategy_id` — the Signal-detail readiness panel. **Feature 177 (FR-1):** verdicts are cached per `(user, strategy, rule, symbol)` in `analysis.readiness_cache` (migration `022`), keyed also on the definition fingerprint + `bar_epoch`. A repeat call whose fingerprint matches and whose row is within `analysis.readiness.stale_after_seconds` serves a **FAST** path (no bars fetch, no re-eval) that is byte-identical to a fresh compute; any miss/mismatch/expiry re-evaluates (**SLOW**) and re-stamps `bar_epoch = max(evaluated, benchmark)` — never a slow-path `bar_epoch` reuse. The response's `computed_at` (proto field 2, FR-5) = the **oldest** served row's stamp, so it is never presented fresher than its oldest symbol.
-- **`GetStrategyAnalytics`** — per-strategy expectancy / hit-rate / max-DD / signals / taken. The "taken" count uses `ListOrders(strategy_id)` over the non-cyclic **analysis → trading read** edge (`TRADING_ENDPOINT`), **reconciled** against queue-derived TAKE dispositions so both read consistently (FR-7). `queue_share` is now **real** (feature 097): the strategy's share of the user's valid materialized queue (attributed rows for this strategy / all attributed rows, zero-guarded; unattributed rows excluded from the denominator).
-- **`GetWatchlistReadiness`** (feature 181) — **cache-first** readiness decoration for a keyset page of a watchlist's bound `(symbol, strategy_id)` pairs, backing the `/insights/watchlists` list (kills the client per-strategy `EvaluateReadiness` N+1 fan-out). Derives the owner's bound pairs from portfolio `GetWatchlist` over the **existing** analysis→portfolio edge (owner from `x-user-id`; **no new edge, no portfolio→analysis cycle**; anti-IDOR — pairs come from the owner's own watchlist), sorts `(symbol ASC, strategy_id ASC)`, keyset-slices (opaque base64 `(symbol, strategy_id)` cursor in `PageRequest.page_token` — the `ListPositions` keyset precedent, **not** `ListOpportunities`' offset), and reads `readiness_cache` **only** (a `GetDataCoverage` bar-epoch probe per page symbol — never a SLOW compute in the RPC body). **Four-way classifier** (order matters): `bar_epoch < 0` sentinel → `UNKNOWN`; else `is_readiness_row_fresh` → `RESOLVED` (inline `SymbolReadiness`); else → `PENDING`. Not-fresh pairs fire a **best-effort, guard-set-deduped background refresh** (`_kick_readiness_refresh`, keyed `(owner, strategy_id, symbol)`) that reuses the shared `compute_readiness_row`; **UNKNOWN** rows re-kick only past the `_READINESS_UNKNOWN_RETRY_SECONDS` (300s) recovery cooldown. Clients render rows immediately and poll this same RPC until every row is `RESOLVED` (design R-E). **Scope note:** the `bar_epoch = -1` data-unavailable sentinel is written by the **shared** `compute_readiness_row` (feature 180), so it is a (more-correct) behavior change to the interactive `EvaluateReadiness` + materializer paths too — a persistent primary-bars-fetch failure now re-computes SLOW rather than FAST-serving a degraded row (operator-approved deviation, feature 181 context.md).
-  - **R-F (semaphore coupling):** the on-read refresh kick shares `analysis.readiness_materializer.max_concurrent_bars_fetches` (the materializer's own sem, **not** the interactive `_bars_fetch_sem` — feature-176 priority-inversion guard), so that key now also throttles interactive watchlist-read kicks.
-  - **R-B (warm-first-render prerequisite):** a **warm FAST first render** (all rows `RESOLVED` on first paint) requires `analysis.readiness_materializer.enabled` (default **OFF**) with a `valid_window` covering the read cadence; with it off, a cold page renders `PENDING` and self-warms over one poll via the kick's 24h stamp. This feature does **not** flip the shipped default. The client N+1 elimination itself is unconditional (one page-bounded RPC + poll, never a per-strategy fan-out).
+`ListOpportunities` (pure read of the materialized `analysis.opportunities` queue; the read DB phase runs
+sequentially on one budgeted connection, ANALYSIS-14), `SetOpportunityAction`, `EvaluateReadiness`,
+`GetStrategyAnalytics` and `GetWatchlistReadiness` → this service's `docs/` folder (**`opportunities.md`**).
 
 ### Cross-Stock Score Derivation (feature 065) & Pre-Window Warm-Up Prefix (feature 071)
 
@@ -298,9 +131,9 @@ Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` bui
 | xstockstrat-config | gRPC WatchConfig | Live config at startup |
 | xstockstrat-marketdata | gRPC read | Historical OHLCV data for backtesting |
 | xstockstrat-indicators | gRPC read/write | SMA/EMA/indicator computation; formula reads as the strategy owner; strategy-template saga copies (`InstantiateTemplate`/`ResolveTemplateIntent`, feature 224) |
-| xstockstrat-ingest | gRPC read/write | QuerySignals for signal-weighted backtesting; `IngestSignal`/`ManageSignalSource` for the fundamentals signal producer (feature 062) |
-| xstockstrat-portfolio | gRPC read | Watchlist universe for the fundamentals signal producer (feature 062); held positions for the `ListOpportunities` queue + `ScreenResult.held` cross-ref (feature 083) |
-| xstockstrat-trading | gRPC read | `ListOrders(strategy_id)` for the `GetStrategyAnalytics` "taken" count (feature 083 — new non-cyclic analysis→trading edge; `TRADING_ENDPOINT`); `ListOrders(user_id, strategy_id, symbol)` + owner `x-user-id` (and a per-pass `x-trace-id`) boot-time-only for the exit-cooldown entry-time backfill (feature 116, `app/engine/entry_backfill.py`) — reuses the same edge/stub, no new channel |
+| xstockstrat-ingest | gRPC read/write | QuerySignals for signal-weighted backtesting; `IngestSignal`/`ManageSignalSource` for the fundamentals signal producer |
+| xstockstrat-portfolio | gRPC read | Watchlist universe for the fundamentals signal producer; held positions for the `ListOpportunities` queue + `ScreenResult.held` cross-ref |
+| xstockstrat-trading | gRPC read | `ListOrders(strategy_id)` for the `GetStrategyAnalytics` "taken" count (non-cyclic analysis→trading edge); `ListOrders(user_id, strategy_id, symbol)` + owner `x-user-id` (and a per-pass `x-trace-id`) boot-time-only for the exit-cooldown entry-time backfill (`app/engine/entry_backfill.py`) — same stub |
 | xstockstrat-ledger | gRPC write | Store backtest lifecycle events |
 | xstockstrat-notify | gRPC write | Alert on completed backtests |
 
@@ -321,33 +154,8 @@ Signal-weighted mode (set via `strategy_params`):
 
 ### Backtest Fill Model (feature 151)
 
-`RunBacktest` supports two fill models, selected by `RunBacktestRequest.fill_model` (else the
-`analysis.backtest.default_fill_model` config key, else legacy):
-
-- **`FILL_MODEL_SAME_BAR_CLOSE`** (legacy default) — a signal on bar `i` fills at bar `i`'s own
-  close ± slippage. Optimistically biased (a mild look-ahead: the close that produced the signal is
-  also the fill price).
-- **`FILL_MODEL_NEXT_BAR_OPEN`** (opt-in, bias-free) — a signal on bar `i` fills at bar `(i+1)`'s
-  open ± slippage. The standard bias-free convention.
-
-Mechanics (both simulators share one deferred-execution state machine, `_apply_fill` over a
-`SimState`; the loop stays the sole writer of `diags[...].action` and the sole appender to
-`daily_equity`, so the feature-071 `daily_equity[j]↔diags[j]` 1:1 invariant is preserved):
-
-- **Last-bar rule (no look-ahead):** a signal on the absolute last bar `n-1` schedules a fill for
-  bar `n`, which never runs — so it opens no position and references no bar outside the window. A
-  signal on `n-2` fills at `bars[n-1].open` then is force-closed at `bars[n-1].close` (one round
-  trip), so trade counts stay symmetric across modes.
-- **Cooldown is fill-to-fill:** the re-entry (feature 069) and exit/min-hold (feature 116) cooldowns
-  are keyed on the **fill-bar** time. Byte-identical to legacy in same-bar mode (`signal == fill`).
-- **Action/conviction decouple (display-only):** in next-bar mode a diagnostics row can show
-  ENTER/EXIT on bar `i+1` while that row's `conviction` is bar `i+1`'s own value (the action reflects
-  bar `i`'s signal). This is display-only — the derived grade math reads only
-  sharpe/drawdown/win-rate, never conviction, so the grade is unaffected.
-
-The effective model is recorded on `BacktestResult.fill_model`, `BacktestRunSummary.fill_model`, and
-the `analysis.backtest_runs.fill_model` column (enum name), so a run is reproducible despite config
-drift.
+`RunBacktestRequest.fill_model` (else `analysis.backtest.default_fill_model`, else legacy `SAME_BAR_CLOSE`);
+`NEXT_BAR_OPEN` is the bias-free opt-in. Mechanics → this service's `docs/` folder (**`backtest-fill-model.md`**).
 
 ## Composable Strategy Rules — Operands & Output Series
 
@@ -379,180 +187,28 @@ both indicator and declared-formula series as dropdown operands via
 
 ### Benchmark / reference-symbol operand (`source_symbol`, feature 152)
 
-A `StrategyComponent` carries an optional **`source_symbol`** (`analysis.proto` field 6). When
-non-empty, the component's indicator/formula is computed on **that** symbol's bars (e.g. `VOO`) and
-its output series is **left-joined onto the evaluated symbol's trading-day (date) timeline**; empty =
-computed on the evaluated symbol (byte-identical to pre-152, and — being a plain proto3 string — an
-unset value is omitted from `definition_json` so the definition fingerprint is unchanged). This
-enables cross-symbol "market-regime" gates (buy dips on any symbol only when `VOO`'s 200-day is
-rising) that per-symbol operands cannot express.
-
-- **One computation unit.** `StrategyEvaluator._assemble_component_series(comp, closes, eval_dates,
-  benchmark_bars)` is the single seam behind every StrategyComponent consumer — backtest
-  (`evaluate_with_series`), live (`evaluate`), readiness/opportunities (`evaluate_conditions_traced`),
-  and `GetIndicatorSeries`. A `source_symbol` component with no benchmark bars supplied → all-`None`
-  (safe hold), **never** computed on the evaluated closes.
-- **Compute-then-align, no look-ahead.** The indicator/formula runs on the benchmark's own contiguous
-  closes first, *then* the output is date-joined (`bar.time.ToDatetime(UTC).date()`); a date the
-  benchmark lacks → `None` (leaf reads hold/false) — no forward-fill, the evaluated symbol is never
-  reindexed, and a benchmark value at bar *t* uses only benchmark data ≤ *t*.
-- **Warmup / coverage.** Benchmark bars are loaded window+warmup like the evaluated symbol
-  (`_load_benchmark_bars`, deduped once per backtest run); a benchmark warmup shortfall raises
-  `_InsufficientData(source_symbol)` → a `CoverageGap` naming the **benchmark**, and the run reports
-  `BACKTEST_STATUS_INSUFFICIENT_DATA`. The **live loop** wires this too
-  (`live_loop._load_benchmark_bars`, builtin lookback + declared formula `warmup_period` via
-  `StrategyEvaluator.declared_formula_warmups`); the opportunities pass dedups each benchmark to one
-  fetch under `_readiness_materializer_bars_sem` (feature 185).
-- **Write path.** `ManageStrategy` normalizes `source_symbol` server-side (uppercase/trim, empty →
-  unset) on both REGISTER and UPDATE (`_normalize_source_symbols`); it enters the fingerprint via
-  `definition_json`, so changing a benchmark clears the derived grade.
-- **Deferred:** `screen_symbols` `source_symbol` and a UI strategy-builder editor for it are follow-ons
-  (agent-authored strategies are fully functional now via `manage_strategy`).
+`StrategyComponent.source_symbol` computes a component on another symbol's bars, date-joined onto the evaluated
+symbol's timeline with no forward-fill → this service's `docs/` folder (**`warmup.md`**) § Benchmark / reference-symbol operand.
 
 ### Fundamentals-input formula operand (`fundamental_inputs`, feature 200)
 
-A `COMPONENT_KIND_CUSTOM_FORMULA` component whose formula declares
-`fundamental_inputs` (the closed `FundamentalMetric` enum, owned by xstockstrat-indicators) is fed
-**only** those fundamentals (never OHLCV `close`), scored **once per filing-boundary epoch**, and the
-scalar output broadcast across the span — the same input/output contract as the fundamentals-signal
-producer's scoring formula (feature 062), so one formula id works in both places (FR-5, full-row
-parity; the partial-row case diverges by design — see `@AC-8`). This is disjoint from the feature-198
-`COMPONENT_KIND_FUNDAMENTAL` single-metric operand: 198 reads **one** metric per component off the
-bar; 200 feeds a **set** of metrics into a formula.
-
-- **Routing.** The evaluator branch fires only when the component's `formula_id` maps to a non-empty
-  metric list in the `formula_fundamentals` map the servicer/live loop builds
-  (`_formula_fundamentals` / `evaluator.declared_formula_fundamentals`, one `GetFormula` per distinct
-  formula). An unmapped formula stays the ordinary indicator-only path (fed `close`) — byte-identical
-  to pre-200 (`@AC-7`). The routing map must be built **before** the loader/eval at every surface
-  (a site that computes `eval_dates` without it silently holds).
-- **Two data channels, kept separate.** The formula reads a **dedicated** `formula_fundamentals_data`
-  channel so a co-occurring feature-198 operand keeps its own PIT `fundamentals` channel unchanged
-  (C-16 PRESERVE `@feature-198`). On **backtest** the formula channel is the same per-symbol **PIT**
-  filing history (`_load_fundamentals`) so it is as-of-bar-date with the 198 T+1 carry-forward
-  (`formula_fundamentals_data` left `None` → defaults to the PIT list). On the **5 non-backtest**
-  surfaces (live loop, `EvaluateReadiness`, readiness materializer, `ListOpportunities`,
-  `GetIndicatorSeries`) the formula channel is the current-snapshot row from marketdata
-  single-symbol `GetFundamentals` (feature 215 — NotFound = absent, FailedPrecondition = disabled),
-  lowered by `_load_fundamentals_snapshot` (live loop:
-  `_load_fundamentals_snapshot`) into a **one-element** `[FundamentalPeriod]` with `filed_date =
-  date.min` (strictly before every bar), so the identical `_fundamental_as_of_series` broadcasts it as
-  one degenerate epoch — one code shape for PIT and snapshot.
-- **Gate (one key, two sites).** `analysis.backtest.fundamentals.enabled` (default OFF) now gates
-  **both** the 198 PIT loader (`_load_fundamentals`) **and** the 200 snapshot loader
-  (`_load_fundamentals_snapshot`) — one config key, two enforcement sites. OFF ⇒ the formula operand
-  reads hold on every surface (no snapshot/PIT fetch, no formula execution — no fabricated 0.0).
-- **Warmup.** A fundamentals-only formula consumes no rolling `close` window, so its warmup is forced
-  to **0** in the backtest warmup cache (the cache value stays `int`); the `fundamental_inputs` read
-  folds into the existing warmup-prefetch `GetFormula` at backtest/live (no extra RPC there). The
-  other 4 surfaces pay one bounded per-pass `GetFormula` fan-out to build the map.
-- **Write-time guard.** `ManageStrategy` rejects `INVALID_ARGUMENT` a component that sets **both**
-  `source_symbol` and a fundamentals-input formula — a component is a benchmark operand XOR a
-  fundamentals-formula operand (the formula reads fundamentals, not bars).
+A custom formula declaring `fundamental_inputs` is fed only those metrics and returns a scalar broadcast
+(ANALYSIS-12). Routing, the two data channels, the shared gate and the write-time XOR →
+this service's `docs/` folder (**`fundamentals-guard.md`**).
 
 ### Fundamentals availability guard (feature 215)
 
-A strategy that **requires fundamentals** is judged by one pure module,
-`app/services/fundamentals_guard.py`. "Requires" means a `COMPONENT_KIND_FUNDAMENTAL` operand, or
-a custom formula whose `fundamental_inputs` map is non-empty. The judgement only runs while
-`analysis.backtest.fundamentals.enabled` is on; when the gate is off, nothing below happens.
-
-`assess(...)` returns `NOT_REQUIRED`, `NOT_ASSESSED` (no bars), `AVAILABLE`, `UNAVAILABLE`, `UNKNOWN`
-or `DISABLED`, with precedence UNAVAILABLE > UNKNOWN > DISABLED > AVAILABLE. Availability means the
-evaluator **would execute ≥1 epoch** on the metrics the strategy actually reads: a partial row still
-evaluates, and only filings before the last evaluated bar count. The loaders keep absence and
-failure distinct:
-
-- NotFound from marketdata means absent.
-- FailedPrecondition on the snapshot means DISABLED.
-- Any other RPC error, including `RESOURCE_EXHAUSTED`, means UNKNOWN.
-
-Each surface acts on the result:
-
-- **Backtest refusal.** An UNAVAILABLE symbol is not evaluated. Its diagnostic carries
-  `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` plus a `fundamentals_gap` label from marketdata's
-  cache-only `GetEtfFlags` (any error leaves `UNSPECIFIED`). It gets no evidence cell, and a WARN log
-  names the symbol and strategy. A refused symbol makes the run INSUFFICIENT_DATA when no symbol
-  traded. An UNKNOWN symbol is not refused: it gets no cell and the warning
-  `fundamentals fetch failed for <SYM> — rerun`.
-- **Live deny-entry.** An UNAVAILABLE `(strategy, symbol)` has its entry denied, while exits and
-  state replay are untouched. On entering the state the loop emits one WARN log naming
-  `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` and one WARNING `EmitAlert` (category `strategy`). The
-  state is in-memory, so a restart re-alerts at most once. UNKNOWN, DISABLED and NOT_ASSESSED change
-  nothing. `SetStrategyLive` does not check availability.
-- **Opportunity skip row.** This applies to **entry** candidates only; a held symbol keeps its
-  exit/REDUCE row. An UNAVAILABLE candidate becomes a non-actionable row:
-  - action UNSPECIFIED, conviction and signal axis 0, NULL composite;
-  - the `"fundamentals_unavailable"` provenance marker, which is structural (never a source/facet)
-    and exempt from the conviction floor;
-  - the `fundamentals_gap` label in `readiness_json`.
-
-  It is mutually exclusive with the `"unavailable"` data-unavailable row. An UNKNOWN candidate stays
-  a row-local `"unavailable"` row with its action preserved. The 300s heal re-assesses the row and
-  can rewrite it to the skip row (`replace_symbols` writes `action` via `COALESCE`).
-- **Snapshot quota ripple.** The snapshot loaders use single-symbol `GetFundamentals`. An uncached
-  symbol at the vendor quota (`RESOURCE_EXHAUSTED`, common under the default `finnhub` per-minute
-  cap) therefore reads UNKNOWN. That stamps the opportunity row `"unavailable"` and retries it every
-  300s; it is never a skip row or a live state change.
-- **Formula refusal (feature 289).** A refused `GetFormula` (`UNREADABLE_FORMULA_CODES`) is "not a
-  fundamentals formula" and records no UNKNOWN. This holds in `_formula_fundamentals` and in
-  `_declared_formula_warmup`, so both backtest start branches agree. An outage still records UNKNOWN.
-  - The symbol reaches `ExecuteFormula`, so a backtest gets `NO_TRADE_REASON_FORMULA_ERROR`, not the
-    `fundamentals fetch failed … rerun` warning.
-  - ScoreStrategy does not abort on it.
-  - Opportunities and the heal get the `formula_unreadable` marker.
-  - Gate OFF is unchanged. The live twin `evaluator.declared_formula_fundamentals` still records
-    UNKNOWN for a refusal (pinned by test).
-  - `recompute_unscored_pairs` keeps one formula cache per owner, so one owner's refusal cannot drop
-    the guard for another owner who can read the formula.
-- **Evidence exclusion (H).** Grade derivation reads every cell for the current fingerprint
-  (`fetch_all_for_fingerprint`). It drops cells the guard refuses over each cell's window **before**
-  the per-symbol dedup, and never deletes a cell. UNKNOWN keeps the previous grade with a warning.
-  ScoreStrategy aborts UNAVAILABLE on UNKNOWN, and NOT_FOUND when every evidence symbol is excluded.
-  A successful ScoreStrategy sets trailing metadata `x-score-excluded-symbols` (JSON array of the
-  symbols left with no surviving cell; `"[]"` when none or when the guard does not apply; omitted
-  above 4096 bytes and on every abort path), consumed by the agent's `manage_strategy operation='score'`.
-  A refused-only RunBacktest still triggers the recompute.
-  - **Gate-off re-includes refused cells** (Open Risk 3), because the exclusion is non-destructive.
-    With the gate ON the same exposure now applies to a refused formula that really declares
-    fundamentals: its cells are no longer guarded (feature 289, accepted).
-  - Post-deploy, a manual `ScoreStrategy` refresh clears a legacy 0-trade ETF contribution from a
-    fundamentals strategy's grade.
-
-**Fixed invariants** (not config keys):
-
-- `_FUND_PAGE_SIZE = 200`, `_MAX_FUND_PAGES = 8` and `_FUND_PAGE_TIMEOUT_SECONDS = 10`. The PIT
-  pager drains every page; a page-cap hit or a stalled token is UNKNOWN, never a refusal.
-- `_INTERACTIVE_DERIVATION_CONCURRENCY = 4` bounds an interactive recompute's PIT fan-out. It uses a
-  local semaphore, never the materializer's.
+`app/services/fundamentals_guard.py#assess` judges strategies that require fundamentals: UNAVAILABLE refuses /
+denies entry; UNKNOWN never refuses; DISABLED / NOT_ASSESSED change nothing. Per-surface behaviour →
+this service's `docs/` folder (**`fundamentals-guard.md`**).
 
 ### Per-sector component-param overrides (`sector_param_overrides`, feature 217)
 
-`StrategyDefinition.sector_param_overrides` (field 15, rides `definition_json`, maskable) overrides
-`components[component_ref].params[param_name]` by the evaluated symbol's sector
-(`app/services/sector_params.py`). It is a **param** override only — rule `rhs` thresholds are not
-sector-addressable.
-
-- **Backtest (PIT)**: one batched `marketdata.GetSectorHistory` per run (header trio propagated);
-  each bar resolves its sector as-of `bar.time` (`valid_from` inclusive, `valid_to` exclusive).
-  A component is computed once per **distinct** resolved param set over the full window and
-  stitched per bar (`StrategyEvaluator._assemble_sector_resolved`) — correct warm-up across a
-  mid-window reclassification; no overrides → one compute, byte-identical. Warm-up prefix sizes for
-  the hungriest sector variant (`warmup.required_prefix_bars`).
-- **Live surfaces** (readiness, opportunities, materializer, live loop): the current sector via
-  `GetCurrentSector` (10-min per-process cache in the servicer) → `apply_sector`. Strategies
-  without overrides issue no sector RPC.
-- **Fail-safe**: unclassified bar/symbol or a marketdata failure → `default_value` (never a
-  carry-forward). Backtest `warnings` carry a sector-unavailable notice and the **seed-span**
-  notice when a bar resolved against an epoch-seed row (the signed-off pre-go-live look-ahead).
-- Write validation (`_validate_definition`): component must exist and not be a fundamental operand;
-  no duplicate `(component_ref, param_name)`; `by_sector` sectors unique and not UNSPECIFIED; finite.
-  A changed override changes the definition fingerprint (clears the derived grade).
+`StrategyDefinition.sector_param_overrides` overrides component params by the evaluated symbol's sector
+(PIT on backtest, current sector live; fail-safe to `default_value`) →
+this service's `docs/` folder (**`sector-overrides.md`**).
 
 ## Config Keys Consumed
-
-> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
-> by a config migration.
 
 Namespace: `analysis`. Keys are listed and read as namespace-relative (`backtest.max_duration_seconds`); logs and
 errors may print the FQN `analysis.<key>`. The `marketdata` namespace's `fundamentals.provider` is read through a
@@ -574,19 +230,19 @@ second watcher.
 | `scoring.shrinkage_days` | int | `250` | Empirical-Bayes shrinkage pseudo-count `k` (in trading days) for the derived headline grade (feature 065); larger `k` → stronger pull toward the neutral 0.5 prior, so a strong grade needs more evidence. Formula is ANALYSIS-2 in `docs/context-constitution.md`. Read via `int_positive`: a stored ≤ 0 reads as the default 250. |
 | `scoring.min_evidence_symbols` | int | `3` | Below this many distinct evidence symbols the derived grade is flagged `provisional`. |
 | `scoring.min_evidence_days` | int | `500` | Below this many total evidence trading-days the derived grade is flagged `provisional`. |
-| `scoring.signal_decay_half_life_hours` | float | `24.0` | Exponential half-life (hours) for age decay of a signal's contribution to the Opportunities queue's `signal_axis` (feature 022); `effective = conviction × source_weight × exp(−ln2/half_life × age_hours)`, age from `ExternalSignal.ingested_at`. **Registered as a config key with server-enforced bounds `[0, 8760]` (feature 161, migration 019 + config-service `SCALAR_BOUNDS_REGISTRY`)** — appears in config-ui with a bounds hint and is settable via `set_config`. Set to `0` to disable decay (min inclusive); the config service rejects a value outside `[0, 8760]` at `SetConfig` (negative values are no longer settable via `SetConfig`, though the reader still tolerates them defensively). A configured `0` is honoured. |
+| `scoring.signal_decay_half_life_hours` | float | `24.0` | Exponential half-life (hours) for age decay of a signal's contribution to the Opportunities queue's `signal_axis` (feature 022); `effective = conviction × source_weight × exp(−ln2/half_life × age_hours)`, age from `ExternalSignal.ingested_at`. **Registered as a config key with server-enforced bounds `[0, 8760]` (feature 161, migration 019 + config-service `SCALAR_BOUNDS_REGISTRY`)** — appears in config-ui with a bounds hint and is settable via `set_config`. Set to `0` to disable decay (min inclusive); the config service rejects a value outside `[0, 8760]` at `SetConfig` (negative values are no longer settable via `SetConfig`, though the reader still tolerates them defensively). |
 | `scoring.composite_shrinkage_k` | float | `1.0` | Empirical-Bayes pseudo-count `k` for the per-opportunity `composite_score` fusion `(Σwᵢ·sᵢ + 0.5·k)/(Σwᵢ + k)` (feature 199). Deliberately **distinct** from `shrinkage_days` (feature-065 grade, `k` in trading-days): here `k` is dimensionless and equals one axis-weight, so a single maxed axis lands at `0.750` and a corroborated pair at `0.833` (usable `[0.167, 0.833]` band). A configured `0` is honoured (it disables shrinkage). Not seeded by a config-ui migration (code-default only, like the sibling `analysis.scoring.*` keys). |
 | `scoring.composite_weight_readiness` | float | `1.0` | Fusion weight `wᵢ` for the readiness sub-score (identity map of `conviction`) in the `composite_score` blend (feature 199). A configured `0` is honoured: it disables the readiness axis (its weight is omitted, never a zero score). Code-default only (not config-ui-seeded). |
 | `scoring.composite_weight_signal` | float | `1.0` | Fusion weight `wᵢ` for the directional-signal sub-score (`clamp(max_agree)·(1−clamp(max_conflict))`) in the `composite_score` blend (feature 199). A configured `0` is honoured: it disables the signal axis. Code-default only (not config-ui-seeded). |
 | `scoring.symbol_score_decay` | float | `0.5` | Geometric rank-decay γ for the feature-200 symbol_score fold `Σ γ^i·(composite_score × strategy_weight)` (terms sorted DESC). **Read-clamped to `[0, 0.99]`** in `_compute_opportunities` and the heal re-fold — a configured γ≥1 stops the decay / inverts the `@AC-3` saturation ordering. A configured `0` is honoured (it collapses the fold to the top term). Code-default only (not config-ui-seeded), like the sibling `analysis.scoring.*` keys. |
 | `scoring.strategy_weight_floor` | float | `0.5` | Affine grade-weight floor for `strategy_weight = floor + (1−floor)·clamp01(overall_score)` (feature 200); also the neutral weight for a provisional / absent / unattributed grade — never `0`, so an unproven strategy's opportunity still contributes a term (FR-4/`@AC-7`). A configured `0` is honoured. Code-default only (not config-ui-seeded). |
 | `strategy.default_cooldown_days` | int | `31` | Per-strategy default re-entry cooldown in calendar days when `StrategyDefinition.cooldown_days` is unset (feature 069); `31` sits outside the IRS 30-day-each-side wash-sale window. Read via `int_positive`: a platform-wide stored ≤ 0 reads as the default `31` — a per-strategy explicit-`0` (no cooldown) is unaffected because it travels via proto explicit presence, not this config read. |
-| `strategy.default_exit_cooldown_days` | int | `0` | Per-strategy default minimum holding period (calendar days) before `exit_rule` may fire a sell, when `StrategyDefinition.exit_cooldown_days` is unset (feature 116); mirrors `default_cooldown_days` but gates the exit transition. Default `0` (no minimum hold — no wash-sale-style rationale exists for a non-zero default here, unlike the 31-day re-entry default). A configured `0` is a legitimate value and is honoured. |
+| `strategy.default_exit_cooldown_days` | int | `0` | Per-strategy default minimum holding period (calendar days) before `exit_rule` may fire a sell, when `StrategyDefinition.exit_cooldown_days` is unset (feature 116); mirrors `default_cooldown_days` but gates the exit transition. Default `0` (no minimum hold — no wash-sale-style rationale exists for a non-zero default here, unlike the 31-day re-entry default). |
 | `strategy.max_concurrent_entry_backfill` | int | `4` | Semaphore bound on concurrent `ListOrders` calls during the boot-time entry-time backfill pass (feature 116, `app/engine/entry_backfill.py`) — mirrors `analysis.screener.max_concurrent_formula_evals`'s shape. |
 | `engine.eval_interval_seconds` | int | `60` | Live evaluation polling cadence in seconds. Seeded by migration 041 (feature 295); 043 (feature 293) guards and backfills metadata; bounds [30,600]. |
 | `engine.max_strategies_per_cycle` | int | `50` | Max (strategy × symbol) pairs evaluated per cycle. Seeded by migration 041 (feature 295); 043 (feature 293) guards and backfills metadata; bounds [1,1000]. |
 | `engine.alert_throttle_seconds` | int | `300` | Min seconds between alerts per (strategy, symbol) pair |
-| `engine.fundamentals_blend_strategy_id` | string | `fundamentals_macd_blend` | Strategy id the fundamentals-universe force-run rule governs (feature 168). When that strategy is live, it is evaluated/attributed over the fundamentals universe (signals from the `analysis.fundsignal.source_slug` source ∩ symbols with fundamentals data) minus its deny list, instead of its ordinary owner-scoped universe. **Feature 193 hoisted this restriction into the shared `resolve_universe` (`blend_id`/`fundamentals_universe` kwargs) so all three callers honor it uniformly — the live loop, the opportunity queue (`_compute_opportunities`), and the boot entry-backfill; `signal_eligible` is inert for the blend on every caller. Before 193 only the live loop applied it, so the queue over-attributed the blend to off-universe signal/held/watchlist symbols.** Read via `str_nonempty`: a stored empty string reads as the default. Seed migration `026_analysis_engine_blend_keys`. |
+| `engine.fundamentals_blend_strategy_id` | string | `fundamentals_macd_blend` | Strategy id the fundamentals-universe force-run rule governs (feature 168). When that strategy is live, it is evaluated/attributed over the fundamentals universe (signals from the `analysis.fundsignal.source_slug` source ∩ symbols with fundamentals data) minus its deny list, instead of its ordinary owner-scoped universe. **Feature 193 hoisted this restriction into the shared `resolve_universe` (`blend_id`/`fundamentals_universe` kwargs) so all three callers honor it uniformly — the live loop, the opportunity queue (`_compute_opportunities`), and the boot entry-backfill; `signal_eligible` is inert for the blend on every caller.** Read via `str_nonempty`: a stored empty string reads as the default. Seed migration `026_analysis_engine_blend_keys`. |
 | `engine.fundamentals_blend_enabled` | bool | `true` | Kill-switch for the fundamentals-universe force-run (feature 168). Read via `get_bool` (HasField-based — an explicit operator `false` is honored), which disables the override entirely (the governed strategy then resolves its own universe like any other), independent of whether that strategy is live. Seed migration `026_analysis_engine_blend_keys`. |
 | `screener.max_universe_size` | int | `100` | Max symbols a single `ScreenSymbols` scan may cover (feature 060); over-cap requests are truncated |
 | `screener.max_duration_seconds` | int | `120` | Overall deadline for one screener scan |
@@ -655,8 +311,6 @@ second watcher.
 ## Running Tests
 
 ```bash
-uv sync --extra dev   # install deps (including dev) from uv.lock
-uv run pytest         # run all tests
 uv run pytest --cov=app --cov-fail-under=40  # with coverage
 uv run pytest -m real_pg   # only the real-PostgreSQL tests
 ```
@@ -669,8 +323,6 @@ skip locally and fail under `CI=true`.
 
 ## Observability (feature 294-signal-map-instrumentation)
 
-The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed). Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
-
 - INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `fundsignal` (24 h), `opportunity_refresh` (24 h), `readiness_materializer` (24 h), `template_intent_sweep` (300 s) and `pnl_consumer` (event-driven, throttled to one per 60 s); states `idle`, `disabled`. A not-due or lock-held tick writes nothing. `live_loop` keeps `live_loop: cycle complete` and writes no `loop tick ok`.
 - Instruments: `analysis.live_loop.pairs{outcome ok|no_bars|error}`, `analysis.live_loop.drain_failures{source signals|held|watchlist}`, `analysis.live_loop.triggers{trigger entry|exit, outcome throttled|alerted|alert_failed}`, `analysis.live_loop.cycle.duration`, `analysis.fundsignal.signals{outcome emitted|failed}`, `analysis.opportunity.recompute{kind full|retry, outcome ok|failed}`, `template.instantiate{service, outcome}`.
 - Load-bearing log: INFO `fundsignal run summary`.
@@ -678,18 +330,12 @@ The throttles, N, windows and caps below are code constants, not config keys; lo
 
 ## Environment Variables
 
-> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
+> mTLS: requires `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` (fail-closed) — see root `CLAUDE.md` § Environment Variable Naming Convention.
 
 ```text
-GRPC_PORT=50056
-CONFIG_ENDPOINT=xstockstrat-config:50060
-MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
-INDICATORS_ENDPOINT=xstockstrat-indicators:50054
-INGEST_ENDPOINT=xstockstrat-ingest:50055
+# GRPC_PORT and the plain *_ENDPOINT values (config, marketdata, indicators, ingest, ledger, notify): docker-compose.yml
 PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052   # feature 062 — fundamentals signal producer watchlist universe; feature 083 — ListOpportunities held positions
 TRADING_ENDPOINT=xstockstrat-trading:50051       # feature 083 — GetStrategyAnalytics ListOrders "taken" count
-LEDGER_ENDPOINT=xstockstrat-ledger:50057
-NOTIFY_ENDPOINT=xstockstrat-notify:50059
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```

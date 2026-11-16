@@ -10,8 +10,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { transports } from 'winston';
+
 import { FanoutDispatcher } from '../fanout/fanout.js';
-import { install, points } from './fixtures/collectingReader.js';
+import { SendgridSender } from '../fanout/sendgridSender.js';
+import { counterValue, install, points } from './fixtures/collectingReader.js';
+import { fakeCommsgun, type FakeCommsgunOpts } from './fixtures/fakeCommsgun.js';
 import { fakeConfig, type Cfg } from './fixtures/fakeConfig.js';
 import { stubFetch } from './fixtures/stubFetch.js';
 
@@ -25,12 +29,17 @@ describe('fanout test harness', () => {
 // ── Fakes ─────────────────────────────────────────────────────────────────────
 
 /** Construct a dispatcher with the given credential env, then clear the env (constructor read once). */
-function makeDispatcher(env: { slack?: string; sendgrid?: string }, cfg: Cfg): FanoutDispatcher {
+function makeDispatcher(
+  env: { slack?: string; sendgrid?: string },
+  cfg: Cfg,
+  commsgun: ReturnType<typeof fakeCommsgun> = fakeCommsgun(),
+): FanoutDispatcher {
   const prevSlack = process.env.SLACK_WEBHOOK_URL;
   const prevSg = process.env.SENDGRID_API_KEY;
   if (env.slack) process.env.SLACK_WEBHOOK_URL = env.slack; else delete process.env.SLACK_WEBHOOK_URL;
   if (env.sendgrid) process.env.SENDGRID_API_KEY = env.sendgrid; else delete process.env.SENDGRID_API_KEY;
-  const d = new FanoutDispatcher(fakeConfig(cfg));
+  const config = fakeConfig(cfg);
+  const d = new FanoutDispatcher(config, new SendgridSender(config), commsgun);
   // restore
   if (prevSlack === undefined) delete process.env.SLACK_WEBHOOK_URL; else process.env.SLACK_WEBHOOK_URL = prevSlack;
   if (prevSg === undefined) delete process.env.SENDGRID_API_KEY; else process.env.SENDGRID_API_KEY = prevSg;
@@ -194,5 +203,184 @@ describe('FanoutDispatcher delivery telemetry', () => {
         assert.ok(v !== 'signal' && v !== 'analysis', `label value ${String(v)} leaks category/sourceService`);
       }
     }
+  });
+});
+
+// ── Email provider selection (feature 338) ────────────────────────────────────
+
+const SG_URL = 'https://api.sendgrid.com/v3/mail/send';
+const SLACK = 'https://hooks.slack.test/x';
+const ENQUEUE_URL = 'https://comms.ts.example.net/v1/messages';
+const RECIPIENT = 'ops@example.com';
+const APP_KEY = 'k-0123456789abcdef0123456789abcdef';
+const SG_ADDRESSES = { 'fanout.sendgrid_from_email': 'alerts@example.com', 'fanout.sendgrid_to_email': 'ops@example.com' };
+const COMMSGUN_BASE = {
+  'commsgun.enqueue_url': ENQUEUE_URL,
+  'commsgun.app_id': 'xstockstrat-staging',
+  'commsgun.to_email': RECIPIENT,
+};
+
+function providerCfg(mode: string | undefined, str: Record<string, string> = {}): Cfg {
+  return {
+    ...GATE,
+    str: { ...(mode === undefined ? {} : { 'fanout.email_provider': mode }), ...SG_ADDRESSES, ...COMMSGUN_BASE, ...str },
+  };
+}
+
+function provider(mode: string | undefined, opts: { str?: Record<string, string>; commsgun?: FakeCommsgunOpts; slack?: boolean; sendgrid?: boolean } = {}) {
+  const commsgun = fakeCommsgun(opts.commsgun);
+  const dispatcher = makeDispatcher(
+    { slack: opts.slack ? SLACK : undefined, sendgrid: opts.sendgrid === false ? undefined : 'SG.key' },
+    providerCfg(mode, opts.str),
+    commsgun,
+  );
+  return { dispatcher, commsgun };
+}
+
+const sendgridPosts = (f: { calls: Array<{ url: string }> }) => f.calls.filter((c) => c.url === SG_URL);
+
+/** Captures what the real logger writes while `run` executes. */
+async function withLogs(run: () => Promise<void>): Promise<Array<Record<string | symbol, unknown>>> {
+  const captured: Array<Record<string | symbol, unknown>> = [];
+  const original = transports.Console.prototype.log;
+  transports.Console.prototype.log = function (info: Record<string | symbol, unknown>, next: () => void) {
+    captured.push(info);
+    next();
+  };
+  try {
+    await run();
+  } finally {
+    transports.Console.prototype.log = original;
+  }
+  return captured;
+}
+
+describe('FanoutDispatcher email provider', () => {
+  it('@AC-1 sendgrid mode sends one SendGrid email and never queues, even with commsgun configured', async () => {
+    const f = stubFetch();
+    const { dispatcher, commsgun } = provider('sendgrid');
+    await dispatcher.dispatch(makeAlert());
+    assert.equal(sendgridPosts(f).length, 1);
+    assert.equal(commsgun.enqueued.length, 0);
+    f.restore();
+  });
+
+  for (const [name, opts] of [
+    ['the enqueue URL is empty', { str: { 'commsgun.enqueue_url': '' } }],
+    ['the app id is empty', { str: { 'commsgun.app_id': '' } }],
+    ['the recipient is empty', { str: { 'commsgun.to_email': '' } }],
+    ['the app key is absent', { commsgun: { keyKind: 'absent' } }],
+    ['GetSecret has never succeeded', { commsgun: { keyKind: 'unknown' } }],
+  ] as const) {
+    it(`@AC-2 @AC-19 @AC-33 auto behaves as sendgrid when ${name}`, async () => {
+      const f = stubFetch();
+      const { dispatcher, commsgun } = provider('auto', opts as any);
+      await dispatcher.dispatch(makeAlert());
+      assert.equal(sendgridPosts(f).length, 1);
+      assert.equal(commsgun.enqueued.length, 0);
+      f.restore();
+    });
+  }
+
+  for (const mode of ['auto', 'mailgun', undefined]) {
+    it(`@AC-3 @AC-4 mode ${mode} with commsgun ready queues the rendered email and sends nothing itself`, async () => {
+      const reader = install();
+      const f = stubFetch();
+      const { dispatcher, commsgun } = provider(mode);
+      await dispatcher.dispatch(makeAlert({ alertId: 'alert-338', context: { symbol: 'AAPL', conviction: 0.82 } }));
+      assert.equal(f.calls.length, 0);
+      assert.equal(commsgun.enqueued.length, 1);
+      const queued = commsgun.enqueued[0];
+      assert.equal(queued.alertId, 'alert-338');
+      assert.equal(queued.recipient, RECIPIENT);
+      assert.equal(queued.subject, '[ALERT_SEVERITY_WARNING] BUY AAPL');
+      assert.ok(queued.text.includes('Symbol: AAPL') && queued.text.includes('Conviction: 0.82'));
+      assert.equal(await counterValue(reader, 'notify.delivery', 'outcome', 'queued'), 1);
+      f.restore();
+    });
+  }
+
+  it('@AC-25 commsgun mode queues on the base alone, without a key', async () => {
+    const f = stubFetch();
+    const { dispatcher, commsgun } = provider('commsgun', { commsgun: { keyKind: 'absent' } });
+    await dispatcher.dispatch(makeAlert());
+    assert.equal(commsgun.enqueued.length, 1);
+    assert.equal(f.calls.length, 0);
+    f.restore();
+  });
+
+  it('@AC-26 commsgun mode without the base queues nothing, sends nothing, and counts unconfigured', async () => {
+    const reader = install();
+    const f = stubFetch();
+    const { dispatcher, commsgun } = provider('commsgun', { str: { 'commsgun.enqueue_url': '' } });
+    for (const title of ['one', 'two', 'three']) await dispatcher.dispatch(makeAlert({ title }));
+    assert.equal(commsgun.enqueued.length, 0);
+    assert.equal(f.calls.length, 0);
+    assert.equal(await counterValue(reader, 'notify.delivery', 'outcome', 'unconfigured'), 3);
+    f.restore();
+  });
+
+  for (const mode of ['sendgrid', 'auto', 'commsgun']) {
+    it(`@AC-23 a commsgun-category alert is never emailed in mode ${mode}, and Slack still gets it`, async () => {
+      const f = stubFetch();
+      const { dispatcher, commsgun } = provider(mode, { slack: true });
+      await dispatcher.dispatch(makeAlert({ category: 'commsgun', sourceService: 'xstockstrat-notify' }));
+      assert.equal(sendgridPosts(f).length, 0);
+      assert.equal(commsgun.enqueued.length, 0);
+      assert.equal(f.calls.length, 1);
+      assert.match(f.calls[0].url, /hooks\.slack\.test/);
+      f.restore();
+    });
+  }
+
+  it('@AC-40 a failed enqueue in auto is counted, logged once, and sent through SendGrid once', async () => {
+    const reader = install();
+    const f = stubFetch();
+    const { dispatcher, commsgun } = provider('auto', { commsgun: { enqueue: 'reject' } });
+    const logs = await withLogs(() => dispatcher.dispatch(makeAlert()));
+    assert.equal(commsgun.enqueued.length, 1);
+    assert.equal(sendgridPosts(f).length, 1);
+    assert.equal(await counterValue(reader, 'notify.delivery', 'outcome', 'enqueue_error'), 1);
+    const warns = logs.filter((r) => r[Symbol.for('level')] === 'warn');
+    assert.equal(warns.length, 1);
+    assert.equal(warns[0].channel, 'commsgun');
+    assert.equal(warns[0].alertId, 'alert-1');
+    f.restore();
+  });
+
+  it('@AC-40 a failed enqueue in commsgun mode is counted and logged once, with no SendGrid email', async () => {
+    const reader = install();
+    const f = stubFetch();
+    const { dispatcher } = provider('commsgun', { commsgun: { enqueue: 'reject' } });
+    const logs = await withLogs(() => dispatcher.dispatch(makeAlert()));
+    assert.equal(f.calls.length, 0);
+    assert.equal(await counterValue(reader, 'notify.delivery', 'outcome', 'enqueue_error'), 1);
+    assert.equal(logs.filter((r) => r[Symbol.for('level')] === 'warn').length, 1);
+    f.restore();
+  });
+
+  it('dedup precedes the insert: the same alert twice is queued once (020 @AC-5)', async () => {
+    const f = stubFetch();
+    const { dispatcher, commsgun } = provider('auto');
+    await dispatcher.dispatch(makeAlert());
+    await dispatcher.dispatch(makeAlert());
+    assert.equal(commsgun.enqueued.length, 1);
+    f.restore();
+  });
+
+  it('@AC-18 no log line carries the recipient, the title, the key or the URL', async () => {
+    const f = stubFetch(500);
+    const logs = await withLogs(async () => {
+      for (const [mode, enqueue] of [['auto', 'reject'], ['commsgun', 'reject'], ['sendgrid', 'resolve']] as const) {
+        const { dispatcher } = provider(mode, { commsgun: { enqueue } });
+        await dispatcher.dispatch(makeAlert({ title: 'AAPL breakout' }));
+      }
+    });
+    assert.ok(logs.length >= 3, 'the failure paths log');
+    const dump = JSON.stringify(logs);
+    for (const secret of [RECIPIENT, 'AAPL breakout', APP_KEY, ENQUEUE_URL]) {
+      assert.ok(!dump.includes(secret), `leaked: ${secret}`);
+    }
+    f.restore();
   });
 });
