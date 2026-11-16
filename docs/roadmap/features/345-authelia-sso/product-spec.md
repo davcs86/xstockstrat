@@ -28,8 +28,9 @@ signature/`iss`/`aud`/`exp` checks, and creates no session. On success it calls 
 the ID token's `iss`, `sub` and `email`, and then receives the **existing** session token pair (identity-minted
 access JWT + identity-backed refresh token, signed with env `JWT_SECRET` per IDENTITY-1) for the resolved user. The
 session-cookie, middleware, header-propagation (`x-user-id`, `x-access-scope`, `x-trace-id`) and refresh paths are
-unchanged. The login page keeps a "Remember me" checkbox next to "Sign in with SSO". Its value travels in the OIDC
-`state`, and the callback passes it to `setSessionCookies` exactly as the password path does today (UI-8).
+unchanged. The login page keeps a "Remember me" checkbox next to "Sign in with SSO". Its value, and the post-login
+redirect, travel bound to the OIDC `state`: they are stored in the encrypted, httpOnly SSO-transaction cookie keyed
+by the random `state` value (owner decision 2026-11-16). The callback passes it to `setSessionCookies` exactly as the password path does today (UI-8).
 
 FR-2. **MCP as a resource server.** In SSO mode (FR-14), `xstockstrat-agent` accepts **only** Authelia-issued JWT access tokens on its MCP
 endpoint. A token passes only if all of these hold, against Authelia's cached JWKS:
@@ -38,8 +39,10 @@ endpoint. A token passes only if all of these hold, against Authelia's cached JW
 - `exp` is in the future;
 - `aud` equals `AGENT_PUBLIC_URL` (RFC 8707; the single source of the expected audience, IDENTITY-4/AGENT-8).
 
-Any failure returns HTTP 401 with a `WWW-Authenticate` header pointing at the agent's RFC 9728 protected-resource
-metadata. That metadata names Authelia as the authorization server. The agent stops accepting identity-minted OAuth
+Any token defect (signature, `iss`, `exp`, `aud`, unknown key while Authelia's keys are reachable) returns HTTP 401
+with a `WWW-Authenticate` header pointing at the agent's RFC 9728 protected-resource metadata. When the token's key
+cannot be judged because Authelia's signing keys cannot be fetched, the agent returns HTTP 503 without
+`WWW-Authenticate`, the same contract as an identity outage (owner sign-off 2026-11-16). That metadata names Authelia as the authorization server. The agent stops accepting identity-minted OAuth
 tokens. It issues no tokens and keeps no per-request state (`instance_count > 1` stays safe). Clients are
 pre-registered in Authelia; there is no dynamic client registration. Authelia is configured to include the `email`
 claim in access tokens (spike item), and the agent never logs a token or its `email` claim.

@@ -127,3 +127,12 @@
     routes.
   - R-13: the metadata builder is in `oauth_metadata.py`, not `main.py`.
   - R-14: a local mTLS fault returns 401, while an outage returns 503.
+
+## Session 2026-11-16 — sdd-design round 1 gate
+
+- Round 1: 16 decisions settled, 9 alternatives rejected, 18 objections (6 blocking: O-1..O-6), no Floor breach.
+- Owner decisions at gate 1:
+  - Run round 2.
+  - **Approved deviation from FR-2:** an unfetchable JWKS with an unknown `kid` returns 503 without `WWW-Authenticate`; token defects stay 401. FR-2 is amended.
+  - **Approved:** remember-me and the redirect are bound to `state` through the encrypted SSO-transaction cookie. FR-1 is amended.
+  - **Chosen:** `openid-client` v6 for the UI OIDC flow (closes O-13).
