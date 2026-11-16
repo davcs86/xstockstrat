@@ -173,7 +173,7 @@ C-12: this file uses no domain object (colours and published constants only), so
 
 ### Step 3 — docs: feasibility gate on the 12 candidate values
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/342-chart-series-palette/`
 **Files**:
 - `docs/roadmap/features/342-chart-series-palette/context.md` — modify (one appended entry)
@@ -551,4 +551,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 2 — RED method and Verification run shape
 - **Spec said**: RED with `ciede2000` stubbed to return 0 (Step 1's file already exists); Verification items 2-4 each in a fresh shell at the repo root.
 - **Actual**: RED stubbed `ciede2000` with a temporary `return 0;` in `colorVision.cjs`, ran item 1, then restored the file with `git checkout --`; the stub was never committed. Items 2-4 ran in one log, each in its own `( cd services/xstockstrat-ui && … )` subshell joined with `&&`.
+- **Disposition**: mechanical. The commands are unchanged.
+
+### Step 3 — Verification run shape
+- **Spec said**: three Verification items, each in a fresh shell at the repo root.
+- **Actual**: the three items ran in one log, each in its own subshell, joined with `&&`. Item 1's gate command was unchanged, and items 2 and 3 ran from the repo root. Item 2's byte-identity check was a separate `grep -cxF` of the run's `C` literal against `context.md`, which matched exactly 1 line.
 - **Disposition**: mechanical. The commands are unchanged.

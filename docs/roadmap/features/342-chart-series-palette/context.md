@@ -39,9 +39,9 @@ Targets marked "design step" use the design's numbering; see the map in Decision
 
 - [ ] **O-24 (C-11), before Step 1.** Have the operator confirm that "Confirmed" (floors) and "Agreed" (approval) answered this feature's questions; ask at `/sdd-execute` Phase-2 confirmation. If either belonged to a peer feature, D-27/D-28, the FR-4 and @AC-5 amendments, the design approval and Steps 3 and 5 reopen. (Originally targeted at `/sdd-spec` boot; not resolved there or at impl-spec review.)
 - [ ] Routing risk (round 4): the steer and the relayed user request disagreed on item 8, and relayed items 1-10 read like answers for peer features; the orchestrator should check that its question numbering reached the right features — part of O-24.
-- [ ] The feasibility gate may fail (one shared 12-value set clearing five distance floors and 3:1 on two dark cards is tight); stop and escalate to the operator, no per-theme fallback, no lowered floor; only a reorder of the same 12 values is allowed — target: Step 3 (design step 2).
-- [ ] The 12 colour values are the spec author's pick, not the operator's; the operator has not seen or chosen them. If no order passes, the feature is blocked until the operator decides — target: Step 3.
-- [ ] The gate has only been dry-run against the probe's maths, not the real `colorVision.cjs` — target: Step 3.
+- [x] The feasibility gate may fail (one shared 12-value set clearing five distance floors and 3:1 on two dark cards is tight); stop and escalate to the operator, no per-theme fallback, no lowered floor; only a reorder of the same 12 values is allowed — target: Step 3 (design step 2). Step 3 (2026-11-16): `GATE PASS` in the spec's order, no reorder.
+- [ ] The 12 colour values are the spec author's pick, not the operator's; the operator has not seen or chosen them. If no order passes, the feature is blocked until the operator decides — target: Step 3. Step 3 (2026-11-16): the gate passed, so no escalation was needed; the operator still has not seen the values.
+- [x] The gate has only been dry-run against the probe's maths, not the real `colorVision.cjs` — target: Step 3. Step 3 (2026-11-16): run against the real `colorVision.cjs`; the minima equal the probe's to two decimals.
 - [x] Machado matrices and the four Lab pins are not transcribed from source (D-21); the authors' page reset the connection in two sessions. The executor transcribes from the source or stops and asks the operator (P-03); probe numbers are advisory until then — target: Steps 1-2.
   - Step 1 (2026-11-15): the Machado half is done. Under the operator's Option B, both matrices were transcribed from colour-science 0.4.7 `machado2010.py`, and they equal the cross-check values. The four Lab pins remain open, target: Step 2.
   - Step 2 (2026-11-16): the Lab pins are done. They were computed with colour-science 0.4.7 using the Lindbloom matrix and its row-sum white. This was the orchestrator's Option A, under the operator's "colour-science 0.4.7 (Recommended)" choice. The values match the cross-check values; see the Deviation Log entry "Step 2 — Lab pin source (D-21)". D-21 transcription is closed for Steps 1-2.
@@ -63,6 +63,7 @@ Service/UI source (by step):
 
 - Step 1: `services/xstockstrat-ui/src/styles/themes/colorVision.cjs` (created), `services/xstockstrat-ui/src/styles/themes/checkThemeBundle.cjs` (`nonSharedTokens` added to `module.exports`).
 - Step 2: `services/xstockstrat-ui/src/styles/themes/colorVision.test.ts` (created).
+- Step 3: none (it appends the gate record to `context.md` only).
 
 SDD artifacts, all under `docs/roadmap/features/342-chart-series-palette/`:
 
@@ -410,3 +411,36 @@ Unresolved items carried into execution. `/sdd-execute` announces each one still
   - The RED method and the Verification run shape.
   - Full detail is in the Deviation Log.
 - Still open: O-24, which gates Steps 3 and 5.
+
+## Session 2026-11-16 — sdd-execute sequential (step 3)
+
+### Feasibility gate — series palette values (Step 3)
+
+The Step 3 command was run verbatim from `services/xstockstrat-ui/` against the committed `colorVision.cjs` (tree `dd6269c73`). The 12 values were in the spec's order; no reorder was needed. The full output (exit=0):
+
+```text
+deuteranopia adjacent: 28.51 (floor 10)
+protanopia adjacent: 28.88 (floor 10)
+deuteranopia non-adjacent: 11.94 (floor 5)
+protanopia non-adjacent: 11.73 (floor 5)
+normal all pairs: 22.96 (floor 10)
+staging contrast vs --card: 3.37 (floor 3)
+staging contrast vs --background: 3.80 (floor 3)
+production contrast vs --card: 3.34 (floor 3)
+production contrast vs --background: 3.74 (floor 3)
+collisions with nonSharedTokens: 0 (must be 0)
+GATE PASS
+```
+
+The `C` array literal that passed, byte for byte. Step 4 copies the 12 values from this block:
+
+```js
+["rgb(135 240 30)", "rgb(165 0 255)", "rgb(255 150 165)", "rgb(165 90 0)", "rgb(60 210 255)", "rgb(0 135 105)", "rgb(105 240 210)", "rgb(165 150 0)", "rgb(15 120 150)", "rgb(240 225 165)", "rgb(210 45 90)", "rgb(120 150 255)"]
+```
+
+### Step 3 — docs: feasibility gate on the 12 candidate values [done]
+- Ran the gate. Every minimum met its floor, collisions were 0, and it printed `GATE PASS`. The result is recorded in the entry above. TDD: N/A (docs step). Config-key wiring gate: N/A, because no config key is touched.
+- O-24 assumption: this step ran with O-24 still open. The set passes the confirmed floors, and those floors are a superset of the one alternative design named (adjacent-only), so this verdict holds under either outcome. If O-24 resolves to different floors, rerun the gate and append a superseding entry (Step 3 item 5). O-24 still gates Step 5.
+- Verification: exit=0. The gate printed `GATE PASS` and the collisions line read `0`. The heading was found at `context.md:417`, the array matched byte for byte, and `git status --porcelain services/` was empty (`.sdd-logs/v-2.log`).
+- Files modified: `docs/roadmap/features/342-chart-series-palette/context.md`.
+- Deviations: the Verification run shape, which is mechanical. Full detail is in the Deviation Log.
