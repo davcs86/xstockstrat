@@ -76,8 +76,9 @@ test.describe('Account halt indicator + admin Resume', () => {
 
     // In place (never a reload): the halt indicator and the Resume action are gone.
     await expect(row.getByText('Halted', { exact: true })).toHaveCount(0, { timeout: 30000 });
-    // The confirm flow leaves the row menu mounted (Radix keeps it open on select-preventDefault);
-    // reset it before re-opening so the trigger click isn't blocked by the still-open menu.
+    // The confirm flow leaves the row menu open (select-preventDefault), blocking the trigger click.
+    // Escape reaches the menu only once the closing dialog has left the layer stack.
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Actions for Halted Alpaca' }).click();
     await expect(page.getByRole('menuitem', { name: 'Resume' })).toHaveCount(0);

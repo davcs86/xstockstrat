@@ -859,3 +859,13 @@ Feature: fix-symbol-page-alerts-ui (bug fix)
 ## Session 2026-11-16 — operator confirmation of the regenerated promotion plan (orchestrator)
 
 - Asked: confirm the corrected plan above (12 scenarios, verbatim, tags kept, new file under `services/xstockstrat-ui/acceptance/`)? **Operator, verbatim: "Confirm both (Recommended)".** This confirms the last `sdd-batch-promotion-plan` block (P-04).
+
+## Session 2026-11-16 — integration PR e2e failures
+
+- PR #1550 "Frontend E2E (shard 2/2)": 3 failed / 307 passed. All three reproduced locally on the branch tip (`b41b96bc4`); none is a product defect; fixed in the specs only, no animation disable.
+- `trader/orders.spec.ts` `@AC-10` and `trader/account-resume.spec.ts` `@AC-3` — one root cause. Both flows keep the row menu open (`onSelect` `preventDefault`) under a confirm `AlertDialog`, and the spec pressed Escape right after Confirm to close the menu. Since Step 9 the dialog plays a 100 ms exit animation and stays in the Radix dismissable-layer stack until it ends, so that Escape went to the closing dialog and the modal menu stayed open: `body` kept `pointer-events: none` (`<html> intercepts pointer events`) and the page stayed `aria-hidden` (the trigger was not found by role).
+  - Measured: after Confirm the overlay is `data-state="closed"`, `animation-name: exit`, `0.1s`, and is unmounted within about 200 ms, so the overlay is not stuck and `animationend` fires. With Escape sent early: 1.5 s later menu `open`, body `pointer-events: none`, no dialog. With Escape sent after the dialog detached: menu closes and body pointer-events clear at once.
+  - Not a user-facing lock: one raw mouse click outside closes the menu and restores pointer events; the next click reaches the target. The menu staying open after Confirm predates this feature (both specs already said so).
+  - Fix: `await expect(page.getByRole('alertdialog')).toHaveCount(0)` before the Escape (the form `account-selector.spec.ts` already uses).
+- `theme/theme-bundle.spec.ts` `@AC-7` shell banner — stale ARIA snapshot. Steps 14+15 made the default-mock bell badge `5` by design (design.md, "default badge 5"); `shell.aria.yml` still held `"2"`. Snapshot updated to `"5"`; no other line needed to change.
+- Observation, not changed: after a confirmed row action the row menu stays open and absorbs the user's next click (`RowActionsMenu`, `OrdersTable`).
