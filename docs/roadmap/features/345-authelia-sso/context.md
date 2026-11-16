@@ -160,3 +160,20 @@
   - Chose to run round 6 on the round-5 additions.
 - Spec line 216 and FR-15 amended.
 - Round 6: the adversary rated it SOUND. O-55..O-60 were folded into D-61..D-65. The orchestrator verified jose 5.10.0 (JWTExpired.payload; signature checked before claims) and radix checkbox 1.3.11 (native form submission, unchecked by default). Accepted residual risk: a stolen access token that expired less than 14 days ago can force a 'log out everywhere' for its owner (matches the defect report's Expected section). Register: 65 decisions (D-45 superseded), 22 rejected alternatives, 0 open objections.
+
+### 2026-11-16 — /sdd-design round 7 (final consolidated design + holistic review)
+
+- The proposer consolidated D-1..D-65 into the design.md draft and ran seam check v2 (S-1..S-11). The adversary found no Floor breach and no register violation. Its verdict was "approvable without another adversarial round" once 9 gaps (O-61..O-69) are folded in.
+- Settled D-66..D-76:
+  - validity of the issuers and `APP_URL` is computed once, pinned by a shared vector file, and logout never redirects to an invalid issuer;
+  - `APP_URL` is wired into compose and Playwright;
+  - `isSameOrigin` is new code;
+  - the agent checks `iss`, requires `sub`, and rejects an unverified foreign `iss` before key lookup;
+  - the Configuration cache is keyed by secret hash with a 600 s TTL;
+  - dropped settled details are restored verbatim;
+  - metrics are typed per event, and `sso_login_failed` carries a reason;
+  - callback latency is an accepted residual, under the authorization-code lifespan invariant;
+  - runbook rollback order and cross-repo back-channel reachability are added;
+  - the txn cookie is `secure`, and callback error logging is scrubbed.
+- Spec text fixes were applied to product-spec.md and acceptance.feature: the SSO checkbox label, the 23505 re-classify wording, FR-15 in the SSO-mode list, `/start` POST-only (GET → 405), the Affected Services additions, the `unlink-sso` script entry, the reader lists, the secret seed sentinel, MCP-only refresh in Risks, the AC-24 foreign-key row and the AC-47 wording. `/sdd-review product-spec` must re-run (P-03).
+- P-2, a petition to reopen D-52 (Origin check on logout against same-site sibling apps), awaits the owner.

@@ -117,7 +117,7 @@ Feature: authelia-sso
     Given identity/auth.password_login_enabled is false in staging
     When AuthenticateUser is called with email "admin@localhost" and the correct password
     Then it returns PERMISSION_DENIED with "password login disabled"
-    And the staging login page shows the "Sign in with SSO" button and the "Remember me" checkbox and no password field
+    And the staging login page shows the "Sign in with SSO" button and the "Keep me signed in for 14 days (SSO)" checkbox and no password field
 
   @AC-17 @FR-9
   Scenario: Password login works again when the flag is turned on
@@ -185,6 +185,7 @@ Feature: authelia-sso
       | state "s-999"                            |
       | an ID token whose nonce is "n-000"       |
       | an ID token whose aud is "other-client"  |
+      | an ID token signed by a key not in Authelia's JWKS |
 
   @AC-25 @FR-3
   Scenario: Concurrent first logins create one account
@@ -218,7 +219,7 @@ Feature: authelia-sso
 
   @AC-29 @FR-1
   Scenario: Remember me survives the SSO round trip
-    Given the user ticks "Remember me" and clicks "Sign in with SSO" on the staging login page
+    Given the user ticks "Keep me signed in for 14 days (SSO)" and clicks "Sign in with SSO" on the staging login page
     When Authelia completes the login for subject "a1b2"
     Then the session cookies carry Max-Age=1209600 and the "remember_me=1" marker is set
     And a later cookie rotation keeps Max-Age=1209600
@@ -338,7 +339,7 @@ Feature: authelia-sso
   @AC-47 @FR-14
   Scenario: The SSO routes are inert outside SSO mode
     Given staging ui/oidc.issuer is "https://auth.example.test" and agent/oidc.issuer is ""
-    When a client requests "/api/auth/sso/start" and "/api/auth/sso/callback?code=c1&state=s1"
+    When a client POSTs "/api/auth/sso/start" from the same origin and GETs "/api/auth/sso/callback?code=c1&state=s1"
     Then both return HTTP 404 with no redirect
     And no row is written to identity.users or identity.external_identities
 

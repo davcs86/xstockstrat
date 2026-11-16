@@ -28,7 +28,7 @@ signature/`iss`/`aud`/`exp` checks, and creates no session. On success it calls 
 the ID token's `iss`, `sub` and `email`, and then receives the **existing** session token pair (identity-minted
 access JWT + identity-backed refresh token, signed with env `JWT_SECRET` per IDENTITY-1) for the resolved user. The
 session-cookie, middleware, header-propagation (`x-user-id`, `x-access-scope`, `x-trace-id`) and refresh paths are
-unchanged. The login page keeps a "Remember me" checkbox next to "Sign in with SSO". Its value, and the post-login
+unchanged. The login page shows a "Keep me signed in for 14 days (SSO)" checkbox next to "Sign in with SSO". Its value, and the post-login
 redirect, travel bound to the OIDC `state`: they are stored in the encrypted, httpOnly SSO-transaction cookie keyed
 by the random `state` value (owner decision 2026-11-16). The callback passes it to `setSessionCookies` exactly as the password path does today (UI-8).
 
@@ -62,8 +62,8 @@ resolves in this order:
      - `ambiguous email`: several rows match.
 
   Link and create are a single atomic write keyed on `(issuer, subject)` (IDENTITY-13). Concurrent first logins for one
-  subject therefore yield exactly one link and at most one created user. A unique-constraint race maps through
-  `mapDbError` and is retried as step 1 (IDENTITY-11). A best-effort, post-commit, allow-listed ledger audit records each
+  subject therefore yield exactly one link and at most one created user. A raw unique-constraint race (`23505`), or a
+  link write that affected zero rows, is re-classified once from step 1, *before* `mapDbError` (IDENTITY-11). A best-effort, post-commit, allow-listed ledger audit records each
   link and create through `auditSafe` (IDENTITY-7). Its payload is `user_id`, `issuer` and `outcome` only, with no email
   and no token. A ledger outage never fails the login. Each environment resolves against its own `identity.users`;
   prod and staging never share links.
@@ -175,14 +175,15 @@ config rows. Each deployment runs in exactly one mode, chosen by its own config,
   - `/accounts/authorized-apps` lists and revokes those grants.
 
   The new RPCs, table and keys exist but are unused.
-- **SSO mode**: both issuers are set. FR-1, FR-2, FR-7, FR-8 and FR-11 apply (FR-3/4/5 are reached only through
+- **SSO mode**: both issuers are set. FR-1, FR-2, FR-7, FR-8, FR-11 and FR-15 apply (the "Sign out" button itself is shown in both modes) (FR-3/4/5 are reached only through
   them; FR-10 applies in both modes). The agent rejects identity-minted tokens,
   and its legacy OAuth routes answer 404, so a deployment never accepts both token kinds at once.
 - **Cutover for one deployment** is a config change only: set the `ui.oidc.*` and `agent.oidc.issuer` keys, then set
   `auth.password_login_enabled` to `false`. Clearing the two issuers returns that deployment to legacy mode (the MCP
   rollback path; redeploying the previous release remains possible).
-- Outside SSO mode (legacy or half-configured), `/api/auth/sso/start` and `/api/auth/sso/callback` return 404, start no
-  flow, and never call `ResolveExternalIdentity`.
+- Outside SSO mode (legacy or half-configured), a POST to `/api/auth/sso/start` and a GET to `/api/auth/sso/callback`
+  return 404, start no flow, and never call `ResolveExternalIdentity`. `/start` is POST-only: a GET returns 405 in every
+  mode.
 - A half-configured deployment (exactly one issuer set) is treated as legacy mode on both surfaces, and the agent and
   UI each log `sso_mode_misconfigured` once per process start.
 
@@ -203,10 +204,11 @@ config rows. Each deployment runs in exactly one mode, chosen by its own config,
 
 ## Affected Services
 
-- `xstockstrat-identity`: `ResolveExternalIdentity` (SAN-gated), `external_identities`, email sync, the password-login
-  gate.
-- `xstockstrat-ui`: OIDC login, callback and "Remember me"; the login page per the flag; the `/accounts/authorized-apps`
-  page.
+- `xstockstrat-identity`: `ResolveExternalIdentity` and `IssueSessionForUser` (both SAN-gated), `external_identities`,
+  email sync, the password-login gate; the table `manage-users.py unlink-sso` deletes from.
+- `xstockstrat-ui`: OIDC login, callback and the SSO "keep me signed in" checkbox; the login page per the flag; the
+  `/accounts/authorized-apps` page; the SSO logout redirect (FR-15) and the shared-header "Sign out" button; the
+  `/api/oauth/{protected-resource,authorization-server}` discovery routes; the middleware public/cookie-gated path sets.
 - `xstockstrat-agent`: JWKS validation, protected-resource metadata, resolved-identity stamping, scope narrowing, the
   role cache.
 - `xstockstrat-config`: seed migration `050`, and a `SECRET_CALLER_ALLOWLIST` grant (`src/grpc/authz.ts`, PLAT-9):
@@ -216,7 +218,7 @@ config rows. Each deployment runs in exactly one mode, chosen by its own config,
 ## Consumer Surface(s)
 
 - [x] **UI** (`xstockstrat-ui`), SSO mode unless noted (legacy mode is otherwise unchanged, FR-14; the exceptions, owner sign-off 2026-11-16, are a "Sign out" button in the shared header in both modes, and logout with an expired session answering JSON instead of a redirect):
-  - The login page (`src/app/auth/login`, shared by `/trader`, `/insights` and `/config-ui`) gets a "Sign in with SSO" button next to the "Remember me" checkbox. The password form is shown only when the flag
+  - The login page (`src/app/auth/login`, shared by `/trader`, `/insights` and `/config-ui`) gets a "Sign in with SSO" button next to a "Keep me signed in for 14 days (SSO)" checkbox. The password form is shown only when the flag
     is on.
   - The page reads the mode and the flag server-side (today it is a `'use client'` page rendering `CredentialsForm`).
     An unreadable config renders the legacy login: password form, no SSO button.
@@ -225,7 +227,7 @@ config rows. Each deployment runs in exactly one mode, chosen by its own config,
   - `/accounts/authorized-apps` becomes a pointer to Authelia (FR-11).
 - [x] **Agent** (`xstockstrat-agent`): every MCP tool's authentication and effective scope changes; no tool name,
   parameter or response changes. Connector setup moves to pre-registered read-only and full clients.
-- [x] **Script**: `scripts/manage-users.py update-email`.
+- [x] **Script**: `scripts/manage-users.py update-email` and `unlink-sso`.
 
 ## Proto Contract Changes
 
@@ -262,7 +264,8 @@ environment, because prod and staging are separate Authelia apps.
   - empty means legacy mode (FR-14): no SSO button, and today's password login;
   - readers:
     - `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcConfig` (new), called by the login page,
-      `src/app/api/auth/sso/start/route.ts:GET` and `src/app/api/auth/sso/callback/route.ts:GET` (new). One-shot
+      `src/app/api/auth/sso/start/route.ts:POST`, `src/app/api/auth/sso/callback/route.ts:GET` (new), the logout route,
+      `/accounts/authorized-apps` and the two `src/app/api/oauth/*` discovery routes. One-shot
       `GetConfig(namespace: 'ui')` per request, live on the next request.
     - `services/xstockstrat-agent/app/auth.py:sso_mode` (new), for the half-configured check (FR-14), through
       `read_config_value('ui', 'oidc.issuer')`. This requires adding `ui` to `WATCHED_NAMESPACES`
@@ -272,11 +275,13 @@ environment, because prod and staging are separate Authelia apps.
   - same reader and mechanism as `ui.oidc.issuer`: `src/lib/oidcConfig.ts:loadOidcConfig`, one-shot per request,
     live on the next request.
 - `ui.oidc.client_secret`
-  - namespace `ui`, stored key `oidc.client_secret`, `string`, encrypted `is_secret` row, seeded empty;
+  - namespace `ui`, stored key `oidc.client_secret`, `string`, encrypted `is_secret` row, seeded with the `[redacted]`
+    sentinel and a NULL ciphertext, which `GetSecret` reports as `found=false` (unset);
   - code default `""`: empty in SSO mode means the callback fails with "SSO not configured" (fail closed);
-  - sole reader `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcClientSecret` (new), called only by
-    `src/app/api/auth/sso/callback/route.ts:GET`, through `GetSecret` on each callback via the allow-list grant above.
-    A rotated value applies on the next callback. It is redacted at every other edge.
+  - reader `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcClientSecret` (new), called by
+    `src/app/api/auth/sso/start/route.ts:POST`, `src/app/api/auth/sso/callback/route.ts:GET` and the logout route, through
+    `GetSecret` via the allow-list grant above. A rotated value applies on the next request (the cached OIDC
+    Configuration is keyed on the secret's hash). It is redacted at every other edge.
 - `ui.oidc.mcp_client_id` and `ui.oidc.mcp_client_id_readonly`
   - namespace `ui`, stored keys `oidc.mcp_client_id` / `oidc.mcp_client_id_readonly`, `string`, code default `""`
     (an empty value hides that line on the card);
@@ -290,8 +295,8 @@ environment, because prod and staging are separate Authelia apps.
       protected-resource metadata builder in `services/xstockstrat-agent/app/main.py`. All read through
       `read_config_value('agent', 'oidc.issuer')` (AGENT-9; `agent` is in `WATCHED_NAMESPACES`), live through the
       snapshot.
-    - `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcConfig`, for the half-configured check (FR-14):
-      a one-shot `GetConfig(namespace: 'agent')` per request, live on the next request.
+    - `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcConfig`, for the half-configured check (FR-14) and the
+      protected-resource document (`src/app/api/oauth/protected-resource/route.ts`): a one-shot `GetConfig(namespace: 'agent')` per request, live on the next request.
 
 The expected MCP audience is `AGENT_PUBLIC_URL`. No new key duplicates it (AGENT-6/AGENT-8).
 
@@ -354,7 +359,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
   `SEED_USER_ID`.
 - **Statelessness (insights.md, 072, FR-B13).** The role cache is per instance. It stays correct with
   `instance_count > 1` only because it is bounded by its TTL and fails closed.
-- **Dependency on the edge.** Authelia down blocks new web logins and token refreshes; issued tokens and sessions keep
+- **Dependency on the edge.** Authelia down blocks new web logins and MCP token refreshes (web session refresh goes through identity only); issued tokens and sessions keep
   working until they expire.
 
 ## Open Questions

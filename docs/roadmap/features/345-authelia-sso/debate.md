@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (the owner authorized more than 5 rounds if necessary — context.md 2026-11-15)
-**Rounds run**: 6
+**Rounds run**: 7
 
 ## Rounds
 
@@ -14,6 +14,7 @@
 | 4 | 2026-11-16 | /sdd-design | 13 | 3 | 11 | 11 | 0 | yes |
 | 5 | 2026-11-16 | /sdd-design | 10 | 3 | 11 | 11 | 1 | yes |
 | 6 | 2026-11-16 | /sdd-design | 5 | 2 | 6 | 6 | 0 | yes |
+| 7 | 2026-11-16 | /sdd-design | 11 | 0 | 9 | 9 | 1 | yes |
 
 ## Settled Decisions
 
@@ -84,6 +85,17 @@
 | D-63 | 6 | **SignOutButton details** (RF-4, RF-5; O-58, O-59).<br>• `size-11 sm:size-8`, `aria-label="Sign out"`.<br>• `fetch(..., {redirect:'manual'})` inside try/catch. A rejection, a non-ok response, or an `opaqueredirect` all go to `location.assign('/auth/login')`; `pending` never sticks.<br>• A mobile e2e at 375 px on `/trader` asserts `scrollWidth <= clientWidth` and that the button is in the viewport. If that fails, the button moves into the mobile offcanvas sheet below `sm`. | `PlatformHeader.tsx:202,246-253`, `button.tsx:35`, `trader/AppShell.tsx:20-26` | settled |
 | D-64 | 6 | **Test plan for logout and SSO forms** (O-55, RF-6, D-58).<br>• "RevokeToken called iff signature-valid" is asserted in the route unit test, with `revokeToken` mocked.<br>• e2e checks only that cookies are cleared and that navigation goes to the end-session or portal URL, via a `page.route()` intercept on the stub Authelia host. No cross-process counter (C-18).<br>• Stub discovery fixtures go in `e2e/fixtures/` and `INVENTORY.md` (C-12).<br>• The radix uncontrolled checkbox starts unchecked (`rcb index.mjs:35`). e2e intercepts the `/start` body: `remember=1` only when checked.<br>• `_mock_conn` gains a `fetchall` side effect (lookup rows, then DELETE RETURNING rows). | `e2e/global-setup.ts:29`, `test_manage_users.py:59-60` | settled |
 | D-65 | 6 | **Configuration cache and URLs** (O-56, O-57). `getOidcConfiguration` reads GetSecret with `AUTH_CONFIG_TIMEOUT_MS`. The cache stores only resolved Configurations and drops rejected promises (unit case: "rejected discovery is not cached"). Every app URL is built with `new URL('/auth/login', APP_URL).href`, both for `post_logout_redirect_uri` and in `autheliaPortalLogoutUrl`. | — | settled |
+| D-66 | 7 | **Validity is computed once** (S-5, O-61; extends D-27/D-41).<br>• `loadOidcConfig` checks both issuers (D-27 rules) and `APP_URL` (absolute https, or http on loopback, no path) once and returns `'sso'` with `valid: false` plus the reason. Surfaces branch on the result, not on their own checks: start/callback → `?error=not_configured`; UI and agent protected-resource → 503 `no-store`; logout → `{ok:true}` with **no** `redirect` + ERROR `sso_issuer_invalid` (required: `SignOutButton` does `location.assign(body.redirect)`); the login page still renders the SSO button; the card omits the Authelia link.<br>• The TS and Python validators are pinned to one vector file, `scripts/testdata/oidc-issuer-vectors.json` (precedent: `scripts/testdata/rpc-status-vectors.json`). | `rpc-status-vectors.json` | settled |
+| D-67 | 7 | **`APP_URL` wiring** (O-61). It is added to the `docker-compose.yml` UI block and to `playwright.config.ts` `webServer.env` with the same origin as `baseURL`, and to the UI `CLAUDE.md` env table. Today it is set only in `.do/app.yaml:650`, `.do/app.dev.yaml:647` and `deploy/homelab/compose.yml:283`. | `playwright.config.ts:139-168`; fails.md:398 | settled |
+| D-68 | 7 | **`isSameOrigin` is new** (O-62), in `src/lib/sameOrigin.ts`. It compares `req.headers.get('origin')` exactly to `new URL(APP_URL).origin`, never to `req.nextUrl.origin`. Unit cases: missing, `null`, matching, different port, different scheme. | — | settled |
+| D-69 | 7 | **Agent claim checks** (O-63, S-10).<br>• Before any key lookup, these return 401: a missing `kid`; an `alg` outside the asymmetric allow-list, HS256 or `none`; and an **unverified** `iss` ≠ `agent/oidc.issuer`.<br>• The decode passes `issuer=agent_issuer` and `options={"require": ["exp","iss","aud","sub"]}`. `sub` must be a non-empty `str`, otherwise 401 `invalid_token`.<br>• Each is a `test_sso_auth.py` case; AC-23 row 1 stays 401 during a JWKS outage. | PyJWT 2.15.0 | settled |
+| D-70 | 7 | **Configuration cache key** (O-64; extends D-65). The key is `(issuer, clientId, sha256(secret))` with TTL `OIDC_DISCOVERY_FRESH_S = 600` (UI fixed invariant, same value as the agent's `_DISCOVERY_FRESH_S`). Unit case: "rotated secret → new Configuration". | — | settled |
+| D-71 | 7 | **Binding detail is restated verbatim in design.md** (O-65): the D-31 cooldown branch with no running task (`last_fetch_ok` and ≤ STALE_MAX → 401, otherwise 503); the D-32 LINK predicate `u.user_id=$3`; the D-19 sync `SET email = lower($2)`; the D-40 "near-expiry + failing refresh passes through" test; the D-54 `safeRedirect` case `/trader/../..//evil.com`; the D-34 stub knob `signWith:'foreign'`; the D-59 stub knobs `endSession` and `requireHint`; D-27's issuer rules applied by the UI too. | — | settled |
+| D-72 | 7 | **Metrics, typed** (S-7, O-66).<br>• `recordAuthEvent` gets a per-event type map: `'logout'` carries only `LogoutReason` and `'jwt_rejected'` only `JwtRejectReason`. The shared key-loading helper never records `jwt_rejected` on the logout path.<br>• `sso_login_failed` carries a closed `reason` equal to the D-41 `?error=` code (7 values, no identifiers, `@AC-41 @feature-294`-safe).<br>• Both are pinned in `bffAllowlist.test.ts` and added to the runbook signal list.<br>• No D-n authorized the `ui.auth.events` members `sso_login_ok`, `sso_login_failed`, `sso_login_error` and `login_disabled`, nor `IssueSessionForUser` → `NOT_FOUND` for a missing user; both are adopted here. | `bffMetrics.ts:20,47` | settled |
+| D-73 | 7 | **Callback latency** (S-6; corrects D-37's note, not a REOPEN). The worst case is about 60–70 s, accepted as a residual with no overall deadline (C-18). Invariant: the steps before the code exchange (mode, secret and discovery, ≤ 30 s worst case) stay under Authelia's authorization-code lifespan (default about 1 min; confirmed in the spike). Caddy `reverse_proxy` sets no response timeout. | — | settled |
+| D-74 | 7 | **Runbook and cross-repo additions** (O-67, O-68).<br>• Roll back config (clear the issuers, set the flag `true`) **before** reverting code.<br>• After rollback, SSO-CREATED users need `manage-users reset-password` (D-6).<br>• Residual: on a cut-over deployment, a config outage gives the legacy render (AC-46) with no working password login.<br>• Cutover pre-check: the app VM resolves and reaches `auth.<domain>` for discovery, token and JWKS calls.<br>• homelab-edge: back-channel egress from the app VM is a `TODO(verify)`, and any Authelia rate-limit zone must exempt the app VM's single source IP. | — | settled |
+| D-75 | 7 | **Security nits** (O-69). The txn cookie sets `secure: isProduction` like `setSessionCookies` (`auth.ts:53-54`). The callback's error path logs only the error class, never the `code`, the ID token, the token-response body or the email; a unit test asserts it. | `auth.ts:53-54` | settled |
+| D-76 | 7 | **Seam check v2 adopted** (S-1..S-4, S-8, S-9, S-11). The SSO checkbox label is "Keep me signed in for 14 days (SSO)" (S-1). The canonical `/start` and callback orders are fixed (S-2, S-3). AC-24 gains the foreign-key row (S-4). D-62 governs the exempt sets (S-9). The product-spec and acceptance text was fixed this round; `/sdd-review product-spec` re-runs (P-03). | — | settled |
 | D-13 | 1 | **Fixed constants** (60 s role TTL, JWKS freshness, cooldown, fetch timeout) stay in code with the "Fixed invariant (F-07)" comment form. They are not config keys. | `client.py:39-47` | settled |
 
 ## Rejected Alternatives (locked)
@@ -179,6 +191,15 @@
 | O-58 | 6 | SignOutButton has no rejection path, so `pending` sticks. | no | closed @ round 6 (D-63) |
 | O-59 | 6 | Possible mobile header overflow on `/trader`. (C-17) | no | closed @ round 6 (D-63) |
 | O-60 | 6 | Unverified or over-age logouts leave no trace. | no | closed @ round 6 (D-61) |
+| O-61 | 7 | `APP_URL` is not wired in compose or Playwright; an unset value makes `new URL` throw. (C-01, fails.md:398) | no | closed @ round 7 (D-66, D-67) |
+| O-62 | 7 | `isSameOrigin` reads as existing code but is new. (P-03) | no | closed @ round 7 (D-68) |
+| O-63 | 7 | The agent never checks `iss` or requires `sub`. (FR-2, AC-23) | no | closed @ round 7 (D-69) |
+| O-64 | 7 | The Configuration cache key is unspecified; a rotated secret would break every exchange. | no | closed @ round 7 (D-70) |
+| O-65 | 7 | The draft dropped settled D-31/D-32/D-19/D-40/D-54/D-34/D-59/D-27 details. | no | closed @ round 7 (D-71) |
+| O-66 | 7 | `sso_login_failed` carries no reason. | no | closed @ round 7 (D-72) |
+| O-67 | 7 | Rollback order, CREATED-user passwords, config-outage residual, and Risks text. | no | closed @ round 7 (D-74; Risks text fixed) |
+| O-68 | 7 | Back-channel reachability and the shared source IP vs the rate limit. | no | closed @ round 7 (D-74) |
+| O-69 | 7 | Txn cookie `secure`; callback error logging. | no | closed @ round 7 (D-75) |
 
 ## Reopen Petitions
 
@@ -186,3 +207,4 @@
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
 | P-1 | 5 | D-45 | Owner steer during round 5: "Redirect to the authelia's logout endpoint seems the most logical solution." | user reopened |
+| P-2 | 7 | D-52 | Adversary round 7: D-51 requires the Authelia session-cookie domain to cover the `APP_URL` host, so sibling homelab apps on `*.<domain>` are same-site and their POSTs carry Lax cookies. A compromised sibling could force a logout plus a "log out everywhere" revoke. O-44/D-52 only considered cross-site. Proposed fix: reject logout only when an Origin header is present and differs from the `APP_URL` origin (`auth.spec.ts:307` sends none). Nuisance-level. | pending user |
