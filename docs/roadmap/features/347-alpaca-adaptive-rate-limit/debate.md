@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-16 | /sdd-design | 14 | 8 | 10 | 13 | 0 | yes |
 | 2 | 2026-11-16 | /sdd-design | 7 | 3 | 14 | 11 | 0 | yes |
+| 3 | 2026-11-16 | /sdd-design | 3 | 2 | 8 | 11 | 0 | yes |
 
 ## Settled Decisions
 
@@ -37,6 +38,9 @@
 | D-19 | 2 | User steer (gate): the spread-skip rule is accepted. A spread slot later than the caller's latest send time (D-15) is not waited for; the request is sent at once while the window still has local quota, consuming one unit. FR-2 is amended accordingly. | context.md 2026-11-16; O-15 | settled |
 | D-20 | 2 | User steer (gate): on `ErrRateLimited`, `CancelOrder` returns `Unavailable` and leaves the order and its local state as they were (no local CANCELED write), and `ReplaceOrder` leaves no stored Rejected intent, so an identical retry really retries. Each has a test. A rate-limited submit stays REJECTED with `order.broker_rejected` (the error text carries "rate limited"); this and the `client_order_id` replay are documented in the trading `CLAUDE.md`. | `services/xstockstrat-trading/internal/service/trading.go:1383-1429,1526-1589`; context.md 2026-11-16; fails.md:2609 | settled |
 | D-21 | 2 | User steer (gate): bound the background loops. Marketdata's warm-quote and bar-ingest cycles each run under a deadline equal to their interval; trading's fill poller wraps `GetOrder` in `WithTimeout(ctx, brokerCallTimeout)` for Alpaca accounts only. No `brokerCallFloor` helper; IBKR is untouched (FR-7). | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1220,1313`; `services/xstockstrat-trading/internal/service/trading.go:1803-1822,2079`; context.md 2026-11-16 | settled |
+| D-22 | 3 | Final core surface (`alpacapace`): constants `Window` 60 s, `ResetSlack` 5 s, `LowWaterRatio` 10, `BackoffBase` 1 s, `BackoffCap` 8 s, `MaxJitter` 500 ms; `ParseHeaders`, `ParseReset`, `NewPacer`, `(*Pacer).Key/Observe/Reserve/WarnOnce`, `RetryWait`; `Reserve(key, now, latest, jitter)` returns `{Wait, Fits}`. Jitter is drawn by each client from an unexported `jitter` func (test seam) and passed in. A recorded `Reset` is clamped to `now + Window`, and a hold is `min(R − now, Window)` with `Fits` iff `now + hold ≤ latest`, so the fit test and the wait use the same time. Marketdata's `latest` uses a fixed `minAttempt` of 1 s, defined in marketdata's client, not the core. The 90 s no-deadline bound is also checked against the `now` seam so a fake clock can reach it. | D-3, D-4, D-15, D-19; O-29 | settled |
+| D-23 | 3 | Staleness housekeeping in `CancelOrder`: the CANCELED write and the cancel-intent finalize move before the bracket-leg cancels (ledger event and broadcast after them, as today), so one intent covers one broker mutation; the not-cancelable re-read (`reconcileNotCancelable`) uses the same Alpaca-only per-call timeout helper as the fill poller. Residual recorded: at T 10 s with the multiplier at its 1.5 floor, mutation budget plus re-read is 20 s against a 15 s threshold (today that read is unbounded). Resize cancels are IBKR-only and untouched. | `services/xstockstrat-trading/internal/service/trading.go:1383-1449,3539-3543,3567-3575`; 267 @AC-3/@AC-8 | settled |
+| D-24 | 3 | Scenario and evidence corrections adopted: AC-38 and AC-39 are driven by 429s / a reset 10 s ahead so they fail without the fix; AC-29 asserts 4 REJECTED flatten orders with 4 distinct client order ids and names the 429's headers; AC-13 folds into the budget outline as a row; AC-35 states the partially-filled-parent precondition; the scenarios that hard-code jitter or core arithmetic stay feature-local (not promoted to durable suites). Test fakes: only `fakeReconciliationOrderIntentRepo` must gain a new repo method to compile; the D-20 tests use the map-backed `memIntentRepo`. A pre-existing defect is filed, not fixed: `ReplaceOrder` inserts its intent before `validateTIF`. | `services/xstockstrat-trading/internal/broker/alpaca.go:58`; `internal/service/trading_reconciliation_test.go:827-865`; `internal/service/trading_flatten_rejection_test.go:39-43`; `internal/service/trading.go:1531,1575-1577`; fails.md:3175 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -54,6 +58,8 @@
 | R-9 | 2 | Refuse (fail with a rate-limit error) a caller that cannot wait for its spread slot | Declined by the user (D-19): interactive reads would start failing when quota is merely low, not exhausted. | locked |
 | R-10 | 2 | Leave the rate-limited cancel and replace outcomes unchanged and file a defect | User chose to fix both in this feature (D-20). | locked |
 | R-11 | 2 | A `brokerCallFloor` (IBKR-inclusive, 10 s) timeout in the fill poller, or accepting the loop stalls | Changes IBKR behavior (FR-7); user chose Alpaca-only bounds (D-21). | locked |
+| R-12 | 3 | Deliver D-20 by storing a marked Rejected intent that the classifier re-arms (`UPDATE ... SET state=PENDING WHERE state=REJECTED`) | Needs a repo method, a classifier branch and a marker format; larger than a guarded DELETE, and a missed marker brings back the stale-replay bug. | locked |
+| R-13 | 3 | Put an attempt nonce in the cancel/replace intent id so a retry gets a new id | Breaks TRADING-6: content-identical requests must collapse to one intent. | locked |
 
 ## Objections
 
@@ -84,6 +90,17 @@
 | O-22 | 2 | For a no-deadline marketdata call the proposal let attempts run past W (W + 30 s), relaxing D-8's "attempt capped at the call deadline". | no | closed @ round 2 (D-16: attempts run under the bounded context with cancel-on-close; hard 90 s) |
 | O-23 | 2 | The amended FR-9 gave `throttle` two meanings. | no | closed @ round 2 (D-16 wording) |
 | O-24 | 2 | Missing scenarios: marketdata caller cancel mid-wait; a trading read under a hold with a T deadline; a mutation bounded by a caller deadline shorter than the budget; the jitter-boundary slot. | no | closed @ round 2 (added to the amendment list for design.md) |
+| O-25 | 3 | D-20 cannot be met with existing intent-repository operations (insert, finalize-if-PENDING, reclaim to UNKNOWN, resolve UNKNOWN): finalize replays the stored row, PENDING is refused then blocked as UNKNOWN for good. It needs one new method, `ReleasePendingIntent` = `DELETE ... WHERE intent_id = $1 AND state = PENDING`, the first delete path on `trading.order_intents`; race-safe (same PENDING guard as the sweeper CAS, no FK or trigger, PK allows re-insert) but a lifecycle change to an order-safety table that needs the user's sign-off (P-03). On a failed or lost release the in-memory state must be UNKNOWN to match the DB and the reply must not promise a retry; the WARN carries the intent id; the rule is written into the trading `CLAUDE.md` and the service constitution. | yes | open |
+| O-26 | 3 | AC-38 and AC-39 as written could not fail (C-15; fails.md:3175). | yes | closed @ round 3 (D-24) |
+| O-27 | 3 | D-21's cycle deadline, applied to the whole cycle, lets warm-quote cache writes run on an expired context and still write `loop tick ok` with nothing cached, and rolls back a cycle's bar insert (294 loop-tick rule; fails.md:3180). Fix: apply the deadline to the vendor calls only and keep DB writes on the loop context. This refines the wording of settled D-21, so it needs the user. | yes | open |
+| O-28 | 3 | The release-failure path was unspecified and left memory and DB split (P-03). | yes | closed @ round 3 (folded into O-25's required behavior) |
+| O-29 | 3 | The `Reserve` hold row tested `R ≤ latest` but waited `min(R − now, Window)`, so a reset 60–65 s ahead would send before the reset. | yes | closed @ round 3 (D-22) |
+| O-30 | 3 | After the D-23 reorder a bracket cancel can take up to the budget for the parent plus the budget for each leg (60 s at defaults) before returning; a caller may time out on a cancel that already succeeded (the retry safely replays the stored result). Option: bound each leg cancel by `broker.timeout_ms` through the same Alpaca-only helper. | no | open |
+| O-31 | 3 | The proposal's list of test fakes needing the new method was wrong (C-01). | no | closed @ round 3 (D-24) |
+| O-32 | 3 | The fill poller, `reconcileTick` and `syncPositions` all run on a T deadline, so under D-19 they always skip spreading; the largest steady consumer of the trading quota is never spread. | no | closed @ round 3 (recorded as an accepted consequence of D-19 and D-21 in design.md Open Risks) |
+| O-33 | 3 | AC-29 and AC-19 were ambiguous or untestable under a fake clock; AC-13 no longer pinned anything on its own. | no | closed @ round 3 (D-22, D-24) |
+| O-34 | 3 | The "budget + T < S" claim for the not-cancelable re-read fails at the clamp row (T 10 s, ×1.5) and leaves a 1 s margin at T 1 s, ×3.0. | no | closed @ round 3 (D-23 records the residual) |
+| O-35 | 3 | New FR-11 (loop bounds) adds a requirement to an approved spec (P-04). | no | closed @ round 3 (it makes the user's D-21 steer concrete; recorded at the gate) |
 
 ## Reopen Petitions
 
