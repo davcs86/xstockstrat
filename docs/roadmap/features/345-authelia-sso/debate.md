@@ -14,7 +14,7 @@
 | 4 | 2026-11-16 | /sdd-design | 13 | 3 | 11 | 11 | 0 | yes |
 | 5 | 2026-11-16 | /sdd-design | 10 | 3 | 11 | 11 | 1 | yes |
 | 6 | 2026-11-16 | /sdd-design | 5 | 2 | 6 | 6 | 0 | yes |
-| 7 | 2026-11-16 | /sdd-design | 11 | 0 | 9 | 9 | 1 | yes |
+| 7 | 2026-11-16 | /sdd-design | 12 | 0 | 9 | 9 | 1 | yes |
 
 ## Settled Decisions
 
@@ -96,6 +96,7 @@
 | D-74 | 7 | **Runbook and cross-repo additions** (O-67, O-68).<br>• Roll back config (clear the issuers, set the flag `true`) **before** reverting code.<br>• After rollback, SSO-CREATED users need `manage-users reset-password` (D-6).<br>• Residual: on a cut-over deployment, a config outage gives the legacy render (AC-46) with no working password login.<br>• Cutover pre-check: the app VM resolves and reaches `auth.<domain>` for discovery, token and JWKS calls.<br>• homelab-edge: back-channel egress from the app VM is a `TODO(verify)`, and any Authelia rate-limit zone must exempt the app VM's single source IP. | — | settled |
 | D-75 | 7 | **Security nits** (O-69). The txn cookie sets `secure: isProduction` like `setSessionCookies` (`auth.ts:53-54`). The callback's error path logs only the error class, never the `code`, the ID token, the token-response body or the email; a unit test asserts it. | `auth.ts:53-54` | settled |
 | D-76 | 7 | **Seam check v2 adopted** (S-1..S-4, S-8, S-9, S-11). The SSO checkbox label is "Keep me signed in for 14 days (SSO)" (S-1). The canonical `/start` and callback orders are fixed (S-2, S-3). AC-24 gains the foreign-key row (S-4). D-62 governs the exempt sets (S-9). The product-spec and acceptance text was fixed this round; `/sdd-review product-spec` re-runs (P-03). | — | settled |
+| D-77 | 7 | **D-52 amendment: logout Origin check** (P-2, owner decision 2026-11-16). The logout route returns 403 with no revoke and no cookie change when an `Origin` header is **present** and differs from `new URL(APP_URL).origin` (D-68 `isSameOrigin` in a "present-only" mode). A request with no Origin header still passes (`auth.spec.ts:307`). Unit cases: absent, matching, sibling `*.<domain>` origin, `null`. | `auth.spec.ts:307` | settled |
 | D-13 | 1 | **Fixed constants** (60 s role TTL, JWKS freshness, cooldown, fetch timeout) stay in code with the "Fixed invariant (F-07)" comment form. They are not config keys. | `client.py:39-47` | settled |
 
 ## Rejected Alternatives (locked)
@@ -207,4 +208,4 @@
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
 | P-1 | 5 | D-45 | Owner steer during round 5: "Redirect to the authelia's logout endpoint seems the most logical solution." | user reopened |
-| P-2 | 7 | D-52 | Adversary round 7: D-51 requires the Authelia session-cookie domain to cover the `APP_URL` host, so sibling homelab apps on `*.<domain>` are same-site and their POSTs carry Lax cookies. A compromised sibling could force a logout plus a "log out everywhere" revoke. O-44/D-52 only considered cross-site. Proposed fix: reject logout only when an Origin header is present and differs from the `APP_URL` origin (`auth.spec.ts:307` sends none). Nuisance-level. | pending user |
+| P-2 | 7 | D-52 | Adversary round 7: D-51 requires the Authelia session-cookie domain to cover the `APP_URL` host, so sibling homelab apps on `*.<domain>` are same-site and their POSTs carry Lax cookies. A compromised sibling could force a logout plus a "log out everywhere" revoke. O-44/D-52 only considered cross-site. Proposed fix: reject logout only when an Origin header is present and differs from the `APP_URL` origin (`auth.spec.ts:307` sends none). Nuisance-level. | user reopened |

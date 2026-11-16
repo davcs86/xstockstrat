@@ -177,3 +177,4 @@
   - the txn cookie is `secure`, and callback error logging is scrubbed.
 - Spec text fixes were applied to product-spec.md and acceptance.feature: the SSO checkbox label, the 23505 re-classify wording, FR-15 in the SSO-mode list, `/start` POST-only (GET → 405), the Affected Services additions, the `unlink-sso` script entry, the reader lists, the secret seed sentinel, MCP-only refresh in Risks, the AC-24 foreign-key row and the AC-47 wording. `/sdd-review product-spec` must re-run (P-03).
 - P-2, a petition to reopen D-52 (Origin check on logout against same-site sibling apps), awaits the owner.
+- Owner gate (round 7): **run round 8**, and **adopt P-2**. D-52 is reopened and amended by D-77: logout rejects a request with 403 when its Origin header is present and is not the `APP_URL` origin.
