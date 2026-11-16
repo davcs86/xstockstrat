@@ -46,3 +46,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Focus fallback: **"Main content region (Recommended)"** (D-6).
 - C-16 promotion: **"Approve in advance (Recommended)"** — a new durable suite `services/xstockstrat-ui/acceptance/fix-row-menu-stays-open.feature`, tagged `@feature-350`, no existing suite edited; the plan is generated from the feature branch after execution and the exact text listed in the PR.
 - No steer text was given with "Run another round"; round 2 takes the open objections (O-4, O-10, O-11), the per-site shape of D-5 and the React 19 ref dependency.
+
+## Session 2026-11-16 — sdd-design round-2 gate (operator answers, verbatim options)
+
+- Round 2 ran: adversary verdict NEEDS WORK, no Floor breach, "third round not needed"; register delta D-10..D-14, R-8..R-10, O-12..O-18, petition P-1 (REOPEN O-8: the D-3 guard test cannot fail in Chromium).
+- Design approval: **"Run round 3"** — option text: "Another proposer/adversary round with the petition accepted." The design is NOT approved. P-1 → `user reopened`; O-8 → reopened @ round 3.
+- Button names: **"Unique names (Recommended)"** — orders "Actions for order {orderId}", strategies "Actions for {strategyId}" (closes O-15).
