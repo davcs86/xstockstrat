@@ -1,3 +1,5 @@
+> Distilled 2026-11-15 by /sdd-distill. Full pre-distill session prose is in git history (before this commit).
+
 # Context: backtest-inline-backfill
 
 **Feature**: `docs/roadmap/features/343-backtest-inline-backfill/feature.md`
@@ -6,10 +8,792 @@
 
 ---
 
-## Session 2026-11-15 — sdd-story
+## Decisions
 
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from an operator report (staging, homelab, with screenshots) and same-day read-only recon.
-- Operator decisions (2026-11-15): backfill the **missing range only**; after completion show a **re-run action** (no automatic re-run); **try to open the action to everyone**; if that requires a lot of changes, **replace the section with strategy scores only, default "not enough data", no actions at all**.
-- Interpretation (mine): "Yes to the rerun action" answered a recommendation of inline progress + a "data ready, re-run" state over automatic re-run; read as accepting that. "The section" in the fallback is read as the Backtests card on the symbol page; confirm in design.
-- @AC-7 and @AC-8 are mutually exclusive — design picks FR-6 or FR-7 and the losing scenario is struck, not renumbered.
-- Recon facts: `page.tsx:1226-1240` (insufficient-data callout), `:1405-1415` (panel trigger: no range, BARS, 1Day, admin-only UI), `hooks/useBacktest.ts:19-23` (`useTriggerBackfill`), `insightsBff.ts:86-88` (BFF `forward`, no admin gate), ingest `servicer.py:417-425` (`admin scope required`), analysis `servicer.py:1578` (gap = prefix start → window start).
+Binding register: `debate.md` (State `approved`; D-1…D-28 settled, D-5 superseded by D-8 and D-21 by D-22; R-1…R-15 locked; O-1…O-31 closed, O-32 and O-33 still `open`; P-1 and P-2 `user reopened`). Chosen approach: `design.md` § Chosen Approach. Steps and § Assumptions made at /sdd-spec (1–12): `implementation-spec.md`. The lines below are what those files do not carry, plus a one-line index.
+
+**Operator rulings (all 2026-11-15; quotes are verbatim)**
+
+- sdd-story: backfill the **missing range only**; after completion show a **re-run action** (no automatic re-run); **try to open the action to everyone**; if that requires a lot of changes, **replace the section with strategy scores only, default "not enough data", no actions at all**. Interpretation (the story author's, not operator words): "Yes to the rerun action" answered a recommendation of inline progress + a "data ready, re-run" state over automatic re-run and was read as accepting that; "the section" in the fallback was read as the Backtests card on the symbol page.
+- Recorded verbatim at sdd-review product-spec:
+
+  OPERATOR DECISIONS (binding, recorded 2026-11-15):
+  - Backfill only the missing range reported by the backtest, not full history.
+  - After the backfill completes show a re-run action; do not re-run automatically.
+  - Try to open the backfill action to every authenticated user. If that requires a lot of changes, replace the section with strategy scores only, defaulting to 'not enough data' with no actions at all.
+  - The operator set the fallback but not the threshold for 'a lot of changes': the design must present the cost of opening the trigger to non-admins at the design gate rather than choose silently.
+
+- Design gate, applied in round 3: tier **T1** chosen and the FR-7 fallback declined; the request range is widened (G-2 → D-8, amends FR-2/@AC-2 and the first decision above); the insights strategy button is opened to non-admins (G-3 → D-10); the request-count exposure is accepted and answered by raising `backfill.max_concurrent_jobs`, not by a per-user cap.
+- Design gate, applied in round 4: concurrency option **B**; the insights Backfills create form stays admin-only; the lock-breach counter belongs to feature 341; 200 bars on DigitalOcean and 1000 bars on the homelab; config values are read over the MCP (relayed item 5, "Use the mcp to read the values"); the lowest-friction handling on ALREADY_EXISTS.
+- Relayed with round 5: "1. Approved", "2. Confirmed", "3. Sign-off the change, amend it", "4. There are no production instances. Staging is enough." Only item 4 was applied as a decision (D-24, homelab config steps target staging only); the questions items 1–3 answer were not in that step's input, so none was mapped to a register row.
+- Design gate approval (round 5), verbatim "Agreed": the round-5 design is approved, including the petitioned D-21 reopen. The lock-setting raise step becomes a read-only check, and the computed inequality is the stop (this answers O-32: only a failed lock inequality stops the homelab rollout).
+- Relayed with the sdd-design / sdd-spec / impl-review runs: "1. Agreed", "2. Ok, agreed.", "3. I plan to do psql over ssh if possible.", "4. Confirmed", "5. Yes, fix the primitives. Use the switch component from Shadcn.", "6. Sounds good". The questions were not in those steps' input and the batch covers four features, so items 1, 2, 4 and 6 are mapped to nothing; item 3 is read as the access route for the runbook's Postgres read (spec Assumption 2); item 5 is not about this feature.
+- Relayed in round 3 and left unmapped: item 6 "Accept it, option A" (not assumed to answer the concurrency option, because the request numbers answers across six features; the operator later chose option B), item 7 "update all pages" and item 9 "Expand the fetches. Add a metric…" (answered in round 4 by D-15/D-16: `insights/backfills/page.tsx` stays admin-only, the counter is feature 341's), item 10 (per-row and clear-all buttons; read as another feature's).
+- Execute directives ("Use MCP tools if possible in 341 and 343.", "max_locks_per_transaction assume what homelab-edge has", "max_connections are now love."): kept verbatim in the last session below. They supersede Step 16's `SHOW max_locks_per_transaction` read and the "PR #79 merged but not applied" precondition.
+
+**Design (index; text is in `design.md` / `debate.md`)**
+
+- FR-6, not FR-7: a tier-T1 self-serve envelope on ingest `TriggerBackfill` with eight conditions (D-11) and first-failed-condition denial tokens (D-18, D-25); admin behaviour unchanged; no proto change, no ingest schema migration.
+- Self-serve-only per-symbol de-dup in one transaction under `pg_advisory_xact_lock`, ALREADY_EXISTS without the other job's id (D-9, D-19, R-4); card copy "A backfill for {symbol} is already queued or running. Try again when it finishes.", button stays enabled, no link or polling (D-20, D-27).
+- Symbol card requests `gap.start` through the backtest window end under GAPS_ONLY (D-8), keeps its own `jobId` in local state, manual re-run only (D-2), "No vendor data for {range}" on a same-gap second insufficient result (D-7), two PARTIAL copy branches (D-12).
+- Insights strategy button opened to non-admins with the exact gap; non-admins send GAPS_ONLY, admins keep FULL (D-10, R-5). `insights/backfills/page.tsx` stays admin-only and unchanged (D-15). No lock-breach counter here; the merge waits on feature 341 (D-16).
+- New key `ingest` / `backfill.self_serve_max_range_days`, default and seed 730 (D-17); `backfill.max_concurrent_jobs` keeps default and seed 3 (D-14, option B). Homelab staging only is set to 8 jobs and 1830 days by a runbook subsection in `docs/runbooks/config-rollout.md` after a lock-inequality check (D-22, D-23, D-24, D-26). No lock-parameter raise in this feature; nothing in homelab-edge is edited.
+- Rejected (R-1…R-15), chiefly: deleting the gate outright, automatic re-run, the FR-7 fallback, any lock-parameter raise in this feature.
+- Constitution rules touched: C-05, C-08, C-10, C-11, C-12, C-13, C-14, C-15, C-16, C-18, F-07, P-02, P-03, P-06, PLAT-4, PLAT-N1. Floor breaches: none in any round. Adversary verdicts: NEEDS WORK (rounds 3, 4), SOUND (round 5).
+
+**Process decisions and deviations (only recorded here)**
+
+- @AC-7 and @AC-8 were mutually exclusive; the losing scenario is struck, not renumbered. At /sdd-spec @AC-8 was commented out with its ID reserved, @AC-2 amended (D-8), @AC-9 examples rewritten (D-12), @AC-10…@AC-16 appended.
+- sdd-review product-spec (PASS WITH WARNINGS, 8 warnings, no fails) resolved in-session: @AC-9 added as a Scenario Outline (PARTIAL and CANCELED) on the FR-6 branch; FR-5 now reads "with the job's error when one is reported" (a canceled job may carry none); the C-14 Agent box left unchecked with the reason stated (ticked at /sdd-spec); a per-user backfill limit key, if added, carries the full config-key contract (C-05, F-07); the persona named ("the trader"). @AC-2 and @AC-5 assert a request rather than what the card shows and were left as written on purpose (the range is the point of FR-2).
+- The ingest `TriggerBackfill` admin gate was added deliberately in feature 092 to protect vendor quota (`services/xstockstrat-ingest/tests/test_ingest_servicer.py:362-384`); opening it is the quota exposure the tier decision costs.
+- sdd-design `debate.md` edits: State `in-debate` → `approved`; P-1 and P-2 `pending user` → `user reopened`; no row added or reworded. Deviation from the batch step's wording, which said to mark pending petitions `user declined`: both reopens were accepted by the operator (P-1 by the round-3 widening decision, D-8; P-2 by the round-5 approval, D-22), so `user declined` would misstate the record. During rounds 4 and 5 the P-1 cell was left `pending user` because those rounds gave no verdict row for it.
+- O-32 and O-33 keep status `open` in `debate.md` because the step supplied no status line for them; O-32 is answered by the round-5 approval (above), O-33 is not (see Open Threads).
+- No ledger line was written in any session: the token drift trap is already in `fails.md` (lines 308 and 1516, cited by D-25) and /sdd-spec surfaced no new pattern or trap.
+- /sdd-spec: 16 steps; atomic units are Steps 2+3+4 (config key: seed, reader and tests), 5+6 (ingest gate), 10+11 (UI helper), 12+13 (card and e2e), each on one surface. The drift guard is one JSON file read by three test suites (ingest, UI vitest, agent parity) at `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json`.
+- /sdd-spec discovery ran on `feature/backtest-inline-backfill@42f5e7b2e`; `origin/main-dev@d1c97273b` was 4 commits ahead and not merged (none changes a cited code file); `/sdd-execute` BRANCH SYNC merges it.
+- /sdd-spec findings that correct the design record: `backfill_jobs.has_active_job` does not exist (`debate.md` D-9 cites `backfill_jobs.py:111`, which is the `= ANY(symbols)` predicate in `list_jobs`); Step 5 creates it, and `insert_job` only calls `db_pool.execute`, so a connection can be passed with no signature change. `make_servicer` (`tests/test_ingest_servicer.py:34-62`) builds `cfg` as a `MagicMock`, so the new config attribute must be set as a real int there, and a new `int_positive` read turns `tests/test_config_read_classification.py` red until the key is in `FR3_KEYS`.
+- /sdd-spec findings that close design-time unknowns: `bars_total` is written when the chunk plan is made (ingest `servicer.py:715-716`), so a QUEUED job has none (the zero-denominator case, @AC-14); the PARTIAL and all-chunks-failed FAILED terminal writes carry no `error` (`:739-752`), hence chunk-count copy (@AC-9, @AC-16). The e2e sentinel `strat-insufficient-001` returns a gap equal to the requested window and no `timeframe` or `requestedRange` (`e2e/mock-backend.ts:1073-1097`); Step 13 fixes it with `prefixGapRange`; no `getBackfillStatus` mock exists. The BFF `forward` rethrows the backend `ConnectError` unchanged (`src/lib/bffShared.ts:77-91`) and the agent passes both codes through (`app/tools.py:225-236`), so the denial detail and `ALREADY_EXISTS` reach the caller. Marketdata pool metrics are `marketdata.db.pool.empty_acquire_count` and `marketdata.db.pool.empty_acquire_wait` (`internal/telemetry/otel.go:478-479`); feature 341's counter is `marketdata.ohlcv.out_of_memory_errors` (on its branch only).
+- The batch task text named the directory with a doubled path (`docs/roadmap/features/docs/roadmap/features/343-…`); it was read as this directory.
+- Homelab values read over the MCP on 2026-11-15 (round-4 synthesis): ingest `backfill.max_concurrent_jobs` 3, `backfill.max_concurrent_chunks` 3, `backfill.chunk_window_days` 90; analysis `readiness_materializer.max_concurrent_bars_fetches` 2, `opportunity.max_concurrent_bars_fetches` 2, `opportunity.max_concurrent_candidates` 4, `backtest.portfolio_max_concurrent` 9, `strategy.max_concurrent_entry_backfill` 4, `backtest.max_range_days` 730.
+- Accepted risks (operator or design, no step): one user can queue one in-envelope job per symbol and fill every slot; an admin multi-symbol job blocks self-serve for its symbols for its whole duration (D-20); `jobId`, "Data ready" and the last-filled gap are local state and are lost on reload (D-2); a strategy whose warmup prefix exceeds the span cap is denied self-serve backfill; a refused trigger is also reported by the global mutation-error fallback because `useTriggerBackfill` has no `meta.errorHandled` (left as is, spec Assumption 10).
+
+## Open Threads
+
+- [ ] O-33: the `343@AC-9` rewrite was made on the strength of the round-5 design approval; no operator decision names the scenario on its own, and none of the relayed numbered answers was read as this sign-off — operator, `/sdd-execute` checkpoint.
+- [x] Step 7 edits the durable suite `docs/sdd/business-rules/platform.feature` (an Examples row on `244@AC-6`) before launch, where C-16 normally promotes at launch; accepted by the operator ("Expand it", read as EXTEND) and landed in Step 7.
+- [x] The feature 343 registered-keys entry in `docs/patterns/config-governance.md` points at `docs/runbooks/config-rollout.md` for the homelab `backfill.max_concurrent_jobs` = 8; Step 16 wrote that subsection.
+- [ ] Step 8 touches 6 files (code, two docs, two `strat-lab` skill files) and stays one step unless the operator wants code and docs split (`docs/patterns/strat-lab-plugin.md` requires the skill change in the same PR; Step 9's parity test reads all of them) — `/sdd-execute` checkpoint.
+- [ ] Config migration number `050` is also held by 341 (`050_ui_chart_history_bars`) and 330 (`050_analysis_live_enrich_ttl_reseed`) on their branches (trunk tip is `049`); 343 merges after 341 and renumbers — re-derive at Step 2 and at the integration PR.
+- [x] Step 2 regenerated `scripts/config-wiring-stored.json` against the operator-provided scratch Postgres (Option B). A renumber at the integration PR means regenerating it again.
+- [x] `docs/roadmap/features/merge-order.md` 343 → 341 row exists (`:127`, #1545); Step 1 added 343's remaining shared files to the cohort section. The integration PR still waits for 341.
+- [ ] Peer file overlap, rebase-only: `trader/positions/[symbol]/page.tsx` (339, 341); `e2e/trader/position-detail.spec.ts` (asserts /Backfill coverage panel/ at `:337`), `insights/strategies/[id]/page.tsx`, `e2e/insights/backtest-coverage.spec.ts` (341; this last pair is not in the spec's peer-overlap list); ingest `servicer.py`, `tests/test_ingest_servicer.py`, `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md` (344); `docs/patterns/config-governance.md`, `docs/runbooks/config-rollout.md` (append order) — integration PR.
+- [ ] Runbook (Step 16) reads after the operator directives: `max_locks_per_transaction` = 1024 and `max_connections` = 70 are taken from `homelab-edge` (the second on the orchestrator's reading of "now love" as "live", not verified against the host). Step 16 kept the specified read-only `SHOW max_prepared_transactions;` (psql over ssh, DB-owner DSN as fallback) because no ruling drops it. The operator may still drop that read and confirm the "live" reading — integration PR.
+- [ ] The S ≤ 2 lock bound fails if marketdata gets `DB_POOL_MAX` or more replicas; confirm one replica with `DB_POOL_MAX` unset — runbook step 2 (Step 16).
+- [ ] Admin GAPS_ONLY ranges are uncapped, so `L_stmt_max` is the longest admin range the operator accepts — runbook step 3 (Step 16).
+- [ ] Pre-004 one-day ohlcv chunks would raise L for old ranges; the homelab is asserted to be a fresh deploy, not verified — runbook step 2 (Step 16).
+- [ ] Eight jobs move contention onto marketdata's 2 connections and can slow interactive `GetBars` — runbook step 5 (Step 16).
+- [ ] A rebuilt homelab database reverts to 3 and 730 until the checklist is re-run — runbook checklist line (Step 16).
+- [ ] Whether a `strat-lab` skill text change needs a `plugin.json` version bump: no rule found; the spec assumes none (Assumption 11) — Step 8.
+- [ ] `xstockstrat-ingest` is shared with `344-alert-detail-page` (backfill-failure alert body vs `TriggerBackfill` authorization) — re-check at the integration PR.
+
+## Files Modified
+
+Outside the feature directory:
+
+- `docs/roadmap/features/merge-order.md` — Step 1: one sentence in the "Symbol-page cohort: 339-344" section.
+- `services/xstockstrat-config/migrations/051_ingest_backfill_self_serve_keys.{up,down}.sql`, `scripts/config-wiring-stored.json` — Step 2 (seed and regenerated stored set).
+- `services/xstockstrat-ingest/app/config/watcher.py` — Step 3 (`backfill_self_serve_max_range_days`).
+- `services/xstockstrat-ingest/tests/test_config_watcher.py`, `tests/test_config_read_classification.py` — Step 4.
+- `services/xstockstrat-ingest/app/handlers/servicer.py`, `app/repositories/backfill_jobs.py` — Step 5 (envelope, denial tokens, `_insert_self_serve_job`, `has_active_job`).
+- `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json`, `tests/conftest.py`, `tests/test_ingest_servicer.py`, `tests/test_backfill_jobs.py` — Step 6.
+- `services/xstockstrat-ingest/CLAUDE.md`, `services/xstockstrat-ingest/docs/context-constitution-findings.md`, `docs/patterns/config-governance.md`, `docs/sdd/business-rules/platform.feature` — Step 7 (gate wording, key row, registered-keys entry, `244@AC-6` row).
+- `services/xstockstrat-agent/app/tools.py`, `app/client.py`, `services/xstockstrat-agent/CLAUDE.md`, `docs/runbooks/mcp-tools.md`, `plugins/strat-lab/skills/backtest/SKILL.md`, `plugins/strat-lab/skills/backtest/reference/backfill.md` — Step 8 (self-serve envelope wording for `trigger_backfill`).
+- `services/xstockstrat-ui/src/lib/backtestBackfill.ts`, `src/lib/backtestBackfill.test.ts`, `.github/workflows/ci.yml` (`xstockstrat-ui` filter) — Steps 10+11 (UI helper and its vitest).
+- `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`, `e2e/trader/position-detail.spec.ts`, `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md` — Steps 12+13 (inline backfill on the Backtests card and its e2e).
+- `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` — Step 14 (strategy-page backfill button builds its request with `gapToBackfillRequest`; non-admins send GAPS_ONLY).
+- `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts` — Step 15 (non-admin GAPS_ONLY and admin no-`fillMode` request tests).
+- `docs/runbooks/config-rollout.md` — Step 16 (subsection "Homelab: self-serve backfill capacity (feature 343)").
+
+Feature-directory artifacts:
+
+- `docs/roadmap/features/343-backtest-inline-backfill/feature.md` — created at sdd-story; Summary restated to the D-8 range and Reviewers snapshot gained agent, config and DBA at sdd-spec.
+- `docs/roadmap/features/343-backtest-inline-backfill/product-spec.md` — created at sdd-story; review fixes (FR-5 wording, Agent box reason, config-key contract line, persona); at sdd-spec FR-2 amended, FR-7 marked not taken, Agent and insights surfaces ticked, new config key recorded, `xstockstrat-config` and `xstockstrat-agent` added to Affected Services.
+- `docs/roadmap/features/343-backtest-inline-backfill/acceptance.feature` — created at sdd-story; @AC-9 added at review; at sdd-spec @AC-2 amended, @AC-9 examples rewritten, @AC-8 struck (ID reserved), @AC-10…@AC-16 appended.
+- `docs/roadmap/features/343-backtest-inline-backfill/recon.md`, `design.md` — written at sdd-design.
+- `docs/roadmap/features/343-backtest-inline-backfill/debate.md` — register through round 5; State → `approved`, P-1/P-2 → `user reopened` at sdd-design.
+- `docs/roadmap/features/343-backtest-inline-backfill/implementation-spec.md` — 16 steps at sdd-spec; edited at sdd-review impl-spec (Step 11 `test:coverage` verification, Step 9 agent CI filter, Step 5 Instruction 7, the `config-wiring.test.mjs` claim corrected).
+- `docs/roadmap/features/343-backtest-inline-backfill/status.md` — draft → spec-ready → design-approved → implementation-ready.
+
+## Superseded Sessions
+
+- 2026-11-15 — sdd-story: created feature.md (draft), product-spec.md, acceptance.feature, context.md from an operator report (staging, homelab, with screenshots) and same-day read-only recon; operator decisions and their interpretation are in the header.
+  Recon facts: `page.tsx:1226-1240` (insufficient-data callout), `:1405-1415` (panel trigger: no range, BARS, 1Day, admin-only UI), `hooks/useBacktest.ts:19-23` (`useTriggerBackfill`), `insightsBff.ts:86-88` (BFF `forward`, no admin gate), ingest `servicer.py:417-425` (`admin scope required`), analysis `servicer.py:1578` (gap = prefix start → window start).
+- 2026-11-15 — sdd-review product-spec: approved, draft → spec-ready (PASS WITH WARNINGS, 8 warnings; fixes in the header); recommended design depth full (2 affected services; warning-level overlap). Carried to design and since settled: FR-6 vs FR-7 is the operator's pick at the gate (C-11); "No proto changes" unchecked pending a named FR-7 score source; `coverage_gaps` exists at `packages/proto/analysis/v1/analysis.proto:136`.
+  Overlap (WARN, file-level, no config/proto/migration collision; peers 339–342 and 344 all `draft` then): `page.tsx` with 339 (Research tab Fundamentals card vs Analysis → Backtests card, disjoint regions, second merger rebases); ingest with 344; `xstockstrat-ui` with 341, 342, 344 (different surfaces). `merge-order.md` rows for 052/053/054 cover `ingest.backfill_jobs` and `BackfillJob` field numbers; this feature adds no proto field and no ingest migration.
+- 2026-11-15 — sdd-batch design gate (round 2): full debate halted at its approval gate (policy: halt); `design.md` not written, status unchanged. Register then: D-1…D-7 settled, R-1…R-3 locked, O-1…O-9 closed, O-10…O-18 open. Round-2 best was tier T1 with the card requesting exactly the reported `gap` (D-5, later superseded by D-8); gate questions were the tier (T0 / T1 recommended / T1+ / T1-L / T2 / FR-7; T1+ and T1-L uncosted, O-17), G-2 (widen the range) and G-3 (insights button to GAPS_ONLY).
+  Strongest objection O-12 (blocking, C-15/C-14): switching the insights button (`insights/strategies/[id]/page.tsx:541-547`) to GAPS_ONLY was an unsanctioned change with no @AC; the synthesis kept it FULL through a shared `gapToBackfillRequest(gap, {fillMode})`. Also blocking: O-10 (no `user_id` in the `ingest.backfill.queued` payload; ledger already stamps the owner from `x-user-id` metadata; add a metadata test), O-11 (PARTIAL occurs with zero failed chunks at `servicer.py:739-740`, so two copy branches).
+  Risks then: request-count flooding under T1 (global `backfill.max_concurrent_jobs`, default 3, the only bound); a definition-path re-run can return OK with zero trades unless G-2 is sanctioned; the 730 default is coupled to analysis `backtest.max_range_days` by documentation only. The relayed Q2/Q3 of that batch concerned the alert page and the batch kickoff and reopened nothing here. Resume block (superseded by round 3's):
+_(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-distill under operator sanction, 2026-11-15; it is in git history before the distill commit.)_
+- 2026-11-15 — sdd-batch design gate (round 3): halted after round 3; status unchanged. Register then: D-8…D-13 settled, D-5 reopened by operator steer and superseded by D-8, R-4…R-6 locked, O-10…O-18 closed, O-19…O-25 open, P-1 on D-5 pending user. Operator rulings (header) added de-dup (D-9), the widened range (D-8), the opened insights button (D-10), two PARTIAL branches (D-12) and the concurrency raise (D-13: option A a new seeded default of 6 everywhere; option B keep 3 and set 8 on the homelab through `SetConfig`).
+  Strongest objection O-19 (blocking, C-11/P-03): the lock-budget arithmetic used the DigitalOcean figure (1024 × 25 = 25,600, `docs/runbooks/ohlcv-lock-budget-tuning.md:59-63`) while option B targets the homelab, where nothing under `deploy/` sets `max_locks_per_transaction` or `max_connections` (possibly the stock 64 per connection); the invariant must count all concurrent bars scans and use 30-day chunks. Also blocking: O-20 (the requested lock-breach metric not designed; no service handles SQLSTATE 53200), O-21 (`insights/backfills/page.tsx` unchanged against "update all pages").
+  Non-blocking: O-22 (the 1096 span-cap default was justified by the wrong coupling; the gap length comes from the strategy warmup, not `backtest.max_range_days`), O-23 (one denial message misreports seven of eight conditions), O-24 (de-dup transaction vs `insert_job` taking a pool; emit-after-commit), O-25 (admin multi-symbol job blocks self-serve; no job to follow on ALREADY_EXISTS). Resume block (supersedes round 2's):
+_(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-distill under operator sanction, 2026-11-15; it is in git history before the distill commit.)_
+- 2026-11-15 — sdd-batch design gate (round 4): halted after round 4; status unchanged. Register then: D-14…D-21 settled, R-7…R-11 locked, O-20…O-25 closed, O-19 still open, O-26…O-31 open. Operator answers (header) fixed option B (D-14), denial tokens (D-18), the one-connection de-dup transaction with emit and spawn after commit (D-19), the ALREADY_EXISTS copy (D-20), span cap 730 with span = `prefix_calendar_days(max warmup bars)` + the 366-day card window (666 days at 200 bars, 1825 at 1000 bars → homelab 1830, D-17), and scope (D-15, D-16).
+  D-21's runbook then included raising `max_locks_per_transaction` to 1024 and restarting Postgres before setting 8; superseded in round 5 by D-22 (read-only check). O-19 narrowed: the proposal's worked lock example used S = 25 where backfill alone is 24 and applied L = 248 to every scanner class; the corrected per-class sum was about 6,584 (384 backfill writes + 4,216 full-span readers + 1,984 gap-planning scans), above a stock 64 × 100 = 6,400.
+  Also blocking then: O-26 (C-11; config inputs and the write/read-back go over the homelab MCP, only the three Postgres `SHOW` parameters need the DB-owner DSN). Non-blocking: O-27 (untyped token wire contract), O-28 (wording), O-29 (provisioning checklist with the reverted symptom), O-30 (no de-dup assertion across admin and self-serve), O-31 (whether the 1000-bar homelab requirement is this feature's, and whether `backtest.max_range_days` = 730 caps a 1000-bar warmup prefix). Resume block:
+_(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-distill under operator sanction, 2026-11-15; it is in git history before the distill commit.)_
+- 2026-11-15 — sdd-batch design gate (round 5): halted after round 5; status unchanged. Register then: D-22…D-28 settled, R-12…R-15 locked, O-19 and O-26…O-31 closed, O-32 and O-33 open, P-2 pending user, D-21 superseded by D-22. Lock budget (D-23): capacity is cluster-wide, `max_locks_per_transaction × (max_connections + max_prepared_transactions)` = 1024 × (70 + 0) = 71,680 once homelab-edge PR #79 is applied; the binding bound is `marketdata connections × replicas × L_stmt_max × databases` with marketdata's pool capped at 2 (`pool.go:14,23`; `DB_POOL_MAX` forbidden on pooled homelab services, `render-assert.jq:49`); L = (⌈span ÷ 30⌉ + 1) × 4, largest statement the analysis bar fetch (2,555 days, L = 348, bound 1,392) or an uncapped admin GAPS_ONLY scan (L = 1,000 → 4,000); the unbounded per-class sum is 6,200 per database.
+  Runbook (D-22, D-24, D-26): a homelab subsection in `docs/runbooks/config-rollout.md` next to `:293-297`, staging only: `get_config` reads, read-only `SHOW` of the three parameters (expected 1024, 70, 0), compute the inequality and stop only if it fails (a mismatch is reported as "PR #79 not applied"), `set_config` 8 and 1830 with read-back, watch 341's 53200 counter and marketdata pool-wait for one readiness cycle; reverted symptom is the "limit of 730 days" denial on a 1000-bar warmup and at most 3 jobs running. Later narrowed by the execute directives (last session below).
+  Other closes: D-25 (one frozen 8-token tuple and `_self_serve_denial_detail(token, max_days=None)` next to `_has_admin_scope`, `servicer.py:357`; literals in `src/lib/backtestBackfill.ts`; one shared JSON fixture), D-27/D-28 (de-dup asserted only between two self-serve requests, the admin row asserts QUEUED only; this feature owns 1830 because it owns the key; analysis `backtest.max_range_days` is checked against `request.range` only, `servicer.py:928-935`, and does not cap the warmup prefix). O-32 had two safe readings of "runbook precondition" (resolved by the approval, header); O-33 open (header). Resume block:
+```sdd-batch-design-state
+{
+  "round": 5,
+  "synth": {
+    "approach": "Round 5 best approach: the round-4 design stands in shape (tier T1 envelope with first-failed-condition tokens, self-serve de-dup in one transaction, widened symbol-card range, insights strategy button opened, span cap default and seed 730, concurrency option B). This round changes only the lock-budget statement, the homelab runbook, the token drift guard and three small copy, test and scope points. I checked the adversary's code claims in the working tree and they hold.\n\n**Lock budget (O-19)**\n- Capacity is cluster-wide: `max_locks_per_transaction × (max_connections + max_prepared_transactions)` = 1024 × (70 + 0) = 71,680 once homelab-edge PR #79 is applied.\n- Gap planning does scan the full requested span.\n  - Under GAPS_ONLY, `_plan_work_ranges` passes `request.range` unchanged to marketdata `GetDataCoverage` (`services/xstockstrat-ingest/app/handlers/servicer.py:654-661`).\n  - That runs one `SELECT MIN, MAX, COUNT … WHERE time >= $3 AND time <= $4` (`services/xstockstrat-marketdata/internal/repository/marketdata_repo.go:228-232`).\n  - It runs once per job, before the job's chunks are planned and written (`servicer.py:683`), so planning and chunk writes of one job never overlap.\n- Binding concurrency bound: only marketdata queries `marketdata.ohlcv`, and its pool is capped at 2 connections (`services/xstockstrat-marketdata/internal/repository/pool.go:14,23`). `DB_POOL_MAX` is forbidden on pooled homelab services (`deploy/homelab/render-assert.jq:49`). So S ≤ 2 × marketdata replicas per database.\n- Backstop bound: PgBouncer `pool_size` = 10 per database (operator value). It applies only if the marketdata pool is ever raised.\n- Per-statement L = (⌈span ÷ 30⌉ + 1) × 4. The self-serve cap (1830 days, L = 248) is not the largest statement:\n  - Analysis bar fetch on the homelab: 730-day window plus up to 1825 days of prefix = 2,555 days, L = 348.\n  - Admin GAPS_ONLY coverage scans have no range cap at ingest.\n- Stated bound: `marketdata conns × replicas × L_stmt_max × databases`. At L = 348: 2 × 348 × 2 = 1,392. At L = 1,000: 4,000. Both fit 71,680, and both also fit the pre-PR-#79 budget (64 × 60 = 3,840 only at the L = 348 figure).\n- Unbounded per-class sum, for reference: 17 full-span readers × 248 + 8 jobs × max(248, 3 × 16) = 6,200 per database.\n- No lock-parameter raise is part of this feature.\n\n**Homelab runbook (O-26, O-29)** — new homelab subsection in `docs/runbooks/config-rollout.md`, next to `:293-297`. Config steps target the homelab staging environment only (user: no production instance exists).\n1. Over the homelab staging MCP, `get_config` for ingest `backfill.max_concurrent_jobs`, `backfill.max_concurrent_chunks`, `backfill.chunk_window_days` and the six analysis keys from round 4.\n2. Read-only against the live host over the DB-owner DSN (`docs/runbooks/operator-db-access.md`): `SHOW max_locks_per_transaction`, `SHOW max_connections`, `SHOW max_prepared_transactions`. Expected after PR #79: 1024, 70, 0. Record what is read.\n   - No PgBouncer `SHOW DATABASES`: no access route is named, and `pool_size` is not the binding bound. Cite the operator value 10.\n   - Confirm marketdata runs one replica with `DB_POOL_MAX` unset (`deploy/homelab/compose.yml:128`, `render-assert.jq:49`).\n3. Compute `marketdata conns × replicas × L_stmt_max × databases ≤ mlpt × (mc + mpt)` from the values just read, with L_stmt_max from the longest admin range the operator accepts. Stop if it fails. A value that differs from the expected ones is reported as \"PR #79 not applied\" and does not stop the rollout while the inequality holds.\n4. Over the homelab staging MCP: `set_config ingest backfill.max_concurrent_jobs=8` and `set_config ingest backfill.self_serve_max_range_days=1830`, then `get_config` to read both back.\n5. For one readiness cycle, watch feature 341's 53200 counter and marketdata's `marketdata.db.pool.empty_acquire_wait` and acquired-equals-max (24 chunk writes now contend for 2 connections with interactive `GetBars`).\n- Provisioning-checklist lines in the same subsection:\n  - Re-run step 4 after a database rebuild.\n  - Apply the same two values per environment when a homelab production app is first deployed.\n  - Reverted symptom: the span-denial copy (\"limit of 730 days\") appears on a 1000-bar warmup, and at most 3 jobs run while others stay QUEUED.\n- This feature edits nothing in homelab-edge.\n\n**Denial tokens (O-27)**\n- Ingest: one frozen tuple of the 8 tokens next to `_has_admin_scope` (`servicer.py:357`) and one formatter `_self_serve_denial_detail(token, max_days=None)`.\n- UI: `src/lib/backtestBackfill.ts` holds the prefix and token literals. `triggerErrorMessage` maps `range_too_long` to the span copy and every other or unknown token to the generic copy. No raw token reaches a trader.\n- Drift guard: one checked-in JSON fixture listing the 8 tokens and the detail format, loaded by both the ingest table test and the UI vitest. Its path is chosen at /sdd-spec under the C-13 fixture homes. Two independently pinned literal sets are not adopted, because each test would only check its own side.\n\n**Copy, tests, scope (O-28, O-30, O-31)**\n- ALREADY_EXISTS copy: \"A backfill for {symbol} is already queued or running. Try again when it finishes.\" Same wording in the @AC and its vitest case.\n- De-dup is asserted only between two self-serve requests (a duplicate row and a race row). The admin row asserts QUEUED only. No row pairs an admin job with a self-serve job.\n- This feature owns the homelab value 1830 because it owns the key. Producing 1000-bar warmups is not this feature's work.\n- Analysis `backtest.max_range_days` is checked against `request.range` only (`services/xstockstrat-analysis/app/handlers/servicer.py:928-935`), so it does not cap the warmup prefix.\n\n**Unchanged from round 4**\n- Ingest gate, predicate, de-dup transaction, admin path, no proto change, no ingest schema migration.\n- Config seed migration `051_ingest_backfill_self_serve_keys` (number re-checked at /sdd-spec).\n- UI card, insights strategy button, PARTIAL copy, D-7 memory.\n- Dependency on feature 341 with a merge-order row.\n- Docs list (agent `tools.py`, `mcp-tools.md`, strat-lab reference, key tables, `platform.feature` row).",
+    "open_objections": [
+      {
+        "text": "Stop condition for the homelab rollout: the synthesis makes the computed lock inequality the hard stop and treats a mismatch with the PR #79 values (1024 / 70 / 0) as a reported finding. The operator steer says the Postgres parameters are \"verified … as a runbook precondition\", which can also be read as \"stop until PR #79 is applied\". Confirm the reading at the design gate; both are safe.",
+        "blocking": false
+      },
+      {
+        "text": "343@AC-9 is still a CHANGE with no operator decision that names it. Relayed item 3 (\"Sign-off the change, amend it\") may be that sign-off or may refer to amending D-21; the question numbering is not in this step's input. Confirm at the gate.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "343@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-6",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-7",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-8",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-9",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "270@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "244@AC-6",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "244@AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "198@AC-7",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "198@AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "334@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "334@AC-26",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Raising the homelab `max_locks_per_transaction` as a step of this feature: the operator's homelab-edge PR #79 already sets 1024, and the corrected bound fits without it.",
+      "Bounding lock use by PgBouncer `pool_size × L_max` as the primary bound: marketdata's 2-connection pool is tighter and code-enforced; the PgBouncer bound stays as a backstop only.",
+      "Using L = 248 (the self-serve span cap) as the largest statement: analysis fetches reach 348 and admin coverage scans are uncapped.",
+      "A PgBouncer `SHOW DATABASES` read in the runbook: it needs an admin or stats login the design does not name, and the value is not binding.",
+      "A hard stop on `max_locks_per_transaction < 1024`: it ties the rollout to another repo's apply when the computed inequality already passes on the stock value.",
+      "Two independently pinned token literal sets (ingest test and UI vitest) as the drift guard: each test checks only its own side, so a rename on one side passes CI.",
+      "A token list generated from a single file into both languages: more mechanism than one UI consumer needs; a shared test fixture gives the same guard without codegen.",
+      "Recording the token set only as a constitution contract entry: it documents the coupling but does not fail CI on drift.",
+      "Editing homelab-edge's `deploy-compose-app.md` for the checklist: that is the owner's repo; the checklist lives in this repo's `config-rollout.md`.",
+      "Applying the two homelab values to the homelab production environment now: no production instance exists; a checklist line covers the day it is deployed."
+    ],
+    "open_risks": [
+      "Homelab-edge PR #79 is merged but not applied. The live Postgres values are unread until runbook step 2.",
+      "The S ≤ 2 bound fails if marketdata gets `DB_POOL_MAX` or more replicas; the runbook re-checks both.",
+      "Admin GAPS_ONLY ranges are uncapped, so L_stmt_max is whatever admin range the operator accepts.",
+      "Pre-004 one-day ohlcv chunks would raise L for old ranges; the homelab is asserted to be a fresh deploy, not verified.",
+      "Raising to 8 jobs moves contention onto marketdata's 2 connections and can slow interactive `GetBars`; step 5 watches the pool metrics.",
+      "The marketdata pool metric names come from the adversary's citation of the marketdata CLAUDE.md; I did not open that file.",
+      "Feature 341's 53200 counter lives on its branch; this feature's merge waits on it.",
+      "A rebuilt homelab database reverts to 3 and 730 until the checklist is re-run.",
+      "The shared token fixture is read across two service trees; its home and loading path are set at /sdd-spec.",
+      "Config migration number 050 may collide with a peer feature; re-check at /sdd-spec.",
+      "Peer features 339 (same `page.tsx`), 341 and 344 (ingest) can conflict at merge; re-run the C-16 scan at /sdd-spec.",
+      "One user can still queue one in-envelope job per symbol and fill every slot (accepted by the operator).",
+      "An admin multi-symbol job blocks self-serve for its symbols for its whole duration (accepted).",
+      "Whether `bars_total` is set during a run is unverified; \"Backfilling…\" without a denominator is the fallback copy.",
+      "The `GetBackfillStatus` e2e mock does not exist yet.",
+      "`jobId`, \"Data ready\" and the last-filled gap are local state and are lost on reload (accepted under D-2).",
+      "@AC-9 exists only on the feature branch until the branches are synced."
+    ],
+    "constitution_rules_touched": [
+      "C-05",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-12",
+      "C-13",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-07",
+      "P-02",
+      "P-03",
+      "P-06",
+      "PLAT-4",
+      "PLAT-N1"
+    ],
+    "rationale": "No Floor breach. The adversary's verdict is SOUND, and no blocking objection remains. Seven objections close, and the adversary's non-blocking fixes are folded into the approach.\n\n**Verified this round (working tree)**\n- `pool.go:14,23`: marketdata's pool defaults to 2 connections.\n- `render-assert.jq:49`: a pooled homelab service may not set its pool size.\n- Only `marketdata_repo.go` and `marketdata_service.go` query `marketdata.ohlcv`.\n- `servicer.py:654-661` and `marketdata_repo.go:228-232`: GAPS_ONLY planning scans the full requested range, once per job, before the chunks.\n- Analysis `servicer.py:928-935`: `backtest.max_range_days` is checked against `request.range` only.\n\n**Closed**\n- O-19: the per-class sum is stated (6,200), planning is confirmed to scan the full span, and the bound is corrected to marketdata's pool with PgBouncer as backstop.\n- O-26: config reads and the write and read-back go over the homelab staging MCP; the three Postgres parameters are read-only SHOWs.\n- O-27: one ingest constant and formatter, a shared JSON fixture for both tests, no raw token shown.\n- O-28, O-29, O-30, O-31: adopted as proposed, with the production-instance checklist line added.\n\n**Register**\n- D-21 step 4 (\"raise to 1024 first\") is contradicted by this round's operator steer (\"no lock-setting raise is needed before the cap raise\"). I record D-21 as reopened by the steer and superseded by a new decision. The proposer's petition is recorded with new evidence (PR #79 values).\n- R-11 is honoured: the rollout is not gated on the stock lock value; the stop is the computed inequality on live values.\n- D-14, D-16, D-17, D-18 and R-10 are honoured. The shared fixture is test data, not `ErrorInfo` plumbing or codegen.\n- P-1 (D-5) is already resolved by D-8; the orchestrator should mark it \"user reopened\".\n\n**Operator steer versus adversary**\n- The steer asks to bound S by the PgBouncer pool where scans are pooled. I keep that bound as a backstop and lead with the tighter marketdata bound.\n- The steer's \"runbook precondition\" wording is ambiguous on whether a non-applied PR #79 stops the rollout. I chose the inequality as the stop and raised it for gate confirmation.\n\n**Business rules**\n- No row changes from round 4. 343@AC-9 stays uncovered because I cannot tie relayed item 3 to it from this step's input.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Supersedes D-21. The homelab raise is a runbook sequence with no lock-parameter change: config inputs over the homelab staging MCP; `max_locks_per_transaction`, `max_connections` and `max_prepared_transactions` by read-only SHOW on the live host; the lock inequality computed from those values as the stop condition; then `set_config` (8 and 1830) and read-back; then observation.",
+          "evidence": "Operator steer round 5 (PR #79: 1024 / 70 / 0, no raise needed; O-26 split); proposal round 5; adversary supports the D-21 reopen."
+        },
+        {
+          "text": "The lock bound is `marketdata connections × replicas × L_stmt_max × databases` against the cluster-wide `mlpt × (mc + mpt)`. PgBouncer `pool_size` (10 per database) is a backstop. GAPS_ONLY gap planning scans the full requested span once per job, before chunk writes.",
+          "evidence": "services/xstockstrat-marketdata/internal/repository/pool.go:14,23; deploy/homelab/render-assert.jq:49; ingest servicer.py:654-661,683; marketdata_repo.go:228-232; operator values."
+        },
+        {
+          "text": "The homelab config steps target the staging environment only. A checklist line applies the same two values per environment when a homelab production app is first deployed.",
+          "evidence": "Relayed user item 4 (\"There are no production instances. Staging is enough.\"); adversary round 5."
+        },
+        {
+          "text": "The denial tokens are one frozen tuple and one formatter in ingest and literals in `src/lib/backtestBackfill.ts`. One checked-in JSON fixture of the tokens and detail format is loaded by both the ingest table test and the UI vitest. `range_too_long` maps to the span copy; any other or unknown token maps to the generic copy.",
+          "evidence": "servicer.py:357,423-424; docs/roadmap/ledger/fails.md:308,1516 (adversary round 5); D-18."
+        },
+        {
+          "text": "The homelab provisioning checklist and reverted symptom live in the homelab subsection of `docs/runbooks/config-rollout.md`. Observation after the raise covers feature 341's 53200 counter and marketdata's pool-wait metrics.",
+          "evidence": "docs/runbooks/config-rollout.md:293-297; proposal round 5; adversary round 5 (pool contention)."
+        },
+        {
+          "text": "The ALREADY_EXISTS copy is \"A backfill for {symbol} is already queued or running. Try again when it finishes.\" De-dup tests cover self-serve pairs only.",
+          "evidence": "D-9 (QUEUED and RUNNING); proposal round 5; uncontested by the adversary."
+        },
+        {
+          "text": "This feature owns the homelab value 1830 for its own key. Analysis `backtest.max_range_days` does not cap the warmup prefix.",
+          "evidence": "services/xstockstrat-analysis/app/handlers/servicer.py:928-935; adversary confirms in round 5."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Raising the homelab `max_locks_per_transaction` as a step of this feature.",
+          "why": "PR #79 in the operator's homelab-edge repo already sets 1024, and the corrected bound fits without it."
+        },
+        {
+          "text": "Two independently pinned token literal sets as the drift guard.",
+          "why": "Each test checks only its own side, so a rename on one side passes CI."
+        },
+        {
+          "text": "A PgBouncer `SHOW DATABASES` read in the runbook.",
+          "why": "No access route is named, and `pool_size` is not the binding bound."
+        },
+        {
+          "text": "A hard stop on `max_locks_per_transaction` below 1024.",
+          "why": "The computed inequality passes without it, and the gate would wait on another repo's apply."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Confirm at the gate whether a host that does not yet show the PR #79 values stops the homelab rollout, or only a failed lock inequality does.",
+          "blocking": false
+        },
+        {
+          "text": "Confirm at the gate that the 343@AC-9 change is signed off; relayed item 3 cannot be tied to it from the synthesis input.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-19",
+          "how": "Per-class sum stated (6,200 per database); gap planning confirmed to scan the full span once per job; the bound is corrected to marketdata's 2-connection pool with PgBouncer as backstop, against 1024 × 70."
+        },
+        {
+          "id": "O-26",
+          "how": "Config reads and the write and read-back go over the homelab staging MCP; the three Postgres parameters are read-only SHOWs on the live host as a precondition."
+        },
+        {
+          "id": "O-27",
+          "how": "One ingest constant and formatter, UI literals, a shared JSON fixture loaded by both tests, and generic copy for any non-span token."
+        },
+        {
+          "id": "O-28",
+          "how": "The copy and the @AC say \"already queued or running\"."
+        },
+        {
+          "id": "O-29",
+          "how": "Checklist lines and the reverted symptom go in the homelab subsection of `config-rollout.md`, including a line for a future production deploy."
+        },
+        {
+          "id": "O-30",
+          "how": "De-dup is asserted only between self-serve requests; the admin row asserts QUEUED only."
+        },
+        {
+          "id": "O-31",
+          "how": "The 1830 value is this feature's because it owns the key; `backtest.max_range_days` is checked against `request.range` only and does not cap the prefix."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "D-21",
+          "evidence": "Proposer, step 4 only: homelab-edge PR #79 and its db-host verify task assert `max_locks_per_transaction` = 1024, so the raise step becomes a read-only check. The adversary supports it and asks that the stop be the computed inequality.",
+          "is_new": true
+        }
+      ],
+      "reopened": [
+        "D-21"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
+- 2026-11-15 — sdd-design: Phase 0 wrote recon.md (services: xstockstrat-ui, xstockstrat-ingest, plus xstockstrat-agent and the `strat-lab` plugin for the docs; reuse patterns: the insights strategy page gap → backfill request, `useTriggerBackfill` + `useBackfillStatus(jobId)`); Phase 1 ran 5 rounds (full); spec-ready → design-approved on the operator's "Agreed".
+  The `debate.md` edits, the `user declined` deviation, the O-32/O-33 status note, the relayed six answers and the no-ledger note are in the header. `343@AC-9` CHANGE sign-off (C-16): the approval covers the design that contains the rewrite (D-12), but no operator decision names the scenario, so /sdd-spec was to confirm before editing it (it edited on that basis; still open as O-33).
+  Its open threads were either closed at /sdd-spec (metric names, fixture home, `bars_total`, e2e mock, `acceptance.feature` / `feature.md` / product-spec edits) or carried into the header's Open Threads.
+- 2026-11-15 — sdd-spec: generated implementation-spec.md with 16 steps; design-approved → implementation-ready; also edited `acceptance.feature`, `product-spec.md`, `feature.md` as `design.md` directs (see Files Modified). Tree, findings, step grouping and the unmapped relayed items are in the header; the 12 assumptions are in `implementation-spec.md` § Assumptions made at /sdd-spec.
+  Copy written at spec because the design gave no text: the generic denial sentence and the @AC-16 failure sentence. `has_active_job` matches any data kind; the admin request on the insights button stays without `fillMode`; `useTriggerBackfill` is unchanged; no `strat-lab` version bump. `merge-order.md` was not edited (outside the feature directory); the row is Step 1.
+
+## Session 2026-11-15 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings on criteria (PASS WITH WARNINGS, no floor breach); overlap FAIL-level on the config migration number (advisory — did not block). Lifecycle unchanged (`implementation-ready`).
+- Run as a batch step that was told to fix the spec, so `implementation-spec.md` was edited here (the skill's Mode B normally leaves it untouched). Each edit was re-checked against the tree first.
+- Addressed in `implementation-spec.md`:
+  - [x] Step 11: verification now runs `pnpm run test:coverage` and names the threshold (`src/lib/**` lines, functions and statements ≥ 40%, `services/xstockstrat-ui/vitest.config.ts:29-33`; `package.json:19`). `test:unit` checks no threshold.
+  - [x] Agent CI filter gap: Step 9 now adds `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json` to the `xstockstrat-agent` filter (`.github/workflows/ci.yml:59`), with a grep check. Assumption 4 and Step Dependencies ("Step 9 requires Step 6") updated.
+  - [x] Step 5 Instruction 7: the executor records the insert shape kept, and the suite result for each shape, in the Deviation Log.
+  - [x] Spec claim corrected (found while checking the filter finding): `scripts/config-wiring.test.mjs` does **not** parse the per-service filter lines. `ciFilterGlobs` (`:663-674`) reads only block-list filters and is called for `config-wiring` alone. So the review's "extend the `node --test scripts/config-wiring.test.mjs` check" has nothing to extend; the filter checks in Steps 9 and 11 are greps, and the `node --test` line stays as a regression run only.
+- Unresolved ⚠ carried into execution:
+  - Step 8: touches 6 files (code, two docs, two `strat-lab` skill files); the reviewer suggests splitting code from docs — [ ] unaddressed. Kept as one step: `docs/patterns/strat-lab-plugin.md` requires the skill change in the same PR and Step 9's parity test reads all of them.
+  - Step 7: edits the durable suite `docs/sdd/business-rules/platform.feature` (an Examples row on `244@AC-6`) before launch, where C-16 normally promotes at launch — [ ] unaddressed. Needs the owner to accept a pre-launch EXTEND; the precedent is the FQN rows at `:495-498`.
+  - Assumption 1: `343@AC-9` was rewritten while O-33 is still `open` in `debate.md` — [ ] unaddressed. Needs the operator's confirmation at the gate. This run's relayed operator note carried six numbered answers ("1. Agreed", "2. Ok, agreed.", "4. Confirmed", "6. Sounds good", …) with no questions attached, so none of them was read as this sign-off.
+  - Step 2: generating `scripts/config-wiring-stored.json` needs a reachable Postgres (blocked without one, P-03) — [ ] unaddressed (environment, not a spec defect).
+- Overlap findings:
+  - [migration, FAIL-level] config migration `050` is also claimed by 341 (`050_ui_chart_history_bars`) and 330 (`050_analysis_live_enrich_ttl_reseed`) on their branches (not readable from this checkout; trunk tip is `049`) — [ ] unaddressed until Step 2 and the integration PR re-derive the number. Already in the spec (Step 2 Instruction 1, "Volatile at merge"); 343 merges after 341 and renumbers.
+  - [dependency] 343 waits for 341 (`marketdata.ohlcv.out_of_memory_errors`); `merge-order.md` has no 341 or 343 row — [ ] unaddressed until Step 1 lands the row (that file is outside this session's write scope).
+  - [file, WARN, rebase-only] `trader/positions/[symbol]/page.tsx` (339, 341); `e2e/trader/position-detail.spec.ts`, `insights/strategies/[id]/page.tsx`, `e2e/insights/backtest-coverage.spec.ts` (341); ingest `servicer.py`, `tests/test_ingest_servicer.py`, `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md` (344); `docs/patterns/config-governance.md`, `docs/runbooks/config-rollout.md` (append order). `e2e/insights/backtest-coverage.spec.ts` ↔ 341 is new in this scan and is not in the spec's peer-overlap list.
+  - [config] `ingest` / `backfill.self_serve_max_range_days`: no collision.
+- Relayed operator items: "3. I plan to do psql over ssh if possible" matches Assumption 2 (already applied). "5. Yes, fix the primitives. Use the switch component from Shadcn." is not about this feature.
+
+### Open Threads
+
+- Operator at the `/sdd-execute` checkpoint: confirm the `343@AC-9` rewrite (O-33) and the pre-launch edit to `platform.feature` (Step 7).
+- Step 8 stays one step unless the operator wants code and docs split.
+- Config migration number `050`: re-derive at Step 2 and at the integration PR; renumber after 341.
+- Step 2 needs a reachable Postgres.
+- `merge-order.md` row for 341 → 343 lands in Step 1.
+
+---
+
+## Session 2026-11-15 — operator directive for execute (orchestrator)
+
+- **Operator, verbatim (2026-11-15): "Use MCP tools if possible in 341 and 343."** Given after the
+  orchestrator reported that one step regenerates `scripts/config-wiring-stored.json` against a
+  reachable Postgres and that the rollout reads Postgres parameters.
+- **Binding for `/sdd-execute` and the rollout runbook:** every live read or write that an MCP tool
+  can do goes through the MCP (`get_config`, `set_config`, `list_config_keys`, `get_backfill_status`,
+  `trigger_backfill` on `xstockstrat_homelab_staging` / `xstockstrat_staging`), not `psql`.
+- **What no connected MCP tool can do (orchestrator finding, not operator words):** (a) read
+  Postgres server parameters (`SHOW max_locks_per_transaction` etc.) — the agent MCP has no SQL
+  tool; the homelab values are in `homelab-edge` `roles/db_host/defaults/main.yml` and its `verify`
+  task asserts the lock setting; (b) regenerate `scripts/config-wiring-stored.json`, which needs a
+  scratch Postgres with the migration set applied, not a live database. Those two stay as specified
+  unless the operator rules otherwise at the execute checkpoint.
+
+- **Operator, verbatim (2026-11-15): "max_locks_per_transaction assume what homelab-edge has".**
+  Supersedes item (a) above for that parameter: the rollout takes `max_locks_per_transaction` = 1024
+  from `homelab-edge` `roles/db_host/defaults/main.yml` (asserted by its `verify` task) and does
+  not read it live with `psql`. Step 16's read-only `SHOW max_locks_per_transaction` precondition
+  is dropped at execute; the lock inequality is computed with 1024.
+- **Orchestrator assumption (not operator words):** the ruling names only
+  `max_locks_per_transaction`. `max_connections` (70 after homelab-edge PR #79 is applied to the
+  host, 60 before) and `max_prepared_transactions` keep their specified read unless the operator
+  extends the ruling.
+- **Operator, verbatim (2026-11-15): "max_connections are now love."** Orchestrator reading (the
+  operator's word is taken as a typo for "live"): homelab-edge PR #79 is applied to the DB host, so
+  `max_connections` = 70 and the PgBouncer pool = 10 per database are the running values. The
+  rollout takes `max_connections` = 70 from `homelab-edge` as well; the "PR merged but not yet
+  applied" precondition is dropped. Not verified by the orchestrator against the live host.
+
+## Session 2026-11-15 — /sdd-distill
+- Distilled 10 sessions → header + Superseded Sessions; kept 2 verbatim.
+- context.md 1373 → 437 lines. Original prose preserved in git history.
+- **Operator sanction (2026-11-15), deviation from the skill's preserve-every-`sdd-batch-*`-block rule:** asked
+  "How should I write them?" with the option "Keep only the last state block", the operator chose it. The 3
+  superseded per-round `sdd-batch-design-state` block(s) are dropped; the last one is kept byte-for-byte (the only one
+  any workflow reads, `.claude/workflows/sdd-batch.js:191`). Other `sdd-batch-*` blocks are untouched.
+- The loss check was a self-check by the planning agent (no separate `context-distiller` verifier was available).
+
+## Session 2026-11-15 — sdd-execute sequential (sdd-batch-execute)
+- Up-front confirmation: the operator approved the plan with this record (binding, verbatim):
+  `{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","dev":"396b54e0c8adf870537e65360f75761c3b84289b","specHash":"2c1b6a9598927a51bd4aeb655ee103bf9aaa23e7","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],"mismatches":[{"n":1,...},{"n":8,...}]}`
+  (the full mismatch details are the first body line of the respec commit below).
+- Operator answers relayed with the run, verbatim: "1. Yes / 2. No, add it to the scope / 3. Yes".
+- Merged `origin/main-dev@9f8856229` into the feature branch (`cf9f49aff`); the resolver and `ledger-guard` were clean.
+- Tooling detection (steps 1-16): Python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff ✓ · Node v24.22.1 ✓ · pnpm 9.15.9 ✓ ·
+  vitest/playwright/tsc ✓ (linked main-checkout `node_modules`) · Chromium in `/opt/pw-browsers` ✓ · docker ✓.
+- Re-spec commits (`respec(backtest-inline-backfill)` on `git log --first-parent origin/main-dev..HEAD`):
+  - `41dc2fba4` respec(backtest-inline-backfill): align steps 1,8 with current codebase. Step 1: the 343 row
+    (`merge-order.md:127`) and the "Symbol-page cohort: 339-344" section (`:403-411`) already exist (#1545), so the
+    step adds no row and appends one sentence naming 343's remaining shared files to that section. Step 8: the
+    `backfill.md` admin/scope grep evidence corrected to "no match".
+- Assumption (re-spec): of the two options the mismatch named (amend the existing entries or mark Step 1
+  satisfied), amend was chosen, because the existing section does not list the 341 insights-page/e2e overlap or the
+  344 ingest/mock/inventory overlap that this spec's Step Dependencies records.
+```sdd-batch-setup
+{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","date":"2026-11-15"}
+```
+
+### Step 1 — docs: merge-order row for feature 341 [done]
+- Added no table row (the 343 row at `merge-order.md:127` stays); appended one sentence to the "Symbol-page cohort: 339-344" section naming 343's other shared files with 341 (insights strategy page, `position-detail.spec.ts`) and 344 (ingest `servicer.py`, `test_ingest_servicer.py`, `mock-backend.ts`, `INVENTORY.md`). TDD: N/A (docs). Verification: `grep -c` → `1`, `grep -n` → `409:` (inside the section), `exit=0`.
+- Files modified: `docs/roadmap/features/merge-order.md`
+- Deviations: none (the Verification fence ends in a `#` comment, so the run script put the closing `)` on its own line; the fence text was run unchanged).
+
+### Step 2 — migration: seed `ingest` / `backfill.self_serve_max_range_days` [done]
+- Atomic unit 2+3+4. Created config migration `051_ingest_backfill_self_serve_keys` (re-derived: `049` is the tip on the branch and on `origin/main-dev`): two global rows (staging, production), value and default 730, actor `system:config-migration-feature-backtest-inline-backfill`; the down deletes only those rows with `value_data = '730'`. Regenerated `scripts/config-wiring-stored.json` against the operator-provided scratch Postgres at `127.0.0.1:5432` (operator Option B; generator exit 0, +2 rows, new `inputs_sha256`). TDD: N/A (migration). Verification (`v-2`): exit=0, `grep -c` → `2`, `--final` reports only the two pre-existing `readers-disagree` lines (analysis, trading), `node --test` 75 pass, 0 fail. Wiring gate step-time with `--declared-from` and `--declared-migration` (`v-8`): exit=0, no findings.
+- Files modified: `services/xstockstrat-config/migrations/051_ingest_backfill_self_serve_keys.up.sql`, `services/xstockstrat-config/migrations/051_ingest_backfill_self_serve_keys.down.sql`, `scripts/config-wiring-stored.json`
+- Deviations: none for the migration; the regeneration used the operator's scratch server (Deviation Log).
+
+### Step 3 — service: ingest reader `backfill_self_serve_max_range_days` [done]
+- Atomic unit 2+3+4. Added the property after `backfill_webhook_sweep_interval_seconds`, returning `int_positive(self, "backfill.self_serve_max_range_days", 730)`. RED and GREEN are recorded under Step 4. Verification (`v-3`): exit=0, `All checks passed!`, `57 files already formatted`, the read is at `watcher.py:143`.
+- Files modified: `services/xstockstrat-ingest/app/config/watcher.py`
+- Deviations: none
+
+### Step 4 — test: reader default, clamp and read classification [done]
+- Atomic unit 2+3+4. Added two clamp rows (stored 0 and -1 → 730), a new test (stored 1830 → 1830, absent → 730) and the key in `FR3_KEYS`. RED (`v-1`, property stubbed to return 0): `4 failed, 35 passed`; the failures were `assert 0 == 730` (×2), `assert 0 == 1830` and `FR3_KEYS entries no longer clamped`. GREEN: `v-5` `39 passed`; `v-6` `506 passed`, `Required test coverage of 40% reached. Total coverage: 86.61%`; `v-7` `--final` plus `node --test` 75 pass, exit=0. C-13: the key string is the only literal, in each file's own table.
+- Files modified: `services/xstockstrat-ingest/tests/test_config_watcher.py`, `services/xstockstrat-ingest/tests/test_config_read_classification.py`
+- Deviations: Verification run per line from the repo root, because the fence's chained `cd` fails as one subshell (`v-4`, exit 1). No command changed (Deviation Log).
+
+### Step 5 — service: self-serve envelope and per-symbol de-dup on `TriggerBackfill` [done]
+- Atomic unit 5+6. The `TriggerBackfill` admin gate now accepts a non-admin request inside the eight-condition envelope. A request outside it is denied `PERMISSION_DENIED` with `_self_serve_denial_detail` of the first failed token. The tuple `_SELF_SERVE_DENIAL_TOKENS` and `_self_serve_denial` sit next to `_has_admin_scope`. A self-serve insert runs in one transaction (`pg_advisory_xact_lock` on `backfill:<symbol>`, then `has_active_job`, then `insert_job(conn, …)`) through the private helper `_insert_self_serve_job`. A hit aborts `ALREADY_EXISTS` ("a backfill for {symbol} is already queued or running", no job id) after the block exits. The admin path is unchanged. Emit and spawn stay after the commit, and the payload has no `user_id`. RED and GREEN are recorded under Step 6. Verification (`v-4`, exit=0): `All checks passed!`, `57 files already formatted`; `_has_admin_scope(context)` count `5`; `metadata=propagation_meta` still at `:588` (the queued event); `"multi_symbol"` on one line (`:375`); `admin scope required` only at `:1040` and `:1688` (outside `TriggerBackfill`). Wiring gate, step-time `--declared-from` (`v-8`): exit=0, no findings.
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/app/repositories/backfill_jobs.py`
+- Deviations: insert shape B (helper) kept, and both shapes passed `156 passed` (`v-2`, `v-3`). `"range_too_long"` appears twice, per Instruction 3. Both are in the Deviation Log.
+
+### Step 6 — test: envelope table, de-dup, shared denial fixture [done]
+- Atomic unit 5+6. Created `tests/fixtures/self_serve_denial.json`, loaded by the session fixture `self_serve_denial_contract` in `conftest.py`. `make_servicer` gained `self_serve_max_range_days=730`. New class `TestTriggerBackfillSelfServe` builds every request as a real `TriggerBackfillRequest`. Rows: contract pin; 10 denial rows (AC-15), with the 731-day row carrying ` (max 730 days)` (AC-12); a coverage check that every contract token has a row; first-failure order; base and 730-day accepted (AC-7, lock, `has_active_job` and insert on the transaction connection); queued-event metadata (D-11, PLAT-4); admin QUEUED only (D-27); duplicate `ALREADY_EXISTS` with no UUID (AC-11); a race under a real `asyncio.Lock` fake, where exactly one request is QUEUED; insert raises, then no event and no spawn. Rewrote `test_permission_denied_without_admin_scope` (`fill_mode` token) and `test_validation_runs_after_the_admin_gate` (`callback_url` token, 334@AC-26 kept). Added `has_active_job` bind-parameter tests. RED (`v-1`, Step 5 symbols as stubs): `22 failed, 149 passed`. Failures: `'admin scope required' != 'self-serve backfill denied: <token>'` for every denial row, `assert () == ('multi_symbo…` for the contract, `PERMISSION_DENIED == ALREADY_EXISTS` for the duplicate, `Exception: aborted` for the accepted rows, `assert 0 == 1` for the race, and `Expected fetchrow to have been awaited once` for the repo. GREEN: `v-6` `171 passed`; `v-7` `528 passed`, `Required test coverage of 40% reached. Total coverage: 86.78%` (`backfill_jobs.py` 100%, `servicer.py` 87%). `v-5` greps: the contract comes from `conftest` (`self_serve_denial_contract` usages), `"multi_symbol"` in tests → `0`, and the first three `MagicMock()` lines are `make_servicer`'s cfg and channels, so no self-serve row uses one. C-13: the token contract is in one JSON file with two consumers (this suite and Step 11's vitest); the request literals stay inline (one consumer).
+- Files modified: `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json`, `services/xstockstrat-ingest/tests/conftest.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`, `services/xstockstrat-ingest/tests/test_backfill_jobs.py`
+- Deviations: Verification run per line for the two `pytest` lines, because the fence's chained `cd` fails as one subshell (`v-5`). No command changed (Deviation Log). Tooling: the ingest `uv sync --extra dev` venv resolved Python 3.12.3 (as in Steps 2-4); ruff 0.16.9 from the host.
+
+## Session 2026-11-15 — operator standing authorization and checkpoint answers (orchestrator)
+
+- **Standing authorization for checkpoints — operator, verbatim (2026-11-15): "Proceed, do not stop at
+  checkpoints unless it's necessary".** Given in answer to "Proceed past the checkpoints?". The run uses
+  `checkpoints: 'report'` from here on; this entry is its `authorizationRef`. It does not waive blockers,
+  failed verifications, Floor breaches, uncovered `@AC` CHANGE lines or any decision that is the
+  operator's — those still halt.
+- **Scratch Postgres for stored-set generation (orchestrator tooling, not an operator ruling):** a
+  Postgres 16 the main session controls listens on 127.0.0.1:5432. `DATABASE_URL` is not exported into
+  agent shells; prefix the generator: `DATABASE_URL='postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable'
+  python3 scripts/config-wiring-stored.py`. Do not start, stop or delete the server; if it is
+  unreachable, stop and report.
+- **Checkpoint 5 — "Yes"** (proceed).
+- **`343@AC-9` rewrite (O-33) — "Confirm".** Asked: the status-message scenario was rewritten to match
+  what the server returns (two different "partial" messages) without an explicit sign-off — confirm?
+  Confirmed; O-33 is closed.
+- **Step 7 pre-launch edit to `platform.feature` (`244@AC-6` row) — operator, verbatim: "Expand it".**
+  Asked: Step 7 adds one row to an existing durable acceptance rule for the new config key, which
+  normally happens at launch, so it needs acceptance to do it now. **Orchestrator reading (not operator
+  words): "expand" is taken as "extend", i.e. the pre-launch EXTEND is accepted.** The reading was
+  stated back to the operator; if the operator corrects it, this line is superseded.
+
+## Session 2026-11-15 — sdd-execute sequential (sdd-batch-execute), Step 7
+
+### Step 7 — docs: ingest gate wording, key table, registered-keys log, business-rule row [done]
+- Ingest `CLAUDE.md` § Authorization: `CancelBackfill` stays admin-gated ("admin scope required"); `TriggerBackfill` is admin or the self-serve envelope, with the eight conditions and tokens in first-failure order, the detail format, the per-symbol `ALREADY_EXISTS` de-dup and an unchanged admin path. Added the `backfill.self_serve_max_range_days` key-table row (seed `051_ingest_backfill_self_serve_keys`), reworded findings `:39` (status stays open), added the feature 343 registered-keys entry above 338, and the `244@AC-6` Examples row (pre-launch EXTEND accepted by the operator, "Expand it"). TDD: N/A (docs). Verification (`.sdd-logs/v-1.log`, exit=0): the key at `CLAUDE.md:33,152`, `config-governance.md:163`, `platform.feature:498`; `admin scope required` only at `CLAUDE.md:17` (`CancelBackfill`); `--final` reports only the two pre-existing `readers-disagree` lines (analysis, trading). Wiring gate step-time `--declared-from` (`v-2`): exit=0, no findings.
+- Files modified: `services/xstockstrat-ingest/CLAUDE.md`, `services/xstockstrat-ingest/docs/context-constitution-findings.md`, `docs/patterns/config-governance.md`, `docs/sdd/business-rules/platform.feature`
+- Deviations: the `platform.feature` site cell overflows its column by 4 characters (the `effective` cell is padded shorter so the row length matches); the `config-rollout.md` reference resolves only once Step 16 lands (Deviation Log).
+
+## Session 2026-11-15 — sdd-execute sequential (sdd-batch-execute), Step 8
+
+Tooling setup (step 8): uv ✓ · Python 3.13.18 ✓ (agent venv, `uv sync --extra dev`) · ruff ✓ 0.16.9 (host) · pytest ✓ (venv) · node ✓.
+
+### Step 8 — service: Agent `trigger_backfill` wording, runbook and `strat-lab` skill [done]
+- The `trigger_backfill` module-header line, tool docstring (the MCP tool description) and client docstring no longer say "admin-scoped": an admin may request anything, any other caller only the self-serve envelope (seven parameter rules, the `backfill.self_serve_max_range_days` limit, the eight `self-serve backfill denied: <token>` tokens, `ALREADY_EXISTS` for an in-flight symbol); the false "queues unconditionally" sentence is replaced. Parameters, the 50-symbol cap, scope forwarding and return shape are unchanged. Agent `CLAUDE.md` takes `trigger_backfill` out of the "non-admin is rejected" sentence; `mcp-tools.md` gains the envelope list, two Errors rows, the `fill_mode` note and a corrected `cancel_backfill` contrast; the `strat-lab` skill and `reference/backfill.md` state the non-admin call shape, the `range_too_long` and `ALREADY_EXISTS` handling, and that `callback_url` is admin-only. No `plugin.json` bump (Assumption 11).
+- TDD (AC-7 Agent surface, via Step 9 Instruction 1's parity assertions in an uncommitted scratch test): red `v-1` exit=1 — `AssertionError: mcp-tools.md § trigger_backfill` (`'self-serve backfill denied'` not in the section) → green `v-2` `1 passed`, exit=0. Verification: `v-3` ruff `All checks passed!`, `75 files already formatted`; per line from the repo root `v-4` no `admin-scoped` + `trigger_backfill` match (exit=1, expected), `v-5` `1593:        access_scope = _caller_access_scope(ctx, "trigger_backfill")`, `v-6` `145 passed`, exit=0. Wiring gate step-time `--declared-from` (`v-7`): exit=0, no findings.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/CLAUDE.md`, `docs/runbooks/mcp-tools.md`, `plugins/strat-lab/skills/backtest/SKILL.md`, `plugins/strat-lab/skills/backtest/reference/backfill.md`
+- Deviations: RED/GREEN via a scratch copy of Step 9's parity test (Step 9's files are outside this step); Verification run per line because of the fence's chained `cd` (Deviation Log).
+- Not changed, noted: the `client.py` `trigger_backfill` docstring body still says "Everything else queues unconditionally"; Instruction 1 names only its first line, so the body was left as is — open for Step 9 or a follow-up.
+
+## Session 2026-11-15 — sdd-execute sequential (sdd-batch-execute), Step 9
+
+Tooling setup (step 9): uv ✓ · Python 3.13.18 ✓ (agent venv, `uv sync --extra dev`) · ruff ✓ (host) · pytest ✓ (venv).
+
+### Step 9 — test: Agent docs parity and refusal pass-through [done]
+- Added `test_docs_and_skill_parity_with_self_serve_backfill` (loads `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json` through `_REPO`; the runbook `trigger_backfill` section, `reference/backfill.md` and the live catalog description carry `gaps_only` and the prefix and no "admin scope required"; the section and description name all eight tokens; `SKILL.md` carries `gaps_only`) and `TestTriggerBackfillTool.test_self_serve_refusals_pass_through` (non-admin `TRADER` ctx; `PERMISSION_DENIED` range_too_long detail and `ALREADY_EXISTS` "a backfill for AAPL is already queued or running" reach the caller as `CODE: detail` unchanged). Added the fixture path to the `xstockstrat-agent` CI filter (`ci.yml:59`, one-line array kept).
+- TDD (AC-7 Agent surface): red `v-2` against the pre-Step-8 files (checked out from `d494abc61^`, restored before commit) exit=1 — `AssertionError: mcp-tools.md § trigger_backfill` (`'self-serve backfill denied'` absent), `1 failed, 147 passed`; the two pass-through cases passed there (red N/A — no behavior change; characterization test added). Green: `v-5` `148 passed`; `v-6` `765 passed`, `Required test coverage of 40% reached. Total coverage: 88.11%`; `v-7` `"multi_symbol"` in agent tests → `0`, filter line `59:` matches; ruff `All checks passed!`, `75 files already formatted` (`v-4`). No config key touched, so no wiring gate.
+- Files modified: `services/xstockstrat-agent/tests/test_tools_endpoint.py`, `services/xstockstrat-agent/tests/test_tools.py`, `.github/workflows/ci.yml`
+- Deviations: RED against the pre-Step-8 tree because Step 8 had landed; Verification run per line because of the fence's chained `cd` (Deviation Log).
+- Still open from Step 8: the `client.py` `trigger_backfill` docstring body ("Everything else queues unconditionally") is outside Step 9's Files and was not changed.
+
+## Session 2026-11-16 — operator sign-off correction (orchestrator)
+
+- **Supersedes the "Expand it" reading above (header line and the Step 7 session).** The operator corrected it, verbatim: "No, \"expand\" was meant you explained more" — it was a request for more explanation, not an acceptance.
+- Asked again explicitly whether the range-cap key may be added as one Examples row on feature 244 `@AC-6` in `platform.feature` now, with the code, instead of at launch. **Operator, verbatim: "Accept now".** The Step 7 pre-launch edit therefore stands on the operator's own words; nothing needs reverting.
+
+## Session 2026-11-16 — main-dev merged, migration renumbered (orchestrator)
+
+- Steps 10+11 were blocked because `pnpm run format:check` in `services/xstockstrat-ui` failed on files this feature does not touch. The operator chose "Fix the baseline first".
+- PR #1548 (prettier applied to the seven failing UI files) merged into `main-dev` as `44e14364d`.
+- `origin/main-dev` was merged into `feature/backtest-inline-backfill` with a merge commit (no rebase, no force-push). Conflicts: `docs/patterns/config-governance.md` (the 343 and 341 registered-keys entries are both kept, newest first) and `scripts/config-wiring-stored.json` (regenerated with `scripts/config-wiring-stored.py`, not hand-merged).
+- Config migration renumbered `050` → `051_ingest_backfill_self_serve_keys`. Feature 341 merged first and holds `050_ui_chart_history_bars`, and two migrations cannot share a number. This branch's migration had not been applied to any deployed database, so it was moved with `git mv` and every reference to the file name was updated, including the earlier session entries above, which now show `051`.
+
+## Session 2026-11-16 — sdd-execute sequential (sdd-batch-execute), Steps 10+11
+
+Tooling setup (steps 10+11): node ✓ v24.22.1 · pnpm ✓ 9.15.9 · vitest ✓ 5.0.3 · tsc ✓ 5.9.3 · prettier ✓ 3.8.3 (linked main-checkout `node_modules`; no install).
+
+### Step 10 — service: UI helper `src/lib/backtestBackfill.ts` [done]
+- Atomic unit 10+11. Created the pure helper: `SELF_SERVE_DENIAL_PREFIX` and the eight `SELF_SERVE_DENIAL_TOKENS` in ingest order; `gapToBackfillRequest` (range = gap start → `rangeEnd ?? gap end`, `fillMode` only when given, `overwrite: false`); `backfillSpanDays`; `gapKey`; `backfillJobMessage` (the nine-row table; int64 as bigint, string or number; empty `error` counts as unset); `triggerErrorMessage` (ALREADY_EXISTS copy, `range_too_long` span copy with `max` parsed from ` (max N days)`, generic copy for every other or unparsable denial, `Could not start backfill: …` otherwise, via `errMessage`); `noVendorDataMessage` (UTC `YYYY-MM-DD`). RED and GREEN are recorded under Step 11. Verification (`v-3`, exit=0): lint (warnings only in untouched files), `All matched files use Prettier code style!`, tsc clean.
+- Files modified: `services/xstockstrat-ui/src/lib/backtestBackfill.ts`
+- Deviations: Verification run per line (Deviation Log); three open choices noted there (status fallback, `?` for an unset bound, token parse).
+
+### Step 11 — test: vitest for the helper, pinned to the shared denial fixture [done]
+- Atomic unit 10+11. Created `src/lib/backtestBackfill.test.ts`: contract pin against `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json` read through `ROOT` (prefix, token order, 730 parsed from the fixture's suffix template); `gapToBackfillRequest` AC-2 and AC-10 (both forms); `backfillJobMessage` one case per row (AC-3 string and bigint, AC-14, COMPLETED, AC-6, AC-16, neither, both AC-9 PARTIAL rows, CANCELED); `triggerErrorMessage` AC-11, AC-12 (1825 / 730), each other token → generic with no token, unparsable `range_too_long`, unknown token, prefix-less denial, non-Connect error; AC-13, `gapKey`, `backfillSpanDays`. Gap and job inputs come from `e2e/fixtures/backtests.ts` and `backfillJobs.ts` (C-12); `ConnectError`s stay inline. Added the fixture path to the `xstockstrat-ui` CI filter (`ci.yml:64`).
+- TDD: RED `v-1` (helper exported as signatures-only stubs) exit=1 — `Tests  30 failed (30)`, each an `AssertionError` (e.g. `expected '' to be 'self-serve backfill denied: '`, `expected {} to deeply equal { symbols: [ 'LYFT' ], …(4) }`) → GREEN `v-4` `Tests  30 passed (30)`; `v-5` `Tests  593 passed | 2 skipped (595)`, `All files 79.54 | 75.61 | 81.54 | 80.76`, `...stBackfill.ts 100 | 89.13 | 100 | 100`; `v-6` both C-12 imports (`:6`, `:7`); `v-7` `ci.yml:59` (agent) and `ci.yml:64` (ui) plus the test's read at `:21`; `v-8` `node --test` 75 pass, 0 fail. All exit=0. No config key touched, so no wiring gate.
+- Files modified: `services/xstockstrat-ui/src/lib/backtestBackfill.test.ts`, `.github/workflows/ci.yml`
+- Deviations: Verification run per line because of the fence's chained `cd` (Deviation Log).
+
+## Session 2026-11-16 — sdd-execute sequential (sdd-batch-execute), Steps 12+13
+
+Tooling setup (steps 12+13): node ✓ · pnpm ✓ 9.15.9 · vitest ✓ 5.0.3 · tsc ✓ · Playwright ✓ with Chromium in `/opt/pw-browsers` (linked main-checkout `node_modules`; no install) · Docker e2e runner ✗ (no `.dockerignore`, the linked `node_modules` would be copied into the image; diagnosed host run used instead).
+
+### Step 12 — service: inline backfill on the symbol-page Backtests card [done]
+- Atomic unit 12+13. `BacktestsSection` keeps the tracked `jobId` and the filled `gapKey` in local state only (D-2), calls `useTriggerBackfill()` and `useBackfillStatus(jobId)`, and never reads `useBackfillJobs`. The insufficient-data callout drops the "Backfill coverage panel" sentence and adds "Backfill missing data" (`backtest-backfill-action`, `gapToBackfillRequest(gap, { fillMode: GAPS_ONLY, rangeEnd: gap.requestedRange?.end })`, same for admins and non-admins), the status line (`backtest-backfill-status`, `backfillJobMessage`), "Re-run backtest" on `ready` (`backtest-rerun`: records the filled gap key, clears the job, calls the unchanged `handleRun`), the trigger error (`backtest-backfill-error`, `triggerErrorMessage`) and the D-7 no-vendor-data line (`backtest-no-vendor-data`, which hides the action for that gap). `handleRun`, the Run button, the history table, the no-strategy branch and `BackfillSection` are unchanged. RED and GREEN are recorded under Step 13. Verification: `v-4` lint (warnings only in untouched files), `All matched files use Prettier code style!`, tsc clean, `Tests  593 passed | 2 skipped (595)`; `v-5` no `Backfill coverage panel` (exit=1, expected); `v-6` `handleRun` at `:1215` (definition), `:1257` (Re-run handler), `:1277` (Run button). No config key touched, so no wiring gate.
+- Files modified: `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`
+- Deviations: Verification run per line because of the fence's chained `cd`; open choices (action disabled until the first poll answers, span computed from the gap) in the Deviation Log.
+
+### Step 13 — test: e2e for the Backtests card, mock and fixtures [done]
+- Atomic unit 12+13. Mock: the `strat-insufficient-001` sentinel now returns `barsHave` 53, `timeframe` 4, `requestedRange: req.range` and `gap: prefixGapRange(req.range)` (pre-window, distinct from the window); new `IngestService.getBackfillStatus` returns a COMPLETED `backfillJob` for the requested id. Spec: the existing INSUFFICIENT_DATA test now asserts `has 53, needs 200 bars` and a visible, enabled `backtest-backfill-action` (AC-1); new `describe('inline backfill from the Backtests card')`, all non-admin (`addAuthCookie`), with AC-2 (request range, GAPS_ONLY, one symbol), AC-7, AC-3 (RUNNING 120/200, disabled), AC-4 (Data ready, one RunBacktest), AC-5 (re-run OK, `strategyId` + `strategyIdRef`), AC-13 (same gap → no vendor data, no action), AC-6 (FAILED error, enabled), AC-11 (409 `already_exists` → the D-27 sentence, enabled). Job states come from `backfillJob(over)` (C-12); the 409 error and the OK re-run body are inline one-offs. `INVENTORY.md` rows "Backtest coverage gaps" and "Backfill jobs" name the new consumers.
+- TDD: RED `v-3` (pre-Step-12 page, `--reporter=list --timeout=90000`) exit=1 — `9 failed`; seven new tests stop at `locator.click: Test timeout of 90000ms exceeded` waiting for `getByTestId('backtest-backfill-action')`, and the first two to start stop earlier at `backtest-insufficient` with the Run button still `Running…` (cold dev compile; the later seven pass that point). GREEN `v-13` (same flags plus `--retries=1`) exit=0 — `8 passed`, `2 flaky` (the same two cold-start tests, passed on retry). `v-11` (fence line unchanged) failed only the 10 s warmup project. `v-8` C-12 imports (`../fixtures/backfillJobs`, `../helpers/auth`, `./fixtures`), `v-9` INVENTORY `:34` and `:57` name the spec and `getBackfillStatus`, `v-10` no `Backfill coverage panel` in the spec (exit=1, expected), `v-14` lint + tsc after a Prettier pass on the spec, exit=0.
+- Files modified: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`, `services/xstockstrat-ui/e2e/mock-backend.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: Verification run per line; Playwright diagnosed with added reporter/timeout/retry flags; `IngestPath` not copied (route globs plus the file's own `fulfillJson` hoisted), so no helper move (Deviation Log).
+
+## Session 2026-11-16 — sdd-execute sequential (sdd-batch-execute), Step 14
+
+Tooling setup (step 14): node ✓ · pnpm ✓ 9.15.9 · vitest ✓ 5.0.3 · tsc ✓ · prettier ✓ · Playwright ✓ with Chromium in `/opt/pw-browsers` (linked main-checkout `node_modules`; no install).
+
+### Step 14 — service: insights strategy button uses the shared helper [done]
+- The `backfill-action` button on `insights/strategies/[id]/page.tsx` now calls `triggerBackfillMutate(gapToBackfillRequest(gap, isAdmin ? undefined : { fillMode: FillMode.GAPS_ONLY }))` in place of the inline request. The range is still the exact gap; an admin's request carries no `fillMode` (Assumption 9, R-5). Label, test ids, confirmation, error line and the missing `isAdmin` wrapper are unchanged; `insights/backfills/page.tsx` is untouched.
+- TDD (AC-10 page surface, via an uncommitted scratch e2e, because Step 15 holds the committed test): red `v-2` exit=1 — `Expected: "FILL_MODE_GAPS_ONLY"`, `Received: undefined` for the non-admin body (the admin no-`fillMode` case passed: characterization) → green `v-3` `2 passed`, exit=0. Verification: `v-4` lint (warnings only in untouched files), `All matched files use Prettier code style!`, tsc silent, `Tests  593 passed | 2 skipped (595)`; per line from the repo root `v-5` `26:` import and `545:` the one call, `v-6` empty `git diff --stat` for `insights/backfills/page.tsx`. All exit=0. No config key touched, so no wiring gate.
+- Files modified: `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx`
+- Deviations: RED/GREEN via a scratch e2e (Step 15's files are outside this step); Verification run per line because of the fence's `cd` (Deviation Log).
+
+## Session 2026-11-16 — sdd-execute sequential (sdd-batch-execute), Step 15
+
+Tooling setup (step 15): node ✓ · pnpm ✓ · tsc ✓ · prettier ✓ · Playwright ✓ with Chromium in `/opt/pw-browsers` (linked main-checkout `node_modules`; no install).
+
+### Step 15 — test: e2e for the insights strategy button by role [done]
+- Added a local `captureStrategyBackfill(page)` helper (runs the `strat-high-001` insufficient-data backtest, clicks `backfill-action`, returns the requested start and the `TriggerBackfill` body) and two tests: non-admin (`addAuthCookie`) asserts `fillMode` `FILL_MODE_GAPS_ONLY`, `range.end` = requested start, `range.start` earlier and `job-e2e-1` in `backfill-confirmation`; admin (`addAdminCookie`) asserts no `fillMode` (or UNSPECIFIED) and the same exact-gap range (198@AC-7). The two existing tests are unchanged; `INVENTORY.md` needed no change.
+- TDD (AC-10 page surface): RED `v-1` against the pre-Step-14 page (checked out from `34ebb5635^`, restored before commit) exit=1 — non-admin test `Expected: "FILL_MODE_GAPS_ONLY"`, `Received: undefined`; the admin test passed (characterization). GREEN `v-5` (`--reporter=list --timeout=90000 --retries=1`) exit=0 — `13 passed`, `2 flaky` (the two unchanged existing gap tests on a cold compile, passed on retry; both new tests passed first time). `v-2` fence verbatim: lint (warnings only in untouched files) and tsc clean; `v-3` grep `:2` `../helpers/auth`, `:3` `../fixtures`, exit=0; `v-4` unchanged Playwright line failed only the 10 s warmup project. Prettier `--check` on the spec clean. No config key touched, so no wiring gate.
+- Files modified: `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts`
+- Deviations: RED against the pre-Step-14 page; Verification run per line and Playwright diagnosed with added flags; the helper is used by the new tests only (Deviation Log).
+
+## Session 2026-11-16 — sdd-execute sequential (sdd-batch-execute), Step 16
+
+Tooling setup (step 16): node ✓ v24.22.1 (no install; docs step).
+
+### Step 16 — docs: homelab rollout subsection in the config-rollout runbook [done]
+- Added "### Homelab: self-serve backfill capacity (feature 343)" after the fresh-deploy paragraph in `docs/runbooks/config-rollout.md`. It is staging only and changes nothing in homelab-edge or Postgres. It has five numbered steps: `get_config` of the three ingest and six analysis keys; the Postgres parameters (1024 and 70 from homelab-edge, plus a read-only `SHOW max_prepared_transactions;`, and checks for one marketdata replica, `DB_POOL_MAX` unset and a fresh deploy); the lock inequality with its two worked rows (1,392 and 4,000 against 71,680) as the only stop; `set_config` 8 and 1830 with read-back (DigitalOcean stays at 3 and 730); and one readiness cycle watching `marketdata.ohlcv.out_of_memory_errors` and the two `empty_acquire` gauges, reverting to 3 jobs if either moves. It ends with the three-line checklist. The section has no hostnames, DSNs or secrets.
+- TDD: N/A (docs). Verification (`.sdd-logs/v-1.log`, exit=0): heading at `:301`; the key at `:348`; `max_locks_per_transaction` at `:313`, `:329`; `out_of_memory_errors` at `:353`; `empty_acquire` at `:354`. `--final` reports only the two pre-existing `readers-disagree` lines (analysis, trading). Wiring gate step-time `--declared-from` (`v-2`): exit=0, no findings. Last step, so `--final` was also run alone (`v-3`): exit=0, with the same two REPORTED lines.
+- Files modified: `docs/runbooks/config-rollout.md`
+- Deviations: step 2 takes `max_locks_per_transaction` and `max_connections` from homelab-edge under the operator's execute directives and keeps only the `max_prepared_transactions` read. The spec's evidence line for the pool gauges has drifted (Deviation Log).
+- All 16 steps are done: `in-progress` → `code-completed`. No ledger insight was written, because nothing generalizes beyond the existing entries.
+
+## Session 2026-11-16 — sdd-batch-execute promotion plan, built from the feature branch (awaiting operator confirm)
+
+- Built by `scenario-promoter` on a checkout of this branch at `13f062696`; scenario bodies generated mechanically from `acceptance.feature` (only `@feature-343` added to each tag line; the source's "Amended"/"rewritten" comment lines and the struck `@AC-8` block are not carried). Merge-order: feature 341 merged into main-dev on 2026-11-16 (PR #1549), so the 343-after-341 row is satisfied.
+
+```sdd-batch-promotion-plan
+## Promotion plan — backtest-inline-backfill (feature 343)
+
+Source: docs/roadmap/features/343-backtest-inline-backfill/acceptance.feature at 13f062696 — 15 scenarios (@AC-1..@AC-7, @AC-9..@AC-16; @AC-8 is struck and stays reserved).
+
+### Verdicts
+- @AC-1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 16 → services/xstockstrat-ui/acceptance/backtest-inline-backfill.feature, CREATE, NEW (13).
+- @AC-7, 15 → services/xstockstrat-ingest/acceptance/backtest-inline-backfill.feature, CREATE, NEW (2).
+- No DUP, OVERLAP or CONFLICT. The feature-244 `@AC-6` Examples row for `ingest.backfill.self_serve_max_range_days` is already in docs/sdd/business-rules/platform.feature (Step 7); nothing else goes there.
+
+### Ready-to-write blocks
+--- services/xstockstrat-ui/acceptance/backtest-inline-backfill.feature (CREATE) ---
+# Promoted from docs/roadmap/features/343-backtest-inline-backfill/acceptance.feature (Constitution C-16).
+# Provenance: @feature-343.
+
+Feature: xstockstrat-ui - the Backtests card and insights strategy page backfill missing data inline, for every signed-in user
+
+  @AC-1 @FR-1 @feature-343
+  Scenario: The insufficient-data message offers a backfill action
+    Given a backtest of "dip_buyer_vol_stop" on "LYFT" that returned insufficient data with 53 of 200 bars
+    When the Backtests card is shown
+    Then the message "has 53, needs 200 bars" is shown with a "Backfill missing data" action
+
+  @AC-2 @FR-2 @feature-343
+  Scenario: The backfill covers the missing range through the end of the backtest window
+    Given the insufficient-data result reports a gap from 2023-03-17 to 2024-01-01 for "LYFT"
+    And the backtest window ends on 2024-12-31
+    When "Backfill missing data" is activated
+    Then a daily-bars backfill is requested for "LYFT" from 2023-03-17 to 2024-12-31
+    And the request asks for missing bars only, without overwrite
+
+  @AC-3 @FR-3 @feature-343
+  Scenario: Progress is shown inline while the backfill runs
+    Given a backfill for "LYFT" triggered from the Backtests card is running with 120 of 200 bars processed
+    When the Backtests card is shown
+    Then it shows "Backfilling… 120 / 200 bars"
+    And the "Backfill missing data" action is disabled
+
+  @AC-4 @FR-4 @feature-343
+  Scenario: A completed backfill offers a re-run and does not run it
+    Given the backfill for "LYFT" triggered from the Backtests card has completed
+    When the Backtests card is shown
+    Then it shows "Data ready" with a "Re-run backtest" action
+    And no new backtest run has been requested
+
+  @AC-5 @FR-4 @feature-343
+  Scenario: Re-running after the backfill produces a result
+    Given the Backtests card shows "Data ready" for "LYFT"
+    When "Re-run backtest" is activated
+    Then a backtest of "dip_buyer_vol_stop" on "LYFT" is requested
+    And the insufficient-data message is no longer shown once it returns status OK
+
+  @AC-6 @FR-5 @feature-343
+  Scenario: A failed backfill reports its error and can be retried
+    Given the backfill for "LYFT" triggered from the Backtests card failed with error "vendor rate limit exceeded"
+    When the Backtests card is shown
+    Then it shows "Backfill failed: vendor rate limit exceeded"
+    And the "Backfill missing data" action is enabled
+
+  @AC-9 @FR-5 @feature-343
+  Scenario Outline: A partial or canceled backfill says so and can be retried
+    Given the backfill for "LYFT" triggered from the Backtests card ended with status "<status>" after <completed> of <total> chunks completed
+    When the Backtests card is shown
+    Then it shows "<message>"
+    And the "Backfill missing data" action is enabled
+
+    Examples:
+      | status   | completed | total | message                                                       |
+      | PARTIAL  | 2         | 3     | Backfill partial: 1 of 3 chunks failed                        |
+      | PARTIAL  | 3         | 3     | Backfill partial: LYFT returned no data for part of the range |
+      | CANCELED | 1         | 3     | Backfill canceled                                             |
+
+  @AC-10 @FR-6 @feature-343
+  Scenario Outline: The insights strategy page backfill button works for every signed-in user
+    Given a signed-in user <role> the admin scope
+    And the insights strategy page shows an insufficient-data result with a gap for "AAPL"
+    When "Backfill this range" is activated
+    Then a daily-bars backfill is requested for "AAPL" over exactly that gap
+    And the request fill mode is <fill mode>
+
+    Examples:
+      | role    | fill mode                 |
+      | without | missing bars only         |
+      | with    | the full range, as before |
+
+  @AC-11 @FR-6 @feature-343
+  Scenario: A second backfill for a symbol that already has one is refused and can be retried
+    Given a self-serve backfill for "LYFT" is already queued or running
+    When a signed-in user without the admin scope activates "Backfill missing data" for "LYFT"
+    Then no second job is created
+    And the card shows "A backfill for LYFT is already queued or running. Try again when it finishes."
+    And the "Backfill missing data" action is enabled
+
+  @AC-12 @FR-6 @feature-343
+  Scenario: A backfill longer than the self-serve limit is refused with the span and the limit
+    Given the self-serve range limit is 730 days
+    And an insufficient-data result for "LYFT" whose backfill range spans 1825 days
+    When a signed-in user without the admin scope activates "Backfill missing data"
+    Then no job is created
+    And the card shows "This backtest needs 1825 days of history, more than the self-serve limit of 730 days. Ask an admin to backfill LYFT."
+
+  @AC-13 @FR-5 @feature-343
+  Scenario: A gap the vendor cannot fill is reported instead of offering the backfill again
+    Given the backfill for "LYFT" triggered from the Backtests card has completed
+    When "Re-run backtest" returns insufficient data with the same gap from 2023-03-17 to 2024-01-01
+    Then the card shows "No vendor data for 2023-03-17 to 2024-01-01"
+    And it offers no "Backfill missing data" action for that gap
+
+  @AC-14 @FR-3 @feature-343
+  Scenario: Progress without a bar total shows no fraction
+    Given a backfill for "LYFT" triggered from the Backtests card is queued with no bar total yet
+    When the Backtests card is shown
+    Then it shows "Backfilling…"
+    And the "Backfill missing data" action is disabled
+
+  @AC-16 @FR-5 @feature-343
+  Scenario: A failed backfill with no error text reports its chunk counts
+    Given the backfill for "LYFT" triggered from the Backtests card failed with no error after 0 of 3 chunks completed
+    When the Backtests card is shown
+    Then it shows "Backfill failed: 3 of 3 chunks failed"
+    And the "Backfill missing data" action is enabled
+
+--- services/xstockstrat-ingest/acceptance/backtest-inline-backfill.feature (CREATE) ---
+# Promoted from docs/roadmap/features/343-backtest-inline-backfill/acceptance.feature (Constitution C-16).
+# Provenance: @feature-343.
+
+Feature: xstockstrat-ingest - TriggerBackfill admits a bounded self-serve backfill for non-admins and denies anything outside it with a reason
+
+  @AC-7 @FR-6 @feature-343
+  Scenario: A non-admin user can run the inline backfill
+    Given a signed-in user without the admin scope
+    And an insufficient-data result for "LYFT"
+    When "Backfill missing data" is activated
+    Then the backfill is accepted and its status is "QUEUED"
+
+  @AC-15 @FR-6 @feature-343
+  Scenario Outline: A non-admin request outside the self-serve envelope is denied with its reason
+    Given a signed-in user without the admin scope
+    When a backfill is requested that breaks the "<condition>" condition
+    Then it is denied with "self-serve backfill denied: <token>"
+    And no job is created
+
+    Examples:
+      | condition                         | token          |
+      | exactly one symbol                | multi_symbol   |
+      | bars only                         | data_kind      |
+      | missing bars only                 | fill_mode      |
+      | no overwrite                      | overwrite      |
+      | explicit range with start < end   | range_unset    |
+      | range within the self-serve limit | range_too_long |
+      | no callback URL                   | callback_url   |
+      | a real user id                    | no_user        |
+
+### Notes
+- Attribution: @AC-7 and @AC-15 assert the server-side TriggerBackfill outcome (QUEUED for a non-admin; the PERMISSION_DENIED detail), so they go to ingest. @AC-11 and @AC-12 end on the card's copy and go to ui; the server side of `range_too_long` is covered by @AC-15.
+- Existing backfill rules checked and still literally true: 198 @AC-6/@AC-7, 334 @AC-1/2/3/26, 261 @AC-2/3/6, 244 @AC-5/@AC-6, 270 @AC-4. No existing scenario says TriggerBackfill is admin-only.
+- O-33 (the @AC-9 Examples rewrite) is still marked open in debate.md; it is promoted verbatim as approved with the design.
+
+### Coverage check
+- Source scenarios: 15. Planned: 15 NEW (ui 13, ingest 2), 0 DUP, 0 OVERLAP, 0 CONFLICT.
+```
+
+## Session 2026-11-16 — operator confirmation of the promotion plan (orchestrator)
+
+- Asked: confirm the plan above (15 scenarios verbatim, tags kept: 13 in `services/xstockstrat-ui/acceptance/backtest-inline-backfill.feature`, 2 in `services/xstockstrat-ingest/acceptance/backtest-inline-backfill.feature`)? **Operator, verbatim: "Confirm (Recommended)".** This confirms the last `sdd-batch-promotion-plan` block (P-04).
+- Merge-order gate: feature 341 merged into main-dev (PR #1549, 5fad24f9c) and main-dev is merged into this branch (090f12d0a); the 343-after-341 row is satisfied.

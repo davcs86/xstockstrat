@@ -122,6 +122,20 @@ async def list_jobs(
     return [dict(row) for row in rows]
 
 
+async def has_active_job(db, symbol: str, active_statuses: list[int]) -> bool:
+    """Whether any job of any data kind lists ``symbol`` with a status in ``active_statuses``.
+
+    ``db`` may be the pool or a connection inside the caller's transaction.
+    """
+    row = await db.fetchrow(
+        "SELECT 1 FROM ingest.backfill_jobs"
+        " WHERE $1 = ANY(symbols) AND status = ANY($2::int[]) LIMIT 1",
+        symbol,
+        list(active_statuses),
+    )
+    return row is not None
+
+
 async def reconcile_interrupted(
     db_pool,
     *,
