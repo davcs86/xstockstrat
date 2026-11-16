@@ -18,6 +18,7 @@
 | 2026-11-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps; FR-10 and @AC-10 added first (design D-25) |
 | 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute (sdd-batch-execute setup) | Sequential execution started; main-dev 9f8856229 merged, steps 2, 7, 9, 10 re-spec'd |
+| 2026-11-15 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 15 steps done; Steps 14+15 (Alerts drawer) landed as one unit; `check-config-wiring.mjs --final` exit 0 |
 
 ---
 

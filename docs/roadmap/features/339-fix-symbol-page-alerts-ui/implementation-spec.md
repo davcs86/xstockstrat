@@ -1041,7 +1041,7 @@ Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
 
 ### Step 14 — service: Alerts drawer lists merged unread alerts, with mark-read and Clear all
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/AlertStream.tsx` — modify
@@ -1130,7 +1130,7 @@ and `grep -n "useReconnectingStream" -A 7 src/components/trader/AlertStream.tsx`
 
 ### Step 15 — test: Alerts drawer scenarios
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/alert-stream.spec.ts` — modify
@@ -1360,3 +1360,41 @@ _Populated by /sdd-execute as implementation proceeds._
   `@playwright/test` import drops `type Route`. **Disposition**: in-scope formatting.
 - **`INVENTORY.md` fails `prettier --check` before and after this step** (the base file warns
   too). Not reformatted: out of scope. **Disposition**: pre-existing, recorded.
+
+### Steps 14+15 — Alerts drawer and its scenarios (2026-11-15, SEV-3)
+
+- **Harness timeouts in the unchanged command.** GREEN with the command unchanged: 17 passed,
+  4 failed, all at the harness 10 s local test timeout during cold dev-server compiles (the push
+  BFF `@AC-3` `res.json`, the bell-visible test, the default-mock badge test waiting for the
+  dialog, the orders reconnect test); every feature-339 `@AC` scenario passed. With
+  `--timeout=90000` the first run passed 20 of 21: the untouched inbox `@AC-1` hit its own 10 s
+  expect on a cold `/accounts/notifications` load. It had passed in the 10 s run. The second run
+  passed 21 of 21. **Disposition**: CI-equivalent fallback (as in Steps 1+2 through 13); the
+  `frontend-e2e` CI job is the confirming run. No unverified AC: `@AC-3`, `@AC-4`, `@AC-5`,
+  `@AC-9` and `@AC-10` passed in a real Playwright run.
+- **RED reasons.** The RED run used the unchanged command. `@AC-3` found no unread row in the
+  drawer. `@AC-4` found no `Mark read: …` button. `@AC-5` found the badge still `1`. `@AC-10`
+  found no `Clear all` button, because today's button needs streamed rows; the spec predicted a
+  later failure on the Notifications page. `@AC-9` hit the 10 s test timeout inside its badge
+  poll, so its no-badge reason was not seen in the log. A second RED run with
+  `--timeout=90000` did not start: another worktree's Playwright run held port 9091
+  (`EADDRINUSE`). **Disposition**: recorded. Every scenario was red before Step 14 and green
+  after it.
+- **Bell locator uses `includeHidden: true`.** While the drawer is open, the Radix modal sets
+  `aria-hidden` on the rest of the page. A plain `getByRole('button', { name: /^Alerts/ })` then
+  cannot reach the badge that `@AC-4`, `@AC-5`, `@AC-9` and `@AC-10` read with the drawer open.
+  It is still a role locator. **Disposition**: in-scope test detail.
+- **Hydration guard in the default-mock tests.** The tests that open the drawer first wait for
+  the badge inside the bell, not for the `^2$` badge. `@AC-9` waits for a `ListAlerts` call and
+  a stream attempt, because no badge shows before the release. **Disposition**: in-scope test
+  detail.
+- **Shared Playwright ports across worktrees.** Parallel batch worktrees use the same ports
+  (3000, 9091-9093). With `reuseExistingServer` set locally, a run could test another
+  worktree's server. Each run here started only after the ports were free and no other
+  `playwright test` process was running. The logs show this tree's own web server.
+  **Disposition**: recorded; the runs here are not affected.
+- **Choices the spec left open.** The error-notice texts are "Could not load alerts" and "Could
+  not mark alerts read". When both a fetch failure and a mark failure apply, one error notice
+  shows, with the mark text. A failed per-row mark still runs `refreshUnread()`, because the spec
+  says to refresh after every mark action. The scroll container gains `space-y-2` so the notices
+  sit apart from the list. **Disposition**: in-scope choices.
