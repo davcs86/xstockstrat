@@ -399,7 +399,7 @@ Feature: authelia-sso
     And the agent's protected-resource metadata returns HTTP 503
     And the agent logs "sso_issuer_invalid"
 
-  @AC-56 @FR-15
+  @AC-56 @FR-14 @FR-15
   Scenario: Logout with an invalid issuer ends only the xstockstrat session
     Given staging ui/oidc.issuer is "http://auth.example.test" and agent/oidc.issuer is "https://auth.example.test"
     When a signed-in user logs out

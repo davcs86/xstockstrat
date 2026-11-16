@@ -30,7 +30,8 @@ access JWT + identity-backed refresh token, signed with env `JWT_SECRET` per IDE
 session-cookie, middleware, header-propagation (`x-user-id`, `x-access-scope`, `x-trace-id`) and refresh paths are
 unchanged. The login page shows a "Keep me signed in for 14 days (SSO)" checkbox next to "Sign in with SSO". Its value, and the post-login
 redirect, travel bound to the OIDC `state`: they are stored in the encrypted, httpOnly SSO-transaction cookie keyed
-by the random `state` value (owner decision 2026-11-16). The callback passes it to `setSessionCookies` exactly as the password path does today (UI-8).
+by the random `state` value (owner decision 2026-11-16). The callback passes it to `setSessionCookies` exactly as the password path does today (UI-8). With an invalid configuration (FR-14), sign-in fails with "SSO not
+configured" and no request reaches Authelia.
 
 FR-2. **MCP as a resource server.** In SSO mode (FR-14), `xstockstrat-agent` accepts **only** Authelia-issued JWT access tokens on its MCP
 endpoint. A token passes only if all of these hold, against Authelia's cached JWKS:
@@ -45,7 +46,8 @@ cannot be judged because Authelia's signing keys cannot be fetched, the agent re
 `WWW-Authenticate`, the same contract as an identity outage (owner sign-off 2026-11-16). That metadata names Authelia as the authorization server. The agent stops accepting identity-minted OAuth
 tokens. It issues no tokens and keeps no per-request state (`instance_count > 1` stays safe). Clients are
 pre-registered in Authelia; there is no dynamic client registration. Authelia is configured to include the `email`
-claim in access tokens (spike item), and the agent never logs a token or its `email` claim.
+claim in access tokens (spike item), and the agent never logs a token or its `email` claim. With an invalid issuer configuration (FR-14), the agent answers
+503 without `WWW-Authenticate` before examining the token.
 
 FR-3. **Account resolution per environment.** A new identity RPC
 `ResolveExternalIdentity(issuer, subject, email)` returns `{user_id, roles, is_active, outcome}`. Email comparison is
@@ -151,11 +153,8 @@ Every other IdP error shows "Sign-in failed. Try again." The UI gains a "Sign ou
 logout. If the UI cannot read its config at logout time, logout ends only the xstockstrat session and logs a warning
 `sso_logout_mode_unknown`; the Authelia session survives (owner decision 2026-11-16). In **both modes**, a logout request
 whose `Origin` header is present and is not the app's own origin (`APP_URL`) is refused with 403 and changes nothing:
-no revoke, no cookie change (owner decision 2026-11-16, P-2). A request with no `Origin` header is unaffected.
-**Invalid configuration fails closed.** When both issuers are set but either is not a valid issuer URL, or `APP_URL` is
-not exactly a `scheme://host[:port]` origin, the deployment stays in SSO mode with a configuration error. SSO sign-in
-returns "SSO not configured", the protected-resource documents and every MCP call answer 503, and logout ends only the
-xstockstrat session with no redirect. Both services log `sso_issuer_invalid`.
+no revoke, no cookie change (owner decision 2026-11-16, P-2). A request with no `Origin` header is unaffected, and a cookie-less cross-origin POST is redirected to the login page
+as today (middleware). With an invalid configuration (FR-14), logout ends only the xstockstrat session, with no redirect.
 
 FR-13. **Documentation.** The same PR as each behaviour change updates:
 - `docs/runbooks/mcp-tools.md`: connector setup with the pre-registered client IDs `xstockstrat-mcp-claude` (full) and
@@ -163,7 +162,7 @@ FR-13. **Documentation.** The same PR as each behaviour change updates:
   for staging, with redirect URI `https://claude.ai/api/mcp/auth_callback`;
 - the identity, ui and agent `CLAUDE.md` files (config keys, auth flow);
 - AGENT-1 and AGENT-9 in `services/xstockstrat-agent/docs/context-constitution.md`: the watched namespaces now include
-  `ui`, plus the new read sites in `app/auth.py`;
+  `ui`, plus the new read sites in `app/sso_mode.py` and the SSO token validator;
 - `docs/patterns/frontend-auth.md`;
 - IDENTITY-15 in `services/xstockstrat-identity/docs/context-constitution.md` and `docs/patterns/database.md`: the
   seed email may be renamed by cutover, so new migrations resolve the seed owner by `SEED_USER_ID`, never by
@@ -174,7 +173,9 @@ FR-14. **Backwards compatibility until cutover (per deployment).** The DigitalOc
 config rows. Each deployment runs in exactly one mode, chosen by its own config, with no image or env change.
 
 - **Legacy mode**: `ui` / `oidc.issuer` and `agent` / `oidc.issuer` are empty. This is the seeded default, so every
-  deployment starts here, the DO apps included, and behaves exactly as before this feature:
+  deployment starts here, the DO apps included, and behaves as before this feature, apart from the both-mode changes
+  (among them: the "Sign out" button, JSON on an expired-session logout, 403 on a logout from a foreign `Origin` (FR-15),
+  logout revoking only a signature-valid session (feature 319), and FR-9's fail-closed default for a missing flag row):
   - password login works (`auth.password_login_enabled` is seeded `true`);
   - the login page shows no SSO button;
   - the agent keeps today's OAuth 2.1 server (DCR, identity-minted, `aud`-bound tokens validated via `ValidateToken`);
@@ -184,6 +185,18 @@ config rows. Each deployment runs in exactly one mode, chosen by its own config,
 - **SSO mode**: both issuers are set. FR-1, FR-2, FR-7, FR-8, FR-11 and FR-15 apply (the "Sign out" button itself is shown in both modes) (FR-3/4/5 are reached only through
   them; FR-10 applies in both modes). The agent rejects identity-minted tokens,
   and its legacy OAuth routes answer 404, so a deployment never accepts both token kinds at once.
+- **SSO mode with invalid configuration**: both issuers are set, but either is not a valid issuer URL, or `APP_URL` is not
+  exactly a `scheme://host[:port]` origin. A valid issuer is https, or http only on `localhost`, `127.0.0.1` or `[::1]`. Its
+  host is a canonical lowercase name: no IP address except loopback, no IDN or `xn--` labels, no default port. It has no
+  userinfo, query, fragment or `%`, and no trailing slash or empty path segment. The deployment stays in SSO mode with a
+  configuration error:
+  - the login page still shows "Sign in with SSO", and SSO sign-in returns "SSO not configured" without contacting
+    Authelia;
+  - the UI's protected-resource document answers 503;
+  - an invalid **issuer** also makes every MCP call, and the agent's protected-resource document, answer 503 without
+    `WWW-Authenticate`;
+  - the UI logs `sso_issuer_invalid` (issuer) or `app_url_invalid` (`APP_URL`); the agent logs `sso_issuer_invalid`.
+    Each is logged once per distinct value.
 - **Cutover for one deployment** is a config change only: set the `ui.oidc.*` and `agent.oidc.issuer` keys, then set
   `auth.password_login_enabled` to `false`. Clearing the two issuers returns that deployment to legacy mode (the MCP
   rollback path; redeploying the previous release remains possible).
@@ -273,7 +286,7 @@ environment, because prod and staging are separate Authelia apps.
       `src/app/api/auth/sso/start/route.ts:POST`, `src/app/api/auth/sso/callback/route.ts:GET` (new), the logout route,
       `/accounts/authorized-apps` and the two `src/app/api/oauth/*` discovery routes. One-shot
       `GetConfig(namespace: 'ui')` per request, live on the next request.
-    - `services/xstockstrat-agent/app/auth.py:sso_mode` (new), for the half-configured check (FR-14), through
+    - `services/xstockstrat-agent/app/sso_mode.py:current_sso_mode` (new), for the half-configured check (FR-14), through
       `read_config_value('ui', 'oidc.issuer')`. This requires adding `ui` to `WATCHED_NAMESPACES`
       (`app/config/watcher.py`, AGENT-9: an unwatched namespace silently reads `None`). Live through the snapshot.
 - `ui.oidc.client_id`
@@ -283,7 +296,8 @@ environment, because prod and staging are separate Authelia apps.
 - `ui.oidc.client_secret`
   - namespace `ui`, stored key `oidc.client_secret`, `string`, encrypted `is_secret` row, seeded with the `[redacted]`
     sentinel and a NULL ciphertext, which `GetSecret` reports as `found=false` (unset);
-  - code default `""`: empty in SSO mode means the callback fails with "SSO not configured" (fail closed);
+  - code default `""`: empty in SSO mode means `/start` and the callback fail with "SSO not configured" (fail closed), and logout
+    falls back to the portal URL;
   - reader `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcClientSecret` (new), called by
     `src/app/api/auth/sso/start/route.ts:POST`, `src/app/api/auth/sso/callback/route.ts:GET` and the logout route, through
     `GetSecret` via the allow-list grant above. A rotated value applies on the next request (the cached OIDC
@@ -297,7 +311,7 @@ environment, because prod and staging are separate Authelia apps.
   - namespace `agent`, stored key `oidc.issuer`, `string`, code default `""`;
   - empty means legacy mode (FR-14): today's OAuth server and identity-token validation, unchanged;
   - readers (all new code):
-    - `services/xstockstrat-agent/app/auth.py:sso_mode`, `app/auth.py:validate_authelia_token` and the
+    - `services/xstockstrat-agent/app/sso_mode.py:current_sso_mode`, the SSO token validator (new) and the
       protected-resource metadata builder in `services/xstockstrat-agent/app/main.py`. All read through
       `read_config_value('agent', 'oidc.issuer')` (AGENT-9; `agent` is in `WATCHED_NAMESPACES`), live through the
       snapshot.

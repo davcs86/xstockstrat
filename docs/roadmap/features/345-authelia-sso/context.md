@@ -190,3 +190,12 @@
   - new acceptance scenarios: AC-54 (UI, invalid issuer), AC-55 (agent, invalid issuer), AC-56 (logout with an invalid issuer), AC-57 (cross-origin logout Outline over legacy and SSO).
 - The owner still needs to confirm that D-77 applies in both modes. The evidence: DigitalOcean declares no extra domains, and each homelab app has a single hostname.
 - Owner gate (round 8): confirmed that D-77 applies in **both modes** (D-80), and chose to **run round 9**.
+
+### 2026-11-16 — /sdd-design round 9 (final text for the round-8 fixes)
+
+- The proposer delivered the final regex grammar and the 82-row vector file, plus the remaining shapes. The orchestrator ran the vectors under Python and Node 22: all rows matched.
+- The adversary found no Floor breach and no register violation, and said no further adversarial round is warranted. Its findings:
+  - O-80: openid-client 6.8.9 normalises or skips the discovery issuer equality. The orchestrator verified this at `oc689 index.js:264,287`. Fixed by D-89, an exact `assertDiscoveredMetadata`.
+  - O-79: `next build` does not type-check test files, so D-83 is unenforced. P-3 petitions to reopen D-83 and move the type assertions into `src/lib/authEvents.typecheck.ts` (D-93, pending owner).
+  - O-81..O-84 were folded into D-90..D-92.
+- Spec changes: the invalid-configuration rule moved to FR-14, with references from FR-1, FR-2 and FR-15; FR-14's legacy bullet now lists the both-mode changes non-exhaustively; reader paths and `client_secret` text were fixed; AC-56 gained `@FR-14`.
