@@ -61,13 +61,13 @@ Binding register: `debate.md` (State `approved`; D-1…D-28 settled, D-5 superse
 
 - [ ] O-33: the `343@AC-9` rewrite was made on the strength of the round-5 design approval; no operator decision names the scenario on its own, and none of the relayed numbered answers was read as this sign-off — operator, `/sdd-execute` checkpoint.
 - [x] Step 7 edits the durable suite `docs/sdd/business-rules/platform.feature` (an Examples row on `244@AC-6`) before launch, where C-16 normally promotes at launch; accepted by the operator ("Expand it", read as EXTEND) and landed in Step 7.
-- [ ] The feature 343 registered-keys entry in `docs/patterns/config-governance.md` points at `docs/runbooks/config-rollout.md` for the homelab `backfill.max_concurrent_jobs` = 8; that subsection is written by Step 16.
+- [x] The feature 343 registered-keys entry in `docs/patterns/config-governance.md` points at `docs/runbooks/config-rollout.md` for the homelab `backfill.max_concurrent_jobs` = 8; Step 16 wrote that subsection.
 - [ ] Step 8 touches 6 files (code, two docs, two `strat-lab` skill files) and stays one step unless the operator wants code and docs split (`docs/patterns/strat-lab-plugin.md` requires the skill change in the same PR; Step 9's parity test reads all of them) — `/sdd-execute` checkpoint.
 - [ ] Config migration number `050` is also held by 341 (`050_ui_chart_history_bars`) and 330 (`050_analysis_live_enrich_ttl_reseed`) on their branches (trunk tip is `049`); 343 merges after 341 and renumbers — re-derive at Step 2 and at the integration PR.
 - [x] Step 2 regenerated `scripts/config-wiring-stored.json` against the operator-provided scratch Postgres (Option B). A renumber at the integration PR means regenerating it again.
 - [x] `docs/roadmap/features/merge-order.md` 343 → 341 row exists (`:127`, #1545); Step 1 added 343's remaining shared files to the cohort section. The integration PR still waits for 341.
 - [ ] Peer file overlap, rebase-only: `trader/positions/[symbol]/page.tsx` (339, 341); `e2e/trader/position-detail.spec.ts` (asserts /Backfill coverage panel/ at `:337`), `insights/strategies/[id]/page.tsx`, `e2e/insights/backtest-coverage.spec.ts` (341; this last pair is not in the spec's peer-overlap list); ingest `servicer.py`, `tests/test_ingest_servicer.py`, `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md` (344); `docs/patterns/config-governance.md`, `docs/runbooks/config-rollout.md` (append order) — integration PR.
-- [ ] Runbook (Step 16) reads after the operator directives: `max_locks_per_transaction` = 1024 and `max_connections` = 70 are taken from `homelab-edge` (the second on the orchestrator's reading of "now love" as "live", not verified against the host); whether `max_prepared_transactions` still needs its specified read (psql over ssh, DB-owner DSN as fallback) is not ruled — `/sdd-execute` checkpoint, Step 16.
+- [ ] Runbook (Step 16) reads after the operator directives: `max_locks_per_transaction` = 1024 and `max_connections` = 70 are taken from `homelab-edge` (the second on the orchestrator's reading of "now love" as "live", not verified against the host). Step 16 kept the specified read-only `SHOW max_prepared_transactions;` (psql over ssh, DB-owner DSN as fallback) because no ruling drops it. The operator may still drop that read and confirm the "live" reading — integration PR.
 - [ ] The S ≤ 2 lock bound fails if marketdata gets `DB_POOL_MAX` or more replicas; confirm one replica with `DB_POOL_MAX` unset — runbook step 2 (Step 16).
 - [ ] Admin GAPS_ONLY ranges are uncapped, so `L_stmt_max` is the longest admin range the operator accepts — runbook step 3 (Step 16).
 - [ ] Pre-004 one-day ohlcv chunks would raise L for old ranges; the homelab is asserted to be a fresh deploy, not verified — runbook step 2 (Step 16).
@@ -92,6 +92,7 @@ Outside the feature directory:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`, `e2e/trader/position-detail.spec.ts`, `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md` — Steps 12+13 (inline backfill on the Backtests card and its e2e).
 - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` — Step 14 (strategy-page backfill button builds its request with `gapToBackfillRequest`; non-admins send GAPS_ONLY).
 - `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts` — Step 15 (non-admin GAPS_ONLY and admin no-`fillMode` request tests).
+- `docs/runbooks/config-rollout.md` — Step 16 (subsection "Homelab: self-serve backfill capacity (feature 343)").
 
 Feature-directory artifacts:
 
@@ -614,3 +615,14 @@ Tooling setup (step 15): node ✓ · pnpm ✓ · tsc ✓ · prettier ✓ · Play
 - TDD (AC-10 page surface): RED `v-1` against the pre-Step-14 page (checked out from `34ebb5635^`, restored before commit) exit=1 — non-admin test `Expected: "FILL_MODE_GAPS_ONLY"`, `Received: undefined`; the admin test passed (characterization). GREEN `v-5` (`--reporter=list --timeout=90000 --retries=1`) exit=0 — `13 passed`, `2 flaky` (the two unchanged existing gap tests on a cold compile, passed on retry; both new tests passed first time). `v-2` fence verbatim: lint (warnings only in untouched files) and tsc clean; `v-3` grep `:2` `../helpers/auth`, `:3` `../fixtures`, exit=0; `v-4` unchanged Playwright line failed only the 10 s warmup project. Prettier `--check` on the spec clean. No config key touched, so no wiring gate.
 - Files modified: `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts`
 - Deviations: RED against the pre-Step-14 page; Verification run per line and Playwright diagnosed with added flags; the helper is used by the new tests only (Deviation Log).
+
+## Session 2026-11-16 — sdd-execute sequential (sdd-batch-execute), Step 16
+
+Tooling setup (step 16): node ✓ v24.22.1 (no install; docs step).
+
+### Step 16 — docs: homelab rollout subsection in the config-rollout runbook [done]
+- Added "### Homelab: self-serve backfill capacity (feature 343)" after the fresh-deploy paragraph in `docs/runbooks/config-rollout.md`. It is staging only and changes nothing in homelab-edge or Postgres. It has five numbered steps: `get_config` of the three ingest and six analysis keys; the Postgres parameters (1024 and 70 from homelab-edge, plus a read-only `SHOW max_prepared_transactions;`, and checks for one marketdata replica, `DB_POOL_MAX` unset and a fresh deploy); the lock inequality with its two worked rows (1,392 and 4,000 against 71,680) as the only stop; `set_config` 8 and 1830 with read-back (DigitalOcean stays at 3 and 730); and one readiness cycle watching `marketdata.ohlcv.out_of_memory_errors` and the two `empty_acquire` gauges, reverting to 3 jobs if either moves. It ends with the three-line checklist. The section has no hostnames, DSNs or secrets.
+- TDD: N/A (docs). Verification (`.sdd-logs/v-1.log`, exit=0): heading at `:301`; the key at `:348`; `max_locks_per_transaction` at `:313`, `:329`; `out_of_memory_errors` at `:353`; `empty_acquire` at `:354`. `--final` reports only the two pre-existing `readers-disagree` lines (analysis, trading). Wiring gate step-time `--declared-from` (`v-2`): exit=0, no findings. Last step, so `--final` was also run alone (`v-3`): exit=0, with the same two REPORTED lines.
+- Files modified: `docs/runbooks/config-rollout.md`
+- Deviations: step 2 takes `max_locks_per_transaction` and `max_connections` from homelab-edge under the operator's execute directives and keeps only the `max_prepared_transactions` read. The spec's evidence line for the pool gauges has drifted (Deviation Log).
+- All 16 steps are done: `in-progress` → `code-completed`. No ledger insight was written, because nothing generalizes beyond the existing entries.

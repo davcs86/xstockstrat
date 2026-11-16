@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/backtest-inline-backfill`
 **Created**: 2026-11-15
-**Last Updated**: 2026-11-15
+**Last Updated**: 2026-11-16
 
 ---
 
@@ -15,6 +15,7 @@
 | 2026-11-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 16 steps |
 | 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
+| 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute | All 16 steps done (Step 16 last); `check-config-wiring.mjs --final` exit 0 |
 
 ---
 
