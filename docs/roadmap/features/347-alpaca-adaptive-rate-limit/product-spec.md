@@ -36,22 +36,29 @@ FR-1. **Header tracking.** Each Alpaca REST client records `X-RateLimit-Limit`, 
 and `X-RateLimit-Reset` from every response, success or failure. State is kept separately per Alpaca host
 and per credential, because each has its own quota window.
 
-FR-2. **Pre-emptive pacing.** When the recorded `Remaining` for a host is 0 and its `Reset` is in the
-future, the next request to that host is not sent before `Reset`. While `Remaining` is low, requests are
-spread over the time left in the window instead of being sent as a burst. The low-water threshold and the
-spreading rule are fixed in code (design decides the values). Whatever threshold design sets, it treats a
-`Remaining` of 4 with a `Limit` of 200 as low (AC-3). A pre-emptive wait that is cut short by the request
-context returns the same "rate limited" error as FR-3, and the request is not sent.
+FR-2. **Pre-emptive pacing.** When the recorded `Remaining` for a host and credential is 0 and its
+`Reset` is in the future, the next request to that host is not sent before `Reset` (a recorded `Reset` is
+capped at one 60-second window, so a single hold never exceeds one window). While `Remaining` is low,
+requests are spread over the time left in the window instead of being sent as a burst. A spread slot
+later than the caller's latest acceptable send time is not waited for: the request is sent at once while
+the window still has local quota, and it uses one unit of that quota. The low-water threshold and the
+spreading rule are fixed in code (§ Fixed Invariants); a `Remaining` of 4 with a `Limit` of 200 is low
+(AC-3). When a hold cannot end before the caller's latest acceptable send time, trading refuses the
+request at once and marketdata waits until the request context is done. A pre-emptive wait that ends
+early returns the same "rate limited" error as FR-3, and the request is not sent.
 
-FR-3. **429 retry.** A 429 response is retried inside the client: wait until `X-RateLimit-Reset` (when
-present and in the future), otherwise back off exponentially from 1s doubling to a fixed cap, with random
-jitter in both cases. Jitter is only ever added to the wait, never subtracted, so a retry is never sent
-before `Reset` or before the backoff base. `Reset` is used whenever it parses, whatever the other two
-headers hold. A retried request is sent with the same method, URL and body. Retries stop when the request
-context is done. When the context has no deadline they still stop at a fixed total wait (design sets it:
-at least 60 seconds, one Alpaca window, and at most 300 seconds in marketdata; below the FR-8 threshold
-in trading). In both cases the caller gets an error whose message contains "rate limited" and the Alpaca
-host name.
+FR-3. **429 retry.** A 429 response is retried inside the client. The client waits until
+`X-RateLimit-Reset` when it parses and is in the future, capped at one 60-second window, whatever the
+other two headers hold. Otherwise it backs off from 1 s, doubling, to an 8 s cap. Random jitter is added
+in both cases and is only ever added, never subtracted, so a retry is never sent before the capped
+`Reset` wait or before the backoff step. A retried request is sent with the same method, URL and body.
+Only a 429 is retried; an attempt that times out or fails in any other way is returned at once. In
+marketdata, retries stop when the request context is done; a context with no deadline also stops after a
+fixed total of 90 seconds. In trading, a retry is started only when its wait plus one full
+`trading.broker.timeout_ms` attempt ends no later than the call's end (FR-8); otherwise the call is
+refused at once. When a wait is refused or ends early, or retries stop, the caller gets an error whose
+message contains "rate limited" and the Alpaca host name; an attempt that times out returns its timeout
+error. In trading the "rate limited" error is a definite outcome and is never a context error.
 
 FR-4. **Static ceiling kept (marketdata).** `marketdata.backfill.rate_limit_rps` stays as a ceiling: the
 effective rate is the lower of the static limit and what the headers allow. A value of `0` still disables
@@ -69,16 +76,30 @@ Alpaca adapter in `internal/broker` in trading. FMP, Finnhub, EDGAR, IBKR and th
 are unchanged.
 
 FR-8. **Order safety (trading).** A retried order mutation (submit, replace, cancel) must never create a
-second order or a second cancel/replace effect, and the total time one broker call can take, retries
-included, must stay below the order-intent staleness threshold computed by
-`services/xstockstrat-trading/internal/service/order_intent.go` (`max(trading.broker.timeout_ms,
-IBKRRequestTimeout)` × `trading.order_intent.stale_multiplier`, multiplier floor 1.5). Order types, fill
-detection and the order status lifecycle are not changed.
+second order or a second cancel/replace effect. Each broker call, waits and retries included, ends
+within B = max(T, S − 2T), where T is the live `trading.broker.timeout_ms` and S is the order-intent
+staleness threshold computed by `services/xstockstrat-trading/internal/service/order_intent.go`
+(`max(trading.broker.timeout_ms, IBKRRequestTimeout)` × `trading.order_intent.stale_multiplier`,
+multiplier floor 1.5): 20 s at defaults. With a caller deadline, the call ends by whichever comes first.
+Order mutations run detached from caller cancellation, bounded by the same end, so a sent attempt always
+completes or times out. An attempt that times out stays an uncertain outcome. A rate-limit refusal means
+the broker did not process the request:
+- a submit is recorded REJECTED with `order.broker_rejected`, and its error contains "rate limited";
+- a cancel or replace returns `Unavailable` and leaves the order unchanged; its intent is released so
+  that an identical retry really retries, and when the intent cannot be released it reads UNKNOWN and
+  the reply does not invite a retry;
+- a rate-limited emergency-flatten submit halts the account at once, and the flatten retries continue.
 
-FR-9. **Observability.** No new instrument is added. In marketdata each 429 is recorded as one
-`marketdata.vendor.requests` point with outcome `http_429` and each retry as its own point; a rate-limit
-wait that ends because the request context is done records outcome `throttle`. One WARN log per
-throttled window names the host and the wait. Trading emits the same WARN log (host and wait) and no
+A cancel's intent is finalized before its bracket-leg cancels are sent. Order types, fill detection and
+the order status lifecycle are not changed.
+
+FR-9. **Observability.** No new instrument, label key or outcome value is added. In marketdata every
+attempt records one `marketdata.vendor.requests` point: a 429 is outcome `http_429`, and each retry is
+its own point. A rate-limit wait that completes records nothing extra. A wait that ends early records one
+point with no duration: outcome `ctx` when the request context ended it (deadline or cancellation), and
+outcome `throttle` when the client refused or bounded the wait while the request context was still live
+(the static ceiling, or the 90-second bound of a call with no deadline). One WARN log per throttled
+window per host names the host and the wait. Trading emits the same WARN log (host and wait) and no
 metric.
 
 FR-10. **Paper and live behave the same.** The behavior is mode-agnostic: the same code path serves the
@@ -86,16 +107,38 @@ paper host (`paper-api.alpaca.markets`) and the live host (`api.alpaca.markets`)
 per host (FR-1). It adds no order-placing call of its own, so it is paper-safe to test; staging exercises
 it against the paper host only.
 
+FR-11. **Loop bounds.** Background loops never stall on a rate-limit wait. In marketdata, the Alpaca calls
+of one warm-quote or bar-ingest cycle run under a deadline equal to that loop's live interval. Once the
+deadline has passed, no further fetch starts in that cycle, and every symbol not fetched counts as a
+fetch error: never as "no bars", and never toward a dead-symbol hold. Quote-cache and bar writes keep the
+loop's own context. In trading, on every account served by the Alpaca client (every non-IBKR account),
+each fill-poller `GetOrder`, the `CancelOrder` re-read after a "not cancelable" answer, and each
+bracket-leg cancel is bounded by one `trading.broker.timeout_ms`, so it never waits or retries; a
+throttled leg cancel is logged like any other leg failure. IBKR calls are unchanged (FR-7). These bounds
+and the cancel ordering apply whether or not the kill switch is on.
+
 ## Fixed Invariants (not config keys)
 
-The FR-2 low-water threshold and spreading rule, and the FR-3 backoff base (1s), doubling factor, cap and
-jitter, are constants in code. Reasons: the operator chose a kill switch as the only new tunable
-(2026-11-16); the backoff shape is the vendor's published guidance, not a deployment preference; the
-adaptive rate itself comes from Alpaca's headers at run time, so there is no per-environment number to
-set; and the two live controls an operator needs already exist as config (the kill switch per service,
-and the static ceiling `marketdata.backfill.rate_limit_rps`). This follows the existing "fixed
-invariants, operator-approved" precedent in `services/xstockstrat-marketdata/CLAUDE.md` (asset-set
-refresher, quote retention). `/sdd-design` sets the values and lists them in each service's `CLAUDE.md`.
+These values are constants in code: window 60 s; reset slack 5 s; low-water when `Remaining × 10 < Limit`;
+spreading `slot = max(now, nextSlot)`, `nextSlot = slot + (Reset − slot) / Remaining`, with local
+`Remaining` decremented per reservation and `nextSlot` never moving backwards; a hold of
+`min(Reset − now, 60 s)`; a 429 retry wait of `min(Reset − now, 60 s)` whenever `Reset` parses and is in
+the future, with no range filter (the 65 s rule applies to pacing state only), otherwise backoff; a
+recorded `Reset` usable for pacing only when all three headers parse and it lies no more than 65 s
+ahead; within one `Reset`, `Remaining = min(observed, local)`; backoff 1 s doubling, capped at 8 s;
+jitter add-only, uniform in [0, 500 ms), applied only to a non-zero adaptive wait; a zero adaptive wait
+is never fit-tested and is sent at once (marketdata's static limiter still applies); marketdata's 90 s
+total for a call with no deadline and 1 s minimum attempt allowance; trading's call budget
+`max(T, S − 2T)` (FR-8); loop fetch bounds of one interval (marketdata) and one
+`trading.broker.timeout_ms` (trading, every non-IBKR account).
+
+Reasons: the operator chose a kill switch as the only new tunable (2026-11-16); the backoff shape is the
+vendor's published guidance, not a deployment preference; the adaptive rate itself comes from Alpaca's
+headers at run time, so there is no per-environment number to set; the trading budget is derived from
+two existing live keys; and the two live controls an operator needs already exist as config (the kill
+switch per service, and the static ceiling `marketdata.backfill.rate_limit_rps`). This follows the
+existing "fixed invariants, operator-approved" precedent in `services/xstockstrat-marketdata/CLAUDE.md`
+(asset-set refresher, quote retention). The values are listed in each service's `CLAUDE.md`.
 
 ## Out of Scope
 
@@ -106,12 +149,20 @@ refresher, quote retention). `/sdd-design` sets the values and lists them in eac
 - Persisting limiter state across restarts.
 - Removing or renaming `marketdata.backfill.rate_limit_rps`.
 - Calling the Broker API (`broker-api.alpaca.markets`).
+- Reserving quota for interactive reads. In an exhausted window a marketdata quote or price fetch now
+  holds for its request budget (2.5 s) before returning, where a 429 used to fail at once.
+- Changing the outcome of a rate-limited submit: it stays REJECTED with `order.broker_rejected`, and a
+  caller reusing the same `client_order_id` replays it (documented in the trading `CLAUDE.md`).
+- Spreading calls whose deadline is shorter than the spread interval (interactive reads; trading's fill
+  poller, `reconcileTick`, `syncPositions`). They skip spreading under FR-2 and are held (marketdata) or
+  refused (trading) only when `Remaining` is 0.
+- The pre-existing `ReplaceOrder` defect (intent inserted before `validateTIF`), filed separately.
 
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-marketdata` — Alpaca REST client chokepoint `internal/alpaca/client.go#do` (MARKETDATA-4) gains header tracking, pacing and 429 retry.
-- `xstockstrat-trading` — Alpaca broker adapter `internal/broker/alpaca.go#do` gains the same behavior, with the FR-8 order-safety bound.
+- `xstockstrat-marketdata` — Alpaca REST client chokepoint `internal/alpaca/client.go#do` (MARKETDATA-4) gains header tracking, pacing and 429 retry; the warm-quote and bar-ingest loops bound their Alpaca calls by the loop interval (FR-11).
+- `xstockstrat-trading` — Alpaca broker adapter `internal/broker/alpaca.go#do` gains the same behavior within the FR-8 budget. `internal/service` handles the rate-limit outcome for cancel, replace and flatten, and bounds the fill poller, the not-cancelable re-read and the bracket-leg cancels (FR-11). One new order-intent repository method releases a PENDING intent.
 - `xstockstrat-config` — config migration seeding the two kill-switch keys.
 
 ## Consumer Surface(s)
