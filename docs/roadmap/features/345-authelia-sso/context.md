@@ -219,3 +219,14 @@
 - [ ] Feature 319 merges first or alongside. Due at rollout.
 - [ ] First `tsc --noEmit` run; fix any pre-existing errors. Due at the first UI step.
 - [ ] homelab-edge PR #77 follow-ups (`sso.md` §7/§8 `unlink-sso`, logout / `rd`, post-logout redirect, back-channel reachability, rate-limit exemption). Due in a separate homelab-edge PR.
+
+## Session 2026-11-16 — sdd-review product-spec (re-review after design)
+
+- Product spec re-approved after the design-round amendments: **0 warnings after 3 passes**. Status stays `design-approved`.
+- Fixes applied:
+  - **Pass 1:** FR-15 logout Origin skip on invalid `APP_URL`; FR-14 unreadable-config and `/start` POST-only bullets; proto field-number text; FR order; AC-58..60.
+  - **Pass 2:** AC-61..64; config check before the Origin check on `/start`; AC-35 tagged `@FR-14`.
+- Overlap: **FAIL-level collision** on config migration `050`, now owned by feature 341 on trunk. Renumbered to `051` (D-94). No merge-order row was added, since renumbering removes the hard dependency. Re-check `051`/`007` at merge (343 also plans a config seed). WARN-level shared files: `manage-users.py` (324), `ci.yml` (297/298/324), identity service impl (319), agent `main.py` (331/323). All are rebase-only.
+- Notes carried into `/sdd-spec`:
+  - `debate.md` D-36/D-48/D-57 still say `050`. D-94 governs; the impl-spec uses `051`.
+  - AC-64 has no mode column. SSO-mode logout also returns `redirect`; unit tests cover the `verified`/`unverified`/`expired_too_old` reasons.

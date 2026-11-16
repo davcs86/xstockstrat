@@ -15,6 +15,7 @@
 | 2026-11-15 | `spec-ready` → `draft` | owner | FR-14 added: backwards compatible with DigitalOcean until cutover; re-review required |
 | 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec re-approved after FR-14 (0 warnings, after 6 passes) |
 | 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (9 rounds, full) and approved; recon.md + debate.md + design.md written. Spec amended during design; `/sdd-review product-spec` re-run required |
+| 2026-11-16 | `design-approved` (unchanged) | /sdd-review | Product spec re-approved after design-round amendments (0 warnings, after 3 passes); config seed renumbered 050 → 051 |
 
 ---
 
@@ -55,4 +56,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review authelia-sso product-spec` (re-review of the design-round amendments: FR-1/2/9/14/15, AC-24/29/47/54..57), then the Authelia v4.39.28 spike, then `/sdd-spec authelia-sso`. Generate the implementation spec from the approved design.
+Run the Authelia v4.39.28 spike: items (a)–(e), the RS256 ID-token algorithm, the end_session / portal `rd` / GET `/logout` behaviour, the auth-code lifespan, and whether the discovery issuer has a trailing slash (design.md § Open Risks). Then run `/sdd-spec authelia-sso` to generate the implementation spec from the approved design.
