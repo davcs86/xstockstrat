@@ -80,3 +80,11 @@
   `flattenAndHalt` submit halts the account first, then keeps retrying the flatten; (10) order mutations
   run detached from caller cancellation, still time-bounded; (11) trading retry budget is
   `max(T, S − 2T)` (20 s at defaults). Recorded as D-11..D-14, R-4..R-8 in debate.md.
+- Round 2 done (D-15..D-18; O-14..O-24). Round 2 gate, operator steers: (12) accept the spread-skip
+  rule (FR-2 amended); (13) fix rate-limited cancel (return Unavailable, no local CANCELED) and replace
+  (no stored Rejected intent) in this feature; (14) bound the loops: per-cycle deadline in marketdata's
+  warm-quote and bar-ingest loops, Alpaca-only per-call timeout in the fill poller; (15) run round 3.
+  D-19..D-21, R-9..R-11.
+- D-14 supersedes operator decision 7 for marketdata: in an exhausted window a detached quote or price
+  fetch now holds for its full budget (2.5 s) before returning the warm subset, where a 429 used to fail
+  in milliseconds. Time bounds are unchanged.
