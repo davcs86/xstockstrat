@@ -571,3 +571,42 @@ Tooling setup (steps 2+3): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with
 - Config-key wiring gate `--final` (`.sdd-logs/v-2.log`, `exit=0`): two `REPORTED: … readers-disagree` lines for analysis `marketdata/fundamentals.provider` and trading `platform/trading_state`, neither a key of this feature. status.md → `code-completed`.
 - Files modified: `docs/roadmap/features/340-fix-fundamentals-roe-unit/context.md`
 - Deviations: lane A pre-export taken minutes before the freeze; gate run split between operator and main session (Deviation Log).
+
+## Session 2026-11-16 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-fundamentals-roe-unit (feature 340)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-fundamentals-roe-unit.feature | CREATE | NEW | The Then asserts on the GetFundamentals `roe` field, which marketdata owns. No file for 340 exists. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-fundamentals-roe-unit.feature (CREATE) ---
+# Promoted from docs/roadmap/features/340-fix-fundamentals-roe-unit/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-340` tag.
+# Durable business rules xstockstrat-marketdata already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-marketdata — fundamentals ROE is served as a fraction
+  Regression guard for docs/reports/2026-11-15-marketdata-roe-value-implausible-defect.md.
+
+  @AC-1 @regression @feature-340
+  Scenario: ROE is served as a fraction on every provider path
+    Given a fundamentals provider that reports a trailing ROE of 3.66 percent for "LYFT"
+    When GetFundamentals is called for "LYFT"
+    Then the returned roe is 0.0366
+
+### Notes / ambiguities / conflicts
+- Attribution: GetFundamentals and its `roe` field live in xstockstrat-marketdata (see /home/user/xstockstrat/services/xstockstrat-marketdata/CLAUDE.md, Fundamentals Integration). It is not cross-cutting, so it does not go in platform.feature.
+- Dedup: I grepped all `acceptance/*.feature` files for `feature-340` and for roe. There is no 340 scenario anywhere, so this is not a DUP. platform.feature has no roe rule.
+- Related but not OVERLAP: /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-edgar-quarterly-roe.feature (feature 222) asserts that EDGAR quarterly ROE is trailing-twelve-month (about 0.353). It covers the EDGAR basis only, not a percent-to-fraction conversion on the vendor providers. Its values are fractions, so there is no CONFLICT. Its AC-2 does touch the snapshot roe, but the asserted outcome differs.
+- Consumer check: /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature uses roe 0.30 and 0.0 as fractions. This agrees with the new rule.
+- Tags: the source scenario carries only `@AC-1 @regression` and has no `@FR-n` tag. I did not invent one. The promoted block keeps `@AC-1 @regression` and adds `@feature-340`.
+- I read the acceptance.feature from the local working tree at /home/user/xstockstrat/docs/roadmap/features/340-fix-fundamentals-roe-unit/. I did not read origin/feature/fix-fundamentals-roe-unit, because git is not available in this read-only environment. The orchestrator should confirm the two copies are identical. feature.md shows status draft, so the scenario may have changed on the branch.
+- Directory: services/xstockstrat-marketdata/acceptance/ already exists, so no lazy directory creation is needed.
+
+### Coverage check
+- Source scenarios: 1. Planned (NEW+DUP+OVERLAP): 1 (NEW 1, DUP 0, OVERLAP 0, CONFLICT 0). Every @AC-* is accounted for and none were skipped.
+```
