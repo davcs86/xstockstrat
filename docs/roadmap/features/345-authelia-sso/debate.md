@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (the owner authorized more than 5 rounds if necessary — context.md 2026-11-15)
-**Rounds run**: 3
+**Rounds run**: 4
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-16 | /sdd-design | 16 | 9 | 1 | 18 | 0 | yes |
 | 2 | 2026-11-16 | /sdd-design | 14 | 3 | 17 | 8 | 0 | yes |
 | 3 | 2026-11-16 | /sdd-design | 7 | 2 | 14 | 6 | 0 | yes |
+| 4 | 2026-11-16 | /sdd-design | 13 | 3 | 11 | 11 | 0 | yes |
 
 ## Settled Decisions
 
@@ -53,6 +54,19 @@
 | D-35 | 3 | **Small hardening** (O-24, O-25, O-27, O-31a, O-32).<br>• On success the callback clears every `sso_txn_*`; on failure only its own.<br>• bcrypt input is `randomBytes(32).toString('base64url')`, cost 10.<br>• JWKS ingest skips unusable keys one by one with a single WARN and fails only when zero usable keys remain. `algorithm=` comes from the JWK `alg` ∩ the D-2 allow-list, never from the token header.<br>• The "never retrieved" test uses `loop.set_exception_handler` (or caplog on `asyncio`) + `gc.collect()`.<br>• Discovery and JWKS fetches send `Accept-Encoding: identity`, reject an oversized `Content-Length` before streaming, keep `follow_redirects=False`, and re-run the D-27 issuer/same-origin checks on every discovery refetch. | adversary round 3 | settled |
 | D-36 | 3 | **050 down never deletes the flag row** (O-29a). The other rows use the 049 guard (`updated_by` sentinel + seed value + `value_encrypted IS NULL` for secrets) inside a `DELETE … RETURNING` CTE that feeds the D-20 notify. This removes the lockout mode; the orphaned global row after a full revert is handled by the dead-row prune. The CONFIG-4 `user_id` omission is documented: the handler reads only namespace and environment, the rows are global, and 046 precedent omits it too. | `049_*.down.sql:5-18`, `046_*.down.sql:4-24`, `configServiceImpl.ts:417-454` | settled |
 | D-37 | 3 | **D-13 fixed-constant list is extended** with `_JWKS_STALE_MAX_S=86400`, `_JWKS_MAX_BYTES=65536`, `_CLOCK_SKEW_S=30`, `OIDC_ID_TOKEN_ALG='RS256'` (spike item) and `OIDC_TIMEOUT_S=10`. Known latency profile: the UI callback worst case is ≥20 s (token exchange + JWKS + GetSecret + resolve + session); no `@AC` binds it. | — | settled |
+| D-38 | 4 | **The UI's copies of the agent discovery documents follow the mode** (O-33). Affects `next.config.js:54-64` and `src/app/api/oauth/{protected-resource,authorization-server}/route.ts`. In SSO mode the PRM mirrors the agent's document (`resource`, `authorization_servers:[agent/oidc.issuer]`, `scopes_supported`) and AS metadata returns 404. On `'error'` both return 503. In legacy mode both are byte-identical. A contract test pins `scopes_supported` (agent ↔ UI). AC-11/AC-43 coverage extends to these routes; new AC-49. | `next.config.js:54-64`, `protected-resource/route.ts:8-13` | settled |
+| D-39 | 4 | **Every `oidcConfig.ts` GetConfig/GetSecret passes `environment: nativeConfigEnvironment()`** (O-34). `oidcConfig.test.ts` pins PRODUCTION for all calls. The agent watcher derives its environment from `resolve_scope("")` for every namespace, `ui` included. | `deploymentEnv.ts:13-14`, `config.proto:42,105,113`, `watcher.py:31-35` | settled |
+| D-40 | 4 | **Middleware SSO exemption** (O-35, replaces N-1b). Both SSO paths sit in an exact top-of-function `Set` checked before `getSessionFromRequest`, mirroring `PUBLIC_HEALTH_PATHS`. Tests: near-expiry token with a failing refresh still passes through; the `/api/auth/sso/startx` lookalike redirects. | `middleware.ts:27-39,86-97` | settled |
+| D-41 | 4 | **UI outcome map** (O-36, O-43; owner chose a distinct message). `?error=` takes one of `failed`, `not_configured` (invalid issuer, secret `found=false` or empty), `linked`, `ambiguous`, `inactive`, `no_email`, `no_access`. `no_access` (IdP `access_denied`) shows "You don't have access to xstockstrat. Ask an admin." (FR-15, AC-51). `response_mode=query` is pinned. The callback rejects a missing or undecryptable `sso_txn` before GetSecret, discovery or the token exchange; only the mode read comes first. All `Location`s are built from `APP_URL`. | context.md 2026-11-16 | settled |
+| D-42 | 4 | **Agent telemetry and runbook signals** (O-37, N-6a amended). `record_auth_rejected` gains `jwks_unavailable` and `account_refused`; an invalid configured issuer is labelled `internal_error` with ERROR `sso_issuer_invalid`. `test_telemetry_allowlist.py` is updated. The cutover runbook's "verify one MCP connection" step lists the signals to check: `wrong_audience`, `jwks_unavailable`, `account_refused`, and `ui.auth.events{sso_login_failed|error}`. No new alert rule. | `tool_metrics.py:39-42` | settled |
+| D-43 | 4 | **`manage-users.py unlink-sso <email> [--issuer]`** (O-38, owner). A guarded DELETE on `identity.external_identities` that mirrors `update-email`, with `TestSqlParameterization`. FR-12 is amended and AC-50 added. This makes homelab-edge sso.md §7/§8 recovery real. | context.md 2026-11-16 | settled |
+| D-44 | 4 | **Connector card** (O-39, owner). In SSO mode authorized-apps keeps the connector URL and copy button, and shows the client IDs from new seeded keys `ui/oidc.mcp_client_id` and `ui/oidc.mcp_client_id_readonly` (string, default `""`, hidden when empty). That takes migration 050 to 7 keys × 2 environments. No hardcoded IDs (F-07). FR-11 is amended and AC-48 added. | context.md 2026-11-16 | settled |
+| D-45 | 4 | **SSO logout** (N-7, owner: "3, or 1 if there's no endpoint"). In SSO mode, logout revokes as today. If Authelia's discovery advertises `end_session_endpoint`, it then redirects there via openid-client's end-session URL builder with `post_logout_redirect_uri=${APP_URL}/auth/login`, which must be registered on the Authelia web client. Otherwise it relies on a short Authelia session (homelab-edge) plus documentation. Whether Authelia 4.39.28 advertises the endpoint is a spike item. FR-15 and AC-52. | context.md 2026-11-16 | settled |
+| D-46 | 4 | **`/api/auth/sso/start` is a POST from the login form, with an `Origin` check** (O-40a, for robustness). A crafted GET link can no longer set `remember`. `safeRedirect` is extracted to `src/lib/safeRedirect.ts` with semantics unchanged and a unit test. | `auth/login/page.tsx:8-18` | settled |
+| D-47 | 4 | **UI auth-path deadlines** (N-2 amended by O-41). The login-page config reads run concurrently (`Promise.all`) under one budget, `AUTH_CONFIG_TIMEOUT_MS` = 10 s, a new constant in `deadlines.ts` (F-07 form) that is separate from `REFRESH_TIMEOUT_MS`. Resolve and IssueSession use the same constant. | `deadlines.ts:2-3`, `connectClients.ts:72` | settled |
+| D-48 | 4 | **Coverage and rollout hygiene.** AC-6 uses a two-database identity DB test: link in DB-A, LINKED_BY_EMAIL in DB-B, A untouched (N-11b amended). AC-20/AC-36 are RED-assertion `grep -F` checks inside a named test step with `**Covers**: AC-20, AC-36`, accepted by the orchestrator as C-15 coverage (N-10b). D-20's runbook order is kept, with an updated reason ("no longer lockout-critical per D-36"; O-42). Rollout is an invariant: every intermediate state is legacy, whatever the component order. 050 now has 14 rows. | — | settled |
+| D-49 | 4 | **Accepted seam refinements.**<br>• N-1a: the spec reader contract for the secret covers both `start` and `callback`.<br>• N-3: lowercasing happens in SQL only.<br>• N-4: decision table.<br>• N-5: `IssueSessionForUser` failure → `inactive`/`failed`; no cookies; the link stays.<br>• N-6: SSO claims have no `email`/`sub`; cache holds successes only, never stale.<br>• N-7b: refresh is unchanged.<br>• N-8: no URL normalisation; runbook rules for `APP_URL`/redirect/audience.<br>• N-9: `reset-password` of the staging seed row is a mandatory cutover step.<br>• N-10a: doc list extended (also agent `docs/oauth.md` §path-insertion, UI `CLAUDE.md` Auth table, homelab-edge `sso.md` §7/§8).<br>• N-12: authorized-apps shows the list on `'error'`.<br>• N-13: cookie clears use the same path.<br>• N-14: `_DISCOVERY_FRESH_S=600` joins the D-37 list. | round4-proposal.md §B | settled |
+| D-50 | 4 | **Build verification for the UI step.** `docker compose build --no-cache xstockstrat-ui` plus a boot smoke of the `output:'standalone'` server, because openid-client is ESM-only and brings `jose ^6` (ledger fails.md:373/470). The D-8 JWE imports the UI's own `jose ^5`. | `ui/package.json:46` | settled |
 | D-13 | 1 | **Fixed constants** (60 s role TTL, JWKS freshness, cooldown, fetch timeout) stay in code with the "Fixed invariant (F-07)" comment form. They are not config keys. | `client.py:39-47` | settled |
 
 ## Rejected Alternatives (locked)
@@ -73,6 +87,9 @@
 | R-12 | 2 | Resolve single-flight per `(iss, sub)` with a trace-link log | The owner chose trace fidelity over cold-cache load at gate 2 (D-30). | locked |
 | R-13 | 3 | Explicit `BEGIN` + two INSERTs as the primary CREATE path | It holds a client across two statements. The CTE is provably correct (adversary round 3); keep it only as a contingency (D-32). | locked |
 | R-14 | 3 | `SELECT … FOR KEY SHARE` on the user during LINK | The deactivation race is already bounded by `IssueSessionForUser` + the 60 s TTL; the extra lock isn't worth it (C-18). | locked |
+| R-15 | 4 | The UI PRM route returns 404 in SSO mode and relies on the agent's `WWW-Authenticate` pointer | Loses for clients that probe the RFC 9728 canonical location first (O-33). | locked |
+| R-16 | 4 | Fold unlink into `update-email --unlink` | Merges two responsibilities (C-18); a separate command is clearer. | locked |
+| R-17 | 4 | Single-DB "viewer" case as AC-6 coverage | It is AC-1 with a viewer; the independence property is untested (fake coverage). | locked |
 | R-7 | 1 | HS256-signed (JWS) SSO transaction cookie | `verifyAccessToken` accepts any HS256 `JWT_SECRET` JWS, so the cookie would also be a valid session token (type confusion). | locked |
 
 ## Objections
@@ -112,6 +129,17 @@
 | O-30 | 3 | 6.8.9 API assumed, not verified (P-03, fails.md:445). | no | closed @ round 3 (orchestrator diff, D-34) |
 | O-31 | 3 | Test precision: never-retrieved detection, `pg_blocking_pids` waiter identification, the oidc pin must exercise the production path (P-06, fails.md:115). | no | closed @ round 3 (D-33, D-34, D-35) |
 | O-32 | 3 | Byte cap is bypassable through gzip, plus redirects and re-validation on refetch. | no | closed @ round 3 (D-35) |
+| O-33 | 4 | The UI serves its own copies of the agent's discovery documents (`next.config.js:54-64`, `src/app/api/oauth/*`), and D-10 does not touch them, so SSO-mode connector setup breaks. (C-10, C-01) | yes | closed @ round 4 (D-38) |
+| O-34 | 4 | UI config reads give no environment, so the server defaults to staging and production would read staging rows. (C-05/D-27) | yes | closed @ round 4 (D-39) |
+| O-35 | 4 | N-1b exempts the SSO paths only in the no-claims branch, so the near-expiry refresh branch can redirect the callback and leak the code. (@feature-271/128) | yes | closed @ round 4 (D-40) |
+| O-36 | 4 | The UI outcome map is incomplete (`not_configured`, `access_denied`, `response_mode`). | no | closed @ round 4 (D-41) |
+| O-37 | 4 | The agent's new rejection reasons are not counted, and the runbook names no signals. | no | closed @ round 4 (D-42) |
+| O-38 | 4 | No unlink tooling, although homelab-edge sso.md §7/§8 depend on it. | no | closed @ round 4 (owner: D-43) |
+| O-39 | 4 | SSO mode loses the connector setup instructions and client IDs. | no | closed @ round 4 (owner: D-44) |
+| O-40 | 4 | A crafted GET `/start?remember=1` can force a 14-day session on a shared device. | no | closed @ round 4 (D-46) |
+| O-41 | 4 | Login-page config reads must run concurrently under one budget. | no | closed @ round 4 (D-47) |
+| O-42 | 4 | N-11 rewords settled D-20; the rollout order should be stated as an invariant. | no | closed @ round 4 (D-48) |
+| O-43 | 4 | The callback must reject a missing txn before any expensive call; edge rate limits. | no | closed @ round 4 (D-41; a staging rate-limit zone is an optional homelab-edge follow-up) |
 
 ## Reopen Petitions
 

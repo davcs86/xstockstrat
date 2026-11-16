@@ -141,3 +141,12 @@
 - C-16 note: `@AC-19 @feature-294` (local auth fault → 401) is reclassified PRESERVE (legacy mode). SSO mode returns 503 per D-17. This is not a change to existing behaviour.
 - Gate 2 owner decisions: run round 3; drop resolve single-flight in favour of trace fidelity (D-30, closes O-21).
 - Round 3: the adversary verdict was SOUND (approvable). It closed every open objection, raised six low/medium ones (O-27..O-32), and the synthesis folded those into D-31..D-37. The orchestrator verified the openid-client 6.8.9 API against 6.9.0 (closes O-30). The register now has 0 open objections, 37 decisions and 14 locked alternatives. No Floor breach.
+- Round 4 (consolidation): the proposer wrote the consolidated design and a seam check (N-1..N-14). The adversary found 3 code-verified blockers that earlier rounds missed: O-33 (the UI's copies of the agent discovery documents), O-34 (UI config reads default to the staging environment) and O-35 (the middleware refresh branch can redirect the SSO callback). The orchestrator verified all three.
+- Gate 4 owner decisions:
+  - **Logout:** use the RP-initiated logout endpoint if Authelia advertises one, else a short Authelia session plus documentation (D-45, FR-15).
+  - **Unlink:** add `manage-users unlink-sso` (D-43, FR-12).
+  - **Connector card:** shows the URL plus both client IDs from new seeded `ui/oidc.mcp_client_id[_readonly]` keys (D-44, FR-11).
+  - **Access denied:** a distinct "no access" message (D-41, FR-15).
+- Spec amended: FR-11, FR-12, new FR-15, two new config keys. AC-48..AC-52 added. The amended spec needs a re-run of `/sdd-review product-spec` after design approval.
+- C-16 label: identity 043 `@AC-2/3/6` are "CHANGE-by-config, pre-signed" (FR-9; context.md 2026-11-15 "seed true + guard").
+- Register: D-1..D-50, R-1..R-17, 0 open objections.

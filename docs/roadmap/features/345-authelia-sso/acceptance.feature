@@ -341,3 +341,36 @@ Feature: authelia-sso
     When a client requests "/api/auth/sso/start" and "/api/auth/sso/callback?code=c1&state=s1"
     Then both return HTTP 404 with no redirect
     And no row is written to identity.users or identity.external_identities
+
+  @AC-48 @FR-11
+  Scenario: The authorized-apps card shows the connector details in SSO mode
+    Given staging ui/oidc.mcp_client_id is "xstockstrat-staging-mcp-claude" and ui/oidc.mcp_client_id_readonly is "xstockstrat-staging-mcp-claude-ro"
+    When a signed-in user opens "/accounts/authorized-apps" in staging
+    Then the page shows the connector URL "https://xstockstrat-staging.example.test/agent" with a copy button
+    And it shows the client IDs "xstockstrat-staging-mcp-claude" and "xstockstrat-staging-mcp-claude-ro"
+
+  @AC-49 @FR-11 @FR-2
+  Scenario: The UI's discovery documents follow the mode
+    When a client fetches "/.well-known/oauth-protected-resource/agent" and "/.well-known/oauth-authorization-server/agent" from the staging UI
+    Then the first lists "authorization_servers" ["https://auth.example.test"]
+    And the second returns HTTP 404
+
+  @AC-50 @FR-12
+  Scenario: unlink-sso lets a user relink after Authelia identities change
+    Given staging user "alice@example.test" is linked to subject "a1b2"
+    When an admin runs "uv run scripts/manage-users.py unlink-sso alice@example.test"
+    Then identity.external_identities has no row for that user
+    And Authelia completing a login for subject "n3w0" with email "alice@example.test" links that user with outcome LINKED_BY_EMAIL
+
+  @AC-51 @FR-15
+  Scenario: A person outside the app's group sees a no-access message
+    Given Authelia answers the staging authorization request with error "access_denied"
+    When the browser arrives at the staging SSO callback
+    Then the login page shows "You don't have access to xstockstrat. Ask an admin." and no session cookie is set
+
+  @AC-52 @FR-15
+  Scenario: Logout ends the Authelia session when Authelia supports it
+    Given staging is in SSO mode and Authelia's discovery document advertises an end_session_endpoint
+    When a signed-in user logs out
+    Then the session cookies are cleared and the refresh token is revoked
+    And the browser is redirected to that end_session_endpoint with post_logout_redirect_uri "https://xstockstrat-staging.example.test/auth/login"

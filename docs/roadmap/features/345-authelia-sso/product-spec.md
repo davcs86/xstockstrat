@@ -125,13 +125,29 @@ Authelia group blocks new logins only. Cutting an existing session needs `SetUse
 
 FR-11. **Authorized apps page.** In SSO mode (FR-14), `/accounts/authorized-apps` no longer lists or revokes xstockstrat OAuth grants. It
 explains that connected apps are managed in Authelia and links to the Authelia URL derived from `ui` /
-`oidc.issuer`.
+`oidc.issuer`. It keeps the connector URL with its copy button, and shows the pre-registered MCP client IDs (full and
+read-only) for the deployment's environment, read from `ui` / `oidc.mcp_client_id` and `ui` / `oidc.mcp_client_id_readonly`,
+with the instruction to paste them into the connector's advanced OAuth settings (owner decision 2026-11-16). The UI's
+own copies of the agent's discovery documents (`/.well-known/oauth-protected-resource/agent` and
+`/.well-known/oauth-authorization-server/agent`, `src/app/api/oauth/*`) follow the same mode: in SSO mode the
+protected-resource document names Authelia exactly like the agent's, and the authorization-server document answers 404.
 
 FR-12. **Admin email tooling.** `scripts/manage-users.py` gains `update-email <old-email> <new-email>` (tested Python,
 `docs/patterns/script-tooling.md`, inside feature 324's CI/ruff scope). It lets admins align an existing row's email
 with the person's Authelia email before their first SSO login (cutover option B, homelab-edge
 `docs/runbooks/sso.md` § 6). It stores the new email lowercased, keeps `user_id`, and exits non-zero with
-"email already in use" when another row holds the email case-insensitively.
+"email already in use" when another row holds the email case-insensitively. It also gains `unlink-sso <email>
+[--issuer <url>]`, which deletes that user's rows in `identity.external_identities` (all issuers unless `--issuer` is
+given) so the next SSO login links by email again. This is the recovery path homelab-edge `docs/runbooks/sso.md` § 7
+and § 8 rely on (owner decision 2026-11-16).
+
+FR-15. **SSO logout and refusals.** In SSO mode, `/api/auth/logout` revokes the session exactly as today. Then, if
+Authelia's discovery document advertises an `end_session_endpoint`, it redirects there (RP-initiated logout, with
+`post_logout_redirect_uri = ${APP_URL}/auth/login`). Otherwise the deployment relies on a short Authelia session
+configured in homelab-edge, and the behaviour is documented (owner decision 2026-11-16; whether the endpoint exists is
+a spike item). When Authelia answers the authorization request with `error=access_denied` (the person is not in the
+app's group), the login page shows "You don't have access to xstockstrat. Ask an admin." (owner decision 2026-11-16).
+Every other IdP error shows "Sign-in failed. Try again."
 
 FR-13. **Documentation.** The same PR as each behaviour change updates:
 - `docs/runbooks/mcp-tools.md`: connector setup with the pre-registered client IDs `xstockstrat-mcp-claude` (full) and
@@ -259,6 +275,11 @@ environment, because prod and staging are separate Authelia apps.
   - sole reader `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcClientSecret` (new), called only by
     `src/app/api/auth/sso/callback/route.ts:GET`, through `GetSecret` on each callback via the allow-list grant above.
     A rotated value applies on the next callback. It is redacted at every other edge.
+- `ui.oidc.mcp_client_id` and `ui.oidc.mcp_client_id_readonly`
+  - namespace `ui`, stored keys `oidc.mcp_client_id` / `oidc.mcp_client_id_readonly`, `string`, code default `""`
+    (an empty value hides that line on the card);
+  - reader `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcConfig`, one-shot `GetConfig(namespace: 'ui')` per
+    request, live on the next request; displayed on `/accounts/authorized-apps` (FR-11).
 - `agent.oidc.issuer`
   - namespace `agent`, stored key `oidc.issuer`, `string`, code default `""`;
   - empty means legacy mode (FR-14): today's OAuth server and identity-token validation, unchanged;
