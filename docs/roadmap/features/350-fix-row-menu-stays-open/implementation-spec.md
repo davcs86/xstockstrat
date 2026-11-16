@@ -524,7 +524,7 @@ C-12: the 500 and `failed_precondition` bodies are error-path one-offs; no domai
 
 ### Step 5 — service: the orders table adopts `RowActionsMenu`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrdersTable.tsx` — modify
@@ -590,7 +590,7 @@ pnpm run lint:dup
 
 ### Step 6 — test: orders confirm flow, keyboard path, unchanged non-confirm items
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/orders.spec.ts` — modify

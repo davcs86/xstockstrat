@@ -132,3 +132,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - GREEN after Step 3 (production build): `authorized-apps.spec.ts` + `templates.spec.ts` `11 passed`, including the authorized-apps `@AC-4` re-run through its new path (cell mounted until the list reloads). `lint`, `tsc --noEmit`, `format:check`, `lint:dup` exit 0.
 - Files modified: `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts`, `e2e/config-ui/templates.spec.ts`
 - Deviations: Playwright through the prebuilt path (same as Step 2's Deviation Log entry).
+
+### Step 5 — service: the orders table adopts `RowActionsMenu` [done]
+- Unit with Step 6. The actions cell is one `RowActionsMenu` (`testId` kept, trigger "Actions for order {orderId}", Edit, Cancel with the operator-approved dialog text); the `cancelling` state and the table-level `AlertDialog` are deleted; `columns` deps `[cancelOrder]`. `TERMINAL` unchanged (both `disabled: isTerminal` uses pinned by the verification line).
+- Files modified: `services/xstockstrat-ui/src/components/trader/OrdersTable.tsx`
+- Deviations: none
+
+### Step 6 — test: orders confirm flow, keyboard path, unchanged non-confirm items [done]
+- Unit with Step 5. Three existing tests repointed from test ids to roles; the feature-270 `@AC-10` workaround removed (it now asserts `[role="menu"]` count 0 and clicks "Dismiss error" directly); feature-350 block added; `@AC-7` guard added to `opportunities.spec.ts`.
+- On the pre-unit tree (production build, `4 failed, 2 passed`):
+  - AC-1 — RED: `getByRole('alertdialog', { name: 'Cancel order' })` not found (today's dialog has no name; the menu-count line is not reached).
+  - AC-2/AC-3 dismiss — RED: settle helper, `[role="menu"]` expected 0, received 1.
+  - AC-2/AC-3/AC-8 confirm — RED: `[role="menu"]` expected 0, received 1, with no key press.
+  - AC-5 — RED: the named dialog is not found (same reason as AC-1; the focus-return line is not reached on today's markup).
+  - AC-7 orders Edit and AC-7 opportunities source filter — guards: pass on the pre-change tree.
+- GREEN after Step 5 (production build): `orders.spec.ts` + `opportunities.spec.ts` `56 passed`; `order-parity`, `stream-reconnect`, `signal-confidence-ticket` `10 passed`. `lint`, `tsc --noEmit`, `format:check`, `lint:dup`, the `! grep` and the `disabled: isTerminal` count exit 0.
+- Files modified: `services/xstockstrat-ui/e2e/trader/orders.spec.ts`, `e2e/insights/opportunities.spec.ts`
+- Deviations: Playwright through the prebuilt path (Step 2's Deviation Log entry).
+
+### Checkpoint — steps 1–6 done (surface: ui), 3 pending
+- Committed to `feature/fix-row-menu-stays-open` (no PR yet). Reported here under the standing authorization (progress-only checkpoint); next surface is still `ui` (Steps 7–8), then docs (Step 9).
+- Out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none. Deviations: one (Playwright prebuilt path / dev first-navigation compile timeout).

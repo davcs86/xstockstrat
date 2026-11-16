@@ -184,6 +184,18 @@ test.describe('Opportunities queue', () => {
     await expect(card(page, 'AAPL')).toBeHidden();
   });
 
+  test.describe('Row menu confirm flow (feature 350)', () => {
+    test('@AC-7 ticking a source keeps the filter menu open', async ({ page }) => {
+      await page.getByRole('button', { name: 'source filter' }).click();
+      const source = page.getByRole('menuitemcheckbox', { name: 'marketwatch', exact: true });
+      await source.click();
+
+      await expect(page.getByRole('menu')).toBeVisible();
+      await expect(source).toBeChecked();
+      await page.keyboard.press('Escape');
+    });
+  });
+
   test('feature 132: a muted row renders muted, has no Snooze/Dismiss, and links to the deny editor', async ({
     page,
   }) => {
