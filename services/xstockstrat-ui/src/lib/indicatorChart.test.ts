@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { INDICATOR_SERIES_AAPL } from '../../e2e/fixtures/indicatorSeries';
-import { normalizeAscendingUnique, toLineData, type IndicatorLinePoint } from './indicatorChart';
+import {
+  INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP,
+  INDICATOR_COMPONENTS_PALETTE_13,
+  INDICATOR_SERIES_AAPL,
+} from '../../e2e/fixtures/indicatorSeries';
+import {
+  isChartable,
+  normalizeAscendingUnique,
+  seriesSlots,
+  toLineData,
+  type IndicatorLinePoint,
+} from './indicatorChart';
+import { SERIES_PALETTE } from './seriesPalette';
 
 // A genuine 0 reading vs an UNSET (warm-up/gap) point — the whole P-03/AC-3 "never a fabricated 0"
 // contract lives in this pure mapper now (moved off the old recharts `?? null` + connectNulls).
@@ -55,5 +66,39 @@ describe('normalizeAscendingUnique (lightweight-charts v5 setData precondition)'
   it('collapses a duplicate timestamp keeping the last point (last wins, documented rule)', () => {
     const out = normalizeAscendingUnique([pt(10, 1), pt(10, 99)]);
     expect(out).toEqual([{ time: 10, value: 99 }]);
+  });
+});
+
+describe('seriesSlots', () => {
+  it('(AC-2) five series across four indicators get SERIES_PALETTE[0..4], all distinct', () => {
+    const rows = seriesSlots(INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP);
+    const flat = rows.flat();
+    expect(flat).toEqual(SERIES_PALETTE.slice(0, 5));
+    expect(new Set(flat.map((e) => e.token)).size).toBe(5);
+    const vts = rows[3];
+    expect(vts).toHaveLength(2);
+    expect(vts[0].token).not.toBe(vts[1].token);
+  });
+
+  it('(AC-6) the thirteenth series reuses the first colour; slots 1-12 are distinct', () => {
+    const flat = seriesSlots(INDICATOR_COMPONENTS_PALETTE_13).flat();
+    expect(flat).toHaveLength(13);
+    expect(flat[12]).toEqual(SERIES_PALETTE[0]);
+    expect(flat[12]).toEqual(flat[0]);
+    expect(new Set(flat.slice(0, 12).map((e) => e.token)).size).toBe(12);
+  });
+
+  it('gives a failed component [] and consumes no index', () => {
+    expect(seriesSlots(INDICATOR_SERIES_AAPL.components)).toEqual([SERIES_PALETTE.slice(0, 3), []]);
+    const failedFirst = [...INDICATOR_SERIES_AAPL.components].reverse();
+    expect(seriesSlots(failedFirst)).toEqual([[], SERIES_PALETTE.slice(0, 3)]);
+  });
+
+  it('isChartable: true with series and no error; false with an error or no series', () => {
+    const [macd, broken] = INDICATOR_SERIES_AAPL.components;
+    expect(isChartable(macd)).toBe(true);
+    expect(isChartable(broken)).toBe(false);
+    expect(isChartable({ ...macd, error: 'boom' })).toBe(false);
+    expect(isChartable({ ...macd, series: [] })).toBe(false);
   });
 });

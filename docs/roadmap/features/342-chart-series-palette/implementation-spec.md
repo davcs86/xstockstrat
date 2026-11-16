@@ -363,7 +363,7 @@ C-12: no domain object is used (theme tokens only), so the test-data inventory d
 
 ### Step 7 — test: slot assignment tests and the two indicator fixtures
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/indicatorChart.test.ts` — modify
@@ -571,4 +571,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 6 — RED method and Verification run shape
 - **Spec said**: TDD `red-green required`; three Verification items, each in a fresh shell at the repo root. The paired unit tests for `seriesSlots` are Step 7's.
 - **Actual**: the three items ran in one log, each in its own `( cd services/xstockstrat-ui && … )` subshell joined with `&&`. RED was the same block run before the edit: item 1 printed the only definition at `src/components/trader/IndicatorPanels.tsx:19`, not in `src/lib/indicatorChart.ts`, so its pass condition failed. The behavioural red→green for `seriesSlots` is Step 7's 4 tests; Step 7's RED ("before Step 6") must restore the pre-Step-6 `indicatorChart.ts` from the Step 5 commit with `git checkout <commit> -- <file>`, as Step 9 does.
+- **Disposition**: mechanical. The commands are unchanged.
+
+### Step 7 — RED method and Verification run shape
+- **Spec said**: Verification item 1 is RED "before Step 6"; items 2-4 each in a fresh shell at the repo root.
+- **Actual**: Step 6 was already committed, so RED restored the pre-Step-6 `indicatorChart.ts` from the Step 5 commit (`git checkout c2c3e39d2 -- <file>`), ran item 1 unchanged, then restored it with `git checkout HEAD -- <file>`; the old file was never committed. Items 2-4 ran in one log, each in its own `( cd services/xstockstrat-ui && … )` subshell separated by `;` with a per-item `rc=` echo.
 - **Disposition**: mechanical. The commands are unchanged.

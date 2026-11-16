@@ -66,6 +66,7 @@ Service/UI source (by step):
 - Step 3: none (it appends the gate record to `context.md` only).
 - Steps 4+5 (one unit): `services/xstockstrat-ui/src/lib/seriesPalette.ts` (created), `src/styles/themes/staging.css` and `production.css` (12 `--series-N` tokens each), `src/styles/themes/themes.test.ts` (modified), `src/lib/seriesPalette.test.ts` (created).
 - Step 6: `services/xstockstrat-ui/src/lib/indicatorChart.ts` (`ChartableComponent`, `isChartable`, `seriesSlots` added), `src/components/trader/IndicatorPanels.tsx` (local `isChartable` removed, import repointed).
+- Step 7: `services/xstockstrat-ui/src/lib/indicatorChart.test.ts` (`describe('seriesSlots')`, 4 tests), `e2e/fixtures/indicatorSeries.ts` (`INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP`, `INDICATOR_COMPONENTS_PALETTE_13`), `e2e/fixtures/INVENTORY.md` (two rows).
 
 SDD artifacts, all under `docs/roadmap/features/342-chart-series-palette/`:
 
@@ -478,3 +479,15 @@ The `C` array literal that passed, byte for byte. Step 4 copies the 12 values fr
 - Files modified: `services/xstockstrat-ui/src/lib/indicatorChart.ts`, `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`
 - Deviations: the RED method and the Verification run shape. Full detail is in the Deviation Log.
 - Still open: O-24. Step 7's RED must restore the pre-Step-6 `indicatorChart.ts` from the Step 5 commit (`c2c3e39d2`), since Step 6 is committed first.
+
+## Session 2026-11-16 — sdd-execute sequential (step 7)
+
+### Step 7 — test: slot assignment tests and the two indicator fixtures [done]
+- Added `INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP` (4 components, 5 series) and `INDICATOR_COMPONENTS_PALETTE_13` (13 one-series components) to `indicatorSeries.ts`, 2 real points per series, with a 2-line header note; two `ComponentSeries` rows in `INVENTORY.md`; `describe('seriesSlots')` with exactly 4 tests in `indicatorChart.test.ts`. The failed-first case is a `[...INDICATOR_SERIES_AAPL.components].reverse()` one-off (C-12 exempt).
+- TDD (AC-2, AC-6):
+  - Red: with the pre-Step-6 `indicatorChart.ts` restored from `c2c3e39d2`, `TypeError: seriesSlots is not a function` / `TypeError: isChartable is not a function`, `Tests  4 failed | 7 passed (11)` (exit=1, `.sdd-logs/v-1.log`). The file was then restored from HEAD.
+  - Green: item 2 `Tests  4 passed | 7 skipped (11)`; item 3 printed the fixture import at line 6 and `2`; item 4 lint and tsc rc=0 (warnings only in unrelated pre-existing files), `Tests  640 passed | 2 skipped (642)`, `Lines        : 79.5% ( 582/732 )` (exit=0, `.sdd-logs/v-2.log`).
+- Config-key wiring gate: N/A. No config key is touched.
+- Files modified: `services/xstockstrat-ui/src/lib/indicatorChart.test.ts`, `services/xstockstrat-ui/e2e/fixtures/indicatorSeries.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: the RED method and the Verification run shape. Full detail is in the Deviation Log.
+- Still open: O-24.
