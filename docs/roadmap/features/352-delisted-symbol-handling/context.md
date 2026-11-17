@@ -581,3 +581,31 @@
   first execute in CI job `marketdata-db-test` on the integration PR — watch that job.
 - `TestProfileDB_ReplaceWatched` deletes foreign rows of `marketdata.watched_symbol`; the AC-27 empty-union
   case fails with a clear message if foreign rows exist.
+
+### Step 8 — service: delisting detection hook, window reader, flagged set, recovery alert (unit 8+9+10) — done
+- New `internal/service/delisting.go`; `asset_servability.go`, `marketdata_service.go`, `telemetry/otel.go`,
+  `cmd/server/main.go`, service `CLAUDE.md`, `docs/context-constitution.md` (MARKETDATA-16), new
+  `docs/runbooks/delisting-rollout.md` (+ index row).
+- Divergence: the hook does not call `ResetUnwatched` when the watched count is 0 (the SQL guard remains
+  too); the INFO line reports `skipped=empty_union`.
+
+### Step 9 — test: detection hook, window counting, warm-set removal, recovery alert (unit 8+9+10) — done
+- TDD: AC-1 red (hook body disabled): `ROKU row … (present false), want date "2026-11-09"`, 24 more
+  `TestDelisting_*` fail in the same run (AC-10 is the declared guard) → green: 28 top-level
+  `TestDelisting_` PASS under `-race`; `go_gate` 87.3%; 14 `@AC-` comments.
+- Beyond the list: `TestDelisting_QuotaWarningKeepsItsTitleAndCategory` (guards the `emitWarning` rewrite),
+  `TestDelisting_HookContextIsBoundedAtThirtySeconds`; `testdata.ServableAssetsWith(symbols...)` is
+  variadic rather than single-symbol.
+
+### Step 10 — migration: config `054` seeds `assets.delisting_confirmation_trading_days` (unit 8+9+10) — done
+- `054` re-derived as free; `053` is on no origin ref yet (feature 345's claim is spec-only).
+- `scripts/config-wiring-stored.json` was **generated**, never hand-edited, against a throwaway local
+  Postgres 16 (operator-approved, Deviation Log): with `054` held aside the committed JSON reproduced byte
+  for byte; with `054` it gains 2 rows for the key. `config-heal-dryrun.py --fresh` left
+  `dryrun-fresh.tsv` unchanged. The instance was stopped and its data directory deleted; no migration was
+  verified and no test was run against it.
+- Wiring gate: `check-config-wiring.mjs` (step-time and `--keys …`) silent, exit 0; `--final` exit 0 with
+  two `REPORTED` readers-disagree lines for other features' keys (`marketdata/fundamentals.provider`,
+  `platform/trading_state`); `--doc-check` exit 0; `config-wiring.test.mjs` 75 pass.
+- Config contract: namespace `marketdata`, key `assets.delisting_confirmation_trading_days`, int, default
+  5, bounds [1, 30] (Step 11), seeded by config `054`, read live through the WatchConfig-backed reader.

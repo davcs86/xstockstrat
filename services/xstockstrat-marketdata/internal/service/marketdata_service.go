@@ -103,6 +103,10 @@ type MarketDataService struct {
 	etf etfFlagState
 	// assets is the Alpaca us_equity asset-set snapshot (feature 282); zero value = not loaded (every symbol servable).
 	assets assetServabilityState
+
+	// delisting is the delisted-symbol state (feature 352); zero value = no store wired (hook is a no-op).
+	delisting delistingState
+
 	// quotaAlert dedupes the 80%-quota WARNING to one emit per active window (UTC day for FMP,
 	// rolling window for Finnhub — see maybeAlertQuota/fundamentalsQuota).
 	quotaAlertMu     sync.Mutex
@@ -2158,14 +2162,8 @@ func (s *MarketDataService) maybeAlertQuota(ctx context.Context, provider string
 // emitWarning emits an ALERT_SEVERITY_WARNING notify alert. Distinct from emitAlert,
 // which hardcodes ALERT_SEVERITY_ERROR — FR-7 needs a WARNING.
 func (s *MarketDataService) emitWarning(ctx context.Context, provider, msg string) {
-	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
-		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING,
-		Category:      "system",
-		Title:         fmt.Sprintf("marketdata %s quota warning", strings.ToUpper(provider)),
-		Body:          msg,
-		SourceService: "marketdata",
-	})
-	if err != nil {
+	title := fmt.Sprintf("marketdata %s quota warning", strings.ToUpper(provider))
+	if err := s.emitNotice(ctx, title, "system", msg); err != nil {
 		slog.WarnContext(ctx, "notify emit (warning) failed", "error", err)
 	}
 }

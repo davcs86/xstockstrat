@@ -370,6 +370,11 @@ const (
 	LeftOutYearEndQuarter = "year_end_quarter"
 )
 
+const (
+	DelistingHookTimeout = "timeout"
+	DelistingHookError   = "error"
+)
+
 var (
 	vendorRequests   = NewCounter("marketdata.vendor.requests")
 	vendorDuration   = NewHistogram("marketdata.vendor.request.duration", metric.WithUnit("s"))
@@ -377,6 +382,8 @@ var (
 	backfillSymbols  = NewCounter("marketdata.backfill.symbols")
 	periodsLeftOut   = NewCounter("marketdata.backfill.periods_left_out")
 	ohlcvOutOfMemory = NewCounter("marketdata.ohlcv.out_of_memory_errors")
+
+	delistingHookFailures = NewCounter("marketdata.delisting.hook_failures")
 )
 
 // OHLCV repository op labels for RecordOhlcvOutOfMemory.
@@ -422,6 +429,10 @@ func RecordBackfillSymbol(ctx context.Context, kind, outcome string) {
 
 func RecordPeriodLeftOut(ctx context.Context, reason string) {
 	periodsLeftOut.Add(ctx, 1, attribute.String(KeyReason, reason))
+}
+
+func RecordDelistingHookFailure(ctx context.Context, reason string) {
+	delistingHookFailures.Add(ctx, 1, attribute.String(KeyReason, reason))
 }
 
 func RecordOhlcvOutOfMemory(ctx context.Context, op string) {

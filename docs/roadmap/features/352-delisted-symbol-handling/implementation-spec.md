@@ -494,7 +494,7 @@ grep -rn "ZZ352_" --include="*_test.go" services/xstockstrat-marketdata | cut -d
 
 ### Step 8 — service: delisting detection hook, confirmation-window reader, flagged set, recovery alert
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/delisting.go` — create
@@ -579,7 +579,7 @@ python3 scripts/check-context-map.py
 
 ### Step 9 — test: detection hook, window counting, warm-set removal, recovery alert
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/delisting_test.go` — create
@@ -646,7 +646,7 @@ grep -rn "Psky *=" --include="*.go" services/xstockstrat-marketdata | wc -l   # 
 
 ### Step 10 — migration: config `054` seeds `assets.delisting_confirmation_trading_days`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/054_marketdata_delisting_confirmation_days.up.sql` — create
