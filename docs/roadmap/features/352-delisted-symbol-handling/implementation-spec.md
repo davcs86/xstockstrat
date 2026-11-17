@@ -1037,7 +1037,7 @@ grep -c "symbol_results" app/handlers/servicer.py     # >= 5
 
 ### Step 19 — test: ingest chunk, retry, resume and read paths
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify

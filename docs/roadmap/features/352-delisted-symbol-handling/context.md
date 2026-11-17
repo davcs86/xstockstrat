@@ -481,3 +481,12 @@
 - `servicer.py`, `repositories/backfill_jobs.py` (`symbol_results` in `_UPDATABLE_COLUMNS`), service
   `CLAUDE.md` (names migration `018`). Verified on this commit alone: ruff clean, `pytest -q` 531 passed,
   grep checks pass, `webhook_handoff_loop.py` untouched.
+
+### Step 19 — test: ingest chunk, retry, resume and read paths — done
+- TDD: AC-11 red: `no update_job call carried symbol_results`; AC-14 red: `[] == [('AXIA', 3, …),
+  ('PSKY', 2, …)]`; repo red: `non-updatable column(s) ['symbol_results']` (12 failed / 6 passed on the
+  unmodified module; the webhook payload guard and the job-level-failure case pass before and after, as
+  specced) → green: 18 passed.
+- `py_gate` via `uv run`: ruff clean, 546 passed, coverage 87.01%. No skipped tests. Every case of
+  Instruction 3 has a test (AC-11, 13, 14, 23, 24, 26; retry; whole-chunk failure; resume with the
+  documented residual; merge precedence; job-level failure; A-4).
