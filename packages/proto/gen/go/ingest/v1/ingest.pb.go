@@ -1366,10 +1366,13 @@ type SignalSource struct {
 	// distinguishable from an explicit 0.0. DB default 1.0 (neutral).
 	ReliabilityWeight *float64 `protobuf:"fixed64,12,opt,name=reliability_weight,json=reliabilityWeight,proto3,oneof" json:"reliability_weight,omitempty"`
 	// Owner of the source (feature 224). "system" = platform-owned, read-only to every user.
-	UserId        string             `protobuf:"bytes,13,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Origin        *v1.TemplateOrigin `protobuf:"bytes,14,opt,name=origin,proto3" json:"origin,omitempty"` // set when instantiated from a template
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	UserId string             `protobuf:"bytes,13,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Origin *v1.TemplateOrigin `protobuf:"bytes,14,opt,name=origin,proto3" json:"origin,omitempty"` // set when instantiated from a template
+	// Prose an LLM agent follows to extract signals from a mediated_* source.
+	// Empty on every other source type.
+	ExtractionInstructions string `protobuf:"bytes,15,opt,name=extraction_instructions,json=extractionInstructions,proto3" json:"extraction_instructions,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *SignalSource) Reset() {
@@ -1498,6 +1501,13 @@ func (x *SignalSource) GetOrigin() *v1.TemplateOrigin {
 		return x.Origin
 	}
 	return nil
+}
+
+func (x *SignalSource) GetExtractionInstructions() string {
+	if x != nil {
+		return x.ExtractionInstructions
+	}
+	return ""
 }
 
 type ListSignalSourcesRequest struct {
@@ -2056,7 +2066,7 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\rowner_user_id\x18\a \x01(\tR\vownerUserId\"\x90\x01\n" +
 	"\x14QuerySignalsResponse\x12?\n" +
 	"\asignals\x18\x01 \x03(\v2%.xstockstrat.ingest.v1.ExternalSignalR\asignals\x127\n" +
-	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\xf0\x04\n" +
+	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\xa9\x05\n" +
 	"\fSignalSource\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1f\n" +
@@ -2077,7 +2087,8 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"signalsFed\x122\n" +
 	"\x12reliability_weight\x18\f \x01(\x01H\x00R\x11reliabilityWeight\x88\x01\x01\x12\x17\n" +
 	"\auser_id\x18\r \x01(\tR\x06userId\x12=\n" +
-	"\x06origin\x18\x0e \x01(\v2%.xstockstrat.common.v1.TemplateOriginR\x06originB\x15\n" +
+	"\x06origin\x18\x0e \x01(\v2%.xstockstrat.common.v1.TemplateOriginR\x06origin\x127\n" +
+	"\x17extraction_instructions\x18\x0f \x01(\tR\x16extractionInstructionsB\x15\n" +
 	"\x13_reliability_weight\"i\n" +
 	"\x18ListSignalSourcesRequest\x12)\n" +
 	"\x10include_inactive\x18\x01 \x01(\bR\x0fincludeInactive\x12\"\n" +

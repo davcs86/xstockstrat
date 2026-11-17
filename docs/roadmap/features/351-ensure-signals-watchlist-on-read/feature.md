@@ -3,6 +3,8 @@
 **Development Branch**: `feature/ensure-signals-watchlist-on-read`
 **Created**: 2026-11-16
 **Last Updated**: 2026-11-16
+**Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
+**Launched date**: 2026-11-17
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute (sequential) | Steps 1-6 done; Step 5 landing gate passed once 354 (#1566) merged to main-dev; scenarios promoted; merge-order row resolved; integration PR #1561 |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 
+| 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
 ---
 
 ## Artifacts

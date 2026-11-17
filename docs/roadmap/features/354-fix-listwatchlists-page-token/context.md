@@ -108,3 +108,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Traversal limit=1: call 1 → `[4d1366d8…]`, next_page_token=`4d1366d8…` (last returned row); call 2 → `[73fa475f…]`, next_page_token="". 2 calls (cap 4).
 - **PASS**: every list exactly once, ascending, final token empty. Discriminating: under the pre-fix code page 1's token would have been the look-ahead `73fa475f…` and the traversal would have returned only `4d1366d8…`.
 - No temporary watchlist was needed (N ≥ 2).
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1573 merged to main
+- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17
