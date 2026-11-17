@@ -98,6 +98,7 @@ Make no other edit. Do not touch the twin `ListPositions` defect (`internal/repo
 ```bash
 cd services/xstockstrat-portfolio
 grep -n "r.db.Query(ctx," internal/repository/watchlist_repo.go          # expect 2 hits: ListByUser + bindingsByWatchlist
+grep -c "r.pool.Query(ctx," internal/repository/watchlist_repo.go        # expect 2 (the two other pool queries, pre-edit :447/:465) — seam edit did not over-replace
 grep -n "nextToken = wls\[pageSize-1\].WatchlistId" internal/repository/watchlist_repo.go   # expect 1 hit
 grep -c "wls\[pageSize\]\.WatchlistId" internal/repository/watchlist_repo.go               # expect 0
 grep -n "watchlist_id > \$2::uuid" internal/repository/watchlist_repo.go                   # predicate unchanged (strict >)
