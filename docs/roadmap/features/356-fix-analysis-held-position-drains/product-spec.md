@@ -48,8 +48,10 @@ logged and counted. Each drain is tested against a fake that ignores the token.
 - **FR-4 (fail closed, observable per caller).** A failed held drain raises to its caller and returns no
   value. Each caller handles it as follows:
   - Live loop cycle (`live_loop.py:402`): it logs a WARNING and skips the strategies of that owner for this
-    cycle. It still evaluates the other owners. It records `analysis.live_loop.drain_failures{source=held}`
-    once per failed drain, which preserves `@AC-16 @feature-294`. No metric attribute carries the owner id.
+    cycle. It still evaluates the other owners. A failed owner is drained at most once per cycle: its
+    remaining strategies are skipped without another `ListPositions` drain. It records
+    `analysis.live_loop.drain_failures{source=held}` once per failed owner per cycle, which preserves
+    `@AC-16 @feature-294`. No metric attribute carries the owner id.
   - Entry backfill (`entry_backfill.py:148`): no change. Its existing `except Exception` already skips the
     owner.
   - `_compute_opportunities` (`servicer.py:5367`): the recompute fails through its existing path
@@ -63,7 +65,9 @@ logged and counted. Each drain is tested against a fake that ignores the token.
   many pages. `_drain_held_symbols` values each symbol by its own summed `abs(market_value)`. Results stay
   owner-scoped, which preserves `@AC-8 @feature-262`.
 - **FR-6 (test contract).** Each drain has a test that runs against a `ListPositions` fake that ignores
-  `page_token`. Each regression test fails on the current code before the fix lands (red before green).
+  `page_token`. Each `@regression` scenario's test fails on the current code before the fix lands (red
+  before green). `@AC-4` is a guard, not a regression: the current code already propagates a non-gRPC
+  exception.
 
 ## Consumer Surface(s)
 
