@@ -130,9 +130,9 @@ may print the FQN `portfolio.<key>`.
 ## Observability (feature 294-signal-map-instrumentation)
 
 - `loop tick ok` is written per event consumer (`order_fill`, `position_sync`, `deregistration`, `bracket`, `balance`) on outcome ok/acked only, throttled to one record per consumer per 60 s. These are event-driven, so there is no idle heartbeat and silence is ambiguous. `signal_prune` keeps its `signal watchlist prune tick` record. Trading also has a `position_sync` loop: filter on `service_name` too.
-- Instruments: `portfolio.consumer.events{consumer, outcome ok|error|parked|acked}`, `portfolio.marketdata_fetch{op=quotes|delistings, outcome ok|error|timeout}`, `portfolio.snapshot{outcome written|skipped_unpriced|db_error}`, `portfolio.mark_source{mark_source, path read|pnl|snapshot|risk}` (a rate, not a state).
+- Instruments: `portfolio.consumer.events{consumer, outcome ok|error|parked|acked}`, `portfolio.marketdata_fetch{op=quotes|delistings, outcome ok|error|timeout}`, `portfolio.snapshot{outcome written|skipped_unpriced|skipped_read_error|db_error}`, `portfolio.mark_source{mark_source, path read|pnl|snapshot|risk}` (a rate, not a state).
 - Stream consumers retry every 2 s (`streamRetryDelay`), log failures at N=10 (`streamLogEvery`) and reset their counters after a 10-minute quiet window (`streamQuietWindow`; counters only, never the retry timing). INFO `<name> stream resumed` marks a recovery.
-- Load-bearing logs: ERROR `portfolio snapshot insert failed` (the ledger emit and broadcast still run); WARN `latest quote has no usable price` is one aggregate per pass with `count` and at most 5 `sample_symbols`.
+- Load-bearing logs: ERROR `portfolio snapshot insert failed` (the ledger emit and broadcast still run); WARN `latest quote has no usable price` is one aggregate per pass with `count` and at most 5 `sample_symbols`; WARN `portfolio snapshot skipped: position read failed` (no persist/emit/broadcast); WARN `concentration check skipped: position read failed` (drawdown still runs).
 
 ## Environment Variables
 

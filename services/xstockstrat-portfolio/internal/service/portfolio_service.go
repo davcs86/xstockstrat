@@ -787,7 +787,7 @@ func sideOf(qty float64) portfoliov1.PositionSide {
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
 	// Caller identity comes from the trusted x-user-id header, never the deprecated request-body user_id.
 	userID := middleware.FromContext(ctx).UserID
-	positions, _, err := s.repo.ListPositions(ctx, userID, req.TradingMode, 500, "", req.GetAccountId(), "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	positions, err := s.listAllPositions(ctx, userID, req.TradingMode, req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}
@@ -932,7 +932,7 @@ var ErrLedgerUnavailable = errors.New("ledger unavailable")
 // (the ONE realized-P&L implementation) — no second formula lives here (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
 	userID := middleware.FromContext(ctx).UserID
-	positions, _, err := s.repo.ListPositions(ctx, userID, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	positions, err := s.listAllPositions(ctx, userID, req.TradingMode, "")
 	if err != nil {
 		return nil, err
 	}
@@ -1170,6 +1170,29 @@ func (s *PortfolioService) collectFills(ctx context.Context, eventType, userID s
 	}
 }
 
+// positionDrainPageSize must stay <= the repo cap: ListPositions turns any larger page size into 100.
+const positionDrainPageSize = 500
+
+// listAllPositions follows the ListPositions cursor to the last page; a page error fails the whole read.
+func (s *PortfolioService) listAllPositions(ctx context.Context, userID string, mode commonv1.TradingMode, accountID string) ([]*portfoliov1.Position, error) {
+	var out []*portfoliov1.Position
+	var token string
+	for {
+		page, next, err := s.repo.ListPositions(ctx, userID, mode, positionDrainPageSize, token, accountID, "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+		if err != nil {
+			return nil, fmt.Errorf("list positions page: %w", err)
+		}
+		out = append(out, page...)
+		if next == "" {
+			return out, nil
+		}
+		if next == token {
+			return nil, fmt.Errorf("list positions page: repeated page token")
+		}
+		token = next
+	}
+}
+
 // GetSnapshot retrieves a historical portfolio snapshot.
 func (s *PortfolioService) GetSnapshot(ctx context.Context, req *portfoliov1.GetSnapshotRequest) (*portfoliov1.PortfolioSnapshot, error) {
 	// Ownership gate: a snapshot's portfolio_id IS the owning user_id (snapshots are written as
@@ -1214,8 +1237,10 @@ func (s *PortfolioService) Unsubscribe(id string) {
 }
 
 func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string, mode commonv1.TradingMode) {
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	positions, err := s.listAllPositions(ctx, userID, mode, "")
 	if err != nil {
+		slog.WarnContext(ctx, "portfolio snapshot skipped: position read failed", "user_id", userID, "error", err)
+		telemetry.RecordSnapshot(ctx, "skipped_read_error")
 		return
 	}
 	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
@@ -1283,22 +1308,23 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	maxDrawdownPct := s.cfg.GetFloat("risk.max_drawdown_pct", 0.10)
 	concentrationLimitPct := s.cfg.GetFloat("risk.concentration_limit_pct", 0.20)
 
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
-	if err != nil {
-		return
-	}
 	var totalValue float64
 	posValues := make(map[string]float64)
-	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
-	applyQuotes(positions, quotes)
-	observeQuotePass(ctx, positions, quotes, "risk")
-	// Any unpriced position would skew the denominator — skip concentration (drawdown below still runs).
-	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
-		slog.WarnContext(ctx, "concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+	positions, err := s.listAllPositions(ctx, userID, mode, "")
+	if err != nil {
+		slog.WarnContext(ctx, "concentration check skipped: position read failed", "user_id", userID, "error", err)
 	} else {
-		for _, p := range positions {
-			posValues[p.Symbol] += p.MarketValue
-			totalValue += p.MarketValue
+		quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+		applyQuotes(positions, quotes)
+		observeQuotePass(ctx, positions, quotes, "risk")
+		// Any unpriced position would skew the denominator — skip concentration (drawdown below still runs).
+		if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
+			slog.WarnContext(ctx, "concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+		} else {
+			for _, p := range positions {
+				posValues[p.Symbol] += p.MarketValue
+				totalValue += p.MarketValue
+			}
 		}
 	}
 

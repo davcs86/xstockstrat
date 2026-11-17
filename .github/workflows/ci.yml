@@ -1062,7 +1062,7 @@ jobs:
           GOWORK: "off"
           CI: "true"
           PORTFOLIO_DB_TEST_URL: postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable
-        run: go test -tags dbtest -race -count=1 ./internal/repository/...
+        run: go test -tags dbtest -race -count=1 ./internal/repository/... ./internal/service/...
 
   # Real-Postgres repository tests (//go:build dbtest); excluded from the go-lint coverage run.
   marketdata-db-test:
