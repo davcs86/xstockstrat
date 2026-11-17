@@ -793,3 +793,224 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-17 — sdd-batch design gate (round 6)
+
+`/sdd-design fix-trading-reconcile-reads` full debate halted at its approval gate after round 6 (gate policy: halt). design.md is NOT written and status.md is unchanged (still spec-ready). The debate register is `debate.md` (D-1..D-24, R-1..R-17, O-1..O-24; O-1..O-19 closed; O-20 and O-21 open and blocking; O-22..O-24 open and non-blocking).
+
+## Open Threads
+
+- **Approach**: round 6 keeps the r5 design (D-1..D-20) unchanged. It folds in the two fixture fixes and adds the skip counter the operator required at the r5 gate. Four new decisions:
+  - D-21: every `listAccountPlatformPositions` error that skips an account's position check is counted. One call, `telemetry.RecordReconcilePositionSkip(ctx, reconcilePositionSkipCause(ppErr))`, goes in the ppErr branch (`trading.go:2240-2243`) before the unchanged WARN and continue. The counter is a new `trading.reconciliation.position_check_skipped`, labelled only with the existing `KeyOutcome` (`otel.go:312`), with no account or user attribute. It stays separate from `trading.escalation.systemic` (R-15; R-6/D-7 hold). This supersedes only D-8's "add no new metric" clause, by the binding operator decision; D-8's cause and page-index wrapping stands.
+  - D-22: the guard failures wrap package sentinels (`errEmptyPageWithToken`, `errRepeatedPageToken`, `errDuplicateSymbol`) via `%w`. The D-12/D-13 texts stay byte-identical, and the skip cause is classified with `errors.Is`, never by matching text (R-17).
+  - D-23: counter-asserting tests call `installMetricReader(t)` as their first statement and never use `t.Parallel`. The instrument is added to `minInstruments` and `driveAllInstruments` in `telemetry_allowlist_test.go`.
+  - D-24: no `produced-signals.tsv` row, alert or dashboard. `docs/reconciliation.md:98` and the service CLAUDE.md "Position & Balance Sync Observability" pointer name the counter.
+  - Fixtures (closes O-18/O-19): `const reconcile358Owner` placed in `brokerPoolEntry.userID` (`trading.go:75-81`), `isPaper: true` on every 358 broker fake, and the literal `commonv1.TradingMode_TRADING_MODE_PAPER` in the D-17 checks.
+  - Counter assertions after two ticks: AC-2 error gives `rpc_error` 2, AC-2 deadline gives `deadline` 2, AC-3 gives `cursor_invalid` 2, and AC-1 and the positive control give a total of 0.
+  - There is no proto, migration, config or portfolio change. Features 351, 353, 354 and 357 are untouched.
+- **Strongest open objection (blocking, O-20, [C-11])**: the deadline mapping. The AC-2 deadline fake blocks on `ctx.Done()` and returns a plain `context.DeadlineExceeded`. `status.Code` reports that as Unknown, so a mapper keyed only on `codes.DeadlineExceeded` labels it `rpc_error` and the test's own `deadline, 2` assertion goes red. Required: map to deadline when `errors.Is(err, context.DeadlineExceeded) || status.Code(err) == codes.DeadlineExceeded`, add a hardening row for each form, and state which form the AC-2 fake returns. The mediator folded this into the approach; it stays open until the proposer adopts it.
+  - O-21 (blocking, [C-15/C-16]): the counted-skip requirement has no FR or @AC trace (product-spec has FR-1..FR-4 only; acceptance.feature has AC-1..AC-3 with no metric Then clause). Append FR-5, plus `@AC-4 @FR-5` or metric Then clauses on AC-2/AC-3 (precedent `signal-map-instrumentation.feature:60`), so the durable acceptance suite pins the counter.
+  - O-22 (non-blocking, [C-18]): use three outcomes, `rpc_error|deadline|cursor_invalid`, with all three sentinels mapped to `cursor_invalid`, because the WARN already names the guard (D-8). Otherwise record why per-guard labels are kept.
+  - O-23 (non-blocking, [C-18]): make the outcome type-enforced (`type ReconcileSkipOutcome string` as the parameter), or drop the "typed" claim.
+  - O-24 (non-blocking, [C-11]): `context.Canceled` on shutdown is counted as `rpc_error`. State that the deploy burst is counted and accepted, document it in `docs/reconciliation.md`, and pin the mapping with a hardening row. No sixth label.
+  - O-18 and O-19 closed at round 6.
+- **Floor status**: no floor breaches.
+- **Uncovered @AC changes**: `358 @AC-1` EXTEND is not covered by an operator decision. `358 @AC-2`, `@AC-3` and the proposed `358 @AC-4 @FR-5` (counted position-side skip) EXTEND are covered (operator 2026-11-17: skip, never halt; count every skip). PRESERVE only: `@AC-1/@AC-2/@AC-3 @feature-206` (fix-reconciliation-false-halt.feature), `@AC-9 @feature-249`, `@AC-45 @feature-294` (signal-map-instrumentation.feature), `@AC-1/@AC-7 @feature-169`.
+- **Open risks**:
+  - Shutdown bursts: a cancelled tick records an `rpc_error` skip for each remaining account, so any future alert needs a rate or for-duration window.
+  - Tick time grows by up to ceil(n/500) × broker.timeout_ms for each large account; page deadlines now surface as `outcome=deadline`.
+  - `resolveUnknownIntents` stays skipped while a platform read is incomplete.
+  - The rejections rely on portfolio's UNIQUE index (migrations/003:10) and on keyset paging. A violation causes false skips (now `cursor_invalid`), never false halts.
+  - A test that misses `installMetricReader` before its first tick makes the zero-count guards vacuous; D-23 mitigates this.
+  - The deadline-ordering assertion needs the monotonic clock to advance across the 5 ms sleep; it fails as a flake, never passes vacuously.
+  - TradingMode propagation is pinned only on the paper path (C-18).
+  - No alert or dashboard is added; if one is added later, the produced-signals row must come with it.
+
+```sdd-batch-design-state
+{
+  "round": 6,
+  "synth": {
+    "approach": "Round 6 keeps r5 (D-1..D-20) unchanged. It folds in the two fixture fixes and adds the skip counter the operator required, with the adversary's corrections applied. Code facts below were re-checked this session. All paths are under /home/user/xstockstrat/services/xstockstrat-trading/.\n\n**Service, internal/service/trading.go**\n- Unchanged from r5:\n  - `const reconcilePositionsPageSize = 500`.\n  - `listAccountPlatformPositions(ctx, accountID, userID string, mode commonv1.TradingMode, timeout time.Duration) (map[string]float64, error)`.\n  - Per page: its own WithTimeout plus x-user-id, cancel() after the call, token guards before the merge, then the duplicate-symbol guard, and the seen set (D-1, D-3, D-4, D-5, D-9, D-16, D-19).\n- New: package sentinels, wrapped with %w so the D-12/D-13 texts stay byte-identical:\n  - `errEmptyPageWithToken = errors.New(\"empty page with next_page_token\")`, used as `fmt.Errorf(\"page %d: %w %q\", i, errEmptyPageWithToken, next)`\n  - `errRepeatedPageToken = errors.New(\"repeated next_page_token\")`, used the same way\n  - `errDuplicateSymbol = errors.New(\"duplicate symbol\")`, used as `fmt.Errorf(\"page %d: %w %q\", i, errDuplicateSymbol, sym)`\n  - The RPC row stays `fmt.Errorf(\"page %d: list positions: %w\", i, err)`.\n- In the ppErr branch (:2240-2243), add exactly one line before the existing WARN and continue: `telemetry.RecordReconcilePositionSkip(ctx, reconcilePositionSkipCause(ppErr))`. The WARN text, the continue, and the exclusion from systemicCount are unchanged (D-2, D-7).\n- `reconcilePositionSkipCause(err) telemetry.ReconcileSkipOutcome` (answers O-20):\n  - `errors.Is(err, context.DeadlineExceeded) || status.Code(err) == codes.DeadlineExceeded` gives Deadline.\n  - `errors.Is` on any of the three guard sentinels gives CursorInvalid. The mediator recommends one cursor label (O-22): the WARN already names the exact guard (D-8). If the proposer keeps one label per guard, it must say why.\n  - Anything else gives RPCError, and that includes context.Canceled. The operator requires every skip caused by a listAccountPlatformPositions error to be counted, so shutdown bursts are counted, accepted and documented. There is no extra label (O-24).\n\n**Telemetry, internal/telemetry/otel.go**\n- One new counter, `reconcilePositionSkip = NewCounter(\"trading.reconciliation.position_check_skipped\")`, declared in the var block at :331-338.\n- `type ReconcileSkipOutcome string` with exported constants. `RecordReconcilePositionSkip(ctx, outcome ReconcileSkipOutcome)` takes the typed value, so the closed label set is not merely a convention (O-23).\n- The only attribute is the existing `KeyOutcome` (:312). No new label key, and no account_id or user_id attribute; both are already in forbiddenLabelKeys.\n- `trading.escalation.systemic` (:337) is not reused: it carries no labels and means a REDUCE_ONLY escalation (@AC-45, R-6, D-7).\n\n**Spec trace (answers O-21; IDs append-only)**\n- docs/roadmap/features/358-fix-trading-reconcile-reads/product-spec.md: append FR-5. Every position-side check skipped because of a listAccountPlatformPositions error increments `trading.reconciliation.position_check_skipped{outcome}` once, with a bounded outcome and no account or user attribute.\n- acceptance.feature: append `@AC-4 @FR-5 @regression`. Alternatively, add `Then \"trading.reconciliation.position_check_skipped\" with outcome \"<x>\" increases by 2` clauses to AC-2 (error and deadline) and AC-3, so the counter is promoted into the durable services/xstockstrat-trading/acceptance/ suite. The step style follows the precedent at signal-map-instrumentation.feature:60.\n\n**Tests, RED first (trading_reconciliation_test.go)**\n- O-18/O-19 fixture fixes, folded in:\n  - `const reconcile358Owner = \"user-358-owner\"`, placed in `brokerPoolEntry{userID: reconcile358Owner, …}` (trading.go:75-81).\n  - Every 358 fakeReconciliationBroker sets `isPaper: true` (test :82, :115).\n  - The D-17 per-entry checks compare against reconcile358Owner and the literal `commonv1.TradingMode_TRADING_MODE_PAPER`.\n- Counter-asserting tests call `installMetricReader(t)` (trading_telemetry_test.go:285) as their first statement, before any tick. None of them uses t.Parallel; the grep this session found none in the package. After two ticks they assert with `counterValue(t, reader, …, attribute.String(\"outcome\", X))` (:316):\n  - AC-2 error: rpc_error, 2.\n  - AC-2 deadline: deadline, 2. This fake's \"p2\" returns `ctx.Err()` (plain context.DeadlineExceeded), which is the form the errors.Is branch handles.\n  - AC-3: cursor_invalid, 2.\n  - AC-1 and the positive control: total 0.\n- Hardening table (D-12):\n  - Every row also asserts `reconcilePositionSkipCause(err)`.\n  - Two extra mapper rows: a wrapped `context.DeadlineExceeded` gives deadline, and a wrapped `status.Error(codes.DeadlineExceeded, …)` gives deadline.\n  - One more row: a wrapped `context.Canceled` gives rpc_error.\n- telemetry_allowlist_test.go: add the instrument to minInstruments (:37-40) and one RecordReconcilePositionSkip call to driveAllInstruments (:44-52).\n\n**Docs**\n- docs/reconciliation.md:98: add the counter and its outcome set, with this meaning: one account's position check was skipped for one tick, and a sustained non-zero rate means that account is going unreconciled. Note that a shutdown can produce a burst of rpc_error.\n- docs/reconciliation.md:57: the paging sentence from r5.\n- Service CLAUDE.md: extend the \"Position & Balance Sync Observability\" pointer line to name the counter.\n- No packages/otel/produced-signals.tsv row: scripts/check-otel-produced-signals.py:2-9 only requires rows for series that an alert or dashboard queries, and none is added.\n\n**Build order**\n1. FR-5 and the @AC trace.\n2. RED tests (AC-1, positive control, AC-2 error and deadline, AC-3, all with counter assertions) plus the allowlist additions.\n3. The counter and the typed outcome.\n4. The helper with sentinels, the mapper, the reconcileTick change, and the hardening table.\n5. `GOWORK=off go test ./...` in services/xstockstrat-trading.\n6. Docs.\n\nThere is no proto, migration, config or portfolio change. Features 351, 353, 354 and 357 are untouched.",
+    "open_objections": [
+      {
+        "text": "[C-11] The deadline label must be part of the design, not an aside under risks. The AC-2 deadline fake blocks on ctx.Done() and returns a plain context.DeadlineExceeded. status.Code returns Unknown for that error, so the r6 mapper as written labels it rpc_error and its own `deadline, 2` assertion goes red. Required: the mapper gives deadline when errors.Is(err, context.DeadlineExceeded) || status.Code(err)==codes.DeadlineExceeded; there is a hardening row for each form (plain context error, and status.Error(codes.DeadlineExceeded)); and the proposal states which form the AC-2 deadline fake returns.",
+        "blocking": true
+      },
+      {
+        "text": "[C-15/C-16] The operator's counted-skip requirement has no FR or @AC trace. product-spec.md has only FR-1..FR-4, and acceptance.feature AC-1..AC-3 have no metric Then clause. Without one, the counter is never promoted to the durable services/xstockstrat-trading/acceptance/ suite, and a refactor could delete it without failing any @AC. Required: append FR-5, plus either @AC-4 @FR-5 or `increases by 2 with outcome …` clauses on AC-2/AC-3 (IDs are append-only; precedent signal-map-instrumentation.feature:60).",
+        "blocking": true
+      },
+      {
+        "text": "[C-18] Five outcome values is more than needed. empty_page_token, repeated_token and duplicate_symbol all mean the portfolio cursor is broken, and the WARN already tells them apart (D-8). Prefer rpc_error|deadline|cursor_invalid, with the three sentinels mapped to cursor_invalid so the D-12/D-13 texts stay byte-identical. Keeping per-guard labels is acceptable only if the proposer records why.",
+        "blocking": false
+      },
+      {
+        "text": "[C-18] The 'typed constants' claim is not enforced: RecordReconcilePositionSkip(ctx, cause string) accepts any string. Declare type ReconcileSkipOutcome string and take it as the parameter, or drop the 'typed' wording from the docs line.",
+        "blocking": false
+      },
+      {
+        "text": "[C-11] On poller shutdown, context.Canceled is labelled rpc_error, which produces a burst of skips on every deploy. Given the operator's 'count every skip caused by a listAccountPlatformPositions error', the proposal must state explicitly that the burst is counted and accepted, document it in docs/reconciliation.md, and pin the Canceled→rpc_error mapping with a hardening row. No sixth label.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "358 @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "358 @AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "358 @AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "358 @AC-4 @FR-5 (proposed: counted position-side skip)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-1 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @feature-249",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-45 @feature-294 (signal-map-instrumentation.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-169",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 @feature-169",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Reusing trading.escalation.systemic, or adding a label to it, for skipped page reads. It lost because that instrument carries no labels and means escalation to REDUCE_ONLY (otel.go:337). Overloading it breaks @AC-45 and the R-6/D-7 split.",
+      "One unlabelled skip counter. It lost because it cannot tell a persistent deadline skip on a large account (the expected R-1/D-3 outcome) apart from a transport outage or a cursor bug, so the alert would not be actionable.",
+      "Classifying a skip cause by matching error text. It lost because a message edit would silently break the mapping. Sentinels wrapped with %w keep the D-12/D-13 strings byte-identical while staying classifiable with errors.Is.",
+      "Not recording context.Canceled (shutdown) as a skip. It lost because the operator requires every skip caused by a listAccountPlatformPositions error to be counted. The deploy burst is accepted and documented instead.",
+      "Adding a packages/otel/produced-signals.tsv row. It lost because scripts/check-otel-produced-signals.py:2-9 only requires rows for series that an alert or dashboard queries, and this feature adds neither."
+    ],
+    "open_risks": [
+      "Shutdown bursts: when the tick ctx is cancelled, the remaining accounts each record an rpc_error skip. An alert on this series needs a rate or for-duration window to avoid paging on deploys.",
+      "Tick wall-clock time grows by up to ceil(n/500) × broker.timeout_ms for each large account, because accounts are processed sequentially. Portfolio's per-page enrichPositions makes page deadlines more likely on big accounts; those now surface as outcome=deadline.",
+      "resolveUnknownIntents stays skipped while an account's platform read is incomplete, because the continue at trading.go:2240-2243 is unchanged. An extended portfolio outage therefore also delays resolving UNKNOWN intents.",
+      "The duplicate-symbol and repeated-token rejections rely on portfolio's UNIQUE(user_id, symbol, trading_mode, account_id) (migrations/003:10) and on the keyset cursor returning each row once. A future portfolio change could cause false skips, never false halts; those now show up as cursor_invalid.",
+      "The counter assertions depend on each test installing its own MeterProvider reader before the first tick. A missed install makes the zero-count guards pass without testing anything. This is mitigated by the 'installMetricReader first statement, no t.Parallel' rule.",
+      "The deadline-ordering assertion needs the monotonic clock to advance across page 1's 5 ms sleep. Equal deadlines make the test fail as a flake; it cannot pass vacuously.",
+      "TradingMode propagation is pinned only on the paper path. The live mapping on later pages has no per-entry assertion (accepted as out of scope, C-18).",
+      "No alert rule or dashboard is added. 'Alertable' means an operator can build one on this series. If one is added later, the produced-signals row must come with it."
+    ],
+    "constitution_rules_touched": [
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-04",
+      "F-07",
+      "P-02",
+      "P-03",
+      "PLAT-4",
+      "PLAT-N1"
+    ],
+    "rationale": "r6 answers both r5 non-blocking objections concretely, and the adversary confirmed both against the code, so they close:\n- O-18: explicit isPaper: true on every 358 broker fake, a literal TRADING_MODE_PAPER assertion, and the wrong assumption dropped.\n- O-19: one reconcile358Owner constant, placed in brokerPoolEntry.userID (trading.go:75-81) and asserted on every D-17 entry.\n\nThe operator's binding r5 gate decision requires a counted skip. The proposal's shape fits the existing harness, and I re-verified it this session:\n- NewCounter and the var block are at otel.go:331-338.\n- KeyOutcome is at :312, so no allowlist change is needed.\n- escalation.systemic carries no labels.\n- check-otel-produced-signals.py:2-9 only enforces series that an alert or dashboard queries.\n- The service package has no t.Parallel; the only hits are comments forbidding it (telemetry_allowlist_test.go:25, trading_telemetry_test.go:283).\n\nTwo gaps block approval, and the proposal does not concretely answer either:\n- The deadline mapping. A ctx.Done()-blocking fake returns a plain context.DeadlineExceeded, which status.Code reports as Unknown, so the specified test would go red.\n- The missing FR-5/@AC trace. Without it, the operator's observability requirement is not anchored in the durable acceptance suite. I verified that acceptance.feature has only AC-1..AC-3 and that the metric-step precedent exists at signal-map-instrumentation.feature:60.\n\nI folded both fixes into the approach so the next proposer has a concrete target. The objections stay open until the proposer adopts them.\n\nOn the non-blocking points, the mediator recommends:\n- a three-value outcome set, with sentinels kept so the D-12/D-13 texts survive;\n- a typed outcome parameter;\n- counting context.Canceled as rpc_error, which honours the operator's 'count every skip' wording.\n\nRegister check:\n- D-8's 'add no new metric' clause is overridden by the binding operator decision of 2026-11-17 (design gate r5), not by a proposer petition. It is recorded as D-21, which cites that decision; D-8's cause and page-index wrapping stands.\n- No other D-n is contradicted. No R-n is reintroduced: R-6 holds because the skip counter is separate from systemic. No closed O-n is re-raised.\n- There are no petitions, and the steer explicitly reopens no ID.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Per the binding operator decision (2026-11-17, design gate r5), every listAccountPlatformPositions error that skips an account's position check is counted. The record is one call, telemetry.RecordReconcilePositionSkip, placed in the ppErr branch (trading.go:2240-2243) before the unchanged WARN and continue. The counter is one new trading.reconciliation.position_check_skipped, labelled only with the existing KeyOutcome and no account or user attribute. This supersedes only D-8's 'add no new metric' clause; D-8's cause and page-index wrapping stands.",
+          "evidence": "Operator decision 2026-11-17 (design gate r5); internal/telemetry/otel.go:311-316 (KeyOutcome), :331-338 (counter block); telemetry_allowlist_test.go:28-35 (allowed and forbidden label keys)"
+        },
+        {
+          "text": "The guard failures wrap package sentinels (errEmptyPageWithToken, errRepeatedPageToken, errDuplicateSymbol) via %w. The D-12/D-13 error strings stay byte-identical, and the skip cause is classified with errors.Is, never by matching text.",
+          "evidence": "D-12, D-13; proposer r6 and adversary r6 agree"
+        },
+        {
+          "text": "Tests that assert the skip counter call installMetricReader(t) as their first statement, before any tick, and never use t.Parallel. The instrument is added to minInstruments and driveAllInstruments in telemetry_allowlist_test.go.",
+          "evidence": "trading_telemetry_test.go:283,285,316; telemetry_allowlist_test.go:25-26,37-52; grep this session shows no t.Parallel call in internal/service"
+        },
+        {
+          "text": "No packages/otel/produced-signals.tsv row and no alert or dashboard are added. The service CLAUDE.md 'Position & Balance Sync Observability' pointer and docs/reconciliation.md:98 name the counter.",
+          "evidence": "scripts/check-otel-produced-signals.py:2-9 (registry enforced only for alert and dashboard queried series); services/xstockstrat-trading/CLAUDE.md has no section titled exactly 'Observability'"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Reusing trading.escalation.systemic (or adding a label to it) to count skipped position reads",
+          "why": "It carries no labels and means escalation to REDUCE_ONLY (otel.go:337). Reusing it breaks @AC-45 and the R-6/D-7 split."
+        },
+        {
+          "text": "A single unlabelled skip counter",
+          "why": "It cannot tell a persistent deadline skip (R-1/D-3 on a large account) apart from a transport outage or a cursor bug, so a persistent skip is not actionable."
+        },
+        {
+          "text": "Classifying the skip cause by matching error text",
+          "why": "A message edit would silently break classification. Sentinels wrapped with %w keep the texts identical and can be classified with errors.Is."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "[C-11] The deadline label must be in the design. The AC-2 deadline fake returns a plain context.DeadlineExceeded, which status.Code reports as Unknown, so it gets mislabelled rpc_error. Required: map to deadline when errors.Is(err, context.DeadlineExceeded) || status.Code(err)==codes.DeadlineExceeded, add a hardening row for each form, and state which form the AC-2 fake returns.",
+          "blocking": true
+        },
+        {
+          "text": "[C-15/C-16] The counted-skip requirement has no FR or @AC. Append FR-5 and @AC-4 @FR-5 (or metric Then clauses on AC-2/AC-3), so the durable acceptance suite pins the counter (precedent signal-map-instrumentation.feature:60).",
+          "blocking": true
+        },
+        {
+          "text": "[C-18] Reduce the outcome set to rpc_error|deadline|cursor_invalid, with the three sentinels mapped to cursor_invalid, because the WARN already tells the guards apart (D-8). Otherwise record why per-guard labels are kept.",
+          "blocking": false
+        },
+        {
+          "text": "[C-18] Make the outcome type-enforced: type ReconcileSkipOutcome string as the RecordReconcilePositionSkip parameter. Otherwise drop the 'typed constants' claim.",
+          "blocking": false
+        },
+        {
+          "text": "[C-11] context.Canceled on shutdown is counted as rpc_error, so every deploy produces a burst. State explicitly that it is counted and accepted (operator: count every skip), document it in docs/reconciliation.md, and pin the mapping with a hardening row. No sixth label.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-18",
+          "how": "r6 sets isPaper: true explicitly on every 358 fakeReconciliationBroker, asserts the literal commonv1.TradingMode_TRADING_MODE_PAPER on every D-17 entry, and drops the wrong 'paper by default' assumption. The adversary confirmed."
+        },
+        {
+          "id": "O-19",
+          "how": "r6 declares one const reconcile358Owner, places it in brokerPoolEntry.userID (trading.go:75-81), and asserts every D-17 x-user-id entry against it. The adversary confirmed."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
