@@ -136,3 +136,20 @@
     replace-all update of that list.
   - **Flag alert emitter**: portfolio, after its removal, stating how many system-managed lists the
     symbol was removed from (debate D-10).
+
+## Session 2026-11-17 — sdd-design (round 2 and its gate)
+
+- Round 2 (debate.md): O-4..O-16 closed; adversary raised O-17..O-30, no Floor breach. Synthesis
+  adopted D-12..D-17 (removal only from a fresh response; no reset on an empty list; bounded hook
+  context with the 282 prune first; boot load of the flagged set; alert rules; binding rules).
+- **Round-2 gate, operator rulings (2026-11-17):**
+  - **Steer**: run round 3 on the simpler variant — the asset-load hook is the only decider of profile
+    state; portfolio's sync only supplies the watchlist symbols (debate D-19).
+  - **Alert delivery**: at-least-once, acknowledgement after send, unacknowledged claims re-claimable
+    (debate D-18).
+  - **Spec amendments approved** and applied to product-spec.md: FR-4 (a replace-all update still drops
+    a flagged symbol), FR-12 (portfolio sends the flag alert after the removal with the count and names
+    of lists; at-least-once; marketdata sends the recovery alert, only if the flag had been reported),
+    Affected Services (+ `xstockstrat-analysis`). No scenario renumbered.
+- Open going into round 3: O-24 (deadlock, expected moot under D-19), O-25 (shared timeout key), O-27
+  (AC-21 timing, expected resolved by D-19).

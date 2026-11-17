@@ -106,6 +106,10 @@ unchanged, so a later `ingest_signal` for the same symbol is still refused while
 FR-4. **User-created watchlists: keep and mark.** On a watchlist that is not system-managed, a flagged
 symbol stays on the list and carries the delisted state: flag, reason and first-unservable date. The
 user can still remove it by hand. Every portfolio RPC that returns watchlist entries carries the state.
+A replace-all update of a user-created list (for example a name-only update through the agent, which
+re-sends the stored symbols) still re-classifies every symbol and drops a flagged one, reporting it in
+`refused_symbols`, as feature 282 does for any unservable symbol (portfolio `@AC-19 @feature-282`,
+operator ruling 2026-11-16).
 
 FR-5. **No watchlist-driven requests for a flagged symbol.** Work that derives its symbol set from
 watchlists (keeping symbols warm, bar and quote ingestion, watchlist opportunity scans, and any
@@ -141,9 +145,13 @@ FR-11. **Visible to the agent.** `get_watchlist`, `list_watchlists` and the watc
 `manage_watchlist` and `manage_watchlist_symbols` return the delisted state of each flagged symbol; `get_backfill_status` returns the per-symbol outcomes and reasons of FR-9.
 
 FR-12. **Alert on transition.** One alert per symbol (D-10) is emitted through `xstockstrat-notify` when
-a symbol becomes flagged delisted, naming the symbol, the reason, and the system-managed watchlists it
-was removed from. One alert per symbol is also emitted when a flag clears on recovery (FR-2, D-18),
-naming the symbol. Each alert is emitted once per transition, not on every later refresh.
+a symbol becomes flagged delisted. It is sent by `xstockstrat-portfolio` after the removal of FR-3 and
+names the symbol, the reason, and how many system-managed watchlists it was removed from, with their
+names; a list locked at that moment is removed on a later refresh without a further alert. Delivery is
+at-least-once: a duplicate is possible only after a crash or timeout between sending and acknowledging.
+One alert per symbol is also emitted when a flag clears on recovery (FR-2, D-18); it is sent by
+`xstockstrat-marketdata`, names the symbol, and is sent only if the flag had been reported. Each alert
+belongs to one transition and is not repeated on later refreshes.
 
 FR-13. **Symbol profile.** The delisted state (flag, reason, first-unservable date) is stored once per
 symbol, platform-wide, in a persisted symbol/company profile record owned by `xstockstrat-marketdata`
@@ -177,7 +185,9 @@ Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-marketdata` — owns the asset set, the warm set, detection and the symbol profile
   (D-15); backfill per-symbol outcome `skipped` and reason; metric outcome
 - `xstockstrat-portfolio` — owns watchlists: returns the delisted state on entries (read from
-  marketdata), removal from system-managed lists
+  marketdata), removal from system-managed lists, emits the flag alert
+- `xstockstrat-analysis` — reads watchlists for opportunity scans and the live loop: skips flagged
+  entries (FR-5)
 - `xstockstrat-ingest` — owns `BackfillJob`: per-symbol outcome and reason, terminal status rule
 - `xstockstrat-agent` — `get_watchlist`, `list_watchlists`, `manage_watchlist`,
   `manage_watchlist_symbols`, `get_backfill_status` response mapping

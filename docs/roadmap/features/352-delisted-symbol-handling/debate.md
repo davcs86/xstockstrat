@@ -9,7 +9,7 @@
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-16 | /sdd-design | 11 | 10 | 3 | 16 | 0 | yes |
-| 2 | 2026-11-17 | /sdd-design | 6 | 1 | 21 | 14 | 0 | yes |
+| 2 | 2026-11-17 | /sdd-design | 8 | 1 | 22 | 14 | 0 | yes |
 
 ## Settled Decisions
 
@@ -33,6 +33,8 @@
 | D-15 | 2 | Refines D-5: the in-memory flagged set is loaded from the database once at boot, independent of the asset load, and again on every successful load. | `asset_servability.go:21-23` | settled |
 | D-16 | 2 | The recovery alert is emitted by marketdata, once per recover transition, and only when the flag alert for that flag had been claimed. Alerts are WARNING, category `symbol_delisting`, untargeted; portfolio gets its own emitter that writes no ledger event. | spec D-12, D-18; `services/xstockstrat-notify/src/fanout/fanout.ts:61-66` | settled |
 | D-17 | 2 | Binding rules carried into the spec: ingest writes `symbol_results` as JSON text and parses it on read (asyncpg has no JSON codec here); marketdata binds DATE values as date-only text under `QueryExecModeExec`; expiry rows of removed symbols are deleted with a plain DELETE under the parent lock; the sync response returns flagged symbols in the request plus newly claimed ones only; `first_unservable_date` has one stated encoding and the UI and agent format it in a fixed zone; the agent post-processes bindings so `delisted: false` is always present. | `services/xstockstrat-ingest/app/repositories/backfill_jobs.py:73-78`; `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go:817-822`; `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go:503-507,577`; `services/xstockstrat-agent/app/client.py:377` | settled |
+| D-18 | 2 (gate) | The flag alert is delivered at-least-once: portfolio acknowledges after sending, and an unacknowledged claim becomes claimable again after a timeout. A duplicate is possible only after a crash or timeout between send and acknowledgement. Operator ruling at the round-2 gate. | context.md 2026-11-17 sdd-design round-2 gate; FR-12 | settled |
+| D-19 | 2 (gate) | Operator steer: the asset-load hook is the only decider of profile state (start, reset, flag, recover). The portfolio sync only supplies the current watchlist symbols, claims and acknowledges alerts, and reads flagged state; it never starts or resets a row. Round 3 details and attacks this. | context.md 2026-11-17 sdd-design round-2 gate | settled |
 | D-9 | 1 | Only an error from the data source turns a flagged symbol into `skipped`. A failure writing to our own database stays `failed` in both backfill kinds. | spec D-16 ("the source returns any error"); `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1561-1565,2344` | settled |
 
 ## Rejected Alternatives (locked)
@@ -77,7 +79,7 @@
 | O-18 | 2 | An empty or partial symbol list resets every unflagged row (insights.md:4308). | yes | closed @ round 2 (D-13) |
 | O-19 | 2 | The hook makes DB calls on the refresher's unbounded context and runs before the first-load prune; a hung DB stalls the refresher and regresses the kept part of 282 `@AC-15`. | yes | closed @ round 2 (D-14) |
 | O-20 | 2 | No boot rebuild of the flagged set (D-5 drift): with Alpaca down at boot, flagged symbols backfill as FAILED. | no | closed @ round 2 (D-15) |
-| O-21 | 2 | The flag alert is at-most-once: any portfolio-side timeout or lost response after the claim commits loses it, and FR-12 says an alert is emitted. Either a lease plus an acknowledgement (at-least-once) or an operator-accepted residual. | yes | open |
+| O-21 | 2 | The flag alert is at-most-once: any portfolio-side timeout or lost response after the claim commits loses it, and FR-12 says an alert is emitted. Either a lease plus an acknowledgement (at-least-once) or an operator-accepted residual. | yes | closed @ round 2 (operator: at-least-once, D-18) |
 | O-22 | 2 | asyncpg cannot bind a dict to JSONB in ingest; the per-chunk write would raise inside the lock. | no | closed @ round 2 (D-17) |
 | O-23 | 2 | DATE binding from a Go time under `QueryExecModeExec` depends on the session time zone. | no | closed @ round 2 (D-17) |
 | O-24 | 2 | Possible deadlock between the sync transaction's multi-row updates and the hook's updates on overlapping rows; lock in symbol order or retry once on 40P01. | no | open |
