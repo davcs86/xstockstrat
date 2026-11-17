@@ -562,3 +562,7 @@
 - Instruction 1a followed (lists located by id; ensure page and `ensureErr` fail-open page both asserted).
 - Known weakness, as specced: the AC-10 guard reuses `valuationCase.run()`, which calls the pure
   `valueOffline` and cannot see the service cache — it fails only if valuation is restructured to consult it.
+
+### Step 5 — migration: marketdata `010_symbol_profile` — done
+- `010` re-derived as free on every origin ref. TDD: N/A (migration). Verified offline: up/down pair,
+  highest number, 5 `CHECK`s, down drops what up creates, only the `marketdata` schema. No database started.

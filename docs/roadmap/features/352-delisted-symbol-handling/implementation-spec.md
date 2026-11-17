@@ -356,7 +356,7 @@ go_gate xstockstrat-portfolio
 
 ### Step 5 — migration: marketdata `010_symbol_profile` (profile + watched-symbol tables)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/migrations/010_symbol_profile.up.sql` — create
