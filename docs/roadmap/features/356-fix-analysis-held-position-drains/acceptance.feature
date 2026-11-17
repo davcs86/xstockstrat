@@ -25,7 +25,7 @@ Feature: fix-analysis-held-position-drains (bug fix)
     Then each drain raises to its caller instead of returning a set or map holding "AAPL"
     And "analysis.live_loop.drain_failures" with source "held" increases by 1 for the live-loop drain
 
-  @AC-4 @FR-3 @FR-4 @regression
+  @AC-4 @FR-3 @FR-4
   Scenario: A non-gRPC exception in the servicer drain is also a failure
     Given the portfolio ListPositions fake raises a non-gRPC exception on page 1
     When servicer._drain_held_symbols drains user "u-1"
@@ -48,10 +48,12 @@ Feature: fix-analysis-held-position-drains (bug fix)
 
   @AC-7 @FR-4 @regression
   Scenario: A failed held drain skips only that owner in the live-loop cycle
-    Given live strategies owned by "o-1" and "o-2"
+    Given two live strategies owned by "o-1" and one live strategy owned by "o-2"
     And the portfolio ListPositions fake raises for owner "o-1" and returns "MSFT" for owner "o-2"
     When the live loop runs one cycle
     Then no strategy owned by "o-1" is evaluated in that cycle
+    And ListPositions is called exactly once for owner "o-1"
+    And "analysis.live_loop.drain_failures" with source "held" increases by exactly 1
     And the strategies owned by "o-2" are evaluated with held set {"MSFT"}
     And no metric attribute contains "o-1"
 
