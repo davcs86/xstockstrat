@@ -1311,12 +1311,12 @@ Feature: Platform-wide guarantees
     And marketdata makes 0 live Alpaca fetches for DNB
     And GetBars does not add DNB to the warm set
 
-  @AC-17 @FR-3 @feature-282
+  @AC-17 @FR-3 @feature-282 @feature-352
   Scenario: A held offline unservable symbol stays valued and warm across later refreshes
     Given an offline account holds FORL, which is unservable and has a stored 1d close
     When portfolio values the account and a later asset-set refresh runs
     Then portfolio requests FORL through GetLatestQuotes and values it from the quote or stored close
-    And FORL stays in the warm set after the later refresh
+    And FORL stays in the warm set after the later refresh, or, once FORL is flagged delisted (feature 352), leaves it at each load and is re-warmed by the next quote read
 
   @AC-22 @FR-1 @FR-5 @feature-282
   Scenario: An oversized servability request is rejected and portfolio lets the write through

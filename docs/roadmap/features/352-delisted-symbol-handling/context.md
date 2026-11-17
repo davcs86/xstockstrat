@@ -638,3 +638,34 @@
 ### Step 16 — test: one test per loop exit arm, the invariant, the metric — done
 - TDD: AC-11 red (helper returning `FAILED` for every error): `failed_symbols = [PSKY], want empty` →
   green: 11 top-level PASS; existing backfill tests ok; `go_gate` 87.3%; 6 `@AC-` comments.
+
+### Step 32 — docs: amend the three signed-off durable scenarios (C-16) — done
+- Marketdata `@AC-15 @feature-282`, platform `@AC-17 @feature-282`, portfolio `@AC-1 @feature-154`: one
+  clause each, `@feature-352` added to the tag line, IDs and existing tags kept. No other scenario edited.
+- TDD: N/A (docs). Verification greps pass (3 tag lines, 3 files, `@AC-15 @FR-3 @feature-282` count 1).
+
+## Session 2026-11-17 — sdd-execute sequential, feature end
+
+- **Integrated-tree verification** (all chains merged, before Step 32): `go_gate` marketdata 87.3% and
+  portfolio 79.1% (0 lint issues, `-race`), trading `go vet`; ingest 546 passed / 87.01%, analysis 1740
+  passed / 91.57%, agent 776 passed / 88.22% (ruff clean each); config lint 0 errors + 384/384 tests; UI
+  lint, `tsc --noEmit`, vitest; `check-context-map.py` OK.
+- **Final wiring gate** `node scripts/check-config-wiring.mjs --final` → exit 0. Output:
+  `REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree`
+  and `REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`
+  — both are other features' keys, reported not failing.
+- **Merge-order gate**: 352 is not in the blocked column of `merge-order.md`; the two rows naming it (345
+  config `053`, 355 ingest `017`) make the other feature renumber if 352 lands first. The 355 row was added
+  by the agent in this run by analogy with the operator's 345 ruling and is pending operator confirmation.
+- **Scenario promotion (C-16)**, approved in advance by the operator ("Do both without pausing"): all 29
+  scenarios promoted verbatim with `@feature-352` — marketdata 16 (AC-1, 2, 3, 4, 9, 11, 12, 13, 20, 21,
+  23, 25, 26, 27, 28, 29), portfolio 7 (AC-5, 6, 7, 10, 17, 18, 22), agent 3 (AC-14, 16, 24), UI 1
+  (AC-15), `platform.feature` 2 (AC-8, AC-19). No duplicates found. Ingest, analysis and config get no
+  suite file: their behavior is asserted through the marketdata, agent and platform scenarios.
+- **Defect reports closed**: none — no report is named in the follow-ons of the features whose scenarios
+  this feature changes (282, 154).
+- **Not verified locally, first run in CI**: the 17 real-database tests (Steps 7, 21); the Playwright
+  suite in the CI harness (one unrelated `screener.spec.ts:43` failure locally, passed on re-run).
+- **Open items for the operator**: confirm the 355 merge-order row; approvals per root `CLAUDE.md`
+  § Approval Flow (DBA + service owner for marketdata `010` and ingest `018`; owner + config team for
+  `marketdata`/`assets.delisting_confirmation_trading_days`); `design.md` still says ingest `017`.

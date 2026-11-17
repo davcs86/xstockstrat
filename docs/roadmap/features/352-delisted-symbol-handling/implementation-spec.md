@@ -1,6 +1,6 @@
 # Implementation Spec: delisted-symbol-handling
 
-**Status**: `in-progress`
+**Status**: `done`
 **Created**: 2026-11-17
 **Feature**: `docs/roadmap/features/352-delisted-symbol-handling/feature.md`
 **Total Steps**: 32
@@ -1631,7 +1631,7 @@ grep -n "feature 352" e2e/fixtures/INVENTORY.md
 
 ### Step 32 — docs: amend the three durable scenarios whose change was signed off (C-16)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/sdd/business-rules/`, `services/xstockstrat-marketdata/acceptance/`, `services/xstockstrat-portfolio/acceptance/`
 **Files**:
 - `services/xstockstrat-marketdata/acceptance/filter-otc-symbols.feature` — modify
@@ -1695,5 +1695,16 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: run the Playwright spec (Docker runner `scripts/run-e2e.py` in sequential mode when the host harness is unreliable).
 **Actual**: Ran on host Playwright with `--timeout=180000 --trace off`. One unrelated case (`screener.spec.ts:43`) failed once and passed on re-run.
 **Reason**: The host harness worked once the dev-mode warm-up was given time.
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 10 — config-wiring stored set generated against a throwaway local Postgres
+**Spec said**: "Step 10 needs a reachable Postgres 16 plus `psql` and `migrate` to **generate** `scripts/config-wiring-stored.json`."
+**Actual**: A throwaway Postgres 16 was started in the session container (`initdb -A trust` as the `postgres` user in `/var/lib/postgresql/pg352`, `pg_ctl` on `127.0.0.1:55432`), `scripts/config-wiring-stored.py` and `scripts/config-heal-dryrun.py --fresh` were run against it with `migrate` v4.17.1, then it was stopped and its data directory deleted. With `054` held aside the committed JSON reproduced byte for byte; with `054` it gains 2 rows for the key. No migration was verified and no test was run against it.
+**Reason**: The stored set can only be generated from an applied config schema; the JSON is never hand-edited (precedent: feature 347 Step 11). Operator-approved at mode entry, 2026-11-17.
+
+### Deviation: Steps 7 and 21 — real-database tests not run locally
+**Spec said**: Steps 7 and 21 add `dbtest` real-database tests next to the pgxmock tests.
+**Actual**: The 8 marketdata `TestProfileDB_*` and 9 portfolio real-database tests compile (`go vet -tags dbtest`) but skip locally without `MARKETDATA_DB_TEST_URL` / `PORTFOLIO_DB_TEST_URL`. They first execute in CI (`marketdata-db-test`, `portfolio-db-test`) on the integration PR.
+**Reason**: A database is never started to verify a step (sdd-execute hard constraint).
 **Disposition**: CI-equivalent fallback
 
