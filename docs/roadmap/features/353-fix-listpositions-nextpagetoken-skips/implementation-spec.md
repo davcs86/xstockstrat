@@ -104,7 +104,7 @@ Every existing test passes, including the three re-pinned `offline_account_pnl_t
 
 ### Step 2 — test: ListPositions cursor tests (pgxmock + codec + real-backend traversal)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go` — modify

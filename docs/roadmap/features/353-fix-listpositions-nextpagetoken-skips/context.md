@@ -77,3 +77,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verification: grep checks ✓, build ✓, vet (dbtest tag) ✓, `go test ./... -race` ✓ (also green with Step 2 test files absent), golangci-lint v2.14.0 0 issues. Real-backend GREEN: traversal + oracle tests PASS in default and exec modes.
 - Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`, `services/xstockstrat-portfolio/internal/service/offline_account_pnl_test.go`
 - Deviations: DEV-1, DEV-2, DEV-3 (Deviation Log)
+
+### Step 2 — ListPositions cursor tests (pgxmock + codec + real-backend traversal) [done]
+- Added `positionRowCols` (C-13 hoist), `emptyStringSlice` pgxmock matcher, first-page / cursor-page / malformed-token pgxmock tests, `TestPositionCursorCodec`; dbtest helpers `testPool(opts...)`, positions cleanup (same `dbtestUserPrefix`), `seedPosition`; `list_positions_dbtest_test.go` with traversal (page sizes 3/1, PAPER filter) and collation/special-character oracle tests over default + Exec-mode pools.
+- RED: captured on the pre-Step-1 tree (see session header above). GREEN: unit tests PASS; full `-tags dbtest ./internal/repository/...` PASS (default + exec subtests ran, none skipped); coverage total 81.8% (floor 40%); golangci-lint 0 issues; C-13 grep exactly 1 hit.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go`, `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go`, `services/xstockstrat-portfolio/internal/repository/list_positions_dbtest_test.go` (new)
+- Deviations: none (DEV-2 applies to the real-backend run)
