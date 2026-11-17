@@ -74,13 +74,18 @@ func seedPosition(t *testing.T, pool *pgxpool.Pool, userID, symbol, mode, accoun
 
 func seedWatchlist(t *testing.T, pool *pgxpool.Pool, userID string, systemManaged bool) string {
 	t.Helper()
+	return seedNamedWatchlist(t, pool, userID, "wl-"+userID, systemManaged)
+}
+
+func seedNamedWatchlist(t *testing.T, pool *pgxpool.Pool, userID, name string, systemManaged bool) string {
+	t.Helper()
 	var id string
 	err := pool.QueryRow(context.Background(),
 		`INSERT INTO portfolio.watchlists (user_id, name, system_managed)
 		 VALUES ($1, $2, $3) RETURNING watchlist_id::text`,
-		userID, "wl-"+userID, systemManaged).Scan(&id)
+		userID, name, systemManaged).Scan(&id)
 	if err != nil {
-		t.Fatalf("seedWatchlist: %v", err)
+		t.Fatalf("seedNamedWatchlist: %v", err)
 	}
 	return id
 }
