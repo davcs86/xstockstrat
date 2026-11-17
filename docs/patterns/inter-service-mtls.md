@@ -66,6 +66,9 @@ A server may also authorize a caller by the **verified peer certificate's DNS SA
 - notify `FanoutWebhook` ← `xstockstrat-ingest` (feature 334, `FANOUT_WEBHOOK_PEER_SANS` in
   `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`). The SAN is the **only** check: no header
   is read, and the matched SAN is recorded as the delivery's source service.
+- marketdata `SyncWatchlistDelistings` / `AckDelistingAlerts` ← `xstockstrat-portfolio` (feature 352,
+  `internalCallerAllowlist` in `services/xstockstrat-marketdata/internal/service/authz.go`). The
+  `x-internal-caller` header is still required as well.
 - ingest and indicators honour `x-user-id: system` grants only from `xstockstrat-analysis` (feature 224,
   `_SYSTEM_GRANT_SAN` / `_ANALYSIS_SAN` in each `app/handlers/servicer.py`), together with an
   allow-listed `x-internal-caller`.

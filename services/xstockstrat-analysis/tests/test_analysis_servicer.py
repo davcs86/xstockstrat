@@ -23,6 +23,7 @@ from gen.analysis.v1 import analysis_pb2
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
 from gen.ingest.v1 import ingest_pb2
+from gen.portfolio.v1 import portfolio_pb2
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -4704,7 +4705,9 @@ def _wl(bindings=None, symbols=None):
     """A Watchlist-shaped object: ``bindings`` = [(symbol, strategy_id), …]; ``symbols`` = the
     deprecated flat mirror for legacy-row coverage (FR-6)."""
     return SimpleNamespace(
-        bindings=[SimpleNamespace(symbol=s, strategy_id=st) for s, st in (bindings or [])],
+        bindings=[
+            portfolio_pb2.WatchlistBinding(symbol=s, strategy_id=st) for s, st in (bindings or [])
+        ],
         symbols=list(symbols or []),
     )
 
@@ -8138,3 +8141,54 @@ class TestUnguardedReadinessParity_feature215:
             src = inspect.getsource(getattr(AnalysisServicer, name))
             assert "_load_fundamentals" in src or "_formula_fundamentals" in src, name
             assert "failures=" not in src, f"{name} must stay unguarded"
+
+
+def _delisted_binding(symbol, strategy_id=""):
+    return portfolio_pb2.WatchlistBinding(
+        symbol=symbol,
+        strategy_id=strategy_id,
+        delisted=common_pb2.DelistedState(
+            reason=common_pb2.UNSERVABLE_REASON_NOT_TRADABLE, first_unservable_date="2026-11-02"
+        ),
+    )
+
+
+async def _drain_bindings(*watchlists):
+    svc = make_servicer()
+    svc._portfolio = AsyncMock()
+    svc._portfolio.ListWatchlists = AsyncMock(
+        return_value=portfolio_pb2.ListWatchlistsResponse(watchlists=list(watchlists))
+    )
+    out = await svc._drain_watchlist_bindings((("x-user-id", "u1"),))
+    return out, svc._portfolio.ListWatchlists
+
+
+class TestDrainSkipsDelistedBindings:
+    """feature 352 @AC-8 — a flagged binding leaves the opportunity scan."""
+
+    async def test_delisted_binding_is_not_returned(self):
+        tech = portfolio_pb2.Watchlist(
+            name="Tech",
+            bindings=[
+                portfolio_pb2.WatchlistBinding(symbol="AAPL", strategy_id="sx"),
+                _delisted_binding("ROKU", "sx"),
+            ],
+        )
+        out, list_watchlists = await _drain_bindings(tech)
+        assert out == [("AAPL", "sx")]
+        assert list_watchlists.await_count == 1
+
+    async def test_all_delisted_list_never_falls_back_to_legacy_symbols(self):
+        only_flagged = portfolio_pb2.Watchlist(
+            name="Tech", bindings=[_delisted_binding("ROKU")], symbols=["ROKU"]
+        )
+        out, list_watchlists = await _drain_bindings(only_flagged)
+        assert out == []
+        assert list_watchlists.await_count == 1
+
+    async def test_binding_without_delisted_is_unchanged(self):
+        tech = portfolio_pb2.Watchlist(
+            name="Tech", bindings=[portfolio_pb2.WatchlistBinding(symbol="AAPL", strategy_id="sx")]
+        )
+        out, _ = await _drain_bindings(tech)
+        assert out == [("AAPL", "sx")]

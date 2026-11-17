@@ -23,6 +23,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type DelistingAlertState int32
+
+const (
+	DelistingAlertState_DELISTING_ALERT_STATE_UNSPECIFIED DelistingAlertState = 0
+	DelistingAlertState_DELISTING_ALERT_STATE_PENDING     DelistingAlertState = 1
+	DelistingAlertState_DELISTING_ALERT_STATE_CLAIMED     DelistingAlertState = 2
+	DelistingAlertState_DELISTING_ALERT_STATE_REDELIVERY  DelistingAlertState = 3
+	DelistingAlertState_DELISTING_ALERT_STATE_REPORTED    DelistingAlertState = 4
+)
+
+// Enum value maps for DelistingAlertState.
+var (
+	DelistingAlertState_name = map[int32]string{
+		0: "DELISTING_ALERT_STATE_UNSPECIFIED",
+		1: "DELISTING_ALERT_STATE_PENDING",
+		2: "DELISTING_ALERT_STATE_CLAIMED",
+		3: "DELISTING_ALERT_STATE_REDELIVERY",
+		4: "DELISTING_ALERT_STATE_REPORTED",
+	}
+	DelistingAlertState_value = map[string]int32{
+		"DELISTING_ALERT_STATE_UNSPECIFIED": 0,
+		"DELISTING_ALERT_STATE_PENDING":     1,
+		"DELISTING_ALERT_STATE_CLAIMED":     2,
+		"DELISTING_ALERT_STATE_REDELIVERY":  3,
+		"DELISTING_ALERT_STATE_REPORTED":    4,
+	}
+)
+
+func (x DelistingAlertState) Enum() *DelistingAlertState {
+	p := new(DelistingAlertState)
+	*p = x
+	return p
+}
+
+func (x DelistingAlertState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DelistingAlertState) Descriptor() protoreflect.EnumDescriptor {
+	return file_marketdata_v1_marketdata_proto_enumTypes[0].Descriptor()
+}
+
+func (DelistingAlertState) Type() protoreflect.EnumType {
+	return &file_marketdata_v1_marketdata_proto_enumTypes[0]
+}
+
+func (x DelistingAlertState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DelistingAlertState.Descriptor instead.
+func (DelistingAlertState) EnumDescriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{0}
+}
+
 type Bar struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Symbol     string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
@@ -764,10 +819,11 @@ func (x *BackfillBarsRequest) GetTimeframeEnum() v1.Timeframe {
 }
 
 type BackfillBarsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BarsWritten   int64                  `protobuf:"varint,1,opt,name=bars_written,json=barsWritten,proto3" json:"bars_written,omitempty"`
-	FailedSymbols []string               `protobuf:"bytes,2,rep,name=failed_symbols,json=failedSymbols,proto3" json:"failed_symbols,omitempty"`
-	ExpectedBars  int64                  `protobuf:"varint,3,opt,name=expected_bars,json=expectedBars,proto3" json:"expected_bars,omitempty"` // estimated total bars across requested symbols/range (FR-6)
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	BarsWritten   int64                      `protobuf:"varint,1,opt,name=bars_written,json=barsWritten,proto3" json:"bars_written,omitempty"`
+	FailedSymbols []string                   `protobuf:"bytes,2,rep,name=failed_symbols,json=failedSymbols,proto3" json:"failed_symbols,omitempty"`
+	ExpectedBars  int64                      `protobuf:"varint,3,opt,name=expected_bars,json=expectedBars,proto3" json:"expected_bars,omitempty"` // estimated total bars across requested symbols/range (FR-6)
+	SymbolResults []*v1.BackfillSymbolResult `protobuf:"bytes,4,rep,name=symbol_results,json=symbolResults,proto3" json:"symbol_results,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -821,6 +877,13 @@ func (x *BackfillBarsResponse) GetExpectedBars() int64 {
 		return x.ExpectedBars
 	}
 	return 0
+}
+
+func (x *BackfillBarsResponse) GetSymbolResults() []*v1.BackfillSymbolResult {
+	if x != nil {
+		return x.SymbolResults
+	}
+	return nil
 }
 
 type GetDataCoverageRequest struct {
@@ -2024,9 +2087,10 @@ func (x *BackfillFundamentalsRequest) GetOverwrite() bool {
 }
 
 type BackfillFundamentalsResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	PeriodsWritten int64                  `protobuf:"varint,1,opt,name=periods_written,json=periodsWritten,proto3" json:"periods_written,omitempty"`
-	FailedSymbols  []string               `protobuf:"bytes,2,rep,name=failed_symbols,json=failedSymbols,proto3" json:"failed_symbols,omitempty"`
+	state          protoimpl.MessageState     `protogen:"open.v1"`
+	PeriodsWritten int64                      `protobuf:"varint,1,opt,name=periods_written,json=periodsWritten,proto3" json:"periods_written,omitempty"`
+	FailedSymbols  []string                   `protobuf:"bytes,2,rep,name=failed_symbols,json=failedSymbols,proto3" json:"failed_symbols,omitempty"`
+	SymbolResults  []*v1.BackfillSymbolResult `protobuf:"bytes,3,rep,name=symbol_results,json=symbolResults,proto3" json:"symbol_results,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2071,6 +2135,13 @@ func (x *BackfillFundamentalsResponse) GetPeriodsWritten() int64 {
 func (x *BackfillFundamentalsResponse) GetFailedSymbols() []string {
 	if x != nil {
 		return x.FailedSymbols
+	}
+	return nil
+}
+
+func (x *BackfillFundamentalsResponse) GetSymbolResults() []*v1.BackfillSymbolResult {
+	if x != nil {
+		return x.SymbolResults
 	}
 	return nil
 }
@@ -3144,6 +3215,242 @@ func (x *GetSymbolServabilityResponse) GetAssetSetLoaded() bool {
 	return false
 }
 
+type FlaggedSymbol struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	Symbol                 string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	State                  *v1.DelistedState      `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	AlertState             DelistingAlertState    `protobuf:"varint,3,opt,name=alert_state,json=alertState,proto3,enum=xstockstrat.marketdata.v1.DelistingAlertState" json:"alert_state,omitempty"`
+	UnservableInCurrentSet bool                   `protobuf:"varint,4,opt,name=unservable_in_current_set,json=unservableInCurrentSet,proto3" json:"unservable_in_current_set,omitempty"` // false means "do not remove"
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *FlaggedSymbol) Reset() {
+	*x = FlaggedSymbol{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FlaggedSymbol) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FlaggedSymbol) ProtoMessage() {}
+
+func (x *FlaggedSymbol) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FlaggedSymbol.ProtoReflect.Descriptor instead.
+func (*FlaggedSymbol) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *FlaggedSymbol) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *FlaggedSymbol) GetState() *v1.DelistedState {
+	if x != nil {
+		return x.State
+	}
+	return nil
+}
+
+func (x *FlaggedSymbol) GetAlertState() DelistingAlertState {
+	if x != nil {
+		return x.AlertState
+	}
+	return DelistingAlertState_DELISTING_ALERT_STATE_UNSPECIFIED
+}
+
+func (x *FlaggedSymbol) GetUnservableInCurrentSet() bool {
+	if x != nil {
+		return x.UnservableInCurrentSet
+	}
+	return false
+}
+
+type SyncWatchlistDelistingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbols       []string               `protobuf:"bytes,1,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncWatchlistDelistingsRequest) Reset() {
+	*x = SyncWatchlistDelistingsRequest{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncWatchlistDelistingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncWatchlistDelistingsRequest) ProtoMessage() {}
+
+func (x *SyncWatchlistDelistingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncWatchlistDelistingsRequest.ProtoReflect.Descriptor instead.
+func (*SyncWatchlistDelistingsRequest) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *SyncWatchlistDelistingsRequest) GetSymbols() []string {
+	if x != nil {
+		return x.Symbols
+	}
+	return nil
+}
+
+type SyncWatchlistDelistingsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Flagged       []*FlaggedSymbol       `protobuf:"bytes,1,rep,name=flagged,proto3" json:"flagged,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncWatchlistDelistingsResponse) Reset() {
+	*x = SyncWatchlistDelistingsResponse{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncWatchlistDelistingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncWatchlistDelistingsResponse) ProtoMessage() {}
+
+func (x *SyncWatchlistDelistingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncWatchlistDelistingsResponse.ProtoReflect.Descriptor instead.
+func (*SyncWatchlistDelistingsResponse) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *SyncWatchlistDelistingsResponse) GetFlagged() []*FlaggedSymbol {
+	if x != nil {
+		return x.Flagged
+	}
+	return nil
+}
+
+type AckDelistingAlertsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbols       []string               `protobuf:"bytes,1,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AckDelistingAlertsRequest) Reset() {
+	*x = AckDelistingAlertsRequest{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AckDelistingAlertsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AckDelistingAlertsRequest) ProtoMessage() {}
+
+func (x *AckDelistingAlertsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AckDelistingAlertsRequest.ProtoReflect.Descriptor instead.
+func (*AckDelistingAlertsRequest) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *AckDelistingAlertsRequest) GetSymbols() []string {
+	if x != nil {
+		return x.Symbols
+	}
+	return nil
+}
+
+type AckDelistingAlertsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AckDelistingAlertsResponse) Reset() {
+	*x = AckDelistingAlertsResponse{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AckDelistingAlertsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AckDelistingAlertsResponse) ProtoMessage() {}
+
+func (x *AckDelistingAlertsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AckDelistingAlertsResponse.ProtoReflect.Descriptor instead.
+func (*AckDelistingAlertsResponse) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{53}
+}
+
 var File_marketdata_v1_marketdata_proto protoreflect.FileDescriptor
 
 const file_marketdata_v1_marketdata_proto_rawDesc = "" +
@@ -3211,11 +3518,12 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01R\ttimeframe\x126\n" +
 	"\x05range\x18\x03 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x05range\x12-\n" +
 	"\x12overwrite_existing\x18\x04 \x01(\bR\x11overwriteExisting\x12G\n" +
-	"\x0etimeframe_enum\x18\x05 \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\rtimeframeEnum\"\x85\x01\n" +
+	"\x0etimeframe_enum\x18\x05 \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\rtimeframeEnum\"\xd9\x01\n" +
 	"\x14BackfillBarsResponse\x12!\n" +
 	"\fbars_written\x18\x01 \x01(\x03R\vbarsWritten\x12%\n" +
 	"\x0efailed_symbols\x18\x02 \x03(\tR\rfailedSymbols\x12#\n" +
-	"\rexpected_bars\x18\x03 \x01(\x03R\fexpectedBars\"\xa8\x01\n" +
+	"\rexpected_bars\x18\x03 \x01(\x03R\fexpectedBars\x12R\n" +
+	"\x0esymbol_results\x18\x04 \x03(\v2+.xstockstrat.common.v1.BackfillSymbolResultR\rsymbolResults\"\xa8\x01\n" +
 	"\x16GetDataCoverageRequest\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12>\n" +
 	"\ttimeframe\x18\x02 \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\ttimeframe\x126\n" +
@@ -3325,10 +3633,11 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\asymbols\x18\x01 \x03(\tR\asymbols\x126\n" +
 	"\x05range\x18\x02 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x05range\x12!\n" +
 	"\fperiod_types\x18\x03 \x03(\tR\vperiodTypes\x12\x1c\n" +
-	"\toverwrite\x18\x04 \x01(\bR\toverwrite\"n\n" +
+	"\toverwrite\x18\x04 \x01(\bR\toverwrite\"\xc2\x01\n" +
 	"\x1cBackfillFundamentalsResponse\x12'\n" +
 	"\x0fperiods_written\x18\x01 \x01(\x03R\x0eperiodsWritten\x12%\n" +
-	"\x0efailed_symbols\x18\x02 \x03(\tR\rfailedSymbols\"2\n" +
+	"\x0efailed_symbols\x18\x02 \x03(\tR\rfailedSymbols\x12R\n" +
+	"\x0esymbol_results\x18\x03 \x03(\v2+.xstockstrat.common.v1.BackfillSymbolResultR\rsymbolResults\"2\n" +
 	"\x16GetLatestQuotesRequest\x12\x18\n" +
 	"\asymbols\x18\x01 \x03(\tR\asymbols\"S\n" +
 	"\x17GetLatestQuotesResponse\x128\n" +
@@ -3391,7 +3700,26 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x06reason\x18\x03 \x01(\x0e2'.xstockstrat.common.v1.UnservableReasonR\x06reason\"\x90\x01\n" +
 	"\x1cGetSymbolServabilityResponse\x12F\n" +
 	"\asymbols\x18\x01 \x03(\v2,.xstockstrat.marketdata.v1.SymbolServabilityR\asymbols\x12(\n" +
-	"\x10asset_set_loaded\x18\x02 \x01(\bR\x0eassetSetLoaded2\xe8\x13\n" +
+	"\x10asset_set_loaded\x18\x02 \x01(\bR\x0eassetSetLoaded\"\xef\x01\n" +
+	"\rFlaggedSymbol\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12:\n" +
+	"\x05state\x18\x02 \x01(\v2$.xstockstrat.common.v1.DelistedStateR\x05state\x12O\n" +
+	"\valert_state\x18\x03 \x01(\x0e2..xstockstrat.marketdata.v1.DelistingAlertStateR\n" +
+	"alertState\x129\n" +
+	"\x19unservable_in_current_set\x18\x04 \x01(\bR\x16unservableInCurrentSet\":\n" +
+	"\x1eSyncWatchlistDelistingsRequest\x12\x18\n" +
+	"\asymbols\x18\x01 \x03(\tR\asymbols\"e\n" +
+	"\x1fSyncWatchlistDelistingsResponse\x12B\n" +
+	"\aflagged\x18\x01 \x03(\v2(.xstockstrat.marketdata.v1.FlaggedSymbolR\aflagged\"5\n" +
+	"\x19AckDelistingAlertsRequest\x12\x18\n" +
+	"\asymbols\x18\x01 \x03(\tR\asymbols\"\x1c\n" +
+	"\x1aAckDelistingAlertsResponse*\xcc\x01\n" +
+	"\x13DelistingAlertState\x12%\n" +
+	"!DELISTING_ALERT_STATE_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dDELISTING_ALERT_STATE_PENDING\x10\x01\x12!\n" +
+	"\x1dDELISTING_ALERT_STATE_CLAIMED\x10\x02\x12$\n" +
+	" DELISTING_ALERT_STATE_REDELIVERY\x10\x03\x12\"\n" +
+	"\x1eDELISTING_ALERT_STATE_REPORTED\x10\x042\xff\x15\n" +
 	"\x11MarketDataService\x12\\\n" +
 	"\n" +
 	"StreamBars\x12,.xstockstrat.marketdata.v1.StreamBarsRequest\x1a\x1e.xstockstrat.marketdata.v1.Bar0\x01\x12b\n" +
@@ -3415,7 +3743,9 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\rGetSectorAsOf\x12/.xstockstrat.marketdata.v1.GetSectorAsOfRequest\x1a0.xstockstrat.marketdata.v1.GetSectorAsOfResponse\x12{\n" +
 	"\x10GetSectorHistory\x122.xstockstrat.marketdata.v1.GetSectorHistoryRequest\x1a3.xstockstrat.marketdata.v1.GetSectorHistoryResponse\x12l\n" +
 	"\vGetEtfFlags\x12-.xstockstrat.marketdata.v1.GetEtfFlagsRequest\x1a..xstockstrat.marketdata.v1.GetEtfFlagsResponse\x12\x87\x01\n" +
-	"\x14GetSymbolServability\x126.xstockstrat.marketdata.v1.GetSymbolServabilityRequest\x1a7.xstockstrat.marketdata.v1.GetSymbolServabilityResponseBDZBgithub.com/xstockstrat/contracts/gen/go/marketdata/v1;marketdatav1b\x06proto3"
+	"\x14GetSymbolServability\x126.xstockstrat.marketdata.v1.GetSymbolServabilityRequest\x1a7.xstockstrat.marketdata.v1.GetSymbolServabilityResponse\x12\x90\x01\n" +
+	"\x17SyncWatchlistDelistings\x129.xstockstrat.marketdata.v1.SyncWatchlistDelistingsRequest\x1a:.xstockstrat.marketdata.v1.SyncWatchlistDelistingsResponse\x12\x81\x01\n" +
+	"\x12AckDelistingAlerts\x124.xstockstrat.marketdata.v1.AckDelistingAlertsRequest\x1a5.xstockstrat.marketdata.v1.AckDelistingAlertsResponseBDZBgithub.com/xstockstrat/contracts/gen/go/marketdata/v1;marketdatav1b\x06proto3"
 
 var (
 	file_marketdata_v1_marketdata_proto_rawDescOnce sync.Once
@@ -3429,174 +3759,192 @@ func file_marketdata_v1_marketdata_proto_rawDescGZIP() []byte {
 	return file_marketdata_v1_marketdata_proto_rawDescData
 }
 
-var file_marketdata_v1_marketdata_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
+var file_marketdata_v1_marketdata_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_marketdata_v1_marketdata_proto_msgTypes = make([]protoimpl.MessageInfo, 56)
 var file_marketdata_v1_marketdata_proto_goTypes = []any{
-	(*Bar)(nil),                               // 0: xstockstrat.marketdata.v1.Bar
-	(*Quote)(nil),                             // 1: xstockstrat.marketdata.v1.Quote
-	(*GetLatestPriceRequest)(nil),             // 2: xstockstrat.marketdata.v1.GetLatestPriceRequest
-	(*LatestPrice)(nil),                       // 3: xstockstrat.marketdata.v1.LatestPrice
-	(*StreamBarsRequest)(nil),                 // 4: xstockstrat.marketdata.v1.StreamBarsRequest
-	(*StreamQuotesRequest)(nil),               // 5: xstockstrat.marketdata.v1.StreamQuotesRequest
-	(*GetBarsRequest)(nil),                    // 6: xstockstrat.marketdata.v1.GetBarsRequest
-	(*GetBarsResponse)(nil),                   // 7: xstockstrat.marketdata.v1.GetBarsResponse
-	(*GetLatestQuoteRequest)(nil),             // 8: xstockstrat.marketdata.v1.GetLatestQuoteRequest
-	(*BackfillBarsRequest)(nil),               // 9: xstockstrat.marketdata.v1.BackfillBarsRequest
-	(*BackfillBarsResponse)(nil),              // 10: xstockstrat.marketdata.v1.BackfillBarsResponse
-	(*GetDataCoverageRequest)(nil),            // 11: xstockstrat.marketdata.v1.GetDataCoverageRequest
-	(*CoverageRange)(nil),                     // 12: xstockstrat.marketdata.v1.CoverageRange
-	(*GetDataCoverageResponse)(nil),           // 13: xstockstrat.marketdata.v1.GetDataCoverageResponse
-	(*ListAssetsRequest)(nil),                 // 14: xstockstrat.marketdata.v1.ListAssetsRequest
-	(*ListAssetsResponse)(nil),                // 15: xstockstrat.marketdata.v1.ListAssetsResponse
-	(*DeleteBackfilledDataRequest)(nil),       // 16: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest
-	(*DeleteBackfilledDataResponse)(nil),      // 17: xstockstrat.marketdata.v1.DeleteBackfilledDataResponse
-	(*Fundamentals)(nil),                      // 18: xstockstrat.marketdata.v1.Fundamentals
-	(*GetFundamentalsRequest)(nil),            // 19: xstockstrat.marketdata.v1.GetFundamentalsRequest
-	(*GetFundamentalsResponse)(nil),           // 20: xstockstrat.marketdata.v1.GetFundamentalsResponse
-	(*GetFundamentalsMultiRequest)(nil),       // 21: xstockstrat.marketdata.v1.GetFundamentalsMultiRequest
-	(*GetFundamentalsMultiResponse)(nil),      // 22: xstockstrat.marketdata.v1.GetFundamentalsMultiResponse
-	(*HistoricalFundamentalsPeriod)(nil),      // 23: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod
-	(*GetHistoricalFundamentalsRequest)(nil),  // 24: xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest
-	(*GetHistoricalFundamentalsResponse)(nil), // 25: xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse
-	(*BackfillFundamentalsRequest)(nil),       // 26: xstockstrat.marketdata.v1.BackfillFundamentalsRequest
-	(*BackfillFundamentalsResponse)(nil),      // 27: xstockstrat.marketdata.v1.BackfillFundamentalsResponse
-	(*GetLatestQuotesRequest)(nil),            // 28: xstockstrat.marketdata.v1.GetLatestQuotesRequest
-	(*GetLatestQuotesResponse)(nil),           // 29: xstockstrat.marketdata.v1.GetLatestQuotesResponse
-	(*BatchGetBarsRequest)(nil),               // 30: xstockstrat.marketdata.v1.BatchGetBarsRequest
-	(*SymbolBars)(nil),                        // 31: xstockstrat.marketdata.v1.SymbolBars
-	(*BatchGetBarsResponse)(nil),              // 32: xstockstrat.marketdata.v1.BatchGetBarsResponse
-	(*BatchGetLatestPriceRequest)(nil),        // 33: xstockstrat.marketdata.v1.BatchGetLatestPriceRequest
-	(*BatchGetLatestPriceResponse)(nil),       // 34: xstockstrat.marketdata.v1.BatchGetLatestPriceResponse
-	(*SymbolSector)(nil),                      // 35: xstockstrat.marketdata.v1.SymbolSector
-	(*GetCurrentSectorRequest)(nil),           // 36: xstockstrat.marketdata.v1.GetCurrentSectorRequest
-	(*GetCurrentSectorResponse)(nil),          // 37: xstockstrat.marketdata.v1.GetCurrentSectorResponse
-	(*GetSectorAsOfRequest)(nil),              // 38: xstockstrat.marketdata.v1.GetSectorAsOfRequest
-	(*GetSectorAsOfResponse)(nil),             // 39: xstockstrat.marketdata.v1.GetSectorAsOfResponse
-	(*SectorHistoryRow)(nil),                  // 40: xstockstrat.marketdata.v1.SectorHistoryRow
-	(*GetSectorHistoryRequest)(nil),           // 41: xstockstrat.marketdata.v1.GetSectorHistoryRequest
-	(*GetSectorHistoryResponse)(nil),          // 42: xstockstrat.marketdata.v1.GetSectorHistoryResponse
-	(*GetEtfFlagsRequest)(nil),                // 43: xstockstrat.marketdata.v1.GetEtfFlagsRequest
-	(*EtfFlag)(nil),                           // 44: xstockstrat.marketdata.v1.EtfFlag
-	(*GetEtfFlagsResponse)(nil),               // 45: xstockstrat.marketdata.v1.GetEtfFlagsResponse
-	(*GetSymbolServabilityRequest)(nil),       // 46: xstockstrat.marketdata.v1.GetSymbolServabilityRequest
-	(*SymbolServability)(nil),                 // 47: xstockstrat.marketdata.v1.SymbolServability
-	(*GetSymbolServabilityResponse)(nil),      // 48: xstockstrat.marketdata.v1.GetSymbolServabilityResponse
-	nil,                                       // 49: xstockstrat.marketdata.v1.Fundamentals.ExtraMetricsEntry
-	nil,                                       // 50: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.ExtraMetricsEntry
-	(*timestamppb.Timestamp)(nil),             // 51: google.protobuf.Timestamp
-	(v1.Timeframe)(0),                         // 52: xstockstrat.common.v1.Timeframe
-	(*v1.TimeRange)(nil),                      // 53: xstockstrat.common.v1.TimeRange
-	(*v1.PageRequest)(nil),                    // 54: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),                   // 55: xstockstrat.common.v1.PageResponse
-	(*v1.Asset)(nil),                          // 56: xstockstrat.common.v1.Asset
-	(v1.Sector)(0),                            // 57: xstockstrat.common.v1.Sector
-	(v1.UnservableReason)(0),                  // 58: xstockstrat.common.v1.UnservableReason
+	(DelistingAlertState)(0),                  // 0: xstockstrat.marketdata.v1.DelistingAlertState
+	(*Bar)(nil),                               // 1: xstockstrat.marketdata.v1.Bar
+	(*Quote)(nil),                             // 2: xstockstrat.marketdata.v1.Quote
+	(*GetLatestPriceRequest)(nil),             // 3: xstockstrat.marketdata.v1.GetLatestPriceRequest
+	(*LatestPrice)(nil),                       // 4: xstockstrat.marketdata.v1.LatestPrice
+	(*StreamBarsRequest)(nil),                 // 5: xstockstrat.marketdata.v1.StreamBarsRequest
+	(*StreamQuotesRequest)(nil),               // 6: xstockstrat.marketdata.v1.StreamQuotesRequest
+	(*GetBarsRequest)(nil),                    // 7: xstockstrat.marketdata.v1.GetBarsRequest
+	(*GetBarsResponse)(nil),                   // 8: xstockstrat.marketdata.v1.GetBarsResponse
+	(*GetLatestQuoteRequest)(nil),             // 9: xstockstrat.marketdata.v1.GetLatestQuoteRequest
+	(*BackfillBarsRequest)(nil),               // 10: xstockstrat.marketdata.v1.BackfillBarsRequest
+	(*BackfillBarsResponse)(nil),              // 11: xstockstrat.marketdata.v1.BackfillBarsResponse
+	(*GetDataCoverageRequest)(nil),            // 12: xstockstrat.marketdata.v1.GetDataCoverageRequest
+	(*CoverageRange)(nil),                     // 13: xstockstrat.marketdata.v1.CoverageRange
+	(*GetDataCoverageResponse)(nil),           // 14: xstockstrat.marketdata.v1.GetDataCoverageResponse
+	(*ListAssetsRequest)(nil),                 // 15: xstockstrat.marketdata.v1.ListAssetsRequest
+	(*ListAssetsResponse)(nil),                // 16: xstockstrat.marketdata.v1.ListAssetsResponse
+	(*DeleteBackfilledDataRequest)(nil),       // 17: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest
+	(*DeleteBackfilledDataResponse)(nil),      // 18: xstockstrat.marketdata.v1.DeleteBackfilledDataResponse
+	(*Fundamentals)(nil),                      // 19: xstockstrat.marketdata.v1.Fundamentals
+	(*GetFundamentalsRequest)(nil),            // 20: xstockstrat.marketdata.v1.GetFundamentalsRequest
+	(*GetFundamentalsResponse)(nil),           // 21: xstockstrat.marketdata.v1.GetFundamentalsResponse
+	(*GetFundamentalsMultiRequest)(nil),       // 22: xstockstrat.marketdata.v1.GetFundamentalsMultiRequest
+	(*GetFundamentalsMultiResponse)(nil),      // 23: xstockstrat.marketdata.v1.GetFundamentalsMultiResponse
+	(*HistoricalFundamentalsPeriod)(nil),      // 24: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod
+	(*GetHistoricalFundamentalsRequest)(nil),  // 25: xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest
+	(*GetHistoricalFundamentalsResponse)(nil), // 26: xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse
+	(*BackfillFundamentalsRequest)(nil),       // 27: xstockstrat.marketdata.v1.BackfillFundamentalsRequest
+	(*BackfillFundamentalsResponse)(nil),      // 28: xstockstrat.marketdata.v1.BackfillFundamentalsResponse
+	(*GetLatestQuotesRequest)(nil),            // 29: xstockstrat.marketdata.v1.GetLatestQuotesRequest
+	(*GetLatestQuotesResponse)(nil),           // 30: xstockstrat.marketdata.v1.GetLatestQuotesResponse
+	(*BatchGetBarsRequest)(nil),               // 31: xstockstrat.marketdata.v1.BatchGetBarsRequest
+	(*SymbolBars)(nil),                        // 32: xstockstrat.marketdata.v1.SymbolBars
+	(*BatchGetBarsResponse)(nil),              // 33: xstockstrat.marketdata.v1.BatchGetBarsResponse
+	(*BatchGetLatestPriceRequest)(nil),        // 34: xstockstrat.marketdata.v1.BatchGetLatestPriceRequest
+	(*BatchGetLatestPriceResponse)(nil),       // 35: xstockstrat.marketdata.v1.BatchGetLatestPriceResponse
+	(*SymbolSector)(nil),                      // 36: xstockstrat.marketdata.v1.SymbolSector
+	(*GetCurrentSectorRequest)(nil),           // 37: xstockstrat.marketdata.v1.GetCurrentSectorRequest
+	(*GetCurrentSectorResponse)(nil),          // 38: xstockstrat.marketdata.v1.GetCurrentSectorResponse
+	(*GetSectorAsOfRequest)(nil),              // 39: xstockstrat.marketdata.v1.GetSectorAsOfRequest
+	(*GetSectorAsOfResponse)(nil),             // 40: xstockstrat.marketdata.v1.GetSectorAsOfResponse
+	(*SectorHistoryRow)(nil),                  // 41: xstockstrat.marketdata.v1.SectorHistoryRow
+	(*GetSectorHistoryRequest)(nil),           // 42: xstockstrat.marketdata.v1.GetSectorHistoryRequest
+	(*GetSectorHistoryResponse)(nil),          // 43: xstockstrat.marketdata.v1.GetSectorHistoryResponse
+	(*GetEtfFlagsRequest)(nil),                // 44: xstockstrat.marketdata.v1.GetEtfFlagsRequest
+	(*EtfFlag)(nil),                           // 45: xstockstrat.marketdata.v1.EtfFlag
+	(*GetEtfFlagsResponse)(nil),               // 46: xstockstrat.marketdata.v1.GetEtfFlagsResponse
+	(*GetSymbolServabilityRequest)(nil),       // 47: xstockstrat.marketdata.v1.GetSymbolServabilityRequest
+	(*SymbolServability)(nil),                 // 48: xstockstrat.marketdata.v1.SymbolServability
+	(*GetSymbolServabilityResponse)(nil),      // 49: xstockstrat.marketdata.v1.GetSymbolServabilityResponse
+	(*FlaggedSymbol)(nil),                     // 50: xstockstrat.marketdata.v1.FlaggedSymbol
+	(*SyncWatchlistDelistingsRequest)(nil),    // 51: xstockstrat.marketdata.v1.SyncWatchlistDelistingsRequest
+	(*SyncWatchlistDelistingsResponse)(nil),   // 52: xstockstrat.marketdata.v1.SyncWatchlistDelistingsResponse
+	(*AckDelistingAlertsRequest)(nil),         // 53: xstockstrat.marketdata.v1.AckDelistingAlertsRequest
+	(*AckDelistingAlertsResponse)(nil),        // 54: xstockstrat.marketdata.v1.AckDelistingAlertsResponse
+	nil,                                       // 55: xstockstrat.marketdata.v1.Fundamentals.ExtraMetricsEntry
+	nil,                                       // 56: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.ExtraMetricsEntry
+	(*timestamppb.Timestamp)(nil),             // 57: google.protobuf.Timestamp
+	(v1.Timeframe)(0),                         // 58: xstockstrat.common.v1.Timeframe
+	(*v1.TimeRange)(nil),                      // 59: xstockstrat.common.v1.TimeRange
+	(*v1.PageRequest)(nil),                    // 60: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),                   // 61: xstockstrat.common.v1.PageResponse
+	(*v1.BackfillSymbolResult)(nil),           // 62: xstockstrat.common.v1.BackfillSymbolResult
+	(*v1.Asset)(nil),                          // 63: xstockstrat.common.v1.Asset
+	(v1.Sector)(0),                            // 64: xstockstrat.common.v1.Sector
+	(v1.UnservableReason)(0),                  // 65: xstockstrat.common.v1.UnservableReason
+	(*v1.DelistedState)(nil),                  // 66: xstockstrat.common.v1.DelistedState
 }
 var file_marketdata_v1_marketdata_proto_depIdxs = []int32{
-	51, // 0: xstockstrat.marketdata.v1.Bar.time:type_name -> google.protobuf.Timestamp
-	52, // 1: xstockstrat.marketdata.v1.Bar.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
-	51, // 2: xstockstrat.marketdata.v1.Quote.time:type_name -> google.protobuf.Timestamp
-	51, // 3: xstockstrat.marketdata.v1.LatestPrice.last_trade_time:type_name -> google.protobuf.Timestamp
-	52, // 4: xstockstrat.marketdata.v1.StreamBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
-	53, // 5: xstockstrat.marketdata.v1.GetBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	54, // 6: xstockstrat.marketdata.v1.GetBarsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	52, // 7: xstockstrat.marketdata.v1.GetBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
-	0,  // 8: xstockstrat.marketdata.v1.GetBarsResponse.bars:type_name -> xstockstrat.marketdata.v1.Bar
-	55, // 9: xstockstrat.marketdata.v1.GetBarsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	53, // 10: xstockstrat.marketdata.v1.BackfillBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	52, // 11: xstockstrat.marketdata.v1.BackfillBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
-	52, // 12: xstockstrat.marketdata.v1.GetDataCoverageRequest.timeframe:type_name -> xstockstrat.common.v1.Timeframe
-	53, // 13: xstockstrat.marketdata.v1.GetDataCoverageRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	51, // 14: xstockstrat.marketdata.v1.CoverageRange.start:type_name -> google.protobuf.Timestamp
-	51, // 15: xstockstrat.marketdata.v1.CoverageRange.end:type_name -> google.protobuf.Timestamp
-	52, // 16: xstockstrat.marketdata.v1.GetDataCoverageResponse.timeframe:type_name -> xstockstrat.common.v1.Timeframe
-	51, // 17: xstockstrat.marketdata.v1.GetDataCoverageResponse.earliest:type_name -> google.protobuf.Timestamp
-	51, // 18: xstockstrat.marketdata.v1.GetDataCoverageResponse.latest:type_name -> google.protobuf.Timestamp
-	12, // 19: xstockstrat.marketdata.v1.GetDataCoverageResponse.covered_ranges:type_name -> xstockstrat.marketdata.v1.CoverageRange
-	53, // 20: xstockstrat.marketdata.v1.GetDataCoverageResponse.gaps:type_name -> xstockstrat.common.v1.TimeRange
-	56, // 21: xstockstrat.marketdata.v1.ListAssetsResponse.assets:type_name -> xstockstrat.common.v1.Asset
-	53, // 22: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	52, // 23: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest.timeframe:type_name -> xstockstrat.common.v1.Timeframe
-	49, // 24: xstockstrat.marketdata.v1.Fundamentals.extra_metrics:type_name -> xstockstrat.marketdata.v1.Fundamentals.ExtraMetricsEntry
-	51, // 25: xstockstrat.marketdata.v1.Fundamentals.as_of:type_name -> google.protobuf.Timestamp
-	18, // 26: xstockstrat.marketdata.v1.GetFundamentalsResponse.fundamentals:type_name -> xstockstrat.marketdata.v1.Fundamentals
-	18, // 27: xstockstrat.marketdata.v1.GetFundamentalsMultiResponse.fundamentals:type_name -> xstockstrat.marketdata.v1.Fundamentals
-	51, // 28: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.period_end:type_name -> google.protobuf.Timestamp
-	51, // 29: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.filed_date:type_name -> google.protobuf.Timestamp
-	51, // 30: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.accepted_date:type_name -> google.protobuf.Timestamp
-	50, // 31: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.extra_metrics:type_name -> xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.ExtraMetricsEntry
-	51, // 32: xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest.as_of_date:type_name -> google.protobuf.Timestamp
-	51, // 33: xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest.range_start:type_name -> google.protobuf.Timestamp
-	51, // 34: xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest.range_end:type_name -> google.protobuf.Timestamp
-	54, // 35: xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	23, // 36: xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse.periods:type_name -> xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod
-	55, // 37: xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse.pagination:type_name -> xstockstrat.common.v1.PageResponse
-	53, // 38: xstockstrat.marketdata.v1.BackfillFundamentalsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	1,  // 39: xstockstrat.marketdata.v1.GetLatestQuotesResponse.quotes:type_name -> xstockstrat.marketdata.v1.Quote
-	51, // 40: xstockstrat.marketdata.v1.BatchGetBarsRequest.start:type_name -> google.protobuf.Timestamp
-	51, // 41: xstockstrat.marketdata.v1.BatchGetBarsRequest.end:type_name -> google.protobuf.Timestamp
-	0,  // 42: xstockstrat.marketdata.v1.SymbolBars.bars:type_name -> xstockstrat.marketdata.v1.Bar
-	31, // 43: xstockstrat.marketdata.v1.BatchGetBarsResponse.results:type_name -> xstockstrat.marketdata.v1.SymbolBars
-	3,  // 44: xstockstrat.marketdata.v1.BatchGetLatestPriceResponse.results:type_name -> xstockstrat.marketdata.v1.LatestPrice
-	57, // 45: xstockstrat.marketdata.v1.SymbolSector.sector:type_name -> xstockstrat.common.v1.Sector
-	35, // 46: xstockstrat.marketdata.v1.GetCurrentSectorResponse.sectors:type_name -> xstockstrat.marketdata.v1.SymbolSector
-	51, // 47: xstockstrat.marketdata.v1.GetSectorAsOfRequest.as_of:type_name -> google.protobuf.Timestamp
-	57, // 48: xstockstrat.marketdata.v1.GetSectorAsOfResponse.sector:type_name -> xstockstrat.common.v1.Sector
-	57, // 49: xstockstrat.marketdata.v1.SectorHistoryRow.sector:type_name -> xstockstrat.common.v1.Sector
-	51, // 50: xstockstrat.marketdata.v1.SectorHistoryRow.valid_from:type_name -> google.protobuf.Timestamp
-	51, // 51: xstockstrat.marketdata.v1.SectorHistoryRow.valid_to:type_name -> google.protobuf.Timestamp
-	51, // 52: xstockstrat.marketdata.v1.GetSectorHistoryRequest.start:type_name -> google.protobuf.Timestamp
-	51, // 53: xstockstrat.marketdata.v1.GetSectorHistoryRequest.end:type_name -> google.protobuf.Timestamp
-	40, // 54: xstockstrat.marketdata.v1.GetSectorHistoryResponse.rows:type_name -> xstockstrat.marketdata.v1.SectorHistoryRow
-	44, // 55: xstockstrat.marketdata.v1.GetEtfFlagsResponse.flags:type_name -> xstockstrat.marketdata.v1.EtfFlag
-	58, // 56: xstockstrat.marketdata.v1.SymbolServability.reason:type_name -> xstockstrat.common.v1.UnservableReason
-	47, // 57: xstockstrat.marketdata.v1.GetSymbolServabilityResponse.symbols:type_name -> xstockstrat.marketdata.v1.SymbolServability
-	4,  // 58: xstockstrat.marketdata.v1.MarketDataService.StreamBars:input_type -> xstockstrat.marketdata.v1.StreamBarsRequest
-	5,  // 59: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:input_type -> xstockstrat.marketdata.v1.StreamQuotesRequest
-	6,  // 60: xstockstrat.marketdata.v1.MarketDataService.GetBars:input_type -> xstockstrat.marketdata.v1.GetBarsRequest
-	8,  // 61: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:input_type -> xstockstrat.marketdata.v1.GetLatestQuoteRequest
-	2,  // 62: xstockstrat.marketdata.v1.MarketDataService.GetLatestPrice:input_type -> xstockstrat.marketdata.v1.GetLatestPriceRequest
-	9,  // 63: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:input_type -> xstockstrat.marketdata.v1.BackfillBarsRequest
-	11, // 64: xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage:input_type -> xstockstrat.marketdata.v1.GetDataCoverageRequest
-	16, // 65: xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData:input_type -> xstockstrat.marketdata.v1.DeleteBackfilledDataRequest
-	14, // 66: xstockstrat.marketdata.v1.MarketDataService.ListAssets:input_type -> xstockstrat.marketdata.v1.ListAssetsRequest
-	19, // 67: xstockstrat.marketdata.v1.MarketDataService.GetFundamentals:input_type -> xstockstrat.marketdata.v1.GetFundamentalsRequest
-	21, // 68: xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti:input_type -> xstockstrat.marketdata.v1.GetFundamentalsMultiRequest
-	28, // 69: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuotes:input_type -> xstockstrat.marketdata.v1.GetLatestQuotesRequest
-	30, // 70: xstockstrat.marketdata.v1.MarketDataService.BatchGetBars:input_type -> xstockstrat.marketdata.v1.BatchGetBarsRequest
-	33, // 71: xstockstrat.marketdata.v1.MarketDataService.BatchGetLatestPrice:input_type -> xstockstrat.marketdata.v1.BatchGetLatestPriceRequest
-	24, // 72: xstockstrat.marketdata.v1.MarketDataService.GetHistoricalFundamentals:input_type -> xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest
-	26, // 73: xstockstrat.marketdata.v1.MarketDataService.BackfillFundamentals:input_type -> xstockstrat.marketdata.v1.BackfillFundamentalsRequest
-	36, // 74: xstockstrat.marketdata.v1.MarketDataService.GetCurrentSector:input_type -> xstockstrat.marketdata.v1.GetCurrentSectorRequest
-	38, // 75: xstockstrat.marketdata.v1.MarketDataService.GetSectorAsOf:input_type -> xstockstrat.marketdata.v1.GetSectorAsOfRequest
-	41, // 76: xstockstrat.marketdata.v1.MarketDataService.GetSectorHistory:input_type -> xstockstrat.marketdata.v1.GetSectorHistoryRequest
-	43, // 77: xstockstrat.marketdata.v1.MarketDataService.GetEtfFlags:input_type -> xstockstrat.marketdata.v1.GetEtfFlagsRequest
-	46, // 78: xstockstrat.marketdata.v1.MarketDataService.GetSymbolServability:input_type -> xstockstrat.marketdata.v1.GetSymbolServabilityRequest
-	0,  // 79: xstockstrat.marketdata.v1.MarketDataService.StreamBars:output_type -> xstockstrat.marketdata.v1.Bar
-	1,  // 80: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:output_type -> xstockstrat.marketdata.v1.Quote
-	7,  // 81: xstockstrat.marketdata.v1.MarketDataService.GetBars:output_type -> xstockstrat.marketdata.v1.GetBarsResponse
-	1,  // 82: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:output_type -> xstockstrat.marketdata.v1.Quote
-	3,  // 83: xstockstrat.marketdata.v1.MarketDataService.GetLatestPrice:output_type -> xstockstrat.marketdata.v1.LatestPrice
-	10, // 84: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:output_type -> xstockstrat.marketdata.v1.BackfillBarsResponse
-	13, // 85: xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage:output_type -> xstockstrat.marketdata.v1.GetDataCoverageResponse
-	17, // 86: xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData:output_type -> xstockstrat.marketdata.v1.DeleteBackfilledDataResponse
-	15, // 87: xstockstrat.marketdata.v1.MarketDataService.ListAssets:output_type -> xstockstrat.marketdata.v1.ListAssetsResponse
-	20, // 88: xstockstrat.marketdata.v1.MarketDataService.GetFundamentals:output_type -> xstockstrat.marketdata.v1.GetFundamentalsResponse
-	22, // 89: xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti:output_type -> xstockstrat.marketdata.v1.GetFundamentalsMultiResponse
-	29, // 90: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuotes:output_type -> xstockstrat.marketdata.v1.GetLatestQuotesResponse
-	32, // 91: xstockstrat.marketdata.v1.MarketDataService.BatchGetBars:output_type -> xstockstrat.marketdata.v1.BatchGetBarsResponse
-	34, // 92: xstockstrat.marketdata.v1.MarketDataService.BatchGetLatestPrice:output_type -> xstockstrat.marketdata.v1.BatchGetLatestPriceResponse
-	25, // 93: xstockstrat.marketdata.v1.MarketDataService.GetHistoricalFundamentals:output_type -> xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse
-	27, // 94: xstockstrat.marketdata.v1.MarketDataService.BackfillFundamentals:output_type -> xstockstrat.marketdata.v1.BackfillFundamentalsResponse
-	37, // 95: xstockstrat.marketdata.v1.MarketDataService.GetCurrentSector:output_type -> xstockstrat.marketdata.v1.GetCurrentSectorResponse
-	39, // 96: xstockstrat.marketdata.v1.MarketDataService.GetSectorAsOf:output_type -> xstockstrat.marketdata.v1.GetSectorAsOfResponse
-	42, // 97: xstockstrat.marketdata.v1.MarketDataService.GetSectorHistory:output_type -> xstockstrat.marketdata.v1.GetSectorHistoryResponse
-	45, // 98: xstockstrat.marketdata.v1.MarketDataService.GetEtfFlags:output_type -> xstockstrat.marketdata.v1.GetEtfFlagsResponse
-	48, // 99: xstockstrat.marketdata.v1.MarketDataService.GetSymbolServability:output_type -> xstockstrat.marketdata.v1.GetSymbolServabilityResponse
-	79, // [79:100] is the sub-list for method output_type
-	58, // [58:79] is the sub-list for method input_type
-	58, // [58:58] is the sub-list for extension type_name
-	58, // [58:58] is the sub-list for extension extendee
-	0,  // [0:58] is the sub-list for field type_name
+	57, // 0: xstockstrat.marketdata.v1.Bar.time:type_name -> google.protobuf.Timestamp
+	58, // 1: xstockstrat.marketdata.v1.Bar.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	57, // 2: xstockstrat.marketdata.v1.Quote.time:type_name -> google.protobuf.Timestamp
+	57, // 3: xstockstrat.marketdata.v1.LatestPrice.last_trade_time:type_name -> google.protobuf.Timestamp
+	58, // 4: xstockstrat.marketdata.v1.StreamBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	59, // 5: xstockstrat.marketdata.v1.GetBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	60, // 6: xstockstrat.marketdata.v1.GetBarsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	58, // 7: xstockstrat.marketdata.v1.GetBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	1,  // 8: xstockstrat.marketdata.v1.GetBarsResponse.bars:type_name -> xstockstrat.marketdata.v1.Bar
+	61, // 9: xstockstrat.marketdata.v1.GetBarsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	59, // 10: xstockstrat.marketdata.v1.BackfillBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	58, // 11: xstockstrat.marketdata.v1.BackfillBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	62, // 12: xstockstrat.marketdata.v1.BackfillBarsResponse.symbol_results:type_name -> xstockstrat.common.v1.BackfillSymbolResult
+	58, // 13: xstockstrat.marketdata.v1.GetDataCoverageRequest.timeframe:type_name -> xstockstrat.common.v1.Timeframe
+	59, // 14: xstockstrat.marketdata.v1.GetDataCoverageRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	57, // 15: xstockstrat.marketdata.v1.CoverageRange.start:type_name -> google.protobuf.Timestamp
+	57, // 16: xstockstrat.marketdata.v1.CoverageRange.end:type_name -> google.protobuf.Timestamp
+	58, // 17: xstockstrat.marketdata.v1.GetDataCoverageResponse.timeframe:type_name -> xstockstrat.common.v1.Timeframe
+	57, // 18: xstockstrat.marketdata.v1.GetDataCoverageResponse.earliest:type_name -> google.protobuf.Timestamp
+	57, // 19: xstockstrat.marketdata.v1.GetDataCoverageResponse.latest:type_name -> google.protobuf.Timestamp
+	13, // 20: xstockstrat.marketdata.v1.GetDataCoverageResponse.covered_ranges:type_name -> xstockstrat.marketdata.v1.CoverageRange
+	59, // 21: xstockstrat.marketdata.v1.GetDataCoverageResponse.gaps:type_name -> xstockstrat.common.v1.TimeRange
+	63, // 22: xstockstrat.marketdata.v1.ListAssetsResponse.assets:type_name -> xstockstrat.common.v1.Asset
+	59, // 23: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	58, // 24: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest.timeframe:type_name -> xstockstrat.common.v1.Timeframe
+	55, // 25: xstockstrat.marketdata.v1.Fundamentals.extra_metrics:type_name -> xstockstrat.marketdata.v1.Fundamentals.ExtraMetricsEntry
+	57, // 26: xstockstrat.marketdata.v1.Fundamentals.as_of:type_name -> google.protobuf.Timestamp
+	19, // 27: xstockstrat.marketdata.v1.GetFundamentalsResponse.fundamentals:type_name -> xstockstrat.marketdata.v1.Fundamentals
+	19, // 28: xstockstrat.marketdata.v1.GetFundamentalsMultiResponse.fundamentals:type_name -> xstockstrat.marketdata.v1.Fundamentals
+	57, // 29: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.period_end:type_name -> google.protobuf.Timestamp
+	57, // 30: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.filed_date:type_name -> google.protobuf.Timestamp
+	57, // 31: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.accepted_date:type_name -> google.protobuf.Timestamp
+	56, // 32: xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.extra_metrics:type_name -> xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod.ExtraMetricsEntry
+	57, // 33: xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest.as_of_date:type_name -> google.protobuf.Timestamp
+	57, // 34: xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest.range_start:type_name -> google.protobuf.Timestamp
+	57, // 35: xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest.range_end:type_name -> google.protobuf.Timestamp
+	60, // 36: xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	24, // 37: xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse.periods:type_name -> xstockstrat.marketdata.v1.HistoricalFundamentalsPeriod
+	61, // 38: xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse.pagination:type_name -> xstockstrat.common.v1.PageResponse
+	59, // 39: xstockstrat.marketdata.v1.BackfillFundamentalsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	62, // 40: xstockstrat.marketdata.v1.BackfillFundamentalsResponse.symbol_results:type_name -> xstockstrat.common.v1.BackfillSymbolResult
+	2,  // 41: xstockstrat.marketdata.v1.GetLatestQuotesResponse.quotes:type_name -> xstockstrat.marketdata.v1.Quote
+	57, // 42: xstockstrat.marketdata.v1.BatchGetBarsRequest.start:type_name -> google.protobuf.Timestamp
+	57, // 43: xstockstrat.marketdata.v1.BatchGetBarsRequest.end:type_name -> google.protobuf.Timestamp
+	1,  // 44: xstockstrat.marketdata.v1.SymbolBars.bars:type_name -> xstockstrat.marketdata.v1.Bar
+	32, // 45: xstockstrat.marketdata.v1.BatchGetBarsResponse.results:type_name -> xstockstrat.marketdata.v1.SymbolBars
+	4,  // 46: xstockstrat.marketdata.v1.BatchGetLatestPriceResponse.results:type_name -> xstockstrat.marketdata.v1.LatestPrice
+	64, // 47: xstockstrat.marketdata.v1.SymbolSector.sector:type_name -> xstockstrat.common.v1.Sector
+	36, // 48: xstockstrat.marketdata.v1.GetCurrentSectorResponse.sectors:type_name -> xstockstrat.marketdata.v1.SymbolSector
+	57, // 49: xstockstrat.marketdata.v1.GetSectorAsOfRequest.as_of:type_name -> google.protobuf.Timestamp
+	64, // 50: xstockstrat.marketdata.v1.GetSectorAsOfResponse.sector:type_name -> xstockstrat.common.v1.Sector
+	64, // 51: xstockstrat.marketdata.v1.SectorHistoryRow.sector:type_name -> xstockstrat.common.v1.Sector
+	57, // 52: xstockstrat.marketdata.v1.SectorHistoryRow.valid_from:type_name -> google.protobuf.Timestamp
+	57, // 53: xstockstrat.marketdata.v1.SectorHistoryRow.valid_to:type_name -> google.protobuf.Timestamp
+	57, // 54: xstockstrat.marketdata.v1.GetSectorHistoryRequest.start:type_name -> google.protobuf.Timestamp
+	57, // 55: xstockstrat.marketdata.v1.GetSectorHistoryRequest.end:type_name -> google.protobuf.Timestamp
+	41, // 56: xstockstrat.marketdata.v1.GetSectorHistoryResponse.rows:type_name -> xstockstrat.marketdata.v1.SectorHistoryRow
+	45, // 57: xstockstrat.marketdata.v1.GetEtfFlagsResponse.flags:type_name -> xstockstrat.marketdata.v1.EtfFlag
+	65, // 58: xstockstrat.marketdata.v1.SymbolServability.reason:type_name -> xstockstrat.common.v1.UnservableReason
+	48, // 59: xstockstrat.marketdata.v1.GetSymbolServabilityResponse.symbols:type_name -> xstockstrat.marketdata.v1.SymbolServability
+	66, // 60: xstockstrat.marketdata.v1.FlaggedSymbol.state:type_name -> xstockstrat.common.v1.DelistedState
+	0,  // 61: xstockstrat.marketdata.v1.FlaggedSymbol.alert_state:type_name -> xstockstrat.marketdata.v1.DelistingAlertState
+	50, // 62: xstockstrat.marketdata.v1.SyncWatchlistDelistingsResponse.flagged:type_name -> xstockstrat.marketdata.v1.FlaggedSymbol
+	5,  // 63: xstockstrat.marketdata.v1.MarketDataService.StreamBars:input_type -> xstockstrat.marketdata.v1.StreamBarsRequest
+	6,  // 64: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:input_type -> xstockstrat.marketdata.v1.StreamQuotesRequest
+	7,  // 65: xstockstrat.marketdata.v1.MarketDataService.GetBars:input_type -> xstockstrat.marketdata.v1.GetBarsRequest
+	9,  // 66: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:input_type -> xstockstrat.marketdata.v1.GetLatestQuoteRequest
+	3,  // 67: xstockstrat.marketdata.v1.MarketDataService.GetLatestPrice:input_type -> xstockstrat.marketdata.v1.GetLatestPriceRequest
+	10, // 68: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:input_type -> xstockstrat.marketdata.v1.BackfillBarsRequest
+	12, // 69: xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage:input_type -> xstockstrat.marketdata.v1.GetDataCoverageRequest
+	17, // 70: xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData:input_type -> xstockstrat.marketdata.v1.DeleteBackfilledDataRequest
+	15, // 71: xstockstrat.marketdata.v1.MarketDataService.ListAssets:input_type -> xstockstrat.marketdata.v1.ListAssetsRequest
+	20, // 72: xstockstrat.marketdata.v1.MarketDataService.GetFundamentals:input_type -> xstockstrat.marketdata.v1.GetFundamentalsRequest
+	22, // 73: xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti:input_type -> xstockstrat.marketdata.v1.GetFundamentalsMultiRequest
+	29, // 74: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuotes:input_type -> xstockstrat.marketdata.v1.GetLatestQuotesRequest
+	31, // 75: xstockstrat.marketdata.v1.MarketDataService.BatchGetBars:input_type -> xstockstrat.marketdata.v1.BatchGetBarsRequest
+	34, // 76: xstockstrat.marketdata.v1.MarketDataService.BatchGetLatestPrice:input_type -> xstockstrat.marketdata.v1.BatchGetLatestPriceRequest
+	25, // 77: xstockstrat.marketdata.v1.MarketDataService.GetHistoricalFundamentals:input_type -> xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest
+	27, // 78: xstockstrat.marketdata.v1.MarketDataService.BackfillFundamentals:input_type -> xstockstrat.marketdata.v1.BackfillFundamentalsRequest
+	37, // 79: xstockstrat.marketdata.v1.MarketDataService.GetCurrentSector:input_type -> xstockstrat.marketdata.v1.GetCurrentSectorRequest
+	39, // 80: xstockstrat.marketdata.v1.MarketDataService.GetSectorAsOf:input_type -> xstockstrat.marketdata.v1.GetSectorAsOfRequest
+	42, // 81: xstockstrat.marketdata.v1.MarketDataService.GetSectorHistory:input_type -> xstockstrat.marketdata.v1.GetSectorHistoryRequest
+	44, // 82: xstockstrat.marketdata.v1.MarketDataService.GetEtfFlags:input_type -> xstockstrat.marketdata.v1.GetEtfFlagsRequest
+	47, // 83: xstockstrat.marketdata.v1.MarketDataService.GetSymbolServability:input_type -> xstockstrat.marketdata.v1.GetSymbolServabilityRequest
+	51, // 84: xstockstrat.marketdata.v1.MarketDataService.SyncWatchlistDelistings:input_type -> xstockstrat.marketdata.v1.SyncWatchlistDelistingsRequest
+	53, // 85: xstockstrat.marketdata.v1.MarketDataService.AckDelistingAlerts:input_type -> xstockstrat.marketdata.v1.AckDelistingAlertsRequest
+	1,  // 86: xstockstrat.marketdata.v1.MarketDataService.StreamBars:output_type -> xstockstrat.marketdata.v1.Bar
+	2,  // 87: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:output_type -> xstockstrat.marketdata.v1.Quote
+	8,  // 88: xstockstrat.marketdata.v1.MarketDataService.GetBars:output_type -> xstockstrat.marketdata.v1.GetBarsResponse
+	2,  // 89: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:output_type -> xstockstrat.marketdata.v1.Quote
+	4,  // 90: xstockstrat.marketdata.v1.MarketDataService.GetLatestPrice:output_type -> xstockstrat.marketdata.v1.LatestPrice
+	11, // 91: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:output_type -> xstockstrat.marketdata.v1.BackfillBarsResponse
+	14, // 92: xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage:output_type -> xstockstrat.marketdata.v1.GetDataCoverageResponse
+	18, // 93: xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData:output_type -> xstockstrat.marketdata.v1.DeleteBackfilledDataResponse
+	16, // 94: xstockstrat.marketdata.v1.MarketDataService.ListAssets:output_type -> xstockstrat.marketdata.v1.ListAssetsResponse
+	21, // 95: xstockstrat.marketdata.v1.MarketDataService.GetFundamentals:output_type -> xstockstrat.marketdata.v1.GetFundamentalsResponse
+	23, // 96: xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti:output_type -> xstockstrat.marketdata.v1.GetFundamentalsMultiResponse
+	30, // 97: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuotes:output_type -> xstockstrat.marketdata.v1.GetLatestQuotesResponse
+	33, // 98: xstockstrat.marketdata.v1.MarketDataService.BatchGetBars:output_type -> xstockstrat.marketdata.v1.BatchGetBarsResponse
+	35, // 99: xstockstrat.marketdata.v1.MarketDataService.BatchGetLatestPrice:output_type -> xstockstrat.marketdata.v1.BatchGetLatestPriceResponse
+	26, // 100: xstockstrat.marketdata.v1.MarketDataService.GetHistoricalFundamentals:output_type -> xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse
+	28, // 101: xstockstrat.marketdata.v1.MarketDataService.BackfillFundamentals:output_type -> xstockstrat.marketdata.v1.BackfillFundamentalsResponse
+	38, // 102: xstockstrat.marketdata.v1.MarketDataService.GetCurrentSector:output_type -> xstockstrat.marketdata.v1.GetCurrentSectorResponse
+	40, // 103: xstockstrat.marketdata.v1.MarketDataService.GetSectorAsOf:output_type -> xstockstrat.marketdata.v1.GetSectorAsOfResponse
+	43, // 104: xstockstrat.marketdata.v1.MarketDataService.GetSectorHistory:output_type -> xstockstrat.marketdata.v1.GetSectorHistoryResponse
+	46, // 105: xstockstrat.marketdata.v1.MarketDataService.GetEtfFlags:output_type -> xstockstrat.marketdata.v1.GetEtfFlagsResponse
+	49, // 106: xstockstrat.marketdata.v1.MarketDataService.GetSymbolServability:output_type -> xstockstrat.marketdata.v1.GetSymbolServabilityResponse
+	52, // 107: xstockstrat.marketdata.v1.MarketDataService.SyncWatchlistDelistings:output_type -> xstockstrat.marketdata.v1.SyncWatchlistDelistingsResponse
+	54, // 108: xstockstrat.marketdata.v1.MarketDataService.AckDelistingAlerts:output_type -> xstockstrat.marketdata.v1.AckDelistingAlertsResponse
+	86, // [86:109] is the sub-list for method output_type
+	63, // [63:86] is the sub-list for method input_type
+	63, // [63:63] is the sub-list for extension type_name
+	63, // [63:63] is the sub-list for extension extendee
+	0,  // [0:63] is the sub-list for field type_name
 }
 
 func init() { file_marketdata_v1_marketdata_proto_init() }
@@ -3612,13 +3960,14 @@ func file_marketdata_v1_marketdata_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_marketdata_v1_marketdata_proto_rawDesc), len(file_marketdata_v1_marketdata_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   51,
+			NumEnums:      1,
+			NumMessages:   56,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_marketdata_v1_marketdata_proto_goTypes,
 		DependencyIndexes: file_marketdata_v1_marketdata_proto_depIdxs,
+		EnumInfos:         file_marketdata_v1_marketdata_proto_enumTypes,
 		MessageInfos:      file_marketdata_v1_marketdata_proto_msgTypes,
 	}.Build()
 	File_marketdata_v1_marketdata_proto = out.File

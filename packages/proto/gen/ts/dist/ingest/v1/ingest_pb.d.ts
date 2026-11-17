@@ -1,6 +1,6 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, TemplateMeta, TemplateOperation, TemplateOrigin, Timeframe, TimeRange } from "../../common/v1/common_pb";
+import type { BackfillSymbolResult, PageRequest, PageResponse, TemplateMeta, TemplateOperation, TemplateOrigin, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
  * Describes the file ingest/v1/ingest.proto.
@@ -81,6 +81,10 @@ export type BackfillJob = Message<"xstockstrat.ingest.v1.BackfillJob"> & {
      * @generated from field: xstockstrat.ingest.v1.BackfillDataKind data_kind = 15;
      */
     dataKind: BackfillDataKind;
+    /**
+     * @generated from field: repeated xstockstrat.common.v1.BackfillSymbolResult symbol_results = 16;
+     */
+    symbolResults: BackfillSymbolResult[];
 };
 /**
  * Describes the message xstockstrat.ingest.v1.BackfillJob.

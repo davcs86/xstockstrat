@@ -1024,6 +1024,10 @@ where `<token>` is one of `multi_symbol`, `data_kind`, `fill_mode`, `overwrite`,
 symbol that already has a `QUEUED` or `RUNNING` backfill is refused `ALREADY_EXISTS`; the other job's
 id is not returned.
 
+A symbol flagged delisted that the data source cannot serve ends `skipped`, not `failed`: it is
+listed in the job's `symbol_results` (see `get_backfill_status`), stays out of `failed_symbols` and
+does not make the job `PARTIAL` (feature 352).
+
 **Parameters**
 
 | Parameter | Type | Required | Description |
@@ -1105,12 +1109,21 @@ Checks one backfill job or lists recent jobs via ingest `GetBackfillStatus` / `L
 **Return**
 
 ```json
-{ "job": { "status": "…", "bars_processed": "…", "bars_total": "…", "chunks_completed": 0, "chunks_total": 0, "failed_symbols": [], "error": "" } }
+{ "job": { "status": "…", "bars_processed": "…", "bars_total": "…", "chunks_completed": 0, "chunks_total": 0, "failed_symbols": [], "symbol_results": [ { "symbol": "PSKY", "outcome": "skipped", "reason": "…" } ], "error": "" } }
 ```
 or, in list mode:
 ```json
 { "jobs": [ … ], "next_page_token": "…" }
 ```
+
+`symbol_results` (both modes, always present, possibly empty) lists the symbols that wrote nothing,
+as `{"symbol", "outcome", "reason"}`; `reason` is omitted when empty. `outcome` is:
+
+| `outcome` | Meaning |
+|---|---|
+| `empty` | Nothing to write for the symbol in the requested range |
+| `skipped` | The symbol is flagged delisted and the data source could not serve it — not a failure: it is not in `failed_symbols` and does not make the job `PARTIAL` |
+| `failed` | A real failure; the symbol is also in `failed_symbols` |
 
 **Errors**
 
@@ -1432,6 +1445,14 @@ Returns `{"watchlists": [<watchlist>, …], "next_page_token": <str>}`. Each `<w
 unbound — / `source`), the deprecated flat `symbols[]` mirror, `system_managed`, `created_at`,
 `updated_at`. An empty `next_page_token` means no more pages.
 
+Each binding also carries `delisted` (bool, always present). A binding flagged delisted adds
+`delisted_reason` (`"UNSERVABLE_REASON_OTC"` | `"UNSERVABLE_REASON_NOT_TRADABLE"`) and
+`first_unservable_date` (`YYYY-MM-DD`, the first NYSE session the symbol was unservable):
+
+```json
+{ "symbol": "ROKU", "delisted": true, "delisted_reason": "UNSERVABLE_REASON_NOT_TRADABLE", "first_unservable_date": "2026-11-09" }
+```
+
 **Errors:** `ToolError` → no verified caller claims on the request.
 
 ---
@@ -1446,7 +1467,8 @@ Wraps `PortfolioService.GetWatchlist`.
 | `watchlist_id` | string | yes | The list identifier (from `list_watchlists`) |
 
 Returns `{"watchlist": <watchlist>}` (snake_case, same shape as `list_watchlists` entries) with the
-full `bindings` array.
+full `bindings` array, each binding with `delisted` and, when true, `delisted_reason` and
+`first_unservable_date`.
 
 The result reflects the pruned set: a `SIGNAL` entry expires once every agent-recorded
 `direction="watchlist"` signal for its symbol has passed `valid_until`, and the portfolio prune then
@@ -1499,7 +1521,9 @@ Returns `{"watchlist": <watchlist>, "refused": [{"symbol": <ticker>, "reason": <
 `{"deleted": true, "watchlist_id": <id>}` for `delete`. `reason` is `"UNSERVABLE_REASON_OTC"` or
 `"UNSERVABLE_REASON_NOT_TRADABLE"`; a refused symbol was **not newly added** (OTC, or not an active
 tradable US equity). A mistyped or newly listed ticker is refused until the next asset-set refresh
-(default 6h, max 24h).
+(default 6h, max 24h). Each binding of the returned `<watchlist>` carries `delisted` and, when true,
+`delisted_reason` and `first_unservable_date` (as `list_watchlists`). A replace-all `update` still
+drops a symbol flagged delisted and reports it in `refused`.
 
 **Errors:** `unknown operation '<op>' (expected create/update/delete)`; `manage_watchlist(...) requires
 a name`/`a watchlist_id`; `watchlist not found`; `permission denied` (non-owner); `invalid argument`
@@ -1535,7 +1559,8 @@ Returns `{"watchlist": <watchlist>}` — the updated list. `add` also returns
 `"refused": [{"symbol": <ticker>, "reason": "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}]`
 (always present, possibly empty): a refused symbol (OTC, or not an active tradable US equity) was
 **not newly added** (feature 282). A mistyped or newly listed ticker is refused until the next
-asset-set refresh (default 6h, max 24h).
+asset-set refresh (default 6h, max 24h). Each binding of the returned `<watchlist>` carries
+`delisted` and, when true, `delisted_reason` and `first_unservable_date` (as `list_watchlists`).
 
 **Errors:** `unknown operation '<op>' (expected add/remove/assign)`;
 `manage_watchlist_symbols requires a watchlist_id`; `manage_watchlist_symbols(operation='assign')

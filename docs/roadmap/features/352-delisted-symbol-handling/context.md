@@ -373,3 +373,315 @@
   feature waits).
 - **A-7 confirmed**: a flagged symbol skipped by a backfill is logged at INFO.
 
+## Session 2026-11-17 — sdd-execute sequential (mode entry, merge train, re-spec gate)
+
+- **Operator instruction**: "Run execution in sequential mode, no checkpoints" — checkpoint reports are
+  printed, no gate; execution stops only on a real blocker.
+- **Operator answers at mode entry**: "Merge train 1563, check for conflicts with spec, restart execution
+  with the same terms"; a throwaway local Postgres is approved for Step 10 artifact generation only
+  (precedent: feature 347) — no staging or shared database is touched; scenario promotion and the
+  integration PR happen at the end without a pause. The integration PR is not merged by the agent.
+- **Merge train**: PR #1563 (story) merged into `main-dev` as `9a685196`; the append-only ledger conflict
+  was auto-resolved by union.
+- **Branch**: `feature/delisted-symbol-handling` created from `origin/main-dev@9a685196` (includes
+  features 351, 353, 354).
+- **Re-spec validation**: no blocker. Line shifts only in Steps 20, 22, 23, 24, 28; substantive additions
+  in Step 24 (decorate `ListWatchlists` after the feature-351 ensure block, plus a `TestListWatchlists351_`
+  run), Step 25 (Instruction 1a: locate lists by `watchlist_id`, uuid-shaped seed ids, the ensure and
+  fail-open pages are both asserted decorated), Step 28 (the 351 docstring and runbook sentences are kept)
+  and Step 32 (351 durable scenarios are PRESERVE; matching rows added to `design.md` § Business Rules
+  Touched). Step count (32), `Lands with` units and the Scenario Coverage table are unchanged. Migrations
+  marketdata `010` / ingest `017` / config `054` and all proto field numbers are still free on all 218
+  origin refs.
+- **Tooling**: `go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (go1.27, scratchpad bin) · migrate ⬇ v4.17.1 (scratchpad bin, Step 10 generation only) · uv ✓ · ruff ✓ · node ✓ 24.22.1 (/opt/node24) · pnpm ✓ 9.15.9 · buf via Docker codegen image · psql/initdb ✓ (Step 10 throwaway only)`
+
+## Session 2026-11-17 — sdd-execute sequential, step log
+
+### Step 1 — proto (unit 1+2) — done
+- Additive fields and RPCs exactly as specced: `BackfillSymbolOutcome`, `BackfillSymbolResult`,
+  `DelistedState` (common); `symbol_results` on `BackfillBarsResponse=4`, `BackfillFundamentalsResponse=3`,
+  `BackfillJob=16`; `WatchlistBinding.delisted=4`; `SyncWatchlistDelistings` / `AckDelistingAlerts`,
+  `DelistingAlertState`, `FlaggedSymbol`.
+- TDD: N/A (proto). `buf lint` and `buf breaking` passed inside the codegen container; `buf breaking` ran
+  against local `main-dev`, which is the same tree as the feature branch before this unit.
+
+### Step 2 — proto-gen (unit 1+2) — done
+- Generated with `python3 scripts/localenv-setup.py` (pinned Docker codegen image). 36 generated files
+  changed, all in the step's `**Files**` list and all inside `common`/`marketdata`/`ingest`/`portfolio`;
+  the 9 listed files that did not change are not staged.
+- The first container run could not compile `gen/ts` (`tsc: not found`) because the workspace had no
+  `node_modules`; `pnpm install --frozen-lockfile` fixed it. No lockfile change.
+- TDD: N/A (proto-gen). Verification: marketdata `go build`, portfolio `go build` + `go vet`, trading
+  `go vet`, ingest `pytest tests/test_backfill_jobs.py` (15 passed), UI `tsc --noEmit` — all passed.
+
+### Step 3 — service: calendar move (unit 3+4) — done
+- `marketsession.go` moved unchanged (`git mv`) to `packages/proto/marketsession/`; the two portfolio
+  importers now use `contracts/marketsession`; `services/xstockstrat-portfolio/internal/marketsession/` is
+  gone; both `CLAUDE.md` files updated.
+- TDD: red N/A — relocation, no behavior change. Verification passed (no old import left, portfolio
+  `go build`, `scripts/check-context-map.py` OK).
+- `gofmt` re-sorted the import line in `offline_valuation.go` (`:17` → `:16`); no other change there.
+
+### Step 4 — test: calendar characterization test re-homed (unit 3+4) — done
+- `internal/service/marketsession_test.go`, package `service`, assertions unchanged.
+- TDD: red N/A — characterization test of unchanged behavior. Green: the anchored `-run` → 5 PASS;
+  `go_gate xstockstrat-portfolio` → 0 lint issues, all packages ok under `-race`, total 79.1%.
+- Divergence from the step text: the New York location is loaded once in a file-local `sync.OnceValue`
+  that `nyDate` calls, not inside `nyDate` on every call — `TestHolidays_2026_2028` uses `time.Time` as a
+  map key, and a fresh `*time.Location` per call makes those lookups miss.
+
+### Step 28 — service: agent tools (delisted state, per-symbol backfill outcomes) — done
+- Executed in a parallel worktree and landed out of step-number order (see Deviation Log, "parallel
+  chains").
+- `_watchlist_to_dict` marks every binding with `delisted` (+ `delisted_reason`, `first_unservable_date`
+  when flagged); `_backfill_job_to_dict` used by both returns of `get_backfill_status`, `symbol_results`
+  always present. Feature-351 docstring and runbook sentences kept. `mcp-tools.md` and the strat-lab
+  `backtest` skill files updated in the same commit.
+- TDD: AC-16 red: `{'delisted': {...}} != {'delisted': True}`; AC-14 red: `'BACKFILL_SYMBOL_OUTCOME_SKIPPED'
+  != 'skipped'` (7 failed / 4 passed on the unmodified client) → green: 11 passed.
+- Verification: ruff clean, full pytest 776 passed, plugin `validate.py` (+ `--self-test`), grep counts,
+  `check-context-map.py` — all passed. The full suite ran once on the tree holding Steps 28 and 29.
+
+### Step 29 — test: agent projections — done
+- 8 new cases in `tests/test_watchlist_client.py`, 4 in `tests/test_client.py`. `py_gate` via `uv run`:
+  ruff clean, 776 passed, coverage 88.22%. No skipped tests.
+- Four of the new tests are guards that pass on the unmodified client (two proto-field guards, "no
+  bindings", "no results → `symbol_results: []`"); two of them go beyond the step text.
+- Noted, not changed: an enum number unknown to this agent build makes `.Name()` raise `ValueError`, the
+  same behaviour as the existing `_refused_to_list`.
+
+### Step 26 — service: analysis skips flagged bindings (unplanned unit 26+27) — done
+- Blocker raised by the worker: `b.HasField("delisted")` raises `AttributeError` on the `SimpleNamespace`
+  fake bindings of existing tests (88 failed / 1652 passed with Step 26 alone). **Operator decision
+  2026-11-17: "Fold + fix fakes"** — one commit for 26+27, the three fake-binding builders build real
+  `portfolio_pb2.WatchlistBinding`, two test files outside `**Files**` join the unit. Production code is
+  exactly the step text (`servicer.py`, `live_loop.py`, one `HasField("delisted")` each).
+- Deviations: unplanned fold + two extra test files (Deviation Log).
+
+### Step 27 — test: flagged bindings leave the opportunity scan and the live loop (unplanned unit 26+27) — done
+- TDD: AC-8 red: `assert {'AAPL','ROKU'} == {'AAPL'}` (3 failed / 1 passed on the unmodified drains; the
+  pass is the "binding without `delisted` is unchanged" characterization case) → green: 4 passed,
+  including "an all-flagged list never falls back to legacy `symbols`".
+- `py_gate` via `uv run`: ruff clean, 1740 passed, coverage 91.57%. No skipped tests.
+- Lesson for the ledger at the end of the run: a spec that adds a `HasField` check on a proto message
+  must list every test double that fakes that message with a non-proto object.
+
+### Step 17 — migration: ingest `018_backfill_symbol_results` (renumbered from `017`) — done
+- Renumbered as Step 17 Instruction 1 prescribes: `origin/ccr-424ada30-29m2lv` (feature 355
+  `mediated-source-extraction-instructions`, in flight) adds ingest `017_signal_source_extraction_instructions`;
+  `018` is free on every origin ref. `feature.md`'s DBA row now says `018`; `design.md` still says `017`
+  (approved artifact, not edited). A merge-order row (355 vs 352) records the same rule the operator chose
+  for 345: whichever lands second re-derives its number — **this row is the agent's extension of that
+  ruling, pending operator confirmation**.
+- TDD: N/A (migration). Verified offline: up/down pair, `018` highest with no duplicate, down drops
+  exactly the column up adds. No database started.
+- Deviations: file names differ from `**Files**` (`018_…` not `017_…`) — Deviation Log.
+
+### Step 18 — service: ingest stores per-symbol results per chunk and serves them merged — done
+- `servicer.py`, `repositories/backfill_jobs.py` (`symbol_results` in `_UPDATABLE_COLUMNS`), service
+  `CLAUDE.md` (names migration `018`). Verified on this commit alone: ruff clean, `pytest -q` 531 passed,
+  grep checks pass, `webhook_handoff_loop.py` untouched.
+
+### Step 19 — test: ingest chunk, retry, resume and read paths — done
+- TDD: AC-11 red: `no update_job call carried symbol_results`; AC-14 red: `[] == [('AXIA', 3, …),
+  ('PSKY', 2, …)]`; repo red: `non-updatable column(s) ['symbol_results']` (12 failed / 6 passed on the
+  unmodified module; the webhook payload guard and the job-level-failure case pass before and after, as
+  specced) → green: 18 passed.
+- `py_gate` via `uv run`: ruff clean, 546 passed, coverage 87.01%. No skipped tests. Every case of
+  Instruction 3 has a test (AC-11, 13, 14, 23, 24, 26; retry; whole-chunk failure; resume with the
+  documented residual; merge precedence; job-level failure; A-4).
+
+### Step 30 — service: `/insights` watchlist row shows the delisted marker — done
+- `delistedMarker` helper (`lib/opportunityShared.tsx`), exported `Binding` with `delisted?`, `DelistedBadge`,
+  the `readable` filter and `morePages` in `WatchlistReadiness.tsx`; `WatchlistDetail.tsx` imports
+  `Binding`; `useWatchlistReadiness` takes optional `morePages = false`.
+- TDD: AC-15 red: `TypeError: delistedMarker is not a function` (4 failed) → green: 14 passed.
+- Verification: `pnpm run lint`, `tsc --noEmit`, `lint:dup` (0 clones), the two greps — all passed.
+- Deviations (Deviation Log): a flagged bound row also omits the blocking-condition cell (a resolved
+  readiness row from analysis would otherwise still show readiness text next to the badge); the badge is
+  followed by a `delisted-detail-<symbol>` span `<reason> · since <date>`.
+
+### Step 31 — test: marker unit test, fixtures and e2e — done
+- TDD (e2e): AC-15 red with Step 30's four files restored to base: 4 failed (`delisted-badge-ROKU` not
+  found; paging case badge count 25 vs 0) → green: all four feature-352 cases pass. The paging case's red
+  was not isolated to the `morePages` instruction — it fails earlier on the missing badges.
+- Green runs: Playwright `watchlists.spec.ts` + `screener.spec.ts` (chromium) → 51 passed, 1 failed
+  (`screener.spec.ts:43`, not edited by this step); `screener.spec.ts` re-run alone → 25 passed (treated as
+  a local dev-server flake; watch it in CI). `pnpm run test:coverage` → 732 passed, 2 skipped (pre-existing
+  skips, not traced), 80.91% statements. Lint and `tsc --noEmit` pass.
+- Deviations: e2e ran on host Playwright with `--timeout=180000 --trace off` (the dev-mode warm-up takes
+  ~58 s here), not the Docker runner; `normBindings` in `e2e/helpers/watchlistMock.ts` now carries
+  `delisted` through so write routes that rebuild bindings keep the field; `UnservableReasonName` type
+  moved above `MockBinding` in the same file. C-12: fixture + `INVENTORY.md` row added.
+
+### Step 20 — service: portfolio's never-waiting removal of flagged symbols — done
+- New `internal/repository/delisted_removal_repo.go` (`SKIP LOCKED`, 2 occurrences); `signal_expiry_repo.go`
+  untouched.
+- TDD: AC-6 red (functions as zero-value stubs): `got {Removed:[] …}, want Removed=[KPTI]` (6 of 7 fail) →
+  green: 7 PASS. `go build`, golangci-lint 0 issues.
+
+### Step 21 — test: removal repository (pgxmock and real database) — done
+- pgxmock run → 7 PASS; `go vet -tags dbtest` passes; `go_gate xstockstrat-portfolio` → 0 lint issues,
+  all packages ok under `-race`, total 79.1%.
+- **Skipped locally: all 9 real-database (`dbtest`) tests** (`PORTFOLIO_DB_TEST_URL` unset; no database is
+  started to verify a step). The removal SQL is exercised only through pgxmock until CI's
+  `portfolio-db-test` job runs on the integration PR — watch that job.
+- The "partial result" database case seeds its two system-managed lists under two users (one user has one
+  system-managed list).
+
+### Step 22 — service: portfolio's delisting tick (unit 22+23) — done
+- New `internal/service/delisting_sync.go`; `signal_prune.go`, `portfolio_service.go`, service `CLAUDE.md`,
+  `docs/context-constitution.md` (PORTFOLIO-18). Greps for `syncDelistings`, `HeaderInternalCaller` and
+  no-`emitEvent` pass; `check-context-map.py` OK.
+- With an empty union or an empty removal set the sync RPC and the store call are still made (the repo
+  no-ops on empty input).
+- Alert wording (A-6): `"<SYM> is delisted (<REASON>, first unservable <date>). Removed from N
+  system-managed watchlist(s): <names>."` + either `" N more system-managed watchlist(s) still hold it and
+  will be updated on a later refresh."` or `" It was on no system-managed watchlist."`; a re-delivery
+  starts with `"This may repeat an earlier alert. "` and names only this tick's lists.
+
+### Step 23 — test: the delisting tick (unit 22+23) — done
+- TDD: AC-6 red (`syncDelistings` returning at once): `store asked to remove [], want [[KPTI]]` (14 of 16
+  fail) → green with `-race`: 16 PASS; existing `SignalPrune` tests unchanged. `go_gate` 79.1%.
+- Test doubles: `delistingMarketData` wraps `stubMarketData` and `delistingNotify` wraps `recordingNotify`
+  (the base stubs live in `portfolio_service_test.go`, outside the unit's `**Files**`). The timeout case
+  drives `pruneOnce` with a 20 ms parent context because the 15 s deadline is a constant.
+
+### Step 24 — service: decorate every watchlist response; filter the cross-user enumeration — done
+- Twelve return sites decorated (11 matching lines — `ListWatchlists` is one call after the 351 ensure
+  block); `ensureSignalListOnFirstPage` and `offline_valuation.go` not edited. Build, lint and
+  `TestListWatchlists351_` pass.
+- A first version filtered the store's slice in place (`slices.DeleteFunc`); the Step 25 AC-8/AC-4 tests
+  caught it and it was fixed (filter into a new slice) before this commit.
+
+### Step 25 — test: decoration parity across every watchlist RPC; enumeration filter — done
+- TDD: red (helpers empty): all 12 parity rows fail with `ROKU delisted = <nil>`, as do AC-7, AC-19,
+  AC-16, AC-8, AC-4 and the caller-supplied-state case; the AC-10 guard passes as specced → green with
+  `-race`: 8 PASS; existing `ListAllWatchlistSymbols` and `TestListWatchlists351_` tests pass. `go_gate`
+  79.1%.
+- Instruction 1a followed (lists located by id; ensure page and `ensureErr` fail-open page both asserted).
+- Known weakness, as specced: the AC-10 guard reuses `valuationCase.run()`, which calls the pure
+  `valueOffline` and cannot see the service cache — it fails only if valuation is restructured to consult it.
+
+### Step 5 — migration: marketdata `010_symbol_profile` — done
+- `010` re-derived as free on every origin ref. TDD: N/A (migration). Verified offline: up/down pair,
+  highest number, 5 `CHECK`s, down drops what up creates, only the `marketdata` schema. No database started.
+
+### Step 6 — service: `ProfileRepo` — done
+- `internal/repository/profile_repo.go`: 12 methods + 2 private helpers, no `Begin(`. Build and lint clean.
+- Beyond the step text: `Candidates` is one statement (`bool_or(watched)` over a `UNION ALL`) so the list
+  and the watched count share a snapshot; methods taking a symbol list return early on an empty list
+  (`ReplaceWatched` does not).
+
+### Step 7 — test: `ProfileRepo` (pgxmock + dbtest) — done
+- TDD: red against zero-value signatures: all 12 `TestProfileRepo_` fail (e.g. `Candidates = [], 0, <nil>`)
+  → green: 12 PASS under `-race`. `vet -tags dbtest` ok; the `CI=true` run fails closed; `go_gate
+  xstockstrat-marketdata` → 0 issues, total 87.3%.
+- **Skipped locally: all 8 real-database `TestProfileDB_*` tests** (`MARKETDATA_DB_TEST_URL` unset). They
+  first execute in CI job `marketdata-db-test` on the integration PR — watch that job.
+- `TestProfileDB_ReplaceWatched` deletes foreign rows of `marketdata.watched_symbol`; the AC-27 empty-union
+  case fails with a clear message if foreign rows exist.
+
+### Step 8 — service: delisting detection hook, window reader, flagged set, recovery alert (unit 8+9+10) — done
+- New `internal/service/delisting.go`; `asset_servability.go`, `marketdata_service.go`, `telemetry/otel.go`,
+  `cmd/server/main.go`, service `CLAUDE.md`, `docs/context-constitution.md` (MARKETDATA-16), new
+  `docs/runbooks/delisting-rollout.md` (+ index row).
+- Divergence: the hook does not call `ResetUnwatched` when the watched count is 0 (the SQL guard remains
+  too); the INFO line reports `skipped=empty_union`.
+
+### Step 9 — test: detection hook, window counting, warm-set removal, recovery alert (unit 8+9+10) — done
+- TDD: AC-1 red (hook body disabled): `ROKU row … (present false), want date "2026-11-09"`, 24 more
+  `TestDelisting_*` fail in the same run (AC-10 is the declared guard) → green: 28 top-level
+  `TestDelisting_` PASS under `-race`; `go_gate` 87.3%; 14 `@AC-` comments.
+- Beyond the list: `TestDelisting_QuotaWarningKeepsItsTitleAndCategory` (guards the `emitWarning` rewrite),
+  `TestDelisting_HookContextIsBoundedAtThirtySeconds`; `testdata.ServableAssetsWith(symbols...)` is
+  variadic rather than single-symbol.
+
+### Step 10 — migration: config `054` seeds `assets.delisting_confirmation_trading_days` (unit 8+9+10) — done
+- `054` re-derived as free; `053` is on no origin ref yet (feature 345's claim is spec-only).
+- `scripts/config-wiring-stored.json` was **generated**, never hand-edited, against a throwaway local
+  Postgres 16 (operator-approved, Deviation Log): with `054` held aside the committed JSON reproduced byte
+  for byte; with `054` it gains 2 rows for the key. `config-heal-dryrun.py --fresh` left
+  `dryrun-fresh.tsv` unchanged. The instance was stopped and its data directory deleted; no migration was
+  verified and no test was run against it.
+- Wiring gate: `check-config-wiring.mjs` (step-time and `--keys …`) silent, exit 0; `--final` exit 0 with
+  two `REPORTED` readers-disagree lines for other features' keys (`marketdata/fundamentals.provider`,
+  `platform/trading_state`); `--doc-check` exit 0; `config-wiring.test.mjs` 75 pass.
+- Config contract: namespace `marketdata`, key `assets.delisting_confirmation_trading_days`, int, default
+  5, bounds [1, 30] (Step 11), seeded by config `054`, read live through the WatchConfig-backed reader.
+
+### Step 11 — service: SetConfig bounds `[1, 30]` for the confirmation window — done
+- One registry row in `configServiceImpl.ts`.
+
+### Step 12 — test: bounds and seed-migration shape — done
+- TDD: red before Step 11: `✖ rejects marketdata/assets.delisting_confirmation_trading_days just outside
+  [1, 30]` (383/384) → green 384/384; lint 0 errors; coverage 92.26%.
+- Seed-shape test: red N/A — the Step 10 files had already landed in the previous unit.
+- Divergence: "seeded value inside the bounds" is asserted against constants in the test, because
+  `SCALAR_BOUNDS_REGISTRY` is not exported.
+- Noted, not changed: `prettier --check` flags `configServiceImpl.ts` and `setConfigScalarBounds.test.ts`;
+  not established whether the drift predates this step (the step's verification is lint + tests).
+
+### Step 13 — service: `SyncWatchlistDelistings` / `AckDelistingAlerts` and the inbound caller check — done
+- `authz.go`, new `delisting_sync.go`, `handler/marketdata_handler.go`, service `CLAUDE.md`,
+  `docs/patterns/inter-service-mtls.md`. Build, lint, 10 handler matches, `check-context-map.py` OK.
+- Noted, not changed: the handler's `toGRPCError` has no `Unimplemented` mapping (nothing here returns it).
+
+### Step 14 — test: caller check, claim states, single-snapshot rule — done
+- TDD: AC-17 red against `Unimplemented` stubs: `SyncWatchlistDelistings: unimplemented` (every sync, ack
+  and handler test fails) → green: 17 top-level PASS under `-race`; `go_gate` 87.3%.
+
+### Step 15 — service: per-symbol backfill results and the `skipped` outcome — done
+- `marketdata_service.go`, `delisting.go`, `telemetry/otel.go`, service `CLAUDE.md`. Build and lint clean;
+  `BackfillSkipped` wired; `SymbolResults` on both responses.
+
+### Step 16 — test: one test per loop exit arm, the invariant, the metric — done
+- TDD: AC-11 red (helper returning `FAILED` for every error): `failed_symbols = [PSKY], want empty` →
+  green: 11 top-level PASS; existing backfill tests ok; `go_gate` 87.3%; 6 `@AC-` comments.
+
+### Step 32 — docs: amend the three signed-off durable scenarios (C-16) — done
+- Marketdata `@AC-15 @feature-282`, platform `@AC-17 @feature-282`, portfolio `@AC-1 @feature-154`: one
+  clause each, `@feature-352` added to the tag line, IDs and existing tags kept. No other scenario edited.
+- TDD: N/A (docs). Verification greps pass (3 tag lines, 3 files, `@AC-15 @FR-3 @feature-282` count 1).
+
+## Session 2026-11-17 — sdd-execute sequential, feature end
+
+- **Integrated-tree verification** (all chains merged, before Step 32): `go_gate` marketdata 87.3% and
+  portfolio 79.1% (0 lint issues, `-race`), trading `go vet`; ingest 546 passed / 87.01%, analysis 1740
+  passed / 91.57%, agent 776 passed / 88.22% (ruff clean each); config lint 0 errors + 384/384 tests; UI
+  lint, `tsc --noEmit`, vitest; `check-context-map.py` OK.
+- **Final wiring gate** `node scripts/check-config-wiring.mjs --final` → exit 0. Output:
+  `REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree`
+  and `REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`
+  — both are other features' keys, reported not failing.
+- **Merge-order gate**: 352 is not in the blocked column of `merge-order.md`; the two rows naming it (345
+  config `053`, 355 ingest `017`) make the other feature renumber if 352 lands first. The 355 row was added
+  by the agent in this run by analogy with the operator's 345 ruling and is pending operator confirmation.
+- **Scenario promotion (C-16)**, approved in advance by the operator ("Do both without pausing"): all 29
+  scenarios promoted verbatim with `@feature-352` — marketdata 16 (AC-1, 2, 3, 4, 9, 11, 12, 13, 20, 21,
+  23, 25, 26, 27, 28, 29), portfolio 7 (AC-5, 6, 7, 10, 17, 18, 22), agent 3 (AC-14, 16, 24), UI 1
+  (AC-15), `platform.feature` 2 (AC-8, AC-19). No duplicates found. Ingest, analysis and config get no
+  suite file: their behavior is asserted through the marketdata, agent and platform scenarios.
+- **Defect reports closed**: none — no report is named in the follow-ons of the features whose scenarios
+  this feature changes (282, 154).
+- **Not verified locally, first run in CI**: the 17 real-database tests (Steps 7, 21); the Playwright
+  suite in the CI harness (one unrelated `screener.spec.ts:43` failure locally, passed on re-run).
+- **Open items for the operator**: confirm the 355 merge-order row; approvals per root `CLAUDE.md`
+  § Approval Flow (DBA + service owner for marketdata `010` and ingest `018`; owner + config team for
+  `marketdata`/`assets.delisting_confirmation_trading_days`); `design.md` still says ingest `017`.
+
+- **Final `main-dev` merge (before the integration PR)**: feature 355 had merged into `main-dev` (#1567)
+  with ingest `017`, so 352's `018` is correctly ordered and the 355 merge-order row is marked resolved (no
+  operator confirmation needed any more). Conflicts: the append-only `insights.md` (both kept, `main-dev`
+  first) and three generated ingest stubs (regenerated with the Docker codegen image from the merged
+  `ingest.proto`, never hand-merged). Re-verified after the merge: ingest 602 passed / 87.16%, agent 802
+  passed / 88.36%, analysis 1740 passed, marketdata and portfolio build + vet, UI lint / `tsc` / vitest 732
+  passed, `check-config-wiring.mjs --final` exit 0, `ledger-guard` clean.
+
+## Session 2026-11-17 — integration PR #1574, CI watch
+
+- PR opened: https://github.com/davcs86/xstockstrat/pull/1574 (auto-merge, squash, enabled by the operator
+  on GitHub).
+- CI failure 1: `Migration rerun (idempotent replay)` — `migration-rerun: ingest should be clean at 17,
+  got: 18`. `scripts/migration-rerun.py` pins the top ingest migration; bumped `17` → `18` (Deviation Log).
+  The checks after that line (post-R assertions, pass 4 with marketdata `010`) had not run yet.

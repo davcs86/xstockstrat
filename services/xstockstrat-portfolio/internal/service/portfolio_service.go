@@ -51,6 +51,8 @@ type PortfolioService struct {
 	// Watchlists — held behind interfaces so cap/ownership rules can be unit-tested with stubs.
 	watchlists WatchlistStore
 	wlCfg      intConfig
+	// delisted is marketdata's flagged set as of the last successful delisting tick.
+	delisted delistedCache
 	// quoteCfg holds the live portfolio.marketdata.quote_timeout_ms read; nil (test literals) means the 4000ms default.
 	quoteCfg intConfig
 
@@ -2010,6 +2012,8 @@ type WatchlistStore interface {
 	// PruneExpiredSignalEntries returns already-committed removals even when err != nil; the caller
 	// must still emit their events.
 	PruneExpiredSignalEntries(ctx context.Context) (repository.PruneResult, error)
+	// RemoveDelistedFromSystemLists returns already-committed removals even when err != nil.
+	RemoveDelistedFromSystemLists(ctx context.Context, symbols []string) ([]repository.DelistedRemoval, error)
 }
 
 // intConfig is the int config slice the watchlist caps and the quote deadline read (injectable in tests).
@@ -2199,6 +2203,7 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 	s.emitEvent(ctx, "portfolio.watchlist.created", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId, "name": wl.Name,
 	})
+	s.decorateWatchlists(wl)
 	return &portfoliov1.CreateWatchlistResponse{Watchlist: wl, RefusedSymbols: refused}, nil
 }
 
@@ -2213,6 +2218,7 @@ func (s *PortfolioService) EnsureSignalWatchlist(ctx context.Context, _ *portfol
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.decorateWatchlists(wl)
 	return &portfoliov1.EnsureSignalWatchlistResponse{Watchlist: wl}, nil
 }
 
@@ -2227,7 +2233,14 @@ func (s *PortfolioService) ListAllWatchlistSymbols(ctx context.Context, _ *portf
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return &portfoliov1.ListAllWatchlistSymbolsResponse{Symbols: syms}, nil
+	// The repo union stays unfiltered: the delisting tick sends it to marketdata.
+	servable := make([]string, 0, len(syms))
+	for _, sym := range syms {
+		if s.delisted.lookup(sym) == nil {
+			servable = append(servable, sym)
+		}
+	}
+	return &portfoliov1.ListAllWatchlistSymbolsResponse{Symbols: servable}, nil
 }
 
 // GetWatchlist returns a single watchlist owned by the caller.
@@ -2240,6 +2253,7 @@ func (s *PortfolioService) GetWatchlist(ctx context.Context, req *portfoliov1.Ge
 	if err != nil {
 		return nil, err
 	}
+	s.decorateWatchlists(wl)
 	return &portfoliov1.GetWatchlistResponse{Watchlist: wl}, nil
 }
 
@@ -2263,6 +2277,7 @@ func (s *PortfolioService) ListWatchlists(ctx context.Context, req *portfoliov1.
 	if pageToken == "" && !slices.ContainsFunc(wls, (*portfoliov1.Watchlist).GetSystemManaged) {
 		wls, next = s.ensureSignalListOnFirstPage(ctx, userID, pageSize, wls, next)
 	}
+	s.decorateWatchlists(wls...)
 	return &portfoliov1.ListWatchlistsResponse{
 		Watchlists: wls,
 		Page:       &commonv1.PageResponse{NextPageToken: next},
@@ -2346,6 +2361,7 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 		s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 			"user_id": userID, "watchlist_id": wl.WatchlistId,
 		})
+		s.decorateWatchlists(wl)
 		return &portfoliov1.UpdateWatchlistResponse{Watchlist: wl}, nil
 	}
 
@@ -2371,6 +2387,7 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId,
 	})
+	s.decorateWatchlists(wl)
 	return &portfoliov1.UpdateWatchlistResponse{Watchlist: wl, RefusedSymbols: refused}, nil
 }
 
@@ -2399,6 +2416,7 @@ func (s *PortfolioService) UpdateWatchlistBinding(ctx context.Context, req *port
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+req.GetWatchlistId(), map[string]interface{}{
 		"user_id": userID, "watchlist_id": req.GetWatchlistId(), "symbol": symbol,
 	})
+	s.decorateBindings(binding)
 	return &portfoliov1.UpdateWatchlistBindingResponse{
 		Binding:   binding,
 		UpdatedAt: timestamppb.New(updatedAt),
@@ -2430,6 +2448,7 @@ func (s *PortfolioService) UpdateWatchlistBindings(ctx context.Context, req *por
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+req.GetWatchlistId(), map[string]interface{}{
 		"user_id": userID, "watchlist_id": req.GetWatchlistId(),
 	})
+	s.decorateBindings(bindings...)
 	return &portfoliov1.UpdateWatchlistBindingsResponse{
 		Bindings:  bindings,
 		UpdatedAt: timestamppb.New(updatedAt),
@@ -2480,6 +2499,7 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	}
 	add, refused := s.refuseUnservable(ctx, add)
 	if len(refused) > 0 && len(add) == 0 {
+		s.decorateWatchlists(existing)
 		return &portfoliov1.AddWatchlistSymbolsResponse{Watchlist: existing, RefusedSymbols: refused}, nil
 	}
 	intent, err := expiryIntentFor(req, existing, add)
@@ -2499,6 +2519,7 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId,
 	})
+	s.decorateWatchlists(wl)
 	return &portfoliov1.AddWatchlistSymbolsResponse{Watchlist: wl, RefusedSymbols: refused}, nil
 }
 
@@ -2518,5 +2539,6 @@ func (s *PortfolioService) RemoveWatchlistSymbols(ctx context.Context, req *port
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId,
 	})
+	s.decorateWatchlists(wl)
 	return &portfoliov1.RemoveWatchlistSymbolsResponse{Watchlist: wl}, nil
 }

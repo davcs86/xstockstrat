@@ -2693,3 +2693,278 @@ class TestFundamentalsBackfill:
         final = uj.await_args_list[-1].kwargs
         assert final["status"] == ingest_pb2.BACKFILL_STATUS_PARTIAL
         assert final["failed_symbols"] == ["TSLA"]
+
+
+# ---------------------------------------------------------------------------
+# Feature 352 — per-symbol backfill results: stored keyed by chunk, merged at read
+# ---------------------------------------------------------------------------
+
+_EMPTY = common_pb2.BACKFILL_SYMBOL_OUTCOME_EMPTY
+_SKIPPED = common_pb2.BACKFILL_SYMBOL_OUTCOME_SKIPPED
+_SYM_FAILED = common_pb2.BACKFILL_SYMBOL_OUTCOME_FAILED
+_NO_CIK = 'edgar: no CIK for ticker "PSKY"'
+
+
+def _sr(symbol, outcome, reason=""):
+    return common_pb2.BackfillSymbolResult(symbol=symbol, outcome=outcome, reason=reason)
+
+
+def _bars_resp(bars_written, failed_symbols, results):
+    resp = _mk_backfill_resp(bars_written, failed_symbols)
+    resp.symbol_results = results
+    return resp
+
+
+def _fund_resp(periods_written, failed_symbols, results):
+    resp = _mk_fund_resp(periods_written, failed_symbols)
+    resp.symbol_results = results
+    return resp
+
+
+def _stored_results(update_job):
+    """The last per-symbol results written, parsed; fails when none was written."""
+    writes = [c.kwargs for c in update_job.await_args_list if "symbol_results" in c.kwargs]
+    assert writes, "no update_job call carried symbol_results"
+    return json.loads(writes[-1]["symbol_results"])
+
+
+def _assert_results_invariant(stored, failed_symbols):
+    """design §6: failed_symbols ⊆ FAILED results; no SKIPPED/EMPTY symbol is a failed symbol."""
+    merged = {}
+    for chunk in stored.values():
+        for sym, entry in chunk.items():
+            merged[sym] = max(merged.get(sym, 0), entry["outcome"])
+    for sym in failed_symbols:
+        assert merged.get(sym) == _SYM_FAILED, f"{sym} failed without a FAILED result"
+    for sym, outcome in merged.items():
+        if outcome in (_SKIPPED, _EMPTY):
+            assert sym not in failed_symbols, f"{sym} is {outcome} and in failed_symbols"
+
+
+def _results_servicer(**kw):
+    svc = make_servicer(db=MagicMock(), **kw)
+    svc._marketdata = MagicMock()
+    svc._notify = MagicMock()
+    svc._notify.EmitAlert = AsyncMock(return_value=MagicMock())
+    return svc
+
+
+async def _run_bars_job(svc, symbols):
+    with patch_chunk_repo([_chunk(symbols)]) as m, patch("asyncio.sleep", AsyncMock()):
+        await svc._run_backfill("job-352", _make_backfill_req(symbols))
+    return m["update_job"]
+
+
+async def _run_fund_job(svc, symbols):
+    with patch(f"{_REPO}.update_job", AsyncMock()) as update_job:
+        await svc._run_backfill("job-352", _make_fund_req(symbols))
+    return update_job
+
+
+def _read_results(row):
+    return [(r.symbol, r.outcome, r.reason) for r in job_row_to_proto(row).symbol_results]
+
+
+class TestBackfillSymbolResults:
+    @pytest.mark.asyncio
+    async def test_AC_11_fundamentals_skipped_symbol_completes_the_job(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillFundamentals = AsyncMock(
+            return_value=_fund_resp(5, [], [_sr("PSKY", _SKIPPED, _NO_CIK)])
+        )
+        uj = await _run_fund_job(svc, ["AAPL", "PSKY"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        assert final["failed_symbols"] == []
+        stored = _stored_results(uj)
+        assert stored == {"fundamentals": {"PSKY": {"outcome": _SKIPPED, "reason": _NO_CIK}}}
+        _assert_results_invariant(stored, final["failed_symbols"])
+
+    @pytest.mark.asyncio
+    async def test_AC_23_bars_skipped_symbol_completes_the_job(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillBars = AsyncMock(
+            return_value=_bars_resp(100, [], [_sr("PSKY", _SKIPPED, "flagged delisted")])
+        )
+        uj = await _run_bars_job(svc, ["AAPL", "PSKY"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        assert final["failed_symbols"] == []
+        stored = _stored_results(uj)
+        assert stored == {"chunk-1": {"PSKY": {"outcome": _SKIPPED, "reason": "flagged delisted"}}}
+        _assert_results_invariant(stored, final["failed_symbols"])
+        svc._notify.EmitAlert.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_AC_13_failed_symbol_keeps_the_job_partial_with_its_reason(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillFundamentals = AsyncMock(
+            return_value=_fund_resp(5, ["AXIA"], [_sr("AXIA", _SYM_FAILED, "edgar: 503")])
+        )
+        uj = await _run_fund_job(svc, ["AAPL", "AXIA"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        assert final["failed_symbols"] == ["AXIA"]
+        stored = _stored_results(uj)
+        assert stored["fundamentals"]["AXIA"] == {"outcome": _SYM_FAILED, "reason": "edgar: 503"}
+        _assert_results_invariant(stored, final["failed_symbols"])
+
+    def test_AC_14_job_read_lists_each_symbol_with_outcome_and_reason(self):
+        row = _job_row(
+            "job-352",
+            ingest_pb2.BACKFILL_STATUS_PARTIAL,
+            symbols=["AAPL", "AXIA", "PSKY"],
+            failed_symbols=["AXIA"],
+            symbol_results=json.dumps(
+                {
+                    "fundamentals": {
+                        "PSKY": {"outcome": _SKIPPED, "reason": _NO_CIK},
+                        "AXIA": {"outcome": _SYM_FAILED, "reason": "edgar: 503"},
+                    }
+                }
+            ),
+        )
+        assert _read_results(row) == [
+            ("AXIA", _SYM_FAILED, "edgar: 503"),
+            ("PSKY", _SKIPPED, _NO_CIK),
+        ]
+        assert 'no CIK for ticker "PSKY"' in _NO_CIK
+
+    def test_symbol_results_read_is_empty_for_a_row_storing_none(self):
+        assert _read_results(_job_row("job-352", ingest_pb2.BACKFILL_STATUS_COMPLETED)) == []
+
+    @pytest.mark.asyncio
+    async def test_AC_24_empty_symbol_completes_and_reads_with_an_empty_reason(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillBars = AsyncMock(
+            return_value=_bars_resp(0, [], [_sr("AAPL", _EMPTY)])
+        )
+        uj = await _run_bars_job(svc, ["AAPL"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        row = _job_row("job-352", final["status"], symbol_results=json.dumps(_stored_results(uj)))
+        assert _read_results(row) == [("AAPL", _EMPTY, "")]
+
+    @pytest.mark.asyncio
+    async def test_AC_26_skipped_with_a_429_reason_completes_the_job(self):
+        svc = _results_servicer()
+        reason = "edgar: 429 too many requests"
+        svc._marketdata.BackfillFundamentals = AsyncMock(
+            return_value=_fund_resp(0, [], [_sr("PSKY", _SKIPPED, reason)])
+        )
+        uj = await _run_fund_job(svc, ["PSKY"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        assert _stored_results(uj)["fundamentals"]["PSKY"]["reason"] == reason
+
+    @pytest.mark.asyncio
+    async def test_symbol_results_retry_drops_a_written_symbol_and_keeps_a_skipped_one(self):
+        svc = _results_servicer(retry=True, max_retry=2)
+        svc._marketdata.BackfillBars = AsyncMock(
+            side_effect=[
+                _bars_resp(
+                    10,
+                    ["TSLA"],
+                    [_sr("TSLA", _SYM_FAILED, "timeout"), _sr("PSKY", _SKIPPED, "flagged")],
+                ),
+                _bars_resp(10, [], []),
+            ]
+        )
+        uj = await _run_bars_job(svc, ["AAPL", "TSLA", "PSKY"])
+        assert svc._marketdata.BackfillBars.await_count == 2
+        assert list(svc._marketdata.BackfillBars.await_args.args[0].symbols) == ["TSLA"]
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        stored = _stored_results(uj)
+        assert stored == {"chunk-1": {"PSKY": {"outcome": _SKIPPED, "reason": "flagged"}}}
+        _assert_results_invariant(stored, final["failed_symbols"])
+
+    @pytest.mark.asyncio
+    async def test_symbol_results_whole_chunk_failure_marks_every_symbol_failed(self):
+        svc = _results_servicer(retry=True, max_retry=1)
+        svc._marketdata.BackfillBars = AsyncMock(
+            side_effect=[
+                _bars_resp(
+                    0,
+                    ["TSLA"],
+                    [_sr("TSLA", _SYM_FAILED, "timeout"), _sr("PSKY", _SKIPPED, "flagged")],
+                ),
+                Exception("network error"),
+            ]
+        )
+        uj = await _run_bars_job(svc, ["TSLA", "PSKY"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_FAILED
+        assert final["failed_symbols"] == ["PSKY", "TSLA"]
+        stored = _stored_results(uj)
+        failed = {"outcome": _SYM_FAILED, "reason": "network error"}
+        assert stored == {"chunk-1": {"TSLA": failed, "PSKY": failed}}
+        _assert_results_invariant(stored, final["failed_symbols"])
+
+    @pytest.mark.asyncio
+    async def test_symbol_results_resume_keeps_completed_chunks_and_replaces_its_own(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_bars_resp(7, [], []))
+        before = {
+            "chunk-0": {"OLDF": {"outcome": _SYM_FAILED, "reason": "timeout"}},
+            "chunk-1": {"AAPL": {"outcome": _SYM_FAILED, "reason": "network error"}},
+        }
+        row = _job_row(
+            "resume-1",
+            ingest_pb2.BACKFILL_STATUS_FAILED,
+            failed_symbols=["AAPL", "OLDF"],
+            symbol_results=json.dumps(before),
+        )
+        with (
+            patch(f"{_REPO}.get_job", AsyncMock(return_value=row)),
+            patch(f"{_CHUNKS}.get_incomplete_chunks", AsyncMock(return_value=[_chunk(["AAPL"])])),
+            patch(f"{_CHUNKS}.mark_chunk_running", AsyncMock()),
+            patch(f"{_CHUNKS}.mark_chunk_completed", AsyncMock()),
+            patch(f"{_REPO}.update_job", AsyncMock()) as uj,
+        ):
+            await svc._resume_job("resume-1")
+        stored = _stored_results(uj)
+        assert stored == {"chunk-0": before["chunk-0"], "chunk-1": {}}
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        # Documented residual: failed_symbols is not seeded on resume, the stored result stays.
+        assert final["failed_symbols"] == []
+        assert stored["chunk-0"]["OLDF"]["outcome"] == _SYM_FAILED
+
+    def test_symbol_results_merge_at_read_prefers_failed_then_skipped_then_empty(self):
+        def entry(outcome, reason=""):
+            return {"outcome": outcome, "reason": reason}
+
+        row = _job_row(
+            "job-352",
+            ingest_pb2.BACKFILL_STATUS_PARTIAL,
+            symbol_results=json.dumps(
+                {
+                    "c1": {"AAA": entry(_EMPTY), "BBB": entry(_SKIPPED, "flagged")},
+                    "c2": {"AAA": entry(_SKIPPED, "flagged"), "BBB": entry(_SYM_FAILED, "boom")},
+                    "c3": {"AAA": entry(_EMPTY), "BBB": entry(_EMPTY)},
+                }
+            ),
+        )
+        assert _read_results(row) == [("AAA", _SKIPPED, "flagged"), ("BBB", _SYM_FAILED, "boom")]
+
+    @pytest.mark.asyncio
+    async def test_symbol_results_not_written_on_a_job_level_failure(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillFundamentals = AsyncMock(side_effect=Exception("boom"))
+        uj = await _run_fund_job(svc, ["LYFT"])
+        statuses = [c.kwargs.get("status") for c in uj.await_args_list]
+        assert ingest_pb2.BACKFILL_STATUS_FAILED in statuses
+        assert all("symbol_results" not in c.kwargs for c in uj.await_args_list)
+
+    @pytest.mark.asyncio
+    async def test_symbol_results_failed_symbol_without_a_result_is_stored_failed(self):
+        """Assumption A-4: a marketdata deployed behind ingest reports no per-symbol results."""
+        svc = _results_servicer(retry=False)
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(50, ["TSLA"]))
+        uj = await _run_bars_job(svc, ["AAPL", "TSLA"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        stored = _stored_results(uj)
+        assert stored == {"chunk-1": {"TSLA": {"outcome": _SYM_FAILED, "reason": ""}}}
+        _assert_results_invariant(stored, final["failed_symbols"])

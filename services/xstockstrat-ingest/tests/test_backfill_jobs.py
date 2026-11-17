@@ -42,6 +42,14 @@ async def test_update_job_builds_set_clause():
 
 
 @pytest.mark.asyncio
+async def test_update_job_accepts_symbol_results_as_the_json_text_given():
+    pool = AsyncMock()
+    await backfill_jobs.update_job(pool, "j1", symbol_results='{"c1": {}}')
+    assert "symbol_results = $1" in pool.execute.await_args.args[0]
+    assert pool.execute.await_args.args[1:] == ('{"c1": {}}', "j1")
+
+
+@pytest.mark.asyncio
 async def test_update_job_noop_when_empty():
     pool = AsyncMock()
     await backfill_jobs.update_job(pool, "j1")

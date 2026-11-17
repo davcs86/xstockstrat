@@ -56,6 +56,10 @@ that carries one is refused `self-serve backfill denied: callback_url`.
   — check `data.status` before backtesting.
 - **No error text in the body.** For a `FAILED` or `PARTIAL` job, call `get_backfill_status` with
   the `job_id` to read the error.
+- **Per-symbol outcomes.** `get_backfill_status` lists `symbol_results` (`symbol`, `outcome`,
+  `reason`) for symbols that wrote nothing. A `skipped` symbol is delisted and has no new data — do
+  not re-trigger it and do not treat the job as failed. `failed_symbols` still lists only real
+  failures. The webhook body is unchanged.
 
 ## When to skip
 
