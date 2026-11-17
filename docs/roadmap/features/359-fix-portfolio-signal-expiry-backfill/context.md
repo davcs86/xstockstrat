@@ -559,3 +559,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: DEV-2 — dbtest Verification lines and local RED/GREEN deferred to CI (operator decision B).
 - [ ] Open: the CI `Portfolio DB test (TimescaleDB)` job must show both new tests green with `branch="blocked"`. A RED run on the pre-Step-1 tree (`branch="addDone"`, signal_id NULL or the old seed id) is still unproven. Any divergence escalates to the register and is never relaxed in place.
 - [ ] Still open from impl-spec review: Step 2 `pg_stat_activity` assumptions (speculative-insert wait as `Lock`, `insertBindingsTx` not waiting), Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew, the 352 overlap.
+
+## Session 2026-11-17 — sdd-execute sequential, Steps 3+4 (atomic unit)
+
+- Tooling setup (steps 3+4): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (pinned `GOTOOLCHAIN=go1.27.0` install into the session scratch bin; host 2.5.0 left in place) · test DB ✗ (operator decision B → CI dbtest).
+
+### Step 3 — service: FR-3 72h grace on backfill untracked marks [done]
+- Part of atomic unit Steps 3+4. Added `backfillMarkGrace = interval '72 hours'` (2-line constraint comment) above `backfillMarkSQL`; the mark select list is now `now() + backfillMarkGrace`. `backfillSeedSQL`, `watchlist_repo.go`, config and migrations are untouched.
+- Verification (local, `.sdd-logs/v-2.log`, `exit=1`, the expected no-match of the config-key grep): `backfillMarkGrace` at `:117` (const) and `:121` (one use); no `mark_grace` config key.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill.go`
+- Deviations: DEV-3 — dbtest Verification lines and local RED/GREEN deferred to CI (operator decision B).
+
+### Step 4 — test: rewrite the StrictUntrackedRemoval tail for the 3-day grace (@AC-3; CHANGE of 281 @AC-16) [done]
+- Part of atomic unit Steps 3+4. Retagged the comment AC-16+AC-3; the setup/REPORT/refusal half is byte-identical. The tail samples `t0`/`t1` around APPLY, asserts `signal_id NULL` and `valid_until` within `[t0+72h, t1+72h]`, an empty prune right after APPLY plus `assertSource(srcSignal)`, then backdates the mark by 72h+1ms and asserts `assertPruned` (SignalID nil, `ValidUntil: aged`) and `assertBindingGone`. No other test edited.
+- Verification (local, `.sdd-logs/v-1.log`, `exit=0`): dbtest build under `-race` clean, `TestBackfill_StrictUntrackedRemoval` `--- SKIP` (`PORTFOLIO_DB_TEST_URL` unset), `TestSignalPrune_UntrackedEventPayload` `--- PASS`, coverage `total: 81.8%`, `golangci-lint` v2.14.0 `0 issues.`
+- TDD: AC-3 red → green deferred to CI per operator decision B (DEV-1/DEV-3). No local RED captured.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill_dbtest_test.go`
+- Deviations: DEV-3 (shared with Step 3).
+- [ ] Open: the CI `Portfolio DB test (TimescaleDB)` job must show `TestBackfill_StrictUntrackedRemoval` green, and `:443`, `:349`, `:252-295` plus the Step 2 guards still green with the grace. The pre-Step-3 RED is still unproven.
+- [ ] Still open from impl-spec review: Step 2 `pg_stat_activity` assumptions, Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew (watch the CI run), the 352 overlap.

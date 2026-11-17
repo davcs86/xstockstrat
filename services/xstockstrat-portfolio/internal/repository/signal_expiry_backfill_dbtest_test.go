@@ -213,7 +213,7 @@ func TestBackfill_SeedsFromOwnerRows(t *testing.T) {
 	assertExpiry(t, pool, wlID, "AAPL", *liveUntil, sigID(liveID))
 }
 
-// AC-16: no own rows ⇒ marked (even with a live legacy row); the next tick removes it with nil SignalID.
+// AC-16+AC-3: no own rows ⇒ marked with a 72h grace (even with a live legacy row); pruned only after it.
 func TestBackfill_StrictUntrackedRemoval(t *testing.T) {
 	pool := testPool(t)
 	repo := NewWatchlistRepo(pool)
@@ -235,16 +235,32 @@ func TestBackfill_StrictUntrackedRemoval(t *testing.T) {
 	}
 	assertNoExpiry(t, pool, wlID, "PLTR")
 
+	t0 := dbNow(t, pool)
 	res, err := backfillApply(pool, legacy, tot.untracked, tot.seedExpired)
 	if err != nil || res.Marked < 1 {
 		t.Fatalf("APPLY = %+v, %v; want at least one marked", res, err)
 	}
+	t1 := dbNow(t, pool)
 	rec := dueRow(t, pool, wlID, "PLTR")
 	if rec.SignalID != nil {
 		t.Fatalf("marked row signal_id = %v, want NULL", *rec.SignalID)
 	}
+	if rec.ValidUntil.Before(t0.Add(72*time.Hour)) || rec.ValidUntil.After(t1.Add(72*time.Hour)) {
+		t.Fatalf("marked row valid_until = %v, want within [%v, %v]", rec.ValidUntil, t0.Add(72*time.Hour), t1.Add(72*time.Hour))
+	}
+	if got := mustPrune(t, repo, wlID); len(got) != 0 {
+		t.Fatalf("prune within the grace removed %+v, want nothing", got)
+	}
+	assertSource(t, pool, wlID, "PLTR", srcSignal)
+
+	var aged time.Time
+	if err := pool.QueryRow(context.Background(),
+		`UPDATE portfolio.watchlist_signal_expiry SET valid_until = valid_until - interval '72 hours' - interval '1 millisecond'
+		 WHERE watchlist_id = $1 AND symbol = 'PLTR' RETURNING valid_until`, wlID).Scan(&aged); err != nil {
+		t.Fatalf("backdate mark: %v", err)
+	}
 	assertPruned(t, mustPrune(t, repo, wlID), PrunedEntry{
-		UserID: userID, WatchlistID: wlID, Symbol: "PLTR", StrategyID: "strat-3", ValidUntil: rec.ValidUntil,
+		UserID: userID, WatchlistID: wlID, Symbol: "PLTR", StrategyID: "strat-3", ValidUntil: aged,
 	})
 	assertBindingGone(t, pool, wlID, "PLTR")
 }

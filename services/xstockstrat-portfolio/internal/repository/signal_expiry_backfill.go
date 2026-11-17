@@ -112,9 +112,13 @@ WHERE s.watchlist_id = $1 AND s.symbol = $2 AND s.source = 2
   AND NOT EXISTS (SELECT 1 FROM ` + ownWatchlistSignals + ` AND n.valid_until IS NULL)
 ON CONFLICT DO NOTHING`
 
+// Operator-fixed (feature 359, same in every environment, not a config key): a mark is due 72h after
+// its APPLY tx, so a live signal added in that window rescues it. Seeds keep the owner's valid_until.
+const backfillMarkGrace = `interval '72 hours'`
+
 const backfillMarkSQL = `
 INSERT INTO portfolio.watchlist_signal_expiry (watchlist_id, symbol, valid_until, signal_id)
-SELECT s.watchlist_id, s.symbol, now(), NULL
+SELECT s.watchlist_id, s.symbol, now() + ` + backfillMarkGrace + `, NULL
 FROM portfolio.watchlist_symbols s
 JOIN portfolio.watchlists w ON w.watchlist_id = s.watchlist_id AND w.system_managed
 WHERE s.watchlist_id = $1 AND s.symbol = $2 AND s.source = 2

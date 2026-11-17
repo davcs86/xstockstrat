@@ -183,7 +183,7 @@ New logic is in an excluded package (`repository/`), so no coverage threshold ap
 
 ### Step 3 — service: FR-3 72h grace on backfill untracked marks
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill.go` — modify
@@ -224,7 +224,7 @@ grep -rn "backfill_mark_grace\|mark_grace" ../xstockstrat-config/migrations inte
 
 ### Step 4 — test: rewrite the StrictUntrackedRemoval tail for the 3-day grace (@AC-3; CHANGE of 281 @AC-16)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill_dbtest_test.go` — modify (`:216-250` only)
@@ -400,3 +400,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: Step 2's Verification runs the two `PORTFOLIO_DB_TEST_URL=<migrated test DB URL> … -tags dbtest` lines, and the TDD gate captures RED (`branch="addDone"` plus the strict-equality failure) on the pre-Step-1 tree and GREEN (`branch="blocked"`) after Step 1, locally.
 - **Actual**: `PORTFOLIO_DB_TEST_URL` is unset and the execute loop never starts a database, so both new tests SKIP locally (`.sdd-logs/v-1.log`). Ran the rest of the block: `go vet -tags dbtest` clean, the coverage gate (`total: 81.8%`), `golangci-lint` v2.14.0 (pinned, built with go1.27.0; `.golangci.yml` sets `build-tags: dbtest`) `0 issues.`, and the `:443` diff guard `0`. Step 1 was already committed before this step, so no pre-fix RED tree exists on the branch; RED needs the CI job run against `2f99b190^` or a revert of `applyBackfillRow`.
 - **Disposition**: covered by operator decision B 2026-11-17 (DEV-1: P-06 waiver of LOCAL red-before-green for Steps 1, 2, 3+4). The RED/GREEN branch proof and the `wait_event_type='Lock'` / `insertBindingsTx` assumptions are deferred to the CI `Portfolio DB test (TimescaleDB)` job on the integration PR. `:443`, `:349` and `:252-295` are untouched (append-only diff).
+
+### DEV-3 — Steps 3+4: dbtest Verification lines and local RED/GREEN deferred to CI (2026-11-17)
+
+- **Expected**: the unit's Verification runs the two `PORTFOLIO_DB_TEST_URL=<migrated test DB URL> … -tags dbtest` lines, and the TDD gate captures RED (`rec.ValidUntil ≈ now()` fails the `[t0+72h, t1+72h]` bound) on the pre-Step-3 tree and GREEN after Step 3, locally.
+- **Actual**: no migrated test DB exists here and the execute loop never starts a database. Ran the block with the `PORTFOLIO_DB_TEST_URL=<…>` prefix dropped and `-v` added to the two targeted lines so the SKIP/PASS is visible: the dbtest files compile under `-race`, `TestBackfill_StrictUntrackedRemoval` `--- SKIP`, `TestSignalPrune_UntrackedEventPayload` `--- PASS`, coverage `total: 81.8%`, `golangci-lint` v2.14.0 (pinned, built with go1.27.0, first on `PATH`) `0 issues.` Step 3 greps: `backfillMarkGrace` at `:117` (const) and `:121` (one use); no `mark_grace` match in config migrations or `internal/config`.
+- **Disposition**: covered by operator decision B 2026-11-17 (DEV-1: P-06 waiver of LOCAL red-before-green for Steps 1, 2, 3+4). The dbtest run and the @AC-3 RED/GREEN proof are deferred to the CI `Portfolio DB test (TimescaleDB)` job on the integration PR; RED needs that job on this unit's parent commit with only the test rewrite applied. No test was weakened, skipped or loosened; `:443`, `:349` and `:252-295` are untouched.
