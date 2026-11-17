@@ -2053,6 +2053,7 @@ function createBaseSignalSource() {
         reliabilityWeight: undefined,
         userId: "",
         origin: undefined,
+        extractionInstructions: "",
     };
 }
 exports.SignalSource = {
@@ -2098,6 +2099,9 @@ exports.SignalSource = {
         }
         if (message.origin !== undefined) {
             common_1.TemplateOrigin.encode(message.origin, writer.uint32(114).fork()).join();
+        }
+        if (message.extractionInstructions !== "") {
+            writer.uint32(122).string(message.extractionInstructions);
         }
         return writer;
     },
@@ -2206,6 +2210,13 @@ exports.SignalSource = {
                     message.origin = common_1.TemplateOrigin.decode(reader, reader.uint32());
                     continue;
                 }
+                case 15: {
+                    if (tag !== 122) {
+                        break;
+                    }
+                    message.extractionInstructions = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2272,6 +2283,11 @@ exports.SignalSource = {
                     ? globalThis.String(object.user_id)
                     : "",
             origin: isSet(object.origin) ? common_1.TemplateOrigin.fromJSON(object.origin) : undefined,
+            extractionInstructions: isSet(object.extractionInstructions)
+                ? globalThis.String(object.extractionInstructions)
+                : isSet(object.extraction_instructions)
+                    ? globalThis.String(object.extraction_instructions)
+                    : "",
         };
     },
     toJSON(message) {
@@ -2318,6 +2334,9 @@ exports.SignalSource = {
         if (message.origin !== undefined) {
             obj.origin = common_1.TemplateOrigin.toJSON(message.origin);
         }
+        if (message.extractionInstructions !== "") {
+            obj.extractionInstructions = message.extractionInstructions;
+        }
         return obj;
     },
     create(base) {
@@ -2341,6 +2360,7 @@ exports.SignalSource = {
         message.origin = (object.origin !== undefined && object.origin !== null)
             ? common_1.TemplateOrigin.fromPartial(object.origin)
             : undefined;
+        message.extractionInstructions = object.extractionInstructions ?? "";
         return message;
     },
 };

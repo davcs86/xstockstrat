@@ -34,15 +34,18 @@ from app.repositories.signal_sources import (
     derive_health_status,
     get_source,
     insert_source,
+    is_mediated_source_type,
     list_sources,
     mark_source_error,
     mark_source_fed,
+    normalize_extraction_instructions,
     owner_scope_predicate,
     reactivate_source,
     slug_holders,
     touch_source_last_seen,
     update_source,
     validate_config_json,
+    validate_extraction_instructions,
 )
 
 log = logging.getLogger(__name__)
@@ -63,6 +66,7 @@ _SS_MASKABLE_PATHS = frozenset(
         "config_json",
         "credentials_ref",
         "reliability_weight",
+        "extraction_instructions",
     }
 )
 # slug is the PK; active is column-authoritative (lifecycle via reactivate/deactivate only).
@@ -70,6 +74,8 @@ _SS_COLUMN_AUTH_PATHS = frozenset({"slug", "active"})
 _SS_CREDENTIAL_REQUIRED_TYPES = frozenset(
     {"authenticated_website", "mediated_authenticated_website", "mcp_client"}
 )
+# Stored for every mediated source whatever the caller sends; nothing imports it.
+_MEDIATED_EXTRACTOR_MODULE = "app.extractors.noop"
 
 
 class _SignalValidationError(Exception):
@@ -173,6 +179,7 @@ _TEMPLATE_PAYLOAD_FIELDS = (
     "extractor_module",
     "config_json",
     "reliability_weight",
+    "extraction_instructions",
 )
 
 
@@ -216,6 +223,7 @@ def _source_to_proto(row: dict, latest_versions: dict[str, int]) -> ingest_pb2.S
         has_credentials=(row["credentials_ref"] is not None),
         config_json=cfg,
         reliability_weight=row.get("reliability_weight", 1.0),
+        extraction_instructions=row.get("extraction_instructions", ""),
     )
     template_id = row.get("origin_template_id")
     if template_id:
@@ -1580,7 +1588,12 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
     @staticmethod
     def _validate_source_write(
-        source_type: str, config_json: dict | None, credentials_ref: str | None
+        source_type: str,
+        config_json: dict | None,
+        credentials_ref: str | None,
+        instructions: str,
+        *,
+        require_instructions: bool,
     ) -> str | None:
         """Feature 088: validate a register/update write on the *effective* (post-merge) fields.
         Covers config_json shape and the credential-required rule for both credential types
@@ -1590,7 +1603,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             return err
         if source_type in _SS_CREDENTIAL_REQUIRED_TYPES and not credentials_ref:
             return f"{source_type} source requires credentials_ref"
-        return None
+        return validate_extraction_instructions(
+            source_type, instructions, require=require_instructions
+        )
 
     @staticmethod
     def _register_conflict(owner: str, slug: str, holders: list[str]):
@@ -1679,9 +1694,14 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 src.display_name if _use_req("display_name") else stored["display_name"]
             )
             merged_type = src.source_type if _use_req("source_type") else stored["source_type"]
-            merged_extractor = (
-                src.extractor_module if _use_req("extractor_module") else stored["extractor_module"]
-            )
+            if is_mediated_source_type(merged_type):
+                merged_extractor = _MEDIATED_EXTRACTOR_MODULE
+            else:
+                merged_extractor = (
+                    src.extractor_module
+                    if _use_req("extractor_module")
+                    else stored["extractor_module"]
+                )
             merged_cfg = (
                 (MessageToDict(src.config_json) if src.config_json else None)
                 if _use_req("config_json")
@@ -1694,7 +1714,22 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 if _use_req("credentials_ref")
                 else stored["credentials_ref"]
             )
-            err = self._validate_source_write(merged_type, merged_cfg, merged_cred)
+            # No mask replaces every field, so it applies the request's instructions too.
+            if _use_req("extraction_instructions"):
+                merged_instructions = normalize_extraction_instructions(src.extraction_instructions)
+                require_instructions = is_mediated_source_type(merged_type)
+            else:
+                merged_instructions = stored.get("extraction_instructions", "")
+                require_instructions = is_mediated_source_type(
+                    merged_type
+                ) and not is_mediated_source_type(stored["source_type"])
+            err = self._validate_source_write(
+                merged_type,
+                merged_cfg,
+                merged_cred,
+                merged_instructions,
+                require_instructions=require_instructions,
+            )
             if err:
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
                 return
@@ -1719,6 +1754,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 credentials_ref=merged_cred,
                 config_json=merged_cfg,
                 reliability_weight=merged_weight,
+                extraction_instructions=merged_instructions,
             )
             if row is None:
                 await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
@@ -1733,6 +1769,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         # values, which neither json.dumps nor asyncpg can encode.
         cfg_dict = MessageToDict(src.config_json) if src.config_json else None
         cred = credentials_ref or None
+        instructions = normalize_extraction_instructions(src.extraction_instructions)
         async with self._db.acquire() as conn, conn.transaction():
             # Serializes every REGISTER of one slug so the reserved-slug holder check below
             # cannot race a concurrent register by another owner.
@@ -1743,7 +1780,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 return None, failure
             # An omitted weight resolves to the 1.0 default. Never pass None — the NOT NULL
             # column would raise.
-            err = self._validate_source_write(src.source_type, cfg_dict, cred) or _weight_error(src)
+            err = self._validate_source_write(
+                src.source_type, cfg_dict, cred, instructions, require_instructions=True
+            ) or _weight_error(src)
             if err:
                 return None, (grpc.StatusCode.INVALID_ARGUMENT, err)
             row = await insert_source(
@@ -1751,7 +1790,11 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 slug=src.slug,
                 display_name=src.display_name,
                 source_type=src.source_type,
-                extractor_module=src.extractor_module,
+                extractor_module=(
+                    _MEDIATED_EXTRACTOR_MODULE
+                    if is_mediated_source_type(src.source_type)
+                    else src.extractor_module
+                ),
                 credentials_ref=cred,
                 config_json=cfg_dict,
                 active=True,
@@ -1759,6 +1802,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     src.reliability_weight if src.HasField("reliability_weight") else 1.0
                 ),
                 user_id=owner,
+                extraction_instructions=instructions,
             )
             if origin is not None:
                 row = await source_templates.stamp_origin(conn, owner, src.slug, *origin)
@@ -1802,7 +1846,16 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         elif op in (common_pb2.TEMPLATE_OPERATION_CREATE, common_pb2.TEMPLATE_OPERATION_UPDATE):
             src = request.template.payload
             cfg_dict = MessageToDict(src.config_json) if src.config_json else None
-            err = validate_config_json(src.source_type, cfg_dict) or _weight_error(src)
+            src.extraction_instructions = normalize_extraction_instructions(
+                src.extraction_instructions
+            )
+            err = (
+                validate_config_json(src.source_type, cfg_dict)
+                or validate_extraction_instructions(
+                    src.source_type, src.extraction_instructions, require=True
+                )
+                or _weight_error(src)
+            )
             if err:
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
                 return

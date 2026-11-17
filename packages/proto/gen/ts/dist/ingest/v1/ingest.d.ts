@@ -246,6 +246,11 @@ export interface SignalSource {
     userId: string;
     /** set when instantiated from a template */
     origin?: TemplateOrigin | undefined;
+    /**
+     * Prose an LLM agent follows to extract signals from a mediated_* source.
+     * Empty on every other source type.
+     */
+    extractionInstructions: string;
 }
 export interface ListSignalSourcesRequest {
     includeInactive: boolean;

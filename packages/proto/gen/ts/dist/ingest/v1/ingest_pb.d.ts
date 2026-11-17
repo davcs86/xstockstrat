@@ -520,6 +520,13 @@ export type SignalSource = Message<"xstockstrat.ingest.v1.SignalSource"> & {
      * @generated from field: xstockstrat.common.v1.TemplateOrigin origin = 14;
      */
     origin?: TemplateOrigin | undefined;
+    /**
+     * Prose an LLM agent follows to extract signals from a mediated_* source.
+     * Empty on every other source type.
+     *
+     * @generated from field: string extraction_instructions = 15;
+     */
+    extractionInstructions: string;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.SignalSource.

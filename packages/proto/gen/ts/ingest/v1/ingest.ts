@@ -620,7 +620,14 @@ export interface SignalSource {
   /** Owner of the source (feature 224). "system" = platform-owned, read-only to every user. */
   userId: string;
   /** set when instantiated from a template */
-  origin?: TemplateOrigin | undefined;
+  origin?:
+    | TemplateOrigin
+    | undefined;
+  /**
+   * Prose an LLM agent follows to extract signals from a mediated_* source.
+   * Empty on every other source type.
+   */
+  extractionInstructions: string;
 }
 
 export interface ListSignalSourcesRequest {
@@ -2472,6 +2479,7 @@ function createBaseSignalSource(): SignalSource {
     reliabilityWeight: undefined,
     userId: "",
     origin: undefined,
+    extractionInstructions: "",
   };
 }
 
@@ -2518,6 +2526,9 @@ export const SignalSource: MessageFns<SignalSource> = {
     }
     if (message.origin !== undefined) {
       TemplateOrigin.encode(message.origin, writer.uint32(114).fork()).join();
+    }
+    if (message.extractionInstructions !== "") {
+      writer.uint32(122).string(message.extractionInstructions);
     }
     return writer;
   },
@@ -2641,6 +2652,14 @@ export const SignalSource: MessageFns<SignalSource> = {
           message.origin = TemplateOrigin.decode(reader, reader.uint32());
           continue;
         }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.extractionInstructions = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2708,6 +2727,11 @@ export const SignalSource: MessageFns<SignalSource> = {
         ? globalThis.String(object.user_id)
         : "",
       origin: isSet(object.origin) ? TemplateOrigin.fromJSON(object.origin) : undefined,
+      extractionInstructions: isSet(object.extractionInstructions)
+        ? globalThis.String(object.extractionInstructions)
+        : isSet(object.extraction_instructions)
+        ? globalThis.String(object.extraction_instructions)
+        : "",
     };
   },
 
@@ -2755,6 +2779,9 @@ export const SignalSource: MessageFns<SignalSource> = {
     if (message.origin !== undefined) {
       obj.origin = TemplateOrigin.toJSON(message.origin);
     }
+    if (message.extractionInstructions !== "") {
+      obj.extractionInstructions = message.extractionInstructions;
+    }
     return obj;
   },
 
@@ -2779,6 +2806,7 @@ export const SignalSource: MessageFns<SignalSource> = {
     message.origin = (object.origin !== undefined && object.origin !== null)
       ? TemplateOrigin.fromPartial(object.origin)
       : undefined;
+    message.extractionInstructions = object.extractionInstructions ?? "";
     return message;
   },
 };
