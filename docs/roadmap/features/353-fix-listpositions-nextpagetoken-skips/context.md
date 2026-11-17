@@ -58,3 +58,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] internal 500-row truncation (portfolio_service.go:787,932,1214,1283; trading.go:2235)
 
 - Review iteration 2: 0 ✗, 3 ⚠ (stale pgxmock "not in cache" text; scan-wrapper trade-off not cross-referenced; parent-level pool construction intent) + citation drift :191-196→:192-197 and unqualified ledger paths — all fixed in implementation-spec.md.
+
+## Session 2026-11-17 — sdd-review impl-spec (advisory) — final
+
+- Result: iteration 3 PASS — 0 failures, 0 warnings (advisory). Loop: it.1 0✗/6⚠ → fixed; it.2 0✗/3⚠ → fixed; it.3 clean (cosmetic 30→29 testPool call-site count fixed).
+- Unresolved ✗ / ⚠ carried into execution: none.
+- Overlap findings: none blocking; soft rebase note — 311 and 323 (spec-ready) touch portfolio_repo.go in disjoint regions.
+- Tree: ccr-fix-listpositions-nextpagetoken-skips@02ce334 (origin/main-dev@ccbe424 merged).

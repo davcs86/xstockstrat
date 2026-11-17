@@ -156,7 +156,7 @@ Every existing test passes, including the three re-pinned `offline_account_pnl_t
    - c. `TestListPositions_MalformedTokenIssuesNoQuery`: for `"AAPL"` and `"BRK.B"`, register no expectation. Assert `errors.Is(err, ErrInvalidPageToken)` and `mock.ExpectationsWereMet() == nil`.
 5. **Real-backend tests**: new file `list_positions_dbtest_test.go` with `//go:build dbtest` and `package repository`.
    - **Helpers in `dbtest_helpers_test.go`:**
-     - Give `testPool` a variadic parameter `opts ...func(*pgxpool.Config)` and apply it after `ParseConfig` (`:31`). The 30 existing `testPool(t)` call sites (`grep -rn 'testPool(t' internal --include=*_test.go`) pass no option, so they compile and behave unchanged; no other file is edited.
+     - Give `testPool` a variadic parameter `opts ...func(*pgxpool.Config)` and apply it after `ParseConfig` (`:31`). The 29 existing `testPool(t)` call sites (`grep -rn 'testPool(t' internal --include=*_test.go`) pass no option, so they compile and behave unchanged; no other file is edited.
      - Add a second cleanup that runs `DELETE FROM portfolio.positions WHERE user_id LIKE $1` with the same `dbtestUserPrefix+"%"`. Reuse the prefix; do not add a second one (D-8).
      - Add `seedPosition(t, pool, userID, symbol, mode, accountID string, qty float64)`. It inserts `(user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id)` with `avg_entry_price=1` and `cost_basis=qty`, and calls `t.Fatalf` on error.
      - Add `traverse(t, repo, userID, mode, pageSize) (seq []float64, pageLens []int)`. It loops `ListPositions` until the token is `""`, fails after 50 pages, and fails if a token equals the previous one.
