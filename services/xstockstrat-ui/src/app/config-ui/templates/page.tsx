@@ -82,6 +82,7 @@ const PAYLOAD_FIELDS: Record<CatalogKind, FieldDef[]> = {
     { key: 'displayName', label: 'Display name' },
     { key: 'sourceType', label: 'Source type', placeholder: 'e.g. simple_website' },
     { key: 'extractorModule', label: 'Extractor module' },
+    { key: 'extractionInstructions', label: 'Extraction instructions', multiline: true },
     { key: 'reliabilityWeight', label: 'Reliability weight (0–1)', placeholder: '1' },
     { key: 'configJson', label: 'Config (JSON object)', multiline: true, placeholder: '{}' },
   ],
@@ -137,6 +138,7 @@ function formFromTemplate(row: CatalogTemplate): FormState {
         displayName: p?.displayName ?? '',
         sourceType: p?.sourceType ?? '',
         extractorModule: p?.extractorModule ?? '',
+        extractionInstructions: p?.extractionInstructions ?? '',
         reliabilityWeight: p?.reliabilityWeight !== undefined ? String(p.reliabilityWeight) : '',
         configJson: JSON.stringify(p?.configJson ?? {}, null, 2),
       };
@@ -224,6 +226,7 @@ function buildInput(
             displayName: form.displayName,
             sourceType: form.sourceType.trim(),
             extractorModule: form.extractorModule,
+            extractionInstructions: form.extractionInstructions,
             configJson: config as JsonObject,
             reliabilityWeight: weight,
           }),

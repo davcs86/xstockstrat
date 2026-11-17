@@ -190,6 +190,9 @@ message SignalSource {
   // Owner of the source (feature 224). "system" = platform-owned, read-only to every user.
   string user_id = 13;
   xstockstrat.common.v1.TemplateOrigin origin = 14;  // set when instantiated from a template
+  // Prose an LLM agent follows to extract signals from a mediated_* source.
+  // Empty on every other source type.
+  string extraction_instructions = 15;
 }
 
 // Health of a registered signal source (feature 083). Closed set → enum (C-04).
