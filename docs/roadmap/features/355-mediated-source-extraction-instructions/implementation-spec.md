@@ -1125,4 +1125,13 @@ for the e2e layer.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### 2026-11-17 — `@AC-27` added after the spec was written
+- **What**: one acceptance scenario, `@AC-27 @FR-4`, was appended to `acceptance.feature` at the
+  integration stage: the agent names `extraction_instructions` in the update mask only when the
+  caller supplies it (the EXTEND of `@AC-2` / `@AC-10 @feature-161` that design.md records).
+- **Why**: the design named the extension but no scenario stated it, so it could not be promoted
+  (C-16 promotes only reviewed scenarios).
+- **Test home**: Step 9's `agent/tests/test_extraction_instructions.py` —
+  `test_update_of_another_field_does_not_name_instructions_in_the_mask` and
+  `test_supplied_instructions_are_masked_even_when_empty`. No code change.
+- **Disposition**: operator approved at the promotion gate (context.md); no step body edited.

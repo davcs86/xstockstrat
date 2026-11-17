@@ -349,3 +349,26 @@
 - Config-key wiring gate (`node scripts/check-config-wiring.mjs --final`): exit 0. It prints two
   pre-existing `REPORTED: … readers-disagree` lines (analysis `fundamentals.provider`, trading
   `platform/trading_state`), neither touched by this feature.
+
+## Session 2026-11-17 — sdd-execute (integration)
+
+**Steps this session**: 1–11
+**Progress**: 11 done / 11 total
+**Stopped at**: all complete — status `code-completed`
+- Merged `origin/main-dev` three times during the run (docs-only changes on trunk; the only
+  conflict each time was two features appending to `docs/roadmap/ledger/insights.md`, resolved by
+  keeping both entries).
+- Merge-order gate: 355 is not blocked by any row (323 waits for 355).
+- **Scenario promotion (C-16), operator-approved:** `@AC-1..5, 16..23, 25, 26` →
+  `services/xstockstrat-ingest/acceptance/mediated-source-extraction-instructions.feature`;
+  `@AC-6..10, 15, 24, 27` → the agent suite of the same name; `@AC-11..14` → the UI suite. Nothing
+  to `platform.feature`. `@AC-27` was added first (operator-approved; Deviation Log).
+- Defect reports resolved by this feature: none (no C-16 CHANGE, no report named in the trail).
+- Integration PR: the existing PR #1567 (`ccr-424ada30-29m2lv` → `main-dev`) — title and body
+  updated; PR activity subscribed for the CI watch.
+- Unaddressed review warnings: the three impl-spec review items stay `[ ] unaddressed` by design —
+  Step 2's wildcard `**Files**` (generated output), Step 1's `buf breaking` ref (the `ref=HEAD`
+  fallback was used), Step 2's verification wording (Step 1 ran `buf lint` + `buf breaking`).
+- **Not proven locally:** the live apply / replay / refused-down of migration 017 and
+  `ingest-017.sql` (CI `migration-rerun`), and the full e2e suite (CI).
+**Next**: watch CI on PR #1567; operator reviews the five instruction texts before merge.

@@ -217,3 +217,14 @@ Feature: mediated-source-extraction-instructions
     When the caller registers source "plain_mail" of type "simple_email" with config_json {"sender_patterns": ["a@example.com"], "subject_patterns": ["*"]}, extractor_module "app.extractors.example_simple_email" and extraction_instructions "   "
     Then the register succeeds
     And ingest ListSignalSources returns "plain_mail" with extraction_instructions ""
+
+  @AC-27 @FR-4
+  Scenario Outline: manage_signal_source names extraction_instructions in the update mask only when supplied
+    Given a mediated source "whale_alerts" exists with display_name "Whale" and extraction_instructions "Each bolded ticker is a buy signal."
+    When an agent calls manage_signal_source with operation "update", slug "whale_alerts" and <supplied>
+    Then the ManageSignalSource request's update_mask paths are exactly "<mask>"
+
+    Examples:
+      | supplied                                                                  | mask                    |
+      | display_name "Whale Alerts" and no extraction_instructions                | display_name            |
+      | extraction_instructions "Only 'New positions' tickers are buy signals."   | extraction_instructions |

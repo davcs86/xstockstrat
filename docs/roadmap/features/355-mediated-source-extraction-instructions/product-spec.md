@@ -182,3 +182,5 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
   `@AC` asserts them; `design.md` holds the texts verbatim.
 - FR-15 and `@AC-24..26` were added at design approval (2026-11-17) to match decisions made in the
   design debate.
+- `@AC-27` (the agent's update-mask rule for the field, under FR-4) was added at integration
+  (2026-11-17) so the rule could be promoted to the agent suite.
