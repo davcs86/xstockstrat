@@ -46,3 +46,11 @@ Feature: fix-portfolio-internal-position (bug fix)
     Then no snapshot is persisted or broadcast for "u-1"
     And no concentration alert is emitted for "u-1"
     And each reader logs the page-read failure
+
+  @AC-6 @FR-5 @regression
+  Scenario: A position-read failure skips concentration but drawdown still alerts
+    Given user "u-1" holds 501 positions in PAPER, the repository read of the second page fails, and account "brk-1" is 20% below its peak equity with risk.max_drawdown_pct at 0.10
+    When checkRiskLimits runs for "u-1" in PAPER
+    Then no concentration alert is emitted for "u-1"
+    And exactly one drawdown alert names account "brk-1"
+    And the concentration check logs the page-read failure
