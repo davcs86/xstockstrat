@@ -1,6 +1,6 @@
 # Implementation Spec: fix-listpositions-nextpagetoken-skips
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-17
 **Feature**: `docs/roadmap/features/353-fix-listpositions-nextpagetoken-skips/feature.md`
 **Total Steps**: 4
@@ -40,7 +40,7 @@ Analysis drains also treat the token as opaque (`services/xstockstrat-analysis/a
 
 ### Step 1 — service: Composite keyset cursor in `PortfolioRepo.ListPositions`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -263,3 +263,17 @@ The new logic is in the excluded `handler` package, so no coverage threshold app
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### DEV-1 — Execution branch created from the docs branch (2026-11-17)
+- **Spec said**: `**Feature Branch**: feature/fix-listpositions-nextpagetoken-skips` (branch-sync creates it from `main-dev`).
+- **Actual**: `main-dev` has no `353-*` directory (the triage/design/spec docs live only on `ccr-fix-listpositions-nextpagetoken-skips`, PR #1564), so the feature branch was created from that branch's HEAD `559036b` (already containing `origin/main-dev@ccbe424`).
+- **Disposition**: integration PR from `feature/fix-listpositions-nextpagetoken-skips` carries the docs + code; PR #1564 becomes redundant (operator decides whether to close it).
+
+### DEV-2 — Real-backend verification ran against an already-running TimescaleDB (2026-11-17)
+- **Rule**: HARD CONSTRAINTS forbid starting a database to verify a step.
+- **Actual**: no database was started by this execute run. The local `timescale/timescaledb:latest-pg16` container (`ts353`) was started during the `/sdd-review impl-spec` loop, when the spec author added the local RED recipe; Step 2 §RED explicitly asks for the real-backend RED with `PORTFOLIO_DB_TEST_URL`. The execute run reused it. Both the RED (pre-Step-1 tree `559036b`) and the GREEN were captured on it; CI `portfolio-db-test` remains the authoritative run.
+- **Disposition**: disclosed; no migration step involved.
+
+### DEV-3 — Operator waived checkpoints (2026-11-17)
+- **Actual**: the operator invoked sequential mode "with no checkpoints"; that instruction served as the §5.1b mode-entry and §5.4 per-feature confirmation and waived the §5.5b checkpoint reports (surface-boundary / cap / feature-end). The accountability block is reported at session end instead.
+- **Disposition**: operator instruction, recorded.

@@ -65,3 +65,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Unresolved ✗ / ⚠ carried into execution: none.
 - Overlap findings: none blocking; soft rebase note — 311 and 323 (spec-ready) touch portfolio_repo.go in disjoint regions.
 - Tree: ccr-fix-listpositions-nextpagetoken-skips@02ce334 (origin/main-dev@ccbe424 merged).
+
+## Session 2026-11-17 — sdd-execute sequential (no checkpoints, operator instruction)
+
+- Tooling setup (steps 1-4): go1.27 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.27.0) · TimescaleDB container ts353 (pre-existing, see DEV-2).
+- Branch: feature/fix-listpositions-nextpagetoken-skips created from ccr-fix-listpositions-nextpagetoken-skips@559036b (DEV-1).
+- RED (pre-Step-1 tree 559036b): local `TestListPositions_FirstPageBindsEmptyCursorArray` FAIL (SQL `($2 = '' OR symbol > $2) ORDER BY symbol ASC` does not match `cardinality(...::text[])`); real backend `TestListPositions_TraversalYieldsEveryRowOnce` FAIL in default and exec modes — page size 3 got qty [1 2 3 5 6 7] (pages [3 3]), page size 1 got [1 5 7], PAPER filter got [2 6]; `TestListPositions_CursorMatchesOracleOrder` FAIL (page size 1 returned only "Acct-1").
+
+### Step 1 — Composite keyset cursor in `PortfolioRepo.ListPositions` [done]
+- Token from the last returned row over (symbol, trading_mode, account_id), base64url(JSON); one `text[]` cursor arg in the old token slot with explicit casts; `ORDER BY symbol, trading_mode, account_id`; malformed token → `ErrInvalidPageToken` before any query; `scanPositionRowWithMode` wrapper; three `offline_account_pnl_test.go` pins re-pinned to `[]string{}`.
+- Verification: grep checks ✓, build ✓, vet (dbtest tag) ✓, `go test ./... -race` ✓ (also green with Step 2 test files absent), golangci-lint v2.14.0 0 issues. Real-backend GREEN: traversal + oracle tests PASS in default and exec modes.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`, `services/xstockstrat-portfolio/internal/service/offline_account_pnl_test.go`
+- Deviations: DEV-1, DEV-2, DEV-3 (Deviation Log)
