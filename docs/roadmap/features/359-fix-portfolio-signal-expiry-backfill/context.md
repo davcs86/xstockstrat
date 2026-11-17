@@ -423,3 +423,43 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-17 — sdd-design
+
+- **Phase 0 Recon:** wrote `recon.md` earlier (services: xstockstrat-portfolio). Key reuse patterns:
+  - The parent `watchlists` row lock is the serialization point (`watchlist_repo.go:545-546`; the lock form at `signal_expiry_repo.go:70`).
+  - The `:349` `pg_stat_activity` forced-interleave test technique.
+- **Phase 1 Grilling:** 3 rounds (full). The operator approved at the round-3 gate with the Floor clear.
+- **Chosen approach:**
+  - **Lock fix:** each APPLY candidate runs in its own short READ COMMITTED tx, via the single-caller helper `applyBackfillRow`. The tx does an Exec of `SELECT 1 … FOR NO KEY UPDATE` on the parent watchlist row, then the unchanged seed/mark INSERT, then Commit. `:168-183` stay byte-identical.
+  - **FR-3:** `backfillMarkSQL` writes `now() + backfillMarkGrace`, an unexported Go constant `interval '72 hours'`. This applies to marks only; the seed SQL is untouched.
+- **Rejected:** R-1..R-9.
+  - R-1..R-6 were rejected in earlier rounds: CTE lock, add-path upsert, SERIALIZABLE/advisory lock, touch-UPDATE lock, relaxed GREEN assertion, production lock_timeout.
+  - R-7..R-9 were rejected in round 3: config key, `'3 days'`/`$3`, pre-boundary aging step.
+- **Register at approval:**
+  - O-10 (blocking) is closed by the operator's @AC-1/FR-1 amendment (commit `96fad930`).
+  - P-1 (REOPEN D-1) is marked user declined. The operator approved instead of reopening, and D-11 records the superseded-in-part clause.
+  - O-11 (non-blocking) is carried into Open Threads.
+- **Constitution rules touched:** C-08, C-11, C-15, C-16, C-18, P-02, P-03, P-06, F-01, F-06, F-07, PORTFOLIO-18. Floor breaches: none.
+- **Business rules (C-16):**
+  - CHANGE `281 @AC-16`, signed off by operator decision 2026-11-17 (FR-3 design-gate steer; also sanctions runbook §8).
+  - EXTEND @AC-2 and @AC-3.
+  - PRESERVE @AC-1 (Then clause amended by the operator), `281 @AC-17` (title wording only), @AC-9, @AC-12 and @AC-15.
+- **F-07 reasoning (for /sdd-review):** `backfillMarkGrace` is a constant, not a config key, for three reasons:
+  - `config-governance.md:7` scopes the hardcoding ban to env-specific values, and this one is not env-specific and was fixed by the operator.
+  - The backfill CLI has no config client (`cmd/server/backfill.go:29-61`).
+  - The Fix Scope says "No config key changes".
+- **Ledger:** no line added. The parent-row-lock pattern is already the documented portfolio contract and is recorded next to PORTFOLIO-18 in this feature's spec. The RC snapshot-before-lock trap is feature-specific evidence (R-1).
+- **Status:** spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] **O-11 / :443 blindness.** After FR-3, `:443` can no longer catch a lock-fix regression. /sdd-spec must list `TestBackfill_MarkIngestInterleavingRescued` and `TestBackfill_SeedIngestInterleavingRescued` as must-not-weaken, with the same status as `:443` under D-6. Target: /sdd-spec, Step 1.
+- [ ] **Operational window change.** Marks now reach prune 72h after APPLY. The runbook §9 emergency-stop window and the §11 monitoring advice must change with it. Target: Step 2 (docs).
+- [ ] **Accepted residual: `:443` 500ms lock_timeout.** The frozen test now waits milliseconds on the watchlist-row lock. If CI reports 55P03 under `-race`, investigate the runner and never edit the test. Target: Step 1 verification.
+- [ ] **Accepted: cluster-wide `pg_stat_activity` gate predicates.** Acceptable because the tests run sequentially and the branch assertion comes last. Target: Step 1.
+- [ ] **Prove at execute.** Target: Step 1 (RED on current code, then GREEN).
+  - The forced interleave is deterministic in both RED and GREEN.
+  - The speculative-insert wait shows as `wait_event_type='Lock'`.
+  - `insertBindingsTx` does not wait on an existing binding.
+- [ ] **Accepted (YAGNI, R-6): APPLY has no lock_timeout.** A wedged add-path tx pauses the one-shot job. Target: Step 2 runbook note.
