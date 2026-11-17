@@ -1589,7 +1589,7 @@ grep -n "delisted-badge" src/components/insights/WatchlistReadiness.tsx
 
 ### Step 31 — test: marker unit test, fixtures and e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/opportunityShared.test.ts` — modify

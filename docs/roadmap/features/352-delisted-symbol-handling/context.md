@@ -500,3 +500,16 @@
 - Deviations (Deviation Log): a flagged bound row also omits the blocking-condition cell (a resolved
   readiness row from analysis would otherwise still show readiness text next to the badge); the badge is
   followed by a `delisted-detail-<symbol>` span `<reason> · since <date>`.
+
+### Step 31 — test: marker unit test, fixtures and e2e — done
+- TDD (e2e): AC-15 red with Step 30's four files restored to base: 4 failed (`delisted-badge-ROKU` not
+  found; paging case badge count 25 vs 0) → green: all four feature-352 cases pass. The paging case's red
+  was not isolated to the `morePages` instruction — it fails earlier on the missing badges.
+- Green runs: Playwright `watchlists.spec.ts` + `screener.spec.ts` (chromium) → 51 passed, 1 failed
+  (`screener.spec.ts:43`, not edited by this step); `screener.spec.ts` re-run alone → 25 passed (treated as
+  a local dev-server flake; watch it in CI). `pnpm run test:coverage` → 732 passed, 2 skipped (pre-existing
+  skips, not traced), 80.91% statements. Lint and `tsc --noEmit` pass.
+- Deviations: e2e ran on host Playwright with `--timeout=180000 --trace off` (the dev-mode warm-up takes
+  ~58 s here), not the Docker runner; `normBindings` in `e2e/helpers/watchlistMock.ts` now carries
+  `delisted` through so write routes that rebuild bindings keep the field; `UnservableReasonName` type
+  moved above `MockBinding` in the same file. C-12: fixture + `INVENTORY.md` row added.
