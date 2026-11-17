@@ -7,6 +7,7 @@ Feature: delisted-symbol-handling
 
   Background:
     Given xstockstrat-portfolio's delisting refresh runs after every watchlist change and after every asset-set load
+    And every asset-set load in these scenarios that names no date runs on a trading day
 
   @AC-1 @FR-1
   Scenario: A symbol unservable for the whole confirmation window is flagged delisted

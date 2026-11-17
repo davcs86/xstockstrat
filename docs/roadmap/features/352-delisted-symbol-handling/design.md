@@ -1,8 +1,8 @@
 # Design: delisted-symbol-handling
 
 **Created**: 2026-11-17
-**Rounds**: 6 (full, round cap of 5 overridden by the operator 2026-11-17; termination: DRAFT — under round-6 review, not approved)
-**Approved by**: _pending_
+**Rounds**: 6 (full; round cap of 5 overridden by the operator 2026-11-17; termination: approved)
+**Approved by**: user @ 2026-11-17 (round-6 gate)
 **Grounded in**: recon.md
 **Debate register**: debate.md
 
@@ -363,7 +363,7 @@ K drains from system-managed lists over ⌈K/100⌉ prune ticks. Portfolio deplo
 - `C-07` / `F-01` — honored by: three new numbered migrations, none edited.
 - `C-10` / `C-14` — honored by: the state is decorated on every watchlist-returning RPC and reaches the agent tools and the `/insights` row.
 - `C-12` / `C-13` — honored by: UI fixtures through `watchlistMock` and `INVENTORY.md`; Go fixtures in `internal/testdata/`.
-- `C-15` — honored by: every `@AC-n` maps to a mechanism; AC-29, AC-8 and the Background amended with operator sign-off; a further Background line ("every asset-set load in these scenarios that names no date runs on a trading day", covering AC-4, AC-5, AC-27 and AC-29) awaits sign-off at the next gate.
+- `C-15` — honored by: every `@AC-n` maps to a mechanism; AC-29, AC-8 and the Background amended with operator sign-off; a second Background line ("every asset-set load in these scenarios that names no date runs on a trading day", covering AC-4, AC-5, AC-27 and AC-29) signed off at the round-6 gate.
 - `C-16` — see Business Rules Touched.
 - `PLAT-9` — honored by: the two marketdata grants are bound to the caller header and the peer SAN `xstockstrat-portfolio` (D-30).
 - `C-18` — honored by: one decider, one deleter per resource, no new edge, no portfolio storage.

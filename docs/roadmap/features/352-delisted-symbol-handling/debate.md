@@ -1,6 +1,6 @@
 # Debate Register: delisted-symbol-handling
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 6 (round numbers continue across runs; the 5-round cap was overridden by the operator on 2026-11-17, context.md)
 

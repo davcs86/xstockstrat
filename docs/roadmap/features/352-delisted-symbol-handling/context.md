@@ -202,3 +202,37 @@
   - **Caller check**: the two new marketdata RPCs require the caller header and portfolio's mTLS peer
     identity (debate D-30).
 
+## Session 2026-11-17 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: marketdata, portfolio, ingest, agent, ui, notify, analysis;
+  key reuse patterns: the 281 `pruneListTx` SKIP LOCKED deleter, `classification_repo.go`, the
+  `refuseUnservable` pull edge).
+- Phase 1 Grilling: 6 rounds (full; cap overridden by the operator). Chosen approach: marketdata owns a
+  per-symbol profile and a copy of the watchlist union, and its asset-load hook is the only decider;
+  portfolio pulls on its prune tick, removes from system-managed lists, sends and acknowledges the flag
+  alert. Rejected: a marketdata → portfolio push, gating `markWarm`, per-read decoration RPCs, an
+  in-memory union (14 locked alternatives in debate.md).
+- **Round-6 gate (2026-11-17)**: operator approved the design, and the second Background line ("every
+  asset-set load in these scenarios that names no date runs on a trading day") (C-15).
+- Constitution rules touched: C-03, C-04, C-05, C-07, C-09, C-10, C-12, C-13, C-14, C-15, C-16, C-18,
+  F-01, F-06, F-07, PLAT-9. Floor breaches: none in any round.
+- C-16 CHANGE sign-offs on record: 282 marketdata `@AC-15` (2026-11-16), platform `@AC-17 @feature-282`
+  for flagged symbols (2026-11-16), portfolio `@AC-1 @feature-154` (2026-11-17), and the reading of 281
+  `@AC-4`/`@AC-5` (2026-11-17).
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks — each needs a spec step or an explicit check)
+
+- [ ] Recovery alert at-most-once (accepted) — emitter step in marketdata.
+- [ ] Hook timeout can miss a reset or the flagged-set rebuild (accepted) — WARN + counter in the hook step.
+- [ ] Re-sent flag alert names only the lists removed on its own tick — portfolio alert step.
+- [ ] Recovery between a claim and a send (accepted, FR-12 "claimed") — covered by tests of the sync step.
+- [ ] Weekend/holiday recovery lag (operator ruling) — hook step and its closed-day test.
+- [ ] A sync spanning a load can remove a just-relisted, just-re-added symbol — documented residual.
+- [ ] Marker timing on a system-managed list before portfolio's tick — UI/e2e step.
+- [ ] Another instance's flag invisible to backfills until the next load — backfill step note.
+- [ ] Resumed job can show FAILED results absent from `failed_symbols` (R-9) — ingest step test.
+- [ ] Job-level fundamentals failure carries no per-symbol results — ingest step note.
+- [ ] Union depends on portfolio's tick; deploy-era first-unservable dates — rollout note step.
+- [ ] Re-verify at spec time: config seed number (052 last, 053 claimed by 345), migration numbers from
+  `git log --all` and every `origin/feature/*`, the two portfolio importers of `marketsession`.

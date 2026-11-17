@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/delisted-symbol-handling`
 **Created**: 2026-11-16
-**Last Updated**: 2026-11-16
+**Last Updated**: 2026-11-17
 
 ---
 
@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-11-16 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after 4 rounds; 3 notes) |
+| 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full; round cap overridden by the operator) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -19,6 +20,7 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) · [Debate Register](debate.md) · [Design](design.md)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec delisted-symbol-handling`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -50,4 +52,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design delisted-symbol-handling` — full design recommended (6 services, additive proto on 3 contracts, new marketdata table, new inter-service direction, C-16 CHANGE to feature 282)
+`/sdd-spec delisted-symbol-handling` — generate implementation spec from the approved design
