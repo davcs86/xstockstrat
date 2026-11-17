@@ -45,3 +45,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Analysis drains don't fail closed / reject a repeated token (fails.md:3312), pre-existing → separate defect if wanted.
 - [ ] `/sdd-spec`: Execution Summary + Deviation Log row must cite the C-14 override (impl-spec-criteria.md:31).
 - Status: draft → design-approved.
+
+## Session 2026-11-17 — sdd-spec
+
+- Tree: ccr-fix-listwatchlists-page-token@965f979 ≡ origin/ccr-fix-listwatchlists-page-token (origin/main-dev already an ancestor; no sync needed).
+- Generated implementation-spec.md with 2 steps (Step 1 `service` watchlist_repo.go seam+fix+comments; Step 2 `test` unit pgxmock + dbtest + `seedNamedWatchlist`), declared `**Lands with**` each other per D-8. Status → implementation-ready.
+- Key codebase findings (re-verified against 965f979; recon citations still hold):
+  - `watchlist_repo.go`: ListByUser `:107`, main query `r.pool.Query` `:111`, strict `>` `:114`, comment block `:135-136`, bug `nextToken = wls[pageSize].WatchlistId` `:139`, field comment `:27-28`, sole constructor `:34` sets `db: pool`; `bindingsByWatchlist` already on `r.db.Query` `:167`.
+  - `seedWatchlist` (`dbtest_helpers_test.go:57-68`) has 66 call sites in dbtest files → signature must stay; `watchlist_list_dbtest_test.go` absent.
+  - Local harness: `/usr/lib/postgresql/16/bin` + `postgres` OS user present; only TimescaleDB call is `001_portfolio_hypertable.up.sql:35-40`; no migration needs an EXTENSION or envsubst — shim given with named params (`relation`, `time_column_name`, `chunk_time_interval`, `if_not_exists`) because 001 calls it with named notation.
+- C-14 agent `list_watchlists` override recorded in the spec's Execution Summary + Deviation Log (spec-time row) as an override, not a deferral (closes the design Open Thread for `/sdd-spec`).
+- Expected `/sdd-review impl-spec` advisory WARN: Lands-with declared with no strict §C table trigger — deliberate per D-8 (stated in `## Step Dependencies`).
