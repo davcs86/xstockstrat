@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-17 | /sdd-design | 7 | 4 | 1 | 9 | 0 | yes |
 | 2 | 2026-11-17 | /sdd-design | 5 | 5 | 11 | 3 | 0 | yes |
 | 3 | 2026-11-17 | /sdd-design | 9 | 2 | 3 | 4 | 0 | yes |
+| 4 | 2026-11-17 | /sdd-design | 1 | 2 | 0 | 0 | 0 | yes (O-13 narrowed to user sign-off) |
 
 ## Settled Decisions
 
@@ -35,6 +36,7 @@
 | D-16 | 3 | DRY/C-13: jscpd ignores tests (`.jscpd.json:22`; `docs/patterns/dry-guard-rail.md:39,75`). pgxmock rows are SQL-shape scenario one-offs, not domain fixtures → no `internal/testdata/` addition. To avoid repeating the empty-bindings expectation in the two new tests, add file-local `expectNoBindings(mock pgxmock.PgxPoolIface, ids ...string)` wrapping `ExpectQuery(`watchlist_id = ANY\(\$1::uuid\[\]\)`).WithArgs(ids).WillReturnRows(<4 binding columns, zero rows>)`; the existing `TestBindingsByWatchlist_SingleAnyArrayQuery` (`:25-34`) is left untouched (How-to-Act #3). | `watchlist_repo_test.go:25-34`; `internal/testdata/` (ledger/marks/offline_pnl only) | settled |
 | D-17 | 3 | Verification (cwd `services/xstockstrat-portfolio`): RED unit post-seam `GOWORK=off go test -race -count=1 -v -run 'TestListByUser_' ./internal/repository/` (FAIL TokenIsLastReturnedRow, PASS ExactlyFull); RED dbtest via D-10 (ii) (both subtests FAIL; SKIP invalidates); GREEN = same, all PASS; regression: `GOWORK=off go test -race -count=1 ./...`, `GOWORK=off go vet -tags dbtest ./...`, `golangci-lint run`, `-list` proof, full dbtest package on the harness `go test -tags dbtest -race -count=1 ./internal/repository/...` (proves the `seedWatchlist` delegate keeps existing dbtests green). PR body + context.md disclose: unit RED post-seam/pre-fix; dbtest RED on unmodified query path; harness fidelity delta; CI `portfolio-db-test` GREEN of record + `-list`; mixed-fleet note (D-7); consumer impact (D-5). A pgxmock arg mismatch at execute goes to the Deviation Log, never a silent step edit (F-09). | `tdd-gate.md:35-38,59-60,66-69` | settled |
 | D-18 | 3 | Add `## Consumer Surface(s)` to product-spec.md at completion: Agent MCP `list_watchlists` (`services/xstockstrat-agent/app/tools.py:2153-2166`, client `app/client.py:416-431`) — pure passthrough, reached by the backend fix with no code change, docstring `:2155` becomes true, guarded by PRESERVE `@AC-1 @feature-148`; UI `/insights` `useWatchlists.ts:33` single page of 50 = `watchlist.max_per_user` → unaffected; analysis drains internal. How C-14's "own step" is satisfied → see O-13. | as cited; `docs/sdd/constitution.md:45` | settled |
+| D-19 | 4 | Dev smoke ("affected service smoke-tested on dev") is a post-merge launch check, not a step (dev deploys only on a `main-dev` push): agent `list_watchlists` with `limit` below the caller's list count (test user with ≥2 lists) following `next_page_token` to empty returns every list exactly once; run only after the rollout completes (D-7 window). Recorded in the PR body / context.md launch checklist; not presented as satisfying C-14. | root CLAUDE.md § CI/CD; `watchlist_repo.go:108-109` (default page 100 > `max_per_user` 50 → must set `limit`) | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -52,6 +54,8 @@
 | R-9 | 2 | Add `-v` to the `portfolio-db-test` CI job | Out of scope for this bug; `ok` + `-list` is adequate secondary evidence | locked |
 | R-10 | 3 | Dedicated agent code/test step for `list_watchlists` | Pure passthrough — a step with no change is ceremony (C-18); agent tests are mocked and cannot prove token semantics (fails.md:2786) | locked |
 | R-11 | 3 | `pgxmock.AnyArg()` for the LIMIT arg as an execute-time fallback | Drops the `pageSize+1` pin guarding D-2; an execute-time choice invites an unlogged step-body change (F-09) | locked |
+| R-12 | 4 | Satisfy C-14 with a `docs` step (one runbook sentence in `docs/runbooks/mcp-tools.md` § list_watchlists) labelled as the Agent surface's step | Fails the enforced gate: `spec-template.md:107-108` requires a `service` step touching `services/xstockstrat-agent/`, and `/sdd-review` `impl-spec-criteria.md:31` flags "no `xstockstrat-agent` step for the named tool"; the step exists only to satisfy the rule (C-18 ceremony, P-03 reframing); the sentence as drafted ("exactly once") is also inaccurate for lists created mid-traversal and the D-7 window, and adds a third doc home for the token semantic (D-6) | locked |
+| R-13 | 4 | Verification-only sub-bullet in Step 2 for the agent surface (O-13 option b) | Not an `xstockstrat-agent` step under `impl-spec-criteria.md:31`; would put an agent item inside the backend Lands-with unit, crossing surfaces (`step-constraints.md:62-65`) | locked |
 
 ## Objections
 
@@ -71,7 +75,7 @@
 | O-10 | 2 | Lands-with reason was wrong ("Step 2 cannot pass without Step 1"); `step-constraints.md` §C says plain service→test pairing is not a unit by itself — state the true reason or drop it (P-03). | no | closed @ 2 (D-8 restates the reason) |
 | O-11 | 2 | Unit RED runs on a partly implemented tree (seam applied first) vs `tdd-gate.md:35` "pre-implementation tree" — justified (nil `pool` otherwise) but must be stated (P-06 honesty). | no | closed @ 2 (D-10 disclosure in PR body + context.md) |
 | O-12 | 2 | `db` field comment `watchlist_repo.go:27-28` goes stale once the page query also reads through `db` (How-to-Act #5, C-18). | no | closed @ 2 (D-11 trims it) |
-| O-13 | 3 | C-14 (`constitution.md:45`): "each named surface earns its own implementation step(s)" — D-18 names the Agent `list_watchlists` surface with no step; resolve by (a) explicit user sign-off recorded in context.md + design.md, or (b) a verification-only sub-bullet in Step 2 naming the surface + PRESERVE `@AC-1 @feature-148` (must not claim mocked agent tests prove the fix). | yes | open (user decision at round-3 gate) |
+| O-13 | 3 | C-14 (`constitution.md:45`): "each named surface earns its own implementation step(s)" — D-18 names the Agent `list_watchlists` surface with no step; resolve by (a) explicit user sign-off recorded in context.md + design.md, or (b) a verification-only sub-bullet in Step 2 naming the surface + PRESERVE `@AC-1 @feature-148` (must not claim mocked agent tests prove the fix). | yes | open (round 4: every non-override route is locked — R-10, R-12, R-13; only resolution left = user sign-off per `constitution.md:45`) |
 | O-14 | 3 | Pin `WithArgs("u1","",3)`; remove the AnyArg execute-time fallback (P-03/F-09). | no | closed @ 3 (D-13, R-11, D-17) |
 | O-15 | 3 | C-13: bindings column literal would appear 3× in the test file; state the reading or fold into a helper. | no | closed @ 3 (D-16: SQL-shape one-offs; `expectNoBindings` helper) |
 | O-16 | 3 | Spec code must be real gofmt/goimports code (import groups, `//go:build` + blank line); subtests use their own shadowed `t`. | no | closed @ 3 (D-14, D-15) |
