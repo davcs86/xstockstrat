@@ -165,7 +165,7 @@ grep -n "_opportunity_refresh_tick\|daily refresh" docs/roadmap/features/356-fix
 
 ### Step 2 — service: Shared fail-closed positions drain; `_drain_held_symbols` and `ScreenSymbols` use it
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -503,3 +503,15 @@ awk -F'\t' '$1=="metric" && $2=="analysis_opportunity_recompute_total" && $3=="s
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 2 — Verification blocks re-spec'd to run as one shell (steps 2-7)
+**Spec said**: each **Verification** fence ran `cd services/xstockstrat-analysis && …` lines in sequence, with a trailing `#` comment on the last line.
+**Actual**: operator-directed re-spec (sequential-mode.md §5.3, commit `545825bf9`, before the step commit): each command line of Steps 2-7 is wrapped in its own `( … )` subshell, and each last-line comment moved onto its own line above. No command, path, flag or expected result changed.
+**Reason**: run as one shell, the second `cd` resolved against the first one's directory and the trailing comment swallowed the wrapper's closing parenthesis, so the blocks could not run verbatim.
+**Disposition**: operator decision (Option B, widened) on the Step 2 blocker.
+
+### Deviation: Step 2 — RED captured with an uncommitted scratch probe
+**Spec said**: `**TDD**: red-green required`; `**Covers**: —`; the paired tests are Step 3's (Step 3 item 5: run them against the pre-Step-2 tree).
+**Actual**: Step 2 runs in its own agent and may stage only `servicer.py` (F-08), so Step 3's test file was not written here. RED/GREEN was captured with an uncommitted probe `.sdd-logs/red/test_step2_red.py` (5 cases: ignored token, cap, page-2 RpcError, metadata/sum characterization, ScreenSymbols degrade). RED: 4 failed, 1 passed (`DID NOT RAISE` ×3, AAPL `held` `True is False`); GREEN: 5 passed. Recorded in context.md.
+**Reason**: red-before-green is mandatory, and the only committed tests for this behaviour belong to Step 3's **Files**.
+**Disposition**: Step 3 must still record its own RED for its named test ids. The Step-2 commit is already on the branch, so that RED runs against the pre-Step-2 `servicer.py` (`git show 545825bf9:services/xstockstrat-analysis/app/handlers/servicer.py`).

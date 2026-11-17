@@ -390,6 +390,11 @@ class _FundamentalsPageError(Exception):
     """Raised when PIT fundamentals pagination cannot complete safely (stalled cursor, page cap)."""
 
 
+class _PositionsPageError(Exception):
+    """Raised when positions pagination cannot complete safely (page error, repeated token,
+    page cap)."""
+
+
 def bucket_pnl_factors(samples, *, min_sample, bucket_count):
     """Query-time bucketing for QueryPnLPatterns (feature 042, design § 3). Pure — no I/O.
 
@@ -3932,7 +3937,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return
         # Mark rows the caller already holds (best-effort cross-ref).
         user_id = self._caller_user_id(context)
-        held = await self._drain_held_symbols(user_id, propagation_meta)
+        try:
+            held = await self._drain_held_symbols(user_id, propagation_meta)
+        except _PositionsPageError as e:
+            log.warning("ScreenSymbols: held cross-reference skipped for user=%s: %s", user_id, e)
+            held = {}
         for r in resp.results:
             # _drain_held_symbols keys by normalized symbol, so normalize the membership test
             # (no-op for uppercase broker tickers; correct for mixed case).
@@ -6414,28 +6423,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ``held_norm``, so a raw key would silently rank a real held symbol at 0.0."""
         if self._portfolio is None:
             return {}
+        rows = await _drain_positions_paged(self._portfolio, user_id, propagation_meta)
         held: dict[str, float] = {}
-        page_token = ""
-        for _ in range(_MAX_DRAIN_PAGES):
-            try:
-                resp = await self._portfolio.ListPositions(
-                    portfolio_pb2.ListPositionsRequest(
-                        user_id=user_id,
-                        page=common_pb2.PageRequest(
-                            page_size=_BAR_PAGE_SIZE, page_token=page_token
-                        ),
-                    ),
-                    metadata=propagation_meta,
-                )
-            except grpc.RpcError as e:
-                log.warning("ListOpportunities: ListPositions failed: %s", e)
-                return held
-            for p in resp.positions:
-                norm = _normalize_symbol(p.symbol)
-                held[norm] = held.get(norm, 0.0) + abs(p.market_value)
-            page_token = resp.page.next_page_token
-            if not page_token:
-                break
+        for p in rows:
+            norm = _normalize_symbol(p.symbol)
+            held[norm] = held.get(norm, 0.0) + abs(p.market_value)
         return held
 
     @owner_scoped
@@ -6702,6 +6694,38 @@ async def _fetch_historical_fundamentals_paged(stub, symbol, metadata) -> list[F
             return _fundamental_periods(periods)
     raise _FundamentalsPageError(
         f"{symbol}: fundamentals pagination exceeded {_MAX_FUND_PAGES} pages"
+    )
+
+
+async def _drain_positions_paged(stub, user_id, metadata) -> list:
+    """Drain every ``ListPositions`` page for ``user_id``; raises ``_PositionsPageError`` on a
+    page error, a repeated page token or the page cap, never returning partial rows."""
+    rows: list = []
+    token = ""
+    for _ in range(_MAX_DRAIN_PAGES):
+        try:
+            resp = await stub.ListPositions(
+                portfolio_pb2.ListPositionsRequest(
+                    user_id=user_id,
+                    page=common_pb2.PageRequest(page_size=_BAR_PAGE_SIZE, page_token=token),
+                ),
+                metadata=metadata,
+            )
+            page = list(resp.positions)
+            nxt = resp.page.next_page_token
+        except Exception as e:
+            raise _PositionsPageError(f"{user_id}: ListPositions failed: {e}") from e
+        rows.extend(page)
+        if not nxt:
+            return rows
+        if nxt == token:
+            raise _PositionsPageError(f"{user_id}: ListPositions repeated page token")
+        token = nxt
+    log.warning(
+        "ListPositions(%s) exceeded %d pages with a token pending", user_id, _MAX_DRAIN_PAGES
+    )
+    raise _PositionsPageError(
+        f"{user_id}: ListPositions pagination exceeded {_MAX_DRAIN_PAGES} pages"
     )
 
 
