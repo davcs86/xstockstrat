@@ -372,3 +372,10 @@
 - **Not proven locally:** the live apply / replay / refused-down of migration 017 and
   `ingest-017.sql` (CI `migration-rerun`), and the full e2e suite (CI).
 **Next**: watch CI on PR #1567; operator reviews the five instruction texts before merge.
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1576 merged to main
+- Feature promoted and committed: 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17

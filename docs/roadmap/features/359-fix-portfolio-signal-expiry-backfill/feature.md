@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-17
 **Last Updated**: 2026-11-17
+**Committed to main**: 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f
+**Launched date**: 2026-11-17
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
 | 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done (sequential); dbtest RED/GREEN deferred to CI per operator decision B |
 
+| 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1576; committed 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f |
 ---
 
 ## Artifacts
