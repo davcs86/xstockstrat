@@ -48,6 +48,11 @@ Reconcile assumed one page per account while the token was unreliable (fixed by 
 - **FR-4** Broker-agnostic: the change touches only the portfolio read, so it applies to every account
   `reconcileTick` covers today (every broker type except `BROKER_TYPE_OFFLINE`, which stays skipped as
   today). The broker-side `GetPositions` read, the order-side reconcile and fill handling are unchanged.
+- **FR-5** Every position-side check skipped because of a `listAccountPlatformPositions` error (FR-2 or
+  FR-3) is counted on the OTel counter `trading.reconciliation.position_check_skipped`, labelled only with
+  a bounded `outcome` (`rpc_error` | `deadline` | `cursor_invalid`) and no account or user attribute, so a
+  persistently skipped account is observable and alertable. (Appended 2026-11-17 by `/sdd-spec` per the
+  binding operator decision at design gate r6; IDs append-only.)
 
 ## Consumer Surface(s)
 
