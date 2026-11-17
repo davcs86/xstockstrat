@@ -68,3 +68,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [x] i2 overlap: helper-name collision risk → verified via git that 351's spec declares none of seedNamedWatchlist/listPageRows/expectNoBindings/listPageSQL and does not modify watchlist_repo.go.
   - [x] Twin `ListPositions` report exists only on origin/ccr-1305a9de-7x1t7v; out of scope (owned by another session).
 - Overlap findings: 351 ordering (recorded, merge-order.md); nothing else.
+
+## Session 2026-11-17 — sdd-execute (sequential)
+
+- User: "execute it in sequential mode, no checkpoints, then merge train". Mode-entry + up-front confirm: **agree**. Checkpoint pauses waived by the user (feature-end report still printed, not gated).
+- **User override 2026-11-17 of the sdd-execute HARD CONSTRAINT "never start a database to verify a step"** (one-off, this run): dbtest RED/GREEN captured on an ephemeral local PG16 process (no container) per design D-10 (ii) — `postgres` OS user, data dir `/tmp/pg354`, no-op `create_hypertable` shim, full migration chain, hard timeouts, torn down after.
+- C-16 promotion approved: `@AC-1`/`@AC-2` → `services/xstockstrat-portfolio/acceptance/fix-listwatchlists-page-token.feature` (`@feature-354`).
+- Integration PR = existing #1566 (`ccr-fix-listwatchlists-page-token` → `main-dev`); merge train authorized by the user after execution.
