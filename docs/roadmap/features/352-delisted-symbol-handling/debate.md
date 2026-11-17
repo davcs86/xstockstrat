@@ -133,3 +133,4 @@
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
+| P-1 | 5 | D-5 | Narrow: run the recover step on every successful load, closed days included; detection stays trading-day gated. Evidence not on record at D-5: FR-2 says a flag "is re-evaluated by every successful asset-set load" (`product-spec.md` FR-2), while FR-1's closed-day rule covers observations for detection only. | pending user |
