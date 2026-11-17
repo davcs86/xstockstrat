@@ -318,7 +318,7 @@ grep -n "conftest\|def .*fixture" tests/test_signal_source_projection.py tests/t
 
 ### Step 5 — migration: ingest `017` — prose column and seeded template prose
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/017_signal_source_extraction_instructions.up.sql` — create

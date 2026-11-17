@@ -255,3 +255,14 @@
 - Files modified: `services/xstockstrat-agent/tests/test_signal_source_projection.py`,
   `services/xstockstrat-agent/tests/test_signal_source_builder.py`
 - Deviations: none.
+
+### Step 5 — migration: ingest `017` — prose column and seeded template prose [done]
+- Created the 017 pair (defaulted `extraction_instructions` column; guarded payload overlay on the
+  four system templates, no version bump), `ingest-017.sql`, and bumped the clean ingest version in
+  `migration-rerun.py` to 17. Offline checks: `pglast` parses 2 + 2 statements; the four seeded
+  literals equal design.md's texts byte for byte; exactly one `*_seed_source_templates.up.sql`;
+  scripts suite 491 passed, ruff clean. Down reverses up by inspection (key removed, column dropped).
+- Files modified: `services/xstockstrat-ingest/migrations/017_signal_source_extraction_instructions.{up,down}.sql`,
+  `scripts/migration-assertions/ingest-017.sql`, `scripts/migration-rerun.py`
+- Deviations: none. TDD: N/A (migration). Live apply / replay / refused-down / `ingest-017.sql` are
+  proven by CI `migration-rerun` on the PR, not here.
