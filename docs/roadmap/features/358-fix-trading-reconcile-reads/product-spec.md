@@ -52,7 +52,7 @@ Reconcile assumed one page per account while the token was unreliable (fixed by 
 
 No surface changes (C-14). The only observable effect is that a trader/operator no longer sees a false
 reconciliation halt on an account with more than 500 positions — via the existing trader UI halt badge
-(`HaltBadge` on `/trader/accounts`) and the existing reconciliation alert. No MCP tool, RPC, proto or UI
+(`HaltBadge`, shown in the trader account selector and the accounts panel) and the existing reconciliation alert. No MCP tool, RPC, proto or UI
 change.
 
 ## Affected Services
