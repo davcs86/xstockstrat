@@ -449,3 +449,19 @@
   bindings", "no results → `symbol_results: []`"); two of them go beyond the step text.
 - Noted, not changed: an enum number unknown to this agent build makes `.Name()` raise `ValueError`, the
   same behaviour as the existing `_refused_to_list`.
+
+### Step 26 — service: analysis skips flagged bindings (unplanned unit 26+27) — done
+- Blocker raised by the worker: `b.HasField("delisted")` raises `AttributeError` on the `SimpleNamespace`
+  fake bindings of existing tests (88 failed / 1652 passed with Step 26 alone). **Operator decision
+  2026-11-17: "Fold + fix fakes"** — one commit for 26+27, the three fake-binding builders build real
+  `portfolio_pb2.WatchlistBinding`, two test files outside `**Files**` join the unit. Production code is
+  exactly the step text (`servicer.py`, `live_loop.py`, one `HasField("delisted")` each).
+- Deviations: unplanned fold + two extra test files (Deviation Log).
+
+### Step 27 — test: flagged bindings leave the opportunity scan and the live loop (unplanned unit 26+27) — done
+- TDD: AC-8 red: `assert {'AAPL','ROKU'} == {'AAPL'}` (3 failed / 1 passed on the unmodified drains; the
+  pass is the "binding without `delisted` is unchanged" characterization case) → green: 4 passed,
+  including "an all-flagged list never falls back to legacy `symbols`".
+- `py_gate` via `uv run`: ruff clean, 1740 passed, coverage 91.57%. No skipped tests.
+- Lesson for the ledger at the end of the run: a spec that adds a `HasField` check on a proto message
+  must list every test double that fakes that message with a non-proto object.

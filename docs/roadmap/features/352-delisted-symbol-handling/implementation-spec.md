@@ -1387,7 +1387,7 @@ test "$(grep -c "@AC-" services/xstockstrat-portfolio/internal/service/delisting
 
 ### Step 26 — service: analysis skips flagged bindings in its two watchlist drains
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -1420,7 +1420,7 @@ grep -n 'HasField("delisted")' app/handlers/servicer.py app/engine/live_loop.py 
 
 ### Step 27 — test: flagged bindings leave the opportunity scan and the live loop
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -1669,3 +1669,15 @@ grep -c "@AC-15 @FR-3 @feature-282" services/xstockstrat-marketdata/acceptance/f
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: all steps — parallel chains
+**Spec said**: (sequential mode) "continue straight to step N+1 in the same session"
+**Actual**: After Steps 1–4, independent step chains (5–16 marketdata/config, 17–19 ingest, 20–25 portfolio, 26–27 analysis, 28–29 agent, 30–31 UI) were executed by parallel workers in isolated git worktrees. Each step is still one commit on `feature/delisted-symbol-handling`, but commits land in completion order, not step-number order.
+**Reason**: The chains touch disjoint files and depend only on Steps 1–4 (§ Step Dependencies); running them in parallel shortens the run without changing any step's content or verification.
+
+### Deviation: Steps 26+27 — analysis skips flagged bindings / tests
+**Spec said**: Steps 26 and 27 are an ordinary service/test pair with `**Files**` `app/handlers/servicer.py`, `app/engine/live_loop.py` (26) and `tests/test_analysis_servicer.py`, `tests/test_live_loop_telemetry.py` (27).
+**Actual**: Folded Step 27 into Step 26 (one commit) and added `tests/test_readiness_materializer.py` and `tests/test_owner_header_guard.py` to the unit: their fake-binding builders (and `_wl` in `test_analysis_servicer.py`) now build `portfolio_pb2.WatchlistBinding` instead of `SimpleNamespace`. Production code is exactly the step text.
+**Reason**: `b.HasField("delisted")` raises `AttributeError` on the `SimpleNamespace` fakes that existing tests feed through the two drains (88 failures with Step 26 alone), so Step 26 could not pass its own Verification and Step 27's `py_gate` could not pass inside its `**Files**`.
+**Disposition**: folded Step 27 into Step 26 — a later step repairs the earlier step's suite; operator chose "Fold + fix fakes" on 2026-11-17.
+
