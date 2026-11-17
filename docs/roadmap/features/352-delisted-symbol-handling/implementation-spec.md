@@ -1708,3 +1708,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Reason**: A database is never started to verify a step (sdd-execute hard constraint).
 **Disposition**: CI-equivalent fallback
 
+### Deviation: Step 17 — CI replay script pins the ingest version
+**Spec said**: Step 17 `**Files**`: the ingest migration pair only.
+**Actual**: `scripts/migration-rerun.py` also changed (one literal: expected clean ingest version `17` → `18`), after the integration PR's `Migration rerun (idempotent replay)` job failed with `migration-rerun: ingest should be clean at 17, got: 18`.
+**Reason**: The CI replay script pins the top ingest migration; every new ingest migration must bump it (feature 355 did the same for `017`). The spec did not list the file.
+

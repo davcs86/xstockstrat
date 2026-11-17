@@ -677,3 +677,11 @@
   `ingest.proto`, never hand-merged). Re-verified after the merge: ingest 602 passed / 87.16%, agent 802
   passed / 88.36%, analysis 1740 passed, marketdata and portfolio build + vet, UI lint / `tsc` / vitest 732
   passed, `check-config-wiring.mjs --final` exit 0, `ledger-guard` clean.
+
+## Session 2026-11-17 — integration PR #1574, CI watch
+
+- PR opened: https://github.com/davcs86/xstockstrat/pull/1574 (auto-merge, squash, enabled by the operator
+  on GitHub).
+- CI failure 1: `Migration rerun (idempotent replay)` — `migration-rerun: ingest should be clean at 17,
+  got: 18`. `scripts/migration-rerun.py` pins the top ingest migration; bumped `17` → `18` (Deviation Log).
+  The checks after that line (post-R assertions, pass 4 with marketdata `010`) had not run yet.
