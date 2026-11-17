@@ -537,3 +537,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] O-7. Edit only the CI portfolio db-test step at ci.yml:1065; ci.yml:1116 (marketdata) is not touched. Target: the CI step.
 - [ ] Users with more than 500 positions see different totals and P&L, and may see new concentration alerts. Target: the integration PR release notes.
 - [ ] Read the PORTFOLIO-14 and PORTFOLIO-16 invariants. Target: `/sdd-spec`.
+
+## Session 2026-11-17 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status: design-approved → implementation-ready.
+- The steps form three red→green atomic units:
+  - Unit A, Steps 1–3: pgxmock RPC-reader tests, the 501-row service dbtest plus the ci.yml:1065 edit, and `listAllPositions` with the GetPortfolio/GetPnL switch.
+  - Unit B, Steps 4–5: the repeated-token RED test, then the guards.
+  - Unit C, Steps 6–7: background-reader tests, then broadcastSnapshot/checkRiskLimits plus the service CLAUDE.md Observability update.
+- Two docs steps follow: Step 8 promotes the scenarios (C-16), and Step 9 runs the D-9 dev smoke gate, a numbered step with a recorded result per fails.md:3305-3307.
+- `acceptance.feature`: appended `@AC-6 @FR-5` "A position-read failure skips concentration but drawdown still alerts". This is design.md's new `@feature-357` scenario (O-2, the EXTEND of `@AC-9 @feature-231`), added append-only so Step 6's 4g test has a Covers target.
+- Key codebase findings:
+  - **O-10 anchor.** `cardinality($n::text[])` appears only in the ListPositions SQL (portfolio_repo.go:167). The precedent regex is `(?s)cardinality\(\$\d+::text\[\]\)` (portfolio_repo_test.go:279).
+  - **Arg shape.** PAPER with no account binds 4 args, cursor at index 2. PAPER plus an account binds 5 args, cursor at index 3. The page-2 cursor is `[]string{rows[499].Symbol, "TRADING_MODE_PAPER", rows[499].AccountId}` (portfolio_repo.go:166-168, :193-196).
+  - **InsertSnapshot.** `open_positions` is arg index 5 (portfolio_repo.go:231-236).
+  - **O-9 resolved.** `*pgxpool.Pool` satisfies `queryRower` (portfolio_repo.go:20-21, :46). The only non-test `repo.Pool()` call is in `NewPortfolioService` (portfolio_service.go:162), so `NewPortfolioRepoWithDB(pool)` works for the dbtest and the R-10 fallback is not needed.
+  - **O-7.** The portfolio db-test `run:` line is ci.yml:1065; ci.yml:1116 is marketdata and is untouched.
+  - **PORTFOLIO-14/16 read.** The drain runs after `positionsMu` is released (portfolio_service.go:481-485) and only reads `positions`, so it is not a new writer. `latestQuotesFor` stays the single quote-fetch site, one batch per reader invocation.
+  - **Existing pgxmock tests.** They return at most one row per positions query, so a single page with no token stays green. The `TestProcessOrderFill_*` error tests (portfolio_fill_errors_test.go:67-110) now reach `GetAccountDrawdowns` on a page error; it is unexpected, it errors and it is skipped (`if err == nil`, portfolio_service.go:1313), so no nil-notify dereference occurs.
+
+### Decisions
+
+- **Guards in their own unit.** The guards land in Steps 4–5, separate from the drain in Step 3. A test that calls `listAllPositions` directly (design 4(d)) cannot compile before the helper exists, and a guard test written after the guard cannot go RED. Splitting the units gives a behavioural RED: the drain without a guard reaches a third, unexpected pgxmock call, so the `"repeated page token"` assertion fails.
+- **No Exec-mode subtest.** The service dbtest has none. Feature 353's repository dbtest already proves the `$n::text[]` bind under `QueryExecModeExec` (list_positions_dbtest_test.go:24), and this fix adds no bind (insights.md:4626-4628). This follows design's minimal `serviceTestPool`.
+- **Isolation.** The dbtest prefix is `it-357-`. Account ids are derived from the per-test user id, and cleanup deletes by prefix only (O-8).
+
+### Open Threads
+
+- [ ] **Escalation (P-03): the empty-page-with-a-token guard is unreachable through the concrete repo.** `ListPositions` emits a token only when `len(positions) > pageSize` (portfolio_repo.go:193-197), so design 4(d)'s "empty page with a token via GetPnL end to end" test cannot be built. There is no repo seam, and R-1/C-18 rule out adding one.
+  - The spec ships the guard untested as defense in depth (design D-3, mirroring `collectFills` :1125-1127) and marks the test **Not found** (Step 4).
+  - The operator may instead drop the guard at `/sdd-review impl-spec`. Decide before `/sdd-execute` Step 5.
+- [ ] D-9 smoke (Step 9) runs after the integration merge to main-dev and before `/promote`. On failure: per-page enrichment plus re-aggregation, and relax AC-4 to `<= 2`.
+- [ ] The release notes at the integration PR must cover: totals and P&L change for users with more than 500 positions, new concentration alerts, cross-page skew (D-8), fill hot-path cost (D-13), and drawdown no longer suppressed by a page error (O-2).
