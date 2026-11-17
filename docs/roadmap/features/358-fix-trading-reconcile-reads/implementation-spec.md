@@ -424,7 +424,7 @@ Step 3 and is GREEN-side only. Its guard discrimination is exact text per row (D
 
 ### Step 5 — docs: Document paging and the skip counter in the trading reconciliation docs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/docs/reconciliation.md` — modify

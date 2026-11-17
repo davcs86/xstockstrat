@@ -19,6 +19,7 @@
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps; FR-5 and @AC-4 appended per operator decision (design gate r6) |
 | 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
 | 2026-11-17 | `in-progress` → `in-progress` | /sdd-execute | Re-spec c36086186: Steps 1-4 Verification lines wrapped in `( ... )` subshells (operator Option B); Step 1 done |
+| 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done (Step 5 docs last); `check-config-wiring.mjs --final` exit 0 |
 
 ---
 

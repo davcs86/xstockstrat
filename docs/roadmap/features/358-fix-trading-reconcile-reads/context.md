@@ -1176,3 +1176,13 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - Config-key wiring gate: N/A. The step declares no config key.
 - Files modified: `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go`
 - Deviations: RED was taken on a temporarily restored pre-Step-3 tree, the status package uses the `grpcstatus` alias, and the block exits 1 on success. Full detail is in the Deviation Log.
+
+## Session 2026-11-17 — sdd-execute sequential, Step 5 (sdd-batch-execute)
+
+### Step 5 — docs: Document paging and the skip counter in the trading reconciliation docs [done]
+- `reconciliation.md`: added the paging sentence right after the end of the sentence the spec quotes at :56-57 ("…not immediately a foreign position: … empty `account.positions.synced`."; it ends at :58). Also appended `trading.reconciliation.position_check_skipped{outcome rpc_error|deadline|cursor_invalid}` (feature 358) to the feature-294 instrument bullet, with its meaning and the deploy-burst/alert note. `CLAUDE.md:223`: the pointer line now names the skip counter. The counter name, outcome set, page size 500 and `broker.timeout_ms` were re-verified against `otel.go:339,385-387` and `trading.go:2085,2634-2635`.
+- TDD: N/A (docs). Green: both Verification greps matched (`reconciliation.md:102` and `CLAUDE.md:223` for the counter; `reconciliation.md:59` "page by page", `:61` `next_page_token`), `exit=0` (.sdd-logs/v-1.log).
+- Config-key wiring gate (last step, `--final`): `exit=0` (.sdd-logs/v-2.log). It printed two `REPORTED:` baseline lines, `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. Neither comes from this feature: the 358 diff against `origin/main-dev` has no `trading_state` line and declares no key.
+- Files modified: `services/xstockstrat-trading/docs/reconciliation.md`, `services/xstockstrat-trading/CLAUDE.md`
+- Deviations: none.
+- Status: in-progress → code-completed. No insights.md entry, because nothing new generalizes beyond the existing fails.md:3311/3312 lessons.
