@@ -700,3 +700,10 @@ Feature: xstockstrat-portfolio - signal-expiry backfill APPLY never strands a li
 ### Coverage check
 - Source scenarios: 3. Planned: 2 NEW (AC-1, AC-2) and 1 DUP (AC-3, already in durable 281 @AC-16 via step 6). Every @AC-* is accounted for.
 ```
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1576 merged to main
+- Feature promoted and committed: 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17

@@ -117,7 +117,7 @@ name matches the expected one, so Step 9 writes the row.
 
 ### Step 1 — docs: Align acceptance.feature and product-spec.md with the approved design
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/356-fix-analysis-held-position-drains/`
 **Files**:
 - `docs/roadmap/features/356-fix-analysis-held-position-drains/acceptance.feature` — modify
@@ -126,9 +126,9 @@ name matches the expected one, so Step 9 writes the row.
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `acceptance.feature:36-42` is `@AC-5`; its When step reads `When the opportunity queue for "u-1" is recomputed`.
-- `acceptance.feature` has `@AC-1..@AC-9` only (last scenario `@AC-9` at `:67-74`).
-- `product-spec.md` FR-4 bullet `_compute_opportunities` says "Repeated failures surface `compute_failed` (feature 185). The fix adds no new metric instrument." and has no daily-refresh bullet.
+- `acceptance.feature:34-40` is `@AC-5` (tag `:34`); its When step (`:38`) reads `When the opportunity queue for "u-1" is recomputed`. `:42` is the `@AC-6` tag.
+- `acceptance.feature` has `@AC-1..@AC-9` only (9 scenarios; last scenario `@AC-9`, tag at `:68`); no `@AC-10`.
+- `product-spec.md:59-60` FR-4 bullet `_compute_opportunities` says "Repeated failures surface `compute_failed` (feature 185). The fix adds no new metric instrument." and has no daily-refresh bullet.
 - design.md § Chosen Approach 4 and 6, D-11, D-13 (debate.md:32,34) and § Business Rules Touched EXTEND `@AC-5` / `@AC-10`.
 - `servicer.py:4784-4795` (`compute_failed` set only on cold reads; O-6).
 
@@ -165,7 +165,7 @@ grep -n "_opportunity_refresh_tick\|daily refresh" docs/roadmap/features/356-fix
 
 ### Step 2 — service: Shared fail-closed positions drain; `_drain_held_symbols` and `ScreenSymbols` use it
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -174,9 +174,9 @@ grep -n "_opportunity_refresh_tick\|daily refresh" docs/roadmap/features/356-fix
 
 **Codebase Evidence**:
 - Exception precedent: `class _BarFetchError(Exception)` (`servicer.py:385`) and `class _FundamentalsPageError(Exception)` (`servicer.py:389`).
-- Paged-helper precedent, module level: `async def _fetch_historical_fundamentals_paged(stub, symbol, metadata)` (`servicer.py:6672-6703`), raising `_FundamentalsPageError` on a stalled cursor or the page cap; imported by `live_loop.py:41-42`.
+- Paged-helper precedent, module level: `async def _fetch_historical_fundamentals_paged(stub, symbol, metadata)` (`servicer.py:6674`), raising `_FundamentalsPageError` on a stalled cursor or the page cap; imported by `live_loop.py:41-42`.
 - Constants: `_BAR_PAGE_SIZE = 1000` (`servicer.py:298`), `_MAX_DRAIN_PAGES = 50` (`servicer.py:347`).
-- `_drain_held_symbols` (`servicer.py:6404-6437`): `None`-portfolio early return `{}` (`:6413`); loop `for _ in range(_MAX_DRAIN_PAGES)` (`:6417`); `ListPositionsRequest(user_id=..., page=common_pb2.PageRequest(page_size=_BAR_PAGE_SIZE, page_token=page_token))` with `metadata=propagation_meta` (`:6419-6427`); `except grpc.RpcError` → `log.warning("ListOpportunities: ListPositions failed: %s", e)` → `return held` (`:6428-6430`); per-page sum `held[norm] = held.get(norm, 0.0) + abs(p.market_value)` (`:6431-6433`); token exit `:6434-6437`.
+- `_drain_held_symbols` (`servicer.py:6406-6439`; +2 since spec time from main-dev `756a24a7`'s delisted-binding filter in `_drain_watchlist_bindings`): `None`-portfolio early return `{}` (`:6415`); loop `for _ in range(_MAX_DRAIN_PAGES)` (`:6419`); `ListPositionsRequest(user_id=..., page=common_pb2.PageRequest(page_size=_BAR_PAGE_SIZE, page_token=page_token))` with `metadata=propagation_meta` (`:6421-6429`); `except grpc.RpcError` → `log.warning("ListOpportunities: ListPositions failed: %s", e)` → `return held` (`:6430-6432`); per-page sum `held[norm] = held.get(norm, 0.0) + abs(p.market_value)` (`:6433-6435`); token exit `:6436-6439`.
 - `ScreenSymbols` cross-ref (`servicer.py:3933-3941`): `user_id = self._caller_user_id(context)`, `held = await self._drain_held_symbols(user_id, propagation_meta)`, then `if _normalize_symbol(r.symbol) in held: r.held = True`; no try/except.
 - `_compute_opportunities` gathers `_drain_held_symbols` without `return_exceptions` (`servicer.py:5365-5370`); kick path `_run` catches `Exception`, logs with `exc_info=True` and records `record_opportunity_recompute("full", "failed")` (`servicer.py:4940-4958`). Not edited (design § 3, R-5).
 - Header propagation: unchanged; the helper receives the caller's `metadata` and passes it through as `metadata=` (C-03, PLAT-4). No new outbound call.
@@ -188,29 +188,30 @@ grep -n "_opportunity_refresh_tick\|daily refresh" docs/roadmap/features/356-fix
 
 **Instructions**:
 1. After `class _FundamentalsPageError` (`servicer.py:389-390`), add `class _PositionsPageError(Exception)` with a one-line docstring in the style of its neighbours ("Raised when positions pagination cannot complete safely (page error, repeated token, page cap)."). It must not subclass `ValueError` (D-2; `live_loop.py:409` treats `ValueError` as the ownerless skip).
-2. Next to `_fetch_historical_fundamentals_paged` (module level, `servicer.py:6672`), add `async def _drain_positions_paged(stub, user_id, metadata) -> list` (D-1, D-2, D-6):
+2. Next to `_fetch_historical_fundamentals_paged` (module level, `servicer.py:6674`), add `async def _drain_positions_paged(stub, user_id, metadata) -> list` (D-1, D-2, D-6):
    - `rows: list = []`, `token = ""`; loop `for _ in range(_MAX_DRAIN_PAGES)`.
    - `try:` covers only the page body: `resp = await stub.ListPositions(portfolio_pb2.ListPositionsRequest(user_id=user_id, page=common_pb2.PageRequest(page_size=_BAR_PAGE_SIZE, page_token=token)), metadata=metadata)`, `page = list(resp.positions)`, `nxt = resp.page.next_page_token`. `except Exception as e: raise _PositionsPageError(f"{user_id}: ListPositions failed: {e}") from e`.
    - After that `try`: `rows.extend(page)`; `if not nxt: return rows`; `if nxt == token: raise _PositionsPageError(f"{user_id}: ListPositions repeated page token")`; `token = nxt`.
    - After the loop: `log.warning(...)` naming `user_id` and the cap `_MAX_DRAIN_PAGES` (e.g. `"ListPositions(%s) exceeded %d pages with a token pending"`), then `raise _PositionsPageError(...)` naming both.
    - No `max_pages` / `page_size` parameters (R-4). No partial return on any failure path. `next == sent` misses an A→B→A cycle; the cap is the backstop (accepted open risk). Portfolio clamps the page size to 100 (`services/xstockstrat-portfolio/internal/repository/portfolio_repo.go:137-138`), so the effective bound is 5,000 positions per owner (accepted; R-7 is the follow-up). Do not add comments restating this (CLAUDE.md rule 5).
-3. Rewrite the body of `_drain_held_symbols` (`servicer.py:6413-6437`): keep `if self._portfolio is None: return {}`; then `rows = await _drain_positions_paged(self._portfolio, user_id, propagation_meta)`; build `held` by summing `abs(p.market_value)` per `_normalize_symbol(p.symbol)` over `rows`; return it. No try/except (the error reaches `_compute_opportunities` → `_run`, R-5). Keep the docstring; drop nothing else.
+3. Rewrite the body of `_drain_held_symbols` (after its docstring, `servicer.py:6415-6439`): keep `if self._portfolio is None: return {}`; then `rows = await _drain_positions_paged(self._portfolio, user_id, propagation_meta)`; build `held` by summing `abs(p.market_value)` per `_normalize_symbol(p.symbol)` over `rows`; return it. No try/except (the error reaches `_compute_opportunities` → `_run`, R-5). Keep the docstring; drop nothing else.
 4. In `ScreenSymbols` (`servicer.py:3933-3941`) wrap only the drain: `try: held = await self._drain_held_symbols(user_id, propagation_meta)` / `except _PositionsPageError as e: log.warning("ScreenSymbols: held cross-reference skipped for user=%s: %s", user_id, e); held = {}`. Keep `user_id = self._caller_user_id(context)` outside the `try`. The response is still returned with no row marked `held`.
-5. Do not touch `_compute_opportunities`, `_kick_opportunity_recompute`, `_opportunity_refresh_tick` (Step 6), the out-of-scope sibling drains (`servicer.py:6006`, `:6369`) or the constants.
+5. Do not touch `_compute_opportunities`, `_kick_opportunity_recompute`, `_opportunity_refresh_tick` (Step 6), the out-of-scope sibling drains (`servicer.py:6006`, `:6371`) or the constants.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_servicer.py tests/test_owner_header_guard.py tests/test_opportunities_latency.py tests/test_unreadable_formula.py -q
-grep -n "class _PositionsPageError\|async def _drain_positions_paged\|except _PositionsPageError" services/xstockstrat-analysis/app/handlers/servicer.py
-grep -n "metadata=metadata" services/xstockstrat-analysis/app/handlers/servicer.py   # helper forwards the caller's propagation metadata (C-03)
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_servicer.py tests/test_owner_header_guard.py tests/test_opportunities_latency.py tests/test_unreadable_formula.py -q )
+( grep -n "class _PositionsPageError\|async def _drain_positions_paged\|except _PositionsPageError" services/xstockstrat-analysis/app/handlers/servicer.py )
+# helper forwards the caller's propagation metadata (C-03)
+( grep -n "metadata=metadata" services/xstockstrat-analysis/app/handlers/servicer.py )
 ```
 
 ---
 
 ### Step 3 — test: Servicer held drain, ScreenSymbols and on-demand recompute fail closed (red first)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_held_position_drains.py` — create
@@ -220,12 +221,12 @@ grep -n "metadata=metadata" services/xstockstrat-analysis/app/handlers/servicer.
 **Reviewers**: xstockstrat-analysis service owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `make_servicer()` (`tests/test_analysis_servicer.py:43-67`) passes no `portfolio_channel`, so `svc._portfolio is None` (`servicer.py:556-560`); the tests assign a whole stub `svc._portfolio = SimpleNamespace(ListPositions=AsyncMock(side_effect=...))` (R-13). `_strategies_repo` is `None` without a `db_pool` (`servicer.py:564`).
+- `make_servicer()` (`tests/test_analysis_servicer.py:44`) passes no `portfolio_channel`, so `svc._portfolio is None` (`servicer.py:556-560`); the tests assign a whole stub `svc._portfolio = SimpleNamespace(ListPositions=AsyncMock(side_effect=...))` (R-13). `_strategies_repo` is `None` without a `db_pool` (`servicer.py:564`).
 - RpcError fake: `aio_rpc_error(code, details="")` returns a `grpc.aio.AioRpcError` (`tests/conftest.py:145-147`), a `grpc.RpcError` subclass (D-5 substance kept by D-12).
-- Screener harness: `class TestScreenSymbolsHeld` / `test_held_marked_from_positions` (`tests/test_analysis_servicer.py:6487-6516`), building the servicer, stubbing `_marketdata.GetBars`, `_indicators.ComputeIndicator`, `_ingest.ListSignalSources`, then `await svc.ScreenSymbols(analysis_pb2.ScreenSymbolsRequest(symbols=["AAPL", "MSFT"]), _ctx(_HEADERS))`.
-- Recompute harness: `_refresh_svc(user_ids, compute=None)` (`tests/test_analysis_tick_telemetry.py:44-50`) sets `svc._compute_opportunities` as an instance attribute and `svc._replace_and_stamp_compute_state = AsyncMock()`; `_drain_background()` (`:53-55`); the AC-51 exc_info pattern (`:174-184`); `metric_sum`, `all_attribute_values` imported from `tests.test_live_loop_telemetry` (`:17`); `metric_reader = test_telemetry.metric_reader` (`:28`).
+- Screener harness: `class TestScreenSymbolsHeld` / `test_held_marked_from_positions` (`tests/test_analysis_servicer.py:6490`, `:6492`; its empty-token `pos_resp.page.next_page_token = ""` at `:6511`), building the servicer, stubbing `_marketdata.GetBars`, `_indicators.ComputeIndicator`, `_ingest.ListSignalSources`, then `await svc.ScreenSymbols(analysis_pb2.ScreenSymbolsRequest(symbols=["AAPL", "MSFT"]), _ctx(_HEADERS))`.
+- Recompute harness: `_refresh_svc(user_ids, compute=None)` (`tests/test_analysis_tick_telemetry.py:44-50`) sets `svc._compute_opportunities` as an instance attribute and `svc._replace_and_stamp_compute_state = AsyncMock()`; `_drain_background()` (`:53-55`); the AC-51 exc_info pattern (`:174-184`); `metric_sum`, `all_attribute_values` imported from `tests.test_live_loop_telemetry` (`:17`); `metric_reader = test_telemetry.metric_reader` (`:29`). The file has no `from tests.conftest` import yet; this step adds it (for `aio_rpc_error`), which Step 7's verification grep also relies on. The `_compute_opportunities` ListPositions `AsyncMock` precedent is `tests/test_analysis_servicer.py:4815`.
 - Kick path `svc._kick_opportunity_recompute(user_id, meta)` → `_run` (`servicer.py:4933-4961`).
-- Sibling drains to stub empty: `_drain_active_signals -> list` (`servicer.py:6363`), `_drain_watchlist_bindings -> list[tuple[str, str]]` (`:5995`), `_drain_source_weights -> dict[str, float]` (`:6389`).
+- Sibling drains to stub empty: `_drain_active_signals -> list` (`servicer.py:6365`), `_drain_watchlist_bindings -> list[tuple[str, str]]` (`:5995`), `_drain_source_weights -> dict[str, float]` (`:6391`).
 - Recon: no existing test fake ignores `page_token` (recon.md:56, :99).
 - C-13: the ListPositions fakes in `test_held_position_drains.py` are shared by Steps 3 and 5 **within one file** (one consumer module); the AC-5 / AC-6 fakes are one-offs in their own files and reuse the canonical `aio_rpc_error` from `tests/conftest.py`. No second inline copy of a domain literal across files, so no new conftest entry.
 
@@ -250,8 +251,8 @@ grep -n "metadata=metadata" services/xstockstrat-analysis/app/handlers/servicer.
    - AC-8: returns `{"AAPL": 100.0, "MSFT": 200.0, "NVDA": 300.0}`; `await_count == 3`.
    - AC-9: returns `{"AAPL": 150.0}`; `await_count == 1`.
    Import the module as `import app.handlers.servicer as servicer_mod` so the file imports cleanly against the pre-Step-2 tree.
-3. AC-6, in `TestScreenSymbolsHeld` (`tests/test_analysis_servicer.py:6487`): add `test_failed_held_drain_marks_no_row_held(self, caplog)`, copying the stubs of `test_held_marked_from_positions` but with `svc._portfolio.ListPositions` = page 1 AAPL `next_page_token="p2"`, page 2 raises `aio_rpc_error(grpc.StatusCode.UNAVAILABLE)` (import from `tests.conftest`, already imported there at `:40`). Assert the RPC returns results, the AAPL row has `held is False`, and one WARNING record mentions the held cross-reference. (Today: AAPL `held is True`.)
-4. AC-5, in `tests/test_analysis_tick_telemetry.py` after the AC-51 tests (`:174-199`): `test_ac5_failed_held_drain_fails_on_demand_recompute(metric_reader, caplog)`:
+3. AC-6, in `TestScreenSymbolsHeld` (`tests/test_analysis_servicer.py:6490`): add `test_failed_held_drain_marks_no_row_held(self, caplog)`, copying the stubs of `test_held_marked_from_positions` but with `svc._portfolio.ListPositions` = page 1 AAPL `next_page_token="p2"`, page 2 raises `aio_rpc_error(grpc.StatusCode.UNAVAILABLE)` (import from `tests.conftest`, already imported there at `:41`). Assert the RPC returns results, the AAPL row has `held is False`, and one WARNING record mentions the held cross-reference. (Today: AAPL `held is True`.)
+4. AC-5, in `tests/test_analysis_tick_telemetry.py` after the AC-51 tests (`:174-199`): `test_ac5_failed_held_drain_fails_on_demand_recompute(metric_reader, caplog)`. Add `from tests.conftest import aio_rpc_error` to this file's imports (none exists today):
    - `svc = _refresh_svc(_OWNERS)` then `del svc._compute_opportunities` so the real `AnalysisServicer._compute_opportunities` and the real `_drain_held_symbols` run (R-9).
    - Stub only the siblings: `svc._drain_active_signals = AsyncMock(return_value=[])`, `svc._drain_watchlist_bindings = AsyncMock(return_value=[])`, `svc._drain_source_weights = AsyncMock(return_value={})`.
    - `svc._portfolio = SimpleNamespace(ListPositions=AsyncMock(side_effect=aio_rpc_error(grpc.StatusCode.UNAVAILABLE)))` (page 1 raises).
@@ -262,17 +263,18 @@ grep -n "metadata=metadata" services/xstockstrat-analysis/app/handlers/servicer.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_held_position_drains.py tests/test_analysis_servicer.py::TestScreenSymbolsHeld tests/test_analysis_tick_telemetry.py -q
-cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40
-grep -n "conftest\|from tests.conftest" services/xstockstrat-analysis/tests/test_held_position_drains.py services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py   # aio_rpc_error from the canonical home (C-13)
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_held_position_drains.py tests/test_analysis_servicer.py::TestScreenSymbolsHeld tests/test_analysis_tick_telemetry.py -q )
+( cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 )
+# aio_rpc_error from the canonical home (C-13)
+( grep -n "conftest\|from tests.conftest" services/xstockstrat-analysis/tests/test_held_position_drains.py services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py )
 ```
 
 ---
 
 ### Step 4 — service: Live-loop held drain fails closed; the cycle skips a failed owner once
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -287,7 +289,8 @@ grep -n "conftest\|from tests.conftest" services/xstockstrat-analysis/tests/test
 - Pattern to reuse: entry-backfill `failed_owners` short-circuit (`entry_backfill.py:142-144`, `:150-159`).
 - Telemetry: `record_live_loop_drain_failure(source)` has no owner attribute (`app/telemetry.py:465-467`).
 - Callers of `_drain_held`: `live_loop.py:402`, `entry_backfill.py:148` (grep over `app/`). The backfill's `except Exception` (`entry_backfill.py:150-159`) already isolates the owner; no change there (`@AC-8 @feature-262`).
-- Test call sites broken by the new raise: `tests/test_live_loop_telemetry.py:121-127` (`held = await loop._drain_held("o-1")`; `assert held == set()`), repaired in Step 5. `tests/test_owner_header_guard.py:408-416` stays green (`ValueError` before any RPC).
+- Callers of `_drain_held_symbols` (for completeness): `servicer.py:3935`, `:5367`. No other `_drain_held(`/`_drain_held_symbols(` caller exists.
+- Test call sites broken by the new raise: `tests/test_live_loop_telemetry.py:123-129` (`held = await loop._drain_held("o-1")`; `assert held == set()`), repaired in Step 5. `tests/test_owner_header_guard.py:411-419` (empty-owner parametrize at `:411`) stays green (`ValueError` before any RPC).
 
 **Lands with**: `Step 5`
 
@@ -311,17 +314,18 @@ grep -n "conftest\|from tests.conftest" services/xstockstrat-analysis/tests/test
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_live_loop.py tests/test_live_loop_telemetry.py tests/test_entry_backfill.py tests/test_owner_header_guard.py -q
-grep -n "except _PositionsPageError\|failed_owners" services/xstockstrat-analysis/app/engine/live_loop.py
-grep -n "owner_metadata(owner)" services/xstockstrat-analysis/app/engine/live_loop.py   # header propagation unchanged (C-03)
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_live_loop.py tests/test_live_loop_telemetry.py tests/test_entry_backfill.py tests/test_owner_header_guard.py -q )
+( grep -n "except _PositionsPageError\|failed_owners" services/xstockstrat-analysis/app/engine/live_loop.py )
+# header propagation unchanged (C-03)
+( grep -n "owner_metadata(owner)" services/xstockstrat-analysis/app/engine/live_loop.py )
 ```
 
 ---
 
 ### Step 5 — test: Live-loop held drain and cycle fail closed (red first); flip the AC-16 test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_held_position_drains.py` — modify
@@ -331,8 +335,8 @@ grep -n "owner_metadata(owner)" services/xstockstrat-analysis/app/engine/live_lo
 
 **Codebase Evidence**:
 - Live-loop harness: `_make_loop()` (`tests/test_live_loop.py:37-59`), `_live_row(strategy_id, user_id, symbols=None, ...)` (`:647-660`), the per-owner cycle pattern with `loop._eval_pair = fake_eval` recording `(defn.user_id, symbol)` and `await loop._run_cycle()` (`tests/test_live_loop.py:900-930`).
-- `_wire_drains(loop, list_positions=...)` (`tests/test_live_loop_telemetry.py:53-60`) sets EOF `ListWatchlists` / `QuerySignals`; `metric_sum` (`:32`), `all_attribute_values` (`:41`), `metric_reader = test_telemetry.metric_reader` (`:26`).
-- `test_ac16_failed_held_drain_counted_without_owner` (`tests/test_live_loop_telemetry.py:121-127`): `RuntimeError("portfolio down")` side effect, `assert held == set()`, metric == 1, no `"o-1"` attribute.
+- `_wire_drains(loop, list_positions=...)` (`tests/test_live_loop_telemetry.py:55-62`) sets EOF `ListWatchlists` / `QuerySignals`; `metric_sum` (`:34`), `all_attribute_values` (`:43`), `metric_reader = test_telemetry.metric_reader` (`:28`). The file already imports `common_pb2` / `portfolio_pb2` and ends with a `test_ac8_delisted_binding` test (main-dev).
+- `test_ac16_failed_held_drain_counted_without_owner` (`tests/test_live_loop_telemetry.py:123-129`): `RuntimeError("portfolio down")` side effect, `assert held == set()`, metric == 1, no `"o-1"` attribute.
 - `resolve_universe`: a non-empty `signal_params.symbols` allowlist is the universe verbatim, else `watchlist ∪ held ∪ ...` (`live_loop.py:126-128,150-152`), so o-1 strategies with `symbols=["AAPL"]` are evaluated today even when the held drain fails (non-vacuous RED for AC-7), and an o-2 strategy with no allowlist evaluates exactly its held set.
 - `ListPositions` request carries `user_id=owner` and `metadata=owner_metadata(owner)` (`live_loop.py:568-580`), so a fake can branch on `req.user_id`.
 
@@ -349,22 +353,23 @@ grep -n "owner_metadata(owner)" services/xstockstrat-analysis/app/engine/live_lo
    - AC-3: raises (no set holding AAPL returned), `drain_failures{held} == 1`.
    - AC-8: returns `{"AAPL", "MSFT", "NVDA"}`, `await_count == 3`. AC-9: returns `{"AAPL"}`, `await_count == 1`.
 2. AC-7 cycle test: `loop._db.fetch = AsyncMock(return_value=[_live_row("s1", "o-1", symbols=["AAPL"]), _live_row("s2", "o-1", symbols=["AAPL"]), _live_row("s3", "o-2")])`; `ListPositions` side effect raises `aio_rpc_error(grpc.StatusCode.UNAVAILABLE)` when `req.user_id == "o-1"` and returns one MSFT page with an empty token for `"o-2"`; record `seen` via `loop._eval_pair`; `await loop._run_cycle()`. Assert: no `seen` entry has user `"o-1"`; `ListPositions` awaited exactly once with `user_id == "o-1"`; `drain_failures{held} == 1`; `{s for u, s in seen if u == "o-2"} == {"MSFT"}`; no attribute value contains `"o-1"`; exactly one WARNING naming `s1` and `o-1`. (Today: s1/s2 are evaluated on AAPL.)
-3. Flip `test_ac16_failed_held_drain_counted_without_owner` (`tests/test_live_loop_telemetry.py:121-127`): replace `held = await loop._drain_held("o-1")` / `assert held == set()` with `with pytest.raises(_PositionsPageError): await loop._drain_held("o-1")` (import from `app.handlers.servicer`); keep the metric == 1 and no-`"o-1"` assertions unchanged (`@AC-16 @feature-294` PRESERVE, operator decision).
+3. Flip `test_ac16_failed_held_drain_counted_without_owner` (`tests/test_live_loop_telemetry.py:123-129`): replace `held = await loop._drain_held("o-1")` / `assert held == set()` with `with pytest.raises(_PositionsPageError): await loop._drain_held("o-1")` (import from `app.handlers.servicer`); keep the metric == 1 and no-`"o-1"` assertions unchanged (`@AC-16 @feature-294` PRESERVE, operator decision).
 4. As one unit with Step 4: run items 1-2 against the Step-3 tree and record the RED (AC-1/2/3 DID NOT RAISE, AC-7 o-1 evaluated), then apply Step 4 and record GREEN.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_held_position_drains.py tests/test_live_loop_telemetry.py tests/test_live_loop.py tests/test_entry_backfill.py tests/test_owner_header_guard.py -q
-cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40
-grep -n "from tests.conftest\|from tests.test_live_loop" services/xstockstrat-analysis/tests/test_held_position_drains.py   # reuses existing harness/fixture homes (C-13)
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_held_position_drains.py tests/test_live_loop_telemetry.py tests/test_live_loop.py tests/test_entry_backfill.py tests/test_owner_header_guard.py -q )
+( cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 )
+# reuses existing harness/fixture homes (C-13)
+( grep -n "from tests.conftest\|from tests.test_live_loop" services/xstockstrat-analysis/tests/test_held_position_drains.py )
 ```
 
 ---
 
 ### Step 6 — service: Daily opportunity refresh counts a failed user on `recompute{full,failed}`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -372,8 +377,8 @@ grep -n "from tests.conftest\|from tests.test_live_loop" services/xstockstrat-an
 **Reviewers**: xstockstrat-analysis service owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_opportunity_refresh_tick` per-user loop (`servicer.py:6054-6064`): `meta = owner_metadata(uid)` (`:6057`); `rows = await self._compute_opportunities(uid, meta)` / `await self._replace_and_stamp_compute_state(uid, rows, meta)` (`:6059-6060`); `except Exception as e:  # one bad user never kills the pass` → `failed += 1` (`:6062`) → `log.warning("opportunity daily refresh failed for user=%s: %s", uid, e)` (`:6063`); `schedule.advance(...)` (`:6066`) and `_log_items_tick(...)` (`:6067`) after the loop.
-- Instrument: `record_opportunity_recompute(kind, outcome)` with `kind: full | retry; outcome: ok | failed` (`app/telemetry.py:484-486`); existing call `telemetry.record_opportunity_recompute("full", "failed")` (`servicer.py:4957`) and the `exc_info=True` precedent (`servicer.py:4955`).
+- `_opportunity_refresh_tick` per-user loop (`servicer.py:6056-6069`): `meta = owner_metadata(uid)` (`:6059`); `rows = await self._compute_opportunities(uid, meta)` / `await self._replace_and_stamp_compute_state(uid, rows, meta)` (`:6061-6062`); `except Exception as e:  # one bad user never kills the pass` (`:6063`) → `failed += 1` (`:6064`) → `log.warning("opportunity daily refresh failed for user=%s: %s", uid, e)` (`:6065`); `schedule.advance(...)` (`:6068`) and `_log_items_tick(...)` (`:6069`) after the loop.
+- Instrument: `record_opportunity_recompute(kind, outcome)` with `kind: full | retry; outcome: ok | failed` (`app/telemetry.py:484-486`); existing call `telemetry.record_opportunity_recompute("full", "failed")` (`servicer.py:4957`, today the only such site) and the `exc_info=True` precedent (`servicer.py:4955`).
 - `_log_items_tick` (`servicer.py:377-382`) emits no failed count; untouched (R-8).
 
 **TDD**: red-green required
@@ -381,21 +386,22 @@ grep -n "from tests.conftest\|from tests.test_live_loop" services/xstockstrat-an
 **Covers**: —
 
 **Instructions**:
-1. In the per-user `except Exception as e:` of `_opportunity_refresh_tick` (`servicer.py:6061-6063`): add `exc_info=True` to the existing `log.warning(...)`, and add `telemetry.record_opportunity_recompute("full", "failed")` after `failed += 1` (D-11).
+1. In the per-user `except Exception as e:` of `_opportunity_refresh_tick` (`servicer.py:6063-6065`): add `exc_info=True` to the existing `log.warning(...)`, and add `telemetry.record_opportunity_recompute("full", "failed")` after `failed += 1` (D-11).
 2. Nothing else: no new instrument or label value (R-10), no daily `ok` (R-12), no count inside `_compute_opportunities` (R-11), `_log_items_tick` and `schedule.advance` unchanged. If every user fails (a portfolio outage at the refresh hour), the counter rises by N, no `loop tick ok` is written and all queues stay stale ~24h: accepted open risk. The counter also counts non-drain per-user failures (`owner_metadata` `ValueError`, lock or replace errors): accepted scope, documented in Step 8.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_tick_telemetry.py tests/test_telemetry_allowlist.py -q
-grep -n 'record_opportunity_recompute("full", "failed")' services/xstockstrat-analysis/app/handlers/servicer.py   # → two sites (kick path, daily refresh)
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_tick_telemetry.py tests/test_telemetry_allowlist.py -q )
+# → two sites (kick path, daily refresh)
+( grep -n 'record_opportunity_recompute("full", "failed")' services/xstockstrat-analysis/app/handlers/servicer.py )
 ```
 
 ---
 
 ### Step 7 — test: Daily-refresh failed user is counted and keeps its queue (red first); allowlist drive
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py` — modify
@@ -405,7 +411,7 @@ grep -n 'record_opportunity_recompute("full", "failed")' services/xstockstrat-an
 
 **Codebase Evidence**:
 - `_refresh_svc` (`tests/test_analysis_tick_telemetry.py:44-50`); `_schedule()` from `tests.test_strategy_templates` (`tests/test_strategy_templates.py:612-615`, an `AsyncMock` with `next_sleep_seconds` → 0.0); `test_opportunity_refresh_tick_record_ok_idle_and_none` (`:61-79`, no metric assertions, unaffected by Step 6).
-- `owner_metadata(uid)` sets `x-user-id` (`servicer.py:6057`), so the fake branches on `dict(metadata)["x-user-id"]` (D-13, R-13: a shared `side_effect` cannot fail u-1 while u-2 succeeds).
+- `owner_metadata(uid)` sets `x-user-id` (`servicer.py:6059`), so the fake branches on `dict(metadata)["x-user-id"]` (D-13, R-13: a shared `side_effect` cannot fail u-1 while u-2 succeeds).
 - Allowlist `_drive()` (`tests/test_telemetry_allowlist.py:46-55`) already calls `record_opportunity_recompute("full", "ok")` (`:52`); AC-41 checks label keys only (`:70-76`).
 
 **TDD**: red-green required
@@ -425,17 +431,18 @@ grep -n 'record_opportunity_recompute("full", "failed")' services/xstockstrat-an
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_tick_telemetry.py tests/test_telemetry_allowlist.py -q
-cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40
-grep -n "from tests.conftest" services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py   # aio_rpc_error from the canonical home (C-13)
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_tick_telemetry.py tests/test_telemetry_allowlist.py -q )
+( cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 )
+# aio_rpc_error from the canonical home (C-13); the import is added by Step 3
+( grep -n "from tests.conftest" services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py )
 ```
 
 ---
 
 ### Step 8 — docs: Analysis CLAUDE.md Observability caveat for `recompute{full,failed}`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -464,7 +471,7 @@ git diff -U0 -- services/xstockstrat-analysis/CLAUDE.md | grep -c "loop tick ok"
 
 ### Step 9 — docs: Register `analysis_opportunity_recompute_total` in produced-signals.tsv
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel`
 **Files**:
 - `packages/otel/produced-signals.tsv` — modify
@@ -496,3 +503,33 @@ awk -F'\t' '$1=="metric" && $2=="analysis_opportunity_recompute_total" && $3=="s
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 2 — Verification blocks re-spec'd to run as one shell (steps 2-7)
+**Spec said**: each **Verification** fence ran `cd services/xstockstrat-analysis && …` lines in sequence, with a trailing `#` comment on the last line.
+**Actual**: operator-directed re-spec (sequential-mode.md §5.3, commit `545825bf9`, before the step commit): each command line of Steps 2-7 is wrapped in its own `( … )` subshell, and each last-line comment moved onto its own line above. No command, path, flag or expected result changed.
+**Reason**: run as one shell, the second `cd` resolved against the first one's directory and the trailing comment swallowed the wrapper's closing parenthesis, so the blocks could not run verbatim.
+**Disposition**: operator decision (Option B, widened) on the Step 2 blocker.
+
+### Deviation: Step 2 — RED captured with an uncommitted scratch probe
+**Spec said**: `**TDD**: red-green required`; `**Covers**: —`; the paired tests are Step 3's (Step 3 item 5: run them against the pre-Step-2 tree).
+**Actual**: Step 2 runs in its own agent and may stage only `servicer.py` (F-08), so Step 3's test file was not written here. RED/GREEN was captured with an uncommitted probe `.sdd-logs/red/test_step2_red.py` (5 cases: ignored token, cap, page-2 RpcError, metadata/sum characterization, ScreenSymbols degrade). RED: 4 failed, 1 passed (`DID NOT RAISE` ×3, AAPL `held` `True is False`); GREEN: 5 passed. Recorded in context.md.
+**Reason**: red-before-green is mandatory, and the only committed tests for this behaviour belong to Step 3's **Files**.
+**Disposition**: Step 3 must still record its own RED for its named test ids. The Step-2 commit is already on the branch, so that RED runs against the pre-Step-2 `servicer.py` (`git show 545825bf9:services/xstockstrat-analysis/app/handlers/servicer.py`).
+
+### Deviation: Step 3 — RED run against a temporarily restored pre-Step-2 `servicer.py`
+**Spec said**: item 5, write the tests and run them against the pre-Step-2 tree **before** applying Step 2.
+**Actual**: Step 2 was already committed (`89d21e081`). For the RED run (`.sdd-logs/v-1.log`) the working-tree `servicer.py` was overwritten with `git show 545825bf9:services/xstockstrat-analysis/app/handlers/servicer.py`, the Step 3 Verification block was run verbatim, and the file was then restored with `git checkout --` (empty diff before GREEN and commit). The spec's AC-4 note expected "red N/A — guard"; on the pre-Step-2 tree AC-4 fails only at the new type pin (`AttributeError: ... no attribute '_PositionsPageError'`), the raw `RuntimeError` already propagates. AC-8 and AC-9 pass on the pre-Step-2 tree (success-path characterization; the spec claims no red for them).
+**Reason**: the step-2 deviation's disposition requires Step 3 to record its own RED for its named test ids against the pre-Step-2 `servicer.py`.
+**Disposition**: carried out as the Step 2 deviation directed; no commit holds the swapped file.
+
+### Deviation: Step 6 — RED captured with an uncommitted scratch probe
+**Spec said**: `**TDD**: red-green required`; `**Covers**: —`; the paired `@AC-10` test belongs to Step 7, whose item 4 records RED for Step 6.
+**Actual**: Step 6 may stage only `servicer.py` (F-08), so Step 7's test was not written here. RED/GREEN was captured with the uncommitted probe `.sdd-logs/red/test_step6_red.py` (one case on `_refresh_svc` with two users, u-1's `_compute_opportunities` raising: `recompute{full,failed}` == 1, `ok` == 0, WARNING `exc_info[0] is RuntimeError`, no `u-1` attribute, u-2 replaced, schedule advanced). RED: `AssertionError: assert 0 == 1` on the `failed` count; GREEN: `1 passed`. The edit site sat at `servicer.py:6072-6074` at the branch head (Steps 2-5 shifted it +9 from the cited `:6063-6065`); the content matched exactly.
+**Reason**: red-before-green is mandatory, and the committed test for this behaviour is in Step 7's **Files**.
+**Disposition**: same shape as the Step 2 deviation. Step 7 must still record its own `@AC-10` RED, against the pre-Step-6 `servicer.py` (the parent of the Step 6 commit).
+
+### Deviation: Step 7 — RED run against a temporarily restored pre-Step-6 `servicer.py`
+**Spec said**: item 4, write the test and run it against the Step-5 tree **before** applying Step 6.
+**Actual**: Step 6 was already committed (`d6989bd0b`). For the RED run (`.sdd-logs/v-1.log`) the working-tree `servicer.py` was overwritten with `git show dfd2f710c:services/xstockstrat-analysis/app/handlers/servicer.py` (the Step-5 tree), the Step 7 Verification block was run verbatim, and the file was then restored with `git checkout --` (empty diff before GREEN and commit). The RED stops at the first failing assertion (`recompute{full,failed}` `assert 0 == 1`), so the spec's second expected RED fact (`exc_info` unset) was not separately observed.
+**Reason**: the Step 6 deviation's disposition requires Step 7 to record its own `@AC-10` RED against the pre-Step-6 `servicer.py`.
+**Disposition**: carried out as the Step 6 deviation directed; no commit holds the swapped file.

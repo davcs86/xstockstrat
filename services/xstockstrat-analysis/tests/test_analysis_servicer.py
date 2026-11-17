@@ -6518,6 +6518,42 @@ class TestScreenSymbolsHeld:
         assert by_symbol.get("AAPL") is True
         assert by_symbol.get("MSFT") is False
 
+    @pytest.mark.asyncio
+    async def test_failed_held_drain_marks_no_row_held(self, caplog):
+        svc = make_servicer()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(
+                bars=[SimpleNamespace(close=c) for c in [10.0, 11.0, 12.0]]
+            )
+        )
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            return_value=SimpleNamespace(result=[SimpleNamespace(value=50.0)])
+        )
+        svc._ingest = MagicMock()
+        svc._ingest.ListSignalSources = AsyncMock(return_value=SimpleNamespace(sources=[]))
+        page1 = SimpleNamespace(
+            positions=[SimpleNamespace(symbol="AAPL", market_value=100.0)],
+            page=SimpleNamespace(next_page_token="p2"),
+        )
+        svc._portfolio = SimpleNamespace(
+            ListPositions=AsyncMock(side_effect=[page1, aio_rpc_error(grpc.StatusCode.UNAVAILABLE)])
+        )
+
+        req = analysis_pb2.ScreenSymbolsRequest(symbols=["AAPL", "MSFT"])
+        with caplog.at_level(logging.WARNING):
+            resp = await svc.ScreenSymbols(req, _ctx(_HEADERS))
+        by_symbol = {r.symbol: r.held for r in resp.results}
+        assert set(by_symbol) == {"AAPL", "MSFT"}
+        assert by_symbol["AAPL"] is False
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "held cross-reference" in r.getMessage()
+        ]
+        assert len(warnings) == 1
+
 
 # ---------------------------------------------------------------------------
 # Feature 089 — honest strategy lifecycle (reactivate + live preconditions)
