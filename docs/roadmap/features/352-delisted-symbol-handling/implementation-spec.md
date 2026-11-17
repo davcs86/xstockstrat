@@ -760,7 +760,7 @@ grep -n "migrationSql" src/__tests__/delistingConfirmationSeedMigration.test.ts
 
 ### Step 13 — service: `SyncWatchlistDelistings` / `AckDelistingAlerts` and marketdata's inbound caller check
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/authz.go` — create

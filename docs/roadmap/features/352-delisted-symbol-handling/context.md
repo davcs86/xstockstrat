@@ -621,3 +621,8 @@
   `SCALAR_BOUNDS_REGISTRY` is not exported.
 - Noted, not changed: `prettier --check` flags `configServiceImpl.ts` and `setConfigScalarBounds.test.ts`;
   not established whether the drift predates this step (the step's verification is lint + tests).
+
+### Step 13 — service: `SyncWatchlistDelistings` / `AckDelistingAlerts` and the inbound caller check — done
+- `authz.go`, new `delisting_sync.go`, `handler/marketdata_handler.go`, service `CLAUDE.md`,
+  `docs/patterns/inter-service-mtls.md`. Build, lint, 10 handler matches, `check-context-map.py` OK.
+- Noted, not changed: the handler's `toGRPCError` has no `Unimplemented` mapping (nothing here returns it).

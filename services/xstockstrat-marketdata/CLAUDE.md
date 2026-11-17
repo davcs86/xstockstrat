@@ -169,6 +169,25 @@ row whose flag alert had been claimed; a failed or cut-off send is logged at WAR
 15 s within it; a hook error or timeout never fails the asset load. A quote or price read re-warms a flagged
 symbol (`markWarm` is ungated, MARKETDATA-16) until the next load removes it again.
 
+**Sync and acknowledge RPCs.** `SyncWatchlistDelistings` and `AckDelistingAlerts`
+(`internal/service/delisting_sync.go`) are the only marketdata RPCs with an inbound caller check: the grant
+needs the header `x-internal-caller: portfolio` **and** a verified mTLS peer whose certificate carries the
+exact DNS SAN `xstockstrat-portfolio` (`internalCallerAllowlist`, `internal/service/authz.go`). A sync replaces
+`marketdata.watched_symbol` with the request (an empty request clears it), claims due flag alerts and returns
+the flagged symbols, read from the database and never from the in-memory flagged set. Fixed values: at most
+20 000 symbols per call (`InvalidArgument` above it), at most 100 claims per sync, a 10-minute claim lease.
+
+| `alert_state` | Rule |
+|---|---|
+| `REPORTED` | the alert is acknowledged |
+| `CLAIMED` | claimed by this call for the first time |
+| `REDELIVERY` | claimed by this call after a lease expired |
+| `PENDING` | anything else: not yet claimed, leased to another caller, over the limit of 100, or servable now |
+
+Every servability decision of one call reads the asset-set pointer once, so `CLAIMED`/`REDELIVERY` always
+implies `unservable_in_current_set = true`; an unloaded asset set claims nothing. Residual: a sync that spans
+an asset-set load can report a just-relisted symbol as unservable for one tick.
+
 Rollout and the first-flag burst → `docs/runbooks/delisting-rollout.md`.
 
 ## Quote retention (feature 229)
