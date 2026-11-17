@@ -1344,7 +1344,7 @@ git diff --exit-code HEAD -- services/xstockstrat-portfolio/internal/service/off
 
 ### Step 25 — test: decoration parity across every watchlist RPC; enumeration filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/delisting_decorate_test.go` — create

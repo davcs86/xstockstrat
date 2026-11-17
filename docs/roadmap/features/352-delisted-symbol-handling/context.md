@@ -553,3 +553,12 @@
   `TestListWatchlists351_` pass.
 - A first version filtered the store's slice in place (`slices.DeleteFunc`); the Step 25 AC-8/AC-4 tests
   caught it and it was fixed (filter into a new slice) before this commit.
+
+### Step 25 — test: decoration parity across every watchlist RPC; enumeration filter — done
+- TDD: red (helpers empty): all 12 parity rows fail with `ROKU delisted = <nil>`, as do AC-7, AC-19,
+  AC-16, AC-8, AC-4 and the caller-supplied-state case; the AC-10 guard passes as specced → green with
+  `-race`: 8 PASS; existing `ListAllWatchlistSymbols` and `TestListWatchlists351_` tests pass. `go_gate`
+  79.1%.
+- Instruction 1a followed (lists located by id; ensure page and `ensureErr` fail-open page both asserted).
+- Known weakness, as specced: the AC-10 guard reuses `valuationCase.run()`, which calls the pure
+  `valueOffline` and cannot see the service cache — it fails only if valuation is restructured to consult it.
