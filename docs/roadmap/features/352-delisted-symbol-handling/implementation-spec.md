@@ -726,7 +726,7 @@ grep -n "delisting_confirmation_trading_days" src/grpc/configServiceImpl.ts   # 
 
 ### Step 12 — test: bounds and seed-migration shape
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify

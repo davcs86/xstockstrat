@@ -612,3 +612,12 @@
 
 ### Step 11 — service: SetConfig bounds `[1, 30]` for the confirmation window — done
 - One registry row in `configServiceImpl.ts`.
+
+### Step 12 — test: bounds and seed-migration shape — done
+- TDD: red before Step 11: `✖ rejects marketdata/assets.delisting_confirmation_trading_days just outside
+  [1, 30]` (383/384) → green 384/384; lint 0 errors; coverage 92.26%.
+- Seed-shape test: red N/A — the Step 10 files had already landed in the previous unit.
+- Divergence: "seeded value inside the bounds" is asserted against constants in the test, because
+  `SCALAR_BOUNDS_REGISTRY` is not exported.
+- Noted, not changed: `prettier --check` flags `configServiceImpl.ts` and `setConfigScalarBounds.test.ts`;
+  not established whether the drift predates this step (the step's verification is lint + tests).
