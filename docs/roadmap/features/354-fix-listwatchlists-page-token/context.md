@@ -88,3 +88,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - C-16 promotion (user-approved): `@AC-1`/`@AC-2` → `services/xstockstrat-portfolio/acceptance/fix-listwatchlists-page-token.feature` (`@feature-354`); dedup vs `quote-fanout-batching.feature` `@AC-2` (bindings query count — different guarantee).
 - ALL-DONE 2.6 (close resolved reports): no candidates — this feature records no C-16 CHANGE; its own report sidecar stays `triaged` → `feature:354-…` (Track C: `/sdd-archiver` derives resolution from `launched`).
 - Merge-order gate: 354 has no blocking row (351 waits for 354). Integration PR = #1566.
+
+## Session 2026-11-17 — sdd-execute (summary)
+**Steps this session**: 1, 2 (Lands-with unit, commit c20cd61) + C-16 promotion (af83890)
+**Progress**: 2 done / 2 total — lifecycle `code-completed`
+**Stopped at**: all complete; integration PR #1566 body updated
+**Accountability**: out-of-scope changes: none · open items: none (launch checks: CI `portfolio-db-test` GREEN of record; D-19 dev smoke after rollout) · unaddressed review warnings: none
+**Next**: merge train for #1566 (user-authorized: "then merge train")
