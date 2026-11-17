@@ -103,6 +103,10 @@ type MarketDataService struct {
 	etf etfFlagState
 	// assets is the Alpaca us_equity asset-set snapshot (feature 282); zero value = not loaded (every symbol servable).
 	assets assetServabilityState
+
+	// delisting is the delisted-symbol state (feature 352); zero value = no store wired (hook is a no-op).
+	delisting delistingState
+
 	// quotaAlert dedupes the 80%-quota WARNING to one emit per active window (UTC day for FMP,
 	// rolling window for Finnhub — see maybeAlertQuota/fundamentalsQuota).
 	quotaAlertMu     sync.Mutex
@@ -1540,6 +1544,7 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 
 	var totalWritten int64
 	var failedSymbols []string
+	var results []*commonv1.BackfillSymbolResult
 
 	src, err := s.registry.Get("")
 	if err != nil {
@@ -1549,17 +1554,27 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	for _, sym := range req.Symbols {
 		bars, err := src.GetBars(ctx, sym, canonicalTf, start, end)
 		if err != nil {
-			slog.ErrorContext(ctx, "backfill failed", "symbol", sym, "error", err)
-			failedSymbols = append(failedSymbols, sym)
-			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillFailed)
+			result, failed := s.backfillErrorResult(sym, err, true)
+			results = append(results, result)
+			if failed {
+				slog.ErrorContext(ctx, "backfill failed", "symbol", sym, "error", err)
+				failedSymbols = append(failedSymbols, sym)
+				telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillFailed)
+			} else {
+				slog.InfoContext(ctx, backfillSkippedMsg, "symbol", sym, "error", err)
+				telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillSkipped)
+			}
 			continue
 		}
 		if len(bars) == 0 {
+			results = append(results, backfillEmptyResult(sym))
 			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillEmpty)
 			continue
 		}
 		if err := s.barInserter.InsertBars(ctx, bars); err != nil {
 			slog.ErrorContext(ctx, "insert bars failed", "symbol", sym, "error", err)
+			result, _ := s.backfillErrorResult(sym, err, false)
+			results = append(results, result)
 			failedSymbols = append(failedSymbols, sym)
 			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillFailed)
 			continue
@@ -1583,7 +1598,31 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 		BarsWritten:   totalWritten,
 		FailedSymbols: failedSymbols,
 		ExpectedBars:  estimateExpectedBars(req.Symbols, canonicalTf, start, end),
+		SymbolResults: results,
 	}, nil
+}
+
+const backfillSkippedMsg = "backfill: flagged-delisted symbol skipped"
+
+// sourceError marks an error returned by the data source itself, as opposed to our own database.
+type sourceError struct{ error }
+
+func (e sourceError) Unwrap() error { return e.error }
+
+// backfillErrorResult classifies a per-symbol backfill error: only a source error on a
+// flagged-delisted symbol is SKIPPED; everything else is FAILED and counts as failed.
+func (s *MarketDataService) backfillErrorResult(sym string, err error, fromSource bool) (*commonv1.BackfillSymbolResult, bool) {
+	result := &commonv1.BackfillSymbolResult{Symbol: sym, Reason: err.Error()}
+	if fromSource && s.isFlaggedDelisted(sym) {
+		result.Outcome = commonv1.BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_SKIPPED
+		return result, false
+	}
+	result.Outcome = commonv1.BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_FAILED
+	return result, true
+}
+
+func backfillEmptyResult(sym string) *commonv1.BackfillSymbolResult {
+	return &commonv1.BackfillSymbolResult{Symbol: sym, Outcome: commonv1.BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_EMPTY}
 }
 
 // estimateExpectedBars approximates total bars across symbols/range (weekdays × per-day factor ×
@@ -2158,14 +2197,8 @@ func (s *MarketDataService) maybeAlertQuota(ctx context.Context, provider string
 // emitWarning emits an ALERT_SEVERITY_WARNING notify alert. Distinct from emitAlert,
 // which hardcodes ALERT_SEVERITY_ERROR — FR-7 needs a WARNING.
 func (s *MarketDataService) emitWarning(ctx context.Context, provider, msg string) {
-	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
-		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING,
-		Category:      "system",
-		Title:         fmt.Sprintf("marketdata %s quota warning", strings.ToUpper(provider)),
-		Body:          msg,
-		SourceService: "marketdata",
-	})
-	if err != nil {
+	title := fmt.Sprintf("marketdata %s quota warning", strings.ToUpper(provider))
+	if err := s.emitNotice(ctx, title, "system", msg); err != nil {
 		slog.WarnContext(ctx, "notify emit (warning) failed", "error", err)
 	}
 }
@@ -2320,22 +2353,32 @@ func (s *MarketDataService) BackfillFundamentals(ctx context.Context, req *marke
 	overwrite := req.GetOverwrite()
 	var written int64
 	var failed []string
+	var results []*commonv1.BackfillSymbolResult
 	for _, sym := range req.GetSymbols() {
 		n, err := s.backfillOneSymbol(ctx, sym, from, to, periodTypes, enrichEnabled, overwrite)
 		if err != nil {
-			slog.WarnContext(ctx, "fundamentals backfill: symbol failed (skipped)", "symbol", sym, "error", err)
-			failed = append(failed, sym)
-			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillFailed)
+			var srcErr sourceError
+			result, isFailed := s.backfillErrorResult(sym, err, errors.As(err, &srcErr))
+			results = append(results, result)
+			if isFailed {
+				slog.WarnContext(ctx, "fundamentals backfill: symbol failed (skipped)", "symbol", sym, "error", err)
+				failed = append(failed, sym)
+				telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillFailed)
+			} else {
+				slog.InfoContext(ctx, backfillSkippedMsg, "symbol", sym, "error", err)
+				telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillSkipped)
+			}
 			continue
 		}
 		if n > 0 {
 			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillWritten)
 		} else {
+			results = append(results, backfillEmptyResult(sym))
 			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillEmpty)
 		}
 		written += n
 	}
-	return &marketdatav1.BackfillFundamentalsResponse{PeriodsWritten: written, FailedSymbols: failed}, nil
+	return &marketdatav1.BackfillFundamentalsResponse{PeriodsWritten: written, FailedSymbols: failed, SymbolResults: results}, nil
 }
 
 // backfillOneSymbol derives one symbol's full period set, reconciles it with the stored rows and
@@ -2346,7 +2389,7 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 	// from a replaced or a vanished one against every derived period.
 	periods, err := s.histFundamentals.FetchHistorical(ctx, symbol, time.Time{}, time.Time{}, nil)
 	if err != nil {
-		return 0, err
+		return 0, sourceError{err}
 	}
 	// Sort chronologically so the TTM-EPS rolling sum sees prior quarters first.
 	sort.Slice(periods, func(i, j int) bool { return periods[i].PeriodEnd.Before(periods[j].PeriodEnd) })

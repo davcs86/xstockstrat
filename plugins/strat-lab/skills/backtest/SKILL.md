@@ -219,6 +219,9 @@ only if the caller guarantees data is already present.
   and `end`, and no `callback_url`. `PERMISSION_DENIED: self-serve backfill denied:
   range_too_long (max N days)` means shorten the range or ask an operator; `ALREADY_EXISTS` means a
   backfill for the symbol is in flight — poll `get_backfill_status` and retry later.
+- `get_backfill_status` lists per-symbol `symbol_results`. A `skipped` symbol is delisted and has
+  no new data — do not re-trigger it and do not treat the job as failed; `failed_symbols` still
+  lists only real failures.
 
 ## Phase 2 — Run, and handle the oversized output
 

@@ -39,6 +39,7 @@ async def test_projection_covers_every_signal_source_field():
         health=1,
         last_error="",
         signals_fed=1,
+        extraction_instructions="Each bolded ticker is a buy signal.",
     )
     src.last_seen_at.GetCurrentTime()
     resp = ingest_pb2.ListSignalSourcesResponse(sources=[src])
@@ -52,3 +53,4 @@ async def test_projection_covers_every_signal_source_field():
     projected = set(result[0].keys())
     all_fields = set(ingest_pb2.SignalSource.DESCRIPTOR.fields_by_name)
     assert projected | _INTENTIONALLY_DROPPED == all_fields
+    assert result[0]["extraction_instructions"] == "Each bolded ticker is a buy signal."

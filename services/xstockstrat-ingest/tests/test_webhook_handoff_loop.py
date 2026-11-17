@@ -375,6 +375,16 @@ async def test_payload_timestamps_are_null_when_the_row_has_none(jobs):
     assert payload["completed_at"] is None
 
 
+async def test_ac30_payload_keys_are_unchanged_by_a_row_carrying_symbol_results(jobs):
+    stored = '{"c1": {"PSKY": {"outcome": 2, "reason": "flagged delisted"}}}'
+    jobs(_row("job-1", _COMPLETED, symbol_results=stored))
+    svc = _svc()
+    await loop.run_one_cycle(svc)
+    svc._notify.FanoutWebhook.assert_awaited_once()
+    assert set(MessageToDict(_sent(svc).payload)) == _PAYLOAD_KEYS
+    assert "PSKY" not in _sent(svc).SerializeToString().decode("utf-8", "ignore")
+
+
 # ---------------------------------------------------------------------------
 # Cycle end on any other failure; guards; tick log
 # ---------------------------------------------------------------------------

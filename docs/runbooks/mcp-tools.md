@@ -117,7 +117,7 @@ the implicit numeric casts in the client (`float()` / `int()` of caller input).
 
 ### `list_signal_sources`
 
-Lists active signal sources registered in `xstockstrat-ingest`. Enriches each source with an `extractor_tool` field derived from the source type.
+Lists active signal sources registered in `xstockstrat-ingest`. Enriches each source with an `extractor_tool` field derived from the source type and, for a `mediated_*` source, with its `extraction_instructions`.
 
 **Parameters**
 
@@ -134,17 +134,34 @@ Lists active signal sources registered in `xstockstrat-ingest`. Enriches each so
       "slug": "unusual_whales",
       "display_name": "Unusual Whales",
       "source_type": "mediated_simple_email",
-      "config_json": {},
+      "config_json": { "sender_patterns": ["alerts@example.com"], "subject_patterns": ["*"] },
       "extractor_tool": null,
-      "active": true,
-      "health": "SOURCE_HEALTH_STATUS_HEALTHY",
-      "last_seen_at": "2026-08-02T12:00:00+00:00",
-      "last_error": "",
-      "signals_fed": 42
+      "has_credentials": false,
+      "reliability_weight": 1.0,
+      "extraction_instructions": "Each bolded ticker with a call sweep over $1M is a buy signal.",
+      "extraction_instructions_is_default": false,
+      "origin": null
     }
   ]
 }
 ```
+
+A `mediated_*` entry carries three keys beyond the first seven (feature 355); every other source
+type carries the first seven keys only:
+
+- `extraction_instructions` — prose saying what to extract from the source's content and how to
+  call `ingest_signal`. It is **always non-empty**: the source's stored text, or the platform's
+  generic procedure when the source stores none. The agent follows it.
+- `extraction_instructions_is_default` — `true` when the generic procedure was substituted. Tell
+  the operator, who can add instructions with `manage_signal_source` (`update`).
+- `origin` — the template the source was instantiated from (`template_id`, `template_version`,
+  `latest_version`, `update_available`), or `null`. When a source shows the generic procedure and
+  has an `origin`, the template's curated prose is `payload.extractionInstructions` in
+  `list_templates`.
+
+`extractor_tool: null` means there is no extraction tool to call — the agent reads the content
+itself (the email body) and follows `extraction_instructions`. It never means there is nothing to
+extract.
 
 Source-health fields (feature 083, surfaced by feature 087): `active` (bool), `health`
 (`SourceHealthStatus` enum **name**), `last_seen_at` (RFC3339, or `null` for a source that has never
@@ -209,7 +226,7 @@ All attachments and URLs are concatenated with double newlines.
 
 ### `extract_website_content`
 
-Fetches and returns raw text from a registered website source. The URL is read from the source's `config_json.url` — Claude never constructs URLs. **Call only when the source's `extractor_tool` is `"extract_website_content"`.**
+Fetches a registered website source and returns the **whole response body** as `raw_text` (HTML, XML/Atom, JSON, …). The URL is read from the source's `config_json.url` — Claude never constructs URLs. `config_json.scrape_selector` is **not applied**: it is only a hint naming the elements of `raw_text` that hold the content; the agent reads those and follows the source's `extraction_instructions`. **Call only when the source's `extractor_tool` is `"extract_website_content"`.**
 
 > **Credentials (feature 093):** as with `extract_email_content`, a source with `has_credentials=true` **raises `ToolError`** — secure per-source credential resolution is a deferred follow-up (AC-3). Only `has_credentials=false` sources are extractable today.
 
@@ -806,6 +823,9 @@ migration since feature 335), which admins cannot edit or retire; copy them with
 `instantiate_template`. The blend template `tpl-fundamentals_macd_blend` instantiates under the id
 `fundamentals_macd_blend_copy` by default.
 
+For a `signal_source` template, `payload.extractionInstructions` is the curated prose a `mediated_*`
+instance inherits; `payload.extractorModule` has no meaning for a mediated source.
+
 ---
 
 ### `instantiate_template`
@@ -825,8 +845,11 @@ reports `template_version`, `latest_version`, and `update_available`.
 | `bearer_token` | `string` | No | (`signal_source`) credential for a credential-requiring type such as `mcp_client`. Written FIRST to the caller's own encrypted per-user config secret under an opaque key (`ingest.mcp_credential.<uuid>`, `is_secret=true`), then passed as the new source's `credentials_ref`. **Never returned** |
 
 **Return** — `formula` → the formula in camelCase; `strategy` → the strategy definition in
-camelCase; `signal_source` → `{"slug", "display_name", "source_type", "extractor_module", "active",
-"has_credentials", "reliability_weight", "user_id", "origin"}` (never a credential).
+camelCase; `signal_source` → the `manage_signal_source` shape (never a credential). A `mediated_*`
+source returns `{"slug", "display_name", "source_type", "extraction_instructions",
+"extraction_instructions_is_default", "active", "has_credentials", "reliability_weight", "user_id",
+"origin"}` and inherits the template's `extraction_instructions`; a non-mediated source returns
+`"extractor_module"` in place of the two instruction keys.
 
 **Errors**
 
@@ -835,6 +858,7 @@ camelCase; `signal_source` → `{"slug", "display_name", "source_type", "extract
 | Unknown or retired `template_id` | `template not found` (NOT_FOUND) |
 | `signal_source` slug already used by the caller | `ALREADY_EXISTS` |
 | `signal_source` without a `slug` | `INVALID_ARGUMENT` |
+| A `mediated_*` template whose payload has no `extraction_instructions` | `INVALID_ARGUMENT` (an admin must add the prose to the template first) |
 | Unknown `kind` | `ToolError` client-side, before any RPC |
 
 ---
@@ -866,7 +890,8 @@ rejected `PERMISSION_DENIED`.
 | `display_name` | `string` | No | Human-readable name (on `update`, changed only if supplied) |
 | `source_type` | `string` | No | Source type (on `update`, changed only if supplied) |
 | `config_json` | `object` | No | Source configuration (on `update`, changed only if supplied) |
-| `extractor_module` | `string` | No | Extractor module name (on `update`, changed only if supplied) |
+| `extractor_module` | `string` | No | Extractor module name, for a non-mediated source only (on `update`, changed only if supplied). A `mediated_*` source takes none: ingest stores `app.extractors.noop` itself, whatever is sent |
+| `extraction_instructions` | `string` | No | (`mediated_*` only) prose telling the consuming agent what to extract from the source and how to map it to `ingest_signal`; at most 16,000 characters. **Required non-empty** when registering a `mediated_*` source, and on an `update` that changes `source_type` to a mediated type. On `update` it is applied only when supplied — omit it to preserve the stored text; `""` or whitespace is rejected on a mediated source |
 | `credentials_ref` | `string` | No | Reference to stored credentials — forwarded, **never echoed**. On `update`, omit to preserve the stored ref; pass `""` to clear it |
 | `bearer_token` | `string` | No | The MCP bearer for a `mcp_client` source (feature 166). Supplied on `register`; written FIRST to the caller's own encrypted per-user config secret under an opaque key (`ingest.mcp_credential.<uuid>`, `is_secret=true`), then the source is registered with `credentials_ref` pointing at it. Stored encrypted at rest and **never returned** |
 
@@ -881,8 +906,18 @@ rejected `PERMISSION_DENIED`.
 
 **Return**
 
+A `mediated_*` source:
+
 ```json
-{ "slug": "unusual_whales", "display_name": "Unusual Whales", "source_type": "newsletter", "active": true, "has_credentials": true, "user_id": "u-1", "origin": null }
+{ "slug": "unusual_whales", "display_name": "Unusual Whales", "source_type": "mediated_simple_email", "active": true, "has_credentials": false, "reliability_weight": 1.0, "user_id": "u-1", "origin": null, "extraction_instructions": "Each bolded ticker with a call sweep over $1M is a buy signal.", "extraction_instructions_is_default": false }
+```
+
+`extraction_instructions_is_default: true` means no instructions are stored and the text is the
+platform's generic procedure (a source registered before feature 355). A non-mediated source returns
+`"extractor_module"` in place of the two instruction keys:
+
+```json
+{ "slug": "acme-mcp", "display_name": "Acme MCP", "source_type": "mcp_client", "extractor_module": "", "active": true, "has_credentials": true, "reliability_weight": 1.0, "user_id": "u-1", "origin": null }
 ```
 
 **Errors**
@@ -893,6 +928,9 @@ rejected `PERMISSION_DENIED`.
 | `update`/`reactivate`/`deactivate` on unknown source | `signal source not found` (NOT_FOUND) |
 | `update` masking `active`/`slug`, or update with no fields | `invalid argument` (INVALID_ARGUMENT) |
 | `authenticated_website` / `mediated_authenticated_website` with no (merged) credential | `invalid argument` (INVALID_ARGUMENT) |
+| `register` of a `mediated_*` source with empty `extraction_instructions`, or an `update` that sets them to `""` / whitespace on one | `… source requires non-empty extraction_instructions` (INVALID_ARGUMENT) |
+| Non-empty `extraction_instructions` on any other source type | `extraction_instructions is only allowed on mediated_* sources …` (INVALID_ARGUMENT) |
+| `extraction_instructions` longer than 16,000 characters | `extraction_instructions must be at most 16000 characters` (INVALID_ARGUMENT) |
 | `credentials_ref` exposure | **Never** — `credentials_ref` is intentionally omitted from the return and never exposed to Claude (FR-12) |
 
 ---
@@ -986,6 +1024,10 @@ where `<token>` is one of `multi_symbol`, `data_kind`, `fill_mode`, `overwrite`,
 symbol that already has a `QUEUED` or `RUNNING` backfill is refused `ALREADY_EXISTS`; the other job's
 id is not returned.
 
+A symbol flagged delisted that the data source cannot serve ends `skipped`, not `failed`: it is
+listed in the job's `symbol_results` (see `get_backfill_status`), stays out of `failed_symbols` and
+does not make the job `PARTIAL` (feature 352).
+
 **Parameters**
 
 | Parameter | Type | Required | Description |
@@ -1067,12 +1109,21 @@ Checks one backfill job or lists recent jobs via ingest `GetBackfillStatus` / `L
 **Return**
 
 ```json
-{ "job": { "status": "…", "bars_processed": "…", "bars_total": "…", "chunks_completed": 0, "chunks_total": 0, "failed_symbols": [], "error": "" } }
+{ "job": { "status": "…", "bars_processed": "…", "bars_total": "…", "chunks_completed": 0, "chunks_total": 0, "failed_symbols": [], "symbol_results": [ { "symbol": "PSKY", "outcome": "skipped", "reason": "…" } ], "error": "" } }
 ```
 or, in list mode:
 ```json
 { "jobs": [ … ], "next_page_token": "…" }
 ```
+
+`symbol_results` (both modes, always present, possibly empty) lists the symbols that wrote nothing,
+as `{"symbol", "outcome", "reason"}`; `reason` is omitted when empty. `outcome` is:
+
+| `outcome` | Meaning |
+|---|---|
+| `empty` | Nothing to write for the symbol in the requested range |
+| `skipped` | The symbol is flagged delisted and the data source could not serve it — not a failure: it is not in `failed_symbols` and does not make the job `PARTIAL` |
+| `failed` | A real failure; the symbol is also in `failed_symbols` |
 
 **Errors**
 
@@ -1394,6 +1445,14 @@ Returns `{"watchlists": [<watchlist>, …], "next_page_token": <str>}`. Each `<w
 unbound — / `source`), the deprecated flat `symbols[]` mirror, `system_managed`, `created_at`,
 `updated_at`. An empty `next_page_token` means no more pages.
 
+Each binding also carries `delisted` (bool, always present). A binding flagged delisted adds
+`delisted_reason` (`"UNSERVABLE_REASON_OTC"` | `"UNSERVABLE_REASON_NOT_TRADABLE"`) and
+`first_unservable_date` (`YYYY-MM-DD`, the first NYSE session the symbol was unservable):
+
+```json
+{ "symbol": "ROKU", "delisted": true, "delisted_reason": "UNSERVABLE_REASON_NOT_TRADABLE", "first_unservable_date": "2026-11-09" }
+```
+
 **Errors:** `ToolError` → no verified caller claims on the request.
 
 ---
@@ -1408,7 +1467,8 @@ Wraps `PortfolioService.GetWatchlist`.
 | `watchlist_id` | string | yes | The list identifier (from `list_watchlists`) |
 
 Returns `{"watchlist": <watchlist>}` (snake_case, same shape as `list_watchlists` entries) with the
-full `bindings` array.
+full `bindings` array, each binding with `delisted` and, when true, `delisted_reason` and
+`first_unservable_date`.
 
 The result reflects the pruned set: a `SIGNAL` entry expires once every agent-recorded
 `direction="watchlist"` signal for its symbol has passed `valid_until`, and the portfolio prune then
@@ -1461,7 +1521,9 @@ Returns `{"watchlist": <watchlist>, "refused": [{"symbol": <ticker>, "reason": <
 `{"deleted": true, "watchlist_id": <id>}` for `delete`. `reason` is `"UNSERVABLE_REASON_OTC"` or
 `"UNSERVABLE_REASON_NOT_TRADABLE"`; a refused symbol was **not newly added** (OTC, or not an active
 tradable US equity). A mistyped or newly listed ticker is refused until the next asset-set refresh
-(default 6h, max 24h).
+(default 6h, max 24h). Each binding of the returned `<watchlist>` carries `delisted` and, when true,
+`delisted_reason` and `first_unservable_date` (as `list_watchlists`). A replace-all `update` still
+drops a symbol flagged delisted and reports it in `refused`.
 
 **Errors:** `unknown operation '<op>' (expected create/update/delete)`; `manage_watchlist(...) requires
 a name`/`a watchlist_id`; `watchlist not found`; `permission denied` (non-owner); `invalid argument`
@@ -1497,7 +1559,8 @@ Returns `{"watchlist": <watchlist>}` — the updated list. `add` also returns
 `"refused": [{"symbol": <ticker>, "reason": "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}]`
 (always present, possibly empty): a refused symbol (OTC, or not an active tradable US equity) was
 **not newly added** (feature 282). A mistyped or newly listed ticker is refused until the next
-asset-set refresh (default 6h, max 24h).
+asset-set refresh (default 6h, max 24h). Each binding of the returned `<watchlist>` carries
+`delisted` and, when true, `delisted_reason` and `first_unservable_date` (as `list_watchlists`).
 
 **Errors:** `unknown operation '<op>' (expected add/remove/assign)`;
 `manage_watchlist_symbols requires a watchlist_id`; `manage_watchlist_symbols(operation='assign')
@@ -1791,16 +1854,31 @@ Returns the updated profile (same shape as `admin_get_user_metadata`). **Errors:
 
 ## Usage Patterns
 
+A source's `extraction_instructions` override this generic guidance in both ingestion patterns
+below: the steps show the tool sequence, the instructions say what counts as a signal and which
+values to send.
+
+- **Clock.** The seeded and generic instructions ingest only content from the last 24 hours, so the
+  agent must know the current date **and time of day**. A host that knows only the date, with no
+  clock tool, ingests nothing from mediated sources until the operator supplies the time.
+- **Watchlist expiry.** A `watchlist` signal's `valid_until` expires the watchlist entry it creates,
+  but not an entry that was already on the list without an expiry or was added manually — see
+  `docs/runbooks/signal-watchlist-expiry-backfill.md`.
+
 ### Email newsletter ingestion
+
+A source's `extraction_instructions` override this generic guidance.
 
 ```
 1. list_signal_sources(source_type=["mediated_email_attachment", "mediated_linked_email"])
    → confirm extractor_tool == "extract_email_content" for each source
+   → read each source's extraction_instructions
 
 2. extract_email_content(source_slug="<slug>", attachments_b64=["<base64-pdf>"])
    → raw_text: newsletter content
 
-3. Parse raw_text to extract signal fields (symbol, direction, conviction, dates)
+3. Follow the source's extraction_instructions to extract signal fields from raw_text
+   (symbol, direction, conviction, dates)
 
 4. ingest_signal(source="<slug>", symbol="NVDA", direction="buy",
                  valid_from="2026-05-01T00:00:00Z", conviction=0.85)
@@ -1809,14 +1887,17 @@ Returns the updated profile (same shape as `admin_get_user_metadata`). **Errors:
 
 ### Website signal ingestion
 
+A source's `extraction_instructions` override this generic guidance.
+
 ```
 1. list_signal_sources(source_type=["mediated_simple_website", "mediated_authenticated_website"])
    → confirm extractor_tool == "extract_website_content" for each source
+   → read each source's extraction_instructions
 
 2. extract_website_content(source_slug="<slug>")
-   → raw_text: page content from config_json.url
+   → raw_text: the whole body fetched from config_json.url (scrape_selector is only a hint)
 
-3. Parse raw_text to extract signal fields
+3. Follow the source's extraction_instructions to extract signal fields from raw_text
 
 4. ingest_signal(source="<slug>", symbol="AAPL", direction="buy",
                  valid_from="2026-05-01T00:00:00Z", conviction=0.7)

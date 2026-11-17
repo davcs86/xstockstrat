@@ -143,6 +143,7 @@ func main() {
 	}
 	svc.SetClassification(repository.NewClassificationRepo(repo), fmpClient, fmpClient)
 	svc.SetEtfFlagSource(fmpClient)
+	svc.SetSymbolProfiles(repository.NewProfileRepo(repo))
 	hdl := handler.NewMarketDataHandler(svc)
 
 	go svc.StartWarmQuotePoller(ctx)

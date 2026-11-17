@@ -29,6 +29,8 @@ The agent registers forty-five tools plus one MCP prompt (`list_correlation_guid
 server `instructions` string (`create_server`, `app/main.py`); the full per-tool parameter/return/error
 reference is `docs/runbooks/mcp-tools.md`.
 
+- `get_backfill_status` returns per-symbol `symbol_results` (`{symbol, outcome, reason}`, always present) for symbols that wrote nothing: `empty`, `skipped` (flagged delisted and unservable — not a failure, not in `failed_symbols`) or `failed` (feature 352).
+
 ### Management-tool authorization
 
 Tool refusals are raised as `ToolError` with a `CODE: body` message so the MCP caller sees why a call was refused (constitution **AGENT-5**).
@@ -85,6 +87,10 @@ and a name-only `update` drops and reports a stored symbol that is now unservabl
 `default_strategy_id` field-mask update never classifies. `ingest_signal`'s watchlist auto-add
 reports a refusal as `watchlist_refused` (present only when non-empty) and still succeeds. A mistyped
 or newly listed ticker is refused until the next asset-set refresh (default 6h, max 24h).
+Every watchlist the four tools return marks each binding with `delisted` (bool) and, when true,
+`delisted_reason` (the `UnservableReason` name) and `first_unservable_date` (`YYYY-MM-DD`, omitted
+when malformed) — one projection, `_watchlist_to_dict` (feature 352). A replace-all `update` still
+drops a flagged symbol and reports it in `refused`.
 
 **`manage_formula` is different** — it forwards **no** admin scope (plain `_metadata()`); the
 indicators backend enforces an **author-ownership** check instead (no admin override since feature 224;
