@@ -35,6 +35,19 @@ Token taken from the look-ahead row (`wls[pageSize]`) instead of the last return
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated
 
+## Functional Requirements
+
+- **FR-1**: Following ListWatchlists' next_page_token until it is empty returns each of the caller's watchlists that exist throughout the traversal exactly once, in ascending watchlist_id order.
+- **FR-2**: A non-final page's next_page_token equals the watchlist_id of the last watchlist returned on that page; the final page (including one that is exactly full) returns an empty next_page_token. Response shape and token format (a watchlist_id UUID string) are unchanged.
+
+FR-1 and FR-2 describe the fully rolled-out fix. During the mixed-version rollout, an old-server token sent to a new server can skip one existing list once (same loss as today) — see design.md / debate.md D-7.
+
+## Consumer Surface(s)
+
+- **Agent MCP `list_watchlists`** (`services/xstockstrat-agent/app/tools.py:2153-2166`, client `app/client.py:416-432`) — single passthrough of `page_token`/`next_page_token`; reached by the portfolio fix with no code change; no step of its own by explicit user C-14 sign-off (context.md 2026-11-17).
+- **UI `/insights`** (`services/xstockstrat-ui/src/hooks/useWatchlists.ts:33`) — single page of 50 = `watchlist.max_per_user`; token unused; unaffected.
+- **Analysis drains** — internal consumers; no change.
+
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass after the fix (Constitution **C-15**). Required proof: a real-backend (`dbtest`-tag) repository test traversing a user's lists with `page_size = 1` across a full traversal, yielding every list exactly once (via a named-seed variant of the `seedWatchlist` helper, leaving its signature unchanged), plus a unit-level test. Plus: existing tests pass; affected service smoke-tested on dev.

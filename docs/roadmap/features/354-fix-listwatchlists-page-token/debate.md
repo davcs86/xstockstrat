@@ -1,6 +1,6 @@
 # Debate Register: fix-listwatchlists-page-token
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -84,7 +84,7 @@
 | O-10 | 2 | Lands-with reason was wrong ("Step 2 cannot pass without Step 1"); `step-constraints.md` §C says plain service→test pairing is not a unit by itself — state the true reason or drop it (P-03). | no | closed @ 2 (D-8 restates the reason) |
 | O-11 | 2 | Unit RED runs on a partly implemented tree (seam applied first) vs `tdd-gate.md:35` "pre-implementation tree" — justified (nil `pool` otherwise) but must be stated (P-06 honesty). | no | closed @ 2 (D-10 disclosure in PR body + context.md) |
 | O-12 | 2 | `db` field comment `watchlist_repo.go:27-28` goes stale once the page query also reads through `db` (How-to-Act #5, C-18). | no | closed @ 2 (D-11 trims it) |
-| O-13 | 3 | C-14 (`constitution.md:45`): "each named surface earns its own implementation step(s)" — D-18 names the Agent `list_watchlists` surface with no step; resolve by (a) explicit user sign-off recorded in context.md + design.md, or (b) a verification-only sub-bullet in Step 2 naming the surface + PRESERVE `@AC-1 @feature-148` (must not claim mocked agent tests prove the fix). | yes | open (round 4: every non-override route is locked — R-10, R-12, R-13; only resolution left = user sign-off per `constitution.md:45`) |
+| O-13 | 3 | C-14 (`constitution.md:45`): "each named surface earns its own implementation step(s)" — D-18 names the Agent `list_watchlists` surface with no step; resolve by (a) explicit user sign-off recorded in context.md + design.md, or (b) a verification-only sub-bullet in Step 2 naming the surface + PRESERVE `@AC-1 @feature-148` (must not claim mocked agent tests prove the fix). | yes | waived @ post-cap 4 (user C-14 sign-off, context.md 2026-11-17; text = D-20/D-21) |
 | O-14 | 3 | Pin `WithArgs("u1","",3)`; remove the AnyArg execute-time fallback (P-03/F-09). | no | closed @ 3 (D-13, R-11, D-17) |
 | O-15 | 3 | C-13: bindings column literal would appear 3× in the test file; state the reading or fold into a helper. | no | closed @ 3 (D-16: SQL-shape one-offs; `expectNoBindings` helper) |
 | O-16 | 3 | Spec code must be real gofmt/goimports code (import groups, `//go:build` + blank line); subtests use their own shadowed `t`. | no | closed @ 3 (D-14, D-15) |
