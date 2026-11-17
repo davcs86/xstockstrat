@@ -193,3 +193,23 @@
 - [ ] State the lazy `""` → noop flip in the ingest findings row. — Step 6.
 - [ ] Report the `list_signal_sources` runbook drift (source-health fields the tool does not return)
   through `/sdd-qa defect`. — after Step 8.
+
+## Session 2026-11-17 — sdd-review impl-spec (advisory)
+
+- Tree: `ccr-424ada30-29m2lv@638920e1 ≡ origin/ccr-424ada30-29m2lv` (merged `origin/main-dev@98d8d3d9`;
+  the merge touched `agent/app/tools.py` and `docs/runbooks/mcp-tools.md` — a watchlist change that
+  alters nothing Steps 3/8/9 rely on).
+- Result: 1 failure, 5 warnings (advisory — did not block). No Floor risk. Every D-1..D-30 is
+  reflected in a step; all `@AC-1..26` have a `**Covers**` home.
+- Fixed in the spec before execution started (spec not yet in-progress): Step 8 stale citations
+  (`_get_source`, Usage Patterns) and the Step 8 grep expectation, which the new `_is_mediated`
+  prefix literal would have tripped (pattern now requires a type name after the prefix).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 2: `**Files**` uses wildcards for generated stubs (the generated-output convention) — [ ] unaddressed (accepted: generated output cannot be enumerated ahead of codegen)
+  - Step 1: `buf breaking` against `feature/<slug>` — the branch does not exist; use the spec's `ref=HEAD` fallback (C-09) — [ ] unaddressed
+  - Step 2: verification runs `./scripts/buf-gen.sh` rather than naming `buf lint` / `buf breaking` — [ ] unaddressed (Step 1 runs both)
+- Overlap findings: **FAIL-level** with `323-fix-orphaned-code` (spec-ready): 323 deletes
+  `agent/app/prompts/signal_extraction.md` (this feature edits it, Step 8) and
+  `ingest/app/extractors/noop.py` (this feature stores the string `app.extractors.noop`; nothing
+  imports it). Operator decision pending. WARN-level, disjoint functions/sections: 351, 354, 343,
+  340, 314 on `agent/app/tools.py` / `client.py` / `docs/runbooks/mcp-tools.md`; 328 unchanged.

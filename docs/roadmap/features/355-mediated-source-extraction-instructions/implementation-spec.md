@@ -733,7 +733,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_extraction_instruct
     slug/display_name/source_type/extractor_module" `:1434`; return-shape docstring `:1457-1459`;
     `source` dict `:1460-1470`; `supplied` mask dict `:1473-1482` (`is not None`); the client call
     `:1492-1498`.
-  - `_get_source` `:2640-2650` returns the raw client dict; only `has_credentials` / `config_json`
+  - `_get_source` `:2642-2652` returns the raw client dict; only `has_credentials` / `config_json`
     are read from it.
 - `agent/app/client.py:1429-1441` — `_managed_source_to_dict`, shared by manage (`:1417`) and
   instantiate (`:1511`).
@@ -749,7 +749,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_extraction_instruct
 - `docs/runbooks/mcp-tools.md` — `list_signal_sources` `:118-172` (return example `:130-147`);
   `extract_website_content` `:210-235`; `list_templates` `:788-807`; `instantiate_template`
   `:811-838` (return `:827-829`); `manage_signal_source` `:842-896` (parameter table `:861-872`,
-  `extractor_module` row `:869`, return `:882-886`, errors `:888-896`); Usage Patterns `:1791-1823`.
+  `extractor_module` row `:869`, return `:882-886`, errors `:888-896`); Usage Patterns `:1792-1824`.
   `docs/runbooks/signal-watchlist-expiry-backfill.md` exists (pointer target).
 - The default text: design.md § Instruction texts, block `_DEFAULT_EXTRACTION_INSTRUCTIONS`.
 - No new outbound RPC; header propagation unchanged.
@@ -833,7 +833,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_extraction_instruct
     `extraction_instructions` parameter row; the `extractor_module` row scoped to non-mediated
     sources (with `non-mediated` on the same line); error rows for empty prose on a mediated source,
     prose on a non-mediated source, and prose over 16,000 characters (`INVALID_ARGUMENT`).
-20. Usage Patterns (`:1793-1823`): the precedence line of item 15 in both ingestion patterns; one
+20. Usage Patterns (`:1794-1824`): the precedence line of item 15 in both ingestion patterns; one
     note that a host that knows only the date, with no clock tool, ingests nothing from mediated
     sources until the operator supplies the time of day; one pointer to
     `docs/runbooks/signal-watchlist-expiry-backfill.md` for watchlist entries the seven-day expiry
@@ -852,7 +852,7 @@ want = dict(re.findall(r"^#### `([^`]+)`[^\n]*\n\n```\n(.*?)\n```", d, re.DOTALL
 assert tools._DEFAULT_EXTRACTION_INSTRUCTIONS == want["_DEFAULT_EXTRACTION_INSTRUCTIONS"]
 print("default text matches design.md")
 EOF
-grep -c '"mediated_[a-z_]*"' app/tools.py   # expect 4 — the _EXTRACTOR_TOOL_MAP keys; no new quoted type literal
+grep -c '"mediated_[a-z_]\{2,\}"' app/tools.py   # expect 4 — the _EXTRACTOR_TOOL_MAP keys; the bare "mediated_" prefix in _is_mediated is not a type literal
 ```
 
 ---
