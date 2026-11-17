@@ -794,3 +794,21 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - [ ] The D-9 sweep of bare-`MagicMock` fakes must land before RED. Target: the RED step.
 - [ ] AC-5/AC-10 rebind the real `_compute_opportunities` and may need a rebase against `308-fix-analysis-per-symbol-isolation`. Target: the RED/test step.
 - [ ] `next == sent` misses an A→B→A token cycle; the 50-page cap is the backstop. Page-exception wrapping keeps `__cause__`. Target: the helper step.
+
+## Session 2026-11-17 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready. Tree: `origin/feature/fix-analysis-held-position-drains@a4ff372c`.
+- Steps: 1 docs (acceptance.feature narrows `@AC-5` and adds `@AC-10`; product-spec FR-4 daily-refresh wording, per D-11/D-13); 2 service + 3 test (shared `_drain_positions_paged` / `_PositionsPageError` in `servicer.py`, `_drain_held_symbols`, `ScreenSymbols` guard; AC-1..AC-6, AC-8, AC-9); 4+5 one atomic unit (live-loop `_drain_held` + cycle `failed_owners`; flip `test_ac16_failed_held_drain_counted_without_owner`); 6 service + 7 test (daily-refresh `recompute{full,failed}` + `exc_info=True`; `@AC-10`; allowlist `_drive`); 8 docs (analysis CLAUDE.md `:327` caveat, `:326` untouched); 9 docs (`produced-signals.tsv` row).
+- Key codebase findings:
+  - D-9 sweep done in the spec: no existing fake that reaches a held drain uses a truthy shared token. Every one returns an EOF page, or the path never reaches a held drain (`_portfolio` None via `make_servicer` / `_svc()` / `_make_loop`'s default `portfolio_stub=None`). No fake repair is needed before RED.
+  - The only test call site broken by the new raise is `tests/test_live_loop_telemetry.py:121-127` (`assert held == set()`). That is why Steps 4+5 are one unit.
+  - RED is kept behavioural: tests import `app.handlers.servicer as servicer_mod` and assert the raise before the `_PositionsPageError` type pin. AC-4 is a guard (FR-6) and is recorded "red N/A — guard".
+  - AC-5 moved into Step 3 (not beside AC-10). Step 2 alone turns it green, so it could not be red against the pre-Step-6 tree.
+- Mimir verification (D-15, operator decision r4), run through the Grafana Cloud MCP on datasource `grafanacloud-prom`, 30d `last_over_time` instant queries. (a) `count by (__name__) (...{__name__=~"analysis_opportunity_recompute.*"}...)` returned `analysis_opportunity_recompute_total` = 7. (b) `count by (kind, outcome, service_name, deployment_environment) (...)` returned `staging / full / ok / analysis` = 7. Production returned no series and no `failed` series exists yet. The name is verified (it matches the expected name), so Step 9 writes the row.
+
+## Open Threads
+
+- [ ] RED evidence for Steps 3, 5 and 7 is captured by `/sdd-execute` against the pre-step tree (AC-4 and the `_drive` addition are guards).
+- [ ] Rebase against `308-fix-analysis-per-symbol-isolation` if it lands first. Steps 3 and 7 run the real `_compute_opportunities`.
+- [ ] Accepted risks carried unchanged from design.md: the 5,000-position effective bound (R-7 follow-up); the boot-time entry-backfill gap; the merging of the kick and daily paths on `recompute{full,failed}` (Step 8 caveat); the A→B→A token cycle, which the cap backstops; all-users-fail staleness of about 24h; the un-guarded `gather` siblings.
+- [ ] `produced-signals.tsv` gets the first `_total` row. It is operator-mandated, has no consumer, and sets no convention.
