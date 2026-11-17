@@ -606,3 +606,166 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-17 — sdd-batch design gate (round 5)
+
+`/sdd-design fix-analysis-held-position-drains` (full) is halted at its approval gate after round 5 (gate policy: halt). design.md is not written and status.md is unchanged (still `spec-ready`). The debate register is `debate.md` (D-1..D-16, R-1..R-15, O-1..O-9, P-1..P-3). Round 5 applied the operator's r4 steer on the produced-signals row and closed O-8 and O-9. No objection is open.
+
+## Open Threads
+
+- **Approach.** The mechanism is unchanged from round 4 (D-1..D-4, D-6, D-8..D-14 stand): the shared `_drain_positions_paged` and `_PositionsPageError` in `app/handlers/servicer.py`, the live-loop `failed_owners` set caught before `except ValueError` (`live_loop.py:409`), the `ScreenSymbols` guard, the D-9 fake sweep before RED, the daily-refresh `record_opportunity_recompute("full","failed")` plus `exc_info=True` at `servicer.py:6061-6063`, AC-5/AC-10 in `tests/test_analysis_tick_telemetry.py`, `("full","failed")` in the allowlist `_drive`, and red before green. New this round, record and spec steps only (D-15, D-16):
+  - **Produced-signals row (D-15, closes O-8).** The `packages/otel/produced-signals.tsv` row lands in this PR only after `/sdd-spec` verifies the exported series name through the Grafana Cloud MCP: (a) `count by (__name__) ({__name__=~"analysis_opportunity_recompute.*"})` and (b) `count by (kind, outcome, service_name, <environment label>) (analysis_opportunity_recompute_total)` (or per stack), over 30d or more, recording datasource, environment, queries and results. Expected name `analysis_opportunity_recompute_total` (unit-less Counter, `app/telemetry.py:442-444`); the verified name wins. The row copies the existing `metric` layout with the literal `analysis.opportunity.recompute` (`telemetry.py:443`). If prod and dev both return nothing, no row is written and the operator decides at spec time; the code steps are not blocked. design.md labels the row operator-mandated, with no consumer today, and the first counter (`_total`) row, not a convention.
+  - **@AC-51 and CLAUDE.md (D-16, closes O-9).** The `@AC-51 @feature-294` scenario (`signal-map-instrumentation.feature:37-45`) stays unedited; its Given (`:40`) and Then (`:45`) already cover both triggers. design.md lists it as an EXTEND naming the kick path (`servicer.py:4957`) and the daily per-user catch (`:6061-6063`). The `test_analysis_tick_telemetry.py:174-184` test stays kick-path-only at exactly 1. The D-14 caveat is appended to the analysis CLAUDE.md Instruments line (`:327`); the `loop tick ok` sentence at `:326` stays word for word.
+  - **Out of scope:** no proto, migration, config or other-service change; features 351, 353 and 354 untouched.
+- **Strongest open objection.** None. O-8 and O-9 closed this round and the adversary found the proposal SOUND. The strongest residual risk is that Mimir holds no `analysis_opportunity_recompute*` series (a counter exports only after its first `add`), which would withhold the tsv row pending an operator call at spec time.
+- **Floor status.** No Floor breaches in any of the five rounds.
+- **Uncovered @AC changes (not covered by an operator decision).** All PRESERVE: `@AC-3 @feature-262`; `@AC-6 @feature-191`; `@AC-6/@AC-7/@AC-10 @feature-185/@feature-289` (`@AC-7` `compute_failed` stays cold-read-only); `@AC-2 @feature-168`, `@AC-1/@AC-3 @feature-193`; the feature-097/158 daily-refresh per-user isolation and loop-tick semantics (`_log_items_tick` untouched, CLAUDE.md `:326` kept verbatim); `@AC-41 @feature-294` (key set unchanged). Covered by operator decision: PRESERVE `@AC-16 @feature-294`, `@AC-8 @feature-262`; EXTEND `@AC-51 @feature-294`, `@AC-5`, the new `@AC-10` and `@AC-1..@AC-9 @feature-356`.
+- **Register bookkeeping for the orchestrator.** P-1 (D-7), P-2 (D-5) and P-3 (R-6) still read `pending user` although the operator accepted them at the r3 gate; D-11/D-12 supersede D-7/D-5. Their verdicts should become `user reopened` and D-5/D-7 be marked superseded.
+
+```sdd-batch-design-state
+{
+  "round": 5,
+  "synth": {
+    "approach": "The mechanism does not change from the round-4 synthesis. The register entries D-1..D-4, D-6 and D-8..D-14 all stand:\n- In `services/xstockstrat-analysis/app/handlers/servicer.py`, the shared `_drain_positions_paged` and `_PositionsPageError` sit next to `_fetch_historical_fundamentals_paged`. `try` wraps only the page body. The `next == sent` check and the cap-exhaustion WARNING-and-raise run outside it.\n- `live_loop._drain_held` uses a set reducer. It records `drain_failures{held}` and re-raises.\n- The live-loop `failed_owners` set is caught before `except ValueError` (`live_loop.py:409`).\n- The `ScreenSymbols` guard stays.\n- The D-9 sweep of existing fakes lands before the RED run.\n- Daily refresh: in the per-user catch of `_opportunity_refresh_tick` (`servicer.py:6061-6063`), add `telemetry.record_opportunity_recompute(\"full\",\"failed\")` and add `exc_info=True` to the WARNING.\n- AC-5 and AC-10 go in `tests/test_analysis_tick_telemetry.py`. They use the real `_compute_opportunities` and `_drain_held_symbols`, a whole-stub `_portfolio`, and, for AC-10, a fake that branches on `x-user-id`.\n- Add `(\"full\",\"failed\")` to the allowlist `_drive`.\n- Red before green throughout.\n\nThis round closes the last two objections. Both are record or spec steps; there is no new code.\n\n**1. O-8: the `packages/otel/produced-signals.tsv` row (operator steer r4).**\nThe row lands in this PR only after `/sdd-spec` has verified the exported series name. The verification is a spec-time step, done before `/sdd-execute` starts. It is not a PR-time gate.\n\nThe spec runs two PromQL queries through the Grafana Cloud MCP and records the datasource, the stack or environment, the time range (30d or more), each query's text and its result:\n- (a) `count by (__name__) ({__name__=~\"analysis_opportunity_recompute.*\"})`\n- (b) `count by (kind, outcome, service_name, deployment_environment) (analysis_opportunity_recompute_total)`. Use whatever environment label the stack actually exposes. If it has none, query each stack separately.\n\nThe spec also records which environment answered.\n\nThe expected name is `analysis_opportunity_recompute_total`. That rests on two facts: the instrument is a `Counter` with no `unit` (`app/telemetry.py:442-444`), and the OTLP-to-Prometheus counter rule adds the `_total` suffix. If Mimir shows a different name, the verified name wins.\n\nThe row copies the existing `metric` layout (`produced-signals.tsv:2-10`):\n`metric <TAB> <verified series> <TAB> services/xstockstrat-analysis/app/telemetry.py <TAB> analysis.opportunity.recompute`\nThat literal is present at `telemetry.py:443`, so it satisfies `scripts/check-otel-produced-signals.py:184-194`.\n\nIf both prod and dev return no series, the spec records the empty result and does not write the row. The operator decides at spec time. The code steps are not blocked.\n\ndesign.md records three things about the row:\n- it exists by operator mandate (r4 gate), not because the code needs it;\n- no alert or dashboard consumes the series today (`check-otel-produced-signals.py:241-253`);\n- it is the first counter (`_total`) row in a registry of histogram `_count`/`_bucket`/`_sum` and `target_info` rows. This is not a new convention.\n\n**2. O-9: the @AC-51 @feature-294 EXTEND (D-14 bookkeeping, now confirmed against the text).**\n- The scenario at `services/xstockstrat-analysis/acceptance/signal-map-instrumentation.feature:37-45` stays unedited. Its Given, \"a background full opportunity recompute that fails once\" (`:40`), and its Then, `recompute` kind \"full\" outcome \"failed\" +1 (`:45`), already cover both triggers.\n- design.md's business-rule section lists the EXTEND with both triggers: the kick path `_run` (`servicer.py:4957`) and the daily per-user catch (`servicer.py:6061-6063`).\n- The existing test `test_analysis_tick_telemetry.py:174-184` stays kick-path-only, at exactly 1. The new @AC-10 @feature-356 covers the daily trigger.\n\n**3. The CLAUDE.md caveat (`services/xstockstrat-analysis/CLAUDE.md`).**\n- The D-14 caveat is a clause appended to the Instruments line (`:327`).\n- The `loop tick ok` line (`:326`, \"a tick writes no record when every item that reached its fallible call failed\") stays word for word. It is the R-8/O-4 fact. The new caveat adds the metric and does not replace the log behaviour.\n\n**Touchpoints:**\n- `servicer.py`\n- `live_loop.py`\n- analysis tests (`test_analysis_tick_telemetry.py`, `test_telemetry_allowlist.py`, and the D-9 sweep files)\n- `services/xstockstrat-analysis/CLAUDE.md`\n- `packages/otel/produced-signals.tsv` (conditional, as above)\n- the feature's design.md, product-spec.md and acceptance.feature\n\nThere is no proto, migration, config or other-service change. Features 351, 353 and 354 are not touched.",
+    "open_objections": [],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-16 @feature-294",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-8 @feature-262",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-3 @feature-262",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @feature-191",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6/@AC-7/@AC-10 @feature-185/@feature-289 (kick-path recompute failure; @AC-7 compute_failed stays cold-read-only)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-168, @AC-1/@AC-3 @feature-193 (held set assumed complete)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-097/158 daily opportunity refresh per-user isolation and loop-tick record semantics (_log_items_tick untouched; CLAUDE.md:326 tick sentence kept verbatim)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-41 @feature-294 (telemetry label-key allowlist; _drive gains the full/failed call, key set unchanged)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-51 @feature-294 (scenario text unchanged at signal-map-instrumentation.feature:37-45; recompute{full,failed} now also counted by daily-refresh per-user failures; :174-184 test stays kick-path-only at exactly 1)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-5 @feature-356 (When step narrowed to the on-demand recompute path)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-10 @feature-356 (new: daily-refresh failed user counted, previous queue kept, schedule advances)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-1..@AC-9 @feature-356 (fail-closed held-drain rules)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      }
+    ],
+    "rejected_alternatives": [
+      "Drop the produced-signals.tsv row entirely (the proposer's runner-up). It would be the smallest diff and has no consumer today. It loses because the operator's r4 steer requires the row once it is verified, and that steer breaches no Floor.",
+      "Defer the row to the follow-up that adds the first alert or dashboard on this series. That would match the registry's stated purpose (`packages/otel/CLAUDE.md`). It loses for the same reason: the operator wants it in this PR.",
+      "Make the Mimir verification a PR-time gate (an 'operator blocker for the PR'). It loses because it would hold a SEV-3 fail-closed fix behind an external lookup for a row nothing consumes. Verification runs in /sdd-spec, and an empty result goes to the operator then.",
+      "Verify with a query not scoped to an environment, such as `count by (kind, outcome, service_name)`. It loses because it cannot show which stack or environment produced the series, and alerts key on the short `service_name` (OTEL-1).",
+      "Edit the @AC-51 scenario text to name both triggers. It loses because the Given at `:40` ('a background full opportunity recompute that fails once') already covers the daily pass, and the existing test stays exact, so an EXTEND entry in design.md is enough (C-16).",
+      "Rewrite the CLAUDE.md `loop tick ok` line (`:326`) as part of the caveat. It loses because that line holds the R-8/O-4 fact. The caveat is appended to the Instruments line at `:327` instead.",
+      "Carried from r4: a new label value `kind=daily`; counting inside `_compute_opportunities`; a daily `ok`; setting `ListPositions` on a None `_portfolio` or using one shared `side_effect`; registering the series name unverified (R-10..R-13 and r4)."
+    ],
+    "open_risks": [
+      "Mimir may hold no `analysis_opportunity_recompute*` series. A counter is exported only after its first `add`, and the kick path may not have failed or succeeded in the queried window. The row would then be withheld pending an operator call at spec time, even though the code is correct. To reduce this, query both prod and dev over 30d or more before declaring the series absent.",
+      "The produced-signals row would be the first counter (`_total`) row. A later reader may take it as a convention. design.md must record that the operator mandated it and that it currently has no consumer.",
+      "The `recompute{kind=full,outcome=failed}` series now merges two failure modes: a kick-path failure that is retried on the next read, and a daily-refresh failure that leaves the queue stale for about 24h. `ok` is recorded on the kick path only, so any failed/(ok+failed) ratio over `kind=full` reads high. Only the CLAUDE.md caveat mitigates this.",
+      "The daily counter also counts per-user failures that are not held-drain failures: an `owner_metadata` ValueError, and lock or replace errors. This is accepted scope.",
+      "If every user fails during a portfolio outage at the refresh hour, `recompute{full,failed}` rises by N, no `loop tick ok` is written, and all queues stay stale for about 24h.",
+      "The effective fail-closed bound is 5,000 positions per owner, because portfolio clamps the page size to 100 (`portfolio_repo.go:137-138`).",
+      "A transient held-drain failure at boot leaves the entry-backfill cooldown state unseeded until the process restarts (`entry_backfill.py:199-202`).",
+      "The D-9 sweep must land before RED, or the existing bare-`MagicMock` fakes go red for the wrong reason.",
+      "AC-5 and AC-10 rebind the real `_compute_opportunities`. They may need a rebase against `308-fix-analysis-per-symbol-isolation`.",
+      "`next == sent` misses an A to B to A token cycle, and the 50-page cap is the backstop for that. Wrapping every page exception turns programming errors into owner skips, with `__cause__` preserved.",
+      "Register bookkeeping is out of date. P-1 (D-7), P-2 (D-5) and P-3 (R-6) still show 'pending user', but the operator accepted them at the r3 gate, and D-11 and D-12 supersede D-7 and D-5. The orchestrator should set their verdicts to 'user reopened' and mark D-5 and D-7 superseded."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-03",
+      "C-08",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-01",
+      "P-02",
+      "P-03",
+      "P-06",
+      "F-07",
+      "PLAT-4",
+      "PLAT-N1"
+    ],
+    "rationale": "I checked the round-5 claims against the code this session.\n- `services/xstockstrat-analysis/app/telemetry.py:442-444` declares `analysis.opportunity.recompute` as a Counter with no unit, so the only expected Prometheus name is `analysis_opportunity_recompute_total`.\n- `packages/otel/produced-signals.tsv:2-10` holds only histogram `_count`/`_bucket`/`_sum` metric rows, so this would be the first counter row.\n- `signal-map-instrumentation.feature:37-45` holds @AC-51. Its Given at `:40` ('a background full opportunity recompute that fails once') and its Then at `:45` already cover the daily pass, so the EXTEND needs no text edit.\n- In `services/xstockstrat-analysis/CLAUDE.md`, `:326` holds the `loop tick ok` sentence (the R-8/O-4 fact) and `:327` holds the Instruments line.\n\nThe adversary found the proposal SOUND. It raised no blocking objection and found no Floor breach or register violation. I folded its non-blocking fixes into the approach:\n- the verification query is scoped to an environment, and the answering environment is recorded;\n- verification happens at spec time, not PR time;\n- design.md labels the row operator-mandated, with no consumer, and the first `_total` row;\n- the CLAUDE.md `:326` sentence is preserved;\n- the 'not re-read' assumption on the @AC-51 line range is dropped.\n\nThese satisfy both O-8 conditions: the operator's r4 steer gives the confirmation, and the spec records the query and its result before the row is written. O-9 is satisfied because the EXTEND is declared and the scenario text is confirmed to cover both triggers. Both objections close.\n\nOn the register:\n- Nothing settled is contradicted. D-14 already put the @AC-51 EXTEND in design.md. The new decisions refine only the tsv verification procedure and the CLAUDE.md edit scope.\n- No locked R entry is revived. There is no `kind=daily` (R-10) and no daily `ok` (R-12).\n- No petition was filed this round, and the operator steer reopens nothing new, so `reopened` is empty.\n\nOn the operator decisions, all are honoured:\n- fail closed, reject a token equal to the one sent, and test against a fake that ignores the token;\n- PRESERVE @AC-16 @feature-294 and @AC-8 @feature-262;\n- leave features 351, 353 and 354 untouched;\n- red before green;\n- the daily-refresh counter, the guard and the CLAUDE.md change all land in the same PR;\n- the tsv row lands only after spec-recorded Mimir verification.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The produced-signals.tsv row for `analysis.opportunity.recompute` is gated on a spec-time verification step, done in /sdd-spec before /sdd-execute and not as a PR gate.\n\nThe spec records the datasource, the stack or environment, a range of 30d or more, and each query's text and result for:\n- (a) `count by (__name__) ({__name__=~\"analysis_opportunity_recompute.*\"})`;\n- (b) `count by (kind, outcome, service_name, <environment label>) (analysis_opportunity_recompute_total)`, or the same query per stack.\n\nThe expected name is `analysis_opportunity_recompute_total`, but the verified name wins.\n\nThe row copies the existing `metric` layout: `metric`, the verified series, `services/xstockstrat-analysis/app/telemetry.py`, and the literal `analysis.opportunity.recompute`.\n\nIf both prod and dev return nothing, the spec records the empty result, writes no row, and the operator decides at spec time.\n\ndesign.md records that the row is operator-mandated (r4 gate), has no consumer today, and is the first counter (`_total`) row, which does not set a convention.",
+          "evidence": "Operator decision 2026-11-17 (design gate r4). `app/telemetry.py:442-444` (Counter with no unit) and `:443` (the literal). `produced-signals.tsv:2-10` (histogram-only metric rows). `scripts/check-otel-produced-signals.py:184-194` (producer-literal check) and `:241-253` (consumer check). Adversary r5 environment-scoping and spec-time points."
+        },
+        {
+          "text": "The @AC-51 @feature-294 scenario text (`signal-map-instrumentation.feature:37-45`) stays unedited. Its Given at `:40` and its Then at `:45` already cover both the kick-path and the daily per-user triggers, and the D-14 EXTEND entry in design.md names both (`servicer.py:4957` and `:6061-6063`).\n\nThe D-14 CLAUDE.md caveat is appended to the Instruments line (`services/xstockstrat-analysis/CLAUDE.md:327`). The `loop tick ok` sentence at `:326` stays word for word.",
+          "evidence": "`signal-map-instrumentation.feature:37-45` and `CLAUDE.md:326-327`, both re-read this round. Adversary r5 C-16 points. R-8/O-4 tick-semantics fact."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Hold the PR behind a PR-time Mimir verification gate for the tsv row.",
+          "why": "It holds a SEV-3 fail-closed fix behind an external lookup for a row nothing consumes. Verification moves to /sdd-spec, where an empty result is an operator call that does not block the code steps."
+        },
+        {
+          "text": "Verify the series with a query not scoped to an environment, such as `count by (kind, outcome, service_name)`.",
+          "why": "It cannot show which stack or environment produced the series, and alerts key on the short `service_name` (OTEL-1)."
+        }
+      ],
+      "new_objections": [],
+      "closed_objections": [
+        {
+          "id": "O-8",
+          "how": "The operator's r4 steer gives the confirmation. A new decision makes environment-scoped Mimir verification a recorded /sdd-spec step before the row is written in the existing `metric` layout with literal `analysis.opportunity.recompute` (`telemetry.py:443`). An empty result means no row and an operator call at spec time. design.md labels the row operator-mandated, with no consumer, and the first `_total` row."
+        },
+        {
+          "id": "O-9",
+          "how": "design.md records @AC-51 @feature-294 as an EXTEND naming both triggers (`servicer.py:4957`, `:6061-6063`). The scenario text at `signal-map-instrumentation.feature:40,45` is confirmed to already cover the daily pass and stays unedited. The `test_analysis_tick_telemetry.py:174-184` test stays kick-path-only at exactly 1, and @AC-10 @feature-356 covers the daily trigger."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
