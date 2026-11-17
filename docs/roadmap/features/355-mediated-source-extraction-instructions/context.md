@@ -120,3 +120,7 @@
   Fixed in the text (D-27). D-28 lists the spec amendments, D-29 the step refinements. Adversary:
   "with that clause fixed the design is APPROVABLE". Round 6 runs as a confirming pass under the
   user's continue-until-sound instruction.
+- Round 6 (2026-11-17, confirming pass): proposer — all five texts compliant; adversary — **sound,
+  no blocking objection**, no Floor breach, no register violation. Verified on the saved live Form 4
+  body: newest-first ordering and one `<updated>` per accession number. Pending at closeout: write
+  the D-28 amendments into product-spec.md / acceptance.feature. Approval gate presented next.

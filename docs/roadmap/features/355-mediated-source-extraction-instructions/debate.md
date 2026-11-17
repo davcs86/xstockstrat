@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 6 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 Paths: `ingest/` = `services/xstockstrat-ingest/`, `agent/` = `services/xstockstrat-agent/`,
 `ui/` = `services/xstockstrat-ui/`.
@@ -16,6 +16,7 @@ Paths: `ingest/` = `services/xstockstrat-ingest/`, `agent/` = `services/xstockst
 | 3 | 2026-11-17 | /sdd-design | 3 | 0 | 11 | 11 | 0 | yes |
 | 4 | 2026-11-17 | /sdd-design | 2 | 1 | 7 | 7 | 0 | yes |
 | 5 | 2026-11-17 | /sdd-design | 3 | 0 | 4 | 4 | 0 | yes |
+| 6 | 2026-11-17 | /sdd-design | 1 | 0 | 1 | 1 | 0 | yes |
 
 ## Settled Decisions
 
@@ -51,6 +52,7 @@ Paths: `ingest/` = `services/xstockstrat-ingest/`, `agent/` = `services/xstockst
 | D-27 | 5 | Final-text corrections, round 5: the default text forbids the current time for both `valid_from` and `valid_until`, and says the fields it names (`extractor_tool`, `config_json`) are on the source's `list_signal_sources` entry; the PR Newswire text covers "a merger or acquisition" and uses the same no-current-time sentence as the others; the 8-K text names the lowest-numbered qualifying item for the headline and tag. **Form 4**: a "counted filing" is a recent filing for the issuer that shares no reporting person with at least one other recent filing for that issuer; an AccNo is skipped when its Issuer entry, or every one of its Reporting entries, is missing from the fetch; every filing whose `<updated>` equals the oldest `<updated>` in the fetch is ignored (the latest-100 feed may have cut it off). | `ingest/app/handlers/servicer.py:1240-1241`; `agent/app/client.py:1429-1441`; `agent/app/tools.py:553,567`; context.md live check (56 Reporting / 44 Issuer in 100 entries) | settled |
 | D-28 | 5 | Spec amendments to match decisions made during design (append-only ids): FR-5 holds "through a masked partial update; a maskless update replaces every field" (D-11); FR-3 also covers every update whose effective type is mediated (D-15); FR-6 — a mediated `list_signal_sources` entry also carries `origin` + `@AC-24` (D-25 a); new FR-15 — `ManageTemplate` CREATE/UPDATE apply the same rules, RETIRE never checked + `@AC-25` (D-12); definitions — whitespace-only is stored as `""`, non-blank verbatim + `@AC-26`, modelled on `@AC-18` with an `extractor_module` supplied (D-13); FR-14 "characters (Unicode code points)"; a Design Note that the recency, expiry, conviction and per-source scope rules live in prose and carry no `@AC`. | product-spec.md; acceptance.feature | settled |
 | D-29 | 5 | Step refinements: the 017 overlay lives inside `_rows()` of the ingest seed test and lands in the ingest step (it needs that step's payload allow-list; `test_ac7` instantiates through the real handler). The 017 header states the row grammar without writing the quote tag itself (clarifies D-23). The agent step adds one precedence line — a source's `extraction_instructions` override the generic guidance — to the runbook's Usage Patterns and to `signal_extraction.md`. Validator order: length → required → non-mediated-non-empty, after normalization. | `ingest/tests/test_seed_source_templates.py:29-36,62,67,95-110`; `docs/runbooks/mcp-tools.md:1793-1823`; `agent/app/prompts/signal_extraction.md:52-68` | settled |
+| D-30 | 6 | Confirming pass: the five final texts stand as written after two wording tightenings (8-K headline/tag = the lowest-numbered item of the winning direction; Form 4 counted filing = a recent filing "not skipped or ignored above" that shares no reporting person with at least one other such filing). The oldest-`<updated>` rule rests on two feed facts verified against the saved live Form 4 body of 2026-11-17: entries are ordered newest-first, and each accession number carries exactly one `<updated>` across its entries (0 of 44 differed). Adversary verdict: sound, no blocking objection. | context.md 2026-11-17 live check; `ingest/app/handlers/servicer.py:1231-1241` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -117,6 +119,7 @@ Paths: `ingest/` = `services/xstockstrat-ingest/`, `agent/` = `services/xstockst
 | O-44 | 5 | Text determinism gaps: the default text forbade the current time only for `valid_from`; it named fields absent from manage/instantiate responses; Form 4 "counted filings" was undefined; PR Newswire wording narrower than D-24(b). | no | closed @ round 5 (D-27) |
 | O-45 | 5 | Product spec / acceptance text lags the decisions made during design (maskless rule, `origin`, template-write validation, blank normalization, code points, noop on update). C-15. | no | closed @ round 5 (D-28) |
 | O-46 | 5 | The no-re-ingest property holds only while `signals.dedup_window_hours` ≥ 24; the default text's 0.3/0.6/0.9 choice is still an LLM judgement that can differ between runs; a new non-overlapping Form 4 filing re-wins the slot. | no | waived @ round 5 (orchestrator: residual Open Risks in design.md; no mechanism, C-18) |
+| O-47 | 6 | Within the dedup window a second, separate 8-K `sell` for the same ticker (conviction 0.6, no `valid_until`) is swallowed as deduplicated because `valid_from` is never compared — a missed signal, never a wrong or repeated one. | no | waived @ round 6 (orchestrator: Open Risk in design.md) |
 
 ## Reopen Petitions
 
