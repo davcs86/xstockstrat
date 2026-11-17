@@ -146,16 +146,20 @@ Both exit 0.
 **Covers**: `AC-4` (the label set is bounded and carries no `account_id`/`user_id` key).
 
 **Instructions**:
-1. RED first (before Step 1): append `"trading.reconciliation.position_check_skipped"` to `minInstruments`
-   (:37-40). Run `go test -run TestAllowlist_AC41 ./internal/service/` and capture the failure
-   `instrument trading.reconciliation.position_check_skipped not collected`.
-2. After Step 1: append to `driveAllInstruments` (:44-52) one call per outcome:
+1. RED is a temporary run on the pre-Step-1 tree, taken out of the step order. Before Step 1 is applied,
+   append `"trading.reconciliation.position_check_skipped"` to `minInstruments` (:37-40). Run
+   `GOWORK=off go test -run TestAllowlist_AC41 ./internal/service/` and capture the failure
+   `instrument trading.reconciliation.position_check_skipped not collected`. Keep that edit uncommitted
+   while Step 1 lands. No new test function is added; the existing `TestAllowlist_AC41_*` tests cover it.
+2. After Step 1 is committed: append to `driveAllInstruments` (:44-52) one call per outcome:
    `telemetry.RecordReconcilePositionSkip(ctx, telemetry.ReconcileSkipRPCError)`,
    `telemetry.RecordReconcilePositionSkip(ctx, telemetry.ReconcileSkipDeadline)`,
    `telemetry.RecordReconcilePositionSkip(ctx, telemetry.ReconcileSkipCursorInvalid)`.
    The existing allowlist and forbidden-key loops then cover the new instrument with no new assertion code.
 3. C-13: no domain test data is added (instrument names and typed constants only). Single consumer, nothing
    to move.
+4. The Step 2 commit holds both edits together: the `minInstruments` entry (item 1) and the
+   `driveAllInstruments` calls (item 2).
 
 **Verification**:
 ```bash
@@ -329,7 +333,7 @@ Step 3 and is GREEN-side only. Its guard discrimination is exact text per row (D
      - a page-2 block on `ctx.Done()`;
      - `ignoreToken`.
      `takeLog()` returns the log and resets it (D-15).
-2. **AC-1** (`@AC-1`, plus `@AC-4` zero guard):
+2. **AC-1** (`@AC-1`, plus `@AC-4` zero guard), test `TestReconcileTick_358_AC1_DrainsAllPages_NoFindingNoHalt`:
    - Page 2 holds `SYM501` qty 10 with next `""`. Pre-seed `svc.reconcileCandidates["acc-1:pos:SYM501"] = 1`.
    - Run `svc.reconcileTick(context.Background(), 1, 1.1)` twice.
    - After **each** tick assert:
@@ -340,12 +344,12 @@ Step 3 and is GREEN-side only. Its guard discrimination is exact text per row (D
    - After tick 1, also assert the seeded key is absent.
    - After both ticks, assert `counterValue(t, reader, "trading.reconciliation.position_check_skipped") == 0`.
    - RED today: the finding and the halt at tick 1, and 1 call per tick (O-8).
-3. **Positive control** (preserves `@AC-2 @feature-206`):
+3. **Positive control** (preserves `@AC-2 @feature-206`), test `TestReconcileTick_358_PositiveControl_Page2MismatchHalts`:
    - Same as AC-1, but page 2 has SYM501 qty 5.
    - After two ticks assert exactly one `reconciliation.mismatch_found` whose `Payload.Fields["order_id"]` is `"SYM501"`, `["expected"].GetNumberValue() == 5` and `["broker_reported"].GetNumberValue() == 10`, read only from `recordingLedgerClient` (D-10, D-14, R-9).
    - Assert `svc.isAccountHalted("acc-1")`, the per-entry identity/mode assertions from item 2, and skip counter total 0.
    - RED today: `expected == 0`.
-4. **AC-2 error** (`@AC-2`, `@AC-4` rpc_error row):
+4. **AC-2 error** (`@AC-2`, `@AC-4` rpc_error row), test `TestReconcileTick_358_AC2_Page2RPCError_SkipsAccountForTick`:
    - Page `"p2"` returns `status.Error(codes.Unavailable, "portfolio down")`.
    - After each tick assert:
      - a `"p2"` call was made;
@@ -355,7 +359,7 @@ Step 3 and is GREEN-side only. Its guard discrimination is exact text per row (D
    - After two ticks assert:
      - `counterValue(t, reader, name, outcome("rpc_error")) == 2`;
      - `keysByInstrument(t, reader)[name]` holds neither `"account_id"` nor `"user_id"`.
-5. **AC-2 deadline** (EXTEND of `@AC-2`):
+5. **AC-2 deadline** (EXTEND of `@AC-2`), test `TestReconcileTick_358_AC2_Page2Deadline_SkipsAccountForTick`:
    - `svc.cfgW = snapshotInts(map[string]int64{"broker.timeout_ms": 50})`.
    - Page 1 does `time.Sleep(5 * time.Millisecond)` and never observes ctx (D-18, R-12).
    - Page `"p2"` blocks on `<-ctx.Done()` and returns `ctx.Err()`. This is a **plain `context.DeadlineExceeded`**, the form the AC-2 deadline fake returns (operator r6).
@@ -363,15 +367,22 @@ Step 3 and is GREEN-side only. Its guard discrimination is exact text per row (D
    - Assert the same skip outcomes as item 4.
    - Assert that in each tick's log the page-2 entry `Deadline()` is strictly after page 1's (D-11; a shared deadline, R-1, gives equal values).
    - Assert `counterValue(..., outcome("deadline")) == 2`.
-6. **AC-3** (`@AC-3`, `@AC-4` cursor_invalid row):
+6. **AC-3** (`@AC-3`, `@AC-4` cursor_invalid row), test `TestReconcileTick_358_AC3_IgnoredToken_SkipsAccountForTick`:
    - `ignoreToken`: every call returns page 1 with next `"p2"`.
    - After each tick assert:
      - at most 2 calls (exactly 2: `["", "p2"]`);
      - no `acc-1:pos:` candidate, no finding, not halted.
    - After two ticks assert `counterValue(..., outcome("cursor_invalid")) == 2` and no `account_id`/`user_id` key.
    - The repeated-token guard (not the duplicate-symbol guard) fires, because the token guards run before the merge (D-9). The hardening row in item 8 pins the text.
-7. Confirm items 2-6 FAIL on the pre-Step-3 tree and capture the output (RED). Then apply Step 3.
-8. **Direct-helper hardening table** (after Step 3; D-12, D-13). Call
+7. This step is staged in two passes and lands as one commit:
+   - Pass 1, before Step 3 is applied: write items 1-6 (uncommitted), run
+     `GOWORK=off go test ./internal/service/ -run 'TestReconcileTick_358' -count=1 -v`, and confirm items
+     2-6 FAIL. Capture that output as the RED evidence.
+   - Then Step 3 lands as its own commit, with the pass-1 test edits still uncommitted in the working tree.
+   - Pass 2: add item 8, run the Verification below, and commit the whole file as the Step 4 commit.
+8. **Direct-helper hardening table** (after Step 3; D-12, D-13), table test
+   `TestListAccountPlatformPositions_358_Guards` (guard rows plus the happy row) and table test
+   `TestReconcilePositionSkipCause_358` (the mapper-only rows). Call
    `svc.listAccountPlatformPositions(context.Background(), "acc-1", reconcile358Owner, commonv1.TradingMode_TRADING_MODE_PAPER, time.Second)`
    against the paging fake. Each row asserts `got == nil`, the exact `err.Error()` (or the stated
    check), and `reconcilePositionSkipCause(err)`:
@@ -397,11 +408,13 @@ Step 3 and is GREEN-side only. Its guard discrimination is exact text per row (D
 **Verification**:
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestReconcileTick|TestListAccountPlatformPositions|TestReconcilePositionSkipCause|TestAllowlist' -count=1 -race -v 2>&1 | grep -E "^(--- |ok|FAIL)"
-cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
+cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
 cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -n "t.Parallel" services/xstockstrat-trading/internal/service/trading_reconciliation_test.go
 ```
-- All 358 subtests pass under `-race`.
+- All 358 tests pass under `-race`. The `-run` filter selects them by the names in items 2-6 and 8:
+  `TestReconcileTick_358_*`, `TestListAccountPlatformPositions_358_Guards` and
+  `TestReconcilePositionSkipCause_358`. The output must list each of the seven by name.
 - The coverage total is ≥ 40%. New logic is in the excluded `service` and `telemetry` packages, so the
   threshold is unchanged by this feature; the 358 unit tests are the verification.
 - Lint exits 0.
