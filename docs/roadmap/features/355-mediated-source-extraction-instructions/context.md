@@ -65,3 +65,10 @@
 - Phase 0 Recon: wrote recon.md from four scouts (ingest+proto, agent, ui, scenario-recon). No
   existing `@AC-*` needs a CHANGE sign-off.
 - Phase 1: round 1 proposer running. No debate.md yet.
+- Round 1 (2026-11-17): proposer + adversary run; debate.md written. Both blocking objections
+  (migration-rerun hardcoded ingest version; stale `list_signal_sources` docstring) verified in code
+  and folded in (D-8, D-9).
+- **Round-1 gate — user decisions:** (1) maskless update = plain replace-all, no "empty means
+  omitted" exception (D-11, R-6); (2) `ManageTemplate` CREATE/UPDATE require prose on a mediated
+  payload (D-12) — goes beyond FR-1..14, accepted; (3) no `merge-order.md` row for the 328 overlap;
+  (4) run round 2.
