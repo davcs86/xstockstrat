@@ -101,3 +101,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Only failure: `TestBackfill_IngestRaceNeverLeavesEntryRemovable` (`signal_expiry_backfill_dbtest_test.go:494`, iteration 1: "entry left due … while a live signal exists"). A real-concurrency race test (goroutines racing `backfillApply` vs `AddSymbols`, 10 iterations), feature 281 territory; it passed in this session's local full-package run (49/49). This feature's diff touches neither racing path (only `ListByUser`'s token and the SQL-identical `seedWatchlist` delegate). All other CI jobs green, incl. Go lint and test (portfolio).
 - Classified as a timing-dependent flake in pre-existing code, not a 354 regression → no code churn (CI-watch rule). Re-run of failed jobs refused by the integration (403); empty commits / close-reopen are forbidden → needs a manual "Re-run failed jobs" on run 43997601438. Subscribed to #1566 activity.
 - [ ] Open: possible real race in the feature-281 signal-expiry backfill — candidate for `/sdd-qa defect` (user decision).
+
+## Session 2026-11-17 — launch check: D-19 dev smoke (PASS)
+- Merged to main-dev as `149351d` (#1566, squash). DO app `xstockstrat-staging` deployment ACTIVE since 2026-11-17T01:57:20Z (started 01:53:41Z, after the 01:50:44Z merge); `xstockstrat-portfolio` image tag `149351d`; all 12 components HEALTHY → rollout complete, no D-7 mixed-fleet window.
+- Agent MCP (`xstockstrat_staging`) `list_watchlists` limit=0 → N=2: `4d1366d8-7e23-4503-a758-1ef815b941c5` (Signals, system-managed), `73fa475f-132f-496d-8ef1-905963e25a70`; token "".
+- Traversal limit=1: call 1 → `[4d1366d8…]`, next_page_token=`4d1366d8…` (last returned row); call 2 → `[73fa475f…]`, next_page_token="". 2 calls (cap 4).
+- **PASS**: every list exactly once, ascending, final token empty. Discriminating: under the pre-fix code page 1's token would have been the look-ahead `73fa475f…` and the traversal would have returned only `4d1366d8…`.
+- No temporary watchlist was needed (N ≥ 2).
