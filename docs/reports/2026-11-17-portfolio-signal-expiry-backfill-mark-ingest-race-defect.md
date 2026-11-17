@@ -1,7 +1,7 @@
 # Defect: portfolio signal-expiry backfill mark races a concurrent signal add, leaving a live entry prunable
 
 **Recorded**: 2026-11-17
-**Severity**: SEV-2
+**Severity**: SEV-3
 **Impact type**: silent-data-loss (watchlist entry removed while its signal is live)
 **Environment**: CI (Portfolio DB test, TimescaleDB); production exposure when `backfill-signal-expiry --mode=apply` overlaps signal ingest
 **Affected service(s)**: xstockstrat-portfolio
