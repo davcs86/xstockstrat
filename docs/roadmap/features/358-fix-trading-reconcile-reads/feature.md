@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md` |
+| 2026-11-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@
 
 ## Next Action
 
-`/sdd-design fix-trading-reconcile-reads quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-trading-reconcile-reads quick` — quick design recommended (SEV-2 bug, single service xstockstrat-trading, no proto/migration/config/consumer-surface change; overlap PASS)
