@@ -1,6 +1,6 @@
 # Implementation Spec: ensure-signals-watchlist-on-read
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-17
 **Feature**: `docs/roadmap/features/351-ensure-signals-watchlist-on-read/feature.md`
 **Total Steps**: 6

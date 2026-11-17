@@ -139,3 +139,30 @@
 - Verification (all run): runbook `(read-only` = 0, `idempotent` = 1; header line `(read-only)` = 0, `idempotent` = 1, exactly 1 matching line; docstring range `(read-only)` = 0, `idempotent` = 1; `ruff check .` "All checks passed!"; `ruff format --check .` "75 files already formatted"; `uv run pytest tests/test_tools_endpoint.py tests/test_watchlist_tools.py -q` → **36 passed** (the first attempt with the global pytest failed collection — `No module named 'starlette'` — because it ran outside the project's synced environment; rerun inside `uv sync --extra dev` / `uv run`, which is the repo's documented route).
 - Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`
 - Deviations: none
+
+### Step 5 — test: landing gate — the `ListByUser` token fix is on `origin/main-dev` [HALTED — waiting on an external dependency; status left `pending`]
+- Ran the step's Verification at 2026-11-17T01:25:14Z on `ccr-1305a9de-7x1t7v` (origin/main-dev is an ancestor of HEAD — "main-dev merged"). The gate FAILS, as designed (F-05 — a HALT, not a defect of 351; the fix is not implemented here, D-6/R-5):
+  - (i) `! grep -n 'wls\[pageSize\]\.WatchlistId' services/xstockstrat-portfolio/internal/repository/watchlist_repo.go` → `139:		nextToken = wls[pageSize].WatchlistId` → **FAIL** (the look-ahead token is still present).
+  - (ii) `grep -ln 'next_page_token\|nextToken' services/xstockstrat-portfolio/internal/repository/*dbtest*_test.go` → no output → **FAIL** (no dbtest names a token traversal).
+  - (iii) `cat docs/reports/2026-11-16-portfolio-listwatchlists-page-token-skips-boundary-row-defect.status` → `open` → **FAIL** (expect `resolved`).
+  - vet/lint half: `go vet -tags dbtest ./internal/repository/` ok · `golangci-lint run` → "0 issues".
+- Unblock = the token-fix feature merges to `origin/main-dev`. Observed (verified on GitHub, not just reported): the fix is **feature 354 `fix-listwatchlists-page-token`**, PR #1566 (base `main-dev`, open, docs-only so far: triage + product spec/acceptance; its design/spec/execute phases and the dbtest traversal proof are still ahead; the fix session reports its impl-spec review clean and says the next step is `/sdd-execute fix-listwatchlists-page-token`). The defect report's `.status` is stamped by that session on its branch (still `open` on this one until it merges).
+- Step 6 not started (it requires Step 5's recorded passing output). When the gate passes, Step 6 fills the merge-order row's `<fix-slug> (<NNN>)` with `fix-listwatchlists-page-token (354)`.
+- Files modified: none (verification only)
+- Deviations: none
+
+## Session 2026-11-17T01:25:14Z — sdd-execute (sequential, no checkpoints)
+**Steps this session**: 1, 2, 3, 4 done; 5 halted (external dependency); 6 not started
+**Progress**: 4 done / 6 total
+**Stopped at**: Step 5 (landing gate: the `ListByUser` token fix, feature 354, is not on origin/main-dev)
+**Next**: after 354 merges to main-dev: `/sdd-execute ensure-signals-watchlist-on-read next` (Step 5 re-run, then Step 6)
+
+Commits on `ccr-1305a9de-7x1t7v` (no per-step PRs; integration PR is #1561): Step 1 `7f7e6b6`, Step 2 `c24a73f`, Step 3 `3c54ec0`, Step 4 `65069be`.
+
+Accountability (P-03):
+- Out-of-scope changes: none.
+- Open questions / items:
+  - [ ] Step 3's two dbtests were SKIPPED locally (no database; none may be started here). Their proof is the CI job `portfolio-db-test` on #1561 — both must PASS, not SKIP; record that result here.
+  - [ ] Step 5 gate fails until feature 354 merges to main-dev (above).
+  - [ ] The tree-freshness stamp in the spec header predates the Step 1-4 commits (cosmetic).
+- Unaddressed review warnings: none (the impl-spec review note carried only informational items; the Step 5 halt is the one it announced).
