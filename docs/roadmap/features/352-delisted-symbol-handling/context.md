@@ -566,3 +566,9 @@
 ### Step 5 — migration: marketdata `010_symbol_profile` — done
 - `010` re-derived as free on every origin ref. TDD: N/A (migration). Verified offline: up/down pair,
   highest number, 5 `CHECK`s, down drops what up creates, only the `marketdata` schema. No database started.
+
+### Step 6 — service: `ProfileRepo` — done
+- `internal/repository/profile_repo.go`: 12 methods + 2 private helpers, no `Begin(`. Build and lint clean.
+- Beyond the step text: `Candidates` is one statement (`bool_or(watched)` over a `UNION ALL`) so the list
+  and the watched count share a snapshot; methods taking a symbol list return early on an empty list
+  (`ReplaceWatched` does not).

@@ -396,7 +396,7 @@ grep -c "CHECK" services/xstockstrat-marketdata/migrations/010_symbol_profile.up
 
 ### Step 6 — service: `ProfileRepo` — the conditional statements over `symbol_profile` and `watched_symbol`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/profile_repo.go` — create
