@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 6 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -13,6 +13,7 @@
 | 3 | 2026-11-17 | /sdd-batch | 3 | 2 | 4 | 5 | 0 | yes |
 | 4 | 2026-11-17 | /sdd-batch | 3 | 2 | 5 | 3 | 0 | yes |
 | 5 | 2026-11-17 | /sdd-batch | 2 | 2 | 3 | 2 | 0 | yes |
+| 6 | 2026-11-17 | /sdd-batch | 4 | 3 | 2 | 5 | 0 | yes |
 
 ## Settled Decisions
 
@@ -39,6 +40,10 @@
 | D-18 | 4 | In the deadline variant, page 1's fake delays with time.Sleep and must not observe ctx. Only page "p2" blocks on ctx.Done(). This keeps the page-2 entry Deadline() logged even if page 1 overruns. | helper fails only on the RPC's returned error (step 4); adversary r4 risk correction | settled |
 | D-19 | 5 | listAccountPlatformPositions takes the per-page timeout as a parameter, sourced from the single per-tick brokerCallTimeout read at trading.go:2109. The helper never reads config itself, so every page of one drain uses the same timeout value. | trading.go:2109 (per-tick timeout read), :2585 (brokerCallTimeout); adversary r5 C-18 advisory; D-3 | settled |
 | D-20 | 5 | The 358 fixtures set fakeReconciliationBroker.isPaper: true explicitly, and the D-17 mode check asserts the literal commonv1.TradingMode_TRADING_MODE_PAPER. The x-user-id check asserts against one named test owner constant that is placed in brokerPoolEntry.userID. | trading_reconciliation_test.go:82,115 (isPaper field, zero value false); trading.go:2227-2230 (false maps to LIVE); trading.go:75-81 (brokerPoolEntry.userID is the source of entry.userID); adversary r5; C-13 | settled |
+| D-21 | 6 | Per the binding operator decision (2026-11-17, design gate r5), every listAccountPlatformPositions error that skips an account's position check is counted. The record is one call, telemetry.RecordReconcilePositionSkip, placed in the ppErr branch (trading.go:2240-2243) before the unchanged WARN and continue. The counter is one new trading.reconciliation.position_check_skipped, labelled only with the existing KeyOutcome and no account or user attribute. This supersedes only D-8's 'add no new metric' clause; D-8's cause and page-index wrapping stands. | Operator decision 2026-11-17 (design gate r5); internal/telemetry/otel.go:311-316 (KeyOutcome), :331-338 (counter block); telemetry_allowlist_test.go:28-35 (allowed and forbidden label keys) | settled |
+| D-22 | 6 | The guard failures wrap package sentinels (errEmptyPageWithToken, errRepeatedPageToken, errDuplicateSymbol) via %w. The D-12/D-13 error strings stay byte-identical, and the skip cause is classified with errors.Is, never by matching text. | D-12, D-13; proposer r6 and adversary r6 agree | settled |
+| D-23 | 6 | Tests that assert the skip counter call installMetricReader(t) as their first statement, before any tick, and never use t.Parallel. The instrument is added to minInstruments and driveAllInstruments in telemetry_allowlist_test.go. | trading_telemetry_test.go:283,285,316; telemetry_allowlist_test.go:25-26,37-52; grep this session shows no t.Parallel call in internal/service | settled |
+| D-24 | 6 | No packages/otel/produced-signals.tsv row and no alert or dashboard are added. The service CLAUDE.md 'Position & Balance Sync Observability' pointer and docs/reconciliation.md:98 name the counter. | scripts/check-otel-produced-signals.py:2-9 (registry enforced only for alert and dashboard queried series); services/xstockstrat-trading/CLAUDE.md has no section titled exactly 'Observability' | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -59,6 +64,9 @@
 | R-12 | 4 | A page-1 fake that selects on ctx.Done() during its delay in the deadline variant | A page-1 overrun would become a page-1 error, page 2 would never be logged, and the D-11 strictly-increasing-deadline assertion would flake. | locked |
 | R-13 | 5 | Re-deriving the expected TradingMode in tests from the fake's IsPaper() by copying the production if/else | The test would mirror the mapping it checks, so an inverted paper/live mapping on later pages would still pass (C-13). | locked |
 | R-14 | 5 | Reading brokerCallTimeout(s.cfgW) per page inside listAccountPlatformPositions | A config change mid-drain could change the per-page timeout partway through, which alters the D-3 semantics. It would also force the direct-helper tests to stand up a config watcher. | locked |
+| R-15 | 6 | Reusing trading.escalation.systemic (or adding a label to it) to count skipped position reads | It carries no labels and means escalation to REDUCE_ONLY (otel.go:337). Reusing it breaks @AC-45 and the R-6/D-7 split. | locked |
+| R-16 | 6 | A single unlabelled skip counter | It cannot tell a persistent deadline skip (R-1/D-3 on a large account) apart from a transport outage or a cursor bug, so a persistent skip is not actionable. | locked |
+| R-17 | 6 | Classifying the skip cause by matching error text | A message edit would silently break classification. Sentinels wrapped with %w keep the texts identical and can be classified with errors.Is. | locked |
 
 ## Objections
 
@@ -82,8 +90,13 @@
 | O-15 | 4 | [C-13] AC-1 and the positive control must assert, per logged page call in each tick, x-user-id == owner, req.GetAccountId() == "acc-1" and the expected TradingMode. Otherwise a drain that drops identity or the filter on page 2 and later passes every AC (trading.go:2234; fails.md:2534). | no | closed @ round 5 (r5 adopts D-17. AC-1 and the positive control assert x-user-id == owner, AccountId == "acc-1" and the expected TradingMode for every logged page call in each tick. The adversary confirmed this against code (the literal-enum and owner-source refinements are tracked as new objections).) |
 | O-16 | 4 | [C-11] Correct the stated strongest risk. A time.Sleep page-1 overrun still lets page 2 log its Deadline(). State that page 1's fake must not select on ctx.Done(). | no | closed @ round 5 (r5 restates the deadline variant: page 1 uses time.Sleep and never selects on or reads ctx.Done(), and only "p2" blocks. A page-1 overrun therefore cannot suppress the page-2 log entry (D-18, R-12). The adversary confirmed.) |
 | O-17 | 4 | [C-18] Return map[string]float64 from listAccountPlatformPositions and delete trading.go:2244-2247 instead of re-pointing it. | no | closed @ round 5 (r5 adopts D-16. The helper returns map[string]float64, trading.go:2244-2247 is deleted, and platformBySymbol binds directly from the helper. The adversary confirmed.) |
-| O-18 | 5 | [C-11/C-13] Set fakeReconciliationBroker.isPaper: true explicitly in the 358 fixtures and assert the literal TRADING_MODE_PAPER, not a value re-derived from IsPaper(). Drop the incorrect 'no live toggle / paper by default' assumption: the field exists at test:82 and its zero value drives LIVE (trading.go:2227-2230). | no | open |
-| O-19 | 5 | [C-11] The owner is brokerPoolEntry.userID (trading.go:75-81), not noopAccountRepo or newTestReconciliationService. Name one owner constant, set it in the brokerPoolEntry, and assert every D-17 entry against it. | no | open |
+| O-18 | 5 | [C-11/C-13] Set fakeReconciliationBroker.isPaper: true explicitly in the 358 fixtures and assert the literal TRADING_MODE_PAPER, not a value re-derived from IsPaper(). Drop the incorrect 'no live toggle / paper by default' assumption: the field exists at test:82 and its zero value drives LIVE (trading.go:2227-2230). | no | closed @ round 6 (r6 sets isPaper: true explicitly on every 358 fakeReconciliationBroker, asserts the literal commonv1.TradingMode_TRADING_MODE_PAPER on every D-17 entry, and drops the wrong 'paper by default' assumption. The adversary confirmed.) |
+| O-19 | 5 | [C-11] The owner is brokerPoolEntry.userID (trading.go:75-81), not noopAccountRepo or newTestReconciliationService. Name one owner constant, set it in the brokerPoolEntry, and assert every D-17 entry against it. | no | closed @ round 6 (r6 declares one const reconcile358Owner, places it in brokerPoolEntry.userID (trading.go:75-81), and asserts every D-17 x-user-id entry against it. The adversary confirmed.) |
+| O-20 | 6 | [C-11] The deadline label must be in the design. The AC-2 deadline fake returns a plain context.DeadlineExceeded, which status.Code reports as Unknown, so it gets mislabelled rpc_error. Required: map to deadline when errors.Is(err, context.DeadlineExceeded) // status.Code(err)==codes.DeadlineExceeded, add a hardening row for each form, and state which form the AC-2 fake returns. | yes | open |
+| O-21 | 6 | [C-15/C-16] The counted-skip requirement has no FR or @AC. Append FR-5 and @AC-4 @FR-5 (or metric Then clauses on AC-2/AC-3), so the durable acceptance suite pins the counter (precedent signal-map-instrumentation.feature:60). | yes | open |
+| O-22 | 6 | [C-18] Reduce the outcome set to rpc_error/deadline/cursor_invalid, with the three sentinels mapped to cursor_invalid, because the WARN already tells the guards apart (D-8). Otherwise record why per-guard labels are kept. | no | open |
+| O-23 | 6 | [C-18] Make the outcome type-enforced: type ReconcileSkipOutcome string as the RecordReconcilePositionSkip parameter. Otherwise drop the 'typed constants' claim. | no | open |
+| O-24 | 6 | [C-11] context.Canceled on shutdown is counted as rpc_error, so every deploy produces a burst. State explicitly that it is counted and accepted (operator: count every skip), document it in docs/reconciliation.md, and pin the mapping with a hardening row. No sixth label. | no | open |
 
 ## Reopen Petitions
 
