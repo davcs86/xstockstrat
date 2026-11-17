@@ -339,3 +339,18 @@
   scenario tests carry a `// @AC-<n>` comment.
 - Unresolved ✗ / ⚠ carried into execution: none from round 3.
 
+
+## Session 2026-11-17 — sdd-review impl-spec (advisory), round 4
+
+- Tree: `claude/story-delisted-symbol-handling@6f0e12e` (contains `origin/main-dev@149351d`).
+- Result: 1 failure, 3 warnings, 1 note (advisory — did not block). All applied to the spec:
+  Step 9 (AC-4 and AC-5 are two tests, so the enforced `@AC-` count of 14 is reachable), Step 6
+  (`ClaimableSymbols` lease bound as `make_interval(secs => $1)`; `Start` day bound as `$3::date`),
+  Step 4 (anchored `-run` filter), Step 30/31 (paging), Step 30 line anchors.
+- Behavioral one: a readiness page whose bound rows are all flagged no longer dead-ends pagination.
+  The page token comes only from the server, and the hook is disabled when it gets no pairs. Fix:
+  `useWatchlistReadiness` gains an optional `morePages` parameter that only widens `enabled`; the
+  component passes the unflagged pairs and whether more bound bindings follow the page. The poll-alive
+  test still uses the pairs only, and a list whose only bound bindings are flagged still issues no
+  request. Step 30 now modifies the hook file; Step 31 gains a 26-binding e2e case.
+- Unresolved ✗ / ⚠ carried into execution: none from round 4.
