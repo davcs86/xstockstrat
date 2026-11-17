@@ -388,7 +388,7 @@ body and `context.md`. Do not start a database inside `/sdd-execute`.
 
 ### Step 4 — docs: agent wording for `list_watchlists` no longer says "(read-only)"
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify

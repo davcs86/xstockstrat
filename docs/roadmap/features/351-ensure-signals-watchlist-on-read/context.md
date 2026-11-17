@@ -132,3 +132,10 @@
 - [ ] unaddressed: record the `portfolio-db-test` result for the commit carrying Step 3 (both tests must PASS, not SKIP, under `CI=true`).
 - Files modified: `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go`, `services/xstockstrat-portfolio/internal/repository/watchlist_ensure_dbtest_test.go` (new)
 - Deviations: goroutine results are written to distinct slice indices instead of "collected under a mutex" (same race-freedom, no lock needed); logged here only.
+
+### Step 4 — docs: agent wording for `list_watchlists` no longer says "(read-only)" [done]
+- Reworded the three sites (FR-7, AC-9): `tools.py:33` header pinned to `  list_watchlists     — lists the caller's own watchlists, paginated; idempotently ensures Signals` (98 columns, limit 100); the tool docstring (`tools.py:2154-2156`) now states that a first-page call (empty `page_token`) idempotently ensures the caller's system-managed "Signals" list (docstring lines ≤ 97 columns; it keeps "Pagination is stable across pages." per D-6, the parameters, the return shape and the "Only the caller's own lists" sentence; it does not contain `user_id = _caller_user_id`); `docs/runbooks/mcp-tools.md:1382` drops "read-only," from `(paginated)` and adds the same sentence. Heading `### \`list_watchlists\`` kept; `get_watchlist` and `list_opportunities` untouched.
+- TDD: N/A (docs — wording only).
+- Verification (all run): runbook `(read-only` = 0, `idempotent` = 1; header line `(read-only)` = 0, `idempotent` = 1, exactly 1 matching line; docstring range `(read-only)` = 0, `idempotent` = 1; `ruff check .` "All checks passed!"; `ruff format --check .` "75 files already formatted"; `uv run pytest tests/test_tools_endpoint.py tests/test_watchlist_tools.py -q` → **36 passed** (the first attempt with the global pytest failed collection — `No module named 'starlette'` — because it ran outside the project's synced environment; rerun inside `uv sync --extra dev` / `uv run`, which is the repo's documented route).
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`
+- Deviations: none
