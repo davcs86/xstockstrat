@@ -546,3 +546,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: DEV-1 — dbtest Verification line and local RED/GREEN deferred to CI (operator decision B).
 - [ ] Open: the CI `Portfolio DB test (TimescaleDB)` job must show `TestBackfill_|TestAddPath_|TestPrune_` green on the integration PR, including `:443` and `:349`; a 55P03 on `:443` under `-race` is the accepted lock_timeout residual (investigate the runner, never edit the test).
 - [ ] Still open from impl-spec review: `pgx.ReadCommitted` and `pgconn.CommandTag` are now confirmed by the Step 1 compile (closes that warning). Step 2 `pg_stat_activity` assumptions, Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew and the 352 overlap stay open.
+
+## Session 2026-11-17 — sdd-execute sequential, Step 2
+
+- Tooling setup (step 2): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (pinned `GOTOOLCHAIN=go1.27.0` install into the session scratch bin; host 2.5.0 left in place) · test DB ✗ (operator decision B → CI dbtest).
+
+### Step 2 — test: deterministic forced-interleave tests for the mark and seed race (@AC-1, @AC-2) [done]
+- Appended `runForcedInterleave(t, class, priorSignalAge) (sigID, until, branch)` (pinned signature; branches `"blocked"` / `"addDone"`), `TestBackfill_MarkIngestInterleavingRescued` (AC-1) and `TestBackfill_SeedIngestInterleavingRescued` (AC-2) after `:349`, with the strict-equality assertions in spec order and `branch == "blocked"` last. The pinned signature returns no watchlist id, so each test body resolves it from `sigID` through `watchlistOfSignal` (signal `user_id` → that user's only watchlist); no assertion changes.
+- Verification (local, `.sdd-logs/v-1.log`, `exit=0`): `go vet -tags dbtest` clean; both tests `--- SKIP` (`PORTFOLIO_DB_TEST_URL` unset); coverage `total: 81.8%`; `golangci-lint` v2.14.0 `0 issues.`; `:443` diff guard `0`. The diff only adds lines, so `:443`, `:349` and `:252-295` are byte-identical.
+- TDD: AC-1/AC-2 red → green deferred to CI per operator decision B (DEV-1/DEV-2). No local RED captured, and Step 1 is already on the branch, so RED needs the CI job against `2f99b190^` (or the fix reverted).
+- Files modified: `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill_dbtest_test.go`
+- Deviations: DEV-2 — dbtest Verification lines and local RED/GREEN deferred to CI (operator decision B).
+- [ ] Open: the CI `Portfolio DB test (TimescaleDB)` job must show both new tests green with `branch="blocked"`. A RED run on the pre-Step-1 tree (`branch="addDone"`, signal_id NULL or the old seed id) is still unproven. Any divergence escalates to the register and is never relaxed in place.
+- [ ] Still open from impl-spec review: Step 2 `pg_stat_activity` assumptions (speculative-insert wait as `Lock`, `insertBindingsTx` not waiting), Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew, the 352 overlap.

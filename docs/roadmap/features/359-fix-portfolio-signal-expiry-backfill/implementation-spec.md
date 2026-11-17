@@ -113,7 +113,7 @@ All of the above must pass. `:443` and `:349` must stay green. If `:443` reports
 
 ### Step 2 — test: deterministic forced-interleave tests for the mark and seed race (@AC-1, @AC-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill_dbtest_test.go` — modify (append the helper and two tests after `TestBackfill_IngestInterleavingSkipsChanged`, which ends before `:441`; do not touch `:443-503`)
@@ -394,3 +394,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: Step 1's Verification runs `PORTFOLIO_DB_TEST_URL=<migrated test DB URL> GOWORK=off go test -tags dbtest -race -count=1 -run 'TestBackfill_|TestAddPath_|TestPrune_' ./internal/repository/...`, and the TDD gate captures RED (Step 2's tests on the pre-Step-1 tree), then GREEN, locally.
 - **Actual**: no migrated TimescaleDB test DB can be provisioned in the execute container (Docker Hub 429 on `timescale/timescaledb:latest-pg16`, no apt package, GitHub source download 403), and the execute loop never starts a database. Ran the rest of the block locally: `go build` and `go vet -tags dbtest` clean, `golangci-lint` v2.14.0 (pinned install, built with go1.27.0, put first on `PATH` because the host binary is 2.5.0) `0 issues.`, `pool.Exec(ctx, stmt` no match, `FOR NO KEY UPDATE` only at `:124` (`backfillLockSQL`).
 - **Disposition**: operator decision B 2026-11-17 — explicit P-06 waiver of LOCAL red-before-green for the dbtest-verified steps of feature 359. The dbtest run and the Steps 1–2 RED/GREEN evidence are deferred to the CI `Portfolio DB test (TimescaleDB)` job on the integration PR. No test was weakened, skipped or loosened; `:443`, `:349` and `:252-295` are untouched.
+
+### DEV-2 — Step 2: dbtest Verification lines and local RED/GREEN deferred to CI (2026-11-17)
+
+- **Expected**: Step 2's Verification runs the two `PORTFOLIO_DB_TEST_URL=<migrated test DB URL> … -tags dbtest` lines, and the TDD gate captures RED (`branch="addDone"` plus the strict-equality failure) on the pre-Step-1 tree and GREEN (`branch="blocked"`) after Step 1, locally.
+- **Actual**: `PORTFOLIO_DB_TEST_URL` is unset and the execute loop never starts a database, so both new tests SKIP locally (`.sdd-logs/v-1.log`). Ran the rest of the block: `go vet -tags dbtest` clean, the coverage gate (`total: 81.8%`), `golangci-lint` v2.14.0 (pinned, built with go1.27.0; `.golangci.yml` sets `build-tags: dbtest`) `0 issues.`, and the `:443` diff guard `0`. Step 1 was already committed before this step, so no pre-fix RED tree exists on the branch; RED needs the CI job run against `2f99b190^` or a revert of `applyBackfillRow`.
+- **Disposition**: covered by operator decision B 2026-11-17 (DEV-1: P-06 waiver of LOCAL red-before-green for Steps 1, 2, 3+4). The RED/GREEN branch proof and the `wait_event_type='Lock'` / `insertBindingsTx` assumptions are deferred to the CI `Portfolio DB test (TimescaleDB)` job on the integration PR. `:443`, `:349` and `:252-295` are untouched (append-only diff).

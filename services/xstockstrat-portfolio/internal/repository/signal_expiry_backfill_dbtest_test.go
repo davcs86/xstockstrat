@@ -438,6 +438,204 @@ func TestBackfill_IngestInterleavingSkipsChanged(t *testing.T) {
 	assertSource(t, pool, wlID, "META", srcSignal)
 }
 
+// runForcedInterleave parks APPLY's INSERT for META (REPORT class `class`) on an uncommitted expiry row,
+// commits a live signal, runs AddSymbols for it, then releases APPLY. branch is "blocked" or "addDone".
+func runForcedInterleave(t *testing.T, class backfillClass, priorSignalAge time.Duration) (sigID int64, until time.Time, branch string) {
+	t.Helper()
+	pool := testPool(t)
+	addPool := testPool(t, func(c *pgxpool.Config) { c.ConnConfig.RuntimeParams["lock_timeout"] = "10s" })
+	applyPool, err := pgxpool.New(context.Background(), os.Getenv("PORTFOLIO_DB_TEST_URL"))
+	if err != nil {
+		t.Fatalf("apply pool: %v", err)
+	}
+	t.Cleanup(applyPool.Close)
+
+	ctx := context.Background()
+	userID := testUserID(t)
+	cleanupIngest(t, pool, userID)
+	wlID := seedWatchlist(t, pool, userID, true)
+	seedBinding(t, pool, wlID, "META", "", int16(srcSignal))
+	if priorSignalAge > 0 {
+		seedWatchSignal(t, pool, userID, "META", offset(fmt.Sprintf("-%d seconds", int64(priorSignalAge/time.Second))))
+	}
+
+	rep, tot := backfillReport(t, pool, "SEED")
+	classified := false
+	for _, line := range strings.Split(rep.Report, "\n") {
+		if !strings.Contains(line, "\t"+wlID+"\tMETA\t") {
+			continue
+		}
+		switch class {
+		case classUntracked:
+			classified = strings.HasPrefix(line, "UNTRACKED\t")
+		case classSeed:
+			classified = strings.HasPrefix(line, "SEED\t") && strings.HasSuffix(line, "\tY")
+		}
+		if classified {
+			break
+		}
+	}
+	if !classified {
+		t.Fatalf("REPORT does not classify %s/META as class %d:\n%s", wlID, class, rep.Report)
+	}
+
+	side, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin side tx: %v", err)
+	}
+	defer side.Rollback(ctx) //nolint:errcheck // no-op after the explicit rollback
+	if _, err := side.Exec(ctx,
+		`INSERT INTO portfolio.watchlist_signal_expiry (watchlist_id, symbol, valid_until, signal_id)
+		 VALUES ($1, 'META', now() - interval '1 day', NULL)`, wlID); err != nil {
+		t.Fatalf("side expiry row: %v", err)
+	}
+
+	type outcome struct {
+		res BackfillResult
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		res, err := backfillApply(applyPool, "SEED", tot.untracked, tot.seedExpired)
+		done <- outcome{res, err}
+	}()
+
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := pool.QueryRow(ctx,
+			`SELECT count(*) FROM pg_stat_activity
+			 WHERE wait_event_type = 'Lock' AND query LIKE '%INSERT INTO portfolio.watchlist_signal_expiry%'
+			   AND pid <> pg_backend_pid()`).Scan(&waiting); err != nil {
+			t.Fatalf("poll pg_stat_activity: %v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		select {
+		case o := <-done:
+			t.Fatalf("APPLY finished without waiting on the side tx: res=%+v err=%v", o.res, o.err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("APPLY never blocked on the side tx within 10s")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO ingest.newsletter_signals (user_id, source, symbol, direction, valid_from, valid_until)
+		 VALUES ($1, 'mcp_client', 'META', 'watchlist', now(), now() + interval '30 days')
+		 RETURNING id, valid_until`, userID).Scan(&sigID, &until); err != nil {
+		t.Fatalf("live signal: %v", err)
+	}
+
+	addDone := make(chan error, 1)
+	go func() {
+		_, err := NewWatchlistRepo(addPool).AddSymbols(ctx, wlID,
+			[]*portfoliov1.WatchlistBinding{addBinding("META", srcSignal)}, provenanceIntent("META", sigID, until))
+		addDone <- err
+	}()
+
+	var (
+		addErr      error
+		addReceived bool
+	)
+	deadline = time.Now().Add(10 * time.Second)
+	for branch == "" {
+		select {
+		case addErr = <-addDone:
+			addReceived, branch = true, "addDone"
+			continue
+		default:
+		}
+		var waiting int
+		if err := pool.QueryRow(ctx,
+			`SELECT count(*) FROM pg_stat_activity
+			 WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE portfolio.watchlists SET updated_at%'
+			   AND pid <> pg_backend_pid()`).Scan(&waiting); err != nil {
+			t.Fatalf("poll pg_stat_activity: %v", err)
+		}
+		if waiting > 0 {
+			branch = "blocked"
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("AddSymbols neither returned nor blocked on the watchlist row within 10s")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if err := side.Rollback(ctx); err != nil {
+		t.Fatalf("rollback side tx: %v", err)
+	}
+	if o := <-done; o.err != nil {
+		t.Fatalf("apply err = %v (code %s); want none\n%s", o.err, pgCode(o.err), o.res.Report)
+	}
+	if !addReceived {
+		addErr = <-addDone
+	}
+	if addErr != nil {
+		t.Fatalf("AddSymbols err = %v (code %s); want none", addErr, pgCode(addErr))
+	}
+	return sigID, until, branch
+}
+
+// watchlistOfSignal returns the watchlist owned by the signal's user (one per runForcedInterleave user).
+func watchlistOfSignal(t *testing.T, pool *pgxpool.Pool, sigID int64) string {
+	t.Helper()
+	var wlID string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT w.watchlist_id::text FROM portfolio.watchlists w
+		 JOIN ingest.newsletter_signals n ON n.user_id = w.user_id WHERE n.id = $1`, sigID).Scan(&wlID); err != nil {
+		t.Fatalf("watchlistOfSignal: %v", err)
+	}
+	return wlID
+}
+
+// AC-1: a signal committed while APPLY's mark is in flight leaves the entry tracked by it, never marked.
+func TestBackfill_MarkIngestInterleavingRescued(t *testing.T) {
+	sigID, until, branch := runForcedInterleave(t, classUntracked, 0)
+	pool := testPool(t)
+	wlID := watchlistOfSignal(t, pool, sigID)
+
+	rec, ok := expiryRow(t, pool, wlID, "META")
+	if !ok || rec.SignalID == nil || *rec.SignalID != sigID || !rec.ValidUntil.Equal(until) || !until.After(dbNow(t, pool)) {
+		t.Fatalf("expiry row = (ok=%v valid_until=%v signal_id=%v), want tracked by live signal (%v, %d)",
+			ok, rec.ValidUntil, ptrVal(rec.SignalID), until, sigID)
+	}
+	if got := mustPrune(t, NewWatchlistRepo(pool), wlID); len(got) != 0 {
+		t.Fatalf("tick removed %+v despite the live signal", got)
+	}
+	if !until.After(dbNow(t, pool).Add(72 * time.Hour)) {
+		t.Fatalf("live signal valid_until %v is not beyond 3 days from now", until)
+	}
+	assertSource(t, pool, wlID, "META", srcSignal)
+	if branch != "blocked" {
+		t.Fatalf("AddSymbols branch = %q, want \"blocked\" on the watchlist row lock", branch)
+	}
+}
+
+// AC-2: a signal committed while APPLY seeds from the owner's expired signal leaves the entry tracked by the new one.
+func TestBackfill_SeedIngestInterleavingRescued(t *testing.T) {
+	sigID, until, branch := runForcedInterleave(t, classSeed, 48*time.Hour)
+	pool := testPool(t)
+	wlID := watchlistOfSignal(t, pool, sigID)
+
+	rec, ok := expiryRow(t, pool, wlID, "META")
+	if !ok || rec.SignalID == nil || *rec.SignalID != sigID || !rec.ValidUntil.Equal(until) || !until.After(dbNow(t, pool)) {
+		t.Fatalf("expiry row = (ok=%v valid_until=%v signal_id=%v), want tracked by the new signal (%v, %d)",
+			ok, rec.ValidUntil, ptrVal(rec.SignalID), until, sigID)
+	}
+	if got := mustPrune(t, NewWatchlistRepo(pool), wlID); len(got) != 0 {
+		t.Fatalf("tick removed %+v despite the live signal", got)
+	}
+	assertSource(t, pool, wlID, "META", srcSignal)
+	if branch != "blocked" {
+		t.Fatalf("AddSymbols branch = %q, want \"blocked\" on the watchlist row lock", branch)
+	}
+}
+
 // Real-concurrency invariant: whichever side wins, the entry ends untracked, seeded live or rescued
 // (never left due while a live signal exists) and neither side errors.
 func TestBackfill_IngestRaceNeverLeavesEntryRemovable(t *testing.T) {
