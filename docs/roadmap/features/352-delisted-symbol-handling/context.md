@@ -373,3 +373,24 @@
   feature waits).
 - **A-7 confirmed**: a flagged symbol skipped by a backfill is logged at INFO.
 
+## Session 2026-11-17 — sdd-execute sequential (mode entry, merge train, re-spec gate)
+
+- **Operator instruction**: "Run execution in sequential mode, no checkpoints" — checkpoint reports are
+  printed, no gate; execution stops only on a real blocker.
+- **Operator answers at mode entry**: "Merge train 1563, check for conflicts with spec, restart execution
+  with the same terms"; a throwaway local Postgres is approved for Step 10 artifact generation only
+  (precedent: feature 347) — no staging or shared database is touched; scenario promotion and the
+  integration PR happen at the end without a pause. The integration PR is not merged by the agent.
+- **Merge train**: PR #1563 (story) merged into `main-dev` as `9a685196`; the append-only ledger conflict
+  was auto-resolved by union.
+- **Branch**: `feature/delisted-symbol-handling` created from `origin/main-dev@9a685196` (includes
+  features 351, 353, 354).
+- **Re-spec validation**: no blocker. Line shifts only in Steps 20, 22, 23, 24, 28; substantive additions
+  in Step 24 (decorate `ListWatchlists` after the feature-351 ensure block, plus a `TestListWatchlists351_`
+  run), Step 25 (Instruction 1a: locate lists by `watchlist_id`, uuid-shaped seed ids, the ensure and
+  fail-open pages are both asserted decorated), Step 28 (the 351 docstring and runbook sentences are kept)
+  and Step 32 (351 durable scenarios are PRESERVE; matching rows added to `design.md` § Business Rules
+  Touched). Step count (32), `Lands with` units and the Scenario Coverage table are unchanged. Migrations
+  marketdata `010` / ingest `017` / config `054` and all proto field numbers are still free on all 218
+  origin refs.
+- **Tooling**: `go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (go1.27, scratchpad bin) · migrate ⬇ v4.17.1 (scratchpad bin, Step 10 generation only) · uv ✓ · ruff ✓ · node ✓ 24.22.1 (/opt/node24) · pnpm ✓ 9.15.9 · buf via Docker codegen image · psql/initdb ✓ (Step 10 throwaway only)`

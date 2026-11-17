@@ -14,6 +14,7 @@
 | 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after 4 rounds; 3 notes) |
 | 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full; round cap overridden by the operator) and approved; recon.md + debate.md + design.md written |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 32 steps |
+| 2026-11-17 | `implementation-ready` (unchanged) | /sdd-execute | Re-spec gate: steps 20, 22, 23, 24, 25, 28, 32 aligned with `main-dev@9a685196` after feature 351 landed (line shifts; Step 25 harness note; 351 PRESERVE rows) |
 
 ---
 

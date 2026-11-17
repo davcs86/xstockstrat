@@ -383,4 +383,6 @@ K drains from system-managed lists over ⌈K/100⌉ prune ticks. Portfolio deplo
 - PRESERVE `@AC-3`, `@AC-4` `@feature-154` (`services/xstockstrat-analysis/acceptance/fundsignal-watchlist-universe.feature`) — written over the enumeration output.
 - EXTEND `@AC-2 @feature-180` (`services/xstockstrat-analysis/acceptance/watchlist-readiness-precompute.feature`) — flagged bindings are skipped.
 - EXTEND `@AC-14 @feature-294` — outcome value `skipped`.
+- PRESERVE `@AC-1`..`@AC-8`, `@AC-10` `@feature-351` (`services/xstockstrat-portfolio/acceptance/ensure-signals-watchlist-on-read.feature`) — not regressed by the decoration: `ListWatchlists` gains only the `delisted` output field, applied after the ensure block on both the re-listed and the fail-open page; no ensure, cap or pagination path is edited (re-spec gate 2026-11-17).
+- PRESERVE `@AC-1 @feature-351` (`services/xstockstrat-agent/acceptance/mcp-watchlist-tools.feature`) — not regressed by the agent projection: `list_watchlists` gains only per-binding output keys and keeps its ensure-on-first-page behavior and docstring sentence (re-spec gate 2026-11-17).
 - EXTEND `@AC-18 @feature-282`, `@AC-1`, `@AC-2`, `@AC-7`, `@AC-8` `@feature-148` (agent) and `@AC-8 @feature-127` (UI) — entries carry the delisted state and marker.
