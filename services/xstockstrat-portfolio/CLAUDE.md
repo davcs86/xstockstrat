@@ -27,7 +27,7 @@ with provenance (`mark_source`/`mark_as_of`) and broker-style Day P&L from tradi
 close wins; otherwise the last close in the lookback; else `MARK_SOURCE_NONE` (listed, excluded from sums).
 An unreadable offline-state read degrades per account (PORTFOLIO-11).
 `GetPnL`, `broadcastSnapshot` and `checkRiskLimits` never use it (231 behaviour kept). Fixed invariants, not
-config: the NYSE calendar (`internal/marketsession`, rule holidays, no early closes), a bar's session date =
+config: the NYSE calendar (`contracts/marketsession` in `packages/proto/marketsession`, rule holidays, no early closes), a bar's session date =
 NY date of `time + 6h`, and the 1-minute truncation of the bars `End` (singleflight coalescing).
 
 **Account/portfolio-scoped reads are ownership-gated (2026-09-16 security audit, H-3).**

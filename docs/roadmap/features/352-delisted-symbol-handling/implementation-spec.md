@@ -274,7 +274,7 @@ grep -n "delisted = 4" packages/proto/portfolio/v1/portfolio.proto
 
 ### Step 3 — service: move the NYSE calendar to `packages/proto/marketsession`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio` (and `packages/proto`)
 **Files**:
 - `packages/proto/marketsession/marketsession.go` — create (moved)
@@ -323,7 +323,7 @@ python3 scripts/check-context-map.py
 
 ### Step 4 — test: re-home the calendar characterization test in portfolio
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/marketsession_test.go` — create (moved from the deleted package)

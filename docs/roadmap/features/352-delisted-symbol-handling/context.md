@@ -413,3 +413,19 @@
   `node_modules`; `pnpm install --frozen-lockfile` fixed it. No lockfile change.
 - TDD: N/A (proto-gen). Verification: marketdata `go build`, portfolio `go build` + `go vet`, trading
   `go vet`, ingest `pytest tests/test_backfill_jobs.py` (15 passed), UI `tsc --noEmit` — all passed.
+
+### Step 3 — service: calendar move (unit 3+4) — done
+- `marketsession.go` moved unchanged (`git mv`) to `packages/proto/marketsession/`; the two portfolio
+  importers now use `contracts/marketsession`; `services/xstockstrat-portfolio/internal/marketsession/` is
+  gone; both `CLAUDE.md` files updated.
+- TDD: red N/A — relocation, no behavior change. Verification passed (no old import left, portfolio
+  `go build`, `scripts/check-context-map.py` OK).
+- `gofmt` re-sorted the import line in `offline_valuation.go` (`:17` → `:16`); no other change there.
+
+### Step 4 — test: calendar characterization test re-homed (unit 3+4) — done
+- `internal/service/marketsession_test.go`, package `service`, assertions unchanged.
+- TDD: red N/A — characterization test of unchanged behavior. Green: the anchored `-run` → 5 PASS;
+  `go_gate xstockstrat-portfolio` → 0 lint issues, all packages ok under `-race`, total 79.1%.
+- Divergence from the step text: the New York location is loaded once in a file-local `sync.OnceValue`
+  that `nyDate` calls, not inside `nyDate` on every call — `TestHolidays_2026_2028` uses `time.Time` as a
+  map key, and a fresh `*time.Location` per call makes those lookups miss.
