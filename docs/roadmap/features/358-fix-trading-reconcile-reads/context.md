@@ -424,3 +424,196 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-17 — sdd-batch design gate (round 4)
+
+`/sdd-design fix-trading-reconcile-reads` full debate halted at its approval gate after round 4 (gate policy: halt). design.md is NOT written and status.md is unchanged (still spec-ready). The debate register is `debate.md` (D-1..D-18, R-1..R-12, O-1..O-17; O-1..O-14 closed, O-15..O-17 open and non-blocking).
+
+## Open Threads
+
+- **Approach**: the round-3 design (D-1..D-15) stands. The r4 proposal closes O-10..O-14 as written, and three refinements from the r4 adversary are folded in. None of them changes the D-2/D-7 skip semantics.
+  - D-16: `listAccountPlatformPositions(ctx, accountID, userID, mode, timeout)` returns `map[string]float64` (symbol→qty), the D-5 dedup set it already builds. The map is complete, or `nil` with an error. `trading.go:2244-2247` (the map rebuild) is deleted, and `reconcileTick:2231-2239` binds `platformBySymbol, ppErr` straight from the helper. The ppErr WARN and `continue` at `:2240-2243` stay byte-identical.
+  - The per-page loop is unchanged: its own `context.WithTimeout` plus `x-user-id` on every page, `cancel()` right after the call, token guards before the merge (D-9), `page %d: duplicate symbol %q` (D-13), and a const `reconcilePositionsPageSize = 500`.
+  - D-17: at call entry, the paging fake logs `PageToken`, outgoing `x-user-id`, `AccountId`, `TradingMode` and `ctx.Deadline()`. `takeLog()` resets the log per tick. AC-1 and the positive control assert owner, `"acc-1"` and the expected mode on every entry.
+  - D-18: in the deadline variant, page 1's fake uses `time.Sleep(5ms)` and must not observe ctx. Only page "p2" blocks on `ctx.Done()`.
+  - The tests (RED first) are unchanged: AC-1, the positive control (`expected == 5`, `broker_reported == 10`), AC-2 error, AC-2 deadline (`snapshotInts`, `broker.timeout_ms=50`), AC-3, and the direct-helper hardening table (`status.Code(err) == codes.Unavailable` on the wrapped error). There is no proto, migration, config or portfolio change.
+- **Strongest open objection (non-blocking, O-15, [C-13])**: per-page identity and filter propagation is not pinned. The fake serves by token alone, so a drain that drops `x-user-id`, `AccountId` or `TradingMode` on page 2 and later would pass every AC. In production it would then silently skip, or compare against the wrong set (`trading.go:2234`; fails.md:2534). D-17 folds the fix into the approach, but the proposer has not yet answered it.
+  - O-16 [C-11]: correct the stated strongest risk to "page 1's fake must not select on ctx.Done()".
+  - O-17 [C-18]: return the map and delete `:2244-2247`.
+  - Both are also open and non-blocking, and both are folded in (D-18, D-16). O-10..O-14 closed at round 4. No blocking objection remains.
+- **Floor status**: no floor breaches.
+- **Uncovered @AC changes**: `358 @AC-1` EXTEND is not covered by an operator decision. `358 @AC-2` and `@AC-3` EXTEND are covered (operator 2026-11-17: skip, never halt). PRESERVE only: `@AC-1/@AC-2/@AC-3 @feature-206` (fix-reconciliation-false-halt.feature), `@AC-9 @feature-249`, `@AC-45 @feature-294` (signal-map-instrumentation.feature), `@AC-1/@AC-7 @feature-169`.
+- **Open risks**:
+  - A skipped tick shows only as a cause-tagged WARN (no metric, D-8).
+  - Tick time grows by up to ceil(n/500) × broker.timeout_ms for each large account.
+  - `resolveUnknownIntents` stays skipped while a platform read is incomplete.
+  - The rejections rely on portfolio's UNIQUE index (migrations/003:10) and on keyset paging. A violation causes false skips, never false halts.
+  - The deadline-ordering assertion needs the monotonic clock to advance across the 5 ms sleep. If it does not, the test fails as a flake; it never passes vacuously.
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "Round 4 keeps the round-3 design (D-1..D-15) and closes O-10..O-14 exactly as the r4 proposal wrote them. It adds three small refinements from the r4 adversary. None changes the D-2/D-7 skip semantics.\n\n**Service** (`services/xstockstrat-trading/internal/service/trading.go`). Re-verified this round: `:2231-2247`; the `x-user-id` append is at `:2234`.\n- Add a package const `reconcilePositionsPageSize = 500`. It replaces the literal at `:2237`.\n- Add a helper next to `reconcileTick`: `func (s *TradingService) listAccountPlatformPositions(ctx context.Context, accountID, userID string, mode commonv1.TradingMode, timeout time.Duration) (map[string]float64, error)` (D-16).\n  - It returns the symbol→qty map that the D-5 dedup already builds. The returned map is complete, or it is `nil` with an error. It is never partial (D-1).\n- For each 1-based page `i`, the helper runs these steps in order:\n  1. `pctx, cancel := context.WithTimeout(ctx, timeout)`, then `metadata.AppendToOutgoingContext(pctx, \"x-user-id\", userID)` on every page (D-3, PLAT-4).\n  2. Call `ListPositions` with `{AccountId: &accountID, TradingMode: mode, Page: {PageSize: reconcilePositionsPageSize, PageToken: token}}`.\n  3. Call `cancel()` right after the call. No `defer` in the loop.\n  4. On an RPC error, return `nil, fmt.Errorf(\"page %d: list positions: %w\", i, err)`.\n  5. Read `next := resp.GetPage().GetNextPageToken()`.\n  6. Run the token guards before any merge (D-9):\n     - zero positions and `next != \"\"` → `page %d: empty page with next_page_token %q`\n     - `next` already in the seen set → `page %d: repeated next_page_token %q`\n  7. Merge `p.Symbol→p.Qty`. Any symbol already present gives `page %d: duplicate symbol %q` (D-13).\n  8. If `next == \"\"`, return the map. Otherwise add `next` to the seen set and set `token = next`.\n- In `reconcileTick`:\n  - `:2231-2239` becomes `platformBySymbol, ppErr := s.listAccountPlatformPositions(ctx, accountID, entry.userID, tradingMode, timeout)`.\n  - `:2240-2243` (the ppErr WARN and `continue`) stays byte-identical (D-2, D-7).\n  - `:2244-2247` (the map rebuild) is deleted. Everything downstream (`:2254-2288`) is untouched.\n- The seen set gets a code comment of at most 2 lines: defense-in-depth against a monotonic keyset cursor.\n\n**Tests, written RED first** (`trading_reconciliation_test.go`).\n\nShared setup:\n- One file-local paging fake plugs into `fakeReconciliationPortfolioClient.listPositionsFn` (`:124`).\n  - Under a mutex, at call entry and before any sleep or block, it appends `{PageToken, x-user-id from metadata.FromOutgoingContext, req.GetAccountId(), req.GetTradingMode(), ctx.Deadline()}` (O-13).\n  - It has a call cap of 100, an `ignoreToken` mode, and per-token error and block hooks.\n  - `takeLog()` copies and resets the log. Tests call it after each tick and assert each tick on its own (D-15).\n- Broker fakes (`:79`) return SYM001..SYM501 at qty 10. They never sleep or block (O-13; `brokerCallTimeout` `:2585-2591` also bounds `:2125`/`:2215`).\n- `fakePositionQtyLookup` is empty. graceTicks=1, two ticks (pattern at `:554-555`).\n- Payloads are read only from `recordingLedgerClient` (`:137-149`) via `e.Payload.Fields[\"expected\"/\"broker_reported\"].GetNumberValue()`. There is no second recorder (D-14).\n\nTest cases:\n1. **AC-1**\n   - Page 1 is SYM001..500 with next \"p2\". Page 2 is SYM501 with next \"\".\n   - Pre-seed `reconcileCandidates[\"acc-1:pos:SYM501\"]=1`.\n   - After each tick: the key is absent, there is no `reconciliation.mismatch_found`, and the account is not halted.\n   - Each tick's log: tokens `[\"\",\"p2\"]`. Every entry has `x-user-id == <owner>`, `AccountId == \"acc-1\"` and the expected `TradingMode` (D-17).\n2. **Positive control**\n   - Same pages, but SYM501 on page 2 has qty 5.\n   - Assert `mismatch_found` with `expected == 5` and `broker_reported == 10`, and assert the account is halted.\n   - Each tick's log has 2 entries with the same per-entry identity, account and mode assertions (D-17).\n   - RED today, where `expected == 0`.\n3. **AC-2 error**\n   - Page \"p2\" returns `codes.Unavailable`.\n   - The \"p2\" call is logged. No `acc-1:pos:` candidate, no finding, no halt.\n4. **AC-2 deadline variant**\n   - Set `broker.timeout_ms=50`. Prefer the existing `snapshotInts` helper (`trading_ibkr_auth_test.go:121-126`) over a new literal shape.\n   - Page 1 records its deadline at entry, then `time.Sleep(5ms)`. It must not select on `ctx`.\n   - Page \"p2\" records its deadline at entry, then blocks on `<-ctx.Done()`.\n   - Assert the AC-2 skip outcomes, plus page 2's entry `Deadline()` strictly after page 1's (D-11, D-18).\n5. **AC-3**\n   - The fake ignores the token and always returns page 1 with next \"p2\".\n   - Each tick's log has exactly 2 entries. No candidate, finding or halt.\n6. **Hardening table** (direct helper calls; every row asserts a `nil` map)\n   - `page 2: repeated next_page_token \"p2\"`\n   - `page 2: empty page with next_page_token \"p3\"`\n   - `page 2: duplicate symbol \"SYM500\"`\n   - `page 2: list positions:` prefix with `status.Code(err) == codes.Unavailable` on the wrapped error. No `errors.Unwrap` (O-14).\n\n**Build order**\n1. Tests 1-5 RED on unchanged code.\n2. The helper and `reconcileTick` change, plus test 6.\n3. `GOWORK=off go test ./...` in `services/xstockstrat-trading`. Existing tests use the default single empty page (`:131`), so they make 1 call.\n4. One paging sentence at `services/xstockstrat-trading/docs/reconciliation.md:57`.\n\nThere is no proto, migration, config or portfolio change. Features 351, 353 and 354 are untouched.",
+    "open_objections": [
+      {
+        "text": "[C-13] AC-1 and the positive control must assert, for every logged page call in each tick: x-user-id == the account owner, req.GetAccountId() == \"acc-1\", and the expected TradingMode. The fake serves by token alone. Without these assertions, a drain that drops identity or the account/mode filter on page 2 and later still passes, and then silently skips (or compares against the wrong set) in production. That is the fails.md:2534 class. The x-user-id is appended once today at trading.go:2234, on a ctx the helper now rebuilds for each page.",
+        "blocking": false
+      },
+      {
+        "text": "[C-11] Correct the stated strongest risk. Page 1's fake uses time.Sleep without observing ctx, so an overrun still returns page 1's response and page 2 still logs its entry Deadline(). The spec must say page 1's fake must not select on ctx.Done(), which is the only route to the claimed flake.",
+        "blocking": false
+      },
+      {
+        "text": "[C-18] listAccountPlatformPositions should return map[string]float64, the D-5 dedup set it already builds, and trading.go:2244-2247 should be deleted rather than re-pointed. Otherwise the symbol→qty concept is built twice.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "358 @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "358 @AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "358 @AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-1 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @feature-249",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-45 @feature-294 (signal-map-instrumentation.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-169",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 @feature-169",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "The helper returns []*portfoliov1.Position, which reconcileTick then reshapes into a map. It lost because the slice's only consumer is the symbol→qty map that the D-5 dedup already builds inside the helper, so the concept would be built twice (C-18/YAGNI).",
+      "Asserting only page tokens per call. It lost because the fake serves by token alone, so a drain that drops x-user-id, AccountId or TradingMode on page 2 and later would pass every AC while failing in production.",
+      "A page-1 fake that selects on ctx.Done() during its delay. It lost because an overrun would become a page-1 error, page 2 would never be logged, and the strictly-increasing-deadline assertion would flake.",
+      "A third ad-hoc config literal shape for broker.timeout_ms. It lost because snapshotInts (trading_ibkr_auth_test.go:121-126) and the FloatVal form at trading_rate_limit_test.go:49 already exist, and GetFloat accepts IntVal (watchcore.go:414-415)."
+    ],
+    "open_risks": [
+      "A skipped tick is visible only through a cause-tagged WARN. A persistent cursor bug would leave an account's position side unchecked indefinitely, with no metric or alert (D-8 keeps a metric out of scope).",
+      "Tick wall-clock time grows by up to ceil(n/500) × broker.timeout_ms for each large account, because accounts are processed sequentially. Portfolio's per-page enrichPositions makes page deadlines more likely on big accounts.",
+      "resolveUnknownIntents stays skipped while an account's platform read is incomplete (the continue at trading.go:2240-2243 is unchanged). An extended portfolio outage therefore also delays UNKNOWN-intent resolution.",
+      "The duplicate-symbol and repeated-token rejections rely on portfolio's UNIQUE(user_id, symbol, trading_mode, account_id) (migrations/003:10) and on the keyset cursor returning each row once. A future portfolio change that splits a symbol across rows would cause false skips, never false halts.",
+      "The deadline-ordering assertion needs the monotonic clock to advance across page 1's 5 ms sleep. If equal deadlines occur, the test fails as a flake; it cannot pass vacuously. The page-1 overrun flake is excluded only while page 1's fake does not observe ctx."
+    ],
+    "constitution_rules_touched": [
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-04",
+      "F-07",
+      "P-02",
+      "P-03",
+      "PLAT-4",
+      "PLAT-N1"
+    ],
+    "rationale": "r4 answers O-10..O-14 concretely, and the adversary's verdict is SOUND with no Floor breaches. All five close:\n- O-10: the fallback recorder is gone; only recordingLedgerClient Payload.Fields reads remain.\n- O-11: the duplicate-symbol text drops \"across pages\".\n- O-12: takeLog() gives each tick its own log.\n- O-13: the broker fakes do not sleep or block, and deadlines are captured at fake-call entry.\n- O-14: status.Code is asserted on the wrapped error.\n\nI re-verified trading.go:2231-2247 this session.\n- The x-user-id is appended once at :2234 on listPosCtx.\n- The request carries AccountId and TradingMode (:2236).\n- :2244-2247 rebuilds platformBySymbol from the response.\n\nThis confirms both new design points from the adversary:\n- Per-page identity and filter propagation is a real seam the r4 tests do not pin. The fake records x-user-id but nothing asserts it, and nothing records AccountId or TradingMode. A regression there would turn into a permanent silent skip or a wrong-set compare (PLAT-4, fails.md:2534).\n- Returning the map removes a duplicated concept. It does not contradict D-1, which fixes the complete-or-error contract, not the type; \"never partial\" still holds with a nil map.\n\nBoth are folded into the approach as D-16 and D-17. They stay open as non-blocking objections because the proposer has not yet answered them.\n\nThe risk correction is accepted. The fake's time.Sleep does not observe ctx and the helper only fails on a returned error, so a page-1 overrun cannot suppress the page-2 log entry. The real constraint is that page 1's fake must not select on ctx, which becomes D-18.\n\nThe snapshotInts reuse is a cosmetic DRY preference. It is folded into the approach without a decision.\n\nRegister check:\n- No D-n is contradicted.\n- No R-n is reintroduced: per-page WithTimeout (not R-1), a helper (not R-2), no page cap (R-4), no second recorder (R-9), no fake clock (R-10).\n- No closed O-n is re-raised, and there are no petitions.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "listAccountPlatformPositions returns map[string]float64 (symbol→qty), the D-5 dedup set it already builds. The map is complete, or nil with an error. trading.go:2244-2247 (the map rebuild) is deleted, and reconcileTick binds platformBySymbol directly from the helper.",
+          "evidence": "trading.go:2244-2247 (re-verified: rebuilds platformBySymbol from the response); adversary r4 C-18; D-1 fixes the contract, not the type"
+        },
+        {
+          "text": "The paging fake records req.GetAccountId(), req.GetTradingMode() and the outgoing x-user-id for every call. AC-1 and the positive control assert, per entry in each tick, x-user-id == owner, AccountId == \"acc-1\" and the expected TradingMode.",
+          "evidence": "trading.go:2234 (single x-user-id append on a ctx the helper rebuilds per page), :2236 (AccountId/TradingMode); PLAT-4; fails.md:2534; adversary r4"
+        },
+        {
+          "text": "In the deadline variant, page 1's fake delays with time.Sleep and must not observe ctx. Only page \"p2\" blocks on ctx.Done(). This keeps the page-2 entry Deadline() logged even if page 1 overruns.",
+          "evidence": "helper fails only on the RPC's returned error (step 4); adversary r4 risk correction"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "The helper returns []*portfoliov1.Position, which reconcileTick then reshapes into a symbol→qty map",
+          "why": "The slice's only consumer is the map the helper already builds for D-5, so the same concept would be built twice (C-18)."
+        },
+        {
+          "text": "A page-1 fake that selects on ctx.Done() during its delay in the deadline variant",
+          "why": "A page-1 overrun would become a page-1 error, page 2 would never be logged, and the D-11 strictly-increasing-deadline assertion would flake."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "[C-13] AC-1 and the positive control must assert, per logged page call in each tick, x-user-id == owner, req.GetAccountId() == \"acc-1\" and the expected TradingMode. Otherwise a drain that drops identity or the filter on page 2 and later passes every AC (trading.go:2234; fails.md:2534).",
+          "blocking": false
+        },
+        {
+          "text": "[C-11] Correct the stated strongest risk. A time.Sleep page-1 overrun still lets page 2 log its Deadline(). State that page 1's fake must not select on ctx.Done().",
+          "blocking": false
+        },
+        {
+          "text": "[C-18] Return map[string]float64 from listAccountPlatformPositions and delete trading.go:2244-2247 instead of re-pointing it.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-10",
+          "how": "r4 deletes the local-recorder fallback. Payload assertions read only recordingLedgerClient e.Payload.Fields[\"expected\"/\"broker_reported\"].GetNumberValue() (:137-149). The adversary confirmed."
+        },
+        {
+          "id": "O-11",
+          "how": "r4 uses `page %d: duplicate symbol %q`, and the hardening row asserts `page 2: duplicate symbol \"SYM500\"`."
+        },
+        {
+          "id": "O-12",
+          "how": "r4 adds takeLog() (copy and reset under the mutex), called after each tick. All call and token assertions are per tick."
+        },
+        {
+          "id": "O-13",
+          "how": "r4 states that the broker fakes never sleep or block, and that the paging fake records ctx.Deadline() at call entry, before page 1's sleep and page 2's block. The adversary confirmed this is needed given brokerCallTimeout at :2125/:2215."
+        },
+        {
+          "id": "O-14",
+          "how": "r4's RPC-error row asserts status.Code(err) == codes.Unavailable on the wrapped error itself, with no errors.Unwrap."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
