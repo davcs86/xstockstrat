@@ -1155,3 +1155,12 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - Config-key wiring gate: N/A. The step declares no config key.
 - Files modified: `services/xstockstrat-trading/internal/service/telemetry_allowlist_test.go`
 - Deviations: none.
+
+## Session 2026-11-17 — sdd-execute sequential, Step 3 (sdd-batch-execute)
+
+### Step 3 — service: Drain `ListPositions` fail-closed in `reconcileTick` and count skips [done]
+- Added `reconcilePositionsPageSize`, the three sentinels, `listAccountPlatformPositions` (per-page timeout and `x-user-id`, `cancel()` after each call, token guards before the duplicate-symbol merge, complete map or nil + page-indexed `%w` error) and `reconcilePositionSkipCause` (deadline in both forms → `deadline`; any sentinel → `cursor_invalid`; anything else, `context.Canceled` included → `rpc_error`). `reconcileTick` binds `platformBySymbol, ppErr` from the helper, the rebuild is gone, and the `ppErr` branch gained only the `RecordReconcilePositionSkip` line before the unchanged WARN/`continue`. The `x-user-id` comment moved into the helper unchanged.
+- TDD: AC-1/AC-2/AC-3/AC-4 red: Step 4 pass-1 behavioural subtests (items 1-6) as a temporary uncommitted edit of `trading_reconciliation_test.go`; all five `TestReconcileTick_358_*` FAIL on the pre-Step-3 tree for the specced reasons (`tick 1 tokens = [""], want ["" "p2"]`, `payload ... expected=0 broker_reported=10, want SYM501 5 10`, `rpc_error skips = 0, want 2`, `deadline skips = 0, want 2`, `cursor_invalid skips = 0, want 2`; `exit=1`, .sdd-logs/v-1.log) → green: the same five `--- PASS` (`exit=0`, .sdd-logs/v-3.log), and the Step 3 Verification block with those tests present gave every package `ok`, the grep showing the const, helper, mapper and one `RecordReconcilePositionSkip` call with no `PageSize: 500`, and `0 issues.` (`exit=0`, .sdd-logs/v-2.log). The pass-1 edit was then reverted (Step 4 owns that file and rewrites it), and the Verification block re-ran clean on the committed tree (`exit=0`, .sdd-logs/v-4.log). No coverage threshold applies (excluded `service` package).
+- Config-key wiring gate: N/A. The step declares no config key.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: none against the spec. Note for Step 4: its RED is the run recorded above (captured before this commit); a fresh pass-1 RED can no longer be taken on this branch.

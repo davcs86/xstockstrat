@@ -173,7 +173,7 @@ threshold applies here (Step 4 runs the full coverage command).
 
 ### Step 3 — service: Drain `ListPositions` fail-closed in `reconcileTick` and count skips
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
