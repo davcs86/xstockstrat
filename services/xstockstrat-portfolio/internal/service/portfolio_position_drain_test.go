@@ -8,11 +8,14 @@ import (
 	"testing"
 
 	"github.com/pashagolub/pgxmock/v4"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/protobuf/proto"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
+	"github.com/xstockstrat/portfolio/internal/config"
+	"github.com/xstockstrat/portfolio/internal/telemetry"
 )
 
 // Feature 357 — GetPortfolio and GetPnL read every ListPositions page, not only the first 500 rows.
@@ -211,6 +214,133 @@ func TestGetPnL_357_AC2_PageTwoErrorReturnsError(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)
 	}
+}
+
+// Background readers (broadcastSnapshot, checkRiskLimits). No t.Parallel(): these swap the global slog default and MeterProvider.
+
+func TestBroadcastSnapshot_357_AC1_DrainsPastFirstPage(t *testing.T) {
+	svc, mock, _ := newQuoteSvc(t, &stubMarketData{}, 0)
+	expectTwoPages(mock, "acc-1", false, brokerValued, nil)
+	snapArgs := anyArgs(7)
+	snapArgs[5] = 501
+	mock.ExpectExec(`INSERT INTO portfolio.snapshots`).WithArgs(snapArgs...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	ch := svc.Subscribe("t", "u1")
+
+	svc.broadcastSnapshot(ctxWithUser(t, "u1"), "u1", paperMode)
+
+	if len(ch) != 1 {
+		t.Fatalf("snapshots broadcast = %d, want 1", len(ch))
+	}
+	snap := <-ch
+	if snap.OpenPositions != 501 {
+		t.Errorf("OpenPositions = %d, want 501", snap.OpenPositions)
+	}
+	if want := 500*11.0 + 1010; math.Abs(snap.Equity-want) > 1e-9 {
+		t.Errorf("Equity = %v, want %v", snap.Equity, want)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestCheckRiskLimits_357_AC1_ConcentrationOn501st(t *testing.T) {
+	svc, mock, _ := newQuoteSvc(t, &stubMarketData{}, 0)
+	notify := &recordingNotify{}
+	svc.cfg, svc.notify = &config.Watcher{}, notify
+	expectTwoPages(mock, "acc-1", false, func(i int) float64 {
+		if i == 500 {
+			return 1500
+		}
+		return 7
+	}, nil)
+	expectDrawdowns(mock)
+
+	svc.checkRiskLimits(ctxWithUser(t, "u1"), "u1", paperMode)
+
+	if want := []string{"concentration limit breach: S500 at 30.0%"}; !sameSet(notify.bodies, want) {
+		t.Errorf("alerts = %v, want exactly %v", notify.bodies, want)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestBroadcastSnapshot_357_AC5_PageErrorSkipsAndLogs(t *testing.T) {
+	reader := installMetricReader(t)
+	rec := recordLogs(t)
+	errPageTwo := errors.New("page two down")
+	svc, mock, ledger := newQuoteSvc(t, &stubMarketData{}, 0)
+	expectTwoPages(mock, "acc-1", false, brokerValued, errPageTwo)
+	ch := svc.Subscribe("t", "u1")
+
+	svc.broadcastSnapshot(ctxWithUser(t, "u1"), "u1", paperMode)
+
+	if len(ch) != 0 || ledger.calls != 0 {
+		t.Errorf("a failed read must not broadcast or emit, got %d snapshots and %d ledger emits", len(ch), ledger.calls)
+	}
+	warns := rec.with("portfolio snapshot skipped: position read failed")
+	if len(warns) != 1 || warns[0]["user_id"] != "u1" || warns[0]["error"] == "" {
+		t.Errorf("WARN records = %v, want one with user_id u1 and an error", warns)
+	}
+	if got := counterValue(t, reader, "portfolio.snapshot", attr(telemetry.KeyOutcome, "skipped_read_error")); got != 1 {
+		t.Errorf("snapshot{outcome=skipped_read_error} = %d, want 1", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+// riskPageTwoFails runs checkRiskLimits where page 1 alone breaches concentration (S000) and page 2 errors.
+func riskPageTwoFails(t *testing.T, drawdowns ...[3]any) (*recordingNotify, *logRecorder, *sdkmetric.ManualReader, pgxmock.PgxPoolIface) {
+	t.Helper()
+	reader := installMetricReader(t)
+	rec := recordLogs(t)
+	svc, mock, _ := newQuoteSvc(t, &stubMarketData{}, 0)
+	notify := &recordingNotify{}
+	svc.cfg, svc.notify = &config.Watcher{}, notify
+	expectTwoPages(mock, "acc-1", false, func(i int) float64 {
+		if i == 0 {
+			return 1500
+		}
+		return 7
+	}, errors.New("page two down"))
+	expectDrawdowns(mock, drawdowns...)
+
+	svc.checkRiskLimits(ctxWithUser(t, "u1"), "u1", paperMode)
+	return notify, rec, reader, mock
+}
+
+func assertRiskReadSkipped(t *testing.T, rec *logRecorder, reader *sdkmetric.ManualReader, mock pgxmock.PgxPoolIface) {
+	t.Helper()
+	warns := rec.with("concentration check skipped: position read failed")
+	if len(warns) != 1 || warns[0]["user_id"] != "u1" || warns[0]["error"] == "" {
+		t.Errorf("WARN records = %v, want one with user_id u1 and an error", warns)
+	}
+	if got := counterValue(t, reader, "portfolio.mark_source", attr(telemetry.KeyPath, "risk")); got != 0 {
+		t.Errorf("mark_source{path=risk} = %d, want 0 (a failed read is never a mark-source pass)", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestCheckRiskLimits_357_AC5_PageErrorNoConcentrationAlert(t *testing.T) {
+	notify, rec, reader, mock := riskPageTwoFails(t)
+
+	if len(notify.bodies) != 0 {
+		t.Errorf("alerts = %v, want none", notify.bodies)
+	}
+	assertRiskReadSkipped(t, rec, reader, mock)
+}
+
+func TestCheckRiskLimits_357_AC6_PageErrorDrawdownStillAlerts(t *testing.T) {
+	notify, rec, reader, mock := riskPageTwoFails(t, [3]any{"brk-1", 800.0, 1000.0})
+
+	want := []string{"drawdown limit breach: account brk-1 at 20.0% (peak 1000.00, current 800.00)"}
+	if !sameSet(notify.bodies, want) {
+		t.Errorf("alerts = %v, want exactly %v", notify.bodies, want)
+	}
+	assertRiskReadSkipped(t, rec, reader, mock)
 }
 
 func TestListAllPositions_357_RepeatedTokenFailsClosed(t *testing.T) {

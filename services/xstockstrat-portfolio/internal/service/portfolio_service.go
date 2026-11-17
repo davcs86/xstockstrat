@@ -1237,8 +1237,10 @@ func (s *PortfolioService) Unsubscribe(id string) {
 }
 
 func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string, mode commonv1.TradingMode) {
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	positions, err := s.listAllPositions(ctx, userID, mode, "")
 	if err != nil {
+		slog.WarnContext(ctx, "portfolio snapshot skipped: position read failed", "user_id", userID, "error", err)
+		telemetry.RecordSnapshot(ctx, "skipped_read_error")
 		return
 	}
 	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
@@ -1306,22 +1308,23 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	maxDrawdownPct := s.cfg.GetFloat("risk.max_drawdown_pct", 0.10)
 	concentrationLimitPct := s.cfg.GetFloat("risk.concentration_limit_pct", 0.20)
 
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
-	if err != nil {
-		return
-	}
 	var totalValue float64
 	posValues := make(map[string]float64)
-	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
-	applyQuotes(positions, quotes)
-	observeQuotePass(ctx, positions, quotes, "risk")
-	// Any unpriced position would skew the denominator — skip concentration (drawdown below still runs).
-	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
-		slog.WarnContext(ctx, "concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+	positions, err := s.listAllPositions(ctx, userID, mode, "")
+	if err != nil {
+		slog.WarnContext(ctx, "concentration check skipped: position read failed", "user_id", userID, "error", err)
 	} else {
-		for _, p := range positions {
-			posValues[p.Symbol] += p.MarketValue
-			totalValue += p.MarketValue
+		quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+		applyQuotes(positions, quotes)
+		observeQuotePass(ctx, positions, quotes, "risk")
+		// Any unpriced position would skew the denominator — skip concentration (drawdown below still runs).
+		if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
+			slog.WarnContext(ctx, "concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+		} else {
+			for _, p := range positions {
+				posValues[p.Symbol] += p.MarketValue
+				totalValue += p.MarketValue
+			}
 		}
 	}
 

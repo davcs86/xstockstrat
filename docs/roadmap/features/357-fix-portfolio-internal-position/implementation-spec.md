@@ -364,7 +364,7 @@ The new logic is in the excluded `service` package, so no coverage threshold app
 
 ### Step 6 — test: RED tests for the background readers (broadcastSnapshot, checkRiskLimits)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_position_drain_test.go` — modify
@@ -444,7 +444,7 @@ GOWORK=off go test ./internal/service/... -race -count=1
 
 ### Step 7 — service: broadcastSnapshot and checkRiskLimits drain all pages; logged skips on a read failure
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -586,3 +586,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 1 names `listPositionsSQL`, `drainRows`, `pageTwoCursor`; Step 2 builds the service inline per test.
 - **Actual**: Step 1 also adds `expectTwoPages` (registers page 1 + pinned page 2, or the page-2 error), `brokerValued` and `paperMode`; Step 2 adds `drainDBFixture`, `seedDrainPositions`, `drainDBUser`. All file-local, each used by several tests in the same file (DRY guard rail); the assertions and fixtures are the specced ones.
 - **Disposition**: in-scope (same **Files**), no behaviour change.
+
+### 2026-11-17 — Step 6 (unit 6+7): file-local helpers for the checkRiskLimits page-error tests
+- **Spec said**: Step 6 items 4 and 5 describe two tests with the same setup (page 1 breaches concentration on `S000`, page 2 errors) and the same WARN / mark-source / expectations assertions; item 5 adds a drawdown row.
+- **Actual**: the shared setup is `riskPageTwoFails(t, drawdowns...)` and the shared assertions are `assertRiskReadSkipped`; each test keeps its own alert assertion. `errPageTwo` is local to each test, as in Step 1's tests (Step 1 declared no package-level `errPageTwo`).
+- **Disposition**: in-scope (same **Files**), no behaviour change; the assertions are the specced ones.
+
+### 2026-11-17 — Step 7 (unit 6+7): call-site grep count
+- **Spec said**: `grep -c 'listAllPositions(ctx' internal/service/portfolio_service.go` expects 4 call sites.
+- **Actual**: it prints 5. The pattern also matches the definition line `func (s *PortfolioService) listAllPositions(ctx context.Context, …)` (:1177); `grep -n` shows exactly the four call sites the spec names: GetPortfolio :790, GetPnL :935, broadcastSnapshot :1240, checkRiskLimits :1313.
+- **Disposition**: spec expectation miscounted (definition line); behaviour as specced, no code change.
