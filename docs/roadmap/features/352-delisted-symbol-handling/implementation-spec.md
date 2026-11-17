@@ -1138,7 +1138,7 @@ grep -c "FOR [A-Z ]*SKIP LOCKED" services/xstockstrat-portfolio/internal/reposit
 
 ### Step 21 — test: removal repository (pgxmock and real database)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/delisted_removal_repo_test.go` — create

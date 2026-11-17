@@ -519,3 +519,12 @@
   untouched.
 - TDD: AC-6 red (functions as zero-value stubs): `got {Removed:[] …}, want Removed=[KPTI]` (6 of 7 fail) →
   green: 7 PASS. `go build`, golangci-lint 0 issues.
+
+### Step 21 — test: removal repository (pgxmock and real database) — done
+- pgxmock run → 7 PASS; `go vet -tags dbtest` passes; `go_gate xstockstrat-portfolio` → 0 lint issues,
+  all packages ok under `-race`, total 79.1%.
+- **Skipped locally: all 9 real-database (`dbtest`) tests** (`PORTFOLIO_DB_TEST_URL` unset; no database is
+  started to verify a step). The removal SQL is exercised only through pgxmock until CI's
+  `portfolio-db-test` job runs on the integration PR — watch that job.
+- The "partial result" database case seeds its two system-managed lists under two users (one user has one
+  system-managed list).
