@@ -59,8 +59,11 @@ early return at `:136-138` is restructured) → `runDelistingHook` on every succ
 context. A rejected or failed load never reaches the hook (`:124`, `:133`). A hook error or timeout logs
 a WARN and increments a counter; it never fails the load.
 
-The hook computes `d`, the New York calendar date of now; it is a trading day iff the shared calendar's
-`IsTradingDay(d)` (§8). The existing `SessionDate` helper is **not** used: it shifts the time by +6 h
+The hook computes `d = DayStart(now)`, the New York calendar date of now; it is a trading day iff
+`IsTradingDay(d)` (§8). "now" comes from a new `now func() time.Time` field on
+`assetServabilityState` (nil → `time.Now`), copied from `etfFlagState`
+(`xstockstrat-marketdata/internal/service/etf_flags.go:47,68-73`), so tests fix the New York date;
+`delisted_at` and the lease use database `now()`. The existing `SessionDate` helper is **not** used: it shifts the time by +6 h
 (`xstockstrat-portfolio/internal/marketsession/marketsession.go:20-25`) and would turn a Friday-evening
 load into a Saturday. On a trading day it reads the candidates (`watched_symbol` ∪ profile rows with a first-unservable date),
 classifies each against `next` (`classify`, `:46`), reads `N` (§9) and runs five statements in order,
@@ -114,8 +117,14 @@ by the next quote read and leaves again at the next load (D-11).
 
 1. Inbound internal-caller check — a new marketdata allow-list modelled on
    `xstockstrat-portfolio/internal/service/authz.go:9-38`, grants `{portfolio, SyncWatchlistDelistings}`
-   and `{portfolio, AckDelistingAlerts}`. A grant requires both the `x-internal-caller` header and the
-   mTLS peer identity of `xstockstrat-portfolio` (PLAT-9); the header alone is not enough. Marketdata has no inbound check today; the check applies to
+   and `{portfolio, AckDelistingAlerts}`. A grant requires both the `x-internal-caller` header and a
+   verified mTLS peer whose leaf certificate carries the exact DNS SAN `xstockstrat-portfolio` (PLAT-9,
+   D-30), read through `peer.FromContext` → `credentials.TLSInfo` → `VerifiedChains[0][0].DNSNames`,
+   exact match, fail closed. No Go code reads the peer certificate today (the precedents are Node,
+   `xstockstrat-config/src/grpc/authz.ts:163-166`, and Python `peer_san_matches`), so this is a new
+   helper in a new `xstockstrat-marketdata/internal/service/authz.go`; tests inject the peer with
+   `peer.NewContext`. Marketdata already requires and verifies client certificates
+   (`xstockstrat-marketdata/cmd/server/main.go:166-181`). Marketdata has no inbound check today; the check applies to
    these two RPCs only and no existing marketdata RPC gains one.
 2. More than 20 000 symbols → `InvalidArgument`. Normalize, dedupe, sort.
 3. Union rewrite: an ordered insert of new symbols, then an anti-join delete of symbols no longer in the
@@ -152,13 +161,15 @@ recovers it, no claim exists, so no recovery alert is sent either (O-33, D-16).
 
 ### 5. Portfolio tick (D-8, D-10, D-12, D-18, D-22, D-23)
 
-A new step after the existing expiry prune in `pruneOnce`
-(`xstockstrat-portfolio/internal/service/signal_prune.go:51-79`), in a new
-`internal/service/delisting_sync.go`:
+A new step called at the end of `pruneOnce`
+(`xstockstrat-portfolio/internal/service/signal_prune.go:51-79`), after its INFO line (`:77-78`), on
+the same tick context and whether or not the expiry prune failed; `pruneOnce` keeps its signature and
+its 281 behavior. The step lives in a new `internal/service/delisting_sync.go`:
 
 1. Union from the unfiltered repo `ListAllSymbols`
-   (`xstockstrat-portfolio/internal/repository/watchlist_repo.go:446`). On error, or above 20 000
-   symbols: WARN, keep the old cache, stop.
+   (`xstockstrat-portfolio/internal/repository/watchlist_repo.go:446`). On error: WARN, keep
+   the old cache, stop. Portfolio holds no symbol cap of its own; marketdata's `InvalidArgument` above
+   20 000 symbols takes step 2's error path (one constant, in marketdata only).
 2. Call `SyncWatchlistDelistings` under a fixed 15 s deadline with `x-internal-caller: portfolio`
    appended to the tick context, which already carries only `x-trace-id`
    (`xstockstrat-portfolio/internal/service/signal_prune.go:52`); no user headers are sent, as for the
@@ -194,8 +205,8 @@ A new step after the existing expiry prune in `pruneOnce`
    `REDELIVERY` after the lease (D-18).
 
 One helper decorates `WatchlistBinding.delisted` from the cache on every watchlist-returning RPC
-(`xstockstrat-portfolio/internal/service/portfolio_service.go:2233`, `:2246`, and the create, update,
-add, remove and binding responses). `ListAllWatchlistSymbols` (`:2220`) drops cached symbols in the handler, after the
+(`xstockstrat-portfolio/internal/service/portfolio_service.go:2233`, `:2246`, `EnsureSignalWatchlist`
+`:2215`, and the create, update, add, remove and binding responses). `ListAllWatchlistSymbols` (`:2220`) drops cached symbols in the handler, after the
 repo call at `:2225`; the repo `ListAllSymbols` itself stays unfiltered, because the tick's union depends
 on it. An empty cache decorates and filters nothing. The acceptance Background ("runs after every
 watchlist change and after every asset-set load") is a test precondition: step tests call the delisting
@@ -219,7 +230,9 @@ step directly after the change or load; at runtime it runs only on the prune tic
   from the results is dropped as written, so a symbol that fails and is then written on a retry leaves
   no `FAILED` entry. A resumed chunk replaces its own entry. The job view merges across chunks at read
   with failed > skipped > empty. A whole-chunk RPC failure writes `FAILED` for every symbol of the
-  chunk. Resume keeps the stored entries of completed chunks and never seeds `failed_symbols` (R-9). Invariant, with a test per loop exit arm in both marketdata loops and in
+  chunk. A job-level failure in `_run_backfill`'s exception arm (`servicer.py:660-672`, for example a
+  fundamentals RPC error) writes no `symbol_results` and no `failed_symbols`, as today; the job `error`
+  carries the reason. Resume keeps the stored entries of completed chunks and never seeds `failed_symbols` (R-9). Invariant, with a test per loop exit arm in both marketdata loops and in
   ingest's chunk, retry and resume paths: every symbol in `failed_symbols` has exactly one `FAILED`
   result; no `SKIPPED` or `EMPTY` symbol is in `failed_symbols`; results merge per symbol and are never
   replaced across chunks; a whole-chunk `FAILED` may override an earlier `SKIPPED`; a symbol has a
@@ -234,7 +247,8 @@ step directly after the change or load; at runtime it runs only on the prune tic
   the UI — a malformed date is omitted, never reformatted through a time zone.
 - **Agent**: `_watchlist_to_dict` (`xstockstrat-agent/app/client.py:377`) post-processes every binding
   to `delisted: bool` (always present) plus `delisted_reason` and `first_unservable_date` when flagged;
-  `get_backfill_status` (`:2146`) maps outcomes to `empty|skipped|failed`. Docstrings, the agent
+  `get_backfill_status` (`:2146`) maps outcomes to `empty|skipped|failed` through one job
+  post-processor applied in both the single-job (`:2173-2179`) and list (`:2199-2207`) returns. Docstrings, the agent
   CLAUDE.md, `docs/runbooks/mcp-tools.md` and the strat-lab `backfill.md` and `SKILL.md` change in the
   same PR.
 - **UI**: a badge on the `WatchlistReadiness` row
@@ -242,7 +256,10 @@ step directly after the change or load; at runtime it runs only on the prune tic
   `UNSERVABLE_REASON[reason]` (`xstockstrat-ui/src/lib/opportunityShared.tsx:48-52`) and the date string
   as given; `mockWatchlists` and `e2e/fixtures/INVENTORY.md` are extended (C-12). A flagged binding
   renders the badge in the verdict cell in place of the readiness skeleton, because analysis never
-  resolves readiness for it (`WatchlistReadiness.tsx:296-297,333-340`).
+  resolves readiness for it (`WatchlistReadiness.tsx:296-297,333-340`). No BFF change
+  (`xstockstrat-ui/src/lib/insightsBff.ts:137-138` forwards the generated message). The hand-written
+  `Binding` type gains optional `delisted`; `WatchlistDetail.tsx:38` imports it from
+  `WatchlistReadiness.tsx:34` in place of its second copy.
 - **Analysis**: flagged bindings are skipped in `_drain_watchlist_bindings`
   (`xstockstrat-analysis/app/handlers/servicer.py:5995`) and `_drain_watchlist`
   (`xstockstrat-analysis/app/engine/live_loop.py:592`); the fundsignal union is covered by portfolio's
@@ -258,24 +275,29 @@ row, the tick step, the `symbol_delisting` alert, the cross-user union wording);
 `backfill.md` and `SKILL.md`; the durable scenarios listed under Business Rules Touched as CHANGE; a
 rollout note for the burst; the Observability bullets (`marketdata.backfill.symbols` outcome `skipped`
 and the hook timeout/error counter in marketdata; `portfolio.marketdata_fetch` op `delistings` in
-portfolio).
+portfolio); `docs/patterns/inter-service-mtls.md` § Peer-SAN authorization (the new marketdata ←
+portfolio grant); `docs/patterns/config-governance.md` key row; `services/xstockstrat-ingest/CLAUDE.md`
+(`backfill_jobs.symbol_results`, migration `017`). `xstockstrat-config` gains one code change, the
+bounds-registry row.
 
 ### 8. Trading calendar (D-4)
 
 The rule-based NYSE calendar moves from `xstockstrat-portfolio/internal/marketsession` to
-`packages/proto/marketsession` (the `pnl/` precedent, `packages/proto/CLAUDE.md:7-13`), gaining a
-trading-days-inclusive count and a New-York-calendar-date helper with its own name, tested at 17:59 and
-18:01 New York time. Its test moves to a portfolio service test; two
+`packages/proto/marketsession` (the `pnl/` precedent, `packages/proto/CLAUDE.md:7-13`), with
+its API unchanged: the hook's day is `DayStart(now)` (`marketsession.go:27-33`, the New York date
+without `SessionDate`'s shift) and the cutoff `c` is `d` stepped back N−1 times with `PrevTradingDay`
+(`:55-60`). The hook is tested at 17:59 and 18:01 New York time. Its test moves to a portfolio service test; two
 portfolio callers are re-pointed. One-off closures are not modelled.
 
 ### 9. Config, proto, migrations, fixed values
 
 - **Config key** (C-05): namespace `marketdata`, key `assets.delisting_confirmation_trading_days`, int,
-  default 5; read nil or ≤ 0 → 5, > 30 → 30; SetConfig bounds [1, 30]; reader
+  default 5; read nil or ≤ 0 → 5, > 30 → 30; SetConfig bounds [1, 30] (a `SCALAR_BOUNDS_REGISTRY` row in
+  `xstockstrat-config/src/grpc/configServiceImpl.ts`); reader
   `resolveDelistingConfirmationDays` in `asset_servability.go` on the same watcher as
   `resolveAssetRefreshInterval` (`:169-181`), re-read at each load; seed config migration `054`
   (`052` is the last on `main-dev`, `053` is claimed by feature 345; re-checked at spec time), in the
-  same commit as the reader.
+  same commit as the reader, with `scripts/config-wiring-stored.json` regenerated.
 - **Proto** (additive): `common/v1` `BackfillSymbolOutcome {UNSPECIFIED=0, EMPTY=1, SKIPPED=2,
   FAILED=3}`, `BackfillSymbolResult {symbol=1, outcome=2, reason=3}`, `DelistedState {reason=1,
   first_unservable_date=2}`; `marketdata/v1` `BackfillBarsResponse.symbol_results=4`,
@@ -285,8 +307,8 @@ portfolio callers are re-pointed. One-off closures are not modelled.
   `ingest/v1` `BackfillJob.symbol_results=16`; `portfolio/v1` `WatchlistBinding.delisted=4`.
 - **Migrations**: marketdata `010`, ingest `017`, config `054`.
 - **Fixed values** (operator-approved 2026-11-17, not config keys): hook time limit 30 s; flag-alert
-  lease 10 minutes; sync, acknowledge and per-alert-send deadline 15 s; 20 000 symbols per sync; 100
-  claims per sync.
+  lease 10 minutes; sync, acknowledge and per-alert-send deadline 15 s; 20 000 symbols per sync (a constant in marketdata only; about 1.5× the roughly 13 500-symbol active
+  universe, since inserts are servability-gated); 100 claims per sync.
 
 ### 10. Rollout
 
@@ -327,6 +349,7 @@ K drains from system-managed lists over ⌈K/100⌉ prune ticks. Portfolio deplo
 - [ ] A flagged symbol on a system-managed list shows no marker until portfolio's next tick, and shows the marker while its alert is `PENDING` until a later tick removes it.
 - [ ] A hook that times out before the rebuild leaves a newly flagged symbol out of the in-memory flagged set until the next successful hook (up to one refresh interval); it backfills as `FAILED`, not `SKIPPED`, in that window.
 - [ ] A job resumed after a restart can show `FAILED` results for symbols of chunks completed before the restart that are not in `failed_symbols` (existing resume behavior, R-9).
+- [ ] A job-level fundamentals failure carries no per-symbol results (job `error` only), as today.
 - [ ] The union depends on portfolio's tick: observation lags a watchlist add by up to one prune interval, and a portfolio outage freezes the last union.
 - [ ] `first_unservable_date` for symbols already dead at deploy is the deploy-era load date.
 - [ ] The config seed number and the two portfolio callers of `marketsession` are re-verified at spec time.
@@ -340,8 +363,9 @@ K drains from system-managed lists over ⌈K/100⌉ prune ticks. Portfolio deplo
 - `C-07` / `F-01` — honored by: three new numbered migrations, none edited.
 - `C-10` / `C-14` — honored by: the state is decorated on every watchlist-returning RPC and reaches the agent tools and the `/insights` row.
 - `C-12` / `C-13` — honored by: UI fixtures through `watchlistMock` and `INVENTORY.md`; Go fixtures in `internal/testdata/`.
-- `C-15` — honored by: every `@AC-n` maps to a mechanism; AC-29, AC-8 and the Background amended with operator sign-off.
+- `C-15` — honored by: every `@AC-n` maps to a mechanism; AC-29, AC-8 and the Background amended with operator sign-off; a further Background line ("every asset-set load in these scenarios that names no date runs on a trading day", covering AC-4, AC-5, AC-27 and AC-29) awaits sign-off at the next gate.
 - `C-16` — see Business Rules Touched.
+- `PLAT-9` — honored by: the two marketdata grants are bound to the caller header and the peer SAN `xstockstrat-portfolio` (D-30).
 - `C-18` — honored by: one decider, one deleter per resource, no new edge, no portfolio storage.
 - `F-06` — honored by: no new pool; the new queries use marketdata's and portfolio's existing pooled connections.
 - `P-03` / `P-04` — honored by: every scope fork was put to the operator and recorded in context.md.
