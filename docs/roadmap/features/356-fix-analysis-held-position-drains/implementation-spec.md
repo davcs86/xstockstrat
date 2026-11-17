@@ -5,7 +5,7 @@
 **Feature**: `docs/roadmap/features/356-fix-analysis-held-position-drains/feature.md`
 **Total Steps**: 9
 **Feature Branch**: `feature/fix-analysis-held-position-drains`
-**Tree**: `origin/feature/fix-analysis-held-position-drains@a4ff372c`. Every `path:line` below was re-read at this commit.
+**Tree**: `origin/feature/fix-analysis-held-position-drains@a4ff372c`. Every `path:line` below was re-read at this commit. Impl-spec review (2026-11-17): `git diff a4ff372c 2408de65 -- services packages scripts .github` is empty, so the citations still hold at the branch head; spot-checked `servicer.py:385-390,3933-3941,4955-4957,6054-6067,6404`, `live_loop.py:400-411,563-568`, `tests/test_live_loop_telemetry.py:121-127`.
 
 ---
 
@@ -108,7 +108,10 @@ name matches the expected one, so Step 9 writes the row.
 - Step 7 [test] covers Step 6 [service]; Step 7's `@AC-10` is red against the Step-5 tree only because Step 2 already makes u-1's drain raise and Step 6 is the missing counter.
 - Step 8 requires Step 6: the caveat documents the behaviour Step 6 adds.
 - Step 9 requires Step 6 and the Mimir verification above: the row registers a series whose name was verified, and Step 6 is the new `failed` producer the operator mandated the row for.
-- Rebase risk: `308-fix-analysis-per-symbol-isolation` edits `_compute_opportunities` (`servicer.py:5350-5370`). This feature does not edit that function, but Steps 3 and 7 run it for real; rebase if 308 lands first.
+- Rebase risk: `308-fix-analysis-per-symbol-isolation` edits `_compute_opportunities` (`servicer.py:5350-5370`). This feature does not edit that function, but Steps 3 and 7 run it for real; if 308 lands first, rebase and re-run both steps' Verification.
+- Rebase risk: `337-metrics-host-provider-label` (in-progress) also appends to `packages/otel/produced-signals.tsv` (337 `context.md:21`, append-at-end). Step 9's row is a text-only conflict; on rebase keep both rows and re-run `python3 scripts/check-otel-produced-signals.py`.
+- CI: `.github/workflows/ci.yml:59` includes `services/xstockstrat-analysis/app/handlers/servicer.py` in the `xstockstrat-agent` path filter, so Steps 2 and 6 also trigger the agent test job. No agent change is expected; a red agent job is a regression to investigate, not noise.
+- Red-before-green evidence (C-08/P-06): Steps 2/3 and 6/7 are committed service-first, so the commit history shows no red commit. The RED is evidenced only by the context.md record that Steps 3, 5 and 7 require (failing test ids + failure reason, captured against the pre-change tree before the service change is applied). A step is not complete without that record.
 
 ---
 
@@ -255,7 +258,7 @@ grep -n "metadata=metadata" services/xstockstrat-analysis/app/handlers/servicer.
    - Run `svc._kick_opportunity_recompute("u-tick-1", ())` and `await _drain_background()` under `caplog.at_level(logging.INFO)`.
    - Assert `svc._replace_and_stamp_compute_state.await_count == 0` (previous queue kept), `recompute{kind=full,outcome=failed} == 1`, `recompute{outcome=ok} == 0`, the "opportunity recompute failed" record's `exc_info[0] is servicer_mod._PositionsPageError` (checked last), and no attribute value contains `"u-tick-1"`.
    (Today: the RpcError is swallowed, the drain returns `{}`, the replace is awaited and `ok == 1`.)
-5. Run the new tests against the pre-Step-2 tree and record the RED in context.md (AC-4 noted as guard), then GREEN after Step 2.
+5. Write these tests and run them against the pre-Step-2 tree **before** applying Step 2's change. Record the RED in context.md (each failing test id and its failure reason, e.g. DID NOT RAISE / `await_count` 50 != 2 / AAPL `held is True` / `ok == 1`; AC-4 noted as guard). Then apply Step 2 and record GREEN. The commit history will not show the red state, so this context.md record is the only evidence (C-08).
 
 **Verification**:
 ```bash
@@ -418,6 +421,7 @@ grep -n 'record_opportunity_recompute("full", "failed")' services/xstockstrat-an
    - RED on the Step-5 tree: `failed == 0` and `exc_info` is unset.
 2. In `tests/test_telemetry_allowlist.py` `_drive()` add `telemetry.record_opportunity_recompute("full", "failed")` after the `("full", "ok")` call (`:52`) (D-14). It exercises existing keys only, so it is a guard (no RED expected; say so in context.md).
 3. Leave `test_ac51_failed_full_recompute_counted_with_traceback` (`:174-184`) unchanged: kick-path-only at exactly 1 (`@AC-51 @feature-294` EXTEND, text unedited, D-16).
+4. Write item 1 and run it against the Step-5 tree **before** applying Step 6. Record the RED in context.md (test id, `failed == 0`, `exc_info` unset), then apply Step 6 and record GREEN (C-08; the commit history will not show the red state).
 
 **Verification**:
 ```bash
