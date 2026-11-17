@@ -103,3 +103,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - C-16 promotion: `@AC-1` → `services/xstockstrat-portfolio/acceptance/fix-listpositions-nextpagetoken-skips.feature` (`@feature-353`); no equivalent scenario existed (scenario-recon: none pins ListPositions pagination). Operator's "no checkpoints" instruction covered the promotion confirm.
 - Defect-report closing (2.6): no candidates — this feature records no C-16 CHANGE. The source report's sidecar stays `triaged` / `feature:353-fix-listpositions-nextpagetoken-skips`; `/sdd-archiver` derives resolution from `launched`.
 - Open Threads (follow-ups, file after launch via /sdd-qa defect): still `[ ]` — analysis drain hardening; WatchlistRepo.ListByUser; internal 500-row truncation.
+
+## Session 2026-11-17 — sdd-execute
+**Steps this session**: 1, 2, 3, 4
+**Progress**: 4 done / 4 total
+**Stopped at**: all complete — integration PR #1568 (feature/fix-listpositions-nextpagetoken-skips → main-dev) opened, CI watch subscribed
+**Next**: merge #1568 when CI is green; PR #1564 (docs-only, same commits' docs) is superseded — operator to close it; after launch file the three follow-up defect reports
