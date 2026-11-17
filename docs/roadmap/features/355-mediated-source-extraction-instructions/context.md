@@ -90,3 +90,10 @@
 - **Round-2 gate — user decisions:** watchlist signals from seeded prose expire after 7 days; 8-K
   scope narrow (sell 0.6 for 1.03/3.01/4.02, watchlist 0.3 for 1.01/2.01, skip the rest); Form 4
   cluster-only watchlist; **run another round** (round 3).
+- Round 3 (2026-11-17, user-requested): proposer wrote the final texts; adversary re-traced
+  `ingest_signal` and ingest dedup. Architecture unchanged; no Floor breach, no register violation.
+  **Finding:** dedup is one slot per `(user, source, symbol, direction)`, re-won after the window or
+  when `conviction`/`valid_until` differs, and ignores `valid_from` — the drafted prose's
+  idempotence claim was wrong. Folded in D-22 (prose corrections) and D-23 (step refinements).
+  Open for the gate: O-27 recency bound, O-28 PR Newswire / Snacks rules, O-29 Form 4 joint
+  filings, O-30 `8-K/A` skipped + sell without `valid_until`.
