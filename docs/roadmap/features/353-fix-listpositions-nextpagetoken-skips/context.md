@@ -97,3 +97,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: none
 
 - Final config-wiring gate: `node scripts/check-config-wiring.mjs --final` exit 0 (only pre-existing REPORTED lines for analysis `fundamentals.provider` and trading `trading_state`; no key from this feature).
+
+## Integration (2026-11-17)
+- Merge-order gate: no entry for 353 → proceed.
+- C-16 promotion: `@AC-1` → `services/xstockstrat-portfolio/acceptance/fix-listpositions-nextpagetoken-skips.feature` (`@feature-353`); no equivalent scenario existed (scenario-recon: none pins ListPositions pagination). Operator's "no checkpoints" instruction covered the promotion confirm.
+- Defect-report closing (2.6): no candidates — this feature records no C-16 CHANGE. The source report's sidecar stays `triaged` / `feature:353-fix-listpositions-nextpagetoken-skips`; `/sdd-archiver` derives resolution from `launched`.
+- Open Threads (follow-ups, file after launch via /sdd-qa defect): still `[ ]` — analysis drain hardening; WatchlistRepo.ListByUser; internal 500-row truncation.
