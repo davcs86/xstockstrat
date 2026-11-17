@@ -45,8 +45,9 @@ Reconcile assumed one page per account while the token was unreliable (fixed by 
 - **FR-3** If portfolio returns a `next_page_token` equal to the token the read just sent, the read
   stops and is treated as failed (FR-2 applies): the account's position-side check is skipped for that
   tick and the read does not loop.
-- **FR-4** Applies to every broker type that `reconcileTick` covers today; the broker-side
-  `GetPositions` read, the order-side reconcile and fill handling are unchanged.
+- **FR-4** Broker-agnostic: the change touches only the portfolio read, so it applies to every account
+  `reconcileTick` covers today (every broker type except `BROKER_TYPE_OFFLINE`, which stays skipped as
+  today). The broker-side `GetPositions` read, the order-side reconcile and fill handling are unchanged.
 
 ## Consumer Surface(s)
 
