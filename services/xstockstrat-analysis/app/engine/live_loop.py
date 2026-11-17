@@ -39,8 +39,10 @@ from app import telemetry
 from app.config.watcher import int_positive
 from app.engine.fundsignal_loop import fundsignal_source_slug
 from app.handlers.servicer import (
+    _drain_positions_paged,
     _fetch_historical_fundamentals_paged,
     _normalize_symbol,
+    _PositionsPageError,
     _record_pit_failure,
     _record_snapshot_failure,
     _row_to_strategy_definition,
@@ -390,6 +392,7 @@ class LiveEvaluationLoop:
         # cost one ListPositions + one ListWatchlists, not N of each.
         held_cache: dict[str, set] = {}
         watch_cache: dict[str, set] = {}
+        failed_owners: set[str] = set()
         # records: (created_at, strategy_id, symbol, definition, deny_entry) — extra per-pair state
         # rides the sortable key so no (strategy_id, symbol) collision across owners loses it.
         records: list[tuple] = []
@@ -397,6 +400,8 @@ class LiveEvaluationLoop:
             d = dict(row)
             definition = _row_to_strategy_definition(d)
             owner = definition.user_id
+            if owner in failed_owners:
+                continue
             try:
                 if owner not in held_cache:
                     held_cache[owner] = await self._drain_held(owner)
@@ -406,6 +411,15 @@ class LiveEvaluationLoop:
                     if owner not in own_cache:
                         own_cache[owner] = await self._drain_owner_signals(owner)
                     signal_symbols = own_cache[owner] | system_signals
+            except _PositionsPageError as e:
+                log.warning(
+                    "live_loop: strategy %s owner %s skipped — held drain failed: %s",
+                    definition.strategy_id,
+                    owner,
+                    e,
+                )
+                failed_owners.add(owner)
+                continue
             except ValueError as e:
                 log.warning("live_loop: strategy %s skipped — %s", definition.strategy_id, e)
                 continue
@@ -562,32 +576,17 @@ class LiveEvaluationLoop:
 
     async def _drain_held(self, owner: str) -> set:
         """Owner's held symbols (normalized). Synthetic ``x-user-id`` metadata scopes ownership
-        server-side (C-03; mirrors feature 133 / fundsignal_loop). Best-effort."""
+        server-side (C-03; mirrors feature 133 / fundsignal_loop). A failed drain is counted
+        and raises ``_PositionsPageError``."""
         if self._portfolio is None:
             return set()
         meta = owner_metadata(owner)
-        out: set = set()
-        page_token = ""
-        for _ in range(_DRAIN_PAGES):
-            try:
-                resp = await self._portfolio.ListPositions(
-                    portfolio_pb2.ListPositionsRequest(
-                        user_id=owner,
-                        page=common_pb2.PageRequest(
-                            page_size=_DRAIN_PAGE_SIZE, page_token=page_token
-                        ),
-                    ),
-                    metadata=meta,
-                )
-            except Exception as e:
-                log.warning("live_loop: ListPositions(%s) failed: %s", owner, e)
-                telemetry.record_live_loop_drain_failure("held")
-                return out
-            out.update(_normalize_symbol(p.symbol) for p in resp.positions)
-            page_token = resp.page.next_page_token
-            if not page_token:
-                break
-        return out
+        try:
+            rows = await _drain_positions_paged(self._portfolio, owner, meta)
+        except _PositionsPageError:
+            telemetry.record_live_loop_drain_failure("held")
+            raise
+        return {_normalize_symbol(p.symbol) for p in rows}
 
     async def _drain_watchlist(self, owner: str) -> set:
         """Owner's watchlisted symbols (normalized) across all their watchlists. Reads the

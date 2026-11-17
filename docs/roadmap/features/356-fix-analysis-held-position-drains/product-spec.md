@@ -54,10 +54,16 @@ logged and counted. Each drain is tested against a fake that ignores the token.
     `@AC-16 @feature-294`. No metric attribute carries the owner id.
   - Entry backfill (`entry_backfill.py:148`): no change. Its existing `except Exception` already skips the
     owner.
-  - `_compute_opportunities` (`servicer.py:5367`): the recompute fails through its existing path
-    (`servicer.py:4948-4957`). The user's previous queue is not replaced, and the failure is counted by
-    `analysis.opportunity.recompute{outcome=failed}`. Repeated failures surface `compute_failed`
-    (feature 185). The fix adds no new metric instrument.
+  - `_compute_opportunities` (`servicer.py:5367`), on-demand (kick-path) recompute: the recompute fails
+    through its existing path (`servicer.py:4948-4957`). The user's previous queue is not replaced, and
+    the failure is counted by `analysis.opportunity.recompute{outcome=failed}`. On a cold read (no stored
+    queue), repeated failures surface `compute_failed` (feature 185, `servicer.py:4784-4795`); a user with
+    a stored queue is served the stale rows. The fix adds no new metric instrument.
+  - Daily refresh (`_opportunity_refresh_tick`, `servicer.py:6056-6069`): a per-user failure logs a
+    WARNING with traceback and records `analysis.opportunity.recompute{kind=full,outcome=failed}` once per
+    failed user, with no user attribute. That user's previous queue is kept, and the schedule still
+    advances. No `ok` is recorded on this path. The loop tick is unchanged: an ordinary tick on partial
+    failure, and none when every user fails.
   - `ScreenSymbols` (`servicer.py:3935`): it still returns the screen results, but marks no row `held`. It
     logs a WARNING instead of marking from a partial set.
 - **FR-5 (unchanged success path).** When `ListPositions` honors `page_token` and ends with an empty
@@ -106,12 +112,14 @@ unaffected (C-1 to C-5 not triggered).
 - No database migrations.
 - No config key changes: the 50-page cap stays a module constant.
 - No new metric instrument. The fix reuses `analysis.live_loop.drain_failures{source=held}` and
-  `analysis.opportunity.recompute{outcome=failed}`.
+  `analysis.opportunity.recompute{outcome=failed}`. The daily refresh reuses the existing
+  `recompute{kind=full,outcome=failed}` label set (no new label value).
 
 ## Acceptance Criteria
 
 See `acceptance.feature`. Its regression scenarios must fail on the buggy behavior and pass after the fix
-(Constitution **C-15**). Every scenario is tagged with the FR it covers. The existing analysis tests must
+(Constitution **C-15**); they are `@AC-1`, `@AC-2`, `@AC-3`, `@AC-5`, `@AC-6`, `@AC-7` and `@AC-10` (the
+daily-refresh failed user). Every scenario is tagged with the FR it covers. The existing analysis tests must
 also pass, and the affected service must be smoke-tested on dev.
 
 ## Out of Scope
