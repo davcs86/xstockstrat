@@ -284,3 +284,24 @@
 - [x] Job-level fundamentals failure carries no per-symbol results → Step 19.
 - [x] Union depends on portfolio's tick; deploy-era first-unservable dates → rollout note, Step 8.
 - [ ] Still open for execute time: the three migration numbers against every `origin/feature/*` ref.
+
+## Session 2026-11-17 — sdd-review impl-spec (advisory), round 1
+
+- Tree: `claude/story-delisted-symbol-handling@4746789` (contains `origin/main-dev@149351d`; features 353
+  and 354 merged in since the spec was written).
+- Result: 2 failures, 27 warnings, 6 notes (advisory — did not block). All applied to
+  implementation-spec.md: F1 (Step 2 Files as exact generated paths), F2 (Step 31 coverage threshold),
+  W1–W27 (stale citations W1, W2, W13, W14, W16, W19, W20, W22; vacuous RED W10, W21, W22; guard AC-12
+  W12; removal result gains `Left` W15; pgxmock feasibility and local RED W17, W18; proto field numbers
+  W3; verification commands W4, W5; file-count notes W6, W8, W24; `<NNN>` seed reference W9; unused
+  Files entry W11; `profileDBSymbolPrefix` W7; `GetWatchlistReadiness` left unchanged and documented
+  W23; agent CLAUDE.md bullet W25; rollout note moved to `docs/runbooks/delisting-rollout.md` per
+  design §10 W26; assumptions A-8 extended, A-10 and A-11 added, A-7 marked for operator confirmation
+  W27).
+- W18 adapted: the pgxmock `@AC-6` case asserts the list query's bound symbols and returns no rows,
+  because `WatchlistRepo` transactions use `r.pool.Begin`, which pgxmock cannot substitute.
+- Overlap findings: no migration, proto-field or config-key collision. Config migration ordering hazard
+  with feature 345 (it claims `053`, this feature takes `054`) — a merge-order row is pending the
+  operator's decision. Same-file overlaps with 343, 344, 345, 337, 341, 347, 348, 339, 340 and 322 are
+  rebase-level.
+- Unresolved carried into execution: none from round 1.

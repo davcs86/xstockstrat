@@ -5,9 +5,10 @@
 **Feature**: `docs/roadmap/features/352-delisted-symbol-handling/feature.md`
 **Total Steps**: 32
 **Feature Branch**: `feature/delisted-symbol-handling`
-**Tree**: `claude/story-delisted-symbol-handling@21c4a2e` (contains `origin/main-dev@4c87ea8`; the delta is
-docs-only) — the same recorded deviation from `docs/sdd/tree-freshness.md` as `recon.md`: the story PR is
-not merged, so `main-dev` does not hold the feature directory.
+**Tree**: `claude/story-delisted-symbol-handling@4746789` (contains `origin/main-dev@149351d`, which includes
+features 353 and 354; the story-branch delta over `main-dev` is docs-only) — the same recorded deviation
+from `docs/sdd/tree-freshness.md` as `recon.md`: the story PR is not merged, so `main-dev` does not hold the
+feature directory.
 
 ---
 
@@ -23,7 +24,7 @@ named in the product spec land last: the Agent tools (28–29) and the `/insight
 
 Every step is green on a tree that holds only the steps before it; the four places where that is not
 possible are declared as atomic units (`**Lands with**`). No new env var, port or deployment-file change:
-portfolio already dials marketdata and notify (`services/xstockstrat-portfolio/internal/service/portfolio_service.go:137-149`),
+portfolio already dials marketdata and notify (`services/xstockstrat-portfolio/internal/service/portfolio_service.go:137-152`),
 marketdata already dials notify (`services/xstockstrat-marketdata/internal/service/marketdata_service.go:225-238`).
 
 Trading-domain survey (`reference/step-constraints.md` §A): `TRADING_MODE`, `BrokerType`, `OrderType` and
@@ -37,7 +38,7 @@ only the Alpaca asset set, which is the same in paper and live.
 | AC | Steps | AC | Steps | AC | Steps |
 |---|---|---|---|---|---|
 | AC-1 | 7, 9 | AC-11 | 16, 19 | AC-21 | 7, 9 |
-| AC-2 | 9 | AC-12 | 16 | AC-22 | 23 |
+| AC-2 | 9 | AC-12 | 16 (guard) | AC-22 | 23 |
 | AC-3 | 9 | AC-13 | 16, 19 | AC-23 | 16, 19 |
 | AC-4 | 9, 25 | AC-14 | 19, 29 | AC-24 | 16, 19, 29 |
 | AC-5 | 9, 23 | AC-15 | 31 | AC-25 | 9 |
@@ -47,9 +48,10 @@ only the Alpaca asset set, which is the same in paper and live.
 | AC-9 | 7 (guard) | AC-19 | 9, 14, 25 | AC-29 | 9 |
 | AC-10 | 9, 25 (guard) | AC-20 | 9 | | |
 
-AC-9 and AC-10 are **guards**: they pass on today's code (nothing deletes stored data; quote and price
-readers are not filtered) and stay green only if this feature adds no such deletion or filter. Their tests
-are written as regression guards and are exempt from the RED requirement, stated per `tdd-gate.md`.
+AC-9, AC-10 and AC-12 are **guards**: they pass on today's code (nothing deletes stored data; quote and
+price readers are not filtered; a backfill attempts every symbol it is given) and stay green only if this
+feature adds no such deletion or filter. Their tests are written as regression guards and are exempt from
+the RED requirement, stated per `tdd-gate.md`.
 
 ## Assumptions made by this spec (not decided in `design.md`)
 
@@ -61,11 +63,13 @@ Each is a naming or shape choice the design left open. `/sdd-review impl-spec` s
 | A-2 | The hook counter is `marketdata.delisting.hook_failures{reason timeout\|error}` | design §3 says "increments a counter"; `reason` is an already-allowed label key (`services/xstockstrat-marketdata/internal/service/telemetry_allowlist_test.go:28-31`) |
 | A-3 | `ingest.backfill_jobs.symbol_results` stores `{"<chunk key>": {"<SYMBOL>": {"outcome": <enum int>, "reason": "<text>"}}}` | design §6 fixes "keyed by chunk" and JSON text; statuses are already stored as enum ints (`services/xstockstrat-ingest/app/handlers/servicer.py:308`) |
 | A-4 | A symbol in a marketdata response's `failed_symbols` with no entry in `symbol_results` (marketdata deployed behind ingest) is stored as `FAILED` with an empty reason | keeps the design §6 invariant during a rolling deploy; design §10 "every additive field means the non-destructive state when absent" |
-| A-5 | The rollout note with the burst-count query lives in the new "Delisted-symbol detection" section of `services/xstockstrat-marketdata/CLAUDE.md` | design §10 says "a runbook note" and names no file |
+| A-5 | The rollout note with the burst-count query is a new runbook, `docs/runbooks/delisting-rollout.md`, indexed in `docs/runbooks/CLAUDE.md`; `services/xstockstrat-marketdata/CLAUDE.md` carries a one-line pointer to it | follows design §10 ("a runbook note"); only the file name is this spec's choice |
 | A-6 | Alert titles and bodies (Steps 8 and 22) | design §3/§5 fix severity, category, audience and what each alert names, not the wording |
-| A-7 | A flagged symbol skipped by a backfill is logged at INFO, not with the existing `failed` WARN/ERROR line | design §6 is silent; FR-9 moves the reason into the job status |
-| A-8 | The UI marker uses the existing `Badge` variant `warning` | design §7 says "a badge"; `services/xstockstrat-ui/src/components/ui/badge.tsx:25` |
+| A-7 | A flagged symbol skipped by a backfill is logged at INFO, not with the existing `failed` WARN/ERROR line — **for operator confirmation** | design §6 is silent; FR-9 moves the reason into the job status |
+| A-8 | The UI marker uses the existing `Badge` variant `warning`, with the label text `Delisted` and an accessible name holding the symbol, the reason text and the date (Step 30) | design §7 says "a badge"; `services/xstockstrat-ui/src/components/ui/badge.tsx:25` |
 | A-9 | Go/Python/TS symbol names introduced by this spec (`ProfileRepo`, `runDelistingHook`, `syncDelistings`, …) | **Not found** — created from scratch; no existing symbol |
+| A-10 | Error codes of the two new RPCs (Step 13): `connect.CodeUnavailable` when no profile store is wired, `connect.CodeInternal` on a store error, `connect.CodePermissionDenied` without the grant | design §4 fixes only `InvalidArgument` above 20 000 symbols |
+| A-11 | Step 28 makes no `plugin.json` version bump | feature 343 precedent; `docs/patterns/strat-lab-plugin.md:54` requires only that the two plugin manifests stay identical |
 
 ## Verification command blocks
 
@@ -172,14 +176,14 @@ the verification. `go_gate` still runs so the service total cannot regress.
    - After `GetSymbolServability` (`:76`) add `rpc SyncWatchlistDelistings(SyncWatchlistDelistingsRequest) returns (SyncWatchlistDelistingsResponse);` and `rpc AckDelistingAlerts(AckDelistingAlertsRequest) returns (AckDelistingAlertsResponse);`, each with a one-line comment "internal: `xstockstrat-portfolio` only".
    - `enum DelistingAlertState { DELISTING_ALERT_STATE_UNSPECIFIED = 0; DELISTING_ALERT_STATE_PENDING = 1; DELISTING_ALERT_STATE_CLAIMED = 2; DELISTING_ALERT_STATE_REDELIVERY = 3; DELISTING_ALERT_STATE_REPORTED = 4; }`
    - `message FlaggedSymbol { string symbol = 1; xstockstrat.common.v1.DelistedState state = 2; DelistingAlertState alert_state = 3; bool unservable_in_current_set = 4; }` — comment: `unservable_in_current_set` false means "do not remove".
-   - The four request/response messages of assumption A-1.
+   - `message SyncWatchlistDelistingsRequest { repeated string symbols = 1; }`, `message SyncWatchlistDelistingsResponse { repeated FlaggedSymbol flagged = 1; }`, `message AckDelistingAlertsRequest { repeated string symbols = 1; }`, `message AckDelistingAlertsResponse {}` (assumption A-1).
 3. `ingest/v1/ingest.proto` `BackfillJob`: add `repeated xstockstrat.common.v1.BackfillSymbolResult symbol_results = 16;`.
 4. `portfolio/v1/portfolio.proto` `WatchlistBinding`: add `xstockstrat.common.v1.DelistedState delisted = 4;` — comment: server-set, output only; presence means flagged delisted.
 5. No field is removed, renumbered or retyped; no `reserved` statement is added.
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against "../../.git#branch=feature/delisted-symbol-handling,subdir=packages/proto"
+( cd packages/proto && buf lint && buf breaking --against "$(git rev-parse --path-format=absolute --git-common-dir)#branch=feature/delisted-symbol-handling,subdir=packages/proto" )   # the common-dir form also works inside a git worktree
 grep -n "symbol_results = 4\|symbol_results = 3" packages/proto/marketdata/v1/marketdata.proto
 grep -n "symbol_results = 16" packages/proto/ingest/v1/ingest.proto
 grep -n "delisted = 4" packages/proto/portfolio/v1/portfolio.proto
@@ -192,9 +196,51 @@ grep -n "delisted = 4" packages/proto/portfolio/v1/portfolio.proto
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/go/` — modify (generated)
-- `packages/proto/gen/python/` — modify (generated)
-- `packages/proto/gen/ts/` — modify (generated)
+- `packages/proto/gen/go/common/v1/common.pb.go` — modify (generated)
+- `packages/proto/gen/go/marketdata/v1/marketdata.pb.go` — modify (generated)
+- `packages/proto/gen/go/marketdata/v1/marketdata_grpc.pb.go` — modify (generated)
+- `packages/proto/gen/go/marketdata/v1/marketdatav1connect/marketdata.connect.go` — modify (generated)
+- `packages/proto/gen/go/ingest/v1/ingest.pb.go` — modify (generated)
+- `packages/proto/gen/go/ingest/v1/ingest_grpc.pb.go` — modify (generated)
+- `packages/proto/gen/go/ingest/v1/ingestv1connect/ingest.connect.go` — modify (generated)
+- `packages/proto/gen/go/portfolio/v1/portfolio.pb.go` — modify (generated)
+- `packages/proto/gen/go/portfolio/v1/portfolio_grpc.pb.go` — modify (generated)
+- `packages/proto/gen/go/portfolio/v1/portfoliov1connect/portfolio.connect.go` — modify (generated)
+- `packages/proto/gen/python/common/v1/common_pb2.py` — modify (generated)
+- `packages/proto/gen/python/common/v1/common_pb2_grpc.py` — modify (generated)
+- `packages/proto/gen/python/marketdata/v1/marketdata_pb2.py` — modify (generated)
+- `packages/proto/gen/python/marketdata/v1/marketdata_pb2_grpc.py` — modify (generated)
+- `packages/proto/gen/python/ingest/v1/ingest_pb2.py` — modify (generated)
+- `packages/proto/gen/python/ingest/v1/ingest_pb2_grpc.py` — modify (generated)
+- `packages/proto/gen/python/portfolio/v1/portfolio_pb2.py` — modify (generated)
+- `packages/proto/gen/python/portfolio/v1/portfolio_pb2_grpc.py` — modify (generated)
+- `packages/proto/gen/ts/common/v1/common.ts` — modify (generated)
+- `packages/proto/gen/ts/common/v1/common_pb.ts` — modify (generated)
+- `packages/proto/gen/ts/marketdata/v1/marketdata.ts` — modify (generated)
+- `packages/proto/gen/ts/marketdata/v1/marketdata_connect.ts` — modify (generated)
+- `packages/proto/gen/ts/marketdata/v1/marketdata_pb.ts` — modify (generated)
+- `packages/proto/gen/ts/ingest/v1/ingest.ts` — modify (generated)
+- `packages/proto/gen/ts/ingest/v1/ingest_connect.ts` — modify (generated)
+- `packages/proto/gen/ts/ingest/v1/ingest_pb.ts` — modify (generated)
+- `packages/proto/gen/ts/portfolio/v1/portfolio.ts` — modify (generated)
+- `packages/proto/gen/ts/portfolio/v1/portfolio_connect.ts` — modify (generated)
+- `packages/proto/gen/ts/portfolio/v1/portfolio_pb.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/common/v1/common.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/common/v1/common.js` — modify (generated)
+- `packages/proto/gen/ts/dist/common/v1/common_pb.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/common/v1/common_pb.js` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata.js` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata_pb.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/marketdata/v1/marketdata_pb.js` — modify (generated)
+- `packages/proto/gen/ts/dist/ingest/v1/ingest.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/ingest/v1/ingest.js` — modify (generated)
+- `packages/proto/gen/ts/dist/ingest/v1/ingest_pb.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/ingest/v1/ingest_pb.js` — modify (generated)
+- `packages/proto/gen/ts/dist/portfolio/v1/portfolio.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/portfolio/v1/portfolio.js` — modify (generated)
+- `packages/proto/gen/ts/dist/portfolio/v1/portfolio_pb.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/portfolio/v1/portfolio_pb.js` — modify (generated)
 
 **Reviewers**: Proto Reviewer — field number uniqueness per message, `buf lint` / `buf breaking` pass; `packages/proto` owner — backward compatibility, naming conventions; `xstockstrat-marketdata` owner — OHLCV ingestion integrity; `xstockstrat-ingest` owner — idempotent ingestion; `xstockstrat-portfolio` owner — concurrent write safety
 
@@ -212,10 +258,11 @@ grep -n "delisted = 4" packages/proto/portfolio/v1/portfolio.proto
 **Instructions**:
 1. Run `./scripts/buf-gen.sh` (Docker codegen container; without Docker follow `docs/runbooks/codegen-toolchain-host-setup.md`). Never edit a generated file by hand.
 2. Confirm the diff under `packages/proto/gen/` touches only the `common`, `marketdata`, `ingest` and `portfolio` packages. Any other changed file means a plugin-version drift: stop and report (**P-03**).
+3. `**Files**` lists the generated outputs of those four packages as they exist on this tree (Go, Go connect, Python, TypeScript and the checked-in `gen/ts/dist` outputs). At execute time `git status --porcelain packages/proto/gen/` must show no path outside that list; a generated file that did not change is simply not staged, and a path outside the list blocks the step (**F-08**).
 
 **Verification**:
 ```bash
-./scripts/buf-gen.sh && git status --porcelain packages/proto/gen/ | grep -Ev "/(common|marketdata|ingest|portfolio)/" ; test $? -eq 1   # nothing outside the four packages
+./scripts/buf-gen.sh && ! git status --porcelain packages/proto/gen/ | grep -Ev "/(common|marketdata|ingest|portfolio)/"   # nothing outside the four packages; a buf-gen failure fails the line
 ( cd services/xstockstrat-marketdata && GOWORK=off go build ./... )
 ( cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go vet ./... )
 ( cd services/xstockstrat-trading && GOWORK=off go vet ./... )
@@ -261,6 +308,7 @@ grep -n "delisted = 4" packages/proto/portfolio/v1/portfolio.proto
 4. `packages/proto/CLAUDE.md`: extend the "Non-generated helper carve-out" paragraph with `marketsession/` (`github.com/xstockstrat/contracts/marketsession`), shared by `xstockstrat-portfolio` and `xstockstrat-marketdata`, tested from the consuming services because no CI job runs `go test` inside `packages/proto/`.
 5. `services/xstockstrat-portfolio/CLAUDE.md:30`: replace `internal/marketsession` with `contracts/marketsession` (`packages/proto/marketsession`).
 6. Trading-domain: broker coverage, order types, fill handling and `TRADING_MODE` are unaffected by this step.
+7. Files count 7 (1 create, 2 deletes, 2 import re-points, 2 CLAUDE.md edits). Not split because the move is one atomic unit with Step 4.
 
 **Verification**:
 ```bash
@@ -421,7 +469,7 @@ grep -c "func (r \*ProfileRepo)" services/xstockstrat-marketdata/internal/reposi
 
 **Instructions**:
 1. `profile_repo_test.go` (pgxmock): one test per method asserting the statement is issued once with the expected argument shapes (date-only strings, arrays), that `RETURNING` rows are mapped to the row types, and that a driver error is wrapped and returned. `ReplaceWatched` asserts insert-then-delete order and that an empty slice issues the delete.
-2. `profile_repo_dbtest_test.go` (`//go:build dbtest`, package `repository`), using `dbtestRepo` and a file-local symbol prefix (for example `ZZ352_`) with cleanup of exactly the rows it creates in both tables:
+2. `profile_repo_dbtest_test.go` (`//go:build dbtest`, package `repository`), using `dbtestRepo` and a new file-local const `profileDBSymbolPrefix = "ZZ352_"` (not `dbtestSymbolPrefix`, which this package already declares as `"ZZ348_"` under the same build tag) with cleanup of exactly the rows it creates in both tables:
    - **@AC-21** `Start` creates a row with the given date and reason and `delisted_at` NULL for a watched symbol, and creates none for a symbol not in `watched_symbol`.
    - **@AC-1** `Flag` with a cutoff equal to the row's date flags it; with a cutoff one day earlier it does not; an unwatched started row is not flagged.
    - **@AC-27** `ResetUnwatched` leaves a flagged row untouched and resets an unflagged started row that left the union; with an empty `watched_symbol` it resets nothing. `Recover` clears a flagged row whatever the union holds and reports `AlertClaimed` correctly for a claimed and an unclaimed row.
@@ -456,6 +504,8 @@ grep -rn "ZZ352_" --include="*_test.go" services/xstockstrat-marketdata | cut -d
 - `services/xstockstrat-marketdata/cmd/server/main.go` — modify
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
 - `services/xstockstrat-marketdata/docs/context-constitution.md` — modify (MARKETDATA-16)
+- `docs/runbooks/delisting-rollout.md` — create
+- `docs/runbooks/CLAUDE.md` — modify (index row)
 
 **Reviewers**: `xstockstrat-marketdata` owner — OHLCV ingestion integrity, Alpaca feed idempotency
 
@@ -471,6 +521,7 @@ grep -rn "ZZ352_" --include="*_test.go" services/xstockstrat-marketdata | cut -d
 - Calendar: `github.com/xstockstrat/contracts/marketsession` (Step 3) — `DayStart`, `IsTradingDay`, `PrevTradingDay`. `SessionDate` shifts by +6 h and must not be used (design §3).
 - Existing asset tests build `&MarketDataService{registry: reg, warmSymbols: …}` with no store (`asset_servability_test.go:50-55`), so the hook must be a no-op when no store is wired.
 - Config-key contract (**C-05**): namespace `marketdata`, key `assets.delisting_confirmation_trading_days`, `value_type` `int`, code default `5`, reader `services/xstockstrat-marketdata/internal/service/asset_servability.go:resolveDelistingConfirmationDays`, seed migration Step 10 (`054`), live mechanism: marketdata's `WatchConfig` watcher (`s.budgetCfg`), re-read at each successful asset-set load. `grep -rn "delisting_confirmation" services scripts` → no match today.
+- Runbook index: `docs/runbooks/CLAUDE.md:5-6` (table `| File | Purpose | Key trigger |`, one row per runbook, alphabetical by file name); the sanctioned way to run operator SQL is `docs/runbooks/operator-db-access.md` (indexed at `:12`). `ls docs/runbooks | grep -i delist` → no match today.
 - MARKETDATA-16 text: `services/xstockstrat-marketdata/docs/context-constitution.md:29`. CLAUDE.md anchors: config row `:71`, § Asset-set servability `:126-143` ("only the **first** successful load prunes" `:139`, residual R2 `:141-142`), § Database `:95-106`.
 
 **Lands with**: `Step 9, Step 10`
@@ -501,13 +552,15 @@ grep -rn "ZZ352_" --include="*_test.go" services/xstockstrat-marketdata | cut -d
 10. **Telemetry.** Add `delistingHookFailures = NewCounter("marketdata.delisting.hook_failures")`, constants `DelistingHookTimeout = "timeout"` / `DelistingHookError = "error"` and `RecordDelistingHookFailure(ctx, reason)` using `KeyReason`. No new label key.
 11. **Wiring.** `cmd/server/main.go`, after `svc.SetEtfFlagSource(fmpClient)` (`:145`): `svc.SetSymbolProfiles(repository.NewProfileRepo(repo))`. No new goroutine, pool, env var or endpoint.
 12. **`services/xstockstrat-marketdata/CLAUDE.md`:**
-    - Config table: add the `assets.delisting_confirmation_trading_days` row after `assets.refresh_interval_hours` (`:71`) — int, `5`, read clamp nil/`<= 0` → 5 and `> 30` → 30, re-read at each asset-set load, seeded by `054_marketdata_delisting_confirmation_days`, SetConfig-bounded `[1,30]`.
+    - Config table: add the `assets.delisting_confirmation_trading_days` row after `assets.refresh_interval_hours` (`:71`) — int, `5`, read clamp nil/`<= 0` → 5 and `> 30` → 30, re-read at each asset-set load, seeded by config migration `<NNN>_marketdata_delisting_confirmation_days` (`<NNN>` = the number Step 10 landed — `054` expected; see Step 10's Deviation Log entry if renumbered), SetConfig-bounded `[1,30]`.
     - § Database: add `marketdata.symbol_profile` (one row per symbol, written lazily, state columns nulled — never deleted — on reset or recovery) and `marketdata.watched_symbol` (marketdata's copy of portfolio's watchlist symbol union; holds no state).
     - § Asset-set servability: replace "only the **first** successful load prunes the warm set of unservable symbols" with: the first successful load prunes unservable symbols, and every successful load removes flagged-delisted symbols; replace residual R2 with: a symbol that becomes unservable after it was warmed stays warm until it is flagged delisted (feature 352).
-    - New section "Delisted-symbol detection (feature 352)": the hook order and truth table by reference to the five statements, the single-decider rule (the hook is the only writer of profile state), the fixed values (hook limit 30 s, per-alert send 15 s), the rule that a quote read re-warms a flagged symbol until the next load, and a **Rollout** paragraph: at deploy both tables are empty; the first load after portfolio's first sync starts every currently unservable watchlist symbol dated that day; `N` trading days later one load flags them together. The burst size is `SELECT count(*) FROM marketdata.symbol_profile WHERE delisted_at IS NULL AND first_unservable_date IS NOT NULL;` (run per `docs/runbooks/operator-db-access.md`). State that first-unservable dates of symbols already dead at deploy are deploy-era dates.
+    - New section "Delisted-symbol detection (feature 352)": the hook order and truth table by reference to the five statements, the single-decider rule (the hook is the only writer of profile state), the fixed values (hook limit 30 s, per-alert send 15 s), the rule that a quote read re-warms a flagged symbol until the next load, and a one-line pointer "Rollout and the first-flag burst → `docs/runbooks/delisting-rollout.md`".
     - § Observability: add the counter `marketdata.delisting.hook_failures{reason timeout|error}` and the INFO `delisting hook`.
-13. **MARKETDATA-16** (`docs/context-constitution.md:29`): keep "the gate applies at warm-add sites only"; add that the feature-352 hook is the one remover besides the first-load prune, that it removes flagged-delisted symbols at every successful load, and that `markWarm` stays ungated so a held flagged symbol is re-warmed by the next quote read.
-14. No header-propagation change: the hook's `EmitAlert` reuses the existing notify client and interceptor (`marketdata_service.go:229`), on the same header-less background context the refresher already uses.
+13. **Rollout runbook** (design §10, assumption A-5). Create `docs/runbooks/delisting-rollout.md` — prerequisites, steps, verification, like its siblings: at deploy both tables are empty; the boot load starts nothing; portfolio's first tick fills `marketdata.watched_symbol`; the first asset-set load after that starts every currently unservable watchlist symbol, dated that day; `N` trading days later (`N` = `marketdata` / `assets.delisting_confirmation_trading_days`) one load flags them together, and portfolio removes and alerts for at most 100 per prune tick, so a burst of K drains over ⌈K/100⌉ ticks. The size of the coming burst is `SELECT count(*) FROM marketdata.symbol_profile WHERE delisted_at IS NULL AND first_unservable_date IS NOT NULL;`, run per `docs/runbooks/operator-db-access.md` — the runbook's only command is this SQL query, so the macOS-compatibility rule for shell commands in docs has nothing to check. State that first-unservable dates of symbols already dead at deploy are deploy-era dates, that raising the config key before day `N` defers the burst, that portfolio deployed ahead of marketdata gets `Unimplemented` and removes nothing, and that detection depends on portfolio's tick (a portfolio outage freezes the last union). Add its row to the table in `docs/runbooks/CLAUDE.md` in alphabetical position: file `delisting-rollout.md`, purpose "First rollout of delisted-symbol detection (feature 352): what happens at deploy, how to size the first-flag alert burst, how to defer it", key trigger "Deploying feature 352; expecting or seeing a burst of `symbol_delisting` alerts".
+14. **MARKETDATA-16** (`docs/context-constitution.md:29`): keep "the gate applies at warm-add sites only"; add that the feature-352 hook is the one remover besides the first-load prune, that it removes flagged-delisted symbols at every successful load, and that `markWarm` stays ungated so a held flagged symbol is re-warmed by the next quote read.
+15. No header-propagation change: the hook's `EmitAlert` reuses the existing notify client and interceptor (`marketdata_service.go:229`), on the same header-less background context the refresher already uses.
+16. Files count 9 (seven code and service-doc files, plus the runbook and its index row). Not split because the hook, its reader, its telemetry, its wiring and its documents land as the Step 8–10 atomic unit.
 
 **Verification** (run as the Steps 8–10 unit):
 ```bash
@@ -516,6 +569,8 @@ grep -n "runDelistingHook" services/xstockstrat-marketdata/internal/service/asse
 grep -n "SetSymbolProfiles" services/xstockstrat-marketdata/cmd/server/main.go
 ! grep -n "SessionDate" services/xstockstrat-marketdata/internal/service/delisting.go
 grep -n "assets.delisting_confirmation_trading_days" services/xstockstrat-marketdata/CLAUDE.md services/xstockstrat-marketdata/internal/service/asset_servability.go
+grep -c "symbol_profile" docs/runbooks/delisting-rollout.md                 # >= 1 (the burst-count query)
+grep -n "delisting-rollout.md" docs/runbooks/CLAUDE.md services/xstockstrat-marketdata/CLAUDE.md   # index row + pointer
 python3 scripts/check-context-map.py
 ```
 
@@ -527,14 +582,13 @@ python3 scripts/check-context-map.py
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/delisting_test.go` — create
-- `services/xstockstrat-marketdata/internal/service/asset_servability_test.go` — modify
 - `services/xstockstrat-marketdata/internal/service/telemetry_allowlist_test.go` — modify
 - `services/xstockstrat-marketdata/internal/testdata/assets.go` — modify
 
 **Reviewers**: `xstockstrat-marketdata` owner — OHLCV ingestion integrity
 
 **Codebase Evidence**:
-- Harness to reuse: `fakeAssetSource`, `assetReply`, `newAssetSvc`, `withoutSymbol`, `mustRefresh`, `isWarm` — `services/xstockstrat-marketdata/internal/service/asset_servability_test.go:26-91`; `fakeIntGetter` `marketdata_service_test.go:2070`; `fakeNotify` `:325-335` (counts WARNING alerts); `recordingBarsSource` `bar_hold_test.go:45`.
+- Harness to reuse **unchanged** (`asset_servability_test.go` is not edited; the new helper in `delisting_test.go` sets `assets.now` on the service it builds): `fakeAssetSource`, `assetReply`, `newAssetSvc`, `withoutSymbol`, `mustRefresh`, `isWarm` — `services/xstockstrat-marketdata/internal/service/asset_servability_test.go:26-91`; `fakeIntGetter` `marketdata_service_test.go:2070`; `fakeNotify` `:325-335` (counts WARNING alerts); `recordingBarsSource` `bar_hold_test.go:45`.
 - `TestAssetSet_FirstLoadPrunesWarmSet` (`asset_servability_test.go:270-289`) asserts an **unflagged** symbol stays warm on a later refresh; with no store wired it must keep passing unchanged.
 - Reader-test precedent incl. the literal-key wiring test: `TestResolveAssetRefreshInterval` `:292-310`, `TestResolveAssetRefreshInterval_ReadsSeededKey` `:313-318`.
 - Allow-list test: `minInstruments` `telemetry_allowlist_test.go:38-42`, `driveAllInstruments` `:46-55`.
@@ -553,7 +607,7 @@ python3 scripts/check-context-map.py
 3. **Scenario tests** (each test name carries its `@AC`; every one drives `refreshAssets` through `mustRefresh`, never the hook directly):
    - **@AC-1** absent Mon 2026-11-09 through Fri 2026-11-13, one load per trading day → flagged on the Friday load with reason `UNSERVABLE_REASON_NOT_TRADABLE` and first-unservable date `2026-11-09`.
    - **@AC-2** first absent 2026-11-16, load on 2026-11-17 → started, not flagged, and still in the warm set after the load.
-   - **@AC-3** a refresh rejected by the shrink guard (use `testdata.SyntheticAssets`) → the fake store records zero calls.
+   - **@AC-3** a refresh rejected by the shrink guard (use `testdata.SyntheticAssets`) → the fake store records zero calls. Paired control in the same test: a following accepted 13 500-asset refresh without `AAPL` on a later trading day records one `Start` call naming `AAPL`; RED fails on this assertion.
    - **@AC-4 / @AC-5** a flagged symbol that is servable in the next load → H5 clears it whether or not it is in `watched_symbol`; the hook writes nothing to `watched_symbol`.
    - **@AC-8** `AAPL` and `ROKU` warm; after the load that flags `ROKU`, `isWarm(ROKU)` is false with the same service instance, `warmSnapshot()` holds `AAPL` only, and one `ingestRecentBars` pass over a `recordingBarsSource` requests `AAPL` and not `ROKU`.
    - **@AC-10 (guard)** after `NWE` is flagged, `svc.markWarm("NWE")` (the quote/price path) warms it again and the next load removes it again. Passes on today's code for the first half; it guards that `markWarm` gains no flagged check.
@@ -823,7 +877,7 @@ grep -rn "type fakeProfileStore" --include="*_test.go" services/xstockstrat-mark
 - EDGAR errors are untyped strings: `fmt.Errorf("no CIK for ticker %q")` — `services/xstockstrat-marketdata/internal/edgar/edgar_client.go:180`.
 - Metric constants `BackfillWritten|Empty|Failed`: `services/xstockstrat-marketdata/internal/telemetry/otel.go:360-366`; recorder `:419-421`.
 - The flagged set and its normalization: Step 8 (`delisting.flagged`, upper-cased symbols as stored by `Start`).
-- Existing literals build the service without a store (`marketdata_service_test.go:5700-5701`), so the flagged lookup must be false on the zero value.
+- Existing literals build the service without a store (`marketdata_service_test.go:5701-5702`), so the flagged lookup must be false on the zero value.
 - Ledger: every `continue` in a per-symbol loop records an outcome when an aggregate status gate changes (`fails.md` entry cited at `recon.md` § Risks, 3573).
 - CLAUDE.md § Observability names `marketdata.backfill.symbols{kind bars|fundamentals, outcome written|empty|failed}` (`:152`).
 
@@ -877,7 +931,7 @@ grep -c "SymbolResults" services/xstockstrat-marketdata/internal/service/marketd
 **Instructions**:
 Create `backfill_outcome_test.go` with a file-local assertion helper for the design §6 invariant, applied to every response in the file: every symbol in `failed_symbols` has exactly one `FAILED` result; no `SKIPPED` or `EMPTY` symbol is in `failed_symbols`; no symbol has two results.
 1. **@AC-11** fundamentals, `AAPL` written and flagged `PSKY` failing in `FetchHistorical` with `no CIK for ticker "PSKY"` → `PSKY` is `SKIPPED` with that reason, `failed_symbols` is empty, `marketdata.backfill.symbols{kind=fundamentals}` gains 1 `skipped` and 0 `failed`.
-2. **@AC-12** flagged `ROKU` that the source serves → no result for `ROKU`, periods written, `written` metric.
+2. **@AC-12 (guard)** flagged `ROKU` that the source serves → no result for `ROKU`, periods written, `written` metric. It passes before and after; it fails only if a flag-based filter is later added to the backfill path (FR-7, R-7). Exempt from RED per `tdd-gate.md`.
 3. **@AC-13** unflagged `AXIA` failing the same way → `FAILED` with the reason, in `failed_symbols`, `failed` metric.
 4. **@AC-23** bars: flagged `PSKY` with a `GetBars` error → `SKIPPED`, not in `failed_symbols`, `bars/skipped` 1 and `bars/failed` 0, and the ledger event is `marketdata.backfill.completed`.
 5. **@AC-24** fundamentals writing 0 periods → `EMPTY` with an empty reason, not in `failed_symbols`.
@@ -946,7 +1000,7 @@ ls services/xstockstrat-ingest/migrations | tail -2      # highest number, no du
 - `_resume_job` `:890-916` already reads the job row (`:892`) and does not seed `failed_symbols` (design R-9).
 - Job-level failure arm of `_run_backfill`: `:660-672`. Terminal rule of `_finalize_backfill`: `:827-833`. Both stay as they are.
 - `_UPDATABLE_COLUMNS`: `services/xstockstrat-ingest/app/repositories/backfill_jobs.py:13-26`; `update_job` builds `col = $n` for each kwarg `:61-79`; `get_job` `:82-87`.
-- The pool has no JSONB codec — JSONB parameters are passed as JSON text: `services/xstockstrat-ingest/app/repositories/signal_sources.py:154-155`; `json` is already imported in the servicer (`servicer.py:164`).
+- The pool has no JSONB codec — JSONB parameters are passed as JSON text: `services/xstockstrat-ingest/app/repositories/signal_sources.py:154-155`; `json` is already imported in the servicer (`servicer.py:9`).
 - Webhook payload built from eight row columns only: `services/xstockstrat-ingest/app/engine/webhook_handoff_loop.py:41-62` (PRESERVE `@AC-30 @feature-334`).
 - No new outbound call: the two marketdata RPCs are already called with `metadata=propagation_meta` (`:698`, `:959`).
 - CLAUDE.md table notes: `services/xstockstrat-ingest/CLAUDE.md:116-125`.
@@ -1040,9 +1094,10 @@ grep -n "symbol_results" services/xstockstrat-ingest/tests/_helpers.py     # the
 
 **Codebase Evidence**:
 - The deleter to mirror, which stays untouched: `PruneExpiredSignalEntries` and `pruneListTx` — `services/xstockstrat-portfolio/internal/repository/signal_expiry_repo.go:35-146`: parent lock `FOR NO KEY UPDATE SKIP LOCKED` `:68-71` (no row → skipped `:72-74`), binding lock `FOR UPDATE SKIP LOCKED` `:86-91`, delete of only the locked set `:100-103`, expiry-row cleanup `:126-134`, `updated_at` touch `:135-142`, removals of committed lists returned with the first error `:32-34,44-57`.
-- Lock order that forces "never wait": `UpdateBinding` locks the binding row before touching the parent (`services/xstockstrat-portfolio/internal/repository/watchlist_repo.go:361-372`), the reverse of the prune; waiting on a binding while holding the parent would deadlock (debate D-25).
+- Lock order that forces "never wait": `UpdateBinding` locks the binding row before touching the parent (`services/xstockstrat-portfolio/internal/repository/watchlist_repo.go:360-371` — the `UPDATE` that takes the binding lock starts at `:360`, the parent touch is at `:371`), the reverse of the prune; waiting on a binding while holding the parent would deadlock (debate D-25).
 - Schema: `portfolio.watchlists.system_managed` (`migrations/011_watchlist_system_managed_source.up.sql:12`), `portfolio.watchlist_symbols.source` (`:32`), `portfolio.watchlist_signal_expiry (watchlist_id, symbol)` primary key with the FK on the watchlist, not the binding (`migrations/018_watchlist_signal_expiry.up.sql:4-11`), so a removed binding's expiry row must be deleted explicitly.
 - `symbol = ANY($n)` with a Go string slice is an existing bind on this pool (`signal_expiry_repo.go:86-91`).
+- Mock seam: `WatchlistRepo` holds `pool *pgxpool.Pool` and the mockable `db queryRower` (`watchlist_repo.go:25-29`); pgxmock tests build `&WatchlistRepo{db: mock}` with a nil pool (`watchlist_repo_test.go:24`), reads go through `r.db.Query` (`:110`, `:166`) and transactions through `r.pool.Begin` (`:39`, `:194`), which pgxmock cannot substitute.
 - Trading-domain survey: no `TRADING_MODE`, `BrokerType`, `OrderType` or `OrderStatus` reference in the repository's watchlist files.
 - No portfolio migration and no new index (design §5): the lookup is driven from the `system_managed` watchlists into the `(watchlist_id, symbol)` primary key.
 
@@ -1052,18 +1107,18 @@ grep -n "symbol_results" services/xstockstrat-ingest/tests/_helpers.py     # the
 
 **Instructions**:
 Create `delisted_removal_repo.go` (package `repository`).
-1. `DelistedRemoval{WatchlistID, UserID, Name string; Removed []string; Skipped bool}` — one entry per system-managed list that held at least one of the given symbols; `Skipped` is true when the parent row was locked, or when any held binding was locked and so left in place.
+1. `DelistedRemoval{WatchlistID, UserID, Name string; Removed, Left []string; Skipped bool}` — one entry per system-managed list that held at least one of the given symbols. `Removed` is the symbols deleted from it; `Left` is the held symbols that were **not** removed (all of them when the parent row was locked; the locked bindings otherwise); `Skipped` is true when the parent row was locked, or when any held binding was locked and so left in place. `Name` and the held symbols come from the list query, so a parent-locked list still reports what it held.
 2. `func (r *WatchlistRepo) RemoveDelistedFromSystemLists(ctx context.Context, symbols []string) ([]DelistedRemoval, error)`:
    - empty `symbols` → no query, empty result;
-   - one set-based query lists the `system_managed` watchlists holding any of the symbols (watchlist id, name, held symbols), driven from `portfolio.watchlists WHERE system_managed` joined to `portfolio.watchlist_symbols` on the primary key with `symbol = ANY($1)`, ordered by watchlist id;
+   - one set-based query, issued through `r.db.Query` (the mockable surface), lists the `system_managed` watchlists holding any of the symbols (watchlist id, user id, name, held symbols), driven from `portfolio.watchlists WHERE system_managed` joined to `portfolio.watchlist_symbols` on the primary key with `symbol = ANY($1)`, ordered by watchlist id;
    - per list call `removeDelistedListTx`; every list is attempted; the removals of committed lists are returned even when the first per-list error is returned with them (the `PruneExpiredSignalEntries` contract).
-3. `removeDelistedListTx` — one short transaction that never waits on a row lock:
+3. `removeDelistedListTx` — one short transaction, begun with `r.pool.Begin` like `pruneListTx`, that never waits on a row lock:
    - `SELECT user_id, name, system_managed FROM portfolio.watchlists WHERE watchlist_id = $1 FOR NO KEY UPDATE SKIP LOCKED`; no row → `Skipped`; `system_managed` false on the re-check → commit and report nothing removed;
    - lock the held bindings of **any** source: `SELECT symbol FROM portfolio.watchlist_symbols WHERE watchlist_id = $1 AND symbol = ANY($2) FOR UPDATE SKIP LOCKED`;
    - delete only the locked set, `RETURNING symbol`;
    - delete the removed symbols' expiry rows with a plain `DELETE FROM portfolio.watchlist_signal_expiry WHERE watchlist_id = $1 AND symbol = ANY($3)` (under the parent lock, debate D-17);
    - touch `updated_at` when something was removed; commit;
-   - fewer bindings locked than held → `Skipped = true` beside the `Removed` list.
+   - fewer bindings locked than held → `Skipped = true`, with the unlocked-and-removed symbols in `Removed` and the rest in `Left`; a locked parent → `Skipped = true`, empty `Removed`, every held symbol in `Left`.
 4. It emits nothing and writes no ledger row; `pruneListTx` and `PruneExpiredSignalEntries` are not edited.
 5. Broker coverage, order types, fill handling and `TRADING_MODE` are unaffected by this step.
 
@@ -1089,7 +1144,7 @@ grep -c "SKIP LOCKED" services/xstockstrat-portfolio/internal/repository/deliste
 
 **Codebase Evidence**:
 - pgxmock precedent in this package: `services/xstockstrat-portfolio/internal/repository/watchlist_repo_test.go:16-20`.
-- Real-DB helpers: `testPool` `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go:22`, `testUserID` `:61`, `seedWatchlist(…, systemManaged bool)` `:75`, `seedBinding(…, source)` `:88`, `seedExpiry` `:105`, `expiryRow` `:134`; `assertBindingGone` `signal_expiry_prune_dbtest_test.go:89`.
+- Real-DB helpers: `testPool` `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go:22`, `testUserID` `:61`, `seedWatchlist(…, systemManaged bool)` `:75`, `seedNamedWatchlist(…, name, systemManaged)` `:80` (feature 354; suits the two-list cases), `seedBinding(…, source)` `:93`, `seedExpiry` `:110`, `expiryRow` `:139`; `assertBindingGone` `signal_expiry_prune_dbtest_test.go:89`.
 - Never-wait proof to copy: `TestPrune_ConcurrencyNeverWaits` `signal_expiry_prune_dbtest_test.go:270`, with `waitForParentLockWait` `:432`.
 - CI runs them: job `portfolio-db-test` (`.github/workflows/ci.yml:1017-1065`, `PORTFOLIO_DB_TEST_URL`).
 - C-13: every row is seeded through the existing helpers; no new fixture literal.
@@ -1099,17 +1154,18 @@ grep -c "SKIP LOCKED" services/xstockstrat-portfolio/internal/repository/deliste
 **Covers**: `AC-6, AC-7`
 
 **Instructions**:
-1. `delisted_removal_repo_test.go` (pgxmock): empty input issues no query; a query error is wrapped; a per-list error is returned together with the removals of the lists that committed.
+1. `delisted_removal_repo_test.go` (pgxmock, `&WatchlistRepo{db: mock}` — no pool, so no case may reach a per-list transaction): empty input issues no query; a list-query error is wrapped and returned; **@AC-6 (local RED)** called with `[KPTI]`, the list query is issued exactly once with `$1 = [KPTI]` — never `AAPL` — and, returning no rows, yields an empty result without opening a transaction (`ExpectationsWereMet`).
 2. `delisted_removal_dbtest_test.go` (`//go:build dbtest`), tests named `TestDelistedRemoval_…`:
    - **@AC-6** a system-managed list holding `KPTI` and `AAPL`: removing `[KPTI]` deletes the `KPTI` binding, keeps `AAPL`, bumps `updated_at`, and reports the list's name.
-   - **@AC-7** a list that is not system-managed and holds `ROKU` is untouched and not reported.
+   - **@AC-7** a user-created list and a system-managed list (seeded with `seedNamedWatchlist`) both hold `ROKU`: removing `[ROKU]` changes only the system-managed one; the user-created list is untouched and not reported.
    - A `source = MANUAL` entry on a system-managed list is removed like a `SIGNAL` one (operator reading of 281 `@AC-4`/`@AC-5`).
    - The expiry row of a removed symbol is deleted, due or not; the expiry row of a symbol that stays is kept.
-   - Never waits: with the parent row locked by another transaction the call returns at once with `Skipped`; with one binding row locked (an in-flight `UpdateBinding`) the call returns at once, removes the other bindings and reports `Skipped`. Bound each call with a short context and fail on a wait, as `TestPrune_ConcurrencyNeverWaits` does.
+   - Never waits: with the parent row locked by another transaction the call returns at once with `Skipped`, an empty `Removed` and `Left` equal to the held symbols; with one binding row locked (an in-flight `UpdateBinding`) the call returns at once, removes the other bindings, reports `Skipped` and names the locked symbol in `Left`. Bound each call with a short context and fail on a wait, as `TestPrune_ConcurrencyNeverWaits` does.
+   - Partial result: two system-managed lists hold the symbol and the second one's parent row is locked → the first list's removal is committed and returned, the second is reported `Skipped` with its `Left`; every list is attempted.
    - A list whose `system_managed` flag is false at lock time is not modified.
    - A second call for the same symbols is a no-op.
    - PRESERVE 281: after a removal, `PruneExpiredSignalEntries` on the same list still behaves as before for the remaining entries.
-3. RED: with the method present returning an empty result, the pgxmock per-list case and (in CI) `@AC-6` fail.
+3. RED: with the method present returning an empty result without querying, the pgxmock `@AC-6` case fails locally on the unmet query expectation, and (in CI, job `portfolio-db-test`) the `@AC-6` and `@AC-7` database cases fail on the binding still present.
 
 **Verification**:
 ```bash
@@ -1136,7 +1192,7 @@ go_gate xstockstrat-portfolio
 
 **Codebase Evidence**:
 - `pruneOnce`: `services/xstockstrat-portfolio/internal/service/signal_prune.go:51-79` — the tick context carries only `x-trace-id` (`:52`), a prune error is logged and the function continues (`:53-56`), closing INFO `:77-78`. Started by `go svc.PruneExpiredSignalEntries(ctx)` (`cmd/server/main.go:81`); interval key `watchlist.signal_prune_interval_seconds` (`signal_prune.go:12,33`).
-- `WatchlistStore`: `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1987-2012` (last method `:2011`); unfiltered union `ListAllSymbols` `:2008` → repo `watchlist_repo.go:446-462`.
+- `WatchlistStore`: `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1987-2012` (last method `:2011`); unfiltered union `ListAllSymbols` `:2008` → repo `watchlist_repo.go:445-461`.
 - Marketdata client with the propagating interceptor: field `:47`, dial `:137-144` (`middleware.UnaryClientInterceptor`); notify client `:48`, dial `:145-152`. Outgoing metadata appended to a context reaches the wire: the existing prune test asserts `x-trace-id` on the ledger call (`signal_prune_test.go:38-40`).
 - Pull-with-deadline, fail-open precedent: `refuseUnservable` `:568-580` (nil client → no-op `:569-571`); metric `telemetry.RecordMarketdataFetch(ctx, op, outcome)` with timeout detection `:514-520`.
 - Alert precedent (which also writes a ledger event and swallows the error, so it is not reused): `emitRiskAlert` `:1320-1335`.
@@ -1164,7 +1220,7 @@ go_gate xstockstrat-portfolio
      4. Replace the cache with every response entry, whatever its alert state.
      5. Removal set: entries whose `alert_state` is `CLAIMED`, `REDELIVERY` or `REPORTED` **and** whose `unservable_in_current_set` is true. `PENDING` and `UNSPECIFIED` are never removed.
      6. `RemoveDelistedFromSystemLists(removal set)`. An error is a WARN; the removals it returned are still used.
-     7. For each `CLAIMED` or `REDELIVERY` entry, in symbol order, send one alert under `delistingRPCTimeout`. Title `symbol delisted`. A `CLAIMED` body names the symbol, the reason enum name, the first-unservable date, the number and names of the system-managed lists removed on this tick, and — when some lists were skipped — how many will be removed on a later refresh; when the symbol was on no system-managed list it says so. A `REDELIVERY` body starts by saying it may repeat an earlier alert and names only the lists removed on this tick, if any. Stop at the first failed or timed-out send.
+     7. For each `CLAIMED` or `REDELIVERY` entry, in symbol order, send one alert under `delistingRPCTimeout`. Title `symbol delisted`. A `CLAIMED` body names the symbol, the reason enum name, the first-unservable date, the number and names of the system-managed lists removed on this tick (the `DelistedRemoval` entries whose `Removed` holds the symbol), and — when some lists still hold it — how many will be removed on a later refresh (the entries whose `Left` holds the symbol; count `Left`, not `Skipped`, because a skipped list may have left a different symbol); when the symbol was on no system-managed list it says so. A `REDELIVERY` body starts by saying it may repeat an earlier alert and names only the lists removed on this tick, if any. Stop at the first failed or timed-out send.
      8. `AckDelistingAlerts` for the symbols whose alert was sent, with the same caller header and deadline. A failure is a WARN; the claim is re-delivered after the lease.
      9. A removal that carried no alert (a `REPORTED` entry) is logged at INFO. One INFO `delisting sync tick` closes the step with the flagged, removed, alerted and acknowledged counts.
 3. `signal_prune.go`: call `s.syncDelistings(tickCtx)` as the last statement of `pruneOnce`, after the INFO at `:77-78`. `pruneOnce` keeps its signature and every existing line.
@@ -1214,9 +1270,9 @@ python3 scripts/check-context-map.py
    - **@AC-17** exactly one alert: WARNING, category `symbol_delisting`, no `TargetUserId`, body naming `KPTI`, `UNSERVABLE_REASON_NOT_TRADABLE` and `Signals`; `AckDelistingAlerts` is then called with `[KPTI]`. A second tick whose response reports `KPTI` as `REPORTED` sends no alert and no acknowledgement.
    - **@AC-18** two `CLAIMED` entries → two alerts, one naming each symbol, and one acknowledgement with both.
    - **@AC-22** the removal appends no ledger event (`fakeLedger.reqs` is empty) while the alert count is 1.
-   - **@AC-5** a tick whose response no longer lists the symbol calls neither `AddSymbols` nor the removal.
+   - **@AC-5** tick 1 returns `ATCH` as `CLAIMED` and unservable, and the store is asked to remove `[ATCH]` (RED fails here). Tick 2 returns no `ATCH` entry: the store records no further removal and no `AddSymbols` call, and the cache no longer holds `ATCH`.
    - `PENDING` → not removed, no alert. `REPORTED` with `unservable_in_current_set = false` → not removed. `REPORTED` and unservable → removed, no alert, INFO only.
-   - A `REDELIVERY` body says it may repeat an earlier alert and names only this tick's lists; skipped lists are counted as removed on a later refresh; a symbol on no system-managed list says so.
+   - A `REDELIVERY` body says it may repeat an earlier alert and names only this tick's lists; a list whose `Left` holds the symbol is counted as removed on a later refresh, and a skipped list that left only a different symbol is not; a symbol on no system-managed list says so.
    - Sync error, sync timeout and gRPC `Unimplemented` → nothing removed, no alert, the cache from the previous tick is kept, `portfolio.marketdata_fetch{op=delistings}` records `error` or `timeout`.
    - `ListAllSymbols` error → no RPC.
    - The first alert send fails → no later alert is sent and nothing is acknowledged; the second of three fails → only the first is acknowledged.
@@ -1284,7 +1340,7 @@ git diff --exit-code HEAD -- services/xstockstrat-portfolio/internal/service/off
 **Reviewers**: `xstockstrat-portfolio` owner — position snapshot consistency
 
 **Codebase Evidence**:
-- Service-test harness: `newSvc`, `ctxWithUser`, `fakeWatchlistStore` (`watchlist_service_test.go:32-58,329-345`); internal-caller context for the enumeration test: existing `ListAllWatchlistSymbols` cases set `fakeWatchlistStore.allSymbols` (`:36-38`).
+- Service-test harness: `newSvc`, `ctxWithUser`, `fakeWatchlistStore` (`watchlist_service_test.go:32-58,329-345`); internal-caller context for the enumeration test: existing `ListAllWatchlistSymbols` cases set `fakeWatchlistStore.allSymbols` (`:37-38`).
 - The Step 23 `stubMarketData` overrides drive the cache through a real tick.
 - Offline-valuation harness in the same package: `offline_valuation_test.go`, fixtures `internal/testdata/offline_pnl.go`.
 - C-13: reuses the Step 23 doubles and `internal/testdata`; no second inline copy of a domain literal.
@@ -1300,7 +1356,7 @@ Fill the cache by running a tick (`pruneOnce`) against a scripted sync response;
 3. **@AC-19** lists `Tech` (user A) and `Media` (user B) both carry the same state for `ROKU` from the single cache entry.
 4. **@AC-16** the watchlist returned by `AddWatchlistSymbols` when `MSFT` is added to `Tech` carries the state for `ROKU`.
 5. **@AC-8** `ListAllWatchlistSymbols` omits flagged `ROKU` and keeps `AAPL`, while the symbols sent in the next tick's `SyncWatchlistDelistings` request still include `ROKU`.
-6. **@AC-4** after a tick whose response no longer lists `ROKU`, no response carries `delisted` for it and the enumeration returns it again.
+6. **@AC-4** after a first tick that flags `ROKU` (every response carries `delisted` for it; the enumeration omits it), a second tick whose response no longer lists `ROKU` leaves no response with `delisted` for it and the enumeration returns `ROKU` again.
 7. An input binding that arrives with `delisted` set is not echoed for an unflagged symbol; an empty cache decorates nothing.
 8. **@AC-10 (guard)** with the cache holding `NWE`, the offline valuation of a 10-share `NWE` position returns the same mark as with an empty cache (reuse the `offline_valuation_test.go` harness). It passes on today's code; it fails only if a valuation path starts consulting the cache.
 9. RED: with Step 24's helpers present as empty bodies, the parity test fails on every row.
@@ -1327,7 +1383,8 @@ grep -c "@AC-" services/xstockstrat-portfolio/internal/service/delisting_decorat
 **Codebase Evidence**:
 - `_drain_watchlist_bindings`: `services/xstockstrat-analysis/app/handlers/servicer.py:5995-6027` — the binding branch `out.extend((b.symbol, b.strategy_id) for b in wl.bindings)` at `:6020-6021`, the legacy flat-`symbols` branch `:6022-6023`. Callers `:5368`, `:6109`.
 - `_drain_watchlist`: `services/xstockstrat-analysis/app/engine/live_loop.py:592-622` — binding branch `:616-617`, legacy branch `:618-619`. Callers `live_loop.py:403`, `app/engine/entry_backfill.py:149`.
-- The third watchlist reader, `_enumerate_watchlist_union` (`app/engine/fundsignal_loop.py:394`), reads `ListAllWatchlistSymbols`, which portfolio filters in Step 24 — no analysis change there (design §7).
+- `GetWatchlistReadiness` (`servicer.py:4153-4164`) also reads bindings and is intentionally left unchanged: the UI replaces the readiness cell for a flagged binding (Step 30), so its verdict is never shown. The design authorises only the two drains.
+- The third watchlist-symbol source, `_enumerate_watchlist_union` (`app/engine/fundsignal_loop.py:394`), reads `ListAllWatchlistSymbols`, which portfolio filters in Step 24 — no analysis change there (design §7).
 - No new outbound call; both drains already send their propagation metadata (`servicer.py:6014`, `live_loop.py:609`).
 
 **TDD**: `red-green required`
@@ -1410,10 +1467,11 @@ py_gate xstockstrat-analysis
 1. `client.py`, watchlists: `_watchlist_to_dict` post-processes every entry of `bindings`, reading the state from the proto binding (not from the dict): `delisted` is always present as a bool; when the binding has `delisted` set it also gets `delisted_reason` (the `UnservableReason` enum **name**) and `first_unservable_date` — the string as given when it matches `YYYY-MM-DD`, otherwise the key is omitted; the date is never parsed through a time zone. The nested proto `delisted` object is not returned. A watchlist with no bindings is returned as today.
 2. `client.py`, backfill: add one job post-processor applied in **both** returns of `get_backfill_status` (`:2173-2179` and `:2199-2207`): each `symbol_results` entry becomes `{"symbol", "outcome", "reason"}` with `outcome` one of `empty`, `skipped`, `failed` (the enum name without its prefix, lower-cased) and `reason` omitted when empty. `symbol_results` is always present (an empty list when there is none).
 3. `tools.py` docstrings: `get_backfill_status` — add `symbol_results` to the listed fields with the three outcomes, that `skipped` is a symbol flagged delisted that the data source could not serve, that it is not in `failed_symbols` and does not make the job `PARTIAL`, and that `empty` means nothing to write. The four watchlist tools — each binding carries `delisted` (bool) and, when true, `delisted_reason` and `first_unservable_date`; `manage_watchlist` — a replace-all update still drops a flagged symbol and reports it in `refused`.
-4. `services/xstockstrat-agent/CLAUDE.md` (`:71-86`): the same two statements, in the watchlist paragraph and wherever `get_backfill_status` is described.
+4. `services/xstockstrat-agent/CLAUDE.md`: the watchlist statement in the paragraph at `:71-86`, and a new one-sentence `get_backfill_status` bullet under `## MCP Tools` (`:26`) stating `symbol_results` and the three outcomes (the file has no `get_backfill_status` description today).
 5. `docs/runbooks/mcp-tools.md`: update the five tool sections' return shapes and examples (`:1052-1083`, `:1380-1505`) with the new keys; state under `trigger_backfill` (`:964`) that a flagged-delisted symbol the source cannot serve ends `skipped`, not `failed`.
 6. `plugins/strat-lab/skills/backtest/reference/backfill.md` (`:50-58`): after "No error text in the body", add that `get_backfill_status` now lists per-symbol `symbol_results`; a `skipped` symbol is delisted and has no new data — do not re-trigger it and do not treat the job as failed; `failed_symbols` still lists only real failures; the webhook body is unchanged. `SKILL.md` Phase 1 (`:205-221`): one bullet with the same rule.
 7. No header or deployment change.
+8. Files count 6 (two source, four docs that must change with the tool contract per C-10); not split.
 
 **Verification**:
 ```bash
@@ -1421,6 +1479,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && pytest
 cd ../.. && python3 plugins/strat-lab/scripts/validate.py --self-test && python3 plugins/strat-lab/scripts/validate.py
 grep -c "symbol_results" docs/runbooks/mcp-tools.md plugins/strat-lab/skills/backtest/reference/backfill.md services/xstockstrat-agent/app/tools.py   # each >= 1
 grep -c "delisted" docs/runbooks/mcp-tools.md services/xstockstrat-agent/app/tools.py services/xstockstrat-agent/CLAUDE.md                              # each >= 1
+grep -c symbol_results services/xstockstrat-agent/CLAUDE.md   # >= 1
 python3 scripts/check-context-map.py
 ```
 
@@ -1481,7 +1540,7 @@ py_gate xstockstrat-agent
 - Reason text map: `UNSERVABLE_REASON` `services/xstockstrat-ui/src/lib/opportunityShared.tsx:48-52` (`NOT_TRADABLE` → "not an active, tradable US equity", the text AC-15 names); it is unit-tested (`src/lib/opportunityShared.test.ts:47-63`).
 - `Badge` variants: `services/xstockstrat-ui/src/components/ui/badge.tsx:11-27`; `warning` at `:25` (**C-17**: reuse an existing primitive and variant; no new color literal).
 - No BFF change: the generated message passes through `src/lib/insightsBff.ts:137-147`.
-- Analysis never resolves readiness for a flagged binding (Step 26), so its row would otherwise stay on the loading skeleton.
+- Analysis no longer scans a flagged binding (Step 26), so its readiness would stay unresolved or stale; the UI therefore never shows a flagged binding's readiness, whatever analysis returns.
 - No new page or route — no `PLATFORM_SUBNAV` change (**C-10(a)** not triggered).
 
 **TDD**: `red-green required`
@@ -1532,7 +1591,7 @@ grep -n "delisted-badge" src/components/insights/WatchlistReadiness.tsx
 
 **Instructions**:
 1. `opportunityShared.test.ts`: the helper returns `null` without a state; the text for `NOT_TRADABLE` and for `OTC`; the date as given for `2026-11-09`; `undefined` for a malformed date; never a shifted day.
-2. `watchlistMock.ts`: add an optional `delisted?: { reason: UnservableReasonName; firstUnservableDate: string }` to `MockBinding`; the mock returns it unchanged on every watchlist response. Its readiness route returns `PENDING` for a flagged binding (what analysis does after Step 26). No new fixture module: this extends the existing inventory fixture.
+2. `watchlistMock.ts`: add an optional `delisted?: { reason: UnservableReasonName; firstUnservableDate: string }` to `MockBinding`; the mock returns it unchanged on every watchlist response. Its readiness route returns `PENDING` for a flagged binding (a flagged binding's readiness is not shown by the UI whatever analysis returns). No new fixture module: this extends the existing inventory fixture.
 3. `INVENTORY.md` (`:47`): append "feature 352 — optional `MockBinding.delisted` (protojson `{ reason, firstUnservableDate }`); a flagged binding's readiness stays `PENDING`".
 4. `watchlists.spec.ts`: **@AC-15** seed `Tech` with `AAPL` and a `ROKU` binding flagged `UNSERVABLE_REASON_NOT_TRADABLE` / `2026-11-09`; open it on `/insights/watchlists`; the `ROKU` row shows the delisted badge with the text "not an active, tradable US equity" and `2026-11-09`, shows no readiness skeleton and no `Review` link; the `AAPL` row has no delisted badge; `ROKU` can still be removed with its row control. Add a second case for a flagged **unbound** symbol.
 5. Test data comes only from `mockWatchlists` (seed argument) — no inline watchlist literal outside the seed, which is a `{ ...override }` scenario one-off of the inventory fixture.
@@ -1540,7 +1599,8 @@ grep -n "delisted-badge" src/components/insights/WatchlistReadiness.tsx
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm run test:unit
+cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
+pnpm run test:coverage   # vitest thresholds lines/functions/statements 40 over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33)
 pnpm exec playwright test e2e/insights/watchlists.spec.ts e2e/insights/screener.spec.ts --project=chromium
 grep -n "helpers/watchlistMock\|helpers/auth" e2e/insights/watchlists.spec.ts      # inventory + auth helpers imported (C-12)
 grep -n "feature 352" e2e/fixtures/INVENTORY.md
