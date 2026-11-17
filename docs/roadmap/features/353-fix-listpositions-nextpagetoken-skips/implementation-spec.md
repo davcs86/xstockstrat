@@ -190,7 +190,7 @@ The new logic is in the excluded `repository` package, so no coverage threshold 
 
 ### Step 3 — service: Map `ErrInvalidPageToken` to `InvalidArgument` in the ListPositions handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go` — modify

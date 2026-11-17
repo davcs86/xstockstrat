@@ -83,3 +83,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - RED: captured on the pre-Step-1 tree (see session header above). GREEN: unit tests PASS; full `-tags dbtest ./internal/repository/...` PASS (default + exec subtests ran, none skipped); coverage total 81.8% (floor 40%); golangci-lint 0 issues; C-13 grep exactly 1 hit.
 - Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go`, `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go`, `services/xstockstrat-portfolio/internal/repository/list_positions_dbtest_test.go` (new)
 - Deviations: none (DEV-2 applies to the real-backend run)
+
+### Step 3 — Map `ErrInvalidPageToken` to `InvalidArgument` in the ListPositions handler [done]
+- Added `classifyListPositionsError` beside `classifyGetPositionError`; `ListPositions` handler now returns `classifyListPositionsError(err)` instead of `CodeInternal`.
+- RED: Step 4's `TestClassifyListPositionsError` written first → build failed `undefined: classifyListPositionsError` (compile-level RED; behavioural RED is Step 2's `TestListPositions_MalformedTokenIssuesNoQuery`). GREEN: Step 3 verification (with the Step 4 test file absent) build ✓, handler tests ✓, golangci-lint 0 issues.
+- Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`
+- Deviations: none
