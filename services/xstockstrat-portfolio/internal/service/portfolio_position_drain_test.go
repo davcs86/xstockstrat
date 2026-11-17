@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/pashagolub/pgxmock/v4"
@@ -206,6 +207,27 @@ func TestGetPnL_357_AC2_PageTwoErrorReturnsError(t *testing.T) {
 	}
 	if !errors.Is(err, errPageTwo) {
 		t.Errorf("err = %v, want errors.Is(err, errPageTwo)", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestListAllPositions_357_RepeatedTokenFailsClosed(t *testing.T) {
+	svc, mock, _ := newQuoteSvc(t, &stubMarketData{}, 0)
+	page1, syms := drainRows(mock, "acc-1", 501, brokerValued)
+	mock.ExpectQuery(listPositionsSQL).WithArgs(anyArgs(4)...).WillReturnRows(page1)
+	page2, _ := drainRows(mock, "acc-1", 501, brokerValued)
+	args := anyArgs(4)
+	args[2] = pageTwoCursor(syms, "acc-1")
+	mock.ExpectQuery(listPositionsSQL).WithArgs(args...).WillReturnRows(page2)
+
+	positions, err := svc.listAllPositions(ctxWithUser(t, "u1"), "u1", commonv1.TradingMode_TRADING_MODE_PAPER, "")
+	if positions != nil {
+		t.Errorf("listAllPositions returned %d positions over a repeated token, want nil", len(positions))
+	}
+	if err == nil || !strings.Contains(err.Error(), "repeated page token") {
+		t.Errorf("err = %v, want a repeated page token error", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)

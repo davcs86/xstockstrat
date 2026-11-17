@@ -648,3 +648,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Atomic unit 1+2+3. Added `positionDrainPageSize = 500` and `listAllPositions` (page-error wrap only; the guard is Step 5) after `collectFills`; `GetPortfolio` and `GetPnL` now drain. Green: build/vet/vet-dbtest clean, 6/6 `_357_` PASS, coverage `total: 79.1%`, golangci-lint `0 issues`, no `ListPositions(ctx, userID, req.TradingMode, 500` hit.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
 - Deviations: none
+
+### Step 4 — test: RED test for the repeated-token guard (called directly) [done]
+- Atomic unit 4+5. Added `TestListAllPositions_357_RepeatedTokenFailsClosed`: two identical 501-row `acc-1` pages (page 2 cursor pinned to `pageTwoCursor(syms, "acc-1")`), `listAllPositions` called directly. TDD: AC-2 red `err = list positions page: list positions: all expectations were already fulfilled, call to method Query() was not expected, want a repeated page token error` (the unguarded drain reached a third page) → green: PASS, full service package `ok`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_position_drain_test.go`
+- Deviations: none
+
+### Step 5 — service: fail-closed repeated-token guard in `listAllPositions` [done]
+- Atomic unit 4+5. `listAllPositions` now returns `list positions page: repeated page token` when the next token equals the one just sent; no empty-page guard (operator decision 2026-11-17). Green: 7/7 `Test(ListAllPositions|GetPnL|GetPortfolio)_357_` PASS, full service package `ok`, golangci-lint `0 issues`, guard grep 3 hits (:1128, :1167, :1190).
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: none

@@ -1186,6 +1186,9 @@ func (s *PortfolioService) listAllPositions(ctx context.Context, userID string, 
 		if next == "" {
 			return out, nil
 		}
+		if next == token {
+			return nil, fmt.Errorf("list positions page: repeated page token")
+		}
 		token = next
 	}
 }

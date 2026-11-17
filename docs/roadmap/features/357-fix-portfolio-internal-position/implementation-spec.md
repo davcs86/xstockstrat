@@ -287,7 +287,7 @@ The new logic is in the excluded `service` package, so no coverage threshold app
 
 ### Step 4 — test: RED test for the repeated-token guard (called directly)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_position_drain_test.go` — modify
@@ -325,7 +325,7 @@ GOWORK=off go test ./internal/service/... -race -count=1
 
 ### Step 5 — service: fail-closed repeated-token guard in `listAllPositions`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
