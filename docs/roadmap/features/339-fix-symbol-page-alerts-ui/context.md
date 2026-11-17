@@ -869,3 +869,10 @@ Feature: fix-symbol-page-alerts-ui (bug fix)
   - Fix: `await expect(page.getByRole('alertdialog')).toHaveCount(0)` before the Escape (the form `account-selector.spec.ts` already uses).
 - `theme/theme-bundle.spec.ts` `@AC-7` shell banner — stale ARIA snapshot. Steps 14+15 made the default-mock bell badge `5` by design (design.md, "default badge 5"); `shell.aria.yml` still held `"2"`. Snapshot updated to `"5"`; no other line needed to change.
 - Observation, not changed: after a confirmed row action the row menu stays open and absorbs the user's next click (`RowActionsMenu`, `OrdersTable`).
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1573 merged to main
+- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17

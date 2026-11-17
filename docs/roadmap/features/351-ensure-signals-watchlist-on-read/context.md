@@ -210,3 +210,10 @@ Accountability (P-03):
 - Out-of-scope changes: none.
 - Open questions / items: [x] CI run 44000801130 on Step 5's commit `7a92315` → success; out of 351 scope and only noted: `signal_expiry_backfill_dbtest_test.go:352` builds its own pool rather than `testPool` with an option (dry-reviewer, low confidence).
 - Unaddressed review warnings: none.
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1573 merged to main
+- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17
