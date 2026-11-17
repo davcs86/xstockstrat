@@ -1,6 +1,6 @@
 # Debate Register: fix-portfolio-signal-expiry-backfill
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -61,7 +61,7 @@
 | O-7 | 1 | [C-08/C-16] List the :349 interleaving test as an explicit must-still-pass guard in spec. | no | closed @ round 2 (:349 TestBackfill_IngestInterleavingSkipsChanged is a named must-still-pass guard in the approach) |
 | O-8 | 2 | [PORTFOLIO constitution] Add the lock-order invariant (every watchlist_signal_expiry writer takes the parent watchlists row lock first, and APPLY is now one of them) next to PORTFOLIO-18 as a mandatory spec step. | no | closed @ round 3 (The lock-order invariant next to PORTFOLIO-18 (context-constitution.md:30) is a mandatory spec doc step, together with the FR-3 grace note) |
 | O-9 | 2 | [C-18] The shared forced-interleave test helper takes only the class and the prior-signal setup, takes no function hooks, returns (sigID, until, branch), and leaves assertions in each test body. | no | closed @ round 3 (The helper is pinned as runForcedInterleave(t, class, priorSignalAge time.Duration) (sigID, until, branch): no function-valued parameters, assertions in each test body, and the @AC-3 test does not use it) |
-| O-10 | 3 | [C-15/C-16] After FR-3, 359's @AC-1 Then clause and FR-1 text ('absent or valid_until in the future'; 'prune removes nothing') pass on lock-less code: the mark that lost the race is +72h/NULL and is pruned at APPLY+72h while the signal is live. The operator must amend them to 'absent or tracked by the live signal (signal_id and valid_until)' plus 'a prune after 3 days removes nothing', or sign a written waiver that the strict test assertion carries the guarantee. | yes | open |
+| O-10 | 3 | [C-15/C-16] After FR-3, 359's @AC-1 Then clause and FR-1 text ('absent or valid_until in the future'; 'prune removes nothing') pass on lock-less code: the mark that lost the race is +72h/NULL and is pruned at APPLY+72h while the signal is live. The operator must amend them to 'absent or tracked by the live signal (signal_id and valid_until)' plus 'a prune after 3 days removes nothing', or sign a written waiver that the strict test assertion carries the guarantee. | yes | closed @ round 3 (operator amended @AC-1 Then and FR-1, commit 96fad930, operator decision 2026-11-17 at the round-3 design gate) |
 | O-11 | 3 | [C-08] Present the :443 blindness to @AC-1 as an explicit design-gate line item, and list the forced-interleave tests in spec as must-not-weaken with the same status as :443 under D-6. | no | open |
 
 ## Reopen Petitions
@@ -69,4 +69,4 @@
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 3 | D-1 | Operator decision 2026-11-17 (FR-3) explicitly sanctions changing backfillMarkSQL's valid_until, which contradicts D-1's 'backfillMarkSQL unchanged' clause; this evidence post-dates D-1 and is not on the register. The petition asks the operator to confirm D-1 as superseded-in-part by the FR-3 decision; its lock-fix scope stands. | pending user |
+| P-1 | 3 | D-1 | Operator decision 2026-11-17 (FR-3) explicitly sanctions changing backfillMarkSQL's valid_until, which contradicts D-1's 'backfillMarkSQL unchanged' clause; this evidence post-dates D-1 and is not on the register. The petition asks the operator to confirm D-1 as superseded-in-part by the FR-3 decision; its lock-fix scope stands. | user declined |
