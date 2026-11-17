@@ -442,7 +442,7 @@ grep -n "_opportunity_refresh_tick\|daily refresh" docs/roadmap/features/356-fix
 
 ### Step 8 — docs: Analysis CLAUDE.md Observability caveat for `recompute{full,failed}`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify

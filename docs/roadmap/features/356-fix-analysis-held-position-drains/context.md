@@ -896,6 +896,12 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - Files modified: `services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py`, `services/xstockstrat-analysis/tests/test_telemetry_allowlist.py`
 - Deviations: RED ran against a temporarily restored pre-Step-6 `servicer.py` (Deviation Log). Commit-trailer attribution as noted under Step 3.
 
+### Step 8 — docs: Analysis CLAUDE.md Observability caveat for `recompute{full,failed}` [done]
+- Appended the caveat clause to the Instruments bullet (`services/xstockstrat-analysis/CLAUDE.md:327`): `recompute{kind=full,outcome=failed}` counts kick-path and daily-refresh per-user failures (any exception the per-user catch handles); `ok` is kick-path only, so no failed/(ok+failed) ratio over `kind=full` is meaningful. The `loop tick ok` bullet (`:326`) is unchanged (D-16). Checked against the code at the branch head: `full/ok` only at `servicer.py:4956`; `full/failed` at `:4966` (kick) and `:6074` (daily catch).
+- TDD: N/A (docs). Verification block run verbatim (`.sdd-logs/v-1.log`, `exit=1` — the status is the final `grep -c`, which exits 1 when it counts 0): `1 file changed, 1 insertion(+), 1 deletion(-)` and the `loop tick ok` count `0`. Config-key wiring gate: N/A (no config key).
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none, apart from the commit-trailer attribution noted under Step 3.
+
 ## Open Items
 
 - ~~Step 3 must still record RED for its own test ids (item 5).~~ Resolved by Step 3 (2026-11-17), RED recorded above.
