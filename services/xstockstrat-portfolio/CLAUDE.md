@@ -42,6 +42,9 @@ rejected `InvalidArgument` on both paths before subscribing (feature 264).
 
 **Cross-user watchlist enumeration (feature 154).** `ListAllWatchlistSymbols` is cross-user; it is gated on
 `x-internal-caller` `analysis-fundsignal` only, never the admin bit (PORTFOLIO-8).
+It returns the distinct set minus flagged-delisted symbols (feature 352); the repo union behind the delisting tick
+stays unfiltered. Every watchlist response carries `WatchlistBinding.delisted` from the delisted cache, so a flagged
+symbol on a system-managed list shows the marker from the tick that learns of it until a later tick removes it.
 
 **Watchlist servability filter (feature 282).** The three watchlist insert paths store only symbols marketdata
 `GetSymbolServability` calls servable and return the rest in `refused_symbols`; fail-open on error/timeout — see

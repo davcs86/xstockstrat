@@ -1304,7 +1304,7 @@ test "$(grep -c "@AC-" services/xstockstrat-portfolio/internal/service/delisting
 
 ### Step 24 — service: decorate every watchlist response; filter the cross-user enumeration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/delisting_sync.go` — modify

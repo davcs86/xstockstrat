@@ -16,6 +16,7 @@ import (
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
+	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	"github.com/xstockstrat/portfolio/internal/repository"
 	"github.com/xstockstrat/portfolio/internal/telemetry"
 )
@@ -36,6 +37,27 @@ func (c *delistedCache) replace(m map[string]*commonv1.DelistedState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.m = m
+}
+
+func (c *delistedCache) lookup(symbol string) *commonv1.DelistedState {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.m[symbol]
+}
+
+func (s *PortfolioService) decorateWatchlists(wls ...*portfoliov1.Watchlist) {
+	for _, wl := range wls {
+		s.decorateBindings(wl.GetBindings()...)
+	}
+}
+
+// decorateBindings overwrites Delisted on every binding, so a caller-supplied value is never echoed.
+func (s *PortfolioService) decorateBindings(bs ...*portfoliov1.WatchlistBinding) {
+	for _, b := range bs {
+		if b != nil {
+			b.Delisted = s.delisted.lookup(b.GetSymbol())
+		}
+	}
 }
 
 // emitDelistingAlert writes no ledger event and returns the send error: the caller acknowledges

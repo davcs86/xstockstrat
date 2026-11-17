@@ -546,3 +546,10 @@
 - Test doubles: `delistingMarketData` wraps `stubMarketData` and `delistingNotify` wraps `recordingNotify`
   (the base stubs live in `portfolio_service_test.go`, outside the unit's `**Files**`). The timeout case
   drives `pruneOnce` with a 20 ms parent context because the 15 s deadline is a constant.
+
+### Step 24 — service: decorate every watchlist response; filter the cross-user enumeration — done
+- Twelve return sites decorated (11 matching lines — `ListWatchlists` is one call after the 351 ensure
+  block); `ensureSignalListOnFirstPage` and `offline_valuation.go` not edited. Build, lint and
+  `TestListWatchlists351_` pass.
+- A first version filtered the store's slice in place (`slices.DeleteFunc`); the Step 25 AC-8/AC-4 tests
+  caught it and it was fixed (filter into a new slice) before this commit.
