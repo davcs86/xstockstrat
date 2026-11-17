@@ -111,7 +111,7 @@ database only.
 
 ### Step 1 — service: ensure the caller's system list on a first page that lacks it
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify

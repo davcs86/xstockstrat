@@ -100,3 +100,16 @@
   - [ ] Overlap (rebase-only, WARN): `portfolio_service.go` shared with 311, 312, 315, 317, 323, 326 (all `spec-ready`, product-spec level only); agent `tools.py`/`mcp-tools.md` shared with 343, 345 (disjoint sections); `merge-order.md` append order. Re-check at Step 1 that 323 has not removed `EnsureSystemManaged`/`signalWatchlistDefaultName` and 312 has not changed `requireUserID`.
   - [ ] The token-fix feature has no slug/number yet (its session waits at `/sdd-triage`'s feature-number gate); the merge-order row's `<fix-slug> (<NNN>)` is filled at Step 6. The `ListPositions` fix is feature 353 (no directory on this branch yet).
   - [ ] Cosmetic: the spec's header cites the tree as re-verified at `4cc3d41`; `/sdd-execute` BRANCH SYNC refreshes it (only `docs/` changed since).
+
+## Session 2026-11-17T01:22:01Z — sdd-execute (sequential, no checkpoints)
+
+- Mode: sequential, operator-directed "no checkpoints" (the operator's instruction stood in for the mode-entry confirmation); work and commits on the session branch `ccr-1305a9de-7x1t7v` (no `feature/ensure-signals-watchlist-on-read` branch exists; the harness forbids other branches); one commit per step; no per-step PR — the integration PR is the existing #1561. Tree at start: `ccr-1305a9de-7x1t7v@cfb8031 ≡ origin/ccr-1305a9de-7x1t7v`, origin/main-dev an ancestor, clean.
+- Tooling setup (steps 1-4): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (the preinstalled v2.5.0 was built with go1.25 and cannot lint go1.27 modules; installed with GOTOOLCHAIN=go1.27.0 to /root/.local/bin) · uv ✓ · ruff ✓ · pytest ✓ · database ✗ by design (dbtests SKIP offline; CI job portfolio-db-test is the proof for Step 3).
+- Overlap re-check at Step 1: `EnsureSystemManaged` (portfolio_service.go:2006,2212) and `signalWatchlistDefaultName` still present (323 has not removed them); `requireUserID` unchanged (312).
+
+### Step 1 — service: ensure the caller's system list on a first page that lacks it [done]
+- `ListWatchlists` now calls the new private `ensureSignalListOnFirstPage` only when `pageToken == ""` and the loaded page has no system-managed row; fail-open WARN (silent on a cancelled context); D-2 id-compare skip of the re-list; at most one re-list.
+- TDD (red-before-green, paired Step 2): RED captured before this code existed — AC-1, 2, 4, 6, 7 FAILED (e.g. "got 2 watchlists, want 3"; "response holds no system list"; WARN missing; "listCalls=1 systemRows=0, want 1 and 1"); AC-3, 5, 8, 10 passed by design. GREEN after: all 10 `TestListWatchlists351*` PASS under -race.
+- Verification (exit=0): `go build ./...` · `go vet ./internal/service/` · `golangci-lint run` → "0 issues" · `go test ./internal/service/ -count=1` → ok (9.1s); greps show `ensureSignalListOnFirstPage`, `slices.ContainsFunc`, `"slices"`, and exactly three `EnsureSystemManaged` references (interface, EnsureSignalWatchlist, the helper).
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: none

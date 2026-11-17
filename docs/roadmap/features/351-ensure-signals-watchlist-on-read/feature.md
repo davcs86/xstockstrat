@@ -13,6 +13,7 @@
 | 2026-11-16 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 2 rounds (round 1 FAIL: unresolved Open Questions; round 2 PASS WITH WARNINGS, all fixed; 2 author assumptions carried to the design gate) |
 | 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full; escalated from quick at the post-Recon gate) and approved; recon.md + debate.md + design.md written; token bug split to separate defect sessions, cap accepted at 49, fail-open confirmed |
+| 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Step 1 committed on `ccr-1305a9de-7x1t7v` (no per-step PR; integration PR is #1561) |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 
 ---
