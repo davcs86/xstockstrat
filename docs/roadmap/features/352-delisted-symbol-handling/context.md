@@ -626,3 +626,7 @@
 - `authz.go`, new `delisting_sync.go`, `handler/marketdata_handler.go`, service `CLAUDE.md`,
   `docs/patterns/inter-service-mtls.md`. Build, lint, 10 handler matches, `check-context-map.py` OK.
 - Noted, not changed: the handler's `toGRPCError` has no `Unimplemented` mapping (nothing here returns it).
+
+### Step 14 — test: caller check, claim states, single-snapshot rule — done
+- TDD: AC-17 red against `Unimplemented` stubs: `SyncWatchlistDelistings: unimplemented` (every sync, ack
+  and handler test fails) → green: 17 top-level PASS under `-race`; `go_gate` 87.3%.

@@ -815,7 +815,7 @@ python3 scripts/check-context-map.py
 
 ### Step 14 — test: caller check, claim states, single-snapshot rule
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/authz_test.go` — create
