@@ -1,6 +1,6 @@
 # Implementation Spec: mediated-source-extraction-instructions
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-11-17
 **Feature**: `docs/roadmap/features/355-mediated-source-extraction-instructions/feature.md`
 **Total Steps**: 11
@@ -943,7 +943,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_extraction_instruct
 
 ### Step 10 — service: UI forms offer extraction instructions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/signal-sources/page.tsx` — modify
@@ -1023,7 +1023,7 @@ grep -n "extractionInstructions" src/app/insights/signal-sources/page.tsx src/ap
 
 ### Step 11 — test: UI fixtures and e2e for both forms
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/signalSources.ts` — modify

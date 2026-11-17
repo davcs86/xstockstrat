@@ -318,3 +318,34 @@
   INVALID_ARGUMENT surfacing as a ToolError.
 - Files modified: `services/xstockstrat-agent/tests/test_extraction_instructions.py` (new)
 - Deviations: none.
+
+### Step 10 — service: UI forms offer extraction instructions [done]
+- `/insights/signal-sources`: an "Extraction instructions" `Textarea` replaces the "Extractor
+  Module" input on a mediated type; `resolveExtractionInstructions` applies the four save rules
+  (send prose + mask the path; leave an untouched empty legacy value alone; block blank; send
+  nothing on a non-mediated type) and the 16,000 code-point cap; the value goes on both source
+  builders. `/config-ui/templates`: the field in `PAYLOAD_FIELDS`, `formFromTemplate` and
+  `buildInput`. Unit with Step 11.
+- Files modified: `services/xstockstrat-ui/src/app/insights/signal-sources/page.tsx`,
+  `services/xstockstrat-ui/src/app/config-ui/templates/page.tsx`
+- Deviations: none.
+
+### Step 11 — test: UI fixtures and e2e for both forms [done]
+- AC-11 / AC-13 / AC-14 red on the pre-Step-10 forms: the new tests 8 failed, 2 passed on the dev
+  server (no "Extraction instructions" input; the two passing tests cover unchanged non-mediated
+  behaviour). AC-14's first red was a dev-server compile timeout, so it was re-run alone with the
+  templates page change stashed: `getByLabel('Extraction instructions')` — element not found.
+  → green: the step's four spec files on a production build (`CI=1`), 42 passed; `tsc --noEmit`
+  exit 0; `pnpm run lint` exit 0; prettier clean.
+- Covers AC-11, 12, 13, 14, plus the legacy-edit rule, whitespace on a legacy row, the mask on an
+  edit with prose, the client-side cap and the non-mediated register body.
+- Files modified: `services/xstockstrat-ui/e2e/fixtures/signalSources.ts`,
+  `services/xstockstrat-ui/e2e/fixtures/templates.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`,
+  `services/xstockstrat-ui/e2e/insights/signal-sources.spec.ts`,
+  `services/xstockstrat-ui/e2e/config-ui/templates.spec.ts`
+- Deviations: none. The full e2e suite and the hermetic Docker runner were not run here — CI runs
+  them on the PR.
+
+- Config-key wiring gate (`node scripts/check-config-wiring.mjs --final`): exit 0. It prints two
+  pre-existing `REPORTED: … readers-disagree` lines (analysis `fundamentals.provider`, trading
+  `platform/trading_state`), neither touched by this feature.

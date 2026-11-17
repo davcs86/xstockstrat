@@ -15,6 +15,7 @@
 | 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full — round cap lifted by the operator) and approved; recon.md + debate.md + design.md written; FR-15 and @AC-24..26 added |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
 | 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–4 done (sequential) |
+| 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done (sequential, one commit per unit on the PR branch) |
 
 ---
 
@@ -50,4 +51,4 @@ docs/runbooks/reviewer-registry.md. Re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review mediated-source-extraction-instructions impl-spec` — validate implementation spec, then `/sdd-execute mediated-source-extraction-instructions`
+Review and merge the integration PR (#1567) once CI is green — `migration-rerun` is the first live apply of migration 017.
