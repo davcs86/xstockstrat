@@ -18,6 +18,7 @@
 | 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); main-dev `756a24a7` merged, steps 1-7 re-specced (line drift) |
+| 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done; `check-config-wiring.mjs --final` exit=0 |
 
 ---
 

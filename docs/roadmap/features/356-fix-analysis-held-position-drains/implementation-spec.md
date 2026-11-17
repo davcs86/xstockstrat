@@ -471,7 +471,7 @@ git diff -U0 -- services/xstockstrat-analysis/CLAUDE.md | grep -c "loop tick ok"
 
 ### Step 9 — docs: Register `analysis_opportunity_recompute_total` in produced-signals.tsv
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel`
 **Files**:
 - `packages/otel/produced-signals.tsv` — modify

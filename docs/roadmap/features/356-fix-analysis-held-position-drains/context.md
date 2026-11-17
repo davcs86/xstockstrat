@@ -902,6 +902,13 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - Files modified: `services/xstockstrat-analysis/CLAUDE.md`
 - Deviations: none, apart from the commit-trailer attribution noted under Step 3.
 
+### Step 9 — docs: Register `analysis_opportunity_recompute_total` in produced-signals.tsv [done]
+- Appended one tab-separated row at the end of `packages/otel/produced-signals.tsv`, after the `metric target_info` row: `metric analysis_opportunity_recompute_total services/xstockstrat-analysis/app/telemetry.py analysis.opportunity.recompute`. No comment was added. Discovery: the producer literal is at `services/xstockstrat-analysis/app/telemetry.py:443`, the guard's `load_registry`/`produces` are at `scripts/check-otel-produced-signals.py:180-194`, and CI runs the guard at `ci.yml:1161`. 337's row has not landed on this branch, so there was no conflict.
+- TDD: N/A (registry row). Baseline (`.sdd-logs/v-1.log`, `exit=0`): the guard was silent and the awk returned no row. Verification block run verbatim (`.sdd-logs/v-2.log`, `exit=0`): the guard was silent, which means no `AC-8 P1-producer` hit, and the awk returned exactly one row, `metric analysis_opportunity_recompute_total services/xstockstrat-analysis/app/telemetry.py analysis.opportunity.recompute`.
+- Last step. `node scripts/check-config-wiring.mjs --final` (`.sdd-logs/v-3.log`, `exit=0`) printed only two baseline lines, both about other code: `REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. Neither is a key this feature touches. Status `in-progress` → `code-completed`. No insights ledger line was added, because nothing new generalizes.
+- Files modified: `packages/otel/produced-signals.tsv`
+- Deviations: none, apart from the commit-trailer attribution noted under Step 3.
+
 ## Open Items
 
 - ~~Step 3 must still record RED for its own test ids (item 5).~~ Resolved by Step 3 (2026-11-17), RED recorded above.
