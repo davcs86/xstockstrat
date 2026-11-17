@@ -1,6 +1,6 @@
 # Implementation Spec: mediated-source-extraction-instructions
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-17
 **Feature**: `docs/roadmap/features/355-mediated-source-extraction-instructions/feature.md`
 **Total Steps**: 11
@@ -146,7 +146,7 @@ Rules Touched). Ledger entries are written by `/sdd-execute`.
 
 ### Step 1 — proto: `extraction_instructions` on `SignalSource`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -184,7 +184,7 @@ branch — ledger insight 2026-08-19), use `--against "../../.git#ref=HEAD,subdi
 
 ### Step 2 — proto-gen: regenerate Go / Python / TypeScript stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/ingest/v1/**` — modify (generated)
@@ -230,7 +230,7 @@ in the same unit.
 
 ### Step 3 — service: agent client carries `extraction_instructions`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -271,7 +271,7 @@ grep -n "extraction_instructions" app/client.py   # two hits: the list projectio
 
 ### Step 4 — test: agent descriptor-parity tests cover the new field
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_signal_source_projection.py` — modify

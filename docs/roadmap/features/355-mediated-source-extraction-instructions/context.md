@@ -219,3 +219,39 @@
   323 waits for 355 and rebases; (4) **execute all 11 steps** — one commit per step group on the PR
   branch `ccr-424ada30-29m2lv` (the session may push only there; no per-step branches or PRs),
   tests before each commit, stop at the first step that cannot pass or needs a decision.
+
+## Session 2026-11-17 — sdd-execute (sequential)
+
+- Mode entry + up-front confirmation: the operator's "Start, all steps" answer (above). Commits go
+  directly to `ccr-424ada30-29m2lv` (PR #1567), the branch standing in for `feature/<slug>`.
+  Checkpoint reports are printed without a gate — the operator chose "report at the end, stop only
+  on a failing step or a decision".
+- Tooling setup (steps 1–11): uv ✓ 0.11.32 · python ✓ 3.13 · ruff/pytest ✓ (uv sync) · pnpm ✓ 9.15.9 ·
+  node 22.23 (repo pins 24; `tsc` and install pass) · buf ✗ on host → Docker `xstockstrat-codegen`
+  image ⬇ (baseline regeneration reproduced the committed stubs: empty diff) · Chromium ✓
+  pre-provisioned · no database.
+- Baseline before any change: agent 765 passed, ingest 531 passed.
+
+### Step 1 — proto: `extraction_instructions` on `SignalSource` [done]
+- Added `string extraction_instructions = 15` (unit with Steps 2–4). `buf lint` OK; `buf breaking`
+  OK against `ref=HEAD` (the spec's documented fallback — the feature branch ref does not exist).
+- Files modified: `packages/proto/ingest/v1/ingest.proto`
+- Deviations: none. TDD: N/A (proto).
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Regenerated in the pinned codegen image; only `ingest/v1` generated files changed (0 others).
+  Ingest suite 531 passed; UI `tsc --noEmit` exit 0.
+- Files modified: `packages/proto/gen/{go,python,ts,ts/dist}/ingest/v1/*`
+- Deviations: none. TDD: N/A (proto-gen).
+
+### Step 3 — service: agent client carries `extraction_instructions` [done]
+- List projection and request builder carry the field; `_managed_source_to_dict` untouched (D-18).
+- Files modified: `services/xstockstrat-agent/app/client.py`
+- Deviations: none.
+
+### Step 4 — test: agent descriptor-parity tests cover the new field [done]
+- AC-6 (client half) red: both descriptor-parity assertions failed on the missing
+  `extraction_instructions` (2 failed, 6 passed) → green: agent suite 766 passed, coverage 88.11%.
+- Files modified: `services/xstockstrat-agent/tests/test_signal_source_projection.py`,
+  `services/xstockstrat-agent/tests/test_signal_source_builder.py`
+- Deviations: none.

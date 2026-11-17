@@ -219,6 +219,7 @@ async def list_signal_sources(include_inactive: bool = False) -> list[dict[str, 
             "reliability_weight": src.reliability_weight,
             "user_id": src.user_id,
             "origin": _origin_to_dict(src),
+            "extraction_instructions": src.extraction_instructions,
         }
         for src in resp.sources
     ]
@@ -1388,6 +1389,7 @@ async def manage_signal_source(
         display_name=source.get("display_name", ""),
         source_type=source.get("source_type", ""),
         extractor_module=source.get("extractor_module", ""),
+        extraction_instructions=source.get("extraction_instructions", ""),
         active=source.get("active", True),
     )
     config_json = source.get("config_json")

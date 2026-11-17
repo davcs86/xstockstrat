@@ -14,6 +14,7 @@
 | 2026-11-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; 3 rounds — open questions resolved with the operator, AC-2 configs corrected) |
 | 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full — round cap lifted by the operator) and approved; recon.md + debate.md + design.md written; FR-15 and @AC-24..26 added |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
+| 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–4 done (sequential) |
 
 ---
 
