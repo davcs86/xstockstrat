@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md` |
 | 2026-11-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
+| 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -22,6 +23,9 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections, petitions
+- [Design](design.md) — approved approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-analysis-held-position-drains`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -33,4 +37,4 @@ Harden the two analysis consumers that page portfolio `ListPositions` (`live_loo
 
 ## Next Action
 
-`/sdd-design fix-analysis-held-position-drains quick` — quick design recommended (SEV-3, single service, no proto/migration/config; only rebase-level overlap with 308/327; one round to settle the shared-helper vs in-place fork)
+`/sdd-spec fix-analysis-held-position-drains` — generate implementation spec from the approved design
