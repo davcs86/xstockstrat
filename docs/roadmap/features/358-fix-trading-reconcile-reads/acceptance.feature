@@ -31,3 +31,19 @@ Feature: fix-trading-reconcile-reads (bug fix)
     And no reconciliation candidate is recorded for "acc-1"
     And no quantity-discrepancy finding is emitted for "acc-1"
     And "acc-1" is not halted
+
+  @AC-4 @FR-5 @regression
+  Scenario Outline: A skipped position-side check is counted with a bounded outcome label
+    Given a metric reader is installed before the first reconcileTick
+    And broker account "acc-1" holds 501 positions "SYM001" through "SYM501", each with quantity 10
+    And the portfolio ListPositions fake behaves as in <case>
+    And NetFilledQtyBySymbol returns no filled quantity for "SYM501"
+    When reconcileTick runs for graceTicks plus one ticks
+    Then "trading.reconciliation.position_check_skipped" with outcome "<outcome>" increases by 2
+    And "trading.reconciliation.position_check_skipped" carries no "account_id" or "user_id" attribute
+    And "acc-1" is not halted
+
+    Examples:
+      | case                                        | outcome        |
+      | AC-2 (page 2 returns an Unavailable error)  | rpc_error      |
+      | AC-3 (fake ignores page_token, repeats p2)  | cursor_invalid |
