@@ -114,7 +114,7 @@ The fix stays in the `xstockstrat-portfolio` service layer (design.md § Chosen 
 4. Tests:
    - **`TestGetPnL_357_AC1_DrainsPastFirstPage`**
      - `k=4`. Rows `S000..S499` are broker-valued at `current 11` (unrealized 1 each). `S500` is `current 1010` (unrealized 1000).
-     - Call `GetPnL(ctxWithUser(t,"u1"), &portfoliov1.GetPnLRequest{TradingMode: PAPER})` (`fakeLedger.QueryEvents` returns an empty page; `watchlist_service_test.go:325-327`).
+     - Call `GetPnL(ctxWithUser(t,"u1"), &portfoliov1.GetPnLRequest{TradingMode: PAPER})` (`fakeLedger.QueryEvents` returns an empty page; `watchlist_service_test.go:322-325`).
      - Assert `err == nil` and `UnrealizedPnl == 1500`, `stub.getLatestQuotesCalls == 0` (all broker-valued) and `mock.ExpectationsWereMet() == nil`.
      - RED today: 500, and page 2 is unmet.
    - **`TestGetPortfolio_357_AC1_DrainsPastFirstPage`**
@@ -169,7 +169,7 @@ grep -rn "func drainRows" internal/service --include="*_test.go"   # expect exac
   - The only `repo.Pool()` call in non-test code is the constructor `NewPortfolioService` (`internal/service/portfolio_service.go:162`), which none of the drained readers call. So `repository.NewPortfolioRepoWithDB(pool)` (`:50-52`) is safe, and the R-10 fallback is not needed.
 - Service fields as in `newQuoteSvc` (`portfolio_quote_deadline_test.go:105-110`):
   - `marketdata` is `stubMarketData`. It answers `BatchGetBars` (`portfolio_service_test.go:65-82`) and `GetLatestQuotes` (`:84-96`).
-  - `ledger` is `&fakeLedger{}`, whose `QueryEvents` returns an empty page (`watchlist_service_test.go:325-327`).
+  - `ledger` is `&fakeLedger{}`, whose `QueryEvents` returns an empty page (`watchlist_service_test.go:322-325`).
   - `subs` is `map[string]snapshotSubscriber{}`.
   - Those helpers, `ctxWithUser` and `quote` live in untagged `_test.go` files of `package service`, so they compile under `-tags dbtest`.
 - Offline path: with no balance row, `GetPortfolio` without an account reads offline states for the position accounts (`portfolio_service.go:806-825`, `offline_valuation.go:112-147`). AC-3 therefore asserts count and account ids only, not equity (O-9).
@@ -308,7 +308,7 @@ The new logic is in the excluded `service` package, so no coverage threshold app
 **Instructions**:
 1. Add **`TestListAllPositions_357_RepeatedTokenFailsClosed`**:
    - Use `newQuoteSvc(t, &stubMarketData{}, 0)`.
-   - Page 1 is `ExpectQuery(listPositionsSQL).WithArgs(anyArgs(4)...)` returning `drainRows(...)` with 501 rows.
+   - Page 1 is `ExpectQuery(listPositionsSQL).WithArgs(anyArgs(4)...)` returning `drainRows(mock, "acc-1", 501, …)` (the account must be `"acc-1"` so the page-2 pin below matches).
    - Page 2 has the cursor pinned to `pageTwoCursor(syms, "acc-1")` and returns **the same 501 rows**, so the repo emits the same token again.
    - Call `svc.listAllPositions(ctxWithUser(t, "u1"), "u1", commonv1.TradingMode_TRADING_MODE_PAPER, "")`.
    - Assert the result is `nil`, `err != nil`, `strings.Contains(err.Error(), "repeated page token")` and `mock.ExpectationsWereMet() == nil`.
@@ -388,7 +388,7 @@ The new logic is in the excluded `service` package, so no coverage threshold app
   - `recordingNotify` (`portfolio_quote_deadline_test.go:349-362`), `expectDrawdowns(mock, rows ...[3]any)` (`:372-378`, args `"u1", "TRADING_MODE_PAPER"`) and `sameSet` (`:380`).
   - `svc.cfg = &config.Watcher{}` for the defaults, as in `:450`.
   - `recordLogs(t)` (`portfolio_telemetry_test.go:152-158`) with `.with(msg)` (`:128`), and `installMetricReader(t)` (`:39-50`). D-11: both are used together, as at `:532-533`.
-  - `counterValue(t, reader, name, kv...)` (`:75-93`) and `attr` (`:95`).
+  - `counterValue(t, reader, name, kv...)` (`:75-91`) and `attr` (`:93`).
   - `telemetry.KeyOutcome` / `telemetry.KeyPath` (`internal/telemetry/otel.go:311-317`).
   - `svc.Subscribe(id, userID)` (`portfolio_service.go:1195`), and `fakeLedger.calls` counting emits.
 - Existing precedent for the shape: `TestCheckRiskLimits_AC9_UnpricedSkipsConcentrationDrawdownStillAlerts` (`portfolio_quote_deadline_test.go:471-496`).
@@ -427,11 +427,11 @@ The new logic is in the excluded `service` package, so no coverage threshold app
      - `rec.with("concentration check skipped: position read failed")` has one record, with `user_id` and `error`;
      - `counterValue(t, reader, "portfolio.mark_source", attr(telemetry.KeyPath, "risk")) == 0` (D-12: a failed read is never a mark-source pass);
      - `ExpectationsWereMet`, which proves the drawdown read ran.
-   - RED today: there is no WARN, and page 2 and the drawdown expectation are unmet.
+   - RED on the Step-5 tree: the single-page read of 500 rows succeeds, so a concentration alert for `S000` fires from page 1 alone (`len(notify.bodies) == 1`), there is no WARN, a `risk` mark-source sample is recorded, and the page-2 expectation is unmet. The drawdown expectation *is* met on the RED tree, because the read does not fail.
 5. **`TestCheckRiskLimits_357_AC6_PageErrorDrawdownStillAlerts`** (O-2, design 4g)
    - Same as item 4, but with `expectDrawdowns(mock, [3]any{"brk-1", 800.0, 1000.0})`.
    - Assert `notify.bodies` equals exactly `["drawdown limit breach: account brk-1 at 20.0% (peak 1000.00, current 800.00)"]` (format at `portfolio_service.go:1271-1273`, `evaluateDrawdowns` :1263). Also assert no concentration alert, no `risk` mark-source sample, and `ExpectationsWereMet`.
-   - RED today: the bare return skips drawdown, so a concentration alert fires from page 1.
+   - RED on the Step-5 tree: the single-page read succeeds, so `notify.bodies` holds both the page-1 concentration alert and the drawdown alert (the exact-equality assertion fails), and the page-2 expectation is unmet. The bare-return-skips-drawdown defect (O-2) is only reachable when page 1 itself errors, which this drained-read test does not exercise; the GREEN assertion pins the post-Step-7 fall-through.
 6. **§RED** on the Step-5 tree: capture each failing assertion named above.
 
 **Verification**:
