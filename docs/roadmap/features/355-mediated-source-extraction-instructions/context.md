@@ -124,3 +124,30 @@
   no blocking objection**, no Floor breach, no register violation. Verified on the saved live Form 4
   body: newest-first ordering and one `<updated>` per accession number. Pending at closeout: write
   the D-28 amendments into product-spec.md / acceptance.feature. Approval gate presented next.
+
+## Session 2026-11-17 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: ingest, agent, ui, proto; key reuse patterns: the
+  `reliability_weight` end-to-end column pattern; the agent descriptor-parity tests).
+- Phase 1 Grilling: 6 rounds (full; cap lifted by the user). Chosen approach: a first-class
+  `extraction_instructions` field validated by ingest on every write path, `app.extractors.noop`
+  forced server-side, agent tool-layer shaping that always returns prose (stored or a fixed default)
+  and never `extractor_module` for mediated sources, prose seeded into the four system templates by
+  one migration. Rejected: R-1..R-8 (optional field, version bump, shared constant, served prompt,
+  second migration, maskless exception, SQL normalization, server clock).
+- Constitution rules touched: C-01, C-07, C-08, C-09, C-10, C-12, C-13, C-14, C-15, C-16, C-18,
+  P-01, P-02, P-04, P-06, F-01, F-04, F-11. Floor breaches: none in any round.
+- **User approved the design** at the round-6 gate (2026-11-17). Status: spec-ready → design-approved.
+- Spec amendments applied at approval (D-28): FR-3, FR-5, FR-6, FR-14 wording; new FR-15;
+  `@AC-24..26` appended.
+
+## Open Threads
+
+- [ ] Operator reviews the five instruction texts (design.md § Instruction texts) before the
+  migration step merges — after that they change only by a new migration. — S2.
+- [ ] Re-derive proto field 15 and ingest migration prefix 017 from the union of open branches. — /sdd-spec.
+- [ ] Feature 328 overlap on `agent/app/tools.py` (no merge-order row; second merger rebases). — S4.
+- [ ] Runbook guidance for hosts without a clock, and a pointer to the watchlist-expiry backfill
+  runbook for entries the 7-day rule does not reach. — S4.
+- [ ] Note in the S3 PR that admin-authored mediated templates without prose stop instantiating. — S3.
+- [ ] State the lazy `""` → noop flip in the ingest findings row. — S3.

@@ -189,3 +189,31 @@ Feature: mediated-source-extraction-instructions
     Given a source "robinhood_snacks" of type "mediated_simple_email" stored with extraction_instructions ""
     When the caller updates "robinhood_snacks" supplying only extraction_instructions "   "
     Then the update fails with INVALID_ARGUMENT
+
+  @AC-24 @FR-6
+  Scenario: A mediated list entry carries its template origin and a non-mediated one does not
+    Given a source "my_snacks" of type "mediated_simple_email" instantiated from template "tpl-robinhood_snacks"
+    And a source "ext_feed" of type "mcp_client"
+    When an agent calls list_signal_sources
+    Then the entry for "my_snacks" has origin.template_id "tpl-robinhood_snacks"
+    And the entry for "ext_feed" has no "origin" key
+
+  @AC-25 @FR-15
+  Scenario Outline: A signal-source template payload obeys the instruction rules
+    Given an admin caller
+    When the admin creates signal_source template "tpl-x" with payload source_type "<source_type>", config_json <config_json> and extraction_instructions <instructions>
+    Then the create fails with INVALID_ARGUMENT naming "extraction_instructions"
+    And no template "tpl-x" exists
+
+    Examples:
+      | source_type           | config_json                                                       | instructions                |
+      | mediated_simple_email | {"sender_patterns": ["a@example.com"], "subject_patterns": ["*"]} | ""                          |
+      | simple_email          | {"sender_patterns": ["a@example.com"], "subject_patterns": ["*"]} | "Each ticker is a buy."     |
+      | mediated_simple_email | {"sender_patterns": ["a@example.com"], "subject_patterns": ["*"]} | a text of 16001 characters  |
+
+  @AC-26 @FR-13
+  Scenario: A whitespace-only value on a non-mediated source is stored as empty
+    Given no signal source with slug "plain_mail" exists for the caller
+    When the caller registers source "plain_mail" of type "simple_email" with config_json {"sender_patterns": ["a@example.com"], "subject_patterns": ["*"]}, extractor_module "app.extractors.example_simple_email" and extraction_instructions "   "
+    Then the register succeeds
+    And ingest ListSignalSources returns "plain_mail" with extraction_instructions ""

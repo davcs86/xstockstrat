@@ -23,7 +23,8 @@ consuming agent knows what to extract instead of concluding there is no work.
 "Mediated source" below means a source whose `source_type` is one of the five `mediated_*` types
 (`mediated_simple_email`, `mediated_email_attachment`, `mediated_linked_email`,
 `mediated_simple_website`, `mediated_authenticated_website`). "Empty" instructions means absent,
-`""`, or whitespace only.
+`""`, or whitespace only. A whitespace-only value is stored as `""`; any other value is stored
+verbatim.
 
 FR-1. A signal source has a first-class prose field `extraction_instructions`, persisted by
 `xstockstrat-ingest` and carried on the `SignalSource` proto message.
@@ -32,19 +33,23 @@ FR-2. Registering a mediated source with empty `extraction_instructions` is reje
 `INVALID_ARGUMENT`; nothing is persisted.
 
 FR-3. Registering a mediated source does not require `extractor_module`. Ingest stores
-`app.extractors.noop` for a mediated source itself, whatever the caller sent.
+`app.extractors.noop` for a mediated source itself, whatever the caller sent — on register and on
+every update whose effective type is mediated.
 
 FR-4. A partial update of a mediated source preserves `extraction_instructions` when the field is
 omitted and replaces it when supplied — the same merge rule every other updatable field follows.
 
 FR-5. A mediated source that already exists with empty `extraction_instructions` keeps working: it
-is still listed, still updatable in its other fields, and no migration fills the field in.
+is still listed, still updatable in its other fields through a masked partial update, and no
+migration fills the field in. (An update sent without a field mask replaces every field, so on a
+mediated source it must supply non-empty instructions.)
 
 FR-6. Every agent tool response that describes a mediated source (`list_signal_sources`,
 `manage_signal_source`, `instantiate_template` with `kind=signal_source`) carries a non-empty
 `extraction_instructions` and a boolean `extraction_instructions_is_default`. When the stored value
 is empty, the agent layer substitutes one fixed generic instruction text and sets the boolean to
-`true`; otherwise it returns the stored text and `false`.
+`true`; otherwise it returns the stored text and `false`. A mediated `list_signal_sources` entry also carries
+`origin`.
 
 FR-7. `manage_signal_source` and `instantiate_template` responses for a mediated source do not
 contain `extractor_module`, and the `manage_signal_source` contract no longer tells the caller to
@@ -72,8 +77,12 @@ FR-12. An update that sets `extraction_instructions` to empty on a mediated sour
 FR-13. A register or update that leaves a non-mediated source with non-empty
 `extraction_instructions` is rejected with `INVALID_ARGUMENT`.
 
-FR-14. `extraction_instructions` longer than 16,000 characters is rejected with `INVALID_ARGUMENT`
-on register and update.
+FR-14. `extraction_instructions` longer than 16,000 characters (Unicode code points) is rejected with
+`INVALID_ARGUMENT` on register and update.
+
+FR-15. Creating or updating a signal-source template applies the same rules to its payload: empty
+instructions on a mediated type, non-empty instructions on a non-mediated type, and instructions
+over the cap are each rejected with `INVALID_ARGUMENT`. Retiring a template is never checked.
 
 ## Out of Scope
 
@@ -166,3 +175,10 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
   authored in design/spec and reviewed by the operator in the PR.
 - FR-3 "whatever the caller sent": the `/insights` edit form round-trips the stored
   `extractorModule`, so a mediated update must tolerate a supplied value rather than reject it.
+- **Rules that live in prose (design decisions D-20, D-24..D-27):** the generic default text and the
+  four seeded instructions encode a 24-hour recency rule, a 7-day expiry on watchlist signals, fixed
+  convictions, and per-source scopes (8-K narrow; Form 4 clusters of filings with no reporting person
+  in common; PR Newswire and Robinhood Snacks watchlist-only). They are instructions to an LLM, so no
+  `@AC` asserts them; `design.md` holds the texts verbatim.
+- FR-15 and `@AC-24..26` were added at design approval (2026-11-17) to match decisions made in the
+  design debate.

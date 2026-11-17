@@ -1,6 +1,6 @@
 # Debate Register: mediated-source-extraction-instructions
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 6 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
