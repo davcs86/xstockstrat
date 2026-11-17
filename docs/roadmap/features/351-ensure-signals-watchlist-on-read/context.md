@@ -113,3 +113,14 @@
 - Verification (exit=0): `go build ./...` · `go vet ./internal/service/` · `golangci-lint run` → "0 issues" · `go test ./internal/service/ -count=1` → ok (9.1s); greps show `ensureSignalListOnFirstPage`, `slices.ContainsFunc`, `"slices"`, and exactly three `EnsureSystemManaged` references (interface, EnsureSignalWatchlist, the helper).
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
 - Deviations: none
+
+### Step 2 — test: first `ListWatchlists` unit tests and fake-store hooks [done]
+- Added the fake-store hooks (`ensureErr`, `ensureID`, `ensureCalls`, `listCalls`, `listErrAt`), replaced the fake `ListByUser` with a keyset version over uuid-shaped ids (last-returned-row token; no test asserts or follows a token), and 10 tests: `TestListWatchlists351_AC1…AC8`, `AC10` plus the unchanged-error-path test. Inline test data (C-13, one consumer).
+- TDD: RED (pre-Step-1 tree, `go test -run TestListWatchlists351 -race -v`): FAIL AC-1, AC-2, AC-4, AC-6, AC-7; PASS AC-3, AC-5, AC-8, AC-10 and the list-failure test — as specified. GREEN (after Step 1): all 10 PASS under -race; full suite `go test ./... -race -coverpkg=<non-excluded pkgs>` exit 0, total coverage 81.8% (gate 40%, awk assertion exit 0); `golangci-lint` 0 issues; gofmt clean; `grep -c TestListWatchlists351_AC` = 9.
+- **Mutation-red (D-9), executed and restored** (file byte-identical to the pre-mutation copy afterwards):
+  - AC-3: drop the `pageToken == ""` condition → FAIL ("ensureCalls=1 rows=2, want 0 and 1 (no write on a continuation page)") → restored → PASS.
+  - AC-8: call the ensure before `requireUserID` → FAIL ("ensureCalls=1 listCalls=1 rows=1, want all 0") → restored → PASS.
+  - AC-5: make the ensure unconditional (drop the `ContainsFunc` guard) → FAIL ("system rows=1 ensureCalls=1, want 1 and 0") → restored → PASS.
+  - AC-10: red N/A — characterization test of existing cap behavior (touches no code).
+- Files modified: `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`, this file
+- Deviations: none

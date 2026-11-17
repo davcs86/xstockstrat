@@ -202,7 +202,7 @@ proof is Step 2's tests going RED → GREEN.
 
 ### Step 2 — test: first `ListWatchlists` unit tests and fake-store hooks
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go` — modify
