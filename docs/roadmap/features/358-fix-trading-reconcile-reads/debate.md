@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -12,6 +12,7 @@
 | 2 | 2026-11-17 | /sdd-batch | 4 | 2 | 5 | 4 | 0 | yes |
 | 3 | 2026-11-17 | /sdd-batch | 3 | 2 | 4 | 5 | 0 | yes |
 | 4 | 2026-11-17 | /sdd-batch | 3 | 2 | 5 | 3 | 0 | yes |
+| 5 | 2026-11-17 | /sdd-batch | 2 | 2 | 3 | 2 | 0 | yes |
 
 ## Settled Decisions
 
@@ -36,6 +37,8 @@
 | D-16 | 4 | listAccountPlatformPositions returns map[string]float64 (symbol→qty), the D-5 dedup set it already builds. The map is complete, or nil with an error. trading.go:2244-2247 (the map rebuild) is deleted, and reconcileTick binds platformBySymbol directly from the helper. | trading.go:2244-2247 (re-verified: rebuilds platformBySymbol from the response); adversary r4 C-18; D-1 fixes the contract, not the type | settled |
 | D-17 | 4 | The paging fake records req.GetAccountId(), req.GetTradingMode() and the outgoing x-user-id for every call. AC-1 and the positive control assert, per entry in each tick, x-user-id == owner, AccountId == "acc-1" and the expected TradingMode. | trading.go:2234 (single x-user-id append on a ctx the helper rebuilds per page), :2236 (AccountId/TradingMode); PLAT-4; fails.md:2534; adversary r4 | settled |
 | D-18 | 4 | In the deadline variant, page 1's fake delays with time.Sleep and must not observe ctx. Only page "p2" blocks on ctx.Done(). This keeps the page-2 entry Deadline() logged even if page 1 overruns. | helper fails only on the RPC's returned error (step 4); adversary r4 risk correction | settled |
+| D-19 | 5 | listAccountPlatformPositions takes the per-page timeout as a parameter, sourced from the single per-tick brokerCallTimeout read at trading.go:2109. The helper never reads config itself, so every page of one drain uses the same timeout value. | trading.go:2109 (per-tick timeout read), :2585 (brokerCallTimeout); adversary r5 C-18 advisory; D-3 | settled |
+| D-20 | 5 | The 358 fixtures set fakeReconciliationBroker.isPaper: true explicitly, and the D-17 mode check asserts the literal commonv1.TradingMode_TRADING_MODE_PAPER. The x-user-id check asserts against one named test owner constant that is placed in brokerPoolEntry.userID. | trading_reconciliation_test.go:82,115 (isPaper field, zero value false); trading.go:2227-2230 (false maps to LIVE); trading.go:75-81 (brokerPoolEntry.userID is the source of entry.userID); adversary r5; C-13 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -54,6 +57,8 @@
 | R-10 | 3 | A fake clock seam to make the per-page deadline ordering deterministic | context.WithTimeout does not use s.clock, so this would need a new speculative seam (C-18). A 5 ms sleep with entry-captured Deadline() is enough. | locked |
 | R-11 | 4 | The helper returns []*portfoliov1.Position, which reconcileTick then reshapes into a symbol→qty map | The slice's only consumer is the map the helper already builds for D-5, so the same concept would be built twice (C-18). | locked |
 | R-12 | 4 | A page-1 fake that selects on ctx.Done() during its delay in the deadline variant | A page-1 overrun would become a page-1 error, page 2 would never be logged, and the D-11 strictly-increasing-deadline assertion would flake. | locked |
+| R-13 | 5 | Re-deriving the expected TradingMode in tests from the fake's IsPaper() by copying the production if/else | The test would mirror the mapping it checks, so an inverted paper/live mapping on later pages would still pass (C-13). | locked |
+| R-14 | 5 | Reading brokerCallTimeout(s.cfgW) per page inside listAccountPlatformPositions | A config change mid-drain could change the per-page timeout partway through, which alters the D-3 semantics. It would also force the direct-helper tests to stand up a config watcher. | locked |
 
 ## Objections
 
@@ -74,9 +79,11 @@
 | O-12 | 3 | Split the paging fake's call log per tick (snapshot or reset between the two reconcileTick calls) so the call assertions are per tick, not cumulative. | no | closed @ round 4 (r4 adds takeLog() (copy and reset under the mutex), called after each tick. All call and token assertions are per tick.) |
 | O-13 | 3 | In the deadline variant, the broker fakes must not sleep, because the 50 ms broker.timeout_ms also applies to the broker calls. Record ctx.Deadline() at fake-call entry, before page 1's sleep and before page 2 blocks. | no | closed @ round 4 (r4 states that the broker fakes never sleep or block, and that the paging fake records ctx.Deadline() at call entry, before page 1's sleep and page 2's block. The adversary confirmed this is needed given brokerCallTimeout at :2125/:2215.) |
 | O-14 | 3 | The RPC-error hardening row should assert status.Code(err)==codes.Unavailable on the wrapped error, not status.Code(errors.Unwrap(err)). | no | closed @ round 4 (r4's RPC-error row asserts status.Code(err) == codes.Unavailable on the wrapped error itself, with no errors.Unwrap.) |
-| O-15 | 4 | [C-13] AC-1 and the positive control must assert, per logged page call in each tick, x-user-id == owner, req.GetAccountId() == "acc-1" and the expected TradingMode. Otherwise a drain that drops identity or the filter on page 2 and later passes every AC (trading.go:2234; fails.md:2534). | no | open |
-| O-16 | 4 | [C-11] Correct the stated strongest risk. A time.Sleep page-1 overrun still lets page 2 log its Deadline(). State that page 1's fake must not select on ctx.Done(). | no | open |
-| O-17 | 4 | [C-18] Return map[string]float64 from listAccountPlatformPositions and delete trading.go:2244-2247 instead of re-pointing it. | no | open |
+| O-15 | 4 | [C-13] AC-1 and the positive control must assert, per logged page call in each tick, x-user-id == owner, req.GetAccountId() == "acc-1" and the expected TradingMode. Otherwise a drain that drops identity or the filter on page 2 and later passes every AC (trading.go:2234; fails.md:2534). | no | closed @ round 5 (r5 adopts D-17. AC-1 and the positive control assert x-user-id == owner, AccountId == "acc-1" and the expected TradingMode for every logged page call in each tick. The adversary confirmed this against code (the literal-enum and owner-source refinements are tracked as new objections).) |
+| O-16 | 4 | [C-11] Correct the stated strongest risk. A time.Sleep page-1 overrun still lets page 2 log its Deadline(). State that page 1's fake must not select on ctx.Done(). | no | closed @ round 5 (r5 restates the deadline variant: page 1 uses time.Sleep and never selects on or reads ctx.Done(), and only "p2" blocks. A page-1 overrun therefore cannot suppress the page-2 log entry (D-18, R-12). The adversary confirmed.) |
+| O-17 | 4 | [C-18] Return map[string]float64 from listAccountPlatformPositions and delete trading.go:2244-2247 instead of re-pointing it. | no | closed @ round 5 (r5 adopts D-16. The helper returns map[string]float64, trading.go:2244-2247 is deleted, and platformBySymbol binds directly from the helper. The adversary confirmed.) |
+| O-18 | 5 | [C-11/C-13] Set fakeReconciliationBroker.isPaper: true explicitly in the 358 fixtures and assert the literal TRADING_MODE_PAPER, not a value re-derived from IsPaper(). Drop the incorrect 'no live toggle / paper by default' assumption: the field exists at test:82 and its zero value drives LIVE (trading.go:2227-2230). | no | open |
+| O-19 | 5 | [C-11] The owner is brokerPoolEntry.userID (trading.go:75-81), not noopAccountRepo or newTestReconciliationService. Name one owner constant, set it in the brokerPoolEntry, and assert every D-17 entry against it. | no | open |
 
 ## Reopen Petitions
 
