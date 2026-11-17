@@ -617,3 +617,179 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-17 — sdd-batch design gate (round 5)
+
+`/sdd-design fix-trading-reconcile-reads` full debate halted at its approval gate after round 5 (gate policy: halt). design.md is NOT written and status.md is unchanged (still spec-ready). The debate register is `debate.md` (D-1..D-20, R-1..R-14, O-1..O-19; O-1..O-17 closed, O-18 and O-19 open and non-blocking).
+
+## Open Threads
+
+- **Approach**: the round-4 design (D-1..D-18) stands. Round 5 adopts the r5 proposal unchanged and adds two decisions. Neither changes the D-2/D-7 skip semantics.
+  - D-19: `listAccountPlatformPositions(ctx, accountID, userID, mode, timeout) (map[string]float64, error)` takes the per-page timeout as a parameter. It comes from the single per-tick `brokerCallTimeout` read at `trading.go:2109`, and the helper never reads config itself, so every page of one drain uses the same timeout (R-14 rejects a per-page config read).
+  - D-20: the 358 fixtures set `fakeReconciliationBroker.isPaper: true` explicitly (field at `trading_reconciliation_test.go:82`; its zero value drives LIVE at `trading.go:2227-2230`). The D-17 mode check asserts the literal `commonv1.TradingMode_TRADING_MODE_PAPER`, and the `x-user-id` check asserts one named owner constant placed in `brokerPoolEntry.userID` (`trading.go:75-81`). R-13 rejects re-deriving the expected mode from `IsPaper()`.
+  - Unchanged from round 4:
+    - The helper runs a per-page `context.WithTimeout` plus `x-user-id` on every page, with `cancel()` right after the call.
+    - Token guards run before the merge (D-9), the duplicate-symbol text is `page %d: duplicate symbol %q` (D-13), and the page size is `const reconcilePositionsPageSize = 500`.
+    - `:2231-2239` binds `platformBySymbol, ppErr` from the helper, `:2240-2243` stays byte-identical, and `:2244-2247` is deleted (D-16).
+    - The tests are RED-first: AC-1, the positive control (`expected == 5`, `broker_reported == 10`), AC-2 error, the AC-2 deadline variant (page 1 uses `time.Sleep` and never observes ctx, D-18), AC-3, and the direct-helper hardening table.
+    - There is no proto, migration, config or portfolio change. Features 351, 353, 354 and 357 are untouched.
+- **Strongest open objection (non-blocking, O-18, [C-11/C-13])**: the r5 proposal's Assumptions said fixtures are "paper unless a live toggle exists". That is wrong: an unconfigured `fakeReconciliationBroker` drives LIVE. Re-deriving the expected mode from `IsPaper()` would also make the D-17 mode check mirror the mapping it is meant to pin. D-20 folds the fix into the approach, but the proposer has not yet answered it.
+  - O-19 [C-11]: the owner for the `x-user-id` assertion is `brokerPoolEntry.userID`, not `noopAccountRepo` or `newTestReconciliationService`. It is also open and non-blocking, and folded in through D-20.
+  - O-15..O-17 closed at round 5. No blocking objection remains.
+- **Floor status**: no floor breaches.
+- **Uncovered @AC changes**: `358 @AC-1` EXTEND is not covered by an operator decision. `358 @AC-2` and `@AC-3` EXTEND are covered (operator 2026-11-17: skip, never halt). PRESERVE only: `@AC-1/@AC-2/@AC-3 @feature-206` (fix-reconciliation-false-halt.feature), `@AC-9 @feature-249`, `@AC-45 @feature-294` (signal-map-instrumentation.feature), `@AC-1/@AC-7 @feature-169`.
+- **Open risks**:
+  - A skipped tick shows only as a cause-tagged WARN, so a persistent cursor bug or recurring page deadlines leave an account unreconciled with no metric or alert (D-2, D-8).
+  - Tick time grows by up to ceil(n/500) × broker.timeout_ms for each large account.
+  - `resolveUnknownIntents` stays skipped while a platform read is incomplete.
+  - The rejections rely on portfolio's UNIQUE index (migrations/003:10) and on keyset paging. A violation causes false skips, never false halts.
+  - The deadline-ordering assertion needs the monotonic clock to advance across the 5 ms sleep. If it does not, the test fails as a flake; it never passes vacuously.
+  - TradingMode propagation is pinned only on the paper path. The live mapping on later pages is accepted as out of scope (C-18).
+
+```sdd-batch-design-state
+{
+  "round": 5,
+  "synth": {
+    "approach": "Round 5 adopts the r5 proposal unchanged, with two fixture corrections from the r5 adversary. I re-verified both this session. All paths are under /home/user/xstockstrat/services/xstockstrat-trading/.\n\n**Service** (internal/service/trading.go)\n- Add `const reconcilePositionsPageSize = 500` (D-6). It replaces the literal at :2237.\n- Add the helper `func (s *TradingService) listAccountPlatformPositions(ctx context.Context, accountID, userID string, mode commonv1.TradingMode, timeout time.Duration) (map[string]float64, error)`. It returns the complete symbol→qty map, or nil with an error (D-1, D-16).\n  - `timeout` is passed in from the single per-tick `brokerCallTimeout` read at :2109. The helper never reads config itself (D-19).\n- For each 1-based page i, the helper does this in order:\n  1. `pctx, cancel := context.WithTimeout(ctx, timeout)`, then `metadata.AppendToOutgoingContext(pctx, \"x-user-id\", userID)`. This is the :2232-2234 comment and append moved into the helper and done on every page (D-3, PLAT-4).\n  2. Call `ListPositions{AccountId:&accountID, TradingMode:mode, Page:{PageSize: reconcilePositionsPageSize, PageToken: token}}`.\n  3. Call `cancel()` right after the call. No `defer` in the loop.\n  4. On an RPC error, return `nil, fmt.Errorf(\"page %d: list positions: %w\", i, err)`.\n  5. Read `next := resp.GetPage().GetNextPageToken()`.\n  6. Run the token guards before any merge (D-9, D-4):\n     - zero positions and `next != \"\"` gives `page %d: empty page with next_page_token %q`\n     - `next` already in the seen set gives `page %d: repeated next_page_token %q`\n  7. Merge Symbol→Qty. A symbol already present gives `page %d: duplicate symbol %q` (D-5, D-13).\n  8. If `next == \"\"`, return the map. Otherwise record `next` as seen and set `token = next`.\n- The seen set gets one comment of at most 2 lines: defense-in-depth against a monotonic keyset cursor.\n- In `reconcileTick`:\n  - :2227-2230 (tradingMode derivation) is unchanged.\n  - :2231-2239 becomes `platformBySymbol, ppErr := s.listAccountPlatformPositions(ctx, accountID, entry.userID, tradingMode, timeout)`.\n  - :2240-2243 (the ppErr WARN and continue) stays byte-identical (D-2, D-7).\n  - :2244-2247 (the map rebuild) is deleted (D-16).\n  - :2248 onward is untouched.\n\n**Tests, RED first** (internal/service/trading_reconciliation_test.go)\n\nThe paging fake:\n- It plugs into `fakeReconciliationPortfolioClient.listPositionsFn` (:124).\n- Under a mutex, at call entry and before any sleep or block, it logs `{PageToken, x-user-id from metadata.FromOutgoingContext, req.GetAccountId(), req.GetTradingMode(), ctx.Deadline()}`.\n- It has a call cap of 100, an `ignoreToken` mode, and per-token error and block hooks.\n- `takeLog()` copies and resets the log after each tick (D-15).\n\nThe rest of the setup:\n- One named owner constant in the test is placed in the `brokerPoolEntry.userID` (trading.go:75-81) that the test puts in the brokers map (D-20).\n- Every 358 `fakeReconciliationBroker` (:79-82) sets `isPaper: true` explicitly (D-20).\n- Broker fakes return SYM001..SYM501 at qty 10 and never sleep or block.\n- `fakePositionQtyLookup` is empty. graceTicks=1, two ticks (the :554-555 pattern).\n- Payloads are read only from `recordingLedgerClient` (:137-149) via `Payload.Fields` (D-14).\n\nThe cases:\n1. **AC-1**\n   - Pre-seed `acc-1:pos:SYM501`.\n   - After each tick: the key is absent, there is no `mismatch_found`, and the account is not halted.\n   - Each tick's tokens are `[\"\",\"p2\"]`.\n   - For every entry in each tick: `x-user-id ==` the owner constant, `AccountId == \"acc-1\"`, and `TradingMode == commonv1.TradingMode_TRADING_MODE_PAPER` as a literal (D-17, D-20).\n2. **Positive control**\n   - Page-2 SYM501 has qty 5.\n   - Assert `expected == 5`, `broker_reported == 10`, and the account is halted (D-10).\n   - Make the same per-entry identity, account and mode assertions.\n3. **AC-2 error**\n   - \"p2\" returns `Unavailable`.\n   - Assert the \"p2\" call is logged, and there is no `acc-1:pos:` candidate, no finding and no halt.\n4. **AC-2 deadline variant**\n   - Set `broker.timeout_ms=50` via `snapshotInts` (trading_ibkr_auth_test.go:121-126).\n   - Page 1 logs its entry, then `time.Sleep(5ms)`, and never observes ctx (D-18).\n   - \"p2\" blocks on `<-ctx.Done()`.\n   - Assert the skip outcomes, and that page 2's entry `Deadline()` is strictly after page 1's (D-11).\n5. **AC-3**\n   - The fake ignores the token.\n   - Assert exactly 2 entries per tick, and no candidate, finding or halt.\n6. **Hardening table**: direct helper calls. Every row asserts a nil map and its exact text:\n   - repeated token\n   - empty page with a token\n   - `page 2: duplicate symbol \"SYM500\"`\n   - an RPC row asserting `status.Code(err) == codes.Unavailable` on the wrapped error\n\n**Build order**\n1. Tests 1-5, confirmed RED.\n2. The helper and the `reconcileTick` change, plus test 6.\n3. `GOWORK=off go test ./...` in services/xstockstrat-trading.\n4. One paging sentence at docs/reconciliation.md:57.\n\nThere is no proto, migration, config or portfolio change. Features 351, 353, 354 and 357 are untouched.",
+    "open_objections": [
+      {
+        "text": "[C-11/C-13] The 358 fixtures must set fakeReconciliationBroker.isPaper explicitly (true). The per-entry TradingMode assertion must compare against the literal commonv1.TradingMode_TRADING_MODE_PAPER, not re-derive it from IsPaper(). Also drop the incorrect 'no live toggle / paper by default' assumption: the isPaper field exists (test:82) and its zero value drives LIVE (trading.go:2227-2230).",
+        "blocking": false
+      },
+      {
+        "text": "[C-11] The owner for the D-17 x-user-id assertion is brokerPoolEntry.userID (trading.go:75-81), not noopAccountRepo or newTestReconciliationService. Name one owner constant in the test, set it in the brokerPoolEntry, and assert every logged entry against it.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "358 @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "358 @AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "358 @AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-1 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @feature-249",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-45 @feature-294 (signal-map-instrumentation.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-169",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 @feature-169",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Re-deriving the expected TradingMode in the test from the fake's IsPaper() with an if/else copied from the production code. It lost because the test would mirror the mapping it checks, so an inverted paper/live mapping on page 2 or later would still pass. A literal enum against an explicit isPaper fixture does not have this gap.",
+      "Reading brokerCallTimeout(s.cfgW) per page inside the helper. It lost because a config change in the middle of a drain could alter the per-page timeout partway through, which changes the D-3 semantics. It would also force the D-12 direct-helper tests to stand up a config watcher.",
+      "Relying on an unconfigured fakeReconciliationBroker for paper mode. It lost because the zero value of isPaper is false, which drives TRADING_MODE_LIVE (trading.go:2227-2230)."
+    ],
+    "open_risks": [
+      "A skipped tick is visible only through a WARN tagged with its cause. If a cursor bug persists, or page deadlines keep recurring on very large accounts, that account's position-side reconciliation stays off indefinitely with no metric or alert (D-2, D-8, operator 'skip, never halt').",
+      "Tick wall-clock time grows by up to ceil(n/500) × broker.timeout_ms for each large account, because accounts are processed sequentially. Portfolio's per-page enrichPositions makes page deadlines more likely on big accounts.",
+      "resolveUnknownIntents stays skipped while an account's platform read is incomplete, because the continue at trading.go:2240-2243 is unchanged. An extended portfolio outage therefore also delays resolving UNKNOWN intents.",
+      "The duplicate-symbol and repeated-token rejections rely on portfolio's UNIQUE(user_id, symbol, trading_mode, account_id) (migrations/003:10) and on the keyset cursor returning each row once. A future portfolio change that splits a symbol across rows would cause false skips, never false halts.",
+      "The deadline-ordering assertion needs the monotonic clock to advance across page 1's 5 ms sleep. Equal deadlines make the test fail as a flake; it cannot pass vacuously. The page-1 overrun flake is excluded only while page 1's fake never observes ctx (D-18).",
+      "TradingMode propagation is pinned only on the paper path. The live mapping on later pages has no per-entry assertion, which is accepted as out of scope (C-18)."
+    ],
+    "constitution_rules_touched": [
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-04",
+      "F-07",
+      "P-02",
+      "P-03",
+      "PLAT-4",
+      "PLAT-N1"
+    ],
+    "rationale": "The r5 proposal answers all three round-4 objections, and the adversary checked each answer against the code and returned SOUND with no Floor breach.\n- O-15 is closed by D-17's per-entry assertions in each tick.\n- O-16 is closed by D-18: page 1 uses time.Sleep and never observes ctx, so the stated strongest risk is corrected.\n- O-17 is closed by D-16: the helper returns the map, :2244-2247 is deleted, and platformBySymbol binds directly.\n\nI re-verified both factual errors the adversary found in the proposal's Assumptions this session:\n- `fakeReconciliationBroker.isPaper bool` exists at trading_reconciliation_test.go:82, and IsPaper() returns it at :115. Its zero value maps to TRADING_MODE_LIVE at trading.go:2227-2230. The proposal's 'paper unless a live toggle exists' assumption is therefore wrong. Re-deriving the expected mode from IsPaper() would also make the D-17 mode check mirror the production mapping instead of pinning it.\n- `entry.userID` is the userID field of brokerPoolEntry (trading.go:75-81), which the test puts in the brokers map. It does not come from noopAccountRepo.\n\nBoth corrections are folded into the approach as D-20: an explicit `isPaper: true`, a literal PAPER enum assertion, and a named owner constant placed in brokerPoolEntry. They stay as non-blocking open objections because the proposer has not yet answered them.\n\nThe adversary's advisory point on passing `timeout` into the helper is recorded as D-19, and the per-page config read as a rejected alternative, so that it is not 'simplified' during implementation.\n\nRegister check:\n- No D-n is contradicted. D-19 makes explicit the per-tick timeout source that D-3 already uses.\n- No R-n is reintroduced: R-1 (shared deadline), R-11 (slice return) and R-12 (ctx-observing page-1 fake) are all honored.\n- No closed O-n is re-raised, and there are no petitions.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "listAccountPlatformPositions takes the per-page timeout as a parameter, sourced from the single per-tick brokerCallTimeout read at trading.go:2109. The helper never reads config itself, so every page of one drain uses the same timeout value.",
+          "evidence": "trading.go:2109 (per-tick timeout read), :2585 (brokerCallTimeout); adversary r5 C-18 advisory; D-3"
+        },
+        {
+          "text": "The 358 fixtures set fakeReconciliationBroker.isPaper: true explicitly, and the D-17 mode check asserts the literal commonv1.TradingMode_TRADING_MODE_PAPER. The x-user-id check asserts against one named test owner constant that is placed in brokerPoolEntry.userID.",
+          "evidence": "trading_reconciliation_test.go:82,115 (isPaper field, zero value false); trading.go:2227-2230 (false maps to LIVE); trading.go:75-81 (brokerPoolEntry.userID is the source of entry.userID); adversary r5; C-13"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Re-deriving the expected TradingMode in tests from the fake's IsPaper() by copying the production if/else",
+          "why": "The test would mirror the mapping it checks, so an inverted paper/live mapping on later pages would still pass (C-13)."
+        },
+        {
+          "text": "Reading brokerCallTimeout(s.cfgW) per page inside listAccountPlatformPositions",
+          "why": "A config change mid-drain could change the per-page timeout partway through, which alters the D-3 semantics. It would also force the direct-helper tests to stand up a config watcher."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "[C-11/C-13] Set fakeReconciliationBroker.isPaper: true explicitly in the 358 fixtures and assert the literal TRADING_MODE_PAPER, not a value re-derived from IsPaper(). Drop the incorrect 'no live toggle / paper by default' assumption: the field exists at test:82 and its zero value drives LIVE (trading.go:2227-2230).",
+          "blocking": false
+        },
+        {
+          "text": "[C-11] The owner is brokerPoolEntry.userID (trading.go:75-81), not noopAccountRepo or newTestReconciliationService. Name one owner constant, set it in the brokerPoolEntry, and assert every D-17 entry against it.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-15",
+          "how": "r5 adopts D-17. AC-1 and the positive control assert x-user-id == owner, AccountId == \"acc-1\" and the expected TradingMode for every logged page call in each tick. The adversary confirmed this against code (the literal-enum and owner-source refinements are tracked as new objections)."
+        },
+        {
+          "id": "O-16",
+          "how": "r5 restates the deadline variant: page 1 uses time.Sleep and never selects on or reads ctx.Done(), and only \"p2\" blocks. A page-1 overrun therefore cannot suppress the page-2 log entry (D-18, R-12). The adversary confirmed."
+        },
+        {
+          "id": "O-17",
+          "how": "r5 adopts D-16. The helper returns map[string]float64, trading.go:2244-2247 is deleted, and platformBySymbol binds directly from the helper. The adversary confirmed."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
