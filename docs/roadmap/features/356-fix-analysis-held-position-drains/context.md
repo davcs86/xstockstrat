@@ -812,3 +812,23 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - [ ] Rebase against `308-fix-analysis-per-symbol-isolation` if it lands first. Steps 3 and 7 run the real `_compute_opportunities`.
 - [ ] Accepted risks carried unchanged from design.md: the 5,000-position effective bound (R-7 follow-up); the boot-time entry-backfill gap; the merging of the kick and daily paths on `recompute{full,failed}` (Step 8 caveat); the A→B→A token cycle, which the cap backstops; all-users-fail staleness of about 24h; the un-guarded `gather` siblings.
 - [ ] `produced-signals.tsv` gets the first `_total` row. It is operator-mandated, has no consumer, and sets no convention.
+
+## Session 2026-11-17 — sdd-review impl-spec
+
+- Mode B (advisory; lifecycle unchanged, stays `implementation-ready`). Criteria verdict: PASS WITH WARNINGS (0 fails, 0 floor breaches). Overlap verdict: WARN (no FAIL).
+- Re-verified: `git diff a4ff372c 2408de65 -- services packages scripts .github` is empty, so the spec's citations hold at the branch head. Spot-checked `servicer.py:385-390,3933-3941,4955-4957,6054-6067,6404`, `live_loop.py:400-411,563-568`, `tests/test_live_loop_telemetry.py:121-127`, `ci.yml:59,473-474`.
+- Addressed (implementation-spec.md edited):
+  - Red-before-green evidence (C-08/P-06): Step 3 item 5 now requires writing and running the tests against the pre-Step-2 tree before applying Step 2, and recording each failing test id and failure reason here. Step 7 gains item 4 with the same rule for Step 6. A Step Dependencies bullet says this context.md record is the only RED evidence, because the commits are service-first.
+  - 337 overlap: a Step Dependencies bullet records that `337-metrics-host-provider-label` also appends to `packages/otel/produced-signals.tsv` (rebase: keep both rows, re-run the guard).
+  - 308 rebase risk: the bullet now also says to re-run Steps 3 and 7 Verification after the rebase.
+  - CI: a Step Dependencies bullet notes that `ci.yml:59` triggers the `xstockstrat-agent` job on `servicer.py` edits (Steps 2, 6).
+  - Line-number re-verification at the branch head was recorded in the spec's Tree line.
+- Accepted, no change: Step 6 counts every per-user exception on `recompute{full,failed}` (accepted scope, Step 8 caveat). Steps 4 and 6 have no coverage command of their own; their paired test steps 5 and 7 carry `--cov-fail-under=40` (matches `ci.yml:473-474`).
+- Still open: see Open Threads.
+
+## Open Threads
+
+- [ ] `/sdd-execute` must record RED here for Steps 3, 5 and 7 (test id + failure reason, captured against the pre-change tree) before it applies the paired service change. AC-4 and the allowlist `_drive` addition are guards.
+- [ ] If `308-fix-analysis-per-symbol-isolation` lands first, rebase and re-run Steps 3 and 7 Verification.
+- [ ] If `337-metrics-host-provider-label` lands first, Step 9's tsv append conflicts textually. Keep both rows and re-run `python3 scripts/check-otel-produced-signals.py`. 337's full file list was not read; the hunk-level overlap is unverified.
+- [ ] Expect the `xstockstrat-agent` CI job on this PR (`ci.yml:59`). A red agent job is a regression to investigate.
