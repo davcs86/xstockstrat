@@ -35,7 +35,7 @@ Feature: fix-analysis-held-position-drains (analysis)
   Scenario: A failed held drain fails the opportunity recompute and keeps the previous queue
     Given user "u-1" has a previously computed opportunity queue
     And the portfolio ListPositions fake raises on page 1
-    When the opportunity queue for "u-1" is recomputed
+    When the on-demand opportunity recompute for "u-1" runs
     Then the previous queue for "u-1" is not replaced
     And "analysis.opportunity.recompute" with outcome "failed" increases by 1
 
@@ -72,3 +72,14 @@ Feature: fix-analysis-held-position-drains (analysis)
     Then live_loop._drain_held returns {"AAPL"}
     And servicer._drain_held_symbols returns {"AAPL": 150}
     And each drain makes exactly 1 ListPositions call
+
+  @AC-10 @FR-4 @regression @feature-356
+  Scenario: A failed daily-refresh user is counted and keeps the previous queue
+    Given users "u-1" and "u-2" each have a previously computed opportunity queue
+    And the portfolio ListPositions fake raises for "u-1" and returns an empty page for "u-2"
+    When the daily opportunity refresh pass runs
+    Then the previous queue for "u-1" is not replaced
+    And the queue for "u-2" is replaced
+    And "analysis.opportunity.recompute" with kind "full" and outcome "failed" increases by exactly 1
+    And no metric attribute contains "u-1"
+    And the refresh schedule advances
