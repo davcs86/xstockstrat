@@ -912,3 +912,111 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 ## Open Items
 
 - ~~Step 3 must still record RED for its own test ids (item 5).~~ Resolved by Step 3 (2026-11-17), RED recorded above.
+
+## Session 2026-11-17 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-analysis-held-position-drains (feature 356)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-analysis/acceptance/fix-analysis-held-position-drains.feature | CREATE | NEW | same-token rejection; Then asserts on analysis drains |
+| AC-2 | same | CREATE | NEW | 50-page cap with token pending fails loudly |
+| AC-3 | same | CREATE | NEW | mid-drain page error raises |
+| AC-4 | same | CREATE | NEW | non-gRPC exception in servicer drain |
+| AC-5 | same | CREATE | NEW | failed drain keeps previous opportunity queue |
+| AC-6 | same | CREATE | NEW | screener row held=false on failed drain |
+| AC-7 | same | CREATE | NEW | per-owner skip in live-loop cycle |
+| AC-8 | same | CREATE | NEW | multi-page drain returns all positions |
+| AC-9 | same | CREATE | NEW | single-page drain unchanged |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-held-position-drains.feature (CREATE) ---
+# Promoted from docs/roadmap/features/356-fix-analysis-held-position-drains/acceptance.feature (C-16). Verbatim; do not edit by hand.
+Feature: fix-analysis-held-position-drains (analysis)
+
+  @AC-1 @FR-1 @FR-4 @FR-6 @regression @feature-356
+  Scenario: A drain rejects a next_page_token equal to the one it sent
+    Given the portfolio ListPositions fake ignores page_token and always returns position "AAPL" with market_value 100 and next_page_token "t"
+    When live_loop._drain_held drains owner "o-1" and servicer._drain_held_symbols drains user "u-1"
+    Then each drain makes exactly 2 ListPositions calls instead of 50
+    And each drain raises to its caller instead of returning a held set
+    And "analysis.live_loop.drain_failures" with source "held" increases by 1 for the live-loop drain
+
+  @AC-2 @FR-2 @FR-4 @regression @feature-356
+  Scenario: A drain that reaches its 50-page cap with a token still pending fails loudly
+    Given the portfolio ListPositions fake returns a distinct non-empty next_page_token on every page
+    When live_loop._drain_held drains owner "o-1" and servicer._drain_held_symbols drains user "u-1"
+    Then each drain makes exactly 50 ListPositions calls
+    And each drain logs a WARNING naming the owner or user and the cap 50
+    And each drain raises to its caller instead of returning a held set
+    And "analysis.live_loop.drain_failures" with source "held" increases by 1 for the live-loop drain
+
+  @AC-3 @FR-3 @FR-4 @regression @feature-356
+  Scenario: A page error mid-drain is an error, never end-of-data
+    Given the portfolio ListPositions fake returns page 1 holding "AAPL" with next_page_token "p2" and then raises on page 2
+    When live_loop._drain_held drains owner "o-1" and servicer._drain_held_symbols drains user "u-1"
+    Then each drain raises to its caller instead of returning a set or map holding "AAPL"
+    And "analysis.live_loop.drain_failures" with source "held" increases by 1 for the live-loop drain
+
+  @AC-4 @FR-3 @FR-4 @feature-356
+  Scenario: A non-gRPC exception in the servicer drain is also a failure
+    Given the portfolio ListPositions fake raises a non-gRPC exception on page 1
+    When servicer._drain_held_symbols drains user "u-1"
+    Then the drain raises to its caller instead of returning an empty map
+
+  @AC-5 @FR-4 @regression @feature-356
+  Scenario: A failed held drain fails the opportunity recompute and keeps the previous queue
+    Given user "u-1" has a previously computed opportunity queue
+    And the portfolio ListPositions fake raises on page 1
+    When the opportunity queue for "u-1" is recomputed
+    Then the previous queue for "u-1" is not replaced
+    And "analysis.opportunity.recompute" with outcome "failed" increases by 1
+
+  @AC-6 @FR-4 @regression @feature-356
+  Scenario: A failed held drain marks no screener row as held
+    Given the portfolio ListPositions fake returns page 1 holding "AAPL" with next_page_token "p2" and then raises on page 2
+    When ScreenSymbols returns a result row for "AAPL"
+    Then the "AAPL" row has held false
+    And a WARNING is logged for the failed held cross-reference
+
+  @AC-7 @FR-4 @regression @feature-356
+  Scenario: A failed held drain skips only that owner in the live-loop cycle
+    Given two live strategies owned by "o-1" and one live strategy owned by "o-2"
+    And the portfolio ListPositions fake raises for owner "o-1" and returns "MSFT" for owner "o-2"
+    When the live loop runs one cycle
+    Then no strategy owned by "o-1" is evaluated in that cycle
+    And ListPositions is called exactly once for owner "o-1"
+    And "analysis.live_loop.drain_failures" with source "held" increases by exactly 1
+    And the strategies owned by "o-2" are evaluated with held set {"MSFT"}
+    And no metric attribute contains "o-1"
+
+  @AC-8 @FR-5 @FR-6 @feature-356
+  Scenario: A multi-page drain returns every held position exactly once
+    Given the portfolio ListPositions fake honors page_token across three pages holding "AAPL" (100), "MSFT" (200) and "NVDA" (300)
+    When live_loop._drain_held drains owner "o-1" and servicer._drain_held_symbols drains user "u-1"
+    Then live_loop._drain_held returns {"AAPL", "MSFT", "NVDA"}
+    And servicer._drain_held_symbols returns {"AAPL": 100, "MSFT": 200, "NVDA": 300}
+    And each drain makes exactly 3 ListPositions calls
+
+  @AC-9 @FR-5 @feature-356
+  Scenario: A single-page drain is unchanged
+    Given the portfolio ListPositions fake returns one page holding "AAPL" with market_value -150 and an empty next_page_token
+    When live_loop._drain_held drains owner "o-1" and servicer._drain_held_symbols drains user "u-1"
+    Then live_loop._drain_held returns {"AAPL"}
+    And servicer._drain_held_symbols returns {"AAPL": 150}
+    And each drain makes exactly 1 ListPositions call
+
+### Notes / ambiguities / conflicts
+- Attribution: every scenario's observable subject is analysis code (live_loop._drain_held, servicer._drain_held_symbols, opportunity recompute, ScreenSymbols). Portfolio appears only as a faked dependency in Given, so all 9 route to the single analysis suite. platform.feature has no match (grep for _drain_held/ListPositions empty); no cross-service guarantee.
+- Reviewers table lists only xstockstrat-analysis as affected service. The acceptance/ dir exists, and the target file does not yet exist (no DUP).
+- Partial overlap, not a duplicate: services/xstockstrat-analysis/acceptance/signal-map-instrumentation.feature (@AC-16 @feature-294) asserts drain_failures{source=held} +1 when a ListPositions call fails and no attribute contains "o-1". 356 AC-1/2/3/7 repeat that metric clause but add different outcomes (raise instead of returning a set, call counts, cap warning, per-owner skip), so I marked them NEW rather than OVERLAP. No contradiction; consolidation is unnecessary.
+- Other pagination-cap suites (fix-analysis-backtest-bounds, block-fundamentals-strategy-on-etf, opportunities-pagination-drain) cover marketdata GetBars or the ListOpportunities response, not portfolio held drains. No overlap.
+- opportunities-latency-fix.feature line 9 mentions _drain_held_symbols running concurrently via asyncio.gather. That is a concurrency rule and does not conflict with failure semantics.
+- CONFLICT: none.
+- I read acceptance.feature from the working-tree path docs/roadmap/features/356-.../acceptance.feature, not from origin/feature/fix-analysis-held-position-drains, and the files exist locally. If the feature branch has diverged, re-verify the scenario text.
+
+### Coverage check
+- Source scenarios: 9 (AC-1..AC-9). Planned NEW 9, DUP 0, OVERLAP 0, CONFLICT 0. All accounted for, none skipped. Scenario text is verbatim; only the @feature-356 tag was added.
+```
