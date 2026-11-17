@@ -864,7 +864,7 @@ grep -rn "type fakeProfileStore" --include="*_test.go" services/xstockstrat-mark
 
 ### Step 15 — service: per-symbol backfill results and the `skipped` outcome
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify

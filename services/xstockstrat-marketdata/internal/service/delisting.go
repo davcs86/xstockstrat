@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -65,6 +66,16 @@ func (s *MarketDataService) loadFlaggedSet(ctx context.Context) error {
 	}
 	s.warmMu.Unlock()
 	return nil
+}
+
+// isFlaggedDelisted reads this instance's in-memory flagged set; false when none is loaded.
+func (s *MarketDataService) isFlaggedDelisted(sym string) bool {
+	set := s.delisting.flagged.Load()
+	if set == nil {
+		return false
+	}
+	_, ok := (*set)[strings.ToUpper(strings.TrimSpace(sym))]
+	return ok
 }
 
 // emitNotice sends one untargeted WARNING alert and returns the send error.

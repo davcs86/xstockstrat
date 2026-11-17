@@ -630,3 +630,7 @@
 ### Step 14 — test: caller check, claim states, single-snapshot rule — done
 - TDD: AC-17 red against `Unimplemented` stubs: `SyncWatchlistDelistings: unimplemented` (every sync, ack
   and handler test fails) → green: 17 top-level PASS under `-race`; `go_gate` 87.3%.
+
+### Step 15 — service: per-symbol backfill results and the `skipped` outcome — done
+- `marketdata_service.go`, `delisting.go`, `telemetry/otel.go`, service `CLAUDE.md`. Build and lint clean;
+  `BackfillSkipped` wired; `SymbolResults` on both responses.

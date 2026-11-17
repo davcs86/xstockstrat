@@ -362,6 +362,7 @@ const (
 	BackfillFundamentals = "fundamentals"
 	BackfillWritten      = "written"
 	BackfillEmpty        = "empty"
+	BackfillSkipped      = "skipped"
 	BackfillFailed       = "failed"
 )
 
