@@ -47,3 +47,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The design assumption about the deploy straddle was wrong. `/trader/positions` renders the error with hand-rolled markup (`page.tsx:511` "Failed to load positions"), not `QueryStateMessages`. The error is still visible, and the user recovers by reload or `resetPaging` (`:58-62`). That markup is a pre-existing C-17 deviation and out of scope; there is no UI step.
   - TimescaleDB is not installed locally, so the dbtest RED/GREEN is authoritative only in CI `portfolio-db-test` (or on a host with migrated TimescaleDB). The local RED is the pgxmock first-page test.
 - Open thread for /sdd-review: `acceptance.feature` has no scenario for the malformed-token → InvalidArgument path (D-4). Step 4 marks Covers as `—` and guards it as a design decision. Adding an `@AC-2` is a product-spec call.
+
+## Session 2026-11-17 — sdd-review impl-spec loop (iteration 1 → spec fixes)
+
+- Review iteration 1: 0 ✗, 6 ⚠ (advisory); overlap CLEAN (soft rebase note: 311/323 touch portfolio_repo.go in disjoint regions, both spec-ready).
+- Addressed in implementation-spec.md: citation drift (:134→:135, clamp :136-138, :505-507 `[]string` precedent re-verified); pgxmock `Argument` interface verified from module source (argument.go:6-8, DeepEqual at expectations.go:169); local TimescaleDB recipe verified (docker timescale/timescaledb:latest-pg16 + psql migrations, existing dbtests green) so the real-backend RED is capturable locally; PR TDD-block instructions for Steps 2 and 4; testPool variadic call-site claim quantified (30 sites); follow-up tracking rule.
+- Open Threads (follow-ups, file after launch via /sdd-qa defect):
+  - [ ] analysis position-drain hardening (equal-token guard, fail closed, cap-hit log)
+  - [ ] WatchlistRepo.ListByUser look-ahead token (other session owns the sibling report)
+  - [ ] internal 500-row truncation (portfolio_service.go:787,932,1214,1283; trading.go:2235)

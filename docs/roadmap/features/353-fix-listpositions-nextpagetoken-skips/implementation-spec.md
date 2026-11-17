@@ -31,7 +31,7 @@ Analysis drains also treat the token as opaque (`services/xstockstrat-analysis/a
 - Step 3 requires Step 1, for `repository.ErrInvalidPageToken`.
 - Step 4 [test] covers Step 3 [service]. Step 4 needs Step 3 for `classifyListPositionsError`.
 - No atomic units. Step 1 carries its own test-pin edits (step-constraints §C: the three `WithArgs(..., "", 501)` pins would otherwise turn red), so every step is green at its own commit.
-- Follow-ups from design.md Open Risks are not steps. After this feature lands, file each with `/sdd-qa defect`:
+- Follow-ups from design.md Open Risks are not steps. They are tracked as `[ ]` items in `context.md` Open Threads; the `/sdd-execute` integration PR body must list them, and the feature is not archived until each has a filed report under `docs/reports/` (or a recorded wont-fix). After this feature lands, file each with `/sdd-qa defect`:
   1. Harden the analysis position drains: equal-token guard, fail closed, cap-hit log (fails.md:3309-3312).
   2. The look-ahead token in `WatchlistRepo.ListByUser` (`internal/repository/watchlist_repo.go:139`). Another session owns the sibling report.
   3. Internal callers read only the first 500 positions (`portfolio_service.go:787,932,1214,1283`; trading `trading.go:2235`).
@@ -49,7 +49,7 @@ Analysis drains also treat the token as opaque (`services/xstockstrat-analysis/a
 **Reviewers**: Service owner (`xstockstrat-portfolio`): P&L calculation accuracy, position snapshot consistency, concurrent write safety
 
 **Codebase Evidence**:
-- `portfolio_repo.go:134` `func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode commonv1.TradingMode, pageSize int, pageToken string, accountID string, symbolFilter string, side portfoliov1.PositionSide) ([]*portfoliov1.Position, string, error)`. The page-size clamp is at `:135-137`.
+- `portfolio_repo.go:135` `func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode commonv1.TradingMode, pageSize int, pageToken string, accountID string, symbolFilter string, side portfoliov1.PositionSide) ([]*portfoliov1.Position, string, error)`. The page-size clamp is at `:136-138`.
 - `:140-160` define the filter-builder closure `add` and the mode/account/symbol/side conditions.
 - The bug, part 1: `:161-162` `args = append(args, pageToken)` and `conds = append(conds, fmt.Sprintf("($%d = '' OR symbol > $%d)", len(args), len(args)))`, a symbol-only keyset.
 - `:163-164` bind the limit as `pageSize+1`. `:168-172` run `ORDER BY symbol ASC LIMIT $%d`, with no tiebreaker.
@@ -57,7 +57,7 @@ Analysis drains also treat the token as opaque (`services/xstockstrat-analysis/a
 - The bug, part 2: `:191-196` `nextToken = positions[pageSize].Symbol`, the look-ahead row.
 - `scanPositionRow` (`:253-293`) scans `trading_mode` into `modeStr` and never returns it. Its other callers are `:131` (`GetPosition`) and `:626` (`ListPositionsByAccount`). Tests call it at `portfolio_repo_test.go:26,33`. `positionColumns` is at `:297`.
 - Sentinel pattern: `:247` `var ErrPositionNotFound = errors.New("position not found")`. The file already imports `encoding/json`, `errors`, `fmt` and `strings` (`:3-9`); `encoding/base64` is not imported yet.
-- A `[]string` bound in production SQL already exists: `:507` `account_id = ANY($2)`, with `accountIDs`.
+- A `[]string` bound in production SQL already exists and runs under the PgBouncer Exec mode today: `:505-507` (`r.db.Query(... WHERE user_id=$1 AND account_id = ANY($2)`, userID, accountIDs)`; re-confirmed 2026-11-17).
 - Uniqueness argument (insights.md:3547): `migrations/003_positions_account_id.up.sql:8-10` declares `UNIQUE (user_id, symbol, trading_mode, account_id)`. All three cursor columns are `NOT NULL` TEXT (`001_portfolio_hypertable.up.sql:10`, `002_add_trading_mode.up.sql:6`, `003_positions_account_id.up.sql:2`). `user_id = $1` is always an equality filter.
 - Pattern reused, copied rather than imported because it is unexported: marketdata builds the token from the last returned row (`marketdata_repo.go:956` `last := out[pageSize-1]`) and over-fetches by one.
 - Exact pins that change: `internal/service/offline_account_pnl_test.go:530` `WithArgs("u1", "alp-1", "", 501)`, `:531` `WithArgs("u1", offAcct, "", 501)` and `:572` `WithArgs("u-1", account, "", 501)`. `grep -rn 'WithArgs(' --include=*_test.go | grep '""'` finds no other empty-token pin. The roughly 37 `anyArgs(3)`/`anyArgs(4)` pins (helper at `portfolio_fill_errors_test.go:36`) keep their arg count and are left alone.
@@ -129,8 +129,18 @@ Every existing test passes, including the three re-pinned `offline_account_pnl_t
 **Instructions**:
 1. **§RED (do this before Step 1's implementation).** Draft the behavioural tests from items 4 and 5 below. They reference only `ListPositions`, `PortfolioRepo`, `NewPortfolioRepoWithDB`, `testPool` and `testUserID`. Run them against the tree as it was before Step 1:
    - **Local RED:** `TestListPositions_FirstPageBindsEmptyCursorArray` fails because the SQL has no `cardinality(` and the bound arg is the `""` string.
-   - **Real-backend RED:** `TestListPositions_TraversalYieldsEveryRowOnce`. At page size 3, page 1 (`LIMIT 4`) returns 3 of the 4 AAPL rows with token `"AAPL"`, and page 2 returns `[MSFT, MSFT, NVDA]`, so qty 4 is missing. Capture this when `PORTFOLIO_DB_TEST_URL` points at a migrated TimescaleDB. Otherwise the CI `portfolio-db-test` job is the authority: state that in the PR's TDD block.
+   - **Real-backend RED:** `TestListPositions_TraversalYieldsEveryRowOnce`. At page size 3, page 1 (`LIMIT 4`) returns 3 of the 4 AAPL rows with token `"AAPL"`, and page 2 returns `[MSFT, MSFT, NVDA]`, so qty 4 is missing. Capture it locally against a migrated TimescaleDB (recipe verified in this environment on 2026-11-17; the existing dbtests pass on it):
+     ```bash
+     docker run -d --name ts353 --network host -e POSTGRES_USER=xstockstrat -e POSTGRES_PASSWORD=ci-only -e POSTGRES_DB=xstockstrat timescale/timescaledb:latest-pg16
+     # portfolio then ingest migrations in NNN order (ingest is needed by signal_expiry_prune_dbtest_test.go);
+     # render ${SEED_USER_ID} as CI does (ci.yml portfolio-db-test: 00000000-0000-4000-8000-0000000000c1)
+     for f in services/xstockstrat-portfolio/migrations/*.up.sql services/xstockstrat-ingest/migrations/*.up.sql; do
+       sed 's/\${SEED_USER_ID}/00000000-0000-4000-8000-0000000000c1/g' "$f" | PGPASSWORD=ci-only psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U xstockstrat -d xstockstrat; done
+     export PORTFOLIO_DB_TEST_URL='postgres://xstockstrat:ci-only@127.0.0.1:5432/xstockstrat?sslmode=disable'
+     ```
+     If neither Docker nor a TimescaleDB is available, the CI `portfolio-db-test` job run on the pre-fix commit is the RED evidence: link that job run in the PR's TDD block.
    - Add the tests that use the codec or the sentinel (item 3, item 4c) only after the RED is captured, because they would not compile before Step 1.
+   - **PR TDD block (tdd-gate.md):** record that the RED was captured against the pre-Step-1 tree, naming that commit sha and pasting the failing assertion output for both RED tests (local and real-backend), then the GREEN output on the Step-2 commit.
 2. **C-13:** the 17-column pgxmock row header at `portfolio_repo_test.go:60-63` gets its second consumer in this step. Hoist it into a package-level `var positionRowCols = []string{...}` in `portfolio_repo_test.go` and use it at `:60`. It is a test-mechanics column list in the `repository` test package, not proto domain data. The `service` package has its own copy at `portfolio_fill_errors_test.go:46-48`, which is a different package and stays as it is. The seed rows below are scenario one-offs with a single consumer (this file), so they stay inline.
 3. **Codec table test** `TestPositionCursorCodec` in `portfolio_repo_test.go`:
    - Round-trip `encodePositionCursor` → `decodePositionCursor` for `("AAPL","TRADING_MODE_PAPER","a")`, `("BRK|B","TRADING_MODE_LIVE","x,\"{}\\ y")` and `("","","")`.
@@ -139,14 +149,14 @@ Every existing test passes, including the three re-pinned `offline_account_pnl_t
 4. **pgxmock `ListPositions` tests** in `portfolio_repo_test.go`:
    - a. `TestListPositions_FirstPageBindsEmptyCursorArray`:
      - `ExpectQuery` with a regex requiring both `cardinality\(\$\d+::text\[\]\)` and `\(\$\d+::text\[\]\)\[1\]`.
-     - `.WithArgs("u1", emptyStringSlice{}, 4)`, where `emptyStringSlice` is a local `pgxmock.Argument` whose `Match` returns true only for a non-nil `[]string` of length 0. Use a matcher, not DeepEqual (D-8).
+     - `.WithArgs("u1", emptyStringSlice{}, 4)`, where `emptyStringSlice` is a local `pgxmock.Argument` (interface verified in pgxmock v4.9.0 `argument.go:6-8`: `Match(interface{}) bool`) whose `Match` returns true only for a non-nil `[]string` of length 0. Use a matcher, not a plain value: non-`Argument` args are compared with `reflect.DeepEqual` (`expectations.go:169`), which this test must not rely on for nil-vs-empty (D-8).
      - Return 4 rows (AAPL/PAPER/a, AAPL/PAPER/b, AAPL/PAPER/c, MSFT/PAPER/a), using `pageSize=3` and no filters.
      - Assert 3 positions come back, and that `decodePositionCursor(next)` equals `[]string{"AAPL","TRADING_MODE_PAPER","c"}`. That is the last *returned* row, not the look-ahead MSFT row. Add the decode assertion after RED (item 1).
    - b. `TestListPositions_CursorPageBindsDecodedTuple`: token `encodePositionCursor("AAPL","TRADING_MODE_PAPER","c")`, `.WithArgs("u1", []string{"AAPL","TRADING_MODE_PAPER","c"}, 4)`. Return 1 row and assert `next == ""`.
    - c. `TestListPositions_MalformedTokenIssuesNoQuery`: for `"AAPL"` and `"BRK.B"`, register no expectation. Assert `errors.Is(err, ErrInvalidPageToken)` and `mock.ExpectationsWereMet() == nil`.
 5. **Real-backend tests**: new file `list_positions_dbtest_test.go` with `//go:build dbtest` and `package repository`.
    - **Helpers in `dbtest_helpers_test.go`:**
-     - Give `testPool` a variadic parameter `opts ...func(*pgxpool.Config)` and apply it after `ParseConfig` (`:31`). Existing call sites compile unchanged.
+     - Give `testPool` a variadic parameter `opts ...func(*pgxpool.Config)` and apply it after `ParseConfig` (`:31`). The 30 existing `testPool(t)` call sites (`grep -rn 'testPool(t' internal --include=*_test.go`) pass no option, so they compile and behave unchanged; no other file is edited.
      - Add a second cleanup that runs `DELETE FROM portfolio.positions WHERE user_id LIKE $1` with the same `dbtestUserPrefix+"%"`. Reuse the prefix; do not add a second one (D-8).
      - Add `seedPosition(t, pool, userID, symbol, mode, accountID string, qty float64)`. It inserts `(user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id)` with `avg_entry_price=1` and `cost_basis=qty`, and calls `t.Fatalf` on error.
      - Add `traverse(t, repo, userID, mode, pageSize) (seq []float64, pageLens []int)`. It loops `ListPositions` until the token is `""`, fails after 50 pages, and fails if a token equals the previous one.
@@ -227,7 +237,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 - Imports already present (`:3-15`): `errors`, `fmt`, `connect`, `codes`, `status`, `repository`.
 - The handler package cannot build a `PortfolioService` over pgxmock. The only constructor is `NewPortfolioService(cfg, cfgWatcher)` (`portfolio_service.go:123`), and handler tests use `&PortfolioHandler{}` (`portfolio_identity_test.go:28`). So the test works at the classifier level, like the existing classifier tests.
 
-**TDD**: `red-green required`. The RED is compile-level, because `classifyListPositionsError` does not exist before Step 3 and there is no handler harness backed by a repo. The behavioural RED for the malformed-token path is Step 2's `TestListPositions_MalformedTokenIssuesNoQuery`. State this in the PR's TDD block (tdd-gate.md).
+**TDD**: `red-green required`. The RED is compile-level, because `classifyListPositionsError` does not exist before Step 3 and there is no handler harness backed by a repo. The behavioural RED for the malformed-token path is Step 2's `TestListPositions_MalformedTokenIssuesNoQuery`. **PR TDD block (tdd-gate.md):** paste the compile-failure output (`undefined: classifyListPositionsError`) captured before Step 3, cite Step 2's behavioural RED by test name and commit, then the GREEN output.
 
 **Covers**: — (guards design D-4; no `@AC-*` in `acceptance.feature` names the malformed-token path)
 
