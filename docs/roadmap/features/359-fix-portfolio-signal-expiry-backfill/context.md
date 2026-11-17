@@ -653,3 +653,50 @@ Feature: fix-portfolio-signal-expiry-backfill (bug fix)
 ### Coverage check
 - Source scenarios: 1. Planned (NEW+DUP+OVERLAP): 1. Every @AC-* is accounted for, and none were skipped.
 ```
+
+## Session 2026-11-17 (operator: corrected C-16 promotion plan)
+
+- The promotion plan above was built from the stale triage-time `acceptance.feature` on `main-dev` (the scenario-promoter reads the main checkout). It promoted only the original `@AC-1` wording, without `@FR-1`, and missed `@AC-2` and `@AC-3`. This block supersedes it: it is built from the branch's `acceptance.feature`.
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-portfolio-signal-expiry-backfill (feature 359), corrected
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-portfolio/acceptance/fix-portfolio-signal-expiry-backfill.feature | CREATE | NEW | The amended wording (absent or tracked by the live signal; no removal after 3 days). No existing scenario covers APPLY versus a concurrent live ingest. |
+| AC-2 | services/xstockstrat-portfolio/acceptance/fix-portfolio-signal-expiry-backfill.feature | APPEND | NEW | The seed-path race. Not covered by 281 @AC-15 (seeding without concurrency). |
+| AC-3 | — | — | DUP | Step 6 already promoted the same guarantee as the CHANGE of durable 281 @AC-16 (signal-watchlist-expiry-pruning.feature:127, tagged @feature-359): mark valid_until 3 days after APPLY, nothing removed within 3 days, removed after 3 days with signal_entry_removed_untracked. Do not duplicate it. |
+
+### Ready-to-write blocks
+--- services/xstockstrat-portfolio/acceptance/fix-portfolio-signal-expiry-backfill.feature (CREATE) ---
+# Promoted from docs/roadmap/features/359-fix-portfolio-signal-expiry-backfill/acceptance.feature at launch
+# (Constitution C-16). Scenarios are verbatim; @AC-/@FR- tags are preserved and @feature-359 added.
+
+Feature: xstockstrat-portfolio - signal-expiry backfill APPLY never strands a live signal's watchlist entry
+  The signal-expiry backfill APPLY serializes each row on the parent watchlist row lock, so a signal added
+  concurrently always leaves its SIGNAL watchlist entry tracked by that live signal (feature 359).
+
+  @AC-1 @FR-1 @regression @feature-359
+  Scenario: A signal added during backfill APPLY keeps its watchlist entry out of the prune set
+    Given a system-managed watchlist with a SIGNAL binding for "META" that has no expiry row and no own watchlist signals
+    And a backfill REPORT that classifies that binding as untracked
+    When the backfill APPLY runs concurrently with a live watchlist signal for "META" being ingested (valid_until 30 days ahead) and added through AddSymbols with its provenance
+    Then the binding's expiry row is either absent or tracked by the live signal (its signal_id and valid_until)
+    And a prune tick run afterwards removes nothing from that watchlist
+    And a prune tick run after 3 days removes nothing from that watchlist
+    And the "META" binding remains with source SIGNAL
+
+  @AC-2 @FR-2 @regression @feature-359
+  Scenario: A signal added during a seed APPLY leaves the entry tracked by the new signal, never by the owner's expired one
+    Given a system-managed watchlist with a SIGNAL binding for "META" that has no expiry row
+    And the owner's own watchlist signal for "META" whose valid_until is already past
+    And a backfill REPORT that classifies that binding as a seed with seed_expired Y
+    When the backfill APPLY runs concurrently with a live watchlist signal for "META" being ingested (valid_until 30 days ahead) and added through AddSymbols with its provenance
+    Then the binding's expiry row has the live signal's signal_id and valid_until
+    And a prune tick run afterwards removes nothing from that watchlist
+    And the "META" binding remains with source SIGNAL
+
+### Coverage check
+- Source scenarios: 3. Planned: 2 NEW (AC-1, AC-2) and 1 DUP (AC-3, already in durable 281 @AC-16 via step 6). Every @AC-* is accounted for.
+```
