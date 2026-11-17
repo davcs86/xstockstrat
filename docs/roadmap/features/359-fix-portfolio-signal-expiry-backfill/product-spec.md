@@ -71,7 +71,7 @@ See `acceptance.feature`. Its regression scenario must fail on the buggy behavio
 
 All of these are deferred to `/sdd-design`. None blocks product-spec approval.
 
-- Seed path (`backfillSeedSQL`, `signal_expiry_backfill.go:101-112`): does it have the same race shape (committing a stale, already-expired `valid_until` after a merge that found no row)? Design decides. If confirmed, add FR-2 and a covering scenario (append-only `@AC-2`).
-- Fix site: should backfill APPLY take the parent `portfolio.watchlists` row lock, or should `watchlist_repo.go#applyExpiryIntentTx` / `mergeSignalExpirySQL` change? Design decides. Keep clear of the `ListByUser` / constructor region that feature 354 edits.
-- Determinism: how does the `@AC-1` regression fail reliably on the buggy code (for example a forced interleaving hook) instead of only intermittently? Design decides (C-15).
-- Does the `backfill-signal-expiry` runbook (§7) wording need an update? Decide at design or spec.
+- [ ] Seed path (`backfillSeedSQL`, `signal_expiry_backfill.go:101-112`): does it have the same race shape (committing a stale, already-expired `valid_until` after a merge that found no row)? Design decides. If confirmed, add FR-2 and a covering scenario (append-only `@AC-2`).
+- [ ] Fix site: should backfill APPLY take the parent `portfolio.watchlists` row lock, or should `watchlist_repo.go#applyExpiryIntentTx` / `mergeSignalExpirySQL` change? Design decides. Keep clear of the `ListByUser` / constructor region that feature 354 edits.
+- [ ] Determinism: how does the `@AC-1` regression fail reliably on the buggy code (for example a forced interleaving hook) instead of only intermittently? Design decides (C-15).
+- [ ] Does the `backfill-signal-expiry` runbook (§7) wording need an update? Decide at design or spec.
