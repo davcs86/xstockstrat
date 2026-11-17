@@ -52,4 +52,4 @@ Portfolio's `backfill-signal-expiry` APPLY can mark a SIGNAL watchlist entry as 
 
 ## Next Action
 
-`/sdd-review fix-portfolio-signal-expiry-backfill impl-spec` — validate implementation spec, then `/sdd-execute fix-portfolio-signal-expiry-backfill`
+Merge integration PR #1575 (`feature/fix-portfolio-signal-expiry-backfill` → `main-dev`) once CI's `Portfolio DB test (TimescaleDB)` job is green. It carries the deferred DB-test evidence for DEV-1..DEV-3. The fix then ships to production with the next `/promote`.
