@@ -685,3 +685,10 @@
 - CI failure 1: `Migration rerun (idempotent replay)` — `migration-rerun: ingest should be clean at 17,
   got: 18`. `scripts/migration-rerun.py` pins the top ingest migration; bumped `17` → `18` (Deviation Log).
   The checks after that line (post-R assertions, pass 4 with marketdata `010`) had not run yet.
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1576 merged to main
+- Feature promoted and committed: 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17
