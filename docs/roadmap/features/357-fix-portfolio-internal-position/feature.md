@@ -16,6 +16,7 @@
 | 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-11-17-portfolio-internal-position-reads-truncate-at-500-defect.md` |
 | 2026-11-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 | 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 
 ---
 
@@ -26,7 +27,7 @@
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Debate Register](debate.md) — D-n / R-n / O-n / P-n register (3 full-mode rounds)
 - [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-portfolio-internal-position`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -35,6 +36,16 @@
 
 `GetPortfolio`, `GetPnL`, `broadcastSnapshot` and `checkRiskLimits` read one 500-row `ListPositions` page and drop the token; users with more than 500 positions get truncated totals, snapshots and risk checks returned as success.
 
+## Reviewers
+
+| Role | Focus | Steps |
+|---|---|---|
+| Service owner (xstockstrat-portfolio) | P&L calculation accuracy, position snapshot consistency, concurrent write safety | 1–7 |
+
+Steps 8–9 (`docs`): none.
+
+---
+
 ## Next Action
 
-`/sdd-spec fix-portfolio-internal-position` — generate implementation spec from the approved design
+`/sdd-review fix-portfolio-internal-position impl-spec` — validate implementation spec, then `/sdd-execute fix-portfolio-internal-position`
