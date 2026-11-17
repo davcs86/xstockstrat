@@ -11,7 +11,8 @@
 Paths: `portfolio/` abbreviates `services/xstockstrat-portfolio/`, `agent/` abbreviates
 `services/xstockstrat-agent/`. Every `path:line` below was read on the tree
 `ccr-1305a9de-7x1t7v@34c34ed` (`origin/main-dev@ccbe424` merged in; no `origin/feature/ensure-signals-watchlist-on-read`
-exists yet, so `main-dev` was the freshness target). Symbols marked **new** do not exist today and are
+exists yet, so the session branch was the freshness target; re-verified at `4cc3d41` during
+`/sdd-review impl-spec` — only `docs/` differs, so every code reference below is unchanged). Symbols marked **new** do not exist today and are
 created by the step that names them. This session had no Go toolchain (`go version` tried to download
 1.27.0), so no Go command below was executed here; the commands are the repo's own CI forms.
 
@@ -88,11 +89,23 @@ database only.
 - Step 6 requires Step 5's recorded output in `context.md` (design.md § Build order item 5).
 - Merge order: this feature's final integration PR waits for the fix (D-10(a)); the fix has no feature
   slug or number yet (the fix session sits at `/sdd-triage`'s feature-number gate, `context.md` Open
-  Threads), so the row's `<fix-slug> (<NNN>)` is filled in at Step 6.
+  Threads), so the row's `<fix-slug> (<NNN>)` is filled in at Step 6. The row text in Step 6 follows
+  design.md § Merge-order row, which is authoritative; D-11(b)'s register wording ("Merge order only —
+  `<fix-slug>` need not be launched") is the same meaning in short form and matches rows 29-30 of
+  `merge-order.md` once written as "**Hard — merge order only; … need not be launched**".
+- Numbering note: design.md labels the landing gate "step 4" and the integration PR "step 5" (its own
+  build order, where agent docs is step 3); this spec's Steps 1-4 are design steps 1-3 (service, tests
+  split into unit and dbtest, docs) and its Step 5 / Step 6 are the design's step 4 / step 5.
+- Step 5 halts, it does not fail: see the execute handoff in Step 5 (F-05).
 - Overlap, rebase-only: `portfolio/internal/service/portfolio_service.go` is also named by 311, 312, 315,
   317, 323 and 326, all `spec-ready` today (`status.md` read for each). Re-check at Step 1 time that 323
   has not removed `EnsureSystemManaged` or `signalWatchlistDefaultName` and that 312 has not changed how
-  `requireUserID` resolves the id.
+  `requireUserID` resolves the id. Behavioral coupling (not a file collision): feature 348 (`code-completed`)
+  builds its lane symbol list by calling `list_watchlists` then `get_watchlist` over all lists
+  (`348-fix-edgar-historical-fundamentals/implementation-spec.md:81,1347-1348`); the new empty Signals list
+  adds no symbols, so the union is unchanged, but a recorded watchlist count can read one higher.
+- AC-2's concurrency is proven at repository level (Step 3a) and sequentially at service level (Step 2):
+  the fake store is a mutex-less map, so a concurrent unit test would fail under `-race` (D-9, accepted).
 
 ---
 
@@ -283,7 +296,7 @@ proof is Step 2's tests going RED → GREEN.
 **Verification**:
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/ -run 'TestListWatchlists351' -race -count=1 -v
-cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
+cd services/xstockstrat-portfolio && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
 cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -c 'TestListWatchlists351_AC' internal/service/watchlist_service_test.go   # >= 9 (one per AC-1,2,3,4,5,6,7,8,10)
 ```
@@ -362,6 +375,10 @@ cd services/xstockstrat-portfolio && GOWORK=off go vet -tags dbtest ./internal/r
   && GOWORK=off go test -tags dbtest -race -count=1 ./internal/repository/ -run 'TestEnsureSystemManaged_ConcurrentSingleRow|TestListByUser_OrdersByWatchlistIDAfterEnsure' -v
 grep -n 'testPool(t)' internal/repository/signal_expiry_prune_dbtest_test.go | head -3   # existing callers unchanged
 ```
+**Coverage threshold: none applies to this step.** `repository/` is excluded from the Go coverage gate
+(`docs/patterns/ci-overview.md:19,87`); the CI job `portfolio-db-test` (`.github/workflows/ci.yml:1017`) is
+the gate for these tests.
+
 Run offline (no `PORTFOLIO_DB_TEST_URL`) the two tests report SKIP, which is **not** evidence
 (`fails.md:3055`). The proof is the CI job `portfolio-db-test` (`ci.yml:1017`) on the step PR, where
 `CI=true` makes an unset URL fatal (`dbtest_helpers_test.go:25-29`); record that job's result in the PR
@@ -422,7 +439,8 @@ not by a new test; flagged as an assumption above)
 cd /home/user/xstockstrat
 sed -n '/^### `list_watchlists`$/,/^### `get_watchlist`$/p' docs/runbooks/mcp-tools.md | grep -c '(read-only'   # expect 0
 sed -n '/^### `list_watchlists`$/,/^### `get_watchlist`$/p' docs/runbooks/mcp-tools.md | grep -c 'idempotent'   # expect >= 1
-grep -n 'list_watchlists     —' services/xstockstrat-agent/app/tools.py        # header line: no "(read-only)", names the ensure
+grep -n 'list_watchlists     —' services/xstockstrat-agent/app/tools.py | grep -c '(read-only)'    # header line: expect 0
+grep -n 'list_watchlists     —' services/xstockstrat-agent/app/tools.py | grep -c 'idempotent'     # header line names the ensure: expect 1
 sed -n '/async def list_watchlists/,/user_id = _caller_user_id/p' services/xstockstrat-agent/app/tools.py | grep -c '(read-only)'   # expect 0
 sed -n '/async def list_watchlists/,/user_id = _caller_user_id/p' services/xstockstrat-agent/app/tools.py | grep -c 'idempotent'    # expect >= 1
 cd services/xstockstrat-agent && ruff check . && ruff format --check . && pytest tests/test_tools_endpoint.py tests/test_watchlist_tools.py -q
@@ -492,6 +510,16 @@ cd services/xstockstrat-portfolio && GOWORK=off go vet -tags dbtest ./internal/r
 ```
 Plus the recorded run of `go test -tags dbtest -race ./internal/repository/...` (CI job `portfolio-db-test`
 result or a named local run). A SKIP does not satisfy (ii).
+
+**Coverage threshold: none applies to this step.** It adds no test code of its own (at most the removal of
+351's duplicate seeding helper); `repository/` is excluded from the Go coverage gate
+(`docs/patterns/ci-overview.md:19,87`) and the CI job `portfolio-db-test` is the gate.
+
+**Execute handoff (F-05).** This step cannot pass its own Verification until the external `ListByUser`
+fix is merged to `origin/main-dev`. `/sdd-execute` must report it as a **HALT waiting on an external
+dependency** (named: the fix session / defect report), not as a step failure to repair inside this feature,
+and must not mark the step `done` or open the integration PR until (i)-(iii) are recorded in `context.md`.
+Any divergence goes in the `## Deviation Log` (F-09), never into an edit of this step's body.
 
 ---
 
