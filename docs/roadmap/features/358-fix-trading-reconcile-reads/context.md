@@ -1114,3 +1114,9 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - IBKR and both-broker test coverage for the drain is prose-only. Decide at /sdd-execute.
 - Rebase on 337, 347 and 349 before integration (file-level overlaps only).
 - 358 merges after 353. No merge-order.md row exists yet.
+
+## Session 2026-11-17 — operator decision (main session)
+
+- Operator decision: **accept paper-only broker coverage** for the drain tests. No `BROKER_TYPE_IBKR` row and no live-mode (`isPaper=false`) row are added. This is an accepted risk: `listAccountPlatformPositions` does not branch on broker type and only forwards `tradingMode` (C-18). Closes the Open Thread "IBKR and both-broker test coverage … decide at /sdd-execute".
+- Merge-order note: 358's prerequisite 353 is already merged into `main-dev` (#1568), so no `merge-order.md` row is needed.
+- Overlap re-check vs 356/357: the implementation specs' `**Files**` lists are disjoint (358 touches only `services/xstockstrat-trading/**`). There is no shared proto, migration or config key.
