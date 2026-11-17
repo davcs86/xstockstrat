@@ -56,3 +56,5 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] analysis position-drain hardening (equal-token guard, fail closed, cap-hit log)
   - [ ] WatchlistRepo.ListByUser look-ahead token (other session owns the sibling report)
   - [ ] internal 500-row truncation (portfolio_service.go:787,932,1214,1283; trading.go:2235)
+
+- Review iteration 2: 0 ✗, 3 ⚠ (stale pgxmock "not in cache" text; scan-wrapper trade-off not cross-referenced; parent-level pool construction intent) + citation drift :191-196→:192-197 and unqualified ledger paths — all fixed in implementation-spec.md.

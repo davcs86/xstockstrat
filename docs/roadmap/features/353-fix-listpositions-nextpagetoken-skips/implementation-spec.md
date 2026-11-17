@@ -32,7 +32,7 @@ Analysis drains also treat the token as opaque (`services/xstockstrat-analysis/a
 - Step 4 [test] covers Step 3 [service]. Step 4 needs Step 3 for `classifyListPositionsError`.
 - No atomic units. Step 1 carries its own test-pin edits (step-constraints §C: the three `WithArgs(..., "", 501)` pins would otherwise turn red), so every step is green at its own commit.
 - Follow-ups from design.md Open Risks are not steps. They are tracked as `[ ]` items in `context.md` Open Threads; the `/sdd-execute` integration PR body must list them, and the feature is not archived until each has a filed report under `docs/reports/` (or a recorded wont-fix). After this feature lands, file each with `/sdd-qa defect`:
-  1. Harden the analysis position drains: equal-token guard, fail closed, cap-hit log (fails.md:3309-3312).
+  1. Harden the analysis position drains: equal-token guard, fail closed, cap-hit log (`docs/roadmap/ledger/fails.md:3309-3312`).
   2. The look-ahead token in `WatchlistRepo.ListByUser` (`internal/repository/watchlist_repo.go:139`). Another session owns the sibling report.
   3. Internal callers read only the first 500 positions (`portfolio_service.go:787,932,1214,1283`; trading `trading.go:2235`).
 
@@ -54,11 +54,11 @@ Analysis drains also treat the token as opaque (`services/xstockstrat-analysis/a
 - The bug, part 1: `:161-162` `args = append(args, pageToken)` and `conds = append(conds, fmt.Sprintf("($%d = '' OR symbol > $%d)", len(args), len(args)))`, a symbol-only keyset.
 - `:163-164` bind the limit as `pageSize+1`. `:168-172` run `ORDER BY symbol ASC LIMIT $%d`, with no tiebreaker.
 - `:182` `p, err := scanPositionRow(rows)`.
-- The bug, part 2: `:191-196` `nextToken = positions[pageSize].Symbol`, the look-ahead row.
+- The bug, part 2: `:192-197` (`:194` `nextToken = positions[pageSize].Symbol`), the look-ahead row.
 - `scanPositionRow` (`:253-293`) scans `trading_mode` into `modeStr` and never returns it. Its other callers are `:131` (`GetPosition`) and `:626` (`ListPositionsByAccount`). Tests call it at `portfolio_repo_test.go:26,33`. `positionColumns` is at `:297`.
 - Sentinel pattern: `:247` `var ErrPositionNotFound = errors.New("position not found")`. The file already imports `encoding/json`, `errors`, `fmt` and `strings` (`:3-9`); `encoding/base64` is not imported yet.
 - A `[]string` bound in production SQL already exists and runs under the PgBouncer Exec mode today: `:505-507` (`r.db.Query(... WHERE user_id=$1 AND account_id = ANY($2)`, userID, accountIDs)`; re-confirmed 2026-11-17).
-- Uniqueness argument (insights.md:3547): `migrations/003_positions_account_id.up.sql:8-10` declares `UNIQUE (user_id, symbol, trading_mode, account_id)`. All three cursor columns are `NOT NULL` TEXT (`001_portfolio_hypertable.up.sql:10`, `002_add_trading_mode.up.sql:6`, `003_positions_account_id.up.sql:2`). `user_id = $1` is always an equality filter.
+- Uniqueness argument (`docs/roadmap/ledger/insights.md:3547`): `migrations/003_positions_account_id.up.sql:8-10` declares `UNIQUE (user_id, symbol, trading_mode, account_id)`. All three cursor columns are `NOT NULL` TEXT (`001_portfolio_hypertable.up.sql:10`, `002_add_trading_mode.up.sql:6`, `003_positions_account_id.up.sql:2`). `user_id = $1` is always an equality filter.
 - Pattern reused, copied rather than imported because it is unexported: marketdata builds the token from the last returned row (`marketdata_repo.go:956` `last := out[pageSize-1]`) and over-fetches by one.
 - Exact pins that change: `internal/service/offline_account_pnl_test.go:530` `WithArgs("u1", "alp-1", "", 501)`, `:531` `WithArgs("u1", offAcct, "", 501)` and `:572` `WithArgs("u-1", account, "", 501)`. `grep -rn 'WithArgs(' --include=*_test.go | grep '""'` finds no other empty-token pin. The roughly 37 `anyArgs(3)`/`anyArgs(4)` pins (helper at `portfolio_fill_errors_test.go:36`) keep their arg count and are left alone.
 
@@ -79,13 +79,13 @@ Analysis drains also treat the token as opaque (`services/xstockstrat-analysis/a
      - Return `ErrInvalidPageToken` on a decode error, an unmarshal error, or `len(parts) != 3`. This covers JSON `null`, an object, non-string elements, and bare legacy tokens such as `"AAPL"` or `"BRK.B"`.
      - Empty-string elements are valid.
    - Put this 2-line constraint comment above `decodePositionCursor`: `// Rejects (never resumes page 1, unlike marketdata parseHistCursor): a silent restart makes` / `// paging consumers re-add rows (analysis _drain_held_symbols sums market_value).`
-4. Rename the body of `scanPositionRow` to `scanPositionRowWithMode(row pgxRow) (*portfoliov1.Position, string, error)`. It returns `modeStr` as the second value; on an error it returns `nil, "", err`, keeping the `ErrPositionNotFound` mapping at `:265-267`. Then make `scanPositionRow` a one-line wrapper: `p, _, err := scanPositionRowWithMode(row); return p, err`. Its callers at `:131` and `:626` and its tests stay unchanged.
+4. (Accepted trade-off, design D-3: a wrapper beats changing `scanPositionRow`'s signature for its 3 production + 2 test callers, and beats a `Position` proto change.) Rename the body of `scanPositionRow` to `scanPositionRowWithMode(row pgxRow) (*portfoliov1.Position, string, error)`. It returns `modeStr` as the second value; on an error it returns `nil, "", err`, keeping the `ErrPositionNotFound` mapping at `:265-267`. Then make `scanPositionRow` a one-line wrapper: `p, _, err := scanPositionRowWithMode(row); return p, err`. Its callers at `:131` and `:626` and its tests stay unchanged.
 5. In `ListPositions`:
    - Before building any args, call `cursor, err := decodePositionCursor(pageToken)`. If `err != nil`, return `nil, "", fmt.Errorf("list positions: %w", err)`. No query is issued.
    - Replace `:161-162` with `args = append(args, cursor)` and condition `fmt.Sprintf("(cardinality($%[1]d::text[]) = 0 OR (symbol, trading_mode, account_id) > (($%[1]d::text[])[1], ($%[1]d::text[])[2], ($%[1]d::text[])[3]))", len(args))`. Write the explicit `::text[]` on every use. This is one arg in the token's existing slot, so the arg count does not change (D-7).
    - Change `ORDER BY symbol ASC` at `:171` to `ORDER BY symbol, trading_mode, account_id`.
    - In the scan loop (`:181-187`), call `scanPositionRowWithMode` and collect the modes into a parallel `modes []string`.
-   - Replace `:191-196` with: if `len(positions) > pageSize`, set `last := pageSize-1`, `nextToken = encodePositionCursor(positions[last].Symbol, modes[last], positions[last].AccountId)`, `positions = positions[:pageSize]`.
+   - Replace `:192-196` (the `nextToken` block before `return`) with: if `len(positions) > pageSize`, set `last := pageSize-1`, `nextToken = encodePositionCursor(positions[last].Symbol, modes[last], positions[last].AccountId)`, `positions = positions[:pageSize]`.
    - The filters (mode, account, symbol, side) stay ANDed before `LIMIT`.
 6. In `offline_account_pnl_test.go`, change the third arg at `:530`, `:531` and `:572` from `""` to `[]string{}`. Change nothing else in that file.
 
@@ -114,11 +114,11 @@ Every existing test passes, including the three re-pinned `offline_account_pnl_t
 **Reviewers**: Service owner (`xstockstrat-portfolio`): P&L calculation accuracy, position snapshot consistency, concurrent write safety
 
 **Codebase Evidence**:
-- pgxmock repo-test pattern: `portfolio_repo_test.go:49-92` (`TestGetPosition_ScopesToRequestedAccount`) uses `pgxmock.NewPool()`, `repo := &PortfolioRepo{db: mock}`, `mock.ExpectQuery(<regex>).WithArgs(...)` and `mock.ExpectationsWereMet()`. The inline 17-column row header is at `:60-63`. pgxmock is `github.com/pashagolub/pgxmock/v4 v4.9.0` (`go.mod:9`). The module is not in the local cache, so check the `pgxmock.Argument` interface signature (`Match(any) bool`) when executing (design O-9).
+- pgxmock repo-test pattern: `portfolio_repo_test.go:49-92` (`TestGetPosition_ScopesToRequestedAccount`) uses `pgxmock.NewPool()`, `repo := &PortfolioRepo{db: mock}`, `mock.ExpectQuery(<regex>).WithArgs(...)` and `mock.ExpectationsWereMet()`. The inline 17-column row header is at `:60-63`. pgxmock is `github.com/pashagolub/pgxmock/v4 v4.9.0` (`go.mod:9`). The `pgxmock.Argument` interface is verified in v4.9.0 `argument.go:6-8` (`Match(interface{}) bool`); plain args are compared with `reflect.DeepEqual` (`expectations.go:169`) (debate.md O-9).
 - Cursor-test template: marketdata `marketdata_repo_test.go:305` (`TestQueryHistoricalFundamentals_Pagination`, ":334 cursor is the LAST RETURNED row"), `:394` (`...CompositeCursorSamePeriodEnd`) and `:450` (`TestParseHistCursor`).
 - dbtest harness: `dbtest_helpers_test.go:1` `//go:build dbtest`. `:18` `const dbtestUserPrefix = "it-281-"`. `:22-49` `testPool(t)` reads `PORTFOLIO_DB_TEST_URL`, fails under `CI=true` if it is unset and skips otherwise. Its cleanup deletes only `portfolio.watchlists` (`:41-46`). `:52-55` is `testUserID(t)`. There is no positions seeder yet.
 - `NewPortfolioRepoWithDB(db queryRower)` (`portfolio_repo.go:49`). `*pgxpool.Pool` satisfies `queryRower` (`:22-26`: `QueryRow`, `Query`, `Exec`).
-- Production Exec mode: `pool.go:29-32` sets `cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec` when `DB_PGBOUNCER` is set (fails.md:1977-2001).
+- Production Exec mode: `pool.go:29-32` sets `cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec` when `DB_PGBOUNCER` is set (`docs/roadmap/ledger/fails.md:1977-2001`).
 - Positions columns without a default: `user_id`, `symbol`, `qty`, `avg_entry_price`, `cost_basis` (`001_portfolio_hypertable.up.sql:9-13`). `trading_mode` and `account_id` have defaults (`002:6`, `003:2`). There is no CHECK or trigger on `positions`.
 - CI: the `portfolio-db-test` job (`.github/workflows/ci.yml:1016-1065`) applies all migrations to `timescale/timescaledb:latest-pg16` and runs `go test -tags dbtest -race -count=1 ./internal/repository/...`. A new file in that package needs no workflow change. TimescaleDB is not installed locally (no `timescale*` under `/usr/share/postgresql/16/extension`).
 
@@ -160,7 +160,7 @@ Every existing test passes, including the three re-pinned `offline_account_pnl_t
      - Add a second cleanup that runs `DELETE FROM portfolio.positions WHERE user_id LIKE $1` with the same `dbtestUserPrefix+"%"`. Reuse the prefix; do not add a second one (D-8).
      - Add `seedPosition(t, pool, userID, symbol, mode, accountID string, qty float64)`. It inserts `(user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id)` with `avg_entry_price=1` and `cost_basis=qty`, and calls `t.Fatalf` on error.
      - Add `traverse(t, repo, userID, mode, pageSize) (seq []float64, pageLens []int)`. It loops `ListPositions` until the token is `""`, fails after 50 pages, and fails if a token equals the previous one.
-   - **Two exec modes:** both tests run as subtests over `{"default": testPool(t), "exec": testPool(t, func(c *pgxpool.Config){ c.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec })}`, each wrapped by `NewPortfolioRepoWithDB(pool)`. Both are mandatory (D-8).
+   - **Two exec modes:** both tests run as subtests over `{"default": testPool(t), "exec": testPool(t, func(c *pgxpool.Config){ c.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec })}`, each wrapped by `NewPortfolioRepoWithDB(pool)`. Both are mandatory (D-8). Build both pools at the parent-test level on purpose: an unset `PORTFOLIO_DB_TEST_URL` then skips (or, under `CI=true`, fails) the whole test once, and both subtests share one cleanup scope; do not move pool construction into the subtests.
    - **`TestListPositions_TraversalYieldsEveryRowOnce` (`@AC-1`):**
      - Seed 7 rows with `qty` 1..7 as the identity: AAPL/TRADING_MODE_LIVE/a, AAPL/TRADING_MODE_PAPER/a, AAPL/TRADING_MODE_PAPER/b, AAPL/TRADING_MODE_PAPER/c, MSFT/TRADING_MODE_LIVE/a, MSFT/TRADING_MODE_PAPER/a, NVDA/TRADING_MODE_PAPER/a.
      - Page size 3: assert `seq == [1,2,3,4,5,6,7]` exactly and `pageLens == [3,3,1]`.
