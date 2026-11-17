@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
+**Rounds run**: 6 (round numbers continue across runs; the 5-round cap was overridden by the operator on 2026-11-17, context.md)
 
 ## Rounds
 
@@ -13,6 +13,7 @@
 | 3 | 2026-11-17 | /sdd-design | 5 | 3 | 12 | 12 | 0 | yes |
 | 4 | 2026-11-17 | /sdd-design | 3 | 0 | 11 | 12 | 0 | yes |
 | 5 | 2026-11-17 | /sdd-design | 2 | 0 | 3 | 3 | 1 | yes |
+| 6 | 2026-11-17 | /sdd-design | 1 | 0 | 0 | 0 | 0 | yes |
 
 ## Settled Decisions
 
@@ -48,6 +49,7 @@
 | D-27 | 4 | The sync handler reads the asset-set pointer once per call and builds its response from the claim's own returned rows: `CLAIMED` or `REDELIVERY` implies `unservable_in_current_set`, and an unloaded asset set claims nothing. A claim covers only symbols unservable in that snapshot. | `services/xstockstrat-marketdata/internal/service/asset_servability.go:46-49,135` | settled |
 | D-29 | 5 | Ingest stores `symbol_results` keyed by chunk; within a chunk each attempt's results replace the entries of every symbol it was sent and a sent symbol absent from the results is dropped as written; a resumed chunk replaces its own entry; the job view merges across chunks at read (failed > skipped > empty). The invariant holds in both directions except for chunks completed before a restart. H4's window test is a date cutoff computed in Go and re-checked inside the statement. | `services/xstockstrat-ingest/app/handlers/servicer.py:909-912,962,974-978`; fails.md:3573 | settled |
 | D-30 | 5 (gate) | Operator rulings at the round-5 gate: recovery runs on trading-day loads only (D-5 stands; FR-2 amended to say so); the recovery alert is keyed on the flag alert having been claimed for sending (FR-12 clarified); the two new marketdata RPCs require the `x-internal-caller` header and the mTLS peer identity of `xstockstrat-portfolio`. | context.md 2026-11-17 sdd-design round-5 gate; PLAT-9 | settled |
+| D-31 | 6 | Refinements verified against the code, none contradicting an earlier decision: the calendar's API is unchanged — the hook's day is `DayStart(now)` and the inclusive count of D-4 is done by stepping back N−1 times with `PrevTradingDay`; the refresher gains a `now` clock seam copied from `etfFlagState`; the peer-identity check is a new Go helper in marketdata (native grpc-go server, verified client certificates, DNS SAN `xstockstrat-portfolio`); the delisting step is appended at the end of `pruneOnce`; the 20 000 cap is a constant in marketdata only; one agent post-processor serves the single-job and list returns. Round-6 adversary: sound as written, no objection. | `services/xstockstrat-portfolio/internal/marketsession/marketsession.go:27-33,55-62`; `services/xstockstrat-marketdata/internal/service/etf_flags.go:47,68-73`; `services/xstockstrat-marketdata/cmd/server/main.go:171-181`; `services/xstockstrat-marketdata/internal/mtls/mtls.go:51`; `scripts/gen-dev-certs.sh:50`; `services/xstockstrat-portfolio/internal/service/signal_prune.go:51-79` | settled |
 | D-9 | 1 | Only an error from the data source turns a flagged symbol into `skipped`. A failure writing to our own database stays `failed` in both backfill kinds. | spec D-16 ("the source returns any error"); `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1561-1565,2344` | settled |
 
 ## Rejected Alternatives (locked)
