@@ -31,7 +31,8 @@ Trading-domain survey (`reference/step-constraints.md` §A): `TRADING_MODE`, `Br
 `OrderStatus` have no match in the portfolio files this feature edits (`signal_prune.go`,
 `signal_expiry_repo.go`, `watchlist_repo.go`, the watchlist handlers of `portfolio_service.go`). Order
 placement, broker dispatch, order types and fill handling are unaffected by every step; detection reads
-only the Alpaca asset set, which is the same in paper and live.
+only the Alpaca asset set, which is the same in paper and live. IBKR has no marketdata integration, so
+no counterpart step is needed.
 
 ## Scenario Coverage (C-15)
 
@@ -76,11 +77,11 @@ Each is a naming or shape choice the design left open. `/sdd-review impl-spec` s
 Steps call these by name. Run from the repo root.
 
 ```bash
-go_gate() {  # lint + whole-service race tests + the CI coverage total (threshold 40)
+go_gate() {  # lint + whole-service race tests + the CI coverage total; fails below the CI threshold (40, .github/workflows/ci.yml:330-335)
   ( cd "services/$1" && GOWORK=off golangci-lint run --modules-download-mode=mod &&
     COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') &&
     GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" &&
-    GOWORK=off go tool cover -func=coverage.out | grep "^total:" )   # confirm >= 40%
+    GOWORK=off go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print; if ($3+0 < 40) exit 1}' )
 }
 py_gate() {  # lint + whole-service tests at the CI threshold (40)
   ( cd "services/$1" && ruff check . && ruff format --check . && pytest --cov=app --cov-fail-under=40 )
@@ -521,7 +522,7 @@ grep -rn "ZZ352_" --include="*_test.go" services/xstockstrat-marketdata | cut -d
 - Calendar: `github.com/xstockstrat/contracts/marketsession` (Step 3) — `DayStart`, `IsTradingDay`, `PrevTradingDay`. `SessionDate` shifts by +6 h and must not be used (design §3).
 - Existing asset tests build `&MarketDataService{registry: reg, warmSymbols: …}` with no store (`asset_servability_test.go:50-55`), so the hook must be a no-op when no store is wired.
 - Config-key contract (**C-05**): namespace `marketdata`, key `assets.delisting_confirmation_trading_days`, `value_type` `int`, code default `5`, reader `services/xstockstrat-marketdata/internal/service/asset_servability.go:resolveDelistingConfirmationDays`, seed migration Step 10 (`054`), live mechanism: marketdata's `WatchConfig` watcher (`s.budgetCfg`), re-read at each successful asset-set load. `grep -rn "delisting_confirmation" services scripts` → no match today.
-- Runbook index: `docs/runbooks/CLAUDE.md:5-6` (table `| File | Purpose | Key trigger |`, one row per runbook, alphabetical by file name); the sanctioned way to run operator SQL is `docs/runbooks/operator-db-access.md` (indexed at `:12`). `ls docs/runbooks | grep -i delist` → no match today.
+- Runbook index: `docs/runbooks/CLAUDE.md:5-6` (table `| File | Purpose | Key trigger |`, one row per runbook; the order is not strictly alphabetical, and the new row goes between `db-seed-migration-state.md` `:8` and `hotfix-log.md` `:9`); the sanctioned way to run operator SQL is `docs/runbooks/operator-db-access.md` (indexed at `:12`). `ls docs/runbooks | grep -i delist` → no match today.
 - MARKETDATA-16 text: `services/xstockstrat-marketdata/docs/context-constitution.md:29`. CLAUDE.md anchors: config row `:71`, § Asset-set servability `:126-143` ("only the **first** successful load prunes" `:139`, residual R2 `:141-142`), § Database `:95-106`.
 
 **Lands with**: `Step 9, Step 10`
@@ -557,10 +558,11 @@ grep -rn "ZZ352_" --include="*_test.go" services/xstockstrat-marketdata | cut -d
     - § Asset-set servability: replace "only the **first** successful load prunes the warm set of unservable symbols" with: the first successful load prunes unservable symbols, and every successful load removes flagged-delisted symbols; replace residual R2 with: a symbol that becomes unservable after it was warmed stays warm until it is flagged delisted (feature 352).
     - New section "Delisted-symbol detection (feature 352)": the hook order and truth table by reference to the five statements, the single-decider rule (the hook is the only writer of profile state), the fixed values (hook limit 30 s, per-alert send 15 s), the rule that a quote read re-warms a flagged symbol until the next load, and a one-line pointer "Rollout and the first-flag burst → `docs/runbooks/delisting-rollout.md`".
     - § Observability: add the counter `marketdata.delisting.hook_failures{reason timeout|error}` and the INFO `delisting hook`.
-13. **Rollout runbook** (design §10, assumption A-5). Create `docs/runbooks/delisting-rollout.md` — prerequisites, steps, verification, like its siblings: at deploy both tables are empty; the boot load starts nothing; portfolio's first tick fills `marketdata.watched_symbol`; the first asset-set load after that starts every currently unservable watchlist symbol, dated that day; `N` trading days later (`N` = `marketdata` / `assets.delisting_confirmation_trading_days`) one load flags them together, and portfolio removes and alerts for at most 100 per prune tick, so a burst of K drains over ⌈K/100⌉ ticks. The size of the coming burst is `SELECT count(*) FROM marketdata.symbol_profile WHERE delisted_at IS NULL AND first_unservable_date IS NOT NULL;`, run per `docs/runbooks/operator-db-access.md` — the runbook's only command is this SQL query, so the macOS-compatibility rule for shell commands in docs has nothing to check. State that first-unservable dates of symbols already dead at deploy are deploy-era dates, that raising the config key before day `N` defers the burst, that portfolio deployed ahead of marketdata gets `Unimplemented` and removes nothing, and that detection depends on portfolio's tick (a portfolio outage freezes the last union). Add its row to the table in `docs/runbooks/CLAUDE.md` in alphabetical position: file `delisting-rollout.md`, purpose "First rollout of delisted-symbol detection (feature 352): what happens at deploy, how to size the first-flag alert burst, how to defer it", key trigger "Deploying feature 352; expecting or seeing a burst of `symbol_delisting` alerts".
+13. **Rollout runbook** (design §10, assumption A-5). Create `docs/runbooks/delisting-rollout.md` — prerequisites, steps, verification, like its siblings: at deploy both tables are empty; the boot load starts nothing; portfolio's first tick fills `marketdata.watched_symbol`; the first asset-set load after that starts every currently unservable watchlist symbol, dated that day; `N` trading days later (`N` = `marketdata` / `assets.delisting_confirmation_trading_days`) one load flags them together, and portfolio removes and alerts for at most 100 per prune tick, so a burst of K drains over ⌈K/100⌉ ticks. The size of the coming burst is `SELECT count(*) FROM marketdata.symbol_profile WHERE delisted_at IS NULL AND first_unservable_date IS NOT NULL;`, run per `docs/runbooks/operator-db-access.md` — the runbook's only command is this SQL query, so the macOS-compatibility rule for shell commands in docs has nothing to check. State that first-unservable dates of symbols already dead at deploy are deploy-era dates, that the burst is deferred by raising `marketdata` / `assets.delisting_confirmation_trading_days` (SetConfig, bounds [1,30]) through the config UI before day `N` — no command is run by this runbook —, that portfolio deployed ahead of marketdata gets `Unimplemented` and removes nothing, and that detection depends on portfolio's tick (a portfolio outage freezes the last union). Add its row to the table in `docs/runbooks/CLAUDE.md` between the `db-seed-migration-state.md` row (`:8`) and the `hotfix-log.md` row (`:9`): file `delisting-rollout.md`, purpose "First rollout of delisted-symbol detection (feature 352): what happens at deploy, how to size the first-flag alert burst, how to defer it", key trigger "Deploying feature 352; expecting or seeing a burst of `symbol_delisting` alerts".
 14. **MARKETDATA-16** (`docs/context-constitution.md:29`): keep "the gate applies at warm-add sites only"; add that the feature-352 hook is the one remover besides the first-load prune, that it removes flagged-delisted symbols at every successful load, and that `markWarm` stays ungated so a held flagged symbol is re-warmed by the next quote read.
 15. No header-propagation change: the hook's `EmitAlert` reuses the existing notify client and interceptor (`marketdata_service.go:229`), on the same header-less background context the refresher already uses.
-16. Files count 9 (seven code and service-doc files, plus the runbook and its index row). Not split because the hook, its reader, its telemetry, its wiring and its documents land as the Step 8–10 atomic unit.
+16. Files count 9 (seven code and service-doc files, plus the runbook and its index row). Not split because the hook, reader, telemetry, wiring and documents land as the Step 8–10 atomic unit, and the marketdata CLAUDE.md pointer to `docs/runbooks/delisting-rollout.md` must resolve under `check-context-map.py` in the same commit.
+17. Broker symmetry: marketdata is the only Alpaca market-data integration and detection reads only the Alpaca asset set; IBKR has no marketdata path, so no IBKR counterpart exists. `TRADING_MODE`, order types and fills are unaffected.
 
 **Verification** (run as the Steps 8–10 unit):
 ```bash
@@ -604,7 +606,7 @@ python3 scripts/check-context-map.py
 **Instructions**:
 1. **Fixtures.** Add to `internal/testdata/assets.go` the symbols this feature's scenarios name and that Steps 14 and 16 also use (`Roku`, `Atch`, `Shph`, `Psky`, `Nwe`, `Kpti`, `Axia`) and one helper returning `ServableAssets()` plus a given symbol on NASDAQ. Dates stay inline in the test (one consumer).
 2. **Fake store.** In `delisting_test.go` declare `fakeProfileStore`, an in-memory model of the two tables that implements all twelve `profileStore` methods with the semantics of Step 6 (it is reused by Steps 14 and 16), records the method call order, snapshots slice arguments at call entry, and can be scripted to return an error or to block until its context ends for one named method. A helper builds a service from `newAssetSvc(replies…)` with the fake store, a `fakeNotify`, a `fakeIntGetter` and `assets.now` fixed to a given New York wall-clock time.
-3. **Scenario tests** (each test name carries its `@AC`; every one drives `refreshAssets` through `mustRefresh`, never the hook directly):
+3. **Scenario tests** (each test name carries its `@AC`; every one drives `refreshAssets` through `mustRefresh`, never the hook directly). Name every scenario and mechanism test of this file `TestDelisting_…` (scenario tests `TestDelisting_AC<n>_…`), so the `-run` filter of the Verification selects them:
    - **@AC-1** absent Mon 2026-11-09 through Fri 2026-11-13, one load per trading day → flagged on the Friday load with reason `UNSERVABLE_REASON_NOT_TRADABLE` and first-unservable date `2026-11-09`.
    - **@AC-2** first absent 2026-11-16, load on 2026-11-17 → started, not flagged, and still in the warm set after the load.
    - **@AC-3** a refresh rejected by the shrink guard (use `testdata.SyntheticAssets`) → the fake store records zero calls. Paired control in the same test: a following accepted 13 500-asset refresh without `AAPL` on a later trading day records one `Start` call naming `AAPL`; RED fails on this assertion.
@@ -634,7 +636,7 @@ python3 scripts/check-context-map.py
 
 **Verification** (run as the Steps 8–10 unit):
 ```bash
-( cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ -race -count=1 -run 'Delisting|AssetSet|ResolveDelisting|Allowlist' -v | grep -c '^--- PASS' )
+( cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ -race -count=1 -run 'Delisting|AssetSet|ResolveDelisting|Allowlist' -v | grep -c '^--- PASS' )   # >= 25
 go_gate xstockstrat-marketdata
 grep -c "@AC-" services/xstockstrat-marketdata/internal/service/delisting_test.go          # >= 14
 grep -rn "Psky *=" --include="*.go" services/xstockstrat-marketdata | wc -l   # 1 declaration site (C-13)
@@ -848,11 +850,12 @@ python3 scripts/check-context-map.py
    - a store error → `Internal`.
    - `AckDelistingAlerts`: denied without the grant; acknowledges only the given symbols.
 3. `marketdata_handler_test.go`: one round trip per new RPC through `GRPCHandler()` proving the adapter forwards the request and maps `PermissionDenied` to the gRPC code.
+   Name the tests of this step `TestInternalCaller_…`, `TestSyncWatchlistDelistings_…` and `TestAckDelistingAlerts_…`, so the `-run` filter of the Verification selects them.
 4. RED: with Step 13's methods present returning `Unimplemented`/zero values, the `CLAIMED` case fails.
 
 **Verification**:
 ```bash
-( cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ ./internal/handler/ -race -count=1 -run 'InternalCaller|SyncWatchlistDelistings|AckDelistingAlerts' -v | grep -c '^--- PASS' )
+( cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ ./internal/handler/ -race -count=1 -run 'InternalCaller|SyncWatchlistDelistings|AckDelistingAlerts' -v | grep -c '^--- PASS' )   # >= 20
 go_gate xstockstrat-marketdata
 grep -rn "type fakeProfileStore" --include="*_test.go" services/xstockstrat-marketdata | wc -l   # 1 declaration site (C-13)
 ```
@@ -942,7 +945,7 @@ Create `backfill_outcome_test.go` with a file-local assertion helper for the des
 
 **Verification**:
 ```bash
-( cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ -race -count=1 -run 'BackfillOutcome|BackfillBars_SymbolOutcomeCounts|BackfillFundamentals' -v | grep -c '^--- PASS' )
+( cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ -race -count=1 -run 'BackfillOutcome|BackfillBars_SymbolOutcomeCounts|BackfillFundamentals' -v | grep -c '^--- PASS' )   # >= 10
 go_gate xstockstrat-marketdata
 grep -c "@AC-" services/xstockstrat-marketdata/internal/service/backfill_outcome_test.go   # >= 6
 ```
@@ -1097,7 +1100,7 @@ grep -n "symbol_results" services/xstockstrat-ingest/tests/_helpers.py     # the
 - Lock order that forces "never wait": `UpdateBinding` locks the binding row before touching the parent (`services/xstockstrat-portfolio/internal/repository/watchlist_repo.go:360-371` — the `UPDATE` that takes the binding lock starts at `:360`, the parent touch is at `:371`), the reverse of the prune; waiting on a binding while holding the parent would deadlock (debate D-25).
 - Schema: `portfolio.watchlists.system_managed` (`migrations/011_watchlist_system_managed_source.up.sql:12`), `portfolio.watchlist_symbols.source` (`:32`), `portfolio.watchlist_signal_expiry (watchlist_id, symbol)` primary key with the FK on the watchlist, not the binding (`migrations/018_watchlist_signal_expiry.up.sql:4-11`), so a removed binding's expiry row must be deleted explicitly.
 - `symbol = ANY($n)` with a Go string slice is an existing bind on this pool (`signal_expiry_repo.go:86-91`).
-- Mock seam: `WatchlistRepo` holds `pool *pgxpool.Pool` and the mockable `db queryRower` (`watchlist_repo.go:25-29`); pgxmock tests build `&WatchlistRepo{db: mock}` with a nil pool (`watchlist_repo_test.go:24`), reads go through `r.db.Query` (`:110`, `:166`) and transactions through `r.pool.Begin` (`:39`, `:194`), which pgxmock cannot substitute.
+- Mock seam: `WatchlistRepo` holds `pool *pgxpool.Pool` and the mockable `db queryRower` (`watchlist_repo.go:25-29`); pgxmock tests build `&WatchlistRepo{db: mock}` with a nil pool (`watchlist_repo_test.go:24`), reads go through `r.db.Query` (`:110`, `:166`) and transactions through `r.pool.Begin` (`:39`, `:194`), which a nil pool cannot serve. The pinned `github.com/pashagolub/pgxmock/v4 v4.9.0` (`services/xstockstrat-portfolio/go.mod:9`) pool mock does serve `ExpectBegin()` / `Begin(ctx)` and returns a `pgx.Tx`, so the per-list statements are testable locally once they take a `pgx.Tx` argument.
 - Trading-domain survey: no `TRADING_MODE`, `BrokerType`, `OrderType` or `OrderStatus` reference in the repository's watchlist files.
 - No portfolio migration and no new index (design §5): the lookup is driven from the `system_managed` watchlists into the `(watchlist_id, symbol)` primary key.
 
@@ -1111,13 +1114,13 @@ Create `delisted_removal_repo.go` (package `repository`).
 2. `func (r *WatchlistRepo) RemoveDelistedFromSystemLists(ctx context.Context, symbols []string) ([]DelistedRemoval, error)`:
    - empty `symbols` → no query, empty result;
    - one set-based query, issued through `r.db.Query` (the mockable surface), lists the `system_managed` watchlists holding any of the symbols (watchlist id, user id, name, held symbols), driven from `portfolio.watchlists WHERE system_managed` joined to `portfolio.watchlist_symbols` on the primary key with `symbol = ANY($1)`, ordered by watchlist id;
-   - per list call `removeDelistedListTx`; every list is attempted; the removals of committed lists are returned even when the first per-list error is returned with them (the `PruneExpiredSignalEntries` contract).
-3. `removeDelistedListTx` — one short transaction, begun with `r.pool.Begin` like `pruneListTx`, that never waits on a row lock:
-   - `SELECT user_id, name, system_managed FROM portfolio.watchlists WHERE watchlist_id = $1 FOR NO KEY UPDATE SKIP LOCKED`; no row → `Skipped`; `system_managed` false on the re-check → commit and report nothing removed;
+   - per list: begin one short transaction with `r.pool.Begin` (like `pruneListTx`), call `removeDelistedInTx`, commit on success and roll back on error; every list is attempted; the removals of committed lists are returned even when the first per-list error is returned with them (the `PruneExpiredSignalEntries` contract).
+3. `removeDelistedInTx(ctx context.Context, tx pgx.Tx, l delistedList) (DelistedRemoval, error)` holds **all** per-list statements and takes the transaction as an argument (`delistedList` is the list-query row: watchlist id, user id, name, held symbols). It neither begins nor commits; `pruneListTx` stays untouched. It never waits on a row lock:
+   - `SELECT user_id, name, system_managed FROM portfolio.watchlists WHERE watchlist_id = $1 FOR NO KEY UPDATE SKIP LOCKED`; no row → `Skipped`; `system_managed` false on the re-check → report nothing removed;
    - lock the held bindings of **any** source: `SELECT symbol FROM portfolio.watchlist_symbols WHERE watchlist_id = $1 AND symbol = ANY($2) FOR UPDATE SKIP LOCKED`;
    - delete only the locked set, `RETURNING symbol`;
    - delete the removed symbols' expiry rows with a plain `DELETE FROM portfolio.watchlist_signal_expiry WHERE watchlist_id = $1 AND symbol = ANY($3)` (under the parent lock, debate D-17);
-   - touch `updated_at` when something was removed; commit;
+   - touch `updated_at` when something was removed (the caller commits);
    - fewer bindings locked than held → `Skipped = true`, with the unlocked-and-removed symbols in `Removed` and the rest in `Left`; a locked parent → `Skipped = true`, empty `Removed`, every held symbol in `Left`.
 4. It emits nothing and writes no ledger row; `pruneListTx` and `PruneExpiredSignalEntries` are not edited.
 5. Broker coverage, order types, fill handling and `TRADING_MODE` are unaffected by this step.
@@ -1127,7 +1130,7 @@ Create `delisted_removal_repo.go` (package `repository`).
 ( cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mode=mod )
 git diff --exit-code HEAD -- services/xstockstrat-portfolio/internal/repository/signal_expiry_repo.go                     # this step leaves the 281 deleter untouched
 git log --oneline origin/main-dev..HEAD -- services/xstockstrat-portfolio/internal/repository/signal_expiry_repo.go | wc -l   # 0 — no earlier step touched it either
-grep -c "SKIP LOCKED" services/xstockstrat-portfolio/internal/repository/delisted_removal_repo.go   # 2
+grep -c "FOR [A-Z ]*SKIP LOCKED" services/xstockstrat-portfolio/internal/repository/delisted_removal_repo.go   # 2 — the two lock statements; comments do not match
 ```
 
 ---
@@ -1154,7 +1157,11 @@ grep -c "SKIP LOCKED" services/xstockstrat-portfolio/internal/repository/deliste
 **Covers**: `AC-6, AC-7`
 
 **Instructions**:
-1. `delisted_removal_repo_test.go` (pgxmock, `&WatchlistRepo{db: mock}` — no pool, so no case may reach a per-list transaction): empty input issues no query; a list-query error is wrapped and returned; **@AC-6 (local RED)** called with `[KPTI]`, the list query is issued exactly once with `$1 = [KPTI]` — never `AAPL` — and, returning no rows, yields an empty result without opening a transaction (`ExpectationsWereMet`).
+1. `delisted_removal_repo_test.go` (pgxmock), every test named `TestDelistedRemoval_…`:
+   - Through `&WatchlistRepo{db: mock}` (no pool, so these cases must not reach a per-list transaction): empty input issues no query; a list-query error is wrapped and returned; called with `[KPTI]`, the list query is issued exactly once with `$1 = [KPTI]` — never `AAPL` — and, returning no rows, yields an empty result (`ExpectationsWereMet`).
+   - **@AC-6 (local RED)** — `removeDelistedInTx` driven directly: `mock.ExpectBegin(); tx, _ := mock.Begin(ctx)`, then expect, in order, the parent-lock query (`FOR NO KEY UPDATE SKIP LOCKED`) returning the system-managed row; the binding-lock query with args `("wl-1", []string{"KPTI"})` returning `KPTI`; the `DELETE … RETURNING symbol` with the same args returning `KPTI`; the expiry-row `ExpectExec`; the `updated_at` `ExpectExec`. Call `removeDelistedInTx(ctx, tx, list)` for a list holding `KPTI` (the list also holds `AAPL` in the watchlist, but `AAPL` is not in the removal set and appears in no bind). Assert `Removed == [KPTI]`, `Left` empty, `Skipped` false and `ExpectationsWereMet`.
+   - A parent-lock query returning no row → `Skipped`, every held symbol in `Left`, and no later statement is issued.
+   - A binding-lock query returning fewer symbols than held → the returned ones in `Removed`, the rest in `Left`, `Skipped` true.
 2. `delisted_removal_dbtest_test.go` (`//go:build dbtest`), tests named `TestDelistedRemoval_…`:
    - **@AC-6** a system-managed list holding `KPTI` and `AAPL`: removing `[KPTI]` deletes the `KPTI` binding, keeps `AAPL`, bumps `updated_at`, and reports the list's name.
    - **@AC-7** a user-created list and a system-managed list (seeded with `seedNamedWatchlist`) both hold `ROKU`: removing `[ROKU]` changes only the system-managed one; the user-created list is untouched and not reported.
@@ -1165,11 +1172,11 @@ grep -c "SKIP LOCKED" services/xstockstrat-portfolio/internal/repository/deliste
    - A list whose `system_managed` flag is false at lock time is not modified.
    - A second call for the same symbols is a no-op.
    - PRESERVE 281: after a removal, `PruneExpiredSignalEntries` on the same list still behaves as before for the remaining entries.
-3. RED: with the method present returning an empty result without querying, the pgxmock `@AC-6` case fails locally on the unmet query expectation, and (in CI, job `portfolio-db-test`) the `@AC-6` and `@AC-7` database cases fail on the binding still present.
+3. RED: with `RemoveDelistedFromSystemLists` and `removeDelistedInTx` present as stubs returning zero values, the pgxmock `@AC-6` case fails locally on the unmet statement expectations and on `Removed`, and (in CI, job `portfolio-db-test`) the `@AC-6` and `@AC-7` database cases fail on the binding still present.
 
 **Verification**:
 ```bash
-( cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/repository/ -race -count=1 -run 'DelistedRemoval' -v | grep -c '^--- PASS' )
+( cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/repository/ -race -count=1 -run 'DelistedRemoval' -v | grep -c '^--- PASS' )   # >= 4
 GOWORK=off go -C services/xstockstrat-portfolio vet -tags dbtest ./internal/repository/...
 GOWORK=off go -C services/xstockstrat-portfolio test -tags dbtest ./internal/repository/... -count=1 -run 'DelistedRemoval' -v | grep -c '^--- SKIP'   # >= 1 locally; CI job portfolio-db-test runs them
 go_gate xstockstrat-portfolio
@@ -1214,7 +1221,7 @@ go_gate xstockstrat-portfolio
    - `delistedCache`: a mutex-guarded `map[string]*commonv1.DelistedState` with a `replace` method that swaps the whole map.
    - `emitDelistingAlert(ctx, title, body string) error`: one `s.notify.EmitAlert` — WARNING, category `symbol_delisting`, `SourceService: "portfolio"`, no `TargetUserId`; it writes **no** ledger event and returns the error.
    - `syncDelistings(ctx context.Context)`:
-     1. Return when `s.marketdata == nil`.
+     1. Return when `s.marketdata == nil`. When `s.notify == nil`, run sub-steps 2–6 and return after the removal, before sub-steps 7–8, so a service built without a notify client (the test pattern of `newSvc`) never dereferences it.
      2. `ListAllSymbols` (the unfiltered repo method). Error → WARN, stop; the cache is kept.
      3. Call `SyncWatchlistDelistings` with the union, on `metadata.AppendToOutgoingContext(ctx, HeaderInternalCaller, delistingCallerID)` under `delistingRPCTimeout`. Error or timeout → WARN, `RecordMarketdataFetch(ctx, "delistings", "error"|"timeout")`, stop: the cache is kept and nothing is removed. Success → `RecordMarketdataFetch(ctx, "delistings", "ok")`.
      4. Replace the cache with every response entry, whatever its alert state.
@@ -1265,7 +1272,7 @@ python3 scripts/check-context-map.py
 
 **Instructions**:
 1. `watchlist_service_test.go`: `fakeWatchlistStore` implements `RemoveDelistedFromSystemLists` (records the symbols it was given, returns a scripted result and error) and gains a `pruneErr` so `PruneExpiredSignalEntries` can fail.
-2. `delisting_sync_test.go`: add `SyncWatchlistDelistings` / `AckDelistingAlerts` overrides on `stubMarketData` that record the request, the outgoing metadata and the context deadline at call entry and return a scripted response or error. Every case calls `pruneOnce` (the runtime entry point).
+2. `delisting_sync_test.go`: add `SyncWatchlistDelistings` / `AckDelistingAlerts` overrides on `stubMarketData` that record the request, the outgoing metadata and the context deadline at call entry and return a scripted response or error. Build the service with `newSvc(store, cfg, ledger)` (`watchlist_service_test.go:329-331`), then set `svc.marketdata = stub` and `svc.notify = &recordingNotify{}`. Name the tests `TestDelisting_…`. Every case calls `pruneOnce` (the runtime entry point).
    - **@AC-6** a `CLAIMED`, unservable `KPTI` → the store is asked to remove `[KPTI]`; servable `AAPL` is never passed.
    - **@AC-17** exactly one alert: WARNING, category `symbol_delisting`, no `TargetUserId`, body naming `KPTI`, `UNSERVABLE_REASON_NOT_TRADABLE` and `Signals`; `AckDelistingAlerts` is then called with `[KPTI]`. A second tick whose response reports `KPTI` as `REPORTED` sends no alert and no acknowledgement.
    - **@AC-18** two `CLAIMED` entries → two alerts, one naming each symbol, and one acknowledgement with both.
@@ -1280,11 +1287,12 @@ python3 scripts/check-context-map.py
    - Both RPCs carry `x-internal-caller: portfolio` and an `x-trace-id`, and no `x-user-id`; each context has a deadline at most 15 s after call entry; so does each alert send.
    - The step runs when the expiry prune failed (`pruneErr` set).
    - A nil marketdata client → the step is a no-op (the existing `TestSignalPrune_*` cases).
+   - A nil notify client with a `CLAIMED` entry → the removal still runs, no alert and no acknowledgement are attempted, and nothing panics.
 3. RED: with Step 22's `syncDelistings` present as an empty body, the `@AC-6` case fails on "store not asked to remove".
 
 **Verification** (run as the Steps 22–23 unit):
 ```bash
-( cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/ -race -count=1 -run 'Delisting|SignalPrune' -v | grep -c '^--- PASS' )
+( cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/ -race -count=1 -run 'Delisting|SignalPrune' -v | grep -c '^--- PASS' )   # >= 12
 go_gate xstockstrat-portfolio
 grep -c "@AC-" services/xstockstrat-portfolio/internal/service/delisting_sync_test.go   # >= 5
 ```
@@ -1350,7 +1358,7 @@ git diff --exit-code HEAD -- services/xstockstrat-portfolio/internal/service/off
 **Covers**: `AC-4, AC-7, AC-8, AC-10, AC-16, AC-19`
 
 **Instructions**:
-Fill the cache by running a tick (`pruneOnce`) against a scripted sync response; never write the cache field directly.
+Fill the cache by running a tick (`pruneOnce`) against a scripted sync response; never write the cache field directly. Name the tests `TestDelistedDecoration_…`; the enumeration cases keep `ListAllWatchlistSymbols` in their name.
 1. **Parity (C-10)** — one table-driven test over the eleven response sites of Step 24: with `ROKU` flagged (reason `UNSERVABLE_REASON_NOT_TRADABLE`, date `2026-11-09`), the `ROKU` binding of each response carries exactly that state and the `AAPL` binding carries none. The table is keyed by RPC name so a twelfth watchlist-returning RPC without a row fails review.
 2. **@AC-7** `ROKU` stays in `GetWatchlist` of a user-created list, marked; `RemoveWatchlistSymbols([ROKU])` removes it.
 3. **@AC-19** lists `Tech` (user A) and `Media` (user B) both carry the same state for `ROKU` from the single cache entry.
@@ -1363,7 +1371,7 @@ Fill the cache by running a tick (`pruneOnce`) against a scripted sync response;
 
 **Verification**:
 ```bash
-( cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/ -race -count=1 -run 'Delisted|ListAllWatchlistSymbols' -v | grep -c '^--- PASS' )
+( cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/ -race -count=1 -run 'DelistedDecoration|ListAllWatchlistSymbols' -v | grep -c '^--- PASS' )   # >= 8
 go_gate xstockstrat-portfolio
 grep -c "@AC-" services/xstockstrat-portfolio/internal/service/delisting_decorate_test.go   # >= 6
 ```
@@ -1540,7 +1548,8 @@ py_gate xstockstrat-agent
 - Reason text map: `UNSERVABLE_REASON` `services/xstockstrat-ui/src/lib/opportunityShared.tsx:48-52` (`NOT_TRADABLE` → "not an active, tradable US equity", the text AC-15 names); it is unit-tested (`src/lib/opportunityShared.test.ts:47-63`).
 - `Badge` variants: `services/xstockstrat-ui/src/components/ui/badge.tsx:11-27`; `warning` at `:25` (**C-17**: reuse an existing primitive and variant; no new color literal).
 - No BFF change: the generated message passes through `src/lib/insightsBff.ts:137-147`.
-- Analysis no longer scans a flagged binding (Step 26), so its readiness would stay unresolved or stale; the UI therefore never shows a flagged binding's readiness, whatever analysis returns.
+- Analysis no longer scans a flagged binding (Step 26), so its readiness would stay unresolved or stale; the UI therefore never shows a flagged binding's readiness, whatever analysis returns, and the component passes only unflagged bound pairs to `useWatchlistReadiness`, so a flagged pair neither keeps the poll alive nor, when it is the page's only bound pair, issues the request at all.
+- Poll-alive rule: `useWatchlistReadiness` refetches every 30 s while any `pagePairs` entry is missing, `PENDING` or `UNKNOWN` (`services/xstockstrat-ui/src/hooks/useWatchlistReadiness.ts:42-49`) and is disabled when `pagePairs` is empty (`:40`). The request itself carries only the watchlist id and the page (`:35-39`), never the pairs. The component builds the pairs from the page's bound bindings (`WatchlistReadiness.tsx:215-228`; the hook call `:224-228`).
 - No new page or route — no `PLATFORM_SUBNAV` change (**C-10(a)** not triggered).
 
 **TDD**: `red-green required`
@@ -1553,9 +1562,10 @@ py_gate xstockstrat-agent
    - Export the `Binding` type and add the optional `delisted` field typed from the generated `DelistedState`.
    - Add a `DelistedBadge` next to `SignalSourceBadge`: `<Badge variant="warning" data-testid={`delisted-badge-${symbol}`}>` with the label `Delisted`, followed by the reason text and, when present, the date; its accessible name contains the symbol, the reason text and the date.
    - Bound rows: when the binding is flagged, render `DelistedBadge` in the verdict cell **in place of** the three readiness branches (resolved / unknown / loading), and render no `Review` link. Unbound rows: render `DelistedBadge` in place of the "not evaluated — bind a strategy" text.
+   - Pass to `useWatchlistReadiness` only the page's bound bindings **without** `delisted` (`pageBound.filter((b) => !b.delisted).map(…)` at `:227`). The page slice itself (`bound`, `afterCursor`, `pageBound`, `:215-222`) stays over all bound bindings, because the server's keyset cursor covers flagged ones too.
    - Row checkbox and `BindingRowControls` stay, so the owner can still remove the symbol.
 3. `WatchlistDetail.tsx`: delete its local `Binding` declaration (`:38`) and import the exported one.
-4. No hardcoded color, no new `ui/*` primitive, no BFF, hook or route change.
+4. No hardcoded color, no new `ui/*` primitive, no BFF or route change, and no hook change (the hook receives the filtered pairs from the component).
 
 **Verification**:
 ```bash
@@ -1591,9 +1601,9 @@ grep -n "delisted-badge" src/components/insights/WatchlistReadiness.tsx
 
 **Instructions**:
 1. `opportunityShared.test.ts`: the helper returns `null` without a state; the text for `NOT_TRADABLE` and for `OTC`; the date as given for `2026-11-09`; `undefined` for a malformed date; never a shifted day.
-2. `watchlistMock.ts`: add an optional `delisted?: { reason: UnservableReasonName; firstUnservableDate: string }` to `MockBinding`; the mock returns it unchanged on every watchlist response. Its readiness route returns `PENDING` for a flagged binding (a flagged binding's readiness is not shown by the UI whatever analysis returns). No new fixture module: this extends the existing inventory fixture.
-3. `INVENTORY.md` (`:47`): append "feature 352 — optional `MockBinding.delisted` (protojson `{ reason, firstUnservableDate }`); a flagged binding's readiness stays `PENDING`".
-4. `watchlists.spec.ts`: **@AC-15** seed `Tech` with `AAPL` and a `ROKU` binding flagged `UNSERVABLE_REASON_NOT_TRADABLE` / `2026-11-09`; open it on `/insights/watchlists`; the `ROKU` row shows the delisted badge with the text "not an active, tradable US equity" and `2026-11-09`, shows no readiness skeleton and no `Review` link; the `AAPL` row has no delisted badge; `ROKU` can still be removed with its row control. Add a second case for a flagged **unbound** symbol.
+2. `watchlistMock.ts`: add an optional `delisted?: { reason: UnservableReasonName; firstUnservableDate: string }` to `MockBinding`; the mock returns it unchanged on every watchlist response. Its readiness route is unchanged (a flagged binding's readiness is not shown by the UI whatever analysis returns; a case that needs a `PENDING` row for it uses the existing `readinessOverrides` argument, `:52`). No new fixture module: this extends the existing inventory fixture.
+3. `INVENTORY.md` (`:47`): append "feature 352 — optional `MockBinding.delisted` (protojson `{ reason, firstUnservableDate }`)".
+4. `watchlists.spec.ts`: **@AC-15** seed `Tech` with `AAPL` and a `ROKU` binding flagged `UNSERVABLE_REASON_NOT_TRADABLE` / `2026-11-09`; open it on `/insights/watchlists`; the `ROKU` row shows the delisted badge with the text "not an active, tradable US equity" and `2026-11-09`, shows no readiness skeleton and no `Review` link; the `AAPL` row has no delisted badge; `ROKU` can still be removed with its row control. In the same case force `ROKU`'s readiness row to `PENDING` through `readinessOverrides` and assert the `ROKU` row still shows the badge and no skeleton. Add a second case for a flagged **unbound** symbol. Add a third case — a list whose only bound binding is the flagged `ROKU`: the page issues **no** `GetWatchlistReadiness` request (count them with `page.on('request')` filtered on the route's URL suffix; the request carries no pairs, so the absence of the request is the observable proof that a flagged pair is not passed to the hook).
 5. Test data comes only from `mockWatchlists` (seed argument) — no inline watchlist literal outside the seed, which is a `{ ...override }` scenario one-off of the inventory fixture.
 6. RED: the vitest case fails without the helper; the e2e case fails on the missing badge.
 

@@ -305,3 +305,23 @@
   operator's decision. Same-file overlaps with 343, 344, 345, 337, 341, 347, 348, 339, 340 and 322 are
   rebase-level.
 - Unresolved carried into execution: none from round 1.
+
+## Session 2026-11-17 — sdd-review impl-spec (advisory), round 2
+
+- Tree: `claude/story-delisted-symbol-handling@b33f655` (contains `origin/main-dev@149351d`).
+- Result: 0 failures, 8 warnings, 4 notes (advisory — did not block). All applied to
+  implementation-spec.md.
+- The two with behavioural weight: (1) AC-6 now has a real local RED — the per-list statements move
+  into `removeDelistedInTx(ctx, tx pgx.Tx, …)`, driven in a pgxmock test through
+  `ExpectBegin`/`Begin` (Steps 20–21); (2) the `/insights` row passes only unflagged bound pairs to
+  `useWatchlistReadiness`, so a flagged pair neither keeps the 30 s poll alive nor triggers analysis'
+  on-read refresh (Steps 30–31).
+- Others: runbook "how to defer" sentence and index position, broker-symmetry statement, test-name
+  prefixes with pass-count floors (Steps 9, 14, 16, 21, 23, 25), anchored `SKIP LOCKED` grep, nil-notify
+  guard and test construction (Steps 22–23), `go_gate` now fails below the CI threshold of 40.
+- Adapted from the reviewer's text: the readiness request carries only the watchlist id and page, never
+  the pairs, so the e2e proof is "a list whose only bound binding is flagged issues no
+  `GetWatchlistReadiness` request", not a pairs assertion; the pairs filter is applied to `pageBound`,
+  not `bound`, so the page slice stays aligned with the server's keyset cursor.
+- Unresolved carried into execution: none from round 2.
+
