@@ -572,3 +572,12 @@
 - Beyond the step text: `Candidates` is one statement (`bool_or(watched)` over a `UNION ALL`) so the list
   and the watched count share a snapshot; methods taking a symbol list return early on an empty list
   (`ReplaceWatched` does not).
+
+### Step 7 — test: `ProfileRepo` (pgxmock + dbtest) — done
+- TDD: red against zero-value signatures: all 12 `TestProfileRepo_` fail (e.g. `Candidates = [], 0, <nil>`)
+  → green: 12 PASS under `-race`. `vet -tags dbtest` ok; the `CI=true` run fails closed; `go_gate
+  xstockstrat-marketdata` → 0 issues, total 87.3%.
+- **Skipped locally: all 8 real-database `TestProfileDB_*` tests** (`MARKETDATA_DB_TEST_URL` unset). They
+  first execute in CI job `marketdata-db-test` on the integration PR — watch that job.
+- `TestProfileDB_ReplaceWatched` deletes foreign rows of `marketdata.watched_symbol`; the AC-27 empty-union
+  case fails with a clear message if foreign rows exist.

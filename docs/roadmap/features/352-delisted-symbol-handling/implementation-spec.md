@@ -448,7 +448,7 @@ grep -c "func (r \*ProfileRepo)" services/xstockstrat-marketdata/internal/reposi
 
 ### Step 7 — test: `ProfileRepo` against pgxmock and a real database (`dbtest`, Exec mode)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/profile_repo_test.go` — create
