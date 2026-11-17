@@ -51,6 +51,8 @@ type PortfolioService struct {
 	// Watchlists — held behind interfaces so cap/ownership rules can be unit-tested with stubs.
 	watchlists WatchlistStore
 	wlCfg      intConfig
+	// delisted is marketdata's flagged set as of the last successful delisting tick.
+	delisted delistedCache
 	// quoteCfg holds the live portfolio.marketdata.quote_timeout_ms read; nil (test literals) means the 4000ms default.
 	quoteCfg intConfig
 
@@ -2010,6 +2012,8 @@ type WatchlistStore interface {
 	// PruneExpiredSignalEntries returns already-committed removals even when err != nil; the caller
 	// must still emit their events.
 	PruneExpiredSignalEntries(ctx context.Context) (repository.PruneResult, error)
+	// RemoveDelistedFromSystemLists returns already-committed removals even when err != nil.
+	RemoveDelistedFromSystemLists(ctx context.Context, symbols []string) ([]repository.DelistedRemoval, error)
 }
 
 // intConfig is the int config slice the watchlist caps and the quote deadline read (injectable in tests).

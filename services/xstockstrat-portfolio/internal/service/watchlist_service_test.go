@@ -42,6 +42,11 @@ type fakeWatchlistStore struct {
 	addSymbolsCnt int
 	// feature 281: what PruneExpiredSignalEntries returns.
 	pruneResult repository.PruneResult
+	pruneErr    error
+	// feature 352: every symbol set RemoveDelistedFromSystemLists was given, and what it returns.
+	delistedCalls  [][]string
+	delistedResult []repository.DelistedRemoval
+	delistedErr    error
 	// feature 351: EnsureSystemManaged / ListByUser hooks. ensureID names a newly created system row
 	// (default wl-<seq>); listErrAt = n fails the n-th ListByUser call (1 first, 2 the re-list).
 	ensureErr   error
@@ -62,7 +67,12 @@ func (f *fakeWatchlistStore) ListAllSymbols(_ context.Context) ([]string, error)
 
 // PruneExpiredSignalEntries returns the configured prune result (feature 281).
 func (f *fakeWatchlistStore) PruneExpiredSignalEntries(_ context.Context) (repository.PruneResult, error) {
-	return f.pruneResult, nil
+	return f.pruneResult, f.pruneErr
+}
+
+func (f *fakeWatchlistStore) RemoveDelistedFromSystemLists(_ context.Context, symbols []string) ([]repository.DelistedRemoval, error) {
+	f.delistedCalls = append(f.delistedCalls, symbols)
+	return f.delistedResult, f.delistedErr
 }
 
 func clone(wl *portfoliov1.Watchlist) *portfoliov1.Watchlist {

@@ -528,3 +528,21 @@
   `portfolio-db-test` job runs on the integration PR — watch that job.
 - The "partial result" database case seeds its two system-managed lists under two users (one user has one
   system-managed list).
+
+### Step 22 — service: portfolio's delisting tick (unit 22+23) — done
+- New `internal/service/delisting_sync.go`; `signal_prune.go`, `portfolio_service.go`, service `CLAUDE.md`,
+  `docs/context-constitution.md` (PORTFOLIO-18). Greps for `syncDelistings`, `HeaderInternalCaller` and
+  no-`emitEvent` pass; `check-context-map.py` OK.
+- With an empty union or an empty removal set the sync RPC and the store call are still made (the repo
+  no-ops on empty input).
+- Alert wording (A-6): `"<SYM> is delisted (<REASON>, first unservable <date>). Removed from N
+  system-managed watchlist(s): <names>."` + either `" N more system-managed watchlist(s) still hold it and
+  will be updated on a later refresh."` or `" It was on no system-managed watchlist."`; a re-delivery
+  starts with `"This may repeat an earlier alert. "` and names only this tick's lists.
+
+### Step 23 — test: the delisting tick (unit 22+23) — done
+- TDD: AC-6 red (`syncDelistings` returning at once): `store asked to remove [], want [[KPTI]]` (14 of 16
+  fail) → green with `-race`: 16 PASS; existing `SignalPrune` tests unchanged. `go_gate` 79.1%.
+- Test doubles: `delistingMarketData` wraps `stubMarketData` and `delistingNotify` wraps `recordingNotify`
+  (the base stubs live in `portfolio_service_test.go`, outside the unit's `**Files**`). The timeout case
+  drives `pruneOnce` with a 20 ms parent context because the 15 s deadline is a constant.

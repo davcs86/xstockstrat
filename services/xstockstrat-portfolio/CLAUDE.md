@@ -47,6 +47,13 @@ rejected `InvalidArgument` on both paths before subscribing (feature 264).
 `GetSymbolServability` calls servable and return the rest in `refused_symbols`; fail-open on error/timeout — see
 PORTFOLIO-19.
 
+**Delisted symbols (feature 352).** The last step of each signal-prune tick (`syncDelistings`) sends the
+cross-user symbol union to marketdata `SyncWatchlistDelistings`, replaces the in-memory delisted cache with the
+answer, removes the flagged symbols it is told to from system-managed lists, sends one `symbol_delisting` WARNING
+per newly claimed symbol (untargeted, no ledger event) and acknowledges what was sent with `AckDelistingAlerts`.
+Marketdata is the only decider; portfolio only supplies the union, removes, alerts and acknowledges. Each call has
+a fixed 15 s deadline; a failed sync removes nothing and keeps the cache, which is at most one tick stale.
+
 ## Docker Build Pattern
 
 Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, static binary compilation (`CGO_ENABLED=0`), and distroless final images.
@@ -57,7 +64,7 @@ Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, stat
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config |
 | xstockstrat-ledger | gRPC stream | Consume `order.filled` events to update positions |
-| xstockstrat-marketdata | gRPC read | Current prices for unrealized P&L + `BatchGetBars` (`allow_partial`) daily closes for offline marks/Day P&L (feature 240) + `GetSymbolServability` on watchlist inserts (feature 282) |
+| xstockstrat-marketdata | gRPC read | Current prices for unrealized P&L + `BatchGetBars` (`allow_partial`) daily closes for offline marks/Day P&L (feature 240) + `GetSymbolServability` on watchlist inserts (feature 282) + `SyncWatchlistDelistings` / `AckDelistingAlerts` on the prune tick (feature 352) |
 | xstockstrat-notify | gRPC write | Risk limit breach alerts |
 | TimescaleDB | DB (schema: `portfolio`) | Positions + snapshots hypertable |
 
@@ -120,7 +127,7 @@ may print the FQN `portfolio.<key>`.
 ## Observability (feature 294-signal-map-instrumentation)
 
 - `loop tick ok` is written per event consumer (`order_fill`, `position_sync`, `deregistration`, `bracket`, `balance`) on outcome ok/acked only, throttled to one record per consumer per 60 s. These are event-driven, so there is no idle heartbeat and silence is ambiguous. `signal_prune` keeps its `signal watchlist prune tick` record. Trading also has a `position_sync` loop: filter on `service_name` too.
-- Instruments: `portfolio.consumer.events{consumer, outcome ok|error|parked|acked}`, `portfolio.marketdata_fetch{op=quotes, outcome ok|error|timeout}`, `portfolio.snapshot{outcome written|skipped_unpriced|db_error}`, `portfolio.mark_source{mark_source, path read|pnl|snapshot|risk}` (a rate, not a state).
+- Instruments: `portfolio.consumer.events{consumer, outcome ok|error|parked|acked}`, `portfolio.marketdata_fetch{op=quotes|delistings, outcome ok|error|timeout}`, `portfolio.snapshot{outcome written|skipped_unpriced|db_error}`, `portfolio.mark_source{mark_source, path read|pnl|snapshot|risk}` (a rate, not a state).
 - Stream consumers retry every 2 s (`streamRetryDelay`), log failures at N=10 (`streamLogEvery`) and reset their counters after a 10-minute quiet window (`streamQuietWindow`; counters only, never the retry timing). INFO `<name> stream resumed` marks a recovery.
 - Load-bearing logs: ERROR `portfolio snapshot insert failed` (the ledger emit and broadcast still run); WARN `latest quote has no usable price` is one aggregate per pass with `count` and at most 5 `sample_symbols`.
 

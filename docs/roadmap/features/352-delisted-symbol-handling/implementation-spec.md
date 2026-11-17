@@ -1187,7 +1187,7 @@ go_gate xstockstrat-portfolio
 
 ### Step 22 — service: portfolio's delisting tick — sync, remove, alert, acknowledge
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/delisting_sync.go` — create
@@ -1249,7 +1249,7 @@ python3 scripts/check-context-map.py
 
 ### Step 23 — test: the delisting tick
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/delisting_sync_test.go` — create
