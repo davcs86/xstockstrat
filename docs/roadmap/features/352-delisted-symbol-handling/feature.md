@@ -52,7 +52,7 @@ changes.)_
 | `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity |
 | `xstockstrat-ui` owner | Analytics display accuracy, Connect-RPC call safety |
 | `packages/proto` owner + Proto Reviewer | Field number uniqueness, backward compatibility, `buf lint` / `buf breaking` pass |
-| DBA | Migration NNN numbering (marketdata `010`, ingest `017`, config `054`), up+down pair present, index correctness, run-order compliance with `scripts/db-migrate.sh` |
+| DBA | Migration NNN numbering (marketdata `010`, ingest `018`, config `054`), up+down pair present, index correctness, run-order compliance with `scripts/db-migrate.sh` |
 
 `xstockstrat-notify` has no step (the alerts use the existing `EmitAlert` path unchanged), so its owner
 is no longer in the snapshot; `xstockstrat-analysis` and `xstockstrat-config` each gained steps.

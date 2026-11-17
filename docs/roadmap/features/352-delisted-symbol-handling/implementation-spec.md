@@ -1681,3 +1681,7 @@ _Populated by /sdd-execute as implementation proceeds._
 **Reason**: `b.HasField("delisted")` raises `AttributeError` on the `SimpleNamespace` fakes that existing tests feed through the two drains (88 failures with Step 26 alone), so Step 26 could not pass its own Verification and Step 27's `py_gate` could not pass inside its `**Files**`.
 **Disposition**: folded Step 27 into Step 26 — a later step repairs the earlier step's suite; operator chose "Fold + fix fakes" on 2026-11-17.
 
+### Deviation: Step 17 — migration: ingest `017_backfill_symbol_results`
+**Spec said**: `services/xstockstrat-ingest/migrations/017_backfill_symbol_results.up.sql` / `.down.sql`, with the number re-derived from every `origin/*` ref before writing.
+**Actual**: The files are `018_backfill_symbol_results.{up,down}.sql`; Steps 18 and 19 name `018` in `CLAUDE.md` and a test docstring.
+**Reason**: `origin/ccr-424ada30-29m2lv` (feature 355, in flight) already adds ingest `017_signal_source_extraction_instructions`. `design.md` still says `017`.
