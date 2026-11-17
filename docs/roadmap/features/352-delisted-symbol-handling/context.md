@@ -669,3 +669,11 @@
 - **Open items for the operator**: confirm the 355 merge-order row; approvals per root `CLAUDE.md`
   § Approval Flow (DBA + service owner for marketdata `010` and ingest `018`; owner + config team for
   `marketdata`/`assets.delisting_confirmation_trading_days`); `design.md` still says ingest `017`.
+
+- **Final `main-dev` merge (before the integration PR)**: feature 355 had merged into `main-dev` (#1567)
+  with ingest `017`, so 352's `018` is correctly ordered and the 355 merge-order row is marked resolved (no
+  operator confirmation needed any more). Conflicts: the append-only `insights.md` (both kept, `main-dev`
+  first) and three generated ingest stubs (regenerated with the Docker codegen image from the merged
+  `ingest.proto`, never hand-merged). Re-verified after the merge: ingest 602 passed / 87.16%, agent 802
+  passed / 88.36%, analysis 1740 passed, marketdata and portfolio build + vet, UI lint / `tsc` / vitest 732
+  passed, `check-config-wiring.mjs --final` exit 0, `ledger-guard` clean.
