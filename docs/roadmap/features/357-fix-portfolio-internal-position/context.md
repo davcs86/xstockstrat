@@ -673,3 +673,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Created the portfolio durable-suite file with the feature-353 promotion header, then copied the `Feature:` block and `@AC-1`..`@AC-6` verbatim, adding `@feature-357` to each scenario tag line. A diff of the file, with the header and the tags stripped, against `acceptance.feature` is empty. `fix-after-hours-positions-priced.feature` is untouched, so `@AC-9 @feature-231` is EXTENDED by `@AC-6 @feature-357`, not rewritten. TDD: N/A (docs). Green: `@feature-357` count 6, source `@AC-` count 6, `git diff --quiet` on fix-after-hours-positions-priced.feature `exit=0`.
 - Files modified: `services/xstockstrat-portfolio/acceptance/fix-portfolio-internal-position.feature`
 - Deviations: none
+
+### Step 9 — docs: D-9 dev smoke gate (single-batch enrichment at ≥501 symbols) [pending — deferred by operator]
+- **Operator decision 2026-11-17 (binding): Option A, defer Step 9.** Step 9 stays `pending` and no smoke result is recorded. The run needs the integration PR merged to `main-dev` and the dev app deployed, followed by seeding ≥501 PAPER positions on dev (`docs/runbooks/operator-db-access.md`), which this session cannot do.
+- The D-9 dev smoke gate (≥501 PAPER positions on dev; pass = no `Unavailable` from `GetPnL`/`GetPortfolio` and `portfolio.marketdata_fetch{op=quotes}` outcome `ok`) runs after the integration PR is merged to `main-dev` and deployed to dev.
+- **Promotion to `main` stays gated on a recorded PASS.** `/promote` must not take this feature until a later session appends a `D-9 smoke: PASS` entry (date, symbol count, outcome, Grafana evidence) and marks Step 9 `done`. A FAIL triggers the Step 9 item 7 fallback (per-page enrichment, AC-4 relaxed to `<= 2`) as a logged deviation and re-spec.
+- The integration PR to `main-dev` is opened with Steps 1–8 done and status `in-progress`; its description states the pending D-9 gate as a pre-promotion requirement.
+- Files modified: `docs/roadmap/features/357-fix-portfolio-internal-position/context.md`
+- Deviations: none (the step is deferred, not deviated; Verification not run because there is no result to check)
