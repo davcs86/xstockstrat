@@ -513,3 +513,9 @@
   ~58 s here), not the Docker runner; `normBindings` in `e2e/helpers/watchlistMock.ts` now carries
   `delisted` through so write routes that rebuild bindings keep the field; `UnservableReasonName` type
   moved above `MockBinding` in the same file. C-12: fixture + `INVENTORY.md` row added.
+
+### Step 20 — service: portfolio's never-waiting removal of flagged symbols — done
+- New `internal/repository/delisted_removal_repo.go` (`SKIP LOCKED`, 2 occurrences); `signal_expiry_repo.go`
+  untouched.
+- TDD: AC-6 red (functions as zero-value stubs): `got {Removed:[] …}, want Removed=[KPTI]` (6 of 7 fail) →
+  green: 7 PASS. `go build`, golangci-lint 0 issues.

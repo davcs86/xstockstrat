@@ -1089,7 +1089,7 @@ grep -n "symbol_results" services/xstockstrat-ingest/tests/_helpers.py     # the
 
 ### Step 20 — service: portfolio's never-waiting removal of flagged symbols from system-managed lists
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/delisted_removal_repo.go` — create
