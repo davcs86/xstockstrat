@@ -522,3 +522,10 @@ before merge" items of the session summary, not only the role approvals logged a
 
 Still open and not an approval item: `ReleasePendingIntent`'s SQL has no DB-level test (accepted design
 risk, flagged for review on the PR).
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1573 merged to main
+- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17

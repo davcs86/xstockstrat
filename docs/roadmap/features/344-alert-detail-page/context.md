@@ -667,3 +667,10 @@ Feature: alert-detail-page (ingest backfill-failure alert body)
 ## Session 2026-11-16 — wording of feature 271 `@AC-5` (orchestrator)
 
 - Shown to the operator: `Given a signed-in trader with the alert stream open` → `Given a signed-in user on any segment page with the alert stream open` (first line only; title, tags and the other steps unchanged). **Operator, verbatim: "Signoff".** File: `services/xstockstrat-ui/acceptance/fix-ui-transport-hardening.feature`. Wording only; no test or behaviour change.
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1573 merged to main
+- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17
