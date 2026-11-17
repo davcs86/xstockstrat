@@ -633,3 +633,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ```sdd-batch-setup
 {"mainDev":"0558e377e1bd805653e3e29b2a5853b4bdb1d3d8","date":"2026-11-17"}
 ```
+
+### Step 1 — test: pgxmock RED tests for the RPC readers' drain (GetPortfolio, GetPnL) [done]
+- Atomic unit 1+2+3. Added six `Test(GetPnL|GetPortfolio)_357_*` pgxmock tests with the O-10 `cardinality(...)` anchor and the page-2 cursor pinned to `[]string{"S499","TRADING_MODE_PAPER",acct}`. TDD: AC-1 red `UnrealizedPnl = 500, want 1500` / `len(Positions) = 500, want 501` / `Equity = 5500, want 6510`; AC-3 red `len(Positions) = 500, want 501`; AC-4 red `first quote batch requested 500 symbols, want 501`; AC-2 red `err = <nil>, want errors.Is(err, errPageTwo)` → green: 6/6 PASS, full service package `ok`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_position_drain_test.go`
+- Deviations: extra file-local helpers (`expectTwoPages`, `brokerValued`, `paperMode`) — see Deviation Log
+
+### Step 2 — test: 501-row real-DB service dbtest + CI package list (D-15) [done]
+- Atomic unit 1+2+3. Added the `//go:build dbtest` service test (prefix `it-357-`, `serviceTestPool` twin with the D-17 comment, seeding via `UpsertPosition`, three `TestPositionDrain_357_*` tests); ci.yml:1065 now runs `./internal/repository/... ./internal/service/...`, :1116 unchanged. TDD: real-DB red/green not run locally (no `PORTFOLIO_DB_TEST_URL`; never start a DB); vet + lint under `-tags dbtest` clean; the authoritative run is CI `portfolio-db-test` on this commit.
+- Files modified: `services/xstockstrat-portfolio/internal/service/position_drain_dbtest_test.go`, `.github/workflows/ci.yml`
+- Deviations: real-DB RED/GREEN deferred to CI (CI-equivalent fallback); extra file-local fixture helpers — see Deviation Log
+
+### Step 3 — service: `listAllPositions` drain; GetPortfolio and GetPnL read every page [done]
+- Atomic unit 1+2+3. Added `positionDrainPageSize = 500` and `listAllPositions` (page-error wrap only; the guard is Step 5) after `collectFills`; `GetPortfolio` and `GetPnL` now drain. Green: build/vet/vet-dbtest clean, 6/6 `_357_` PASS, coverage `total: 79.1%`, golangci-lint `0 issues`, no `ListPositions(ctx, userID, req.TradingMode, 500` hit.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: none

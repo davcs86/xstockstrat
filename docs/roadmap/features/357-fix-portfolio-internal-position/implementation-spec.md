@@ -69,7 +69,7 @@ The fix stays in the `xstockstrat-portfolio` service layer (design.md § Chosen 
 
 ### Step 1 — test: pgxmock RED tests for the RPC readers' drain (GetPortfolio, GetPnL)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_position_drain_test.go` — create
@@ -149,7 +149,7 @@ grep -rn "func drainRows" internal/service --include="*_test.go"   # expect exac
 
 ### Step 2 — test: 501-row real-DB service dbtest + CI package list (D-15)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/position_drain_dbtest_test.go` — create
@@ -220,7 +220,7 @@ Check the `-v` output to confirm the three tests ran and did not skip when the U
 
 ### Step 3 — service: `listAllPositions` drain; GetPortfolio and GetPnL read every page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -576,3 +576,13 @@ grep -n 'D-9 smoke' docs/roadmap/features/357-fix-portfolio-internal-position/co
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-11-17 — Step 2 (unit 1+2+3): real-DB RED/GREEN not run locally
+- **Spec said**: Step 2 §RED runs the 501-row dbtest against the pre-Step-3 tree on a migrated TimescaleDB, or, without one, cites the CI `portfolio-db-test` run on the pre-Step-3 commit.
+- **Actual**: `PORTFOLIO_DB_TEST_URL` is unset in the execution sandbox and the execute loop never starts a database. Steps 1+2+3 land as one atomic commit, so no pre-Step-3 commit exists for CI to run. Locally the dbtest compiles and vets (`go vet -tags dbtest`, `golangci-lint --build-tags dbtest`: 0 issues). The behavioural RED is the pgxmock suite from Step 1 (same readers, same 501-row shape).
+- **Disposition**: CI-equivalent fallback. The authoritative real-DB GREEN is the CI `portfolio-db-test` job on this unit's commit (ci.yml:1065 now includes `./internal/service/...`).
+
+### 2026-11-17 — Steps 1–2 (unit 1+2+3): extra file-local test helpers
+- **Spec said**: Step 1 names `listPositionsSQL`, `drainRows`, `pageTwoCursor`; Step 2 builds the service inline per test.
+- **Actual**: Step 1 also adds `expectTwoPages` (registers page 1 + pinned page 2, or the page-2 error), `brokerValued` and `paperMode`; Step 2 adds `drainDBFixture`, `seedDrainPositions`, `drainDBUser`. All file-local, each used by several tests in the same file (DRY guard rail); the assertions and fixtures are the specced ones.
+- **Disposition**: in-scope (same **Files**), no behaviour change.

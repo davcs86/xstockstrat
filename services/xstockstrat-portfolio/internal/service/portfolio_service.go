@@ -787,7 +787,7 @@ func sideOf(qty float64) portfoliov1.PositionSide {
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
 	// Caller identity comes from the trusted x-user-id header, never the deprecated request-body user_id.
 	userID := middleware.FromContext(ctx).UserID
-	positions, _, err := s.repo.ListPositions(ctx, userID, req.TradingMode, 500, "", req.GetAccountId(), "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	positions, err := s.listAllPositions(ctx, userID, req.TradingMode, req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}
@@ -932,7 +932,7 @@ var ErrLedgerUnavailable = errors.New("ledger unavailable")
 // (the ONE realized-P&L implementation) — no second formula lives here (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
 	userID := middleware.FromContext(ctx).UserID
-	positions, _, err := s.repo.ListPositions(ctx, userID, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	positions, err := s.listAllPositions(ctx, userID, req.TradingMode, "")
 	if err != nil {
 		return nil, err
 	}
@@ -1165,6 +1165,26 @@ func (s *PortfolioService) collectFills(ctx context.Context, eventType, userID s
 		}
 		if next == token {
 			return nil, fmt.Errorf("GetPnL: QueryEvents (%s): repeated page token: %w", eventType, ErrLedgerUnavailable)
+		}
+		token = next
+	}
+}
+
+// positionDrainPageSize must stay <= the repo cap: ListPositions turns any larger page size into 100.
+const positionDrainPageSize = 500
+
+// listAllPositions follows the ListPositions cursor to the last page; a page error fails the whole read.
+func (s *PortfolioService) listAllPositions(ctx context.Context, userID string, mode commonv1.TradingMode, accountID string) ([]*portfoliov1.Position, error) {
+	var out []*portfoliov1.Position
+	var token string
+	for {
+		page, next, err := s.repo.ListPositions(ctx, userID, mode, positionDrainPageSize, token, accountID, "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+		if err != nil {
+			return nil, fmt.Errorf("list positions page: %w", err)
+		}
+		out = append(out, page...)
+		if next == "" {
+			return out, nil
 		}
 		token = next
 	}
