@@ -295,3 +295,26 @@
   `services/xstockstrat-ingest/tests/test_seed_source_templates.py`
 - Deviations: none. Note for future tests: calling `.extend(())` on `request.update_mask.paths`
   sets the mask's presence, so a "maskless" request must not touch `update_mask` at all.
+
+### Step 8 — service: agent tools return prose, never `extractor_module`, for mediated sources [done]
+- `tools.py`: `_is_mediated`, `_DEFAULT_EXTRACTION_INSTRUCTIONS` (equals design.md's block byte for
+  byte), `_instruction_fields`, `_shape_managed_source`; `list_signal_sources` adds the two
+  instruction keys and `origin` on mediated entries only; `manage_signal_source` gains
+  `extraction_instructions` (masked only when supplied) and shapes its result;
+  `instantiate_template` shapes a `signal_source` result; docstrings for the five tools and the
+  module header. `client.py`: `_managed_source_to_dict` carries the raw field. Prompt file and
+  `docs/runbooks/mcp-tools.md` updated (shapes, parameter and error rows, Usage Patterns with the
+  precedence line, the clock note and the watchlist-expiry pointer). Unit with Step 9.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`,
+  `services/xstockstrat-agent/app/prompts/signal_extraction.md`, `docs/runbooks/mcp-tools.md`
+- Deviations: none. Feature 328 overlap (same tool bodies) stands: whichever merges second rebases.
+
+### Step 9 — test: agent response shapes, mask rule and doc parity [done]
+- AC-7 / AC-8 red on the pre-Step-8 tree: `tests/test_extraction_instructions.py` 21 failed, 4
+  passed (no instruction keys on a mediated list entry; `extractor_module` present on manage
+  results; docs missing the fields) → green: agent suite 791 passed, coverage 88.25%; ruff clean;
+  `grep -c '"mediated_[a-z_]\{2,\}"' app/tools.py` = 4.
+- Covers AC-6, 7, 8, 9, 10, 15, 24, the mask rule (EXTEND `@AC-2` / `@AC-10 @feature-161`) and
+  INVALID_ARGUMENT surfacing as a ToolError.
+- Files modified: `services/xstockstrat-agent/tests/test_extraction_instructions.py` (new)
+- Deviations: none.

@@ -1440,6 +1440,7 @@ def _managed_source_to_dict(src) -> dict[str, Any]:
         "reliability_weight": src.reliability_weight,
         "user_id": src.user_id,
         "origin": _origin_to_dict(src),
+        "extraction_instructions": src.extraction_instructions,
     }
 
 

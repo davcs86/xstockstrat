@@ -704,7 +704,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_extraction_instruct
 
 ### Step 8 — service: agent tools return prose, never `extractor_module`, for mediated sources
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -859,7 +859,7 @@ grep -c '"mediated_[a-z_]\{2,\}"' app/tools.py   # expect 4 — the _EXTRACTOR_T
 
 ### Step 9 — test: agent response shapes, mask rule and doc parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_extraction_instructions.py` — create
