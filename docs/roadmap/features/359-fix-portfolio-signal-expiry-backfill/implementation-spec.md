@@ -46,6 +46,13 @@ These tests may **not** be edited, skipped, loosened or deleted by any step. If 
 - Step 6 requires Step 4. The durable @AC-16 CHANGE must match the asserted behavior. The @AC-16 CHANGE and the @AC-17 retitle are one commit (D-14).
 - Step 7 requires Steps 1 and 3. It documents the invariant those steps create.
 - Merge order: no row is needed. Recon found that feature 354 overlaps only `watchlist_repo.go:107-141` and `dbtest_helpers_test.go`. This spec edits neither file, and 354 is already merged to `main-dev` (#1566).
+- Execute order (TDD): Step 1 is numbered first, but /sdd-execute writes Step 2's tests first and captures RED on the pre-Step-1 tree. It then applies Step 1 and captures GREEN. Running Step 1 first loses the real RED.
+- Textual overlap with `352-delisted-symbol-handling` (`implementation-ready` on `origin/main-dev`; impl-spec review 2026-11-17, WARN only). 352 also edits three files this spec touches:
+  - the PORTFOLIO-18 row of `services/xstockstrat-portfolio/docs/context-constitution.md` (Step 7 here);
+  - `services/xstockstrat-portfolio/CLAUDE.md`, on lines other than `:98`;
+  - the `docs/runbooks/CLAUDE.md` index table, where 352 inserts a new row and Step 5 here edits the backfill row.
+
+  Whichever feature lands second rebases these doc edits. No merge-order row is required.
 
 ---
 
