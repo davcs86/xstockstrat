@@ -116,8 +116,8 @@ binding operator decision at design gate r6 (IDs append-only).
 
 **Verification**:
 ```bash
-cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./internal/telemetry/... ./internal/service/... && GOWORK=off go test ./internal/telemetry/... ./internal/service/... -count=1
-cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
+( cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./internal/telemetry/... ./internal/service/... && GOWORK=off go test ./internal/telemetry/... ./internal/service/... -count=1 )
+( cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod )
 ```
 Both exit 0.
 
@@ -163,8 +163,8 @@ Both exit 0.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestAllowlist' -count=1 -v 2>&1 | grep -E "^(--- |ok|FAIL)"
-cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
+( cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestAllowlist' -count=1 -v 2>&1 | grep -E "^(--- |ok|FAIL)" )
+( cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod )
 ```
 Every `TestAllowlist*` passes. New logic is in the excluded `telemetry`/`service` packages, so no coverage
 threshold applies here (Step 4 runs the full coverage command).
@@ -265,9 +265,9 @@ threshold applies here (Step 4 runs the full coverage command).
 
 **Verification**:
 ```bash
-cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./... && GOWORK=off go test ./... -count=1
-cd services/xstockstrat-trading && grep -n "reconcilePositionsPageSize\|listAccountPlatformPositions\|reconcilePositionSkipCause\|RecordReconcilePositionSkip\|PageSize: 500" internal/service/trading.go
-cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
+( cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./... && GOWORK=off go test ./... -count=1 )
+( cd services/xstockstrat-trading && grep -n "reconcilePositionsPageSize\|listAccountPlatformPositions\|reconcilePositionSkipCause\|RecordReconcilePositionSkip\|PageSize: 500" internal/service/trading.go )
+( cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod )
 ```
 `go test ./...` passes: the pre-existing reconcile tests stay green on a single page. The grep shows the
 const, the helper, the mapper and one `RecordReconcilePositionSkip` call, and no remaining `PageSize: 500`
@@ -407,10 +407,10 @@ Step 3 and is GREEN-side only. Its guard discrimination is exact text per row (D
 
 **Verification**:
 ```bash
-cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestReconcileTick|TestListAccountPlatformPositions|TestReconcilePositionSkipCause|TestAllowlist' -count=1 -race -v 2>&1 | grep -E "^(--- |ok|FAIL)"
-cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
-cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -n "t.Parallel" services/xstockstrat-trading/internal/service/trading_reconciliation_test.go
+( cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestReconcileTick|TestListAccountPlatformPositions|TestReconcilePositionSkipCause|TestAllowlist' -count=1 -race -v 2>&1 | grep -E "^(--- |ok|FAIL)" )
+( cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:" )
+( cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod )
+( grep -n "t.Parallel" services/xstockstrat-trading/internal/service/trading_reconciliation_test.go )
 ```
 - All 358 tests pass under `-race`. The `-run` filter selects them by the names in items 2-6 and 8:
   `TestReconcileTick_358_*`, `TestListAccountPlatformPositions_358_Guards` and
