@@ -220,7 +220,7 @@ order-intent staleness threshold; `rateLimitBudget` in `internal/service/order_i
 
 ## Position & Balance Sync Observability
 
-Position-sync heartbeat/watchdog, `loop tick ok` loops, instruments and load-bearing logs (feature 294) → this service's `docs/` folder (**`reconciliation.md`**).
+Position-sync heartbeat/watchdog, `loop tick ok` loops, instruments (incl. the feature-358 `trading.reconciliation.position_check_skipped` skip counter) and load-bearing logs (feature 294) → this service's `docs/` folder (**`reconciliation.md`**).
 
 ## Environment Variables
 
