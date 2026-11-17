@@ -85,3 +85,6 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-portfolio/internal/repository/{watchlist_repo.go, watchlist_repo_test.go, dbtest_helpers_test.go, watchlist_list_dbtest_test.go (new)}`.
 - Deviations: evidence line drift after main-dev merge; ingest migrations added to the harness (envsubst near-miss caught); user override of the no-DB rail — all in `## Deviation Log`.
 - Review warnings carried: none (impl-spec review loop closed clean).
+- C-16 promotion (user-approved): `@AC-1`/`@AC-2` → `services/xstockstrat-portfolio/acceptance/fix-listwatchlists-page-token.feature` (`@feature-354`); dedup vs `quote-fanout-batching.feature` `@AC-2` (bindings query count — different guarantee).
+- ALL-DONE 2.6 (close resolved reports): no candidates — this feature records no C-16 CHANGE; its own report sidecar stays `triaged` → `feature:354-…` (Track C: `/sdd-archiver` derives resolution from `launched`).
+- Merge-order gate: 354 has no blocking row (351 waits for 354). Integration PR = #1566.
