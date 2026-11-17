@@ -225,7 +225,7 @@ Feature: delisted-symbol-handling
 
   @AC-29 @FR-12 @FR-2
   Scenario: Recovery emits one alert
-    Given "ATCH" is flagged delisted
+    Given "ATCH" is flagged delisted and its flag alert was sent
     When the asset set is loaded with "ATCH" as an active, tradable, non-OTC asset
     Then one alert is emitted naming "ATCH" as servable again
     And the next asset-set refresh, still with "ATCH", emits no further alert for "ATCH"

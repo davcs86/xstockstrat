@@ -101,16 +101,16 @@
 | O-31 | 3 | Removal was not tied to the alert claim, so a first-delivery alert could report removal from 0 lists (burst over the claim limit, SKIP LOCKED skip, second instance). FR-12, AC-17, AC-18. | yes | closed @ round 3 (alert-state enum; no removal while pending, D-22) |
 | O-32 | 3 | A union that legitimately shrinks to empty was ignored, leaving a stale union that keeps starting and flagging symbols on no watchlist. | no | closed @ round 3 (empty union clears the table; no flag outside the union, D-20) |
 | O-33 | 3 | A relisted symbol's fresh signal entry could be removed before the hook recovers it (recovery lags by a load, a weekend or a holiday). | no | closed @ round 3 (removal excludes symbols servable in the current asset set, D-22) |
-| O-34 | 3 | `emitWarning` hard-codes category and title; the recovery alert is at-most-once. | no | open |
+| O-34 | 3 | `emitWarning` hard-codes category and title; the recovery alert is at-most-once. | no | waived @ round 3 (user: recovery alert at-most-once accepted; parameterised emitter per D-24) |
 | O-35 | 3 | The shared insert-path timeout is too tight for the background sync. | no | closed @ round 3 (D-23) |
 | O-36 | 3 | 1000 alerts in one tick could outlast the 10-minute lease and delay the 281 prune. | no | closed @ round 3 (claim limit 100 per call, D-22) |
 | O-37 | 3 | The union rewrite had no lock order and a linear-per-row delete. | no | closed @ round 3 (ordered insert, anti-join delete, D-20) |
 | O-38 | 3 | `refreshAssets` returns early on later loads; the hook placement needs a restructure. | no | closed @ round 3 (D-21) |
 | O-39 | 3 | Ack statement lock order is plan-dependent; `date[]` must be bound from text. | no | closed @ round 3 (D-24) |
-| O-40 | 3 | The new fixed invariants (hook timeout 30 s, alert lease 10 min, sync deadline 15 s, request cap 20 000, claim limit 100) need explicit operator approval (F-07 precedent, P-04). | yes | open |
+| O-40 | 3 | The new fixed invariants (hook timeout 30 s, alert lease 10 min, sync deadline 15 s, request cap 20 000, claim limit 100) need explicit operator approval (F-07 precedent, P-04). | yes | closed @ round 3 (operator approved the five fixed invariants) |
 | O-41 | 3 | Config seed migration number must be re-checked at spec time. | no | closed @ round 3 (D-24) |
-| O-42 | 3 | AC-29's Given must state that the flag alert was sent; changing an approved scenario needs operator sign-off (C-15). | yes | open |
-| O-43 | 3 | Residual: a load whose hook times out misses a reset, and the symbol can then flag earlier than FR-1 allows (AC-25). | no | open |
+| O-42 | 3 | AC-29's Given must state that the flag alert was sent; changing an approved scenario needs operator sign-off (C-15). | yes | closed @ round 3 (operator approved the AC-29 Given amendment) |
+| O-43 | 3 | Residual: a load whose hook times out misses a reset, and the symbol can then flag earlier than FR-1 allows (AC-25). | no | waived @ round 3 (user: accepted residual, logged and counted) |
 
 ## Reopen Petitions
 

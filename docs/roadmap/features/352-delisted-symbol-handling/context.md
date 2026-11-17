@@ -153,3 +153,17 @@
     Affected Services (+ `xstockstrat-analysis`). No scenario renumbered.
 - Open going into round 3: O-24 (deadlock, expected moot under D-19), O-25 (shared timeout key), O-27
   (AC-21 timing, expected resolved by D-19).
+
+## Session 2026-11-17 — sdd-design (round 3 and its gate)
+
+- Round 3 (debate.md D-20..D-24): persisted union `marketdata.watched_symbol`; the hook as five ordered
+  conditional statements; alert-state enum with claim, 10-minute lease and a separate acknowledge RPC;
+  fixed 15 s sync deadline; inbound internal-caller allow-list on marketdata. `state_as_of` dropped.
+- **Round-3 gate, operator rulings (2026-11-17):**
+  - **Run another round** (round 4) on the synthesized design before approval.
+  - **Fixed invariants approved** (not config keys): hook time limit 30 s, flag-alert lease 10 minutes,
+    sync deadline 15 s, 20 000 symbols per sync, 100 flag alerts claimed per sync.
+  - **Accepted residuals**: the recovery alert is at-most-once; a hook timeout on a load where a symbol
+    was servable can let it flag earlier than the 5-day rule (logged and counted).
+  - **Scenario amendment approved (C-15)**: AC-29 Given becomes "ATCH is flagged delisted and its flag
+    alert was sent". ID and outcome unchanged.
