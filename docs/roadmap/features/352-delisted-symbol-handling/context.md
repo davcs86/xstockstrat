@@ -354,3 +354,14 @@
   test still uses the pairs only, and a list whose only bound bindings are flagged still issues no
   request. Step 30 now modifies the hook file; Step 31 gains a 26-binding e2e case.
 - Unresolved ✗ / ⚠ carried into execution: none from round 4.
+
+## Session 2026-11-17 — sdd-review impl-spec (advisory), round 5
+
+- Tree: `claude/story-delisted-symbol-handling@ec3439d` (contains `origin/main-dev@149351d`).
+- Result: CLEAN — 0 failures, 0 warnings, 0 notes (advisory — did not block). Rounds 1–4 returned 29,
+  12, 7 and 5 findings; all were applied to implementation-spec.md.
+- Unresolved ✗ / ⚠ carried into execution: none.
+- Overlap findings (round 1, unchanged): no migration, proto-field or config-key collision. Config
+  migration ordering against feature 345 (`053` there, `054` here): a merge-order row is pending the
+  operator's decision. Same-file overlaps with pending features are rebase-level.
+- For operator confirmation, not blocking: assumption A-7 (a skipped symbol is logged at INFO).
