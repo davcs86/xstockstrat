@@ -208,3 +208,172 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-17 — sdd-batch design gate (round 3)
+
+`/sdd-design fix-analysis-held-position-drains` (full) is halted at its approval gate after round 3 (gate policy: halt). design.md is not written and status.md is unchanged (still `spec-ready`). The debate register is `debate.md` (D-1..D-10, R-1..R-9, O-1..O-7, P-1..P-2).
+
+## Open Threads
+
+- **Approach.** No code change this round. The mechanism stays as D-1..D-4, D-6 and D-8..D-10 define it: the shared `_drain_positions_paged` and `_PositionsPageError` in `app/handlers/servicer.py`; a `try` that wraps only the page body, with the equality and cap checks outside it; the live-loop `failed_owners` set, handled before `except ValueError` (`live_loop.py:409`); the `ScreenSymbols` guard; the D-9 sweep of existing fakes; red before green. The remaining work is accurate record edits, corrected against the code: (1) design.md "Behaviour changes accepted under fail-closed" (a) cites `entry_backfill.py:52-58,142-159` and `:199-202`; (d) the daily refresh (`servicer.py:6055-6067`) logs a per-user WARNING, skips `_replace_and_stamp_compute_state`, still advances the schedule, records no `recompute{failed}`, and `_log_items_tick` (`servicer.py:377-382`) records no failed count — a partial failure writes a normal `loop tick ok`, and only an all-users failure leaves no tick record; (2) product-spec FR-4 counting sentence rewritten accordingly, and the `compute_failed` clause limited to cold reads (`servicer.py:4784-4795`; stored queues served stale, `:4798-4801`); (3) `@AC-5` When step narrowed to the on-demand recompute path, no new scenario; (4) the AC-5 harness moves from `tests/test_list_opportunities_deadlines.py` (kick mocked at `:98`) to `tests/test_analysis_tick_telemetry.py` (`_refresh_svc`) or `tests/test_opportunity_compute_state.py` (`_opp_svc`), restoring the real `_compute_opportunities`/`_drain_held_symbols`, with a page-1 `grpc.RpcError`-subclass `ListPositions` fake, seeded previous rows, and asserts that the replace is never awaited, `recompute{kind=full,outcome=failed}` == 1 and `recompute{outcome=ok}` == 0; (5) no new daily-refresh @AC — the spec names `test_opportunity_refresh.py:77` and `test_analysis_tick_telemetry.py:61+`. Items 1(d), 2 and 4 depend on the operator's verdict on P-1 (REOPEN D-7, wording only) and P-2 (REOPEN D-5, harness clause only); the substance of D-7 ("record, no new instrument") and D-5 ("RpcError-subclass fakes, real path") is kept. No proto, migration, config or other-service change; features 351, 353 and 354 untouched.
+- **Strongest open objection — O-4 / O-3 (blocking, record accuracy; P-03, C-11).** D-7 and the proposed FR-4/(d) text say a daily-refresh failure is "counted as a failed loop-tick item". That is false: `_log_items_tick` (`servicer.py:377-382`) takes no failed count. O-3 and O-4 close only with the corrected FR-4 text above, which needs the operator's verdict on P-1. O-5 (blocking, C-15 vacuous green): the AC-5 harness named by D-5 never reaches `_run` (`servicer.py:4940-4960`); closes only with the corrected harness, which needs the verdict on P-2. Non-blocking: O-1 (records (a)–(d) accurately), O-6 (`compute_failed` cold-read only), O-7 (cite `entry_backfill.py:199-202`).
+- **Floor status.** No Floor breaches in any of the three rounds.
+- **Uncovered @AC changes (not covered by an operator decision).** EXTEND `@AC-5 @feature-356` (When step narrowed to the on-demand recompute path; needs sign-off at the gate). PRESERVE: `@AC-3 @feature-262`; `@AC-6 @feature-191`; `@AC-6/@AC-7/@AC-10 @feature-185/@feature-289` (`@AC-7` `compute_failed` stays cold-read-only); `@AC-2 @feature-168`, `@AC-1/@AC-3 @feature-193`; feature-097/158 daily-refresh per-user isolation and loop-tick record semantics (no `@AC` id located; `_log_items_tick` untouched). Covered by operator decision: PRESERVE `@AC-16 @feature-294`, `@AC-8 @feature-262`; EXTEND `@AC-1..@AC-9 @feature-356`.
+- **Open risks carried to design.md.** A single-user daily-refresh held-drain failure gives no metric and a healthy-looking tick (one WARNING only; queue stale ~24h); an all-users failure shows only as a missing `opportunity_refresh` tick record; 5,000-position effective bound per owner (`portfolio_repo.go:137-138`); transient boot failure leaves entry-backfill state unseeded until restart (`entry_backfill.py:199-202`); D-9 fakes may flip branch (sweep before RED); AC-5 vacuous-green risk until P-2 is ruled on; `next == sent` misses an A→B→A cycle (50-page cap is the backstop); live-loop held drain reads the servicer page constants while sibling drains keep live_loop's.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "The code mechanism stays exactly as D-1..D-4, D-6 and D-8..D-10 define it: the shared `_drain_positions_paged` and `_PositionsPageError` in `services/xstockstrat-analysis/app/handlers/servicer.py`; a `try` that wraps only the page body, with the equality and cap checks outside it; the live-loop `failed_owners` set, whose handler comes before `except ValueError` (`live_loop.py:409`); the `ScreenSymbols` guard; the D-9 sweep of existing fakes; and red before green. This round changes no code. The remaining work is accurate record edits, which the orchestrator writes (P-01).\n\nThe proposer's text for those edits is corrected against the code, which I checked this round.\n\n**1. design.md, section \"Behaviour changes accepted under fail-closed\"**\n- **(a) Entry backfill.** Cite both `entry_backfill.py:52-58,142-159` (per-owner skip) and `:199-202` (the boot-time call site and the WARNING for skipped owners). A transient held-drain failure at boot leaves that owner's `last_entry_at` unseeded until the process restarts. There is no retry.\n- **(b) Portfolio outage.** Every owner is skipped in the live loop each cycle. Each skip records `drain_failures{source=held}` +1 and one WARNING per owner per cycle.\n- **(c) `ScreenSymbols`.** The response loses its held badges but the request is not aborted.\n- **(d) Daily opportunity refresh** (`servicer.py:6055-6067`). Use this corrected wording:\n  - `_compute_opportunities` raises for the affected user (`:6059`). The per-user `except Exception` catches it and logs `opportunity daily refresh failed for user=%s` (`:6061-6063`).\n  - `_replace_and_stamp_compute_state` (`:6060`) is skipped, so the previous queue stays and is stale until the next day's pass. The schedule still advances (`:6066`).\n  - `_log_items_tick` (`servicer.py:377-382`) records no failed-item count. When some users fail, it writes an ordinary `loop tick ok`, so a partial failure looks exactly like a healthy pass apart from the per-user WARNING. When every user fails, it writes no `loop tick ok` record for that pass.\n  - No `recompute{failed}` is recorded on this path.\n  - Accepted, not coded (R-5, R-6).\n\n**2. product-spec.md, FR-4, the `_compute_opportunities` bullet.** The counting sentence becomes:\n> \"On the on-demand recompute path (`_kick_opportunity_recompute._run`, `servicer.py:4940-4960`) the failure is counted by `analysis.opportunity.recompute{outcome=failed}`. On the daily refresh pass (`servicer.py:6055-6067`) it is logged as a per-user WARNING only. If every user fails, the pass writes no `loop tick ok` record; a partial failure is otherwise indistinguishable from a healthy pass in the tick record. The pass still advances to the next day. In both paths the user's previous queue is not replaced. No new metric instrument is added.\"\n\nThe `compute_failed` clause becomes:\n> \"On a cold read (no stored queue), repeated kick-path failures surface `compute_failed` (feature 185 @AC-7, `servicer.py:4784-4795`). A user with a stored queue keeps being served the stale rows (`:4798-4801`).\"\n\n**3. acceptance.feature, @AC-5.** The When step is narrowed to `When the opportunity queue for \"u-1\" is recomputed through the on-demand recompute path`. Both Then steps stay. No new scenario is added.\n\n**4. AC-5 test harness.** This is a correction to D-5's harness clause and is pending the operator's verdict on the REOPEN.\n- D-5 names `tests/test_list_opportunities_deadlines.py`. That file replaces `_kick_opportunity_recompute` with a `MagicMock` (`:98`), so a test there can never reach `_run`.\n- The spec should instead use `tests/test_analysis_tick_telemetry.py`, following the `_refresh_svc` and `test_ac51_failed_full_recompute_counted_with_traceback` pattern (`:44-50`, `:174-184`). Alternatively it can use `tests/test_opportunity_compute_state.py` (`_opp_svc`, `:45-53`; the real kick at `:118`).\n- Both helpers stub `_compute_opportunities` with an `AsyncMock` by default (`:48` and `:52`). The AC-5 test must therefore restore the real bound `_compute_opportunities`, or at least the real `_drain_held_symbols` inside it, and set `ListPositions` to raise a `grpc.RpcError` subclass on page 1.\n- It must seed the previous rows and assert:\n  - `replace_for_user` and `_replace_and_stamp_compute_state` are never awaited;\n  - `recompute{kind=full,outcome=failed}` == 1;\n  - `recompute{outcome=ok}` == 0.\n\n**5. Daily-refresh behaviour.** No new @AC is added. The spec names by test the existing per-user isolation coverage, `tests/test_opportunity_refresh.py:77` (an `AsyncMock` with `side_effect=RuntimeError`), and the tick-record tests in `test_analysis_tick_telemetry.py:61+`. These show that (d)'s corrected wording describes behaviour that is already tested.\n\nItems 1(d), 2 and 4 depend on the operator ruling on the adversary's REOPEN D-7 (wording only) and REOPEN D-5 (harness clause only) petitions. The underlying decisions are kept: D-7 still means \"record, no new instrument\" and D-5 still means \"RpcError-subclass fakes, real path\".\n\nThere is no proto, migration, config or other-service change. Features 351, 353 and 354 are not touched.",
+    "open_objections": [
+      {
+        "text": "O-1 stays open until design.md records (a) to (d) with accurate wording. Three things are needed: (a) cites `entry_backfill.py:199-202` as well as `:52-58,142-159`; (d) states the real signal from `_log_items_tick` (`servicer.py:377-382`), which is a per-user WARNING only, with a missing `loop tick ok` record only when every user fails; and the 'failed-item count' claim is removed.",
+        "blocking": false
+      },
+      {
+        "text": "O-3 stays open. The proposed FR-4 and (d) text claim that a daily-refresh failure is 'counted as a failed item in that pass's loop tick'. That is false: `_log_items_tick` (`servicer.py:377-382`) emits no failed count, writes a normal `loop tick ok` on partial failure, and writes nothing when every user fails. O-3 closes only when the corrected FR-4 replacement text in the approach is used, which also requires the operator's verdict on REOPEN D-7, since D-7's own wording repeats the false claim.",
+        "blocking": true
+      },
+      {
+        "text": "The AC-5 harness named by D-5 is vacuous (`fails.md:3350-3353`). `tests/test_list_opportunities_deadlines.py:98` replaces `_kick_opportunity_recompute` with a `MagicMock`, so `_run` (`servicer.py:4940-4960`) is never reached. The spec must instead name `tests/test_analysis_tick_telemetry.py` (`_refresh_svc`, `:44-50`, `:174-184`) or `tests/test_opportunity_compute_state.py` (`_opp_svc`, `:45-53`, `:118`). Both stub `_compute_opportunities` by default, so the test must restore the real method or the real `_drain_held_symbols`, use a page-1 `grpc.RpcError`-subclass `ListPositions` fake, seed the previous rows, and assert that the replace is never awaited. This needs the operator's verdict on REOPEN D-5 (harness clause).",
+        "blocking": true
+      },
+      {
+        "text": "The kept FR-4 clause 'Repeated failures surface `compute_failed`' is too broad. `compute_failed` is set only in the `n == 0` cold-read branch (`servicer.py:4784-4795`). A user with a stored queue (AC-5's own precondition) is served stale rows (`:4798-4801`) and only `recompute{failed}` fires. The clause must be limited to cold reads.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-16 @feature-294",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-8 @feature-262",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-3 @feature-262",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @feature-191",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6/@AC-7/@AC-10 @feature-185/@feature-289 (recompute failure path; @AC-7 compute_failed stays cold-read-only)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-168, @AC-1/@AC-3 @feature-193 (held set assumed complete)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-097/158 daily opportunity refresh per-user isolation and loop-tick record semantics (no @AC id located; `_log_items_tick` untouched)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-356 (When step narrowed to the on-demand recompute path; the daily-refresh signal is a per-user WARNING, not a counted tick item)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1..@AC-9 @feature-356 (new fail-closed held-drain rules)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      }
+    ],
+    "rejected_alternatives": [
+      "Catch `_PositionsPageError` in `_compute_opportunities` and fall back to an empty held map. Lost because held symbols would rank at 0.0 in a normal-looking queue, which is the silent partial result `fails.md:3311-3312` forbids (R-5).",
+      "Add `recompute{failed}` or a new metric on the daily-refresh path. Lost because the Fix Scope rules out new instruments (R-6).",
+      "Request the server's honoured page size (500 or less). Lost because it is out of scope; follow-up only (R-7).",
+      "Describe the daily-refresh failure as 'counted as a failed loop-tick item'. Lost because it is false: `_log_items_tick` (`servicer.py:377-382`) emits no failed count.",
+      "Run the AC-5 test in `tests/test_list_opportunities_deadlines.py`. Lost because that file mocks `_kick_opportunity_recompute` (`:98`), so `_run` is never reached and the test would be vacuous (`fails.md:3350-3353`).",
+      "Run the AC-5 test with `_refresh_svc` or `_opp_svc` as-is. Lost because both stub `_compute_opportunities` with an `AsyncMock`, so the held drain is never exercised.",
+      "Add a new daily-refresh @AC asserting the WARNING and the missing tick record. Lost because it is extra test scope (CLAUDE.md rule 2). Existing per-user isolation and tick-record tests (`test_opportunity_refresh.py:77`, `test_analysis_tick_telemetry.py:61+`) are named in the spec instead.",
+      "Keep @AC-5's When step un-narrowed and test both paths. Lost because the daily path records no `recompute{failed}`, so the Then step would be false there."
+    ],
+    "open_risks": [
+      "A single-user held-drain failure during the daily refresh gives no metric and no tick signal. The tick record looks healthy (`servicer.py:377-382`), and only one WARNING per user marks it. That user's queue stays stale for about 24h. Operators who watch only `recompute{failed}` or loop-tick presence will miss it until the next kick-path read. This is accepted under fail-closed, R-5 and R-6.",
+      "If every user fails during a portfolio outage at the refresh hour, the only aggregate signal is a missing `opportunity_refresh` `loop tick ok` record, and all queues stay stale for about 24h.",
+      "The effective fail-closed bound is 5,000 positions per owner (portfolio clamps the page size to 100, `portfolio_repo.go:137-138`). An owner above that is skipped every cycle.",
+      "A transient boot-time held-drain failure leaves entry-backfill cooldown state unseeded until restart (`entry_backfill.py:199-202`). A portfolio outage skips every owner in the live loop each cycle.",
+      "Existing bare `MagicMock` portfolio fakes (the D-9 list) may now take the owner-skip or recompute-failed branch. The sweep must land before RED.",
+      "Vacuous-green risk on AC-5 until REOPEN D-5 is ruled on: the register still names a harness that mocks the kick. If the operator declines the petition, AC-5 cannot be proven red.",
+      "`next == sent` misses an A to B to A token cycle; the 50-page cap is the backstop. Wrapping every page exception turns programming errors into owner skips, with `__cause__` preserved.",
+      "The live-loop held drain now reads the servicer page constants, while the sibling drains keep the live_loop constants. The values are equal today but could drift."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-03",
+      "C-08",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-01",
+      "P-02",
+      "P-03",
+      "P-06",
+      "F-07",
+      "PLAT-4"
+    ],
+    "rationale": "I checked the adversary's claims against the code this round, and all of them hold.\n\n**What the code shows**\n- **`_log_items_tick`** (`servicer.py:377-382`) returns early when `failed == total` and otherwise logs a plain tick. It takes no failed count.\n- **`test_list_opportunities_deadlines.py:98`** replaces `_kick_opportunity_recompute` with a `MagicMock`.\n- **The two alternative helpers**, `_refresh_svc` in `test_analysis_tick_telemetry.py:44-50` and `_opp_svc` in `test_opportunity_compute_state.py:45-53`, both stub `_compute_opportunities` with an `AsyncMock`. So they work for AC-5 only if the real method is restored.\n- **`compute_failed`** is set only in the `n == 0` branch (`servicer.py:4784-4795`). Stored queues are served stale (`:4798-4801`).\n- **`entry_backfill.py:199-202`** holds the per-owner skip WARNING after the pass.\n\n**Effect on the proposal**\n- Its no-code, record-only direction is right, and no Floor breach or register violation was found.\n- Two of the facts it would write down are false (the loop-tick count and the broad `compute_failed` clause), and its named AC-5 harness is vacuous.\n- An objection the proposal does not concretely answer stays open. O-1 and O-3 therefore remain open. Closing them on the proposed text would record a false observability claim, the `fails.md:3356-3358` shape.\n- The two blocking adversary objections become new O entries.\n\n**Register handling**\n- D-7's wording ('counted only as a failed loop-tick item') and D-5's harness clause both rest on facts now shown to be wrong. The adversary filed REOPEN petitions on each, with new evidence not already on record.\n- Only the operator can reopen, so these are recorded as pending petitions, not new decisions. `reopened` is empty.\n- The approach keeps the substance of both decisions: D-7 still means 'record, no new instrument', and D-5 still means 'RpcError fakes, real path'. It marks the corrected wording and harness as contingent on the operator's verdict.\n\n**Operator decisions:** all honoured.\n- Fail closed, reject a repeated token, and test with a fake that ignores the token.\n- `@AC-16 @feature-294` and `@AC-8 @feature-262` are preserved.\n- Red before green.\n- Features 351, 353 and 354 are untouched.\n\n**Covered by operator decision.** The @AC-5 wording narrowing is marked as not covered by an operator decision: no operator steer sanctions it explicitly, so it needs sign-off at the approval gate.",
+    "register_delta": {
+      "new_decisions": [],
+      "new_rejected": [
+        {
+          "text": "Describe the daily-refresh held-drain failure as counted in the loop tick (a 'failed loop-tick item' or 'failed-item count').",
+          "why": "`_log_items_tick` (`servicer.py:377-382`) emits no failed count. It writes a normal `loop tick ok` on partial failure and no record only when every user fails."
+        },
+        {
+          "text": "Run the AC-5 test against a harness whose kick (`test_list_opportunities_deadlines.py:98`) or `_compute_opportunities` (`test_analysis_tick_telemetry.py:48`, `test_opportunity_compute_state.py:52`) is mocked.",
+          "why": "The held drain and `_run` are never exercised, which makes the test vacuous (`fails.md:3350-3353`)."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Blocking (P-03, C-11). The FR-4 and design.md (d) text must not say that a daily-refresh failure is 'counted as a failed item in the loop tick'. `_log_items_tick` (`servicer.py:377-382`) records no failed count. The accurate signal is a per-user WARNING (`:6063`), plus a missing `loop tick ok` record only when every user fails; a partial failure is indistinguishable from a healthy pass. The 'Strongest risk' paragraph must drop the failed-item-count signal.",
+          "blocking": true
+        },
+        {
+          "text": "Blocking (C-15, vacuous green). The AC-5 harness named in D-5, `tests/test_list_opportunities_deadlines.py`, mocks `_kick_opportunity_recompute` (`:98`). The spec must use `test_analysis_tick_telemetry.py` (`:44-50`, `:174-184`) or `test_opportunity_compute_state.py` (`:45-53`, `:118`), restore the real `_compute_opportunities` or `_drain_held_symbols`, use a page-1 `grpc.RpcError`-subclass `ListPositions` fake, seed the previous rows, and assert that the replace is never awaited.",
+          "blocking": true
+        },
+        {
+          "text": "Non-blocking (P-03). Limit the FR-4 'Repeated failures surface `compute_failed`' clause to cold reads. `compute_failed` is set only when `n == 0` (`servicer.py:4784-4795`), and stored queues are served stale (`:4798-4801`).",
+          "blocking": false
+        },
+        {
+          "text": "Non-blocking (record accuracy). Consequence (a) must cite `entry_backfill.py:199-202` as well as `:52-58,142-159`, so the boot-only, no-retry claim has its evidence.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [],
+      "reopen_petitions": [
+        {
+          "target": "D-7",
+          "evidence": "Adversary r3, wording only. `servicer.py:377-382`: `_log_items_tick` records no failed-item count; it writes a normal tick on partial failure and no tick when every user fails. D-7's evidence cited only `:6055-6067`. Requested change: replace 'counted only as a failed loop-tick item' with 'logged as a per-user WARNING; the tick record is missing only when every user fails'. 'Record, no new instrument' stays.",
+          "is_new": true
+        },
+        {
+          "target": "D-5",
+          "evidence": "Adversary r3, AC-5 harness clause only. `tests/test_list_opportunities_deadlines.py:98` replaces `_kick_opportunity_recompute` with a `MagicMock`, so `_run` (`servicer.py:4940-4960`) is unreachable. The alternatives `test_analysis_tick_telemetry.py:44-50` and `test_opportunity_compute_state.py:45-53` stub `_compute_opportunities`, so the real method must be restored. Not on record because D-5 named the file without checking its fixtures.",
+          "is_new": true
+        }
+      ],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
