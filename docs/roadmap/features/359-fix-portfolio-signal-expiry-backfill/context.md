@@ -614,3 +614,42 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: none.
 - [ ] Open: the CI `Portfolio DB test (TimescaleDB)` job on the integration PR must show the dbtest suites green (DEV-1/2/3). The Steps 1–4 RED proofs are still unproven.
 - [ ] Still open from impl-spec review: Step 2 `pg_stat_activity` assumptions, Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew, the 352 overlap (the PORTFOLIO-18 row and portfolio CLAUDE.md edited here are rebase sites).
+
+## Session 2026-11-17 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-portfolio-signal-expiry-backfill (feature 359)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-portfolio/acceptance/fix-portfolio-signal-expiry-backfill.feature | CREATE | NEW | Observable subject is the portfolio backfill APPLY, the expiry row and the prune tick, so this is a single-service guarantee. No existing scenario covers the APPLY-versus-live-ingest race. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-portfolio-signal-expiry-backfill.feature (CREATE) ---
+# Promoted from docs/roadmap/features/359-fix-portfolio-signal-expiry-backfill/acceptance.feature at launch
+# (Constitution C-16). Scenarios are verbatim; @AC-/@FR- tags are preserved and @feature-359 added.
+# Durable business rule xstockstrat-portfolio guarantees: the signal-expiry backfill APPLY never leaves a SIGNAL watchlist entry due while a live signal for it exists.
+
+Feature: fix-portfolio-signal-expiry-backfill (bug fix)
+  Regression guard for defect report docs/reports/2026-11-17-portfolio-signal-expiry-backfill-mark-ingest-race-defect.md:
+  the signal-expiry backfill APPLY must never leave a SIGNAL watchlist entry due while a live signal for it exists.
+
+  @AC-1 @regression @feature-359
+  Scenario: A signal added during backfill APPLY keeps its watchlist entry out of the prune set
+    Given a system-managed watchlist with a SIGNAL binding for "META" that has no expiry row and no own watchlist signals
+    And a backfill REPORT that classifies that binding as untracked
+    When the backfill APPLY runs concurrently with a live watchlist signal for "META" being ingested (valid_until 30 days ahead) and added through AddSymbols with its provenance
+    Then the binding's expiry row is either absent or has a valid_until in the future
+    And a prune tick run afterwards removes nothing from that watchlist
+    And the "META" binding remains with source SIGNAL
+
+### Notes / ambiguities / conflicts
+- The source scenario has no @FR tag, only `@AC-1 @regression`. It is promoted verbatim, with `@feature-359` appended. No @FR tag was invented.
+- Related but not overlapping: 281 @AC-17 in /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature covers a marked entry being rescued by a live signal before the next tick, and @AC-15/@AC-16 cover backfill REPORT/APPLY. None asserts the concurrent APPLY-versus-ingest race, so I judged it NEW rather than OVERLAP. I found no CONFLICT. 281 @AC-17 is consistent with 359 @AC-1.
+- I grepped the other portfolio suites and platform.feature for feature-359, APPLY and backfill. Nothing relevant turned up.
+- The service attribution comes from the scenario's subject. I did not read feature.md's Reviewers table, because the portfolio service is clear from the scenario itself.
+
+### Coverage check
+- Source scenarios: 1. Planned (NEW+DUP+OVERLAP): 1. Every @AC-* is accounted for, and none were skipped.
+```
