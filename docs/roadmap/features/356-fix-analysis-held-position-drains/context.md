@@ -769,3 +769,28 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-17 — sdd-design
+
+- Phase 0 Recon: recon.md (already written; services: xstockstrat-analysis; key reuse patterns: the entry-backfill `failed_owners` short-circuit (`entry_backfill.py:142-159`) and the existing `record_live_loop_drain_failure("held")` / `record_opportunity_recompute("full","failed")` instruments).
+- Phase 1 Grilling: 5 rounds (full). Termination: approved by the operator at the r5 gate. No objection was open and the Floor was clear.
+- Chosen approach: a shared `_drain_positions_paged` raises `_PositionsPageError` on a page error, a repeated token, or a used-up cap. Both held drains route through it. The live loop catches the error before `except ValueError` and skips the owner through a per-cycle `failed_owners` set. `ScreenSymbols` gets a guard. The daily refresh counts each failed user on `recompute{full,failed}`. The produced-signals row is written only after Mimir verification at spec time.
+- Rejected: in-place hardening (R-1), a broad `except Exception` (R-2), an empty-held fallback (R-5), `kind=daily` / a daily `ok` (R-10, R-12), and a PR-time Mimir gate (R-14).
+- Register bookkeeping: P-1 (D-7), P-2 (D-5) and P-3 (R-6) are recorded as `user reopened`, per the operator decision at the r5 gate. D-7 is marked `superseded by D-11` and D-5 `superseded by D-12`. debate.md State is `approved`.
+- Constitution rules touched: C-01, C-03, C-08, C-11, C-15, C-16, C-18, P-01, P-02, P-03, P-06, F-07, PLAT-4, PLAT-N1. Floor breaches: none.
+- Business rules: PRESERVE @AC-16 @feature-294, @AC-8/@AC-3 @feature-262, @AC-6 @feature-191, @AC-6/@AC-7 @feature-185, @AC-10 @feature-289, @AC-2 @feature-168, @AC-1/@AC-3 @feature-193, feature-097/158 daily-refresh isolation, @AC-41 @feature-294. EXTEND @AC-51 @feature-294, @AC-5, the new @AC-10 and @AC-1..@AC-9 @feature-356. All EXTENDs are covered by operator decisions of 2026-11-17. No CHANGE.
+- Ledger: no new line. The fail-closed token rule is already `fails.md:3311` and the vacuous-green trap is already `fails.md:3350-3353`.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Mimir may hold no `analysis_opportunity_recompute*` series, because a counter exports only after its first `add`. Query prod and dev over 30d or more. If both are empty, write no tsv row and the operator decides. Target: `/sdd-spec`, the produced-signals verification step.
+- [ ] The produced-signals row would be the first counter (`_total`) row. Label it operator-mandated with no consumer, not a convention. Target: the tsv step.
+- [ ] `recompute{full,failed}` now merges kick-path and daily-refresh failures, and `ok` is kick-path only. Target: the CLAUDE.md caveat step (append to `:327`, keep `:326` verbatim).
+- [ ] The daily counter also counts non-drain per-user failures (`owner_metadata` ValueError, lock or replace errors). This is accepted scope. Target: the CLAUDE.md caveat step.
+- [ ] If every user fails during a portfolio outage, the counter rises by N, no `loop tick ok` is written and queues stay stale for about 24h. Accepted. Target: the daily-refresh step.
+- [ ] The effective fail-closed bound is 5,000 positions per owner (`portfolio_repo.go:137-138`). Accepted; R-7 is the follow-up. Target: the helper step.
+- [ ] A transient boot-time held-drain failure leaves the entry-backfill state unseeded until restart (`entry_backfill.py:199-202`). Accepted. Target: the callers verification step.
+- [ ] The D-9 sweep of bare-`MagicMock` fakes must land before RED. Target: the RED step.
+- [ ] AC-5/AC-10 rebind the real `_compute_opportunities` and may need a rebase against `308-fix-analysis-per-symbol-isolation`. Target: the RED/test step.
+- [ ] `next == sent` misses an A→B→A token cycle; the 50-page cap is the backstop. Page-exception wrapping keeps `__cause__`. Target: the helper step.
