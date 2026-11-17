@@ -16,6 +16,7 @@
 | 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report |
 | 2026-11-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 | 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
 
 ---
 
@@ -26,8 +27,20 @@
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Debate Register](debate.md) — D-1..D-14, R-1..R-9, O-1..O-11, P-1
 - [Design](design.md) — approved design (3 rounds, full)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-portfolio-signal-expiry-backfill`_
+- [Implementation Spec](implementation-spec.md) — 7 steps (lock fix + forced-interleave tests, FR-3 mark grace unit, docs)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec (2026-11-17).
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| xstockstrat-portfolio service owner | Concurrent write safety (P&L calculation accuracy, position snapshot consistency, concurrent write safety) | 1, 2, 3, 4 |
+
+Steps 5–7 are `docs` (no reviewer).
 
 ---
 
@@ -37,4 +50,4 @@ Portfolio's `backfill-signal-expiry` APPLY can mark a SIGNAL watchlist entry as 
 
 ## Next Action
 
-`/sdd-spec fix-portfolio-signal-expiry-backfill` — generate implementation spec from the approved design
+`/sdd-review fix-portfolio-signal-expiry-backfill impl-spec` — validate implementation spec, then `/sdd-execute fix-portfolio-signal-expiry-backfill`
