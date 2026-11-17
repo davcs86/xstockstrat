@@ -211,7 +211,7 @@ grep -n "_opportunity_refresh_tick\|daily refresh" docs/roadmap/features/356-fix
 
 ### Step 3 — test: Servicer held drain, ScreenSymbols and on-demand recompute fail closed (red first)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_held_position_drains.py` — create
@@ -515,3 +515,9 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: Step 2 runs in its own agent and may stage only `servicer.py` (F-08), so Step 3's test file was not written here. RED/GREEN was captured with an uncommitted probe `.sdd-logs/red/test_step2_red.py` (5 cases: ignored token, cap, page-2 RpcError, metadata/sum characterization, ScreenSymbols degrade). RED: 4 failed, 1 passed (`DID NOT RAISE` ×3, AAPL `held` `True is False`); GREEN: 5 passed. Recorded in context.md.
 **Reason**: red-before-green is mandatory, and the only committed tests for this behaviour belong to Step 3's **Files**.
 **Disposition**: Step 3 must still record its own RED for its named test ids. The Step-2 commit is already on the branch, so that RED runs against the pre-Step-2 `servicer.py` (`git show 545825bf9:services/xstockstrat-analysis/app/handlers/servicer.py`).
+
+### Deviation: Step 3 — RED run against a temporarily restored pre-Step-2 `servicer.py`
+**Spec said**: item 5, write the tests and run them against the pre-Step-2 tree **before** applying Step 2.
+**Actual**: Step 2 was already committed (`89d21e081`). For the RED run (`.sdd-logs/v-1.log`) the working-tree `servicer.py` was overwritten with `git show 545825bf9:services/xstockstrat-analysis/app/handlers/servicer.py`, the Step 3 Verification block was run verbatim, and the file was then restored with `git checkout --` (empty diff before GREEN and commit). The spec's AC-4 note expected "red N/A — guard"; on the pre-Step-2 tree AC-4 fails only at the new type pin (`AttributeError: ... no attribute '_PositionsPageError'`), the raw `RuntimeError` already propagates. AC-8 and AC-9 pass on the pre-Step-2 tree (success-path characterization; the spec claims no red for them).
+**Reason**: the step-2 deviation's disposition requires Step 3 to record its own RED for its named test ids against the pre-Step-2 `servicer.py`.
+**Disposition**: carried out as the Step 2 deviation directed; no commit holds the swapped file.
