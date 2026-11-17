@@ -1164,3 +1164,15 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - Config-key wiring gate: N/A. The step declares no config key.
 - Files modified: `services/xstockstrat-trading/internal/service/trading.go`
 - Deviations: none against the spec. Note for Step 4: its RED is the run recorded above (captured before this commit); a fresh pass-1 RED can no longer be taken on this branch.
+
+## Session 2026-11-17 — sdd-execute sequential, Step 4 (sdd-batch-execute)
+
+### Step 4 — test: 358 regression tests: drain, skip-the-tick, repeated token, counted skips, guard hardening [done]
+- Added the 358 fixtures (`reconcile358Owner`, a 501-symbol broker builder, the `reconcile358Pager` paging fake with a call cap of 100 and `takeLog()`) and the five behavioural tests to `trading_reconciliation_test.go`, plus two tables: `TestListAccountPlatformPositions_358_Guards` (exact-text guard rows and a happy row) and `TestReconcilePositionSkipCause_358` (both deadline forms → `deadline`, `context.Canceled` → `rpc_error`). Every counter test calls `installMetricReader(t)` first, and nothing runs in parallel.
+- TDD:
+  - AC-1..AC-4 red: pass 1 (items 1-6) ran against a temporarily restored pre-Step-3 `trading.go` (c12e2e23c, uncommitted, restored from HEAD afterwards). All five `TestReconcileTick_358_*` FAIL, with `tick 1 tokens = [""], want ["" "p2"]`, `payload order_id="SYM501" expected=0 broker_reported=10, want SYM501 5 10`, `rpc_error skips = 0, want 2`, `deadline skips = 0, want 2` and `cursor_invalid skips = 0, want 2` (`exit=1`, .sdd-logs/v-1.log).
+  - Green: the Verification block lists all seven 358 tests `--- PASS` under `-race`, every package `ok`, `total: (statements) 84.8%` (≥ 40%), `0 issues.`, and an empty `t.Parallel` grep (.sdd-logs/v-3.log).
+  - The block's `exit=1` comes only from that empty grep. .sdd-logs/v-2.log was a failed run: the grep matched a comment this step had added. The comment was reworded and the block re-run.
+- Config-key wiring gate: N/A. The step declares no config key.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go`
+- Deviations: RED was taken on a temporarily restored pre-Step-3 tree, the status package uses the `grpcstatus` alias, and the block exits 1 on success. Full detail is in the Deviation Log.

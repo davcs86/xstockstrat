@@ -277,7 +277,7 @@ literal. Lint exits 0.
 
 ### Step 4 — test: 358 regression tests: drain, skip-the-tick, repeated token, counted skips, guard hardening
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go` — modify
@@ -471,3 +471,13 @@ The counter appears in both files, and the paging sentence is present.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 4 — RED captured on a temporarily restored pre-Step-3 `trading.go`
+- **Spec said**: item 7 pass 1 runs RED before Step 3 is applied, with the test edits kept uncommitted while Step 3 lands.
+- **Actual**: Step 3 was already committed (8bcfd1a59) when Step 4 started. Step 3's pass-1 test edit had been reverted, so it was not on the branch. Pass 1 was rewritten, and `trading.go` was temporarily overwritten with its Step-2-commit copy (c12e2e23c) and left uncommitted. The five `TestReconcileTick_358_*` tests were run there: all FAIL for the specced reasons. `trading.go` was then restored from HEAD before pass 2, and no change to it is committed.
+- **Disposition**: same RED evidence on the same tree the spec names. No scope change.
+
+### Step 4 — import alias and `-run` filter observations
+- The status package is imported as `grpcstatus`, the alias `trading.go` and `trading_telemetry_test.go` already use, not as bare `status`. The assertions are the ones the spec names (`grpcstatus.Code(err) == codes.Unavailable`, `grpcstatus.Error(...)`).
+- The Verification block's last command, `grep -n "t.Parallel"`, exits 1 when it prints nothing, which is its pass condition, so the block as a whole reports `exit=1` on success. GREEN was judged on the block's output, not on that exit code.
+- **Disposition**: no deviation in behaviour. Recorded so the next reader does not take `exit=1` for a failure.
