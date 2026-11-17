@@ -274,7 +274,7 @@ grep -n "_opportunity_refresh_tick\|daily refresh" docs/roadmap/features/356-fix
 
 ### Step 4 — service: Live-loop held drain fails closed; the cycle skips a failed owner once
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -325,7 +325,7 @@ grep -n "_opportunity_refresh_tick\|daily refresh" docs/roadmap/features/356-fix
 
 ### Step 5 — test: Live-loop held drain and cycle fail closed (red first); flip the AC-16 test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_held_position_drains.py` — modify
