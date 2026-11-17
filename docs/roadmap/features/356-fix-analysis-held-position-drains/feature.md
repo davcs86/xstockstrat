@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md` |
+| 2026-11-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@ Harden the two analysis consumers that page portfolio `ListPositions` (`live_loo
 
 ## Next Action
 
-`/sdd-design fix-analysis-held-position-drains quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-analysis-held-position-drains quick` — quick design recommended (SEV-3, single service, no proto/migration/config; only rebase-level overlap with 308/327; one round to settle the shared-helper vs in-place fork)
