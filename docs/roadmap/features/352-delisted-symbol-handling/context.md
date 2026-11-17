@@ -465,3 +465,14 @@
 - `py_gate` via `uv run`: ruff clean, 1740 passed, coverage 91.57%. No skipped tests.
 - Lesson for the ledger at the end of the run: a spec that adds a `HasField` check on a proto message
   must list every test double that fakes that message with a non-proto object.
+
+### Step 17 — migration: ingest `018_backfill_symbol_results` (renumbered from `017`) — done
+- Renumbered as Step 17 Instruction 1 prescribes: `origin/ccr-424ada30-29m2lv` (feature 355
+  `mediated-source-extraction-instructions`, in flight) adds ingest `017_signal_source_extraction_instructions`;
+  `018` is free on every origin ref. `feature.md`'s DBA row now says `018`; `design.md` still says `017`
+  (approved artifact, not edited). A merge-order row (355 vs 352) records the same rule the operator chose
+  for 345: whichever lands second re-derives its number — **this row is the agent's extension of that
+  ruling, pending operator confirmation**.
+- TDD: N/A (migration). Verified offline: up/down pair, `018` highest with no duplicate, down drops
+  exactly the column up adds. No database started.
+- Deviations: file names differ from `**Files**` (`018_…` not `017_…`) — Deviation Log.

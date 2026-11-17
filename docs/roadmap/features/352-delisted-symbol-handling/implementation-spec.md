@@ -955,7 +955,7 @@ test "$(grep -c "@AC-" services/xstockstrat-marketdata/internal/service/backfill
 
 ### Step 17 — migration: ingest `017_backfill_symbol_results`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/017_backfill_symbol_results.up.sql` — create
