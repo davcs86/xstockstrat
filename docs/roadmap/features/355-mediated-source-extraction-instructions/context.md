@@ -101,3 +101,9 @@
   watchlist-only (0.3, 7-day expiry, never buy/sell); Form 4 cluster = two or more separate filings
   by different reporting persons; `8-K/A` skipped, sell without `valid_until`, and the gRPC size
   limit as a recorded risk were shown and left as drafted; **run another round** (round 4).
+- Round 4 (2026-11-17, user-requested): final texts written and attacked. No Floor breach, no
+  register violation. Folded in D-25: `origin` on mediated `list_signal_sources` entries; default
+  text conviction fixed to 0.3 / 0.6 / 0.9; "date and time of day" wording; website fallback covers
+  a raising tool. Verified in code: dedup ignores `valid_from`; the 7-day watchlist expiry reaches
+  only new / tracked SIGNAL entries (feature-281 behaviour). Open for the gate: O-39 Form 4 shared
+  reporting person, O-40 default text's 7-day rule.

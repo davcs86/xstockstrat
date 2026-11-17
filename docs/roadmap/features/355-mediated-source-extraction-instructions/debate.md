@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 Paths: `ingest/` = `services/xstockstrat-ingest/`, `agent/` = `services/xstockstrat-agent/`,
 `ui/` = `services/xstockstrat-ui/`.
@@ -14,6 +14,7 @@ Paths: `ingest/` = `services/xstockstrat-ingest/`, `agent/` = `services/xstockst
 | 1 | 2026-11-17 | /sdd-design | 12 | 6 | 9 | 13 | 0 | yes |
 | 2 | 2026-11-17 | /sdd-design | 9 | 1 | 15 | 11 | 0 | yes |
 | 3 | 2026-11-17 | /sdd-design | 3 | 0 | 11 | 11 | 0 | yes |
+| 4 | 2026-11-17 | /sdd-design | 1 | 0 | 5 | 7 | 0 | yes |
 
 ## Settled Decisions
 
@@ -44,6 +45,7 @@ Paths: `ingest/` = `services/xstockstrat-ingest/`, `agent/` = `services/xstockst
 | D-22 | 3 | Prose corrections that apply to the default text and all four seeded texts: (a) no claim that a content-derived `valid_from` makes re-reading deduplicate — ingest's dedup slot is `(user_id, source, symbol, direction)`, re-won after `signals.dedup_window_hours` or when `conviction` / `valid_until` differs, and never looks at `valid_from`; the texts say only "re-sending an identical signal inside ingest's deduplication window is a no-op; outside it a new signal is created", without hard-coding the window; (b) "at most one signal per ticker and direction per run, taken from the newest qualifying item"; (c) the texts name `source` as "this source's slug", never the template slug; (d) `valid_from` and `valid_until` still derive from the content's own timestamp so repeated runs send identical values; (e) the default text puts "find the matching messages" ahead of the `extractor_tool` branch (attachment / linked-email sources need the email first), and says: no mail tool, or the extraction tool raises → ingest nothing and tell the operator; when `origin` names a template, its curated `extraction_instructions` are in `list_templates` and the operator can copy them with an update; (f) the 8-K text drops the sentence restating the alert threshold. | `ingest/app/handlers/servicer.py:1231-1241`; `agent/app/tools.py:304-310,594-600,637-638,671-673,716-720,741-747,1387`; `agent/app/client.py:212,221` | settled |
 | D-23 | 3 | Step-list refinements: S1 also edits `agent/tests/test_signal_source_builder.py` (its builder-subfield parity test goes red on the new proto field; the `source` dict gains a non-empty `extraction_instructions`). The ingest `CLAUDE.md` § Database line and the D-15 findings row belong to the ingest step's files. The agent step also fixes `signal_extraction.md:90` (`ingest_signal` returns `deduplicated: true`, not an error). Validator messages each name `extraction_instructions`. The 017 row-grammar header says a literal never contains `$t$`; the overlay parser uses `re.DOTALL`. A mediated-source builder used by two or more test files in a service moves to that service's `tests/conftest.py` (C-13). | `agent/tests/test_signal_source_builder.py:91-112`; `agent/app/prompts/signal_extraction.md:90`; `agent/app/tools.py:227-235,685-688`; `ingest/tests/test_seed_source_templates.py:29-36` | settled |
 | D-24 | 3 | Seeded/default prose product rules (user, round-3 gate): (a) **recency** — ingest only content published within the last 24 hours (default text and all four seeded texts); (b) **PR Newswire and Robinhood Snacks — watchlist only**: direction `watchlist`, conviction 0.3, `valid_until = valid_from + 7 days`, never `buy`/`sell`; PR Newswire only for releases that print a US exchange ticker and announce results, guidance, M&A, a regulatory decision or a material contract award; Snacks only for a company that is the main subject of a story; (c) **Form 4 cluster** = two or more separate filings (distinct accession numbers) by different reporting persons for the same issuer in one fetch — a joint filing alone is not a cluster (refines D-20's Form 4 wording); (d) accepted as drafted: `8-K/A` amendments are skipped, and 8-K `sell` signals carry no `valid_until`. | context.md 2026-11-17 round-3 gate | settled |
+| D-25 | 4 | Final-text corrections: (a) a mediated entry of `list_signal_sources` also carries `origin` (the client already returns it), documented in the docstring and covered by a tool test — the default text's template pointer reads `origin.template_id` from that entry; non-mediated entries keep their seven keys; (b) the default text fixes conviction to one of 0.3 / 0.6 / 0.9 so a repeated run sends the same value (dedup compares conviction); (c) all five texts say "the current date and time of day (from your context, a clock tool, or by asking the operator; a date alone is not enough)"; (d) the three website texts' closing fallback also covers `extract_website_content` raising. | `agent/app/tools.py:562-570,637-638,716-733`; `agent/app/client.py:221,1424-1426`; `ingest/app/handlers/servicer.py:1238-1239` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -98,6 +100,13 @@ Paths: `ingest/` = `services/xstockstrat-ingest/`, `agent/` = `services/xstockst
 | O-33 | 3 | The 8-K text restated the alert threshold — drifts with the config key and instructs nothing. C-18. | no | closed @ round 3 (D-22 f) |
 | O-34 | 3 | Docs lines unassigned to any step's files; `signal_extraction.md:90` misstates dedup; S1 misses the second parity test. C-08 / C-01. | no | closed @ round 3 (D-23) |
 | O-35 | 3 | An unpaginated `ListSignalSources` response with 16,000-char prose exceeds the default 4 MiB gRPC receive limit at roughly 60 maxed-out multibyte sources (≈250 ASCII) in one owner's list; the agent list tool has no size guard. | no | waived @ round 3 (orchestrator: carried as an Open Risk in design.md; a guard now would be speculative, C-18; shown at the round-3 gate and not changed by the user) |
+| O-36 | 4 | The default text points at `origin.template_id`, but the `list_signal_sources` tool drops `origin` (`agent/app/tools.py:562-570`), so the pointer that closed O-32 never fires on the surface where the default text is read. C-10 / P-03. | yes | closed @ round 4 (D-25 a) |
+| O-37 | 4 | The default text let the agent choose any conviction each run; dedup re-wins on a differing conviction (`ingest/app/handlers/servicer.py:1238-1239`), so a re-read can create a new signal and re-alert. P-03. | yes | closed @ round 4 (D-25 b) |
+| O-38 | 4 | "Cannot determine the current date and time" is misreadable when a host knows only the date; no xstockstrat tool returns a server clock. P-03. | no | closed @ round 4 (D-25 c; the "ingest nothing" cost is an Open Risk) |
+| O-39 | 4 | Form 4 "the Reporting CIKs of those filings must not all be the same" can be read as a flat list, inverting the rule; and whether two filings that share a reporting person count is the operator's call. P-03 / D-24(c). | no | open |
+| O-40 | 4 | The default text's firm 7-day `valid_until` for watchlist signals extends D-20 (seeded texts only) — a product rule to show at the gate. P-03 / P-04. | no | open |
+| O-41 | 4 | Seeded website texts did not say what to do when the extraction tool raises. C-10. | no | closed @ round 4 (D-25 d) |
+| O-42 | 4 | The 7-day watchlist expiry is delivered only for a new, tracked or backfill-marked SIGNAL entry; an existing open-ended SIGNAL entry or a MANUAL entry keeps no expiry, and a later watchlist signal without `valid_until` untracks a tracked one (`services/xstockstrat-portfolio/internal/repository/watchlist_repo.go:292-297,548-580`). Pre-existing feature-281 behaviour. | no | waived @ round 4 (orchestrator: outside this feature's scope; carried as an Open Risk in design.md, shown at the gate) |
 
 ## Reopen Petitions
 
