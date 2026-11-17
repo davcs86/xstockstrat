@@ -79,7 +79,7 @@ binding operator decision at design gate r6 (IDs append-only).
 
 ### Step 1 — service: Add the `trading.reconciliation.position_check_skipped` counter and its typed outcome
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify

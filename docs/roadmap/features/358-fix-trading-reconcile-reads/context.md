@@ -1133,3 +1133,16 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 ```sdd-batch-setup
 {"mainDev":"756a24a7f19fedc571bc499dc87056f69b920a9a","date":"2026-11-17"}
 ```
+
+## Session 2026-11-17 — sdd-execute sequential, Step 1 (sdd-batch-execute)
+
+- Operator decision on the Step 1 blocker (binding): Option B, widened. Re-spec under sequential-mode.md §5.3 in one commit, c36086186 `respec(fix-trading-reconcile-reads): make Verification blocks runnable as one shell (steps 1,2,3,4)`. Each Verification command line of Steps 1-4 is now wrapped in its own `( ... )` subshell, so every line runs from the repo root. No command, path, flag or expected result changed. No trailing `#` comment existed, so none was moved.
+
+### Step 1 — service: Add the `trading.reconciliation.position_check_skipped` counter and its typed outcome [done]
+- Added the lazy counter `reconcilePositionSkip` to the `otel.go` counter var block, plus `type ReconcileSkipOutcome string`, the three constants `rpc_error`/`deadline`/`cursor_invalid`, and `RecordReconcilePositionSkip(ctx, outcome ReconcileSkipOutcome)`. The only label is the existing `KeyOutcome`. There is no new `Key*` constant and `escalationSystemic` is untouched. Nothing calls the new function yet.
+- TDD:
+  - AC-4 red: Step 2's `minInstruments` entry was applied as a temporary, uncommitted edit and failed with `telemetry_allowlist_test.go:107: instrument trading.reconciliation.position_check_skipped not collected` (`exit=1`, .sdd-logs/v-1.log). The edit was reverted before implementing, so Step 2 re-applies it.
+  - Green: the Step 1 Verification block, run verbatim after the re-spec, gave `ok .../internal/telemetry`, `ok .../internal/service` and `0 issues.` (`exit=0`, .sdd-logs/v-2.log). No coverage threshold applies, because the telemetry and service packages are excluded.
+- Config-key wiring gate: N/A. The step declares no config key.
+- Files modified: `services/xstockstrat-trading/internal/telemetry/otel.go`
+- Deviations: none against the spec. One note on the re-spec commit: its trailer used the harness-attributed model name, not the one the workflow prompt supplied.
