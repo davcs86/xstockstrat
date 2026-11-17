@@ -113,6 +113,10 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   templates, and the `system` / `derived` `fundamentals` source inserted only when no owner holds that
   slug (an existing row is never modified); its down never touches `signal_sources`. System templates
   are read-only (PLAT-19). The two SEC templates carry a placeholder User-Agent contact each user must replace.
+- Migration `017_signal_source_extraction_instructions` (feature 355): adds
+  `signal_sources.extraction_instructions` (`TEXT NOT NULL DEFAULT ''`) and writes
+  `extraction_instructions` into the four system templates' payloads with no version bump; existing
+  source rows are not backfilled.
 - Table: `ingest.backfill_jobs` — durable backfill job state (plain table, **not** a hypertable);
   replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
   `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer

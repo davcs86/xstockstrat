@@ -2,9 +2,10 @@
 MCP tool definitions for xstockstrat-agent.
 
 Forty-five tools:
-  list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
+  list_signal_sources  — lists active sources from ingest, enriched with extractor_tool and,
+                         for a mediated source, its extraction_instructions
   extract_email_content — extracts raw text from email attachments or gated URLs
-  extract_website_content — fetches and returns raw text from a registered website source
+  extract_website_content — fetches a registered website source and returns its whole body
   ingest_signal        — ingests a trading signal via gRPC IngestSignal
   emit_alert           — emits an alert via gRPC EmitAlert
   run_backtest         — triggers a backtest via gRPC RunBacktest
@@ -30,7 +31,7 @@ Forty-five tools:
   set_config          — writes one config value incl. secrets (encrypted at rest; admin-scoped)
   get_user_metadata   — fetches the calling user's own profile metadata (read-only)
   set_user_metadata   — partial-updates the calling user's own profile metadata
-  list_watchlists     — lists the caller's own watchlists from portfolio, paginated (read-only)
+  list_watchlists     — lists the caller's own watchlists, paginated; idempotently ensures Signals
   get_watchlist       — reads one of the caller's watchlists incl. its stocks (read-only)
   manage_watchlist    — create/update(read-modify-write merge)/delete a caller-owned watchlist
   manage_watchlist_symbols — add/remove stocks on a caller-owned watchlist (add = MANUAL source)
@@ -310,6 +311,83 @@ _EXTRACTOR_TOOL_MAP: dict[str, str | None] = {
 }
 
 
+def _is_mediated(source_type: str) -> bool:
+    # The only "mediated" test in the agent: a prefix, never a list of types.
+    return source_type.startswith("mediated_")
+
+
+# Returned to callers verbatim for a mediated source that stores no instructions.
+_DEFAULT_EXTRACTION_INSTRUCTIONS = (
+    "This source has no extraction instructions of its own, so follow this generic procedure."
+    " Having no instructions never means there is nothing to extract.\n"
+    "1. Get the content. The fields named below (extractor_tool, config_json) are on this"
+    " source's entry in list_signal_sources.\n"
+    "   - Email source (its source_type contains 'email'): first find the messages that match"
+    " config_json.sender_patterns and config_json.subject_patterns in your mail tool. If you"
+    " have no mail tool, ingest nothing and tell the operator.\n"
+    "   - If extractor_tool is null, there is no extraction tool to call: read the content"
+    " yourself (for an email source, the message body).\n"
+    "   - If extractor_tool is extract_email_content, call it with this source's slug and the"
+    " matching message's attachments (attachments_b64; config_json.attachment_mime_types says"
+    " which) or the links in it (urls; config_json.url_patterns says which), and read the"
+    " raw_text it returns.\n"
+    "   - If extractor_tool is extract_website_content, call it with this source's slug. It"
+    " returns the whole fetched page as raw_text; config_json.scrape_selector only tells you"
+    " which elements of the page hold the content.\n"
+    "   - If the extraction tool raises an error, ingest nothing and tell the operator what"
+    " it said.\n"
+    "2. Recency: use only content published within the last 24 hours. Take each item's own"
+    " publication time (an email's sent time; for a page or feed, the time the item itself"
+    " shows) and compare it with the current date and time. Skip an item that is older than"
+    " 24 hours or whose publication time you cannot tell. If you cannot determine the current"
+    " date and time of day (from your context, a clock tool, or by asking the operator; a"
+    " date alone is not enough), ingest nothing and tell the operator.\n"
+    "3. Extract only signals the content states clearly: a company with a US exchange ticker"
+    " you are certain of, and a direction of buy, sell, hold or watchlist. Do not invent"
+    " signals and never guess a ticker. Send at most one signal per ticker and direction per"
+    " run, taken from the newest qualifying item.\n"
+    "4. Call ingest_signal once per signal: source = this source's slug; symbol = the ticker;"
+    " direction; conviction above 0 and at most 1, and only one of 0.3 (worth watching), 0.6"
+    " (a clear, explicit call) or 0.9 (an emphatic call), so that a repeated run sends the"
+    " same value; valid_from = the item's own publication time as ISO 8601 with its offset"
+    " (for example 2026-05-01T14:30:00Z). Never use the current time for valid_from or"
+    " valid_until. For a watchlist signal also set valid_until = valid_from + 7 days in the"
+    " same format, so the watchlist entry expires. Add headline, raw_url and tags when known."
+    " Because the times come from the content and the conviction is one of these fixed"
+    " values, a repeated run sends identical values: re-sending an identical signal inside"
+    " ingest's deduplication window is a no-op (the result says deduplicated: true); outside"
+    " it a new signal is created.\n"
+    "5. Tell the operator that this source has no extraction instructions"
+    " (extraction_instructions_is_default is true) and that you used this generic procedure."
+    " They can add instructions with manage_signal_source (operation 'update', this slug,"
+    " extraction_instructions). If this source's origin names a template (origin.template_id"
+    " in this list_signal_sources entry), that template's curated instructions are its"
+    " payload.extractionInstructions in list_templates (kind 'signal_source'), and the"
+    " operator can copy them onto this source with that update."
+)
+
+
+def _instruction_fields(src: dict) -> dict:
+    """The two instruction keys of a mediated source: its stored text, else the default."""
+    stored = src.get("extraction_instructions") or ""
+    if stored.strip():
+        return {"extraction_instructions": stored, "extraction_instructions_is_default": False}
+    return {
+        "extraction_instructions": _DEFAULT_EXTRACTION_INSTRUCTIONS,
+        "extraction_instructions_is_default": True,
+    }
+
+
+def _shape_managed_source(src: dict) -> dict:
+    """A manage/instantiate result: a mediated source trades extractor_module for instructions."""
+    shaped = dict(src)
+    stored = shaped.pop("extraction_instructions", None)
+    if _is_mediated(shaped.get("source_type", "")):
+        shaped.pop("extractor_module", None)
+        shaped.update(_instruction_fields({"extraction_instructions": stored}))
+    return shaped
+
+
 # ── data-explorer query tools (feature 204) ──────────────────────────────────
 _QUERY_BARS_MAX_LIMIT = 1000
 _QUERY_FUNDAMENTALS_MAX_LIMIT = 50
@@ -541,10 +619,19 @@ def register_tools(server: MCPServer) -> None:
         source_type: list[str] | None = None,
     ) -> dict:
         """List active signal sources from xstockstrat-ingest.
-        Returns slug, display_name, source_type, config_json, extractor_tool, and
-        reliability_weight per source.
+        Returns slug, display_name, source_type, config_json, extractor_tool, has_credentials and
+        reliability_weight per source. A mediated_* source also carries extraction_instructions,
+        extraction_instructions_is_default and origin.
         extractor_tool: 'extract_email_content' | 'extract_website_content' | null.
-        Claude must follow extractor_tool exactly — do not infer routing from source_type.
+        Claude must follow extractor_tool exactly — do not infer routing from source_type. null
+            means there is no extraction tool to call: read the content yourself (e.g. the email
+            body) and follow extraction_instructions — never that there is nothing to extract.
+        extraction_instructions: (mediated_* only, always non-empty) prose saying what to extract
+            from this source's content and how to call ingest_signal. Follow it. It is the
+            source's stored text, or the platform's generic procedure when none is stored.
+        extraction_instructions_is_default: true when the generic procedure was substituted —
+            tell the operator so they can add instructions with manage_signal_source.
+        origin: (mediated_* only) the template this source was instantiated from, or null.
         reliability_weight: per-source ranking multiplier in [0, 1] (default 1.0); higher weights
             rank this source's signals higher, 0 effectively ignores the source (feature 134).
         source_type: optional filter list
@@ -558,17 +645,19 @@ def register_tools(server: MCPServer) -> None:
         enriched = []
         for src in sources:
             st = src["source_type"]
-            enriched.append(
-                {
-                    "slug": src["slug"],
-                    "display_name": src["display_name"],
-                    "source_type": st,
-                    "config_json": src["config_json"],
-                    "extractor_tool": _EXTRACTOR_TOOL_MAP.get(st, None),
-                    "has_credentials": src["has_credentials"],
-                    "reliability_weight": src["reliability_weight"],
-                }
-            )
+            entry = {
+                "slug": src["slug"],
+                "display_name": src["display_name"],
+                "source_type": st,
+                "config_json": src["config_json"],
+                "extractor_tool": _EXTRACTOR_TOOL_MAP.get(st, None),
+                "has_credentials": src["has_credentials"],
+                "reliability_weight": src["reliability_weight"],
+            }
+            if _is_mediated(st):
+                entry.update(_instruction_fields(src))
+                entry["origin"] = src.get("origin")
+            enriched.append(entry)
         if source_type:
             enriched = [s for s in enriched if s["source_type"] in source_type]
         return {"sources": enriched}
@@ -618,11 +707,14 @@ def register_tools(server: MCPServer) -> None:
     async def extract_website_content(
         source_slug: str,
     ) -> dict:
-        """Fetch and return raw text from a registered website source.
+        """Fetch a registered website source's URL and return the whole response body.
         Called only when a source's extractor_tool equals 'extract_website_content'.
         source_slug: slug from list_signal_sources.
         The URL is read from the source's config_json.url — Claude never constructs URLs.
-        Returns {raw_text: str}. Credentials are never exposed in the response.
+        Returns {raw_text: str}: the complete, unparsed body (HTML, XML/Atom, JSON, ...).
+            config_json.scrape_selector is NOT applied — it is only a hint naming the elements of
+            raw_text that hold the content; read those and follow the source's
+            extraction_instructions. Credentials are never exposed in the response.
         CREDENTIAL CAVEAT (feature 093): a source that requires credentials (has_credentials=true)
             currently RAISES — secure per-source credential resolution is not yet supported (the
             platform stores secrets as is_secret references the config service redacts). Only
@@ -1362,7 +1454,9 @@ def register_tools(server: MCPServer) -> None:
             "payload": <the formula/strategy/source definition>}, ...]} (camelCase); retired
             templates are excluded.
         meta.readOnly: present (true) only for platform-seeded system templates, which cannot be
-            edited or retired; copy them with instantiate_template like any other template."""
+            edited or retired; copy them with instantiate_template like any other template.
+        payload.extractionInstructions: (signal_source) the curated prose a mediated_* instance
+            inherits; payload.extractorModule has no meaning for a mediated source."""
         try:
             return {"templates": await client.list_templates(kind)}
         except grpc.aio.AioRpcError as e:
@@ -1389,16 +1483,19 @@ def register_tools(server: MCPServer) -> None:
             `mcp_client`; written FIRST to an encrypted per-user config secret under an opaque key
             and referenced by the source. Stored encrypted at rest and NEVER returned.
         Returns the new instance: formula → the formula in camelCase; strategy → the strategy
-            definition in camelCase; signal_source → {"slug", "display_name", "source_type",
-            "extractor_module", "active", "has_credentials", "reliability_weight", "user_id",
-            "origin"} (never a credential)."""
+            definition in camelCase; signal_source → the manage_signal_source shape (never a
+            credential): a mediated_* source returns {"slug", "display_name", "source_type",
+            "extraction_instructions", "extraction_instructions_is_default", "active",
+            "has_credentials", "reliability_weight", "user_id", "origin"} and inherits the
+            template's extraction_instructions; a non-mediated source returns "extractor_module"
+            in place of the two instruction keys."""
         credentials_ref = ""
         if kind == "signal_source" and bearer_token:
             credentials_ref = await _write_source_bearer(
                 ctx, "instantiate_template", slug, bearer_token
             )
         try:
-            return await client.instantiate_template(
+            result = await client.instantiate_template(
                 kind,
                 template_id,
                 strategy_id=strategy_id,
@@ -1411,6 +1508,7 @@ def register_tools(server: MCPServer) -> None:
                     e, not_found="template not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
             ) from e
+        return _shape_managed_source(result) if kind == "signal_source" else result
 
     @server.tool()
     async def manage_signal_source(
@@ -1424,6 +1522,7 @@ def register_tools(server: MCPServer) -> None:
         credentials_ref: str | None = None,
         reliability_weight: float | None = None,
         bearer_token: str | None = None,
+        extraction_instructions: str | None = None,
     ) -> dict:
         """Register/update/reactivate/deactivate one of YOUR signal sources in xstockstrat-ingest.
         Sources are owned by the caller: any authenticated user manages their own sources, a slug
@@ -1431,7 +1530,9 @@ def register_tools(server: MCPServer) -> None:
         operation: 'register' | 'update' | 'reactivate' | 'deactivate'. These are HONEST,
             distinct verbs (feature 088):
             - register: strict create — an existing slug returns ALREADY_EXISTS (no overwrite).
-              Provide slug/display_name/source_type/extractor_module (+config_json/credentials_ref).
+              Provide slug/display_name/source_type (+config_json/credentials_ref). A mediated_*
+              source also requires extraction_instructions; a non-mediated source takes
+              extractor_module instead.
             - update: PARTIAL MERGE — pass only the fields to change; every omitted field is
               PRESERVED. An unknown slug returns NOT_FOUND. (At least one field must be supplied.)
             - reactivate: set active=true; decoupled from update (update never changes active).
@@ -1454,9 +1555,19 @@ def register_tools(server: MCPServer) -> None:
             carries `mcp_endpoint` (the Streamable-HTTP MCP URL) and `mcp_tool` (the tool name),
             plus optional `mcp_arguments`. bearer_token is mandatory (register is rejected without
             it).
-        Returns {"slug", "display_name", "source_type", "extractor_module", "active",
-            "has_credentials", "reliability_weight", "user_id", "origin"} — credentials_ref and
-            bearer_token are never included."""
+        extraction_instructions: (mediated_* only) prose telling the consuming agent what to
+            extract from the source and how to map it to ingest_signal; at most 16,000 characters.
+            Required non-empty when registering a mediated_* source, and on an update that changes
+            source_type to a mediated type. On update it is applied ONLY when supplied — omit it
+            to preserve the stored text; "" or whitespace is rejected on a mediated source. Any
+            non-empty value on another source type is rejected.
+        Returns, for a mediated_* source: {"slug", "display_name", "source_type",
+            "extraction_instructions", "extraction_instructions_is_default", "active",
+            "has_credentials", "reliability_weight", "user_id", "origin"} —
+            extraction_instructions_is_default=true means no instructions are stored and the text
+            is the platform's generic procedure. A non-mediated source returns "extractor_module"
+            in place of the two instruction keys. credentials_ref and bearer_token are never
+            included."""
         source: dict = {"slug": slug}
         if display_name is not None:
             source["display_name"] = display_name
@@ -1468,6 +1579,8 @@ def register_tools(server: MCPServer) -> None:
             source["config_json"] = config_json
         if reliability_weight is not None:
             source["reliability_weight"] = reliability_weight
+        if extraction_instructions is not None:
+            source["extraction_instructions"] = extraction_instructions
         update_mask: list[str] | None = None
         if operation == "update":
             supplied = {
@@ -1479,6 +1592,8 @@ def register_tools(server: MCPServer) -> None:
                 # Mask reliability_weight ONLY when supplied, so a field-only update never resets
                 # it to 0.0.
                 "reliability_weight": reliability_weight,
+                # "" is supplied: the clear reaches ingest, which rejects it on a mediated source.
+                "extraction_instructions": extraction_instructions,
             }
             update_mask = [field for field, val in supplied.items() if val is not None]
             if not update_mask:
@@ -1489,7 +1604,7 @@ def register_tools(server: MCPServer) -> None:
                 ctx, "manage_signal_source", slug, bearer_token
             )
         try:
-            return await client.manage_signal_source(
+            result = await client.manage_signal_source(
                 operation=operation,
                 source=source,
                 credentials_ref=credentials_ref,
@@ -1505,6 +1620,7 @@ def register_tools(server: MCPServer) -> None:
                     write=True,
                 )
             ) from e
+        return _shape_managed_source(result)
 
     @server.tool()
     async def set_strategy_live(
@@ -2151,7 +2267,9 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def list_watchlists(ctx: Context, limit: int = 0, page_token: str = "") -> dict:
-        """List the calling user's OWN watchlists from xstockstrat-portfolio (read-only).
+        """List the calling user's OWN watchlists from xstockstrat-portfolio. A first-page call
+        (empty page_token) idempotently ensures the caller's system-managed "Signals" list, so it
+        is returned even for a user who never ingested a signal.
         limit: max lists to return; 0 = server default. Pagination is stable across pages.
         page_token: opaque token from a prior call's next_page_token; "" starts at the first page.
         Returns {"watchlists": [<watchlist>, ...], "next_page_token": <str>} where each watchlist is
