@@ -222,6 +222,37 @@ async def test_ac5_failed_held_drain_fails_on_demand_recompute(metric_reader, ca
     assert rec.exc_info and rec.exc_info[0] is servicer_mod._PositionsPageError
 
 
+async def test_ac10_daily_refresh_failed_user_counted_and_queue_kept(metric_reader, caplog):
+    svc = _refresh_svc(("u-1", "u-2"))
+    del svc._compute_opportunities
+    svc._drain_active_signals = AsyncMock(return_value=[])
+    svc._drain_watchlist_bindings = AsyncMock(return_value=[])
+    svc._drain_source_weights = AsyncMock(return_value={})
+
+    async def fake(_request, metadata=None):
+        if dict(metadata)["x-user-id"] == "u-1":
+            raise aio_rpc_error(grpc.StatusCode.UNAVAILABLE)
+        return SimpleNamespace(positions=[], page=SimpleNamespace(next_page_token=""))
+
+    svc._portfolio = SimpleNamespace(ListPositions=AsyncMock(side_effect=fake))
+    schedule = _schedule()
+    with caplog.at_level(logging.INFO):
+        await svc._opportunity_refresh_tick(schedule)
+    replaced = [c.args[0] for c in svc._replace_and_stamp_compute_state.await_args_list]
+    assert replaced == ["u-2"]
+    recompute = "analysis.opportunity.recompute"
+    assert metric_sum(metric_reader, recompute, kind="full", outcome="failed") == 1
+    assert metric_sum(metric_reader, recompute, outcome="ok") == 0
+    assert not [v for v in all_attribute_values(metric_reader) if "u-1" in v]
+    schedule.advance.assert_awaited_once()
+    (rec,) = [
+        r
+        for r in caplog.records
+        if "opportunity daily refresh failed" in r.getMessage() and "u-1" in r.getMessage()
+    ]
+    assert rec.exc_info and rec.exc_info[0] is servicer_mod._PositionsPageError
+
+
 # ── supervised tick / seed errors carry a traceback (AC-51) ───────────────────────────────────
 
 

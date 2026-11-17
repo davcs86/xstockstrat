@@ -401,7 +401,7 @@ grep -n "_opportunity_refresh_tick\|daily refresh" docs/roadmap/features/356-fix
 
 ### Step 7 — test: Daily-refresh failed user is counted and keeps its queue (red first); allowlist drive
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py` — modify
@@ -527,3 +527,9 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: Step 6 may stage only `servicer.py` (F-08), so Step 7's test was not written here. RED/GREEN was captured with the uncommitted probe `.sdd-logs/red/test_step6_red.py` (one case on `_refresh_svc` with two users, u-1's `_compute_opportunities` raising: `recompute{full,failed}` == 1, `ok` == 0, WARNING `exc_info[0] is RuntimeError`, no `u-1` attribute, u-2 replaced, schedule advanced). RED: `AssertionError: assert 0 == 1` on the `failed` count; GREEN: `1 passed`. The edit site sat at `servicer.py:6072-6074` at the branch head (Steps 2-5 shifted it +9 from the cited `:6063-6065`); the content matched exactly.
 **Reason**: red-before-green is mandatory, and the committed test for this behaviour is in Step 7's **Files**.
 **Disposition**: same shape as the Step 2 deviation. Step 7 must still record its own `@AC-10` RED, against the pre-Step-6 `servicer.py` (the parent of the Step 6 commit).
+
+### Deviation: Step 7 — RED run against a temporarily restored pre-Step-6 `servicer.py`
+**Spec said**: item 4, write the test and run it against the Step-5 tree **before** applying Step 6.
+**Actual**: Step 6 was already committed (`d6989bd0b`). For the RED run (`.sdd-logs/v-1.log`) the working-tree `servicer.py` was overwritten with `git show dfd2f710c:services/xstockstrat-analysis/app/handlers/servicer.py` (the Step-5 tree), the Step 7 Verification block was run verbatim, and the file was then restored with `git checkout --` (empty diff before GREEN and commit). The RED stops at the first failing assertion (`recompute{full,failed}` `assert 0 == 1`), so the spec's second expected RED fact (`exc_info` unset) was not separately observed.
+**Reason**: the Step 6 deviation's disposition requires Step 7 to record its own `@AC-10` RED against the pre-Step-6 `servicer.py`.
+**Disposition**: carried out as the Step 6 deviation directed; no commit holds the swapped file.
