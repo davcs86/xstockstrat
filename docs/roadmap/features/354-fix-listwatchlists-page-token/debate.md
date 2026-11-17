@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -12,6 +12,7 @@
 | 2 | 2026-11-17 | /sdd-design | 5 | 5 | 11 | 3 | 0 | yes |
 | 3 | 2026-11-17 | /sdd-design | 9 | 2 | 3 | 4 | 0 | yes |
 | 4 | 2026-11-17 | /sdd-design | 1 | 2 | 0 | 0 | 0 | yes (O-13 narrowed to user sign-off) |
+| 5 | 2026-11-17 | /sdd-design | 1 | 0 | 0 | 0 | 0 | yes (sign-off record drafted + corrected) |
 
 ## Settled Decisions
 
@@ -37,6 +38,7 @@
 | D-17 | 3 | Verification (cwd `services/xstockstrat-portfolio`): RED unit post-seam `GOWORK=off go test -race -count=1 -v -run 'TestListByUser_' ./internal/repository/` (FAIL TokenIsLastReturnedRow, PASS ExactlyFull); RED dbtest via D-10 (ii) (both subtests FAIL; SKIP invalidates); GREEN = same, all PASS; regression: `GOWORK=off go test -race -count=1 ./...`, `GOWORK=off go vet -tags dbtest ./...`, `golangci-lint run`, `-list` proof, full dbtest package on the harness `go test -tags dbtest -race -count=1 ./internal/repository/...` (proves the `seedWatchlist` delegate keeps existing dbtests green). PR body + context.md disclose: unit RED post-seam/pre-fix; dbtest RED on unmodified query path; harness fidelity delta; CI `portfolio-db-test` GREEN of record + `-list`; mixed-fleet note (D-7); consumer impact (D-5). A pgxmock arg mismatch at execute goes to the Deviation Log, never a silent step edit (F-09). | `tdd-gate.md:35-38,59-60,66-69` | settled |
 | D-18 | 3 | Add `## Consumer Surface(s)` to product-spec.md at completion: Agent MCP `list_watchlists` (`services/xstockstrat-agent/app/tools.py:2153-2166`, client `app/client.py:416-431`) — pure passthrough, reached by the backend fix with no code change, docstring `:2155` becomes true, guarded by PRESERVE `@AC-1 @feature-148`; UI `/insights` `useWatchlists.ts:33` single page of 50 = `watchlist.max_per_user` → unaffected; analysis drains internal. How C-14's "own step" is satisfied → see O-13. | as cited; `docs/sdd/constitution.md:45` | settled |
 | D-19 | 4 | Dev smoke ("affected service smoke-tested on dev") is a post-merge launch check, not a step (dev deploys only on a `main-dev` push): agent `list_watchlists` with `limit` below the caller's list count (test user with ≥2 lists) following `next_page_token` to empty returns every list exactly once; run only after the rollout completes (D-7 window). Recorded in the PR body / context.md launch checklist; not presented as satisfying C-14. | root CLAUDE.md § CI/CD; `watchlist_repo.go:108-109` (default page 100 > `max_per_user` 50 → must set `limit`) | settled |
+| D-20 | 5 | No truthful non-locked C-14 route remains (agent tool makes one passthrough call, `tools.py:2162-2166`, `client.py:416-432` — no loop, so no agent-side token guard; a named follow-up would be invented work). The O-13 resolution is the C-14 user override, recorded with this corrected text (no dev-smoke-as-verification claim; `@AC-1 @feature-148` scoped to the passthrough contract; D-7 rollout caveat; Deviation Log row names it an override, not a deferral, for `impl-spec-criteria.md:31`). Placeholders filled only from the user's own answer. | `docs/sdd/constitution.md:45`; `services/xstockstrat-agent/acceptance/mcp-watchlist-tools.feature:13-18`; fails.md:2786 | settled |
 
 ## Rejected Alternatives (locked)
 
