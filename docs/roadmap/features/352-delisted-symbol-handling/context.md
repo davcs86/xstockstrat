@@ -325,3 +325,17 @@
   not `bound`, so the page slice stays aligned with the server's keyset cursor.
 - Unresolved carried into execution: none from round 2.
 
+## Session 2026-11-17 — sdd-review impl-spec (advisory), round 3
+
+- Tree: `claude/story-delisted-symbol-handling@8df4f8f` (contains `origin/main-dev@149351d`).
+- Result: 0 failures, 5 warnings, 2 notes (advisory — did not block). All applied to the spec: W1–W5
+  and N1; N2 needed no change.
+- Behavioural ones: the expiry-row DELETE in Step 20 bound two arguments but used `$3` (now `$2`, with
+  the Step 21 mock arguments stated); the readiness roll-up in Step 30 counted flagged rows as
+  "no-data" (the page now derives `readable` from `pageBound` for the hook pairs, `resolved`, the
+  roll-up list and the roll-up visibility test).
+- Pass counts are now enforced by the commands (`test "$( … | grep -c '^--- PASS')" -ge N`) in Steps
+  4, 7, 9, 14, 16, 21, 23 and 25, with `-run` filters matching the prescribed test-name prefixes;
+  scenario tests carry a `// @AC-<n>` comment.
+- Unresolved ✗ / ⚠ carried into execution: none from round 3.
+
