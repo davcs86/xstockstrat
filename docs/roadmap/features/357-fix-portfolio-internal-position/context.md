@@ -611,3 +611,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Operator decision: **drop** the empty-page-with-a-token guard from `listAllPositions` (C-08/P-06). The concrete repo cannot produce such a page (`portfolio_repo.go:193-197`), so the guard would ship untested. The repeated-token guard still stops a looping server. This supersedes design item 1 / D-3's third fail-closed case and design 4(d)'s empty-page test.
 - `implementation-spec.md` Steps 4–5 updated accordingly: Step 5 adds only the repeated-token guard; the Step 5 verification grep expects 3 hits.
 - Closes the Open Thread "empty-page-with-a-token guard … decide before `/sdd-execute` Step 5".
+
+## Session 2026-11-17 — overlap re-check vs 356/358 (main session)
+
+- Closes the Open Thread "re-run the Mode B overlap scan once 356 and 358 have implementation specs". Compared the `**Files**` lists of all three implementation specs (branch heads at the time of this entry):
+  - 356 touches only `services/xstockstrat-analysis/**`, `packages/otel/produced-signals.tsv` and its own feature dir.
+  - 358 touches only `services/xstockstrat-trading/**`.
+  - 357 touches `services/xstockstrat-portfolio/**` and `.github/workflows/ci.yml` (:1065).
+- No shared file, proto field, migration NNN or config key among 356/357/358. No merge-order constraint among them.
