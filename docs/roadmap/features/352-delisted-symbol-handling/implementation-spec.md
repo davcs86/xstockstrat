@@ -1540,7 +1540,7 @@ py_gate xstockstrat-agent
 
 ### Step 30 — service: `/insights` watchlist row shows the delisted marker
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/opportunityShared.tsx` — modify

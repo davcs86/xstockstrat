@@ -490,3 +490,13 @@
 - `py_gate` via `uv run`: ruff clean, 546 passed, coverage 87.01%. No skipped tests. Every case of
   Instruction 3 has a test (AC-11, 13, 14, 23, 24, 26; retry; whole-chunk failure; resume with the
   documented residual; merge precedence; job-level failure; A-4).
+
+### Step 30 — service: `/insights` watchlist row shows the delisted marker — done
+- `delistedMarker` helper (`lib/opportunityShared.tsx`), exported `Binding` with `delisted?`, `DelistedBadge`,
+  the `readable` filter and `morePages` in `WatchlistReadiness.tsx`; `WatchlistDetail.tsx` imports
+  `Binding`; `useWatchlistReadiness` takes optional `morePages = false`.
+- TDD: AC-15 red: `TypeError: delistedMarker is not a function` (4 failed) → green: 14 passed.
+- Verification: `pnpm run lint`, `tsc --noEmit`, `lint:dup` (0 clones), the two greps — all passed.
+- Deviations (Deviation Log): a flagged bound row also omits the blocking-condition cell (a resolved
+  readiness row from analysis would otherwise still show readiness text next to the badge); the badge is
+  followed by a `delisted-detail-<symbol>` span `<reason> · since <date>`.
