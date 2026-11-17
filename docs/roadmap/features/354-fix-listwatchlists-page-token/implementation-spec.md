@@ -1,6 +1,6 @@
 # Implementation Spec: fix-listwatchlists-page-token
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-17
 **Feature**: `docs/roadmap/features/354-fix-listwatchlists-page-token/feature.md`
 **Total Steps**: 2
@@ -42,7 +42,7 @@ FR-1 and FR-2 (product-spec.md) describe the **fully rolled-out** fix. During th
 
 ### Step 1 — service: Token = last returned row in `WatchlistRepo.ListByUser`; page query through `r.db`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go` — modify
@@ -110,7 +110,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 2 — test: Unit (pgxmock) and real-backend dbtest proof of the page-token contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_repo_test.go` — modify
@@ -387,3 +387,6 @@ _Populated by /sdd-execute as implementation proceeds._
 | Date | Step | Deviation | Reason / authority |
 |---|---|---|---|
 | 2026-11-17 | — (spec-time) | **C-14 override:** the named Agent MCP surface `list_watchlists` (`services/xstockstrat-agent/app/tools.py:2153-2166`, `app/client.py:416-432`) has no `xstockstrat-agent` implementation step. This is an **override, not a deferral**; there is no follow-up feature. | Explicit user sign-off 2026-11-17, recorded verbatim in `context.md` (Session 2026-11-17 — sdd-design (completed)) and `design.md` § Constitution Rules Touched. Basis: a single passthrough with no agent-side token logic, reached by the portfolio fix unchanged; its contract is guarded by PRESERVE `@AC-1 @feature-148` (which does not check token meaning); the D-7 rollout window is the same loss as today. Rejected step shapes: R-10, R-12, R-13. |
+| 2026-11-17 | 1+2 | **Evidence line drift after merging `origin/main-dev` (twin fix #1568, feature 353).** `dbtest_helpers_test.go`: `seedWatchlist` moved `:57-68` → `:75-86` with an identical body; `testPool` became variadic (`testPool(t, opts ...func(*pgxpool.Config))`) and gained a positions cleanup. `watchlist_repo.go` was untouched by #1568. No step body edited; the edits were applied to the moved symbols as written. | Re-spec gate §5.3 validation: symbols present, semantics unchanged → no re-spec needed; recorded here instead (F-09). |
+| 2026-11-17 | 2 | **Harness: ingest migrations also applied.** The portfolio-only chain (19/19) was enough for this feature's tests, but the regression run of the full `./internal/repository/...` dbtest package needs `ingest.newsletter_signals` (`TestPrune_IngestSignalsDoNotKeepAlive`, `TestBackfill_*`), as CI's all-service migrator provides. All 17 ingest migrations were applied with `${SEED_USER_ID}` rendered via `sed` to CI's value `00000000-0000-4000-8000-0000000000c1` (`envsubst` is not installed here). A first attempt piped through the missing `envsubst` and fed psql empty input; it "succeeded" without applying 013-016 and was caught and redone with a non-empty/rendered check. Final: full package 49 PASS / 0 FAIL / 0 SKIP. | Fidelity of the D-10 (ii) harness for the D-17 regression command; harness stays ephemeral (R-5). |
+| 2026-11-17 | 2 | **User override of the sdd-execute rail "never start a database to verify a step"** for the D-10 (ii) ephemeral PG16 harness (local process as `postgres` user, `/tmp/pg354`, timeouts, torn down). | Explicit user decision at the sequential mode-entry gate, context.md "Session 2026-11-17 — sdd-execute (sequential)". |

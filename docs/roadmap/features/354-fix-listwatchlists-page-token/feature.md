@@ -16,6 +16,8 @@
 | 2026-11-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-11-16-portfolio-listwatchlists-page-token-skips-boundary-row-defect.md` |
 | 2026-11-17 | `draft` → `design-approved` | /sdd-design | Design debated (5 rounds + 4 post-cap confirmation passes, full) and approved; recon.md + debate.md + design.md written; user C-14 sign-off recorded |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 2 steps (one Lands-with service+test unit; C-14 override logged in Deviation Log) |
+| 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Steps 1+2 (Lands-with unit) started |
+| 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute (sequential) | Steps 1+2 done in one commit; unit + real-backend dbtest RED→GREEN; integration PR #1566 |
 
 ---
 
@@ -48,4 +50,4 @@ per-step `**Reviewers**` lines. Re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review fix-listwatchlists-page-token impl-spec` — validate implementation spec, then `/sdd-execute fix-listwatchlists-page-token`
+Merge integration PR #1566 (merge train); after launch run the D-19 dev smoke (agent `list_watchlists` with a small `limit`).
