@@ -11,6 +11,7 @@ from gen.common.v1 import common_pb2
 from gen.portfolio.v1 import portfolio_pb2
 
 import app.engine.live_loop as live_loop_module
+from app.handlers.servicer import _PositionsPageError
 from app.services.evaluator import StrategyEvaluator
 from tests import test_telemetry
 from tests.conftest import AAPL_PIT_PERIODS
@@ -123,8 +124,8 @@ async def test_ac15_ok_and_no_bars_pairs_counted(metric_reader):
 async def test_ac16_failed_held_drain_counted_without_owner(metric_reader):
     loop = _make_loop()
     _wire_drains(loop, list_positions=AsyncMock(side_effect=RuntimeError("portfolio down")))
-    held = await loop._drain_held("o-1")
-    assert held == set()
+    with pytest.raises(_PositionsPageError):
+        await loop._drain_held("o-1")
     assert metric_sum(metric_reader, "analysis.live_loop.drain_failures", source="held") == 1
     assert not [v for v in all_attribute_values(metric_reader) if "o-1" in v]
 
