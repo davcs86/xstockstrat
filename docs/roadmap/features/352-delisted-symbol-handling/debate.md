@@ -12,7 +12,7 @@
 | 2 | 2026-11-17 | /sdd-design | 8 | 1 | 22 | 14 | 0 | yes |
 | 3 | 2026-11-17 | /sdd-design | 5 | 3 | 12 | 12 | 0 | yes |
 | 4 | 2026-11-17 | /sdd-design | 3 | 0 | 11 | 12 | 0 | yes |
-| 5 | 2026-11-17 | /sdd-design | 1 | 0 | 2 | 3 | 1 | yes |
+| 5 | 2026-11-17 | /sdd-design | 2 | 0 | 3 | 3 | 1 | yes |
 
 ## Settled Decisions
 
@@ -47,6 +47,7 @@
 | D-26 | 4 | The hook's day is the New York calendar date of now, a trading day iff `IsTradingDay`; the existing `SessionDate` (+6 h shift) is not used. The flagged-set rebuild and warm-set deletion run right after H5 and before the recovery alerts, each of which is bounded at 15 s. The stored reason is the one observed at start. | `services/xstockstrat-portfolio/internal/marketsession/marketsession.go:20-25`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:2160-2170` | settled |
 | D-27 | 4 | The sync handler reads the asset-set pointer once per call and builds its response from the claim's own returned rows: `CLAIMED` or `REDELIVERY` implies `unservable_in_current_set`, and an unloaded asset set claims nothing. A claim covers only symbols unservable in that snapshot. | `services/xstockstrat-marketdata/internal/service/asset_servability.go:46-49,135` | settled |
 | D-29 | 5 | Ingest stores `symbol_results` keyed by chunk; within a chunk each attempt's results replace the entries of every symbol it was sent and a sent symbol absent from the results is dropped as written; a resumed chunk replaces its own entry; the job view merges across chunks at read (failed > skipped > empty). The invariant holds in both directions except for chunks completed before a restart. H4's window test is a date cutoff computed in Go and re-checked inside the statement. | `services/xstockstrat-ingest/app/handlers/servicer.py:909-912,962,974-978`; fails.md:3573 | settled |
+| D-30 | 5 (gate) | Operator rulings at the round-5 gate: recovery runs on trading-day loads only (D-5 stands; FR-2 amended to say so); the recovery alert is keyed on the flag alert having been claimed for sending (FR-12 clarified); the two new marketdata RPCs require the `x-internal-caller` header and the mTLS peer identity of `xstockstrat-portfolio`. | context.md 2026-11-17 sdd-design round-5 gate; PLAT-9 | settled |
 | D-9 | 1 | Only an error from the data source turns a flagged symbol into `skipped`. A failure writing to our own database stays `failed` in both backfill kinds. | spec D-16 ("the source returns any error"); `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1561-1565,2344` | settled |
 
 ## Rejected Alternatives (locked)
@@ -131,11 +132,11 @@
 | O-55 | 4 | H4 does not refresh the reason stored at start. | no | closed @ round 4 (D-26: the start reason is kept) |
 | O-56 | 5 | The per-symbol merge into one job-level column kept a FAILED entry for a symbol written on a retry or a resume (FR-8, FR-9). | yes | closed @ round 5 (D-29) |
 | O-57 | 5 | H4's trading-day window cannot be evaluated per row in SQL; passing a precomputed symbol list is unsafe with a second instance. | no | closed @ round 5 (D-29) |
-| O-58 | 5 | The new marketdata internal-caller grant is header-only; the sync can clear the union and the ack can suppress alerts. Bind the grant to the mTLS peer identity, or record a waiver (PLAT-9). | no | open |
+| O-58 | 5 | The new marketdata internal-caller grant is header-only; the sync can clear the union and the ack can suppress alerts. Bind the grant to the mTLS peer identity, or record a waiver (PLAT-9). | no | closed @ round 5 (operator: bind to the mTLS peer identity, D-30) |
 
 ## Reopen Petitions
 
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 5 | D-5 | Narrow: run the recover step on every successful load, closed days included; detection stays trading-day gated. Evidence not on record at D-5: FR-2 says a flag "is re-evaluated by every successful asset-set load" (`product-spec.md` FR-2), while FR-1's closed-day rule covers observations for detection only. | pending user |
+| P-1 | 5 | D-5 | Narrow: run the recover step on every successful load, closed days included; detection stays trading-day gated. Evidence not on record at D-5: FR-2 says a flag "is re-evaluated by every successful asset-set load" (`product-spec.md` FR-2), while FR-1's closed-day rule covers observations for detection only. | user declined (2026-11-17: recovery stays on trading-day loads; FR-2 amended instead) |

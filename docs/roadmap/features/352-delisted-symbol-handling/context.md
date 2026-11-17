@@ -185,3 +185,20 @@
     delisting refresh runs after every watchlist change and after every asset-set load".
   - **Acknowledged**: the approved 15 s value also bounds each alert send; portfolio stops sending at
     the first failed alert and the rest are re-sent after the lease.
+
+## Session 2026-11-17 — sdd-design (round 5 and its gate)
+
+- Round 5: proposer consistency pass applied to the draft design.md (incl. a UI fix: a flagged row
+  shows the badge in place of a readiness skeleton that would never resolve); adversary found one
+  blocking defect in the backfill-results merge, fixed (debate D-29). Petition P-1 (REOPEN D-5) logged.
+- **Round-5 gate, operator rulings (2026-11-17):**
+  - **Round cap overridden**: "override round cap, until design is sound". The skill's hard cap of 5
+    debate rounds is lifted for this feature by explicit operator instruction. Stopping criterion used
+    from here: a round whose adversary returns no blocking objection and no text edit; the design then
+    comes back to the operator for approval (P-04 still applies).
+  - **P-1 declined**: recovery stays on trading-day loads only. FR-2 amended to "re-evaluated by every
+    successful asset-set load on a trading day" (C-15, operator-approved).
+  - **FR-12 clarified**: the recovery alert is sent only if the flag alert had been claimed for sending.
+  - **Caller check**: the two new marketdata RPCs require the caller header and portfolio's mTLS peer
+    identity (debate D-30).
+
