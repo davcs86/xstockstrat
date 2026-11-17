@@ -200,10 +200,11 @@ grep -n "_opportunity_refresh_tick\|daily refresh" docs/roadmap/features/356-fix
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_servicer.py tests/test_owner_header_guard.py tests/test_opportunities_latency.py tests/test_unreadable_formula.py -q
-grep -n "class _PositionsPageError\|async def _drain_positions_paged\|except _PositionsPageError" services/xstockstrat-analysis/app/handlers/servicer.py
-grep -n "metadata=metadata" services/xstockstrat-analysis/app/handlers/servicer.py   # helper forwards the caller's propagation metadata (C-03)
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_servicer.py tests/test_owner_header_guard.py tests/test_opportunities_latency.py tests/test_unreadable_formula.py -q )
+( grep -n "class _PositionsPageError\|async def _drain_positions_paged\|except _PositionsPageError" services/xstockstrat-analysis/app/handlers/servicer.py )
+# helper forwards the caller's propagation metadata (C-03)
+( grep -n "metadata=metadata" services/xstockstrat-analysis/app/handlers/servicer.py )
 ```
 
 ---
@@ -262,10 +263,11 @@ grep -n "metadata=metadata" services/xstockstrat-analysis/app/handlers/servicer.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_held_position_drains.py tests/test_analysis_servicer.py::TestScreenSymbolsHeld tests/test_analysis_tick_telemetry.py -q
-cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40
-grep -n "conftest\|from tests.conftest" services/xstockstrat-analysis/tests/test_held_position_drains.py services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py   # aio_rpc_error from the canonical home (C-13)
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_held_position_drains.py tests/test_analysis_servicer.py::TestScreenSymbolsHeld tests/test_analysis_tick_telemetry.py -q )
+( cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 )
+# aio_rpc_error from the canonical home (C-13)
+( grep -n "conftest\|from tests.conftest" services/xstockstrat-analysis/tests/test_held_position_drains.py services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py )
 ```
 
 ---
@@ -312,10 +314,11 @@ grep -n "conftest\|from tests.conftest" services/xstockstrat-analysis/tests/test
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_live_loop.py tests/test_live_loop_telemetry.py tests/test_entry_backfill.py tests/test_owner_header_guard.py -q
-grep -n "except _PositionsPageError\|failed_owners" services/xstockstrat-analysis/app/engine/live_loop.py
-grep -n "owner_metadata(owner)" services/xstockstrat-analysis/app/engine/live_loop.py   # header propagation unchanged (C-03)
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_live_loop.py tests/test_live_loop_telemetry.py tests/test_entry_backfill.py tests/test_owner_header_guard.py -q )
+( grep -n "except _PositionsPageError\|failed_owners" services/xstockstrat-analysis/app/engine/live_loop.py )
+# header propagation unchanged (C-03)
+( grep -n "owner_metadata(owner)" services/xstockstrat-analysis/app/engine/live_loop.py )
 ```
 
 ---
@@ -355,10 +358,11 @@ grep -n "owner_metadata(owner)" services/xstockstrat-analysis/app/engine/live_lo
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_held_position_drains.py tests/test_live_loop_telemetry.py tests/test_live_loop.py tests/test_entry_backfill.py tests/test_owner_header_guard.py -q
-cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40
-grep -n "from tests.conftest\|from tests.test_live_loop" services/xstockstrat-analysis/tests/test_held_position_drains.py   # reuses existing harness/fixture homes (C-13)
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_held_position_drains.py tests/test_live_loop_telemetry.py tests/test_live_loop.py tests/test_entry_backfill.py tests/test_owner_header_guard.py -q )
+( cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 )
+# reuses existing harness/fixture homes (C-13)
+( grep -n "from tests.conftest\|from tests.test_live_loop" services/xstockstrat-analysis/tests/test_held_position_drains.py )
 ```
 
 ---
@@ -387,9 +391,10 @@ grep -n "from tests.conftest\|from tests.test_live_loop" services/xstockstrat-an
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_tick_telemetry.py tests/test_telemetry_allowlist.py -q
-grep -n 'record_opportunity_recompute("full", "failed")' services/xstockstrat-analysis/app/handlers/servicer.py   # → two sites (kick path, daily refresh)
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_tick_telemetry.py tests/test_telemetry_allowlist.py -q )
+# → two sites (kick path, daily refresh)
+( grep -n 'record_opportunity_recompute("full", "failed")' services/xstockstrat-analysis/app/handlers/servicer.py )
 ```
 
 ---
@@ -426,10 +431,11 @@ grep -n 'record_opportunity_recompute("full", "failed")' services/xstockstrat-an
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check .
-cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_tick_telemetry.py tests/test_telemetry_allowlist.py -q
-cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40
-grep -n "from tests.conftest" services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py   # aio_rpc_error from the canonical home (C-13); the import is added by Step 3
+( cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . )
+( cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_tick_telemetry.py tests/test_telemetry_allowlist.py -q )
+( cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 )
+# aio_rpc_error from the canonical home (C-13); the import is added by Step 3
+( grep -n "from tests.conftest" services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py )
 ```
 
 ---
