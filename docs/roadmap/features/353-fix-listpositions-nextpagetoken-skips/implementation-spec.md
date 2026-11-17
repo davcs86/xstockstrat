@@ -1,6 +1,6 @@
 # Implementation Spec: fix-listpositions-nextpagetoken-skips
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-11-17
 **Feature**: `docs/roadmap/features/353-fix-listpositions-nextpagetoken-skips/feature.md`
 **Total Steps**: 4
@@ -224,7 +224,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 4 — test: ListPositions error classification at the Connect and gRPC edges
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/handler/portfolio_handler_test.go` — modify

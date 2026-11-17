@@ -89,3 +89,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - RED: Step 4's `TestClassifyListPositionsError` written first → build failed `undefined: classifyListPositionsError` (compile-level RED; behavioural RED is Step 2's `TestListPositions_MalformedTokenIssuesNoQuery`). GREEN: Step 3 verification (with the Step 4 test file absent) build ✓, handler tests ✓, golangci-lint 0 issues.
 - Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`
 - Deviations: none
+
+### Step 4 — ListPositions error classification at the Connect and gRPC edges [done]
+- `TestClassifyListPositionsError` (sentinel, wrapped → InvalidArgument; other → Internal) plus the gRPC-edge assertion `status.Code(toGRPCError(...)) == codes.InvalidArgument`.
+- RED: compile failure captured before Step 3 (`undefined: classifyListPositionsError`). GREEN: handler tests PASS; coverage total 81.8% (floor 40%); golangci-lint 0 issues.
+- Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler_test.go`
+- Deviations: none
+
+- Final config-wiring gate: `node scripts/check-config-wiring.mjs --final` exit 0 (only pre-existing REPORTED lines for analysis `fundamentals.provider` and trading `trading_state`; no key from this feature).

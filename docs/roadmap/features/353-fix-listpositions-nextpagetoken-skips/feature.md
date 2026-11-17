@@ -17,6 +17,7 @@
 | 2026-11-16 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
 | 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode, no checkpoints) |
+| 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | Steps 1-4 done; integration PR next |
 
 ---
 
@@ -46,4 +47,4 @@
 
 ## Next Action
 
-`/sdd-review fix-listpositions-nextpagetoken-skips impl-spec` — validate implementation spec, then `/sdd-execute fix-listpositions-nextpagetoken-skips`
+Integration PR `feature/fix-listpositions-nextpagetoken-skips` → `main-dev`; after merge + promotion, file the three follow-up defect reports (context.md Open Threads)
