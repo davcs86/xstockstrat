@@ -190,12 +190,12 @@ threshold applies here (Step 4 runs the full coverage command).
 - Rebuild to delete: `trading.go:2244-2247` (`platformBySymbol := make(map[string]float64, len(platformPositions.Positions))` + range loop). Consumers of `platformBySymbol`: :2256 and :2277-2278.
 - `tradingMode` derived at `trading.go:2227-2230`. `timeout := brokerCallTimeout(s.cfgW)` at :2109 (`func brokerCallTimeout` at :2585-2591).
 - Imports already present in `trading.go`: `"errors"` (:7), `"fmt"` (:8), `"google.golang.org/grpc/codes"` (:20), `"google.golang.org/grpc/metadata"` (:22), `grpcstatus "google.golang.org/grpc/status"` (:23, the status package is aliased `grpcstatus` in this file), `commonv1` (:28), `portfoliov1` (:33), `"github.com/xstockstrat/trading/internal/telemetry"` (:41). No import change is needed.
-- Precedent drain (reuse target, recon.md § Patterns to REUSE): `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1111-1167` (`collectFills`):
-  - `PageRequest{PageSize, PageToken: token}` at :1119;
-  - error on an RPC error (:1121-1123);
-  - empty page with a token (:1124-1126);
-  - `next := resp.GetPage().GetNextPageToken()` (:1159), return on `""` (:1160-1162);
-  - error on `next == token` (:1163-1165).
+- Precedent drain (reuse target, recon.md § Patterns to REUSE): `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1114-1170` (`collectFills`):
+  - `PageRequest{PageSize, PageToken: token}` at :1122;
+  - error on an RPC error (:1124-1126);
+  - empty page with a token (:1127-1129);
+  - `next := resp.GetPage().GetNextPageToken()` (:1162), return on `""` (:1163-1165);
+  - error on `next == token` (:1166-1168).
 - Only production `ListPositions` call in trading: `trading.go:2235` (recon.md:35).
 - Trading-domain survey (step-constraints §A):
   - Broker coverage: the change is broker-agnostic. The portfolio read runs for every `brokerMap` entry; `BROKER_TYPE_OFFLINE` stays skipped at `trading.go:2095`. ALPACA and IBKR are both unaffected beyond the read.
@@ -286,17 +286,17 @@ literal. Lint exits 0.
 
 **Codebase Evidence** (all re-read at this tree):
 - Harness in `trading_reconciliation_test.go`:
-  - `fakeReconciliationBroker{listOrdersFn, getPositionsFn, isPaper}` at :79-83 (`IsPaper()` returns `f.isPaper`, :117);
+  - `fakeReconciliationBroker{listOrdersFn, getPositionsFn, isPaper}` at :79-83 (`IsPaper()` returns `f.isPaper`, :115);
   - `fakeReconciliationPortfolioClient{listPositionsFn}` at :122-133 (default response is an empty `ListPositionsResponse`, :131);
   - `recordingLedgerClient` at :137-170, recording the full `AppendEventRequest` (`events`) with `eventTypes()`;
-  - `newTestReconciliationService(brokers, portfolio, ledger, notify, accountRepo)` at :168-170, which sets `cfgW: &config.Watcher{}`, `reconcilePositionLookup: &fakePositionQtyLookup{}` and `reconcileCandidates: make(map[string]int)`;
+  - `newTestReconciliationService(brokers, portfolio, ledger, notify, accountRepo)` at :168-170, which delegates to `newTestReconciliationServiceWithIntents` (:176-196); that helper sets `cfgW: &config.Watcher{}` (:179), `reconcilePositionLookup: &fakePositionQtyLookup{}` (:188) and `reconcileCandidates: make(map[string]int)` (:194);
   - `fakePositionQtyLookup` at :228-245 (empty `net`, so SYM501 is unexplained);
   - `noopAccountRepo` at :250-256;
   - two-tick grace pattern at :554-555;
   - payload reads `e.Payload.Fields["order_id"].GetStringValue()` at :632.
   Existing imports (:3-22) lack `fmt`, `codes`, `status`, `metadata` and `commonv1`; add them.
 - `fakeNotifyClient` at `trading_bracket_test.go:180`.
-- `snapshotInts(map[string]int64) *config.Watcher` at `trading_ibkr_auth_test.go:121-127` (`config.MustSnapshotWatcher("trading", …)`). `brokerCallTimeout` reads `cfgW.GetFloat("broker.timeout_ms", 5000)` (`trading.go:2585-2591`), and `GetFloat` widens an IntVal (recon/D-11 evidence `internal/config/watchcore.go:411-416`).
+- `snapshotInts(map[string]int64) *config.Watcher` at `trading_ibkr_auth_test.go:121-127` (`config.MustSnapshotWatcher("trading", …)`). `brokerCallTimeout` reads `cfgW.GetFloat("broker.timeout_ms", 5000)` (`trading.go:2585-2591`), and `GetFloat` widens an IntVal (recon/D-11 evidence `internal/config/watchcore.go:406-416`).
 - Metric helpers in package `service`:
   - `installMetricReader(t)` at `trading_telemetry_test.go:285-296`;
   - `counterValue(t, reader, name, kv...)` at :316-332;
