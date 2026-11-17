@@ -56,3 +56,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Local harness: `/usr/lib/postgresql/16/bin` + `postgres` OS user present; only TimescaleDB call is `001_portfolio_hypertable.up.sql:35-40`; no migration needs an EXTENSION or envsubst — shim given with named params (`relation`, `time_column_name`, `chunk_time_interval`, `if_not_exists`) because 001 calls it with named notation.
 - C-14 agent `list_watchlists` override recorded in the spec's Execution Summary + Deviation Log (spec-time row) as an override, not a deferral (closes the design Open Thread for `/sdd-spec`).
 - Expected `/sdd-review impl-spec` advisory WARN: Lands-with declared with no strict §C table trigger — deliberate per D-8 (stated in `## Step Dependencies`).
+
+## Session 2026-11-17 — sdd-review impl-spec (advisory, looped until clean)
+
+- Result: iteration 3 = 0 failures, 0 warnings (criteria) + CLEAN (overlap). User asked to loop until all warnings were addressed; 3 iterations.
+- Items raised and how each was addressed:
+  - [x] i1 Step 2: coverage command didn't export GOWORK and only stated the 40% threshold in prose → now `export GOWORK=off` + awk exit-code assertion mirroring `ci.yml:361-392` (commit e9fb287; gate tested at 41.2%→0 / 39.9%→1).
+  - [x] i1 B3b: Lands-with declared with no §C trigger → acknowledged in `## Step Dependencies` as the user-approved D-8/O-10 decision (e9fb287).
+  - [x] i1 overlap: feature 351 (on origin/ccr-1305a9de-7x1t7v, implementation-ready) gates its Step 5 on this fix and edits the same `dbtest_helpers_test.go` → ordering note in `## Step Dependencies` (e9fb287) + user-confirmed row in `docs/roadmap/features/merge-order.md` "351 must wait for 354" (de1a27d). 351's files untouched.
+  - [x] i2 Step 1: guard against the seam edit over-replacing → `grep -c "r.pool.Query(ctx," … # expect 2` (7bee258).
+  - [x] i2 overlap: helper-name collision risk → verified via git that 351's spec declares none of seedNamedWatchlist/listPageRows/expectNoBindings/listPageSQL and does not modify watchlist_repo.go.
+  - [x] Twin `ListPositions` report exists only on origin/ccr-1305a9de-7x1t7v; out of scope (owned by another session).
+- Overlap findings: 351 ordering (recorded, merge-order.md); nothing else.
