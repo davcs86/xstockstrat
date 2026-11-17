@@ -37,6 +37,29 @@ func TestClassifyGetPositionError_GenericError_IsInternal(t *testing.T) {
 	}
 }
 
+func TestClassifyListPositionsError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want connect.Code
+	}{
+		{"sentinel", repository.ErrInvalidPageToken, connect.CodeInvalidArgument},
+		{"wrapped", fmt.Errorf("list positions: %w", repository.ErrInvalidPageToken), connect.CodeInvalidArgument},
+		{"other", errors.New("db connection reset"), connect.CodeInternal},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyListPositionsError(tc.err); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+	wrapped := fmt.Errorf("list positions: %w", repository.ErrInvalidPageToken)
+	if code := status.Code(toGRPCError(connect.NewError(classifyListPositionsError(wrapped), wrapped))); code != codes.InvalidArgument {
+		t.Fatalf("gRPC edge: got %v, want InvalidArgument", code)
+	}
+}
+
 // feature 229 @AC-5: a quote gap maps to Unavailable at both the Connect and the gRPC edge; everything else stays Internal.
 func TestClassifyGetPnLError(t *testing.T) {
 	if got := classifyGetPnLError(context.Background(), fmt.Errorf("GetPnL: no usable quote for MSFT: %w", service.ErrQuotesUnavailable)); got != connect.CodeUnavailable {
