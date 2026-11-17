@@ -2,13 +2,14 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 1 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
+**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
 
 ## Rounds
 
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-16 | /sdd-design | 11 | 10 | 3 | 16 | 0 | yes |
+| 2 | 2026-11-17 | /sdd-design | 6 | 1 | 21 | 14 | 0 | yes |
 
 ## Settled Decisions
 
@@ -26,6 +27,12 @@
 | D-8 | 1 | Portfolio keeps an in-memory map of flagged symbols refreshed on its existing prune tick. One service-layer helper decorates `WatchlistBinding.delisted` (field 4, a `common.v1.DelistedState` message; presence = flagged) on every watchlist-returning RPC; `ListAllWatchlistSymbols` drops flagged symbols; analysis skips flagged bindings at `_drain_watchlist_bindings` and `_drain_watchlist`. An empty or stale cache never removes anything. Portfolio stores nothing in its DB. | `services/xstockstrat-portfolio/internal/service/signal_prune.go:37`; `packages/proto/portfolio/v1/portfolio.proto:243`; `services/xstockstrat-analysis/app/handlers/servicer.py:5995`; `services/xstockstrat-analysis/app/engine/live_loop.py:592` | settled |
 | D-10 | 1 (gate) | The flag alert is emitted by portfolio after its removal has run, and states how many system-managed lists the symbol was removed from (zero if none). Once-only across restarts and instances is decided by a conditional update on the marketdata profile row. Operator ruling at the round-1 gate. | context.md 2026-11-16 sdd-design round-1 gate; spec D-12, FR-12 | settled |
 | D-11 | 1 (gate) | A held flagged symbol leaves the warm set at each load and is re-warmed by the next quote read; quote and price paths are unchanged. C-16 CHANGE to platform `@AC-17 @feature-282` for flagged symbols only, signed off by the operator. | context.md 2026-11-16 sdd-design round-1 gate; `docs/sdd/business-rules/platform.feature:1314-1319` | settled |
+| D-12 | 2 | Portfolio removes only from the flagged list of the current tick's successful sync response. On an RPC error it decorates from the old cache and removes nothing. | D-8; insights.md:3762, 4297 | settled |
+| D-13 | 2 | The reset of unflagged rows that left every watchlist never runs on an empty symbol list, and its count is logged at INFO. | insights.md:4308 | settled |
+| D-14 | 2 | The detection hook runs under a bounded context, and the first-load warm prune runs before it, so a stalled database can never block the asset refresher or the feature-282 prune. | `services/xstockstrat-marketdata/internal/service/asset_servability.go:136-148,183-189` | settled |
+| D-15 | 2 | Refines D-5: the in-memory flagged set is loaded from the database once at boot, independent of the asset load, and again on every successful load. | `asset_servability.go:21-23` | settled |
+| D-16 | 2 | The recovery alert is emitted by marketdata, once per recover transition, and only when the flag alert for that flag had been claimed. Alerts are WARNING, category `symbol_delisting`, untargeted; portfolio gets its own emitter that writes no ledger event. | spec D-12, D-18; `services/xstockstrat-notify/src/fanout/fanout.ts:61-66` | settled |
+| D-17 | 2 | Binding rules carried into the spec: ingest writes `symbol_results` as JSON text and parses it on read (asyncpg has no JSON codec here); marketdata binds DATE values as date-only text under `QueryExecModeExec`; expiry rows of removed symbols are deleted with a plain DELETE under the parent lock; the sync response returns flagged symbols in the request plus newly claimed ones only; `first_unservable_date` has one stated encoding and the UI and agent format it in a fixed zone; the agent post-processes bindings so `delisted: false` is always present. | `services/xstockstrat-ingest/app/repositories/backfill_jobs.py:73-78`; `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go:817-822`; `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go:503-507,577`; `services/xstockstrat-agent/app/client.py:377` | settled |
 | D-9 | 1 | Only an error from the data source turns a flagged symbol into `skipped`. A failure writing to our own database stays `failed` in both backfill kinds. | spec D-16 ("the source returns any error"); `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1561-1565,2344` | settled |
 
 ## Rejected Alternatives (locked)
@@ -42,6 +49,7 @@
 | R-7 | 1 | N1: make `markWarm` skip flagged symbols | Not needed for FR-5 (every watchlist-driven warm-add is already gated); contradicts FR-6; regresses 282 `@AC-16` and `@AC-26`; would pass the textual guard test `marketdata_service_test.go:5358-5363` while defeating it | locked |
 | R-8 | 1 | Delete the profile row on reset or recovery | Same cost as nulling the state; spec D-9 wants the profile to hold further metadata | locked |
 | R-10 | 1 (gate) | N2: a replace-all `UpdateWatchlist` keeps a stored flagged symbol | Declined by the operator: portfolio `@AC-19 @feature-282` stays as is. Accepted consequence: a flagged symbol on a user list is dropped, and reported in `refused_symbols`, by a replace-all update such as a name-only agent update | locked |
+| R-11 | 2 | Read the flagged set from the database per backfill symbol instead of keeping it in memory | One query per symbol on the backfill path; a boot load (D-15) fixes the cold-start gap equally | locked |
 | R-9 | 1 | Seed `_resume_job` state from the row's `failed_symbols` | A successfully re-run failed chunk would stay in the set and finalize PARTIAL (`servicer.py:909-912,981-987,830`); also scope creep into a known separate defect | locked |
 
 ## Objections
@@ -52,19 +60,33 @@
 | O-1 | 1 | With R-7, a held flagged symbol leaves the warm set at each load and is re-warmed by the next quote read. That changes platform `@AC-17 @feature-282` ("stays … warm across later refreshes") for flagged symbols and needs operator sign-off (C-16, P-03). | yes | closed @ round 1 (operator signed off, D-11) |
 | O-2 | 1 | N2: keeping a stored flagged symbol through a replace-all `UpdateWatchlist` changes portfolio `@AC-19 @feature-282`; without it an agent rename silently drops a flagged symbol (FR-4, AC-7). Needs operator sign-off (C-16). | yes | closed @ round 1 (operator declined the change, R-10) |
 | O-3 | 1 | FR-12 / AC-17: marketdata cannot know which system-managed lists a symbol was removed from, and would alert before portfolio removes anything. Either portfolio emits the flag alert after its removal (once-only via a marketdata conditional update) or the operator accepts wording that states the removal as upcoming. | yes | closed @ round 1 (operator: portfolio emits after removal, D-10) |
-| O-4 | 1 | The reused `pruneListTx` deletes only `source = 2` (`signal_expiry_repo.go:87-91`); FR-3 needs removal from a system-managed list whatever the entry's source, without leaking into the expiry path (281 `@AC-5`). The flag cause needs its own lock-and-delete branch. | yes | open |
-| O-5 | 1 | The existing cleanup deletes only due expiry rows (`signal_expiry_repo.go:126-134,150-152`); a flag-removed entry with an unexpired expiry row leaves an orphan that can prune a later re-add early. The flag branch must delete the expiry rows of the symbols it removed, locked with SKIP LOCKED. | yes | open |
-| O-6 | 1 | Ingest writes `failed_symbols` only at finalize (`servicer.py:835-843`); per-symbol results must be persisted per chunk in the locked `update_job` if they are to survive a restart, and resume must not seed failed symbols (R-9). | yes | open |
-| O-7 | 1 | State the per-symbol result invariant and test every loop exit (fails.md:3573): every symbol in `failed_symbols` has exactly one FAILED result, no skipped symbol is in it, merge per symbol never per chunk; a retry attempt sends only the remaining symbols, so results must not be overwritten per chunk (`servicer.py:964-998`). | no | open |
-| O-8 | 1 | The observe RPC must read flagged state from `symbol_profile`, not from the in-memory set, and portfolio must keep its old cache when `asset_set_loaded` is false; otherwise marks vanish after a marketdata restart (AC-19). | no | open |
-| O-9 | 1 | Race: an observe call holding the previous snapshot can re-date a row the hook just reset, breaking the FR-1 reset rule (AC-25). The upsert needs a guard (a stored last-load day or a snapshot generation check). | no | open |
-| O-10 | 1 | A not-yet-flagged row whose symbol left every watchlist can still flag, against FR-1 ("on at least one watchlist"); spec D-17 covers persistence only after the flag. Observe should stamp a last-observed day and the hook should reset an unflagged row not observed since the previous trading day. | no | open |
-| O-11 | 1 | Detection can stall silently (fails.md:3581): log one INFO per skip reason per load in marketdata and a WARN plus a fetch outcome in portfolio when the refresh fails. | no | open |
-| O-12 | 1 | Fundamentals and bars must apply the same rule to our own DB errors. | no | open |
-| O-13 | 1 | Moving `marketsession` has unstated costs: the `pnl/` carve-out says "one small, hand-written package", its test must move to a consumer, and two portfolio callers are re-pointed. | no | open |
-| O-14 | 1 | The observe RPC does two jobs; name it for both and document that classification is server-side. | no | open |
-| O-15 | 1 | AC-11, AC-14, AC-23, AC-24 say outcome "skipped"/"empty"; the agent would return `BACKFILL_SYMBOL_OUTCOME_SKIPPED`. Map to the short lowercase name in the agent or reconcile the scenarios (C-15). | no | open |
-| O-16 | 1 | First-rollout burst: one admin push per already-unservable watchlist symbol in a single load. Tell the operator the expected count before go-live. | no | open |
+| O-4 | 1 | The reused `pruneListTx` deletes only `source = 2` (`signal_expiry_repo.go:87-91`); FR-3 needs removal from a system-managed list whatever the entry's source, without leaking into the expiry path (281 `@AC-5`). The flag cause needs its own lock-and-delete branch. | yes | closed @ round 2 (new `removeDelistedListTx` beside `pruneListTx`, no source filter; `pruneListTx` untouched) |
+| O-5 | 1 | The existing cleanup deletes only due expiry rows (`signal_expiry_repo.go:126-134,150-152`); a flag-removed entry with an unexpired expiry row leaves an orphan that can prune a later re-add early. The flag branch must delete the expiry rows of the symbols it removed, locked with SKIP LOCKED. | yes | closed @ round 2 (plain DELETE of the removed symbols' expiry rows under the parent lock, D-17) |
+| O-6 | 1 | Ingest writes `failed_symbols` only at finalize (`servicer.py:835-843`); per-symbol results must be persisted per chunk in the locked `update_job` if they are to survive a restart, and resume must not seed failed symbols (R-9). | yes | closed @ round 2 (per-chunk `symbol_results` written inside the locked `update_job`; resume keeps stored results of completed chunks only, never seeds `failed_symbols`) |
+| O-7 | 1 | State the per-symbol result invariant and test every loop exit (fails.md:3573): every symbol in `failed_symbols` has exactly one FAILED result, no skipped symbol is in it, merge per symbol never per chunk; a retry attempt sends only the remaining symbols, so results must not be overwritten per chunk (`servicer.py:964-998`). | no | closed @ round 2 (invariant stated with a test per exit arm; whole-chunk FAILED may override an earlier SKIPPED and is named in a test) |
+| O-8 | 1 | The observe RPC must read flagged state from `symbol_profile`, not from the in-memory set, and portfolio must keep its old cache when `asset_set_loaded` is false; otherwise marks vanish after a marketdata restart (AC-19). | no | closed @ round 2 (flagged state read from `symbol_profile`; old cache kept on RPC error) |
+| O-9 | 1 | Race: an observe call holding the previous snapshot can re-date a row the hook just reset, breaking the FR-1 reset rule (AC-25). The upsert needs a guard (a stored last-load day or a snapshot generation check). | no | closed @ round 2 (superseded by round-2 design; see O-24 and the hook-decides alternative pending at the gate) |
+| O-10 | 1 | A not-yet-flagged row whose symbol left every watchlist can still flag, against FR-1 ("on at least one watchlist"); spec D-17 covers persistence only after the flag. Observe should stamp a last-observed day and the hook should reset an unflagged row not observed since the previous trading day. | no | closed @ round 2 (census reset: an unflagged row is reset only when a sync arrives without its symbol; flagged rows never reset) |
+| O-11 | 1 | Detection can stall silently (fails.md:3581): log one INFO per skip reason per load in marketdata and a WARN plus a fetch outcome in portfolio when the refresh fails. | no | closed @ round 2 (INFO per load and per skip reason in marketdata; WARN + `RecordMarketdataFetch` op value `delistings` in portfolio) |
+| O-12 | 1 | Fundamentals and bars must apply the same rule to our own DB errors. | no | closed @ round 2 (typed `backfillSourceError` at the `FetchHistorical` return; own-DB errors stay FAILED) |
+| O-13 | 1 | Moving `marketsession` has unstated costs: the `pnl/` carve-out says "one small, hand-written package", its test must move to a consumer, and two portfolio callers are re-pointed. | no | closed @ round 2 (path `packages/proto/marketsession`, test moved to portfolio service tests, two callers re-pointed, three docs updated) |
+| O-14 | 1 | The observe RPC does two jobs; name it for both and document that classification is server-side. | no | closed @ round 2 (RPC `SyncWatchlistDelistings`; internal-caller allow-list on marketdata with one grant) |
+| O-15 | 1 | AC-11, AC-14, AC-23, AC-24 say outcome "skipped"/"empty"; the agent would return `BACKFILL_SYMBOL_OUTCOME_SKIPPED`. Map to the short lowercase name in the agent or reconcile the scenarios (C-15). | no | closed @ round 2 (agent maps outcome names to `empty|skipped|failed` and post-processes bindings to `delisted` bool + reason + date, D-17) |
+| O-16 | 1 | First-rollout burst: one admin push per already-unservable watchlist symbol in a single load. Tell the operator the expected count before go-live. | no | closed @ round 2 (runbook note: count of unflagged started rows during the window is the burst) |
+| O-17 | 2 | Removal driven by a stale cache after an RPC error would remove a symbol that has recovered and been re-added (D-8). | yes | closed @ round 2 (D-12) |
+| O-18 | 2 | An empty or partial symbol list resets every unflagged row (insights.md:4308). | yes | closed @ round 2 (D-13) |
+| O-19 | 2 | The hook makes DB calls on the refresher's unbounded context and runs before the first-load prune; a hung DB stalls the refresher and regresses the kept part of 282 `@AC-15`. | yes | closed @ round 2 (D-14) |
+| O-20 | 2 | No boot rebuild of the flagged set (D-5 drift): with Alpaca down at boot, flagged symbols backfill as FAILED. | no | closed @ round 2 (D-15) |
+| O-21 | 2 | The flag alert is at-most-once: any portfolio-side timeout or lost response after the claim commits loses it, and FR-12 says an alert is emitted. Either a lease plus an acknowledgement (at-least-once) or an operator-accepted residual. | yes | open |
+| O-22 | 2 | asyncpg cannot bind a dict to JSONB in ingest; the per-chunk write would raise inside the lock. | no | closed @ round 2 (D-17) |
+| O-23 | 2 | DATE binding from a Go time under `QueryExecModeExec` depends on the session time zone. | no | closed @ round 2 (D-17) |
+| O-24 | 2 | Possible deadlock between the sync transaction's multi-row updates and the hook's updates on overlapping rows; lock in symbol order or retry once on 40P01. | no | open |
+| O-25 | 2 | The sync reuses `portfolio.marketdata.servability_timeout_ms` (500–4000 ms, documented for the insert paths); record the second consumer or add a dedicated key. | no | open |
+| O-26 | 2 | A recovery alert could fire for a flag the operator was never told about. | no | closed @ round 2 (D-16) |
+| O-27 | 2 | AC-21 as written cannot be met by a load alone when rows are started by portfolio's sync; a long prune interval also delays the first-unservable date. | no | open |
+| O-28 | 2 | `first_unservable_date` as a Timestamp at New York midnight renders as the previous day in a western browser zone. | no | closed @ round 2 (D-17) |
+| O-29 | 2 | The response returning every flagged row grows without bound. | no | closed @ round 2 (D-17) |
+| O-30 | 2 | SKIP LOCKED on expiry rows under the parent lock is dead mechanism. | no | closed @ round 2 (D-17) |
 
 ## Reopen Petitions
 
