@@ -846,3 +846,9 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 ```sdd-batch-setup
 {"mainDev":"756a24a7f19fedc571bc499dc87056f69b920a9a","date":"2026-11-17"}
 ```
+
+### Step 1 — docs: Align acceptance.feature and product-spec.md with the approved design [done]
+- Narrowed the `@AC-5` When step to the on-demand recompute and appended `@AC-10 @FR-4 @regression` (daily-refresh failed user counted, previous queue kept). product-spec FR-4 now limits `compute_failed` to cold reads and adds the daily-refresh bullet (`servicer.py:6056-6069`, cited at the branch head); Fix Scope notes the reused `recompute{kind=full,outcome=failed}` label set; Acceptance Criteria names the `@regression` scenarios including `@AC-10`.
+- TDD: N/A (docs). Baseline run (`.sdd-logs/v-1.log`): `exit=1`, scenario count `9`. Verification (`.sdd-logs/v-2.log`): `exit=0`; `76:  @AC-10 @FR-4 @regression`; `38:    When the on-demand opportunity recompute for "u-1" runs`; count `10`; product-spec `62:` daily-refresh bullet. Config-key wiring gate: N/A (no key).
+- Files modified: `docs/roadmap/features/356-fix-analysis-held-position-drains/acceptance.feature`, `docs/roadmap/features/356-fix-analysis-held-position-drains/product-spec.md`
+- Deviations: none

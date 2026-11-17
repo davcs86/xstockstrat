@@ -117,7 +117,7 @@ name matches the expected one, so Step 9 writes the row.
 
 ### Step 1 — docs: Align acceptance.feature and product-spec.md with the approved design
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/356-fix-analysis-held-position-drains/`
 **Files**:
 - `docs/roadmap/features/356-fix-analysis-held-position-drains/acceptance.feature` — modify
