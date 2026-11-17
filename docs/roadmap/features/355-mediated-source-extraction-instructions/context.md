@@ -56,3 +56,12 @@
   `manage_signal_source` / `instantiate_template` bodies in `services/xstockstrat-agent/app/tools.py`.
   Suggested order 328 → 355 (rebase-only). No `merge-order.md` row written — needs operator confirmation.
 - Recommended design depth: full (proto change, DB migration, ≥2 services, warning-level overlap).
+
+## Session 2026-11-17 — sdd-design (in progress)
+
+- Mode: full. Tree: `ccr-424ada30-29m2lv@f8e7a99 ≡ origin/ccr-424ada30-29m2lv`. The harness-assigned
+  `ccr-*` branch stands in for `feature/<slug>` in this session (pushes are restricted to it);
+  `origin/main-dev` is an ancestor.
+- Phase 0 Recon: wrote recon.md from four scouts (ingest+proto, agent, ui, scenario-recon). No
+  existing `@AC-*` needs a CHANGE sign-off.
+- Phase 1: round 1 proposer running. No debate.md yet.
