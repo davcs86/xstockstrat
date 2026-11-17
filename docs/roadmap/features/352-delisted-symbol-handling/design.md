@@ -59,8 +59,10 @@ early return at `:136-138` is restructured) → `runDelistingHook` on every succ
 context. A rejected or failed load never reaches the hook (`:124`, `:133`). A hook error or timeout logs
 a WARN and increments a counter; it never fails the load.
 
-The hook computes `d`, the NYSE session date of now (America/New_York), from the shared calendar (§8).
-On a trading day it reads the candidates (`watched_symbol` ∪ profile rows with a first-unservable date),
+The hook computes `d`, the New York calendar date of now; it is a trading day iff the shared calendar's
+`IsTradingDay(d)` (§8). The existing `SessionDate` helper is **not** used: it shifts the time by +6 h
+(`xstockstrat-portfolio/internal/marketsession/marketsession.go:20-25`) and would turn a Friday-evening
+load into a Saturday. On a trading day it reads the candidates (`watched_symbol` ∪ profile rows with a first-unservable date),
 classifies each against `next` (`classify`, `:46`), reads `N` (§9) and runs five statements in order,
 stopping at the first error. Each is one autocommitted conditional statement that locks its rows in
 symbol order (D-3, D-21):
@@ -73,10 +75,11 @@ symbol order (D-3, D-21):
 | H4 flag | unflagged started rows, unservable now, in `watched_symbol`, with `TradingDaysInclusive(first, d) ≥ N` | `delisted_at = now()` |
 | H5 recover | flagged rows, servable now (the union is ignored) | all state columns → NULL; returns whether the flag alert had been claimed |
 
-After H5 commits, marketdata sends one recovery alert per recovered row whose flag alert had been
-claimed (D-16, D-22). Then, on every load including closed days, it rebuilds the in-memory flagged set
-from the database and deletes flagged symbols from `warmSymbols` (D-5). The same read runs once at boot,
-independent of the asset load (D-15).
+After H5 commits, on every load including closed days, the hook rebuilds the in-memory flagged set from
+the database and deletes flagged symbols from `warmSymbols` (D-5). Only then does it send one recovery
+alert per recovered row whose flag alert had been claimed (D-16, D-22), each send bounded at 15 s, so a
+notify stall cannot cost the rebuild. The same flagged-set read runs once at boot, independent of the
+asset load (D-15). The stored reason is the one observed when the row started; H4 does not refresh it.
 
 Truth table for a trading-day load:
 
@@ -123,6 +126,12 @@ set is loaded and the symbol is unservable in it; the default false means "do no
 | `REDELIVERY` | claimed by this call after a lease expired |
 | `PENDING` | anything else: not yet claimed, leased to another caller, skipped by SKIP LOCKED, over the limit of 100, or servable now |
 
+All three servability uses in one call (the claim filter, `unservable_in_current_set`, and the
+"servable now" case of `PENDING`) come from a single read of the asset-set pointer, so `CLAIMED` or
+`REDELIVERY` always implies `unservable_in_current_set = true`; an unloaded asset set claims nothing.
+The response is built from the claim's own returned rows, never from a re-read, so a symbol the hook
+recovers mid-call cannot have a claim without a response entry.
+
 `AckDelistingAlerts` sets `alert_acked_at` on flagged, claimed, unacknowledged rows of the symbols it is
 given, with the same ordered-lock shape (D-24).
 
@@ -149,14 +158,20 @@ A new step after the existing expiry prune in `pruneOnce`
 5. Remove them from system-managed lists with a new `removeDelistedListTx`, a sibling of `pruneListTx`
    (`xstockstrat-portfolio/internal/repository/signal_expiry_repo.go:61`), which is untouched. Per
    list: lock the parent `FOR NO KEY UPDATE SKIP LOCKED` (a locked list is skipped), re-check
-   `system_managed`, delete the bindings of any source, delete the removed symbols' expiry rows with a
-   plain DELETE, touch `updated_at`, commit. No ledger event (spec D-12).
+   `system_managed`, lock the bindings of any source `FOR UPDATE SKIP LOCKED` and delete only the
+   locked set, delete the removed symbols' expiry rows with a plain DELETE, touch `updated_at`, commit.
+   Nothing in it ever waits: `UpdateBinding` locks the binding before the parent
+   (`xstockstrat-portfolio/internal/repository/watchlist_repo.go:361-372`), so waiting on a binding
+   while holding the parent would deadlock. A list whose bindings were skipped counts like a locked
+   list. The lists holding the removal set are found with one set-based query per tick. No ledger event
+   (spec D-12); a removal that carries no alert is logged at INFO.
 6. For `CLAIMED` and `REDELIVERY` entries, send one alert each: WARNING, category `symbol_delisting`,
    untargeted, through a new portfolio emitter that writes no ledger event and returns its error. A
    `CLAIMED` alert names the symbol, the reason, the first-unservable date, and the count and names of
    the system-managed lists removed on this tick; lists locked on this tick are counted as "removed on a
-   later refresh" and are removed silently later. A `REDELIVERY` alert says it repeats an earlier alert
-   and that the removal was done on an earlier refresh.
+   later refresh" and are removed silently later. A `REDELIVERY` alert says it may repeat an earlier
+   alert and names the lists removed on this tick, if any. Each send is bounded at 15 s, and the alert
+   phase stops at the first failed or timed-out send; the unsent claims stay unacknowledged.
 7. Acknowledge the symbols whose alert was sent, through `AckDelistingAlerts` under a 15 s deadline. A
    failed send or a failed acknowledgement leaves the claim unacknowledged; it is re-claimed as
    `REDELIVERY` after the lease (D-18).
@@ -201,11 +216,22 @@ cache decorates and filters nothing. A replace-all update still drops a flagged 
   (`xstockstrat-analysis/app/engine/live_loop.py:592`); the fundsignal union is covered by portfolio's
   filter.
 
+### 7a. Documents changed in the same PR
+
+`services/xstockstrat-marketdata/CLAUDE.md` (the "only the first successful load prunes" sentence and
+residual R2, the config row, the fixed values, the two RPCs and the inbound allow-list, the backfill
+outcome bullet, the two tables); MARKETDATA-16; `services/xstockstrat-portfolio/CLAUDE.md` (dependency
+row, the tick step, the `symbol_delisting` alert, the cross-user union wording); PORTFOLIO-18;
+`packages/proto/CLAUDE.md`; the agent CLAUDE.md, `docs/runbooks/mcp-tools.md`, the strat-lab
+`backfill.md` and `SKILL.md`; the durable scenarios listed under Business Rules Touched as CHANGE; a
+rollout note for the burst.
+
 ### 8. Trading calendar (D-4)
 
 The rule-based NYSE calendar moves from `xstockstrat-portfolio/internal/marketsession` to
 `packages/proto/marketsession` (the `pnl/` precedent, `packages/proto/CLAUDE.md:7-13`), gaining a
-trading-days-inclusive count and a session-date helper. Its test moves to a portfolio service test; two
+trading-days-inclusive count and a New-York-calendar-date helper with its own name, tested at 17:59 and
+18:01 New York time. Its test moves to a portfolio service test; two
 portfolio callers are re-pointed. One-off closures are not modelled.
 
 ### 9. Config, proto, migrations, fixed values
@@ -225,7 +251,8 @@ portfolio callers are re-pointed. One-off closures are not modelled.
   `ingest/v1` `BackfillJob.symbol_results=16`; `portfolio/v1` `WatchlistBinding.delisted=4`.
 - **Migrations**: marketdata `010`, ingest `017`, config `054`.
 - **Fixed values** (operator-approved 2026-11-17, not config keys): hook time limit 30 s; flag-alert
-  lease 10 minutes; sync and acknowledge deadline 15 s; 20 000 symbols per sync; 100 claims per sync.
+  lease 10 minutes; sync, acknowledge and per-alert-send deadline 15 s; 20 000 symbols per sync; 100
+  claims per sync.
 
 ### 10. Rollout
 
@@ -254,6 +281,7 @@ portfolio alerts for at most 100 per tick. A runbook note gives the query that c
 ## Open Risks
 
 - [ ] The recovery alert is at-most-once (accepted by the operator).
+- [ ] If a flag alert is lost and re-sent, the names of lists removed on the earlier tick are not repeated; the re-sent alert names only what was removed on its own tick.
 - [ ] A hook timeout on a load where a symbol was servable misses a reset; the symbol can flag earlier than the 5-day rule (accepted by the operator; WARN and counter).
 - [ ] Another marketdata instance's flag is invisible to this instance's backfills until its next load.
 - [ ] A quote read re-warms a flagged symbol until the next load (D-11).
@@ -280,9 +308,11 @@ portfolio alerts for at most 100 per tick. A runbook note gives the query that c
 - CHANGE `@AC-17 @FR-3 @feature-282` "A held offline unservable symbol stays valued and warm across later refreshes" (`docs/sdd/business-rules/platform.feature`) — for flagged symbols only, the symbol leaves the warm set at each load and is re-warmed by the next quote read; it stays valued; signed off by the operator 2026-11-16 (context.md, debate D-11).
 - PRESERVE `@AC-16`, `@AC-26` `@feature-282` (marketdata `filter-otc-symbols.feature`) — `markWarm` stays ungated.
 - PRESERVE `@AC-19 @feature-282` (`services/xstockstrat-portfolio/acceptance/filter-otc-symbols.feature`) — replace-all still drops a stored unservable symbol.
-- PRESERVE `@AC-2`..`@AC-8`, `@AC-13` `@feature-281` (`services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature`) — `pruneListTx` untouched; the new removal emits neither 281 event and deletes the expiry rows of what it removes.
+- PRESERVE `@AC-2`..`@AC-8`, `@AC-12`, `@AC-13` `@feature-281` (`services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature`) — `pruneListTx` untouched; the new removal never waits, emits neither 281 event and deletes the expiry rows of what it removes. `@AC-4` and `@AC-5` ("never removed by the recurring prune", "manual entries are never pruned") are read as rules of the expiry prune; the delisting removal is a different mechanism in the same tick and, under spec D-2, removes a flagged symbol from a system-managed list whatever the entry's source.
 - PRESERVE `@AC-30 @feature-334` (`services/xstockstrat-ingest/acceptance/webhook-fanout-callback.feature`) — payload keeps its 8 keys.
 - PRESERVE `@AC-6 @feature-261`, `@AC-9 @feature-343`, `@AC-41 @feature-294`, `@AC-1`/`@AC-6` `@feature-291`, `@feature-347` loop bounds, `@feature-242` untargeted push.
-- EXTEND `@AC-1 @feature-154` (portfolio) and `@AC-3`, `@AC-4` `@feature-154`, `@AC-2 @feature-180` (analysis) — flagged symbols leave the union and the scan universe.
+- CHANGE `@AC-1 @FR-1 @feature-154` "Portfolio enumerates the distinct cross-user union of watchlist symbols" (`services/xstockstrat-portfolio/acceptance/fundsignal-watchlist-universe.feature`) — the response is no longer exactly the distinct set: flagged symbols are left out (FR-5); operator sign-off pending at the round-4 gate.
+- PRESERVE `@AC-3`, `@AC-4` `@feature-154` (`services/xstockstrat-analysis/acceptance/fundsignal-watchlist-universe.feature`) — written over the enumeration output.
+- EXTEND `@AC-2 @feature-180` (`services/xstockstrat-analysis/acceptance/watchlist-readiness-precompute.feature`) — flagged bindings are skipped.
 - EXTEND `@AC-14 @feature-294` — outcome value `skipped`.
 - EXTEND `@AC-18 @feature-282`, `@AC-1`, `@AC-2`, `@AC-7`, `@AC-8` `@feature-148` (agent) and `@AC-8 @feature-127` (UI) — entries carry the delisted state and marker.

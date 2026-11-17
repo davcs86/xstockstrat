@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
+**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-16 | /sdd-design | 11 | 10 | 3 | 16 | 0 | yes |
 | 2 | 2026-11-17 | /sdd-design | 8 | 1 | 22 | 14 | 0 | yes |
 | 3 | 2026-11-17 | /sdd-design | 5 | 3 | 12 | 12 | 0 | yes |
+| 4 | 2026-11-17 | /sdd-design | 3 | 0 | 9 | 12 | 0 | yes |
 
 ## Settled Decisions
 
@@ -41,6 +42,9 @@
 | D-22 | 3 | Alert contract: `symbol_profile` gains `alert_claimed_at` and `alert_acked_at`. The sync claims unacknowledged flag alerts (never claimed, or claimed longer ago than a 10-minute lease) with SKIP LOCKED, at most 100 per call, and returns per flagged symbol one alert-state enum value: pending, claimed, redelivery, reported. Portfolio removes a symbol from system-managed lists only when its state is not pending and the symbol is not servable in marketdata's current asset set, sends the alert for claimed and redelivery, then acknowledges through a separate `AckDelistingAlerts` RPC. A redelivery says the removal was done on an earlier refresh. The recovery alert is keyed on the flag alert having been claimed. | D-10, D-16, D-18; FR-12 | settled |
 | D-23 | 3 | The sync and acknowledge calls run under a fixed 15 s background deadline, not under `portfolio.marketdata.servability_timeout_ms`. The sync request is capped at 20 000 symbols. Both RPCs are guarded by a new inbound internal-caller allow-list on marketdata (two grants for `portfolio`); portfolio's tick sets the `x-internal-caller` header, which it does not send today. | `services/xstockstrat-portfolio/internal/service/portfolio_service.go:141,548-554`; `services/xstockstrat-portfolio/internal/service/authz.go:19-35` | settled |
 | D-24 | 3 | Carried into the spec as checks: the ack statement uses the same ordered-lock shape as the hook; `date[]` parameters are bound from date-only text; `first_unservable_date` is a `YYYY-MM-DD` string on the wire, validated in the agent and UI; the union comes from the unfiltered repo `ListAllSymbols`, never the filtered RPC; a title/category-parameterised alert emitter is added beside `emitWarning`, which delegates to it; the config seed number is re-checked against in-flight features (052 is last on `main-dev`, 053 is claimed by feature 345); a WARN and a counter make a timed-out hook visible. | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:2163-2164`; `services/xstockstrat-marketdata/internal/repository/pool.go:31-33` | settled |
+| D-25 | 4 | Portfolio's delisting removal never waits: bindings are locked `FOR UPDATE SKIP LOCKED` and only the locked set is deleted; a list whose bindings were skipped counts like a locked list. Each alert send is bounded at 15 s and the alert phase stops at the first failed send. A redelivery alert says it may repeat an earlier alert and names the lists removed on its own tick. | `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go:361-372`; `services/xstockstrat-portfolio/internal/repository/signal_expiry_repo.go:87-103`; insights.md:4297; fails.md:3189 | settled |
+| D-26 | 4 | The hook's day is the New York calendar date of now, a trading day iff `IsTradingDay`; the existing `SessionDate` (+6 h shift) is not used. The flagged-set rebuild and warm-set deletion run right after H5 and before the recovery alerts, each of which is bounded at 15 s. The stored reason is the one observed at start. | `services/xstockstrat-portfolio/internal/marketsession/marketsession.go:20-25`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:2160-2170` | settled |
+| D-27 | 4 | The sync handler reads the asset-set pointer once per call and builds its response from the claim's own returned rows: `CLAIMED` or `REDELIVERY` implies `unservable_in_current_set`, and an unloaded asset set claims nothing. A claim covers only symbols unservable in that snapshot. | `services/xstockstrat-marketdata/internal/service/asset_servability.go:46-49,135` | settled |
 | D-9 | 1 | Only an error from the data source turns a flagged symbol into `skipped`. A failure writing to our own database stays `failed` in both backfill kinds. | spec D-16 ("the source returns any error"); `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1561-1565,2344` | settled |
 
 ## Rejected Alternatives (locked)
@@ -111,6 +115,18 @@
 | O-41 | 3 | Config seed migration number must be re-checked at spec time. | no | closed @ round 3 (D-24) |
 | O-42 | 3 | AC-29's Given must state that the flag alert was sent; changing an approved scenario needs operator sign-off (C-15). | yes | closed @ round 3 (operator approved the AC-29 Given amendment) |
 | O-43 | 3 | Residual: a load whose hook times out misses a reset, and the symbol can then flag earlier than FR-1 allows (AC-25). | no | waived @ round 3 (user: accepted residual, logged and counted) |
+| O-44 | 4 | `removeDelistedListTx` held the parent lock and deleted bindings without SKIP LOCKED; `UpdateBinding` locks binding then parent, a deadlock cycle, and it breaks the never-waits guarantee behind 281 `@AC-12`. | yes | closed @ round 4 (D-25) |
+| O-45 | 4 | `EmitAlert` in portfolio has no deadline; 100 claims at 15 s each outlast the lease. | no | closed @ round 4 (D-25; operator acknowledgement of the 15 s value for alert sends pending at the gate) |
+| O-46 | 4 | The redelivery wording was false when the earlier tick crashed before removing, and list names from a lost first alert are never re-sent. | no | closed @ round 4 (D-25; residual listed in design.md Open Risks) |
+| O-47 | 4 | The claim filter and `unservable_in_current_set` must come from one snapshot read. | no | closed @ round 4 (D-27) |
+| O-48 | 4 | A re-read after the claim could drop a claimed symbol from the response, later yielding a recovery alert for an unreported flag. | no | closed @ round 4 (D-27) |
+| O-49 | 4 | `SessionDate` shifts by +6 h; using it for the hook's day misdates evening loads. | no | closed @ round 4 (D-26) |
+| O-50 | 4 | Recovery alerts were sent before the flagged-set rebuild inside the 30 s hook budget. | no | closed @ round 4 (D-26) |
+| O-51 | 4 | Portfolio `@AC-1 @feature-154` is a CHANGE (the union is no longer exactly the distinct set), not an EXTEND; 281 `@AC-4`/`@AC-5` need a stated reading (C-16). | yes | open |
+| O-52 | 4 | AC-8 does not hold as written (a quote read re-warms a flagged symbol; the scan clause depends on portfolio's next refresh), and many scenarios implicitly assume portfolio's refresh has run (C-15). | yes | open |
+| O-53 | 4 | The design did not list the documents that change in the same PR. | no | closed @ round 4 (design.md §7a) |
+| O-54 | 4 | `REPORTED` entries re-enter the removal set every tick; use one set-based lookup and log alert-less removals. | no | closed @ round 4 (design.md §5 step 5) |
+| O-55 | 4 | H4 does not refresh the reason stored at start. | no | closed @ round 4 (D-26: the start reason is kept) |
 
 ## Reopen Petitions
 
