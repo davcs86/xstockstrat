@@ -266,3 +266,232 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-17 — sdd-batch design gate (round 3)
+
+`/sdd-design fix-portfolio-internal-position` (full mode) halted at the approval gate after round 3 (gate policy: halt). design.md was not written and status.md was not changed (it stays `spec-ready`). Register in `debate.md`: D-1..D-17 (D-7 reopened by operator steer, amended as D-15), R-1..R-10, O-1..O-10, P-1. Severity: SEV-2.
+
+### Open Threads
+
+- **Approach.** Same shape as round 2, now built on D-1..D-17 and the operator's 2026-11-17 rulings at the round-2 gate: (a') for the D-7 dbtest petition, and approval of the O-2 drawdown fall-through. `portfolio_repo.go`, the SQL, the cursor codec, the proto and 353's `dbtest_helpers_test.go` are not touched, so 351, 353 and 354 stay untouched.
+  - A private `listAllPositions` drains `ListPositions` with `positionDrainPageSize = 500`. It fails closed on a page error, on an empty page with a token, and on a repeated token. All four readers drain first, then enrich once.
+  - `GetPortfolio` and `GetPnL` return Internal. `broadcastSnapshot` logs WARN and records `skipped_read_error`.
+  - `checkRiskLimits` (O-2 approved, D-16) logs WARN "concentration check skipped: position read failed". The quote fetch, `applyQuotes`, `observeQuotePass(...,"risk")` and the concentration work move into the success branch, and execution falls through to the unchanged drawdown block.
+  - The pgxmock tests:
+    - Page 2 is pinned to `[]string{rows[499].Symbol, "TRADING_MODE_PAPER", rows[499].AccountId}`.
+    - The ListPositions regex is anchored to a substring unique to its SELECT. The spec names it.
+    - The guard tests stay.
+    - AC-5 uses `recordLogs` with `installMetricReader`.
+    - AC-4 asserts at most 1 batch.
+    - A new red test (4g) fails page 2 and asserts that a drawdown alert still fires, with no concentration alert and no `risk` mark-source sample.
+  - The dbtest (D-15) is a new `internal/service/position_drain_dbtest_test.go` under `//go:build dbtest`.
+    - A local `serviceTestPool` sets `lock_timeout=500ms` and uses the same skip/CI-fatal rule as `testPool`. Its duplication is the C-18 waiver recorded as D-17.
+    - The repo is `repository.NewPortfolioRepoWithDB(pool)`. The fallback is `NewPortfolioRepo(url)`.
+    - Users get an `it-357-` prefix, each test gets unique account ids, and cleanup is by prefix only.
+    - It seeds 501 rows plus a 3-row second account via `UpsertPosition`.
+    - The service sets the `marketdata`, `ledger` and `subs` fields, as `newQuoteSvc` does.
+    - AC-3 asserts count and account ids, not equity.
+    - In CI, only the portfolio step at ci.yml:1065 gains `./internal/service/...`.
+  - The D-9 smoke gate stands. The design.md disclosures stand: totals change, read skew, fill hot-path cost, and drawdown no longer suppressed.
+- **Strongest open objection (blocking): O-7.** The round-3 proposal edits ci.yml:1116, but that is the **marketdata** dbtest step (working-directory at ci.yml:1111). Only ci.yml:1065 is portfolio (ci.yml:1060). The synthesis already edits :1065 alone and rejects the :1116 edit as R-9. O-7 closes when the proposer drops :1116 from Touchpoints and Key Decisions.
+- **Non-blocking, open until the proposal answers them** (the synthesis already does):
+  - O-8: dbtest prefix and account collisions with the parallel repository-package dbtests. `testPool` deletes `it-281-%`, and account-keyed deletes are cross-user.
+  - O-9: dbtest wiring, meaning the repo constructor, the service fields and the AC-3 offline path.
+  - O-10: under `MatchExpectationsInOrder(false)`, the loose `FROM portfolio.positions` regex can let another positions query use up the pinned page-2 expectation.
+- **Closed this round:**
+  - O-1: the cursor pin is adopted, the guards are kept and the D-7 form is settled.
+  - O-2: the operator approved the fall-through.
+  - O-5: the operator ruled (a').
+  - O-6: the hot-path cost is disclosed per D-13.
+- **Floor status:** no Floor breaches.
+- **@AC changes:**
+  - `@AC-9 @feature-231` is an EXTEND, not a CHANGE, covered by the operator's 2026-11-17 sign-off on O-2. A new `@feature-357` scenario, "a position-read failure skips concentration but drawdown still alerts", is promoted at C-16.
+  - `@AC-1`..`@AC-5` of this feature are EXTENDs, not covered by an operator decision.
+  - `@AC-3 @feature-231` and `@AC-8 @feature-231` are PRESERVEs, not covered by an operator decision.
+  - `@AC-1 @feature-178` and `@AC-1 @feature-353` are PRESERVEs, covered by the operator decisions of 2026-11-17.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "The fix stays in the service layer and builds on D-1 to D-14 plus the two operator rulings of 2026-11-17. It does not touch portfolio_repo.go, the SQL, the cursor codec, the proto, or 353's internal/repository/dbtest_helpers_test.go. Features 351, 353 and 354 stay untouched.\n\n1. **Drain helper (D-1, D-3, D-6).** Add a private `listAllPositions(ctx, userID, mode, accountID)` in services/xstockstrat-portfolio/internal/service/portfolio_service.go, next to collectFills (:1111-1168).\n   - It loops `s.repo.ListPositions(..., positionDrainPageSize, token, accountID, \"\", POSITION_SIDE_UNSPECIFIED)`.\n   - `const positionDrainPageSize = 500` gets a constraint comment: it must stay at or below the repo cap, because portfolio_repo.go:137-138 turns any value above 500 into 100.\n   - It fails closed on a page error (wrapped with %w), on an empty page that still carries a token, and on a token that repeats.\n\n2. **Call sites (D-2).** Each reader drains every page first, then enriches once.\n   - GetPortfolio (:787) passes `req.GetAccountId()`.\n   - GetPnL (:932), broadcastSnapshot (:1214) and checkRiskLimits (:1283) pass `\"\"`.\n\n3. **Behaviour on a page error.**\n   - **GetPortfolio and GetPnL:** the wrapped error maps to Internal (D-4).\n   - **broadcastSnapshot (:1215-1217):**\n     - Log WARN \"portfolio snapshot skipped: position read failed\" with `user_id` and `error`.\n     - Call `telemetry.RecordSnapshot(ctx, \"skipped_read_error\")`, then return.\n     - Nothing is inserted, emitted or broadcast.\n     - The service CLAUDE.md Observability section is updated in the same PR (D-5).\n   - **checkRiskLimits (operator-approved O-2):**\n     - The bare return at :1284-1286 becomes WARN \"concentration check skipped: position read failed\".\n     - The :1287-1300 body moves into the success branch: quote fetch, applyQuotes, observeQuotePass(...,\"risk\") and summing (D-12).\n     - `positions`, `totalValue` and `posValues` are declared before the branch. totalValue stays 0, so the :1303 gate cannot fire.\n     - Execution then falls through to the drawdown block (:1312-1317), which is unchanged.\n\n4. **Red-before-green pgxmock tests (P-06).** These go in a new internal/service/portfolio_position_drain_test.go.\n   - **(a) Two pages.**\n     - Page 1 returns 501 rows and is matched with `anyArgs`.\n     - The page-2 expectation has the same arg count as page 1. Its `$n::text[]` slot is pinned to `[]string{rows[499].Symbol, \"TRADING_MODE_PAPER\", rows[499].AccountId}` (D-10). Every other slot is `pgxmock.AnyArg()`, never `anyArgs` (R-4).\n     - **New:** the ListPositions expectation regex is anchored to a substring unique to the ListPositions SELECT at portfolio_repo.go:136-206, such as its keyset row-comparison clause, not the loose `FROM portfolio.positions`. That way no other positions query in GetPortfolio or checkRiskLimits can use up the page-2 expectation under `MatchExpectationsInOrder(false)` (portfolio_quote_deadline_test.go:103). The spec names the exact substring.\n   - **(b) Account-scoped GetPortfolio (AC-3).**\n   - **(c) Page-2 WillReturnError** for GetPortfolio and GetPnL (AC-2).\n   - **(d) Guard tests.** The repeated-token case calls listAllPositions directly; the empty-page-with-token case runs GetPnL end to end.\n   - **(e) AC-5.**\n     - Uses recordLogs with installMetricReader, in non-parallel tests (D-11).\n     - Asserts the WARN messages, the `skipped_read_error` label, no InsertSnapshot, no broadcast, no concentration alert, and ExpectationsWereMet.\n   - **(f) AC-4.** Asserts `getLatestQuotesCalls <= 1` and `getLatestQuoteCalls == 0` (D-14).\n   - **(g) O-2 red test.**\n     - Page 1 succeeds and page 2 errors.\n     - GetAccountDrawdowns returns a row over `risk.max_drawdown_pct`.\n     - Asserts exactly one drawdown alert, no concentration alert, and no `risk` mark-source sample.\n\n5. **501-row dbtest (D-7 as amended by operator ruling (a')).** New file internal/service/position_drain_dbtest_test.go, `//go:build dbtest`, `package service`.\n   - **Pool.** A local `serviceTestPool(t)`:\n     - reads PORTFOLIO_DB_TEST_URL;\n     - calls t.Fatal when `CI == \"true\"`, otherwise t.Skip;\n     - parses with pgxpool.ParseConfig and sets `lock_timeout=500ms`;\n     - registers t.Cleanup(pool.Close).\n     - It carries a one-line constraint comment that points at its twin in internal/repository/dbtest_helpers_test.go:22-44, so a change to the skip/CI-fatal rule is made in both places (C-18 waiver).\n   - **Repo.** Built as `repository.NewPortfolioRepoWithDB(pool)` (portfolio_repo.go:50).\n     - The spec confirms that `*pgxpool.Pool` satisfies queryRower and that no service path in the drained readers calls `repo.Pool()`.\n     - If either check fails, the fallback is `NewPortfolioRepo(url)` with a t.Cleanup Close, which loses the lock_timeout.\n   - **Isolation.**\n     - The user-id prefix is unique to this service and must not start with `it-281-`, for example `it-357-` plus t.Name().\n     - Account ids are unique per test.\n     - t.Cleanup deletes only `portfolio.positions` rows matching that prefix. This avoids collisions with the repository-package dbtests running in parallel, whose testPool cleanup deletes `it-281-%` (dbtest_helpers_test.go:18,51-55), and with deletes keyed only on account_id (portfolio_repo.go:391).\n   - **Seeding.** 501 rows, plus a 3-row second account for AC-3, are seeded through the exported `(*PortfolioRepo).UpsertPosition` (portfolio_repo.go:62).\n   - **Service.** The PortfolioService literal sets the same fields as newQuoteSvc (portfolio_quote_deadline_test.go:105-110): `marketdata` (stubMarketData, which must also answer BatchGetBars), `ledger` (for GetPnL's collectFills) and `subs`.\n   - **Assertions.**\n     - GetPnL and GetPortfolio count all 501 rows.\n     - The AC-3 case runs on the offline-valuation path (portfolio_service.go:819-825, offline_valuation.go:112-147), so it asserts position count and account ids, not equity.\n   - **CI.** Edit only the portfolio step at .github/workflows/ci.yml:1065 (working-directory services/xstockstrat-portfolio, :1060) to `go test -tags dbtest -race -count=1 ./internal/repository/... ./internal/service/...`. The step at :1116 is the marketdata job (:1111) and is not touched.\n\n6. **D-9 gate.** A dev smoke test with at least 501 symbols for GetPnL and GetPortfolio.\n   - Pass condition: no Unavailable, and `marketdata_fetch{op=quotes}` reports ok.\n   - If it fails, fall back to per-page enrichment and relax the AC-4 test to at most 2 calls.\n\n7. **design.md disclosures.**\n   - Totals, P&L and open_positions change for users with more than 500 positions, and they may see new concentration alerts.\n   - Cross-page read skew is accepted (D-8).\n   - The fill hot path costs more: each fill runs two drains and two large quote batches (D-13).\n   - A page error no longer suppresses drawdown alerts (O-2).\n\n8. **C-16 promotion.**\n   - Promote the AC scenarios to services/xstockstrat-portfolio/acceptance/.\n   - Add a new scenario tagged `@feature-357`: \"a position-read failure skips concentration but drawdown still alerts\".\n   - context.md records that `@AC-9 @feature-231` is EXTENDED, not CHANGED, under the operator's 2026-11-17 sign-off.\n   - The spec reads the PORTFOLIO-14 and PORTFOLIO-16 invariants.",
+    "open_objections": [
+      {
+        "text": "Step 5 of the r3 proposal edits ci.yml:1116, but that is the marketdata dbtest step (working-directory services/xstockstrat-marketdata, ci.yml:1111). Only ci.yml:1065 is portfolio (ci.yml:1060). The proposal must edit :1065 alone and remove :1116 from Touchpoints and Key Decisions. The synthesis approach already does this; the objection closes when the proposer adopts it.",
+        "blocking": true
+      },
+      {
+        "text": "Dbtest isolation: the service dbtest shares the database with the repository-package dbtests, and go test runs the two packages in parallel. testPool cleanup deletes user_id LIKE 'it-281-%' (dbtest_helpers_test.go:18,51-55), and account-keyed deletes are cross-user (portfolio_repo.go:391). The spec must pin a service-unique user prefix that does not start with it-281-, use per-test unique account ids, and clean up by prefix only.",
+        "blocking": false
+      },
+      {
+        "text": "Dbtest wiring is underspecified on three points. The spec must settle each:\n- Which repo constructor to use. NewPortfolioRepo opens its own pool; NewPortfolioRepoWithDB gives a nil Pool() (portfolio_repo.go:38-50).\n- Which PortfolioService fields to set: marketdata, ledger and subs, as in portfolio_quote_deadline_test.go:105-110.\n- How the AC-3 offline path is handled. stubMarketData must answer BatchGetBars, and the test asserts count and account ids, not equity (portfolio_service.go:819-825, offline_valuation.go:112-147).",
+        "blocking": false
+      },
+      {
+        "text": "Unordered pgxmock matching (MatchExpectationsInOrder(false), portfolio_quote_deadline_test.go:103) lets another positions query whose SQL matches the loose 'FROM portfolio.positions' regex use up the pinned page-2 expectation. Fix: anchor the regex to the ListPositions SELECT shape, or use ordered matching in portfolio_position_drain_test.go.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1 @feature-178",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-1 @feature-353",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-3 @feature-231",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8 @feature-231",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @feature-231",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Repo-level ListAllPositions drain (R-1, locked).",
+      "A single unpaged repo query (R-2, locked).",
+      "Reusing db_error for a snapshot read failure (R-3, locked).",
+      "anyArgs for the page-2 expectation (R-4, locked).",
+      "An ErrPositionsUnavailable sentinel (R-5, locked).",
+      "Draining once per fill and sharing the slice (R-6, locked).",
+      "Moving seedPosition/testPool to a shared package (R-7, locked).",
+      "Copying seedPosition into the service package (R-8, locked).",
+      "Editing the marketdata dbtest step at ci.yml:1116. It belongs to xstockstrat-marketdata (ci.yml:1111) and is outside the operator's portfolio-only scope.",
+      "A dbtest that uses only NewPortfolioRepo(PORTFOLIO_DB_TEST_URL), with no local pool. It drops lock_timeout=500ms, so a lock wait would hang instead of failing fast, and the operator's (a') ruling specifies a minimal local pool. It is kept only as the fallback if *pgxpool.Pool does not satisfy queryRower.",
+      "Option (c), a repository-package oracle plus pgxmock-only service tests. The operator declined it in favour of (a'), and it does not exercise the service drain on a real database."
+    ],
+    "open_risks": [
+      "A single GetLatestQuotes batch of 501 or more symbols may exceed batch_timeout_ms (2500) inside quote_timeout_ms (4000), or hit an unverified vendor cap. The D-9 smoke test is the guard, and per-page enrichment is the fallback.",
+      "Cross-page read skew across N non-transactional statements (D-8). This is disclosed, not mitigated.",
+      "The serialized fill consumer slows down for users with more than 500 positions, because each fill runs two drains and two large quote batches (D-13).",
+      "Drain memory grows linearly with the number of positions. Only the repeated-token and empty-page guards stop a pathological loop.",
+      "Parallel package runs against a shared dbtest database can flake if the spec does not pin a unique prefix and unique account ids.",
+      "NewPortfolioRepoWithDB(pool) assumes *pgxpool.Pool satisfies queryRower and that the drained readers never call repo.Pool(). The spec must verify both.",
+      "After deploy, users with more than 500 positions see different totals and P&L and may see new concentration alerts. The release notes must say so.",
+      "The PORTFOLIO-14 and PORTFOLIO-16 invariants have not been read yet. The spec must check them."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-06",
+      "F-04",
+      "F-07",
+      "PLAT-N1"
+    ],
+    "rationale": "I checked the adversary's blocking claim against the worktree. ci.yml:1060 sets working-directory services/xstockstrat-portfolio with the step run at :1065. ci.yml:1111 sets working-directory services/xstockstrat-marketdata with the step run at :1116. So step 5 of the proposal would edit marketdata CI, which the operator scope (portfolio only) and CLAUDE.md rule 3 forbid. The synthesis approach corrects this to edit only :1065. Following the round-2 precedent for O-1, the objection stays blocking-open until the proposer adopts the correction.\n\nI also confirmed several other points in the code:\n- NewPortfolioRepo opens its own pool, and NewPortfolioRepoWithDB leaves Pool() nil (portfolio_repo.go:38-50).\n- testPool cleans up by the it-281- prefix (dbtest_helpers_test.go:18,51-55).\n- newQuoteSvc sets MatchExpectationsInOrder(false) (portfolio_quote_deadline_test.go:103).\n\nThose findings support the adversary's non-blocking collision, wiring and regex objections. The approach answers each one concretely:\n- a service-unique prefix and unique account ids;\n- NewPortfolioRepoWithDB(pool), which keeps lock_timeout, with NewPortfolioRepo as the fallback;\n- the field list from newQuoteSvc;\n- AC-3 assertions on count and account ids;\n- an anchored ListPositions regex.\nThey stay open because the proposal itself does not yet answer them.\n\nUnder the operator steer, the following objections close:\n- **O-1:** the corrected TRADING_MODE_PAPER pin from rows[499] is adopted.\n- **O-2:** sign-off is recorded, observeQuotePass sits in the success branch, the drawdown-after-page-2-failure red test is added, and a new @feature-357 scenario extends @AC-9 @feature-231.\n- **O-5:** the operator ruled (a').\n- **O-6:** the hot-path cost is disclosed per D-13.\n\nThe operator steer explicitly resolves the D-7 petition (P-1), so D-7 is listed as reopened and its amended form is recorded as a new decision. No other D-n is contradicted, no R-n is reintroduced, and no closed O-n is re-raised. @AC-9 @feature-231 is recorded as EXTEND under the operator's decision, not CHANGE.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "D-7 amended per operator ruling (a'). The mandatory 501-row dbtest for GetPnL and GetPortfolio is a new internal/service/position_drain_dbtest_test.go (//go:build dbtest, package service). It seeds through the exported (*PortfolioRepo).UpsertPosition and opens a minimal local pool with the same PORTFOLIO_DB_TEST_URL skip/CI-fatal rule and lock_timeout as testPool. The CI change is limited to the portfolio dbtest step at ci.yml:1065, which gains ./internal/service/.... 353's dbtest_helpers_test.go is untouched.",
+          "evidence": "Operator 2026-11-17 design gate r2; portfolio_repo.go:62; dbtest_helpers_test.go:22-44; ci.yml:1060,1065 (portfolio) vs ci.yml:1111,1116 (marketdata)"
+        },
+        {
+          "text": "On a position-read failure, checkRiskLimits logs WARN 'concentration check skipped: position read failed' and falls through to the unchanged drawdown block. A red test proves a drawdown alert still fires after a page-2 failure. A new acceptance scenario tagged @feature-357 records that @AC-9 @feature-231 is EXTENDED.",
+          "evidence": "Operator 2026-11-17 design gate r2 (O-2 approved); portfolio_service.go:1284-1286, :1303, :1312-1317"
+        },
+        {
+          "text": "The ~15-line skip/CI-fatal/lock_timeout logic in serviceTestPool, duplicated from testPool, is accepted as a recorded C-18 waiver in context.md. It carries a one-line constraint comment that points at its twin in dbtest_helpers_test.go:22-44.",
+          "evidence": "Operator ruling (a'); R-7/R-8 forbid moving or copying the helpers; adversary r3 C-18 note"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Editing the marketdata dbtest CI step at ci.yml:1116 to add ./internal/service/...",
+          "why": "The step belongs to xstockstrat-marketdata (ci.yml:1111). It is outside the operator's portfolio-only scope and violates 'touch only what the task requires'."
+        },
+        {
+          "text": "A service dbtest using only NewPortfolioRepo(PORTFOLIO_DB_TEST_URL), with no local pool",
+          "why": "It drops lock_timeout=500ms, so a lock wait hangs instead of failing fast, and the operator's (a') ruling specifies a minimal local pool. It is retained only as the fallback if *pgxpool.Pool does not satisfy queryRower."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Step 5 of the proposal edits ci.yml:1116, but that is the marketdata dbtest step (ci.yml:1111). Only ci.yml:1065 is portfolio (ci.yml:1060). Edit :1065 alone and remove :1116 from Touchpoints and Key Decisions.",
+          "blocking": true
+        },
+        {
+          "text": "Dbtest prefix and account collisions under parallel package runs. testPool deletes it-281-% (dbtest_helpers_test.go:18,51-55), and account-keyed deletes are cross-user (portfolio_repo.go:391). The spec must pin a service-unique prefix that does not start with it-281-, per-test unique account ids, and prefix-only cleanup.",
+          "blocking": false
+        },
+        {
+          "text": "Dbtest wiring is underspecified:\n- the repo constructor (NewPortfolioRepo vs NewPortfolioRepoWithDB, portfolio_repo.go:38-50);\n- the PortfolioService fields marketdata, ledger and subs (portfolio_quote_deadline_test.go:105-110);\n- the AC-3 offline path, which needs a BatchGetBars stub and an assertion on count and account ids, not equity (portfolio_service.go:819-825, offline_valuation.go:112-147).",
+          "blocking": false
+        },
+        {
+          "text": "Under MatchExpectationsInOrder(false) (portfolio_quote_deadline_test.go:103), the loose 'FROM portfolio.positions' regex can let another positions query use up the pinned page-2 expectation. Anchor the regex to the ListPositions SELECT shape, or use ordered matching.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-1",
+          "how": "The proposal adopts the corrected page-2 pin []string{rows[499].Symbol, \"TRADING_MODE_PAPER\", rows[499].AccountId} (D-10), keeps the repeated-token and empty-page guard tests, and the operator settled the D-7 dbtest form as (a')."
+        },
+        {
+          "id": "O-2",
+          "how": "The operator approved the fall-through on 2026-11-17. The design implements a WARN plus fall-through to drawdown with observeQuotePass in the success branch (D-12), adds the drawdown-after-page-2-failure red test (4g), and promotes a new scenario that extends @AC-9 @feature-231."
+        },
+        {
+          "id": "O-5",
+          "how": "The operator resolved the D-7 petition (P-1) as (a'): a service-package dbtest seeded via UpsertPosition, with a minimal local pool, and the portfolio CI dbtest package list extended."
+        },
+        {
+          "id": "O-6",
+          "how": "Step 7 of the proposal discloses the fill hot-path cost in design.md per D-13."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": [
+        "D-7"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
