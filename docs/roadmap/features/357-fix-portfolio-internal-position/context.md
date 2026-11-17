@@ -619,3 +619,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - 358 touches only `services/xstockstrat-trading/**`.
   - 357 touches `services/xstockstrat-portfolio/**` and `.github/workflows/ci.yml` (:1065).
 - No shared file, proto field, migration NNN or config key among 356/357/358. No merge-order constraint among them.
+
+## Session 2026-11-17 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation.** The operator approved the plan with this record (binding, verbatim): `{"mainDev":"0558e377e1bd805653e3e29b2a5853b4bdb1d3d8","dev":"28534529e105b34a718e78dca133849245b97f27","specHash":"488e1f6ba86decd22f445a12787041c83b9e7797","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9],"mismatches":[…9 entries; full text in the respec commit body…]}`. The full mismatches list is the first body line of commit `81d9f169c38a47b53e810b62eebc3cb4f706852c`.
+- **Merge.** `0558e377` (main-dev) was merged into the feature branch as `3cdfc7f38`. The merge-train resolver took main-dev's copy of the 356/358 feature docs (rule `theirs`, nothing unresolvable). ledger-guard reported clean.
+- **Re-spec commits** (`git log --first-parent origin/main-dev..HEAD`):
+  - `81d9f169c38a47b53e810b62eebc3cb4f706852c` respec(fix-portfolio-internal-position): align steps 1,2,3,4,5,6,7,8,9 with current codebase
+- **What the re-spec changed.** It updated only line citations in the step bodies; no instruction changed. Step 8 had no mismatch and is unchanged. In Step 7 the `:133` Instruments line also carries the delisting feature's `portfolio.marketdata_fetch{op=quotes|delistings,…}`, and the step edits only the `portfolio.snapshot` entry on it. The Execution Summary and Step Dependencies sections still cite pre-merge lines (for example `:481-485`, `:787`), because those sections are outside the step bodies the re-spec may edit.
+- **Tooling** (steps 1–9): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0) · hook check ✓.
+- Status → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"0558e377e1bd805653e3e29b2a5853b4bdb1d3d8","date":"2026-11-17"}
+```
