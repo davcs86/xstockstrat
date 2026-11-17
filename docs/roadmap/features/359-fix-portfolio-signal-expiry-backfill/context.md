@@ -463,3 +463,39 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The speculative-insert wait shows as `wait_event_type='Lock'`.
   - `insertBindingsTx` does not wait on an existing binding.
 - [ ] **Accepted (YAGNI, R-6): APPLY has no lock_timeout.** A wedged add-path tx pauses the one-shot job. Target: Step 2 runbook note.
+
+## Session 2026-11-17 — sdd-spec
+
+- Generated implementation-spec.md with 7 steps. Status: design-approved → implementation-ready. Tree: `feature/fix-portfolio-signal-expiry-backfill@7418bc8b`. It is 6 commits behind `origin/main-dev`, with no diff under `services/xstockstrat-portfolio`, `docs/runbooks` or `.github`.
+- The steps:
+  1. service: `applyBackfillRow` lock fix.
+  2. test: the forced-interleave tests (@AC-1, @AC-2).
+  3. service: `backfillMarkGrace` FR-3. **Lands with** Step 4.
+  4. test: the `TestBackfill_StrictUntrackedRemoval` tail rewrite (@AC-3). **Lands with** Step 3.
+  5. docs: the runbook and the runbooks index row.
+  6. docs: the durable @AC-16 CHANGE and @AC-17 retitle, tagged `@feature-359`.
+  7. docs: PORTFOLIO-18 lock-order invariant and grace note, plus the portfolio CLAUDE.md bullet.
+- Scenario coverage: @AC-1 and @AC-2 → Step 2. @AC-3 → Step 4.
+- **O-11 closed in spec.** `TestBackfill_MarkIngestInterleavingRescued` and `TestBackfill_SeedIngestInterleavingRescued` are listed as must-not-weaken, with the same status as `:443` (spec § Must-not-weaken guards).
+- **Atomic unit:** Steps 3+4. The FR-3 one-token SQL change breaks the current next-tick removal tail (`signal_expiry_backfill_dbtest_test.go:243-249`), so Step 3 cannot pass its own dbtest Verification alone.
+- **No Lands with on Steps 1–2.** Step 2 references only existing helpers, so its RED is a behavior failure, and Step 1 alone keeps every existing test green.
+- Key codebase findings:
+  - APPLY's autocommit call is `signal_expiry_backfill.go:167`, and `:168-183` stays byte-identical. The transaction idiom is copied from `readBackfillState` (`:203`, `:207`). `pgconn` is imported in-package already at `portfolio_repo.go:13`. `pgx.ReadCommitted` was not grepped (no module cache), so the Step 1 compile confirms it.
+  - The AddSymbols pool override uses the variadic `testPool(t, opts ...func(*pgxpool.Config))` (`dbtest_helpers_test.go:22`), as `watchlist_ensure_dbtest_test.go:20` does. 359 does not edit `dbtest_helpers_test.go` (354 overlap avoided).
+  - The gate predicate matches `touchWatchlistTx`'s SQL at `watchlist_repo.go:505`. The poll and goroutine precedent is `:390-418`.
+  - Other mark-then-prune tests hold under the grace: `:252-295` (the merge sets a NULL-signal row's `valid_until := $3`, `watchlist_repo.go:294`), `:320-344`, `:349` and `:443`. No other file calls `RunBackfill` except `cmd/server/backfill.go`.
+  - The @AC-3 event kind comes from `SignalID == nil` routing (`signal_prune.go:59-70`) and is guarded by `TestSignalPrune_UntrackedEventPayload` (`signal_prune_test.go:102`).
+  - Runbook touch points: `:27`, `:66-67`, §7 `:150-155` (with the R-6 no-lock_timeout operator note), §8 `:160` retitle, §9 `:177-179`, §11 `:223`, and `docs/runbooks/CLAUDE.md:14`. §6 `:122-123` (seed_expired next tick) stays correct.
+- Ledger: no line added. No new cross-feature lesson; the lock-parked interleave pattern is already at `insights.md` 2026-11-10 (signal-watchlist-expiry-pruning, reuse).
+
+## Open Threads
+
+- [x] **O-11 / :443 blindness.** Closed by the spec's must-not-weaken list (Step 2 + § Must-not-weaken guards).
+- [ ] **Operational window change.** Target: Step 5 (runbook §8, §9, §11).
+- [ ] **Accepted residual: `:443` 500ms lock_timeout.** If CI reports 55P03 under `-race`, investigate the runner and never edit the test. Target: Step 1 verification.
+- [ ] **Accepted: cluster-wide `pg_stat_activity` gate predicates.** Target: Step 2.
+- [ ] **Prove at execute.** Target: Step 2.
+  - RED branch is `addDone` and GREEN branch is `blocked`, deterministically.
+  - The speculative-insert wait shows as `wait_event_type='Lock'`.
+  - `insertBindingsTx` does not wait on an existing binding.
+- [ ] **Accepted (YAGNI, R-6): APPLY has no lock_timeout.** Target: the Step 5 runbook §7 operator note.
