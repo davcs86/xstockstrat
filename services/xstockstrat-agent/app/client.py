@@ -8,6 +8,7 @@ import json
 import logging
 import math
 import os
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -374,9 +375,28 @@ async def add_watchlist_symbol(
 # These curation tools stamp new entries MANUAL (vs the ingest_signal watchlist path's SIGNAL).
 
 
+_DELISTED_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
 def _watchlist_to_dict(wl) -> dict[str, Any]:
-    """Project a Watchlist proto to a snake_case dict (bindings + deprecated flat symbols kept)."""
-    return MessageToDict(wl, preserving_proto_field_name=True)
+    """Project a Watchlist proto to a snake_case dict (bindings + deprecated flat symbols kept).
+
+    Each binding carries ``delisted`` (bool); a flagged one adds ``delisted_reason`` (enum NAME) and
+    ``first_unservable_date`` (kept only when ``YYYY-MM-DD``).
+    """
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+
+    out = MessageToDict(wl, preserving_proto_field_name=True)
+    for entry, binding in zip(out.get("bindings", []), wl.bindings, strict=True):
+        flagged = binding.HasField("delisted")
+        entry["delisted"] = flagged
+        if not flagged:
+            continue
+        entry["delisted_reason"] = common_pb2.UnservableReason.Name(binding.delisted.reason)
+        # The date is an NYSE session date string: never parsed through a time zone.
+        if _DELISTED_DATE_RE.fullmatch(binding.delisted.first_unservable_date):
+            entry["first_unservable_date"] = binding.delisted.first_unservable_date
+    return out
 
 
 def _refused_to_list(resp) -> list[dict[str, str]]:
@@ -2143,6 +2163,30 @@ async def trigger_backfill(
     return {"job_id": resp.job_id, "status": ingest_pb2.BackfillStatus.Name(resp.status)}
 
 
+_BACKFILL_OUTCOME_PREFIX = "BACKFILL_SYMBOL_OUTCOME_"
+
+
+def _backfill_job_to_dict(job) -> dict[str, Any]:
+    """Project a BackfillJob to a snake_case dict; zero-valued fields stay visible while polling.
+
+    ``symbol_results`` entries become ``{"symbol", "outcome": empty|skipped|failed, "reason"?}``.
+    """
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+
+    out = MessageToDict(
+        job, preserving_proto_field_name=True, always_print_fields_with_no_presence=True
+    )
+    results = []
+    for r in job.symbol_results:
+        name = common_pb2.BackfillSymbolOutcome.Name(r.outcome)
+        entry = {"symbol": r.symbol, "outcome": name.removeprefix(_BACKFILL_OUTCOME_PREFIX).lower()}
+        if r.reason:
+            entry["reason"] = r.reason
+        results.append(entry)
+    out["symbol_results"] = results
+    return out
+
+
 async def get_backfill_status(
     job_id: str = "",
     status_filter: str | None = None,
@@ -2168,15 +2212,7 @@ async def get_backfill_status(
                 metadata=_metadata(),
                 timeout=_RPC_TIMEOUT_S,
             )
-        # snake_case keys; zero-valued fields (bars_processed=0 while queued) stay visible during
-        # polling.
-        return {
-            "job": MessageToDict(
-                resp,
-                preserving_proto_field_name=True,
-                always_print_fields_with_no_presence=True,
-            )
-        }
+        return {"job": _backfill_job_to_dict(resp)}
 
     if status_filter is None or status_filter == "unspecified":
         mapped = 0
@@ -2197,14 +2233,7 @@ async def get_backfill_status(
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.ListBackfillJobs(req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)
     return {
-        "jobs": [
-            MessageToDict(
-                j,
-                preserving_proto_field_name=True,
-                always_print_fields_with_no_presence=True,
-            )
-            for j in resp.jobs
-        ],
+        "jobs": [_backfill_job_to_dict(j) for j in resp.jobs],
         "next_page_token": resp.page.next_page_token,
     }
 

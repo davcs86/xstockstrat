@@ -1452,7 +1452,7 @@ py_gate xstockstrat-analysis
 
 ### Step 28 — service: agent tools return the delisted state and the per-symbol backfill outcomes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify

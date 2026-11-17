@@ -429,3 +429,15 @@
 - Divergence from the step text: the New York location is loaded once in a file-local `sync.OnceValue`
   that `nyDate` calls, not inside `nyDate` on every call — `TestHolidays_2026_2028` uses `time.Time` as a
   map key, and a fresh `*time.Location` per call makes those lookups miss.
+
+### Step 28 — service: agent tools (delisted state, per-symbol backfill outcomes) — done
+- Executed in a parallel worktree and landed out of step-number order (see Deviation Log, "parallel
+  chains").
+- `_watchlist_to_dict` marks every binding with `delisted` (+ `delisted_reason`, `first_unservable_date`
+  when flagged); `_backfill_job_to_dict` used by both returns of `get_backfill_status`, `symbol_results`
+  always present. Feature-351 docstring and runbook sentences kept. `mcp-tools.md` and the strat-lab
+  `backtest` skill files updated in the same commit.
+- TDD: AC-16 red: `{'delisted': {...}} != {'delisted': True}`; AC-14 red: `'BACKFILL_SYMBOL_OUTCOME_SKIPPED'
+  != 'skipped'` (7 failed / 4 passed on the unmodified client) → green: 11 passed.
+- Verification: ruff clean, full pytest 776 passed, plugin `validate.py` (+ `--self-test`), grep counts,
+  `check-context-map.py` — all passed. The full suite ran once on the tree holding Steps 28 and 29.
