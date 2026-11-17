@@ -1186,3 +1186,86 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - Files modified: `services/xstockstrat-trading/docs/reconciliation.md`, `services/xstockstrat-trading/CLAUDE.md`
 - Deviations: none.
 - Status: in-progress → code-completed. No insights.md entry, because nothing new generalizes beyond the existing fails.md:3311/3312 lessons.
+
+## Session 2026-11-17 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-trading-reconcile-reads (feature 358)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-trading/acceptance/fix-trading-reconcile-reads.feature | CREATE | NEW | Held position past first 500 is not flagged or halted. |
+| AC-2 | same | CREATE | NEW | A page error skips the account for the tick. |
+| AC-3 | same | CREATE | NEW | A repeated next_page_token is a failed read, with at most 2 calls per tick. |
+| AC-4 | same | CREATE | NEW | Scenario Outline with 2 examples (rpc_error, cursor_invalid). Bounded outcome label, no account_id or user_id attribute. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-trading-reconcile-reads.feature (CREATE) ---
+# Promoted from docs/roadmap/features/358-fix-trading-reconcile-reads/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-358` tag.
+# Durable business rules xstockstrat-trading already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring. These cover the reconcile
+# position-side check reading ALL platform positions (paginated) and skipping fail-safe on a failed read.
+
+Feature: xstockstrat-trading — reconcile reads every platform position page and skips safely on a failed read
+  Regression guard for defect report docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md: trading reconcile reads only the first 500 platform positions per account.
+
+  @AC-1 @FR-1 @FR-4 @regression @feature-358
+  Scenario: Reconcile does not flag a held position that sits past the first 500
+    Given broker account "acc-1" holds 501 positions "SYM001" through "SYM501", each with quantity 10
+    And the platform projection for "acc-1" holds the same 501 symbols, each with quantity 10
+    And the portfolio ListPositions fake returns "SYM001".."SYM500" on page 1 with next_page_token "p2", and "SYM501" on page 2 with an empty next_page_token
+    And NetFilledQtyBySymbol returns no filled quantity for "SYM501"
+    When reconcileTick runs for graceTicks plus one ticks
+    Then no quantity-discrepancy finding is emitted for "acc-1"
+    And "acc-1" is not halted
+
+  @AC-2 @FR-2 @regression @feature-358
+  Scenario: A page error while reading platform positions skips the account for the tick
+    Given broker account "acc-1" holds 501 positions "SYM001" through "SYM501", each with quantity 10
+    And the portfolio ListPositions fake returns "SYM001".."SYM500" on page 1 with next_page_token "p2" and returns an Unavailable error for page 2
+    And NetFilledQtyBySymbol returns no filled quantity for "SYM501"
+    When reconcileTick runs for graceTicks plus one ticks
+    Then no reconciliation candidate is recorded for "acc-1"
+    And no quantity-discrepancy finding is emitted for "acc-1"
+    And "acc-1" is not halted
+
+  @AC-3 @FR-3 @regression @feature-358
+  Scenario: Reconcile treats a repeated next_page_token as a failed read
+    Given broker account "acc-1" holds 501 positions "SYM001" through "SYM501", each with quantity 10
+    And the portfolio ListPositions fake ignores page_token and returns "SYM001".."SYM500" with next_page_token "p2" on every call
+    And NetFilledQtyBySymbol returns no filled quantity for "SYM501"
+    When reconcileTick runs for graceTicks plus one ticks
+    Then each tick makes at most 2 ListPositions calls for "acc-1"
+    And no reconciliation candidate is recorded for "acc-1"
+    And no quantity-discrepancy finding is emitted for "acc-1"
+    And "acc-1" is not halted
+
+  @AC-4 @FR-5 @regression @feature-358
+  Scenario Outline: A skipped position-side check is counted with a bounded outcome label
+    Given a metric reader is installed before the first reconcileTick
+    And broker account "acc-1" holds 501 positions "SYM001" through "SYM501", each with quantity 10
+    And the portfolio ListPositions fake behaves as in <case>
+    And NetFilledQtyBySymbol returns no filled quantity for "SYM501"
+    When reconcileTick runs for graceTicks plus one ticks
+    Then "trading.reconciliation.position_check_skipped" with outcome "<outcome>" increases by 2
+    And "trading.reconciliation.position_check_skipped" carries no "account_id" or "user_id" attribute
+    And "acc-1" is not halted
+
+    Examples:
+      | case                                        | outcome        |
+      | AC-2 (page 2 returns an Unavailable error)  | rpc_error      |
+      | AC-3 (fake ignores page_token, repeats p2)  | cursor_invalid |
+
+### Notes / ambiguities / conflicts
+- Affected service is xstockstrat-trading only (feature.md Reviewers table lists only the trading service owner). All four scenarios assert on reconcileTick behavior, so none is cross-cutting. Nothing goes to docs/sdd/business-rules/platform.feature.
+- Dedup: grep of services/xstockstrat-trading/acceptance/*.feature for next_page_token, position_check_skipped, "first 500" and @feature-358 returned nothing. grep of platform.feature for position_check_skipped, reconcil and @feature-358 also returned nothing. So there is no DUP and no OVERLAP.
+- Nearest neighbour is services/xstockstrat-trading/acceptance/fix-reconciliation-false-halt.feature (feature 206). It covers the DB-grounded netting and the lookup-error case. AC-1 here shares its "not halted" outcome but differs in cause (pagination vs. net-filled-qty), so it is not an OVERLAP. There is no contradiction: AC-2 of feature 206 (a genuinely foreign position still halts) is unaffected, because feature 358 only suppresses findings when the platform read failed.
+- The source file's `Feature:` header and description are kept in spirit. I rewrote the header title and added the promotion comment per the suite convention. The scenario steps are verbatim and only the tag lines gained @feature-358.
+- The acceptance/ directory already exists, so no lazy dir creation is needed.
+- I read acceptance.feature from the local working tree, not from origin/feature/fix-trading-reconcile-reads. I could not run git with the tools I have. The orchestrator should confirm the local copy matches the branch copy before writing.
+
+### Coverage check
+- Source scenarios: 4 (AC-1 to AC-4, where AC-4 is an outline with 2 examples). Planned (NEW+DUP+OVERLAP): 4 (4 NEW, 0 DUP, 0 OVERLAP). No scenario was skipped, and the counts match.
+```
