@@ -600,3 +600,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature`
 - Deviations: none.
 - [ ] Still open from impl-spec review: Step 2 `pg_stat_activity` assumptions, Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew, the 352 overlap.
+
+## Session 2026-11-17 — sdd-execute sequential, Step 7
+
+- Tooling setup (step 7): docs step, none needed.
+
+### Step 7 — docs: PORTFOLIO-18 lock-order invariant + grace note; portfolio CLAUDE.md Database bullet [done]
+- Extended the PORTFOLIO-18 row (no new row). The Rule cell now has the lock-order invariant: every `watchlist_signal_expiry` writer, including backfill APPLY via `applyBackfillRow`, takes the parent `watchlists` row lock first. The Why cell has the 72h `backfillMarkGrace` note. The Evidence cell lists `signal_expiry_backfill.go#applyBackfillRow`/`#backfillMarkGrace` and the two forced-interleave guard tests. The portfolio CLAUDE.md Database bullet now ends "…a backfill "untracked" mark, due 72h after APPLY."
+- Verification (local, `.sdd-logs/v-1.log`, `exit=0`): `applyBackfillRow|backfillMarkGrace` only on the PORTFOLIO-18 row (`:30`); `due 72h after APPLY` once (`CLAUDE.md:98`); `PORTFOLIO-` row count 19, the same as `origin/main-dev`. TDD: N/A (docs).
+- Last step: `node scripts/check-config-wiring.mjs --final` (`.sdd-logs/v-2.log`, `exit=0`). It printed two baseline `REPORTED:` lines, both outside this feature: `xstockstrat-analysis …fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `xstockstrat-trading …trading.go:platform/trading_state:readers-disagree`. Status: `in-progress` → `code-completed`.
+- Ledger: no insights line. The parent-row-lock pattern is already the documented portfolio contract (now PORTFOLIO-18), and the design session found no new cross-feature lesson.
+- Files modified: `services/xstockstrat-portfolio/docs/context-constitution.md`, `services/xstockstrat-portfolio/CLAUDE.md`
+- Deviations: none.
+- [ ] Open: the CI `Portfolio DB test (TimescaleDB)` job on the integration PR must show the dbtest suites green (DEV-1/2/3). The Steps 1–4 RED proofs are still unproven.
+- [ ] Still open from impl-spec review: Step 2 `pg_stat_activity` assumptions, Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew, the 352 overlap (the PORTFOLIO-18 row and portfolio CLAUDE.md edited here are rebase sites).

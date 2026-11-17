@@ -18,6 +18,7 @@
 | 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
 | 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
+| 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done (sequential); dbtest RED/GREEN deferred to CI per operator decision B |
 
 ---
 

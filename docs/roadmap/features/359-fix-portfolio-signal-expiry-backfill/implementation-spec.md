@@ -355,7 +355,7 @@ grep -c "Scenario" services/xstockstrat-portfolio/acceptance/signal-watchlist-ex
 
 ### Step 7 — docs: PORTFOLIO-18 lock-order invariant + grace note; portfolio CLAUDE.md Database bullet
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio` (docs)
 **Files**:
 - `services/xstockstrat-portfolio/docs/context-constitution.md` — modify
