@@ -569,3 +569,39 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The operator may instead drop the guard at `/sdd-review impl-spec`. Decide before `/sdd-execute` Step 5.
 - [ ] D-9 smoke (Step 9) runs after the integration merge to main-dev and before `/promote`. On failure: per-page enrichment plus re-aggregation, and relax AC-4 to `<= 2`.
 - [ ] The release notes at the integration PR must cover: totals and P&L change for users with more than 500 positions, new concentration alerts, cross-page skew (D-8), fill hot-path cost (D-13), and drawdown no longer suppressed by a page error (O-2).
+
+## Session 2026-11-17 — sdd-review impl-spec
+
+- MODE B is advisory, so the lifecycle stays `implementation-ready`.
+  - The reviewer read the trunk checkout, which has no `implementation-spec.md`. All three of its FAILs were "spec not readable".
+  - This session re-verified the spec against the branch tree instead (`origin/feature/fix-portfolio-internal-position@b23deded`).
+- Verified against the branch tree:
+  - The `portfolio_service.go` anchors: `:787`, `:932`, `:1111-1168`, `:1213-1258` and `:1279-1318`.
+  - The `ci.yml:1065` portfolio dbtest `run:` line, and the `:1116` marketdata line.
+  - `acceptance.feature` `@AC-1`..`@AC-6`. The `@AC-6 @FR-5` scenario is present on the branch.
+  - The B3b `Lands with` units 1+2+3, 4+5 and 6+7. Each unit is adjacent and symmetric, has at most 4 members, and has a matching `## Step Dependencies` line.
+  - The test-helper symbols: `newQuoteSvc`, `posRow`, `quote`, `recordingNotify`, `expectDrawdowns`, `recordLogs`, `installMetricReader`, `counterValue`, `expectBalanceList`, `expectOfflineIDList` and `stubMarketData.requested`.
+  - Step 9's Verification is a runnable `grep`.
+- Overlap verdict: WARN only.
+  - `.github/workflows/ci.yml` is shared with `345-authelia-sso`. The line ranges are disjoint, so this is a rebase-only risk.
+  - There is no migration, proto or config-key collision, so no merge-order row is needed.
+
+### Addressed
+
+- Line-anchor drift:
+  - `fakeLedger.QueryEvents` is at `watchlist_service_test.go:322-325`, not `:325-327`.
+  - `counterValue` is at `:75-91`, not `:75-93`.
+  - `attr` is at `:93`, not `:95`.
+- Step 4: the `drainRows` account is now `"acc-1"`, so it matches the page-2 cursor pin `pageTwoCursor(syms, "acc-1")`.
+- Step 6, items 4 and 5: the §RED descriptions are corrected.
+  - On the Step-5 tree the single-page read succeeds.
+  - So the RED shows as a page-1 concentration alert plus an unmet page-2 expectation.
+  - Drawdown still runs; it is not skipped.
+
+### Open Threads
+
+- [ ] Still open; the operator decides before `/sdd-execute` Step 5. The empty-page-with-a-token guard in `listAllPositions` has no test.
+  - The concrete repo cannot produce such a page (`portfolio_repo.go:193-197`).
+  - The spec records the guard as an explicit escalated trade-off: defense in depth, mirroring `collectFills`.
+  - The choice is to accept the untested guard or to drop it (C-08/P-06).
+- [ ] Still open: re-run the Mode B overlap scan once 356 and 358 have implementation specs. Both consume `ListPositions`, so they could clash with this feature.
