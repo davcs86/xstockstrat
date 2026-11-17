@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-11-17-portfolio-internal-position-reads-truncate-at-500-defect.md` |
+| 2026-11-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@
 
 ## Next Action
 
-`/sdd-design fix-portfolio-internal-position quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-portfolio-internal-position quick` — quick design recommended (SEV-2 bug, single service, no proto/DB/config gates; overlap is file-level rebase-only; do not merge before feature 353 is on main-dev)
