@@ -266,3 +266,32 @@
   `scripts/migration-assertions/ingest-017.sql`, `scripts/migration-rerun.py`
 - Deviations: none. TDD: N/A (migration). Live apply / replay / refused-down / `ingest-017.sql` are
   proven by CI `migration-rerun` on the PR, not here.
+
+### Step 6 — service: ingest stores, validates and returns `extraction_instructions` [done]
+- Repository: `is_mediated_source_type`, `normalize_extraction_instructions`,
+  `validate_extraction_instructions`, the cap constant; the column appended last in `_LIST_COLS`,
+  `insert_source` (`$10`) and `update_source` (`$9`). Servicer: mask path, template payload field,
+  `_source_to_proto`, `_validate_source_write` (config → credential → instructions), noop forced in
+  `_register_source` and the update merge, ManageTemplate CREATE/UPDATE validation. Docs: the 017
+  bullet and the findings row. Unit with Step 7.
+- Files modified: `services/xstockstrat-ingest/app/repositories/signal_sources.py`,
+  `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/CLAUDE.md`,
+  `services/xstockstrat-ingest/docs/context-constitution-findings.md`
+- Deviations: none.
+- **PR note (design.md § Open Risks):** an admin-authored mediated template with no prose no longer
+  instantiates and cannot be updated until prose is added (D-12).
+
+### Step 7 — test: ingest validation, merge rules and seeded prose [done]
+- AC-1 / AC-2 red on the pre-Step-6 tree: `tests/test_extraction_instructions.py` 31 failed, 10
+  passed — the handler passed no `extraction_instructions` to `insert_source` and accepted a
+  mediated register without prose → green: ingest suite 587 passed, coverage 86.97%; ruff clean.
+  With Step 6 alone the expected reds were the three `test_signal_sources.py` repository tests and
+  `test_ac7_prnewswire…` (no seeded prose without the overlay); all green after this step.
+- Covers AC-1..5, 9, 16..23, 25, 26, plus precedence (ALREADY_EXISTS / NOT_FOUND / PERMISSION_DENIED
+  ahead of the new check), the maskless rule (D-11), type changes in both directions, the lazy noop
+  flip (D-15) and reactivate/deactivate on a legacy row.
+- Files modified: `services/xstockstrat-ingest/tests/test_extraction_instructions.py` (new),
+  `services/xstockstrat-ingest/tests/test_signal_sources.py`,
+  `services/xstockstrat-ingest/tests/test_seed_source_templates.py`
+- Deviations: none. Note for future tests: calling `.extend(())` on `request.update_mask.paths`
+  sets the mask's presence, so a "maskless" request must not touch `update_mask` at all.

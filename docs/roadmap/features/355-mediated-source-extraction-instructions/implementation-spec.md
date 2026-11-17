@@ -436,7 +436,7 @@ payload key by the down's `payload - 'extraction_instructions'`. The apply, repl
 
 ### Step 6 — service: ingest stores, validates and returns `extraction_instructions`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/repositories/signal_sources.py` — modify
@@ -583,7 +583,7 @@ grep -c '"mediated_[a-z_]*"' app/handlers/servicer.py   # expect 1 — _SS_CREDE
 
 ### Step 7 — test: ingest validation, merge rules and seeded prose
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_extraction_instructions.py` — create
