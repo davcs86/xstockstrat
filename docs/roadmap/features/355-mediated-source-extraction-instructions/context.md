@@ -97,3 +97,7 @@
   idempotence claim was wrong. Folded in D-22 (prose corrections) and D-23 (step refinements).
   Open for the gate: O-27 recency bound, O-28 PR Newswire / Snacks rules, O-29 Form 4 joint
   filings, O-30 `8-K/A` skipped + sell without `valid_until`.
+- **Round-3 gate — user decisions:** recency bound 24 hours; PR Newswire + Robinhood Snacks
+  watchlist-only (0.3, 7-day expiry, never buy/sell); Form 4 cluster = two or more separate filings
+  by different reporting persons; `8-K/A` skipped, sell without `valid_until`, and the gRPC size
+  limit as a recorded risk were shown and left as drafted; **run another round** (round 4).
