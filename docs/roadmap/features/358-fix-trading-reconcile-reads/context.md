@@ -1046,3 +1046,48 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - No alert or dashboard; a future one must bring its `packages/otel/produced-signals.tsv` row. Target: a future PR.
 - 358 must not merge ahead of feature 353's lifecycle. Target: the integration PR and merge-order.
 - `/sdd-spec` must append FR-5 and `@AC-4 @FR-5` (operator r6). Target: `/sdd-spec`.
+
+## Session 2026-11-17 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status: design-approved → implementation-ready.
+  1. service: the counter and the typed `ReconcileSkipOutcome` in `internal/telemetry/otel.go`
+  2. test: the allowlist test registers the counter
+  3. service: the drain helper, sentinels and mapper, plus the `reconcileTick` change in `internal/service/trading.go`
+  4. test: the 358 regression and hardening tests in `trading_reconciliation_test.go`
+  5. docs: `docs/reconciliation.md` and the service `CLAUDE.md`
+- Per the operator decision (design gate r6), appended FR-5 to product-spec.md and `@AC-4 @FR-5 @regression`
+  (a Scenario Outline with `rpc_error`/`cursor_invalid` rows) to acceptance.feature. IDs are append-only.
+  This closes the r6 open thread "`/sdd-spec` must append FR-5 and `@AC-4 @FR-5`".
+- Assumptions:
+  - The batch-supplied feature path was malformed (`docs/roadmap/features/docs/roadmap/features/358-…`). The
+    files live at `docs/roadmap/features/358-fix-trading-reconcile-reads/`, the same finding as the
+    sdd-review session.
+  - Durable-suite promotion of @AC-1..@AC-4 is left to `/sdd-execute` at integration (SKILL step 2.5). It is
+    not a spec step.
+- Key codebase findings (re-verified at this tree):
+  - The defect site `trading.go:2231-2239`, the `ppErr` skip at :2240-2243 and the rebuild at :2244-2247 match recon.
+  - `trading.go` aliases the status package as `grpcstatus` (:23) and already imports `errors`, `codes`,
+    `metadata` and `telemetry` (:7, :20, :22, :41), so the mapper needs no import change.
+  - The counter block is at `otel.go:331-338` and `KeyOutcome` at :312. `NewCounter` is lazy (:191-205), so
+    `installMetricReader` sees it. The allowlist test is `internal/service/telemetry_allowlist_test.go`
+    (`minInstruments` :37-40, `driveAllInstruments` :44-52).
+  - The deadline fixture reuses `snapshotInts` (`trading_ibkr_auth_test.go:121-127`) for
+    `broker.timeout_ms = 50`. grpc is v1.83.2, so `status.Code` unwraps `%w`-wrapped errors.
+- Atomic units: none. No §C trigger fires. The steps are ordered so each passes its own Verification:
+  - The RED for Step 1 is Step 2's `minInstruments` entry.
+  - The RED for Step 3 is Step 4's behavioural subtests, which use only existing symbols.
+  - Step 4's hardening table is written after Step 3, because it calls Step 3's symbols.
+
+### Decisions
+
+- The spec carries design.md § Chosen Approach verbatim, including the operator r6 resolutions:
+  - the `deadline` mapping has both forms;
+  - the AC-2 deadline fake returns a plain `context.DeadlineExceeded`;
+  - there is a single `cursor_invalid` label;
+  - `context.Canceled` maps to `rpc_error`.
+
+### Open Threads
+
+- Next: `/sdd-review fix-trading-reconcile-reads impl-spec`, then `/sdd-execute fix-trading-reconcile-reads`.
+- These carry over from the sdd-design session unchanged: the shutdown burst, tick-time growth, the
+  `resolveUnknownIntents` skip, the merge order after feature 353, and no alert or produced-signals row.
