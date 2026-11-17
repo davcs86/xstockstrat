@@ -72,3 +72,11 @@
   omitted" exception (D-11, R-6); (2) `ManageTemplate` CREATE/UPDATE require prose on a mediated
   payload (D-12) — goes beyond FR-1..14, accepted; (3) no `merge-order.md` row for the 328 overlap;
   (4) run round 2.
+- Round 2 (2026-11-17): proposer + adversary run. No Floor breach, no register violation, no
+  petitions; the decision table yields the right gRPC code for every `@AC-1..23`. Folded in D-13..D-19
+  and R-7. **Proposer finding:** `extract_website_content` returns the whole response body —
+  `scrape_selector` is never applied (`agent/app/tools.py:630-647,2713-2772`) — so seeded prose is
+  written for raw Atom XML / list-page HTML.
+- Still open after round 2: O-15 (seeded prose floods the signals watchlist; no `valid_until`; sell
+  conviction sits on the alert threshold) — blocking, operator's call; O-20 (feed-structure claims
+  unverified) — a live read-only fetch of the three staging sources is running to check them.
