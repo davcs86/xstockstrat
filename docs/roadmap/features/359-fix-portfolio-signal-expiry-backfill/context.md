@@ -499,3 +499,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The speculative-insert wait shows as `wait_event_type='Lock'`.
   - `insertBindingsTx` does not wait on an existing binding.
 - [ ] **Accepted (YAGNI, R-6): APPLY has no lock_timeout.** Target: the Step 5 runbook §7 operator note.
+
+## Session 2026-11-17 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 6 warnings, no Floor breaches (PASS WITH WARNINGS; advisory, lifecycle unchanged at `implementation-ready`).
+- Overlap: WARN, file-level only, all with `352-delisted-symbol-handling` (`implementation-ready` on `origin/main-dev`). No migration NNN, proto field or config-key collision.
+  - The PORTFOLIO-18 row of `services/xstockstrat-portfolio/docs/context-constitution.md`.
+  - `services/xstockstrat-portfolio/CLAUDE.md`, on different lines.
+  - The `docs/runbooks/CLAUDE.md` index table.
+  - Behavioural overlap only: 352 adds a delisting removal to the same prune tick. No shared file.
+- **Addressed** (implementation-spec.md § Step Dependencies):
+  - Process warning: added an explicit execute-order bullet. Write Step 2 first and capture RED, then apply Step 1.
+  - Overlap: added a bullet naming 352's three textual same-file overlaps. The rebase falls on whichever feature lands second, and no merge-order row is needed. 352's spec lines were verified on `origin/main-dev` (`:287`, `:509`, `:1197-1198`).
+- **No change needed** (re-verified; already recorded in the spec or design):
+  - Step 3/4 `Lands with` pairing is symmetric and correct.
+  - Step 1/3 YAGNI: D-2 and D-7 are recorded decisions. The R-6 no-lock_timeout operator note is in Step 5.
+- **Still open** (announce at every /sdd-execute checkpoint):
+  - [ ] Step 1: `pgx.ReadCommitted` and `pgconn.CommandTag` were not confirmed against the module cache. Only the Step 1 compile confirms them. Low risk.
+  - [ ] Step 2: the RED/GREEN claim relies on `pg_stat_activity` behaviour that is still unproven: the speculative-insert wait showing as `Lock`, and `insertBindingsTx` not waiting on the existing binding. A divergence escalates to the debate register and is never relaxed in place (C-08).
+  - [ ] Step 2: the 10s-poll gates may be flaky on slow CI runners. If one flakes, investigate the runner. Never loosen the strict-equality assertions.
+  - [ ] Step 4: the `[t0+72h, t1+72h]` bound uses DB `now()` sampled on separate pool connections around APPLY. It is sound on a single server clock, but watch for a bound failure caused by sampling skew, not by the code. Advisory.
+  - [ ] Overlap with 352: whichever of 359 and 352 lands second must rebase the PORTFOLIO-18 row, the portfolio CLAUDE.md edit and the runbooks index row (Steps 5 and 7).
