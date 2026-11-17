@@ -5,6 +5,9 @@ Feature: delisted-symbol-handling
 
   # The confirmation window is the default of 5 trading days (D-8, D-13). 2026-11-09 is a Monday.
 
+  Background:
+    Given xstockstrat-portfolio's delisting refresh runs after every watchlist change and after every asset-set load
+
   @AC-1 @FR-1
   Scenario: A symbol unservable for the whole confirmation window is flagged delisted
     Given the confirmation window is 5 trading days
@@ -63,10 +66,11 @@ Feature: delisted-symbol-handling
   Scenario: Watchlist-driven work stops requesting a flagged symbol without a restart
     Given the user-created watchlist "Tech" holds "AAPL" and "ROKU"
     And both symbols are warm in marketdata
+    And no quote or price read names "ROKU" after it is flagged
     When "ROKU" becomes flagged delisted
     Then "ROKU" is no longer in the warm set, with no service restart
     And the bars stored by the next bar-ingest cycle include "AAPL" and no new bar for "ROKU"
-    And the opportunities listed after the next scan of "Tech" include "AAPL" and none for "ROKU"
+    And the opportunities listed after the next scan of "Tech" that follows xstockstrat-portfolio's next delisting refresh include "AAPL" and none for "ROKU"
 
   @AC-9 @FR-6
   Scenario: Stored history of a flagged symbol stays readable

@@ -296,7 +296,7 @@ portfolio alerts for at most 100 per tick. A runbook note gives the query that c
 - `C-07` / `F-01` — honored by: three new numbered migrations, none edited.
 - `C-10` / `C-14` — honored by: the state is decorated on every watchlist-returning RPC and reaches the agent tools and the `/insights` row.
 - `C-12` / `C-13` — honored by: UI fixtures through `watchlistMock` and `INVENTORY.md`; Go fixtures in `internal/testdata/`.
-- `C-15` — honored by: every `@AC-n` maps to a mechanism; AC-29 amended with operator sign-off.
+- `C-15` — honored by: every `@AC-n` maps to a mechanism; AC-29, AC-8 and the Background amended with operator sign-off.
 - `C-16` — see Business Rules Touched.
 - `C-18` — honored by: one decider, one deleter per resource, no new edge, no portfolio storage.
 - `F-06` — honored by: no new pool; the new queries use marketdata's and portfolio's existing pooled connections.
@@ -308,10 +308,10 @@ portfolio alerts for at most 100 per tick. A runbook note gives the query that c
 - CHANGE `@AC-17 @FR-3 @feature-282` "A held offline unservable symbol stays valued and warm across later refreshes" (`docs/sdd/business-rules/platform.feature`) — for flagged symbols only, the symbol leaves the warm set at each load and is re-warmed by the next quote read; it stays valued; signed off by the operator 2026-11-16 (context.md, debate D-11).
 - PRESERVE `@AC-16`, `@AC-26` `@feature-282` (marketdata `filter-otc-symbols.feature`) — `markWarm` stays ungated.
 - PRESERVE `@AC-19 @feature-282` (`services/xstockstrat-portfolio/acceptance/filter-otc-symbols.feature`) — replace-all still drops a stored unservable symbol.
-- PRESERVE `@AC-2`..`@AC-8`, `@AC-12`, `@AC-13` `@feature-281` (`services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature`) — `pruneListTx` untouched; the new removal never waits, emits neither 281 event and deletes the expiry rows of what it removes. `@AC-4` and `@AC-5` ("never removed by the recurring prune", "manual entries are never pruned") are read as rules of the expiry prune; the delisting removal is a different mechanism in the same tick and, under spec D-2, removes a flagged symbol from a system-managed list whatever the entry's source.
+- PRESERVE `@AC-2`..`@AC-8`, `@AC-12`, `@AC-13` `@feature-281` (`services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature`) — `pruneListTx` untouched; the new removal never waits, emits neither 281 event and deletes the expiry rows of what it removes. `@AC-4` and `@AC-5` ("never removed by the recurring prune", "manual entries are never pruned") are read as rules of the expiry prune; the delisting removal is a different mechanism in the same tick and, under spec D-2, removes a flagged symbol from a system-managed list whatever the entry's source (reading signed off by the operator 2026-11-17).
 - PRESERVE `@AC-30 @feature-334` (`services/xstockstrat-ingest/acceptance/webhook-fanout-callback.feature`) — payload keeps its 8 keys.
 - PRESERVE `@AC-6 @feature-261`, `@AC-9 @feature-343`, `@AC-41 @feature-294`, `@AC-1`/`@AC-6` `@feature-291`, `@feature-347` loop bounds, `@feature-242` untargeted push.
-- CHANGE `@AC-1 @FR-1 @feature-154` "Portfolio enumerates the distinct cross-user union of watchlist symbols" (`services/xstockstrat-portfolio/acceptance/fundsignal-watchlist-universe.feature`) — the response is no longer exactly the distinct set: flagged symbols are left out (FR-5); operator sign-off pending at the round-4 gate.
+- CHANGE `@AC-1 @FR-1 @feature-154` "Portfolio enumerates the distinct cross-user union of watchlist symbols" (`services/xstockstrat-portfolio/acceptance/fundsignal-watchlist-universe.feature`) — the response is no longer exactly the distinct set: flagged symbols are left out (FR-5); signed off by the operator 2026-11-17 (context.md, round-4 gate).
 - PRESERVE `@AC-3`, `@AC-4` `@feature-154` (`services/xstockstrat-analysis/acceptance/fundsignal-watchlist-universe.feature`) — written over the enumeration output.
 - EXTEND `@AC-2 @feature-180` (`services/xstockstrat-analysis/acceptance/watchlist-readiness-precompute.feature`) — flagged bindings are skipped.
 - EXTEND `@AC-14 @feature-294` — outcome value `skipped`.

@@ -167,3 +167,21 @@
     was servable can let it flag earlier than the 5-day rule (logged and counted).
   - **Scenario amendment approved (C-15)**: AC-29 Given becomes "ATCH is flagged delisted and its flag
     alert was sent". ID and outcome unchanged.
+
+## Session 2026-11-17 — sdd-design (round 4 and its gate)
+
+- Round 4 attacked the consolidated draft design.md. One blocking defect (a deadlock between the
+  delisting removal and `UpdateBinding`) fixed by never waiting on a lock (debate D-25). D-26, D-27
+  added (New York calendar date, rebuild before recovery alerts, one snapshot per sync call).
+- **Round-4 gate, operator rulings (2026-11-17):**
+  - **Run a fifth round** (the cap) before approval.
+  - **C-16 sign-off**: portfolio `@AC-1 @feature-154` changes — the cross-user enumeration returns the
+    distinct set minus flagged-delisted symbols. 281 `@AC-4` and `@AC-5` keep their text and are read
+    as rules of the expiry prune: the delisting removal takes a flagged symbol off a system-managed
+    list even if it was added manually.
+  - **Scenario amendments approved (C-15)**: AC-8 gains "And no quote or price read names ROKU after
+    it is flagged" and its scan line reads "after the next scan of Tech that follows
+    xstockstrat-portfolio's next delisting refresh"; a Background line is added: "xstockstrat-portfolio's
+    delisting refresh runs after every watchlist change and after every asset-set load".
+  - **Acknowledged**: the approved 15 s value also bounds each alert send; portfolio stops sending at
+    the first failed alert and the rest are re-sent after the lease.

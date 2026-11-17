@@ -116,14 +116,14 @@
 | O-42 | 3 | AC-29's Given must state that the flag alert was sent; changing an approved scenario needs operator sign-off (C-15). | yes | closed @ round 3 (operator approved the AC-29 Given amendment) |
 | O-43 | 3 | Residual: a load whose hook times out misses a reset, and the symbol can then flag earlier than FR-1 allows (AC-25). | no | waived @ round 3 (user: accepted residual, logged and counted) |
 | O-44 | 4 | `removeDelistedListTx` held the parent lock and deleted bindings without SKIP LOCKED; `UpdateBinding` locks binding then parent, a deadlock cycle, and it breaks the never-waits guarantee behind 281 `@AC-12`. | yes | closed @ round 4 (D-25) |
-| O-45 | 4 | `EmitAlert` in portfolio has no deadline; 100 claims at 15 s each outlast the lease. | no | closed @ round 4 (D-25; operator acknowledgement of the 15 s value for alert sends pending at the gate) |
+| O-45 | 4 | `EmitAlert` in portfolio has no deadline; 100 claims at 15 s each outlast the lease. | no | closed @ round 4 (D-25; operator acknowledged the 15 s value for alert sends) |
 | O-46 | 4 | The redelivery wording was false when the earlier tick crashed before removing, and list names from a lost first alert are never re-sent. | no | closed @ round 4 (D-25; residual listed in design.md Open Risks) |
 | O-47 | 4 | The claim filter and `unservable_in_current_set` must come from one snapshot read. | no | closed @ round 4 (D-27) |
 | O-48 | 4 | A re-read after the claim could drop a claimed symbol from the response, later yielding a recovery alert for an unreported flag. | no | closed @ round 4 (D-27) |
 | O-49 | 4 | `SessionDate` shifts by +6 h; using it for the hook's day misdates evening loads. | no | closed @ round 4 (D-26) |
 | O-50 | 4 | Recovery alerts were sent before the flagged-set rebuild inside the 30 s hook budget. | no | closed @ round 4 (D-26) |
-| O-51 | 4 | Portfolio `@AC-1 @feature-154` is a CHANGE (the union is no longer exactly the distinct set), not an EXTEND; 281 `@AC-4`/`@AC-5` need a stated reading (C-16). | yes | open |
-| O-52 | 4 | AC-8 does not hold as written (a quote read re-warms a flagged symbol; the scan clause depends on portfolio's next refresh), and many scenarios implicitly assume portfolio's refresh has run (C-15). | yes | open |
+| O-51 | 4 | Portfolio `@AC-1 @feature-154` is a CHANGE (the union is no longer exactly the distinct set), not an EXTEND; 281 `@AC-4`/`@AC-5` need a stated reading (C-16). | yes | closed @ round 4 (operator signed off the 154 `@AC-1` CHANGE and the stated reading of 281 `@AC-4`/`@AC-5`) |
+| O-52 | 4 | AC-8 does not hold as written (a quote read re-warms a flagged symbol; the scan clause depends on portfolio's next refresh), and many scenarios implicitly assume portfolio's refresh has run (C-15). | yes | closed @ round 4 (operator approved the AC-8 amendment and the Background line) |
 | O-53 | 4 | The design did not list the documents that change in the same PR. | no | closed @ round 4 (design.md §7a) |
 | O-54 | 4 | `REPORTED` entries re-enter the removal set every tick; use one set-based lookup and log alert-less removals. | no | closed @ round 4 (design.md §5 step 5) |
 | O-55 | 4 | H4 does not refresh the reason stored at start. | no | closed @ round 4 (D-26: the start reason is kept) |
