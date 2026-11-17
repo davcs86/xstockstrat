@@ -308,7 +308,7 @@ executes none of them proves nothing, `tdd-gate.md` last bullet). RED on the pre
 
 ### Step 3 — test: real-Postgres tests for the concurrent ensure and the id order
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go` — modify

@@ -124,3 +124,11 @@
   - AC-10: red N/A — characterization test of existing cap behavior (touches no code).
 - Files modified: `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`, this file
 - Deviations: none
+
+### Step 3 — test: real-Postgres tests for the concurrent ensure and the id order [done — dbtests NOT executed locally]
+- Refactored `testPool` into a one-line wrapper over new `testPoolWithLockTimeout(t, lockTimeout)` (callers unchanged: `testPool(t)` still used by the feature-281 dbtests) and added `TestEnsureSystemManaged_ConcurrentSingleRow` (5 concurrent ensures → same id, exactly 1 system row, `lock_timeout` 5s) and `TestListByUser_OrdersByWatchlistIDAfterEnsure` (3 manual rows seeded with explicit non-ascending ids, ensure, one `ListByUser(…,100,"")`, 4 rows, 1 system, ids strictly ascending under Go `<`). Inline `INSERT` seeding (C-13, single consumer); no new helper that the token fix could duplicate.
+- TDD: `red N/A — characterization of existing repository behavior; new dbtests added` (no production change in this step).
+- Verification run (exit=0): `go vet -tags dbtest` · `golangci-lint run` → "0 issues" (one staticcheck QF1001 on this step's own new line fixed first) · `go test -tags dbtest -race … -v` → **both tests SKIP** ("PORTFOLIO_DB_TEST_URL unset"); no-tag `go vet ./internal/repository/` ok; existing `testPool(t)` callers unchanged. **A SKIP is not evidence** (fails.md:3055) and no database was started here (hard constraint) — the proof is the CI job `portfolio-db-test` on this branch's PR (#1561).
+- [ ] unaddressed: record the `portfolio-db-test` result for the commit carrying Step 3 (both tests must PASS, not SKIP, under `CI=true`).
+- Files modified: `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go`, `services/xstockstrat-portfolio/internal/repository/watchlist_ensure_dbtest_test.go` (new)
+- Deviations: goroutine results are written to distinct slice indices instead of "collected under a mutex" (same race-freedom, no lock needed); logged here only.

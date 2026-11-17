@@ -21,6 +21,13 @@ const dbtestUserPrefix = "it-281-"
 // lock wait fail fast, so a test that would block reports an error instead of hanging.
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	return testPoolWithLockTimeout(t, "500ms")
+}
+
+// testPoolWithLockTimeout is testPool with a caller-chosen lock_timeout, for tests whose
+// concurrent writers legitimately wait on each other.
+func testPoolWithLockTimeout(t *testing.T, lockTimeout string) *pgxpool.Pool {
+	t.Helper()
 	url := os.Getenv("PORTFOLIO_DB_TEST_URL")
 	if url == "" {
 		if os.Getenv("CI") == "true" {
@@ -32,7 +39,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	if err != nil {
 		t.Fatalf("pgxpool.ParseConfig: %v", err)
 	}
-	cfg.ConnConfig.RuntimeParams["lock_timeout"] = "500ms"
+	cfg.ConnConfig.RuntimeParams["lock_timeout"] = lockTimeout
 	ctx := context.Background()
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
