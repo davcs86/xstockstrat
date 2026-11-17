@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
+**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
 
 ## Rounds
 
@@ -11,7 +11,8 @@
 | 1 | 2026-11-16 | /sdd-design | 11 | 10 | 3 | 16 | 0 | yes |
 | 2 | 2026-11-17 | /sdd-design | 8 | 1 | 22 | 14 | 0 | yes |
 | 3 | 2026-11-17 | /sdd-design | 5 | 3 | 12 | 12 | 0 | yes |
-| 4 | 2026-11-17 | /sdd-design | 3 | 0 | 9 | 12 | 0 | yes |
+| 4 | 2026-11-17 | /sdd-design | 3 | 0 | 11 | 12 | 0 | yes |
+| 5 | 2026-11-17 | /sdd-design | 1 | 0 | 2 | 3 | 1 | yes |
 
 ## Settled Decisions
 
@@ -45,6 +46,7 @@
 | D-25 | 4 | Portfolio's delisting removal never waits: bindings are locked `FOR UPDATE SKIP LOCKED` and only the locked set is deleted; a list whose bindings were skipped counts like a locked list. Each alert send is bounded at 15 s and the alert phase stops at the first failed send. A redelivery alert says it may repeat an earlier alert and names the lists removed on its own tick. | `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go:361-372`; `services/xstockstrat-portfolio/internal/repository/signal_expiry_repo.go:87-103`; insights.md:4297; fails.md:3189 | settled |
 | D-26 | 4 | The hook's day is the New York calendar date of now, a trading day iff `IsTradingDay`; the existing `SessionDate` (+6 h shift) is not used. The flagged-set rebuild and warm-set deletion run right after H5 and before the recovery alerts, each of which is bounded at 15 s. The stored reason is the one observed at start. | `services/xstockstrat-portfolio/internal/marketsession/marketsession.go:20-25`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:2160-2170` | settled |
 | D-27 | 4 | The sync handler reads the asset-set pointer once per call and builds its response from the claim's own returned rows: `CLAIMED` or `REDELIVERY` implies `unservable_in_current_set`, and an unloaded asset set claims nothing. A claim covers only symbols unservable in that snapshot. | `services/xstockstrat-marketdata/internal/service/asset_servability.go:46-49,135` | settled |
+| D-29 | 5 | Ingest stores `symbol_results` keyed by chunk; within a chunk each attempt's results replace the entries of every symbol it was sent and a sent symbol absent from the results is dropped as written; a resumed chunk replaces its own entry; the job view merges across chunks at read (failed > skipped > empty). The invariant holds in both directions except for chunks completed before a restart. H4's window test is a date cutoff computed in Go and re-checked inside the statement. | `services/xstockstrat-ingest/app/handlers/servicer.py:909-912,962,974-978`; fails.md:3573 | settled |
 | D-9 | 1 | Only an error from the data source turns a flagged symbol into `skipped`. A failure writing to our own database stays `failed` in both backfill kinds. | spec D-16 ("the source returns any error"); `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1561-1565,2344` | settled |
 
 ## Rejected Alternatives (locked)
@@ -127,6 +129,9 @@
 | O-53 | 4 | The design did not list the documents that change in the same PR. | no | closed @ round 4 (design.md §7a) |
 | O-54 | 4 | `REPORTED` entries re-enter the removal set every tick; use one set-based lookup and log alert-less removals. | no | closed @ round 4 (design.md §5 step 5) |
 | O-55 | 4 | H4 does not refresh the reason stored at start. | no | closed @ round 4 (D-26: the start reason is kept) |
+| O-56 | 5 | The per-symbol merge into one job-level column kept a FAILED entry for a symbol written on a retry or a resume (FR-8, FR-9). | yes | closed @ round 5 (D-29) |
+| O-57 | 5 | H4's trading-day window cannot be evaluated per row in SQL; passing a precomputed symbol list is unsafe with a second instance. | no | closed @ round 5 (D-29) |
+| O-58 | 5 | The new marketdata internal-caller grant is header-only; the sync can clear the union and the ack can suppress alerts. Bind the grant to the mTLS peer identity, or record a waiver (PLAT-9). | no | open |
 
 ## Reopen Petitions
 

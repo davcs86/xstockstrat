@@ -1,7 +1,7 @@
 # Design: delisted-symbol-handling
 
 **Created**: 2026-11-17
-**Rounds**: 4 (full; termination: DRAFT — under round-4 adversarial review, not approved)
+**Rounds**: 5 (full; termination: DRAFT — awaiting the round-5 gate, not approved)
 **Approved by**: _pending_
 **Grounded in**: recon.md
 **Debate register**: debate.md
@@ -72,7 +72,7 @@ symbol order (D-3, D-21):
 | H1 reset (servable again) | unflagged started rows, servable now | first-unservable date and reason → NULL |
 | H2 reset (left every watchlist) | unflagged started rows whose symbol is not in `watched_symbol`; runs only when `watched_symbol` is non-empty | same; count logged at INFO (D-13) |
 | H3 start | symbols in `watched_symbol`, unservable now, with no row or a reset row | first-unservable date = `d`, reason set |
-| H4 flag | unflagged started rows, unservable now, in `watched_symbol`, with `TradingDaysInclusive(first, d) ≥ N` | `delisted_at = now()` |
+| H4 flag | unflagged started rows, unservable now, in `watched_symbol`, with `first_unservable_date ≤ c`, where `c` is the Nth trading day counting back from `d` inclusive (computed in Go, bound as date-only text); the window test is re-checked inside the statement | `delisted_at = now()` |
 | H5 recover | flagged rows, servable now (the union is ignored) | all state columns → NULL; returns whether the flag alert had been claimed |
 
 After the statements finish — completed, stopped at an error, or skipped on a closed day — the hook
@@ -212,12 +212,17 @@ step directly after the change or load; at runtime it runs only on the prune tic
 - Ingest migration `017` adds `ingest.backfill_jobs.symbol_results JSONB`, written per chunk as JSON
   text inside the locked `update_job` and parsed on read
   (`xstockstrat-ingest/app/handlers/servicer.py:980-1004`, `app/repositories/backfill_jobs.py:13-26`).
-  Results merge per symbol (failed > skipped > written > empty); a whole-chunk RPC failure writes
-  `FAILED` for every symbol of the chunk. Resume keeps the stored results of completed chunks and never
-  seeds `failed_symbols` (R-9). Invariant, with a test per loop exit arm in both marketdata loops and in
+  `symbol_results` is stored keyed by chunk (the chunk id, or `"fundamentals"`). Within a chunk, each
+  attempt's results replace the entries of every symbol that attempt was sent, and a sent symbol absent
+  from the results is dropped as written, so a symbol that fails and is then written on a retry leaves
+  no `FAILED` entry. A resumed chunk replaces its own entry. The job view merges across chunks at read
+  with failed > skipped > empty. A whole-chunk RPC failure writes `FAILED` for every symbol of the
+  chunk. Resume keeps the stored entries of completed chunks and never seeds `failed_symbols` (R-9). Invariant, with a test per loop exit arm in both marketdata loops and in
   ingest's chunk, retry and resume paths: every symbol in `failed_symbols` has exactly one `FAILED`
   result; no `SKIPPED` or `EMPTY` symbol is in `failed_symbols`; results merge per symbol and are never
-  replaced per chunk; a whole-chunk `FAILED` may override an earlier `SKIPPED`. The PARTIAL rules (`servicer.py:705-707`, `:827-833`) and the 8-key
+  replaced across chunks; a whole-chunk `FAILED` may override an earlier `SKIPPED`; a symbol has a
+  `FAILED` result only if it is in `failed_symbols`, except the symbols of chunks completed before a
+  restart (Open Risks). The PARTIAL rules (`servicer.py:705-707`, `:827-833`) and the 8-key
   webhook payload are unchanged (R-6).
 
 ### 7. Consumer surfaces (C-14)
@@ -317,6 +322,8 @@ K drains from system-managed lists over ⌈K/100⌉ prune ticks. Portfolio deplo
 - [ ] A recovery between a claim and a successful send yields a recovery alert for an undelivered flag alert, and possibly a flag alert after it; FR-12's "reported" is read as "claimed".
 - [ ] A sync spanning an asset-set load can remove a symbol that was relisted and re-added to a system-managed list within the same 15 s; the next signal re-adds it.
 - [ ] A flagged symbol on a system-managed list shows no marker until portfolio's next tick, and shows the marker while its alert is `PENDING` until a later tick removes it.
+- [ ] A hook that times out before the rebuild leaves a newly flagged symbol out of the in-memory flagged set until the next successful hook (up to one refresh interval); it backfills as `FAILED`, not `SKIPPED`, in that window.
+- [ ] A job resumed after a restart can show `FAILED` results for symbols of chunks completed before the restart that are not in `failed_symbols` (existing resume behavior, R-9).
 - [ ] The union depends on portfolio's tick: observation lags a watchlist add by up to one prune interval, and a portfolio outage freezes the last union.
 - [ ] `first_unservable_date` for symbols already dead at deploy is the deploy-era load date.
 - [ ] The config seed number and the two portfolio callers of `marketsession` are re-verified at spec time.
