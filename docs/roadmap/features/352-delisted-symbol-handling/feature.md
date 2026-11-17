@@ -14,6 +14,9 @@
 | 2026-11-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after 4 rounds; 3 notes) |
 | 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full; round cap overridden by the operator) and approved; recon.md + debate.md + design.md written |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 32 steps |
+| 2026-11-17 | `implementation-ready` (unchanged) | /sdd-execute | Re-spec gate: steps 20, 22, 23, 24, 25, 28, 32 aligned with `main-dev@9a685196` after feature 351 landed (line shifts; Step 25 harness note; 351 PRESERVE rows) |
+| 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1+2 landed) |
+| 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | All 32 steps done (sequential mode); scenarios promoted; integration PR opened |
 
 ---
 
@@ -50,11 +53,11 @@ changes.)_
 | `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity |
 | `xstockstrat-ui` owner | Analytics display accuracy, Connect-RPC call safety |
 | `packages/proto` owner + Proto Reviewer | Field number uniqueness, backward compatibility, `buf lint` / `buf breaking` pass |
-| DBA | Migration NNN numbering (marketdata `010`, ingest `017`, config `054`), up+down pair present, index correctness, run-order compliance with `scripts/db-migrate.sh` |
+| DBA | Migration NNN numbering (marketdata `010`, ingest `018`, config `054`), up+down pair present, index correctness, run-order compliance with `scripts/db-migrate.sh` |
 
 `xstockstrat-notify` has no step (the alerts use the existing `EmitAlert` path unchanged), so its owner
 is no longer in the snapshot; `xstockstrat-analysis` and `xstockstrat-config` each gained steps.
 
 ## Next Action
 
-`/sdd-review delisted-symbol-handling impl-spec` — validate implementation spec, then `/sdd-execute delisted-symbol-handling`
+Review and merge the integration PR (`feature/delisted-symbol-handling` → `main-dev`) once CI is green and the approvals in root `CLAUDE.md` § Approval Flow are in (DBA + service owners for marketdata `010` / ingest `018`; owner + config team for the new key)

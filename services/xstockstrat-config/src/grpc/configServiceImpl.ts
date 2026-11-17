@@ -168,6 +168,8 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   // feature 282: 24h ceiling stays below marketdata's 48h minIngestLookback; the servability timeout
   // floor/ceiling keeps the check cheap relative to the 4000ms portfolio quote deadline.
   'marketdata.assets.refresh_interval_hours': { minValue: 1, maxValue: 24 },
+  // feature 352: mirrors the marketdata reader clamp, so no writable value is silently re-clamped.
+  'marketdata.assets.delisting_confirmation_trading_days': { minValue: 1, maxValue: 30 },
   'portfolio.marketdata.servability_timeout_ms': { minValue: 500, maxValue: 4000 },
   // feature 282: ceiling = marketdata GetSymbolServability's 1000-symbol request bound, so a within-cap
   // watchlist request can never exceed it and silently fail open.

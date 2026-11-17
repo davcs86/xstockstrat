@@ -1,11 +1,23 @@
-package marketsession
+package service
 
 import (
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/xstockstrat/contracts/marketsession"
 )
 
-func nyDate(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, ny) }
+// One *time.Location for every nyDate: the tests use time.Time as a map key.
+var nyLoc = sync.OnceValue(func() *time.Location {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		panic(err)
+	}
+	return loc
+})
+
+func nyDate(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, nyLoc()) }
 
 func utc(s string) time.Time {
 	t, err := time.Parse(time.RFC3339, s)
@@ -26,7 +38,7 @@ func TestSessionDate_GoldenStagingBars(t *testing.T) {
 		"2026-01-16T05:00:00Z": nyDate(2026, 1, 16),
 		"2025-10-31T04:00:00Z": nyDate(2025, 10, 31), "2025-11-03T05:00:00Z": nyDate(2025, 11, 3),
 	} {
-		if got := SessionDate(utc(bar)); !got.Equal(want) {
+		if got := marketsession.SessionDate(utc(bar)); !got.Equal(want) {
 			t.Errorf("SessionDate(%s) = %v, want %v", bar, got, want)
 		}
 	}
@@ -45,7 +57,7 @@ func TestReference(t *testing.T) {
 		{"2026-11-26T16:00:00Z", nyDate(2026, 11, 25), false},
 		{"2027-03-26T16:00:00Z", nyDate(2027, 3, 25), false},
 	} {
-		ref, live := Reference(utc(tc.now))
+		ref, live := marketsession.Reference(utc(tc.now))
 		if !ref.Equal(tc.ref) || live != tc.live {
 			t.Errorf("Reference(%s) = (%v, %v), want (%v, %v)", tc.now, ref, live, tc.ref, tc.live)
 		}
@@ -58,7 +70,7 @@ func TestPrevTradingDay(t *testing.T) {
 		nyDate(2026, 7, 6):   nyDate(2026, 7, 2),
 		nyDate(2027, 12, 27): nyDate(2027, 12, 23),
 	} {
-		if got := PrevTradingDay(d); !got.Equal(want) {
+		if got := marketsession.PrevTradingDay(d); !got.Equal(want) {
 			t.Errorf("PrevTradingDay(%v) = %v, want %v", d, got, want)
 		}
 	}
@@ -80,25 +92,25 @@ func TestHolidays_2026_2028(t *testing.T) {
 		}
 		for d := nyDate(year, 1, 1); d.Year() == year; d = d.AddDate(0, 0, 1) {
 			weekday := d.Weekday() != time.Saturday && d.Weekday() != time.Sunday
-			if got, want := IsTradingDay(d), weekday && !closed[d]; got != want {
+			if got, want := marketsession.IsTradingDay(d), weekday && !closed[d]; got != want {
 				t.Errorf("IsTradingDay(%s) = %v, want %v", d.Format("2006-01-02 Mon"), got, want)
 			}
 		}
 	}
 	// New Year's on a Saturday has no observance: Fri 2027-12-31 trades.
-	if !IsTradingDay(nyDate(2027, 12, 31)) {
+	if !marketsession.IsTradingDay(nyDate(2027, 12, 31)) {
 		t.Error("2027-12-31 must be a trading day (Sat New Year's is not observed)")
 	}
 }
 
 func TestDST(t *testing.T) {
-	if got := Open(nyDate(2026, 3, 9)); !got.Equal(utc("2026-03-09T13:30:00Z")) {
+	if got := marketsession.Open(nyDate(2026, 3, 9)); !got.Equal(utc("2026-03-09T13:30:00Z")) {
 		t.Errorf("Open(2026-03-09) = %v, want 13:30Z", got.UTC())
 	}
-	if got := Open(nyDate(2026, 11, 2)); !got.Equal(utc("2026-11-02T14:30:00Z")) {
+	if got := marketsession.Open(nyDate(2026, 11, 2)); !got.Equal(utc("2026-11-02T14:30:00Z")) {
 		t.Errorf("Open(2026-11-02) = %v, want 14:30Z", got.UTC())
 	}
-	if got := DayStart(nyDate(2026, 11, 2)); !got.Equal(utc("2026-11-02T05:00:00Z")) {
+	if got := marketsession.DayStart(nyDate(2026, 11, 2)); !got.Equal(utc("2026-11-02T05:00:00Z")) {
 		t.Errorf("DayStart(2026-11-02) = %v, want 05:00Z", got.UTC())
 	}
 }

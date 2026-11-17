@@ -284,6 +284,7 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     { ns: 'portfolio', key: 'marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
     { ns: 'portfolio', key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 },
     { ns: 'marketdata', key: 'assets.refresh_interval_hours', field: 'intVal', min: 1, max: 24 },
+    { ns: 'marketdata', key: 'assets.delisting_confirmation_trading_days', field: 'intVal', min: 1, max: 30 },
     { ns: 'portfolio', key: 'marketdata.servability_timeout_ms', field: 'intVal', min: 500, max: 4000 },
     { ns: 'portfolio', key: 'watchlist.max_symbols_per_list', field: 'intVal', min: 1, max: 1000 },
   ];

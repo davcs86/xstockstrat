@@ -429,6 +429,7 @@ function createBaseBackfillJob() {
         chunksTotal: 0,
         chunksCompleted: 0,
         dataKind: BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+        symbolResults: [],
     };
 }
 exports.BackfillJob = {
@@ -477,6 +478,9 @@ exports.BackfillJob = {
         }
         if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
             writer.uint32(120).int32(backfillDataKindToNumber(message.dataKind));
+        }
+        for (const v of message.symbolResults) {
+            common_1.BackfillSymbolResult.encode(v, writer.uint32(130).fork()).join();
         }
         return writer;
     },
@@ -592,6 +596,13 @@ exports.BackfillJob = {
                     message.dataKind = backfillDataKindFromJSON(reader.int32());
                     continue;
                 }
+                case 16: {
+                    if (tag !== 130) {
+                        break;
+                    }
+                    message.symbolResults.push(common_1.BackfillSymbolResult.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -657,6 +668,11 @@ exports.BackfillJob = {
                 : isSet(object.data_kind)
                     ? backfillDataKindFromJSON(object.data_kind)
                     : BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+            symbolResults: globalThis.Array.isArray(object?.symbolResults)
+                ? object.symbolResults.map((e) => common_1.BackfillSymbolResult.fromJSON(e))
+                : globalThis.Array.isArray(object?.symbol_results)
+                    ? object.symbol_results.map((e) => common_1.BackfillSymbolResult.fromJSON(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -706,6 +722,9 @@ exports.BackfillJob = {
         if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
             obj.dataKind = backfillDataKindToJSON(message.dataKind);
         }
+        if (message.symbolResults?.length) {
+            obj.symbolResults = message.symbolResults.map((e) => common_1.BackfillSymbolResult.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -730,6 +749,7 @@ exports.BackfillJob = {
         message.chunksTotal = object.chunksTotal ?? 0;
         message.chunksCompleted = object.chunksCompleted ?? 0;
         message.dataKind = object.dataKind ?? BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
+        message.symbolResults = object.symbolResults?.map((e) => common_1.BackfillSymbolResult.fromPartial(e)) || [];
         return message;
     },
 };

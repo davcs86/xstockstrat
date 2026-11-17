@@ -2593,6 +2593,30 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
+            "key": "assets.delisting_confirmation_trading_days",
+            "file": "054_marketdata_delisting_confirmation_days.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata delisting detection: trading days a watchlist symbol must stay unservable in every successful asset-set load before it is flagged delisted. The first unservable day counts as day 1. Read at each asset-set load. A value above 30 reads as 30 and a value of 0 or less reads as 5.",
+            "environment": "production",
+            "default_value": "5",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "assets.delisting_confirmation_trading_days",
+            "file": "054_marketdata_delisting_confirmation_days.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata delisting detection: trading days a watchlist symbol must stay unservable in every successful asset-set load before it is flagged delisted. The first unservable day counts as day 1. Read at each asset-set load. A value above 30 reads as 30 and a value of 0 or less reads as 5.",
+            "environment": "staging",
+            "default_value": "5",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
             "key": "assets.refresh_interval_hours",
             "file": "038_marketdata_asset_refresh_interval.up.sql",
             "global": true,
@@ -5113,5 +5137,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "bec16491b575fcec16baec16e3a902119cec3ee1740d1d40da10acf63423bcd8"
+    "inputs_sha256": "4e9dff4761cb839be8dfb7faf5c65a48263ec056f2fc077109b9a3ed05398775"
 }

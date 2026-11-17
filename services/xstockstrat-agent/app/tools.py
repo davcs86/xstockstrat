@@ -1765,13 +1765,17 @@ def register_tools(server: MCPServer) -> None:
         """Check one backfill job or list recent jobs (read-only — no admin scope).
         job_id: when set, returns {"job": {...}} with the BackfillJob fields (status,
             bars_processed, bars_total, chunks_completed, chunks_total, failed_symbols,
-            error). When empty, lists recent jobs instead.
+            symbol_results, error). When empty, lists recent jobs instead.
         status_filter: list mode only — queued/running/completed/failed/partial/canceled;
             omit or 'unspecified' = all statuses.
         symbol: list mode only — optional ticker filter.
         limit: list mode page size; 0 = server default (100).
         page_token: pass the previous response's next_page_token to fetch the next page.
         List mode returns {"jobs": [...], "next_page_token": "..."}.
+        symbol_results (always present, possibly empty) lists the symbols that wrote nothing, as
+            {"symbol", "outcome", "reason"} ("reason" omitted when empty). outcome is "empty"
+            (nothing to write), "skipped" (a symbol flagged delisted that the data source could
+            not serve — it is NOT in failed_symbols and does not make the job PARTIAL) or "failed".
         Note: bars_processed and bars_total are 64-bit integers serialized as JSON STRINGS, not
             numbers — parse before arithmetic."""
         try:
@@ -2276,6 +2280,9 @@ def register_tools(server: MCPServer) -> None:
             snake_case with watchlist_id, name, description, bindings (each with
             symbol/strategy_id/source), the deprecated flat symbols mirror, system_managed, and
             created_at/updated_at timestamps. An empty next_page_token means no more pages.
+            Each binding carries delisted (bool) and, when true, delisted_reason
+            ("UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE") and first_unservable_date
+            (YYYY-MM-DD).
         Only the caller's own lists are ever returned."""
         user_id = _caller_user_id(ctx, "list_watchlists")
         try:
@@ -2290,7 +2297,8 @@ def register_tools(server: MCPServer) -> None:
         watchlist_id: the list identifier (from list_watchlists).
         Returns {"watchlist": <watchlist>} — snake_case, with the full bindings array (each entry's
             symbol, strategy_id — "" means an unbound bare symbol — and source) plus the deprecated
-            flat symbols mirror, system_managed, and timestamps.
+            flat symbols mirror, system_managed, and timestamps. Each binding carries delisted
+            (bool) and, when true, delisted_reason and first_unservable_date (YYYY-MM-DD).
         Reflects the pruned set: expired SIGNAL entries are removed automatically, MANUAL never.
         Fetching a list the caller does not own is rejected (permission denied); an unknown id is
             "watchlist not found"."""
@@ -2354,6 +2362,9 @@ def register_tools(server: MCPServer) -> None:
             and returns {"watchlist": <watchlist>} only. A mistyped or newly listed ticker is
             refused until the next asset-set refresh (default 6h, max 24h).
             {"deleted": true, "watchlist_id": <id>} for delete.
+            Each returned binding carries delisted (bool) and, when true, delisted_reason and
+            first_unservable_date. A replace-all update still drops a symbol flagged delisted and
+            reports it in "refused".
         Acting on a list the caller does not own is rejected (permission denied)."""
         user_id = _caller_user_id(ctx, "manage_watchlist")
         try:
@@ -2426,6 +2437,8 @@ def register_tools(server: MCPServer) -> None:
             "UNSERVABLE_REASON_NOT_TRADABLE"}] (always present, possibly empty): refused symbols
             (OTC, or not an active tradable US equity) were NOT newly added. A mistyped or newly
             listed ticker is refused until the next asset-set refresh (default 6h, max 24h).
+            Each returned binding carries delisted (bool) and, when true, delisted_reason and
+            first_unservable_date.
         Acting on a list the caller does not own is rejected (permission denied)."""
         user_id = _caller_user_id(ctx, "manage_watchlist_symbols")
         if not watchlist_id:

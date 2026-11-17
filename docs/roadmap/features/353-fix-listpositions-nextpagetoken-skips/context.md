@@ -53,9 +53,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Review iteration 1: 0 ✗, 6 ⚠ (advisory); overlap CLEAN (soft rebase note: 311/323 touch portfolio_repo.go in disjoint regions, both spec-ready).
 - Addressed in implementation-spec.md: citation drift (:134→:135, clamp :136-138, :505-507 `[]string` precedent re-verified); pgxmock `Argument` interface verified from module source (argument.go:6-8, DeepEqual at expectations.go:169); local TimescaleDB recipe verified (docker timescale/timescaledb:latest-pg16 + psql migrations, existing dbtests green) so the real-backend RED is capturable locally; PR TDD-block instructions for Steps 2 and 4; testPool variadic call-site claim quantified (30 sites); follow-up tracking rule.
 - Open Threads (follow-ups, file after launch via /sdd-qa defect):
-  - [ ] analysis position-drain hardening (equal-token guard, fail closed, cap-hit log)
-  - [ ] WatchlistRepo.ListByUser look-ahead token (other session owns the sibling report)
-  - [ ] internal 500-row truncation (portfolio_service.go:787,932,1214,1283; trading.go:2235)
+  - [x] analysis position-drain hardening (equal-token guard, fail closed, cap-hit log) — filed `docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md`
+  - [x] WatchlistRepo.ListByUser look-ahead token (other session owns the sibling report) — already filed and triaged as feature 354 (`fix-listwatchlists-page-token`, PR #1566); left to its owner
+  - [x] internal 500-row truncation (portfolio_service.go:787,932,1214,1283; trading.go:2235) — filed as two reports: `docs/reports/2026-11-17-portfolio-internal-position-reads-truncate-at-500-defect.md`, `docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md`
 
 - Review iteration 2: 0 ✗, 3 ⚠ (stale pgxmock "not in cache" text; scan-wrapper trade-off not cross-referenced; parent-level pool construction intent) + citation drift :191-196→:192-197 and unqualified ledger paths — all fixed in implementation-spec.md.
 

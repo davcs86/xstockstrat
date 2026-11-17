@@ -1,7 +1,18 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientReadableStream, type ClientUnaryCall, type handleServerStreamingCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { Asset, PageRequest, PageResponse, Sector, Timeframe, TimeRange, UnservableReason } from "../../common/v1/common";
+import { Asset, BackfillSymbolResult, DelistedState, PageRequest, PageResponse, Sector, Timeframe, TimeRange, UnservableReason } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.marketdata.v1";
+export declare enum DelistingAlertState {
+    DELISTING_ALERT_STATE_UNSPECIFIED = "DELISTING_ALERT_STATE_UNSPECIFIED",
+    DELISTING_ALERT_STATE_PENDING = "DELISTING_ALERT_STATE_PENDING",
+    DELISTING_ALERT_STATE_CLAIMED = "DELISTING_ALERT_STATE_CLAIMED",
+    DELISTING_ALERT_STATE_REDELIVERY = "DELISTING_ALERT_STATE_REDELIVERY",
+    DELISTING_ALERT_STATE_REPORTED = "DELISTING_ALERT_STATE_REPORTED",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function delistingAlertStateFromJSON(object: any): DelistingAlertState;
+export declare function delistingAlertStateToJSON(object: DelistingAlertState): string;
+export declare function delistingAlertStateToNumber(object: DelistingAlertState): number;
 export interface Bar {
     symbol: string;
     time?: Date | undefined;
@@ -104,6 +115,7 @@ export interface BackfillBarsResponse {
     failedSymbols: string[];
     /** estimated total bars across requested symbols/range (FR-6) */
     expectedBars: number;
+    symbolResults: BackfillSymbolResult[];
 }
 export interface GetDataCoverageRequest {
     symbol: string;
@@ -279,6 +291,7 @@ export interface BackfillFundamentalsRequest {
 export interface BackfillFundamentalsResponse {
     periodsWritten: number;
     failedSymbols: string[];
+    symbolResults: BackfillSymbolResult[];
 }
 export interface GetLatestQuotesRequest {
     symbols: string[];
@@ -369,6 +382,24 @@ export interface GetSymbolServabilityResponse {
     symbols: SymbolServability[];
     assetSetLoaded: boolean;
 }
+export interface FlaggedSymbol {
+    symbol: string;
+    state?: DelistedState | undefined;
+    alertState: DelistingAlertState;
+    /** false means "do not remove" */
+    unservableInCurrentSet: boolean;
+}
+export interface SyncWatchlistDelistingsRequest {
+    symbols: string[];
+}
+export interface SyncWatchlistDelistingsResponse {
+    flagged: FlaggedSymbol[];
+}
+export interface AckDelistingAlertsRequest {
+    symbols: string[];
+}
+export interface AckDelistingAlertsResponse {
+}
 export declare const Bar: MessageFns<Bar>;
 export declare const Quote: MessageFns<Quote>;
 export declare const GetLatestPriceRequest: MessageFns<GetLatestPriceRequest>;
@@ -420,6 +451,11 @@ export declare const GetEtfFlagsResponse: MessageFns<GetEtfFlagsResponse>;
 export declare const GetSymbolServabilityRequest: MessageFns<GetSymbolServabilityRequest>;
 export declare const SymbolServability: MessageFns<SymbolServability>;
 export declare const GetSymbolServabilityResponse: MessageFns<GetSymbolServabilityResponse>;
+export declare const FlaggedSymbol: MessageFns<FlaggedSymbol>;
+export declare const SyncWatchlistDelistingsRequest: MessageFns<SyncWatchlistDelistingsRequest>;
+export declare const SyncWatchlistDelistingsResponse: MessageFns<SyncWatchlistDelistingsResponse>;
+export declare const AckDelistingAlertsRequest: MessageFns<AckDelistingAlertsRequest>;
+export declare const AckDelistingAlertsResponse: MessageFns<AckDelistingAlertsResponse>;
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -652,6 +688,26 @@ export declare const MarketDataServiceService: {
         readonly responseSerialize: (value: GetSymbolServabilityResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => GetSymbolServabilityResponse;
     };
+    /** internal: xstockstrat-portfolio only */
+    readonly syncWatchlistDelistings: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/SyncWatchlistDelistings";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: SyncWatchlistDelistingsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => SyncWatchlistDelistingsRequest;
+        readonly responseSerialize: (value: SyncWatchlistDelistingsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => SyncWatchlistDelistingsResponse;
+    };
+    /** internal: xstockstrat-portfolio only */
+    readonly ackDelistingAlerts: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/AckDelistingAlerts";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: AckDelistingAlertsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => AckDelistingAlertsRequest;
+        readonly responseSerialize: (value: AckDelistingAlertsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => AckDelistingAlertsResponse;
+    };
 };
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
     /** Stream live bar data for symbols */
@@ -712,6 +768,10 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
      * >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
      */
     getSymbolServability: handleUnaryCall<GetSymbolServabilityRequest, GetSymbolServabilityResponse>;
+    /** internal: xstockstrat-portfolio only */
+    syncWatchlistDelistings: handleUnaryCall<SyncWatchlistDelistingsRequest, SyncWatchlistDelistingsResponse>;
+    /** internal: xstockstrat-portfolio only */
+    ackDelistingAlerts: handleUnaryCall<AckDelistingAlertsRequest, AckDelistingAlertsResponse>;
 }
 export interface MarketDataServiceClient extends Client {
     /** Stream live bar data for symbols */
@@ -812,6 +872,14 @@ export interface MarketDataServiceClient extends Client {
     getSymbolServability(request: GetSymbolServabilityRequest, callback: (error: ServiceError | null, response: GetSymbolServabilityResponse) => void): ClientUnaryCall;
     getSymbolServability(request: GetSymbolServabilityRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetSymbolServabilityResponse) => void): ClientUnaryCall;
     getSymbolServability(request: GetSymbolServabilityRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetSymbolServabilityResponse) => void): ClientUnaryCall;
+    /** internal: xstockstrat-portfolio only */
+    syncWatchlistDelistings(request: SyncWatchlistDelistingsRequest, callback: (error: ServiceError | null, response: SyncWatchlistDelistingsResponse) => void): ClientUnaryCall;
+    syncWatchlistDelistings(request: SyncWatchlistDelistingsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SyncWatchlistDelistingsResponse) => void): ClientUnaryCall;
+    syncWatchlistDelistings(request: SyncWatchlistDelistingsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SyncWatchlistDelistingsResponse) => void): ClientUnaryCall;
+    /** internal: xstockstrat-portfolio only */
+    ackDelistingAlerts(request: AckDelistingAlertsRequest, callback: (error: ServiceError | null, response: AckDelistingAlertsResponse) => void): ClientUnaryCall;
+    ackDelistingAlerts(request: AckDelistingAlertsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: AckDelistingAlertsResponse) => void): ClientUnaryCall;
+    ackDelistingAlerts(request: AckDelistingAlertsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: AckDelistingAlertsResponse) => void): ClientUnaryCall;
 }
 export declare const MarketDataServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): MarketDataServiceClient;

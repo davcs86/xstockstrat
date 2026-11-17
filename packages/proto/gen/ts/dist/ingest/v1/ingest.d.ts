@@ -1,6 +1,6 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientUnaryCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { PageRequest, PageResponse, TemplateMeta, TemplateOperation, TemplateOrigin, Timeframe, TimeRange } from "../../common/v1/common";
+import { BackfillSymbolResult, PageRequest, PageResponse, TemplateMeta, TemplateOperation, TemplateOrigin, Timeframe, TimeRange } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.ingest.v1";
 export declare enum BackfillStatus {
     BACKFILL_STATUS_UNSPECIFIED = "BACKFILL_STATUS_UNSPECIFIED",
@@ -112,6 +112,7 @@ export interface BackfillJob {
     chunksCompleted: number;
     /** what the job backfills; UNSPECIFIED == BARS (feature 198) */
     dataKind: BackfillDataKind;
+    symbolResults: BackfillSymbolResult[];
 }
 export interface TriggerBackfillRequest {
     symbols: string[];

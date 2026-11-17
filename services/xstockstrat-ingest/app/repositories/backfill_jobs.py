@@ -22,6 +22,7 @@ _UPDATABLE_COLUMNS = frozenset(
         "started_at",
         "completed_at",
         "data_kind",
+        "symbol_results",
     }
 )
 

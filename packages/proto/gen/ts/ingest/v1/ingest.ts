@@ -19,6 +19,7 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import {
+  BackfillSymbolResult,
   PageRequest,
   PageResponse,
   TemplateMeta,
@@ -462,6 +463,7 @@ export interface BackfillJob {
   chunksCompleted: number;
   /** what the job backfills; UNSPECIFIED == BARS (feature 198) */
   dataKind: BackfillDataKind;
+  symbolResults: BackfillSymbolResult[];
 }
 
 export interface TriggerBackfillRequest {
@@ -708,6 +710,7 @@ function createBaseBackfillJob(): BackfillJob {
     chunksTotal: 0,
     chunksCompleted: 0,
     dataKind: BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+    symbolResults: [],
   };
 }
 
@@ -757,6 +760,9 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     }
     if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
       writer.uint32(120).int32(backfillDataKindToNumber(message.dataKind));
+    }
+    for (const v of message.symbolResults) {
+      BackfillSymbolResult.encode(v!, writer.uint32(130).fork()).join();
     }
     return writer;
   },
@@ -888,6 +894,14 @@ export const BackfillJob: MessageFns<BackfillJob> = {
           message.dataKind = backfillDataKindFromJSON(reader.int32());
           continue;
         }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.symbolResults.push(BackfillSymbolResult.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -954,6 +968,11 @@ export const BackfillJob: MessageFns<BackfillJob> = {
         : isSet(object.data_kind)
         ? backfillDataKindFromJSON(object.data_kind)
         : BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+      symbolResults: globalThis.Array.isArray(object?.symbolResults)
+        ? object.symbolResults.map((e: any) => BackfillSymbolResult.fromJSON(e))
+        : globalThis.Array.isArray(object?.symbol_results)
+        ? object.symbol_results.map((e: any) => BackfillSymbolResult.fromJSON(e))
+        : [],
     };
   },
 
@@ -1004,6 +1023,9 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
       obj.dataKind = backfillDataKindToJSON(message.dataKind);
     }
+    if (message.symbolResults?.length) {
+      obj.symbolResults = message.symbolResults.map((e) => BackfillSymbolResult.toJSON(e));
+    }
     return obj;
   },
 
@@ -1029,6 +1051,7 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     message.chunksTotal = object.chunksTotal ?? 0;
     message.chunksCompleted = object.chunksCompleted ?? 0;
     message.dataKind = object.dataKind ?? BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
+    message.symbolResults = object.symbolResults?.map((e) => BackfillSymbolResult.fromPartial(e)) || [];
     return message;
   },
 };
