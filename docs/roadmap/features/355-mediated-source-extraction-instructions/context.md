@@ -213,3 +213,9 @@
   `ingest/app/extractors/noop.py` (this feature stores the string `app.extractors.noop`; nothing
   imports it). Operator decision pending. WARN-level, disjoint functions/sections: 351, 354, 343,
   340, 314 on `agent/app/tools.py` / `client.py` / `docs/runbooks/mcp-tools.md`; 328 unchanged.
+- **Operator decisions after the impl-spec review (2026-11-17):** (1) `signal_extraction.md` is
+  edited as planned (323 may delete it later; that conflict resolves as a delete); (2) keep
+  `app.extractors.noop` as the stored module for mediated sources; (3) `merge-order.md` row added:
+  323 waits for 355 and rebases; (4) **execute all 11 steps** — one commit per step group on the PR
+  branch `ccr-424ada30-29m2lv` (the session may push only there; no per-step branches or PRs),
+  tests before each commit, stop at the first step that cannot pass or needs a decision.
