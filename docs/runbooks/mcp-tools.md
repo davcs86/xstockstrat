@@ -1379,9 +1379,10 @@ caller claims on the request.
 
 ### `list_watchlists`
 
-List the calling user's **own** watchlists from `xstockstrat-portfolio` (read-only, paginated). Wraps
+List the calling user's **own** watchlists from `xstockstrat-portfolio` (paginated). Wraps
 `PortfolioService.ListWatchlists`. Ownership is taken from the caller's forwarded `x-user-id`; only
-the caller's own lists are ever returned.
+the caller's own lists are ever returned. A first-page call (empty `page_token`) idempotently ensures
+the caller's system-managed "Signals" list, so it is returned even for a user who never ingested a signal.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
