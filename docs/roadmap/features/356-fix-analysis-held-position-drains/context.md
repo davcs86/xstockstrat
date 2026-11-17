@@ -377,3 +377,232 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-17 — sdd-batch design gate (round 4)
+
+`/sdd-design fix-analysis-held-position-drains` (full) is halted at its approval gate after round 4 (gate policy: halt). design.md is not written and status.md is unchanged (still `spec-ready`). The debate register is `debate.md` (D-1..D-14, R-1..R-13, O-1..O-9, P-1..P-3). Round 4 applied the operator's r3 steer: REOPEN D-7 and D-5 accepted, and the daily refresh must count a failed user as a metric on an existing instrument.
+
+## Open Threads
+
+- **Approach.** The drain mechanism is unchanged (D-1..D-4, D-6, D-8..D-10): the shared `_drain_positions_paged` and `_PositionsPageError` in `app/handlers/servicer.py`, a `try` that wraps only the page body, the live-loop `failed_owners` set caught before `except ValueError` (`live_loop.py:409`), the `ScreenSymbols` guard, the D-9 fake sweep, and red before green. New this round (D-11..D-14):
+  - **Code (D-11, supersedes D-7):** in the per-user `except Exception` of `_opportunity_refresh_tick` (`servicer.py:6061-6063`), add `telemetry.record_opportunity_recompute("full", "failed")` after `failed += 1`, and `exc_info=True` on the WARNING (matches the kick path at `:4955`/`:4957`). No new instrument or label value, no daily `ok`, and `_log_items_tick` is untouched.
+  - **Record edits:** design.md consequences (a)–(d) with accurate wording ((d): per-user WARNING with traceback, `recompute{full,failed}` +1 per failed user with no user attribute, previous queue kept, schedule advances, ordinary tick on partial failure and no tick when every user fails, `ok` is kick-path only). FR-4 covers both paths, and `compute_failed` is limited to cold reads (`:4784-4795`). Fix Scope: one new call site on the existing series. `@AC-5`'s When step is narrowed to the on-demand path, and a new `@AC-10 @FR-4 @regression` covers the daily-refresh failed user.
+  - **Tests (D-12, D-13; supersede D-5's harness clause):** AC-5 and AC-10 go in `tests/test_analysis_tick_telemetry.py` on `_refresh_svc`, with the real `_compute_opportunities` and `_drain_held_symbols` and only the three sibling drains stubbed. Each assigns a whole stub `svc._portfolio = SimpleNamespace(ListPositions=AsyncMock(...))`, because `_portfolio is None` under `make_servicer` (`servicer.py:556-560`). AC-10's fake branches on the `x-user-id` metadata (u-1 raises, u-2 returns an empty page). Both pin `exc_info[0] is _PositionsPageError`.
+  - **Guards and docs (D-14):** add `("full","failed")` to the allowlist `_drive` (`test_telemetry_allowlist.py:46-56`); it exercises existing keys and adds no coverage. Add an analysis CLAUDE.md § Observability caveat that `ok` is kick-path only, so no failed/(ok+failed) ratio over `kind=full` is meaningful.
+  - **Out of scope:** no proto, migration, config or other-service change, and features 351, 353 and 354 are untouched. A rebase against `308-fix-analysis-per-symbol-isolation` may be needed.
+- **Strongest open objection: O-8 (non-blocking).** The `packages/otel/produced-signals.tsv` row for `analysis.opportunity.recompute` lands only if the operator confirms it is wanted (no alert or dashboard queries it today, `packages/otel/CLAUDE.md:8-9`) and the spec verifies the exported series name against Grafana or Mimir. The guard checks only the producer literal (`scripts/check-otel-produced-signals.py:180-195`), and the registry has no `_total` precedent; otherwise drop the row. O-9 (non-blocking): design.md records `@AC-51 @feature-294` as an EXTEND, because it now matches two triggers while its test stays kick-path-only. Closed this round: O-1, O-3, O-4, O-5, O-6, O-7. Pending user: P-1 (D-7) and P-2 (D-5), both met by the operator's r3 REOPEN, and P-3 (R-6, reopened by the same operator counter mandate).
+- **Floor status.** No Floor breaches in any of the four rounds.
+- **Uncovered @AC changes (not covered by an operator decision).** All PRESERVE: `@AC-3 @feature-262`; `@AC-6 @feature-191`; `@AC-6/@AC-7/@AC-10 @feature-185/@feature-289` (`@AC-7` `compute_failed` stays cold-read-only); `@AC-2 @feature-168`, `@AC-1/@AC-3 @feature-193`; the feature-097/158 daily-refresh per-user isolation and loop-tick semantics (`_log_items_tick` untouched); `@AC-41 @feature-294` (key set unchanged). Covered by operator decision: PRESERVE `@AC-16 @feature-294`, `@AC-8 @feature-262`; EXTEND `@AC-51 @feature-294`, `@AC-5`, the new `@AC-10` and `@AC-1..@AC-9 @feature-356`.
+- **Open risks carried to design.md.**
+  - `recompute{full,failed}` now merges a kick-path failure (retried on the next read) with a daily failure (queue stale about 24h), and also counts non-drain per-user errors (accepted scope).
+  - An all-users portfolio outage at the refresh hour raises the counter by N, writes no tick, and leaves every queue stale.
+  - Bounds and boot: the effective bound is 5,000 positions per owner (`portfolio_repo.go:137-138`); a boot failure leaves entry-backfill state unseeded until restart (`entry_backfill.py:199-202`).
+  - Tests: the D-9 fakes may flip branch (sweep before RED), and AC-5/AC-10 may need a rebase against feature 308.
+  - Drain edge cases: an A→B→A token cycle is caught only by the 50-page cap, and the held drain reads the servicer page constants while the sibling drains keep live_loop's.
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "The drain mechanism does not change from D-1..D-4, D-6 and D-8..D-10:\n- the shared `_drain_positions_paged` and `_PositionsPageError` in `services/xstockstrat-analysis/app/handlers/servicer.py`;\n- a `try` that wraps only the page body, with the equality and cap checks outside it;\n- the live-loop `failed_owners` set, caught before `except ValueError` (`live_loop.py:409`);\n- the `ScreenSymbols` guard;\n- the D-9 sweep of existing fakes;\n- red before green.\n\nThis round adds one production call site, one log keyword, and the record and test edits the operator's r3 steer requires.\n\n**1. Production code** (`servicer.py`, the per-user `except Exception` of `_opportunity_refresh_tick`, `:6061-6063`)\n- After `failed += 1`, add `telemetry.record_opportunity_recompute(\"full\", \"failed\")`. This reuses the existing instrument `analysis.opportunity.recompute` and its label set `{kind=full, outcome=failed}`. `kind` means the scope of the recompute (full or surgical retry), not what triggered it. The daily pass runs the same `_compute_opportunities` → `_replace_and_stamp_compute_state` pair (`:6059-6060` vs `:4943-4944`).\n- Add `exc_info=True` to the WARNING at `:6063`. This matches the kick path at `:4955` and lets AC-10 check the cause.\n- No daily `ok` is recorded.\n- `_log_items_tick` (`:377-382`) is untouched.\n- Counting happens at the per-user catch, not inside `_compute_opportunities`, because the kick path already counts at `:4957`.\n\n**2. Record edits** (the orchestrator writes these, P-01)\n\ndesign.md \"Behaviour changes accepted under fail-closed\":\n- (a) Cite `entry_backfill.py:52-58,142-159,199-202`. A held-drain failure at boot leaves the cooldown state unseeded until restart, with no retry.\n- (b) A portfolio outage skips every owner in the live loop each cycle. Each skip records `drain_failures{source=held}` +1 and one WARNING per owner.\n- (c) `ScreenSymbols` loses its held badges, but the request is not aborted.\n- (d) Daily refresh (`:6055-6067`):\n  - The failed user's `_replace_and_stamp_compute_state` is skipped, so the previous queue stays stale until the next pass.\n  - The schedule still advances (`:6066`).\n  - The failure is logged as a per-user WARNING with traceback.\n  - It is counted as `recompute{kind=full,outcome=failed}` +1 per failed user, with no user attribute.\n  - The counter's accepted scope is every exception the per-user catch handles: the held drain, an `owner_metadata` ValueError for a `system` or empty uid, and lock or replace errors.\n  - `_log_items_tick` still writes an ordinary `loop tick ok` on partial failure and no tick when every user fails.\n  - `ok` is recorded on the kick path only, so no `failed/(ok+failed)` ratio over `kind=full` is meaningful.\n\nproduct-spec FR-4, `_compute_opportunities` bullet:\n> \"On both the on-demand recompute (`_kick_opportunity_recompute._run`, `servicer.py:4940-4960`) and the daily refresh pass (`servicer.py:6055-6067`) the failure is counted by `analysis.opportunity.recompute{kind=full,outcome=failed}`. The daily pass also logs a per-user WARNING, writes no `loop tick ok` only when every user fails, and still advances. In both paths the previous queue is not replaced. On a cold read (no stored queue), repeated kick-path failures surface `compute_failed` (`servicer.py:4784-4795`). A user with a stored queue is served the stale rows (`:4798-4801`).\"\n\nFix Scope:\n> \"No new metric instrument or label value. The daily refresh gains one call site on the existing `recompute{full,failed}` series.\"\n\nacceptance.feature:\n- Narrow the When step of @AC-5 to \"...recomputed through the on-demand recompute path\".\n- Add `@AC-10 @FR-4 @regression` \"A failed user in the daily opportunity refresh is counted and keeps the previous queue\":\n  - u-1's ListPositions raises a gRPC error on page 1, and u-2 succeeds.\n  - u-1's queue is not replaced, and u-2's queue is replaced.\n  - `recompute{kind=full,outcome=failed}` increases by exactly 1.\n  - No metric attribute contains \"u-1\".\n  - The schedule advances.\n\nNote the drop of the proposer's 'retire the r3 alternative': no such R entry exists, and the r3 rejected-alternatives text in design.md is simply superseded by @AC-10.\n\n**3. Tests** (all red first, in `tests/test_analysis_tick_telemetry.py`, built on `_refresh_svc` `:44-50`)\n\nShared harness requirements:\n- Rebind the real `AnalysisServicer._compute_opportunities` onto the instance.\n- Stub only `_drain_active_signals`, `_drain_watchlist_bindings` and `_drain_source_weights` to return empty values. Leave the real `_drain_held_symbols`.\n- Assign a whole portfolio stub: `svc._portfolio = SimpleNamespace(ListPositions=AsyncMock(...))`. `make_servicer` (`tests/test_analysis_servicer.py:43-67`) passes no `portfolio_channel`, so `svc._portfolio is None` (`servicer.py:556-560`). Setting an attribute on it would fail, and a drain left on None takes the `return {}` early exit.\n- State in the spec that `_strategies_repo is None` under `make_servicer` (`:564`). The live-coverage block is therefore skipped, and a successful compute yields empty rows, which is what makes \"u-2's queue is replaced\" reachable.\n\nAC-5:\n- Page-1 `grpc.RpcError`-subclass `side_effect`, previous rows seeded, then kick the recompute.\n- Assert:\n  - `_replace_and_stamp_compute_state` is never awaited;\n  - `recompute{full,failed}==1`;\n  - `recompute{ok}==0`;\n  - the logged `exc_info[0] is _PositionsPageError`.\n- Why it is red today: the drain swallows the RpcError and returns `{}`, so the replace is awaited.\n\nAC-10:\n- Drive `_opportunity_refresh_tick(_schedule())` with u-1 and u-2.\n- The `ListPositions` fake branches on `x-user-id` in the passed `metadata` (`owner_metadata(uid)`, `:6057`): it raises for u-1 and returns an empty final page for u-2.\n- Assert:\n  - u-1's replace is never awaited and u-2's replace is awaited;\n  - `recompute{full,failed}==1`;\n  - `all_attribute_values` excludes \"u-1\";\n  - the u-1 WARNING record's `exc_info[0] is _PositionsPageError`;\n  - `ListPositions` was awaited with u-1 metadata;\n  - the schedule advances.\n- Why it is red today: the drain swallows the error, and the daily `except` records no metric.\n\nGuard updates:\n- Add `telemetry.record_opportunity_recompute(\"full\", \"failed\")` to `_drive()` in `tests/test_telemetry_allowlist.py:46-56`. design.md describes this as harmless exercise of an existing key set, not new coverage: AC-41 checks label keys only (`:70-76`).\n- A `metric` row in `packages/otel/produced-signals.tsv` lands only if (i) the operator confirms the row is wanted and (ii) the spec has verified the exported series name against Grafana or Mimir. Today the registry has no `_total` precedent, and the name is unverified.\n- The real guarantee is the AC-10 metric test.\n- `services/xstockstrat-analysis/CLAUDE.md` § Observability gains: \"`recompute{kind=full,outcome=failed}` counts kick-path failures and per-user daily-refresh failures; `ok` is kick-path only, so no failed/(ok+failed) ratio over `kind=full` is meaningful.\"\n\nThere is no proto, migration, config or other-service change. Features 351, 353 and 354 are not touched. A rebase may be needed against `308-fix-analysis-per-symbol-isolation`, which also edits `_compute_opportunities`.",
+    "open_objections": [
+      {
+        "text": "The `packages/otel/produced-signals.tsv` metric row for `analysis.opportunity.recompute` needs two things before it lands. (1) The operator must confirm the row is wanted. The registry's scope is series an alert or dashboard queries (`packages/otel/CLAUDE.md:8-9`), and none queries `recompute` today. (2) The spec must verify the exported series name against Grafana or Mimir. The registry has no `_total` precedent, and `scripts/check-otel-produced-signals.py` (`:180-195`) checks only the producer literal, so an unverified name would let a later wrong-name alert pass the guard. If either condition fails, drop the row; the guard update is then the allowlist `_drive` line plus the AC-10 test.",
+        "blocking": false
+      },
+      {
+        "text": "design.md must record the @AC-51 @feature-294 widening as an EXTEND, not a silent widening. Its phrase 'background full opportunity recompute' (`signal-map-instrumentation.feature:37-45`) now matches two triggers. Its test (`test_analysis_tick_telemetry.py:174-184`) drives only the kick path and stays at exactly 1.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-16 @feature-294",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-8 @feature-262",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-3 @feature-262",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @feature-191",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6/@AC-7/@AC-10 @feature-185/@feature-289 (kick-path recompute failure; @AC-7 compute_failed stays cold-read-only)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-168, @AC-1/@AC-3 @feature-193 (held set assumed complete)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-097/158 daily opportunity refresh per-user isolation and loop-tick record semantics (`_log_items_tick` untouched; `test_opportunity_refresh_tick_record_ok_idle_and_none` unaffected)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-41 @feature-294 (telemetry label-key allowlist; `_drive` gains the full/failed call, key set unchanged)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-51 @feature-294 (recompute{full,failed} now also counted by daily-refresh per-user failures)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-5 @feature-356 (When step narrowed to the on-demand recompute path)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-10 @feature-356 (new: daily-refresh failed user counted, previous queue kept, schedule advances)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-1..@AC-9 @feature-356 (fail-closed held-drain rules)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      }
+    ],
+    "rejected_alternatives": [
+      "Add a new label value `kind=daily` on `analysis.opportunity.recompute`. This was the runner-up. It loses under the operator's 'reuse an existing instrument/label set where one fits': `kind` already means recompute scope, and the daily pass is a full recompute. It remains the clean upgrade if a daily-staleness alert is ever written.",
+      "Count inside `_compute_opportunities`. Lost because the kick path would be counted twice: it already records at `servicer.py:4957`.",
+      "Record a daily-path `ok` as well. Lost because it goes beyond the steer (CLAUDE.md behaviour 2) and would change the meaning of the existing kick-path `ok` series.",
+      "Set `svc._portfolio.ListPositions` on the `make_servicer` instance. Lost because `_portfolio is None` (`servicer.py:556-560`), so setup raises `AttributeError`, and a drain left on None returns `{}` at `:6413`, which is vacuous (`fails.md:3350-3353`).",
+      "Use one shared `side_effect` for the AC-10 `ListPositions` fake. Lost because it cannot make u-1 fail while u-2 succeeds. The fake must branch on the `x-user-id` metadata.",
+      "Pin the AC-10 failure cause through log text only, without `exc_info`. Lost because adding `exc_info=True` at `:6063` costs one token, matches the kick path at `:4955`, and lets AC-10 reuse the AC-5 `exc_info[0] is _PositionsPageError` pin.",
+      "Describe the allowlist `_drive` line as covering the failed label set. Lost because AC-41 checks label keys only (`test_telemetry_allowlist.py:70-76`), and `{kind,outcome}` is already exercised by `(\"full\",\"ok\")`.",
+      "Register `analysis_opportunity_recompute_total` in produced-signals.tsv unverified. Lost because the guard checks only the producer literal, so a wrong registered name would let a broken alert pass."
+    ],
+    "open_risks": [
+      "`recompute{kind=full,outcome=failed}` now merges two failure modes. A kick-path failure is retried on the next read. A daily-refresh failure leaves the queue stale for about 24h. With `ok` recorded on the kick path only, any failed/(ok+failed) ratio over `kind=full` reads high. This is mitigated only by the CLAUDE.md Observability caveat.",
+      "The daily counter also counts per-user failures that are not held-drain failures (an `owner_metadata` ValueError for a system or empty uid, lock or replace errors). This is accepted scope under the operator's per-user wording.",
+      "If every user fails during a portfolio outage at the refresh hour, `recompute{full,failed}` rises by N and no `loop tick ok` is written. All queues stay stale for about 24h.",
+      "The effective fail-closed bound is 5,000 positions per owner (portfolio clamps the page size to 100, `portfolio_repo.go:137-138`). An owner above that is skipped every cycle.",
+      "A transient boot-time held-drain failure leaves the entry-backfill cooldown state unseeded until restart (`entry_backfill.py:199-202`).",
+      "Existing bare `MagicMock` portfolio fakes (the D-9 list) may now take the owner-skip or recompute-failed branch. The sweep must land before RED.",
+      "AC-5 and AC-10 rebind the real `_compute_opportunities`. If `308-fix-analysis-per-symbol-isolation` changes its first statement (the gather) or adds dependencies, those tests may need a rebase.",
+      "`next == sent` misses an A to B to A token cycle; the 50-page cap is the backstop. Wrapping every page exception turns programming errors into owner skips, with `__cause__` preserved.",
+      "The live-loop held drain now reads the servicer page constants, while the sibling drains keep the live_loop constants. The values are equal today but could drift."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-03",
+      "C-08",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-01",
+      "P-02",
+      "P-03",
+      "P-06",
+      "F-07",
+      "PLAT-4",
+      "PLAT-N1"
+    ],
+    "rationale": "I checked the adversary's load-bearing claims against the code this round.\n\n**What the code shows**\n- `make_servicer` (`tests/test_analysis_servicer.py:43-67`) passes no `portfolio_channel`, so `self._portfolio` is None (`servicer.py:556-560`).\n- `_strategies_repo` is None without a `db_pool` (`:564`).\n- The daily per-user WARNING at `:6063` has no `exc_info`, while the kick path at `:4955` does and records `full/failed` at `:4957`.\n- The allowlist `_drive` (`test_telemetry_allowlist.py:46-56`) already calls `(\\\"full\\\",\\\"ok\\\")`, and AC-41 checks only keys.\n- produced-signals.tsv has no analysis metric rows.\n\n**Effect on the proposal**\n- The proposal's direction is right and fits the operator's r3 steer: one call site reusing the existing instrument and label set, red-first AC-5 and AC-10 tests, the CLAUDE.md update, and the guard update.\n- Its harness would have been red for the wrong reason, because of the `_portfolio is None` trap (`fails.md:3350-3353`). I folded the adversary's fixes into the approach: a whole-stub portfolio, a metadata-branching fake for AC-10, and `exc_info=True` at `:6063` for a cause pin.\n- I also downgraded the guard claims to what they actually check.\n- The tsv row is conditional on operator confirmation and a verified exported name. That stays an open, non-blocking objection.\n- The phantom retirement of an r3 alternative is dropped, because no such R entry exists.\n\n**Register handling**\n- The operator's steer explicitly reopens D-7 and D-5. Its binding counter requirement directly mandates what R-6 rejected, so R-6 is treated as reopened by the same operator decision, not by a proposer petition.\n- D-7 is superseded in substance by a new decision, as the adversary required, so the settled register no longer says 'records no recompute{failed}'.\n- D-5's harness clause is superseded, and its substance (RpcError-subclass fakes on the real path) is kept.\n- O-1 and O-3..O-7 are each answered by concrete text or harness in the approach, so they close.\n- No Floor breach was found.\n\n**Operator decisions**\n- Fail closed, reject a repeated token, and test with a fake that ignores the token: kept.\n- `@AC-16 @feature-294` and `@AC-8 @feature-262` are preserved.\n- Red before green: kept.\n- Features 351, 353 and 354 are not touched.\n- The @AC-5 narrowing, the new @AC-10 and the @AC-51 widening are now covered by the operator's explicit 'Update FR-4/AC-5 accordingly' and the counter mandate.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Supersedes D-7 in full. In the per-user `except Exception` of `_opportunity_refresh_tick` (`servicer.py:6061-6063`), add `telemetry.record_opportunity_recompute(\"full\", \"failed\")` after `failed += 1`, and add `exc_info=True` to the WARNING. This reuses the existing instrument and label set, with no new instrument and no new label value. No daily `ok` is recorded, and `_log_items_tick` is untouched. design.md (d) and FR-4 state: per-user WARNING with traceback; `recompute{full,failed}` +1 per failed user, with no user attribute; previous queue kept; schedule advances; ordinary tick on partial failure and no tick when every user fails. The counter's accepted scope is every exception the per-user catch handles.",
+          "evidence": "Operator decision 2026-11-17 (design gate r3): REOPEN D-7 accepted, and the daily refresh must COUNT a failed user as a metric, reusing an existing instrument. `servicer.py:4957` (existing full/failed call) and `:4955` (exc_info precedent). `app/telemetry.py:484-486`."
+        },
+        {
+          "text": "Supersedes D-5's harness clause; the RpcError-subclass-fakes substance is kept. AC-5 goes in `tests/test_analysis_tick_telemetry.py` on `_refresh_svc`, with the real `_compute_opportunities` rebound, the real `_drain_held_symbols`, and only the three sibling drains stubbed empty. It assigns a whole stub `svc._portfolio = SimpleNamespace(ListPositions=AsyncMock(side_effect=<grpc.RpcError subclass>))` and seeds the previous rows. It asserts the replace is never awaited, `recompute{full,failed}==1`, `recompute{ok}==0`, and the logged `exc_info[0] is _PositionsPageError`. The spec states that `_strategies_repo is None` under `make_servicer`.",
+          "evidence": "Operator REOPEN D-5 accepted at design gate r3. `make_servicer` passes no `portfolio_channel` (`tests/test_analysis_servicer.py:43-67`), so `_portfolio is None` (`servicer.py:556-560`) and the drain returns `{}` (`:6413`). `_strategies_repo` is None without a db_pool (`:564`). `fails.md:3350-3353`."
+        },
+        {
+          "text": "Add `@AC-10 @FR-4 @regression` (daily-refresh failed user is counted and keeps the previous queue) and narrow @AC-5's When step to the on-demand recompute path. AC-10 is driven by `_opportunity_refresh_tick(_schedule())` with u-1 and u-2. The `ListPositions` fake branches on the `x-user-id` metadata: it raises an RpcError subclass for u-1 and returns an empty page for u-2. Asserts: u-1 replace never awaited, u-2 replace awaited, `recompute{full,failed}==1`, no attribute contains 'u-1', the u-1 WARNING `exc_info[0] is _PositionsPageError`, and the schedule advances.",
+          "evidence": "Operator steer r4 ('Update FR-4/AC-5 accordingly'; red-first test). `owner_metadata(uid)` at `servicer.py:6057`; `test_analysis_tick_telemetry.py:174-184` exc_info pattern."
+        },
+        {
+          "text": "Guard and doc updates. Add `record_opportunity_recompute(\"full\",\"failed\")` to the allowlist `_drive` (`tests/test_telemetry_allowlist.py:46-56`); it is recorded as exercising existing keys, not as new coverage. The analysis CLAUDE.md § Observability line states that `failed` counts kick-path and daily per-user failures, that `ok` is kick-path only, and that no failed/(ok+failed) ratio over `kind=full` is meaningful. design.md records @AC-51 @feature-294 as an EXTEND.",
+          "evidence": "AC-41 checks label keys only (`test_telemetry_allowlist.py:70-76`); the `(\"full\",\"ok\")` call is already at `:52`. Adversary r4 C-18 and C-16 notes. Operator steer requires the OTel produced-signal guard and CLAUDE.md to be updated in the same PR."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "New label value `kind=daily` on `analysis.opportunity.recompute` for the daily-refresh count.",
+          "why": "The operator steer requires reusing an existing instrument and label set where one fits. `kind` already means full-scope recompute, and the daily pass is one."
+        },
+        {
+          "text": "Count daily-refresh failures inside `_compute_opportunities`.",
+          "why": "It double-counts the kick path, which already records at `servicer.py:4957`."
+        },
+        {
+          "text": "Record a daily-path `recompute{full,ok}`.",
+          "why": "It goes beyond the steer (CLAUDE.md behaviour 2) and changes the meaning of the existing kick-path `ok` series."
+        },
+        {
+          "text": "Set `ListPositions` on the `make_servicer` instance's `_portfolio`, or use one shared `side_effect` for both AC-10 users.",
+          "why": "`_portfolio is None` (`servicer.py:556-560`), which gives an AttributeError or the `return {}` early exit. A shared side_effect cannot fail u-1 while u-2 succeeds. Both give a vacuous red or green (`fails.md:3350-3353`)."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "The produced-signals.tsv `analysis.opportunity.recompute` row needs operator confirmation and a verified exported series name (checked against Grafana or Mimir) before it lands; otherwise drop it. The guard checks only the producer literal (`scripts/check-otel-produced-signals.py:180-195`), and the registry has no `_total` precedent.",
+          "blocking": false
+        },
+        {
+          "text": "design.md must record that @AC-51 @feature-294 ('background full opportunity recompute fails → recompute{full,failed} +1') now matches two triggers, as an EXTEND. Its test (`test_analysis_tick_telemetry.py:174-184`) stays kick-path-only at exactly 1.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-1",
+          "how": "design.md (a)-(d) are now specified with accurate wording. (a) cites `entry_backfill.py:52-58,142-159,199-202`. (d) states the WARNING, the tick that is missing only when every user fails, and the new `recompute{full,failed}` count. The 'failed-item count' claim is removed."
+        },
+        {
+          "id": "O-3",
+          "how": "The FR-4 and design.md (d) text now states the real daily-path signals (per-user WARNING plus the operator-mandated `recompute{full,failed}` call at the per-user catch). The kick path keeps `:4957`."
+        },
+        {
+          "id": "O-4",
+          "how": "The 'failed loop-tick item' wording is gone. `_log_items_tick` is described accurately (ordinary tick on partial failure, none when every user fails), and the strongest-risk paragraph now concerns metric-series merging, not a tick count."
+        },
+        {
+          "id": "O-5",
+          "how": "AC-5 moves to `tests/test_analysis_tick_telemetry.py` with the real `_compute_opportunities` and `_drain_held_symbols`, a whole-stub page-1 RpcError-subclass `_portfolio`, seeded rows, replace asserted never awaited, and an exc_info pin."
+        },
+        {
+          "id": "O-6",
+          "how": "The FR-4 `compute_failed` clause is limited to cold reads (`servicer.py:4784-4795`). Stored queues are served stale (`:4798-4801`)."
+        },
+        {
+          "id": "O-7",
+          "how": "Consequence (a) cites `entry_backfill.py:199-202` alongside `:52-58,142-159`."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "R-6",
+          "evidence": "Operator decision 2026-11-17 (design gate r3) requires the daily refresh to COUNT a failed user as a metric, reusing an existing instrument. It postdates R-6's r2 lock. The adopted form adds no instrument and no label value: one call site on the existing `recompute{full,failed}`.",
+          "is_new": true
+        }
+      ],
+      "reopened": [
+        "D-7",
+        "D-5",
+        "R-6"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
