@@ -1,6 +1,6 @@
 # Implementation Spec: ensure-signals-watchlist-on-read
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-11-17
 **Feature**: `docs/roadmap/features/351-ensure-signals-watchlist-on-read/feature.md`
 **Total Steps**: 6
@@ -529,7 +529,7 @@ Any divergence goes in the `## Deviation Log` (F-09), never into an edit of this
 
 ### Step 6 — docs: promote the scenarios and write the merge-order row
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` (with `services/xstockstrat-portfolio/acceptance/` and `services/xstockstrat-agent/acceptance/`)
 **Files**:
 - `services/xstockstrat-portfolio/acceptance/ensure-signals-watchlist-on-read.feature` — create
@@ -603,3 +603,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Planned**: Instruction 3 — "If the fix landed a seeding or lock-timeout helper that duplicates Step 3's `testPoolWithLockTimeout` or inline seeds, delete 351's copy and use the fix's".
 - **Actual**: the gated fix (354) landed `seedNamedWatchlist`, which cannot set explicit ids, so 351's explicit-id inline INSERT stays (dry-reviewer: KEEP). The lock-timeout duplicate was created by **353** (`fix-listpositions-nextpagetoken-skips`, merged alongside 354), whose `testPool(t, opts ...func(*pgxpool.Config))` makes `testPoolWithLockTimeout` a second way to set the same `lock_timeout` field (dry-reviewer: REPLACE). 351's helper was deleted and the ensure dbtest now passes a `lock_timeout` option to `testPool`; `dbtest_helpers_test.go` is byte-identical to origin/main-dev afterwards.
 - **Disposition**: in scope (same intent as Instruction 3, C-18/D-11(c)); no operator decision needed.
+
+### Step 6 — the merge-order row already existed, so it was updated in place
+- **Planned**: Instruction 3 — "add the row from design.md § Merge-order row" with the fix's slug and number, written as `| ensure-signals-watchlist-on-read (351) | <fix-slug> (<NNN>) | … | No |`; Verification greps `ensure-signals-watchlist-on-read (351)`.
+- **Actual**: feature 354 had already written that row (`` `ensure-signals-watchlist-on-read` (351) `` → `` `fix-listwatchlists-page-token` (354) ``), and its text says "351's Step 6 updates this row rather than adding a second". The row was updated in place: the design's wording was appended ("Merge order only — `fix-listwatchlists-page-token` need not be `launched`", the boundary-row rationale, "gate verified by 351 Step 5") and Resolved set to `Yes` (354 merged to main-dev, `149351de`). The table's backtick convention is kept, so the spec's literal grep `ensure-signals-watchlist-on-read (351)` returns 0; the backtick-tolerant grep returns exactly 1 row.
+- **Also**: the spec's placeholder grep over `services/xstockstrat-*/acceptance/*.feature` matches one pre-existing line outside 351's diff — `services/xstockstrat-ui/acceptance/strategy-performance-dashboard.feature:2` documents the `@feature-<NNN>` convention in prose. Not a 351 placeholder; left untouched (out of scope).
+- **Disposition**: in scope (the row's own text and D-10(a)'s intent call for one row); no operator decision needed.

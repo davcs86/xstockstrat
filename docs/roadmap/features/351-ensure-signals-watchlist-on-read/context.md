@@ -180,7 +180,33 @@ Accountability (P-03):
   - (iii) sidecar `docs/reports/2026-11-16-portfolio-listwatchlists-page-token-skips-boundary-row-defect.status` → `triaged` / `ref: feature:354-fix-listwatchlists-page-token` (not `resolved`); the alternative clause holds: `git merge-base --is-ancestor 149351de origin/main-dev` → yes (fix commit #1566).
   - `go vet -tags dbtest ./internal/repository/` ok; `golangci-lint run` → "0 issues"; `go test -tags dbtest -race ./internal/repository/` ok (dbtests SKIP locally — no database here; the CI run above is the record); `go test ./... -race` ok; gofmt clean.
 - D-11(c) duplicate-helper review (`dry-reviewer` subagent): (1) `testPoolWithLockTimeout` → **REPLACE** with a `testPool` option (353 added `opts ...func(*pgxpool.Config)`, applied after the default `lock_timeout`, so an option overrides it); done: helper deleted, `watchlist_ensure_dbtest_test.go` passes `func(c *pgxpool.Config){ c.ConnConfig.RuntimeParams["lock_timeout"] = "5s" }`; `dbtest_helpers_test.go` is now byte-identical to origin/main-dev. (2) explicit-id inline INSERT → **KEEP** (`seedNamedWatchlist` cannot set ids; the ids are the test's point). (3) shared 4-line setup idiom → KEEP (no extraction). Out of 351's scope, noted only: `signal_expiry_backfill_dbtest_test.go:352` builds its own pool from the env var instead of `testPool` with an option (low confidence).
-- [ ] Re-confirm on the push carrying this step: "Portfolio DB test (TimescaleDB)" green with the option-based pool (the run of record above predates the helper de-duplication).
+- [x] Re-confirmed on the push carrying this step: CI run 44000801130 on `7a92315` (Step 5, option-based pool) completed with conclusion **success** (all non-skipped jobs, incl. the portfolio Go and DB-test jobs triggered by the repository change).
 - TDD: N/A (landing gate; the de-duplication is a refactor with no behavior change).
 - Files modified: `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go` (now identical to main-dev), `services/xstockstrat-portfolio/internal/repository/watchlist_ensure_dbtest_test.go`, this file
 - Deviations: see Deviation Log "Step 5 — the equivalent helper came from 353".
+
+### Step 6 — docs: promote the scenarios and write the merge-order row [done]
+- Promoted AC-1..AC-8 and AC-10 (each with `@feature-351`) into the new `services/xstockstrat-portfolio/acceptance/ensure-signals-watchlist-on-read.feature` (provenance header after `consolidate-watchlist-signal.feature`); AC-9 (docs wording) not promoted. Dedup: 351 AC-6 is **not** a duplicate of 127 AC-6 (127 covers the `EnsureSignalWatchlist` RPC; 351 covers the ensure performed by `ListWatchlists` plus the delete guard) — kept, with a note in the header.
+- Agent suite `mcp-watchlist-tools.feature`: added one scenario `@AC-1 @FR-1 @feature-351` after 148 @AC-1 with a `#` note (operator-approved C-16 EXTEND, design 2026-11-16); its `Then` states the RPC is called with the caller's x-user-id and no body user_id, the caller owns exactly one system "Signals" list afterwards, and the response shape and caller-only scope are unchanged; it does not say a `limit 1` caller "sees" Signals (FR-6). No 148 scenario text edited (0 removed lines vs main-dev).
+- merge-order.md: the existing 351→354 row (written by 354) updated in place and set Resolved = `Yes` — see Deviation Log "Step 6".
+- Accepted UI effects carried into the promotion record (design.md Open Risks; operator decision 2026-11-16, no UI code change): `/insights/watchlists` auto-selects Signals for a user with no other list; the "No watchlists yet" empty state is unreachable for any user who has listed once; the screener "Add top N" picker lists Signals and can write MANUAL entries into the system list (the prune touches only SIGNAL entries).
+- TDD: N/A (docs). Verification: portfolio `@feature-351` = 9, 9 scenarios, `@AC-9` = 0; agent `@feature-351` at line 23; merge-order backtick-tolerant grep = 1 row (spec literal grep = 0, see Deviation Log); placeholder grep = 1 pre-existing prose line outside 351 (`xstockstrat-ui/acceptance/strategy-performance-dashboard.feature:2`); stale "Gate verified by 351 step 4" = 0; agent tests `uv run pytest -k 'acceptance or feature or tools_endpoint'` → 11 passed.
+- Files modified: `services/xstockstrat-portfolio/acceptance/ensure-signals-watchlist-on-read.feature` (new), `services/xstockstrat-agent/acceptance/mcp-watchlist-tools.feature`, `docs/roadmap/features/merge-order.md`
+- Deviations: see Deviation Log "Step 6".
+
+### Completion
+- `node scripts/check-config-wiring.mjs --final` → exit 0 (two `REPORTED: … readers-disagree` lines are pre-existing baseline findings in analysis `fundsignal_loop.py` and trading `trading.go`, unrelated to 351 — 351 declares no config key).
+- Status: in-progress → **code-completed**; implementation-spec header → `complete`.
+- ALL-DONE 2.6 (close defect reports this feature resolved): none — 351 records no C-16 CHANGE and fixes no filed report (the two page-token reports belong to 353/354 and are `triaged` to them).
+- Merge-order gate for the integration PR: the only 351 row (351→354) is Resolved = Yes → passes.
+
+## Session 2026-11-17T02:12:30Z — sdd-execute summary
+**Steps this session**: 5, 6 (and 1-4 in the earlier session)
+**Progress**: 6 done / 6 total
+**Stopped at**: all complete — integration PR #1561 (existing; description updated)
+**Next**: merge #1561 into main-dev when CI is green; Homelab staging gets the Signals list after the dev deploy (if `HOMELAB_STAGING_ENABLED`) and the first ListWatchlists call per user
+
+Accountability (P-03):
+- Out-of-scope changes: none.
+- Open questions / items: [x] CI run 44000801130 on Step 5's commit `7a92315` → success; out of 351 scope and only noted: `signal_expiry_backfill_dbtest_test.go:352` builds its own pool rather than `testPool` with an option (dry-reviewer, low confidence).
+- Unaddressed review warnings: none.
