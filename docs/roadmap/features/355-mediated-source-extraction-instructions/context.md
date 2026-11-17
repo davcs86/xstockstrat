@@ -107,3 +107,11 @@
   a raising tool. Verified in code: dedup ignores `valid_from`; the 7-day watchlist expiry reaches
   only new / tracked SIGNAL entries (feature-281 behaviour). Open for the gate: O-39 Form 4 shared
   reporting person, O-40 default text's 7-day rule.
+- **Round-4 gate — user decisions:** Form 4 cluster needs two filings with no reporting person in
+  common; the default text carries the firm 7-day watchlist expiry; no server clock (R-8) — wording
+  only.
+- **Round-cap override (user sign-off, 2026-11-17):** at the round-4 gate the user answered
+  "override rounds cap, continue until design is sound". The `/sdd-design` five-round hard cap is
+  lifted for this run by explicit operator instruction. Rounds continue without an inter-round gate
+  unless a product decision is needed, until an adversary pass returns no blocking objection; the
+  approval gate (P-04) is then presented. The Floor (F-11) is not affected.
