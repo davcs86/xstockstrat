@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { addAdminCookie } from '../helpers/auth';
+import {
+  expectFocusOnMarkedTrigger,
+  expectRowMenuSettled,
+  openMarkedRowMenu,
+} from '../helpers/rowMenu';
 import { STRATEGY_TEMPLATE_MEANREV, STRATEGY_TEMPLATE_SYSTEM } from '../fixtures';
 
 /**
@@ -44,5 +49,55 @@ test.describe('Template authoring (/config-ui/templates)', () => {
     await adminRow.getByRole('button', { name: /Actions for template/ }).click();
     await expect(page.getByRole('menuitem', { name: 'Edit', exact: true })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'Retire', exact: true })).toBeVisible();
+  });
+});
+
+test.describe('Row menu confirm flow (feature 350)', () => {
+  test('@AC-6 dismissing Retire closes the menu and the page answers the first click', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await page.goto('/config-ui/templates');
+    await page.getByRole('tab', { name: 'Strategy', exact: true }).click();
+    await page
+      .getByRole('button', { name: `Actions for template ${STRATEGY_TEMPLATE_MEANREV.meta.name}` })
+      .click();
+    await page.getByRole('menuitem', { name: 'Retire', exact: true }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click();
+
+    await expectRowMenuSettled(page);
+    await page.getByRole('button', { name: 'New strategy template' }).click();
+    await expect(page.getByRole('alertdialog', { name: 'New strategy template' })).toBeVisible();
+  });
+
+  test('@AC-9 a refused Retire keeps focus on the same row trigger', async ({ page }) => {
+    await addAdminCookie(page);
+    await page.route(
+      '**/config-ui/api/xstockstrat.analysis.v1.AnalysisService/ManageTemplate',
+      (route) =>
+        route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({ code: 'failed_precondition', message: 'template is in use' }),
+        }),
+    );
+    await page.goto('/config-ui/templates');
+    await page.getByRole('tab', { name: 'Strategy', exact: true }).click();
+    const trigger = page.getByRole('button', {
+      name: `Actions for template ${STRATEGY_TEMPLATE_MEANREV.meta.name}`,
+    });
+    await openMarkedRowMenu(trigger);
+    await page.getByRole('menuitem', { name: 'Retire', exact: true }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Retire', exact: true })
+      .click();
+
+    await expect(page.getByRole('main').getByText('template is in use')).toBeVisible();
+    await expectRowMenuSettled(page);
+    await expectFocusOnMarkedTrigger(page);
   });
 });

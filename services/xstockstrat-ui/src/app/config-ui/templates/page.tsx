@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ChangeEvent } from 'react';
+import { useCallback, useMemo, useState, type ChangeEvent } from 'react';
 import { ConnectError } from '@connectrpc/connect';
 import {
   clone,
@@ -341,40 +341,43 @@ function TemplateTable({
   );
 }
 
+const errorMessage = (err: unknown) =>
+  err instanceof ConnectError ? err.rawMessage : err instanceof Error ? err.message : 'Failed';
+
 export default function TemplatesAdminPage() {
   const { data: isAdmin, isLoading: adminLoading } = useIsAdmin();
-  const manage = useManageTemplate();
+  const { mutate, isPending } = useManageTemplate();
   const [editing, setEditing] = useState<Editing | null>(null);
   const [form, setForm] = useState<FormState>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-
-  const errorMessage = (err: unknown) =>
-    err instanceof ConnectError ? err.rawMessage : err instanceof Error ? err.message : 'Failed';
 
   const openCreate = (kind: CatalogKind) => {
     setEditing({ kind, existing: null });
     setForm(emptyForm(kind));
     setFormError(null);
   };
-  const openEdit = (row: CatalogTemplate) => {
+  const openEdit = useCallback((row: CatalogTemplate) => {
     setEditing({ kind: row.kind, existing: row });
     setForm(formFromTemplate(row));
     setFormError(null);
-  };
-  const retire = (row: CatalogTemplate) => {
-    manage.mutate(
-      {
-        kind: row.kind,
-        operation: TemplateOperation.RETIRE,
-        template: { meta: { templateId: row.template.meta?.templateId ?? '', kind: row.kind } },
-      } as ManageTemplateInput,
-      {
-        onSuccess: () => setActionError(null),
-        onError: (err) => setActionError(errorMessage(err)),
-      },
-    );
-  };
+  }, []);
+  const retire = useCallback(
+    (row: CatalogTemplate) => {
+      mutate(
+        {
+          kind: row.kind,
+          operation: TemplateOperation.RETIRE,
+          template: { meta: { templateId: row.template.meta?.templateId ?? '', kind: row.kind } },
+        } as ManageTemplateInput,
+        {
+          onSuccess: () => setActionError(null),
+          onError: (err) => setActionError(errorMessage(err)),
+        },
+      );
+    },
+    [mutate],
+  );
 
   const save = () => {
     if (!editing) return;
@@ -390,7 +393,7 @@ export default function TemplatesAdminPage() {
       setFormError(errorMessage(e));
       return;
     }
-    manage.mutate(input, {
+    mutate(input, {
       onSuccess: () => {
         setEditing(null);
         setActionError(null);
@@ -479,10 +482,10 @@ export default function TemplatesAdminPage() {
             </Button>
             <Button
               type="button"
-              disabled={manage.isPending || (form.templateId ?? '').trim() === ''}
+              disabled={isPending || (form.templateId ?? '').trim() === ''}
               onClick={save}
             >
-              {manage.isPending ? 'Saving…' : 'Save template'}
+              {isPending ? 'Saving…' : 'Save template'}
             </Button>
           </div>
         </div>
