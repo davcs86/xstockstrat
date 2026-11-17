@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report |
+| 2026-11-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@ Portfolio's `backfill-signal-expiry` APPLY can mark a SIGNAL watchlist entry as 
 
 ## Next Action
 
-`/sdd-batch` (full design debate, design gate halts for operator approval) — operator directive; the rubric recommendation was skip (`/sdd-spec fix-portfolio-signal-expiry-backfill`), see context.md
+`/sdd-design fix-portfolio-signal-expiry-backfill` — full design recommended (operator directive 2026-11-17: `/sdd-batch` full design debate; design gate halts for operator approval)
