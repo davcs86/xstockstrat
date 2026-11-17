@@ -1,6 +1,6 @@
 # Debate Register: fix-portfolio-internal-position
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -72,4 +72,4 @@
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 2 | D-7 | seedPosition/testPool are package-repository _test.go symbols under //go:build dbtest (internal/repository/dbtest_helpers_test.go:1-3,22,66), with no dbtest file in internal/service. CI runs go test -tags dbtest only on ./internal/repository/... (.github/workflows/ci.yml:1065,1116). D-7's recorded evidence cites only the helper line numbers, not the package or the CI scope. | pending user |
+| P-1 | 2 | D-7 | seedPosition/testPool are package-repository _test.go symbols under //go:build dbtest (internal/repository/dbtest_helpers_test.go:1-3,22,66), with no dbtest file in internal/service. CI runs go test -tags dbtest only on ./internal/repository/... (.github/workflows/ci.yml:1065,1116). D-7's recorded evidence cites only the helper line numbers, not the package or the CI scope. | user reopened |
