@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
+**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
 
 ## Rounds
 
@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-16 | /sdd-design | 11 | 10 | 3 | 16 | 0 | yes |
 | 2 | 2026-11-17 | /sdd-design | 8 | 1 | 22 | 14 | 0 | yes |
+| 3 | 2026-11-17 | /sdd-design | 5 | 3 | 12 | 12 | 0 | yes |
 
 ## Settled Decisions
 
@@ -35,6 +36,11 @@
 | D-17 | 2 | Binding rules carried into the spec: ingest writes `symbol_results` as JSON text and parses it on read (asyncpg has no JSON codec here); marketdata binds DATE values as date-only text under `QueryExecModeExec`; expiry rows of removed symbols are deleted with a plain DELETE under the parent lock; the sync response returns flagged symbols in the request plus newly claimed ones only; `first_unservable_date` has one stated encoding and the UI and agent format it in a fixed zone; the agent post-processes bindings so `delisted: false` is always present. | `services/xstockstrat-ingest/app/repositories/backfill_jobs.py:73-78`; `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go:817-822`; `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go:503-507,577`; `services/xstockstrat-agent/app/client.py:377` | settled |
 | D-18 | 2 (gate) | The flag alert is delivered at-least-once: portfolio acknowledges after sending, and an unacknowledged claim becomes claimable again after a timeout. A duplicate is possible only after a crash or timeout between send and acknowledgement. Operator ruling at the round-2 gate. | context.md 2026-11-17 sdd-design round-2 gate; FR-12 | settled |
 | D-19 | 2 (gate) | Operator steer: the asset-load hook is the only decider of profile state (start, reset, flag, recover). The portfolio sync only supplies the current watchlist symbols, claims and acknowledges alerts, and reads flagged state; it never starts or resets a row. Round 3 details and attacks this. | context.md 2026-11-17 sdd-design round-2 gate | settled |
+| D-20 | 3 | Marketdata persists the watchlist symbol union in `marketdata.watched_symbol` (same migration `010`), rewritten by each sync with an ordered insert and an anti-join delete. An empty, error-free union clears the table. With an empty union the hook starts nothing, resets nothing for leaving watchlists, and flags no unflagged row; it flags an unflagged row only if its symbol is in the union. | `services/xstockstrat-marketdata/internal/service/asset_servability.go:197`; `services/xstockstrat-portfolio/internal/service/signal_prune.go:15,38`; `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go:446-448` | settled |
+| D-21 | 3 | The hook is five ordered, individually committed conditional statements — reset (servable again), reset (left every watchlist), start, flag, recover — then the flagged-set rebuild and warm-set deletion. It runs on every successful load, after the first-load prune, under a 30 s context; `refreshAssets` is restructured so both the first-load and later-load paths reach it. Rows are locked in symbol order. The `state_as_of` column of round 2 is dropped. | `asset_servability.go:135-148`; D-14, D-19 | settled |
+| D-22 | 3 | Alert contract: `symbol_profile` gains `alert_claimed_at` and `alert_acked_at`. The sync claims unacknowledged flag alerts (never claimed, or claimed longer ago than a 10-minute lease) with SKIP LOCKED, at most 100 per call, and returns per flagged symbol one alert-state enum value: pending, claimed, redelivery, reported. Portfolio removes a symbol from system-managed lists only when its state is not pending and the symbol is not servable in marketdata's current asset set, sends the alert for claimed and redelivery, then acknowledges through a separate `AckDelistingAlerts` RPC. A redelivery says the removal was done on an earlier refresh. The recovery alert is keyed on the flag alert having been claimed. | D-10, D-16, D-18; FR-12 | settled |
+| D-23 | 3 | The sync and acknowledge calls run under a fixed 15 s background deadline, not under `portfolio.marketdata.servability_timeout_ms`. The sync request is capped at 20 000 symbols. Both RPCs are guarded by a new inbound internal-caller allow-list on marketdata (two grants for `portfolio`); portfolio's tick sets the `x-internal-caller` header, which it does not send today. | `services/xstockstrat-portfolio/internal/service/portfolio_service.go:141,548-554`; `services/xstockstrat-portfolio/internal/service/authz.go:19-35` | settled |
+| D-24 | 3 | Carried into the spec as checks: the ack statement uses the same ordered-lock shape as the hook; `date[]` parameters are bound from date-only text; `first_unservable_date` is a `YYYY-MM-DD` string on the wire, validated in the agent and UI; the union comes from the unfiltered repo `ListAllSymbols`, never the filtered RPC; a title/category-parameterised alert emitter is added beside `emitWarning`, which delegates to it; the config seed number is re-checked against in-flight features (052 is last on `main-dev`, 053 is claimed by feature 345); a WARN and a counter make a timed-out hook visible. | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:2163-2164`; `services/xstockstrat-marketdata/internal/repository/pool.go:31-33` | settled |
 | D-9 | 1 | Only an error from the data source turns a flagged symbol into `skipped`. A failure writing to our own database stays `failed` in both backfill kinds. | spec D-16 ("the source returns any error"); `services/xstockstrat-marketdata/internal/service/marketdata_service.go:1561-1565,2344` | settled |
 
 ## Rejected Alternatives (locked)
@@ -52,6 +58,9 @@
 | R-8 | 1 | Delete the profile row on reset or recovery | Same cost as nulling the state; spec D-9 wants the profile to hold further metadata | locked |
 | R-10 | 1 (gate) | N2: a replace-all `UpdateWatchlist` keeps a stored flagged symbol | Declined by the operator: portfolio `@AC-19 @feature-282` stays as is. Accepted consequence: a flagged symbol on a user list is dropped, and reported in `refused_symbols`, by a replace-all update such as a name-only agent update | locked |
 | R-11 | 2 | Read the flagged set from the database per backfill symbol instead of keeping it in memory | One query per symbol on the backfill path; a boot load (D-15) fixes the cold-start gap equally | locked |
+| R-12 | 3 | Hold the watchlist union in marketdata's memory only | Lost on restart, and the boot load is the only load for up to 6 h; with more than one instance only one would hold it | locked |
+| R-13 | 3 | Acknowledge the flag alert as a field on the next sync | The lease would have to exceed the prune interval, which can be 86 400 s | locked |
+| R-14 | 3 | Reuse `portfolio.marketdata.servability_timeout_ms` as the sync deadline | A 500–4000 ms insert-path budget is wrong for a background write of up to 20 000 rows; a persistently slow sync would fail every tick | locked |
 | R-9 | 1 | Seed `_resume_job` state from the row's `failed_symbols` | A successfully re-run failed chunk would stay in the set and finalize PARTIAL (`servicer.py:909-912,981-987,830`); also scope creep into a known separate defect | locked |
 
 ## Objections
@@ -82,13 +91,26 @@
 | O-21 | 2 | The flag alert is at-most-once: any portfolio-side timeout or lost response after the claim commits loses it, and FR-12 says an alert is emitted. Either a lease plus an acknowledgement (at-least-once) or an operator-accepted residual. | yes | closed @ round 2 (operator: at-least-once, D-18) |
 | O-22 | 2 | asyncpg cannot bind a dict to JSONB in ingest; the per-chunk write would raise inside the lock. | no | closed @ round 2 (D-17) |
 | O-23 | 2 | DATE binding from a Go time under `QueryExecModeExec` depends on the session time zone. | no | closed @ round 2 (D-17) |
-| O-24 | 2 | Possible deadlock between the sync transaction's multi-row updates and the hook's updates on overlapping rows; lock in symbol order or retry once on 40P01. | no | open |
-| O-25 | 2 | The sync reuses `portfolio.marketdata.servability_timeout_ms` (500–4000 ms, documented for the insert paths); record the second consumer or add a dedicated key. | no | open |
+| O-24 | 2 | Possible deadlock between the sync transaction's multi-row updates and the hook's updates on overlapping rows; lock in symbol order or retry once on 40P01. | no | closed @ round 3 (single ordered-lock statements, SKIP LOCKED claim, ordered union insert (D-20, D-21)) |
+| O-25 | 2 | The sync reuses `portfolio.marketdata.servability_timeout_ms` (500–4000 ms, documented for the insert paths); record the second consumer or add a dedicated key. | no | closed @ round 3 (fixed 15 s background deadline instead of the shared key (D-23, R-14)) |
 | O-26 | 2 | A recovery alert could fire for a flag the operator was never told about. | no | closed @ round 2 (D-16) |
-| O-27 | 2 | AC-21 as written cannot be met by a load alone when rows are started by portfolio's sync; a long prune interval also delays the first-unservable date. | no | open |
+| O-27 | 2 | AC-21 as written cannot be met by a load alone when rows are started by portfolio's sync; a long prune interval also delays the first-unservable date. | no | closed @ round 3 (persisted union: a load alone starts the row, AC-21 holds as written (D-20)) |
 | O-28 | 2 | `first_unservable_date` as a Timestamp at New York midnight renders as the previous day in a western browser zone. | no | closed @ round 2 (D-17) |
 | O-29 | 2 | The response returning every flagged row grows without bound. | no | closed @ round 2 (D-17) |
 | O-30 | 2 | SKIP LOCKED on expiry rows under the parent lock is dead mechanism. | no | closed @ round 2 (D-17) |
+| O-31 | 3 | Removal was not tied to the alert claim, so a first-delivery alert could report removal from 0 lists (burst over the claim limit, SKIP LOCKED skip, second instance). FR-12, AC-17, AC-18. | yes | closed @ round 3 (alert-state enum; no removal while pending, D-22) |
+| O-32 | 3 | A union that legitimately shrinks to empty was ignored, leaving a stale union that keeps starting and flagging symbols on no watchlist. | no | closed @ round 3 (empty union clears the table; no flag outside the union, D-20) |
+| O-33 | 3 | A relisted symbol's fresh signal entry could be removed before the hook recovers it (recovery lags by a load, a weekend or a holiday). | no | closed @ round 3 (removal excludes symbols servable in the current asset set, D-22) |
+| O-34 | 3 | `emitWarning` hard-codes category and title; the recovery alert is at-most-once. | no | open |
+| O-35 | 3 | The shared insert-path timeout is too tight for the background sync. | no | closed @ round 3 (D-23) |
+| O-36 | 3 | 1000 alerts in one tick could outlast the 10-minute lease and delay the 281 prune. | no | closed @ round 3 (claim limit 100 per call, D-22) |
+| O-37 | 3 | The union rewrite had no lock order and a linear-per-row delete. | no | closed @ round 3 (ordered insert, anti-join delete, D-20) |
+| O-38 | 3 | `refreshAssets` returns early on later loads; the hook placement needs a restructure. | no | closed @ round 3 (D-21) |
+| O-39 | 3 | Ack statement lock order is plan-dependent; `date[]` must be bound from text. | no | closed @ round 3 (D-24) |
+| O-40 | 3 | The new fixed invariants (hook timeout 30 s, alert lease 10 min, sync deadline 15 s, request cap 20 000, claim limit 100) need explicit operator approval (F-07 precedent, P-04). | yes | open |
+| O-41 | 3 | Config seed migration number must be re-checked at spec time. | no | closed @ round 3 (D-24) |
+| O-42 | 3 | AC-29's Given must state that the flag alert was sent; changing an approved scenario needs operator sign-off (C-15). | yes | open |
+| O-43 | 3 | Residual: a load whose hook times out misses a reset, and the symbol can then flag earlier than FR-1 allows (AC-25). | no | open |
 
 ## Reopen Petitions
 
