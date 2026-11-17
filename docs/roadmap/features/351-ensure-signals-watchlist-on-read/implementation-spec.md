@@ -296,7 +296,7 @@ proof is Step 2's tests going RED → GREEN.
 **Verification**:
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/ -run 'TestListWatchlists351' -race -count=1 -v
-cd services/xstockstrat-portfolio && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
+cd services/xstockstrat-portfolio && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print "total " $3 "%"; exit ($3+0 < 40)}'   # exits non-zero below 40%
 cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -c 'TestListWatchlists351_AC' internal/service/watchlist_service_test.go   # >= 9 (one per AC-1,2,3,4,5,6,7,8,10)
 ```
@@ -422,12 +422,16 @@ body and `context.md`. Do not start a database inside `/sdd-execute`.
 not by a new test; flagged as an assumption above)
 
 **Instructions**:
-1. `tools.py:33` — replace `(read-only)` on the `list_watchlists` line with wording that states the call
-   idempotently ensures the caller's system "Signals" list (keep the line ≤ 100 columns, as its siblings).
+1. `tools.py:33` — replace the whole `list_watchlists` header line with exactly (98 columns, inside the
+   100-column limit at `agent/pyproject.toml:37`; single line, so the Verification grep still matches it):
+   `  list_watchlists     — lists the caller's own watchlists, paginated; idempotently ensures Signals`
+   (two leading spaces, five spaces before the em dash, as the sibling lines at `:31-36`).
 2. `tools.py` docstring (`:2154`) — replace `(read-only)` with a sentence stating that the call
    idempotently ensures the caller's system-managed "Signals" list on a first-page call (empty `page_token`),
    so the list is returned even for a user who never ingested a signal. Keep `Pagination is stable across
    pages.` (`:2155`, D-6), the parameters, the return shape and `Only the caller's own lists are ever returned.`
+   The new sentence must not contain the text `user_id = _caller_user_id` (the Verification `sed` range ends
+   at that line, `tools.py:2162`).
    Name, parameters and return shape do not change; no tool-count surface changes.
 3. `docs/runbooks/mcp-tools.md:1382` — replace `(read-only, paginated)` with `(paginated)` and add one
    sentence to that paragraph stating the same idempotent ensure of the caller's system "Signals" list on a
@@ -586,6 +590,7 @@ grep -c '@feature-351' services/xstockstrat-portfolio/acceptance/ensure-signals-
 grep -n '@feature-351' services/xstockstrat-agent/acceptance/mcp-watchlist-tools.feature                    # expect the one new scenario
 grep -n 'ensure-signals-watchlist-on-read (351)' docs/roadmap/features/merge-order.md                       # expect the new row
 grep -n 'fix-slug\|<NNN>' docs/roadmap/features/merge-order.md services/xstockstrat-*/acceptance/*.feature   # expect none (placeholders replaced)
+grep -n 'Gate verified by 351 step 4' docs/roadmap/features/merge-order.md                                    # expect none (rewritten to "Step 5")
 ```
 
 ---
