@@ -369,7 +369,7 @@ grep -n "_opportunity_refresh_tick\|daily refresh" docs/roadmap/features/356-fix
 
 ### Step 6 — service: Daily opportunity refresh counts a failed user on `recompute{full,failed}`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -521,3 +521,9 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: Step 2 was already committed (`89d21e081`). For the RED run (`.sdd-logs/v-1.log`) the working-tree `servicer.py` was overwritten with `git show 545825bf9:services/xstockstrat-analysis/app/handlers/servicer.py`, the Step 3 Verification block was run verbatim, and the file was then restored with `git checkout --` (empty diff before GREEN and commit). The spec's AC-4 note expected "red N/A — guard"; on the pre-Step-2 tree AC-4 fails only at the new type pin (`AttributeError: ... no attribute '_PositionsPageError'`), the raw `RuntimeError` already propagates. AC-8 and AC-9 pass on the pre-Step-2 tree (success-path characterization; the spec claims no red for them).
 **Reason**: the step-2 deviation's disposition requires Step 3 to record its own RED for its named test ids against the pre-Step-2 `servicer.py`.
 **Disposition**: carried out as the Step 2 deviation directed; no commit holds the swapped file.
+
+### Deviation: Step 6 — RED captured with an uncommitted scratch probe
+**Spec said**: `**TDD**: red-green required`; `**Covers**: —`; the paired `@AC-10` test belongs to Step 7, whose item 4 records RED for Step 6.
+**Actual**: Step 6 may stage only `servicer.py` (F-08), so Step 7's test was not written here. RED/GREEN was captured with the uncommitted probe `.sdd-logs/red/test_step6_red.py` (one case on `_refresh_svc` with two users, u-1's `_compute_opportunities` raising: `recompute{full,failed}` == 1, `ok` == 0, WARNING `exc_info[0] is RuntimeError`, no `u-1` attribute, u-2 replaced, schedule advanced). RED: `AssertionError: assert 0 == 1` on the `failed` count; GREEN: `1 passed`. The edit site sat at `servicer.py:6072-6074` at the branch head (Steps 2-5 shifted it +9 from the cited `:6063-6065`); the content matched exactly.
+**Reason**: red-before-green is mandatory, and the committed test for this behaviour is in Step 7's **Files**.
+**Disposition**: same shape as the Step 2 deviation. Step 7 must still record its own `@AC-10` RED, against the pre-Step-6 `servicer.py` (the parent of the Step 6 commit).

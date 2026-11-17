@@ -882,6 +882,13 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - Files modified: `services/xstockstrat-analysis/tests/test_held_position_drains.py`, `services/xstockstrat-analysis/tests/test_live_loop_telemetry.py`
 - Deviations: none, apart from the commit-trailer attribution noted under Step 3, which applies again here.
 
+### Step 6 — service: Daily opportunity refresh counts a failed user on `recompute{full,failed}` [done]
+- In the per-user `except Exception` of `_opportunity_refresh_tick`, added `telemetry.record_opportunity_recompute("full", "failed")` after `failed += 1` and `exc_info=True` on the existing WARNING (D-11). `_log_items_tick`, `schedule.advance` and `_compute_opportunities` are unchanged; no daily `ok`. Discovery: the edit site is at `servicer.py:6072-6074` at the branch head (+9 from the cited `:6063-6065`, from Steps 2-5); content matched exactly.
+- TDD (C-08/P-06), uncommitted probe `.sdd-logs/red/test_step6_red.py` (see Deviation Log). RED against the pre-Step-6 tree (`.sdd-logs/v-1.log`, `exit=1`): `FAILED ::test_daily_refresh_failed_user_counted_with_traceback - AssertionErr...`, `E       AssertionError: assert 0 == 1` (`recompute{full,failed}`), `1 failed in 1.99s`. GREEN (`.sdd-logs/v-3.log`, `exit=0`): `1 passed in 0.27s`.
+- Verification block run verbatim (`.sdd-logs/v-2.log`, `exit=0`): `All checks passed!`, `141 files already formatted`, `18 passed in 1.05s`, grep `4966:                telemetry.record_opportunity_recompute("full", "failed")` and `6074:                telemetry.record_opportunity_recompute("full", "failed")` (two sites). Extra full-suite run (`.sdd-logs/v-4.log`, `exit=0`): `1754 passed, 13 warnings in 92.36s`, `Required test coverage of 40% reached. Total coverage: 91.63%`. Config-key wiring gate: N/A (no config key). Tooling: uv ✓, `uv sync --extra dev` (venv Python 3.12.3).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: RED via an uncommitted scratch probe (Deviation Log); commit-trailer attribution as noted under Step 3.
+
 ## Open Items
 
 - ~~Step 3 must still record RED for its own test ids (item 5).~~ Resolved by Step 3 (2026-11-17), RED recorded above.

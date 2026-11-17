@@ -6071,7 +6071,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     await self._replace_and_stamp_compute_state(uid, rows, meta)
             except Exception as e:  # one bad user never kills the pass
                 failed += 1
-                log.warning("opportunity daily refresh failed for user=%s: %s", uid, e)
+                telemetry.record_opportunity_recompute("full", "failed")
+                log.warning(
+                    "opportunity daily refresh failed for user=%s: %s", uid, e, exc_info=True
+                )
             await asyncio.sleep(0)  # cooperative pacing point
         # A completed pass advances to the next wall-clock hour.
         await schedule.advance(seconds_until_hour_utc(self._opportunity_refresh_hour()))
