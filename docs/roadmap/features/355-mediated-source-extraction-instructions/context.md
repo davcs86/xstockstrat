@@ -115,3 +115,8 @@
   lifted for this run by explicit operator instruction. Rounds continue without an inter-round gate
   unless a product decision is needed, until an adversary pass returns no blocking objection; the
   approval gate (P-04) is then presented. The Floor (F-11) is not affected.
+- Round 5 (2026-11-17): proposer audit found no blocking defect; adversary found one — a Form 4
+  filing cut off at the tail of the latest-100 feed reads as a disjoint filing (false cluster).
+  Fixed in the text (D-27). D-28 lists the spec amendments, D-29 the step refinements. Adversary:
+  "with that clause fixed the design is APPROVABLE". Round 6 runs as a confirming pass under the
+  user's continue-until-sound instruction.
