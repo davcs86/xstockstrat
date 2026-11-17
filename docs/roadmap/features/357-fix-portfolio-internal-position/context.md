@@ -495,3 +495,45 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-17 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-portfolio; key reuse patterns: the fail-closed ledger fill drain at portfolio_service.go:1118-1166, and the 353 `ListPositions` keyset cursor unchanged).
+- Phase 1 Grilling: 3 rounds (full). Termination: approved. The operator approved at the round-3 gate "as synthesized": the CI edit is ci.yml:1065 (the portfolio db-test step) only.
+  - Chosen approach: a private service-level `listAllPositions` drain with fail-closed guards. All four readers drain first, then enrich once.
+    - `GetPortfolio` and `GetPnL` return Internal.
+    - `broadcastSnapshot` logs WARN and records `skipped_read_error`.
+    - `checkRiskLimits` logs WARN and falls through to drawdown.
+    - Pgxmock red tests pin the page-2 cursor slot, and a 501-row service dbtest (D-15) covers the real database.
+  - Rejected: R-1..R-10 (repo-level drain, unpaged query, `db_error` reuse, `anyArgs` page 2, new sentinel, shared per-fill slice, moving or copying 353's helpers, the marketdata ci.yml:1116 edit, the pool-less dbtest). The operator also declined option (c).
+- Constitution rules touched: C-01, C-08, C-11, C-13, C-15, C-16, C-18, P-02, P-03, P-06, F-04, F-07, PLAT-N1. Floor breaches: none.
+- C-18 waiver (D-17): `serviceTestPool` duplicates about 15 lines of skip/CI-fatal/lock_timeout logic from `testPool` (internal/repository/dbtest_helpers_test.go:22-44). It carries a one-line constraint comment that points at its twin.
+- C-16:
+  - `@AC-9 @feature-231` is EXTENDED, not CHANGED: a position-read failure skips concentration while drawdown still alerts. The operator signed off at the round-2 gate on 2026-11-17 ("O-2 approved").
+  - A new `@feature-357` scenario is promoted at launch.
+  - PRESERVE `@AC-1 @feature-178` and `@AC-1 @feature-353` (operator decisions 2026-11-17).
+  - PRESERVE `@AC-3 @feature-231` and `@AC-8 @feature-231`.
+  - EXTEND this feature's `@AC-1`..`@AC-5`.
+- Register at approval:
+  - debate.md State is approved and Rounds run is 3.
+  - P-1 verdict is set to `user reopened`. The operator ruled (a') on the D-7 petition, so D-7 was reopened and amended as D-15. This reflects that ruling rather than "declined".
+  - O-7..O-10 stay open in the register. The approved synthesis resolves all four, and each is carried below as a binding `/sdd-spec` obligation.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- D-1..D-6 and D-8..D-17 are settled (debate.md). D-15 supersedes D-7 in substance: the dbtest is a service-package file seeded via `UpsertPosition` with a local pool, and CI changes only at ci.yml:1065.
+- O-2: on a position-read failure, `checkRiskLimits` falls through to the drawdown check. A red test (4g) proves a drawdown alert still fires after a page-2 failure.
+
+### Open Threads
+
+- [ ] D-9 smoke gate. A single `GetLatestQuotes` batch of 501 or more symbols may exceed `batch_timeout_ms` (2500) inside `quote_timeout_ms` (4000), or hit a vendor cap. Run a dev smoke test with at least 501 symbols for GetPnL and GetPortfolio. The fallback is per-page enrichment, with the AC-4 test relaxed to ≤2. Target: the spec's verification step.
+- [ ] Cross-page read skew (D-8). Disclose it in the release notes. Target: the integration PR.
+- [ ] Fill hot-path cost (D-13): two drains and two large quote batches per fill on the serialized consumer. Disclosed; no optimisation in scope. Target: the integration PR notes.
+- [ ] Drain memory grows linearly with the number of positions; only the repeated-token and empty-page guards stop a runaway loop. Target: the drain-helper step.
+- [ ] O-8 dbtest isolation. Use a service-unique prefix (e.g. `it-357-`, never `it-281-`), per-test unique account ids and prefix-only cleanup. Target: the dbtest step.
+- [ ] O-9 dbtest wiring. Verify that `*pgxpool.Pool` satisfies `queryRower` and that no drained reader calls `repo.Pool()`; the fallback is `NewPortfolioRepo(url)`. Set the `marketdata` (which needs a `BatchGetBars` stub), `ledger` and `subs` fields. AC-3 asserts count and account ids, not equity. Target: the dbtest step.
+- [ ] O-10. Anchor the ListPositions pgxmock regex to a substring unique to its SELECT; the spec names it. Target: the pgxmock test step.
+- [ ] O-7. Edit only the CI portfolio db-test step at ci.yml:1065; ci.yml:1116 (marketdata) is not touched. Target: the CI step.
+- [ ] Users with more than 500 positions see different totals and P&L, and may see new concentration alerts. Target: the integration PR release notes.
+- [ ] Read the PORTFOLIO-14 and PORTFOLIO-16 invariants. Target: `/sdd-spec`.
