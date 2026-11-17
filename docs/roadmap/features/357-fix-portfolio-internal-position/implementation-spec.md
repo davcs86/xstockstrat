@@ -507,7 +507,7 @@ grep -n 'skipped_read_error' CLAUDE.md internal/service/portfolio_service.go    
 
 ### Step 8 — docs: promote the acceptance scenarios to the portfolio durable suite (C-16)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio` (docs)
 **Files**:
 - `services/xstockstrat-portfolio/acceptance/fix-portfolio-internal-position.feature` — create
