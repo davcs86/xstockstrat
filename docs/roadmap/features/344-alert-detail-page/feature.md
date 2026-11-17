@@ -3,6 +3,8 @@
 **Development Branch**: `feature/alert-detail-page`
 **Created**: 2026-11-15
 **Last Updated**: 2026-11-16
+**Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
+**Launched date**: 2026-11-17
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute sequential | → in-progress (sdd-batch-execute setup); merged `origin/main-dev@9f8856229`, re-spec'd steps 1, 2, 4, 17–22 (17–22 still blocked on 339) |
 | 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute sequential | All 23 steps done (Step 23 docs last); `check-config-wiring.mjs --final` exit 0 |
 
+| 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
 ---
 
 ## Artifacts

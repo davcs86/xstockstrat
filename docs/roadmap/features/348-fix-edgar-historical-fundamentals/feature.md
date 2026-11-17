@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-11-16
 **Last Updated**: 2026-11-16
+**Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
+**Launched date**: 2026-11-17
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-11-16 | `in-progress` | /sdd-execute (sequential) | Steps 1–14 done; scenarios promoted; Step 15 (operator gate) open — lane A frozen, audit pending |
 | 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 15 steps done; lane A audited; lane B audit waived by the operator; merge instructed by the operator |
 
+| 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
 ---
 
 ## Artifacts

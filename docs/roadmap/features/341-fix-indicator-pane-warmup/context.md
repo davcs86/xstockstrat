@@ -999,3 +999,10 @@ Feature: fix-indicator-pane-warmup (bug fix)
 ## Session 2026-11-16 — operator confirmation of the regenerated promotion plan (orchestrator)
 
 - Asked: confirm the corrected plan above (4 scenarios, verbatim, tags kept, new file under `services/xstockstrat-ui/acceptance/`)? **Operator, verbatim: "Confirm both (Recommended)".** This confirms the last `sdd-batch-promotion-plan` block (P-04).
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1573 merged to main
+- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17

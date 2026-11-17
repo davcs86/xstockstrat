@@ -354,19 +354,20 @@ type BackfillJob struct {
 	// DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
 	//
 	// Deprecated: Marked as deprecated in ingest/v1/ingest.proto.
-	Timeframe       string                 `protobuf:"bytes,3,opt,name=timeframe,proto3" json:"timeframe,omitempty"`
-	Range           *v1.TimeRange          `protobuf:"bytes,4,opt,name=range,proto3" json:"range,omitempty"`
-	Status          BackfillStatus         `protobuf:"varint,5,opt,name=status,proto3,enum=xstockstrat.ingest.v1.BackfillStatus" json:"status,omitempty"`
-	BarsProcessed   int64                  `protobuf:"varint,6,opt,name=bars_processed,json=barsProcessed,proto3" json:"bars_processed,omitempty"`
-	BarsTotal       int64                  `protobuf:"varint,7,opt,name=bars_total,json=barsTotal,proto3" json:"bars_total,omitempty"`
-	StartedAt       *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	CompletedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
-	Error           string                 `protobuf:"bytes,10,opt,name=error,proto3" json:"error,omitempty"`
-	FailedSymbols   []string               `protobuf:"bytes,11,rep,name=failed_symbols,json=failedSymbols,proto3" json:"failed_symbols,omitempty"` // symbols that failed in a PARTIAL/FAILED job (FR-7)
-	TimeframeEnum   v1.Timeframe           `protobuf:"varint,12,opt,name=timeframe_enum,json=timeframeEnum,proto3,enum=xstockstrat.common.v1.Timeframe" json:"timeframe_enum,omitempty"`
-	ChunksTotal     int32                  `protobuf:"varint,13,opt,name=chunks_total,json=chunksTotal,proto3" json:"chunks_total,omitempty"`                                    // planned chunk count (FR-5)
-	ChunksCompleted int32                  `protobuf:"varint,14,opt,name=chunks_completed,json=chunksCompleted,proto3" json:"chunks_completed,omitempty"`                        // chunks in COMPLETED state (FR-5)
-	DataKind        BackfillDataKind       `protobuf:"varint,15,opt,name=data_kind,json=dataKind,proto3,enum=xstockstrat.ingest.v1.BackfillDataKind" json:"data_kind,omitempty"` // what the job backfills; UNSPECIFIED == BARS (feature 198)
+	Timeframe       string                     `protobuf:"bytes,3,opt,name=timeframe,proto3" json:"timeframe,omitempty"`
+	Range           *v1.TimeRange              `protobuf:"bytes,4,opt,name=range,proto3" json:"range,omitempty"`
+	Status          BackfillStatus             `protobuf:"varint,5,opt,name=status,proto3,enum=xstockstrat.ingest.v1.BackfillStatus" json:"status,omitempty"`
+	BarsProcessed   int64                      `protobuf:"varint,6,opt,name=bars_processed,json=barsProcessed,proto3" json:"bars_processed,omitempty"`
+	BarsTotal       int64                      `protobuf:"varint,7,opt,name=bars_total,json=barsTotal,proto3" json:"bars_total,omitempty"`
+	StartedAt       *timestamppb.Timestamp     `protobuf:"bytes,8,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	CompletedAt     *timestamppb.Timestamp     `protobuf:"bytes,9,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
+	Error           string                     `protobuf:"bytes,10,opt,name=error,proto3" json:"error,omitempty"`
+	FailedSymbols   []string                   `protobuf:"bytes,11,rep,name=failed_symbols,json=failedSymbols,proto3" json:"failed_symbols,omitempty"` // symbols that failed in a PARTIAL/FAILED job (FR-7)
+	TimeframeEnum   v1.Timeframe               `protobuf:"varint,12,opt,name=timeframe_enum,json=timeframeEnum,proto3,enum=xstockstrat.common.v1.Timeframe" json:"timeframe_enum,omitempty"`
+	ChunksTotal     int32                      `protobuf:"varint,13,opt,name=chunks_total,json=chunksTotal,proto3" json:"chunks_total,omitempty"`                                    // planned chunk count (FR-5)
+	ChunksCompleted int32                      `protobuf:"varint,14,opt,name=chunks_completed,json=chunksCompleted,proto3" json:"chunks_completed,omitempty"`                        // chunks in COMPLETED state (FR-5)
+	DataKind        BackfillDataKind           `protobuf:"varint,15,opt,name=data_kind,json=dataKind,proto3,enum=xstockstrat.ingest.v1.BackfillDataKind" json:"data_kind,omitempty"` // what the job backfills; UNSPECIFIED == BARS (feature 198)
+	SymbolResults   []*v1.BackfillSymbolResult `protobuf:"bytes,16,rep,name=symbol_results,json=symbolResults,proto3" json:"symbol_results,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -505,6 +506,13 @@ func (x *BackfillJob) GetDataKind() BackfillDataKind {
 		return x.DataKind
 	}
 	return BackfillDataKind_BACKFILL_DATA_KIND_UNSPECIFIED
+}
+
+func (x *BackfillJob) GetSymbolResults() []*v1.BackfillSymbolResult {
+	if x != nil {
+		return x.SymbolResults
+	}
+	return nil
 }
 
 type TriggerBackfillRequest struct {
@@ -1366,10 +1374,13 @@ type SignalSource struct {
 	// distinguishable from an explicit 0.0. DB default 1.0 (neutral).
 	ReliabilityWeight *float64 `protobuf:"fixed64,12,opt,name=reliability_weight,json=reliabilityWeight,proto3,oneof" json:"reliability_weight,omitempty"`
 	// Owner of the source (feature 224). "system" = platform-owned, read-only to every user.
-	UserId        string             `protobuf:"bytes,13,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Origin        *v1.TemplateOrigin `protobuf:"bytes,14,opt,name=origin,proto3" json:"origin,omitempty"` // set when instantiated from a template
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	UserId string             `protobuf:"bytes,13,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Origin *v1.TemplateOrigin `protobuf:"bytes,14,opt,name=origin,proto3" json:"origin,omitempty"` // set when instantiated from a template
+	// Prose an LLM agent follows to extract signals from a mediated_* source.
+	// Empty on every other source type.
+	ExtractionInstructions string `protobuf:"bytes,15,opt,name=extraction_instructions,json=extractionInstructions,proto3" json:"extraction_instructions,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *SignalSource) Reset() {
@@ -1498,6 +1509,13 @@ func (x *SignalSource) GetOrigin() *v1.TemplateOrigin {
 		return x.Origin
 	}
 	return nil
+}
+
+func (x *SignalSource) GetExtractionInstructions() string {
+	if x != nil {
+		return x.ExtractionInstructions
+	}
+	return ""
 }
 
 type ListSignalSourcesRequest struct {
@@ -1973,7 +1991,7 @@ var File_ingest_v1_ingest_proto protoreflect.FileDescriptor
 
 const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\n" +
-	"\x16ingest/v1/ingest.proto\x12\x15xstockstrat.ingest.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16common/v1/common.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a google/protobuf/field_mask.proto\"\xb1\x05\n" +
+	"\x16ingest/v1/ingest.proto\x12\x15xstockstrat.ingest.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16common/v1/common.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a google/protobuf/field_mask.proto\"\x85\x06\n" +
 	"\vBackfillJob\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x18\n" +
 	"\asymbols\x18\x02 \x03(\tR\asymbols\x12 \n" +
@@ -1992,7 +2010,8 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x0etimeframe_enum\x18\f \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\rtimeframeEnum\x12!\n" +
 	"\fchunks_total\x18\r \x01(\x05R\vchunksTotal\x12)\n" +
 	"\x10chunks_completed\x18\x0e \x01(\x05R\x0fchunksCompleted\x12D\n" +
-	"\tdata_kind\x18\x0f \x01(\x0e2'.xstockstrat.ingest.v1.BackfillDataKindR\bdataKind\"\x9a\x03\n" +
+	"\tdata_kind\x18\x0f \x01(\x0e2'.xstockstrat.ingest.v1.BackfillDataKindR\bdataKind\x12R\n" +
+	"\x0esymbol_results\x18\x10 \x03(\v2+.xstockstrat.common.v1.BackfillSymbolResultR\rsymbolResults\"\x9a\x03\n" +
 	"\x16TriggerBackfillRequest\x12\x18\n" +
 	"\asymbols\x18\x01 \x03(\tR\asymbols\x12 \n" +
 	"\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01R\ttimeframe\x126\n" +
@@ -2056,7 +2075,7 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\rowner_user_id\x18\a \x01(\tR\vownerUserId\"\x90\x01\n" +
 	"\x14QuerySignalsResponse\x12?\n" +
 	"\asignals\x18\x01 \x03(\v2%.xstockstrat.ingest.v1.ExternalSignalR\asignals\x127\n" +
-	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\xf0\x04\n" +
+	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\xa9\x05\n" +
 	"\fSignalSource\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1f\n" +
@@ -2077,7 +2096,8 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"signalsFed\x122\n" +
 	"\x12reliability_weight\x18\f \x01(\x01H\x00R\x11reliabilityWeight\x88\x01\x01\x12\x17\n" +
 	"\auser_id\x18\r \x01(\tR\x06userId\x12=\n" +
-	"\x06origin\x18\x0e \x01(\v2%.xstockstrat.common.v1.TemplateOriginR\x06originB\x15\n" +
+	"\x06origin\x18\x0e \x01(\v2%.xstockstrat.common.v1.TemplateOriginR\x06origin\x127\n" +
+	"\x17extraction_instructions\x18\x0f \x01(\tR\x16extractionInstructionsB\x15\n" +
 	"\x13_reliability_weight\"i\n" +
 	"\x18ListSignalSourcesRequest\x12)\n" +
 	"\x10include_inactive\x18\x01 \x01(\bR\x0fincludeInactive\x12\"\n" +
@@ -2201,13 +2221,14 @@ var file_ingest_v1_ingest_proto_goTypes = []any{
 	(*v1.TimeRange)(nil),               // 30: xstockstrat.common.v1.TimeRange
 	(*timestamppb.Timestamp)(nil),      // 31: google.protobuf.Timestamp
 	(v1.Timeframe)(0),                  // 32: xstockstrat.common.v1.Timeframe
-	(*v1.PageRequest)(nil),             // 33: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),            // 34: xstockstrat.common.v1.PageResponse
-	(*structpb.Struct)(nil),            // 35: google.protobuf.Struct
-	(*v1.TemplateOrigin)(nil),          // 36: xstockstrat.common.v1.TemplateOrigin
-	(*fieldmaskpb.FieldMask)(nil),      // 37: google.protobuf.FieldMask
-	(*v1.TemplateMeta)(nil),            // 38: xstockstrat.common.v1.TemplateMeta
-	(v1.TemplateOperation)(0),          // 39: xstockstrat.common.v1.TemplateOperation
+	(*v1.BackfillSymbolResult)(nil),    // 33: xstockstrat.common.v1.BackfillSymbolResult
+	(*v1.PageRequest)(nil),             // 34: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),            // 35: xstockstrat.common.v1.PageResponse
+	(*structpb.Struct)(nil),            // 36: google.protobuf.Struct
+	(*v1.TemplateOrigin)(nil),          // 37: xstockstrat.common.v1.TemplateOrigin
+	(*fieldmaskpb.FieldMask)(nil),      // 38: google.protobuf.FieldMask
+	(*v1.TemplateMeta)(nil),            // 39: xstockstrat.common.v1.TemplateMeta
+	(v1.TemplateOperation)(0),          // 40: xstockstrat.common.v1.TemplateOperation
 }
 var file_ingest_v1_ingest_proto_depIdxs = []int32{
 	30, // 0: xstockstrat.ingest.v1.BackfillJob.range:type_name -> xstockstrat.common.v1.TimeRange
@@ -2216,67 +2237,68 @@ var file_ingest_v1_ingest_proto_depIdxs = []int32{
 	31, // 3: xstockstrat.ingest.v1.BackfillJob.completed_at:type_name -> google.protobuf.Timestamp
 	32, // 4: xstockstrat.ingest.v1.BackfillJob.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
 	2,  // 5: xstockstrat.ingest.v1.BackfillJob.data_kind:type_name -> xstockstrat.ingest.v1.BackfillDataKind
-	30, // 6: xstockstrat.ingest.v1.TriggerBackfillRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	32, // 7: xstockstrat.ingest.v1.TriggerBackfillRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
-	1,  // 8: xstockstrat.ingest.v1.TriggerBackfillRequest.fill_mode:type_name -> xstockstrat.ingest.v1.FillMode
-	2,  // 9: xstockstrat.ingest.v1.TriggerBackfillRequest.data_kind:type_name -> xstockstrat.ingest.v1.BackfillDataKind
-	0,  // 10: xstockstrat.ingest.v1.TriggerBackfillResponse.status:type_name -> xstockstrat.ingest.v1.BackfillStatus
-	0,  // 11: xstockstrat.ingest.v1.ListBackfillJobsRequest.status_filter:type_name -> xstockstrat.ingest.v1.BackfillStatus
-	33, // 12: xstockstrat.ingest.v1.ListBackfillJobsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	6,  // 13: xstockstrat.ingest.v1.ListBackfillJobsResponse.jobs:type_name -> xstockstrat.ingest.v1.BackfillJob
-	34, // 14: xstockstrat.ingest.v1.ListBackfillJobsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	31, // 15: xstockstrat.ingest.v1.ExternalSignal.valid_from:type_name -> google.protobuf.Timestamp
-	31, // 16: xstockstrat.ingest.v1.ExternalSignal.valid_until:type_name -> google.protobuf.Timestamp
-	31, // 17: xstockstrat.ingest.v1.ExternalSignal.ingested_at:type_name -> google.protobuf.Timestamp
-	15, // 18: xstockstrat.ingest.v1.IngestSignalRequest.signal:type_name -> xstockstrat.ingest.v1.ExternalSignal
-	30, // 19: xstockstrat.ingest.v1.QuerySignalsRequest.active_window:type_name -> xstockstrat.common.v1.TimeRange
-	33, // 20: xstockstrat.ingest.v1.QuerySignalsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	3,  // 21: xstockstrat.ingest.v1.QuerySignalsRequest.scope:type_name -> xstockstrat.ingest.v1.SignalScope
-	15, // 22: xstockstrat.ingest.v1.QuerySignalsResponse.signals:type_name -> xstockstrat.ingest.v1.ExternalSignal
-	34, // 23: xstockstrat.ingest.v1.QuerySignalsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	35, // 24: xstockstrat.ingest.v1.SignalSource.config_json:type_name -> google.protobuf.Struct
-	4,  // 25: xstockstrat.ingest.v1.SignalSource.health:type_name -> xstockstrat.ingest.v1.SourceHealthStatus
-	31, // 26: xstockstrat.ingest.v1.SignalSource.last_seen_at:type_name -> google.protobuf.Timestamp
-	36, // 27: xstockstrat.ingest.v1.SignalSource.origin:type_name -> xstockstrat.common.v1.TemplateOrigin
-	20, // 28: xstockstrat.ingest.v1.ListSignalSourcesResponse.sources:type_name -> xstockstrat.ingest.v1.SignalSource
-	20, // 29: xstockstrat.ingest.v1.ManageSignalSourceRequest.source:type_name -> xstockstrat.ingest.v1.SignalSource
-	37, // 30: xstockstrat.ingest.v1.ManageSignalSourceRequest.update_mask:type_name -> google.protobuf.FieldMask
-	5,  // 31: xstockstrat.ingest.v1.ManageSignalSourceRequest.operation_enum:type_name -> xstockstrat.ingest.v1.SignalSourceOperation
-	20, // 32: xstockstrat.ingest.v1.ManageSignalSourceResponse.source:type_name -> xstockstrat.ingest.v1.SignalSource
-	38, // 33: xstockstrat.ingest.v1.SourceTemplate.meta:type_name -> xstockstrat.common.v1.TemplateMeta
-	20, // 34: xstockstrat.ingest.v1.SourceTemplate.payload:type_name -> xstockstrat.ingest.v1.SignalSource
-	25, // 35: xstockstrat.ingest.v1.ListTemplatesResponse.templates:type_name -> xstockstrat.ingest.v1.SourceTemplate
-	39, // 36: xstockstrat.ingest.v1.ManageTemplateRequest.operation:type_name -> xstockstrat.common.v1.TemplateOperation
-	25, // 37: xstockstrat.ingest.v1.ManageTemplateRequest.template:type_name -> xstockstrat.ingest.v1.SourceTemplate
-	7,  // 38: xstockstrat.ingest.v1.IngestService.TriggerBackfill:input_type -> xstockstrat.ingest.v1.TriggerBackfillRequest
-	9,  // 39: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:input_type -> xstockstrat.ingest.v1.GetBackfillStatusRequest
-	10, // 40: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:input_type -> xstockstrat.ingest.v1.ListBackfillJobsRequest
-	11, // 41: xstockstrat.ingest.v1.IngestService.CancelBackfill:input_type -> xstockstrat.ingest.v1.CancelBackfillRequest
-	13, // 42: xstockstrat.ingest.v1.IngestService.NormalizeRawData:input_type -> xstockstrat.ingest.v1.NormalizeRawDataRequest
-	16, // 43: xstockstrat.ingest.v1.IngestService.IngestSignal:input_type -> xstockstrat.ingest.v1.IngestSignalRequest
-	18, // 44: xstockstrat.ingest.v1.IngestService.QuerySignals:input_type -> xstockstrat.ingest.v1.QuerySignalsRequest
-	21, // 45: xstockstrat.ingest.v1.IngestService.ListSignalSources:input_type -> xstockstrat.ingest.v1.ListSignalSourcesRequest
-	23, // 46: xstockstrat.ingest.v1.IngestService.ManageSignalSource:input_type -> xstockstrat.ingest.v1.ManageSignalSourceRequest
-	26, // 47: xstockstrat.ingest.v1.IngestService.ListTemplates:input_type -> xstockstrat.ingest.v1.ListTemplatesRequest
-	28, // 48: xstockstrat.ingest.v1.IngestService.ManageTemplate:input_type -> xstockstrat.ingest.v1.ManageTemplateRequest
-	29, // 49: xstockstrat.ingest.v1.IngestService.InstantiateTemplate:input_type -> xstockstrat.ingest.v1.InstantiateTemplateRequest
-	8,  // 50: xstockstrat.ingest.v1.IngestService.TriggerBackfill:output_type -> xstockstrat.ingest.v1.TriggerBackfillResponse
-	6,  // 51: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:output_type -> xstockstrat.ingest.v1.BackfillJob
-	12, // 52: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:output_type -> xstockstrat.ingest.v1.ListBackfillJobsResponse
-	6,  // 53: xstockstrat.ingest.v1.IngestService.CancelBackfill:output_type -> xstockstrat.ingest.v1.BackfillJob
-	14, // 54: xstockstrat.ingest.v1.IngestService.NormalizeRawData:output_type -> xstockstrat.ingest.v1.NormalizeRawDataResponse
-	17, // 55: xstockstrat.ingest.v1.IngestService.IngestSignal:output_type -> xstockstrat.ingest.v1.IngestSignalResponse
-	19, // 56: xstockstrat.ingest.v1.IngestService.QuerySignals:output_type -> xstockstrat.ingest.v1.QuerySignalsResponse
-	22, // 57: xstockstrat.ingest.v1.IngestService.ListSignalSources:output_type -> xstockstrat.ingest.v1.ListSignalSourcesResponse
-	24, // 58: xstockstrat.ingest.v1.IngestService.ManageSignalSource:output_type -> xstockstrat.ingest.v1.ManageSignalSourceResponse
-	27, // 59: xstockstrat.ingest.v1.IngestService.ListTemplates:output_type -> xstockstrat.ingest.v1.ListTemplatesResponse
-	25, // 60: xstockstrat.ingest.v1.IngestService.ManageTemplate:output_type -> xstockstrat.ingest.v1.SourceTemplate
-	20, // 61: xstockstrat.ingest.v1.IngestService.InstantiateTemplate:output_type -> xstockstrat.ingest.v1.SignalSource
-	50, // [50:62] is the sub-list for method output_type
-	38, // [38:50] is the sub-list for method input_type
-	38, // [38:38] is the sub-list for extension type_name
-	38, // [38:38] is the sub-list for extension extendee
-	0,  // [0:38] is the sub-list for field type_name
+	33, // 6: xstockstrat.ingest.v1.BackfillJob.symbol_results:type_name -> xstockstrat.common.v1.BackfillSymbolResult
+	30, // 7: xstockstrat.ingest.v1.TriggerBackfillRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	32, // 8: xstockstrat.ingest.v1.TriggerBackfillRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	1,  // 9: xstockstrat.ingest.v1.TriggerBackfillRequest.fill_mode:type_name -> xstockstrat.ingest.v1.FillMode
+	2,  // 10: xstockstrat.ingest.v1.TriggerBackfillRequest.data_kind:type_name -> xstockstrat.ingest.v1.BackfillDataKind
+	0,  // 11: xstockstrat.ingest.v1.TriggerBackfillResponse.status:type_name -> xstockstrat.ingest.v1.BackfillStatus
+	0,  // 12: xstockstrat.ingest.v1.ListBackfillJobsRequest.status_filter:type_name -> xstockstrat.ingest.v1.BackfillStatus
+	34, // 13: xstockstrat.ingest.v1.ListBackfillJobsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	6,  // 14: xstockstrat.ingest.v1.ListBackfillJobsResponse.jobs:type_name -> xstockstrat.ingest.v1.BackfillJob
+	35, // 15: xstockstrat.ingest.v1.ListBackfillJobsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	31, // 16: xstockstrat.ingest.v1.ExternalSignal.valid_from:type_name -> google.protobuf.Timestamp
+	31, // 17: xstockstrat.ingest.v1.ExternalSignal.valid_until:type_name -> google.protobuf.Timestamp
+	31, // 18: xstockstrat.ingest.v1.ExternalSignal.ingested_at:type_name -> google.protobuf.Timestamp
+	15, // 19: xstockstrat.ingest.v1.IngestSignalRequest.signal:type_name -> xstockstrat.ingest.v1.ExternalSignal
+	30, // 20: xstockstrat.ingest.v1.QuerySignalsRequest.active_window:type_name -> xstockstrat.common.v1.TimeRange
+	34, // 21: xstockstrat.ingest.v1.QuerySignalsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	3,  // 22: xstockstrat.ingest.v1.QuerySignalsRequest.scope:type_name -> xstockstrat.ingest.v1.SignalScope
+	15, // 23: xstockstrat.ingest.v1.QuerySignalsResponse.signals:type_name -> xstockstrat.ingest.v1.ExternalSignal
+	35, // 24: xstockstrat.ingest.v1.QuerySignalsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	36, // 25: xstockstrat.ingest.v1.SignalSource.config_json:type_name -> google.protobuf.Struct
+	4,  // 26: xstockstrat.ingest.v1.SignalSource.health:type_name -> xstockstrat.ingest.v1.SourceHealthStatus
+	31, // 27: xstockstrat.ingest.v1.SignalSource.last_seen_at:type_name -> google.protobuf.Timestamp
+	37, // 28: xstockstrat.ingest.v1.SignalSource.origin:type_name -> xstockstrat.common.v1.TemplateOrigin
+	20, // 29: xstockstrat.ingest.v1.ListSignalSourcesResponse.sources:type_name -> xstockstrat.ingest.v1.SignalSource
+	20, // 30: xstockstrat.ingest.v1.ManageSignalSourceRequest.source:type_name -> xstockstrat.ingest.v1.SignalSource
+	38, // 31: xstockstrat.ingest.v1.ManageSignalSourceRequest.update_mask:type_name -> google.protobuf.FieldMask
+	5,  // 32: xstockstrat.ingest.v1.ManageSignalSourceRequest.operation_enum:type_name -> xstockstrat.ingest.v1.SignalSourceOperation
+	20, // 33: xstockstrat.ingest.v1.ManageSignalSourceResponse.source:type_name -> xstockstrat.ingest.v1.SignalSource
+	39, // 34: xstockstrat.ingest.v1.SourceTemplate.meta:type_name -> xstockstrat.common.v1.TemplateMeta
+	20, // 35: xstockstrat.ingest.v1.SourceTemplate.payload:type_name -> xstockstrat.ingest.v1.SignalSource
+	25, // 36: xstockstrat.ingest.v1.ListTemplatesResponse.templates:type_name -> xstockstrat.ingest.v1.SourceTemplate
+	40, // 37: xstockstrat.ingest.v1.ManageTemplateRequest.operation:type_name -> xstockstrat.common.v1.TemplateOperation
+	25, // 38: xstockstrat.ingest.v1.ManageTemplateRequest.template:type_name -> xstockstrat.ingest.v1.SourceTemplate
+	7,  // 39: xstockstrat.ingest.v1.IngestService.TriggerBackfill:input_type -> xstockstrat.ingest.v1.TriggerBackfillRequest
+	9,  // 40: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:input_type -> xstockstrat.ingest.v1.GetBackfillStatusRequest
+	10, // 41: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:input_type -> xstockstrat.ingest.v1.ListBackfillJobsRequest
+	11, // 42: xstockstrat.ingest.v1.IngestService.CancelBackfill:input_type -> xstockstrat.ingest.v1.CancelBackfillRequest
+	13, // 43: xstockstrat.ingest.v1.IngestService.NormalizeRawData:input_type -> xstockstrat.ingest.v1.NormalizeRawDataRequest
+	16, // 44: xstockstrat.ingest.v1.IngestService.IngestSignal:input_type -> xstockstrat.ingest.v1.IngestSignalRequest
+	18, // 45: xstockstrat.ingest.v1.IngestService.QuerySignals:input_type -> xstockstrat.ingest.v1.QuerySignalsRequest
+	21, // 46: xstockstrat.ingest.v1.IngestService.ListSignalSources:input_type -> xstockstrat.ingest.v1.ListSignalSourcesRequest
+	23, // 47: xstockstrat.ingest.v1.IngestService.ManageSignalSource:input_type -> xstockstrat.ingest.v1.ManageSignalSourceRequest
+	26, // 48: xstockstrat.ingest.v1.IngestService.ListTemplates:input_type -> xstockstrat.ingest.v1.ListTemplatesRequest
+	28, // 49: xstockstrat.ingest.v1.IngestService.ManageTemplate:input_type -> xstockstrat.ingest.v1.ManageTemplateRequest
+	29, // 50: xstockstrat.ingest.v1.IngestService.InstantiateTemplate:input_type -> xstockstrat.ingest.v1.InstantiateTemplateRequest
+	8,  // 51: xstockstrat.ingest.v1.IngestService.TriggerBackfill:output_type -> xstockstrat.ingest.v1.TriggerBackfillResponse
+	6,  // 52: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:output_type -> xstockstrat.ingest.v1.BackfillJob
+	12, // 53: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:output_type -> xstockstrat.ingest.v1.ListBackfillJobsResponse
+	6,  // 54: xstockstrat.ingest.v1.IngestService.CancelBackfill:output_type -> xstockstrat.ingest.v1.BackfillJob
+	14, // 55: xstockstrat.ingest.v1.IngestService.NormalizeRawData:output_type -> xstockstrat.ingest.v1.NormalizeRawDataResponse
+	17, // 56: xstockstrat.ingest.v1.IngestService.IngestSignal:output_type -> xstockstrat.ingest.v1.IngestSignalResponse
+	19, // 57: xstockstrat.ingest.v1.IngestService.QuerySignals:output_type -> xstockstrat.ingest.v1.QuerySignalsResponse
+	22, // 58: xstockstrat.ingest.v1.IngestService.ListSignalSources:output_type -> xstockstrat.ingest.v1.ListSignalSourcesResponse
+	24, // 59: xstockstrat.ingest.v1.IngestService.ManageSignalSource:output_type -> xstockstrat.ingest.v1.ManageSignalSourceResponse
+	27, // 60: xstockstrat.ingest.v1.IngestService.ListTemplates:output_type -> xstockstrat.ingest.v1.ListTemplatesResponse
+	25, // 61: xstockstrat.ingest.v1.IngestService.ManageTemplate:output_type -> xstockstrat.ingest.v1.SourceTemplate
+	20, // 62: xstockstrat.ingest.v1.IngestService.InstantiateTemplate:output_type -> xstockstrat.ingest.v1.SignalSource
+	51, // [51:63] is the sub-list for method output_type
+	39, // [39:51] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_ingest_v1_ingest_proto_init() }

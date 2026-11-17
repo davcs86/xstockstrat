@@ -14,6 +14,9 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md` |
+| 2026-11-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
+| 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps; FR-5 and @AC-4 appended per operator decision (design gate r6) |
 
 ---
 
@@ -21,8 +24,21 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-trading-reconcile-reads`_
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections
+- [Design](design.md) — approved design (chosen approach, rejected alternatives, open risks)
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+| Role | Steps | Review Focus |
+|---|---|---|
+| xstockstrat-trading service owner | 1, 2, 3, 4 | Order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement |
+
+Step 5 (`docs`) has no reviewer.
 
 ---
 
@@ -32,4 +48,4 @@
 
 ## Next Action
 
-`/sdd-design fix-trading-reconcile-reads quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-review fix-trading-reconcile-reads impl-spec` — validate implementation spec, then `/sdd-execute fix-trading-reconcile-reads`

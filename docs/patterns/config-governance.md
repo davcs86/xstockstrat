@@ -148,6 +148,21 @@ Append-only log — one entry per feature that registered new keys. Newest first
 
 Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
 
+### feature 352 — delisted-symbol-handling (`xstockstrat-marketdata` / `xstockstrat-config`)
+
+The confirmation window of marketdata's delisted-symbol detection: the number of trading days a watchlist
+symbol must stay unservable in every successful asset-set load before it is flagged delisted (the first
+unservable day counts as day 1). The key has a full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
+`xstockstrat-config` (`configServiceImpl.ts`) and is **seeded** `5` (staging + production, global, stored as
+`int`, insert-if-absent) by config migration `marketdata_delisting_confirmation_days`, with the number-free
+actor sentinel `system:config-migration-feature-delisted-symbol-handling`; the down deletes only a global row
+that still carries that sentinel and still holds `5`, so a value an operator has changed survives a rollback.
+No `scripts/config-wiring.json` baseline entry. Approval: owner + config team.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `marketdata.assets.delisting_confirmation_trading_days` | int | `5` | `[1,30]`; read clamp unset or `≤ 0` → `5`, `> 30` → `30` | Reader `resolveDelistingConfirmationDays` (`asset_servability.go`); re-read at each successful asset-set load, so a change applies on the next load without a restart. |
+
 ### feature 347 — alpaca-adaptive-rate-limit (`xstockstrat-marketdata` / `xstockstrat-trading` / `xstockstrat-config`)
 
 Two kill switches for adaptive Alpaca pacing: each service's Alpaca REST client paces itself from the

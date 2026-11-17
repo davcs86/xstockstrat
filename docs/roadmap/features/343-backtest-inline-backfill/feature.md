@@ -3,6 +3,8 @@
 **Development Branch**: `feature/backtest-inline-backfill`
 **Created**: 2026-11-15
 **Last Updated**: 2026-11-16
+**Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
+**Launched date**: 2026-11-17
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
 | 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute | All 16 steps done (Step 16 last); `check-config-wiring.mjs --final` exit 0 |
 
+| 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
 ---
 
 ## Artifacts

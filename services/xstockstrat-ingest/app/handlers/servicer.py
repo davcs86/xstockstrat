@@ -34,15 +34,18 @@ from app.repositories.signal_sources import (
     derive_health_status,
     get_source,
     insert_source,
+    is_mediated_source_type,
     list_sources,
     mark_source_error,
     mark_source_fed,
+    normalize_extraction_instructions,
     owner_scope_predicate,
     reactivate_source,
     slug_holders,
     touch_source_last_seen,
     update_source,
     validate_config_json,
+    validate_extraction_instructions,
 )
 
 log = logging.getLogger(__name__)
@@ -63,6 +66,7 @@ _SS_MASKABLE_PATHS = frozenset(
         "config_json",
         "credentials_ref",
         "reliability_weight",
+        "extraction_instructions",
     }
 )
 # slug is the PK; active is column-authoritative (lifecycle via reactivate/deactivate only).
@@ -70,6 +74,8 @@ _SS_COLUMN_AUTH_PATHS = frozenset({"slug", "active"})
 _SS_CREDENTIAL_REQUIRED_TYPES = frozenset(
     {"authenticated_website", "mediated_authenticated_website", "mcp_client"}
 )
+# Stored for every mediated source whatever the caller sends; nothing imports it.
+_MEDIATED_EXTRACTOR_MODULE = "app.extractors.noop"
 
 
 class _SignalValidationError(Exception):
@@ -173,6 +179,7 @@ _TEMPLATE_PAYLOAD_FIELDS = (
     "extractor_module",
     "config_json",
     "reliability_weight",
+    "extraction_instructions",
 )
 
 
@@ -216,6 +223,7 @@ def _source_to_proto(row: dict, latest_versions: dict[str, int]) -> ingest_pb2.S
         has_credentials=(row["credentials_ref"] is not None),
         config_json=cfg,
         reliability_weight=row.get("reliability_weight", 1.0),
+        extraction_instructions=row.get("extraction_instructions", ""),
     )
     template_id = row.get("origin_template_id")
     if template_id:
@@ -297,6 +305,47 @@ def _dt_to_ts(dt: datetime) -> Timestamp:
     return ts
 
 
+_FUNDAMENTALS_RESULTS_KEY = "fundamentals"
+_SYMBOL_FAILED = common_pb2.BACKFILL_SYMBOL_OUTCOME_FAILED
+_OUTCOME_PRECEDENCE = {
+    common_pb2.BACKFILL_SYMBOL_OUTCOME_EMPTY: 1,
+    common_pb2.BACKFILL_SYMBOL_OUTCOME_SKIPPED: 2,
+    _SYMBOL_FAILED: 3,
+}
+
+
+def _merged_symbol_results(stored: str | None) -> list[common_pb2.BackfillSymbolResult]:
+    """Merge the stored per-chunk results per symbol (FAILED > SKIPPED > EMPTY), by symbol."""
+    best: dict[str, dict] = {}
+    for chunk_results in (json.loads(stored) if stored else {}).values():
+        for symbol, entry in chunk_results.items():
+            held = best.get(symbol)
+            if held is None or _OUTCOME_PRECEDENCE.get(
+                entry["outcome"], 0
+            ) > _OUTCOME_PRECEDENCE.get(held["outcome"], 0):
+                best[symbol] = entry
+    return [
+        common_pb2.BackfillSymbolResult(
+            symbol=symbol, outcome=best[symbol]["outcome"], reason=best[symbol]["reason"]
+        )
+        for symbol in sorted(best)
+    ]
+
+
+def _record_attempt(chunk_results: dict, sent, resp=None, exc=None) -> None:
+    """Replace the entries of every symbol one attempt was sent with that attempt's outcome."""
+    for symbol in sent:
+        chunk_results.pop(symbol, None)
+    if exc is not None:
+        for symbol in sent:
+            chunk_results[symbol] = {"outcome": _SYMBOL_FAILED, "reason": str(exc)}
+        return
+    for result in resp.symbol_results:
+        chunk_results[result.symbol] = {"outcome": int(result.outcome), "reason": result.reason}
+    for symbol in resp.failed_symbols:
+        chunk_results.setdefault(symbol, {"outcome": _SYMBOL_FAILED, "reason": ""})
+
+
 def job_row_to_proto(row: dict) -> ingest_pb2.BackfillJob:
     """Map an ``ingest.backfill_jobs`` row to a BackfillJob message."""
     job = ingest_pb2.BackfillJob(
@@ -327,6 +376,7 @@ def job_row_to_proto(row: dict) -> ingest_pb2.BackfillJob:
         job.started_at.CopyFrom(_dt_to_ts(row["started_at"]))
     if row.get("completed_at"):
         job.completed_at.CopyFrom(_dt_to_ts(row["completed_at"]))
+    job.symbol_results.extend(_merged_symbol_results(row.get("symbol_results")))
     return job
 
 
@@ -698,6 +748,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             metadata=propagation_meta,
         )
         failed = list(resp.failed_symbols)
+        chunk_results: dict = {}
+        _record_attempt(chunk_results, symbols, resp=resp)
         if job_id in self._canceled_jobs:
             self._canceled_jobs.discard(job_id)
             log.info("fundamentals backfill job %s canceled mid-run; not finalizing", job_id)
@@ -712,6 +764,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             bars_processed=int(resp.periods_written),  # reused as periods-written for fundamentals
             failed_symbols=failed,
             completed_at=datetime.now(UTC),
+            symbol_results=json.dumps({_FUNDAMENTALS_RESULTS_KEY: chunk_results}),
         )
         self._webhook_wake.set()
         await self._emit_backfill_event(
@@ -908,7 +961,14 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             )
             chunks = await backfill_chunks.get_incomplete_chunks(self._db, job_id)
             log.info("resuming backfill job %s with %d incomplete chunk(s)", job_id, len(chunks))
-            state = await self._run_chunks(job_id, req, timeframe, chunks, meta)
+            state = await self._run_chunks(
+                job_id,
+                req,
+                timeframe,
+                chunks,
+                meta,
+                symbol_results=json.loads(row.get("symbol_results") or "{}"),
+            )
             await self._finalize_backfill(job_id, state, len(chunks), meta)
         except Exception:
             log.error("_resume_job failed job=%s", job_id, exc_info=True)
@@ -918,16 +978,31 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
     def _effective_max_attempts(self) -> int:
         return self._cfg.backfill_max_retry_attempts if self._cfg.backfill_retry_on_failure else 0
 
-    async def _run_chunks(self, job_id, request, timeframe, chunks, propagation_meta):
+    async def _run_chunks(
+        self,
+        job_id,
+        request,
+        timeframe,
+        chunks,
+        propagation_meta,
+        symbol_results: dict | None = None,
+    ):
         """Execute chunks concurrently under the chunk-level semaphore (FR-6).
 
-        Returns a state dict: bars, chunks_done, chunks_failed, failed_symbols (set).
+        Returns a state dict: bars, chunks_done, chunks_failed, failed_symbols (set),
+        symbol_results (per-chunk dict, seeded from ``symbol_results``).
         Job progress (bars_processed / chunks_completed) is advanced after each chunk.
         """
         sem = asyncio.Semaphore(self._cfg.backfill_max_concurrent_chunks)
         max_attempts = self._effective_max_attempts()
         tf_enum = _STR_TO_ENUM.get(timeframe, 0)
-        state = {"bars": 0, "chunks_done": 0, "chunks_failed": 0, "failed_symbols": set()}
+        state = {
+            "bars": 0,
+            "chunks_done": 0,
+            "chunks_failed": 0,
+            "failed_symbols": set(),
+            "symbol_results": dict(symbol_results or {}),
+        }
         lock = asyncio.Lock()
 
         async def run_one(chunk):
@@ -944,6 +1019,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 remaining = list(chunk["symbols"])
                 bars = 0
                 failed: list[str] = []
+                chunk_results: dict = {}
                 last_exc = None
                 attempt = 0
                 while True:
@@ -961,9 +1037,11 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                         bars += resp.bars_written
                         failed = list(resp.failed_symbols)
                         last_exc = None
+                        _record_attempt(chunk_results, remaining, resp=resp)
                     except grpc.aio.AioRpcError as e:
                         last_exc = e
                         failed = remaining
+                        _record_attempt(chunk_results, remaining, exc=e)
                         if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
                             # Permanent rejection (e.g. marketdata's 1d-only gate) — retrying
                             # cannot succeed.
@@ -971,6 +1049,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     except Exception as e:  # transient RPC error — retry the whole chunk
                         last_exc = e
                         failed = remaining
+                        _record_attempt(chunk_results, remaining, exc=e)
                     if not failed or attempt >= max_attempts:
                         break
                     attempt += 1
@@ -985,6 +1064,10 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                         )
                         state["chunks_failed"] += 1
                         state["failed_symbols"].update(chunk["symbols"])
+                        chunk_results = {
+                            symbol: {"outcome": _SYMBOL_FAILED, "reason": str(last_exc)}
+                            for symbol in chunk["symbols"]
+                        }
                         log.warning(
                             "backfill job %s chunk %s failed: %s", job_id, chunk_id, last_exc
                         )
@@ -996,11 +1079,13 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                         state["bars"] += bars
                         if failed:
                             state["failed_symbols"].update(failed)
+                    state["symbol_results"][chunk_id] = chunk_results
                     await backfill_jobs.update_job(
                         self._db,
                         job_id,
                         bars_processed=state["bars"],
                         chunks_completed=state["chunks_done"],
+                        symbol_results=json.dumps(state["symbol_results"]),
                     )
 
         await asyncio.gather(*(run_one(c) for c in chunks))
@@ -1503,7 +1588,12 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
     @staticmethod
     def _validate_source_write(
-        source_type: str, config_json: dict | None, credentials_ref: str | None
+        source_type: str,
+        config_json: dict | None,
+        credentials_ref: str | None,
+        instructions: str,
+        *,
+        require_instructions: bool,
     ) -> str | None:
         """Feature 088: validate a register/update write on the *effective* (post-merge) fields.
         Covers config_json shape and the credential-required rule for both credential types
@@ -1513,7 +1603,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             return err
         if source_type in _SS_CREDENTIAL_REQUIRED_TYPES and not credentials_ref:
             return f"{source_type} source requires credentials_ref"
-        return None
+        return validate_extraction_instructions(
+            source_type, instructions, require=require_instructions
+        )
 
     @staticmethod
     def _register_conflict(owner: str, slug: str, holders: list[str]):
@@ -1602,9 +1694,14 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 src.display_name if _use_req("display_name") else stored["display_name"]
             )
             merged_type = src.source_type if _use_req("source_type") else stored["source_type"]
-            merged_extractor = (
-                src.extractor_module if _use_req("extractor_module") else stored["extractor_module"]
-            )
+            if is_mediated_source_type(merged_type):
+                merged_extractor = _MEDIATED_EXTRACTOR_MODULE
+            else:
+                merged_extractor = (
+                    src.extractor_module
+                    if _use_req("extractor_module")
+                    else stored["extractor_module"]
+                )
             merged_cfg = (
                 (MessageToDict(src.config_json) if src.config_json else None)
                 if _use_req("config_json")
@@ -1617,7 +1714,22 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 if _use_req("credentials_ref")
                 else stored["credentials_ref"]
             )
-            err = self._validate_source_write(merged_type, merged_cfg, merged_cred)
+            # No mask replaces every field, so it applies the request's instructions too.
+            if _use_req("extraction_instructions"):
+                merged_instructions = normalize_extraction_instructions(src.extraction_instructions)
+                require_instructions = is_mediated_source_type(merged_type)
+            else:
+                merged_instructions = stored.get("extraction_instructions", "")
+                require_instructions = is_mediated_source_type(
+                    merged_type
+                ) and not is_mediated_source_type(stored["source_type"])
+            err = self._validate_source_write(
+                merged_type,
+                merged_cfg,
+                merged_cred,
+                merged_instructions,
+                require_instructions=require_instructions,
+            )
             if err:
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
                 return
@@ -1642,6 +1754,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 credentials_ref=merged_cred,
                 config_json=merged_cfg,
                 reliability_weight=merged_weight,
+                extraction_instructions=merged_instructions,
             )
             if row is None:
                 await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
@@ -1656,6 +1769,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         # values, which neither json.dumps nor asyncpg can encode.
         cfg_dict = MessageToDict(src.config_json) if src.config_json else None
         cred = credentials_ref or None
+        instructions = normalize_extraction_instructions(src.extraction_instructions)
         async with self._db.acquire() as conn, conn.transaction():
             # Serializes every REGISTER of one slug so the reserved-slug holder check below
             # cannot race a concurrent register by another owner.
@@ -1666,7 +1780,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 return None, failure
             # An omitted weight resolves to the 1.0 default. Never pass None — the NOT NULL
             # column would raise.
-            err = self._validate_source_write(src.source_type, cfg_dict, cred) or _weight_error(src)
+            err = self._validate_source_write(
+                src.source_type, cfg_dict, cred, instructions, require_instructions=True
+            ) or _weight_error(src)
             if err:
                 return None, (grpc.StatusCode.INVALID_ARGUMENT, err)
             row = await insert_source(
@@ -1674,7 +1790,11 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 slug=src.slug,
                 display_name=src.display_name,
                 source_type=src.source_type,
-                extractor_module=src.extractor_module,
+                extractor_module=(
+                    _MEDIATED_EXTRACTOR_MODULE
+                    if is_mediated_source_type(src.source_type)
+                    else src.extractor_module
+                ),
                 credentials_ref=cred,
                 config_json=cfg_dict,
                 active=True,
@@ -1682,6 +1802,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     src.reliability_weight if src.HasField("reliability_weight") else 1.0
                 ),
                 user_id=owner,
+                extraction_instructions=instructions,
             )
             if origin is not None:
                 row = await source_templates.stamp_origin(conn, owner, src.slug, *origin)
@@ -1725,7 +1846,16 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         elif op in (common_pb2.TEMPLATE_OPERATION_CREATE, common_pb2.TEMPLATE_OPERATION_UPDATE):
             src = request.template.payload
             cfg_dict = MessageToDict(src.config_json) if src.config_json else None
-            err = validate_config_json(src.source_type, cfg_dict) or _weight_error(src)
+            src.extraction_instructions = normalize_extraction_instructions(
+                src.extraction_instructions
+            )
+            err = (
+                validate_config_json(src.source_type, cfg_dict)
+                or validate_extraction_instructions(
+                    src.source_type, src.extraction_instructions, require=True
+                )
+                or _weight_error(src)
+            )
             if err:
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
                 return
