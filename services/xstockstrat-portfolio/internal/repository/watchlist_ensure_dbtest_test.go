@@ -6,6 +6,8 @@ import (
 	"context"
 	"sync"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Feature 351: the real-index proof behind ListWatchlists' ensure-on-first-page. Offline these skip
@@ -14,7 +16,8 @@ import (
 // AC-2 (concurrency clause): concurrent ensures for one new user yield exactly one system row, via
 // the partial unique index watchlists_user_system_uidx (migration 011), without a transaction.
 func TestEnsureSystemManaged_ConcurrentSingleRow(t *testing.T) {
-	pool := testPoolWithLockTimeout(t, "5s")
+	// Concurrent ensures wait on the winner's insert, so the default 500ms lock_timeout is too tight.
+	pool := testPool(t, func(c *pgxpool.Config) { c.ConnConfig.RuntimeParams["lock_timeout"] = "5s" })
 	repo := NewWatchlistRepo(pool)
 	uid := testUserID(t)
 	ctx := context.Background()

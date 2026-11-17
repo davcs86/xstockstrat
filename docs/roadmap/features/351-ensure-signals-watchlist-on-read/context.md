@@ -167,3 +167,20 @@ Accountability (P-03):
   - [ ] Step 5 gate fails until feature 354 merges to main-dev (above).
   - [ ] The tree-freshness stamp in the spec header predates the Step 1-4 commits (cosmetic).
 - Unaddressed review warnings: none (the impl-spec review note carried only informational items; the Step 5 halt is the one it announced).
+
+## Session 2026-11-17T02:08:37Z — sdd-execute (sequential, no checkpoints) — Steps 5-6
+
+- Operator: "run the rest of steps in sequential mode with no checkpoints" (stands in for the mode-entry and per-feature confirmations). Tree at start: `ccr-1305a9de-7x1t7v@565b6da ≡ origin`, origin/main-dev an ancestor (0 behind; the merge brought 353 #1568 and 354 #1566). Tooling unchanged from the earlier session (go1.27.0, golangci-lint v2.14.0, uv/ruff).
+
+### Step 5 — landing gate: the `ListByUser` token fix is on `origin/main-dev` [done]
+- Gate output (verbatim, 2026-11-17T02:08:37Z):
+  - `git merge-base --is-ancestor origin/main-dev HEAD` → "main-dev merged"
+  - (i) `! grep -n 'wls\[pageSize\]\.WatchlistId' …/watchlist_repo.go` → no match → "(i) token derives from last returned row" (`ListByUser` now sets `nextToken = wls[pageSize-1].WatchlistId`)
+  - (ii) `grep -ln 'next_page_token\|nextToken' …/*dbtest*_test.go` → `services/xstockstrat-portfolio/internal/repository/watchlist_list_dbtest_test.go` (354's full-traversal test). **Run of record**: CI run 43999514537 on the merged head `565b6da`, job "Portfolio DB test (TimescaleDB)" (133759853015) → success; steps "Apply migrations" and "go test -tags dbtest" both success (01:59:22-01:59:32Z). Also green on 354's own merge to main-dev: push CI run 43998615569 on `149351de` → success.
+  - (iii) sidecar `docs/reports/2026-11-16-portfolio-listwatchlists-page-token-skips-boundary-row-defect.status` → `triaged` / `ref: feature:354-fix-listwatchlists-page-token` (not `resolved`); the alternative clause holds: `git merge-base --is-ancestor 149351de origin/main-dev` → yes (fix commit #1566).
+  - `go vet -tags dbtest ./internal/repository/` ok; `golangci-lint run` → "0 issues"; `go test -tags dbtest -race ./internal/repository/` ok (dbtests SKIP locally — no database here; the CI run above is the record); `go test ./... -race` ok; gofmt clean.
+- D-11(c) duplicate-helper review (`dry-reviewer` subagent): (1) `testPoolWithLockTimeout` → **REPLACE** with a `testPool` option (353 added `opts ...func(*pgxpool.Config)`, applied after the default `lock_timeout`, so an option overrides it); done: helper deleted, `watchlist_ensure_dbtest_test.go` passes `func(c *pgxpool.Config){ c.ConnConfig.RuntimeParams["lock_timeout"] = "5s" }`; `dbtest_helpers_test.go` is now byte-identical to origin/main-dev. (2) explicit-id inline INSERT → **KEEP** (`seedNamedWatchlist` cannot set ids; the ids are the test's point). (3) shared 4-line setup idiom → KEEP (no extraction). Out of 351's scope, noted only: `signal_expiry_backfill_dbtest_test.go:352` builds its own pool from the env var instead of `testPool` with an option (low confidence).
+- [ ] Re-confirm on the push carrying this step: "Portfolio DB test (TimescaleDB)" green with the option-based pool (the run of record above predates the helper de-duplication).
+- TDD: N/A (landing gate; the de-duplication is a refactor with no behavior change).
+- Files modified: `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go` (now identical to main-dev), `services/xstockstrat-portfolio/internal/repository/watchlist_ensure_dbtest_test.go`, this file
+- Deviations: see Deviation Log "Step 5 — the equivalent helper came from 353".

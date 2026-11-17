@@ -454,7 +454,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && pytest
 
 ### Step 5 — test: landing gate — the `ListByUser` token fix is on `origin/main-dev`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go` — modify (only if the fix lands an equivalent lock-timeout or seeding helper)
@@ -598,3 +598,8 @@ grep -n 'Gate verified by 351 step 4' docs/roadmap/features/merge-order.md      
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 5 — the equivalent helper came from 353, not the gated fix 354
+- **Planned**: Instruction 3 — "If the fix landed a seeding or lock-timeout helper that duplicates Step 3's `testPoolWithLockTimeout` or inline seeds, delete 351's copy and use the fix's".
+- **Actual**: the gated fix (354) landed `seedNamedWatchlist`, which cannot set explicit ids, so 351's explicit-id inline INSERT stays (dry-reviewer: KEEP). The lock-timeout duplicate was created by **353** (`fix-listpositions-nextpagetoken-skips`, merged alongside 354), whose `testPool(t, opts ...func(*pgxpool.Config))` makes `testPoolWithLockTimeout` a second way to set the same `lock_timeout` field (dry-reviewer: REPLACE). 351's helper was deleted and the ensure dbtest now passes a `lock_timeout` option to `testPool`; `dbtest_helpers_test.go` is byte-identical to origin/main-dev afterwards.
+- **Disposition**: in scope (same intent as Instruction 3, C-18/D-11(c)); no operator decision needed.
