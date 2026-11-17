@@ -121,6 +121,12 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   skipping a job whose persisted status is `CANCELED` (feature 261). A job canceled while `QUEUED`
   never starts: it is not flipped to `RUNNING` once a backfill slot frees. Chunk-plan progress is tracked by the `chunks_total` /
   `chunks_completed` columns.
+- Per-symbol backfill results — migration `018_backfill_symbol_results` (feature 352) adds the nullable
+  JSONB column `ingest.backfill_jobs.symbol_results`: the outcome and reason of every symbol that was
+  not written, stored keyed by chunk (the chunk id, or `fundamentals`) and merged at read into
+  `BackfillJob.symbol_results` (failed > skipped > empty). It is never part of the webhook payload and
+  is absent for a job-level failure. After a restart a job can hold `FAILED` results for symbols of
+  earlier chunks that are not in `failed_symbols`.
 - Backfill completion webhook — migration `015_backfill_webhook_callback` adds three nullable columns to
   `ingest.backfill_jobs`: `callback_url`, `webhook_enqueued_at`, `webhook_rejected_at`.
   - **Trigger.** A non-empty `TriggerBackfillRequest.callback_url` is judged by notify

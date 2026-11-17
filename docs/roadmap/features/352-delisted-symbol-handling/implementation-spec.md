@@ -988,7 +988,7 @@ ls services/xstockstrat-ingest/migrations | tail -2      # highest number, no du
 
 ### Step 18 — service: ingest stores per-symbol results per chunk and serves them merged
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify

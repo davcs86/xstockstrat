@@ -476,3 +476,8 @@
 - TDD: N/A (migration). Verified offline: up/down pair, `018` highest with no duplicate, down drops
   exactly the column up adds. No database started.
 - Deviations: file names differ from `**Files**` (`018_…` not `017_…`) — Deviation Log.
+
+### Step 18 — service: ingest stores per-symbol results per chunk and serves them merged — done
+- `servicer.py`, `repositories/backfill_jobs.py` (`symbol_results` in `_UPDATABLE_COLUMNS`), service
+  `CLAUDE.md` (names migration `018`). Verified on this commit alone: ruff clean, `pytest -q` 531 passed,
+  grep checks pass, `webhook_handoff_loop.py` untouched.

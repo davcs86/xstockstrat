@@ -297,6 +297,47 @@ def _dt_to_ts(dt: datetime) -> Timestamp:
     return ts
 
 
+_FUNDAMENTALS_RESULTS_KEY = "fundamentals"
+_SYMBOL_FAILED = common_pb2.BACKFILL_SYMBOL_OUTCOME_FAILED
+_OUTCOME_PRECEDENCE = {
+    common_pb2.BACKFILL_SYMBOL_OUTCOME_EMPTY: 1,
+    common_pb2.BACKFILL_SYMBOL_OUTCOME_SKIPPED: 2,
+    _SYMBOL_FAILED: 3,
+}
+
+
+def _merged_symbol_results(stored: str | None) -> list[common_pb2.BackfillSymbolResult]:
+    """Merge the stored per-chunk results per symbol (FAILED > SKIPPED > EMPTY), by symbol."""
+    best: dict[str, dict] = {}
+    for chunk_results in (json.loads(stored) if stored else {}).values():
+        for symbol, entry in chunk_results.items():
+            held = best.get(symbol)
+            if held is None or _OUTCOME_PRECEDENCE.get(
+                entry["outcome"], 0
+            ) > _OUTCOME_PRECEDENCE.get(held["outcome"], 0):
+                best[symbol] = entry
+    return [
+        common_pb2.BackfillSymbolResult(
+            symbol=symbol, outcome=best[symbol]["outcome"], reason=best[symbol]["reason"]
+        )
+        for symbol in sorted(best)
+    ]
+
+
+def _record_attempt(chunk_results: dict, sent, resp=None, exc=None) -> None:
+    """Replace the entries of every symbol one attempt was sent with that attempt's outcome."""
+    for symbol in sent:
+        chunk_results.pop(symbol, None)
+    if exc is not None:
+        for symbol in sent:
+            chunk_results[symbol] = {"outcome": _SYMBOL_FAILED, "reason": str(exc)}
+        return
+    for result in resp.symbol_results:
+        chunk_results[result.symbol] = {"outcome": int(result.outcome), "reason": result.reason}
+    for symbol in resp.failed_symbols:
+        chunk_results.setdefault(symbol, {"outcome": _SYMBOL_FAILED, "reason": ""})
+
+
 def job_row_to_proto(row: dict) -> ingest_pb2.BackfillJob:
     """Map an ``ingest.backfill_jobs`` row to a BackfillJob message."""
     job = ingest_pb2.BackfillJob(
@@ -327,6 +368,7 @@ def job_row_to_proto(row: dict) -> ingest_pb2.BackfillJob:
         job.started_at.CopyFrom(_dt_to_ts(row["started_at"]))
     if row.get("completed_at"):
         job.completed_at.CopyFrom(_dt_to_ts(row["completed_at"]))
+    job.symbol_results.extend(_merged_symbol_results(row.get("symbol_results")))
     return job
 
 
@@ -698,6 +740,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             metadata=propagation_meta,
         )
         failed = list(resp.failed_symbols)
+        chunk_results: dict = {}
+        _record_attempt(chunk_results, symbols, resp=resp)
         if job_id in self._canceled_jobs:
             self._canceled_jobs.discard(job_id)
             log.info("fundamentals backfill job %s canceled mid-run; not finalizing", job_id)
@@ -712,6 +756,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             bars_processed=int(resp.periods_written),  # reused as periods-written for fundamentals
             failed_symbols=failed,
             completed_at=datetime.now(UTC),
+            symbol_results=json.dumps({_FUNDAMENTALS_RESULTS_KEY: chunk_results}),
         )
         self._webhook_wake.set()
         await self._emit_backfill_event(
@@ -908,7 +953,14 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             )
             chunks = await backfill_chunks.get_incomplete_chunks(self._db, job_id)
             log.info("resuming backfill job %s with %d incomplete chunk(s)", job_id, len(chunks))
-            state = await self._run_chunks(job_id, req, timeframe, chunks, meta)
+            state = await self._run_chunks(
+                job_id,
+                req,
+                timeframe,
+                chunks,
+                meta,
+                symbol_results=json.loads(row.get("symbol_results") or "{}"),
+            )
             await self._finalize_backfill(job_id, state, len(chunks), meta)
         except Exception:
             log.error("_resume_job failed job=%s", job_id, exc_info=True)
@@ -918,16 +970,31 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
     def _effective_max_attempts(self) -> int:
         return self._cfg.backfill_max_retry_attempts if self._cfg.backfill_retry_on_failure else 0
 
-    async def _run_chunks(self, job_id, request, timeframe, chunks, propagation_meta):
+    async def _run_chunks(
+        self,
+        job_id,
+        request,
+        timeframe,
+        chunks,
+        propagation_meta,
+        symbol_results: dict | None = None,
+    ):
         """Execute chunks concurrently under the chunk-level semaphore (FR-6).
 
-        Returns a state dict: bars, chunks_done, chunks_failed, failed_symbols (set).
+        Returns a state dict: bars, chunks_done, chunks_failed, failed_symbols (set),
+        symbol_results (per-chunk dict, seeded from ``symbol_results``).
         Job progress (bars_processed / chunks_completed) is advanced after each chunk.
         """
         sem = asyncio.Semaphore(self._cfg.backfill_max_concurrent_chunks)
         max_attempts = self._effective_max_attempts()
         tf_enum = _STR_TO_ENUM.get(timeframe, 0)
-        state = {"bars": 0, "chunks_done": 0, "chunks_failed": 0, "failed_symbols": set()}
+        state = {
+            "bars": 0,
+            "chunks_done": 0,
+            "chunks_failed": 0,
+            "failed_symbols": set(),
+            "symbol_results": dict(symbol_results or {}),
+        }
         lock = asyncio.Lock()
 
         async def run_one(chunk):
@@ -944,6 +1011,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 remaining = list(chunk["symbols"])
                 bars = 0
                 failed: list[str] = []
+                chunk_results: dict = {}
                 last_exc = None
                 attempt = 0
                 while True:
@@ -961,9 +1029,11 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                         bars += resp.bars_written
                         failed = list(resp.failed_symbols)
                         last_exc = None
+                        _record_attempt(chunk_results, remaining, resp=resp)
                     except grpc.aio.AioRpcError as e:
                         last_exc = e
                         failed = remaining
+                        _record_attempt(chunk_results, remaining, exc=e)
                         if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
                             # Permanent rejection (e.g. marketdata's 1d-only gate) — retrying
                             # cannot succeed.
@@ -971,6 +1041,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     except Exception as e:  # transient RPC error — retry the whole chunk
                         last_exc = e
                         failed = remaining
+                        _record_attempt(chunk_results, remaining, exc=e)
                     if not failed or attempt >= max_attempts:
                         break
                     attempt += 1
@@ -985,6 +1056,10 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                         )
                         state["chunks_failed"] += 1
                         state["failed_symbols"].update(chunk["symbols"])
+                        chunk_results = {
+                            symbol: {"outcome": _SYMBOL_FAILED, "reason": str(last_exc)}
+                            for symbol in chunk["symbols"]
+                        }
                         log.warning(
                             "backfill job %s chunk %s failed: %s", job_id, chunk_id, last_exc
                         )
@@ -996,11 +1071,13 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                         state["bars"] += bars
                         if failed:
                             state["failed_symbols"].update(failed)
+                    state["symbol_results"][chunk_id] = chunk_results
                     await backfill_jobs.update_job(
                         self._db,
                         job_id,
                         bars_processed=state["bars"],
                         chunks_completed=state["chunks_done"],
+                        symbol_results=json.dumps(state["symbol_results"]),
                     )
 
         await asyncio.gather(*(run_one(c) for c in chunks))
