@@ -27,3 +27,4 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **User decision 2026-11-17 (round-5 gate):** overrode the 5-round hard cap of the grilling protocol, asking for "one more to confirm it's sound". Run as a single independent post-cap confirmation review (no new proposal), not a sixth debate round. C-14 sign-off still pending.
 - Post-cap confirmation review 1: SOUND-WITH-NITS (no Floor breach, no C-16 regression); gap = FR-1/FR-2 text unrecorded → D-21; sign-off wording nits fixed.
 - **User decision 2026-11-17:** "Override cap until design is sound" — further confirmation passes continue past the 5-round cap until the auditor returns SOUND. C-14 (O-13) remains a user sign-off item; no review round can close it.
+- Confirmation passes 2–4: pass 2 → D-22 (FR-1 qualified, honors R-12); pass 3 → D-23 (FRs describe rolled-out fix, D-7 window); **pass 4 verdict SOUND** (no defects). Awaiting C-14 sign-off (O-13).

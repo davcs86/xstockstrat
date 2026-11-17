@@ -16,6 +16,7 @@
 | post-cap | 2026-11-17 | /sdd-design (user overrode 5-round cap; independent confirmation review, no proposal) | 1 | 0 | 0 | 0 | 0 | verdict SOUND-WITH-NITS; no Floor breach, no C-16 regression |
 | post-cap 2 | 2026-11-17 | /sdd-design (user: "override cap until design is sound"; confirmation pass 2) | 1 | 0 | 0 | 0 | 0 | verdict SOUND-WITH-NITS — FR-1 wording contradicted R-12 → D-22 |
 | post-cap 3 | 2026-11-17 | /sdd-design (confirmation pass 3) | 1 | 0 | 0 | 0 | 0 | verdict SOUND-WITH-NITS — D-22 covered only R-12 (a); D-7 window (b) → D-23 |
+| post-cap 4 | 2026-11-17 | /sdd-design (confirmation pass 4) | 0 | 0 | 0 | 0 | 0 | verdict **SOUND** — no defects, no Floor breach, no C-16 regression; only O-13 (user sign-off) open |
 
 ## Settled Decisions
 
