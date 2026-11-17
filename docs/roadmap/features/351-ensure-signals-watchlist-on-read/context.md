@@ -78,3 +78,15 @@
 - [ ] Future `portfolio.watchlists` index migrations must use `CREATE INDEX CONCURRENTLY`.
 - [ ] Mutation-red evidence for AC-3, AC-5, AC-8 recorded here at step 1/2 (D-9).
 - [ ] Non-UUID owner orphan lists — optional census later.
+
+## Session 2026-11-17 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status → implementation-ready.
+- Tree: `ccr-1305a9de-7x1t7v@34c34ed` (`origin/main-dev@ccbe424` merged; no `origin/feature/ensure-signals-watchlist-on-read` exists, so `main-dev` was the freshness target). No Go toolchain in the session (`go version` tried to download 1.27.0): no Go command in the spec was executed here.
+- Key codebase findings:
+  - `ListWatchlists` is at `portfolio_service.go:2246-2265`; `"slices"` is not imported there (`"net"` `:11`, `"sort"` `:12`), so Step 1 adds it. `EnsureSystemManaged`'s only current caller is `EnsureSignalWatchlist` (`:2211`).
+  - No `ListWatchlists` test exists; the fake `ListByUser` (`watchlist_service_test.go:146`) ignores size and token and iterates a map, so Step 2 replaces it (nothing else calls it). Fake ids are `wl-<n>` and sort after every hex uuid, so Step 2 adds an `ensureID` hook (not in D-9's list) to exercise both D-2 branches.
+  - `watchlist_repo.go:139` still has `nextToken = wls[pageSize].WatchlistId` and the defect `.status` is `open`: Step 5 (landing gate) fails today by design. No feature slug exists for the token fix, so the merge-order row's `<fix-slug> (<NNN>)` is filled in at Step 6.
+  - `testPool` has 30-odd callers; Step 3 keeps its signature and adds `testPoolWithLockTimeout`. Offline dbtests SKIP (not evidence, `fails.md:3055`); proof is the CI job `portfolio-db-test` (`ci.yml:1017`).
+  - FR-7 text sites verified: `tools.py:33`, `tools.py:2153-2161`, `mcp-tools.md:1380-1382`; `agent/CLAUDE.md:71` and `historical-backfill.md:213` do not say "read-only" for `list_watchlists`. Overlap features 311, 312, 315, 317, 323, 326 are all `spec-ready` (rebase-only).
+- Spec assumptions (for impl-spec review): `ensureID` hook; re-list-failure WARN text; AC-9 covered by a `docs` step (per D-9); no wire test; Step 5 as a `test`-category gate with `Covers: —`.
