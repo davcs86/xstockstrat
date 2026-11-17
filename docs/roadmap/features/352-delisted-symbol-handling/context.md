@@ -634,3 +634,7 @@
 ### Step 15 — service: per-symbol backfill results and the `skipped` outcome — done
 - `marketdata_service.go`, `delisting.go`, `telemetry/otel.go`, service `CLAUDE.md`. Build and lint clean;
   `BackfillSkipped` wired; `SymbolResults` on both responses.
+
+### Step 16 — test: one test per loop exit arm, the invariant, the metric — done
+- TDD: AC-11 red (helper returning `FAILED` for every error): `failed_symbols = [PSKY], want empty` →
+  green: 11 top-level PASS; existing backfill tests ok; `go_gate` 87.3%; 6 `@AC-` comments.

@@ -914,7 +914,7 @@ grep -c "SymbolResults" services/xstockstrat-marketdata/internal/service/marketd
 
 ### Step 16 — test: one test per loop exit arm, the invariant, the metric
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/backfill_outcome_test.go` — create
