@@ -1502,7 +1502,7 @@ python3 scripts/check-context-map.py
 
 ### Step 29 — test: agent projections
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_watchlist_client.py` — modify

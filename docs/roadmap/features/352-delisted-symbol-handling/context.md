@@ -441,3 +441,11 @@
   != 'skipped'` (7 failed / 4 passed on the unmodified client) → green: 11 passed.
 - Verification: ruff clean, full pytest 776 passed, plugin `validate.py` (+ `--self-test`), grep counts,
   `check-context-map.py` — all passed. The full suite ran once on the tree holding Steps 28 and 29.
+
+### Step 29 — test: agent projections — done
+- 8 new cases in `tests/test_watchlist_client.py`, 4 in `tests/test_client.py`. `py_gate` via `uv run`:
+  ruff clean, 776 passed, coverage 88.22%. No skipped tests.
+- Four of the new tests are guards that pass on the unmodified client (two proto-field guards, "no
+  bindings", "no results → `symbol_results: []`"); two of them go beyond the step text.
+- Noted, not changed: an enum number unknown to this agent build makes `.Name()` raise `ValueError`, the
+  same behaviour as the existing `_refused_to_list`.
