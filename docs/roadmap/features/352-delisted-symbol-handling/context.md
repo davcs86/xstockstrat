@@ -609,3 +609,6 @@
   `platform/trading_state`); `--doc-check` exit 0; `config-wiring.test.mjs` 75 pass.
 - Config contract: namespace `marketdata`, key `assets.delisting_confirmation_trading_days`, int, default
   5, bounds [1, 30] (Step 11), seeded by config `054`, read live through the WatchConfig-backed reader.
+
+### Step 11 — service: SetConfig bounds `[1, 30]` for the confirmation window — done
+- One registry row in `configServiceImpl.ts`.

@@ -698,7 +698,7 @@ git diff --exit-code scripts/config-heal/dryrun-fresh.tsv
 
 ### Step 11 — service: SetConfig bounds `[1, 30]` for the confirmation window
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
