@@ -533,3 +533,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ```sdd-batch-setup
 {"mainDev":"4330f0eff61f0a5683d284e60a9296895bc93b9b","date":"2026-11-17"}
 ```
+
+## Session 2026-11-17 — sdd-execute sequential, Step 1
+
+- Tooling setup (step 1): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (pinned `GOTOOLCHAIN=go1.27.0` install, built with go1.27.0; host 2.5.0 left in place) · test DB ✗ (operator decision B → CI dbtest).
+- Operator decision (binding, 2026-11-17): B — explicit P-06 waiver of LOCAL red-before-green for the dbtest-verified steps of feature 359 (Steps 1, 2, 3+4). No migrated TimescaleDB test DB can be provisioned here (Docker Hub 429, no apt package, GitHub source 403). Run build, vet, golangci-lint and the step greps locally, commit, and defer the dbtest run plus Steps 1–2 RED/GREEN to the CI `Portfolio DB test (TimescaleDB)` job on the integration PR. Never weaken, skip or loosen a test to compensate.
+
+### Step 1 — service: serialize each APPLY row on the parent watchlist row lock [done]
+- Added `backfillLockSQL` (`SELECT 1 … FOR NO KEY UPDATE`, no SKIP LOCKED) and the single-caller helper `applyBackfillRow`: one READ COMMITTED tx per candidate (lock Exec, unchanged INSERT, Commit, `_ = tx.Rollback` defer). `:167` now calls it; the ABORTED path and the outcome switch are byte-identical. Comments at the APPLY statements and on `RunBackfill` updated per D-10.
+- Verification (local, `.sdd-logs/v-1.log`, `exit=0`): build and `vet -tags dbtest` clean, `golangci-lint` v2.14.0 `0 issues.`, `pool.Exec(ctx, stmt` no match, `FOR NO KEY UPDATE` only at `:124`. TDD: red/green deferred to CI per the operator waiver (no local RED captured).
+- Files modified: `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill.go`
+- Deviations: DEV-1 — dbtest Verification line and local RED/GREEN deferred to CI (operator decision B).
+- [ ] Open: the CI `Portfolio DB test (TimescaleDB)` job must show `TestBackfill_|TestAddPath_|TestPrune_` green on the integration PR, including `:443` and `:349`; a 55P03 on `:443` under `-race` is the accepted lock_timeout residual (investigate the runner, never edit the test).
+- [ ] Still open from impl-spec review: `pgx.ReadCommitted` and `pgconn.CommandTag` are now confirmed by the Step 1 compile (closes that warning). Step 2 `pg_stat_activity` assumptions, Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew and the 352 overlap stay open.

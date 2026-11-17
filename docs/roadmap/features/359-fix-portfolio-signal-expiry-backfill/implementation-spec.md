@@ -58,7 +58,7 @@ These tests may **not** be edited, skipped, loosened or deleted by any step. If 
 
 ### Step 1 — service: serialize each APPLY row on the parent watchlist row lock
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill.go` — modify
@@ -388,3 +388,9 @@ grep -c "^| \*\*PORTFOLIO-" services/xstockstrat-portfolio/docs/context-constitu
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### DEV-1 — Step 1: dbtest Verification line and local RED/GREEN deferred to CI (2026-11-17)
+
+- **Expected**: Step 1's Verification runs `PORTFOLIO_DB_TEST_URL=<migrated test DB URL> GOWORK=off go test -tags dbtest -race -count=1 -run 'TestBackfill_|TestAddPath_|TestPrune_' ./internal/repository/...`, and the TDD gate captures RED (Step 2's tests on the pre-Step-1 tree), then GREEN, locally.
+- **Actual**: no migrated TimescaleDB test DB can be provisioned in the execute container (Docker Hub 429 on `timescale/timescaledb:latest-pg16`, no apt package, GitHub source download 403), and the execute loop never starts a database. Ran the rest of the block locally: `go build` and `go vet -tags dbtest` clean, `golangci-lint` v2.14.0 (pinned install, built with go1.27.0, put first on `PATH` because the host binary is 2.5.0) `0 issues.`, `pool.Exec(ctx, stmt` no match, `FOR NO KEY UPDATE` only at `:124` (`backfillLockSQL`).
+- **Disposition**: operator decision B 2026-11-17 — explicit P-06 waiver of LOCAL red-before-green for the dbtest-verified steps of feature 359. The dbtest run and the Steps 1–2 RED/GREEN evidence are deferred to the CI `Portfolio DB test (TimescaleDB)` job on the integration PR. No test was weakened, skipped or loosened; `:443`, `:349` and `:252-295` are untouched.

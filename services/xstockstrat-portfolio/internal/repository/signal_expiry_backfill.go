@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -96,8 +97,8 @@ WHERE s.source = 2
 GROUP BY w.user_id
 ORDER BY w.user_id`
 
-// The APPLY statements recompute the class from ingest at statement time; zero rows inserted means
-// the binding left the class REPORT named (or gained an expiry row) and is counted as changed.
+// APPLY runs each statement after locking the parent watchlist row, so its class is recomputed after any
+// concurrent add commits; zero rows inserted means the binding left REPORT's class and is counted as changed.
 const backfillSeedSQL = `
 INSERT INTO portfolio.watchlist_signal_expiry (watchlist_id, symbol, valid_until, signal_id)
 SELECT s.watchlist_id, s.symbol, m.valid_until, m.id
@@ -120,8 +121,29 @@ WHERE s.watchlist_id = $1 AND s.symbol = $2 AND s.source = 2
   AND NOT EXISTS (SELECT 1 FROM ` + ownWatchlistSignals + `)
 ON CONFLICT DO NOTHING`
 
-// RunBackfill seeds expiry rows for legacy SIGNAL entries (REPORT reads only; APPLY inserts one
-// autocommit row at a time). It never deletes a binding: marked entries are removed by the prune tick.
+const backfillLockSQL = `SELECT 1 FROM portfolio.watchlists WHERE watchlist_id = $1 FOR NO KEY UPDATE`
+
+func applyBackfillRow(ctx context.Context, pool *pgxpool.Pool, stmt, watchlistID, symbol string) (pgconn.CommandTag, error) {
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return pgconn.CommandTag{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, backfillLockSQL, watchlistID); err != nil {
+		return pgconn.CommandTag{}, err
+	}
+	tag, err := tx.Exec(ctx, stmt, watchlistID, symbol)
+	if err != nil {
+		return pgconn.CommandTag{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return pgconn.CommandTag{}, err
+	}
+	return tag, nil
+}
+
+// RunBackfill seeds expiry rows for legacy SIGNAL entries (REPORT reads only; APPLY writes one
+// short locked tx per row). It never deletes a binding: marked entries are removed by the prune tick.
 func RunBackfill(ctx context.Context, pool *pgxpool.Pool, opts BackfillOptions, out io.Writer) (res BackfillResult, err error) {
 	if err := validateBackfillOptions(opts); err != nil {
 		return res, err
@@ -164,7 +186,7 @@ func RunBackfill(ctx context.Context, pool *pgxpool.Pool, opts BackfillOptions, 
 		default:
 			continue
 		}
-		tag, err := pool.Exec(ctx, stmt, c.watchlistID, c.symbol)
+		tag, err := applyBackfillRow(ctx, pool, stmt, c.watchlistID, c.symbol)
 		if err != nil {
 			printTo(w, "ABORTED seeded=%d marked=%d changed_since_report=%d (re-run is idempotent)\n",
 				res.Seeded, res.Marked, res.SkippedChanged)
