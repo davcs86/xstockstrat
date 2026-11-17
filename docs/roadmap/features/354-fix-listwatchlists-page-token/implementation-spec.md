@@ -25,9 +25,10 @@ FR-1 and FR-2 (product-spec.md) describe the **fully rolled-out** fix. During th
 
 ## Step Dependencies
 
-- Steps 1+2 land together (`**Lands with**`), backend surface only, 2 members. The reason is the user-approved design D-8: one red→green cycle and one F-08-staged commit, so neither a red tree nor an untested seam is committed. This is **not** a strict `step-constraints.md` §C table trigger: Step 1 alone could pass build/lint, so `/sdd-review` may WARN "Lands with declared but no §C trigger applies". The fold is deliberate and approved (D-8, O-10).
+- Steps 1+2 land together (`**Lands with**`), backend surface only, 2 members. The reason is the user-approved design D-8: one red→green cycle and one F-08-staged commit, so neither a red tree nor an untested seam is committed. This is **not** a strict `step-constraints.md` §C table trigger: Step 1 alone could pass build/lint, so `/sdd-review` may WARN "Lands with declared but no §C trigger applies". The fold is deliberate and approved (D-8, O-10). `/sdd-review impl-spec` iteration 1 raised exactly this B3b WARN; it is acknowledged here and is not to be escalated or re-raised.
   - Step 2's unit tests construct `&WatchlistRepo{db: mock}` with a nil `pool`. They can execute `ListByUser` only after Step 1's seam (`r.pool.Query` → `r.db.Query`, `watchlist_repo.go:111`); without it they hit a nil-pointer panic, not an assertion failure.
   - Step 1's fix has no RED proof without Step 2's tests.
+- **Cross-feature ordering (from `/sdd-review impl-spec` overlap scan):** this feature must merge to `main-dev` **before** feature 351 `ensure-signals-watchlist-on-read` (`implementation-ready` on `origin/ccr-1305a9de-7x1t7v`, not yet on `main-dev`). 351's Step 5 is a landing gate that requires this `ListByUser` token fix on `origin/main-dev`, and its Steps 3/5 modify the same `internal/repository/dbtest_helpers_test.go` — 351 Step 5 already plans to switch to "the fix's helper", i.e. this feature's `seedNamedWatchlist`. Do not touch 351's files here; 351 owns its merge-order row (its Step 6). The twin `ListPositions` defect (`portfolio_repo.go:194`; report `docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md`, present only on `origin/ccr-1305a9de-7x1t7v`) is owned by another session and stays out of this diff.
 - Execution order inside the unit (D-8, D-10):
   1. Step 1 edit (a) only: the seam.
   2. Write all of Step 2.
@@ -363,8 +364,8 @@ GOWORK=off go vet -tags dbtest ./...
 GOWORK=off golangci-lint run --modules-download-mode=mod
 # C-13: one declaration site per helper
 grep -rn "func listPageRows\|func expectNoBindings\|func seedNamedWatchlist" --include="*_test.go" .   # expect exactly 3 lines
-# Coverage gate (C-08): new logic is in an excluded package (repository) — no threshold applies; run to confirm the suite and the total are unaffected (≥ 40%)
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
+# Coverage gate (C-08): mirrors CI go-lint (`.github/workflows/ci.yml:361-392`, threshold 40%). New logic is in an excluded package (repository), so this only proves the suite and the gated total are unaffected; exits non-zero below 40%.
+export GOWORK=off; COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//'); go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print "total " $3 "%"; exit ($3+0 >= 40) ? 0 : 1}'
 ```
 - **GREEN of record:** CI `portfolio-db-test` (TimescaleDB) passes on the PR, together with the local `-list` output above (D-10 (iii)).
 - **The PR body and context.md must disclose:**
