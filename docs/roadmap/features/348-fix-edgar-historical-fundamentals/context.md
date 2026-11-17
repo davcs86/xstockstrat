@@ -458,3 +458,10 @@ Operator instructions, verbatim, in order: "Remove the OTC from the watchlists";
 - ADBT, HONA: there is no MCP route to delete `fundamentals_history` rows, so the delete statement (both tables, one transaction, `source = 'edgar'` on the snapshot table) was handed to the operator. Waiting on the operator's word that it ran; the re-run (`start=2021-01-01`, `overwrite=true`, DO staging) has not been triggered.
 - Operator: "Investigate why these symbols fail on the platform, is it an alpaca limitation?" Read-only (stored bars, Loki, Webull, web search). Four are real delistings, matched by the last stored daily bar: ROKU (acquired, closed 2026-11-06), NWE (merged into Bright Horizon Energy, 2026-11-13), KPTI (Chapter 11, Nasdaq suspension 2026-11-11), ATCH (NYSE American suspension 2026-11-10, now OTC Pink). SHPH is unexplained: still printing bars and tradable at another broker, absent from Alpaca's active set; Alpaca's own asset record was not read. The asset set itself loaded normally on both lanes (about 13,500).
 - Operator: "Just remove shph". SHPH removed from DO staging "Signals". ROKU, NWE, KPTI, ATCH stay.
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1573 merged to main
+- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17

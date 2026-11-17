@@ -19,6 +19,7 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import {
+  BackfillSymbolResult,
   PageRequest,
   PageResponse,
   TemplateMeta,
@@ -462,6 +463,7 @@ export interface BackfillJob {
   chunksCompleted: number;
   /** what the job backfills; UNSPECIFIED == BARS (feature 198) */
   dataKind: BackfillDataKind;
+  symbolResults: BackfillSymbolResult[];
 }
 
 export interface TriggerBackfillRequest {
@@ -618,7 +620,14 @@ export interface SignalSource {
   /** Owner of the source (feature 224). "system" = platform-owned, read-only to every user. */
   userId: string;
   /** set when instantiated from a template */
-  origin?: TemplateOrigin | undefined;
+  origin?:
+    | TemplateOrigin
+    | undefined;
+  /**
+   * Prose an LLM agent follows to extract signals from a mediated_* source.
+   * Empty on every other source type.
+   */
+  extractionInstructions: string;
 }
 
 export interface ListSignalSourcesRequest {
@@ -701,6 +710,7 @@ function createBaseBackfillJob(): BackfillJob {
     chunksTotal: 0,
     chunksCompleted: 0,
     dataKind: BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+    symbolResults: [],
   };
 }
 
@@ -750,6 +760,9 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     }
     if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
       writer.uint32(120).int32(backfillDataKindToNumber(message.dataKind));
+    }
+    for (const v of message.symbolResults) {
+      BackfillSymbolResult.encode(v!, writer.uint32(130).fork()).join();
     }
     return writer;
   },
@@ -881,6 +894,14 @@ export const BackfillJob: MessageFns<BackfillJob> = {
           message.dataKind = backfillDataKindFromJSON(reader.int32());
           continue;
         }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.symbolResults.push(BackfillSymbolResult.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -947,6 +968,11 @@ export const BackfillJob: MessageFns<BackfillJob> = {
         : isSet(object.data_kind)
         ? backfillDataKindFromJSON(object.data_kind)
         : BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+      symbolResults: globalThis.Array.isArray(object?.symbolResults)
+        ? object.symbolResults.map((e: any) => BackfillSymbolResult.fromJSON(e))
+        : globalThis.Array.isArray(object?.symbol_results)
+        ? object.symbol_results.map((e: any) => BackfillSymbolResult.fromJSON(e))
+        : [],
     };
   },
 
@@ -997,6 +1023,9 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
       obj.dataKind = backfillDataKindToJSON(message.dataKind);
     }
+    if (message.symbolResults?.length) {
+      obj.symbolResults = message.symbolResults.map((e) => BackfillSymbolResult.toJSON(e));
+    }
     return obj;
   },
 
@@ -1022,6 +1051,7 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     message.chunksTotal = object.chunksTotal ?? 0;
     message.chunksCompleted = object.chunksCompleted ?? 0;
     message.dataKind = object.dataKind ?? BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
+    message.symbolResults = object.symbolResults?.map((e) => BackfillSymbolResult.fromPartial(e)) || [];
     return message;
   },
 };
@@ -2449,6 +2479,7 @@ function createBaseSignalSource(): SignalSource {
     reliabilityWeight: undefined,
     userId: "",
     origin: undefined,
+    extractionInstructions: "",
   };
 }
 
@@ -2495,6 +2526,9 @@ export const SignalSource: MessageFns<SignalSource> = {
     }
     if (message.origin !== undefined) {
       TemplateOrigin.encode(message.origin, writer.uint32(114).fork()).join();
+    }
+    if (message.extractionInstructions !== "") {
+      writer.uint32(122).string(message.extractionInstructions);
     }
     return writer;
   },
@@ -2618,6 +2652,14 @@ export const SignalSource: MessageFns<SignalSource> = {
           message.origin = TemplateOrigin.decode(reader, reader.uint32());
           continue;
         }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.extractionInstructions = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2685,6 +2727,11 @@ export const SignalSource: MessageFns<SignalSource> = {
         ? globalThis.String(object.user_id)
         : "",
       origin: isSet(object.origin) ? TemplateOrigin.fromJSON(object.origin) : undefined,
+      extractionInstructions: isSet(object.extractionInstructions)
+        ? globalThis.String(object.extractionInstructions)
+        : isSet(object.extraction_instructions)
+        ? globalThis.String(object.extraction_instructions)
+        : "",
     };
   },
 
@@ -2732,6 +2779,9 @@ export const SignalSource: MessageFns<SignalSource> = {
     if (message.origin !== undefined) {
       obj.origin = TemplateOrigin.toJSON(message.origin);
     }
+    if (message.extractionInstructions !== "") {
+      obj.extractionInstructions = message.extractionInstructions;
+    }
     return obj;
   },
 
@@ -2756,6 +2806,7 @@ export const SignalSource: MessageFns<SignalSource> = {
     message.origin = (object.origin !== undefined && object.origin !== null)
       ? TemplateOrigin.fromPartial(object.origin)
       : undefined;
+    message.extractionInstructions = object.extractionInstructions ?? "";
     return message;
   },
 };

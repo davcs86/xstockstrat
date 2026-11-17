@@ -708,3 +708,10 @@ Feature: chart-series-palette
 - `e2e/trader/position-detail.spec.ts`, chromium: 52 passed on the staging build and 52 passed with `UI_THEME=production`.
 - `pnpm run format:check` reports one file, `src/styles/themes/colorVision.cjs` (342 Step 1, unchanged by this merge; one redundant-parentheses line). Not fixed here: outside the merge, and no CI job runs `format:check`.
 - Still open: the slot decision above; the `colorVision.cjs` prettier line; the O-24 checkbox under "Open Threads" above is superseded by item 1.
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1573 merged to main
+- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17

@@ -69,6 +69,7 @@ resolved via the separate `GetSecret` RPC (`x-internal-caller: marketdata`), nev
 | `classification.enabled` | bool | `false` | Gate for the sector-classification refresh job (feature 217). Reads (`GetCurrentSector`/`GetSectorAsOf`/`GetSectorHistory`) always serve from `marketdata.symbol_classification` and never call FMP. |
 | `classification.refresh_interval_hours` | int | `24` | Classification refresh cadence (feature 217); `<= 0` pauses. Universe = the warm-quote set ∪ symbols read through the classification RPCs. |
 | `assets.refresh_interval_hours` | int | `6` | Feature 282 — cadence (hours) of the asset-set refresher (`StartAssetSetRefresher`, § Asset-set servability). Re-read every minute; `> 24` → `24` on read (a refresh stays inside the 48h `minIngestLookback`), nil/unset → `6`, `<= 0` pauses and keeps the current set (reader-only: SetConfig rejects `< 1`). SetConfig-bounded `[1,24]`. Seeded by config migration `038_marketdata_asset_refresh_interval` (global staging + production rows at `6`). |
+| `assets.delisting_confirmation_trading_days` | int | `5` | Feature 352 — trading days a watchlist symbol must stay unservable in every successful asset-set load before it is flagged delisted (§ Delisted-symbol detection); the first unservable day is day 1. Re-read at each successful asset-set load; nil/unset or `<= 0` → `5`, `> 30` → `30` on read. SetConfig-bounded `[1,30]`. Seeded by config migration `054_marketdata_delisting_confirmation_days` (global staging + production rows at `5`). |
 | `fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL; endpoint paths (`/stable/quote`, `/stable/ratios-ttm`, `/stable/profile`) are built under it. |
 | `fmp.metrics` | string | `core,extended` | Metric tiers to fetch. `core` (batchable quote, 1 call/scan chunk); `extended` adds per-symbol ratios-ttm + profile. |
 | `finnhub.enabled` | bool | `false` | Master gate for the Finnhub fundamentals source (feature 129). Off by default; same live-per-call-read/no-restart-needed convention as `marketdata.fmp.enabled`. |
@@ -103,6 +104,10 @@ resolved via the separate `GetSecret` RPC (`x-internal-caller: marketdata`), nev
   overwrite a version in place; a sector change closes the open row and opens a new one.
   Epoch-seed rows (`source='seed'`, `valid_from = 1900-01-01`) knowingly apply the first-observed
   sector to all pre-go-live bars (user-signed-off C-16 relaxation; analysis surfaces a backtest warning).
+- Table `marketdata.symbol_profile` (feature 352): one row per symbol, written lazily on the first
+  unservable observation. A reset or a recovery sets the state columns to NULL — never delete a row.
+- Table `marketdata.watched_symbol` (feature 352): marketdata's copy of portfolio's watchlist symbol union,
+  rewritten by each `SyncWatchlistDelistings` call. It holds no state.
 - **Planned, not yet implemented:** continuous aggregate `marketdata.ohlcv_1h` (no migration creates it today)
 
 ## Fundamentals Integration (feature 059; provider made switchable by feature 129)
@@ -136,11 +141,60 @@ on its watchlist insert paths.
 that errors, is empty, or is under 50% of the last good set is rejected and the last good set kept; a failed
 attempt retries with backoff from 1m doubling to a 30m cap; one WARN on entering the never-loaded state and one
 INFO `asset set loaded` on the first load; at most 1000 symbols per `GetSymbolServability` call
-(`InvalidArgument` above it); only the **first** successful load prunes the warm set of unservable symbols.
+(`InvalidArgument` above it); the **first** successful load prunes the warm set of unservable symbols, and
+every successful load removes flagged-delisted symbols from it (feature 352).
 
 **Gate scope — warm-add sites only** (MARKETDATA-16). Accepted residuals: a symbol that becomes unservable after it was warmed stays warm until
-restart (R2); the first load has no previous set to compare against, so a truncated first response
+it is flagged delisted (R2, feature 352); the first load has no previous set to compare against, so a truncated first response
 over-refuses until the next good refresh (R3).
+
+## Delisted-symbol detection (feature 352)
+
+`runDelistingHook` (`internal/service/delisting.go`) runs at the end of every successful asset-set load and is
+the **only writer** of `marketdata.symbol_profile` state — no RPC, backfill or other loop decides it. On a
+trading day (New York calendar date of now, `contracts/marketsession`; never `SessionDate`) it classifies the
+candidates (`watched_symbol` ∪ rows with a first-unservable date) against the new set and runs five
+autocommitted statements in order, stopping at the first error: H1 reset rows that are servable again, H2
+reset rows that left every watchlist (skipped while the union is empty), H3 start a window for watched
+unservable symbols, H4 flag rows whose window of `assets.delisting_confirmation_trading_days` trading days
+has elapsed, H5 clear flagged rows that are servable again (the union is ignored). A closed-day load runs no
+statement. A rejected or failed load never reaches the hook.
+
+After the statements — completed, stopped or skipped — the hook rebuilds the in-memory flagged set from the
+database and removes flagged symbols from the warm set; the same read runs once at boot, independent of the
+asset load. Then it sends one recovery alert (WARNING, category `symbol_delisting`, untargeted) per recovered
+row whose flag alert had been claimed; a failed or cut-off send is logged at WARN and not retried.
+
+**Fixed invariants** (operator-approved, not config keys): the hook is bounded at 30 s and each alert send at
+15 s within it; a hook error or timeout never fails the asset load. A quote or price read re-warms a flagged
+symbol (`markWarm` is ungated, MARKETDATA-16) until the next load removes it again.
+
+**Sync and acknowledge RPCs.** `SyncWatchlistDelistings` and `AckDelistingAlerts`
+(`internal/service/delisting_sync.go`) are the only marketdata RPCs with an inbound caller check: the grant
+needs the header `x-internal-caller: portfolio` **and** a verified mTLS peer whose certificate carries the
+exact DNS SAN `xstockstrat-portfolio` (`internalCallerAllowlist`, `internal/service/authz.go`). A sync replaces
+`marketdata.watched_symbol` with the request (an empty request clears it), claims due flag alerts and returns
+the flagged symbols, read from the database and never from the in-memory flagged set. Fixed values: at most
+20 000 symbols per call (`InvalidArgument` above it), at most 100 claims per sync, a 10-minute claim lease.
+
+| `alert_state` | Rule |
+|---|---|
+| `REPORTED` | the alert is acknowledged |
+| `CLAIMED` | claimed by this call for the first time |
+| `REDELIVERY` | claimed by this call after a lease expired |
+| `PENDING` | anything else: not yet claimed, leased to another caller, over the limit of 100, or servable now |
+
+Every servability decision of one call reads the asset-set pointer once, so `CLAIMED`/`REDELIVERY` always
+implies `unservable_in_current_set = true`; an unloaded asset set claims nothing. Residual: a sync that spans
+an asset-set load can report a just-relisted symbol as unservable for one tick.
+
+**Backfill outcomes.** A backfill still attempts a flagged symbol. `BackfillBars` and `BackfillFundamentals`
+return one `symbol_results` entry per non-written symbol: any error from the data source on a flagged symbol is
+`SKIPPED` with the error text (not in `failed_symbols`); the same error on any other symbol, and every failure
+writing to our own database, is `FAILED`; zero rows is `EMPTY`. The flagged test reads this instance's
+in-memory set, so a flag set by another instance is invisible until this instance's next asset-set load.
+
+Rollout and the first-flag burst → `docs/runbooks/delisting-rollout.md`.
 
 ## Quote retention (feature 229)
 
@@ -149,10 +203,11 @@ over-refuses until the next good refresh (R3).
 ## Observability (feature 294-signal-map-instrumentation)
 
 - `loop tick ok` is written by `warm_quote` (30 s; `idle`, `paused`), `quote_retention` (1 h; `skipped`, `disabled`) and `etf_flag_filler` (event-driven, throttled to one per 60 s; `disabled`, `budget`). `bar_ingest` (`bar ingest: cycle complete`), `classification_refresh` and `asset_refresh` keep their own records.
-- Instruments: `marketdata.vendor.requests{vendor fmp|finnhub|edgar|alpaca, op, outcome}` and `marketdata.vendor.request.duration{vendor, op}`; outcome is ok|http_429|http_4xx|http_5xx|transport|read|decode|ctx|cap|throttle|build|other, `ctx` wins whenever the request context errored, and a duration is recorded only when a request was sent. Feature 347: each Alpaca attempt is its own point, so an attempt answered 429 is one `http_429` point and its retry another; a rate-limit wait that ends early is one point with no duration, `ctx` when the request context ended it and `throttle` when the client bounded it (static ceiling, or the 90 s no-deadline bound). Also `marketdata.stream.reconnects{result reconnected|gave_up}`, the gauge `marketdata.stream.last_message_age`, `marketdata.backfill.symbols{kind bars|fundamentals, outcome written|empty|failed}`, `marketdata.backfill.periods_left_out{reason label_collision|year_end_quarter}` (feature 348: derived EDGAR periods a fundamentals backfill left out), and the unlabelled DB-pool gauges `marketdata.db.pool.{acquired,max,empty_acquire_count,empty_acquire_wait}` (the last two cumulative; `acquired == max` with a rising wait = requests queueing for the 2-connection pool).
+- Instruments: `marketdata.vendor.requests{vendor fmp|finnhub|edgar|alpaca, op, outcome}` and `marketdata.vendor.request.duration{vendor, op}`; outcome is ok|http_429|http_4xx|http_5xx|transport|read|decode|ctx|cap|throttle|build|other, `ctx` wins whenever the request context errored, and a duration is recorded only when a request was sent. Feature 347: each Alpaca attempt is its own point, so an attempt answered 429 is one `http_429` point and its retry another; a rate-limit wait that ends early is one point with no duration, `ctx` when the request context ended it and `throttle` when the client bounded it (static ceiling, or the 90 s no-deadline bound). Also `marketdata.stream.reconnects{result reconnected|gave_up}`, the gauge `marketdata.stream.last_message_age`, `marketdata.backfill.symbols{kind bars|fundamentals, outcome written|empty|skipped|failed}`, `marketdata.backfill.periods_left_out{reason label_collision|year_end_quarter}` (feature 348: derived EDGAR periods a fundamentals backfill left out), and the unlabelled DB-pool gauges `marketdata.db.pool.{acquired,max,empty_acquire_count,empty_acquire_wait}` (the last two cumulative; `acquired == max` with a rising wait = requests queueing for the 2-connection pool).
 - `marketdata.ohlcv.out_of_memory_errors{op bars|recent_bars|bars_batch|insert_bars}` (feature 341) counts SQLSTATE 53200 on the bar paths (`QueryBars`, `QueryRecentBars`, `QueryBarsBatch`, `InsertBars`, via `observeLockBreach`). An increment is read as lock-table exhaustion (`docs/runbooks/ohlcv-lock-budget-tuning.md`); any other out-of-memory cause also counts. It detects a breach; it does not prevent one.
 - Trace context: `telemetry.Init` installs the W3C `traceparent`/baggage propagator, so an inbound RPC from the UI BFF is a child of the BFF dispatch span rather than a root trace.
 - Load-bearing log: WARN `warm poller: cache insert failures` is one aggregate per pass; the per-symbol line is DEBUG.
+- `marketdata.delisting.hook_failures{reason timeout|error}` (feature 352) counts delisting-hook runs that hit a statement error or the 30 s limit. INFO `delisting hook` is one record per successful asset-set load with the per-step counts, the watched count and `skipped` (`closed_day`, `empty_union` or empty).
 - INFO `fundamentals backfill: stored period deleted without replacement` (feature 348) is one record per stored row a backfill deleted whose period is not stored again, with `symbol`, `fiscal_period`, `period_type`, `period_end`, `filed_date` and `category`.
 
 ## Environment Variables

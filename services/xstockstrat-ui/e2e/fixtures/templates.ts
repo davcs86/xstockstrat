@@ -86,6 +86,27 @@ export const TEMPLATES = [
 ];
 
 /**
+ * An admin-authored mediated source template with no `extractionInstructions` yet (feature 355).
+ * Outside `TEMPLATES` and the mock handlers: specs serve it through a stateful `page.route` stub.
+ */
+export const SOURCE_TEMPLATE_MEDIATED_WEBSITE = {
+  meta: {
+    templateId: 'tpl-source-filings',
+    kind: KIND_SIGNAL_SOURCE,
+    name: 'Filings Feed',
+    description: 'Reads a public filings feed.',
+    version: 1,
+  },
+  payload: {
+    slug: 'filings_feed',
+    displayName: 'Filings Feed',
+    sourceType: 'mediated_simple_website',
+    active: true,
+    configJson: { url: 'https://example.com/feed', scrape_selector: 'main' },
+  },
+};
+
+/**
  * The private formula `InstantiateTemplate(FORMULA_TEMPLATE_ZSCORE)` creates, owned by the test user.
  * Its origin lags the template by one version, so the formulas list renders "Update available".
  */

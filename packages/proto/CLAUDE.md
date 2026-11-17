@@ -11,3 +11,6 @@ float-math signed average-cost realized-P&L fold shared by `xstockstrat-trading`
 modules because no CI job runs `go test` inside `packages/proto/`; the `proto-freshness` gate only
 diffs `gen/`, so it never touches `pnl/`. `pnl.QtyEpsilon` is the exported flat-lot
 tolerance shared by the fold and portfolio's Day P&L walk — a fixed constant, not a tuning knob.
+The same carve-out covers `marketsession/` (`github.com/xstockstrat/contracts/marketsession`), the NYSE
+calendar shared by `xstockstrat-portfolio` and `xstockstrat-marketdata`, likewise tested from the
+consuming services because no CI job runs `go test` inside `packages/proto/`.
