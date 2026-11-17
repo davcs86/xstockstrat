@@ -35,3 +35,190 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - Fail-safe direction is skip-the-account-for-the-tick on any incomplete read, never a halt; follow docs/roadmap/ledger/fails.md:3311 (fail closed, reject a repeated token, test against a fake that ignores the token).
 - Do not touch features 351, 353 or 354.
 - Red-before-green is mandatory.
+
+## Session 2026-11-17 — sdd-batch design gate (round 2)
+
+`/sdd-design fix-trading-reconcile-reads` full debate halted at its approval gate after round 2 (gate policy: halt). design.md is NOT written and status.md is unchanged (still spec-ready). The debate register is `debate.md` (D-1..D-12, R-1..R-8, O-1..O-9).
+
+## Open Threads
+
+- **Approach**: the code design is unchanged and rests on D-1..D-8. A trading-local helper `listAccountPlatformPositions` drains portfolio `ListPositions` in pages of the const `reconcilePositionsPageSize = 500`. Each page gets its own `context.WithTimeout(broker.timeout_ms)` with `x-user-id`, and `cancel()` runs right after the call, never deferred in the loop. The helper returns either the complete set or a `nil` slice plus a `%w`-wrapped, 1-based page-indexed error. `reconcileTick:2231-2239` calls the helper, and the existing ppErr skip at `:2240-2243` stays byte-for-byte: WARN and continue, no candidate, no halt, nothing systemic. Round 2 adds D-9: in each page the token guards (empty page with a token, repeated `next_page_token`) run before the symbol merge, and the duplicate-symbol check runs after them. Tests are written RED first in `trading_reconciliation_test.go` with a paging fake capped at 100 calls:
+  - AC-1, with the corrected rationale: RED comes from the finding and halt that today's code emits at tick 1 (`trading.go:2042-2044`).
+  - A positive control asserting the payload `expected == 5` (D-10).
+  - AC-2 error.
+  - AC-2 deadline, asserting page-2 `ctx.Deadline()` is strictly after page 1's (D-11).
+  - AC-3 with an ignore-token fake.
+  - A direct-helper hardening table with exact error text per guard (D-12).
+- **Strongest open objection (blocking, O-6)**: AC-3 has to exercise the repeated-token guard (FR-3/D-4), not the duplicate-symbol guard. In the r2 order (merge first), the D-5 duplicate check shadowed the seen-token check, so deleting the seen-token check left the suite green (fails.md:3312). The synthesis folds in D-9 and a direct-helper row asserting `page 2: repeated next_page_token "p2"`. The objection stays open until the next proposal adopts both concretely. O-7, O-8 and O-9 are non-blocking test-text refinements and are open (payload `expected == 5`, the AC-1 RED rationale, and D-3 vs R-1 deadline discrimination). O-1..O-5 closed at round 2.
+- **Floor status**: no floor breaches.
+- **Uncovered @AC changes**: `358 @AC-1` EXTEND is not covered by an operator decision. `358 @AC-2` and `@AC-3` EXTEND are covered (operator 2026-11-17: skip, never halt). PRESERVE only: `@AC-1/@AC-2/@AC-3 @feature-206` (fix-reconciliation-false-halt.feature) and `@AC-45 @feature-294` (signal-map-instrumentation.feature).
+- **Open risks**:
+  - A skipped tick is visible only through the WARN (no metric, D-8).
+  - Tick wall-clock time grows to ceil(n/500) × broker.timeout_ms.
+  - `resolveUnknownIntents` is skipped whenever the platform read is incomplete.
+  - The rejections rely on portfolio's UNIQUE index (migrations/003:10) and feature 353's paging.
+  - The deadline-ordering assertion needs page 1 to sleep a few ms.
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "The code design is unchanged and rests on D-1 through D-8. This round fixes the order of checks inside each page so that every guard can be tested on its own, and it tightens the test assertions that the adversary showed were vacuous or wrongly reasoned.\n\n**Service change** (`services/xstockstrat-trading/internal/service/trading.go`)\n- Add a package const `reconcilePositionsPageSize = 500`.\n- Add a helper next to reconcileTick: `func (s *TradingService) listAccountPlatformPositions(ctx context.Context, accountID, userID string, mode commonv1.TradingMode, timeout time.Duration) ([]*portfoliov1.Position, error)`.\n- Per page `i` (1-based), the helper:\n  1. Creates `pctx, cancel := context.WithTimeout(ctx, timeout)` and appends `x-user-id`, as `:2231-2234` does today.\n  2. Calls `ListPositions` with `Page{PageSize: reconcilePositionsPageSize, PageToken: token}`.\n  3. Calls `cancel()` as soon as the call returns. It must not `defer` inside the loop.\n  4. On an RPC error, returns `nil, fmt.Errorf(\"page %d: list positions: %w\", i, err)`.\n  5. Reads `next := resp.GetPage().GetNextPageToken()`.\n  6. Runs the token guards before merging any symbols (D-9):\n     - empty page with `next != \"\"` → `\"page %d: empty page with next_page_token %q\"`\n     - `next != \"\"` and `next` already in the seen set → `\"page %d: repeated next_page_token %q\"`\n  7. Merges the page's symbols. A symbol already seen gives `\"page %d: duplicate symbol %q across pages\"`.\n  8. If `next == \"\"`, returns the full set. Otherwise it adds `next` to the seen set and continues with `token = next`.\n- On every error the helper returns `nil`, never a partial slice.\n- Change `reconcileTick`:\n  - `:2231-2239` becomes `platformPositions, ppErr := s.listAccountPlatformPositions(ctx, accountID, entry.userID, tradingMode, timeout)`.\n  - `:2240-2243` stays byte-for-byte: WARN and continue, nothing counted as systemic, `resolveUnknownIntents` skipped.\n  - `:2244-2247` ranges over the returned slice.\n  - Nothing else changes.\n- Put a comment of at most 2 lines on the seen set saying it is defense-in-depth against a monotonic keyset cursor (O-5). The full rationale goes in the PR description.\n\n**Tests, written RED first** (`services/xstockstrat-trading/internal/service/trading_reconciliation_test.go`)\n\nShared setup:\n- One file-local paging fake sets `fakeReconciliationPortfolioClient.listPositionsFn` (:124). It records each call's `PageToken`, `ctx.Deadline()` and `x-user-id` under a mutex. It enforces `pagingCallCap = 100`, mirroring `services/xstockstrat-portfolio/internal/service/portfolio_pnl_paging_test.go:27-28,43`. It serves pages by token, and has an `ignoreToken` mode plus per-token hooks for errors and blocking.\n- The broker `getPositionsFn` (:81) returns SYM001..SYM501 at qty 10. `fakePositionQtyLookup` (:228) is empty. `recordingLedgerClient` (:137).\n- Each test runs graceTicks=1 and calls `reconcileTick` twice, following `:554-555`.\n- Halt state is read through `isAccountHalted` (`trading.go:2892`).\n\n1. **AC-1**\n   - Pages: page 1 is SYM001..500 with next token \"p2\"; page 2 is SYM501 with next token \"\".\n   - Pre-seed `reconcileCandidates[\"acc-1:pos:SYM501\"] = 1`.\n   - After tick 1, assert together: the key is absent, there is no `reconciliation.mismatch_found`, and the account is not halted.\n   - Assert exactly 2 calls per tick, with tokens `[\"\", \"p2\"]`.\n   - Corrected RED rationale: on today's code tick 1 increments the seed to 2 ≥ 1+graceTicks, so `recordReconciliationCandidate` (`trading.go:2042-2044`) deletes the key and emits a finding and a halt. RED therefore comes from the finding and halt assertions, not from the seed \"surviving\". The seed-absent plus no-finding pair is what separates a correct compare from a skip, because a skip leaves the seed at 1.\n2. **Positive control** (guards durable `@AC-2 @feature-206`)\n   - Same pages, but SYM501 on page 2 has qty 5 against broker qty 10.\n   - Assert `reconciliation.mismatch_found` for SYM501 with payload `expected == 5` (from `trading.go:2286` platformQty and the `:2064-2068` payload), and that the account is halted.\n   - Assert 2 calls per tick.\n   - This is now a real RED test: today SYM501 reads as platform qty 0, so the payload has `expected == 0`.\n3. **AC-2 (error)**\n   - Page \"p2\" returns `codes.Unavailable`.\n   - Assert a call with token \"p2\" was made, and that there is no `acc-1:pos:` candidate, no finding and no halt.\n   - It fails RED on today's code: SYM501 is absent, diverges at `:2256` and halts. The \"p2\" assertion is a GREEN-side guard.\n4. **AC-2 deadline variant**\n   - `svc.cfgW = config.MustSnapshotWatcher(...)` with `broker.timeout_ms = 50`, the seam used at `trading_ibkr_auth_test.go:121-126`. `GetFloat` widens an IntVal (`internal/config/watchcore.go:411-416`), so IntVal or FloatVal both work.\n   - Page 1 sleeps about 5 ms, then succeeds. Page \"p2\" blocks on `<-ctx.Done()`.\n   - Assert the same skip outcomes as AC-2.\n   - To pin D-3, assert page 2's recorded `ctx.Deadline()` is strictly after page 1's. A shared deadline (R-1) gives equal deadlines; per-page timeouts give a later one.\n5. **AC-3**\n   - The fake ignores the token and always returns page 1 with token \"p2\".\n   - Assert exactly 2 calls per tick, and no candidate, finding or halt.\n   - Because of D-9, call 2 is rejected by the repeated-token guard before any symbol is merged.\n   - RED: today the account halts on SYM501.\n6. **Hardening table** (calls the helper directly, so no log capture is needed)\n   - Asserts the exact error text, so deleting any single guard turns a row red.\n   - Rows:\n     - `page 2: repeated next_page_token \"p2\"`, using the ignore-token fake\n     - `page 2: empty page with next_page_token`\n     - `page 2: duplicate symbol \"SYM500\"`, using a fake whose page 2 repeats SYM500 under a fresh token\n     - `page 2: list positions:`, which must still satisfy `status.Code(errors.Unwrap(...)) == codes.Unavailable`\n\nBuild order:\n1. Write tests 1-5 and confirm they are RED on unchanged code. Test 6 depends on the helper's signature, so it is added in step 2.\n2. Make the service change and add test 6.\n3. Run `GOWORK=off go test ./...` in `services/xstockstrat-trading`. The existing `trading_ibkr_auth_test.go` and `trading_telemetry_test.go` use the default empty single page (:131), which has no `Page`, so `next == \"\"` and the drain makes 1 call.\n4. Add one sentence at `services/xstockstrat-trading/docs/reconciliation.md:57`.\n\nNo proto, migration, config or portfolio change. Features 351, 353 and 354 are untouched.",
+    "open_objections": [
+      {
+        "text": "[C-15; fails.md:3312] As proposed in r2, AC-3 never exercises the repeated-token guard (FR-3/D-4). The helper merges symbols before it reads the token, so on the ignore-token repeat the duplicate-symbol check (D-5) fires first, and deleting the seen-token check leaves every test green. The synthesized approach fixes this with D-9 (token guards run before the symbol merge) and a direct-helper hardening row that asserts `page 2: repeated next_page_token \"p2\"`. This stays open until the next proposal adopts both concretely.",
+        "blocking": true
+      },
+      {
+        "text": "[C-16, guards @AC-2 @feature-206] The positive control must assert the mismatch_found payload `expected == 5` (trading.go:2286 → :2064-2068). Without it, a drain that fetches page 2 and then discards it still passes (SYM501 reads as 0, which differs from 10). With it, the test becomes a real RED test instead of a GREEN-only guard.",
+        "blocking": false
+      },
+      {
+        "text": "[C-15] The AC-1 RED rationale is factually wrong. On today's code the seeded key does not 'survive and grow': tick 1 increments it to 2 >= 1+graceTicks, and recordReconciliationCandidate deletes it and emits (trading.go:2042-2044). The spec must pair 'key absent after tick 1' with 'no finding and not halted after tick 1', and must state that RED comes from the finding and halt assertions.",
+        "blocking": false
+      },
+      {
+        "text": "[C-15, D-3] The r2 deadline check ('page-1 ctx was still live') cannot tell D-3 apart from the locked R-1. The spec must instead assert that page 2's recorded ctx.Deadline() is strictly after page 1's, with page 1 sleeping a few ms so the clock is guaranteed to advance.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "358 @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "358 @AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "358 @AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-1 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-206 (fix-reconciliation-false-halt.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-45 @feature-294 (signal-map-instrumentation.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Merging symbols before the token checks on each page (the r2 order). It lost because the duplicate-symbol guard then shadows the repeated-token guard on every ignore-token fake, which leaves FR-3 untested (fails.md:3312).",
+      "Giving AC-3's fake fresh symbols on the repeat as the only fix (adversary option b). It lost because it leaves the guard order unspecified. Running the token checks first plus the direct-helper error row pins each guard independently and costs nothing.",
+      "Using 'page-1 ctx still live during the call' as evidence of per-page deadlines. It lost because it holds under both D-3 and the locked R-1. Strictly increasing per-page ctx.Deadline() is the deterministic discriminator.",
+      "Recording 'a legitimate duplicate symbol across pages' as the strongest risk. It lost because positions.account_id is NOT NULL DEFAULT 'alpaca-default' and UNIQUE(user_id, symbol, trading_mode, account_id) (portfolio migrations/003:2,10), and trading filters on user, mode and account. Only a broken cursor can produce a duplicate, which is the premise of D-5/R-3.",
+      "Asserting halt state through the raw svc.halted map. It lost to isAccountHalted (trading.go:2892), the accessor the production path uses."
+    ],
+    "open_risks": [
+      "Each skipped tick is logged only by a cause-tagged WARN. A persistent server-side cursor bug would leave an account's position side unchecked indefinitely, with no metric or alert. A metric is out of scope (YAGNI, D-8).",
+      "Tick wall-clock time grows by up to ceil(n/500) × broker.timeout_ms per large account, and the account loop is sequential. Portfolio's per-page enrichPositions quote fetch (marketdata.quote_timeout_ms 4000 against a broker timeout of 5000) makes page deadlines more likely on big accounts.",
+      "resolveUnknownIntents stays skipped for an account whenever its platform read is incomplete (existing behaviour, trading.go:2240-2243 continue). An extended portfolio outage therefore also delays UNKNOWN-intent resolution.",
+      "The duplicate-symbol and repeated-token rejections rely on portfolio's UNIQUE(user_id, symbol, trading_mode, account_id) (migrations/003:10) and on feature 353's exactly-once keyset paging. A future portfolio change that splits a symbol across rows would cause false skips, not false halts.",
+      "The deadline-ordering assertion relies on the monotonic clock advancing between page calls. A few ms of sleep on page 1 is required, or the assertion could flake on equality."
+    ],
+    "constitution_rules_touched": [
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-04",
+      "F-07",
+      "P-03",
+      "PLAT-4",
+      "PLAT-N1"
+    ],
+    "rationale": "I verified the adversary's factual claims against the code.\n- `recordReconciliationCandidate` deletes the key at >= 1+graceTicks (trading.go:2042-2044), so the r2 AC-1 seed rationale is wrong.\n- `emitReconciliationFinding` puts platformQty into `expected` (:2064-2068, called at :2286), so an `expected==5` assertion makes the positive control a real RED test.\n- `GetFloat` widens an IntVal (watchcore.go:411-416).\n- portfolio migrations/003 makes account_id NOT NULL with a 4-column UNIQUE, so r2's 'strongest risk' is not real.\n\nThe blocking flaw is real: if the helper merges symbols before it checks the token, the ignore-token AC-3 fake is stopped by the D-5 duplicate check, and FR-3's guard is never exercised. That is the exact fails.md:3312 pattern. The cheapest fix runs the token guards before the symbol merge (D-9) and adds a direct-helper error-text row, so each guard can be deleted without the suite staying green. This does not contradict D-4 or D-5. It only fixes evaluation order, so it is a new decision.\n\nO-1 through O-5 close on their stated terms:\n- O-1: r2 delivered a concrete positive-control halt test and the AC-1 call, token and seed assertions.\n- O-2: a deadline variant now exists.\n- O-3: errors are %w-wrapped, page-indexed and cause-specific, including repeated-token text.\n- O-4: AC-2 RED is correctly reasoned.\n- O-5: the seen set is described as defense-in-depth.\n\nThe adversary's further refinements (the payload assertion, the AC-1 rationale correction, and pinning D-3 against R-1) are new defects in r2's test text rather than unmet parts of the old objections. They are recorded as new non-blocking objections and folded into the approach.\n\nRegister check: no D-n is contradicted, no R-n is reintroduced (the deadline test now explicitly discriminates against R-1), and no O-n is re-raised. No reopen petitions came from either side.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Within each page, the helper runs the token guards (empty page with a token, repeated next_page_token) before merging that page's symbols, and only then runs the duplicate-symbol check. This makes the FR-3 repeated-token guard reachable and testable independently of D-5.",
+          "evidence": "adversary r2 blocking objection; fails.md:3312; ignore-token fake pattern at portfolio_pnl_paging_test.go:34,49"
+        },
+        {
+          "text": "The positive-control test asserts that the mismatch_found payload has expected == 5 (the page-2 platform qty). This makes it a RED test that proves page-2 data was used in the compare.",
+          "evidence": "trading.go:2286 emitReconciliationFinding(..., platformQty, bp.Quantity); payload at :2064-2068"
+        },
+        {
+          "text": "D-3 is pinned by asserting that each page call's recorded ctx.Deadline() is strictly later than the previous page's (page 1 sleeps a few ms). Liveness of page 1's ctx is not used as evidence.",
+          "evidence": "adversary r2; R-1 (a shared deadline yields equal deadlines)"
+        },
+        {
+          "text": "Each guard is pinned by a direct-helper hardening row asserting its exact page-indexed error text (repeated token, empty page with a token, duplicate symbol, and an RPC error that still unwraps to codes.Unavailable).",
+          "evidence": "trading.go:2241 WARN; O-3"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Merging a page's symbols before its token checks",
+          "why": "The D-5 duplicate-symbol guard then shadows the D-4 repeated-token guard on ignore-token fakes, leaving FR-3 untested (fails.md:3312)."
+        },
+        {
+          "text": "Using 'page-1 ctx still live during the call' as evidence of per-page deadlines",
+          "why": "It holds identically under the locked R-1 shared deadline, so it cannot tell D-3 from R-1."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "AC-3 must exercise the repeated-token guard, not the duplicate-symbol guard. Adopt D-9 (token checks before the symbol merge) and a direct-helper row asserting `page 2: repeated next_page_token \"p2\"`, so deleting the seen-token check turns a test red.",
+          "blocking": true
+        },
+        {
+          "text": "The positive control must assert the mismatch_found payload expected == 5. Otherwise a drain that fetches and then discards page 2 still passes.",
+          "blocking": false
+        },
+        {
+          "text": "Correct the AC-1 RED rationale. On today's code the seed is deleted and emitted at tick 1 (trading.go:2042-2044). Pair 'key absent' with 'no finding and not halted after tick 1'.",
+          "blocking": false
+        },
+        {
+          "text": "The deadline variant must tell D-3 apart from R-1 by asserting strictly increasing per-page ctx.Deadline(), not ctx liveness.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-1",
+          "how": "r2 concretely added a positive-control halt test on a page-2 symbol, plus AC-1 asserting exactly 2 calls with tokens [\"\",\"p2\"] and a pre-seeded acc-1:pos:SYM501 candidate checked after the tick. The payload and rationale refinements are tracked as new non-blocking objections."
+        },
+        {
+          "id": "O-2",
+          "how": "r2 added a deadline variant: a 50 ms broker.timeout_ms snapshot through config.MustSnapshotWatcher and a page-2 fake blocking on ctx.Done(), asserting the skip. D-3 discrimination is tracked as a new objection."
+        },
+        {
+          "id": "O-3",
+          "how": "Helper errors are %w-wrapped with a 1-based page index and a cause-specific message (list positions, empty page with a token, repeated token, duplicate symbol), asserted through direct helper calls."
+        },
+        {
+          "id": "O-4",
+          "how": "AC-2 is recorded as failing RED naturally (SYM501 absent, so it diverges at :2256 and halts), with the \"p2\" assertion as a GREEN-side guard and no vacuous-pass note. The adversary concurred."
+        },
+        {
+          "id": "O-5",
+          "how": "The seen set is described as defense-in-depth against a monotonic keyset cursor in a code comment of at most 2 lines and in the PR description. The adversary concurred."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
