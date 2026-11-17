@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-11-16
 **Last Updated**: 2026-11-17
+**Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
+**Launched date**: 2026-11-17
 
 ---
 
@@ -19,6 +21,7 @@
 | 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Steps 1+2 (Lands-with unit) started |
 | 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute (sequential) | Steps 1+2 done in one commit; unit + real-backend dbtest RED→GREEN; integration PR #1566 |
 
+| 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
 ---
 
 ## Artifacts

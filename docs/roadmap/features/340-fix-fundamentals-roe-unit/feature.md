@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-15
 **Last Updated**: 2026-11-16
+**Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
+**Launched date**: 2026-11-17
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute (sdd-batch-execute setup) | main-dev 9f8856229 merged; steps 1,4 re-spec'd (line drift only); 10 steps pending |
 | 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute (sdd-batch-execute) | Step 10 operator gate recorded (lane A dry run, freeze on both stagings, pre-exports on both lanes); 10/10 steps done; `check-config-wiring.mjs --final` exit 0 |
 
+| 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
 ---
 
 ## Artifacts

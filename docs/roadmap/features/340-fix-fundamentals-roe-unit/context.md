@@ -706,3 +706,10 @@ Feature: fix-fundamentals-roe-unit (bug fix)
 - The audit found a separate defect — 104 rows whose `period_end` is after their `filed_date` (period-label collision; pre-existing dates, but look-ahead content at version 2). Recorded as `docs/reports/2026-11-16-marketdata-edgar-period-label-collision-defect.md` (`open`).
 - **Operator decisions, verbatim** (asked with the 104-row count shown): close the homelab lane — "Accept with the defect filed (Recommended)"; DO staging — "Hold until the label fix (Recommended)"; homelab key — "Restore to true (Recommended)".
 - End state: homelab `marketdata/fundamentals.history.enabled` = `true` (restored 07:20:35Z); DO staging = `false`, still at version 1, lane B not run.
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1573 merged to main
+- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17

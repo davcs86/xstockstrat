@@ -98,3 +98,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 **Progress**: 3 done / 3 total
 **Stopped at**: all complete — integration PR #1556 (`feature/fix-replace-tif-before-intent` → `main-dev`) open, CI watched; not merged (merge is the operator's call)
 **Next**: operator review and merge of #1556
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1573 merged to main
+- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17
