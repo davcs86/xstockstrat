@@ -46,6 +46,8 @@ Possibly the same shape, not observed: `backfillSeedSQL` (`:101-112`) can commit
 ## Functional Requirements
 
 - **FR-1**: When a live watchlist-direction signal for a SIGNAL binding commits (and `AddSymbols` applies its provenance intent) while the signal-expiry backfill APPLY is running, the binding's `portfolio.watchlist_signal_expiry` row must never end up due with `signal_id NULL`: it is either absent or has a `valid_until` in the future, and a later prune tick removes nothing for that binding. `TestBackfill_IngestRaceNeverLeavesEntryRemovable` stays as the regression guard and is not weakened or skipped.
+- **FR-2**: When a live watchlist-direction signal for a SIGNAL binding commits (and `AddSymbols` applies its provenance intent) while backfill APPLY seeds that binding from the owner's older signal, the binding's expiry row must end up tracked by the new live signal (its `signal_id` and `valid_until`), never by the owner's older, already-expired signal. A later prune tick removes nothing for that binding.
+- **FR-3** (operator decision 2026-11-17): A backfill APPLY untracked mark (`signal_id NULL`) is written with `valid_until = now() + 3 days` instead of `now()`, so a marked entry is pruned no earlier than 3 days after APPLY, and a live signal added within that window rescues it as before. The grace applies only to marks; seed rows keep the owner's signal `valid_until`. This CHANGEs durable rule `@AC-16 @feature-281` (marked entries were removed on the next prune tick) and the runbook's "no grace period" rule (§8). The design decides whether the 3 days is a named constant or a config key under config governance.
 
 ## Fix Scope
 
