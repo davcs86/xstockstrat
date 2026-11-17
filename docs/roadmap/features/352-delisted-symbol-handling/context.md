@@ -236,3 +236,51 @@
 - [ ] Union depends on portfolio's tick; deploy-era first-unservable dates — rollout note step.
 - [ ] Re-verify at spec time: config seed number (052 last, 053 claimed by 345), migration numbers from
   `git log --all` and every `origin/feature/*`, the two portfolio importers of `marketsession`.
+
+## Session 2026-11-17 — sdd-spec
+
+- Generated implementation-spec.md with 32 steps. Status → implementation-ready.
+- Tree: `claude/story-delisted-symbol-handling@21c4a2e` (contains `origin/main-dev@4c87ea8`, docs-only
+  delta). Same deviation from `docs/sdd/tree-freshness.md` as the review and design sessions: the story
+  PR is unmerged and `feature/delisted-symbol-handling` does not exist yet, so the spec was grounded on
+  the story branch. `main-dev` moved `78ab5ca` → `4c87ea8` since recon (features 350 and 353); neither
+  touches a file this feature edits, and every recon `path:line` used in the spec was re-checked.
+- No discovery subagent was available in this session; discovery ran inline with the checklist of
+  `.claude/skills/sdd-spec/reference/discovery-checklist.md`.
+- Key codebase findings:
+  - Migration numbers re-derived: marketdata `010`, ingest `017`, config `054` (`052` is last on the
+    tree, `053` is claimed by feature 345). Only `origin/main-dev` and the story branch are visible in
+    this sandbox, so Steps 5, 10 and 17 re-derive the number from every `origin/*` ref at execute time.
+  - The two portfolio importers of `marketsession` are `internal/service/offline_valuation.go:17` and
+    `internal/testdata/offline_pnl.go:9`. Its test uses the unexported `ny`, so the re-homed test loads
+    the location itself. Portfolio's CI coverage total was measured: 73.2% with the package, 79.1%
+    without it — the move cannot breach the 40% gate.
+  - Existing marketdata and portfolio tests build their service with no profile store and a nil
+    marketdata client; the hook and the tick step are therefore no-ops in those cases by construction.
+  - No descriptor-parity guard covers `WatchlistBinding`, `BackfillJob` or the two marketdata backfill
+    responses, so the proto unit is two steps.
+  - `scripts/config-wiring-stored.json` must be regenerated against a scratch Postgres in the same
+    commit as the seed (precedent: feature 347 Step 11).
+- Atomic units (`**Lands with**`): Steps 1+2 (proto + stubs), 3+4 (calendar move + its test), 8+9+10
+  (hook and reader + tests + config seed), 22+23 (`WatchlistStore` gains a method + its fake).
+- Assumptions made by the spec, listed in its "Assumptions" table for `/sdd-review impl-spec` (not
+  operator decisions): A-1 request/response shapes of the two RPCs; A-2 counter name
+  `marketdata.delisting.hook_failures{reason}`; A-3 JSON shape of `ingest.backfill_jobs.symbol_results`;
+  A-4 a failed symbol without a per-symbol result is stored `FAILED` with an empty reason (rolling
+  deploy); A-5 the rollout note lives in `services/xstockstrat-marketdata/CLAUDE.md`; A-6 alert wording;
+  A-7 a skipped symbol is logged at INFO; A-8 the UI badge uses variant `warning`; A-9 new symbol names.
+
+### Open Threads — where each design Open Risk landed
+
+- [x] Recovery alert at-most-once → Step 8 (WARN on a cut-off send), Step 9.
+- [x] Hook timeout can miss a reset or the rebuild → Step 8 (WARN + counter), Step 9.
+- [x] Re-sent flag alert names only its own tick's lists → Steps 22, 23.
+- [x] Recovery between a claim and a send → Step 14.
+- [x] Weekend/holiday recovery lag → Step 9 (closed-day case).
+- [x] A sync spanning a load → documented in Step 13.
+- [x] Marker timing before portfolio's tick → documented in Step 24.
+- [x] Another instance's flag invisible until the next load → documented in Step 15.
+- [x] Resumed job with FAILED results outside `failed_symbols` → Step 19.
+- [x] Job-level fundamentals failure carries no per-symbol results → Step 19.
+- [x] Union depends on portfolio's tick; deploy-era first-unservable dates → rollout note, Step 8.
+- [ ] Still open for execute time: the three migration numbers against every `origin/feature/*` ref.
