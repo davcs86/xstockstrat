@@ -95,3 +95,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 **Stopped at**: all complete; integration PR #1566 body updated
 **Accountability**: out-of-scope changes: none · open items: none (launch checks: CI `portfolio-db-test` GREEN of record; D-19 dev smoke after rollout) · unaddressed review warnings: none
 **Next**: merge train for #1566 (user-authorized: "then merge train")
+
+## Session 2026-11-17 — merge train (halted, CI red)
+- Merge train (`merge-train`, user-authorized) halted on #1566: CI red — `Portfolio DB test (TimescaleDB)` → `CI Gate`.
+- Only failure: `TestBackfill_IngestRaceNeverLeavesEntryRemovable` (`signal_expiry_backfill_dbtest_test.go:494`, iteration 1: "entry left due … while a live signal exists"). A real-concurrency race test (goroutines racing `backfillApply` vs `AddSymbols`, 10 iterations), feature 281 territory; it passed in this session's local full-package run (49/49). This feature's diff touches neither racing path (only `ListByUser`'s token and the SQL-identical `seedWatchlist` delegate). All other CI jobs green, incl. Go lint and test (portfolio).
+- Classified as a timing-dependent flake in pre-existing code, not a 354 regression → no code churn (CI-watch rule). Re-run of failed jobs refused by the integration (403); empty commits / close-reopen are forbidden → needs a manual "Re-run failed jobs" on run 43997601438. Subscribed to #1566 activity.
+- [ ] Open: possible real race in the feature-281 signal-expiry backfill — candidate for `/sdd-qa defect` (user decision).
