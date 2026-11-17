@@ -520,3 +520,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] Step 2: the 10s-poll gates may be flaky on slow CI runners. If one flakes, investigate the runner. Never loosen the strict-equality assertions.
   - [ ] Step 4: the `[t0+72h, t1+72h]` bound uses DB `now()` sampled on separate pool connections around APPLY. It is sound on a single server clock, but watch for a bound failure caused by sampling skew, not by the code. Advisory.
   - [ ] Overlap with 352: whichever of 359 and 352 lands second must rebase the PORTFOLIO-18 row, the portfolio CLAUDE.md edit and the runbooks index row (Steps 5 and 7).
+
+## Session 2026-11-17 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation (operator-approved record, verbatim): `{"mainDev":"4330f0eff61f0a5683d284e60a9296895bc93b9b","dev":"b3d37c7ee73c50bf9e8511391bf40c46d3a2a7bc","specHash":"56b0cebbee6695c10f21194fe863f00a8f7463cd","directive":"conditional","pending":[1,2,3,4,5,6,7],"mismatches":[]}`
+- Merged `origin/main-dev@4330f0ef` into the dev branch (`ed81aa0d`); resolver and ledger-guard clean.
+- Re-spec commits (`respec(fix-portfolio-signal-expiry-backfill)`): none (mismatches empty).
+- Status: `implementation-ready` → `in-progress`.
+- Tooling detection (steps 1-7): go1.27.0 ✓ · golangci-lint ✗ 2.5.0 on PATH (needs v2.14.0 → pinned `GOTOOLCHAIN=go1.27.0 go install …@v2.14.0` at step time) · docs steps need none.
+- [ ] Steps 1, 2 and 4 verify with `-tags dbtest` against a migrated test DB (`PORTFOLIO_DB_TEST_URL`). None is set here and the execute loop never starts a database; the step executor must raise this as a blocker or record the CI `portfolio-db-test` job as the decided fallback.
+
+```sdd-batch-setup
+{"mainDev":"4330f0eff61f0a5683d284e60a9296895bc93b9b","date":"2026-11-17"}
+```
