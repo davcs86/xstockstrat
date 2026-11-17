@@ -614,7 +614,11 @@ class LiveEvaluationLoop:
                 return out
             for wl in resp.watchlists:
                 if wl.bindings:
-                    out.update(_normalize_symbol(b.symbol) for b in wl.bindings)
+                    out.update(
+                        _normalize_symbol(b.symbol)
+                        for b in wl.bindings
+                        if not b.HasField("delisted")
+                    )
                 else:
                     out.update(_normalize_symbol(s) for s in wl.symbols)
             page_token = resp.page.next_page_token

@@ -6018,7 +6018,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 return out
             for wl in resp.watchlists:
                 if wl.bindings:
-                    out.extend((b.symbol, b.strategy_id) for b in wl.bindings)
+                    out.extend(
+                        (b.symbol, b.strategy_id) for b in wl.bindings if not b.HasField("delisted")
+                    )
                 else:  # legacy row: flat deprecated symbols mirror, unbound
                     out.extend((s, "") for s in wl.symbols)
             page_token = resp.page.next_page_token

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pashagolub/pgxmock/v4"
 
@@ -67,5 +68,77 @@ func TestBindingSymbols_MirrorsBindings_Feature196(t *testing.T) {
 	}
 	if bindingSymbols(nil) != nil {
 		t.Fatalf("expected nil for no bindings")
+	}
+}
+
+// listPageSQL pins the strict > keyset and the LIMIT placeholder; LIMIT's value is pinned by WithArgs.
+const listPageSQL = `FROM portfolio\.watchlists\s+WHERE user_id = \$1 AND \(\$2 = '' OR watchlist_id > \$2::uuid\)\s+ORDER BY watchlist_id ASC LIMIT \$3`
+
+func listPageRows(mock pgxmock.PgxPoolIface, ids ...string) *pgxmock.Rows {
+	now := time.Now()
+	rows := mock.NewRows([]string{"watchlist_id", "user_id", "name", "description", "created_at", "updated_at", "system_managed", "default_strategy_id"})
+	for _, id := range ids {
+		rows.AddRow(id, "u1", "name-"+id, "", now, now, false, "")
+	}
+	return rows
+}
+
+func expectNoBindings(mock pgxmock.PgxPoolIface, ids ...string) {
+	mock.ExpectQuery(`watchlist_id = ANY\(\$1::uuid\[\]\)`).
+		WithArgs(ids).
+		WillReturnRows(mock.NewRows([]string{"watchlist_id", "symbol", "strategy_id", "source"}))
+}
+
+// @AC-2: the token is the last RETURNED row, not the +1 lookahead row.
+func TestListByUser_TokenIsLastReturnedRow(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &WatchlistRepo{db: mock}
+
+	mock.ExpectQuery(listPageSQL).WithArgs("u1", "", 3).WillReturnRows(listPageRows(mock, "wl-a", "wl-b", "wl-c"))
+	expectNoBindings(mock, "wl-a", "wl-b")
+
+	wls, next, err := repo.ListByUser(context.Background(), "u1", 2, "")
+	if err != nil {
+		t.Fatalf("ListByUser: %v", err)
+	}
+	if len(wls) != 2 || wls[0].WatchlistId != "wl-a" || wls[1].WatchlistId != "wl-b" {
+		t.Fatalf("page = %v, want [wl-a wl-b]", wls)
+	}
+	if next != "wl-b" {
+		t.Fatalf("next_page_token = %q, want last returned id %q", next, "wl-b")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+// @AC-1 guard: an exactly-full last page ends the traversal (empty token).
+func TestListByUser_ExactlyFullPageHasNoToken(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &WatchlistRepo{db: mock}
+
+	mock.ExpectQuery(listPageSQL).WithArgs("u1", "", 3).WillReturnRows(listPageRows(mock, "wl-a", "wl-b"))
+	expectNoBindings(mock, "wl-a", "wl-b")
+
+	wls, next, err := repo.ListByUser(context.Background(), "u1", 2, "")
+	if err != nil {
+		t.Fatalf("ListByUser: %v", err)
+	}
+	if len(wls) != 2 {
+		t.Fatalf("page len = %d, want 2", len(wls))
+	}
+	if next != "" {
+		t.Fatalf("next_page_token = %q, want empty on an exactly-full last page", next)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
 	}
 }

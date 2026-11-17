@@ -39,6 +39,7 @@ var minInstruments = []string{
 	"marketdata.vendor.requests", "marketdata.vendor.request.duration", "marketdata.stream.reconnects",
 	"marketdata.backfill.symbols", "marketdata.stream.last_message_age",
 	"marketdata.ohlcv.out_of_memory_errors", "marketdata.backfill.periods_left_out",
+	"marketdata.delisting.hook_failures",
 }
 
 var rpcServerKeys = []string{"rpc.system", "rpc.service", "rpc.method", "rpc.grpc.status_code"}
@@ -51,6 +52,7 @@ func driveAllInstruments(ctx context.Context) {
 	telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillWritten)
 	telemetry.RecordOhlcvOutOfMemory(ctx, telemetry.OhlcvOpRecentBars)
 	telemetry.RecordPeriodLeftOut(ctx, telemetry.LeftOutLabelCollision)
+	telemetry.RecordDelistingHookFailure(ctx, telemetry.DelistingHookError)
 	telemetry.RegisterStreamLastMessageAge(func() (time.Time, bool) { return time.Now(), true }, nil)
 }
 

@@ -74,6 +74,11 @@ service MarketDataService {
   // feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
   // >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
   rpc GetSymbolServability(GetSymbolServabilityRequest) returns (GetSymbolServabilityResponse);
+
+  // internal: xstockstrat-portfolio only
+  rpc SyncWatchlistDelistings(SyncWatchlistDelistingsRequest) returns (SyncWatchlistDelistingsResponse);
+  // internal: xstockstrat-portfolio only
+  rpc AckDelistingAlerts(AckDelistingAlertsRequest) returns (AckDelistingAlertsResponse);
 }
 
 message Bar {
@@ -162,6 +167,7 @@ message BackfillBarsResponse {
   int64 bars_written = 1;
   repeated string failed_symbols = 2;
   int64 expected_bars = 3; // estimated total bars across requested symbols/range (FR-6)
+  repeated xstockstrat.common.v1.BackfillSymbolResult symbol_results = 4;
 }
 
 message GetDataCoverageRequest {
@@ -316,6 +322,7 @@ message BackfillFundamentalsRequest {
 message BackfillFundamentalsResponse {
   int64 periods_written = 1;
   repeated string failed_symbols = 2;
+  repeated xstockstrat.common.v1.BackfillSymbolResult symbol_results = 3;
 }
 
 message GetLatestQuotesRequest {
@@ -424,3 +431,32 @@ message GetSymbolServabilityResponse {
   repeated SymbolServability symbols = 1;
   bool asset_set_loaded = 2;
 }
+
+enum DelistingAlertState {
+  DELISTING_ALERT_STATE_UNSPECIFIED = 0;
+  DELISTING_ALERT_STATE_PENDING = 1;
+  DELISTING_ALERT_STATE_CLAIMED = 2;
+  DELISTING_ALERT_STATE_REDELIVERY = 3;
+  DELISTING_ALERT_STATE_REPORTED = 4;
+}
+
+message FlaggedSymbol {
+  string symbol = 1;
+  xstockstrat.common.v1.DelistedState state = 2;
+  DelistingAlertState alert_state = 3;
+  bool unservable_in_current_set = 4; // false means "do not remove"
+}
+
+message SyncWatchlistDelistingsRequest {
+  repeated string symbols = 1;
+}
+
+message SyncWatchlistDelistingsResponse {
+  repeated FlaggedSymbol flagged = 1;
+}
+
+message AckDelistingAlertsRequest {
+  repeated string symbols = 1;
+}
+
+message AckDelistingAlertsResponse {}

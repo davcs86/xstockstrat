@@ -109,3 +109,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 **Progress**: 4 done / 4 total
 **Stopped at**: all complete — integration PR #1568 (feature/fix-listpositions-nextpagetoken-skips → main-dev) opened, CI watch subscribed
 **Next**: merge #1568 when CI is green; PR #1564 (docs-only, same commits' docs) is superseded — operator to close it; after launch file the three follow-up defect reports
+
+## Session 2026-11-17 (CI: feature status automation)
+
+- Promotion PR #1573 merged to main
+- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-17

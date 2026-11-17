@@ -3,6 +3,8 @@
 **Development Branch**: `feature/alpaca-adaptive-rate-limit`
 **Created**: 2026-11-16
 **Last Updated**: 2026-11-16
+**Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
+**Launched date**: 2026-11-17
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-11-16 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started (sequential); Steps 1+2 done |
 | 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done (sequential); integration PR pending |
 
+| 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
 ---
 
 ## Artifacts

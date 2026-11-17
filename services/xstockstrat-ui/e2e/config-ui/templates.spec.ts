@@ -5,7 +5,11 @@ import {
   expectRowMenuSettled,
   openMarkedRowMenu,
 } from '../helpers/rowMenu';
-import { STRATEGY_TEMPLATE_MEANREV, STRATEGY_TEMPLATE_SYSTEM } from '../fixtures';
+import {
+  SOURCE_TEMPLATE_MEDIATED_WEBSITE,
+  STRATEGY_TEMPLATE_MEANREV,
+  STRATEGY_TEMPLATE_SYSTEM,
+} from '../fixtures';
 
 /**
  * Feature 335 (AC-29) — the admin template catalog renders a platform-seeded template as read-only.
@@ -99,5 +103,57 @@ test.describe('Row menu confirm flow (feature 350)', () => {
     await expect(page.getByRole('main').getByText('template is in use')).toBeVisible();
     await expectRowMenuSettled(page);
     await expectFocusOnMarkedTrigger(page);
+  });
+});
+
+test.describe('Signal-source template instructions (feature 355)', () => {
+  const INGEST_BFF = '**/config-ui/api/xstockstrat.ingest.v1.IngestService';
+  const PROSE = 'Each 8-K item 2.02 entry is an earnings signal.';
+  type SourceTemplate = {
+    meta: Record<string, unknown>;
+    payload: Record<string, unknown>;
+  };
+
+  test('@AC-14 the template form saves and reloads extraction instructions', async ({ page }) => {
+    await addAdminCookie(page);
+    // The shared mock lists one static source template and does not store a ManageTemplate write,
+    // so this pair of stubs holds the template for the test.
+    let stored: SourceTemplate = SOURCE_TEMPLATE_MEDIATED_WEBSITE;
+    await page.route(`${INGEST_BFF}/ListTemplates`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ templates: [stored] }),
+      }),
+    );
+    await page.route(`${INGEST_BFF}/ManageTemplate`, async (route) => {
+      const posted = (route.request().postDataJSON() as { template: SourceTemplate }).template;
+      stored = { meta: { ...stored.meta, ...posted.meta }, payload: posted.payload };
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(stored),
+      });
+    });
+    const name = SOURCE_TEMPLATE_MEDIATED_WEBSITE.meta.name;
+    const openEdit = async () => {
+      await page.getByRole('button', { name: `Actions for template ${name}` }).click();
+      await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+    };
+
+    await page.goto('/config-ui/templates');
+    await page.getByRole('tab', { name: 'Signal source', exact: true }).click();
+    await openEdit();
+    const field = page.getByLabel('Extraction instructions');
+    await expect(field).toHaveValue('');
+    await field.fill(PROSE);
+    const req = page.waitForRequest((r) => r.url().includes('/ManageTemplate'));
+    await page.getByRole('button', { name: 'Save template' }).click();
+    const body = (await req).postDataJSON() as { template: SourceTemplate };
+    expect(body.template.payload.extractionInstructions).toBe(PROSE);
+    await expect(field).toHaveCount(0);
+
+    await openEdit();
+    await expect(page.getByLabel('Extraction instructions')).toHaveValue(PROSE);
   });
 });

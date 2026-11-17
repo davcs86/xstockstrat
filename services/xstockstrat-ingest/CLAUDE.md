@@ -113,6 +113,10 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   templates, and the `system` / `derived` `fundamentals` source inserted only when no owner holds that
   slug (an existing row is never modified); its down never touches `signal_sources`. System templates
   are read-only (PLAT-19). The two SEC templates carry a placeholder User-Agent contact each user must replace.
+- Migration `017_signal_source_extraction_instructions` (feature 355): adds
+  `signal_sources.extraction_instructions` (`TEXT NOT NULL DEFAULT ''`) and writes
+  `extraction_instructions` into the four system templates' payloads with no version bump; existing
+  source rows are not backfilled.
 - Table: `ingest.backfill_jobs` — durable backfill job state (plain table, **not** a hypertable);
   replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
   `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer
@@ -121,6 +125,12 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   skipping a job whose persisted status is `CANCELED` (feature 261). A job canceled while `QUEUED`
   never starts: it is not flipped to `RUNNING` once a backfill slot frees. Chunk-plan progress is tracked by the `chunks_total` /
   `chunks_completed` columns.
+- Per-symbol backfill results — migration `018_backfill_symbol_results` (feature 352) adds the nullable
+  JSONB column `ingest.backfill_jobs.symbol_results`: the outcome and reason of every symbol that was
+  not written, stored keyed by chunk (the chunk id, or `fundamentals`) and merged at read into
+  `BackfillJob.symbol_results` (failed > skipped > empty). It is never part of the webhook payload and
+  is absent for a job-level failure. After a restart a job can hold `FAILED` results for symbols of
+  earlier chunks that are not in `failed_symbols`.
 - Backfill completion webhook — migration `015_backfill_webhook_callback` adds three nullable columns to
   `ingest.backfill_jobs`: `callback_url`, `webhook_enqueued_at`, `webhook_rejected_at`.
   - **Trigger.** A non-empty `TriggerBackfillRequest.callback_url` is judged by notify
