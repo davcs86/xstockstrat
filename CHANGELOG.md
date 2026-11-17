@@ -6,6 +6,23 @@ Each entry corresponds to one `main-dev → main` PR merge.
 ## 2026-11-17
 
 ### Features
+- delisted-symbol-handling: Detect a watchlist symbol that stops being servable after it was added (delisted, acquired, moved to OTC), remove it from system-managed "Signals" watchlists and mark it on user watchlists, stop watchlist-driven work from requesting it, and make backfill jobs report it as `skipped` with a per-symbol reason instead of ending `PARTIAL`.
+- mediated-source-extraction-instructions: A mediated signal source's extraction logic is prose an LLM agent follows, so it gets a first-class `extraction_instructions` field, and the dead `extractor_module` (`app.extractors.noop`) stops being shown or asked for on `mediated_*` sources — the value a consuming agent reads as "no work to do".
+
+### Proto Changes
+- common/v1/common.proto
+- ingest/v1/ingest.proto
+- marketdata/v1/marketdata.proto
+- portfolio/v1/portfolio.proto
+
+### Summary
+6 commits, 2 feature merges since last promotion.
+
+---
+
+## 2026-11-17
+
+### Features
 - fix-symbol-page-alerts-ui: Four trader-segment display defects: the Fundamentals card overflows at mobile width, a strategy-less opportunity chip is labelled with the ticker, the header Alerts drawer never shows stored unread alerts, and a checked switch renders unchecked.
 - fix-fundamentals-roe-unit: Staging serves `roe ≈ 3.66` for LYFT (rendered `+366.34%`) because the EDGAR quarterly ROE divides a genuine TTM net income (2,809,866,000) by a comparative-column equity (767,016,000, dated 2024-12-31) instead of the `Q3-2026` quarter-end equity (2,980,873,000); the corrected LYFT value is `0.942632`.
 - fix-indicator-pane-warmup: On the symbol page indicator chart, a 200-period average over a ~190-bar window renders one dot because the series is computed without a warm-up prefix.
