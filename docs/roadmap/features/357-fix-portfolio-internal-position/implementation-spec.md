@@ -297,7 +297,7 @@ The new logic is in the excluded `service` package, so no coverage threshold app
 **Codebase Evidence**:
 - `listAllPositions` exists after Step 3 and has no guard. Fed two identical 501-row pages, it loops to a third `ListPositions` call. pgxmock has no expectation for that call, so it errors. The error is non-nil, but its text never says `repeated page token`, so asserting the guard's message gives a behavioural RED.
 - Twin guard text in the ledger drain: `"GetPnL: QueryEvents (%s): repeated page token: %w"` (`portfolio_service.go:1164-1165`).
-- The empty-page-with-a-token guard **cannot be exercised** through the concrete repo. `ListPositions` only returns a token when `len(positions) > pageSize` (`portfolio_repo.go:193-197`), so an empty page never carries one. There is no repo interface (`portfolio_service.go:43`), and design R-1/C-18 rule out adding one. **Not found: no seam exists that can produce an empty page with a token.** Design item 4(d)'s "Empty page with a token: run GetPnL end to end" cannot be built. This is escalated (P-03, context.md Open Threads), not substituted: the guard ships in Step 5 as defense in depth, mirroring `collectFills` `:1125-1127`, with no test.
+- The empty-page-with-a-token guard **cannot be exercised** through the concrete repo. `ListPositions` only returns a token when `len(positions) > pageSize` (`portfolio_repo.go:193-197`), so an empty page never carries one. There is no repo interface (`portfolio_service.go:43`), and design R-1/C-18 rule out adding one. **Not found: no seam exists that can produce an empty page with a token.** Design item 4(d)'s "Empty page with a token: run GetPnL end to end" cannot be built. Operator decision 2026-11-17: the guard is **dropped** (C-08/P-06 — no untestable code); Step 5 adds only the repeated-token guard.
 
 **Lands with**: `Step 5`
 
@@ -323,7 +323,7 @@ GOWORK=off go test ./internal/service/... -race -count=1
 
 ---
 
-### Step 5 — service: fail-closed guards in `listAllPositions` (repeated token, empty page with a token)
+### Step 5 — service: fail-closed repeated-token guard in `listAllPositions`
 
 **Status**: `pending`
 **Service**: `xstockstrat-portfolio`
@@ -333,8 +333,7 @@ GOWORK=off go test ./internal/service/... -race -count=1
 **Reviewers**: Service owner (xstockstrat-portfolio) — P&L calculation accuracy, position snapshot consistency, concurrent write safety
 
 **Codebase Evidence**:
-- Guards to mirror in `collectFills`:
-  - Empty page with a token: `if len(resp.GetEvents()) == 0 && resp.GetPage().GetNextPageToken() != "" { return nil, fmt.Errorf(…"empty page with a next token"…) }` (`portfolio_service.go:1125-1127`).
+- Guard to mirror in `collectFills` (its empty-page guard `:1125-1127` is not mirrored — operator decision 2026-11-17, unreachable through the concrete repo, `portfolio_repo.go:193-197`):
   - Repeated token: `if next == token { return nil, fmt.Errorf(…"repeated page token"…) }` (`:1164-1165`).
 - The design adds no repeated-row guard, because the keyset order is strictly increasing (design item 1).
 
@@ -345,11 +344,10 @@ GOWORK=off go test ./internal/service/... -race -count=1
 **Covers**: `AC-2` (verified by Step 4)
 
 **Instructions**:
-1. In `listAllPositions`, right after the page error check, add:
-   `if len(page) == 0 && next != "" { return nil, fmt.Errorf("list positions page: empty page with a next token") }`
-2. Before `token = next`, add:
+1. Before `token = next`, add:
    `if next == token { return nil, fmt.Errorf("list positions page: repeated page token") }`
-3. Change nothing else. Neither guard gets an error sentinel (R-5): `GetPortfolio`/`GetPnL` map these errors to Internal like any other page error.
+2. Do not add an empty-page-with-a-token guard (operator decision 2026-11-17: untestable through the concrete repo).
+3. Change nothing else. The guard gets no error sentinel (R-5): `GetPortfolio`/`GetPnL` map these errors to Internal like any other page error.
 
 **Verification**:
 ```bash
@@ -357,7 +355,7 @@ cd services/xstockstrat-portfolio
 GOWORK=off go test ./internal/service/... -race -count=1 -run 'Test(ListAllPositions|GetPnL|GetPortfolio)_357_' -v
 GOWORK=off go test ./internal/service/... -race -count=1
 GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -n 'repeated page token\|empty page with a next token' internal/service/portfolio_service.go   # 4 hits: 2 ledger + 2 position drain
+grep -n 'repeated page token\|empty page with a next token' internal/service/portfolio_service.go   # 3 hits: 2 ledger + 1 position drain
 ```
 The new logic is in the excluded `service` package, so no coverage threshold applies to it.
 

@@ -605,3 +605,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The spec records the guard as an explicit escalated trade-off: defense in depth, mirroring `collectFills`.
   - The choice is to accept the untested guard or to drop it (C-08/P-06).
 - [ ] Still open: re-run the Mode B overlap scan once 356 and 358 have implementation specs. Both consume `ListPositions`, so they could clash with this feature.
+
+## Session 2026-11-17 — operator decision (main session)
+
+- Operator decision: **drop** the empty-page-with-a-token guard from `listAllPositions` (C-08/P-06). The concrete repo cannot produce such a page (`portfolio_repo.go:193-197`), so the guard would ship untested. The repeated-token guard still stops a looping server. This supersedes design item 1 / D-3's third fail-closed case and design 4(d)'s empty-page test.
+- `implementation-spec.md` Steps 4–5 updated accordingly: Step 5 adds only the repeated-token guard; the Step 5 verification grep expects 3 hits.
+- Closes the Open Thread "empty-page-with-a-token guard … decide before `/sdd-execute` Step 5".
