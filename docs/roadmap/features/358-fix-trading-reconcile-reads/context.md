@@ -1146,3 +1146,12 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - Config-key wiring gate: N/A. The step declares no config key.
 - Files modified: `services/xstockstrat-trading/internal/telemetry/otel.go`
 - Deviations: none against the spec. One note on the re-spec commit: its trailer used the harness-attributed model name, not the one the workflow prompt supplied.
+
+## Session 2026-11-17 — sdd-execute sequential, Step 2 (sdd-batch-execute)
+
+### Step 2 — test: Register the skip counter in the label allowlist test [done]
+- Appended `"trading.reconciliation.position_check_skipped"` to `minInstruments` and three `telemetry.RecordReconcilePositionSkip` calls (`ReconcileSkipRPCError`, `ReconcileSkipDeadline`, `ReconcileSkipCursorInvalid`) to `driveAllInstruments`. The existing allowlist and forbidden-key loops now cover the instrument; no new test function.
+- TDD: AC-4 red: with only the `minInstruments` entry applied on the Step-1 tree, `telemetry_allowlist_test.go:107: instrument trading.reconciliation.position_check_skipped not collected` (`exit=1`, .sdd-logs/v-2.log; the filtered Verification block in .sdd-logs/v-1.log shows `--- FAIL: TestAllowlist_AC41_EveryLabelKeyIsATelemetryConstant`) → green: the Verification block gave all four `TestAllowlist*` `--- PASS`, `ok .../internal/service` and `0 issues.` (`exit=0`, .sdd-logs/v-3.log). No coverage threshold applies (excluded packages).
+- Config-key wiring gate: N/A. The step declares no config key.
+- Files modified: `services/xstockstrat-trading/internal/service/telemetry_allowlist_test.go`
+- Deviations: none.

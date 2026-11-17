@@ -125,7 +125,7 @@ Both exit 0.
 
 ### Step 2 — test: Register the skip counter in the label allowlist test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/telemetry_allowlist_test.go` — modify
