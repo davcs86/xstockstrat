@@ -1685,3 +1685,15 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: `services/xstockstrat-ingest/migrations/017_backfill_symbol_results.up.sql` / `.down.sql`, with the number re-derived from every `origin/*` ref before writing.
 **Actual**: The files are `018_backfill_symbol_results.{up,down}.sql`; Steps 18 and 19 name `018` in `CLAUDE.md` and a test docstring.
 **Reason**: `origin/ccr-424ada30-29m2lv` (feature 355, in flight) already adds ingest `017_signal_source_extraction_instructions`. `design.md` still says `017`.
+
+### Deviation: Step 30 — `/insights` watchlist row shows the delisted marker
+**Spec said**: the flagged row shows a `Badge` (variant `warning`, label `Delisted`) with an accessible name holding the symbol, the reason text and the date; flagged bindings are left out of the readiness request.
+**Actual**: In addition, a flagged bound row omits the blocking-condition cell, and the badge is followed by a visible `delisted-detail-<symbol>` span reading `<reason> · since <date>`.
+**Reason**: A readiness row already resolved by analysis would otherwise render readiness text beside the delisted badge; the visible detail shows the reason and date FR-13 asks for without relying on the accessible name alone.
+
+### Deviation: Step 31 — e2e runner
+**Spec said**: run the Playwright spec (Docker runner `scripts/run-e2e.py` in sequential mode when the host harness is unreliable).
+**Actual**: Ran on host Playwright with `--timeout=180000 --trace off`. One unrelated case (`screener.spec.ts:43`) failed once and passed on re-run.
+**Reason**: The host harness worked once the dev-mode warm-up was given time.
+**Disposition**: CI-equivalent fallback
+
