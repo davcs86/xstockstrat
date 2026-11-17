@@ -365,3 +365,11 @@
   migration ordering against feature 345 (`053` there, `054` here): a merge-order row is pending the
   operator's decision. Same-file overlaps with pending features are rebase-level.
 - For operator confirmation, not blocking: assumption A-7 (a skipped symbol is logged at INFO).
+
+## Session 2026-11-17 — sdd-review impl-spec, operator decisions after the clean round
+
+- **Merge order**: operator chose "345 renumbers if 352 lands first". Row added to
+  `docs/roadmap/features/merge-order.md` (345 vs 352, conditional config-migration renumber; neither
+  feature waits).
+- **A-7 confirmed**: a flagged symbol skipped by a backfill is logged at INFO.
+
