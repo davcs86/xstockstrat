@@ -79,7 +79,8 @@ namespace-relative; logs and errors may print the FQN (`platform.trading_state`)
 | `risk.max_concentration_pct` | float | `0.10` | Max fraction of equity in any single auto-sized position — enforcing, unlike the warn-only `max_position_pct` above |
 | `risk.sizing_enabled` | bool | `true` | Master gate for `ComputePositionSize`; `false` rejects any order submitted without an explicit `qty` |
 | `broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
-| `broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read at account-client construction and applied as the broker HTTP client's `Timeout`. |
+| `broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read live before every request (`brokerCallTimeout`) and applied as the deadline of each attempt. |
+| `broker.adaptive_rate_limit_enabled` | bool | `true` | Feature 347 — kill switch for adaptive Alpaca broker pacing (Alpaca only; IBKR is not affected). **Explicit `true` default** (a missing key must not read as disabled). `true`: the Alpaca client paces from `X-RateLimit-Limit`/`Remaining`/`Reset` and retries an HTTP 429 inside a budget (§ Adaptive rate limit); `false`: every broker call is one unpaced attempt, as before. Read live on every Alpaca request (`alpacaRateLimitBudget`). Seeded by the `alpaca_adaptive_rate_limit_keys` config migration. |
 | `ibkr.lst_refresh_margin_ms` | int | `60000` | Refresh an IBKR account's cached live session token (LST) this long before its `live_session_token_expiration`. Read live per handshake; `<= 0` reads as the default. |
 | `ibkr.handshake_timeout_ms` | int | `10000` | Detached bound on one IBKR LST + `ssodh/init` handshake. Read live per handshake; `<= 0` reads as the default. Independent of `IBKRRequestTimeout`. |
 | `ibkr.reauth_min_interval_ms` | int | `30000` | IBKR negative-cache and 401-invalidation throttle: at most one LST request per interval per account with bad credentials. Read live per handshake; `<= 0` reads as the default. |
@@ -155,6 +156,9 @@ an order with no `broker_order_id` yet are rejected with `FailedPrecondition`. F
 the new total/remaining per its adapter. A successful replace persists the order, emits the
 `order.replaced` ledger event, and broadcasts to `StreamOrderUpdates` subscribers.
 
+A `time_in_force` the order's broker does not allow is rejected with `InvalidArgument` and has no
+side effect, so the caller can correct it and resend (TRADING-7).
+
 ### Per-broker replaceable-field matrix
 
 | Field (proto) | Alpaca — `PATCH /v2/orders/{id}` | IBKR — modify `POST /iserver/account/{acct}/order/{id}` |
@@ -167,6 +171,44 @@ the new total/remaining per its adapter. A successful replace persists the order
 
 The IBKR **netting-mode** assumption documented in *Known Limitations* applies to replace as
 well: a replaced quantity is the new total order quantity (no hedged-mode lot semantics).
+
+## Adaptive rate limit (Alpaca, feature 347)
+
+The Alpaca client (`internal/broker/alpaca.go#do`) paces from the rate-limit response headers and retries
+only an HTTP 429, inside a per-call budget `B = max(T, S − 2T)` (T = `broker.timeout_ms`, S = the
+order-intent staleness threshold; `rateLimitBudget` in `internal/service/order_intent.go`):
+
+| `broker.timeout_ms` | `order_intent.stale_multiplier` | S | B |
+|---|---|---|---|
+| 5 s | 3.0 | 30 s | 20 s |
+| 5 s | 1.5 | 15 s | 5 s (single attempt) |
+| 10 s | 1.5 | 15 s | 10 s (single attempt) |
+| 1 s | 3.0 | 30 s | 28 s |
+
+- **Trading fails fast.** A non-zero wait starts only if the wait plus one full `T` still ends by the call's
+  end (the earlier of the caller's deadline and `start + B`); otherwise the call returns
+  `broker.ErrRateLimited` at once. A zero wait is always sent, so every call bounded by one `T` (fill
+  poller, reconciler, position sync, the re-read and leg cancels below) makes exactly one attempt and is
+  never spread.
+- **Mutations run detached from caller cancellation** (`POST`/`PATCH`/`DELETE`): once a submit, replace or
+  cancel may have been sent it runs to an answer or a timeout. `ErrRateLimited` is a *definite* outcome
+  (the broker did not process the request); an attempt that times out stays *uncertain*.
+- Outcomes:
+  - (a) A rate-limited **submit** is `REJECTED` with `order.broker_rejected` and an error carrying "rate
+    limited"; a caller reusing the same `client_order_id` replays that stored `REJECTED`.
+  - (b) A caller whose own deadline is shorter than a retry wait plus one attempt gets that `REJECTED`.
+  - (c) A rate-limited **cancel or replace** returns `Unavailable`, leaves the order unchanged and releases
+    its intent row (`ReleasePendingIntent`, TRADING-8), so an identical retry really retries. If the row
+    was already reclaimed the order's intent state becomes `UNKNOWN` and the reply says to verify first.
+  - (d) The **emergency flatten** halts the account on the first rate-limited submit and keeps retrying;
+    under a hold each watchdog tick still records `REJECTED` flatten orders, as a raw 429 did before.
+  - (e) `CancelOrder` writes `CANCELED` and finalizes the cancel intent **before** the bracket-leg cancels.
+    The fill poller's `GetOrder`, the not-cancelable re-read and each leg cancel are bounded by one
+    `broker.timeout_ms` on every non-IBKR account (`alpacaCallContext`), independent of the kill switch.
+  - (f) Worst case at defaults: `CancelOrder` ≤ 35 s (parent ≤ 20 s, re-read ≤ 5 s, two legs ≤ 10 s); the
+    cancel intent lives ≤ 25 s, under the 30 s threshold.
+  - (g) Clamp row: at `broker.timeout_ms` 10 s with the multiplier at its 1.5 floor, the mutation budget
+    plus the re-read is 20 s against a 15 s threshold; at 1 s × 3.0 the margin is 1 s.
 
 ## Order Status Reconciliation
 

@@ -15,6 +15,13 @@ backtest.
    feature 198). A strategy that uses a `fundamental` operand (see `strategy-build.md`) needs its
    symbols backfilled with `data_kind="fundamentals"` in addition to bars; fundamentals backfill is
    timeframe-independent (omit/ignore `timeframe`).
+   - **Non-admin caller.** Trigger one symbol per call with `fill_mode="gaps_only"`, `data_kind`
+     `"bars"`, explicit `start` and `end`, and no `callback_url`; anything else is refused
+     `PERMISSION_DENIED: self-serve backfill denied: <token>` and queues nothing.
+     `self-serve backfill denied: range_too_long (max N days)` means the range is longer than the
+     operator limit: shorten it, or ask an operator to backfill.
+   - **`ALREADY_EXISTS`** means a backfill for that symbol is already queued or running: poll
+     `get_backfill_status` and retry later.
 3. **Wait by polling, not sleeping.** Re-check `get_backfill_status` until it reports complete. Do
    not block on a fixed sleep; poll the status and proceed when it flips to done. If a backfill
    stalls, surface it rather than backtesting on partial data. Polling is the default and always
@@ -27,7 +34,8 @@ backtest.
 ## Optional: `callback_url` instead of polling
 
 `trigger_backfill` accepts an optional `callback_url`. Pass it only when you have a webhook listener
-you can wait on; without one, omit it and poll.
+you can wait on; without one, omit it and poll. `callback_url` is admin-only: a non-admin request
+that carries one is refused `self-serve backfill denied: callback_url`.
 
 - **Rule.** The URL must be `https` and its origin must be on the platform's allowlist. The
   allowlist is empty by default, so expect a rejection unless the operator has allowlisted that

@@ -25,6 +25,7 @@ be queued or in progress when the promotion PR is merged (PR #1448).
 | `node-test` (×4) | `pnpm run test:coverage` (Node.js services only) | 40% declared, not enforced (no `--check-coverage`; follow-up defect) |
 | `ledger-db-test` | Applies all migrations to TimescaleDB, runs ledger `pnpm run test:db` (trigger-stub resolve, replay recovery, resolve bound) | — |
 | `portfolio-db-test` | Applies all migrations to TimescaleDB, runs portfolio Go real-Postgres tests (build tag `dbtest`): `go test -tags dbtest -race ./internal/repository/...` (signal-expiry add path, prune tick, backfill); gated into `ci-gate` | — |
+| `marketdata-db-test` | Applies all migrations to TimescaleDB, runs marketdata Go real-Postgres tests (build tag `dbtest`): `go test -tags dbtest -race ./internal/repository/...` (historical-fundamentals transactional replace: pinned deletes, plain inserts, rollback, the audit counts); gated into `ci-gate` | — |
 | `frontend-e2e-build` | Next.js production build for E2E (shared by shards) | — |
 | `frontend-e2e` (×2 shards) | Playwright E2E, chromium only, sharded across 2 runners | — |
 | `frontend-e2e-production` | Production-theme Playwright run of `e2e/theme/` (image built with `UI_THEME=production`; `@AC-10` excluded) (on the `ui-theme` filter, `ci`) | — |

@@ -376,4 +376,20 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.match(err.details ?? err.message, /\[30, 55\]/);
     assert.equal(insertQuery(), undefined);
   });
+
+  it('bounds the indicator history depth to [200, 1000] — AC-1, AC-3', async () => {
+    const HISTORY_KEY = 'chart.indicator_history_bars';
+    for (const v of [199, 1001]) {
+      queries = [];
+      const { err } = await setConfig({ intVal: v }, HISTORY_KEY, 'ui');
+      assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, `history depth ${v} is out of [200, 1000]`);
+      assert.match(err.details ?? err.message, /\[200, 1000\]/);
+      assert.equal(insertQuery(), undefined, `no INSERT for out-of-range ${v}`);
+    }
+    for (const v of [200, 1000]) {
+      queries = [];
+      assert.equal((await setConfig({ intVal: v }, HISTORY_KEY, 'ui')).err, null, `${v} is inside [200, 1000]`);
+      assert.ok(insertQuery(), `history depth ${v} must reach the INSERT (registered, no create_key)`);
+    }
+  });
 });

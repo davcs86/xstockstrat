@@ -551,6 +551,8 @@ export type Fundamentals = Message<"xstockstrat.marketdata.v1.Fundamentals"> & {
      */
     beta: number;
     /**
+     * a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points
+     *
      * @generated from field: double roe = 8;
      */
     roe: number;
@@ -733,6 +735,8 @@ export type HistoricalFundamentalsPeriod = Message<"xstockstrat.marketdata.v1.Hi
      */
     beta: number;
     /**
+     * a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points; a quarterly period uses trailing-twelve-month net income
+     *
      * @generated from field: double roe = 13;
      */
     roe: number;

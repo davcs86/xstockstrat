@@ -214,7 +214,11 @@ only if the caller guarantees data is already present.
   allowlist, which is empty by default) that receives the job's terminal event, so you can wait for
   the webhook instead of polling. An `INVALID_ARGUMENT`, or an `UNAVAILABLE` stating "no job was
   created", means nothing was queued — retry without `callback_url` and poll `get_backfill_status`.
-  See `reference/backfill.md`.
+  `callback_url` is admin-only. See `reference/backfill.md`.
+- A non-admin caller triggers one symbol per call with `fill_mode="gaps_only"`, explicit `start`
+  and `end`, and no `callback_url`. `PERMISSION_DENIED: self-serve backfill denied:
+  range_too_long (max N days)` means shorten the range or ask an operator; `ALREADY_EXISTS` means a
+  backfill for the symbol is in flight — poll `get_backfill_status` and retry later.
 
 ## Phase 2 — Run, and handle the oversized output
 

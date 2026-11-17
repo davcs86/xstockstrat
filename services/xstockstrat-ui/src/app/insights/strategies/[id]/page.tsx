@@ -22,6 +22,8 @@ import {
   NoTradeReason,
   SizingMode,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { FillMode } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+import { gapToBackfillRequest } from '@/lib/backtestBackfill';
 import {
   BacktestDiagnostics,
   SIZING_MODE_LABEL,
@@ -539,12 +541,12 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                       disabled={backfilling}
                       onClick={() => {
                         const gap = result.coverageGaps[0];
-                        triggerBackfillMutate({
-                          symbols: [gap.symbol],
-                          timeframeEnum: gap.timeframe,
-                          range: gap.gap,
-                          overwrite: false,
-                        });
+                        triggerBackfillMutate(
+                          gapToBackfillRequest(
+                            gap,
+                            isAdmin ? undefined : { fillMode: FillMode.GAPS_ONLY },
+                          ),
+                        );
                       }}
                     >
                       {backfilling ? 'Starting backfill…' : 'Backfill this range'}

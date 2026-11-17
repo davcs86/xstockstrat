@@ -313,6 +313,7 @@ const (
 	KeyOutcome = "outcome"
 	KeyResult  = "result"
 	KeyKind    = "kind"
+	KeyReason  = "reason"
 )
 
 // Marketdata loop names. LoopBarIngest, LoopClassificationRefresh and LoopAssetRefresh keep their own
@@ -364,11 +365,26 @@ const (
 	BackfillFailed       = "failed"
 )
 
+const (
+	LeftOutLabelCollision = "label_collision"
+	LeftOutYearEndQuarter = "year_end_quarter"
+)
+
 var (
-	vendorRequests  = NewCounter("marketdata.vendor.requests")
-	vendorDuration  = NewHistogram("marketdata.vendor.request.duration", metric.WithUnit("s"))
-	streamReconnect = NewCounter("marketdata.stream.reconnects")
-	backfillSymbols = NewCounter("marketdata.backfill.symbols")
+	vendorRequests   = NewCounter("marketdata.vendor.requests")
+	vendorDuration   = NewHistogram("marketdata.vendor.request.duration", metric.WithUnit("s"))
+	streamReconnect  = NewCounter("marketdata.stream.reconnects")
+	backfillSymbols  = NewCounter("marketdata.backfill.symbols")
+	periodsLeftOut   = NewCounter("marketdata.backfill.periods_left_out")
+	ohlcvOutOfMemory = NewCounter("marketdata.ohlcv.out_of_memory_errors")
+)
+
+// OHLCV repository op labels for RecordOhlcvOutOfMemory.
+const (
+	OhlcvOpBars       = "bars"
+	OhlcvOpRecentBars = "recent_bars"
+	OhlcvOpBarsBatch  = "bars_batch"
+	OhlcvOpInsertBars = "insert_bars"
 )
 
 // HTTPErrorOutcome classifies a non-success status; it never returns VendorOK.
@@ -402,6 +418,14 @@ func RecordStreamReconnect(ctx context.Context, result string) {
 
 func RecordBackfillSymbol(ctx context.Context, kind, outcome string) {
 	backfillSymbols.Add(ctx, 1, attribute.String(KeyKind, kind), attribute.String(KeyOutcome, outcome))
+}
+
+func RecordPeriodLeftOut(ctx context.Context, reason string) {
+	periodsLeftOut.Add(ctx, 1, attribute.String(KeyReason, reason))
+}
+
+func RecordOhlcvOutOfMemory(ctx context.Context, op string) {
+	ohlcvOutOfMemory.Add(ctx, 1, attribute.String(KeyOp, op))
 }
 
 type lastFrameSource struct {

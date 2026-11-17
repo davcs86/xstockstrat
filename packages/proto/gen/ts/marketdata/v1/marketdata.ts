@@ -236,6 +236,7 @@ export interface Fundamentals {
   dividendYield: number;
   eps: number;
   beta: number;
+  /** a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points */
   roe: number;
   debtToEquity: number;
   price: number;
@@ -303,6 +304,7 @@ export interface HistoricalFundamentalsPeriod {
   dividendYield: number;
   eps: number;
   beta: number;
+  /** a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points; a quarterly period uses trailing-twelve-month net income */
   roe: number;
   debtToEquity: number;
   price: number;

@@ -58,7 +58,7 @@ Feature: fix-ui-transport-hardening (bug fix)
 
   @AC-5 @FR-1 @regression @feature-271
   Scenario: The alert stream is not cut off by the unary default deadline
-    Given a signed-in trader with the alert stream open
+    Given a signed-in user on any segment page with the alert stream open
     And notify sends no alert for longer than the default deadline
     When the default deadline elapses
     Then the streamAlerts connection is still open and delivers the next alert

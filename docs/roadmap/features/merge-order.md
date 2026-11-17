@@ -125,6 +125,7 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `config-dead-rows-prune` (305) | `config-keys-alias-removal` (306) ↔ `third-party-sso-oidc` (280) | Soft — config migration number (first to merge takes max+1; the others renumber: 3 file renames + stored regen, content and P2 sha unchanged); shared `migration-rerun.sh` (305 introduces `cfg_top` and slug-glob discovery; 306/280 rebase onto it and must not re-pin `R1`); shared gate files (305 appends after `membership()`, 306 edits `join()`); shared test file `services/xstockstrat-config/src/__tests__/dormantAlias.test.ts` (305 narrowed its marker-writer scan, 306 inverts its alias assertions); the `047` owner is whichever of 306/280 merges first (306's files are slug-named; a renumber is 3 renames plus a stored-set regeneration); **305 merges before 306's FR-6** (owner hand-off of the kept ledger baseline entry). Operator-approved 2026-11-10. | No |
 | `alert-detail-page` (344) | `fix-symbol-page-alerts-ui` (339) | **Hard — merge order only; 339 need not be `launched`.** Both rewrite the Alerts drawer (`services/xstockstrat-ui/src/components/trader/AlertStream.tsx`): 339 makes it unread-only with mark-read and Clear all; 344 then moves the bell into the shared `PlatformHeader` and puts the unread count on the shared `ALERT_UNREAD_COUNT_KEY` query key. 344's implementation-spec Steps 17-22 are marked blocked on 339 merged and must be re-specified against the post-339 tree (`/sdd-spec alert-detail-page`). Operator decision 2026-11-15 (339 lands first). | No |
 | `backtest-inline-backfill` (343) | `fix-indicator-pane-warmup` (341) | **Hard — merge order only; 341 need not be `launched`.** 343 raises the homelab backfill concurrency against the ohlcv lock budget and depends on the marketdata lock-breach counter (`marketdata.ohlcv.out_of_memory_errors`) that 341 adds; operator decision 2026-11-15 (one counter, owned by 341). Both also add a config seed migration: 343 numbers its migration above 341's at merge time and regenerates `scripts/config-wiring-stored.json`. | No |
+| `ensure-signals-watchlist-on-read` (351) | `fix-listwatchlists-page-token` (354) | **Hard — consumed fix.** 351's Step 5 landing gate requires 354's `ListByUser` token fix (`watchlist_repo.go:139`, token = last returned row) on `main-dev`; both edit `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go` (354 adds `seedNamedWatchlist`, which 351 Step 5 plans to reuse). 354 merges first; 351's Step 6 updates this row rather than adding a second. Found by the 354 impl-spec overlap scan (2026-11-17). **Merge order only — `fix-listwatchlists-page-token` need not be `launched`.** 351's first-page ensure adds a system row for every user, creating page boundaries where `ListByUser`'s former look-ahead token dropped the boundary row (agent limit-1 traversals; owners ≥100 rows). 354 merged to `main-dev` via #1566 (`149351de`); gate verified by 351 Step 5 (context.md, 2026-11-17); row updated in place by 351 Step 6. | Yes |
 
 **257 rolling-deploy note**: until every ledger instance runs 257, a token from an old ledger build (an `event_id` UUID)
 or a repeated page makes portfolio `GetPnL` return `UNAVAILABLE`. Realized P&L changes on purpose once 251 lands:
@@ -406,6 +407,25 @@ Beyond the two table rows above (344 after 339, 343 after 341), the six features
 overlap textually only. `chart-series-palette` (342) and `fix-indicator-pane-warmup` (341) both edit
 `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`, `src/lib/indicatorChart.ts` and the symbol page
 (`src/app/trader/positions/[symbol]/page.tsx`); 339, 340 and 343 also edit that page (disjoint sections). Whichever merges
-second rebases and re-greps its anchors. Config seed number: 341 and 343 each name `050` as next free, as does
+second rebases and re-greps its anchors. 343 also shares `src/app/insights/strategies/[id]/page.tsx` and
+`e2e/trader/position-detail.spec.ts` with 341, and `services/xstockstrat-ingest/app/handlers/servicer.py`,
+`tests/test_ingest_servicer.py`, `e2e/mock-backend.ts` and `e2e/fixtures/INVENTORY.md` with 344; the regions are
+disjoint and the second merger rebases. Config seed number: 341 and 343 each name `050` as next free, as does
 `fix-live-enrich-ttl-seed` (330) on its branch; the trunk tip is `049`, so each re-derives its number at execute and at its
 integration PR, and the later merger regenerates `scripts/config-wiring-stored.json`.
+
+## Config seed number and Alpaca client overlap: 347 ↔ 341, 343, 330, 322, 323 (2026-11-16, non-blocking)
+
+`alpaca-adaptive-rate-limit` (347) names config migration `052` (341 landed `050_ui_chart_history_bars` and 343 landed
+`051_ingest_backfill_self_serve_keys` on 2026-11-16; 330 still names `050` on its branch), so 347 re-derives its number at execute and at its integration PR, and the later merger regenerates
+`scripts/config-wiring-stored.json`. 347 also edits `services/xstockstrat-marketdata/internal/alpaca/client.go` (`do` and the
+limiter), which `fix-retired-surface-proto-cleanup` (322, `Paper` plumbing) and `fix-orphaned-code` (323, `AlpacaAsset`
+removal) edit in disjoint hunks; whichever merges second rebases and re-greps its anchors.
+
+Further same-file overlaps for 347, all textual and non-blocking (whichever merges second rebases and re-greps its anchors):
+`services/xstockstrat-marketdata/cmd/server/main.go` with 322 (adjacent hunks in the Alpaca settings closure);
+`services/xstockstrat-trading/internal/service/trading.go` with 311, 312 and 321, and
+`services/xstockstrat-trading/internal/service/order_intent.go` with 321 (the staleness floor, same line);
+`docs/patterns/config-governance.md` (registered-keys log, both prepend at the same anchor),
+`services/xstockstrat-marketdata/CLAUDE.md` and `scripts/config-wiring-stored.json` with 341 (already on trunk; 347
+regenerates the stored set after any renumber).

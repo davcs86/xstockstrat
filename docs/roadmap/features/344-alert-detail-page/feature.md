@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/alert-detail-page`
 **Created**: 2026-11-15
-**Last Updated**: 2026-11-15
+**Last Updated**: 2026-11-16
 
 ---
 
@@ -11,6 +11,11 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-15 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings) |
+| 2026-11-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 23 steps (Steps 17–22 blocked on 339 merged); `acceptance.feature` and `product-spec.md` amended per D-17 (`@AC-6`, `@AC-10`, FR-8) |
+| 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute sequential | → in-progress (sdd-batch-execute setup); merged `origin/main-dev@9f8856229`, re-spec'd steps 1, 2, 4, 17–22 (17–22 still blocked on 339) |
+| 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute sequential | All 23 steps done (Step 23 docs last); `check-config-wiring.mjs --final` exit 0 |
 
 ---
 
@@ -18,7 +23,10 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec alert-detail-page`_
+- [Recon](recon.md) — grounded codebase dossier
+- [Debate Register](debate.md) — settled decisions, rejected alternatives, objections, petitions
+- [Design](design.md) — approved approach, rejected alternatives, open risks
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -35,11 +43,11 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| Proto Reviewer | Additive `GetAlert` RPC on `notify.v1` |
-| Service owner — `xstockstrat-notify` | Stream delivery guarantees, backpressure handling, alert deduplication |
-| Service owner — `xstockstrat-ui` | Trading UI correctness, analytics display accuracy, Connect-RPC call safety |
-| Service owner — `xstockstrat-ingest` | Signal normalization correctness, idempotent ingestion (backfill alert body) |
+| Proto Reviewer | Field number uniqueness per message, no breaking changes, `buf lint` passes, `buf breaking` passes (Steps 1–2: additive `GetAlert` RPC on `notify.v1`) |
+| Service owner — `xstockstrat-notify` | Stream delivery guarantees, backpressure handling, alert deduplication (Steps 1–6) |
+| Service owner — `xstockstrat-ingest` | Signal normalization correctness, idempotent ingestion (Steps 7–8: backfill alert body) |
+| Service owner — `xstockstrat-ui` | Trading UI correctness, analytics display accuracy, Connect-RPC call safety (Steps 1–2, 9–22) |
 
 ## Next Action
 
-`/sdd-review alert-detail-page product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-review alert-detail-page impl-spec` — validate implementation spec, then `/sdd-execute alert-detail-page`

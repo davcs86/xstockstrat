@@ -7213,6 +7213,112 @@ class TestGetIndicatorSeries:
         with pytest.raises(Exception, match="aborted"):
             await svc.GetIndicatorSeries(req, _owned_ctx())
 
+    @pytest.mark.asyncio
+    async def test_first_value_bars_is_declared_per_component(self):
+        """feature 341 AC-2/AC-4 — each component declares its first-value bars: SMA 200 → 200,
+        SMA 20 → 20, a formula declaring warmup_period 30 → 31, from the one GetFormula pass."""
+        svc = make_servicer()
+        definition = self._definition(
+            [
+                analysis_pb2.StrategyComponent(
+                    ref_name="sma200",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 200.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="sma20",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 20.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="custom",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-warm",
+                ),
+            ]
+        )
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="f-warm", name="warm", warmup_period=30
+            )
+        )
+
+        with patch.object(
+            StrategyEvaluator,
+            "_compute_component",
+            new=AsyncMock(return_value={"value": [None, 1.0, 2.0]}),
+        ):
+            req = analysis_pb2.GetIndicatorSeriesRequest(
+                strategy_id="s1", symbol="AAPL", closes=[1.0, 2.0, 3.0]
+            )
+            resp = await svc.GetIndicatorSeries(req, _owned_ctx())
+
+        by_ref = {c.ref_name: c.first_value_bars for c in resp.components}
+        assert by_ref == {"sma200": 200, "sma20": 20, "custom": 31}
+        assert svc._indicators.GetFormula.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_first_value_bars_zero_on_error_and_fundamentals_formula(self):
+        """A failed component and a fundamentals-only formula both declare 0 first-value bars."""
+        svc = make_servicer()
+        definition = self._definition(
+            [
+                analysis_pb2.StrategyComponent(
+                    ref_name="bad",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 200.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="fund",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-fund",
+                ),
+            ]
+        )
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="f-fund",
+                name="fund",
+                warmup_period=30,
+                fundamental_inputs=[indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO],
+            )
+        )
+        svc._load_fundamentals = AsyncMock(return_value=[])
+        svc._load_fundamentals_snapshot = AsyncMock(return_value=[])
+
+        with (
+            patch.object(
+                StrategyEvaluator,
+                "_compute_component",
+                new=AsyncMock(side_effect=FormulaExecutionError("bad", "boom")),
+            ),
+            patch.object(
+                StrategyEvaluator,
+                "_assemble_component_series",
+                new=AsyncMock(return_value={"value": [1.0, 1.0, 1.0]}),
+            ),
+        ):
+            req = analysis_pb2.GetIndicatorSeriesRequest(
+                strategy_id="s1", symbol="AAPL", closes=[1.0, 2.0, 3.0]
+            )
+            resp = await svc.GetIndicatorSeries(req, _owned_ctx())
+
+        by_ref = {c.ref_name: c for c in resp.components}
+        assert "boom" in by_ref["bad"].error
+        assert by_ref["bad"].first_value_bars == 0
+        assert by_ref["fund"].error == ""
+        assert len(by_ref["fund"].series) == 1
+        assert by_ref["fund"].first_value_bars == 0
+
 
 # ---------------------------------------------------------------------------
 # feature 150 — portfolio sizing routing (Steps 7/8): AC-3, AC-4, AC-5

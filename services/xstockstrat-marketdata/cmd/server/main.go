@@ -90,8 +90,9 @@ func main() {
 			// Default "all" so splits/dividends do not distort backtest OHLCV.
 			Adjustment: cfgWatcher.GetString("alpaca.adjustment", "all"),
 			// Per-request bar limit (clamped to the spec max 10000) and outbound REST rate limit.
-			BatchSize:    int(cfgWatcher.GetInt("backfill.batch_size", 1000)),
-			RateLimitRPS: int(cfgWatcher.GetInt("backfill.rate_limit_rps", 200)),
+			BatchSize:         int(cfgWatcher.GetInt("backfill.batch_size", 1000)),
+			RateLimitRPS:      int(cfgWatcher.GetInt("backfill.rate_limit_rps", 200)),
+			AdaptiveRateLimit: alpacaAdaptiveRateLimit(cfgWatcher),
 			// Streaming WebSocket reconnect tuning.
 			ReconnectDelayMs: int(cfgWatcher.GetInt("stream.reconnect_delay_ms", 2000)),
 			MaxReconnects:    int(cfgWatcher.GetInt("stream.max_reconnects", 10)),
@@ -209,6 +210,12 @@ func looksLikePlaceholderCred(v string) bool {
 	}
 	upper := strings.ToUpper(v)
 	return strings.HasPrefix(upper, "YOUR_") || strings.Contains(upper, "PLACEHOLDER")
+}
+
+// alpacaAdaptiveRateLimit reads the kill switch live. The parameter must stay named cfgWatcher:
+// scripts/config-wiring.json attributes the read to the main.go:cfgWatcher receiver.
+func alpacaAdaptiveRateLimit(cfgWatcher *config.Watcher) bool {
+	return cfgWatcher.GetBool("alpaca.adaptive_rate_limit_enabled", true)
 }
 
 // fundamentalsProvider reads marketdata.fundamentals.provider live; callers read it once per request.

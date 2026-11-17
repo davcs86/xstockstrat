@@ -230,7 +230,7 @@ message Fundamentals {
   double dividend_yield = 5;
   double eps = 6;
   double beta = 7;
-  double roe = 8;
+  double roe = 8;  // a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points
   double debt_to_equity = 9;
   double price = 10;
   double year_high = 11;
@@ -280,7 +280,7 @@ message HistoricalFundamentalsPeriod {
   double dividend_yield = 10;
   double eps = 11;
   double beta = 12;
-  double roe = 13;
+  double roe = 13;  // a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points; a quarterly period uses trailing-twelve-month net income
   double debt_to_equity = 14;
   double price = 15;
   double year_high = 16;

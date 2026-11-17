@@ -345,6 +345,8 @@ def test_getters_default_when_unset_or_mismatched(values, getter, key, default):
             -1,
             60,
         ),
+        ("backfill_self_serve_max_range_days", "backfill.self_serve_max_range_days", 0, 730),
+        ("backfill_self_serve_max_range_days", "backfill.self_serve_max_range_days", -1, 730),
     ],
 )
 def test_fr3_properties_read_non_positive_as_default(prop, key, stored, expected):
@@ -357,6 +359,13 @@ def test_webhook_sweep_interval_honours_a_stored_value_and_defaults_when_absent(
     key = "backfill.webhook_sweep_interval_seconds"
     assert snapshot_watcher(**{key: 45}).backfill_webhook_sweep_interval_seconds == 45
     assert snapshot_watcher().backfill_webhook_sweep_interval_seconds == 60
+
+
+def test_self_serve_max_range_days_honours_a_stored_value_and_defaults_when_absent():
+    """Feature 343: the span cap returns a stored value and defaults to 730 when absent."""
+    key = "backfill.self_serve_max_range_days"
+    assert snapshot_watcher(**{key: 1830}).backfill_self_serve_max_range_days == 1830
+    assert snapshot_watcher().backfill_self_serve_max_range_days == 730
 
 
 @pytest.mark.parametrize(

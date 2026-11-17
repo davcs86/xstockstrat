@@ -81,6 +81,20 @@ async def test_list_jobs_with_and_without_filter():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("row, expected", [({"?column?": 1}, True), (None, False)])
+async def test_has_active_job_binds_symbol_and_statuses(row, expected):
+    pool = AsyncMock()
+    pool.fetchrow.return_value = row
+    assert await backfill_jobs.has_active_job(pool, "AAPL", [1, 2]) is expected
+    pool.fetchrow.assert_awaited_once()
+    sql = pool.fetchrow.await_args.args[0]
+    assert "$1 = ANY(symbols)" in sql
+    assert "status = ANY($2::int[])" in sql
+    assert "AAPL" not in sql
+    assert pool.fetchrow.await_args.args[1:] == ("AAPL", [1, 2])
+
+
+@pytest.mark.asyncio
 async def test_reconcile_interrupted_returns_count():
     pool = AsyncMock()
     pool.fetch = AsyncMock(return_value=[{"job_id": "a"}, {"job_id": "b"}])

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math"
 	"net"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -2242,7 +2243,8 @@ func (s *PortfolioService) GetWatchlist(ctx context.Context, req *portfoliov1.Ge
 	return &portfoliov1.GetWatchlistResponse{Watchlist: wl}, nil
 }
 
-// ListWatchlists returns the caller's watchlists, paginated.
+// ListWatchlists returns the caller's watchlists, paginated. A first page without a system-managed
+// list idempotently ensures it, so this read can write; an ensure failure never fails the read.
 func (s *PortfolioService) ListWatchlists(ctx context.Context, req *portfoliov1.ListWatchlistsRequest) (*portfoliov1.ListWatchlistsResponse, error) {
 	userID, err := requireUserID(ctx)
 	if err != nil {
@@ -2258,10 +2260,38 @@ func (s *PortfolioService) ListWatchlists(ctx context.Context, req *portfoliov1.
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	if pageToken == "" && !slices.ContainsFunc(wls, (*portfoliov1.Watchlist).GetSystemManaged) {
+		wls, next = s.ensureSignalListOnFirstPage(ctx, userID, pageSize, wls, next)
+	}
 	return &portfoliov1.ListWatchlistsResponse{
 		Watchlists: wls,
 		Page:       &commonv1.PageResponse{NextPageToken: next},
 	}, nil
+}
+
+// ensureSignalListOnFirstPage never returns an error: any failure logs a WARN and returns the
+// original page, so a degraded write path cannot break the read.
+func (s *PortfolioService) ensureSignalListOnFirstPage(ctx context.Context, userID string, pageSize int, wls []*portfoliov1.Watchlist, next string) ([]*portfoliov1.Watchlist, string) {
+	ensured, err := s.watchlists.EnsureSystemManaged(ctx, userID, signalWatchlistDefaultName)
+	if err != nil {
+		if ctx.Err() == nil {
+			slog.WarnContext(ctx, "ListWatchlists: ensure system watchlist failed; returning existing lists", "error", err)
+		}
+		return wls, next
+	}
+	// Go string order equals Postgres uuid order (pgx renders canonical lowercase text); compares
+	// ids, never the token, so a later token fix cannot break it.
+	if next != "" && len(wls) > 0 && ensured.GetWatchlistId() > wls[len(wls)-1].GetWatchlistId() {
+		return wls, next
+	}
+	relisted, relistNext, err := s.watchlists.ListByUser(ctx, userID, pageSize, "")
+	if err != nil {
+		if ctx.Err() == nil {
+			slog.WarnContext(ctx, "ListWatchlists: re-list after ensure failed; returning first page", "error", err)
+		}
+		return wls, next
+	}
+	return relisted, relistNext
 }
 
 // watchlistMaskPaths is the closed allowlist of maskable UpdateWatchlist paths (scalar only —
