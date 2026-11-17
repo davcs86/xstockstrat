@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-17 | /sdd-batch | 8 | 6 | 0 | 5 | 0 | yes |
 | 2 | 2026-11-17 | /sdd-batch | 4 | 2 | 5 | 4 | 0 | yes |
 | 3 | 2026-11-17 | /sdd-batch | 3 | 2 | 4 | 5 | 0 | yes |
+| 4 | 2026-11-17 | /sdd-batch | 3 | 2 | 5 | 3 | 0 | yes |
 
 ## Settled Decisions
 
@@ -32,6 +33,9 @@
 | D-13 | 3 | The duplicate-symbol guard's error text is `page %d: duplicate symbol %q`, without 'across pages', because the step-7 check also catches a duplicate within one page. The D-12 hardening row asserts this exact text. | adversary r3; trading.go:2241 WARN (D-8 cause discrimination) | settled |
 | D-14 | 3 | Finding payload assertions read only from the existing recordingLedgerClient via e.Payload.Fields["expected"/"broker_reported"].GetNumberValue(). No local or second ledger recorder may be introduced. | trading_reconciliation_test.go:137-149 (records full AppendEventRequest), :562/:596/:632 (Payload.Fields reads); trading.go:2064-2068 payload map | settled |
 | D-15 | 3 | Per-tick call-count and token assertions use a paging-fake call log that is snapshotted and reset between the two reconcileTick calls, so each tick is asserted independently. | adversary r3; two-tick pattern at trading_reconciliation_test.go:554-555 | settled |
+| D-16 | 4 | listAccountPlatformPositions returns map[string]float64 (symbol→qty), the D-5 dedup set it already builds. The map is complete, or nil with an error. trading.go:2244-2247 (the map rebuild) is deleted, and reconcileTick binds platformBySymbol directly from the helper. | trading.go:2244-2247 (re-verified: rebuilds platformBySymbol from the response); adversary r4 C-18; D-1 fixes the contract, not the type | settled |
+| D-17 | 4 | The paging fake records req.GetAccountId(), req.GetTradingMode() and the outgoing x-user-id for every call. AC-1 and the positive control assert, per entry in each tick, x-user-id == owner, AccountId == "acc-1" and the expected TradingMode. | trading.go:2234 (single x-user-id append on a ctx the helper rebuilds per page), :2236 (AccountId/TradingMode); PLAT-4; fails.md:2534; adversary r4 | settled |
+| D-18 | 4 | In the deadline variant, page 1's fake delays with time.Sleep and must not observe ctx. Only page "p2" blocks on ctx.Done(). This keeps the page-2 entry Deadline() logged even if page 1 overruns. | helper fails only on the RPC's returned error (step 4); adversary r4 risk correction | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -48,6 +52,8 @@
 | R-8 | 2 | Using 'page-1 ctx still live during the call' as evidence of per-page deadlines | It holds identically under the locked R-1 shared deadline, so it cannot tell D-3 from R-1. | locked |
 | R-9 | 3 | A local or second ledger recorder extension for reading finding payloads | recordingLedgerClient already captures the full structpb Payload, and a duplicate recorder could reintroduce the type-only vacuous check that O-7 closed (C-13/C-18). | locked |
 | R-10 | 3 | A fake clock seam to make the per-page deadline ordering deterministic | context.WithTimeout does not use s.clock, so this would need a new speculative seam (C-18). A 5 ms sleep with entry-captured Deadline() is enough. | locked |
+| R-11 | 4 | The helper returns []*portfoliov1.Position, which reconcileTick then reshapes into a symbol→qty map | The slice's only consumer is the map the helper already builds for D-5, so the same concept would be built twice (C-18). | locked |
+| R-12 | 4 | A page-1 fake that selects on ctx.Done() during its delay in the deadline variant | A page-1 overrun would become a page-1 error, page 2 would never be logged, and the D-11 strictly-increasing-deadline assertion would flake. | locked |
 
 ## Objections
 
@@ -63,11 +69,14 @@
 | O-7 | 2 | The positive control must assert the mismatch_found payload expected == 5. Otherwise a drain that fetches and then discards page 2 still passes. | no | closed @ round 3 (The r3 positive control asserts mismatch_found payload expected == 5 and broker_reported == 10. It is RED on today's code (expected == 0), and the payload is readable via recordingLedgerClient Payload.Fields (:562).) |
 | O-8 | 2 | Correct the AC-1 RED rationale. On today's code the seed is deleted and emitted at tick 1 (trading.go:2042-2044). Pair 'key absent' with 'no finding and not halted after tick 1'. | no | closed @ round 3 (The r3 AC-1 RED rationale now states that the seed is deleted and a finding emitted at ≥ 1+graceTicks (trading.go:2041-2044, re-verified). The test pairs 'key absent' with 'no finding and not halted' after tick 1.) |
 | O-9 | 2 | The deadline variant must tell D-3 apart from R-1 by asserting strictly increasing per-page ctx.Deadline(), not ctx liveness. | no | closed @ round 3 (The r3 deadline variant asserts that page 2's recorded Deadline() is strictly after page 1's, with page 1 sleeping 5 ms. Liveness is not used as evidence (R-8).) |
-| O-10 | 3 | Remove the 'local recorder extension' fallback. Payload assertions must use the existing recordingLedgerClient's e.Payload.Fields["expected"].GetNumberValue()==5 and ["broker_reported"]==10. | no | open |
-| O-11 | 3 | Change the duplicate-symbol error text to `page %d: duplicate symbol %q`, without 'across pages', and update the D-12 row to match. | no | open |
-| O-12 | 3 | Split the paging fake's call log per tick (snapshot or reset between the two reconcileTick calls) so the call assertions are per tick, not cumulative. | no | open |
-| O-13 | 3 | In the deadline variant, the broker fakes must not sleep, because the 50 ms broker.timeout_ms also applies to the broker calls. Record ctx.Deadline() at fake-call entry, before page 1's sleep and before page 2 blocks. | no | open |
-| O-14 | 3 | The RPC-error hardening row should assert status.Code(err)==codes.Unavailable on the wrapped error, not status.Code(errors.Unwrap(err)). | no | open |
+| O-10 | 3 | Remove the 'local recorder extension' fallback. Payload assertions must use the existing recordingLedgerClient's e.Payload.Fields["expected"].GetNumberValue()==5 and ["broker_reported"]==10. | no | closed @ round 4 (r4 deletes the local-recorder fallback. Payload assertions read only recordingLedgerClient e.Payload.Fields["expected"/"broker_reported"].GetNumberValue() (:137-149). The adversary confirmed.) |
+| O-11 | 3 | Change the duplicate-symbol error text to `page %d: duplicate symbol %q`, without 'across pages', and update the D-12 row to match. | no | closed @ round 4 (r4 uses `page %d: duplicate symbol %q`, and the hardening row asserts `page 2: duplicate symbol "SYM500"`.) |
+| O-12 | 3 | Split the paging fake's call log per tick (snapshot or reset between the two reconcileTick calls) so the call assertions are per tick, not cumulative. | no | closed @ round 4 (r4 adds takeLog() (copy and reset under the mutex), called after each tick. All call and token assertions are per tick.) |
+| O-13 | 3 | In the deadline variant, the broker fakes must not sleep, because the 50 ms broker.timeout_ms also applies to the broker calls. Record ctx.Deadline() at fake-call entry, before page 1's sleep and before page 2 blocks. | no | closed @ round 4 (r4 states that the broker fakes never sleep or block, and that the paging fake records ctx.Deadline() at call entry, before page 1's sleep and page 2's block. The adversary confirmed this is needed given brokerCallTimeout at :2125/:2215.) |
+| O-14 | 3 | The RPC-error hardening row should assert status.Code(err)==codes.Unavailable on the wrapped error, not status.Code(errors.Unwrap(err)). | no | closed @ round 4 (r4's RPC-error row asserts status.Code(err) == codes.Unavailable on the wrapped error itself, with no errors.Unwrap.) |
+| O-15 | 4 | [C-13] AC-1 and the positive control must assert, per logged page call in each tick, x-user-id == owner, req.GetAccountId() == "acc-1" and the expected TradingMode. Otherwise a drain that drops identity or the filter on page 2 and later passes every AC (trading.go:2234; fails.md:2534). | no | open |
+| O-16 | 4 | [C-11] Correct the stated strongest risk. A time.Sleep page-1 overrun still lets page 2 log its Deadline(). State that page 1's fake must not select on ctx.Done(). | no | open |
+| O-17 | 4 | [C-18] Return map[string]float64 from listAccountPlatformPositions and delete trading.go:2244-2247 instead of re-pointing it. | no | open |
 
 ## Reopen Petitions
 
