@@ -80,3 +80,13 @@
 - Still open after round 2: O-15 (seeded prose floods the signals watchlist; no `valid_until`; sell
   conviction sits on the alert threshold) — blocking, operator's call; O-20 (feed-structure claims
   unverified) — a live read-only fetch of the three staging sources is running to check them.
+- **Live check (2026-11-17, read-only, staging `extract_website_content`):** all three website
+  sources fetched without error (SEC `request_headers` are honored). 8-K feed: 72.5k chars, 100
+  entries, title `8-K - <Company> (<CIK>) (Filer)` (and `8-K/A - …`), summary lists `Item N.NN: …`
+  for every entry, tags `category/id/link/summary/title/updated`, no ticker anywhere. Form 4 feed:
+  56k chars, 100 entries (56 Reporting / 44 Issuer) paired by `AccNo`, no transaction data, no
+  ticker. PR Newswire: 201k chars, 25 anchors, each with time + headline + teaser; 8 of 25 carried
+  an exchange:ticker in the teaser; hrefs relative. Robinhood Snacks (email) not checked.
+- **Round-2 gate — user decisions:** watchlist signals from seeded prose expire after 7 days; 8-K
+  scope narrow (sell 0.6 for 1.03/3.01/4.02, watchlist 0.3 for 1.01/2.01, skip the rest); Form 4
+  cluster-only watchlist; **run another round** (round 3).
