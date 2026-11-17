@@ -1014,3 +1014,35 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-17 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-trading; upstream portfolio `ListPositions` unchanged. Key reuse patterns: the `collectFills` fail-closed drain at portfolio_service.go:1111-1167, and the existing `ppErr` skip at trading.go:2240-2243).
+- Phase 1 Grilling: 6 rounds (full). The round cap was raised to 6 by operator override at the r5 gate.
+  - Chosen approach: a trading-local `listAccountPlatformPositions` drains `ListPositions`, 500 per page, with a per-page timeout and `x-user-id`. It runs the token guards before the duplicate-symbol merge and returns either a complete map or an error that routes into the unchanged `ppErr` skip. Each skip is counted on `trading.reconciliation.position_check_skipped{outcome=rpc_error|deadline|cursor_invalid}`.
+  - Rejected: a shared deadline, an inline loop, tolerating duplicates, a page cap, a config key, systemic counting, reusing `escalation.systemic`, an unlabelled counter, and text-match classification (R-1..R-17).
+- Operator decision 2026-11-17 (design gate r6), binding: the design is APPROVED. The two r6 blocking objections are resolved as follows:
+  1. O-20: `reconcilePositionSkipCause` maps to `deadline` when `errors.Is(err, context.DeadlineExceeded) || status.Code(err) == codes.DeadlineExceeded`. There is one hardening row per form. The AC-2 deadline fake returns a plain `context.DeadlineExceeded`.
+  2. O-21: `/sdd-spec` appends FR-5 to product-spec.md and `@AC-4 @FR-5` to acceptance.feature. These assert the counter's outcome for the AC-2 error case (`rpc_error`) and the AC-3 repeated-token case (`cursor_invalid`). IDs are append-only.
+  - The single `cursor_invalid` label is adopted (O-22).
+  - The design also adopts O-23 (typed `ReconcileSkipOutcome`) and O-24 (`context.Canceled` → `rpc_error`, counted, documented and pinned by a hardening row).
+  - The debate.md Objections rows are left as the register recorded them; design.md § Rounds records the resolution.
+- Constitution rules touched: C-11, C-13, C-15, C-16, C-18, F-04, F-07, P-02, P-03, PLAT-4, PLAT-N1. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- The approach is design.md § Chosen Approach (D-1..D-24 in debate.md). It also carries the operator r6 resolutions of O-20 and O-21 above.
+
+### Open Threads
+
+- Shutdown burst of `rpc_error` skips on deploy. Document it in `docs/reconciliation.md:98`; any future alert needs a rate or for-duration window. Target: the docs step.
+- Tick time grows by ceil(n/500) × `broker.timeout_ms` per large account; page deadlines surface as `outcome=deadline`. Target: accepted; watch post-launch.
+- `resolveUnknownIntents` stays skipped while a platform read is incomplete. Target: note in the integration PR description.
+- The guards rely on portfolio's UNIQUE(user_id, symbol, trading_mode, account_id) and exactly-once keyset paging; a portfolio change could cause false skips (`cursor_invalid`). Target: accepted.
+- Counter tests must call `installMetricReader(t)` as their first statement and must not use `t.Parallel`. Target: the RED test step.
+- The deadline-ordering assertion depends on page 1's 5 ms sleep advancing the monotonic clock. Target: the RED test step.
+- The live TradingMode mapping on later pages is not asserted. Target: accepted, out of scope (C-18).
+- No alert or dashboard; a future one must bring its `packages/otel/produced-signals.tsv` row. Target: a future PR.
+- 358 must not merge ahead of feature 353's lifecycle. Target: the integration PR and merge-order.
+- `/sdd-spec` must append FR-5 and `@AC-4 @FR-5` (operator r6). Target: `/sdd-spec`.
