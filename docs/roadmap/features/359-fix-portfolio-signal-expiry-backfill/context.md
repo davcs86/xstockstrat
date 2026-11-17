@@ -589,3 +589,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `docs/runbooks/signal-watchlist-expiry-backfill.md`, `docs/runbooks/CLAUDE.md`
 - Deviations: none.
 - [ ] Still open from impl-spec review: Step 2 `pg_stat_activity` assumptions, Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew, the 352 overlap (Step 5's index row is one of the rebase sites).
+
+## Session 2026-11-17 — sdd-execute sequential, Step 6
+
+- Tooling setup (step 6): docs step, none needed.
+
+### Step 6 — docs: durable acceptance — CHANGE 281 @AC-16, retitle @AC-17 (@feature-359) [done]
+- Durable 281 suite: @AC-16 tagged `@feature-359` and its last When/Then replaced with the 3-day grace sequence (mark `signal_id NULL`, `valid_until` 3 days after APPLY; a tick within 3 days keeps PLTR; a tick after removes it with one `signal_entry_removed_untracked` event). C-16 CHANGE sign-off: operator decision 2026-11-17 (FR-3 / @AC-3). @AC-17 tagged `@feature-359` and retitled "…rescued by a live signal before it is pruned"; its steps are unchanged (PRESERVE). No other scenario touched.
+- Verification (local, `.sdd-logs/v-1.log`, `exit=0`): `@feature-359` only at `:127` and `:142`; no `next prune tick runs`/`before the next tick` match; `Scenario` count 18, equal to `origin/main-dev`. TDD: N/A (docs). Config-key wiring gate: N/A (no config key).
+- Files modified: `services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature`
+- Deviations: none.
+- [ ] Still open from impl-spec review: Step 2 `pg_stat_activity` assumptions, Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew, the 352 overlap.

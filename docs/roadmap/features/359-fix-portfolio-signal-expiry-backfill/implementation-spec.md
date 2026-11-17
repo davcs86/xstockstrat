@@ -316,7 +316,7 @@ grep -n "changed since REPORT\` stays untracked" docs/runbooks/signal-watchlist-
 
 ### Step 6 — docs: durable acceptance — CHANGE 281 @AC-16, retitle @AC-17 (@feature-359)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio` (durable business-rule suite)
 **Files**:
 - `services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature` — modify
