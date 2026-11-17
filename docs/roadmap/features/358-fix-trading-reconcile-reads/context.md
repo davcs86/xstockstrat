@@ -1091,3 +1091,26 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - Next: `/sdd-review fix-trading-reconcile-reads impl-spec`, then `/sdd-execute fix-trading-reconcile-reads`.
 - These carry over from the sdd-design session unchanged: the shutdown burst, tick-time growth, the
   `resolveUnknownIntents` skip, the merge order after feature 353, and no alert or produced-signals row.
+
+## Session 2026-11-17 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 5 warnings, no floor breaches. Overlap: WARN (file-level, rebase-only). Advisory; lifecycle unchanged.
+- Addressed in implementation-spec.md (commit `e8d68b65`):
+  - Step 4 coverage command: `GOWORK=off` was an assignment-only prefix, so `go list` and `go test` did not see it. The command now uses `export GOWORK=off && ...`, which matches CI (`ci.yml:374-377`).
+  - Step 4 `-run` filter matched no named tests: items 2-6 and 8 now name them (`TestReconcileTick_358_AC1_DrainsAllPages_NoFindingNoHalt`, `TestReconcileTick_358_PositiveControl_Page2MismatchHalts`, `TestReconcileTick_358_AC2_Page2RPCError_SkipsAccountForTick`, `TestReconcileTick_358_AC2_Page2Deadline_SkipsAccountForTick`, `TestReconcileTick_358_AC3_IgnoredToken_SkipsAccountForTick`, `TestListAccountPlatformPositions_358_Guards`, `TestReconcilePositionSkipCause_358`). Verification now requires all seven to appear by name in the output.
+  - Step 2 RED ran out of order: item 1 now says the RED is a temporary pre-Step-1 run, kept uncommitted while Step 1 lands. New item 4 says the Step 2 commit holds both edits.
+  - Step 4 two-pass staging (P-06/C-08): item 7 now spells out the sequence. Pass 1 writes items 1-6 uncommitted and captures RED before Step 3. Step 3 is then committed on its own. Pass 2 adds item 8 and lands the single Step 4 commit.
+- Still open (carried to the /sdd-execute checkpoint):
+  - [ ] Broker and trading-mode coverage is prose-only. No Step 4 test exercises `BROKER_TYPE_IBKR` or iterates both broker types, and AC-1 uses only the paper-mode fake. Low risk, because the helper does not branch on broker (Step 3 Evidence). Not added to the spec because it would widen test scope beyond the reviewer's ask. The executor or owner decides whether to add one IBKR row.
+  - [ ] Overlap WARN, rebase-only:
+    - `internal/telemetry/otel.go` with 337 (in-progress, disjoint regions);
+    - `internal/service/trading.go` with 349 and 347 (code-completed, different functions);
+    - `trading_reconciliation_test.go` with 347 (adjacent fake).
+    Rebase before integration.
+  - [ ] Merge order: 358 must merge after 353 (`fix-listpositions-nextpagetoken-skips`). Neither feature has a `merge-order.md` row. This session may edit only this feature's directory, so the row is not added here. Track it at the integration PR.
+
+### Open Threads (from sdd-review impl-spec)
+
+- IBKR and both-broker test coverage for the drain is prose-only. Decide at /sdd-execute.
+- Rebase on 337, 347 and 349 before integration (file-level overlaps only).
+- 358 merges after 353. No merge-order.md row exists yet.
