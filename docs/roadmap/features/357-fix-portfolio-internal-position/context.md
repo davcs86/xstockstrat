@@ -681,3 +681,93 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - The integration PR to `main-dev` is opened with Steps 1–8 done and status `in-progress`; its description states the pending D-9 gate as a pre-promotion requirement.
 - Files modified: `docs/roadmap/features/357-fix-portfolio-internal-position/context.md`
 - Deviations: none (the step is deferred, not deviated; Verification not run because there is no result to check)
+
+## Session 2026-11-17 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-portfolio-internal-position (feature 357)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-portfolio/acceptance/fix-portfolio-internal-position.feature | CREATE | NEW | Outline over GetPortfolio, GetPnL, broadcastSnapshot and checkRiskLimits. The subject is all portfolio. No existing scenario asserts a 501-position drain. |
+| AC-2 | same | CREATE | NEW | Page error in an RPC reader returns an error. |
+| AC-3 | same | CREATE | NEW | Account-scoped GetPortfolio past 500 positions. |
+| AC-4 | same | CREATE | NEW | Batched quote enrichment while draining. Related to quote-fanout-batching.feature, but not the same outcome (see Notes). |
+| AC-5 | same | CREATE | NEW | No partial snapshot or alert on a page error in the background readers. |
+| AC-6 | same | CREATE | NEW | Position-read failure skips concentration, drawdown still alerts. |
+
+No @feature-357 tag exists anywhere under services/, so there are no DUPs. The suite file does not exist yet, so it is a CREATE.
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-portfolio-internal-position.feature (CREATE) ---
+# Promoted from docs/roadmap/features/357-fix-portfolio-internal-position/acceptance.feature (C-16). Scenarios verbatim; do not edit by hand.
+Feature: fix-portfolio-internal-position (bug fix)
+  Regression guard: portfolio internal position reads cover every position past the first 500 rows.
+
+  @AC-1 @FR-1 @FR-2 @FR-3 @FR-4 @regression @feature-357
+  Scenario Outline: Internal position readers cover every position past the first 500
+    Given user "u-1" holds 501 positions in trading mode PAPER, the 501st ordered last by (symbol, trading_mode, account_id)
+    When <reader> runs for "u-1" in PAPER
+    Then the result is computed over all 501 positions, including the 501st
+    And <observable>
+
+    Examples:
+      | reader            | observable                                                                                                        |
+      | GetPortfolio      | the response lists 501 positions and its total market value includes the 501st position's market value            |
+      | GetPnL            | unrealized_pnl includes the 501st position's unrealized P&L                                                       |
+      | broadcastSnapshot | the persisted snapshot has open_positions 501 and equity that includes the 501st position's market value          |
+      | checkRiskLimits   | with the 501st position at 30% of total market value and risk.concentration_limit_pct at 0.20, a concentration alert names its symbol |
+
+  @AC-2 @FR-5 @regression @feature-357
+  Scenario Outline: A page error in an RPC reader is returned, not a partial result
+    Given user "u-1" holds 501 positions in PAPER and the repository read of the second page fails
+    When <reader> runs for "u-1" in PAPER
+    Then <reader> returns an error instead of a result computed over the first 500 positions
+
+    Examples:
+      | reader       |
+      | GetPortfolio |
+      | GetPnL       |
+
+  @AC-3 @FR-1 @regression @feature-357
+  Scenario: Account-scoped GetPortfolio covers every position of that account past the first 500
+    Given user "u-1" holds 501 positions in PAPER on account "acct-a" and 3 positions in PAPER on account "acct-b"
+    When GetPortfolio runs for "u-1" in PAPER with account_id "acct-a"
+    Then the result covers all 501 "acct-a" positions and none of the "acct-b" positions
+
+  @AC-4 @FR-6 @regression @feature-357
+  Scenario: Draining past 500 positions keeps quote enrichment batched
+    Given user "u-1" holds 501 unpriced positions in PAPER
+    When GetPortfolio runs for "u-1" in PAPER
+    Then no per-position GetLatestQuote call is made
+    And at most 2 GetLatestQuotes batch calls are made
+
+  @AC-5 @FR-5 @regression @feature-357
+  Scenario: A page error in the background readers produces no partial snapshot or risk alert
+    Given user "u-1" holds 501 positions in PAPER, one of the 501 is at 30% of total market value with risk.concentration_limit_pct at 0.20, and the repository read of the second page fails
+    When broadcastSnapshot and checkRiskLimits run for "u-1" in PAPER
+    Then no snapshot is persisted or broadcast for "u-1"
+    And no concentration alert is emitted for "u-1"
+    And each reader logs the page-read failure
+
+  @AC-6 @FR-5 @regression @feature-357
+  Scenario: A position-read failure skips concentration but drawdown still alerts
+    Given user "u-1" holds 501 positions in PAPER, the repository read of the second page fails, and account "brk-1" is 20% below its peak equity with risk.max_drawdown_pct at 0.10
+    When checkRiskLimits runs for "u-1" in PAPER
+    Then no concentration alert is emitted for "u-1"
+    And exactly one drawdown alert names account "brk-1"
+    And the concentration check logs the page-read failure
+
+### Notes / ambiguities / conflicts
+- Every scenario is routed to portfolio. Its feature.md Reviewers table names only xstockstrat-portfolio, and every Then asserts on portfolio readers (GetPortfolio, GetPnL, broadcastSnapshot, checkRiskLimits). None spans services, so nothing goes to platform.feature.
+- AC-4 vs services/xstockstrat-portfolio/acceptance/quote-fanout-batching.feature. That suite asserts one GetLatestQuotes call for 30 symbols and no per-position GetLatestQuote. AC-4 asserts at most 2 batch calls when draining 501 positions. The outcomes differ, so it is NEW. Both share the "no per-position GetLatestQuote" clause, which is a possible consolidation candidate for a human. No deletion planned.
+- AC-6 vs services/xstockstrat-portfolio/acceptance/fix-after-hours-positions-priced.feature (line 65, "Any unpriced position skips concentration but drawdown still alerts"). The trigger differs (page-read failure vs unpriced positions) and the observable is the same shape (concentration skipped, drawdown alerts). This is complementary, not a conflict, so it is NEW. It is a loose OVERLAP at most.
+- AC-5 and AC-1 (checkRiskLimits) share the concentration_limit_pct 0.20 setup with fix-push-untargeted-broadcast.feature and fix-after-hours-positions-priced.feature. Those assert alert text and targeting, not pagination. No CONFLICT found.
+- The existing fix-listpositions-nextpagetoken-skips.feature and fix-ledger-query-pagination.feature were not read in full. The grep showed only a 500-event ledger page in the latter (line 21). A human could glance at the former for overlap with AC-1 and AC-3. Neither is expected to contain 501-position internal-reader guarantees.
+- The Feature: header text and provenance comment are mine. The scenario bodies are verbatim, and @regression is kept. The acceptance/ directory already exists.
+- I read acceptance.feature from the working tree at docs/roadmap/features/357-fix-portfolio-internal-position/acceptance.feature, not from origin/feature/fix-portfolio-internal-position. I had no git access. The caller should confirm the two match.
+
+### Coverage check
+- Source scenarios: 6 (@AC-1 to @AC-6). AC-1 and AC-2 are Scenario Outlines. Planned (NEW+DUP+OVERLAP): 6 (6 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Nothing skipped.
+```
