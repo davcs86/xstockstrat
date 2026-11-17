@@ -30,7 +30,7 @@ Forty-five tools:
   set_config          — writes one config value incl. secrets (encrypted at rest; admin-scoped)
   get_user_metadata   — fetches the calling user's own profile metadata (read-only)
   set_user_metadata   — partial-updates the calling user's own profile metadata
-  list_watchlists     — lists the caller's own watchlists from portfolio, paginated (read-only)
+  list_watchlists     — lists the caller's own watchlists, paginated; idempotently ensures Signals
   get_watchlist       — reads one of the caller's watchlists incl. its stocks (read-only)
   manage_watchlist    — create/update(read-modify-write merge)/delete a caller-owned watchlist
   manage_watchlist_symbols — add/remove stocks on a caller-owned watchlist (add = MANUAL source)
@@ -2151,7 +2151,9 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def list_watchlists(ctx: Context, limit: int = 0, page_token: str = "") -> dict:
-        """List the calling user's OWN watchlists from xstockstrat-portfolio (read-only).
+        """List the calling user's OWN watchlists from xstockstrat-portfolio. A first-page call
+        (empty page_token) idempotently ensures the caller's system-managed "Signals" list, so it
+        is returned even for a user who never ingested a signal.
         limit: max lists to return; 0 = server default. Pagination is stable across pages.
         page_token: opaque token from a prior call's next_page_token; "" starts at the first page.
         Returns {"watchlists": [<watchlist>, ...], "next_page_token": <str>} where each watchlist is
