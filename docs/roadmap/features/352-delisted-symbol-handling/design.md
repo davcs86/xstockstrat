@@ -1,7 +1,7 @@
 # Design: delisted-symbol-handling
 
 **Created**: 2026-11-17
-**Rounds**: 5 (full; termination: DRAFT — awaiting the round-5 gate, not approved)
+**Rounds**: 6 (full, round cap of 5 overridden by the operator 2026-11-17; termination: DRAFT — under round-6 review, not approved)
 **Approved by**: _pending_
 **Grounded in**: recon.md
 **Debate register**: debate.md
@@ -80,8 +80,9 @@ rebuilds the in-memory flagged set from the database and deletes flagged symbols
 (D-5); only expiry of the 30 s context prevents the rebuild (WARN and counter). Only then does it send
 one recovery alert per recovered row whose flag alert had been claimed (D-16, D-22), each send bounded
 at 15 s within what remains of the 30 s context, so a notify stall cannot cost the rebuild; a send that
-is cut off is lost (the accepted at-most-once residual) and logged at WARN. FR-12's "reported" is met
-as "claimed", not as the `REPORTED` alert state. Recovery alerts go through a new title- and
+is cut off is lost (the accepted at-most-once residual) and logged at WARN. FR-12 keys the recovery
+alert on the flag alert having been claimed for sending, not on the `REPORTED` alert state (operator
+ruling 2026-11-17). Recovery alerts go through a new title- and
 category-parameterised emitter beside `emitWarning`, which delegates to it
 (`xstockstrat-marketdata/internal/service/marketdata_service.go:2160-2171`): WARNING, category
 `symbol_delisting`, untargeted. One INFO per load names why a step did not run — closed day (no
@@ -113,7 +114,8 @@ by the next quote read and leaves again at the next load (D-11).
 
 1. Inbound internal-caller check — a new marketdata allow-list modelled on
    `xstockstrat-portfolio/internal/service/authz.go:9-38`, grants `{portfolio, SyncWatchlistDelistings}`
-   and `{portfolio, AckDelistingAlerts}`. Marketdata has no inbound check today; the check applies to
+   and `{portfolio, AckDelistingAlerts}`. A grant requires both the `x-internal-caller` header and the
+   mTLS peer identity of `xstockstrat-portfolio` (PLAT-9); the header alone is not enough. Marketdata has no inbound check today; the check applies to
    these two RPCs only and no existing marketdata RPC gains one.
 2. More than 20 000 symbols → `InvalidArgument`. Normalize, dedupe, sort.
 3. Union rewrite: an ordered insert of new symbols, then an anti-join delete of symbols no longer in the
@@ -319,7 +321,8 @@ K drains from system-managed lists over ⌈K/100⌉ prune ticks. Portfolio deplo
 - [ ] A hook timeout on a load where a symbol was servable misses a reset; the symbol can flag earlier than the 5-day rule (accepted by the operator; WARN and counter).
 - [ ] Another marketdata instance's flag is invisible to this instance's backfills until its next load.
 - [ ] A quote read re-warms a flagged symbol until the next load (D-11).
-- [ ] A recovery between a claim and a successful send yields a recovery alert for an undelivered flag alert, and possibly a flag alert after it; FR-12's "reported" is read as "claimed".
+- [ ] A recovery between a claim and a successful send yields a recovery alert for an undelivered flag alert, and possibly a flag alert after it (accepted by the operator: FR-12 keys on "claimed").
+- [ ] A flagged symbol that becomes servable over a weekend or holiday stays marked and filtered, but is never removed or alerted, until the first trading-day load (operator ruling: recovery on trading days only; FR-2 amended).
 - [ ] A sync spanning an asset-set load can remove a symbol that was relisted and re-added to a system-managed list within the same 15 s; the next signal re-adds it.
 - [ ] A flagged symbol on a system-managed list shows no marker until portfolio's next tick, and shows the marker while its alert is `PENDING` until a later tick removes it.
 - [ ] A hook that times out before the rebuild leaves a newly flagged symbol out of the in-memory flagged set until the next successful hook (up to one refresh interval); it backfills as `FAILED`, not `SKIPPED`, in that window.

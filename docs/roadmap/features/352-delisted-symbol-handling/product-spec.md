@@ -95,7 +95,8 @@ starts, extends nor confirms an absence.
 FR-2. **Automatic recovery.** When a flagged symbol is servable again in a successfully loaded asset
 set, the flag clears and the symbol behaves as a normal watchlist symbol. A symbol that was removed
 from a "Signals" watchlist under FR-3 is not re-added by the recovery itself. A flag persists, and is
-re-evaluated by every successful asset-set load, whether or not the symbol is still on any watchlist;
+re-evaluated by every successful asset-set load on a trading day, whether or not the symbol is still on
+any watchlist;
 it clears only on recovery (D-17).
 
 FR-3. **System-managed watchlists: remove.** When a symbol becomes flagged delisted it is removed from
@@ -150,7 +151,8 @@ names the symbol, the reason, and how many system-managed watchlists it was remo
 names; a list locked at that moment is removed on a later refresh without a further alert. Delivery is
 at-least-once: a duplicate is possible only after a crash or timeout between sending and acknowledging.
 One alert per symbol is also emitted when a flag clears on recovery (FR-2, D-18); it is sent by
-`xstockstrat-marketdata`, names the symbol, and is sent only if the flag had been reported. Each alert
+`xstockstrat-marketdata`, names the symbol, and is sent only if its flag alert had been claimed for
+sending. Each alert
 belongs to one transition and is not repeated on later refreshes.
 
 FR-13. **Symbol profile.** The delisted state (flag, reason, first-unservable date) is stored once per
