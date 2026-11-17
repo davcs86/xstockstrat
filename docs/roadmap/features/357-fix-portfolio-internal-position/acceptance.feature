@@ -6,13 +6,14 @@ Feature: fix-portfolio-internal-position (bug fix)
     Given user "u-1" holds 501 positions in trading mode PAPER, the 501st ordered last by (symbol, trading_mode, account_id)
     When <reader> runs for "u-1" in PAPER
     Then the result is computed over all 501 positions, including the 501st
+    And <observable>
 
     Examples:
-      | reader            |
-      | GetPortfolio      |
-      | GetPnL            |
-      | broadcastSnapshot |
-      | checkRiskLimits   |
+      | reader            | observable                                                                                                        |
+      | GetPortfolio      | the response lists 501 positions and its total market value includes the 501st position's market value            |
+      | GetPnL            | unrealized_pnl includes the 501st position's unrealized P&L                                                       |
+      | broadcastSnapshot | the persisted snapshot has open_positions 501 and equity that includes the 501st position's market value          |
+      | checkRiskLimits   | with the 501st position at 30% of total market value and risk.concentration_limit_pct at 0.20, a concentration alert names its symbol |
 
   @AC-2 @FR-5 @regression
   Scenario Outline: A page error in an RPC reader is returned, not a partial result
@@ -40,7 +41,7 @@ Feature: fix-portfolio-internal-position (bug fix)
 
   @AC-5 @FR-5 @regression
   Scenario: A page error in the background readers produces no partial snapshot or risk alert
-    Given user "u-1" holds 501 positions in PAPER, one of the 501 is a 30% concentration, and the repository read of the second page fails
+    Given user "u-1" holds 501 positions in PAPER, one of the 501 is at 30% of total market value with risk.concentration_limit_pct at 0.20, and the repository read of the second page fails
     When broadcastSnapshot and checkRiskLimits run for "u-1" in PAPER
     Then no snapshot is persisted or broadcast for "u-1"
     And no concentration alert is emitted for "u-1"
