@@ -141,13 +141,55 @@
 - Spec amendments applied at approval (D-28): FR-3, FR-5, FR-6, FR-14 wording; new FR-15;
   `@AC-24..26` appended.
 
+## Session 2026-11-17 — sdd-spec
+
+- Generated implementation-spec.md with 11 steps. Status: design-approved → implementation-ready.
+- Tree: `ccr-424ada30-29m2lv@9703dad ≡ origin/ccr-424ada30-29m2lv` (`origin/main-dev@f0ec13f` is an
+  ancestor). `origin/feature/mediated-source-extraction-instructions` does not exist and the feature
+  directory is not on `main-dev`, so the harness branch stood in for the feature branch, as in the
+  sdd-design session. No file under ingest, agent, ui, `packages/proto`, `scripts/` or the MCP runbook
+  changed since the recon tree `f8e7a99`.
+- Discovery was done inline (no `codebase-discovery` scouts): recon.md covered the map; this session
+  re-read every cited file for line numbers and the break radius.
+- Step map: design S1 = Steps 1–4 (proto, proto-gen, agent client, agent parity tests — one unit);
+  S2 = Step 5 (migration 017); S3 = Steps 6–7 (ingest); S4 = Steps 8–9 (agent); S5 = Steps 10–11 (UI).
+- Key codebase findings:
+  - `SignalSource` field 15 and ingest migration 017 are free on this tree, on `origin/main-dev` and
+    on all 66 `origin/{feature,feature-steps,fix,hotfix}/*` heads (shallow-fetched for this check;
+    highest `SignalSource` field on any of them is 14; none has an ingest migration ≥ 017).
+    `claude/*` / `ccr-*` heads were not scanned.
+  - `ruff` enforces 100 columns in the agent and the default text has lines up to 881 characters, so
+    `_DEFAULT_EXTRACTION_INSTRUCTIONS` must be concatenated literals; Step 8 compares the constant
+    with design.md by a one-off command (design.md is deleted at archive, so no committed test can).
+  - `insert_source` / `update_source` are called directly only by `test_signal_sources.py:257,282,301`;
+    every other test patches them with `AsyncMock` or a `**kw` fake, so the new required keyword
+    breaks only those three calls and the four from-the-end positional assertions (`:274,276,316,317`).
+  - `ui/src/app/config-ui/sources/page.tsx` has no write call; the two pages in Step 10 are the only
+    UI signal-source write surfaces.
+  - A `page.route` fixture cannot hold `BigInt` (the shared source fixtures do), so
+    `SIGNAL_SOURCE_MEDIATED_LEGACY` is Connect-JSON shaped.
+  - The runbook's `list_signal_sources` section documents source-health fields the tool does not
+    return (`mcp-tools.md:149-152` vs `tools.py:561-571`). Existing drift: Step 8 rewrites only the
+    return example; the paragraph is reported, not fixed.
+- Spec-level choices (listed in the spec's "Assumptions"): validator message wording; the ingest
+  constant `_MEDIATED_EXTRACTOR_MODULE`; the new keyword has no default; test module names; the UI
+  over-cap message and `aria-label`; the concrete `@AC-15` rule (`non-mediated` within 200 characters
+  of every `extractor_module`; none in the prompt file); offline `pglast` parse for the migration.
+- Ledger: `insights.md` / `fails.md` were filtered to signal-source, template, agent-parity and
+  migration-harness entries, not read end to end.
+- Nothing was committed by this session.
+
 ## Open Threads
 
 - [ ] Operator reviews the five instruction texts (design.md § Instruction texts) before the
-  migration step merges — after that they change only by a new migration. — S2.
-- [ ] Re-derive proto field 15 and ingest migration prefix 017 from the union of open branches. — /sdd-spec.
-- [ ] Feature 328 overlap on `agent/app/tools.py` (no merge-order row; second merger rebases). — S4.
+  migration step merges — after that they change only by a new migration. — Step 5.
+- [x] Re-derive proto field 15 and ingest migration prefix 017 from the union of open branches. —
+  done by /sdd-spec 2026-11-17 (both free; `claude/*` / `ccr-*` heads not scanned). Re-check at
+  `/sdd-execute` Step 1 and Step 5.
+- [ ] Feature 328 overlap on `agent/app/tools.py` (no merge-order row; second merger rebases). — Step 8.
 - [ ] Runbook guidance for hosts without a clock, and a pointer to the watchlist-expiry backfill
-  runbook for entries the 7-day rule does not reach. — S4.
-- [ ] Note in the S3 PR that admin-authored mediated templates without prose stop instantiating. — S3.
-- [ ] State the lazy `""` → noop flip in the ingest findings row. — S3.
+  runbook for entries the 7-day rule does not reach. — Step 8.
+- [ ] Note in the Step 6 PR that admin-authored mediated templates without prose stop instantiating. — Step 6.
+- [ ] State the lazy `""` → noop flip in the ingest findings row. — Step 6.
+- [ ] Report the `list_signal_sources` runbook drift (source-health fields the tool does not return)
+  through `/sdd-qa defect`. — after Step 8.
