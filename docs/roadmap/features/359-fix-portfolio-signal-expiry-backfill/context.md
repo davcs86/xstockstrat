@@ -578,3 +578,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: DEV-3 (shared with Step 3).
 - [ ] Open: the CI `Portfolio DB test (TimescaleDB)` job must show `TestBackfill_StrictUntrackedRemoval` green, and `:443`, `:349`, `:252-295` plus the Step 2 guards still green with the grace. The pre-Step-3 RED is still unproven.
 - [ ] Still open from impl-spec review: Step 2 `pg_stat_activity` assumptions, Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew (watch the CI run), the 352 overlap.
+
+## Session 2026-11-17 — sdd-execute sequential, Step 5
+
+- Tooling setup (step 5): docs step, none needed.
+
+### Step 5 — docs: backfill runbook and runbooks index for the locked per-row tx and the 3-day mark grace [done]
+- Runbook: §1 UNTRACKED row (`now() + 72 hours`, pruned on the first tick after APPLY + 72h unless rescued), §3 (one short transaction per row), §7 (parent-row `FOR NO KEY UPDATE` lock then INSERT, the "changed since REPORT stays untracked until REPORT and APPLY are re-run" sentence, R-6 no-lock-timeout operator note), §8 retitled "3-day grace for marks; none for seed_expired" (also reworded its "one interval to stop the removals" sentence to seeds only), §9 emergency window, §11 monitoring. Index row in `docs/runbooks/CLAUDE.md` updated. §6 seed_expired text unchanged.
+- Verification (local, `.sdd-logs/v-1.log`, `exit=0`): no `no grace`/`No grace`/`autocommit` match; `72 hours|72h|3-day` at runbook `:27`, `:165`, `:171`, `:189`, `:235` and `CLAUDE.md:14`; one "changed since REPORT` stays untracked" match at `:156`. TDD: N/A (docs).
+- Files modified: `docs/runbooks/signal-watchlist-expiry-backfill.md`, `docs/runbooks/CLAUDE.md`
+- Deviations: none.
+- [ ] Still open from impl-spec review: Step 2 `pg_stat_activity` assumptions, Step 2 10s-poll flakiness, Step 4 `[t0+72h, t1+72h]` sampling skew, the 352 overlap (Step 5's index row is one of the rebase sites).

@@ -272,7 +272,7 @@ New logic is in an excluded package (`repository/`), so no coverage threshold ap
 
 ### Step 5 — docs: backfill runbook and runbooks index for the locked per-row tx and the 3-day mark grace
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/signal-watchlist-expiry-backfill.md` — modify
