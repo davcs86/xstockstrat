@@ -394,3 +394,22 @@
   marketdata `010` / ingest `017` / config `054` and all proto field numbers are still free on all 218
   origin refs.
 - **Tooling**: `go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (go1.27, scratchpad bin) · migrate ⬇ v4.17.1 (scratchpad bin, Step 10 generation only) · uv ✓ · ruff ✓ · node ✓ 24.22.1 (/opt/node24) · pnpm ✓ 9.15.9 · buf via Docker codegen image · psql/initdb ✓ (Step 10 throwaway only)`
+
+## Session 2026-11-17 — sdd-execute sequential, step log
+
+### Step 1 — proto (unit 1+2) — done
+- Additive fields and RPCs exactly as specced: `BackfillSymbolOutcome`, `BackfillSymbolResult`,
+  `DelistedState` (common); `symbol_results` on `BackfillBarsResponse=4`, `BackfillFundamentalsResponse=3`,
+  `BackfillJob=16`; `WatchlistBinding.delisted=4`; `SyncWatchlistDelistings` / `AckDelistingAlerts`,
+  `DelistingAlertState`, `FlaggedSymbol`.
+- TDD: N/A (proto). `buf lint` and `buf breaking` passed inside the codegen container; `buf breaking` ran
+  against local `main-dev`, which is the same tree as the feature branch before this unit.
+
+### Step 2 — proto-gen (unit 1+2) — done
+- Generated with `python3 scripts/localenv-setup.py` (pinned Docker codegen image). 36 generated files
+  changed, all in the step's `**Files**` list and all inside `common`/`marketdata`/`ingest`/`portfolio`;
+  the 9 listed files that did not change are not staged.
+- The first container run could not compile `gen/ts` (`tsc: not found`) because the workspace had no
+  `node_modules`; `pnpm install --frozen-lockfile` fixed it. No lockfile change.
+- TDD: N/A (proto-gen). Verification: marketdata `go build`, portfolio `go build` + `go vet`, trading
+  `go vet`, ingest `pytest tests/test_backfill_jobs.py` (15 passed), UI `tsc --noEmit` — all passed.

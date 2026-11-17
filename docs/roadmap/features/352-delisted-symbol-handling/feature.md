@@ -15,6 +15,7 @@
 | 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full; round cap overridden by the operator) and approved; recon.md + debate.md + design.md written |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 32 steps |
 | 2026-11-17 | `implementation-ready` (unchanged) | /sdd-execute | Re-spec gate: steps 20, 22, 23, 24, 25, 28, 32 aligned with `main-dev@9a685196` after feature 351 landed (line shifts; Step 25 harness note; 351 PRESERVE rows) |
+| 2026-11-17 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1+2 landed) |
 
 ---
 
@@ -58,4 +59,4 @@ is no longer in the snapshot; `xstockstrat-analysis` and `xstockstrat-config` ea
 
 ## Next Action
 
-`/sdd-review delisted-symbol-handling impl-spec` — validate implementation spec, then `/sdd-execute delisted-symbol-handling`
+`/sdd-execute delisted-symbol-handling sequential` — continue the step loop

@@ -246,6 +246,8 @@ message WatchlistBinding {
   // Entry provenance (feature 127); first-writer-wins under ON CONFLICT DO NOTHING.
   // Unspecified on read → treat as MANUAL.
   WatchlistEntrySource source = 3;
+  // Server-set, output only; presence means flagged delisted.
+  xstockstrat.common.v1.DelistedState delisted = 4;
 }
 
 // A symbol refused by a watchlist write because marketdata reports it unservable (feature 282).

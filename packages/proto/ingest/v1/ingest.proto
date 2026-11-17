@@ -47,6 +47,7 @@ message BackfillJob {
   int32 chunks_total = 13;      // planned chunk count (FR-5)
   int32 chunks_completed = 14;  // chunks in COMPLETED state (FR-5)
   BackfillDataKind data_kind = 15;  // what the job backfills; UNSPECIFIED == BARS (feature 198)
+  repeated xstockstrat.common.v1.BackfillSymbolResult symbol_results = 16;
 }
 
 enum BackfillStatus {

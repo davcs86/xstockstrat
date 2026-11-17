@@ -1,6 +1,6 @@
 # Implementation Spec: delisted-symbol-handling
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-17
 **Feature**: `docs/roadmap/features/352-delisted-symbol-handling/feature.md`
 **Total Steps**: 32
@@ -142,7 +142,7 @@ the verification. `go_gate` still runs so the service total cannot regress.
 
 ### Step 1 — proto: per-symbol backfill results, delisted state, sync and acknowledge RPCs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify
@@ -193,7 +193,7 @@ grep -n "delisted = 4" packages/proto/portfolio/v1/portfolio.proto
 
 ### Step 2 — proto-gen: regenerate Go, Python and TypeScript stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/common/v1/common.pb.go` — modify (generated)
