@@ -5,7 +5,7 @@
 **Defect Report**: `docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-16
-**Last Updated**: 2026-11-16
+**Last Updated**: 2026-11-17
 
 ---
 
@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report |
 | 2026-11-16 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
 
 ---
 
@@ -25,8 +26,16 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — decisions, rejected alternatives, objections
 - [Design](design.md) — approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-listpositions-nextpagetoken-skips`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| Service owner (`xstockstrat-portfolio`) | P&L calculation accuracy, position snapshot consistency, concurrent write safety | 1, 2, 3, 4 |
 
 ---
 
@@ -36,4 +45,4 @@
 
 ## Next Action
 
-`/sdd-spec fix-listpositions-nextpagetoken-skips` — generate implementation spec from the approved design
+`/sdd-review fix-listpositions-nextpagetoken-skips impl-spec` — validate implementation spec, then `/sdd-execute fix-listpositions-nextpagetoken-skips`

@@ -30,3 +30,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Constitution rules touched: C-01, C-08, C-10, C-13, C-14, C-15, C-16, C-18, P-06; Floor breaches: none.
 - Open Threads: exec-mode encoding risk -> test step; plan-shape note; deploy-straddle (confirm QueryStateMessages on /trader/positions) -> spec step; follow-up defect reports (analysis drain hardening, WatchlistRepo.ListByUser, internal 500-row truncation) to file after merge.
 - Status: draft -> design-approved.
+
+## Session 2026-11-17 — sdd-spec
+
+- Tree: ccr-fix-listpositions-nextpagetoken-skips@384bf65 ≡ origin/ccr-fix-listpositions-nextpagetoken-skips (origin/main-dev@ccbe424 is an ancestor). `feature/fix-listpositions-nextpagetoken-skips` does not exist on origin. Stayed on the ccr branch because the feature directory exists only there (same call recon made).
+- Wrote implementation-spec.md with 4 steps, all in xstockstrat-portfolio. Status: design-approved → implementation-ready.
+  - Step 1 [service]: repo cursor codec, `ErrInvalidPageToken`, `scanPositionRowWithMode`, and the SQL. It also carries the 3 exact pin edits at `offline_account_pnl_test.go:530,531,572`, so it passes its own verification without a Lands with.
+  - Step 2 [test]: pgxmock tests, the codec table test, and the dbtest traversal + oracle tests over both exec modes. Covers AC-1.
+  - Step 3 [service]: `classifyListPositionsError` at `portfolio_handler.go:115`.
+  - Step 4 [test]: classifier test at the Connect and gRPC edges.
+- Key codebase findings:
+  - Bug lines: `portfolio_repo.go:161-162` (symbol-only keyset) and `:191-196` (`positions[pageSize].Symbol`). The ORDER BY at `:171` has no tiebreaker.
+  - The only empty-token exact pins are `offline_account_pnl_test.go:530,531,572`. The `anyArgs` pins keep their arg count.
+  - dbtest cleanup today covers watchlists only (`dbtest_helpers_test.go:41-46`). There is no positions seeder. To get the Exec-mode pool, the spec extends `testPool` with variadic `opts ...func(*pgxpool.Config)`.
+  - C-13: the repository-package pgxmock row header (`portfolio_repo_test.go:60-63`) gets a second consumer, so Step 2 hoists it into `positionRowCols`.
+  - The design assumption about the deploy straddle was wrong. `/trader/positions` renders the error with hand-rolled markup (`page.tsx:511` "Failed to load positions"), not `QueryStateMessages`. The error is still visible, and the user recovers by reload or `resetPaging` (`:58-62`). That markup is a pre-existing C-17 deviation and out of scope; there is no UI step.
+  - TimescaleDB is not installed locally, so the dbtest RED/GREEN is authoritative only in CI `portfolio-db-test` (or on a host with migrated TimescaleDB). The local RED is the pgxmock first-page test.
+- Open thread for /sdd-review: `acceptance.feature` has no scenario for the malformed-token → InvalidArgument path (D-4). Step 4 marks Covers as `—` and guards it as a design decision. Adding an `@AC-2` is a product-spec call.
