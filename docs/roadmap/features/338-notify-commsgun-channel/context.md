@@ -80,4 +80,4 @@
 
 **Ledger entries written**: insights.md (4), fails.md (1) — see the 2026-11-18 entries.
 **Runtime-invariant recommendations (→ /context-constitution)**: notify candidate (likely already carried by NOTIFY-13/17 and `email-providers.md`): category `commsgun` is reserved and excluded from email; a single notify instance only (in-memory claim and latches); `app_id`/`to_email` change only with an empty outbox. No new PLAT-level candidate.
-**Pruned artifacts**: product-spec.md, recon.md, debate.md, design.md, implementation-spec.md — last present at 262f41eb.
+**Pruned artifacts**: product-spec.md, recon.md, debate.md, design.md, implementation-spec.md — last present at 662413d7.

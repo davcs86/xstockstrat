@@ -37,7 +37,8 @@ dark-only, no light-mode toggle — theme values come entirely from the preset).
   - A Next 16 / Turbopack switch needs the alias re-declared as `turbopack.resolveAlias`.
   - **Series palette (feature 342).** `--series-1`…`--series-12` must stay byte-identical in
     `staging.css` and `production.css`; that keeps them outside check (b) (`nonSharedTokens`). Changing
-    a value means rerunning the feasibility gate (feature 342 implementation-spec, Step 3) and the
+    a value means rerunning the feasibility gate (feature 342's `docs/roadmap/features/342-chart-series-palette/context.md`
+    holds its mechanics and the `git show` for the pruned spec's Step 3) and the
     series tests in `themes.test.ts`. Never put a colour literal in `src/lib/seriesPalette.ts`.
 
 - **Adding a primitive not yet in `src/components/ui/`**: `npx shadcn@latest add <name>`.

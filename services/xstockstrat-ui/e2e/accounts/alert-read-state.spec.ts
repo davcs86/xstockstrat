@@ -5,7 +5,7 @@ import { DRAWER_ALERT_CLEAR_A, DRAWER_ALERT_STORED_UNREAD } from '../fixtures/al
 
 /**
  * Feature 344 @AC-6: opening an alert, or marking it read in the inbox, clears the bell badge on
- * the same page. Badge values only, never request counts (D-26).
+ * the same page. Badge values only, never request counts (344 context.md).
  */
 
 const ALERT = DRAWER_ALERT_STORED_UNREAD;

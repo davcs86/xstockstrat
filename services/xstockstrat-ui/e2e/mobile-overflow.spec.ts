@@ -100,7 +100,7 @@ test.describe('wide-content overflow at the lg grid-split breakpoint (FR-4)', ()
 });
 
 /**
- * Feature 344 (D-19): the alert bell is in every segment's header, so check the header fits from
+ * Feature 344 (see its context.md): the alert bell is in every segment's header, so check the header fits from
  * the sm breakpoint up to lg on the non-trader segments. The 1024px trader edge above stays out of scope.
  */
 for (const width of [640, 768, 1024]) {

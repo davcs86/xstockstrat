@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-symbol-page-alerts-ui`
-**GitHub Issue**: n/a (Issues disabled) — report `docs/reports/2026-11-15-ui-symbol-page-and-alerts-drawer-defects-defect.md` (pruned 2026-11-18; `git show 262f41eb:docs/reports/2026-11-15-ui-symbol-page-and-alerts-drawer-defects-defect.md`)
+**GitHub Issue**: n/a (Issues disabled) — report `docs/reports/2026-11-15-ui-symbol-page-and-alerts-drawer-defects-defect.md` (pruned 2026-11-18; `git show 662413d7:docs/reports/2026-11-15-ui-symbol-page-and-alerts-drawer-defects-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-11-15
 **Last Updated**: 2026-11-15

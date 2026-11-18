@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-listpositions-nextpagetoken-skips`
-**Defect Report**: `docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md` (pruned 2026-11-18; `git show d0eea65f:docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md`)
+**Defect Report**: `docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md` (pruned 2026-11-18; `git show ce1853c3:docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-11-16
 **Last Updated**: 2026-11-17

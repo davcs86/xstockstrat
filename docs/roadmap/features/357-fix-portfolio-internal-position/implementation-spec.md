@@ -198,7 +198,7 @@ grep -rn "func drainRows" internal/service --include="*_test.go"   # expect exac
    - **`TestPositionDrain_357_AC3_AccountScopedPast500`**: also seed 3 rows on `acctB`, then call `GetPortfolio` with `AccountId: proto.String(acctA)`. Assert 501 positions, each with `AccountId == acctA`.
 8. Edit `.github/workflows/ci.yml:1065` only, to `run: go test -tags dbtest -race -count=1 ./internal/repository/... ./internal/service/...`. Leave `:1116` unchanged.
 9. **§RED.** Against the pre-Step-3 tree, with a migrated TimescaleDB:
-   - Use feature 353's local recipe (`docs/roadmap/features/353-fix-listpositions-nextpagetoken-skips/implementation-spec.md`, Step 2 §RED: `docker run … timescale/timescaledb:latest-pg16`, apply migrations, export `PORTFOLIO_DB_TEST_URL`).
+   - Use feature 353's local recipe (`docs/roadmap/features/353-fix-listpositions-nextpagetoken-skips/implementation-spec.md` (pruned: `git show ce1853c3:` that path), Step 2 §RED: `docker run … timescale/timescaledb:latest-pg16`, apply migrations, export `PORTFOLIO_DB_TEST_URL`).
    - `GetPnL` must return 500 and `GetPortfolio` 500 positions.
    - If neither Docker nor TimescaleDB is available, the CI `portfolio-db-test` run on the pre-Step-3 commit is the RED evidence. Link it in the PR's TDD block.
 

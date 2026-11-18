@@ -198,7 +198,7 @@ repair's `start` as `-from`, so its verdict is what re-running the repair would 
 
 **Repair after the version-3 deploy (feature 348), one pass per lane.** [RO] is read-only SQL by the
 operator (read paths and the query-file convention: `docs/runbooks/operator-db-access.md` and
-`docs/roadmap/features/340-fix-fundamentals-roe-unit/design.md` § Step 5), [CFG] a config change,
+`docs/roadmap/features/340-fix-fundamentals-roe-unit/context.md` (the pruned `design.md` § Step 5 is summarized there; original: `git show 662413d7:docs/roadmap/features/340-fix-fundamentals-roe-unit/design.md`)), [CFG] a config change,
 [OP-W] a write by the operator, [MCP] an MCP call made on the operator's word.
 
 Lane A — homelab staging (stored version 2, `fundamentals.history.enabled` = `true` before the repair):

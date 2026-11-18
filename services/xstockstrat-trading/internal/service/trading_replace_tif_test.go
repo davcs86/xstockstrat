@@ -1,7 +1,7 @@
 package service
 
-// Regression tests for docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md
-// (feature 349): ReplaceOrder must refuse a disallowed time-in-force before it claims an intent.
+// Regression tests for the (pruned) defect report 2026-11-16-replace-order-tif-validation-after-intent-claim-defect;
+// see feature 349 context.md: ReplaceOrder must refuse a disallowed time-in-force before it claims an intent.
 
 import (
 	"context"

@@ -18,7 +18,7 @@ Feature: xstockstrat-agent — MCP watchlist tools
     And the tool returns a "watchlists" array and a "next_page_token" string
 
   # Feature 351 (operator-approved C-16 EXTEND, design approved 2026-11-16; 351 design.md § Business Rules
-  # Touched) adds the case below beside 148 @AC-1, which is left unedited. The first-page call now ensures the
+  # Touched, pruned: see 351 context.md; git show ce1853c3:docs/roadmap/features/351-ensure-signals-watchlist-on-read/design.md) adds the case below beside 148 @AC-1, which is left unedited. The first-page call now ensures the
   # caller's system "Signals" list in portfolio; whether a small page shows it depends on id order (351 FR-6).
   @AC-1 @FR-1 @feature-351
   Scenario: list_watchlists on a first page ensures the caller's system Signals list without changing the contract
