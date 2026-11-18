@@ -4057,3 +4057,68 @@ ambiguity is logged here).
 - **Mistake**: The spec fixed ingest migration `017` from the refs visible at spec time. By execute time another in-flight feature's branch had claimed `017`, so the step renumbered to `018` and the number in `design.md`, the reviewer snapshot and the service docs drifted from the spec text.
 - **Evidence**: `docs/roadmap/features/352-delisted-symbol-handling/implementation-spec.md` § Deviation Log (Step 17); `docs/roadmap/features/merge-order.md` (355 vs 352 row).
 - **Rule it implies**: Write a migration step's file name with the number as a value derived at execute time ("next free number across every `origin/*` ref, `017` at spec time") and have later steps and docs cite the file by its description, so a renumber changes one line instead of four artifacts.
+
+### 2026-11-18 — ui-env-themed-bundles — config
+- **Mistake**: The design assumed a webpack alias swap (and a `next.config` `env` change) selects the build variant. Next's persistent `.next/cache` ignores both, so consecutive builds in one tree emitted the previous theme's CSS; a clean `.next` hid the bug and only a value-level check (a) caught it.
+- **Evidence**: implementation-spec.md D-3 (pruned); context.md Steps 4+5 V4.
+- **Rule it implies**: Any build-time variant switch in `next.config.js` (alias, define, env) must also key `config.cache.version` and be verified by building A → B → A in one tree without a clean.
+
+### 2026-11-18 — ui-env-themed-bundles — assumption
+- **Mistake**: The design assumed Tailwind v4 `@theme inline` emits a CSS variable for every declared role. Tailwind 4.3.3 inlines values and prunes variables nothing names (`--color-paper` was already unemitted before this feature); runtime readers (`getComputedStyle`, chart colour resolvers) silently fall back.
+- **Evidence**: implementation-spec.md D-2 (pruned); `useCandlestickChart.ts:38-39` fallbacks.
+- **Rule it implies**: A CSS variable read at runtime by JS must be declared in a plain (unlayered) `:root` with the `@theme inline` entry as a self-map.
+
+### 2026-11-18 — ui-env-themed-bundles — assumption
+- **Mistake**: UI e2e specs are type-checked by nothing in CI (`next build` covers the app only), so two `tsc` errors in `e2e/insights/backfills.spec.ts:135-136` shipped unnoticed and blocked the feature's baseline.
+- **Evidence**: implementation-spec.md D-1 (pruned); borderline overlap with insights.md:2946-2949.
+- **Rule it implies**: Treat Playwright specs as un-type-checked by CI; run a scoped `tsc` over `e2e/` before relying on a green baseline, or add that gate.
+
+### 2026-11-18 — homelab-otel-host-provider — assumption
+- **Mistake**: The spec and earlier design rounds assumed the existing SOPS path delivered OTLP credentials to homelab (FR-4/AC-8); `sops_secrets.py:32-33` scoped them to `(DO,)` ("OTEL: DO only"). The same feature also assumed a resource attribute becomes a series label; only three attributes are promoted. Both were found only by recon and live queries after product-spec approval.
+- **Evidence**: context.md 2026-11-11 "warnings addressed, spec re-reviewed"; recon.md:53-57, R-1 (pruned).
+- **Rule it implies**: A spec that says a value "reuses the existing path" for a new target must cite the line that scopes that value to the target.
+
+### 2026-11-18 — homelab-otel-host-provider — assumption
+- **Mistake**: The new attribute was named `host.provider` although `host.*` is an OTel semconv namespace and the standard attribute is `cloud.provider`; the collision risk was accepted by the operator but recorded only in design.md/context.md, not in the shipped docs, so it was one archive away from being unrecorded.
+- **Evidence**: context.md 2026-11-11 rename session; design.md Open Risks (pruned; see Archive Synthesis).
+- **Rule it implies**: A deliberate deviation from a standard (semconv) name must be recorded in the shipped docs, not only in the spec artifacts.
+
+### 2026-11-18 — webhook-fanout-callback — assumption
+- **Mistake**: The design mandated a per-step verification (run new SQL against a scratch Postgres) that `/sdd-execute` forbids, so the executor would have silently swapped in an offline check; caught only at `/sdd-spec` and upgraded to a CI `migration-assertions` file.
+- **Evidence**: 334 design.md O-9 (pruned); context.md sdd-spec "O-9 upgraded, not confirmed"; `scripts/migration-assertions/webhook-fanout-callback.sql`.
+- **Rule it implies**: A design mitigation that names a verification method must be checked against the executor's allowed verification actions; DB-statement proof routes to a `migration-assertions/*.sql` file by default.
+
+### 2026-11-18 — webhook-fanout-callback — migration
+- **Mistake**: Recon missed that `migration-rerun` hard-codes each service's clean end state (`ingest:14`) and that `config-wiring-stored.json` hashes the generator's own sources; both surfaced late — at spec, then as merge conflicts when main-dev ported those scripts to Python mid-PR (#1517 on `inputs_sha256`; #1520 deleted the edited `.sh`).
+- **Evidence**: context.md sdd-spec "Not in recon"; integration merge sessions 1 and 2 (pruned).
+- **Rule it implies**: Recon for any new migration greps the gate scripts for the service's current tip literal; on a conflict in a generated gate artifact, regenerate it (never hand-merge) and re-port literal edits into a renamed script.
+
+### 2026-11-18 — webhook-fanout-callback — assumption
+- **Mistake**: The impl-spec template's `buf breaking` baseline named the feature branch; once the change is committed that compares the change with itself and passes vacuously.
+- **Evidence**: implementation-spec.md Deviation Log Step 1 (pruned); context.md Step 1, review warning.
+- **Rule it implies**: `buf breaking` baselines must be `origin/main-dev` (the integration base), never the feature branch.
+
+### 2026-11-18 — seed-curated-templates — assumption
+- **Mistake**: A column value that tools could not read (`extractor_module`) was filled with the only plausible value in the repo (`app.extractors.noop`) and seeds written from agent-tool output missed dead keys still in storage (the read path strips them); staging actually stored the column empty. The first parity run found 6 differences.
+- **Evidence**: recon.md:86 (pruned); context.md 2026-11-13; Deviation Log "parity gate outcome".
+- **Rule it implies**: Tool/API output shows the read-normalized view, not the stored form; seed and parity work starts from a raw DB export and unknown values stay blocked rather than guessed.
+
+### 2026-11-18 — seed-curated-templates — assumption
+- **Mistake**: The orchestrator equated "the user created by the migrator" with `SEED_USER_ID`; they differ (`admin@localhost` gets a random id; `SEED_USER_ID` is the operator's literal id), so keying on it would do nothing in staging and create orphan blends on fresh DBs.
+- **Evidence**: debate O-15, P-2, D-30 (pruned).
+- **Rule it implies**: Resolve a "seed user" by an identity lookup, and confirm with the operator before turning a reading of their words into a decision.
+
+### 2026-11-18 — seed-curated-templates — migration
+- **Mistake**: Assertion files run against the final migrated state, so a new seed migration broke predecessors' "has seed rows"/"empty" assertions and a single-file real-PG schema guard.
+- **Evidence**: context.md sdd-spec findings (`scripts/migration-rerun.py:1119-1120`; `test_strategy_templates_real_pg.py:27-30`).
+- **Rule it implies**: A data migration must edit, in the same commit, every earlier assertion that pins the old table contents.
+
+### 2026-11-18 — seed-curated-templates — assumption
+- **Mistake**: The design specified the analysis test's fake `GetFormula` be built from the indicators code module; importing another service's `app.*` inside a Python test run resolves `app.formulas` to the local package, so it could not be done.
+- **Evidence**: implementation-spec.md Decisions #5 (pruned); context.md 2026-11-12 sdd-spec.
+- **Rule it implies**: A cross-service Python test cannot import another service's `app.*` modules; pin the shared shape through a payload the other service's own test already pins to its module.
+
+### 2026-11-18 — python-otel-instance-id — assumption
+- **Mistake**: Feature 332 kept Python's SDK-generated `service.instance.id` as a "preserve" decision (D-7/@AC-21) without verifying where the id came from or whether code could override it; within days 336 reversed a launched business rule, needing a C-16 CHANGE sign-off and re-annotating three 332 scenarios.
+- **Evidence**: 336 context.md 2026-11-12 sdd-story ("332 left it unverified") and the sdd-execute integration session (pruned).
+- **Rule it implies**: A "keep the library default" decision must cite the pinned library's actual source or a test (the fails.md feature-274 bar); otherwise record it as an open risk, not a settled decision.

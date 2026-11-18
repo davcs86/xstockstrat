@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-13
 **Committed to main**: c81d1856a5c1294b8a6867db8a1b37222bbd550f
 **Launched date**: 2026-11-13
+**Archived**: 2026-11-18
 
 ---
 
@@ -20,16 +21,17 @@
 | 2026-11-13 | `in-progress` → `code-completed` | /sdd-execute | All 30 steps done; staging parity gate passed (0 differences) |
 
 | 2026-11-13 | `code-completed` → `launched` | CI workflow | Promoted via PR #1536; committed c81d1856a5c1294b8a6867db8a1b37222bbd550f |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(4); pruned 5 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier
-- [Debate Register](debate.md) — settled decisions, rejected alternatives
-- [Design](design.md) — approved architecture
-- [Implementation Spec](implementation-spec.md) — 29 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-indicators/acceptance/seed-curated-templates.feature, services/xstockstrat-analysis/acceptance/seed-curated-templates.feature, services/xstockstrat-ingest/acceptance/seed-curated-templates.feature, services/xstockstrat-ui/acceptance/seed-curated-templates.feature, services/xstockstrat-agent/acceptance/seed-curated-templates.feature, docs/sdd/business-rules/platform.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Debate Register — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
