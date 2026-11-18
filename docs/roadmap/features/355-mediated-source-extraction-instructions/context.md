@@ -1,381 +1,86 @@
-# Context: mediated-source-extraction-instructions
+# Context: mediated-source-extraction-instructions  (archived 2026-11-18)
 
-**Feature**: `docs/roadmap/features/355-mediated-source-extraction-instructions/feature.md`
-**Product Spec**: `docs/roadmap/features/355-mediated-source-extraction-instructions/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/355-mediated-source-extraction-instructions/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-18 — /sdd-archiver
 
-## Session 2026-11-17 — sdd-story
+**What**: A `mediated_*` signal source's extraction logic is prose an LLM agent follows, so it now has a first-class `extraction_instructions` field (additive `ingest.v1.SignalSource` field 15; `ingest.signal_sources.extraction_instructions TEXT NOT NULL DEFAULT ''` via migration `017_signal_source_extraction_instructions`). Ingest requires non-blank prose on every mediated write path (register, instantiate, update, `ManageTemplate` CREATE/UPDATE), rejects it on non-mediated types, caps it at 16,000 code points, and writes `app.extractors.noop` itself for mediated sources. The agent tools (`list_signal_sources`, `manage_signal_source`, `instantiate_template`) always return prose for a mediated source (stored text, or a fixed generic default with `extraction_instructions_is_default: true`) and never `extractor_module`; the UI replaces the "Extractor Module" input with an "Extraction instructions" textarea on mediated types. Migration 017 also seeds curated prose into the four system templates. All 11 steps shipped with no code deviations (every step's Deviations line is "none"); the seeded texts are verbatim in `services/xstockstrat-ingest/migrations/017_signal_source_extraction_instructions.up.sql` and the default text is `_DEFAULT_EXTRACTION_INSTRUCTIONS` in `services/xstockstrat-agent/app/tools.py`, so the five texts themselves are recoverable from code. Integration PR #1567 from the harness branch `ccr-424ada30-29m2lv` (it stood in for the never-created `feature/mediated-source-extraction-instructions`; pushes were restricted to it); promoted to main by #1576 (`37d41f42`). feature.md "Next Action" ("Review and merge the integration PR") is stale: merge-order.md:275 records "355 merged first (#1567) with `017`".
 
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
-- **User decisions (2026-11-17, asked before the story was written):**
-  1. Prose home = first-class field (`extraction_instructions` column + additive proto field), not a
-     `config_json` key.
-  2. `extractor_module` = hide for mediated only. Proto field 4 and the DB column stay; non-mediated
-     sources keep exposing it. Full removal and all-types hiding were offered and declined.
-  3. Observed symptom = the consuming agent reads `extractor_module: app.extractors.noop` and
-     concludes there is no work. "Fetches but ingests nothing" and "stalls at registration" were
-     offered and not selected.
-  4. Enforcement = required for new only. No backfill of existing rows; empty legacy rows fall back
-     to the generic extraction guidance.
-- Entered as a feature via `/sdd-story` (not `/sdd-triage`): it adds a contract field and changes
-  tool shapes. Stated to the user as an assumption; not contradicted.
-- Recon facts the story rests on: `extractor_module` is stored and echoed but never imported
-  (ingest findings 2026-11-04); `list_signal_sources` already omits it, so today's exposure to
-  agents is `manage_signal_source` (param, docstring, return) and `instantiate_template` (return).
-- Open questions OQ-1..OQ-6 in product-spec.md go to `/sdd-design`; OQ-1 (seeded templates vs
-  "required for new") is the one that can change scope.
+**Why (irrecoverable rationale)**:
+- Trigger and user decisions at story time (asked before the story was written; the question wording is not recorded, only the answers): (1) prose home = a first-class column + proto field, not a `config_json` key; (2) hide `extractor_module` for mediated sources only — full removal and hiding for all types were offered and declined; (3) the observed symptom was the consuming agent reading `extractor_module: app.extractors.noop` and concluding there is no work ("fetches but ingests nothing" and "stalls at registration" were offered and not selected); (4) required for new sources only, no backfill — legacy empty rows fall back to generic guidance. Entered as a feature (`/sdd-story`), not `/sdd-triage`, because it adds a contract field and changes tool shapes; stated to the user as an assumption, not contradicted.
+- Product-spec review failed round 1 on six open questions, all put to the user and resolved: seed prose into the four mediated system templates (OQ-1 → FR-11, the only one that could change scope); literal generic prose plus `extraction_instructions_is_default` (OQ-4); keep `app.extractors.noop`, written server-side (OQ-5); "Strict, larger cap" = clearing rejected, non-empty on non-mediated rejected, 16,000 chars (OQ-2/3/6). Orchestrator assumptions that were not asked: a supplied `extractor_module` on a mediated source is overridden, not rejected (the `/insights` edit form round-trips it, which is why FR-3 says "whatever the caller sent"); FR-6's two fields appear on every agent response for a mediated source, not just the list; whitespace-only counts as empty. Round 2 failed criterion 8 on one defect (AC-2's website rows lacked `scrape_selector`/credential and would have been rejected for the wrong reason); the orchestrator fixed it, checked it against `validate_config_json`/`_validate_source_write`, and did not re-send it to the subagent a third time.
+- Why no `version` bump on the four seeded system templates (D-3, R-2): `scripts/migration-assertions/ingest-016.sql` asserts `version = 1` on those rows and 016's down deletes only `version = 1 AND retired_at IS NULL AND created_by = 'system'` rows, so a bump breaks both. The cost, which recon named ("hides the change from existing instances") and design accepted, is that instances created before 017 never show `update_available` and keep empty prose; they get the generic default, whose text tells the agent to read `origin.template_id` and points the operator at the template's curated `payload.extractionInstructions` in `list_templates` (added at D-22e/D-25a precisely to close this gap, O-32/O-36). The 017 UPDATE is guarded by content (`payload->>'extraction_instructions' IS DISTINCT FROM v.instructions`) and sets `updated_at = NOW()` so the catalog's `meta.updated_at` stays truthful (O-9/D-14); a replay touches no row. See Cross-feature signal for the relationship to feature 335's D-19.
+- One migration, not two (R-5): column and prose must ship together (335 `@AC-7`: a seeded website template must still instantiate under the new "mediated needs prose" rule, so seeding the four payloads is a hard prerequisite of FR-2).
+- Maskless update = plain replace-all (D-11/R-6, user at the round-1 gate): the field applies when the mask names it or no mask is sent; a maskless update that omits prose sends `""` and is rejected on a mediated source. The user declined an "empty means omitted" exception because no in-repo caller sends a maskless update and it would be the only field deviating from replace-all. A masked update that does not name the path leaves a legacy empty row untouched (FR-5). D-12 (user, round-1 gate): `ManageTemplate` CREATE/UPDATE also require prose on a mediated payload, which goes beyond FR-1..14 and was accepted knowingly; consequence (O-23, carried as an Open Risk): an existing admin-authored mediated template with no prose stops instantiating and cannot be updated until prose is added.
+- Plain `string`, not `optional` (D-1/R-1): no caller needs presence, and `""` is never a valid applied value on a mediated source. A DB CHECK for the cap was not added (D-2): ingest's validator is the single authority.
+- "Mediated" is the prefix test `source_type` starts with `mediated_`, one predicate per service (ingest `is_mediated_source_type`, agent `_is_mediated`, UI `isMediatedType`), never an enumerated five-type list (D-4/R-3): a prefix test cannot drop a type (ledger fails 2026-08-05 trap). Ingest's fail-closed type allow-list still runs first.
+- Seeded and default prose are product rules decided by the operator at the design gates (these live in prose only and carry no `@AC`): 7-day expiry (`valid_until = valid_from + 7 days`) on every watchlist signal (round 2); 8-K narrow — `sell` 0.6 only for items 1.03/3.01/4.02, `watchlist` 0.3 only for 1.01/2.01, everything else including 2.02 skipped (the 0.6 meets the default `signal.alert_threshold` so those alert, intended); Form 4 cluster-only watchlist (round 2); 24-hour recency bound (round 3); PR Newswire and Robinhood Snacks watchlist-only 0.3, never buy/sell (round 3); Form 4 cluster = two or more separate filings (distinct AccNo) that share no reporting person (rounds 3-4); the default text also carries the firm 7-day watchlist expiry (round 4); no server clock (R-8) — wording only: "ingest nothing" when the host cannot determine the time of day. Shown at round-3 and left as drafted by the operator (not an affirmative approval): `8-K/A` amendments skipped; 8-K `sell` carries no `valid_until`; the gRPC receive-size limit as a recorded risk.
+- Why the seeded prose is shaped the way it is (verified facts, recorded only here): `extract_website_content` returns the WHOLE response body and `config_json.scrape_selector` is never applied (agent `tools.py` as of design; found by the round-2 proposer), so seeded prose says "the elements matched by `config_json.scrape_selector`" instead of copying the selector (a later selector edit would otherwise leave stale prose, O-19) and each text ends "if the content does not have this shape, ingest nothing and tell the operator" (D-19). Live read-only fetch of the three staging website sources on 2026-11-17 (SEC `request_headers` are honored): SEC 8-K Atom feed — 72.5k chars, 100 entries, title `8-K - <Company> (<CIK>) (Filer)` (and `8-K/A - …`), summary lists `Item N.NN: …`, no ticker anywhere; SEC Form 4 Atom feed — 56k chars, 100 entries (56 Reporting / 44 Issuer) paired by `AccNo`, no transaction data (so no buy/sell can be derived — hence watchlist only), no ticker; PR Newswire list — 201k chars, 25 anchors each with time + `<h3>` headline + teaser, 8 of 25 teasers carried an exchange:ticker, hrefs relative. Robinhood Snacks (email) structure was NOT verified. Round 6 verified on the saved Form 4 body that entries are newest-first and each accession number carries exactly one `<updated>` (0 of 44 differed), which the "ignore the filing(s) at the oldest `<updated>`" rule (D-27) relies on.
+- Write-path facts the texts are built against (traced by the round-3/4 adversary; the existing ledger entry at insights.md:4640-4643 records that these checks were done, not the facts): ingest dedup is one slot per `(user, source, symbol, direction)`, re-won after `signals.dedup_window_hours` or when `conviction` or `valid_until` differs, and it never compares `valid_from` — so the drafted "content-derived `valid_from` makes re-reads idempotent" claim was wrong (D-22a) and the default text fixes conviction to 0.3/0.6/0.9 so a re-run sends the same value (D-25b); `ingest_signal` has no per-source default conviction (the old `signal_extraction.md:70-71` claim was removed) and stores conviction 0.0 as NULL (hence "above 0 and at most 1"); a `direction='watchlist'` signal adds the symbol to the signals watchlist and an entry with no `valid_until` never expires (O-15: the first drafts flooded the watchlist); the 7-day expiry reaches only new / tracked / backfill-marked SIGNAL watchlist entries — an existing open-ended SIGNAL entry or a MANUAL entry keeps no expiry and a later watchlist signal without `valid_until` untracks a tracked one (portfolio `watchlist_repo.go:292-297,548-580` as of design; pre-existing feature-281 behaviour, O-42).
+- Round cap: the `/sdd-design` five-round hard cap was lifted by explicit operator instruction at the round-4 gate. context.md quotes the operator as answering "override rounds cap, continue until design is sound" (the only verbatim operator quote in the sources; the question text is not recorded). Rounds 5 and 6 ran without an inter-round gate; round 6 was a confirming pass whose adversary returned "sound, no blocking objection" and the approval gate followed. Every round 2-5 produced at least one blocking finding (O-14, O-15, O-25..O-28, O-36, O-37, O-43); the Floor (F-11) was never breached in any round.
+- Operator gate answers recorded only as paraphrase in context.md (no recorded question text, so P-04 provenance is the orchestrator's summary): round-1 gate (maskless = replace-all; ManageTemplate requires prose; no `merge-order.md` row for the 328 overlap; run round 2), round-2 gate (7-day expiry; 8-K narrow; Form 4 cluster-only; run round 3), round-3 gate, round-4 gate, and the design approval ("User approved the design at the round-6 gate"). The post-impl-review decisions (below) were relayed as answers with a one-word label ("Start, all steps"; "report at the end, stop only on a failing step or a decision") that are option labels, not sentences the operator typed.
+- Post impl-spec-review decisions (operator, 2026-11-17): (1) `signal_extraction.md` is edited as planned (323 may delete it later; that conflict resolves as a delete); (2) keep `app.extractors.noop` as the stored module for mediated sources; (3) `merge-order.md` row added — 323 waits for 355 and rebases (row at merge-order.md:129); (4) execute all 11 steps as one commit per step group on the PR branch, tests before each commit, stop at the first step that cannot pass or needs a decision — no per-step branches or PRs, checkpoint reports printed without a gate.
+- Scenario promotion (C-16) was operator-approved at the integration stage; `@AC-27` (the agent's update-mask rule for the field, under FR-4) was added at integration with operator approval (Deviation Log, the only entry) because the design named the EXTEND of `@AC-2`/`@AC-10 @feature-161` but no scenario stated it, so it could not be promoted. There was no C-16 CHANGE: no existing `@AC-*` pinned `extractor_module` or a tool key set, so no CHANGE sign-off exists and none is owed.
+- Rollout-order consequence of prose being required server-side (design.md "Deploy window"): `db-migrator` runs 017 before services roll; old ingest on the new schema works (defaulted column, unknown payload key ignored); new agent/UI against old ingest simply show the default text; old agent/UI builds against new ingest have mediated registers rejected (INVALID_ARGUMENT) until they deploy.
 
-## Session 2026-11-17 — sdd-review product-spec (round 1: FAIL, fixed)
+**Rejected alternatives**:
+- R-1 `optional string extraction_instructions` — no caller needs the presence distinction; adds `string | undefined` in TS and `HasField` plumbing; `""` is never valid on a mediated source; C-18.
+- R-2 bump `version` on the four system templates so instances show `update_available` — breaks `ingest-016.sql` (`version = 1`) and 016's down (would leave rows behind).
+- R-3 shared / generated five-type "mediated" constant across services — three languages; a prefix test cannot drop a type.
+- R-4 serve `signal_extraction.md` as an MCP prompt so FR-10 reaches agents at runtime — beyond the spec; tool docstrings and responses carry the guidance (note: that file is loaded by nothing at runtime, agent findings:36; it was edited for consistency only).
+- R-5 seed template prose in a separate migration `018` — column and prose must ship together (335 `@AC-7`).
+- R-6 treat a maskless `""` as "omitted" and keep stored prose — user declined at the round-1 gate (see Why).
+- R-7 normalize existing mediated rows' `extractor_module` to `app.extractors.noop` in SQL — an UPDATE on user-owned rows no reader benefits from (the value is never resolved and is hidden for mediated types) and the down could not restore `""`; so a legacy `""` flips lazily on that row's next update (D-15, pinned by an ingest test and stated in the ingest findings row).
+- R-8 return a server timestamp from `list_signal_sources` so the 24-hour recency rule is computable on every MCP host — user declined at the round-4 gate (outside FR-1..14); a possible follow-up feature.
+- Story/review-time rejections: full removal of `extractor_module` or hiding it for all types (declined by the user); backfilling existing rows (declined); rejecting a supplied `extractor_module` on a mediated source (overridden instead); a `config_json` key for the prose (declined); an unpaginated-list size guard (O-35, waived by the orchestrator as speculative, C-18).
 
-- `spec-reviewer` failed criterion 9 (OQ-1..OQ-6 open). All six were put to the user and resolved:
-  1. OQ-1 → seed prose into the four mediated system templates (FR-11).
-  2. OQ-4 → literal generic prose + `extraction_instructions_is_default` (FR-6).
-  3. OQ-5 → keep `app.extractors.noop`, written server-side (FR-3).
-  4. OQ-2/3/6 → "Strict, larger cap": clearing rejected (FR-12), non-empty on non-mediated rejected
-     (FR-13), 16,000-character cap (FR-14).
-- My own assumptions (not asked): a supplied `extractor_module` on a mediated source is overridden,
-  not rejected (the `/insights` edit form round-trips it); FR-6's two fields appear on every agent
-  response for a mediated source, not just the list; whitespace-only counts as empty.
-- A1b: none of the demoted/canceled features concerns signal sources — answered "no" without asking.
+**Scars & gotchas**:
+- `/sdd-spec` found `ruff` enforces 100 columns in the agent and the default text has lines up to 881 characters, so `_DEFAULT_EXTRACTION_INSTRUCTIONS` must be concatenated literals. `_DEFAULT_EXTRACTION_INSTRUCTIONS` is a fifth, different text from the four seeded ones. Each text was checked byte for byte against design.md exactly once, by one-off commands (Step 5 for the four seeded literals, Step 8 for the constant; context.md Step 5/Step 8 entries). No committed test holds a reference copy, so once design.md is deleted neither the seeded texts nor the default text has one — future edits to either are unguarded against drift from what was approved.
+- Appending the new column last still breaks ingest tests that index SQL args from the end: `insert_source` (`$10`) and `update_source` (`$9`) are asserted positionally in `test_signal_sources.py`; the three direct repository calls and four from-the-end positional assertions had to be edited (F-05 hygiene).
+- Step 7 test trap: calling `.extend(())` on `request.update_mask.paths` sets the mask's presence, so a "maskless" request must not touch `update_mask` at all.
+- UI trap: a Playwright `page.route` fixture cannot hold `BigInt` (the shared source fixtures do), so `SIGNAL_SOURCE_MEDIATED_LEGACY` is Connect-JSON shaped; `mock-backend.ts` `manageSignalSource` update echoes only `reliabilityWeight` and a static template list, so tests assert the request body and use a stateful per-test `page.route` pair for `@AC-14`. Step 11's AC-14 first RED was a dev-server compile timeout, not a real failure — re-run alone with the templates-page change stashed to get the genuine RED (element not found); green runs used a production build (`CI=1`).
+- Agent shaping helpers must read with `.get` / `.pop(k, None)`: existing tool tests mock `client.*` with dicts lacking the new key; carrying the raw key in `_managed_source_to_dict` early would leak it from manage/instantiate until the shaping step, so S1 carried it only in the request builder and list projection (D-18).
+- The new `_is_mediated` prefix literal in `tools.py` would have tripped the Step 8 grep guard that counts `"mediated_…"` literals; the pattern now requires a type name after the prefix (impl-spec-review fix).
+- Check-order trap: the new INVALID_ARGUMENT must run after NOT_FOUND / PERMISSION_DENIED (system source) / ALREADY_EXISTS (reserved slug) so it never pre-empts them; the `template.instantiate` outcome label must stay in the closed label set (platform `@AC-39 @feature-294`).
+- Tooling: `buf` not on the host — regeneration ran in the `xstockstrat-codegen` Docker image (baseline regeneration reproduced committed stubs, empty diff); host node 22 vs the repo's pinned 24 (`tsc` and install passed); three `origin/main-dev` merges during execute conflicted only on two features appending to `docs/roadmap/ledger/insights.md` (keep both). Offline migration checks used `pglast` (2 + 2 statements parsed); the live apply / replay / refused-down of 017 and `ingest-017.sql` were proven only by CI `migration-rerun` on the PR, not locally (migration 017 was its first live apply).
+- Field number 15 and prefix 017 were re-derived from 66 `origin/{feature,feature-steps,fix,hotfix}/*` heads at `/sdd-spec` — `claude/*` and `ccr-*` heads were not scanned, and 352 (also targeting ingest 017) raced it: 352 renumbered to `018_backfill_symbol_results` (see merge-order.md:275).
+- Config-wiring gate (`node scripts/check-config-wiring.mjs --final`) exits 0 but prints two pre-existing `readers-disagree` lines (analysis `fundamentals.provider`, trading `platform/trading_state`), untouched by this feature.
+- `docs/runbooks/mcp-tools.md` has pre-existing drift the feature did not fix: its `list_signal_sources` section documents source-health fields (`active`, `health`, `last_seen_at`, `last_error`, `signals_fed`; now mcp-tools.md:166) that the tool does not return (`tools.py` list projection). Step 8 rewrote only the return example; the Open Thread to report it through `/sdd-qa defect` has no completion record and no matching report was found under `docs/reports/`.
 
-## Session 2026-11-17 — sdd-review product-spec
+**Permanent deviations**:
+- Branch: all work landed on harness branch `ccr-424ada30-29m2lv` (PR #1567) rather than `feature/mediated-source-extraction-instructions`, which never existed on origin; the `buf breaking` step used the spec's documented `ref=HEAD` fallback for that reason. No code impact.
+- Product spec amended after `spec-ready` (D-28, applied at design approval, the amendments were decided at round 5 and not re-reviewed by `/sdd-review`): FR-3 and FR-5/FR-6/FR-14 wording (maskless rule; noop on every update whose effective type is mediated; mediated list entries carry `origin`; code points); new FR-15 (ManageTemplate) with `@AC-24..26`; whitespace-only stored as `""`. `@AC-27` appended at integration (operator-approved).
+- Spec-said-X, shipped-Y on the seed-parity guard: product-spec.md (Database Changes) said "`scripts/check-seed-template-parity.py` and its testdata follow" and recon recommended adding the key to its `SOURCE_PAYLOAD_FIELDS`; debate D-10/O-3 rejected that as inert because the script reads only migration 016, and impl-spec Step 5 says not to edit it. The seeded prose is guarded instead by `scripts/migration-assertions/ingest-017.sql` plus the 017 overlay inside `_rows()` of `services/xstockstrat-ingest/tests/test_seed_source_templates.py` (strict id/prose pairs, exactly the four seeded ids, the validator run with `require=True` on each payload). The unchanged parity script is deliberate, not an omission — do not "fix" it.
+- Impl-spec review (advisory, 1 failure + 5 warnings): three items carried `[ ] unaddressed` by design — Step 2's wildcard `**Files**` for generated stubs, Step 1's `buf breaking` ref (fallback used), Step 2's verification wording. FAIL-level overlap with `323-fix-orphaned-code` resolved by operator decision (above); WARN-level, disjoint-function overlaps with 351, 354, 343, 340, 314 and 328 on `agent/app/tools.py` / `client.py` / `mcp-tools.md` were rebase-only.
+- FR-9 reading (design D-7, not a spec deviation): `/config-ui/templates` gets the field unconditionally because the templates form is type-blind (`sourceType` is free text); only `/insights/signal-sources` swaps it with "Extractor Module" by type.
+- `list_templates` (agent) still returns raw template payloads including `extractorModule` for admin-authored mediated templates (O-12): only a docstring line distinguishes `extractorModule` from `extractionInstructions`; the tool stays outside FR-6/FR-7.
 
-- Product spec approved. Status: draft → spec-ready. Tree: `ccr-424ada30-29m2lv@ccbe424 ≡ origin/main-dev`.
-- Round 2 failed criterion 8 on one defect: AC-2's two website rows lacked `scrape_selector` (and the
-  authenticated row a credential), so they would have been rejected for the wrong reason. Fixed and
-  checked against `validate_config_json` / `_validate_source_write` directly; not re-sent to the
-  subagent a third time.
-- Warnings folded in: update variants for FR-13/FR-14 (AC-21, AC-22), the "omitted" row in AC-2,
-  whitespace on a legacy empty row (AC-23).
-- Warnings carried to design: several `Given` steps name no source type; confirm the FR-11 seed
-  migration against the `system` read-only rule (it guards RPC writes, not migrations — verify);
-  re-derive proto field 15 and migration prefix 017 from the union of open branches.
-- Overlap findings: no FAIL. WARN — `328-fix-agent-bearer-secret-orphan` (spec-ready) edits the same
-  `manage_signal_source` / `instantiate_template` bodies in `services/xstockstrat-agent/app/tools.py`.
-  Suggested order 328 → 355 (rebase-only). No `merge-order.md` row written — needs operator confirmation.
-- Recommended design depth: full (proto change, DB migration, ≥2 services, warning-level overlap).
+**Cross-feature signal**:
+- Feature 335 (`seed-curated-templates`): 335 created the four `created_by = 'system'` templates (migration 016). Its archived context.md:13 records that catalog changes ship only as version-guarded migrations (D-14/D-19/R-4/O-8, read-only system templates), and context.md:48 (the 335 archiver's own wording) says: "ingest CLAUDE.md:116-118 says feature 355 later wrote `extraction_instructions` into the four system source templates without a version bump, which departs from this feature's D-19 rule". What ingest CLAUDE.md:116-118 itself says is only that 017 writes the prose into the four system templates' payloads "with no version bump"; it does not mention D-19 or a departure. The judgement that this departs from D-19 is therefore 335's context.md alone. From 355's own sources: 355 deliberately chose no bump (D-3, R-2, recon Risks) to keep `ingest-016.sql` (`version = 1`) and 016's down valid, accepted the cost that existing instances never see `update_available`, and wrote the change as a content-guarded `UPDATE` (`IS DISTINCT FROM`, `updated_at = NOW()`) in a migration, never an RPC write, with the down removing only the key. 355 did examine the migration-only half of the system-template rule: the product-spec review carried "confirm the FR-11 seed migration against the `system` read-only rule (it guards RPC writes, not migrations — verify)" to design (context.md review session), recon.md:142 records platform `@AC-26 @feature-335` as "payload change is migration-only", and design.md's C-10 row says "system templates change by migration only". PLAT-19 (`docs/context-constitution.md:43`: system templates are immutable through every RPC, "the only writer is a migration") is satisfied by 017, and 355 kept `PERMISSION_DENIED` on UPDATE/RETIRE of a system row. What no 355 source examines is 335's "version-guarded" wording, never cites D-19, never calls the no-bump choice a departure, and records no waiver or sign-off against it; it was an ordinary design alternative rejected on 355's own grounds. So the conflict concerns only 335's "version-guarded" wording, not the binding invariant. Inference, unconfirmed: 017's UPDATE is guarded by content, not by a version predicate or bump, so it may depart from the letter of a version-guarded rule; the writer could not confirm whether 335's D-19 meant a version predicate in the WHERE clause or a bump (335's design and debate are pruned). The cost (instances not notified) is mitigated at read time by the default text's `origin` pointer. The two accounts agree on the facts and differ only in whether to call it a conflict.
+- `323-fix-orphaned-code` (still `spec-ready`): deletes `services/xstockstrat-agent/app/prompts/signal_extraction.md` (355 edits it) and `services/xstockstrat-ingest/app/extractors/noop.py` (355 stores the string `app.extractors.noop`, nothing imports it); merge-order.md:129 says 355 merges first and 323 then rebases, resolves the prompt as a delete, and re-decides `noop.py` against what 355 shipped. `app.extractors.noop` is now an invariant of ingest's write path (stored on every mediated register/update), so deleting the module is still harmless only because nothing resolves `extractor_module` (ingest findings:23).
+- `328-fix-agent-bearer-secret-orphan` (still `spec-ready`): edits the same `manage_signal_source` / `instantiate_template` bodies in `agent/app/tools.py`; the operator declined a `merge-order.md` row at the round-1 gate, so whichever merges second rebases and no row exists.
+- `352-delisted-symbol-handling` (archived): took ingest `018` after 355 claimed `017` (merge-order.md:275, resolved 2026-11-17: 355 merged first). The 017-to-018 renumber and the fact that its pre-renumber design.md still said `017` are recorded at `docs/roadmap/features/352-delisted-symbol-handling/context.md:74`. 352 also had to bump `scripts/migration-rerun.py`'s ingest pin as 355 did (recon had missed that pin — same class as the ledger fails entry at fails.md:4092).
+- Feature 161 (`surface-signal-weight-decay-config`) is the parity-guard precedent (a new `SignalSource` proto field fails the agent descriptor tests until surfaced) and 134 the end-to-end column pattern (`reliability_weight`); 328/351/354/343/340/314 only touch neighbouring tools in disjoint sections.
+- Ledger: insights.md:4640-4643 (2026-11-17, design) already records the prose-as-contract verification lesson and cites `docs/roadmap/features/355-mediated-source-extraction-instructions/debate.md`; it is append-only and its pointer will dangle once the file is pruned — recover with the command in Deferred follow-ons.
 
-## Session 2026-11-17 — sdd-design (in progress)
+**Deferred follow-ons**:
+- Pointer to a soon-pruned file (ledger, left alone): insights.md:4642 cites `docs/roadmap/features/355-mediated-source-extraction-instructions/debate.md` (D-21, D-22, D-25, D-27; O-15, O-25..O-27, O-37, O-43). Retrieve with `git show d0eea65f:docs/roadmap/features/355-mediated-source-extraction-instructions/debate.md` (the other pruned files the same way: `product-spec.md`, `recon.md`, `design.md`, `implementation-spec.md`). No code, CLAUDE.md, docs/patterns, runbook, acceptance suite, other feature's doc or findings file cites 355's pruned files or its decision ids (searched the repo).
+- Owed by the operator, no completion record: review of the five instruction texts before the migration merged ("operator review of the five texts in the S2 PR is the last chance to edit them cheaply" — after merge they change only by a new migration and do not reach existing instances). The 017 migration is already applied on main; Open Thread never ticked.
+- Operator-facing PR note that admin-authored mediated templates without prose stop instantiating (D-12, O-23) was planned for the Step 6 PR; not verified in the sources.
+- Report the `list_signal_sources` runbook drift (source-health fields the tool does not return, `mcp-tools.md:166`) through `/sdd-qa defect` — never filed.
+- Second reported-not-fixed drift (impl-spec Step 8, "Reported, not fixed here"): `services/xstockstrat-agent/app/prompts/signal_extraction.md:41` still says `extract_website_content` "handles authentication internally", but a source with credentials raises (`services/xstockstrat-agent/app/tools.py:637-638`). Never fixed or filed; file it with the `mcp-tools.md` source-health drift through `/sdd-qa defect`.
+- Open Risks accepted in the design (none has a mechanism or owner): an unpaginated `ListSignalSources` with maximum-length prose can exceed the default 4 MiB gRPC receive limit (≈60 maxed-out multibyte sources, ≈250 ASCII, in one owner's list; no guard, O-35); a host that knows only the date, with no clock tool, ingests nothing from mediated sources (R-8; runbook Usage Patterns "Clock" bullet at `mcp-tools.md` ~1861-1863 carries the operator guidance); the 7-day watchlist expiry does not reach existing open-ended SIGNAL or MANUAL entries (runbook pointer to `docs/runbooks/signal-watchlist-expiry-backfill.md`); "never re-ingested" holds only while `signals.dedup_window_hours` ≥ 24 and the default text's 0.3/0.6/0.9 choice is still an LLM judgement (O-46); within the dedup window a second, separate 8-K `sell` for the same ticker is swallowed because `valid_from` is never compared — missed, never wrong (O-47); Form 4 clusters are seen only inside one 100-entry fetch, the oldest-`<updated>` group is always dropped, and SEC ticker mapping relies on the agent's own certainty (a CIK→ticker tool would be a follow-up feature); the seeded prose rests on feed/page shapes checked on 2026-11-17 (drift falls back to "ingest nothing and tell the operator"), and Snacks was never checked; pre-017 instances of the four templates keep empty prose until the operator copies the template text over; a legacy mediated row's stored `extractor_module = ""` becomes `app.extractors.noop` on its next update; `signal_extraction.md` is loaded by nothing at runtime.
+- A server-clock / timestamp tool (R-8) and a CIK→ticker tool are the natural follow-up features if the "ingest nothing" cost bites.
+- If seeded prose ever needs updating for existing instances, a template `version` bump plus a coordinated change to `ingest-016.sql` and 016's down is the route R-2 rejected; whether 335's D-19 should be amended or the 017 approach recorded as an exception is open (see Cross-feature signal).
 
-- Mode: full. Tree: `ccr-424ada30-29m2lv@f8e7a99 ≡ origin/ccr-424ada30-29m2lv`. The harness-assigned
-  `ccr-*` branch stands in for `feature/<slug>` in this session (pushes are restricted to it);
-  `origin/main-dev` is an ancestor.
-- Phase 0 Recon: wrote recon.md from four scouts (ingest+proto, agent, ui, scenario-recon). No
-  existing `@AC-*` needs a CHANGE sign-off.
-- Phase 1: round 1 proposer running. No debate.md yet.
-- Round 1 (2026-11-17): proposer + adversary run; debate.md written. Both blocking objections
-  (migration-rerun hardcoded ingest version; stale `list_signal_sources` docstring) verified in code
-  and folded in (D-8, D-9).
-- **Round-1 gate — user decisions:** (1) maskless update = plain replace-all, no "empty means
-  omitted" exception (D-11, R-6); (2) `ManageTemplate` CREATE/UPDATE require prose on a mediated
-  payload (D-12) — goes beyond FR-1..14, accepted; (3) no `merge-order.md` row for the 328 overlap;
-  (4) run round 2.
-- Round 2 (2026-11-17): proposer + adversary run. No Floor breach, no register violation, no
-  petitions; the decision table yields the right gRPC code for every `@AC-1..23`. Folded in D-13..D-19
-  and R-7. **Proposer finding:** `extract_website_content` returns the whole response body —
-  `scrape_selector` is never applied (`agent/app/tools.py:630-647,2713-2772`) — so seeded prose is
-  written for raw Atom XML / list-page HTML.
-- Still open after round 2: O-15 (seeded prose floods the signals watchlist; no `valid_until`; sell
-  conviction sits on the alert threshold) — blocking, operator's call; O-20 (feed-structure claims
-  unverified) — a live read-only fetch of the three staging sources is running to check them.
-- **Live check (2026-11-17, read-only, staging `extract_website_content`):** all three website
-  sources fetched without error (SEC `request_headers` are honored). 8-K feed: 72.5k chars, 100
-  entries, title `8-K - <Company> (<CIK>) (Filer)` (and `8-K/A - …`), summary lists `Item N.NN: …`
-  for every entry, tags `category/id/link/summary/title/updated`, no ticker anywhere. Form 4 feed:
-  56k chars, 100 entries (56 Reporting / 44 Issuer) paired by `AccNo`, no transaction data, no
-  ticker. PR Newswire: 201k chars, 25 anchors, each with time + headline + teaser; 8 of 25 carried
-  an exchange:ticker in the teaser; hrefs relative. Robinhood Snacks (email) not checked.
-- **Round-2 gate — user decisions:** watchlist signals from seeded prose expire after 7 days; 8-K
-  scope narrow (sell 0.6 for 1.03/3.01/4.02, watchlist 0.3 for 1.01/2.01, skip the rest); Form 4
-  cluster-only watchlist; **run another round** (round 3).
-- Round 3 (2026-11-17, user-requested): proposer wrote the final texts; adversary re-traced
-  `ingest_signal` and ingest dedup. Architecture unchanged; no Floor breach, no register violation.
-  **Finding:** dedup is one slot per `(user, source, symbol, direction)`, re-won after the window or
-  when `conviction`/`valid_until` differs, and ignores `valid_from` — the drafted prose's
-  idempotence claim was wrong. Folded in D-22 (prose corrections) and D-23 (step refinements).
-  Open for the gate: O-27 recency bound, O-28 PR Newswire / Snacks rules, O-29 Form 4 joint
-  filings, O-30 `8-K/A` skipped + sell without `valid_until`.
-- **Round-3 gate — user decisions:** recency bound 24 hours; PR Newswire + Robinhood Snacks
-  watchlist-only (0.3, 7-day expiry, never buy/sell); Form 4 cluster = two or more separate filings
-  by different reporting persons; `8-K/A` skipped, sell without `valid_until`, and the gRPC size
-  limit as a recorded risk were shown and left as drafted; **run another round** (round 4).
-- Round 4 (2026-11-17, user-requested): final texts written and attacked. No Floor breach, no
-  register violation. Folded in D-25: `origin` on mediated `list_signal_sources` entries; default
-  text conviction fixed to 0.3 / 0.6 / 0.9; "date and time of day" wording; website fallback covers
-  a raising tool. Verified in code: dedup ignores `valid_from`; the 7-day watchlist expiry reaches
-  only new / tracked SIGNAL entries (feature-281 behaviour). Open for the gate: O-39 Form 4 shared
-  reporting person, O-40 default text's 7-day rule.
-- **Round-4 gate — user decisions:** Form 4 cluster needs two filings with no reporting person in
-  common; the default text carries the firm 7-day watchlist expiry; no server clock (R-8) — wording
-  only.
-- **Round-cap override (user sign-off, 2026-11-17):** at the round-4 gate the user answered
-  "override rounds cap, continue until design is sound". The `/sdd-design` five-round hard cap is
-  lifted for this run by explicit operator instruction. Rounds continue without an inter-round gate
-  unless a product decision is needed, until an adversary pass returns no blocking objection; the
-  approval gate (P-04) is then presented. The Floor (F-11) is not affected.
-- Round 5 (2026-11-17): proposer audit found no blocking defect; adversary found one — a Form 4
-  filing cut off at the tail of the latest-100 feed reads as a disjoint filing (false cluster).
-  Fixed in the text (D-27). D-28 lists the spec amendments, D-29 the step refinements. Adversary:
-  "with that clause fixed the design is APPROVABLE". Round 6 runs as a confirming pass under the
-  user's continue-until-sound instruction.
-- Round 6 (2026-11-17, confirming pass): proposer — all five texts compliant; adversary — **sound,
-  no blocking objection**, no Floor breach, no register violation. Verified on the saved live Form 4
-  body: newest-first ordering and one `<updated>` per accession number. Pending at closeout: write
-  the D-28 amendments into product-spec.md / acceptance.feature. Approval gate presented next.
+**Ledger entries written**: insights.md (1), fails.md (0) — see the 2026-11-18 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**:
+- INGEST candidate: every write path of a mediated source (register, instantiate, update with any effective-type change, ManageTemplate CREATE/UPDATE) must validate `extraction_instructions` after the NOT_FOUND / PERMISSION_DENIED / ALREADY_EXISTS checks, and mediated rows always store `app.extractors.noop`; RETIRE / reactivate / deactivate are never validated.
+- PLAT candidate: "mediated" is the `mediated_` prefix test in each of ingest, agent and UI — there is no shared constant; ingest `validate_config_json` still holds the five types as string literals (recon:`signal_sources.py:242-244,260-261`), so a sixth mediated type needs that list edited.
+- AGENT candidate: agent responses for mediated sources never carry `extractor_module`; `extraction_instructions` is always non-empty (stored or the default `_DEFAULT_EXTRACTION_INSTRUCTIONS`); no committed reference copy of the default text or of the four seeded texts exists beyond the code/migration themselves (the design.md copy is pruned).
+- INGEST candidate: system-template payload changes after 016 are migration-only; 017 sets the precedent of changing them without a version bump (see Cross-feature signal) — decide and record the rule in one place (335 D-19 vs 355 R-2).
 
-## Session 2026-11-17 — sdd-design
+**Pruned artifacts**: product-spec.md, recon.md, debate.md, design.md, implementation-spec.md — last present at d0eea65f.
 
-- Phase 0 Recon: wrote recon.md (services: ingest, agent, ui, proto; key reuse patterns: the
-  `reliability_weight` end-to-end column pattern; the agent descriptor-parity tests).
-- Phase 1 Grilling: 6 rounds (full; cap lifted by the user). Chosen approach: a first-class
-  `extraction_instructions` field validated by ingest on every write path, `app.extractors.noop`
-  forced server-side, agent tool-layer shaping that always returns prose (stored or a fixed default)
-  and never `extractor_module` for mediated sources, prose seeded into the four system templates by
-  one migration. Rejected: R-1..R-8 (optional field, version bump, shared constant, served prompt,
-  second migration, maskless exception, SQL normalization, server clock).
-- Constitution rules touched: C-01, C-07, C-08, C-09, C-10, C-12, C-13, C-14, C-15, C-16, C-18,
-  P-01, P-02, P-04, P-06, F-01, F-04, F-11. Floor breaches: none in any round.
-- **User approved the design** at the round-6 gate (2026-11-17). Status: spec-ready → design-approved.
-- Spec amendments applied at approval (D-28): FR-3, FR-5, FR-6, FR-14 wording; new FR-15;
-  `@AC-24..26` appended.
-
-## Session 2026-11-17 — sdd-spec
-
-- Generated implementation-spec.md with 11 steps. Status: design-approved → implementation-ready.
-- Tree: `ccr-424ada30-29m2lv@9703dad ≡ origin/ccr-424ada30-29m2lv` (`origin/main-dev@f0ec13f` is an
-  ancestor). `origin/feature/mediated-source-extraction-instructions` does not exist and the feature
-  directory is not on `main-dev`, so the harness branch stood in for the feature branch, as in the
-  sdd-design session. No file under ingest, agent, ui, `packages/proto`, `scripts/` or the MCP runbook
-  changed since the recon tree `f8e7a99`.
-- Discovery was done inline (no `codebase-discovery` scouts): recon.md covered the map; this session
-  re-read every cited file for line numbers and the break radius.
-- Step map: design S1 = Steps 1–4 (proto, proto-gen, agent client, agent parity tests — one unit);
-  S2 = Step 5 (migration 017); S3 = Steps 6–7 (ingest); S4 = Steps 8–9 (agent); S5 = Steps 10–11 (UI).
-- Key codebase findings:
-  - `SignalSource` field 15 and ingest migration 017 are free on this tree, on `origin/main-dev` and
-    on all 66 `origin/{feature,feature-steps,fix,hotfix}/*` heads (shallow-fetched for this check;
-    highest `SignalSource` field on any of them is 14; none has an ingest migration ≥ 017).
-    `claude/*` / `ccr-*` heads were not scanned.
-  - `ruff` enforces 100 columns in the agent and the default text has lines up to 881 characters, so
-    `_DEFAULT_EXTRACTION_INSTRUCTIONS` must be concatenated literals; Step 8 compares the constant
-    with design.md by a one-off command (design.md is deleted at archive, so no committed test can).
-  - `insert_source` / `update_source` are called directly only by `test_signal_sources.py:257,282,301`;
-    every other test patches them with `AsyncMock` or a `**kw` fake, so the new required keyword
-    breaks only those three calls and the four from-the-end positional assertions (`:274,276,316,317`).
-  - `ui/src/app/config-ui/sources/page.tsx` has no write call; the two pages in Step 10 are the only
-    UI signal-source write surfaces.
-  - A `page.route` fixture cannot hold `BigInt` (the shared source fixtures do), so
-    `SIGNAL_SOURCE_MEDIATED_LEGACY` is Connect-JSON shaped.
-  - The runbook's `list_signal_sources` section documents source-health fields the tool does not
-    return (`mcp-tools.md:149-152` vs `tools.py:561-571`). Existing drift: Step 8 rewrites only the
-    return example; the paragraph is reported, not fixed.
-- Spec-level choices (listed in the spec's "Assumptions"): validator message wording; the ingest
-  constant `_MEDIATED_EXTRACTOR_MODULE`; the new keyword has no default; test module names; the UI
-  over-cap message and `aria-label`; the concrete `@AC-15` rule (`non-mediated` within 200 characters
-  of every `extractor_module`; none in the prompt file); offline `pglast` parse for the migration.
-- Ledger: `insights.md` / `fails.md` were filtered to signal-source, template, agent-parity and
-  migration-harness entries, not read end to end.
-- Nothing was committed by this session.
-
-## Open Threads
-
-- [ ] Operator reviews the five instruction texts (design.md § Instruction texts) before the
-  migration step merges — after that they change only by a new migration. — Step 5.
-- [x] Re-derive proto field 15 and ingest migration prefix 017 from the union of open branches. —
-  done by /sdd-spec 2026-11-17 (both free; `claude/*` / `ccr-*` heads not scanned). Re-check at
-  `/sdd-execute` Step 1 and Step 5.
-- [ ] Feature 328 overlap on `agent/app/tools.py` (no merge-order row; second merger rebases). — Step 8.
-- [ ] Runbook guidance for hosts without a clock, and a pointer to the watchlist-expiry backfill
-  runbook for entries the 7-day rule does not reach. — Step 8.
-- [ ] Note in the Step 6 PR that admin-authored mediated templates without prose stop instantiating. — Step 6.
-- [ ] State the lazy `""` → noop flip in the ingest findings row. — Step 6.
-- [ ] Report the `list_signal_sources` runbook drift (source-health fields the tool does not return)
-  through `/sdd-qa defect`. — after Step 8.
-
-## Session 2026-11-17 — sdd-review impl-spec (advisory)
-
-- Tree: `ccr-424ada30-29m2lv@638920e1 ≡ origin/ccr-424ada30-29m2lv` (merged `origin/main-dev@98d8d3d9`;
-  the merge touched `agent/app/tools.py` and `docs/runbooks/mcp-tools.md` — a watchlist change that
-  alters nothing Steps 3/8/9 rely on).
-- Result: 1 failure, 5 warnings (advisory — did not block). No Floor risk. Every D-1..D-30 is
-  reflected in a step; all `@AC-1..26` have a `**Covers**` home.
-- Fixed in the spec before execution started (spec not yet in-progress): Step 8 stale citations
-  (`_get_source`, Usage Patterns) and the Step 8 grep expectation, which the new `_is_mediated`
-  prefix literal would have tripped (pattern now requires a type name after the prefix).
-- Unresolved ✗ / ⚠ carried into execution:
-  - Step 2: `**Files**` uses wildcards for generated stubs (the generated-output convention) — [ ] unaddressed (accepted: generated output cannot be enumerated ahead of codegen)
-  - Step 1: `buf breaking` against `feature/<slug>` — the branch does not exist; use the spec's `ref=HEAD` fallback (C-09) — [ ] unaddressed
-  - Step 2: verification runs `./scripts/buf-gen.sh` rather than naming `buf lint` / `buf breaking` — [ ] unaddressed (Step 1 runs both)
-- Overlap findings: **FAIL-level** with `323-fix-orphaned-code` (spec-ready): 323 deletes
-  `agent/app/prompts/signal_extraction.md` (this feature edits it, Step 8) and
-  `ingest/app/extractors/noop.py` (this feature stores the string `app.extractors.noop`; nothing
-  imports it). Operator decision pending. WARN-level, disjoint functions/sections: 351, 354, 343,
-  340, 314 on `agent/app/tools.py` / `client.py` / `docs/runbooks/mcp-tools.md`; 328 unchanged.
-- **Operator decisions after the impl-spec review (2026-11-17):** (1) `signal_extraction.md` is
-  edited as planned (323 may delete it later; that conflict resolves as a delete); (2) keep
-  `app.extractors.noop` as the stored module for mediated sources; (3) `merge-order.md` row added:
-  323 waits for 355 and rebases; (4) **execute all 11 steps** — one commit per step group on the PR
-  branch `ccr-424ada30-29m2lv` (the session may push only there; no per-step branches or PRs),
-  tests before each commit, stop at the first step that cannot pass or needs a decision.
-
-## Session 2026-11-17 — sdd-execute (sequential)
-
-- Mode entry + up-front confirmation: the operator's "Start, all steps" answer (above). Commits go
-  directly to `ccr-424ada30-29m2lv` (PR #1567), the branch standing in for `feature/<slug>`.
-  Checkpoint reports are printed without a gate — the operator chose "report at the end, stop only
-  on a failing step or a decision".
-- Tooling setup (steps 1–11): uv ✓ 0.11.32 · python ✓ 3.13 · ruff/pytest ✓ (uv sync) · pnpm ✓ 9.15.9 ·
-  node 22.23 (repo pins 24; `tsc` and install pass) · buf ✗ on host → Docker `xstockstrat-codegen`
-  image ⬇ (baseline regeneration reproduced the committed stubs: empty diff) · Chromium ✓
-  pre-provisioned · no database.
-- Baseline before any change: agent 765 passed, ingest 531 passed.
-
-### Step 1 — proto: `extraction_instructions` on `SignalSource` [done]
-- Added `string extraction_instructions = 15` (unit with Steps 2–4). `buf lint` OK; `buf breaking`
-  OK against `ref=HEAD` (the spec's documented fallback — the feature branch ref does not exist).
-- Files modified: `packages/proto/ingest/v1/ingest.proto`
-- Deviations: none. TDD: N/A (proto).
-
-### Step 2 — proto-gen: regenerate stubs [done]
-- Regenerated in the pinned codegen image; only `ingest/v1` generated files changed (0 others).
-  Ingest suite 531 passed; UI `tsc --noEmit` exit 0.
-- Files modified: `packages/proto/gen/{go,python,ts,ts/dist}/ingest/v1/*`
-- Deviations: none. TDD: N/A (proto-gen).
-
-### Step 3 — service: agent client carries `extraction_instructions` [done]
-- List projection and request builder carry the field; `_managed_source_to_dict` untouched (D-18).
-- Files modified: `services/xstockstrat-agent/app/client.py`
-- Deviations: none.
-
-### Step 4 — test: agent descriptor-parity tests cover the new field [done]
-- AC-6 (client half) red: both descriptor-parity assertions failed on the missing
-  `extraction_instructions` (2 failed, 6 passed) → green: agent suite 766 passed, coverage 88.11%.
-- Files modified: `services/xstockstrat-agent/tests/test_signal_source_projection.py`,
-  `services/xstockstrat-agent/tests/test_signal_source_builder.py`
-- Deviations: none.
-
-### Step 5 — migration: ingest `017` — prose column and seeded template prose [done]
-- Created the 017 pair (defaulted `extraction_instructions` column; guarded payload overlay on the
-  four system templates, no version bump), `ingest-017.sql`, and bumped the clean ingest version in
-  `migration-rerun.py` to 17. Offline checks: `pglast` parses 2 + 2 statements; the four seeded
-  literals equal design.md's texts byte for byte; exactly one `*_seed_source_templates.up.sql`;
-  scripts suite 491 passed, ruff clean. Down reverses up by inspection (key removed, column dropped).
-- Files modified: `services/xstockstrat-ingest/migrations/017_signal_source_extraction_instructions.{up,down}.sql`,
-  `scripts/migration-assertions/ingest-017.sql`, `scripts/migration-rerun.py`
-- Deviations: none. TDD: N/A (migration). Live apply / replay / refused-down / `ingest-017.sql` are
-  proven by CI `migration-rerun` on the PR, not here.
-
-### Step 6 — service: ingest stores, validates and returns `extraction_instructions` [done]
-- Repository: `is_mediated_source_type`, `normalize_extraction_instructions`,
-  `validate_extraction_instructions`, the cap constant; the column appended last in `_LIST_COLS`,
-  `insert_source` (`$10`) and `update_source` (`$9`). Servicer: mask path, template payload field,
-  `_source_to_proto`, `_validate_source_write` (config → credential → instructions), noop forced in
-  `_register_source` and the update merge, ManageTemplate CREATE/UPDATE validation. Docs: the 017
-  bullet and the findings row. Unit with Step 7.
-- Files modified: `services/xstockstrat-ingest/app/repositories/signal_sources.py`,
-  `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/CLAUDE.md`,
-  `services/xstockstrat-ingest/docs/context-constitution-findings.md`
-- Deviations: none.
-- **PR note (design.md § Open Risks):** an admin-authored mediated template with no prose no longer
-  instantiates and cannot be updated until prose is added (D-12).
-
-### Step 7 — test: ingest validation, merge rules and seeded prose [done]
-- AC-1 / AC-2 red on the pre-Step-6 tree: `tests/test_extraction_instructions.py` 31 failed, 10
-  passed — the handler passed no `extraction_instructions` to `insert_source` and accepted a
-  mediated register without prose → green: ingest suite 587 passed, coverage 86.97%; ruff clean.
-  With Step 6 alone the expected reds were the three `test_signal_sources.py` repository tests and
-  `test_ac7_prnewswire…` (no seeded prose without the overlay); all green after this step.
-- Covers AC-1..5, 9, 16..23, 25, 26, plus precedence (ALREADY_EXISTS / NOT_FOUND / PERMISSION_DENIED
-  ahead of the new check), the maskless rule (D-11), type changes in both directions, the lazy noop
-  flip (D-15) and reactivate/deactivate on a legacy row.
-- Files modified: `services/xstockstrat-ingest/tests/test_extraction_instructions.py` (new),
-  `services/xstockstrat-ingest/tests/test_signal_sources.py`,
-  `services/xstockstrat-ingest/tests/test_seed_source_templates.py`
-- Deviations: none. Note for future tests: calling `.extend(())` on `request.update_mask.paths`
-  sets the mask's presence, so a "maskless" request must not touch `update_mask` at all.
-
-### Step 8 — service: agent tools return prose, never `extractor_module`, for mediated sources [done]
-- `tools.py`: `_is_mediated`, `_DEFAULT_EXTRACTION_INSTRUCTIONS` (equals design.md's block byte for
-  byte), `_instruction_fields`, `_shape_managed_source`; `list_signal_sources` adds the two
-  instruction keys and `origin` on mediated entries only; `manage_signal_source` gains
-  `extraction_instructions` (masked only when supplied) and shapes its result;
-  `instantiate_template` shapes a `signal_source` result; docstrings for the five tools and the
-  module header. `client.py`: `_managed_source_to_dict` carries the raw field. Prompt file and
-  `docs/runbooks/mcp-tools.md` updated (shapes, parameter and error rows, Usage Patterns with the
-  precedence line, the clock note and the watchlist-expiry pointer). Unit with Step 9.
-- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`,
-  `services/xstockstrat-agent/app/prompts/signal_extraction.md`, `docs/runbooks/mcp-tools.md`
-- Deviations: none. Feature 328 overlap (same tool bodies) stands: whichever merges second rebases.
-
-### Step 9 — test: agent response shapes, mask rule and doc parity [done]
-- AC-7 / AC-8 red on the pre-Step-8 tree: `tests/test_extraction_instructions.py` 21 failed, 4
-  passed (no instruction keys on a mediated list entry; `extractor_module` present on manage
-  results; docs missing the fields) → green: agent suite 791 passed, coverage 88.25%; ruff clean;
-  `grep -c '"mediated_[a-z_]\{2,\}"' app/tools.py` = 4.
-- Covers AC-6, 7, 8, 9, 10, 15, 24, the mask rule (EXTEND `@AC-2` / `@AC-10 @feature-161`) and
-  INVALID_ARGUMENT surfacing as a ToolError.
-- Files modified: `services/xstockstrat-agent/tests/test_extraction_instructions.py` (new)
-- Deviations: none.
-
-### Step 10 — service: UI forms offer extraction instructions [done]
-- `/insights/signal-sources`: an "Extraction instructions" `Textarea` replaces the "Extractor
-  Module" input on a mediated type; `resolveExtractionInstructions` applies the four save rules
-  (send prose + mask the path; leave an untouched empty legacy value alone; block blank; send
-  nothing on a non-mediated type) and the 16,000 code-point cap; the value goes on both source
-  builders. `/config-ui/templates`: the field in `PAYLOAD_FIELDS`, `formFromTemplate` and
-  `buildInput`. Unit with Step 11.
-- Files modified: `services/xstockstrat-ui/src/app/insights/signal-sources/page.tsx`,
-  `services/xstockstrat-ui/src/app/config-ui/templates/page.tsx`
-- Deviations: none.
-
-### Step 11 — test: UI fixtures and e2e for both forms [done]
-- AC-11 / AC-13 / AC-14 red on the pre-Step-10 forms: the new tests 8 failed, 2 passed on the dev
-  server (no "Extraction instructions" input; the two passing tests cover unchanged non-mediated
-  behaviour). AC-14's first red was a dev-server compile timeout, so it was re-run alone with the
-  templates page change stashed: `getByLabel('Extraction instructions')` — element not found.
-  → green: the step's four spec files on a production build (`CI=1`), 42 passed; `tsc --noEmit`
-  exit 0; `pnpm run lint` exit 0; prettier clean.
-- Covers AC-11, 12, 13, 14, plus the legacy-edit rule, whitespace on a legacy row, the mask on an
-  edit with prose, the client-side cap and the non-mediated register body.
-- Files modified: `services/xstockstrat-ui/e2e/fixtures/signalSources.ts`,
-  `services/xstockstrat-ui/e2e/fixtures/templates.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`,
-  `services/xstockstrat-ui/e2e/insights/signal-sources.spec.ts`,
-  `services/xstockstrat-ui/e2e/config-ui/templates.spec.ts`
-- Deviations: none. The full e2e suite and the hermetic Docker runner were not run here — CI runs
-  them on the PR.
-
-- Config-key wiring gate (`node scripts/check-config-wiring.mjs --final`): exit 0. It prints two
-  pre-existing `REPORTED: … readers-disagree` lines (analysis `fundamentals.provider`, trading
-  `platform/trading_state`), neither touched by this feature.
-
-## Session 2026-11-17 — sdd-execute (integration)
-
-**Steps this session**: 1–11
-**Progress**: 11 done / 11 total
-**Stopped at**: all complete — status `code-completed`
-- Merged `origin/main-dev` three times during the run (docs-only changes on trunk; the only
-  conflict each time was two features appending to `docs/roadmap/ledger/insights.md`, resolved by
-  keeping both entries).
-- Merge-order gate: 355 is not blocked by any row (323 waits for 355).
-- **Scenario promotion (C-16), operator-approved:** `@AC-1..5, 16..23, 25, 26` →
-  `services/xstockstrat-ingest/acceptance/mediated-source-extraction-instructions.feature`;
-  `@AC-6..10, 15, 24, 27` → the agent suite of the same name; `@AC-11..14` → the UI suite. Nothing
-  to `platform.feature`. `@AC-27` was added first (operator-approved; Deviation Log).
-- Defect reports resolved by this feature: none (no C-16 CHANGE, no report named in the trail).
-- Integration PR: the existing PR #1567 (`ccr-424ada30-29m2lv` → `main-dev`) — title and body
-  updated; PR activity subscribed for the CI watch.
-- Unaddressed review warnings: the three impl-spec review items stay `[ ] unaddressed` by design —
-  Step 2's wildcard `**Files**` (generated output), Step 1's `buf breaking` ref (the `ref=HEAD`
-  fallback was used), Step 2's verification wording (Step 1 ran `buf lint` + `buf breaking`).
-- **Not proven locally:** the live apply / replay / refused-down of migration 017 and
-  `ingest-017.sql` (CI `migration-rerun`), and the full e2e suite (CI).
-**Next**: watch CI on PR #1567; operator reviews the five instruction texts before merge.
-
-## Session 2026-11-17 (CI: feature status automation)
-
-- Promotion PR #1576 merged to main
-- Feature promoted and committed: 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-11-17
+**Acceptance promotion (C-16)**: all of `@AC-1..27` are promoted, none left behind, nothing added to `docs/sdd/business-rules/platform.feature` (no `@feature-355` there): ingest `services/xstockstrat-ingest/acceptance/mediated-source-extraction-instructions.feature` (`@AC-1..5, 16..23, 25, 26`); agent `services/xstockstrat-agent/acceptance/mediated-source-extraction-instructions.feature` (`@AC-6..10, 15, 24, 27`); UI `services/xstockstrat-ui/acceptance/mediated-source-extraction-instructions.feature` (`@AC-11..14`). No scenario asserts the prose rules (recency, 7-day expiry, fixed convictions, per-source scopes); those exist only as instruction text.
