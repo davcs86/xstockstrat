@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-17
 **Committed to main**: 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f
 **Launched date**: 2026-11-17
+**Archived**: 2026-11-18
 
 ---
 
@@ -20,14 +21,15 @@
 | 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done (sequential, one commit per unit on the PR branch) |
 
 | 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1576; committed 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 5 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) · [Debate Register](debate.md) · [Design](design.md)
-- [Implementation Spec](implementation-spec.md) — 11 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-agent/acceptance/mediated-source-extraction-instructions.feature, services/xstockstrat-ingest/acceptance/mediated-source-extraction-instructions.feature, services/xstockstrat-ui/acceptance/mediated-source-extraction-instructions.feature (C-16)
+- Recon, Debate Register, Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
