@@ -1,118 +1,72 @@
-# Context Log: fix-listpositions-nextpagetoken-skips
+# Context: fix-listpositions-nextpagetoken-skips  (archived 2026-11-18)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-18 — /sdd-archiver
 
-## Session 2026-11-16 (/sdd-triage)
+**What**: `PortfolioRepo.ListPositions` (xstockstrat-portfolio only) now pages over the table's full unique key. The next-page token is built from the last RETURNED row (not the look-ahead row), as an opaque base64url(JSON array of exactly three strings: symbol, trading_mode, account_id). The query orders by `symbol, trading_mode, account_id` and filters with a row-tuple compare, so a symbol held in several accounts or modes can no longer lose rows at a page boundary. A malformed or legacy bare-symbol token is rejected as `ErrInvalidPageToken` before any query, and the handler maps it to `InvalidArgument` (before, every error was `CodeInternal`). No proto, migration or config change. Shipped in PR #1568 (squash `4c87ea83`, integration PR from `feature/fix-listpositions-nextpagetoken-skips`); promoted to main by PR #1573 (`dd41417d`, status flip to `launched` 2026-11-17 per feature.md). The docs-only branch PR #1564 carried the triage/design/spec docs and was declared superseded by #1568; the operator was to close it, and no source records that it was closed.
 
-- Bug reported via defect report `docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md` (sidecar stamped triaged)
-- Severity: SEV-2, environment dev (main-dev) -> Track C (SDD path)
-- Affected services: xstockstrat-portfolio; callers analysis, agent
-- Root cause hypothesis: look-ahead token + non-unique symbol keyset
-- Design depth: full (user choice; rubric default was quick) -> `/sdd-design fix-listpositions-nextpagetoken-skips`
-- Open question for design: handling of legacy bare-symbol tokens from in-flight clients (user: decide in design)
-- Out of bounds: sibling ListWatchlists report, feature 351
-- Development branch: feature/fix-listpositions-nextpagetoken-skips
+**Why (irrecoverable rationale)**:
+- Reject, do not resume page 1 (D-4/R-5). This is a deliberate departure from the marketdata cursor precedent (`parseHistCursor` returns ok=false and restarts at page 1; insights.md:3547). A silent restart makes `analysis _drain_held_symbols` re-add `abs(market_value)` per symbol, which is the fails.md:3309-3312 failure, and can loop paging consumers. The only surviving statement of this is the 2-line comment above `decodePositionCursor` (`portfolio_repo.go:213-214`); a future reader will see "unlike marketdata" and be tempted to align the two.
+- Legacy bare-symbol tokens are not accepted (R-3). The triage session left the policy open ("user: decide in design"); the design settled it as reject because the straddle is a seconds-long deploy window and accepting them would keep the buggy path alive behind a sniffing heuristic (C-18). The accepted cost is one `InvalidArgument` for any client holding an old token across the deploy: a held-symbol drain returns a partial set for one cycle and counts `record_live_loop_drain_failure("held")` (`@AC-16 @feature-294` preserved); `/trader/positions` recovers on reload or filter change (`page.tsx:58-62`, `resetPaging`).
+- One `text[]` cursor arg bound on EVERY page in the old token's slot (D-7, option b, round 2). The deciding factor was test-pin blast radius, not SQL elegance: `FROM portfolio.positions` also matches GetPosition, DELETE, realized, fees and Count queries, so changing the arg count could make an unedited pgxmock pin silently match the wrong query (O-1). Keeping the arg count left every `anyArgs(3)/(4)` pin untouched and only three exact pins changed (`offline_account_pnl_test.go:530,531,572`, `""` to `[]string{}`). Page 1 binds a non-nil empty slice and the SQL tests `cardinality($c::text[]) = 0` in the same predicate.
+- The `[]string` to text[] bind under Exec mode (`DB_PGBOUNCER`, `pool.go:29-32`) is the PgBouncer-only risk, so the Exec-mode dbtest subtests are mandatory (O-7/D-8), per fails.md:1977-2001. The real divergence is client-side text-array quoting of `, " { } \`, spaces and literal `NULL`, not the cast, which is why the seed set includes one `account_id` with all of those.
+- Collation: the schema has no `COLLATE`; the compare and the ORDER BY use the same collation, and the `acct_1` / `Acct-1` / `acct-1` oracle test (O-6) exists to prove the cursor follows whatever order the database actually uses rather than a Go string sort.
+- The token is not authenticated and not proto-visible: `user_id` is always an equality filter, so a forged or edited token can only change where the traversal resumes within that user's own rows (inference from the SQL shape; no source states it).
+- Test shape (O-5): the RED had to assert the exact ordered sequence of seven rows at page sizes 3 and 1, not a count, because current code returns a plausible-looking subset. No `@AC-*` previously pinned `ListPositions` pagination, so `@AC-1` is net-new (EXTEND by addition; no C-16 CHANGE, so no business-rule sign-off exists or was needed).
 
----
+**Rejected alternatives**:
+- R-1 numeric offset token: positions mutate continuously (sync delete+upsert, fills), so offsets shift between pages and drains double-count or skip; also O(offset).
+- R-2 `(symbol, position_id)` cursor: `position_id` is not in `positionColumns` (same scan-wrapper cost), there is no `(user_id, symbol, position_id)` index so each page would sort, and within-symbol order would be arbitrary.
+- R-3 accept legacy bare-symbol tokens (`symbol > $n` fallback): see Why.
+- R-4 pipe-joined `symbol|mode|account`: assumes symbols never contain `|` (offline symbols not provably constrained); a near-tie, base64(JSON) chosen because it is escape-safe.
+- R-5 malformed token resumes page 1: see Why.
+- R-6 option (a), keep the dead `($n='')` bind on page 1 and add 3 args only on cursor pages: two SQL shapes, production SQL bent to fit test pins, cursor-page shape untested (C-18). The adversary withdrew its round-1 preference for this.
+- R-7 option (c), 3 separate cursor args every page: every ListPositions pin 3 to 5 and 4 to 6 (about 37 sites) plus splitting shared-count loops.
+- R-8 option (d), one text arg holding JSON parsed with `NULLIF($n,'')::jsonb->>i`: a jsonb parse inside the predicate, strictly worse than (b).
+- D-6 (scope, not a rejected design): no consumer hardening and no `WatchlistRepo.ListByUser` change in this feature; fails.md:3265 is the scope-creep trap (a parallel fix site, a 9-round design for a narrow fix). Each was routed to its own follow-up (see Deferred follow-ons).
 
-## Session 2026-11-16 — sdd-design (round 1 of full debate)
+**Scars & gotchas**:
+- The design's Open Risk said to "confirm `/trader/positions` renders the straddle error through `QueryStateMessages`". The spec found the assumption wrong: `page.tsx:511` renders hand-rolled `<p className="text-sm text-destructive">Failed to load positions</p>`. The error is still visible, so no UI step was added; the hand-rolled markup is a pre-existing C-17 deviation left alone. Product-spec had also initially omitted `## Consumer Surface(s)`; the round-1 adversary found the unlisted `/trader/positions` consumer (O-2, C-14).
+- Index/plan claim was overstated in the first draft (O-8): the cursor-bounded index seek holds only under a custom plan (Exec mode in prod); under a cached generic plan (direct or dev, after about 5 executions) the `OR` stays a Filter and each page is O(the user's rows) on the unique index. Accepted because it is negligible at no more than 500 positions per user; do not claim index-bounded.
+- pgxmock: do not rely on `DeepEqual` for nil versus `[]string{}` (unverified, O-9). The page-1 test uses a local `pgxmock.Argument` matcher (`emptyStringSlice`) plus regex pins on the cast and the `[1]` index. The spec-time review checked the `Argument` interface in the pgxmock module source.
+- dbtest harness: cleanup existed only for watchlists (`it-281-` prefix) and no positions seeder existed. The shipped test extends the SAME `dbtestUserPrefix` cleanup (a second prefix was rejected, O-10), and `testPool` gained variadic `opts ...func(*pgxpool.Config)` to build the Exec-mode pool (29 call sites). Build both pools at the parent-test level on purpose.
+- Local verification: TimescaleDB was not installed, so the real-backend RED/GREEN is authoritative only in CI `portfolio-db-test` or against a Timescale container. DEV-2: the execute HARD CONSTRAINT forbids starting a database, but a `timescale/timescaledb:latest-pg16` container (`ts353`) had been started during the `/sdd-review impl-spec` loop when the spec author added the local-RED recipe, and the execute run reused it; both RED (pre-Step-1 tree `559036b`) and GREEN were captured there and disclosed. Feature 354 handled the same constraint differently, with an explicit one-off user override (see Cross-feature signal).
+- The RED was captured on the pre-fix tree and the codec/sentinel tests were written only after it (they would not compile before Step 1). Step 3's RED is compile-level (`undefined: classifyListPositionsError`) because there is no handler harness backed by a repo; the behavioural RED for the malformed token is Step 2's `TestListPositions_MalformedTokenIssuesNoQuery`.
+- DEV-1: `main-dev` had no `353-*` directory (triage/design/spec docs lived only on `ccr-fix-listpositions-nextpagetoken-skips`, PR #1564), so `feature/fix-listpositions-nextpagetoken-skips` was created from that branch's HEAD `559036b`, not from main-dev.
+- The Step 4 test calls the Connect classifier and asserts `status.Code(toGRPCError(...)) == codes.InvalidArgument` at the gRPC edge, because the only `PortfolioService` constructor is `NewPortfolioService(cfg, cfgWatcher)` and handler tests use `&PortfolioHandler{}`; the test works at the classifier level.
+- The final config-wiring gate (`node scripts/check-config-wiring.mjs --final`) exited 0, printing only the two pre-existing REPORTED lines (analysis `fundamentals.provider`, trading `trading_state`); no key from this feature.
 
-- Phase 0 Recon: recon.md written (portfolio, analysis, agent, scenario-recon). No existing @AC pins ListPositions pagination; all PRESERVE.
-- Round 1: proposer = composite (symbol, trading_mode, account_id) base64(JSON) cursor from the last returned row, reject malformed tokens (InvalidArgument). Adversary: no Floor breach; one blocking-for-approval objection (O-1: test-pin arg-shape blast radius); missed consumer `/trader/positions` added to product-spec. See debate.md.
-- Pending user steer: O-1 arg shape (a/b/c).
+**Permanent deviations**:
+- No design-vs-ship deviation in behaviour. DEV-1 (branch base), DEV-2 (reused DB container) and DEV-3 (checkpoints waived) are process deviations only; DEV-3 is the operator's "no checkpoints" instruction.
+- Repo-wide pre-existing limits left in place: the repo clamps `page_size` greater than 500 to 100 (`portfolio_repo.go:137-139`) while drains request 1000, so any user with more than 100 positions hit the bug in production; and `ListPositionsByAccount` stays unpaginated. Neither was changed.
+- Legacy-token rejection and the one-cycle straddle error (Why) are accepted costs, not bugs.
 
-## Session 2026-11-16 — sdd-design (round 2, approved)
+**Cross-feature signal**:
+- Twin of 354 (`fix-listwatchlists-page-token`): the same look-ahead-token class in `WatchlistRepo.ListByUser`, deliberately NOT fixed here (D-6; the sibling report was another session's). 354 merged `origin/main-dev` after 353's #1568 and recorded line drift in `dbtest_helpers_test.go` without a re-spec (its implementation-spec.md:390: symbols present, semantics unchanged) (`seedWatchlist` moved `:57-68` to `:75-86`; `testPool` gained 353's options). The two fixes differ: 354 only repoints the token at the last returned row (watchlist ids are unique), while 353 needed a full-key composite cursor because the keyset itself was non-unique. Do not assume the 353 cursor pattern applies to a table whose ordering key is already unique.
+- 351 (`ensure-signals-watchlist-on-read`) first surfaced the bug (adversary O-3) and gates its merge order on the watchlist fix; its later Step 5 replaced its own `testPoolWithLockTimeout` with 353's `testPool` option (351 context.md:182). 353's `testPool(opts...)` is now shared dbtest infrastructure.
+- Follow-up chain, each from the design's Open Risks and each a filed report triaged to its feature: analysis drain hardening (equal-token guard, fail-closed, cap-hit log) is feature 356 (report `2026-11-17-analysis-held-position-drains-trust-page-token-defect`, `triaged`, ref `feature:356-fix-analysis-held-position-drains`; feature.md shows launched via PR #1580); internal portfolio callers reading only the first 500 positions is feature 357 (`fix-portfolio-internal-position`, report `2026-11-17-portfolio-internal-position-reads-truncate-at-500-defect`, ref `feature:357-fix-portfolio-internal-position`; in-progress when read); trading reconcile reading only the first page is feature 358 (`fix-trading-reconcile-reads`, report `2026-11-17-trading-reconcile-reads-first-500-positions-defect`, ref `feature:358-fix-trading-reconcile-reads`; launched via PR #1580). 357 rejected a repo-level `ListAllPositions` drain (its R-1, locked) with the stated reason that it edits 353's fenced file. Filed by PR #1569 (`04393a09`, 2026-11-16).
+- 356's context.md lists 353 as upstream ListPositions fix, soft precedence and not a hard dependency; 356 adds the consumer-side equal-token guard and fail-closed behaviour that 353 deliberately left out (D-6).
 
-- Round 2: O-1 resolved by option (b) (single text[] cursor arg every page; 3 exact pins change at offline_account_pnl_test.go:530,531,572). Adversary agreed; conditions folded into D-8 (mandatory Exec-mode dbtest subtests, special-char/NULL account_id row, matcher for non-nil empty slice, reuse testUserID cleanup).
-- Chosen approach: composite (symbol, trading_mode, account_id) base64url(JSON) cursor from the last returned row; reject malformed/legacy tokens as InvalidArgument (deliberate departure from marketdata resume-page-1). Rejected: R-1..R-8 (see debate.md).
-- Constitution rules touched: C-01, C-08, C-10, C-13, C-14, C-15, C-16, C-18, P-06; Floor breaches: none.
-- Open Threads: exec-mode encoding risk -> test step; plan-shape note; deploy-straddle (confirm QueryStateMessages on /trader/positions) -> spec step; follow-up defect reports (analysis drain hardening, WatchlistRepo.ListByUser, internal 500-row truncation) to file after merge.
-- Status: draft -> design-approved.
+**Deferred follow-ons**:
+- No open follow-on of this feature's own: all three Open Threads follow-ups were filed (see Cross-feature signal) and the checklist items were left `[ ]` only until filing.
+- Live pointer to a soon-pruned file: `docs/roadmap/features/357-fix-portfolio-internal-position/implementation-spec.md:201` points at 353's `implementation-spec.md` Step 2 §RED for the local TimescaleDB recipe (`docker run … timescale/timescaledb:latest-pg16` plus psql migrations). Retrieve with `git show d0eea65f:docs/roadmap/features/353-fix-listpositions-nextpagetoken-skips/implementation-spec.md` (357 is in-progress and may follow it). `docs/roadmap/ledger/insights.md:4627` cites `debate.md` D-7, D-8, O-1, O-7 (ledger is append-only; retrieve `git show d0eea65f:docs/roadmap/features/353-fix-listpositions-nextpagetoken-skips/debate.md`). Other mentions of 353 in 351, 352, 354, 356, 358 are by feature number or the promoted suite, not file paths.
+- Reading of `@AC-1 @feature-178` ("one batched quote call") for pagination: recon asked whether it means one call per RPC page or per traversal; design settled per RPC page (design.md Business Rules; debate D-5), repeated in 357 context.md:15,41.
+- Declined/not applicable: recon offered an optional "do not parse the token" note in the agent docstrings (not adopted); `plugins/strat-lab` has no `get_positions` mention, so the root-CLAUDE.md same-PR strat-lab skill rule did not apply.
+- Live pointers to design.md: `docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md:9`, `docs/reports/2026-11-17-portfolio-internal-position-reads-truncate-at-500-defect.md:9` and `docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md:9` cite "feature 353 design § Open Risks, follow-up (n)". Retrieve with `git show d0eea65f:docs/roadmap/features/353-fix-listpositions-nextpagetoken-skips/design.md`.
+- Transient overlap note: features 311 and 323 (spec-ready) touch `portfolio_repo.go` in disjoint regions (soft rebase note, context.md:53,:66 pre-archive).
+- Optional business-rule gap: no scenario asserts that analysis drains return the full held set across pages (recon); that belongs to 356.
+- Optional: an `@AC` for the malformed-token to `InvalidArgument` path was never added; `acceptance.feature` has only `@AC-1`. The spec-time review flagged it as a product-spec call and Step 4 guards it as a design decision (D-4); it is covered by Step 2/4 unit tests only.
 
-## Session 2026-11-17 — sdd-spec
+**Governance sign-offs and provenance**:
+- Design depth: triage rubric default was quick; the user chose full (2026-11-16, context.md /sdd-triage). Design ran 2 rounds, within the cap; no C-11 round-cap override. design.md records `Approved by: user @ 2026-11-16 (design gate, round 2)`; the approving words are not quoted in any source.
+- O-1 (arg shape, blocking for approval) was resolved by option (b) after a "Pending user steer: O-1 arg shape (a/b/c)" line in round 1; no recorded question or verbatim answer survives, so the user relay of (b) has no P-04 provenance beyond context.md's statement "O-1 resolved by option (b)". The legacy-token policy was explicitly left to design by the user at triage ("user: decide in design"); the decision to reject was the design's and the user approved the design.
+- Execute: the operator invoked sequential mode "with no checkpoints" (verbatim; context.md session header). context.md (:103, Integration) records only that this instruction covered the C-16 promotion confirm; that it also served as the mode-entry and per-feature confirmation and waived the checkpoint reports comes from implementation-spec.md DEV-3 (:277-279, pruned). Spec review ran three impl-spec iterations (0 failures, 0 warnings at iteration 3); product-spec review was not run (feature went `draft` to `design-approved` directly), so that gate was listed but never signed off.
+- C-16: no CHANGE and no business-rule sign-off; `@AC-1` promoted, nothing else touched. Promoted suite: `services/xstockstrat-portfolio/acceptance/fix-listpositions-nextpagetoken-skips.feature` carries `@AC-1 @regression @feature-353` (verbatim, provenance comment says do not hand-edit). Not promoted: none (only one scenario existed). No `@feature-353` tag exists in `platform.feature`.
+- Defect-report closing (execute step 2.6): no candidates; the source report's sidecar stayed `triaged` with `ref: feature:353-fix-listpositions-nextpagetoken-skips` and resolution is derived from `launched`.
 
-- Tree: ccr-fix-listpositions-nextpagetoken-skips@384bf65 ≡ origin/ccr-fix-listpositions-nextpagetoken-skips (origin/main-dev@ccbe424 is an ancestor). `feature/fix-listpositions-nextpagetoken-skips` does not exist on origin. Stayed on the ccr branch because the feature directory exists only there (same call recon made).
-- Wrote implementation-spec.md with 4 steps, all in xstockstrat-portfolio. Status: design-approved → implementation-ready.
-  - Step 1 [service]: repo cursor codec, `ErrInvalidPageToken`, `scanPositionRowWithMode`, and the SQL. It also carries the 3 exact pin edits at `offline_account_pnl_test.go:530,531,572`, so it passes its own verification without a Lands with.
-  - Step 2 [test]: pgxmock tests, the codec table test, and the dbtest traversal + oracle tests over both exec modes. Covers AC-1.
-  - Step 3 [service]: `classifyListPositionsError` at `portfolio_handler.go:115`.
-  - Step 4 [test]: classifier test at the Connect and gRPC edges.
-- Key codebase findings:
-  - Bug lines: `portfolio_repo.go:161-162` (symbol-only keyset) and `:191-196` (`positions[pageSize].Symbol`). The ORDER BY at `:171` has no tiebreaker.
-  - The only empty-token exact pins are `offline_account_pnl_test.go:530,531,572`. The `anyArgs` pins keep their arg count.
-  - dbtest cleanup today covers watchlists only (`dbtest_helpers_test.go:41-46`). There is no positions seeder. To get the Exec-mode pool, the spec extends `testPool` with variadic `opts ...func(*pgxpool.Config)`.
-  - C-13: the repository-package pgxmock row header (`portfolio_repo_test.go:60-63`) gets a second consumer, so Step 2 hoists it into `positionRowCols`.
-  - The design assumption about the deploy straddle was wrong. `/trader/positions` renders the error with hand-rolled markup (`page.tsx:511` "Failed to load positions"), not `QueryStateMessages`. The error is still visible, and the user recovers by reload or `resetPaging` (`:58-62`). That markup is a pre-existing C-17 deviation and out of scope; there is no UI step.
-  - TimescaleDB is not installed locally, so the dbtest RED/GREEN is authoritative only in CI `portfolio-db-test` (or on a host with migrated TimescaleDB). The local RED is the pgxmock first-page test.
-- Open thread for /sdd-review: `acceptance.feature` has no scenario for the malformed-token → InvalidArgument path (D-4). Step 4 marks Covers as `—` and guards it as a design decision. Adding an `@AC-2` is a product-spec call.
-
-## Session 2026-11-17 — sdd-review impl-spec loop (iteration 1 → spec fixes)
-
-- Review iteration 1: 0 ✗, 6 ⚠ (advisory); overlap CLEAN (soft rebase note: 311/323 touch portfolio_repo.go in disjoint regions, both spec-ready).
-- Addressed in implementation-spec.md: citation drift (:134→:135, clamp :136-138, :505-507 `[]string` precedent re-verified); pgxmock `Argument` interface verified from module source (argument.go:6-8, DeepEqual at expectations.go:169); local TimescaleDB recipe verified (docker timescale/timescaledb:latest-pg16 + psql migrations, existing dbtests green) so the real-backend RED is capturable locally; PR TDD-block instructions for Steps 2 and 4; testPool variadic call-site claim quantified (30 sites); follow-up tracking rule.
-- Open Threads (follow-ups, file after launch via /sdd-qa defect):
-  - [x] analysis position-drain hardening (equal-token guard, fail closed, cap-hit log) — filed `docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md`
-  - [x] WatchlistRepo.ListByUser look-ahead token (other session owns the sibling report) — already filed and triaged as feature 354 (`fix-listwatchlists-page-token`, PR #1566); left to its owner
-  - [x] internal 500-row truncation (portfolio_service.go:787,932,1214,1283; trading.go:2235) — filed as two reports: `docs/reports/2026-11-17-portfolio-internal-position-reads-truncate-at-500-defect.md`, `docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md`
-
-- Review iteration 2: 0 ✗, 3 ⚠ (stale pgxmock "not in cache" text; scan-wrapper trade-off not cross-referenced; parent-level pool construction intent) + citation drift :191-196→:192-197 and unqualified ledger paths — all fixed in implementation-spec.md.
-
-## Session 2026-11-17 — sdd-review impl-spec (advisory) — final
-
-- Result: iteration 3 PASS — 0 failures, 0 warnings (advisory). Loop: it.1 0✗/6⚠ → fixed; it.2 0✗/3⚠ → fixed; it.3 clean (cosmetic 30→29 testPool call-site count fixed).
-- Unresolved ✗ / ⚠ carried into execution: none.
-- Overlap findings: none blocking; soft rebase note — 311 and 323 (spec-ready) touch portfolio_repo.go in disjoint regions.
-- Tree: ccr-fix-listpositions-nextpagetoken-skips@02ce334 (origin/main-dev@ccbe424 merged).
-
-## Session 2026-11-17 — sdd-execute sequential (no checkpoints, operator instruction)
-
-- Tooling setup (steps 1-4): go1.27 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.27.0) · TimescaleDB container ts353 (pre-existing, see DEV-2).
-- Branch: feature/fix-listpositions-nextpagetoken-skips created from ccr-fix-listpositions-nextpagetoken-skips@559036b (DEV-1).
-- RED (pre-Step-1 tree 559036b): local `TestListPositions_FirstPageBindsEmptyCursorArray` FAIL (SQL `($2 = '' OR symbol > $2) ORDER BY symbol ASC` does not match `cardinality(...::text[])`); real backend `TestListPositions_TraversalYieldsEveryRowOnce` FAIL in default and exec modes — page size 3 got qty [1 2 3 5 6 7] (pages [3 3]), page size 1 got [1 5 7], PAPER filter got [2 6]; `TestListPositions_CursorMatchesOracleOrder` FAIL (page size 1 returned only "Acct-1").
-
-### Step 1 — Composite keyset cursor in `PortfolioRepo.ListPositions` [done]
-- Token from the last returned row over (symbol, trading_mode, account_id), base64url(JSON); one `text[]` cursor arg in the old token slot with explicit casts; `ORDER BY symbol, trading_mode, account_id`; malformed token → `ErrInvalidPageToken` before any query; `scanPositionRowWithMode` wrapper; three `offline_account_pnl_test.go` pins re-pinned to `[]string{}`.
-- Verification: grep checks ✓, build ✓, vet (dbtest tag) ✓, `go test ./... -race` ✓ (also green with Step 2 test files absent), golangci-lint v2.14.0 0 issues. Real-backend GREEN: traversal + oracle tests PASS in default and exec modes.
-- Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`, `services/xstockstrat-portfolio/internal/service/offline_account_pnl_test.go`
-- Deviations: DEV-1, DEV-2, DEV-3 (Deviation Log)
-
-### Step 2 — ListPositions cursor tests (pgxmock + codec + real-backend traversal) [done]
-- Added `positionRowCols` (C-13 hoist), `emptyStringSlice` pgxmock matcher, first-page / cursor-page / malformed-token pgxmock tests, `TestPositionCursorCodec`; dbtest helpers `testPool(opts...)`, positions cleanup (same `dbtestUserPrefix`), `seedPosition`; `list_positions_dbtest_test.go` with traversal (page sizes 3/1, PAPER filter) and collation/special-character oracle tests over default + Exec-mode pools.
-- RED: captured on the pre-Step-1 tree (see session header above). GREEN: unit tests PASS; full `-tags dbtest ./internal/repository/...` PASS (default + exec subtests ran, none skipped); coverage total 81.8% (floor 40%); golangci-lint 0 issues; C-13 grep exactly 1 hit.
-- Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go`, `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go`, `services/xstockstrat-portfolio/internal/repository/list_positions_dbtest_test.go` (new)
-- Deviations: none (DEV-2 applies to the real-backend run)
-
-### Step 3 — Map `ErrInvalidPageToken` to `InvalidArgument` in the ListPositions handler [done]
-- Added `classifyListPositionsError` beside `classifyGetPositionError`; `ListPositions` handler now returns `classifyListPositionsError(err)` instead of `CodeInternal`.
-- RED: Step 4's `TestClassifyListPositionsError` written first → build failed `undefined: classifyListPositionsError` (compile-level RED; behavioural RED is Step 2's `TestListPositions_MalformedTokenIssuesNoQuery`). GREEN: Step 3 verification (with the Step 4 test file absent) build ✓, handler tests ✓, golangci-lint 0 issues.
-- Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`
-- Deviations: none
-
-### Step 4 — ListPositions error classification at the Connect and gRPC edges [done]
-- `TestClassifyListPositionsError` (sentinel, wrapped → InvalidArgument; other → Internal) plus the gRPC-edge assertion `status.Code(toGRPCError(...)) == codes.InvalidArgument`.
-- RED: compile failure captured before Step 3 (`undefined: classifyListPositionsError`). GREEN: handler tests PASS; coverage total 81.8% (floor 40%); golangci-lint 0 issues.
-- Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler_test.go`
-- Deviations: none
-
-- Final config-wiring gate: `node scripts/check-config-wiring.mjs --final` exit 0 (only pre-existing REPORTED lines for analysis `fundamentals.provider` and trading `trading_state`; no key from this feature).
-
-## Integration (2026-11-17)
-- Merge-order gate: no entry for 353 → proceed.
-- C-16 promotion: `@AC-1` → `services/xstockstrat-portfolio/acceptance/fix-listpositions-nextpagetoken-skips.feature` (`@feature-353`); no equivalent scenario existed (scenario-recon: none pins ListPositions pagination). Operator's "no checkpoints" instruction covered the promotion confirm.
-- Defect-report closing (2.6): no candidates — this feature records no C-16 CHANGE. The source report's sidecar stays `triaged` / `feature:353-fix-listpositions-nextpagetoken-skips`; `/sdd-archiver` derives resolution from `launched`.
-- Open Threads (follow-ups, file after launch via /sdd-qa defect): still `[ ]` — analysis drain hardening; WatchlistRepo.ListByUser; internal 500-row truncation.
-
-## Session 2026-11-17 — sdd-execute
-**Steps this session**: 1, 2, 3, 4
-**Progress**: 4 done / 4 total
-**Stopped at**: all complete — integration PR #1568 (feature/fix-listpositions-nextpagetoken-skips → main-dev) opened, CI watch subscribed
-**Next**: merge #1568 when CI is green; PR #1564 (docs-only, same commits' docs) is superseded — operator to close it; after launch file the three follow-up defect reports
-
-## Session 2026-11-17 (CI: feature status automation)
-
-- Promotion PR #1573 merged to main
-- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-11-17
+**Ledger entries written**: insights.md (1), fails.md (0) — see the 2026-11-18 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: PORTFOLIO candidate (`services/xstockstrat-portfolio/docs/context-constitution.md`, which has no pagination row): `ListPositions` `next_page_token` is an opaque base64url JSON array `[symbol, trading_mode, account_id]` of the last returned row; a token that fails decode must be rejected (`InvalidArgument`), never resumed from page 1; the ordering key must stay the table's full unique key, and the cursor arg stays one `text[]` bound on every page. PLAT candidate: paging consumers must treat tokens as opaque and fail closed on any page error (the 356 mechanism), since a server may legitimately return `InvalidArgument` mid-traversal after a deploy.
+**Pruned artifacts**: product-spec.md, recon.md, debate.md, design.md, implementation-spec.md — last present at d0eea65f.
+**Pruned defect report**: 2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md (triaged, ref feature:353-fix-listpositions-nextpagetoken-skips; feature launched) — SEV-2 silent data loss: look-ahead-row token plus a symbol-only keyset on a table unique on (user_id, symbol, trading_mode, account_id); no lesson beyond the feature's — last present at d0eea65f.
