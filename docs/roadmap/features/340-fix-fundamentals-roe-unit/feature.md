@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-fundamentals-roe-unit`
-**GitHub Issue**: n/a (Issues disabled) — report `docs/reports/2026-11-15-marketdata-roe-value-implausible-defect.md`
+**GitHub Issue**: n/a (Issues disabled) — report `docs/reports/2026-11-15-marketdata-roe-value-implausible-defect.md` (pruned 2026-11-18; `git show 262f41eb:docs/reports/2026-11-15-marketdata-roe-value-implausible-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-11-15
 **Last Updated**: 2026-11-16
 **Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
 **Launched date**: 2026-11-17
+**Archived**: 2026-11-18
 
 ---
 
@@ -23,16 +24,17 @@
 | 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute (sdd-batch-execute) | Step 10 operator gate recorded (lane A dry run, freeze on both stagings, pre-exports on both lanes); 10/10 steps done; `check-config-wiring.mjs --final` exit 0 |
 
 | 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(1); pruned 5 specs; pruned defect report 2026-11-15-marketdata-roe-value-implausible-defect |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier and root-cause trace
-- [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections
-- [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); promoted to services/xstockstrat-marketdata/acceptance/fix-fundamentals-roe-unit.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Debate Register — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
