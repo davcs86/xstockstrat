@@ -4122,7 +4122,6 @@ ambiguity is logged here).
 - **Mistake**: Feature 332 kept Python's SDK-generated `service.instance.id` as a "preserve" decision (D-7/@AC-21) without verifying where the id came from or whether code could override it; within days 336 reversed a launched business rule, needing a C-16 CHANGE sign-off and re-annotating three 332 scenarios.
 - **Evidence**: 336 context.md 2026-11-12 sdd-story ("332 left it unverified") and the sdd-execute integration session (pruned).
 - **Rule it implies**: A "keep the library default" decision must cite the pinned library's actual source or a test (the fails.md feature-274 bar); otherwise record it as an open risk, not a settled decision.
-
 ### 2026-11-18 — notify-commsgun-channel — assumption
 - **Mistake**: The implementation spec's file lists never anticipated that new notify tests built from patterned fake key literals would trip gitleaks' `generic-api-key` rule, so the first CI run on the integration PR failed `Secret scan` and `.gitleaks.toml` had to be edited (three exact-literal entries) outside every step's file list.
 - **Evidence**: 338 context.md "integration (sequential mode, ALL-DONE path)" CI paragraph (pruned; see Archive Synthesis); refines `fails.md:3254-3257` (feature 249, generated fixtures) to inline test constants.
