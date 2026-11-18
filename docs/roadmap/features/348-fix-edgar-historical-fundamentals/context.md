@@ -1,467 +1,67 @@
-# Context Log: fix-edgar-historical-fundamentals
-
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
-
----
-
-## Session 2026-11-16 (/sdd-triage)
-
-- Bug reported via defect report `docs/reports/2026-11-16-marketdata-edgar-period-label-collision-defect.md`
-  (Issues disabled): EDGAR historical fundamentals rows hold a different period's data than their
-  label and filed date say.
-- Severity: SEV-2. Environment: staging (homelab, main-dev). Config-only: no.
-- Routed to SDD path (Track C). No hotfix: no production instance exists.
-- Created: feature.md, status.md, product-spec.md, acceptance.feature (regression scenarios), context.md.
-  Report sidecar stamped `triaged` → `feature:348-fix-edgar-historical-fundamentals`.
-- Feature number 348 reserved by `scripts/sdd-allocate-feature-number.py`.
-- Affected services (from the report): xstockstrat-marketdata.
-- Recommended design depth: full → `/sdd-design fix-edgar-historical-fundamentals`
-  (rationale: SEV-2; a row-key change with a stored-data repair, possibly a migration; consumer
-  surfaces `xstockstrat-ui` and `xstockstrat-agent` count as services under the rubric).
-- Development branch: feature/fix-edgar-historical-fundamentals
-
-### Authorization reference (operator, relayed in the session brief, verbatim)
-
-> "The operator's instruction is: minimal human intervention. Treat that as standing authorization
-> to proceed through checkpoints that only report progress, and record it verbatim in the feature's
-> `context.md` as the authorization reference. It is NOT consent for the gates the Constitution
-> reserves to the operator — design approval, sign-off on changing an existing durable scenario,
-> the C-16 promotion plan, anything in the approval-flow runbook (DB migration: DBA + service owner;
-> breaking proto: owners + platform lead), merging any PR, and every staging action."
-
-No operator answer has been received in this session yet. Nothing below is an operator decision
-unless it is marked as one.
-
-### Root cause, traced at triage (live SEC companyfacts fetched 2026-11-16, HTTP 200)
-
-- The repeated `fy` is in the SEC payload. Companyfacts copies `fy`/`fp` from each filing's
-  cover-page tags, and filers set them inconsistently. Per filing accession (10-K / 10-Q only):
-  - ORCL: 10-Q filed 2025-09-10 (own quarter ended 2025-08-31) and 10-Q filed 2026-09-11 (ended
-    2026-08-31) both `fy` 2026 `fp` Q1.
-  - CRWD: five repeats — `Q1/Q2/Q3` of `fy` 2020 (filed 2019 and 2020), `FY` 2022 (10-Ks filed
-    2022-03-16 and 2023-03-09), `Q1` 2025 (filed 2024-06-05 and 2025-06-04). Its annual `fy` values
-    run 2022, 2022, 2023, 2024, 2026 for the years ended January 2022 to January 2026.
-  - CLSK: six repeats, among them `Q1` 2025 (filed 2025-02-06 and 2026-02-05) and `FY` 2021.
-- Reproduced on `main-dev` code with a throwaway probe test (not committed) that feeds each payload
-  through `FetchHistorical`. Rows with `period_end > filed_date`: ORCL 1, CRWD 5, CLSK 5, FLXS 4,
-  UCTT 4, JAZZ 7; AAPL 0, LYFT 0.
-- Second mechanism, same code: `edgar_client.go:434` takes the latest `end` over every fact in the
-  bucket, including the cover-page share count (`EntityCommonStockSharesOutstanding`), which is
-  dated after the period ends. ORCL `Q1-2026` shows 2026-09-07 for a quarter ended 2026-08-31. JAZZ
-  (calendar fiscal year) gets seven annual rows whose `period_end` is in April, after the February
-  `filed_date`. This is the "period_end looks like a filing-availability date" observation.
-- "Only three of the last four quarters stored" (23 symbols in the feature-340 audit) is the
-  missing period of each collision. Same defect.
-- Different defect, recorded separately as
-  `docs/reports/2026-11-16-marketdata-edgar-tag-coverage-gaps-defect.md` (status `open`): the 11
-  symbols with no quarterly net income and the 13 with nil roe on the latest quarter. Checked on
-  AVGO, JEF, BMO, CARR, HSY, SNOW: the filer reports under `ProfitLoss`, equity including
-  non-controlling interest, or IFRS tags, which the derivation does not read. Not widened into
-  this fix.
-- ORCL facts used by the acceptance scenarios: quarter ended 2025-08-31 net income 2,927,000,000,
-  equity 24,154,000,000, filed 2025-09-10 (accession 0001193125-25-200095); quarter ended
-  2026-08-31 net income 4,760,000,000, equity 66,772,000,000, filed 2026-09-11 (accession
-  0001193125-26-389274); cover-page share count of the second filing dated 2026-09-07.
-
-### Assumptions made by the triage session (not operator decisions)
-
-- Triage artifacts are committed on `feature/fix-edgar-historical-fundamentals` and reach `main-dev`
-  with the integration PR, not through a separate docs PR.
-- The product spec is written fuller than the triage template (numbered FRs, consumer surfaces)
-  because the root cause was traced in the same session.
-- The second defect report is recorded on the session brief's instruction ("if different, record
-  them with `/sdd-qa defect`"); its severity (SEV-3: values missing, none wrong) is the session's
-  classification.
-
-## Session 2026-11-16 — sdd-review product-spec
-
-- Tree: `feature/fix-edgar-historical-fundamentals@f426971 ≡ origin/feature/fix-edgar-historical-fundamentals`.
-- Product spec approved. Status: draft → spec-ready. Verdict: PASS WITH WARNINGS, no Floor breach.
-  Proceeded under the authorization reference above (a progress checkpoint, not a reserved gate).
-- Warnings:
-  - FR-7 is covered only for the EDGAR snapshot path (`@AC-6`); the agent tool, analysis
-    backtests/screens and UI readers have no scenario (C-15, C-14). Carried to recon: add scenarios
-    or narrow FR-7 once every reader is listed.
-  - FR-5's stale-label clause had no explicit assertion in `@AC-5` (C-15). Addressed in this
-    session: `@AC-5` gained `And no stored "ORCL" row has period_end 2026-09-07` (the scenario was
-    still a draft; its ID is unchanged).
-  - If design chooses a migration, the implementation spec must state the next `NNN`, the up and
-    down files and the run order (C-07, F-01). Marketdata migrations end at `009`; next free is `010`.
-  - FR-3's "as its own current period" is abstract; design must define it (own-period facts versus
-    comparative columns).
-- Overlap findings: no FAIL-level overlap. Feature 340 (`fix-fundamentals-roe-unit`, `code-completed`)
-  shares `internal/edgar/edgar_client.go`, the `DerivationVersion` gate, the golden in
-  `derivation_version_test.go` and the `marketdata.fundamentals_history` rows. 340's code is already on
-  `main-dev` (`8ccc152`, PR #1552) and this branch is based on it, so the order is fixed and no
-  merge-order row was written. Features 341, 343 and 347 touch other files.
-- Recommended design depth: full (row-key change with a stored-data repair, possible DB migration,
-  consumer surfaces `xstockstrat-ui` and `xstockstrat-agent`).
-
-## Session 2026-11-16 — sdd-design (in progress: waiting at the approval gate)
-
-- Tree: `feature/fix-edgar-historical-fundamentals@9728776 ≡ origin/feature/fix-edgar-historical-fundamentals`.
-- Phase 0 Recon: wrote recon.md (writer: marketdata; readers reconned: analysis, ingest, agent, ui).
-  No consumer parses or sorts by the label; analysis selects by `filed_date` only.
-- Phase 1 Grilling: 3 rounds (full). Register: debate.md (D-1..D-23, R-1..R-16, O-1..O-33 all
-  closed, no petitions). Floor breaches: none in any round.
-- Rounds 2 and 3 were started without asking: round 2 is mandatory in full mode, and after round 2
-  four blocking objections remained that only a further round could settle. Both are progress
-  checkpoints under the authorization reference, not operator decisions.
-- Measurements added to recon.md by the orchestrator during the debate (live SEC payloads, 14
-  filers): the filer's `fp` is unreliable too; JEF's year-end change; most stored rows carry a
-  cover-page `period_end`, so most rows are rewritten by the repair.
-- NOT approved. The approval gate, the feature-216 `@AC-5` text, the label-collision residual, the
-  deletion categories and the audit runner are put to the operator in one message. Nothing in
-  design.md, status.md or acceptance.feature is written until the operator answers.
-
-## Session 2026-11-16 — sdd-design (approved)
-
-- Phase 0 Recon: wrote recon.md (services: marketdata; readers analysis, ingest, agent, ui; key
-  reuse patterns: the feature-340 balance-sheet anchor and `candSet`, the `DerivationVersion` gate
-  with its golden, feature 340's lane procedure).
-- Phase 1 Grilling: 3 rounds (full). Chosen approach: one period per filing identified by form
-  class and its own balance-sheet date; labels computed from dates in the existing format; a
-  per-symbol reconcile in the backfill (rows the derivation reproduces are upgraded in place, all
-  others deleted and re-inserted in one transaction); guards, a no-write audit, export and restore;
-  version 3; no migration, proto or config change. Rejected: R-1..R-16 (debate.md).
-- Constitution rules touched: C-01, C-08, C-13, C-14, C-15, C-16, C-18, P-01..P-06, F-01, F-04,
-  F-06, F-07. Floor breaches: none.
-- Status: spec-ready → design-approved.
-
-### Operator answers at the approval gate (2026-11-16)
-
-The five questions were put in one message (design approval; the feature-216 `@AC-5` text; the
-label-collision gap; rows deleted without a same-date replacement; who runs the audit). The
-operator's reply, verbatim:
-
-> 1. Yes
-> 2. As recommended
-> 3. Acknowledged
-> 4. Acknowledged, but add a info log for them.
-> 5. You can get the symbols using the MCO, and run the fetches
-
-Follow-up message, verbatim: "in the #5, MCO = MCP".
-
-How each is applied:
-
-1. Design approved as summarized (D-1..D-23). That summary included running the repair with
-   `overwrite=true` and that any admin-triggered fundamentals backfill runs the reconcile once a
-   lane is enabled.
-2. C-16 CHANGE signed: feature 216 `@AC-5` gains the `Given`
-   `And the current EDGAR derivation reproduces that period's fiscal_period, period_type, period_end and filed_date`
-   (Option 1, the recommended one), with this feature's `@AC-11` promoted in the same PR.
-3. "Acknowledged" to "Accept one known gap in labels?". The mechanism (D-19) is inside the design
-   approved under answer 1. The session treats the gap as accepted and told the operator so in its
-   next message; the word recorded is the operator's, not "accepted".
-4. Deletions without a same-date replacement: acknowledged, with a condition — an INFO log for
-   them (D-24).
-5. The main session obtains the symbols through the staging MCP and runs the SEC fetches (D-25).
-   This is the operator's standing word for the read-only MCP reads the audit needs; it is not
-   consent for `set_config`, `trigger_backfill` or any other staging change, which stay per-step.
-
-Deviation from the grilling protocol, flagged: answers 4 and 5 add constraints at the gate. The
-protocol's "inject a constraint" path runs another round. No fourth round was run: the operator
-chose approval in the same reply, and both constraints are additive (a log line; where the audit
-reads its input) and change no settled decision. They are recorded as D-24 and D-25.
-
-### Open Threads (from design.md § Open Risks)
-
-- [ ] How the main session lists a lane's stored symbol universe through the MCP — target: `/sdd-spec` discovery; if no tool lists it, ask the operator for the list.
-- [ ] Read MARKETDATA-13 (`services/xstockstrat-marketdata/docs/context-constitution.md:27`), findings `:29-31`, `docs/runbooks/historical-backfill.md:148+` — target: `/sdd-spec`, before the docs step.
-- [ ] Label-collision left-out periods, deleted-without-replacement rows, guard-failed symbols, single-metric anchors, 6-K half-year rows — target: the pre-enable audit report (procedure step 3), reviewed by the operator per lane.
-- [ ] Empty price-join columns on replaced rows — target: the pre/post diff (procedure step 8).
-- [ ] The acceptance restatement (`@AC-1..@AC-11`, FR-6) is applied in the first implementation step.
-
-## Session 2026-11-16 — sdd-spec
-
-- Tree: `feature/fix-edgar-historical-fundamentals@15da035 ≡ origin/feature/fix-edgar-historical-fundamentals (merged origin/main-dev@f3f02c7)`.
-  The merge moved `internal/service/marketdata_service.go` by +21 lines against recon.md and
-  design.md; the spec cites the current numbers.
-- Implementation spec generated: 15 steps (atomic units 2+3, 4+5, 6+7, 8+9, 10+11; Step 15 is the
-  operator gate). No migration, proto or config change.
-- The skill ran as a forked run that was cut off by a usage limit after it wrote
-  `implementation-spec.md` and before its closing bookkeeping. The main session completed the
-  bookkeeping (status.md, feature.md, this entry) from the file on disk. The main session read the
-  spec's summary sections only; the step bodies have NOT been re-verified by it. The impl-spec
-  review has not run yet.
-- Status: design-approved → implementation-ready.
-- Choices the spec makes where the design is silent are listed in the spec as S-1..S-13. Two need
-  the operator's or the reviewer's word before Step 8 is executed:
-  - S-2: the service's INFO line reports `no_period_derived` for a row the audit reports as
-    `left_out`, because the service only has `FetchHistorical`.
-  - S-4: read literally, D-24 logs one INFO line for every row whose only change is a cover-page
-    `period_end` corrected to the balance-sheet date, which recon measured as most rows of a lane.
-- S-12: no MCP tool lists the symbols stored in `marketdata.fundamentals_history`; the spec builds
-  the list from `get_backfill_status` and has the operator confirm its size with one read-only count.
-
-### Open Threads
-
-- [ ] Run `/sdd-review fix-edgar-historical-fundamentals impl-spec` — not run yet.
-- [ ] S-2 and S-4 — ask the operator before Step 8.
-- [ ] S-12 — confirm the symbol-list method with the operator before Step 15.
-
-## Session 2026-11-16 — operator answers after the spec (orchestrator)
-
-Three questions were put in one message after the PR was opened. The operator's reply, verbatim:
-
-> Q1
-> Narrow set
-> Q2
-> Agreed
-> Q3
-> Use the mcp to pull the symbols from all watchlists
-
-- Q1 (INFO log volume; spec S-4): the narrow set. A row whose period is stored again under corrected
-  dates or label gets no INFO line; only rows whose period no longer exists in the table are logged
-  and listed. This narrows the literal wording of D-24 in design.md § 2 and § 3; the spec's S-3
-  pairing rule is the precise form.
-- Q2 (spec S-2): agreed. The service logs `no_period_derived` where the audit reports `left_out`.
-- Q3 (spec S-12): the main session pulls the symbols from all watchlists through the MCP.
-- The spec was edited in place (S-3, S-4, S-12, Steps 4, 5, 15 evidence and instructions). No step
-  has been executed, so the step bodies are not yet immutable (F-09 applies from execution).
-- Earlier in the session the operator asked, verbatim: "Create a PR with the artifacts you have so
-  far". PR #1558 (`feature/fix-edgar-historical-fundamentals` → `main-dev`) was opened for the docs.
-
-### Open Threads
-
-- [x] S-2, S-4, S-12 — answered above.
-- [ ] Run `/sdd-review fix-edgar-historical-fundamentals impl-spec`.
-
-## Session 2026-11-16 — sdd-review impl-spec (advisory)
-
-- Tree: `feature/fix-edgar-historical-fundamentals@d43cce3 ≡ origin/feature/fix-edgar-historical-fundamentals`.
-  `origin/main-dev` had moved by one commit (#1557, UI only, none of the cited files); it was not
-  merged during the review so the reviewers read a still tree. BRANCH SYNC in `/sdd-execute` merges it.
-- Result: 7 failures, about 24 warnings (advisory — did not block). No Floor breach. About 40
-  citations spot-checked; two off by a few lines.
-- The spec was edited in place before execution (no step had started), commit follows this entry:
-  - [x] Steps 1, 3, 5, 9: `grep` expectations that exit non-zero on success → `test "$(grep -c …)" = N`.
-  - [x] Steps 7, 9, 12: `go test … | grep` pipelines that hide a failure → output to a log, then `test` on it.
-  - [x] Step 9: the `Found:` pattern matched `internal/config/config_test.go` → narrowed.
-  - [x] Step 11 instruction 2 contradicted S-3/S-4 (a replaced row asserted as deleted without replacement) → corrected, plus a case that does produce a category.
-  - [x] Coverage ≥ 40% now asserted in Steps 3, 5, 9, 11; `cd`-chains replaced by `go -C`.
-  - [x] Step 3: the fixture must contain the two real ORCL accession numbers; the SEC `User-Agent` is generic.
-  - [x] Step 8 item 4: which stored row supplies a carried price.
-  - [x] Step 15: lane B export is the operator's; counts only for symbols outside the watchlist union; lane A's flag stays `false` until the operator enables it; `otel.go:371`.
-- Unresolved ⚠ carried into execution:
-  - Steps 4+5, 6+7, 10+11: `**Lands with**` folds that step-constraints §C does not strictly require (a new package does not break the tree) — [ ] unaddressed (kept: each pair is one commit either way in sequential mode)
-  - Step 3 touches 8 files — [ ] unaddressed (fixture migration is one compile unit)
-  - Step 12: "the CI job ran with no SKIP" is checked by eye on the PR — [ ] unaddressed (the job fails closed without its database)
-  - Step 14: one docs check is by eye — [ ] unaddressed
-  - C-14: no UI or agent step by decision; the note sits in the spec's Consumer Surfaces section, verified on the canary after deploy — [ ] unaddressed
-- Overlap findings: no migration, proto or config collision. File-level WARN only: `internal/telemetry/otel.go` and `telemetry_allowlist_test.go` (337, 341), `marketdata_repo.go` and its test (341), `marketdata_service.go` and its test (347), `services/xstockstrat-marketdata/CLAUDE.md` (341, 347), `docs/context-constitution.md` (347), `.github/workflows/ci.yml` (343, 345). No merge-order row written (no FAIL-level overlap).
-
-## Session 2026-11-16 — sdd-execute (sequential)
-
-- Mode entry and the per-feature up-front confirmation were not asked again: the operator's brief
-  names `/sdd-execute <slug> sequential` as the command to run, and the authorization reference
-  covers progress checkpoints. Reserved gates still stop the run: the C-16 promotion plan, Step 15's
-  staging actions, merging.
-- Re-spec gate: `origin/main-dev` merged into the branch (`2e603f21`; #1557, UI only); ledger-guard
-  clean. The impl-spec review had just re-checked about 40 citations on this tree; no step mismatched,
-  no re-spec.
-- Tooling setup (steps 1–15): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 built with go1.27.0 (at
-  `$(go env GOPATH)/bin`; the 2.5.0 binary on PATH is not used) · node v22.23.4 (root tooling only;
-  no UI step) · python3 ✓ · no database installed or started.
-
-### Step 1 — docs: restate acceptance.feature (`@AC-1..@AC-11`) and FR-6 [done]
-- `acceptance.feature` `@AC-3..@AC-11` written mechanically from the Gherkin block in the step body;
-  `@AC-1`, `@AC-2` untouched. FR-6 restated to the strict rule. TDD: N/A (docs).
-- Files modified: `docs/roadmap/features/348-fix-edgar-historical-fundamentals/acceptance.feature`, `docs/roadmap/features/348-fix-edgar-historical-fundamentals/product-spec.md`
-- Deviations: none
-
-### Step 2 — service: EDGAR period identity per filing, date-derived labels, `DerivationVersion` 3 [done]
-- Atomic unit Steps 2+3. `FetchHistorical` now groups facts by accession, types a filing by its form class, dates it at its own balance-sheet anchor (on or before `filed`), merges filings by (type, own end) with the earliest filing winning, labels from dates (`quarterLabel`, floor arithmetic), leaves out label collisions and quarterly filings ending on a real fiscal-year boundary, and exposes `DeriveHistorical`. `unitDatum.FY`/`FP`, `periodKey` and `classifyPeriodType` are gone. `DerivationVersion` = 3. New: `source.LeftOutPeriod`, `telemetry.RecordPeriodLeftOut` with label key `reason`.
-- TDD (unit): RED on the pre-unit tree with the ORCL fixture — AC-1 `no quarterly period with period_end 2025-08-31` / `… 2026-08-31`; AC-2 `Q1-2026 quarterly: period_end 2026-09-07 after filed_date 2025-09-10`; AC-3 `labels: 2025-08-31 → <nil>, 2026-08-31 → <nil>, want Q1-2026 and Q1-2027`. GREEN after the unit: see Step 3.
-- Files modified: `services/xstockstrat-marketdata/internal/edgar/edgar_client.go`, `services/xstockstrat-marketdata/internal/source/source.go`, `services/xstockstrat-marketdata/internal/telemetry/otel.go`
-- Deviations: none
-
-### Step 3 — test: ORCL and CRWD fixtures, period-identity tests, fixture migration, version-3 golden [done]
-- Atomic unit Steps 2+3. Fixtures: ORCL (CIK0001341439, 1,467 facts, 340 KB) and CRWD (CIK0001535527 resolved from SEC's ticker map, 504 facts, 117 KB), fetched live from `data.sec.gov` on 2026-11-16 (HTTP 200, generic tool-only User-Agent) earlier in this session and trimmed by tag only (the 17 read tags, every fact kept, `cik` and `entityName` kept). `period_identity_test.go` holds the shared loader (`lyftPeriods` now calls it), the ORCL and CRWD cases and the synthetic cases (form classes, mixed-form accession, `@AC-10`, the 10-KT boundary, label arithmetic, year-end quarterly, shares tie rules).
-- GREEN: `go test ./internal/edgar/... -race -count=5` → `ok … 15.282s`; `go test ./... -race -count=1` → 16 packages `ok`; coverage `total 86.0`; `golangci-lint` v2.14.0 `0 issues.`; the seven `test` checks of the Verification block passed (`ALL-VERIFY-OK`).
-- Existing tests changed, and why: `cannedCompanyFacts` and `axpFacts` now give each filing its own accession, and the AXP filing of 2026-02-10 is a 10-K (grouping is by accession and the form decides the type); `TestFetchHistorical_MapsFiledPeriod_AC1` expects `Q4-2019` for a lone quarter with no annual filing (Dec-31 fallback), with a sibling case that adds Apple's annual filings and asserts `Q1-2020`; `TestLYFT_PeriodsStampedVersion2_AC5_feature340` became `…StampedCurrentVersion…` and compares against `DerivationVersion`. No assertion on a value was changed: the AXP `Q2-2026` and `FY2025`, the LYFT `Q3-2026` (roe 0.942632) and `FY2025` (roe 0.868791), the BABA-shaped and CRCL `FY2025` cases pass untouched.
-- The version-3 golden hash equals the version-2 hash: the AXP golden fixture has no repeated `fy`/`fp`, no cover-page share fact and no label change, so its output is the same under both versions. Entry `3:` is recorded as the guard requires.
-- Labels and left-out periods of `@AC-3` and `@AC-10` came out exactly as Step 1 states them.
-- Files modified: `services/xstockstrat-marketdata/internal/edgar/testdata/orcl_companyfacts.json`, `services/xstockstrat-marketdata/internal/edgar/testdata/crwd_companyfacts.json`, `services/xstockstrat-marketdata/internal/edgar/period_identity_test.go`, `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go`, `services/xstockstrat-marketdata/internal/edgar/ttm_roe_test.go`, `services/xstockstrat-marketdata/internal/edgar/own_period_test.go`, `services/xstockstrat-marketdata/internal/edgar/derivation_version_test.go`, `services/xstockstrat-marketdata/internal/service/telemetry_allowlist_test.go`
-- Deviations: none
-
-### Step 4 — service: pure reconcile planner (`internal/reconcile`) [done]
-- Atomic unit Steps 4+5. `reconcile.Build(stored, fresh, Request) (Plan, error)` is pure. Guards run first and each has its own sentinel (`ErrFreshEmpty`, `ErrTypeMissing`, `ErrFilerMismatch`); a guard error carries an empty plan. `Plan` holds the identical pairs inside the range, `Deletes` and `Inserts` both sorted by (`fiscal_period`, `period_type`), and `Unreplaced` (row + category). Dates compare as `YYYY-MM-DD` strings. `source.HistoricalPriceState` gained `FiscalPeriod`, `PeriodType`, `PeriodEnd`, `ExtraMetrics`; `periodTypeWanted` moved to `source.PeriodTypesWanted`.
-- Readings of the step text, recorded because Step 8 and Step 10 depend on them: (1) the filer guard reads every stored row of the symbol, not only rows of a requested type, and compares with every fresh period of any type; (2) "stored rows exist and the fresh set is empty" fails the symbol even when the stored rows are all of a type that was not requested; (3) inserts are sorted like deletes, so two runs on one symbol take row locks in one order; (4) category `merged` is given when any fresh period of the row's type has its `filed_date`.
-- Added beyond the step text: `source.PeriodQuarterly` / `source.PeriodAnnual`, with the two unexported constants in `internal/edgar` now set from them (DRY guard rail: the planner needs the two names and the service does not import `internal/edgar`).
-- Known edge, by design (D-17), not changed here: a current-version row that the derivation now dates differently (same type and `filed_date`, other `period_end`) is deleted, and its corrected period is inserted only when that `period_end` is inside the request range. Outside the range the row is listed in `Unreplaced` as `merged` and logged by Step 8, and the period returns on the next backfill whose range covers it. This needs SEC to change a filing's facts after the row was stored at version 3.
-- TDD (unit): RED before `plan.go` existed — the package did not compile (`undefined: Request`, `unknown field FiscalPeriod in struct literal of type source.HistoricalPriceState`). Assertion-level RED by mutation after the unit: with rule (c) removed, `TestBuild_CollidedRowRestoresBothPeriods_AC8_feature348` fails `inserts = [Q1-2026@2025-08-31], want [Q1-2026@2025-08-31 Q1-2027@2026-08-31]`; with the filer guard returning nil, `TestBuild_Guards_AC9_feature348` fails `another filer's values: err = <nil>`. Both mutations were reverted. GREEN: see Step 5.
-- Files modified: `services/xstockstrat-marketdata/internal/reconcile/plan.go`, `services/xstockstrat-marketdata/internal/source/source.go`, `services/xstockstrat-marketdata/internal/edgar/edgar_client.go`
-- Deviations: none
-
-### Step 5 — test: reconcile planner cases [done]
-- Atomic unit Steps 4+5. Seven tests cover the nine cases of the step: identity (incl. same day at another hour), `@AC-8` both halves, rule (b) with the O-4 current-version orphan, the label chain with sorted deletes, requested types, `@AC-9` and the other guards (eight rows), and the four categories plus the replaced cover-page row.
-- GREEN: `go test ./internal/reconcile/... -race -count=1 -cover` → `ok … coverage: 97.3% of statements`; `go test ./... -race -count=1` → 17 packages `ok`; coverage `total 86.6`; `golangci-lint` v2.14.0 `0 issues.`; no `periodTypeWanted` left.
-- Files modified: `services/xstockstrat-marketdata/internal/reconcile/plan_test.go`
-- Deviations: none
-
-### Step 6 — service: repository list-all-rows read and transactional replace [done]
-- Atomic unit Steps 6+7. `histInsertStatement` + `histInsertArgs` hold the insert once; `InsertHistoricalFundamentals` appends its `ON CONFLICT` suffix. `ListHistoricalRows(ctx, symbol)` returns every row of the symbol ordered by (`fiscal_period`, `period_type`), an empty non-nil slice when there is none. `ReplaceHistoricalFundamentals(ctx, symbol, deletes, inserts)` sorts a copy of the deletes, marshals every insert before `Begin`, runs the pinned deletes (dates bound as `YYYY-MM-DD` text, S-9; exactly one row each) then the plain inserts, and commits last. An empty plan opens no transaction. No `SET`, no advisory lock.
-- TDD (unit): RED before the methods existed — build failure (`repo.ListHistoricalRows undefined`, `ReplaceHistoricalFundamentals undefined`, `undefined: histInsertStatement`). Assertion-level RED by mutation: with dates bound as `time.Time`, four replace cases fail on the delete arguments; with the row-count rule loosened to "0 rows only", the two-row case fails `want it to contain "removed 2 rows, want 1"`. Both mutations reverted. GREEN: see Step 7.
-- Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`
-- Deviations: none
-
-### Step 7 — test: pgxmock pins for the list read and the replace [done]
-- Atomic unit Steps 6+7. `TestListHistoricalRows_feature348` pins the projection, `WHERE symbol=$1`, the order, every scanned field and the decoded `stockholders_equity` 66,772,000,000, plus the empty result. `TestReplaceHistoricalFundamentals_feature348` has six cases (the `@AC-5` plan, sorted deletes, 0-row delete, 2-row delete, insert error, empty plan) and the no-`ON CONFLICT` check on the shared statement.
-- The first version of the 0-row and 2-row cases only asserted "an error": the mutation run showed the 2-row case still passed when the row-count rule was loosened, because pgxmock's own "unexpected Exec" error satisfied it. The cases now assert the error text (`removed N rows, want 1`), which is what proves no insert ran.
-- GREEN: the `-run 'ListHistoricalRows|ReplaceHistoricalFundamentals' -v` log has 2 top-level and 6 sub-test `--- PASS`; `go test ./... -race -count=1` → 17 packages `ok`; `golangci-lint` `0 issues.`; the `ON CONFLICT … DO NOTHING` text occurs once in `marketdata_repo.go`.
-- Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go`
-- Deviations: none
-
-### Step 8 — service: backfill write path reconciles through the planner [done]
-- Atomic unit Steps 8+9. `backfillOneSymbol` now fetches the full history (no range, no type filter), lists the symbol's stored rows once, builds the plan with the request's types and range, prices every planned insert before the transaction, calls `ReplaceHistoricalFundamentals` once, logs one INFO per row deleted without replacement after the commit, then runs the unchanged in-place path over the identical pairs. `histFundamentalsRepo` stays at 10 methods (`ListHistoricalRows`, `ReplaceHistoricalFundamentals` in; `InsertHistoricalFundamentals`, `GetHistoricalPriceState` out, also deleted from the repository). `HistoricalPriceState.Found` is gone. `derivePriceMetrics` = `closeAtFiling` + `applyPriceRatios`; `mergePrice`, `priceMergedChanged`, `deriveDividendYield`, `accumulateTTM`, `priceJoin` are untouched (R-14).
-- Readings of the step text: (1) the stored rows are listed and the plan is built before the dividend fetch, so a guard failure makes no Alpaca call and no dividend upsert; (2) a carried `price`/`dividend_yield` comes from any stored row of the same period type and `filed_date` (deleted or not), earliest `period_end` first; (3) the existing INFO `re-derived stale stored periods` is still written only when a row was re-derived in place; the snapshot invalidation also runs after a committed replace.
-- Removed with the per-period read: the WARN `fundamentals backfill: price-state read failed (skipped)`. A failed list read now fails the symbol (item 2).
-- INFO message of item 6: `fundamentals backfill: stored period deleted without replacement` with `symbol`, `fiscal_period`, `period_type`, `period_end`, `filed_date`, `category`. Step 14 documents it.
-- TDD (unit): RED on the pre-unit service — the test package does not build against the old interface (`*fakeHistRepo does not implement histFundamentalsRepo (missing method GetHistoricalPriceState)`). Assertion-level RED by seven mutations of the new code, each reverted: no carry from the stored row → `@AC-11` case 1 fails; in-place updates after a failed replace → the D-24/S-10 test fails; no snapshot invalidation after a replace → `@AC-5/@AC-6` fails (`snapshot invalidations []`); TTM reset per period → the TTM test fails; ratios carried instead of recomputed → `@AC-11` cases 1 and 5 and the TTM test fail; plan built without the request range → `@AC-8` fails (`rows 3 written 1`); no INFO loop → the D-24 test fails (`0 records`). GREEN: see Step 9.
-- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`, `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`, `services/xstockstrat-marketdata/internal/source/source.go`
-- Deviations: none
-
-### Step 9 — test: backfill reconcile tests, migrated fakes, read and snapshot cases [done]
-- Atomic unit Steps 8+9. Fakes: `fakeHistRepo` (no stored row; records inserts from the replace), `fakeHistRepo211` (no-op), `fakeHistRepo216` (lists its store; applies a replace as the SQL does — pinned delete must match exactly one row, insert must not hit a live key — and records each call; `replaceErr` injects a failure). `fakeHistRepo216.UpdateHistoricalPriceJoin` now changes only the five price columns of the stored row, like the SQL; before, it overwrote the whole state, which would have dropped the row's identity.
-- Migrated (O-21), every existing assertion kept: the six feature 216 tests and the feature 223 test seed their stored row through `repo.seed(...)` (same label, type, `period_end`, `filed_date` and `net_income` as the fake source's period) and end with `repo.noReplace(t)`. `onePeriod216` and `axpQ2Period` carry a `net_income`. `backfill216Cfg`, the 223 config, `TestBackfillFundamentals_CapDegrade_AC5` and `dividendYieldSvc` set `fundamentals.history.backfill.max_lookback_years` to 100: the last two are not 216/223 tests, but their 2019 and 2025 period ends would fall outside the default ten-year range in time now that the planner applies it.
-- New tests (8, all `feature348`): `@AC-5/@AC-6` replace + one snapshot invalidation; `@AC-6` snapshot built from the 2026-08-31 period (`as_of` 2026-09-11); `@AC-8` both halves; `@AC-9` with the `fundamentals/failed` count; `@AC-11` five sub-cases (i–vi of the step); D-24 log + S-10; TTM over identical and inserted quarters; `@AC-4` read boundary. `@AC-4` is **red N/A — characterization** (the read path is unchanged; its RED is Step 3's).
-- Share count in the ORCL helper is 1,000,000, the same synthetic value `onePeriod216` uses; net income and equity are the real ORCL values.
-- Repository test: `TestGetHistoricalPriceState` deleted with its method; the projection is pinned by `TestListHistoricalRows_feature348`.
-- GREEN: `-run 'BackfillFundamentals|GetHistoricalFundamentals|EdgarSnapshot|PriceJoin' -v` → 28 top-level `--- PASS` (8 `feature348`), 0 `--- SKIP`, 0 FAIL; `go test ./... -race -count=1` → 17 packages `ok`; coverage `total 86.6`; `golangci-lint` `0 issues.`; the four `test` greps passed; `node scripts/check-config-wiring.mjs` → `exit=0` (no output).
-- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`, `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go`
-- Deviations: none
-
-### Correction — verification runs of Steps 2–9 re-checked (2026-11-16)
-- Found while verifying Steps 10+11: this shell ignores `set -e` (`set -e; false; echo survived` prints `survived`). The earlier Verification blocks were run as one script ending in an `echo`, so their closing "all passed" line proved only that the script reached its end. The `go test`, coverage and `golangci-lint` results were read from their own output and stand. The `test "$(grep …)"` lines were not individually confirmed.
-- Every such check of Steps 2–9 was re-run with a runner that prints PASS/FAIL per command. Result: all pass except two of Step 3 — `grep -rl "orcl_companyfacts" … | wc -l` and the CRWD twin returned 0, not 1, because the tests named the fixtures `"orcl"` / `"crwd"` and built the file name. The Step 3 entry's "the seven `test` checks … passed" was therefore wrong for those two.
-- Fix (Step 3 files only): `period_identity_test.go` now names the three fixture files in constants (`fixtureORCL`, `fixtureCRWD`, `fixtureLYFT`) and `own_period_test.go` uses the constant. Both checks now return 1; `go test ./internal/edgar/... -race -count=5` → `ok`. The C-13 intent (one consuming test file) held before and after.
-- From here on every Verification command is run through the PASS/FAIL runner.
-
-### Step 10 — service: no-write audit (`internal/fundaudit`, `cmd/fundamentals-audit`) [done]
-- Atomic unit Steps 10+11. `fundaudit.ParseRows` reads `{"<SYMBOL>": [period…]}` in the `query_fundamentals` shape; `fundaudit.Plan` derives each symbol through the one-method `Deriver` interface (`*edgar.Client` satisfies it), runs `reconcile.Build` with both types, an open range and the derivation's left-out list, and returns per-symbol reports plus lane totals and two count maps (deleted without replacement by category, left out by reason); `PostRepairVerdict` and `Diff` are separate functions. `cmd/fundamentals-audit` has `plan` and `diff`; exit 0 ok, 1 post-repair verdict failed, 2 usage or unreadable input.
-- Readings of the step text: (1) the post-repair run is selected by the presence of `-post-repair-failed` (its value may be empty), since a run with no failed symbol must still be a post-repair run; (2) the verdict also fails when a symbol outside the failed list could not be planned (derive error or guard): the audit then cannot show that it plans no change. This only tightens `@AC-7`; (3) the diff counts an ambiguous key once, when either side holds more than one row for it and the pre side holds at least one.
-- Row shape is taken from the code (`MessageToDict(p, preserving_proto_field_name=True)` of `HistoricalFundamentalsPeriod`), not from a live MCP response: no staging call was made for this step. The first real rows are parsed at Step 15, before any repair.
-- Command smoke run (scratchpad binary): no arguments → usage, exit 2; `plan` without the required flags → exit 2; `diff` on a one-row file against itself → `compared 1`, exit 0; `plan` on the collided ORCL row reached SEC: `data.sec.gov` answered 200, but `www.sec.gov/files/company_tickers.json` answered 403 "Request Rate Threshold Exceeded" for a tool-only `User-Agent` with no contact, so the symbol was reported under `derive_error` and, with `-post-repair-failed ""`, the verdict failed with exit 1. **A live `plan` run that derives a symbol has not been seen in this session.** SEC needs a `User-Agent` that declares a contact; the operator's value is needed at Step 15 (no personal detail is sent from here).
-- TDD (unit): RED before the package existed — build failure (`undefined: ParseRows`, `undefined: Report`). Assertion-level RED by mutation, each reverted: `missing_metrics` ignored → the parse and diff tests fail; unplanned symbols ignored by the verdict → `@AC-7` fails; duplicate `period_end` ignored → `@AC-7` fails; left-out list not passed to the planner → the per-symbol test fails (`period_type_changed`, want `left_out`). That last mutation survived the first version of the test; the test gained a stored row matching a left-out period.
-- Files modified: `services/xstockstrat-marketdata/internal/fundaudit/audit.go`, `services/xstockstrat-marketdata/cmd/fundamentals-audit/main.go`
-- Deviations: none
-
-### Step 11 — test: audit parsing, per-symbol report, pass conditions, pre/post diff [done]
-- Atomic unit Steps 10+11. Five tests: the ORCL row in the `query_fundamentals` shape (nil `pe_ratio` from `missing_metrics`, 0 for an omitted non-missing column, version from the parameter); malformed and missing dates name the symbol; the per-symbol report (replaced collided row not listed, `no_period_derived`, `left_out`, guard, derive error, lane totals); `@AC-7` seven cases; `@AC-11` diff (value → null, value → value, two ambiguous keys, one unmatched pre row).
-- Test literals: price 310.25 and pb 13.1 are the `@AC-11` values; `market_cap` 310,250,000 is price × the synthetic 1,000,000 shares used in the service tests.
-- GREEN (PASS/FAIL runner, 0 failures): `go test ./internal/fundaudit/... -race -count=1 -cover` → `ok … coverage: 99.0%`; the command builds; `go test ./... -race -count=1` → all packages `ok`; coverage `total 87.3`; `golangci-lint` `0 issues.` (the first lint run failed on six unchecked `fmt.Fprint` results in the command; fixed with one `say` helper); both Dockerfile checks pass.
-- Files modified: `services/xstockstrat-marketdata/internal/fundaudit/audit_test.go`
-- Deviations: none
-
-## Open Items
-
-- **Audit range against the repair range — operator decision pending (raise in the batched question before Step 15).** The audit plans with an open range (Step 10 item 1), the repair runs with `start=<lane minimum period_end>` (design.md § 6). For a symbol whose stored rows are all identical to the derivation (nothing deleted), the repair inserts only periods inside its range (D-17), so SEC periods older than the lane minimum stay unstored; the open-range audit then plans inserts for them and the post-repair verdict (`@AC-7`, "plans no delete and no insert for every non-failed symbol") fails although the repair did what it was asked. Symbols with at least one stale row are not affected (rule (c) inserts their whole history). Options to put to the operator: (A) give `plan` optional `-from`/`-to` flags and run the post-repair audit with the repair's `start`; (B) keep the open range and read those planned inserts as expected; (C) run the repair with a start early enough to cover every SEC period. Earliest step that could carry the change: a follow-on to Step 10 before Step 15. Nothing was chosen here.
-
-### Step 12 — test: replace SQL against a real database (`dbtest` tag) and CI job `marketdata-db-test` [done]
-- `fundamentals_replace_dbtest_test.go` (`//go:build dbtest`): `dbtestRepo` reads `MARKETDATA_DB_TEST_URL` (fatal when unset under `CI=true`, skip otherwise), sets `DB_PGBOUNCER=true`, and deletes rows under the reserved prefix `ZZ348_` in cleanup. Two tests: `@AC-5/@AC-7` (collided row at version 2 → two corrected rows at version 3, equity 66,772,000,000 read back exactly, the `period_end > filed_date` count 1 → 0, no duplicate `period_end` group, and the same plan a second time misses its pinned delete and changes nothing) and three rollback cases (pinned delete with another version, with another `period_end`, insert on a key that is still stored).
-- CI job `marketdata-db-test` ("Marketdata DB test (TimescaleDB)") is a copy of `portfolio-db-test` with the marketdata paths and `MARKETDATA_DB_TEST_URL`; it is in `ci-gate`'s `needs` and echo list. `docs/patterns/ci-overview.md` has its row.
-- TDD: **red N/A — characterization** (the SQL shipped in Steps 6+7; this step is its proof on a real database).
-- Local verification (PASS/FAIL runner, 0 failures): `go vet -tags dbtest` ok; the two cases `--- SKIP` without the URL; with `CI=true` and no URL both fail with `MARKETDATA_DB_TEST_URL is unset under CI=true`; untagged `go test ./... -race` ok; the four greps pass; `golangci-lint` `0 issues.` with and without `--build-tags dbtest`; `ci.yml` parses and `ci-gate.needs` contains the job. No database was started.
-- CI proof on the PR: see "CI results" below (added after the push).
-- Files modified: `services/xstockstrat-marketdata/internal/repository/fundamentals_replace_dbtest_test.go`, `.github/workflows/ci.yml`, `docs/patterns/ci-overview.md`
-- Deviations: none
-
-### Step 13 — docs: signed CHANGE to feature 216 `@AC-5` and two prose notes in the durable suites [done]
-- `fix-historical-fundamentals-price-join.feature`: the one `And` line the operator signed (answer 2, 2026-11-16) added to `@AC-5 @feature-216` between its second given and its `When`; a header note that `@AC-3`, `@AC-4`, `@AC-5` are about rows the current derivation reproduces and that any other row is replaced (feature 348 `@AC-5`, `@AC-11`). `fix-stored-edgar-periods.feature`: one sentence in the feature description. No scenario added, none edited besides the signed line. TDD: N/A (docs).
-- Verification (PASS/FAIL runner): the six checks pass (added line present once; 5 and 2 scenarios; both files cite 348; exactly two files changed).
-- Files modified: `services/xstockstrat-marketdata/acceptance/fix-historical-fundamentals-price-join.feature`, `services/xstockstrat-marketdata/acceptance/fix-stored-edgar-periods.feature`
-- Deviations: none
-
-### Step 14 — docs: derivation and reconcile docs, MARKETDATA-13, findings, observability, runbook procedure [done]
-- `docs/fundamentals.md` (service): the three closing paragraphs rewritten for version 3 — period identity (accession, form class, own end, merge rule, label rule, the two left-out reasons, shares), a new "Backfill reconcile" paragraph (identical / replaced / insert rule / pricing / guards / INFO record / snapshot invalidation), ratio bases and own-period selection restated without `fy`/`fp`; the pointer to the findings log for `shares` is gone. MARKETDATA-13 restated for the reconcile with current evidence symbols. Findings: the `shares` first-seen and cover-page `period_end` rows moved to `## Resolved` (2026-11-16, feature 348); the stale-`pe_ratio`/`pb_ratio` row stays open with re-stamped hints (`#mergePrice ~L2520`, call ~L2473, `coalesceF64` ~L2510). `CLAUDE.md` § Observability: the `periods_left_out` instrument and one line for the INFO record. Runbook: the feature-223 subsection replaced by the reconcile semantics, the audit command, and the lane A / lane B procedure with the three pass-condition queries verbatim, the flag's end state per lane and the restore. TDD: N/A (docs).
-- The runbook says the audit plans with an open range and therefore also lists older SEC periods for a symbol whose rows were all already correct. That sentence states the tool's behaviour as built; it is the Open Item above and will be revised when the operator decides.
-- The runbook points to `docs/runbooks/operator-db-access.md` and feature 340 `design.md` § Step 5 for the per-lane read paths instead of repeating host names.
-- Verification (PASS/FAIL runner, 0 failures): `scripts/check-context-map.py` → `OK - all context-map and doc references resolve.`; `scripts/check-otel-produced-signals.py` exit 0; `markdownlint-cli2` on the service `CLAUDE.md` exit 0; the four greps pass. By eye, with a grep over the five files for `ON CONFLICT`, `first-seen`, `cover-page`, `upgraded in place`, `earliest-filing pin`: the only hits are MARKETDATA-13's "never add … an `ON CONFLICT` insert", the two `## Resolved` rows (past tense), and the fundamentals doc's statements of the new rules. A wider grep of `docs/`, `services/`, `plugins/` for the two removed method names and the old identity wording found nothing outside feature directories.
-- Files modified: `services/xstockstrat-marketdata/docs/fundamentals.md`, `services/xstockstrat-marketdata/docs/context-constitution.md`, `services/xstockstrat-marketdata/docs/context-constitution-findings.md`, `services/xstockstrat-marketdata/CLAUDE.md`, `docs/runbooks/historical-backfill.md`
-- Deviations: none
-
-## Session 2026-11-16 — operator answers at the batched gate (sdd-execute)
-
-Asked once, four questions, through the question dialog. Answers verbatim:
-
-1. Audit range against the repair range → **"Add range flags (Recommended)"**. Closes the Open Item above.
-2. C-16 promotion plan (11 scenarios into a new `fix-edgar-historical-fundamentals.feature`; two leftovers named) → **"Approve, and fix the Q4-2019 name"**. This signs the edit of `@AC-3 @feature-198`.
-3. Lane A freeze (`marketdata/fundamentals.history.enabled` → `false`) → **"I set it now via MCP"**.
-4. SEC `User-Agent` for the audit → **"The lane's configured value (Recommended)"** (read `marketdata/edgar.user_agent` per lane with a read-only `get_config`).
-
-Not asked and therefore not authorized: any `trigger_backfill`, re-enabling the flag, any change on lane B, merging.
-
-### Follow-on to Step 10 — audit range flags [done]
-- `fundaudit.Plan` takes `from, to`; `plan` has `-from` / `-to` (`YYYY-MM-DD`, default open). New test `TestPlan_RangeLimitsInsertsOfRepairedSymbol`: from the lane minimum a repaired symbol plans nothing and the verdict passes; with an open range the older SEC period is a planned insert and the verdict fails. Runbook updated. Deviation logged.
-- Verification (exit codes read one by one): `go test ./internal/fundaudit/... -race -cover` → `ok`, 99.0%; the command builds; `golangci-lint` `0 issues.`; `go test ./... -race -count=1` exit 0.
-
-### C-16 promotion [done]
-- Planned by `scenario-promoter` on the feature-branch tree at `d733ceae`: 11 PROMOTE, 0 duplicate, 0 conflict; `@AC-4` partly restates `@AC-3 @feature-198` (strict `filed_date < as_of`) and is kept whole; `@AC-6` realises the EXTEND of `@AC-2 @feature-223` as a new scenario.
-- Written mechanically: `services/xstockstrat-marketdata/acceptance/fix-edgar-historical-fundamentals.feature` = the four-line promotion header + `acceptance.feature` verbatim with ` @feature-348` appended to each of the 11 tag lines (a `diff` with the tag removed is empty). Both `# guards:` lines kept.
-- `@AC-3 @feature-198`: `Q4-2019` → `Q1-2020` (operator answer 2).
-- Left as is, named to the operator in the question: the feature 216 header sentence "As-reported fields and the earliest filed_date are never overwritten", narrowed by the note added in Step 13.
-- `node scripts/check-config-wiring.mjs --final` → exit 0; two `REPORTED` baseline lines, both outside this feature (`analysis … marketdata/fundamentals.provider:readers-disagree`, `trading … platform/trading_state:readers-disagree`).
-- Merge-order gate: no row names this feature. `origin/main-dev` is 0 commits ahead of the branch.
-
-### Step 15 — operator gate, lane A (homelab staging) [in progress — waiting on the operator]
-- 2026-11-16 12:00 UTC, lane A, on the operator's answer "I set it now via MCP": `get_config(marketdata)` read `fundamentals.history.enabled` = `true` (prior value), `fundamentals.history.backfill.period_types` = `both`, `fundamentals.history.backfill.max_lookback_years` = 10, `edgar.rate_limit_rps` = 10, and the lane's `edgar.user_agent` (the string the audit will send, per answer 4). `set_config(marketdata, fundamentals.history.enabled, bool, false)` returned version `1794830454368`, `updated_at` 2026-11-16T12:00:54Z. A second `get_config` reads `fundamentals.history.enabled` = `false`. **Lane A is frozen; only the operator re-enables it, after deploy.**
-- Symbol list (S-12): `list_watchlists` returned 2 watchlists and an empty `next_page_token`; the union of their bindings is **355 symbols**. The operator's `SELECT count(DISTINCT symbol)` is still needed to compare.
-- One real row read to check the parser against the live shape: `query_fundamentals(ORCL, historical, quarterly, from 2026-01-01, limit 2)`. The shape matches `fundaudit.ParseRows` (snake_case keys, RFC 3339 dates, `missing_metrics`, zero-valued fields omitted). It also shows the defect live: `Q1-2026` with `period_end` 2026-09-07, `filed_date` 2025-09-10, `stockholders_equity` 66,772,000,000.
-- **Not done, and why.** Reading all stored periods through the MCP means at least 355 `query_fundamentals` calls (more with paging at 50 periods), roughly 40 KB of JSON per symbol, about 14 MB for the lane, all of it passing through an agent's context. That is a cost the operator has not been shown. Put to the operator: read through the MCP with worker agents, or the operator produces the rows file with one read-only SQL query. No rows were read beyond the two above; no audit report exists yet.
-- Still needed from the operator for lane A (design § 6 step 2): the full-row export, the version histogram, the `period_end > filed_date` count, the distinct symbol count.
-- Lane B: nothing done.
-
-### CI results (PR #1558)
-- Commit `d733ceae` (Steps 1–14): run https://github.com/davcs86/xstockstrat/actions/runs/43857432247 — all 48 jobs `success`, including "Go lint and test (xstockstrat-marketdata)", "CLAUDE.md lint (markdownlint)", "Marketdata DB test (TimescaleDB)" (job 133265548239, step `go test -tags dbtest` `success`) and "CI Gate".
-- Step 12 proof, stated exactly: the job ran with `CI=true` and `MARKETDATA_DB_TEST_URL` set, and `dbtestRepo` can skip only when that variable is empty, so the two real-database tests executed. The job's command has no `-v`, so the log shows no per-test line and **an executed-test count cannot be read from it**. The impl-spec review warning "Step 12: no SKIP is checked by eye" stays open in that form.
-- Commits after `d733ceae` (range flags, promotion, the Step 15 note): CI was still running when this was written.
-
-### Step 15 — lane A audit run (2026-11-16)
-- Operator, on the row source: **"Keep the mcp route"**.
-- Rows: a 3-symbol pilot, then 11 read-only workers of 32 symbols each, `query_fundamentals(mode="historical", limit=50)`; every response had an empty `next_page_token`. The rows file was rebuilt by script from the workers' raw tool results (no retyping): 355 of 355 symbols, 6,060 rows, none incomplete.
-- Audit at `21e3f7f7`, stored version 2, open range, the lane's `edgar.user_agent`: 1 min 52 s, exit 0, 355 symbols planned, 0 derive errors, 0 guard trips. This is also the first live run of `fundamentals-audit plan` that derived symbols.
-- Report: `audit-lane-a-homelab.md`. Headline: 116 stored rows end after their filing date and 8 duplicate `period_end` groups today; 4,878 of 6,060 rows would be replaced, 1,182 upgraded in place; 20 rows in 18 symbols have no replacement; 10 derived periods are left out; no derived period ends after its filing.
-- Waiting on the operator: review of the report; the lane A SQL figures and export; lane B (run or defer).
-
-### Step 15 — operator instruction after the lane A report [done]
-- Operator, verbatim, 2026-11-16: **"Merge it, then 20minutes later enable the fundamentals.history.enabled config in homelab and DO"**.
-- Taken as: (1) the explicit word to merge PR #1558 (the brief's "do not merge" is lifted by the operator for this PR); (2) the explicit word for two `set_config` calls, `marketdata/fundamentals.history.enabled` = `true` on homelab staging and on DO staging, 20 minutes after the merge.
-- lane B deferred: no pre-enable audit was run on DO staging and the operator's instruction enables it without one (design D-16 asked for the audit first). The operator did not state a review verdict on the lane A report in words; the merge instruction came after it was delivered. The lane A SQL figures and export were not received. All three points are stated back to the operator in the reply, before the 20 minutes run out.
-- Not instructed, so not done: any `trigger_backfill`, the canary, the pass-condition checks.
-
-## Session 2026-11-16 — post-deploy repair on both lanes (operator-instructed)
-
-Operator instructions, verbatim, in order: "Go ahead, proceed as planned"; "After enabling, add ACP to one watchlist then run the canary backfill on homelab"; "Yes, AXP, add it to Test"; "You have my signoff to do it"; "After the canary passes, run the remaining chunks"; "Then run the same on DO staging"; "Use 2021 as starting year. Also, GitHub says that the PR was merged hours ago".
-
-- PR #1558 squash-merged at 12:33 UTC (`48f17194`); CI on its head `05df2bf3` was `success`. The session's worker restarted after the merge call, so the enable ran at 17:13 UTC, about 4 h 40 min after the merge instead of 20 minutes.
-- 17:13:19 UTC: `set_config(marketdata, fundamentals.history.enabled, true)` on homelab staging (version `1794849199326`) and on DO staging (version `1794849199927`). Neither was read back with `get_config`; every backfill below was accepted, which the gate refuses when the flag is `false`.
-- Homelab: AXP added to watchlist "Test" (`refused: []`). Canary job `8584496c` (ORCL, CRWD, JEF, BMO, AAPL, LYFT, AXP; `start=2021-01-01`, `overwrite=true`): COMPLETED in 5 s, no failed symbol, 365 writes. Served check: ORCL `Q1-2026` = 2025-08-31 / 2025-09-10 and `Q1-2027` = 2026-08-31 / 2026-09-11, both present, `Q1-2026` pb 27.99 = market cap over equity 24,154M; LYFT `Q3-2026` roe 0.942632. Then 7 chunk jobs for the other 349 symbols: all COMPLETED, `failed_symbols` empty in each. Total writes over the 8 jobs: 15,402.
-- DO staging (no pre-enable audit, no restore export; operator-waived): canary job `8698edc0`: COMPLETED, no failed symbol, 255 writes; ORCL and LYFT served values as on homelab, except ORCL `Q1-2026` has no price columns there (no carried price and no daily bar near 2025-09-10 on that lane). Then 8 chunk jobs (homelab's 349 symbols + ATCH, AXIA, EVTV, KPTI, LRHC, LXP, PSKY, RAMP, ROKU, SHPH from DO's watchlists): 5 COMPLETED, 3 PARTIAL. **Failed symbols on DO: ADBT, HONA, AXIA, EVTV, LRHC, LXP, PSKY, RAMP.** The job status gives no reason; the marketdata WARN `fundamentals backfill: symbol failed (skipped)` has it. Not investigated yet.
-- Start date: the operator's "2021" was applied as `2021-01-01` on both lanes (homelab's earliest stored `period_end` was 2022-01-07).
-- Not done: the three read-only SQL pass-condition queries (operator), the post-repair audit and the pre/post diff on either lane, a `get_config` read-back of the two flags.
-
-### DO staging — the 8 failed symbols, diagnosed (2026-11-16)
-Operator: "dig into the 8 DO failures, check Loki logs and SEC records, there may be split and dividends". Sources: Loki (`{service_name="marketdata"} |= "symbol failed (skipped)"`, 17:10–17:30 UTC), DO's stored rows through `query_fundamentals`, SEC companyfacts and the SEC ticker map fetched today.
-
-- **AXIA, EVTV, LRHC, LXP, PSKY, RAMP — `no CIK for ticker "<SYM>"`.** None of the six is in SEC's `company_tickers.json` today (10,404 entries), under the ticker or under an obvious company name. The derivation never starts, so the reconcile is not involved and nothing was written. This predates feature 348: PSKY failed the same way in DO job `8de93c4c` on 2026-10-21. Not a split or a dividend; a ticker the SEC map does not list (renamed, delisted, or not an SEC registrant under that symbol).
-- **ADBT, HONA — `reconcile: no stored reported value matches a derived period` (the filer guard, D-18).** Both are recent registrants with one or two 10-Qs and no earlier filing. DO's single stored row for each (version 1) holds the filing's **comparative-column** values: ADBT net income 3,474,000 and revenue 5,597,000 are the quarter ended 2025-06-30, its equity, assets and liabilities are the 2026-03-31 balance sheet; HONA net income 844,000,000 and revenue 4,289,000,000 are the quarter ended 2025-06-28, its balance-sheet values are 2025-12-31. No filing of their own exists for those earlier periods, so no derived period carries those values and the guard reads the row as another filer's. The ticker still resolves to the same company (ADVASA HOLDINGS, INC.; Honeywell Aerospace Inc.). Homelab passed for both because its version-2 rows already held own-period values. Not a split or a dividend: the guard compares reported totals, not per-share figures.
-- This is a **false positive of the filer guard** for a symbol whose only stored rows are version-1 rows of a filer with no earlier filings. The rows it protects are themselves wrong (HONA's stored equity is +8,399M where the quarter's own is −5,697M). Two symbols on DO staging; none on homelab.
-- Ways to clear the two symbols (not done, operator's choice): delete the stored `fundamentals_history` rows of ADBT and HONA on DO staging with one SQL statement, then re-run their backfill (a symbol with no stored row skips the guards); or leave them. A code change to the guard would be a new bug through `/sdd-triage`.
-
-
-### Watchlist clean-up after the DO failures (2026-11-16)
-Operator instructions, verbatim, in order: "Remove the OTC from the watchlists"; (scope) "Let the platform decide", "Both lanes, every watchlist"; "For those 2, Delete their stale rows and rerun"; "Allow the temporary-watchlist probe"; "Option 2".
-
-- Servability probe, DO staging only: a temporary watchlist was created with every symbol of DO's two watchlists, the platform's refusals read, and the watchlist deleted. Result: 0 `OTC`; 11 `NOT_TRADABLE`: ATCH, AXIA, EVTV, KPTI, LRHC, LXP, NWE, PSKY, RAMP, ROKU, SHPH. The probe was not run on homelab.
-- "Option 2" = remove only the six that are both `NOT_TRADABLE` and absent from the SEC ticker map. 17:38:54 UTC: AXIA, EVTV, LRHC, LXP, PSKY, RAMP removed from DO staging watchlist "Signals" (`4d1366d8`). ATCH, KPTI, NWE, ROKU, SHPH stay. No other watchlist on either lane held any of the six. "Signals" is system-managed: a new signal for one of the six would have to pass the servability gate to re-enter.
-- ADBT, HONA: there is no MCP route to delete `fundamentals_history` rows, so the delete statement (both tables, one transaction, `source = 'edgar'` on the snapshot table) was handed to the operator. Waiting on the operator's word that it ran; the re-run (`start=2021-01-01`, `overwrite=true`, DO staging) has not been triggered.
-- Operator: "Investigate why these symbols fail on the platform, is it an alpaca limitation?" Read-only (stored bars, Loki, Webull, web search). Four are real delistings, matched by the last stored daily bar: ROKU (acquired, closed 2026-11-06), NWE (merged into Bright Horizon Energy, 2026-11-13), KPTI (Chapter 11, Nasdaq suspension 2026-11-11), ATCH (NYSE American suspension 2026-11-10, now OTC Pink). SHPH is unexplained: still printing bars and tradable at another broker, absent from Alpaca's active set; Alpaca's own asset record was not read. The asset set itself loaded normally on both lanes (about 13,500).
-- Operator: "Just remove shph". SHPH removed from DO staging "Signals". ROKU, NWE, KPTI, ATCH stay.
-
-## Session 2026-11-17 (CI: feature status automation)
-
-- Promotion PR #1573 merged to main
-- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-11-17
+# Context: fix-edgar-historical-fundamentals  (archived 2026-11-18)
+
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
+
+## Archive Synthesis — 2026-11-18 — /sdd-archiver
+
+**What**: A SEV-2 bug (Track C, staging only, no production instance) from the defect report the feature-340 lane A audit surfaced: `marketdata.fundamentals_history` rows held a different period's values than their label and `filed_date` said. Root cause traced at triage on live SEC companyfacts (2026-11-16): `fy`/`fp` are copied from each filing's cover-page tags and filers repeat or mis-set them (ORCL's 10-Qs of 2025-09-10 and 2026-09-11 both `fy` 2026 `fp` Q1; CRWD five repeats; CLSK six), so two periods a year apart shared one bucket (earliest `filed`, latest `end`, latest values) and one period went missing; a second mechanism took the latest `end` over every fact including the cover-page share count, so most stored rows carried a cover-page `period_end`. Shipped (all in `xstockstrat-marketdata`; no migration, proto or config change): a period is one filing's own period (facts grouped by accession, form class decides annual vs quarterly, own end = latest balance-sheet anchor on or before `filed`, filings merged by (type, own end) with the earliest filing winning, labels computed from dates in the old `Qn-YYYY`/`FYYYYY` format), `DerivationVersion` 3, a pure reconcile planner (`internal/reconcile`) so the backfill can replace rows whose key or dates change (identical rows still upgraded in place), a transactional replace with pinned deletes, filer/empty-set guards, a no-write audit command (`cmd/fundamentals-audit`, `internal/fundaudit`) that uses the same planner, a real-database CI job `marketdata-db-test`, and a lane A/lane B repair procedure in `docs/runbooks/historical-backfill.md`. All 11 `@AC` are promoted (see below). Post-deploy the operator had both staging lanes enabled and repaired the same day (2026-11-16); eight DO symbols failed, six of them removed from a watchlist, **ADBT and HONA left unresolved** (accepted risk below).
+
+**Why (irrecoverable rationale)**:
+- Authorization reference, recorded verbatim in context at triage from the operator's session brief: "The operator's instruction is: minimal human intervention. Treat that as standing authorization to proceed through checkpoints that only report progress ... It is NOT consent for the gates the Constitution reserves to the operator — design approval, sign-off on changing an existing durable scenario, the C-16 promotion plan, anything in the approval-flow runbook (DB migration: DBA + service owner; breaking proto: owners + platform lead), merging any PR, and every staging action." Under it the sessions started debate rounds 2 and 3 without asking (round 2 is mandatory in full mode; four blocking objections remained after it) and did not re-ask the `/sdd-execute sequential` mode-entry confirmation (the brief named the command; inference that this counts as the operator's up-front word). No C-11 round-cap override was needed: 3 rounds ran (full mode is 2–5).
+- Design-gate answers (2026-11-16), five questions put in one message, operator replied verbatim "1. Yes / 2. As recommended / 3. Acknowledged / 4. Acknowledged, but add a info log for them. / 5. You can get the symbols using the MCO, and run the fetches", then "in the #5, MCO = MCP". Applied as: (1) design D-1..D-23 approved, including that the repair runs with `overwrite=true` and that any admin-triggered fundamentals backfill runs the reconcile once a lane is enabled; (2) the C-16 CHANGE to feature 216 `@AC-5` signed in its recommended Option 1; (3) "Acknowledged" to "accept one known gap in labels?" — the label-collision residual (D-19): the session treated it as accepted and said so to the operator, but the operator's recorded word is "Acknowledged"; (4) rows deleted without a same-date replacement acknowledged on condition of an INFO log (D-24); (5) the main session reads the symbols through the staging MCP and runs the SEC fetches (D-25) — a standing word for read-only MCP reads only, explicitly not consent for `set_config`, `trigger_backfill` or any other staging change. Answers 4 and 5 added constraints at the gate; the grilling protocol's "inject a constraint" path would run another round, and none was run because the operator approved in the same reply and both are additive (a protocol deviation the session flagged itself).
+- After the spec, three labelled answers (2026-11-16): Q1 INFO-log volume (spec S-4) "Narrow set"; Q2 spec S-2 "Agreed"; Q3 symbol list (S-12) "Use the mcp to pull the symbols from all watchlists". Operator also asked "Create a PR with the artifacts you have so far", which produced PR #1558 as a docs PR; the same PR later carried the code and was the integration PR.
+- Batched execute gate (2026-11-16), four questions via the question dialog, answers verbatim: audit range vs repair range "Add range flags (Recommended)"; C-16 promotion plan "Approve, and fix the Q4-2019 name"; lane A freeze "I set it now via MCP"; SEC `User-Agent` "The lane's configured value (Recommended)". The second signs the edit of `@AC-3 @feature-198`; the design had said that scenario's "Q4-2019" name was left as is. Explicitly "not asked and therefore not authorized" at that point: any `trigger_backfill`, re-enabling the flag, any change on lane B, merging.
+- Merge and enable (2026-11-16, operator verbatim): "Keep the mcp route" (row source, after the session priced the MCP read at 355+ calls and about 14 MB through agent context and offered a SQL export instead), then after the lane A audit report was delivered, "Merge it, then 20minutes later enable the fundamentals.history.enabled config in homelab and DO". The session read this as the explicit word to merge PR #1558 (lifting the brief's "do not merge" for that PR) and for two `set_config` calls. **Lane B's pre-enable audit and restore export (design D-16, procedure steps 2–3) were skipped**: the operator did not state a verdict on the lane A report in words, the lane A SQL figures and full-row export were never received, and the session stated those three points back before the 20 minutes ran out. feature.md and later notes call this "waived by the operator"; that label is the sessions' reading of the merge-and-enable instruction (inference), not an operator word. The follow-up instructions, verbatim and in order: "Go ahead, proceed as planned"; "After enabling, add ACP to one watchlist then run the canary backfill on homelab" (the context then says AXP; "ACP" is as quoted); "Yes, AXP, add it to Test"; "You have my signoff to do it"; "After the canary passes, run the remaining chunks"; "Then run the same on DO staging"; "Use 2021 as starting year. Also, GitHub says that the PR was merged hours ago". P-04 provenance: the questions these answers responded to are NOT recorded in context.md, so they are the operator's words but their referents are inferred from the surrounding actions (the canary, the chunks, DO). The same applies to the watchlist clean-up answers: "Remove the OTC from the watchlists"; "Let the platform decide"; "Both lanes, every watchlist"; "For those 2, Delete their stale rows and rerun"; "Allow the temporary-watchlist probe"; "Option 2" (its meaning is recorded: remove only the six symbols that are both `NOT_TRADABLE` and absent from SEC's ticker map); "Just remove shph"; and the diagnosis requests "dig into the 8 DO failures, check Loki logs and SEC records, there may be split and dividends" and "Investigate why these symbols fail on the platform, is it an alpaca limitation?".
+- The enable ran at 17:13:19 UTC, about 4 h 40 min after the 12:33 UTC squash merge (`48f17194`, PR #1558), not 20 minutes after: the session's worker restarted after the merge call and the operator's last line is the correction ("GitHub says that the PR was merged hours ago"). Both `set_config` calls (homelab version `1794849199326`, DO `1794849199927`) were never read back with `get_config`, and design § 6 step 4 ("Confirm the build stamps version 3") has no record of being done (indirect evidence only: the canary's served values match version 3); acceptance of every backfill is the only evidence, since the gate refuses when the flag is `false`. The repair `start` was the operator's `2021-01-01` on both lanes instead of the design's "lane minimum `period_end`" (homelab's earliest stored `period_end` was 2022-01-07), so already-correct symbols could gain periods back to 2021 (inference from D-17 rule (a)).
+- Why the identity is date-derived rather than tag-derived: measured on 14 live filers, `fp` is unreliable too (UCTT's three 2023 10-Qs all `Q3`; FLXS and SNOW 10-Qs tagged `FY`), JEF's 10-KT year-end change breaks any rule that ignores 10-KT ends, and CRWD's 10-K filed 2021-03-18 has anchor 2021-01-31 but no annual-length flow ending there, so D-11 (latest balance-sheet anchor on or before `filed`, no equality check against flow ends) is the rule that was measured. 6-K is quarterly-class because BMO files quarterlies on 6-K (measured on one filer only).
+- Why `overwrite=true` for the repair and no code for it (D-22, R-14): re-derived identical rows get their price-join refreshed by the existing overwrite path; recomputing ratios without overwrite would make feature 216 `@AC-3` line 42 false (a CHANGE). Side effect accepted: identical rows' prices refresh to today's adjusted close.
+- Why `year_end_quarter` is limited to real fiscal-year boundaries (O-22, O-29, D-20): leaving out every quarter that ends on a boundary-distance of zero would drop a lone December quarter of a filer with no annual filing, breaking the test behind `@AC-1 @feature-198`; a standalone Q4 row is out of scope per the product spec. Why period type comes from the form class (R-4): flow duration is ambiguous for a 10-K that also carries a three-month flow and undefined for a filing with balance-sheet facts only.
+- User-visible effect of the `period_end` fix: the EDGAR snapshot serves the newest row by `period_end`; a cover-page date used to let an annual row outrank a later quarter (JAZZ), so correcting `period_end` changes which period some symbols' snapshots serve — the reason behind `@AC-6`'s cache-invalidation clause.
+- Why price-join is split on replaced rows (D-15): `market_cap`, `pe_ratio`, `pb_ratio` are recomputed from the row's own corrected statement (carrying them would keep look-ahead: ORCL's 2025-08-31 row would inherit a P/B computed on equity filed a year later); `price` and `dividend_yield` depend only on symbol and `filed_date`, so they are carried only from a stored row with the same `filed_date`. A replaced row may legitimately come back with empty price columns (no bar near the corrected `filed_date`, dividend window predating the fetch); the C-16 text signed for 216 `@AC-5` is about rows the current derivation reproduces, and what happens to replaced rows is this feature's `@AC-11`.
+- Why the insert rule has three arms (D-17): a range-bounded delete followed by `ON CONFLICT DO NOTHING` could silently drop a fresh period and keep a stale row (O-2); when a symbol has at least one deleted row below the current derivation version the request range does not limit its inserts, otherwise the lookback key would be meaningless (R-16). The residual edge (D-17, by design): a current-version row the derivation now dates differently is deleted and its corrected period returns only when a later backfill's range covers it.
+- Why the filer guard compares reported values (D-18): no CIK is stored anywhere and a ticker can start resolving to another filer; the guard passes only if a stored non-zero `net_income`, `revenue`, `assets`, `liabilities` or `stockholders_equity` exactly equals the same metric of any fresh period (jsonb keeps numbers exact). `eps` and `filed_date` rejected (R-15: coincide across filers and deadline days).
+- The audit exists so the operator sees what the service will do before a lane is enabled; it takes its rows from read-only MCP reads (D-25) because the operator asked for the MCP route, and it takes the lane's stored derivation version as a parameter because the proto does not carry it. The no-write audit's first live run (lane A, commit `21e3f7f7`, 355 of 355 symbols, 0 derive errors) was also the first time `fundamentals-audit plan` derived real symbols; its earlier smoke run had hit SEC `www.sec.gov/files/company_tickers.json` 403 "Request Rate Threshold Exceeded" for a tool-only `User-Agent`, while `data.sec.gov` answered 200.
+- Accepted risks that look like bugs:
+  - **ADBT and HONA on DO staging stay failed** with `reconcile: no stored reported value matches a derived period` (the D-18 filer guard). Both are recent registrants with one or two 10-Qs and no earlier filing; DO's single stored version-1 row for each holds the filing's comparative-column values (ADBT net income 3,474,000 and revenue 5,597,000 are the quarter ended 2025-06-30, its balance-sheet values 2026-03-31; HONA net income 844,000,000 and revenue 4,289,000,000 are the quarter ended 2025-06-28, balance-sheet values 2025-12-31), and no filing of their own exists for those earlier periods, so no derived period carries them and the guard reads the row as another filer's. The ticker still resolves to the same company (ADVASA HOLDINGS, INC.; Honeywell Aerospace Inc.). The rows it protects are themselves wrong (HONA's stored equity +8,399M against the quarter's own −5,697M). Homelab passed for both because its version-2 rows already held own-period values. Fail-closed, no data lost. The operator's remedy ("For those 2, Delete their stale rows and rerun") was handed over as one SQL statement (both tables, one transaction, `source = 'edgar'` on the snapshot table) because no MCP route deletes `fundamentals_history` rows; the last record is "waiting on the operator's word that it ran", with the re-run (`start=2021-01-01`, `overwrite=true`, DO staging) never triggered. A guard code change was to go through `/sdd-triage` as a new bug; none is on file and the guard false positive is not in the marketdata findings log either (feature 352 names it as out of scope, "separate bug").
+  - **Lane B ran with no pre-enable audit, no pre-repair row export and therefore no restore path**; the three read-only pass-condition queries, the post-repair audit and the pre/post diff are recorded as "not done" at the end of the repair session and no later record shows them run (feature 340's lane procedure and design § 6 required them). Lane A's pre-enable audit did run (report `audit-lane-a-homelab.md`), but its operator-side SQL figures and full-row export were never received, so homelab also had no restore export.
+  - **Stored symbols outside the watchlist union were never audited or repaired** (inference: the audit read 355 symbols and the defect report counted 362 stored symbols at feature 340; the operator's `SELECT count(DISTINCT symbol)` never arrived). Only the `derivation_version < 3` pass-condition query would show them.
+  - DO ORCL `Q1-2026` has no price columns (no carried price, no daily bar near 2025-09-10 on that lane) — an `@AC-11` case, not a defect. Mid-January 52/53-week year-ends and a year-end that moves later within one calendar year drop the later-ending period (label collision, D-19; counter `marketdata.backfill.periods_left_out{reason}`), and a later 10-KT can make the reconcile delete a row stored correctly; a filer with no annual filing is labelled against Dec 31 and relabelled when its first 10-K arrives; a commit between two pages of an analysis read can make that read skip a newly inserted period (O-27). 6-K half-year filings produce a balance-sheet-only quarterly row (one measured filer).
+  - Step 12 proof stays unverifiable from the log: the CI job `marketdata-db-test` ran with `CI=true` and the URL set (so the real-database tests could not skip), but the command has no `-v`, so an executed-test count cannot be read. The impl-spec review warning stays open in that form. Other review warnings left unaddressed by decision: pair-folded steps 4+5, 6+7, 10+11 (one commit each either way), Step 3 touching 8 files (one compile unit), a by-eye docs check in Step 14, and no UI or agent step by decision (C-14; surfaces verified through the canary `query_fundamentals` reads, which showed served values as expected).
+- The INFO log is deliberately narrow (S-3/S-4, operator "Narrow set"): a replaced row whose period is stored again under corrected dates or a corrected label gets no log line (most rows of a lane are such replaced rows, because most stored rows carried a cover-page `period_end`); only rows whose period no longer exists in the table are logged and listed. The service logs `no_period_derived` where the audit reports `left_out` (S-2, operator "Agreed"), because the service only has `FetchHistorical`.
+
+**Rejected alternatives**:
+- SQL migration `010` to correct rows (R-1: SQL cannot derive a period without the SEC payload; DBA approval for no gain). `period_end` as the physical key (R-2: DBA approval, CHANGE to feature 198 `@AC-1` which names the key tuple, analysis pager key change, and existing rows hold wrong and duplicate `period_end` values so the swap cannot run before the repair).
+- Keep the filer's label and re-label only on collision (R-3, still reads `fy`/`fp`); period type from flow duration (R-4); in-place `UPDATE` of a key (R-5: a collided row is two periods, a label chain hits conflicts mid-statement); group by own end with no notion of a filing (R-6: loses `filed_date` provenance, a comparative column would form a period).
+- Require own end to equal the latest class-duration flow end (R-7, false-fails on CRWD); ordinal cascade on a label collision (R-8, permanent drift); shrink-ratio guard threshold (R-9, arbitrary); extending the dividend fetch start (R-10: a short vendor dividend history would read as zero yield); matching legacy rows via per-filing `fy`/`fp` keys (R-11: unverified premise, brings `fy`/`fp` back for a one-time repair); date-window coverage of a deleted row (R-12); the two-of-three anchor rule (R-13: could silently date a filing to its comparative column); recomputing ratios on in-place rows without overwrite (R-14); a guard on `filed_date` or `eps` (R-15); ignoring the request range on every run (R-16).
+- Also decided against: an equality check of the anchor with the flow end, `ON CONFLICT DO NOTHING` on the replace path (a key conflict must roll the symbol back), a clock seam on `MarketDataService` for the dividend-window tests (S-8: made wall-clock-independent through `dividends.backfill_lookback_years` 1 and 50 and fixed filing dates; the register's "injected clock" wording was not followed), and SQL export as the audit's row source (operator chose the MCP route; the SQL export was to be for restore only).
+
+**Scars & gotchas**:
+- The shell used by the execute session ignored `set -e` (`set -e; false; echo survived` prints `survived`), so Verification blocks of Steps 2–9 that ended in an `echo` proved only that the script reached its end. Re-run through a per-command PASS/FAIL runner, two Step 3 checks (`grep -rl orcl_companyfacts … | wc -l`, CRWD twin) returned 0 not 1 because tests built the fixture file name; fixed with constants `fixtureORCL`, `fixtureCRWD`, `fixtureLYFT`. The earlier "all passed" claim for Step 3 was wrong for those two.
+- The version-3 golden hash equals the version-2 hash (the AXP golden fixture has no repeated `fy`/`fp`, no cover-page share fact, no label change), so the drift guard cannot distinguish the derivation changes of this feature; the entry `3:` exists only because the guard requires one.
+- Mutation runs caught test gaps the green runs did not: a pgxmock "0 rows / 2 rows" replace case asserted only "an error" and still passed when the row-count rule was loosened, because pgxmock's own "unexpected Exec" error satisfied it (now asserts the `removed N rows, want 1` text, which proves no insert ran); the audit test for the left-out list survived a mutation until it gained a stored row matching a left-out period; `fakeHistRepo216.UpdateHistoricalPriceJoin` overwrote the whole stored state, which would have dropped a row's identity (now changes only the five price columns like the SQL).
+- Pre-existing tests with fixed 2019/2025 `period_end` values would fall outside the default ten-year range once the planner applies it: the six feature 216 tests, the 223 test, `TestBackfillFundamentals_CapDegrade_AC5` and `dividendYieldSvc` were set to `fundamentals.history.backfill.max_lookback_years` 100, including two that are not 216/223 tests. The six feature 216 tests and the feature 223 test end with `repo.noReplace(t)` (the 211 fake is a no-op), so they keep guarding the in-place path.
+- Delete/insert dates are bound as `YYYY-MM-DD` text cast with `::date` (S-9): under `QueryExecModeExec` a `time.Time` argument is sent as `timestamptz` and `date = timestamptz` depends on the session time zone, so a miss would fail the symbol. Deletes and inserts are sorted so two runs on one symbol take row locks in one order; a second concurrent replace misses its pinned delete and rolls back.
+- Planner readings that Steps 8 and 10 depend on: the filer guard reads every stored row of the symbol, not only requested types; "stored rows exist and fresh set empty" fails the symbol even if the stored rows are of a type not requested; the stored rows are listed and the plan built before the dividend fetch, so a guard failure makes no Alpaca call and no dividend upsert; a failed list read now fails the symbol (the old WARN `price-state read failed (skipped)` is gone); the post-repair run is selected by the presence of `-post-repair-failed` (its value may be empty); the post-repair verdict also fails when a non-failed symbol could not be planned; the audit's open range made the post-repair verdict fail for a correct symbol whose SEC history starts before the repair's `start` (D-17 inserts only inside the range) — found when the verdict test was written and carried as an open item to the operator, resolved by `-from`/`-to` flags on `plan` (run the post-repair audit with the repair's `start`).
+- A row shape taken from code, not a live MCP response, was proved right at Step 15: `query_fundamentals` historical mode returned snake_case keys, RFC 3339 dates, `missing_metrics`, zero-valued fields omitted, matching `fundaudit.ParseRows`. The rows file was rebuilt by script from workers' raw tool results (no retyping): a 3-symbol pilot then 11 read-only workers of 32 symbols (the lane A report file says 12 workers; the discrepancy is in the sources), every `next_page_token` empty at `limit=50`.
+- The Step 15 gate closed on a text marker: its verification passes when `audit-lane-b-do-staging.md` exists OR `grep -q 'lane B deferred'` matches context.md, and context.md contains that phrase, so the gate passed with no lane B report; "record the deferral and its condition" recorded no condition (possible scar).
+- Watchlist union (355 symbols, 2 watchlists) is the stored-symbol proxy because no MCP tool or RPC lists the symbols stored in `marketdata.fundamentals_history`. A new empty Signals watchlist (feature 351) would add no symbols but could make a recorded watchlist count read one higher.
+- DO diagnosis record that feature 352 cites: of the eight failed DO symbols, AXIA, EVTV, LRHC, LXP, PSKY, RAMP failed with `no CIK for ticker "<SYM>"` (none in SEC's `company_tickers.json`, 10,404 entries today; the derivation never starts, so the reconcile is not involved and nothing was written; PSKY had failed the same way in DO job `8de93c4c` on 2026-10-21); ADBT and HONA failed the filer guard (above). A temporary-watchlist probe on DO staging only found 0 `OTC` and 11 `NOT_TRADABLE` (ATCH, AXIA, EVTV, KPTI, LRHC, LXP, NWE, PSKY, RAMP, ROKU, SHPH). At 17:38:54 UTC the six no-CIK symbols were removed from DO "Signals" watchlist (`4d1366d8`, system-managed: a new signal for one would have to pass the servability gate to re-enter); ATCH, KPTI, NWE, ROKU stay. Four are real delistings by last stored bar: ROKU (acquired, closed 2026-11-06), NWE (merged, 2026-11-13), KPTI (Chapter 11, Nasdaq suspension 2026-11-11), ATCH (NYSE American suspension 2026-11-10, now OTC Pink); SEC's ticker map lags delistings, so their fundamentals backfill succeeded. SHPH was unexplained (still printing bars and tradable at another broker, absent from Alpaca's active set; Alpaca's own asset record not read) and was removed on "Just remove shph". The asset set loaded normally on both lanes (about 13,500). Not split or dividend related: the guard compares reported totals, not per-share figures.
+- Canary served-value checks passed on both lanes: ORCL `Q1-2026` equity 24,154M filed 2025-09-10 and `Q1-2027` 66,772M filed 2026-09-11 both present, `Q1-2026` pb 27.99 = market cap over equity; LYFT `Q3-2026` roe 0.942632. Homelab: canary job `8584496c` plus 7 chunk jobs, 15,402 writes total, no failed symbol; DO: canary `8698edc0` plus 8 chunk jobs (homelab's 349 symbols plus ATCH, AXIA, EVTV, KPTI, LRHC, LXP, PSKY, RAMP, ROKU, SHPH), 5 COMPLETED and 3 PARTIAL; the job status gives no failure reason, only the marketdata WARN `fundamentals backfill: symbol failed (skipped)` does.
+
+**Permanent deviations**:
+- Design § 2/§ 3 D-24 wording ("each row deleted without a same-(type, `period_end`) replacement is logged at INFO") narrowed by the operator's "Narrow set" (S-3/S-4); the service's category for a left-out period is `no_period_derived` (S-2).
+- Design § 5 audit "open range" → `plan` takes optional `-from`/`-to`; the runbook's post-repair run passes the repair's `start` (Deviation Log, operator "Add range flags (Recommended)").
+- Design § Business Rules Touched ("Q4-2019 ... left as is") → `@AC-3 @feature-198` now reads `Q1-2020` (operator "Approve, and fix the Q4-2019 name"); the label rule names the quarter ended 2019-12-28 `Q1-2020`, as `@AC-1` of the same file already did.
+- Design § 6 lane B (audit first, export, then repair, flag ends `false`) → no audit, no export, repaired through the operator's merge-and-enable instruction; no record resets DO's flag to `false` (current value not verified here). Design § 6 step 1 and the "20 minutes" timing → the enable ran 4 h 40 min after merge (above). Design § 6 `start=<lane minimum period_end>` → `2021-01-01`.
+- Step 15 implementation-spec said stop for the operator's review of the report and run the same audit on lane B (`audit-lane-b-do-staging.md`) → neither happened; no `audit-lane-b-do-staging.md` exists (Deviation Log).
+- Business-rule promotion: all 11 scenarios `@AC-1..@AC-11` are promoted to `services/xstockstrat-marketdata/acceptance/fix-edgar-historical-fundamentals.feature` (`@feature-348`, 11 PROMOTE, 0 duplicate, 0 conflict; `@AC-4` partly restates `@AC-3 @feature-198` and was kept whole; `@AC-6` realises the EXTEND of `@AC-2 @feature-223` as a new scenario); none to `platform.feature`; none unpromoted. The sign-offs live in this synthesis only: CHANGE `@AC-5 @feature-216` (one added `And the current EDGAR derivation reproduces that period's fiscal_period, period_type, period_end and filed_date`, operator "As recommended", 2026-11-16) and CHANGE `@AC-3 @feature-198` (`Q4-2019` → `Q1-2020`, operator "Approve, and fix the Q4-2019 name", 2026-11-16). Wording-only prose notes (no scenario edit): the feature 216 header ("As-reported fields and the earliest filed_date are never overwritten", scoped to rows the current derivation reproduces) and the feature 223 description in `fix-stored-edgar-periods.feature`. PRESERVE readings: 216 `@AC-3`/`@AC-4` stay true as being about rows the current derivation reproduces; 198 `@AC-1`/`@AC-5`, 211, 222, 253, 340 label-pinned scenarios hold because the label rule reproduces LYFT `Q3-2026`/`FY2025`, AXP `Q2-2026`, BABA `FY2026`, CRCL `FY2025`. This feature's own FR-6/`@AC-4` was restated to the strict `filed_date < as_of` rule (D-7), correcting the product spec's "on or before".
+- The one durable promoted file, `services/xstockstrat-marketdata/acceptance/fix-edgar-historical-fundamentals.feature`, names the pruned defect report in its description line (:7, "Regression guard for ...") and in two `# guards:` lines (:12, :35); the scenarios read correctly without it.
+
+**Cross-feature signal**: Direct follow-on of 340 (fix-fundamentals-roe-unit): fixes the period-label collision defect its lane A audit surfaced, reuses 340's balance-sheet anchor and `candSet`, the `DerivationVersion` gate and golden, and 340's lane procedure (without 340's lane audit on lane B). 340's archived context is consistent with this account (348 enabled and backfilled DO staging without a pre-enable audit; shares first-seen and cover-page `period_end` residuals resolved; findings `context-constitution-findings.md:56-57`); one nuance against 348's own sources: 340 says the audit-first rule was "waived by the operator", and 348's own files use that label (context "operator-waived", impl-spec Deviation Log "lane B deferred — waived by the operator's instruction", feature.md "lane B audit waived by the operator"), so 340 cites 348 faithfully; but the operator's words contain no waiver: after the lane A report the operator wrote "Merge it, then 20minutes later enable the fundamentals.history.enabled config in homelab and DO", the session stated back that no lane B audit had run, and the later operator words were "Go ahead, proceed as planned", "Then run the same on DO staging" and "Use 2021 as starting year. Also, GitHub says that the PR was merged hours ago" (questions unrecorded; inference that "Go ahead" answered the stated-back points). 340's "alongside symbols the SEC ticker map lacks" is accurate: those six still fail any fundamentals backfill and were only taken off DO "Signals". Mechanism link: 340's version 2 turned this defect's collided rows into look-ahead rows (ORCL `Q1-2026` held 2,929M/20,451M at version 1 and the later period's values at version 2 under the earlier filed date). 352 (delisted-symbol-handling) was born from this feature's DO run and cites its context sections; 351 (ensure-signals-watchlist-on-read) cites its Step 15/S-12 watchlist-union method; 352 also cites Step 12's `dbtest` local-verification form. The `marketdata-db-test` CI job and runbook lane procedure are reusable. Overlaps noted at review (file-level only, no merge-order row written): 337/341 `telemetry/otel.go`, 341/347 `marketdata_repo.go`/`marketdata_service.go`/service `CLAUDE.md`, 343/345 `ci.yml`.
+**Deferred follow-ons**: (1) ADBT and HONA on DO staging: operator to confirm the stale-row delete ran and then re-run their backfill, or leave them; the guard false positive (a symbol whose only stored rows are version-1 comparative-column rows of a filer with no earlier filings) has no defect report or findings row and would need a `/sdd-triage` bug. (2) The operator's read-only pass-condition queries, post-repair audit and pre/post diff on both lanes, and a `get_config` read-back of both flags, have no completion record. (3) Stored symbols outside watchlists on homelab are unrepaired (inference above). (4) Feature 352 handles delisted/untradable symbols still on watchlists. (5) The separate tag-coverage defect `docs/reports/2026-11-16-marketdata-edgar-tag-coverage-gaps-defect.md` (SEV-3, status `open` at triage): 11 symbols without quarterly net income, 13 without ROE on the latest quarter, filers reporting under `ProfitLoss`, equity including non-controlling interest, or IFRS tags (checked on AVGO, JEF, BMO, CARR, HSY, SNOW); out of scope here. (6) The stale-`pe_ratio`/`pb_ratio` finding stays open in the marketdata findings log. (7) LIVE POINTERS to soon-pruned files (recover with `git show f6ce9e7c:docs/roadmap/features/348-fix-edgar-historical-fundamentals/<file>`): `docs/roadmap/features/351-ensure-signals-watchlist-on-read/implementation-spec.md:105` cites `348-.../implementation-spec.md:81,1347-1348`; `docs/roadmap/features/352-delisted-symbol-handling/implementation-spec.md:463` cites `348-.../implementation-spec.md:1169-1172`; `docs/roadmap/features/352-delisted-symbol-handling/context.md:13-14` and `product-spec.md:17` cite sections of 348's `context.md` named "DO staging — the 8 failed symbols, diagnosed" and "Watchlist clean-up after the DO failures" (those headings no longer exist; their content is in this synthesis, "Scars & gotchas"; the original is `git show f6ce9e7c:.../context.md`); `services/xstockstrat-marketdata/acceptance/fix-edgar-historical-fundamentals.feature` cites the pruned defect report at :7 (description) and :12, :35 (`# guards:`), and `docs/roadmap/features/340-fix-fundamentals-roe-unit/audit-lane-a-homelab.md:4,123` cites it too (`git show f6ce9e7c:docs/reports/2026-11-16-marketdata-edgar-period-label-collision-defect.md`); `docs/roadmap/ledger/insights.md:4617` (append-only, leave it) cites 348's `recon.md` § Data findings and `debate.md` D-1, D-2, D-10, O-3 (retrieve with `git show f6ce9e7c:docs/roadmap/features/348-fix-edgar-historical-fundamentals/recon.md` and `.../debate.md`). No CLAUDE.md or docs/patterns file points at the pruned specs. (8) Homelab was never probed for `OTC`/`NOT_TRADABLE` symbols: the operator scoped the OTC clean-up "Both lanes, every watchlist", but the servability probe "was not run on homelab". (9) Design § 6 lane A step 4 ("Merge and deploy. Confirm the build stamps version 3") has no record of being done; the only evidence is indirect (the canary's served values match version 3).
+**Ledger entries written**: insights.md (2), fails.md (1) — see the 2026-11-18 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: MARKETDATA candidate: the reconcile's filer guard fails closed for a symbol whose only stored rows are version-1 rows that hold comparative-column values (filer with no earlier filings); the manual remedy is to delete the symbol's `fundamentals_history` rows (and the `source='edgar'` snapshot row) and re-run its backfill, which skips the guards for a symbol with no stored row. MARKETDATA candidate: once a lane's `marketdata/fundamentals.history.enabled` is `true`, any admin-triggered fundamentals backfill (including via `trigger_backfill`) runs the reconcile and can delete and re-insert a symbol's rows (accepted at the design gate; MARKETDATA-13 states the writer rule but not this reach). MARKETDATA candidate: a period the derivation leaves out (`label_collision`, `year_end_quarter`) is absent from the table by design and is visible only through the WARN and `marketdata.backfill.periods_left_out`.
+**Pruned artifacts**: product-spec.md, recon.md, debate.md, design.md, implementation-spec.md — last present at f6ce9e7c.
+**Pruned defect report**: 2026-11-16-marketdata-edgar-period-label-collision-defect (triaged → feature:348-fix-edgar-historical-fundamentals, launched) — reported 104 of 6,157 homelab rows (61 of 362 symbols) with `period_end` more than 30 days after `filed_date` (ORCL `Q1-2026` the exemplar) and a missing period per collision, hypothesising an `fy`/`fp` bucket collision (confidence high, why filers repeat `fy` untraced), later traced at triage to the SEC payload itself; no lesson beyond the feature's (the vendor-metadata-identity lesson is already at insights.md:4617) — last present at f6ce9e7c.
+**Non-standard artifacts**: audit-lane-a-homelab.md → kept in place by the archiver default (extras gate not asked for this unattended-continuation batch); flagged as an open thread in the PR. It is the lane A (homelab staging) pre-enable audit report for this feature's reconcile.
