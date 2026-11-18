@@ -52,7 +52,8 @@ export async function invalidateAlertReadModels(
 /** The unread list limit, the streamed-buffer cap and the drain page size. */
 export const UNREAD_PAGE_SIZE = 50;
 
-// Raising this means revisiting the notify single-connection load (feature 339 design.md § Load note).
+// Raising this means revisiting the notify single-connection load
+// (docs/roadmap/features/339-fix-symbol-page-alerts-ui/context.md, Why (e)).
 const MAX_DRAIN_BATCHES = 20;
 
 /** Newest first; a missing timestamp sorts first. */

@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-portfolio-signal-expiry-backfill`
-**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-11-17-portfolio-signal-expiry-backfill-mark-ingest-race-defect.md` (pruned 2026-11-18; `git show d0eea65f:docs/reports/2026-11-17-portfolio-signal-expiry-backfill-mark-ingest-race-defect.md`)
+**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-11-17-portfolio-signal-expiry-backfill-mark-ingest-race-defect.md` (pruned 2026-11-18; `git show 351e6fd0:docs/reports/2026-11-17-portfolio-signal-expiry-backfill-mark-ingest-race-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-11-17
 **Last Updated**: 2026-11-17

@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-analysis-held-position-drains`
-**GitHub Issue**: none — Issues disabled; defect report `docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md` (pruned 2026-11-18; `git show d0eea65f:docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md`)
+**GitHub Issue**: none — Issues disabled; defect report `docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md` (pruned 2026-11-18; `git show 351e6fd0:docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-11-17
 **Last Updated**: 2026-11-17
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md` (pruned 2026-11-18; `git show d0eea65f:docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md`) |
+| 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md` (pruned 2026-11-18; `git show 351e6fd0:docs/reports/2026-11-17-analysis-held-position-drains-trust-page-token-defect.md`) |
 | 2026-11-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 | 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |

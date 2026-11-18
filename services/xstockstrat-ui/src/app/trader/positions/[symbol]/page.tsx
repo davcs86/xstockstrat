@@ -1192,7 +1192,7 @@ function BacktestsSection({
   const queryClient = useQueryClient();
   const { data: history, isLoading } = useBacktestHistory(strategyId || undefined);
   const { mutate: runBacktest, isPending, data: runResult, error } = useRunBacktest();
-  // Local only (D-2): jobs have no owner, so the card follows just the id its own trigger returned.
+  // Local only (343 D-2): jobs have no owner, so the card follows just the id its own trigger returned.
   const [backfillJobId, setBackfillJobId] = useState<string>();
   const [filledGapKey, setFilledGapKey] = useState<string>();
   const {

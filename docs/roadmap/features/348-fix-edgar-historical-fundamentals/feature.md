@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-edgar-historical-fundamentals`
-**GitHub Issue**: n/a (Issues disabled) — report `docs/reports/2026-11-16-marketdata-edgar-period-label-collision-defect.md` (pruned 2026-11-18; `git show f6ce9e7c:docs/reports/2026-11-16-marketdata-edgar-period-label-collision-defect.md`)
+**GitHub Issue**: n/a (Issues disabled) — report `docs/reports/2026-11-16-marketdata-edgar-period-label-collision-defect.md` (pruned 2026-11-18; `git show 4e4795b7:docs/reports/2026-11-16-marketdata-edgar-period-label-collision-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-11-16
 **Last Updated**: 2026-11-16

@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-trading-reconcile-reads`
-**GitHub Issue**: none — Issues disabled; defect report `docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md` (pruned 2026-11-18; `git show d0eea65f:docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md`)
+**GitHub Issue**: none — Issues disabled; defect report `docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md` (pruned 2026-11-18; `git show 351e6fd0:docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-11-17
 **Last Updated**: 2026-11-17
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md` (pruned 2026-11-18; `git show d0eea65f:docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md`) |
+| 2026-11-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md` (pruned 2026-11-18; `git show 351e6fd0:docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md`) |
 | 2026-11-17 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 | 2026-11-17 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-17 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps; FR-5 and @AC-4 appended per operator decision (design gate r6) |

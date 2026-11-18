@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-replace-tif-before-intent`
-**GitHub Issue**: none (Issues disabled) — report: `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md` (pruned 2026-11-18; `git show d0eea65f:docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md`)
+**GitHub Issue**: none (Issues disabled) — report: `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md` (pruned 2026-11-18; `git show ce1853c3:docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-11-16
 **Last Updated**: 2026-11-16

@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-row-menu-stays-open`
-**GitHub Issue**: none (Issues disabled) — report: `docs/reports/2026-11-16-ui-row-menu-stays-open-after-confirm-defect.md` (pruned 2026-11-18; `git show d0eea65f:docs/reports/2026-11-16-ui-row-menu-stays-open-after-confirm-defect.md`)
+**GitHub Issue**: none (Issues disabled) — report: `docs/reports/2026-11-16-ui-row-menu-stays-open-after-confirm-defect.md` (pruned 2026-11-18; `git show ce1853c3:docs/reports/2026-11-16-ui-row-menu-stays-open-after-confirm-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-11-16
 **Last Updated**: 2026-11-16
