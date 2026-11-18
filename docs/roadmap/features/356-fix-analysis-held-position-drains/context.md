@@ -832,3 +832,191 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - [ ] If `308-fix-analysis-per-symbol-isolation` lands first, rebase and re-run Steps 3 and 7 Verification.
 - [ ] If `337-metrics-host-provider-label` lands first, Step 9's tsv append conflicts textually. Keep both rows and re-run `python3 scripts/check-otel-produced-signals.py`. 337's full file list was not read; the hunk-level overlap is unverified.
 - [ ] Expect the `xstockstrat-agent` CI job on this PR (`ci.yml:59`). A red agent job is a regression to investigate.
+
+## Session 2026-11-17 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan with this record (binding, verbatim; it is also the first body line of the respec commit below):
+  `{"mainDev":"756a24a7f19fedc571bc499dc87056f69b920a9a","dev":"6d7812a1e5668984159d4b9a83a2688e6d5b64d4","specHash":"14335605f5b54bfaef2cdc57b8eb48083d500d3d","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9],"mismatches":[{"n":1,"detail":"Line-range drift only; the content matches. In acceptance.feature the @AC-5 tag is at :34 and the scenario runs :34-40, with the cited When step at :38. The spec cites :36-42, but :42 is the @AC-6 tag. The @AC-9 tag is at :68 (spec says :67-74). There are 9 scenarios (@AC-1..@AC-9) and no @AC-10. product-spec.md:59-60 contains the cited FR-4 text ('Repeated failures surface `compute_failed` (feature 185). The fix adds no new metric instrument.') and has no daily-refresh bullet. debate.md has D-11 at :32 and D-13 at :34. Both Files paths exist."},{"n":2,"detail":"servicer.py has shifted +2 lines from :6018 onward. The cause is the merged base commit 756a24a7, which adds the delisted-binding filter to _drain_watchlist_bindings. New positions: _drain_held_symbols is at :6406-6439 (spec :6404-6437); the body to rewrite starts after the docstring at about :6415 (spec :6413-6437); _fetch_historical_fundamentals_paged is at :6674 (spec :6672-6703); the out-of-scope sibling QuerySignals drain loop is at about :6371 (spec :6369). Everything else matches exactly: _BAR_PAGE_SIZE :298, _MAX_DRAIN_PAGES :347, _BarFetchError :385, _FundamentalsPageError :389, the ScreenSymbols drain :3934-3941, the _compute_opportunities gather :5365-5370, the kick path _run :4940-4958, and live_loop.py:41-42 importing _fetch_historical_fundamentals_paged. No _PositionsPageError or _drain_positions_paged exists yet, and app/ has no page_token equality guard. The Files path exists."},{"n":3,"detail":"tests/test_held_position_drains.py does not exist. That is expected, because this step creates it. The other two Files paths exist. Drift: in tests/test_analysis_servicer.py, make_servicer is at :44 (spec :43-67) and the `from tests.conftest import ... aio_rpc_error` line is at :41 (spec :40). TestScreenSymbolsHeld is at :6490 and test_held_marked_from_positions at :6492 (spec :6487-6516), and `pos_resp.page.next_page_token = \"\"` is at :6511 (spec :6505). The _compute_opportunities ListPositions AsyncMock is at :4815 (spec :4812-4816). Sibling drains in servicer.py: _drain_active_signals at :6365 (spec :6363) and _drain_source_weights at :6391 (spec :6389); _drain_watchlist_bindings at :5995 matches. In tests/test_analysis_tick_telemetry.py, metric_reader is at :29 (spec :28). _refresh_svc :44, _drain_background :53, the import from tests.test_live_loop_telemetry at :17, and the AC-51 tests at :174-199 all match. conftest aio_rpc_error :145-147 and OWNER_HEADERS :150 match. test_analysis_tick_telemetry.py has no `from tests.conftest` import yet, so this step must add it for its own grep and Step 7's verification grep to return a hit."},{"n":4,"detail":"live_loop.py matches the spec: the servicer import block is at :41-50, _DRAIN_PAGES/_DRAIN_PAGE_SIZE at :66-67, the cycle held_cache/try/except ValueError at :391-411, and _drain_held at :563-590. The only live_loop change since the spec tree is +4 lines in _drain_watchlist at about :614, which is below these citations. entry_backfill.py:142-159 matches, and the only _drain_held(/_drain_held_symbols( callers are servicer.py :3935/:5367, live_loop.py:402 and entry_backfill.py:148. telemetry.py:465-467 matches. Drift in test files: test_ac16_failed_held_drain_counted_without_owner in tests/test_live_loop_telemetry.py is now at :123-129 (spec :121-127), because two imports (common_pb2, portfolio_pb2) were added. The empty-owner guard in tests/test_owner_header_guard.py is now the parametrize at :411 plus the test through about :419 (spec :408-416). The Files path exists."},{"n":5,"detail":"tests/test_live_loop_telemetry.py has shifted +2 lines: metric_reader :28 (spec :26), metric_sum :34 (spec :32), all_attribute_values :43 (spec :41), _wire_drains :55-62 (spec :53-60), and test_ac16 :123-129 (spec :121-127). It already imports common_pb2/portfolio_pb2 (new), and a new test_ac8_delisted_binding test sits at the end of the file. tests/test_live_loop.py matches: _make_loop :37, _live_row :647, the per-owner cycle pattern at about :890-930, and ListPositions at :1079 and :1340. The resolve_universe allowlist-vs-union logic matches. tests/test_held_position_drains.py will only exist once Step 3 creates it, which is expected."},{"n":6,"detail":"The _opportunity_refresh_tick per-user loop in servicer.py has shifted +2 lines: it is now :6056-6069 (spec :6054-6067). meta = owner_metadata(uid) is at :6059 (spec :6057). `except Exception as e:  # one bad user never kills the pass` is at :6063, `failed += 1` at :6064 (spec :6062), and log.warning(\"opportunity daily refresh failed for user=%s: %s\") at :6065 (spec :6063). schedule.advance is at :6068 (spec :6066) and _log_items_tick at :6069 (spec :6067). Instruction 1's target :6061-6063 is now :6063-6065. telemetry.py:484-486 record_opportunity_recompute matches, as do servicer.py:4955/:4957 and _log_items_tick :377-382. Today there is exactly one record_opportunity_recompute(\"full\", \"failed\") site, at :4957."},{"n":7,"detail":"owner_metadata(uid) is now at servicer.py:6059 (spec :6057), the same +2 drift as Step 6. Everything else matches: _refresh_svc :44-50, test_opportunity_refresh_tick_record_ok_idle_and_none :61, the tests/test_strategy_templates.py _schedule at :612-615, the tests/test_telemetry_allowlist.py _drive at :46-55 with record_opportunity_recompute(\"full\",\"ok\") at :52, the AC-41 label-key checks at about :70-76, and test_ac51_failed_full_recompute_counted_with_traceback at :174. Step 7's verification grep for `from tests.conftest` in test_analysis_tick_telemetry.py finds nothing today and only passes once Step 3 adds that import. Both Files paths exist."}]}`
+- Branch sync: merged `origin/main-dev@756a24a7` into `feature/fix-analysis-held-position-drains` (merge `09f1545d4`). The only add/add conflicts were in other features' artifacts (357, 358), and `merge-train-resolve.mjs` resolved them to main-dev's copy. `ledger-guard.py` reported clean.
+- Tooling setup (steps 1-9): python 3.13 ✓ · uv ✓ 0.11.32 · ruff/pytest via `uv sync --extra dev` per step · pnpm ✓ (pre-commit hook) · hook check hook=0.
+- Re-spec commits (directive conditional, sequential-mode.md §5.3) in `git log --first-parent origin/main-dev..HEAD`:
+  - `a14759ae6` respec(fix-analysis-held-position-drains): align steps 1,2,3,4,5,6,7 with current codebase. It changes only line citations; no instruction changes what it does. Step 3 now says explicitly to add `from tests.conftest import aio_rpc_error` to `test_analysis_tick_telemetry.py`, which Step 7's verification grep relies on.
+- Status `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"756a24a7f19fedc571bc499dc87056f69b920a9a","date":"2026-11-17"}
+```
+
+### Step 1 — docs: Align acceptance.feature and product-spec.md with the approved design [done]
+- Narrowed the `@AC-5` When step to the on-demand recompute and appended `@AC-10 @FR-4 @regression` (daily-refresh failed user counted, previous queue kept). product-spec FR-4 now limits `compute_failed` to cold reads and adds the daily-refresh bullet (`servicer.py:6056-6069`, cited at the branch head); Fix Scope notes the reused `recompute{kind=full,outcome=failed}` label set; Acceptance Criteria names the `@regression` scenarios including `@AC-10`.
+- TDD: N/A (docs). Baseline run (`.sdd-logs/v-1.log`): `exit=1`, scenario count `9`. Verification (`.sdd-logs/v-2.log`): `exit=0`; `76:  @AC-10 @FR-4 @regression`; `38:    When the on-demand opportunity recompute for "u-1" runs`; count `10`; product-spec `62:` daily-refresh bullet. Config-key wiring gate: N/A (no key).
+- Files modified: `docs/roadmap/features/356-fix-analysis-held-position-drains/acceptance.feature`, `docs/roadmap/features/356-fix-analysis-held-position-drains/product-spec.md`
+- Deviations: none
+
+- Re-spec (operator decision, Option B widened, on the Step 2 blocker): `545825bf9` respec(fix-analysis-held-position-drains): make Verification blocks runnable as one shell (steps 2,3,4,5,6,7). Only the Verification fences of Steps 2-7 changed: each line is its own `( … )` subshell and the last-line `#` comments moved onto their own lines. No command, path, flag or expected result changed.
+
+### Step 2 — service: Shared fail-closed positions drain; `_drain_held_symbols` and `ScreenSymbols` use it [done]
+- Added `_PositionsPageError(Exception)` after `_FundamentalsPageError` and the module-level `_drain_positions_paged(stub, user_id, metadata)` after `_fetch_historical_fundamentals_paged`. Its `try` wraps only the page body and re-raises as `_PositionsPageError` from the cause. The repeated-token check and the cap path (WARNING naming the user and `_MAX_DRAIN_PAGES`, then raise) run outside the `try`, and no failure path returns partial rows. `_drain_held_symbols` now sums `abs(market_value)` over the helper's rows with no try/except. `ScreenSymbols` catches `_PositionsPageError`, logs `ScreenSymbols: held cross-reference skipped for user=%s: %s` and continues with `held = {}`.
+- TDD (C-08/P-06), using the uncommitted probe `.sdd-logs/red/test_step2_red.py` (see Deviation Log). RED against the pre-Step-2 tree (`.sdd-logs/v-2.log`, `exit=1`): `FAILED ::test_ignored_token_raises_after_two_pages - Failed: DID NOT RAISE`, `FAILED ::test_cap_exhaustion_raises_and_warns - Failed: DID NOT RAISE`, `FAILED ::test_page2_rpc_error_raises_with_cause - Failed: DID NOT RAISE`, `FAILED ::test_screen_symbols_failed_drain_marks_no_row_held - AssertionError: assert True is False`, `4 failed, 1 passed` (the passing case is the metadata-forwarding/sum characterization). GREEN (`.sdd-logs/v-6.log`, `exit=0`): `5 passed`.
+- Verification, re-spec'd block run verbatim (`.sdd-logs/v-5.log`, `exit=0`): `All checks passed!`, `140 files already formatted`, `488 passed in 6.56s`, plus grep hits `393:class _PositionsPageError(Exception):`, `3942:        except _PositionsPageError as e:`, `6700:async def _drain_positions_paged(stub, user_id, metadata) -> list:` and `6712:                metadata=metadata,` (the helper forwards the caller's metadata, C-03). The earlier run `.sdd-logs/v-4.log` (`exit=0`, 488 passed) also showed `E501 Line too long (105 > 100)` on the new docstring. I re-wrapped that line before v-5. This block has no coverage command; Step 3 carries `--cov-fail-under=40`. Config-key wiring gate: N/A (no config key).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: Verification re-spec (operator) and a scratch RED probe instead of Step 3's tests. Full detail is in the Deviation Log.
+
+### Step 3 — test: Servicer held drain, ScreenSymbols and on-demand recompute fail closed (red first) [done]
+- Created `tests/test_held_position_drains.py` with the module-level `ListPositions` fakes (`_ignore_token`, `_distinct_tokens`, `_page2_raises`, `_honor_token`) and the servicer tests for AC-1/2/3/4/8/9. Added `TestScreenSymbolsHeld::test_failed_held_drain_marks_no_row_held` (AC-6) and `test_ac5_failed_held_drain_fails_on_demand_recompute` (AC-5, real `_compute_opportunities`/`_drain_held_symbols`, siblings stubbed). `test_analysis_tick_telemetry.py` now imports `aio_rpc_error` from `tests.conftest` and `app.handlers.servicer as servicer_mod`.
+- RED (`.sdd-logs/v-1.log`, `exit=0` — the block's status is its final grep; the pytest lines carry the verdict), run with `servicer.py` temporarily restored to `545825bf9` (see Deviation Log): `6 failed, 14 passed in 2.38s`; `::test_ac1_ignored_token_raises_after_second_page` and `::test_ac2_page_cap_raises_and_warns` and `::test_ac3_page2_rpc_error_raises_without_partial_rows` — `Failed: DID NOT RAISE <class 'Exception'>`; `::test_ac4_non_grpc_page_error_raises_positions_page_error` — `AttributeError: module 'app.handlers.servicer' has no attribute '_PositionsPageError'` (guard: the raw RuntimeError already propagated, only the type pin is new); `TestScreenSymbolsHeld::test_failed_held_drain_marks_no_row_held` — `assert True is False` (AAPL held); `::test_ac5_failed_held_drain_fails_on_demand_recompute` — `assert 1 == 0` (`_replace_and_stamp_compute_state.await_count`). AC-8/AC-9 passed (red N/A — success-path characterization). Full suite on that tree: `6 failed, 1742 passed`.
+- GREEN (`.sdd-logs/v-2.log`, `exit=0`, Step-2 `servicer.py` restored): `All checks passed!`, `141 files already formatted`, `20 passed in 0.57s`, `1748 passed, 13 warnings in 88.71s`, `Required test coverage of 40% reached. Total coverage: 91.63%`, grep hits `test_held_position_drains.py:11:from tests.conftest import OWNER_HEADERS, aio_rpc_error` and `test_analysis_tick_telemetry.py:15:from tests.conftest import aio_rpc_error` (C-13). Config-key wiring gate: N/A (no config key).
+- Files modified: `services/xstockstrat-analysis/tests/test_held_position_drains.py` (new), `services/xstockstrat-analysis/tests/test_analysis_servicer.py`, `services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py`
+- Deviations: RED captured against a temporarily restored pre-Step-2 `servicer.py` (Deviation Log). Commit trailer uses the session attribution `Claude Opus 5.5` from the harness system reminder instead of the task text's `Claude Fable 5.2`.
+
+### Step 4 — service: Live-loop held drain fails closed; the cycle skips a failed owner once [done]
+- Atomic unit Steps 4+5 (one commit). `_drain_held` now calls `_drain_positions_paged`, and on `_PositionsPageError` it records `drain_failures{source=held}` and re-raises, with no log line; the `None`-portfolio return and `owner_metadata(owner)` still run before any RPC. The cycle has a per-cycle `failed_owners` set, checked right after `owner = definition.user_id`. `except _PositionsPageError` comes before `except ValueError` and logs one WARNING `live_loop: strategy %s owner %s skipped — held drain failed: %s`, adds the owner and continues. `_DRAIN_PAGES`/`_DRAIN_PAGE_SIZE` are kept for the sibling drains. `entry_backfill.py` is unchanged.
+- TDD: the RED/GREEN for this unit is recorded under Step 5. Step 4 Verification (`.sdd-logs/v-2.log`, `exit=0`; the status is the final grep, so the pytest lines carry the verdict): `All checks passed!`, `141 files already formatted`, `131 passed in 1.06s`, grep `395:        failed_owners: set[str] = set()`, `414:            except _PositionsPageError as e:`, `586:        except _PositionsPageError:`, and `583:        meta = owner_metadata(owner)` (C-03 unchanged). Config-key wiring gate: N/A (no config key).
+- Files modified: `services/xstockstrat-analysis/app/engine/live_loop.py`
+- Deviations: none, apart from the commit-trailer attribution noted under Step 3, which applies again here.
+
+### Step 5 — test: Live-loop held drain and cycle fail closed (red first); flip the AC-16 test [done]
+- Atomic unit Steps 4+5. `tests/test_held_position_drains.py` gains the live-loop tests on `_make_loop()` + `_wire_drains` with the Step-3 fakes: `test_ac1_live_loop_ignored_token_raises`, `test_ac2_live_loop_page_cap_raises_and_warns`, `test_ac3_live_loop_page2_error_raises_without_partial_set`, `test_ac8_live_loop_honored_token_returns_every_page`, `test_ac9_live_loop_single_page`, and the cycle test `test_ac7_failed_owner_skipped_once_per_cycle`. It imports `_live_row`/`_make_loop` from `tests.test_live_loop` and `_wire_drains`/`metric_sum`/`all_attribute_values` from `tests.test_live_loop_telemetry` (C-13). `test_ac16_failed_held_drain_counted_without_owner` now asserts `pytest.raises(_PositionsPageError)`; its metric == 1 and no-`"o-1"` assertions are unchanged (`@AC-16 @feature-294` PRESERVE).
+- RED against the Step-3 tree, before the Step 4 change (`.sdd-logs/v-1.log`, `exit=0`; the status is the final grep): `5 failed, 138 passed in 2.71s`. AC-1, AC-2 and AC-3 live-loop failed with `Failed: DID NOT RAISE <class 'Exception'>`. AC-7 failed with `AssertionError: assert not ['AAPL', 'AAPL']` (o-1's strategies were evaluated). `test_ac16_failed_held_drain_counted_without_owner` failed with `Failed: DID NOT RAISE <class 'app.handlers.servicer._PositionsPageError'>`. AC-8 and AC-9 passed: they are success-path characterizations, so red is N/A for them. Full suite on that tree: `5 failed, 1749 passed`.
+- GREEN after Step 4 (`.sdd-logs/v-3.log`, `exit=0`): `All checks passed!`, `141 files already formatted`, `143 passed in 1.12s`, `1754 passed, 13 warnings in 88.24s`, `Required test coverage of 40% reached. Total coverage: 91.63%`. Grep hits: `12:from tests.conftest import OWNER_HEADERS, aio_rpc_error`, `14:from tests.test_live_loop import _live_row, _make_loop`, `15:from tests.test_live_loop_telemetry import _wire_drains, all_attribute_values, metric_sum`. Config-key wiring gate: N/A (no config key).
+- Files modified: `services/xstockstrat-analysis/tests/test_held_position_drains.py`, `services/xstockstrat-analysis/tests/test_live_loop_telemetry.py`
+- Deviations: none, apart from the commit-trailer attribution noted under Step 3, which applies again here.
+
+### Step 6 — service: Daily opportunity refresh counts a failed user on `recompute{full,failed}` [done]
+- In the per-user `except Exception` of `_opportunity_refresh_tick`, added `telemetry.record_opportunity_recompute("full", "failed")` after `failed += 1` and `exc_info=True` on the existing WARNING (D-11). `_log_items_tick`, `schedule.advance` and `_compute_opportunities` are unchanged; no daily `ok`. Discovery: the edit site is at `servicer.py:6072-6074` at the branch head (+9 from the cited `:6063-6065`, from Steps 2-5); content matched exactly.
+- TDD (C-08/P-06), uncommitted probe `.sdd-logs/red/test_step6_red.py` (see Deviation Log). RED against the pre-Step-6 tree (`.sdd-logs/v-1.log`, `exit=1`): `FAILED ::test_daily_refresh_failed_user_counted_with_traceback - AssertionErr...`, `E       AssertionError: assert 0 == 1` (`recompute{full,failed}`), `1 failed in 1.99s`. GREEN (`.sdd-logs/v-3.log`, `exit=0`): `1 passed in 0.27s`.
+- Verification block run verbatim (`.sdd-logs/v-2.log`, `exit=0`): `All checks passed!`, `141 files already formatted`, `18 passed in 1.05s`, grep `4966:                telemetry.record_opportunity_recompute("full", "failed")` and `6074:                telemetry.record_opportunity_recompute("full", "failed")` (two sites). Extra full-suite run (`.sdd-logs/v-4.log`, `exit=0`): `1754 passed, 13 warnings in 92.36s`, `Required test coverage of 40% reached. Total coverage: 91.63%`. Config-key wiring gate: N/A (no config key). Tooling: uv ✓, `uv sync --extra dev` (venv Python 3.12.3).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: RED via an uncommitted scratch probe (Deviation Log); commit-trailer attribution as noted under Step 3.
+
+### Step 7 — test: Daily-refresh failed user is counted and keeps its queue (red first); allowlist drive [done]
+- Added `test_ac10_daily_refresh_failed_user_counted_and_queue_kept` to `tests/test_analysis_tick_telemetry.py`. It uses `_refresh_svc(("u-1", "u-2"))` with the real `_compute_opportunities`/`_drain_held_symbols`, the three sibling drains stubbed empty, and a whole-stub `_portfolio` whose `ListPositions` fake branches on `dict(metadata)["x-user-id"]` (u-1 raises `aio_rpc_error(UNAVAILABLE)`, u-2 gets an empty final page). It asserts: replace awaited only for `u-2`, `recompute{full,failed}` == 1, `ok` == 0, no `u-1` attribute value, `schedule.advance` awaited once, and the u-1 WARNING `exc_info[0] is servicer_mod._PositionsPageError`. The allowlist `_drive()` gains `record_opportunity_recompute("full", "failed")`. That is a guard on existing keys, so no RED is expected for it. `test_ac51_failed_full_recompute_counted_with_traceback` is unchanged.
+- AC-10 RED, against a temporarily restored pre-Step-6 `servicer.py` (`dfd2f710c`, see Deviation Log), Verification block run verbatim (`.sdd-logs/v-1.log`, `exit=0`; the status is the final grep, so the pytest lines carry the verdict). Lines: `FAILED tests/test_analysis_tick_telemetry.py::test_ac10_daily_refresh_failed_user_counted_and_queue_kept`, `E       AssertionError: assert 0 == 1` (`metric_sum(... 'analysis.opportunity.recompute', kind='full', outcome='failed')`), `1 failed, 18 passed in 2.67s`, and full suite `1 failed, 1754 passed`. The `exc_info` pin sits after that assertion, so it was not reached. The warning was logged without a traceback on that tree (`servicer.py:6074 opportunity daily refresh failed for user=u-1`).
+- AC-10 GREEN, with the Step-6 `servicer.py` restored (`.sdd-logs/v-2.log`, `exit=0`). Lines: `All checks passed!`, `141 files already formatted`, `19 passed in 0.89s`, `1755 passed, 13 warnings in 96.33s`, `Required test coverage of 40% reached. Total coverage: 91.63%`, and grep `15:from tests.conftest import aio_rpc_error` (C-13). Config-key wiring gate: N/A (no config key).
+- Files modified: `services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py`, `services/xstockstrat-analysis/tests/test_telemetry_allowlist.py`
+- Deviations: RED ran against a temporarily restored pre-Step-6 `servicer.py` (Deviation Log). Commit-trailer attribution as noted under Step 3.
+
+### Step 8 — docs: Analysis CLAUDE.md Observability caveat for `recompute{full,failed}` [done]
+- Appended the caveat clause to the Instruments bullet (`services/xstockstrat-analysis/CLAUDE.md:327`): `recompute{kind=full,outcome=failed}` counts kick-path and daily-refresh per-user failures (any exception the per-user catch handles); `ok` is kick-path only, so no failed/(ok+failed) ratio over `kind=full` is meaningful. The `loop tick ok` bullet (`:326`) is unchanged (D-16). Checked against the code at the branch head: `full/ok` only at `servicer.py:4956`; `full/failed` at `:4966` (kick) and `:6074` (daily catch).
+- TDD: N/A (docs). Verification block run verbatim (`.sdd-logs/v-1.log`, `exit=1` — the status is the final `grep -c`, which exits 1 when it counts 0): `1 file changed, 1 insertion(+), 1 deletion(-)` and the `loop tick ok` count `0`. Config-key wiring gate: N/A (no config key).
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none, apart from the commit-trailer attribution noted under Step 3.
+
+### Step 9 — docs: Register `analysis_opportunity_recompute_total` in produced-signals.tsv [done]
+- Appended one tab-separated row at the end of `packages/otel/produced-signals.tsv`, after the `metric target_info` row: `metric analysis_opportunity_recompute_total services/xstockstrat-analysis/app/telemetry.py analysis.opportunity.recompute`. No comment was added. Discovery: the producer literal is at `services/xstockstrat-analysis/app/telemetry.py:443`, the guard's `load_registry`/`produces` are at `scripts/check-otel-produced-signals.py:180-194`, and CI runs the guard at `ci.yml:1161`. 337's row has not landed on this branch, so there was no conflict.
+- TDD: N/A (registry row). Baseline (`.sdd-logs/v-1.log`, `exit=0`): the guard was silent and the awk returned no row. Verification block run verbatim (`.sdd-logs/v-2.log`, `exit=0`): the guard was silent, which means no `AC-8 P1-producer` hit, and the awk returned exactly one row, `metric analysis_opportunity_recompute_total services/xstockstrat-analysis/app/telemetry.py analysis.opportunity.recompute`.
+- Last step. `node scripts/check-config-wiring.mjs --final` (`.sdd-logs/v-3.log`, `exit=0`) printed only two baseline lines, both about other code: `REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. Neither is a key this feature touches. Status `in-progress` → `code-completed`. No insights ledger line was added, because nothing new generalizes.
+- Files modified: `packages/otel/produced-signals.tsv`
+- Deviations: none, apart from the commit-trailer attribution noted under Step 3.
+
+## Open Items
+
+- ~~Step 3 must still record RED for its own test ids (item 5).~~ Resolved by Step 3 (2026-11-17), RED recorded above.
+
+## Session 2026-11-17 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-analysis-held-position-drains (feature 356)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-analysis/acceptance/fix-analysis-held-position-drains.feature | CREATE | NEW | same-token rejection; Then asserts on analysis drains |
+| AC-2 | same | CREATE | NEW | 50-page cap with token pending fails loudly |
+| AC-3 | same | CREATE | NEW | mid-drain page error raises |
+| AC-4 | same | CREATE | NEW | non-gRPC exception in servicer drain |
+| AC-5 | same | CREATE | NEW | failed drain keeps previous opportunity queue |
+| AC-6 | same | CREATE | NEW | screener row held=false on failed drain |
+| AC-7 | same | CREATE | NEW | per-owner skip in live-loop cycle |
+| AC-8 | same | CREATE | NEW | multi-page drain returns all positions |
+| AC-9 | same | CREATE | NEW | single-page drain unchanged |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-held-position-drains.feature (CREATE) ---
+# Promoted from docs/roadmap/features/356-fix-analysis-held-position-drains/acceptance.feature (C-16). Verbatim; do not edit by hand.
+Feature: fix-analysis-held-position-drains (analysis)
+
+  @AC-1 @FR-1 @FR-4 @FR-6 @regression @feature-356
+  Scenario: A drain rejects a next_page_token equal to the one it sent
+    Given the portfolio ListPositions fake ignores page_token and always returns position "AAPL" with market_value 100 and next_page_token "t"
+    When live_loop._drain_held drains owner "o-1" and servicer._drain_held_symbols drains user "u-1"
+    Then each drain makes exactly 2 ListPositions calls instead of 50
+    And each drain raises to its caller instead of returning a held set
+    And "analysis.live_loop.drain_failures" with source "held" increases by 1 for the live-loop drain
+
+  @AC-2 @FR-2 @FR-4 @regression @feature-356
+  Scenario: A drain that reaches its 50-page cap with a token still pending fails loudly
+    Given the portfolio ListPositions fake returns a distinct non-empty next_page_token on every page
+    When live_loop._drain_held drains owner "o-1" and servicer._drain_held_symbols drains user "u-1"
+    Then each drain makes exactly 50 ListPositions calls
+    And each drain logs a WARNING naming the owner or user and the cap 50
+    And each drain raises to its caller instead of returning a held set
+    And "analysis.live_loop.drain_failures" with source "held" increases by 1 for the live-loop drain
+
+  @AC-3 @FR-3 @FR-4 @regression @feature-356
+  Scenario: A page error mid-drain is an error, never end-of-data
+    Given the portfolio ListPositions fake returns page 1 holding "AAPL" with next_page_token "p2" and then raises on page 2
+    When live_loop._drain_held drains owner "o-1" and servicer._drain_held_symbols drains user "u-1"
+    Then each drain raises to its caller instead of returning a set or map holding "AAPL"
+    And "analysis.live_loop.drain_failures" with source "held" increases by 1 for the live-loop drain
+
+  @AC-4 @FR-3 @FR-4 @feature-356
+  Scenario: A non-gRPC exception in the servicer drain is also a failure
+    Given the portfolio ListPositions fake raises a non-gRPC exception on page 1
+    When servicer._drain_held_symbols drains user "u-1"
+    Then the drain raises to its caller instead of returning an empty map
+
+  @AC-5 @FR-4 @regression @feature-356
+  Scenario: A failed held drain fails the opportunity recompute and keeps the previous queue
+    Given user "u-1" has a previously computed opportunity queue
+    And the portfolio ListPositions fake raises on page 1
+    When the opportunity queue for "u-1" is recomputed
+    Then the previous queue for "u-1" is not replaced
+    And "analysis.opportunity.recompute" with outcome "failed" increases by 1
+
+  @AC-6 @FR-4 @regression @feature-356
+  Scenario: A failed held drain marks no screener row as held
+    Given the portfolio ListPositions fake returns page 1 holding "AAPL" with next_page_token "p2" and then raises on page 2
+    When ScreenSymbols returns a result row for "AAPL"
+    Then the "AAPL" row has held false
+    And a WARNING is logged for the failed held cross-reference
+
+  @AC-7 @FR-4 @regression @feature-356
+  Scenario: A failed held drain skips only that owner in the live-loop cycle
+    Given two live strategies owned by "o-1" and one live strategy owned by "o-2"
+    And the portfolio ListPositions fake raises for owner "o-1" and returns "MSFT" for owner "o-2"
+    When the live loop runs one cycle
+    Then no strategy owned by "o-1" is evaluated in that cycle
+    And ListPositions is called exactly once for owner "o-1"
+    And "analysis.live_loop.drain_failures" with source "held" increases by exactly 1
+    And the strategies owned by "o-2" are evaluated with held set {"MSFT"}
+    And no metric attribute contains "o-1"
+
+  @AC-8 @FR-5 @FR-6 @feature-356
+  Scenario: A multi-page drain returns every held position exactly once
+    Given the portfolio ListPositions fake honors page_token across three pages holding "AAPL" (100), "MSFT" (200) and "NVDA" (300)
+    When live_loop._drain_held drains owner "o-1" and servicer._drain_held_symbols drains user "u-1"
+    Then live_loop._drain_held returns {"AAPL", "MSFT", "NVDA"}
+    And servicer._drain_held_symbols returns {"AAPL": 100, "MSFT": 200, "NVDA": 300}
+    And each drain makes exactly 3 ListPositions calls
+
+  @AC-9 @FR-5 @feature-356
+  Scenario: A single-page drain is unchanged
+    Given the portfolio ListPositions fake returns one page holding "AAPL" with market_value -150 and an empty next_page_token
+    When live_loop._drain_held drains owner "o-1" and servicer._drain_held_symbols drains user "u-1"
+    Then live_loop._drain_held returns {"AAPL"}
+    And servicer._drain_held_symbols returns {"AAPL": 150}
+    And each drain makes exactly 1 ListPositions call
+
+### Notes / ambiguities / conflicts
+- Attribution: every scenario's observable subject is analysis code (live_loop._drain_held, servicer._drain_held_symbols, opportunity recompute, ScreenSymbols). Portfolio appears only as a faked dependency in Given, so all 9 route to the single analysis suite. platform.feature has no match (grep for _drain_held/ListPositions empty); no cross-service guarantee.
+- Reviewers table lists only xstockstrat-analysis as affected service. The acceptance/ dir exists, and the target file does not yet exist (no DUP).
+- Partial overlap, not a duplicate: services/xstockstrat-analysis/acceptance/signal-map-instrumentation.feature (@AC-16 @feature-294) asserts drain_failures{source=held} +1 when a ListPositions call fails and no attribute contains "o-1". 356 AC-1/2/3/7 repeat that metric clause but add different outcomes (raise instead of returning a set, call counts, cap warning, per-owner skip), so I marked them NEW rather than OVERLAP. No contradiction; consolidation is unnecessary.
+- Other pagination-cap suites (fix-analysis-backtest-bounds, block-fundamentals-strategy-on-etf, opportunities-pagination-drain) cover marketdata GetBars or the ListOpportunities response, not portfolio held drains. No overlap.
+- opportunities-latency-fix.feature line 9 mentions _drain_held_symbols running concurrently via asyncio.gather. That is a concurrency rule and does not conflict with failure semantics.
+- CONFLICT: none.
+- I read acceptance.feature from the working-tree path docs/roadmap/features/356-.../acceptance.feature, not from origin/feature/fix-analysis-held-position-drains, and the files exist locally. If the feature branch has diverged, re-verify the scenario text.
+
+### Coverage check
+- Source scenarios: 9 (AC-1..AC-9). Planned NEW 9, DUP 0, OVERLAP 0, CONFLICT 0. All accounted for, none skipped. Scenario text is verbatim; only the @feature-356 tag was added.
+```

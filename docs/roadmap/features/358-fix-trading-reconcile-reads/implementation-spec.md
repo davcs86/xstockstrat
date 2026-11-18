@@ -79,7 +79,7 @@ binding operator decision at design gate r6 (IDs append-only).
 
 ### Step 1 — service: Add the `trading.reconciliation.position_check_skipped` counter and its typed outcome
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify
@@ -116,8 +116,8 @@ binding operator decision at design gate r6 (IDs append-only).
 
 **Verification**:
 ```bash
-cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./internal/telemetry/... ./internal/service/... && GOWORK=off go test ./internal/telemetry/... ./internal/service/... -count=1
-cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
+( cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./internal/telemetry/... ./internal/service/... && GOWORK=off go test ./internal/telemetry/... ./internal/service/... -count=1 )
+( cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod )
 ```
 Both exit 0.
 
@@ -125,7 +125,7 @@ Both exit 0.
 
 ### Step 2 — test: Register the skip counter in the label allowlist test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/telemetry_allowlist_test.go` — modify
@@ -163,8 +163,8 @@ Both exit 0.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestAllowlist' -count=1 -v 2>&1 | grep -E "^(--- |ok|FAIL)"
-cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
+( cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestAllowlist' -count=1 -v 2>&1 | grep -E "^(--- |ok|FAIL)" )
+( cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod )
 ```
 Every `TestAllowlist*` passes. New logic is in the excluded `telemetry`/`service` packages, so no coverage
 threshold applies here (Step 4 runs the full coverage command).
@@ -173,7 +173,7 @@ threshold applies here (Step 4 runs the full coverage command).
 
 ### Step 3 — service: Drain `ListPositions` fail-closed in `reconcileTick` and count skips
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -190,12 +190,12 @@ threshold applies here (Step 4 runs the full coverage command).
 - Rebuild to delete: `trading.go:2244-2247` (`platformBySymbol := make(map[string]float64, len(platformPositions.Positions))` + range loop). Consumers of `platformBySymbol`: :2256 and :2277-2278.
 - `tradingMode` derived at `trading.go:2227-2230`. `timeout := brokerCallTimeout(s.cfgW)` at :2109 (`func brokerCallTimeout` at :2585-2591).
 - Imports already present in `trading.go`: `"errors"` (:7), `"fmt"` (:8), `"google.golang.org/grpc/codes"` (:20), `"google.golang.org/grpc/metadata"` (:22), `grpcstatus "google.golang.org/grpc/status"` (:23, the status package is aliased `grpcstatus` in this file), `commonv1` (:28), `portfoliov1` (:33), `"github.com/xstockstrat/trading/internal/telemetry"` (:41). No import change is needed.
-- Precedent drain (reuse target, recon.md § Patterns to REUSE): `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1111-1167` (`collectFills`):
-  - `PageRequest{PageSize, PageToken: token}` at :1119;
-  - error on an RPC error (:1121-1123);
-  - empty page with a token (:1124-1126);
-  - `next := resp.GetPage().GetNextPageToken()` (:1159), return on `""` (:1160-1162);
-  - error on `next == token` (:1163-1165).
+- Precedent drain (reuse target, recon.md § Patterns to REUSE): `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1114-1170` (`collectFills`):
+  - `PageRequest{PageSize, PageToken: token}` at :1122;
+  - error on an RPC error (:1124-1126);
+  - empty page with a token (:1127-1129);
+  - `next := resp.GetPage().GetNextPageToken()` (:1162), return on `""` (:1163-1165);
+  - error on `next == token` (:1166-1168).
 - Only production `ListPositions` call in trading: `trading.go:2235` (recon.md:35).
 - Trading-domain survey (step-constraints §A):
   - Broker coverage: the change is broker-agnostic. The portfolio read runs for every `brokerMap` entry; `BROKER_TYPE_OFFLINE` stays skipped at `trading.go:2095`. ALPACA and IBKR are both unaffected beyond the read.
@@ -265,9 +265,9 @@ threshold applies here (Step 4 runs the full coverage command).
 
 **Verification**:
 ```bash
-cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./... && GOWORK=off go test ./... -count=1
-cd services/xstockstrat-trading && grep -n "reconcilePositionsPageSize\|listAccountPlatformPositions\|reconcilePositionSkipCause\|RecordReconcilePositionSkip\|PageSize: 500" internal/service/trading.go
-cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
+( cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./... && GOWORK=off go test ./... -count=1 )
+( cd services/xstockstrat-trading && grep -n "reconcilePositionsPageSize\|listAccountPlatformPositions\|reconcilePositionSkipCause\|RecordReconcilePositionSkip\|PageSize: 500" internal/service/trading.go )
+( cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod )
 ```
 `go test ./...` passes: the pre-existing reconcile tests stay green on a single page. The grep shows the
 const, the helper, the mapper and one `RecordReconcilePositionSkip` call, and no remaining `PageSize: 500`
@@ -277,7 +277,7 @@ literal. Lint exits 0.
 
 ### Step 4 — test: 358 regression tests: drain, skip-the-tick, repeated token, counted skips, guard hardening
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go` — modify
@@ -286,17 +286,17 @@ literal. Lint exits 0.
 
 **Codebase Evidence** (all re-read at this tree):
 - Harness in `trading_reconciliation_test.go`:
-  - `fakeReconciliationBroker{listOrdersFn, getPositionsFn, isPaper}` at :79-83 (`IsPaper()` returns `f.isPaper`, :117);
+  - `fakeReconciliationBroker{listOrdersFn, getPositionsFn, isPaper}` at :79-83 (`IsPaper()` returns `f.isPaper`, :115);
   - `fakeReconciliationPortfolioClient{listPositionsFn}` at :122-133 (default response is an empty `ListPositionsResponse`, :131);
   - `recordingLedgerClient` at :137-170, recording the full `AppendEventRequest` (`events`) with `eventTypes()`;
-  - `newTestReconciliationService(brokers, portfolio, ledger, notify, accountRepo)` at :168-170, which sets `cfgW: &config.Watcher{}`, `reconcilePositionLookup: &fakePositionQtyLookup{}` and `reconcileCandidates: make(map[string]int)`;
+  - `newTestReconciliationService(brokers, portfolio, ledger, notify, accountRepo)` at :168-170, which delegates to `newTestReconciliationServiceWithIntents` (:176-196); that helper sets `cfgW: &config.Watcher{}` (:179), `reconcilePositionLookup: &fakePositionQtyLookup{}` (:188) and `reconcileCandidates: make(map[string]int)` (:194);
   - `fakePositionQtyLookup` at :228-245 (empty `net`, so SYM501 is unexplained);
   - `noopAccountRepo` at :250-256;
   - two-tick grace pattern at :554-555;
   - payload reads `e.Payload.Fields["order_id"].GetStringValue()` at :632.
   Existing imports (:3-22) lack `fmt`, `codes`, `status`, `metadata` and `commonv1`; add them.
 - `fakeNotifyClient` at `trading_bracket_test.go:180`.
-- `snapshotInts(map[string]int64) *config.Watcher` at `trading_ibkr_auth_test.go:121-127` (`config.MustSnapshotWatcher("trading", …)`). `brokerCallTimeout` reads `cfgW.GetFloat("broker.timeout_ms", 5000)` (`trading.go:2585-2591`), and `GetFloat` widens an IntVal (recon/D-11 evidence `internal/config/watchcore.go:411-416`).
+- `snapshotInts(map[string]int64) *config.Watcher` at `trading_ibkr_auth_test.go:121-127` (`config.MustSnapshotWatcher("trading", …)`). `brokerCallTimeout` reads `cfgW.GetFloat("broker.timeout_ms", 5000)` (`trading.go:2585-2591`), and `GetFloat` widens an IntVal (recon/D-11 evidence `internal/config/watchcore.go:406-416`).
 - Metric helpers in package `service`:
   - `installMetricReader(t)` at `trading_telemetry_test.go:285-296`;
   - `counterValue(t, reader, name, kv...)` at :316-332;
@@ -407,10 +407,10 @@ Step 3 and is GREEN-side only. Its guard discrimination is exact text per row (D
 
 **Verification**:
 ```bash
-cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestReconcileTick|TestListAccountPlatformPositions|TestReconcilePositionSkipCause|TestAllowlist' -count=1 -race -v 2>&1 | grep -E "^(--- |ok|FAIL)"
-cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
-cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -n "t.Parallel" services/xstockstrat-trading/internal/service/trading_reconciliation_test.go
+( cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestReconcileTick|TestListAccountPlatformPositions|TestReconcilePositionSkipCause|TestAllowlist' -count=1 -race -v 2>&1 | grep -E "^(--- |ok|FAIL)" )
+( cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:" )
+( cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod )
+( grep -n "t.Parallel" services/xstockstrat-trading/internal/service/trading_reconciliation_test.go )
 ```
 - All 358 tests pass under `-race`. The `-run` filter selects them by the names in items 2-6 and 8:
   `TestReconcileTick_358_*`, `TestListAccountPlatformPositions_358_Guards` and
@@ -424,7 +424,7 @@ grep -n "t.Parallel" services/xstockstrat-trading/internal/service/trading_recon
 
 ### Step 5 — docs: Document paging and the skip counter in the trading reconciliation docs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/docs/reconciliation.md` — modify
@@ -471,3 +471,13 @@ The counter appears in both files, and the paging sentence is present.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 4 — RED captured on a temporarily restored pre-Step-3 `trading.go`
+- **Spec said**: item 7 pass 1 runs RED before Step 3 is applied, with the test edits kept uncommitted while Step 3 lands.
+- **Actual**: Step 3 was already committed (8bcfd1a59) when Step 4 started. Step 3's pass-1 test edit had been reverted, so it was not on the branch. Pass 1 was rewritten, and `trading.go` was temporarily overwritten with its Step-2-commit copy (c12e2e23c) and left uncommitted. The five `TestReconcileTick_358_*` tests were run there: all FAIL for the specced reasons. `trading.go` was then restored from HEAD before pass 2, and no change to it is committed.
+- **Disposition**: same RED evidence on the same tree the spec names. No scope change.
+
+### Step 4 — import alias and `-run` filter observations
+- The status package is imported as `grpcstatus`, the alias `trading.go` and `trading_telemetry_test.go` already use, not as bare `status`. The assertions are the ones the spec names (`grpcstatus.Code(err) == codes.Unavailable`, `grpcstatus.Error(...)`).
+- The Verification block's last command, `grep -n "t.Parallel"`, exits 1 when it prints nothing, which is its pass condition, so the block as a whole reports `exit=1` on success. GREEN was judged on the block's output, not on that exit code.
+- **Disposition**: no deviation in behaviour. Recorded so the next reader does not take `exit=1` for a failure.

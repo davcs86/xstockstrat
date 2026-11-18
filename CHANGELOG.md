@@ -3,6 +3,17 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-18
+
+### Features
+- fix-analysis-held-position-drains: Harden the two analysis consumers that page portfolio `ListPositions` (`live_loop._drain_held`, `servicer._drain_held_symbols`): reject a repeated token, make a page-cap hit visible, and stop returning a partial or duplicated held set as success.
+- fix-trading-reconcile-reads: `reconcileTick` reads one 500-row `ListPositions` page per broker account and drops the token; a held symbol past row 500 reads as platform qty 0 and can raise a false quantity-discrepancy finding that halts the account.
+
+### Summary
+5 commits, 2 feature merges since last promotion.
+
+---
+
 ## 2026-11-17
 
 ### Features

@@ -1120,3 +1120,152 @@ OPERATOR DECISIONS (binding, recorded 2026-11-17):
 - Operator decision: **accept paper-only broker coverage** for the drain tests. No `BROKER_TYPE_IBKR` row and no live-mode (`isPaper=false`) row are added. This is an accepted risk: `listAccountPlatformPositions` does not branch on broker type and only forwards `tradingMode` (C-18). Closes the Open Thread "IBKR and both-broker test coverage … decide at /sdd-execute".
 - Merge-order note: 358's prerequisite 353 is already merged into `main-dev` (#1568), so no `merge-order.md` row is needed.
 - Overlap re-check vs 356/357: the implementation specs' `**Files**` lists are disjoint (358 touches only `services/xstockstrat-trading/**`). There is no shared proto, migration or config key.
+
+## Session 2026-11-17 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan with this binding record (verbatim):
+  `{"mainDev":"756a24a7f19fedc571bc499dc87056f69b920a9a","dev":"bc22f0570cde73541fbb780faae5b8a2f2dfbe5b","specHash":"f4fffe4879aecb2b25ee291e28fe21893d747bce","directive":"conditional","pending":[1,2,3,4,5],"mismatches":[{"n":3,"detail":"The precedent drain cited in Codebase Evidence (services/xstockstrat-portfolio/internal/service/portfolio_service.go collectFills) is 3 lines lower on the merged tree. The merge of 756a24a7f adds 54 lines to that file, so `func collectFills` is now at :1114, not :1111. The cited lines move the same way: PageRequest{PageToken: token} :1119->:1122, the RPC-error return :1121-1123->:1124-1126, the empty-page-with-token check :1124-1126->:1127-1128, `next := ...GetNextPageToken()` :1159->:1162, the `next == token` error :1163-1165->:1166-1167. The pattern itself is unchanged and this is a reuse reference only. Every trading-side reference in Step 3 matches exactly, because the merge touched nothing under services/xstockstrat-trading: trading.go :2227-2230, :2231-2239, :2240-2243, :2244-2247, :2292, :2585-2591, :2892-2896, :75-81, :2095, and the imports at :7/:8/:20/:22/:23/:28/:33/:41. The only production ListPositions call is :2235 and `PageSize: 500` is at :2237. No 358 symbols exist yet."},{"n":4,"detail":"Minor wording issue, not a path error. The evidence says `newTestReconciliationService` at trading_reconciliation_test.go:168-170 'sets cfgW: &config.Watcher{}, reconcilePositionLookup: &fakePositionQtyLookup{} and reconcileCandidates'. In fact it delegates to `newTestReconciliationServiceWithIntents` (:176-196), and that helper sets those fields (cfgW :179, reconcilePositionLookup :188, reconcileCandidates :195). The behaviour the spec relies on holds. Every other Step 4 reference matches: :79-83, :115 IsPaper, :122-133 with the default empty response at :131, :137-170, eventTypes :158, :228 fakePositionQtyLookup, :250 noopAccountRepo, :554-555, :617/:655 single page with no token, :632 order_id; trading_bracket_test.go:180 fakeNotifyClient; trading_ibkr_auth_test.go:121-127 snapshotInts; trading_telemetry_test.go:285 installMetricReader, :316 counterValue, :334 outcome; telemetry_allowlist_test.go:55 keysByInstrument; watchcore.go GetFloat widening an IntVal at :406-416; the item 9 suites at ibkr_auth:335, telemetry:249 and :550; portfolio_pnl_paging_test.go pagingLedger :30, pagingCallCap :28, ignoreToken :34, cap check :43, token :49. Steps 1, 2 and 5: all evidence lines and every Files path match the merged tree with no drift. That covers otel.go :310-316, :331-338, :356-358, :375-377 and the NewCounter at :191; telemetry_allowlist_test.go :28-30, :32-35, :37-40, :44-52, :100; reconciliation.md :56-57 and :98; CLAUDE.md :221-223; packages/otel/produced-signals.tsv; and check-otel-produced-signals.py :2-9."}]}`
+- Merged `origin/main-dev` 756a24a7f into the dev branch (c2eaa95a2; resolver took main-dev's copy of the 356/357 artifacts and unioned `ledger/fails.md`; ledger-guard clean).
+- Re-spec commits (`respec(fix-trading-reconcile-reads)`) on the first-parent range `origin/main-dev..HEAD`:
+  - 74216b957 — align steps 3,4 with current codebase. Re-read on the merged tree: `collectFills`' empty-page block spans :1127-1129 and the `next == token` block :1166-1168, and the helper's `reconcileCandidates` line is :194 (the record said :1127-1128, :1166-1167 and :195).
+- Tooling detection (steps 1-5): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0). Pre-commit hook wired (hook=0).
+
+```sdd-batch-setup
+{"mainDev":"756a24a7f19fedc571bc499dc87056f69b920a9a","date":"2026-11-17"}
+```
+
+## Session 2026-11-17 — sdd-execute sequential, Step 1 (sdd-batch-execute)
+
+- Operator decision on the Step 1 blocker (binding): Option B, widened. Re-spec under sequential-mode.md §5.3 in one commit, c36086186 `respec(fix-trading-reconcile-reads): make Verification blocks runnable as one shell (steps 1,2,3,4)`. Each Verification command line of Steps 1-4 is now wrapped in its own `( ... )` subshell, so every line runs from the repo root. No command, path, flag or expected result changed. No trailing `#` comment existed, so none was moved.
+
+### Step 1 — service: Add the `trading.reconciliation.position_check_skipped` counter and its typed outcome [done]
+- Added the lazy counter `reconcilePositionSkip` to the `otel.go` counter var block, plus `type ReconcileSkipOutcome string`, the three constants `rpc_error`/`deadline`/`cursor_invalid`, and `RecordReconcilePositionSkip(ctx, outcome ReconcileSkipOutcome)`. The only label is the existing `KeyOutcome`. There is no new `Key*` constant and `escalationSystemic` is untouched. Nothing calls the new function yet.
+- TDD:
+  - AC-4 red: Step 2's `minInstruments` entry was applied as a temporary, uncommitted edit and failed with `telemetry_allowlist_test.go:107: instrument trading.reconciliation.position_check_skipped not collected` (`exit=1`, .sdd-logs/v-1.log). The edit was reverted before implementing, so Step 2 re-applies it.
+  - Green: the Step 1 Verification block, run verbatim after the re-spec, gave `ok .../internal/telemetry`, `ok .../internal/service` and `0 issues.` (`exit=0`, .sdd-logs/v-2.log). No coverage threshold applies, because the telemetry and service packages are excluded.
+- Config-key wiring gate: N/A. The step declares no config key.
+- Files modified: `services/xstockstrat-trading/internal/telemetry/otel.go`
+- Deviations: none against the spec. One note on the re-spec commit: its trailer used the harness-attributed model name, not the one the workflow prompt supplied.
+
+## Session 2026-11-17 — sdd-execute sequential, Step 2 (sdd-batch-execute)
+
+### Step 2 — test: Register the skip counter in the label allowlist test [done]
+- Appended `"trading.reconciliation.position_check_skipped"` to `minInstruments` and three `telemetry.RecordReconcilePositionSkip` calls (`ReconcileSkipRPCError`, `ReconcileSkipDeadline`, `ReconcileSkipCursorInvalid`) to `driveAllInstruments`. The existing allowlist and forbidden-key loops now cover the instrument; no new test function.
+- TDD: AC-4 red: with only the `minInstruments` entry applied on the Step-1 tree, `telemetry_allowlist_test.go:107: instrument trading.reconciliation.position_check_skipped not collected` (`exit=1`, .sdd-logs/v-2.log; the filtered Verification block in .sdd-logs/v-1.log shows `--- FAIL: TestAllowlist_AC41_EveryLabelKeyIsATelemetryConstant`) → green: the Verification block gave all four `TestAllowlist*` `--- PASS`, `ok .../internal/service` and `0 issues.` (`exit=0`, .sdd-logs/v-3.log). No coverage threshold applies (excluded packages).
+- Config-key wiring gate: N/A. The step declares no config key.
+- Files modified: `services/xstockstrat-trading/internal/service/telemetry_allowlist_test.go`
+- Deviations: none.
+
+## Session 2026-11-17 — sdd-execute sequential, Step 3 (sdd-batch-execute)
+
+### Step 3 — service: Drain `ListPositions` fail-closed in `reconcileTick` and count skips [done]
+- Added `reconcilePositionsPageSize`, the three sentinels, `listAccountPlatformPositions` (per-page timeout and `x-user-id`, `cancel()` after each call, token guards before the duplicate-symbol merge, complete map or nil + page-indexed `%w` error) and `reconcilePositionSkipCause` (deadline in both forms → `deadline`; any sentinel → `cursor_invalid`; anything else, `context.Canceled` included → `rpc_error`). `reconcileTick` binds `platformBySymbol, ppErr` from the helper, the rebuild is gone, and the `ppErr` branch gained only the `RecordReconcilePositionSkip` line before the unchanged WARN/`continue`. The `x-user-id` comment moved into the helper unchanged.
+- TDD: AC-1/AC-2/AC-3/AC-4 red: Step 4 pass-1 behavioural subtests (items 1-6) as a temporary uncommitted edit of `trading_reconciliation_test.go`; all five `TestReconcileTick_358_*` FAIL on the pre-Step-3 tree for the specced reasons (`tick 1 tokens = [""], want ["" "p2"]`, `payload ... expected=0 broker_reported=10, want SYM501 5 10`, `rpc_error skips = 0, want 2`, `deadline skips = 0, want 2`, `cursor_invalid skips = 0, want 2`; `exit=1`, .sdd-logs/v-1.log) → green: the same five `--- PASS` (`exit=0`, .sdd-logs/v-3.log), and the Step 3 Verification block with those tests present gave every package `ok`, the grep showing the const, helper, mapper and one `RecordReconcilePositionSkip` call with no `PageSize: 500`, and `0 issues.` (`exit=0`, .sdd-logs/v-2.log). The pass-1 edit was then reverted (Step 4 owns that file and rewrites it), and the Verification block re-ran clean on the committed tree (`exit=0`, .sdd-logs/v-4.log). No coverage threshold applies (excluded `service` package).
+- Config-key wiring gate: N/A. The step declares no config key.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: none against the spec. Note for Step 4: its RED is the run recorded above (captured before this commit); a fresh pass-1 RED can no longer be taken on this branch.
+
+## Session 2026-11-17 — sdd-execute sequential, Step 4 (sdd-batch-execute)
+
+### Step 4 — test: 358 regression tests: drain, skip-the-tick, repeated token, counted skips, guard hardening [done]
+- Added the 358 fixtures (`reconcile358Owner`, a 501-symbol broker builder, the `reconcile358Pager` paging fake with a call cap of 100 and `takeLog()`) and the five behavioural tests to `trading_reconciliation_test.go`, plus two tables: `TestListAccountPlatformPositions_358_Guards` (exact-text guard rows and a happy row) and `TestReconcilePositionSkipCause_358` (both deadline forms → `deadline`, `context.Canceled` → `rpc_error`). Every counter test calls `installMetricReader(t)` first, and nothing runs in parallel.
+- TDD:
+  - AC-1..AC-4 red: pass 1 (items 1-6) ran against a temporarily restored pre-Step-3 `trading.go` (c12e2e23c, uncommitted, restored from HEAD afterwards). All five `TestReconcileTick_358_*` FAIL, with `tick 1 tokens = [""], want ["" "p2"]`, `payload order_id="SYM501" expected=0 broker_reported=10, want SYM501 5 10`, `rpc_error skips = 0, want 2`, `deadline skips = 0, want 2` and `cursor_invalid skips = 0, want 2` (`exit=1`, .sdd-logs/v-1.log).
+  - Green: the Verification block lists all seven 358 tests `--- PASS` under `-race`, every package `ok`, `total: (statements) 84.8%` (≥ 40%), `0 issues.`, and an empty `t.Parallel` grep (.sdd-logs/v-3.log).
+  - The block's `exit=1` comes only from that empty grep. .sdd-logs/v-2.log was a failed run: the grep matched a comment this step had added. The comment was reworded and the block re-run.
+- Config-key wiring gate: N/A. The step declares no config key.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go`
+- Deviations: RED was taken on a temporarily restored pre-Step-3 tree, the status package uses the `grpcstatus` alias, and the block exits 1 on success. Full detail is in the Deviation Log.
+
+## Session 2026-11-17 — sdd-execute sequential, Step 5 (sdd-batch-execute)
+
+### Step 5 — docs: Document paging and the skip counter in the trading reconciliation docs [done]
+- `reconciliation.md`: added the paging sentence right after the end of the sentence the spec quotes at :56-57 ("…not immediately a foreign position: … empty `account.positions.synced`."; it ends at :58). Also appended `trading.reconciliation.position_check_skipped{outcome rpc_error|deadline|cursor_invalid}` (feature 358) to the feature-294 instrument bullet, with its meaning and the deploy-burst/alert note. `CLAUDE.md:223`: the pointer line now names the skip counter. The counter name, outcome set, page size 500 and `broker.timeout_ms` were re-verified against `otel.go:339,385-387` and `trading.go:2085,2634-2635`.
+- TDD: N/A (docs). Green: both Verification greps matched (`reconciliation.md:102` and `CLAUDE.md:223` for the counter; `reconciliation.md:59` "page by page", `:61` `next_page_token`), `exit=0` (.sdd-logs/v-1.log).
+- Config-key wiring gate (last step, `--final`): `exit=0` (.sdd-logs/v-2.log). It printed two `REPORTED:` baseline lines, `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. Neither comes from this feature: the 358 diff against `origin/main-dev` has no `trading_state` line and declares no key.
+- Files modified: `services/xstockstrat-trading/docs/reconciliation.md`, `services/xstockstrat-trading/CLAUDE.md`
+- Deviations: none.
+- Status: in-progress → code-completed. No insights.md entry, because nothing new generalizes beyond the existing fails.md:3311/3312 lessons.
+
+## Session 2026-11-17 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-trading-reconcile-reads (feature 358)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-trading/acceptance/fix-trading-reconcile-reads.feature | CREATE | NEW | Held position past first 500 is not flagged or halted. |
+| AC-2 | same | CREATE | NEW | A page error skips the account for the tick. |
+| AC-3 | same | CREATE | NEW | A repeated next_page_token is a failed read, with at most 2 calls per tick. |
+| AC-4 | same | CREATE | NEW | Scenario Outline with 2 examples (rpc_error, cursor_invalid). Bounded outcome label, no account_id or user_id attribute. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-trading-reconcile-reads.feature (CREATE) ---
+# Promoted from docs/roadmap/features/358-fix-trading-reconcile-reads/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-358` tag.
+# Durable business rules xstockstrat-trading already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring. These cover the reconcile
+# position-side check reading ALL platform positions (paginated) and skipping fail-safe on a failed read.
+
+Feature: xstockstrat-trading — reconcile reads every platform position page and skips safely on a failed read
+  Regression guard for defect report docs/reports/2026-11-17-trading-reconcile-reads-first-500-positions-defect.md: trading reconcile reads only the first 500 platform positions per account.
+
+  @AC-1 @FR-1 @FR-4 @regression @feature-358
+  Scenario: Reconcile does not flag a held position that sits past the first 500
+    Given broker account "acc-1" holds 501 positions "SYM001" through "SYM501", each with quantity 10
+    And the platform projection for "acc-1" holds the same 501 symbols, each with quantity 10
+    And the portfolio ListPositions fake returns "SYM001".."SYM500" on page 1 with next_page_token "p2", and "SYM501" on page 2 with an empty next_page_token
+    And NetFilledQtyBySymbol returns no filled quantity for "SYM501"
+    When reconcileTick runs for graceTicks plus one ticks
+    Then no quantity-discrepancy finding is emitted for "acc-1"
+    And "acc-1" is not halted
+
+  @AC-2 @FR-2 @regression @feature-358
+  Scenario: A page error while reading platform positions skips the account for the tick
+    Given broker account "acc-1" holds 501 positions "SYM001" through "SYM501", each with quantity 10
+    And the portfolio ListPositions fake returns "SYM001".."SYM500" on page 1 with next_page_token "p2" and returns an Unavailable error for page 2
+    And NetFilledQtyBySymbol returns no filled quantity for "SYM501"
+    When reconcileTick runs for graceTicks plus one ticks
+    Then no reconciliation candidate is recorded for "acc-1"
+    And no quantity-discrepancy finding is emitted for "acc-1"
+    And "acc-1" is not halted
+
+  @AC-3 @FR-3 @regression @feature-358
+  Scenario: Reconcile treats a repeated next_page_token as a failed read
+    Given broker account "acc-1" holds 501 positions "SYM001" through "SYM501", each with quantity 10
+    And the portfolio ListPositions fake ignores page_token and returns "SYM001".."SYM500" with next_page_token "p2" on every call
+    And NetFilledQtyBySymbol returns no filled quantity for "SYM501"
+    When reconcileTick runs for graceTicks plus one ticks
+    Then each tick makes at most 2 ListPositions calls for "acc-1"
+    And no reconciliation candidate is recorded for "acc-1"
+    And no quantity-discrepancy finding is emitted for "acc-1"
+    And "acc-1" is not halted
+
+  @AC-4 @FR-5 @regression @feature-358
+  Scenario Outline: A skipped position-side check is counted with a bounded outcome label
+    Given a metric reader is installed before the first reconcileTick
+    And broker account "acc-1" holds 501 positions "SYM001" through "SYM501", each with quantity 10
+    And the portfolio ListPositions fake behaves as in <case>
+    And NetFilledQtyBySymbol returns no filled quantity for "SYM501"
+    When reconcileTick runs for graceTicks plus one ticks
+    Then "trading.reconciliation.position_check_skipped" with outcome "<outcome>" increases by 2
+    And "trading.reconciliation.position_check_skipped" carries no "account_id" or "user_id" attribute
+    And "acc-1" is not halted
+
+    Examples:
+      | case                                        | outcome        |
+      | AC-2 (page 2 returns an Unavailable error)  | rpc_error      |
+      | AC-3 (fake ignores page_token, repeats p2)  | cursor_invalid |
+
+### Notes / ambiguities / conflicts
+- Affected service is xstockstrat-trading only (feature.md Reviewers table lists only the trading service owner). All four scenarios assert on reconcileTick behavior, so none is cross-cutting. Nothing goes to docs/sdd/business-rules/platform.feature.
+- Dedup: grep of services/xstockstrat-trading/acceptance/*.feature for next_page_token, position_check_skipped, "first 500" and @feature-358 returned nothing. grep of platform.feature for position_check_skipped, reconcil and @feature-358 also returned nothing. So there is no DUP and no OVERLAP.
+- Nearest neighbour is services/xstockstrat-trading/acceptance/fix-reconciliation-false-halt.feature (feature 206). It covers the DB-grounded netting and the lookup-error case. AC-1 here shares its "not halted" outcome but differs in cause (pagination vs. net-filled-qty), so it is not an OVERLAP. There is no contradiction: AC-2 of feature 206 (a genuinely foreign position still halts) is unaffected, because feature 358 only suppresses findings when the platform read failed.
+- The source file's `Feature:` header and description are kept in spirit. I rewrote the header title and added the promotion comment per the suite convention. The scenario steps are verbatim and only the tag lines gained @feature-358.
+- The acceptance/ directory already exists, so no lazy dir creation is needed.
+- I read acceptance.feature from the local working tree, not from origin/feature/fix-trading-reconcile-reads. I could not run git with the tools I have. The orchestrator should confirm the local copy matches the branch copy before writing.
+
+### Coverage check
+- Source scenarios: 4 (AC-1 to AC-4, where AC-4 is an outline with 2 examples). Planned (NEW+DUP+OVERLAP): 4 (4 NEW, 0 DUP, 0 OVERLAP). No scenario was skipped, and the counts match.
+```

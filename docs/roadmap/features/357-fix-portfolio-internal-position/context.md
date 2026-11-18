@@ -619,3 +619,155 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - 358 touches only `services/xstockstrat-trading/**`.
   - 357 touches `services/xstockstrat-portfolio/**` and `.github/workflows/ci.yml` (:1065).
 - No shared file, proto field, migration NNN or config key among 356/357/358. No merge-order constraint among them.
+
+## Session 2026-11-17 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation.** The operator approved the plan with this record (binding, verbatim): `{"mainDev":"0558e377e1bd805653e3e29b2a5853b4bdb1d3d8","dev":"28534529e105b34a718e78dca133849245b97f27","specHash":"488e1f6ba86decd22f445a12787041c83b9e7797","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9],"mismatches":[…9 entries; full text in the respec commit body…]}`. The full mismatches list is the first body line of commit `81d9f169c38a47b53e810b62eebc3cb4f706852c`.
+- **Merge.** `0558e377` (main-dev) was merged into the feature branch as `3cdfc7f38`. The merge-train resolver took main-dev's copy of the 356/358 feature docs (rule `theirs`, nothing unresolvable). ledger-guard reported clean.
+- **Re-spec commits** (`git log --first-parent origin/main-dev..HEAD`):
+  - `81d9f169c38a47b53e810b62eebc3cb4f706852c` respec(fix-portfolio-internal-position): align steps 1,2,3,4,5,6,7,8,9 with current codebase
+- **What the re-spec changed.** It updated only line citations in the step bodies; no instruction changed. Step 8 had no mismatch and is unchanged. In Step 7 the `:133` Instruments line also carries the delisting feature's `portfolio.marketdata_fetch{op=quotes|delistings,…}`, and the step edits only the `portfolio.snapshot` entry on it. The Execution Summary and Step Dependencies sections still cite pre-merge lines (for example `:481-485`, `:787`), because those sections are outside the step bodies the re-spec may edit.
+- **Tooling** (steps 1–9): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0) · hook check ✓.
+- Status → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"0558e377e1bd805653e3e29b2a5853b4bdb1d3d8","date":"2026-11-17"}
+```
+
+### Step 1 — test: pgxmock RED tests for the RPC readers' drain (GetPortfolio, GetPnL) [done]
+- Atomic unit 1+2+3. Added six `Test(GetPnL|GetPortfolio)_357_*` pgxmock tests with the O-10 `cardinality(...)` anchor and the page-2 cursor pinned to `[]string{"S499","TRADING_MODE_PAPER",acct}`. TDD: AC-1 red `UnrealizedPnl = 500, want 1500` / `len(Positions) = 500, want 501` / `Equity = 5500, want 6510`; AC-3 red `len(Positions) = 500, want 501`; AC-4 red `first quote batch requested 500 symbols, want 501`; AC-2 red `err = <nil>, want errors.Is(err, errPageTwo)` → green: 6/6 PASS, full service package `ok`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_position_drain_test.go`
+- Deviations: extra file-local helpers (`expectTwoPages`, `brokerValued`, `paperMode`) — see Deviation Log
+
+### Step 2 — test: 501-row real-DB service dbtest + CI package list (D-15) [done]
+- Atomic unit 1+2+3. Added the `//go:build dbtest` service test (prefix `it-357-`, `serviceTestPool` twin with the D-17 comment, seeding via `UpsertPosition`, three `TestPositionDrain_357_*` tests); ci.yml:1065 now runs `./internal/repository/... ./internal/service/...`, :1116 unchanged. TDD: real-DB red/green not run locally (no `PORTFOLIO_DB_TEST_URL`; never start a DB); vet + lint under `-tags dbtest` clean; the authoritative run is CI `portfolio-db-test` on this commit.
+- Files modified: `services/xstockstrat-portfolio/internal/service/position_drain_dbtest_test.go`, `.github/workflows/ci.yml`
+- Deviations: real-DB RED/GREEN deferred to CI (CI-equivalent fallback); extra file-local fixture helpers — see Deviation Log
+
+### Step 3 — service: `listAllPositions` drain; GetPortfolio and GetPnL read every page [done]
+- Atomic unit 1+2+3. Added `positionDrainPageSize = 500` and `listAllPositions` (page-error wrap only; the guard is Step 5) after `collectFills`; `GetPortfolio` and `GetPnL` now drain. Green: build/vet/vet-dbtest clean, 6/6 `_357_` PASS, coverage `total: 79.1%`, golangci-lint `0 issues`, no `ListPositions(ctx, userID, req.TradingMode, 500` hit.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: none
+
+### Step 4 — test: RED test for the repeated-token guard (called directly) [done]
+- Atomic unit 4+5. Added `TestListAllPositions_357_RepeatedTokenFailsClosed`: two identical 501-row `acc-1` pages (page 2 cursor pinned to `pageTwoCursor(syms, "acc-1")`), `listAllPositions` called directly. TDD: AC-2 red `err = list positions page: list positions: all expectations were already fulfilled, call to method Query() was not expected, want a repeated page token error` (the unguarded drain reached a third page) → green: PASS, full service package `ok`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_position_drain_test.go`
+- Deviations: none
+
+### Step 5 — service: fail-closed repeated-token guard in `listAllPositions` [done]
+- Atomic unit 4+5. `listAllPositions` now returns `list positions page: repeated page token` when the next token equals the one just sent; no empty-page guard (operator decision 2026-11-17). Green: 7/7 `Test(ListAllPositions|GetPnL|GetPortfolio)_357_` PASS, full service package `ok`, golangci-lint `0 issues`, guard grep 3 hits (:1128, :1167, :1190).
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: none
+
+### Step 6 — test: RED tests for the background readers (broadcastSnapshot, checkRiskLimits) [done]
+- Atomic unit 6+7. Added five `Test(BroadcastSnapshot|CheckRiskLimits)_357_*` pgxmock tests (page-2 cursor pinned via `expectTwoPages`; the AC-5/AC-6 tests use `recordLogs` with `installMetricReader`). TDD: AC-1 red `OpenPositions = 500, want 501` / `Equity = 5500, want 6510`, and `alerts = [], want exactly [concentration limit breach: S500 at 30.0%]`; AC-5 red `a failed read must not broadcast or emit, got 1 snapshots and 1 ledger emits`, `snapshot{outcome=skipped_read_error} = 0, want 1`, `alerts = [concentration limit breach: S000 at 30.0%], want none`, `mark_source{path=risk} = 500, want 0`; AC-6 red `alerts = [concentration limit breach: S000 at 30.0% drawdown limit breach: …], want exactly [drawdown limit breach: …]`, page-2 expectation unmet → green: 5/5 PASS, full service package `ok`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_position_drain_test.go`
+- Deviations: file-local helpers `riskPageTwoFails` / `assertRiskReadSkipped` — see Deviation Log
+
+### Step 7 — service: broadcastSnapshot and checkRiskLimits drain all pages; logged skips on a read failure [done]
+- Atomic unit 6+7. `broadcastSnapshot` drains via `listAllPositions` and, on a read failure, logs WARN `portfolio snapshot skipped: position read failed` and records `skipped_read_error`, with no insert, emit or broadcast. `checkRiskLimits` drains; on a read failure it logs WARN `concentration check skipped: position read failed`, skips quotes, the mark pass and concentration, and falls through to drawdown (O-2). The service CLAUDE.md § Observability is updated. Green: the `Test(BroadcastSnapshot|CheckRiskLimits|ProcessOrderFill|GetPnL|GetPortfolio|ListAllPositions)` run PASS, coverage `total: 79.1%`, golangci-lint `0 issues`, no `ListPositions(ctx, userID, mode, 500` hit, `skipped_read_error` 1 hit each in CLAUDE.md and portfolio_service.go.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/CLAUDE.md`
+- Deviations: the call-site grep prints 5 instead of the specced 4 because it also matches the definition line; there are 4 call sites — see Deviation Log
+
+### Step 8 — docs: promote the acceptance scenarios to the portfolio durable suite (C-16) [done]
+- Created the portfolio durable-suite file with the feature-353 promotion header, then copied the `Feature:` block and `@AC-1`..`@AC-6` verbatim, adding `@feature-357` to each scenario tag line. A diff of the file, with the header and the tags stripped, against `acceptance.feature` is empty. `fix-after-hours-positions-priced.feature` is untouched, so `@AC-9 @feature-231` is EXTENDED by `@AC-6 @feature-357`, not rewritten. TDD: N/A (docs). Green: `@feature-357` count 6, source `@AC-` count 6, `git diff --quiet` on fix-after-hours-positions-priced.feature `exit=0`.
+- Files modified: `services/xstockstrat-portfolio/acceptance/fix-portfolio-internal-position.feature`
+- Deviations: none
+
+### Step 9 — docs: D-9 dev smoke gate (single-batch enrichment at ≥501 symbols) [pending — deferred by operator]
+- **Operator decision 2026-11-17 (binding): Option A, defer Step 9.** Step 9 stays `pending` and no smoke result is recorded. The run needs the integration PR merged to `main-dev` and the dev app deployed, followed by seeding ≥501 PAPER positions on dev (`docs/runbooks/operator-db-access.md`), which this session cannot do.
+- The D-9 dev smoke gate (≥501 PAPER positions on dev; pass = no `Unavailable` from `GetPnL`/`GetPortfolio` and `portfolio.marketdata_fetch{op=quotes}` outcome `ok`) runs after the integration PR is merged to `main-dev` and deployed to dev.
+- **Promotion to `main` stays gated on a recorded PASS.** `/promote` must not take this feature until a later session appends a `D-9 smoke: PASS` entry (date, symbol count, outcome, Grafana evidence) and marks Step 9 `done`. A FAIL triggers the Step 9 item 7 fallback (per-page enrichment, AC-4 relaxed to `<= 2`) as a logged deviation and re-spec.
+- The integration PR to `main-dev` is opened with Steps 1–8 done and status `in-progress`; its description states the pending D-9 gate as a pre-promotion requirement.
+- Files modified: `docs/roadmap/features/357-fix-portfolio-internal-position/context.md`
+- Deviations: none (the step is deferred, not deviated; Verification not run because there is no result to check)
+
+## Session 2026-11-17 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-portfolio-internal-position (feature 357)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-portfolio/acceptance/fix-portfolio-internal-position.feature | CREATE | NEW | Outline over GetPortfolio, GetPnL, broadcastSnapshot and checkRiskLimits. The subject is all portfolio. No existing scenario asserts a 501-position drain. |
+| AC-2 | same | CREATE | NEW | Page error in an RPC reader returns an error. |
+| AC-3 | same | CREATE | NEW | Account-scoped GetPortfolio past 500 positions. |
+| AC-4 | same | CREATE | NEW | Batched quote enrichment while draining. Related to quote-fanout-batching.feature, but not the same outcome (see Notes). |
+| AC-5 | same | CREATE | NEW | No partial snapshot or alert on a page error in the background readers. |
+| AC-6 | same | CREATE | NEW | Position-read failure skips concentration, drawdown still alerts. |
+
+No @feature-357 tag exists anywhere under services/, so there are no DUPs. The suite file does not exist yet, so it is a CREATE.
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-portfolio-internal-position.feature (CREATE) ---
+# Promoted from docs/roadmap/features/357-fix-portfolio-internal-position/acceptance.feature (C-16). Scenarios verbatim; do not edit by hand.
+Feature: fix-portfolio-internal-position (bug fix)
+  Regression guard: portfolio internal position reads cover every position past the first 500 rows.
+
+  @AC-1 @FR-1 @FR-2 @FR-3 @FR-4 @regression @feature-357
+  Scenario Outline: Internal position readers cover every position past the first 500
+    Given user "u-1" holds 501 positions in trading mode PAPER, the 501st ordered last by (symbol, trading_mode, account_id)
+    When <reader> runs for "u-1" in PAPER
+    Then the result is computed over all 501 positions, including the 501st
+    And <observable>
+
+    Examples:
+      | reader            | observable                                                                                                        |
+      | GetPortfolio      | the response lists 501 positions and its total market value includes the 501st position's market value            |
+      | GetPnL            | unrealized_pnl includes the 501st position's unrealized P&L                                                       |
+      | broadcastSnapshot | the persisted snapshot has open_positions 501 and equity that includes the 501st position's market value          |
+      | checkRiskLimits   | with the 501st position at 30% of total market value and risk.concentration_limit_pct at 0.20, a concentration alert names its symbol |
+
+  @AC-2 @FR-5 @regression @feature-357
+  Scenario Outline: A page error in an RPC reader is returned, not a partial result
+    Given user "u-1" holds 501 positions in PAPER and the repository read of the second page fails
+    When <reader> runs for "u-1" in PAPER
+    Then <reader> returns an error instead of a result computed over the first 500 positions
+
+    Examples:
+      | reader       |
+      | GetPortfolio |
+      | GetPnL       |
+
+  @AC-3 @FR-1 @regression @feature-357
+  Scenario: Account-scoped GetPortfolio covers every position of that account past the first 500
+    Given user "u-1" holds 501 positions in PAPER on account "acct-a" and 3 positions in PAPER on account "acct-b"
+    When GetPortfolio runs for "u-1" in PAPER with account_id "acct-a"
+    Then the result covers all 501 "acct-a" positions and none of the "acct-b" positions
+
+  @AC-4 @FR-6 @regression @feature-357
+  Scenario: Draining past 500 positions keeps quote enrichment batched
+    Given user "u-1" holds 501 unpriced positions in PAPER
+    When GetPortfolio runs for "u-1" in PAPER
+    Then no per-position GetLatestQuote call is made
+    And at most 2 GetLatestQuotes batch calls are made
+
+  @AC-5 @FR-5 @regression @feature-357
+  Scenario: A page error in the background readers produces no partial snapshot or risk alert
+    Given user "u-1" holds 501 positions in PAPER, one of the 501 is at 30% of total market value with risk.concentration_limit_pct at 0.20, and the repository read of the second page fails
+    When broadcastSnapshot and checkRiskLimits run for "u-1" in PAPER
+    Then no snapshot is persisted or broadcast for "u-1"
+    And no concentration alert is emitted for "u-1"
+    And each reader logs the page-read failure
+
+  @AC-6 @FR-5 @regression @feature-357
+  Scenario: A position-read failure skips concentration but drawdown still alerts
+    Given user "u-1" holds 501 positions in PAPER, the repository read of the second page fails, and account "brk-1" is 20% below its peak equity with risk.max_drawdown_pct at 0.10
+    When checkRiskLimits runs for "u-1" in PAPER
+    Then no concentration alert is emitted for "u-1"
+    And exactly one drawdown alert names account "brk-1"
+    And the concentration check logs the page-read failure
+
+### Notes / ambiguities / conflicts
+- Every scenario is routed to portfolio. Its feature.md Reviewers table names only xstockstrat-portfolio, and every Then asserts on portfolio readers (GetPortfolio, GetPnL, broadcastSnapshot, checkRiskLimits). None spans services, so nothing goes to platform.feature.
+- AC-4 vs services/xstockstrat-portfolio/acceptance/quote-fanout-batching.feature. That suite asserts one GetLatestQuotes call for 30 symbols and no per-position GetLatestQuote. AC-4 asserts at most 2 batch calls when draining 501 positions. The outcomes differ, so it is NEW. Both share the "no per-position GetLatestQuote" clause, which is a possible consolidation candidate for a human. No deletion planned.
+- AC-6 vs services/xstockstrat-portfolio/acceptance/fix-after-hours-positions-priced.feature (line 65, "Any unpriced position skips concentration but drawdown still alerts"). The trigger differs (page-read failure vs unpriced positions) and the observable is the same shape (concentration skipped, drawdown alerts). This is complementary, not a conflict, so it is NEW. It is a loose OVERLAP at most.
+- AC-5 and AC-1 (checkRiskLimits) share the concentration_limit_pct 0.20 setup with fix-push-untargeted-broadcast.feature and fix-after-hours-positions-priced.feature. Those assert alert text and targeting, not pagination. No CONFLICT found.
+- The existing fix-listpositions-nextpagetoken-skips.feature and fix-ledger-query-pagination.feature were not read in full. The grep showed only a 500-event ledger page in the latter (line 21). A human could glance at the former for overlap with AC-1 and AC-3. Neither is expected to contain 501-position internal-reader guarantees.
+- The Feature: header text and provenance comment are mine. The scenario bodies are verbatim, and @regression is kept. The acceptance/ directory already exists.
+- I read acceptance.feature from the working tree at docs/roadmap/features/357-fix-portfolio-internal-position/acceptance.feature, not from origin/feature/fix-portfolio-internal-position. I had no git access. The caller should confirm the two match.
+
+### Coverage check
+- Source scenarios: 6 (@AC-1 to @AC-6). AC-1 and AC-2 are Scenario Outlines. Planned (NEW+DUP+OVERLAP): 6 (6 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Nothing skipped.
+```

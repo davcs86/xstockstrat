@@ -2082,6 +2082,66 @@ func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountI
 	}
 }
 
+const reconcilePositionsPageSize = 500
+
+var errEmptyPageWithToken = errors.New("empty page with next_page_token")
+
+var errRepeatedPageToken = errors.New("repeated next_page_token")
+
+var errDuplicateSymbol = errors.New("duplicate symbol")
+
+// listAccountPlatformPositions drains portfolio ListPositions for one account and returns the
+// complete symbol→qty map, or nil and a page-indexed error — never a partial map.
+func (s *TradingService) listAccountPlatformPositions(ctx context.Context, accountID, userID string, mode commonv1.TradingMode, timeout time.Duration) (map[string]float64, error) {
+	out := map[string]float64{}
+	seen := map[string]bool{}
+	token := ""
+	for i := 1; ; i++ {
+		pctx, cancel := context.WithTimeout(ctx, timeout)
+		// Identity travels in the x-user-id header (portfolio resolves the caller from it); this
+		// background poller has no inbound header, so inject the account owner explicitly.
+		pctx = metadata.AppendToOutgoingContext(pctx, "x-user-id", userID)
+		resp, err := s.portfolio.ListPositions(pctx, &portfoliov1.ListPositionsRequest{
+			AccountId: &accountID, TradingMode: mode,
+			Page: &commonv1.PageRequest{PageSize: reconcilePositionsPageSize, PageToken: token},
+		})
+		cancel()
+		if err != nil {
+			return nil, fmt.Errorf("page %d: list positions: %w", i, err)
+		}
+		next := resp.GetPage().GetNextPageToken()
+		if len(resp.GetPositions()) == 0 && next != "" {
+			return nil, fmt.Errorf("page %d: %w %q", i, errEmptyPageWithToken, next)
+		}
+		// Defense-in-depth against the keyset cursor: every token already sent is in seen.
+		if next != "" && seen[next] {
+			return nil, fmt.Errorf("page %d: %w %q", i, errRepeatedPageToken, next)
+		}
+		for _, p := range resp.GetPositions() {
+			if _, dup := out[p.GetSymbol()]; dup {
+				return nil, fmt.Errorf("page %d: %w %q", i, errDuplicateSymbol, p.GetSymbol())
+			}
+			out[p.GetSymbol()] = p.GetQty()
+		}
+		if next == "" {
+			return out, nil
+		}
+		seen[next] = true
+		token = next
+	}
+}
+
+func reconcilePositionSkipCause(err error) telemetry.ReconcileSkipOutcome {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded) || grpcstatus.Code(err) == codes.DeadlineExceeded:
+		return telemetry.ReconcileSkipDeadline
+	case errors.Is(err, errEmptyPageWithToken), errors.Is(err, errRepeatedPageToken), errors.Is(err, errDuplicateSymbol):
+		return telemetry.ReconcileSkipCursorInvalid
+	default:
+		return telemetry.ReconcileSkipRPCError
+	}
+}
+
 // reconcileTick compares each registered account's open orders and positions against broker truth,
 // returning how many accounts errored this tick (systemicCount) out of the total (totalAccounts) —
 // the systemic-escalation trigger reads both. graceTicks/systemicThresholdPct are parameters, not
@@ -2228,22 +2288,11 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 		if !entry.client.IsPaper() {
 			tradingMode = commonv1.TradingMode_TRADING_MODE_LIVE
 		}
-		listPosCtx, listPosCancel := context.WithTimeout(ctx, timeout)
-		// Identity travels in the x-user-id header (portfolio resolves the caller from it); this
-		// background poller has no inbound header, so inject the account owner explicitly.
-		listPosCtx = metadata.AppendToOutgoingContext(listPosCtx, "x-user-id", entry.userID)
-		platformPositions, ppErr := s.portfolio.ListPositions(listPosCtx, &portfoliov1.ListPositionsRequest{
-			AccountId: &accountID, TradingMode: tradingMode,
-			Page: &commonv1.PageRequest{PageSize: 500},
-		})
-		listPosCancel()
+		platformBySymbol, ppErr := s.listAccountPlatformPositions(ctx, accountID, entry.userID, tradingMode, timeout)
 		if ppErr != nil {
+			telemetry.RecordReconcilePositionSkip(ctx, reconcilePositionSkipCause(ppErr))
 			slog.WarnContext(ctx, "reconcileTick: portfolio ListPositions failed", "account_id", accountID, "error", ppErr)
 			continue // not counted toward systemic — the broker side of this account is fine
-		}
-		platformBySymbol := make(map[string]float64, len(platformPositions.Positions))
-		for _, p := range platformPositions.Positions {
-			platformBySymbol[p.Symbol] = p.Qty
 		}
 		// DB-ground the position side against trading.orders before halting (mirrors the order side's
 		// KnownBrokerOrderIDs grounding). A broker position that disagrees with portfolio's projection
