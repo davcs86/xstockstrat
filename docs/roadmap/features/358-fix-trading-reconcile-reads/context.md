@@ -1269,3 +1269,10 @@ Feature: xstockstrat-trading — reconcile reads every platform position page an
 ### Coverage check
 - Source scenarios: 4 (AC-1 to AC-4, where AC-4 is an outline with 2 examples). Planned (NEW+DUP+OVERLAP): 4 (4 NEW, 0 DUP, 0 OVERLAP). No scenario was skipped, and the counts match.
 ```
+
+## Session 2026-11-18 (CI: feature status automation)
+
+- Promotion PR #1580 merged to main
+- Feature promoted and committed: 634a6c402de0dfb7624ba086c14a2562f0770588
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-18

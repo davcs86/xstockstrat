@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-11-17
 **Last Updated**: 2026-11-17
+**Committed to main**: 634a6c402de0dfb7624ba086c14a2562f0770588
+**Launched date**: 2026-11-18
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-11-17 | `in-progress` → `in-progress` | /sdd-execute | Re-spec c36086186: Steps 1-4 Verification lines wrapped in `( ... )` subshells (operator Option B); Step 1 done |
 | 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done (Step 5 docs last); `check-config-wiring.mjs --final` exit 0 |
 
+| 2026-11-18 | `code-completed` → `launched` | CI workflow | Promoted via PR #1580; committed 634a6c402de0dfb7624ba086c14a2562f0770588 |
 ---
 
 ## Artifacts

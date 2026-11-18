@@ -1020,3 +1020,10 @@ Feature: fix-analysis-held-position-drains (analysis)
 ### Coverage check
 - Source scenarios: 9 (AC-1..AC-9). Planned NEW 9, DUP 0, OVERLAP 0, CONFLICT 0. All accounted for, none skipped. Scenario text is verbatim; only the @feature-356 tag was added.
 ```
+
+## Session 2026-11-18 (CI: feature status automation)
+
+- Promotion PR #1580 merged to main
+- Feature promoted and committed: 634a6c402de0dfb7624ba086c14a2562f0770588
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-18
