@@ -4647,3 +4647,57 @@ reusing.
 - **Evidence**: `docs/roadmap/features/352-delisted-symbol-handling/implementation-spec.md` § Step Dependencies and § Deviation Log ("parallel chains"); `context.md` "feature end".
 - **Why it worked**: The spec's § Step Dependencies stated which steps need only the contract steps, each chain's `**Files**` were disjoint by service, and workers were forbidden to touch the spec, context and ledger files — the only files every step shares.
 
+### 2026-11-18 — ui-env-themed-bundles — design
+- **Pattern**: For a per-variant build guard, make the check symmetric over every variant and run it in the build that always runs. Any non-token colour equal to a theme-specific token of either theme fails the always-run staging build, so the production-only failure surface is caught at PR time without widening path filters.
+- **Evidence**: `docs/roadmap/features/307-ui-env-themed-bundles/context.md` (round 6 F3, round 7 item 4); design.md §1 B "Theme-independence" (pruned; see Archive Synthesis).
+- **Rule it implies**: A guard that protects a non-default build variant must also fail the default, always-run build; otherwise PRs outside the narrow filter merge and break the variant's deploy.
+
+### 2026-11-18 — ui-env-themed-bundles — design
+- **Pattern**: Classify CSS declarations by property name, not value, because minifiers rewrite values but never names; re-verify a build guard against artifacts extracted from the final image, not the build log, because cache hits skip the build step.
+- **Evidence**: design.md Rejected Alternatives R6/R8 (pruned); `ui-prod-image-build` job (context.md Steps 6+7 V3).
+- **Rule it implies**: Assert on the shipped artifact, never on a log line a cache hit can skip.
+
+### 2026-11-18 — ui-env-themed-bundles — ordering
+- **Pattern**: When impl-spec review keeps finding the same defect classes (self-matching scans, cwd ambiguity, unbounded server loops, host vs container e2e), fix them once in a shared "Verification conventions" block every step inherits. Review converged (iteration 4: 14 warnings → iteration 9: 0).
+- **Evidence**: context.md impl-review iterations 4–9 (pruned; see Archive Synthesis).
+- **Rule it implies**: On the second occurrence of a verification-defect class, add a spec-wide convention instead of patching per step.
+
+### 2026-11-18 — ui-env-themed-bundles — ordering
+- **Pattern**: When a new artifact is required by downstream guards, sequence the producer step before every guard that requires it (here the image label at Step 6 before the deploy-path guards at Steps 15–18), so no intermediate commit is deployable-but-rejected.
+- **Evidence**: implementation-spec.md step order (pruned; see Archive Synthesis).
+- **Rule it implies**: Order steps so a guard never lands before the thing it requires exists.
+
+### 2026-11-18 — homelab-otel-host-provider — design
+- **Pattern**: When a deterministic instance id is shared across environments (homelab staging and prod both `homelab-<svc>`), add the environment label to the join keys (`on (job, instance, deployment_environment)`), not only to the selector, so the join cannot leak across environments if a reader drops a matcher; aggregation wraps the whole join, never the left operand.
+- **Evidence**: `docs/roadmap/features/332-homelab-otel-host-provider/context.md` (debate O-29, P-3, D-14, D-20 — pruned; see Archive Synthesis).
+- **Rule it implies**: A join key must include every label the right-hand id is not unique across.
+
+### 2026-11-18 — homelab-otel-host-provider — ordering
+- **Pattern**: A feature editing `scripts/*.sh` collided at merge-train with a concurrent bash→Python port (#1516) that deleted those files. Recovery: accept the deletion, hand-port the logic into the `.py` file, run the new cases RED against main-dev's ported guard before GREEN.
+- **Evidence**: context.md § sdd-execute merge train 2026-11-11.
+- **Rule it implies**: While a script-tooling port is in flight, overlap scans should WARN-list the files being ported for any feature that edits them.
+
+### 2026-11-18 — webhook-fanout-callback — ordering
+- **Pattern**: When a config seed must land before its readers across separate units (reader-first fails `read-unseeded`; a unit is capped at four steps), add one temporary `seeded-unread` baseline entry per key (owner = this feature) and delete each in the commit that adds that key's reader. The checker's `STALE` rule enforces the removals and the final tree carries none.
+- **Evidence**: 334 implementation-spec Deviation Log "Step 3" (pruned); context.md Step 5 (STALE observed with an entry left in), Steps 9 and 16.
+- **Rule it implies**: Bridge a seed-before-reader gap with self-expiring baseline entries, never by reordering into `read-unseeded`. Complements insights.md:4512.
+
+### 2026-11-18 — webhook-fanout-callback — reuse
+- **Pattern**: For a trigger-time guarantee that depends on another service's policy, add a `validate_only` mode to the same RPC instead of a second RPC or second parser; fail closed (`UNAVAILABLE` with a fixed "no job was created" detail), allow-list that exact detail in the agent so it is not reported as "outcome unknown", and pin the string with a test against the backend source.
+- **Evidence**: debate D-1, D-2, R-1..R-3, O-5 (pruned); `services/xstockstrat-ingest/app/handlers/servicer.py` `CALLBACK_URL_UNVALIDATED_DETAIL`; `services/xstockstrat-agent/app/tools.py` `_BACKFILL_UNAVAILABLE_PASS`.
+- **Rule it implies**: A synchronous cross-service precondition reuses the enforcing RPC in validate mode, and its fail-closed detail is allow-listed and source-pinned in every consumer.
+
+### 2026-11-18 — seed-curated-templates — ordering
+- **Pattern**: When a pre-merge gate depends on an external input (here the operator's staging export), commit the gate's test red with a recorded deviation so CI blocks the merge mechanically instead of relying on a note someone must remember.
+- **Evidence**: implementation-spec.md Deviation Log "Step 23 committed with its parity test failing by design" (pruned); context.md 2026-11-13.
+- **Rule it implies**: An externally gated check should be a failing CI test, not a checklist item.
+
+### 2026-11-18 — seed-curated-templates — design
+- **Pattern**: A migration down may delete only rows it can prove it wrote. When a seeded row is indistinguishable from user-created state, make the down a commented no-op; evolve the catalog by version-guarded `UPDATE`/`retired_at`, never `DELETE`.
+- **Evidence**: debate D-19, D-35, R-7 (pruned).
+- **Rule it implies**: Seeded user-state rows are never reversed by down; catalog evolution happens by forward migration only.
+
+### 2026-11-18 — python-otel-instance-id — design
+- **Pattern**: Weigh a per-instance discriminator (container-id or random suffix) against measured replica reality before adopting it. Live `target_info` showed one instance per job per provider, so the suffix bought nothing; its cost was a 12-runtime change, a new series per container recreate, churn on non-hex hosts and superseding a launched feature's exact-id rules. Trace/span ids are no substitute (request-scoped; metric series carry none).
+- **Evidence**: `docs/roadmap/features/336-python-otel-instance-id/context.md` sessions 2026-11-12 "operator revision" and "suffix dropped" (pruned; see Archive Synthesis).
+- **Rule it implies**: Do not add a per-process telemetry discriminator until a service actually runs more than one replica per stack; record the deferred design as a ready follow-on.
