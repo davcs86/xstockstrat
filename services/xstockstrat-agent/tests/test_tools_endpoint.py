@@ -1,8 +1,7 @@
-"""Tests for the GET /api/tools catalog endpoint (MCP tools UI display feature).
+"""Tests for the agent's tool catalog (MCP tools UI display feature).
 
-Unlike the Streamable HTTP MCP root, this endpoint is unauthenticated — it only ever
-returns tool name/description/inputSchema, the same data already published in
-docs/runbooks/mcp-tools.md, never user data or credentials.
+The catalog is served only by the internal AgentService.ListTools RPC (feature 360); the public
+HTTP route that used to serve it is gone and now answers like any other unauthenticated path.
 """
 
 import json
@@ -10,6 +9,8 @@ import re
 from pathlib import Path
 
 from starlette.testclient import TestClient
+
+from tests.conftest import catalog_tools
 
 _REPO = Path(__file__).resolve().parents[3]
 _TOOL_COUNT = 45
@@ -22,11 +23,8 @@ def _app():
 
 
 def test_list_tools_returns_all_registered_tools():
-    with TestClient(_app()) as tc:
-        r = tc.get("/api/tools")
-    assert r.status_code == 200
-    body = r.json()
-    names = {t["name"] for t in body["tools"]}
+    tools = catalog_tools()
+    names = {t["name"] for t in tools}
     assert names == {
         "query_bars",
         "query_fundamentals",
@@ -74,12 +72,11 @@ def test_list_tools_returns_all_registered_tools():
         "list_templates",
         "instantiate_template",
     }
-    assert len(body["tools"]) == _TOOL_COUNT
+    assert len(tools) == _TOOL_COUNT
 
 
 def _catalog() -> dict:
-    with TestClient(_app()) as tc:
-        return {t["name"]: t for t in tc.get("/api/tools").json()["tools"]}
+    return {t["name"]: t for t in catalog_tools()}
 
 
 def test_public_arguments_are_gone_from_formula_tools():
@@ -164,10 +161,7 @@ def test_every_tool_count_surface_states_the_catalog_size():
 
 
 def test_list_tools_entries_have_description_and_input_schema():
-    with TestClient(_app()) as tc:
-        r = tc.get("/api/tools")
-    body = r.json()
-    by_name = {t["name"]: t for t in body["tools"]}
+    by_name = _catalog()
     ingest_signal = by_name["ingest_signal"]
     assert "Ingest a trading signal" in ingest_signal["description"]
     assert ingest_signal["inputSchema"]["type"] == "object"
@@ -178,11 +172,13 @@ def test_list_tools_entries_have_description_and_input_schema():
     assert "callback_url" in trigger["inputSchema"]["properties"]
 
 
-def test_list_tools_does_not_require_auth():
-    """No Authorization header — unlike the MCP root, this never 401s."""
+def test_public_port_no_longer_serves_the_catalog():
+    """feature 360 AC-4: without a bearer token the old catalog path answers 401, not a catalog."""
     with TestClient(_app()) as tc:
         r = tc.get("/api/tools")
-    assert r.status_code == 200
+    assert r.status_code == 401
+    assert "WWW-Authenticate" in r.headers
+    assert "tools" not in r.text
 
 
 def test_client_has_get_user_metadata_method():

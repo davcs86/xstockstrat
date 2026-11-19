@@ -257,7 +257,7 @@ ls packages/proto/gen/python/agent/v1/agent_pb2_grpc.py packages/proto/gen/ts/di
 
 ### Step 3 — test: Agent internal catalog RPC, public-route removal, mTLS peer gate and parity guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/conftest.py` — modify
@@ -380,7 +380,7 @@ Confirm the handshake cases executed (not skipped): the `pytest -q` summary must
 
 ### Step 4 — test: Move the remaining agent catalog readers to the shared helper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_account_tools.py` — modify
@@ -426,7 +426,7 @@ grep -rn "api/tools" tests/   # expect only the @AC-4 request in tests/test_tool
 
 ### Step 5 — service: Agent internal catalog server on port 50061; remove public GET /api/tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/catalog_service.py` — create

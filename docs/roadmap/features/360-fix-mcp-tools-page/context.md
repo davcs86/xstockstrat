@@ -307,3 +307,37 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: the fourteen `packages/proto/gen/{go,python,ts,ts/dist}/agent/v1/**` paths in the
   step's `**Files**`.
 - Deviations: Deviation 1.
+
+### Step 3 — test: Agent internal catalog RPC, public-route removal, mTLS peer gate and parity guard [done]
+- Unit with Steps 4 and 5. Added `catalog_tools()` to `tests/conftest.py`; `@AC-4` (old route → 401),
+  `@AC-5` (three real-handshake denial rows with pinned status codes, each after a UI baseline on the
+  same server), `@AC-6` (full catalog over the real server), the `_run_http` fail-closed test, the
+  `resolve_grpc_port` cases and the `peer_identity.py` parity test.
+- TDD red (against the uncommitted skeleton: empty `ListTools`, server TLS without client auth,
+  `resolve_grpc_port()` → 0): 19 failed / 132 passed — AC-6 `assert set() == {…}` / `0 == 45`;
+  AC-5 ×3 `DID NOT RAISE AioRpcError`; AC-4 `assert 200 == 401`; `_run_http`
+  `DID NOT RAISE RuntimeError`; port `assert 0 == 50061`; parity
+  `['services/xstockstrat-agent/app/peer_identity.py']` missing. No import-error red.
+- TDD green: same selection 151 passed; full suite 812 passed, coverage 88.35% (≥ 40%).
+- Files modified: `tests/conftest.py`, `tests/test_tools_endpoint.py`, `tests/test_mtls.py`,
+  `tests/test_peer_identity_parity.py`, `tests/test_transport_config.py`
+- Deviations: none. Note: the AC-5 baseline asserts only that the UI call succeeds (no tool count),
+  so the denial rows' red is "DID NOT RAISE", as the spec's expected reds state.
+
+### Step 4 — test: Move the remaining agent catalog readers to the shared helper [done]
+- Unit with Steps 3 and 5. The three `test_endpoint_catalog_lists_*` tests read `catalog_tools()`;
+  the `test_config_tools.py` comment no longer names a route.
+- TDD red (same skeleton tree): the three tests failed `assert {…} <= set()`; green with Step 5.
+- Files modified: `tests/test_account_tools.py`, `tests/test_user_tools.py`,
+  `tests/test_watchlist_tools.py`, `tests/test_config_tools.py`
+- Deviations: none.
+
+### Step 5 — service: Agent internal catalog server on port 50061; remove public GET /api/tools [done]
+- Unit with Steps 3 and 4. New `app/catalog_service.py` (`UI_PEER_SAN`, `CatalogServicer`,
+  `build_catalog_server` → `(server, port)`), `app/peer_identity.py` (byte copy of ingest's),
+  `mtls.server_credentials()` (client auth required); `app/main.py`: route and handler deleted,
+  `build_http_app(server=None)`, `resolve_grpc_port()`, `_run_http` starts gRPC before uvicorn.
+- Verification: full suite 812 passed / 88.35%; `ruff check` and `ruff format --check` clean;
+  `cmp` with the ingest copy identical; no `list_tools_metadata` / old route left in `app/`.
+- Files modified: `app/catalog_service.py`, `app/peer_identity.py`, `app/mtls.py`, `app/main.py`
+- Deviations: none. In scope for lint: removed the now-unused `JSONResponse` import in `app/main.py`.
