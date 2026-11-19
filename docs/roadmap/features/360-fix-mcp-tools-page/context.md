@@ -442,3 +442,14 @@ Deviations: 1 (buf via codegen image), 2 (Playwright in CI mode). Next: Steps 10
 Checkpoint report (no gate, per operator) — steps 1–11 done (surface: backend), 4 pending (docs).
 Out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none.
 Deviations: 1, 2. Next: Steps 12–15 (docs), then the integration PR.
+
+### Step 12 — docs: Root and shared docs for the internal catalog endpoint [done]
+- Root `CLAUDE.md`: agent registry row gRPC port 50061, dependency edge UI → agent. Runbook
+  `mcp-tools.md`: catalog paragraph rewritten (keeps `forty-five tools`; one removal note names the
+  old route). `reviewer-registry.md`: "internal tool catalog". `inter-service-mtls.md`: agent
+  `ListTools` ← `xstockstrat-ui` added to the SAN-gated list. `observability.md`: producers updated.
+- Verification: markdownlint 0 issues; `check-context-map.py` exit 0;
+  `check-otel-produced-signals.py` exit 0; `tests/test_tools_endpoint.py` 11 passed. TDD: N/A (docs).
+- Files modified: `CLAUDE.md`, `docs/runbooks/mcp-tools.md`, `docs/runbooks/reviewer-registry.md`,
+  `docs/patterns/inter-service-mtls.md`, `docs/patterns/observability.md`
+- Deviations: none.

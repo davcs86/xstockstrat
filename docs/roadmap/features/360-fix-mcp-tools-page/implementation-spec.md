@@ -951,7 +951,7 @@ no production code.
 
 ### Step 12 — docs: Root and shared docs for the internal catalog endpoint
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, root `CLAUDE.md`
 **Files**:
 - `CLAUDE.md` — modify

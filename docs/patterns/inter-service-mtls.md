@@ -72,6 +72,9 @@ A server may also authorize a caller by the **verified peer certificate's DNS SA
 - ingest and indicators honour `x-user-id: system` grants only from `xstockstrat-analysis` (feature 224,
   `_SYSTEM_GRANT_SAN` / `_ANALYSIS_SAN` in each `app/handlers/servicer.py`), together with an
   allow-listed `x-internal-caller`.
+- agent `ListTools` ← `xstockstrat-ui` (feature 360, `UI_PEER_SAN` in
+  `services/xstockstrat-agent/app/catalog_service.py`). The SAN is the **only** check: the RPC reads
+  no header.
 
 ## connect-node client-cert spike (resolved, Step 1)
 
