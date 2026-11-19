@@ -860,7 +860,7 @@ configure, still meets its ≥ 40% threshold (`--cov-fail-under=40`).
 
 ### Step 11 — test: DigitalOcean specs, Playwright and CI filter — guard, then values
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deployment specs (`xstockstrat-agent`, `xstockstrat-ui`); guard housed in the
 `xstockstrat-ui` Vitest suite
 **Files**:

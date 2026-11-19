@@ -416,3 +416,29 @@ Deviations: 1 (buf via codegen image), 2 (Playwright in CI mode). Next: Steps 10
 - Files modified: `deploy/homelab/render-assert.jq`, `scripts/homelab-render.test.sh`,
   `deploy/homelab/compose.yml`, `docker-compose.yml`
 - Deviations: none.
+
+### Step 11 — test: DigitalOcean specs, Playwright and CI filter — guard, then values [done]
+- Tool preflight: `sops` 3.13.3 and `age` 1.3.2 (the pinned, checksum-verified release binaries from
+  `.github/actions/setup-sops`), mikefarah `yq` v4.44.3 (`go install`) installed; baseline
+  `sops-secrets.test.sh` passed before any edit.
+- Guard first: `dbTlsPlatformGuard.test.ts` gains one fail-closed predicate `agentEndpointDrift`
+  (agent `GRPC_PORT` set and listed in `internal_ports`; UI `AGENT_ENDPOINT` =
+  `${xstockstrat-agent.PRIVATE_DOMAIN}:<port>`), a positive case on both DO specs and four mutation
+  rows, each after a baseline `null`.
+- TDD red (guard on today's DO specs): 6 failed — both positive cases
+  `expected 'agent GRPC_PORT missing' to be null` (the mutation rows fail on their baseline, as
+  designed). Green after adding `internal_ports: [50061]` + `GRPC_PORT` to the agent and
+  `AGENT_ENDPOINT` to the UI in both DO specs: 19 passed.
+- Also: `playwright.config.ts` `AGENT_ENDPOINT: '127.0.0.1:9094'` (dead port); the
+  `xstockstrat-agent` CI path filter gains the ingest and indicators `peer_identity.py` paths.
+- Verification: `sops-secrets.test.sh` all assertions passed; `pnpm run test:coverage` 744 passed,
+  81.02% (≥ 40%); lint exit 0; `tsc --noEmit` exit 0; Playwright spec 5 passed (Deviation 2);
+  one `AGENT_ENDPOINT` per file; `ci.yml` parses and the agent filter line carries both paths.
+- Files modified: `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts`, `.do/app.yaml`,
+  `.do/app.dev.yaml`, `services/xstockstrat-ui/playwright.config.ts`, `.github/workflows/ci.yml`
+- Deviations: Deviation 2. Not verified here (operator gates, by design): that DigitalOcean accepts a
+  component with both `http_port` and `internal_ports` (D-36), and that the port is routable (D-26).
+
+Checkpoint report (no gate, per operator) — steps 1–11 done (surface: backend), 4 pending (docs).
+Out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none.
+Deviations: 1, 2. Next: Steps 12–15 (docs), then the integration PR.
