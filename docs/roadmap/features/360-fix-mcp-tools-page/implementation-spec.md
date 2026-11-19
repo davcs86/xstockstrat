@@ -264,6 +264,7 @@ ls packages/proto/gen/python/agent/v1/agent_pb2_grpc.py packages/proto/gen/ts/di
 - `services/xstockstrat-agent/tests/test_tools_endpoint.py` — modify
 - `services/xstockstrat-agent/tests/test_mtls.py` — modify
 - `services/xstockstrat-agent/tests/test_peer_identity_parity.py` — create
+- `services/xstockstrat-agent/tests/test_transport_config.py` — modify
 
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability, tool-count statements in
 sync, no secret values in the catalog; Platform Lead — port uniqueness, inter-service dependency
@@ -276,6 +277,8 @@ graph correctness
   at `:15`. `src/lib/copilot.ts` in the UI names the test
   `test_list_tools_returns_all_registered_tools` — keep that name.
 - 401 path for an unauthenticated request: `app/main.py:164-166,179-190,227-233`.
+- Port-resolver tests to mirror: `tests/test_transport_config.py:85-102` (`resolve_http_port`:
+  default, env value, empty value).
 - Shared helpers live in `tests/conftest.py` as plain functions (`_ctx` `:23`, `_rpc_error` `:36`);
   `HANG_GUARD_S` `:20`; dummy `MTLS_*` env `:99-101`.
 - Existing agent PKI fixture: `tests/test_mtls.py:25-82` (inline openssl calls, CA key not
@@ -290,7 +293,7 @@ graph correctness
   agent has none.
 - `pyproject.toml:31-33` (`asyncio_mode = "auto"`), `:22` (dev deps; no new one needed).
 - **Not found** (created by Step 5): `app/catalog_service.py`, `app/peer_identity.py`,
-  `mtls.server_credentials`.
+  `mtls.server_credentials`, `main.resolve_grpc_port`.
 
 **Lands with**: `Step 4`, `Step 5`
 
@@ -298,15 +301,16 @@ graph correctness
 inside this unit (D-34), never against an import error: `app/catalog_service.py` with
 `UI_PEER_SAN`, a `CatalogServicer.ListTools` that returns an empty `ListToolsResponse` with no peer
 check, and `build_catalog_server`; `mtls.server_credentials()` with server TLS only (no client
-auth). The skeleton leaves `app/main.py` untouched and does not create `app/peer_identity.py`, so
-that file is absent during the red and the parity test fails on its existence assertion (it reads
+auth); and in `app/main.py` only a stub `resolve_grpc_port()` that returns `0` (the route table,
+`build_http_app` and `_run_http` are untouched). The skeleton does not create
+`app/peer_identity.py`, so that file is absent during the red and the parity test fails on its existence assertion (it reads
 the three files by path; it imports none of them). The skeleton is an uncommitted working-tree
-stage of this unit: its two files (`app/catalog_service.py`, `app/mtls.py`) are in Step 5's
+stage of this unit: its three files (`app/catalog_service.py`, `app/mtls.py`, `app/main.py`) are in Step 5's
 `**Files**`, nothing is committed under Step 3 or Step 4 alone, and Step 5 replaces the skeleton
 before the unit's single commit (F-08, F-05). The PR lists the skeleton files beside the red
 output. Expected reds: empty catalog (`@AC-6`), "DID NOT RAISE" for the three denial rows
-(`@AC-5`), status 200 instead of 401 (`@AC-4`), "DID NOT RAISE" for `_run_http`, agent
-`peer_identity.py` missing.
+(`@AC-5`), status 200 instead of 401 (`@AC-4`), "DID NOT RAISE" for `_run_http`,
+`resolve_grpc_port()` returning `0` instead of `50061`, agent `peer_identity.py` missing.
 
 **Covers**: `AC-4, AC-5, AC-6`
 
@@ -356,13 +360,16 @@ output. Expected reds: empty catalog (`@AC-6`), "DID NOT RAISE" for the three de
 4. `tests/test_peer_identity_parity.py` (D-35): the three files
    `services/xstockstrat-{ingest,indicators,agent}/app/peer_identity.py` exist and are
    byte-identical.
-5. Test data (C-13): the only new shared helper is `catalog_tools()` in `tests/conftest.py`; no
+5. `tests/test_transport_config.py`: beside the `resolve_http_port` tests (`:85-102`), add the
+   same three cases for `main.resolve_grpc_port()` — `GRPC_PORT` unset → `50061`; set → that value
+   as an int; empty string → `50061` (D-21).
+6. Test data (C-13): the only new shared helper is `catalog_tools()` in `tests/conftest.py`; no
    other domain literal gains a second consumer.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-agent && uv sync --extra dev
-uv run pytest tests/test_tools_endpoint.py tests/test_mtls.py tests/test_peer_identity_parity.py -q
+uv run pytest tests/test_tools_endpoint.py tests/test_mtls.py tests/test_peer_identity_parity.py tests/test_transport_config.py -q
 uv run pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
 grep -n "api/tools" tests/test_tools_endpoint.py   # expect only the @AC-4 request
@@ -842,7 +849,7 @@ bash scripts/homelab-render.test.sh
 shellcheck scripts/homelab-render.test.sh && shfmt -d -i 2 scripts/homelab-render.test.sh
 grep -n "AGENT_ENDPOINT" docker-compose.yml deploy/homelab/compose.yml   # one hit per file
 grep -n "50061" docker-compose.yml deploy/homelab/compose.yml   # two hits per file: GRPC_PORT and AGENT_ENDPOINT
-python3 -c "import yaml; d=yaml.safe_load(open('docker-compose.yml')); assert not any('50061' in str(p) for s in d['services'].values() for p in (s.get('ports') or [])), '50061 is published'"   # local compose: 50061 is not under any ports: (homelab is covered by render-assert.jq:54 in the first command)
+uv run --with pyyaml python3 -c "import yaml; d=yaml.safe_load(open('docker-compose.yml')); assert not any('50061' in str(p) for s in d['services'].values() for p in (s.get('ports') or [])), '50061 is published'"   # local compose: 50061 is not under any ports: (homelab is covered by render-assert.jq:54 in the first command)
 python3 scripts/check-otel-produced-signals.py
 cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 && cd ../..
 ```
@@ -932,7 +939,7 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/lib/dbTlsPlatformGuard.te
   && pnpm exec playwright test e2e/accounts/mcp-tools.spec.ts && cd ../..
 grep -n "AGENT_ENDPOINT" .do/app.yaml .do/app.dev.yaml services/xstockstrat-ui/playwright.config.ts   # one hit per file
 grep -n "50061" .do/app.yaml .do/app.dev.yaml   # GRPC_PORT + AGENT_ENDPOINT + internal_ports
-python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/ci.yml'))"
+uv run --with pyyaml python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"
 grep -n "^ *xstockstrat-agent: " .github/workflows/ci.yml \
   | grep -F "services/xstockstrat-ingest/app/peer_identity.py" \
   | grep -F "services/xstockstrat-indicators/app/peer_identity.py"   # one line: the agent filter carries both paths
