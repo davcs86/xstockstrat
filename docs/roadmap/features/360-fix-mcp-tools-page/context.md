@@ -242,3 +242,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - BRANCH SYNC branches from `main-dev`, so the feature directory must reach `main-dev` (PR #1588)
   before `/sdd-execute` starts.
 - The impl-spec review predates this revision → re-run `/sdd-review fix-mcp-tools-page impl-spec`.
+
+## Session 2026-11-19T20:02Z — sdd-spec revision 3 (step re-shape)
+
+- Operator instruction: loop the impl-spec review until every warning is addressed.
+- The ">5 files" warnings are cleared by splitting, not by exception: the spec now has 15 steps.
+  Old → new: 1→1, 2→2, 3→3+4 (catalog tests) and 6 (telemetry tests), 4→5 (catalog server) and
+  7 (telemetry), 5→8, 6→9, 7→10 (homelab + local compose) and 11 (DO + Playwright + CI filter),
+  8→12 (root/shared docs), 13 (agent docs), 14 (UI docs), 15 (two business rules).
+- Atomic units: 1+2, 3+4+5, 6+7, 8+9. Steps 10 and 11 each hold their own guard-first red→green.
+- Design relation: D-28's step shape is advisory for `/sdd-spec`; order, content and the
+  red-before-green rules are unchanged. Step 2 (generated stubs) keeps more than five files and
+  states why it cannot be split.
+- Step numbers in the earlier advisory review block above refer to the 8-step spec.

@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-11-19
 **Feature**: `docs/roadmap/features/360-fix-mcp-tools-page/feature.md`
-**Total Steps**: 8
+**Total Steps**: 15
 **Feature Branch**: `feature/fix-mcp-tools-page`
 
 ---
@@ -11,21 +11,23 @@
 ## Execution Summary
 
 The order follows `design.md` § Step shape (D-28): the `agent/v1` contract and its stubs first
-(Steps 1+2), because both consumers import them; then the agent server with its tests (Steps 3+4);
-then the UI BFF with its tests (Steps 5+6); then the deployment values behind two guards (Step 7);
-docs last (Step 8). Three pairs are atomic units because neither member passes its own verification
-alone. One squash reaches `main-dev`.
+(Steps 1+2), because both consumers import them; then the agent catalog server with its tests
+(Steps 3+4+5) and the agent's server telemetry with its tests (Steps 6+7); then the UI BFF with its
+tests (Steps 8+9); then the deployment values behind their guards (Step 10 homelab and local
+compose, Step 11 DigitalOcean, Playwright and the CI filter); docs last (Steps 12–15). Four groups
+are atomic units because no member passes its own verification alone. One squash reaches
+`main-dev`.
+
+The design's eight advisory steps are split here so that no hand-written step lists more than five
+files; order, content and the red-before-green rules are unchanged. The one exception is Step 2
+(generated stubs), which cannot be split and says why.
 
 Evidence was read on `ccr-a72ccc3e-9kr7yq@6916759` and re-read on `ccr-a72ccc3e-9kr7yq@4fdea96`
 (both = `origin/main-dev@5142fc5` plus docs-only commits under `docs/`); every `path:line` below is
 from that tree. Re-check anchors after any `main-dev` merge into the feature branch
 (`fails.md:3926`).
 
-Steps 3, 7 and 8 each list more than five files. The step shape is fixed by `design.md` § Step
-shape (D-28): each of them is one red-green cycle or one sweep, and splitting it would leave a
-commit that fails its own verification.
-
-**Consumer surface (C-14).** UI `/accounts/mcp-tools` is reached by Step 6: the page
+**Consumer surface (C-14).** UI `/accounts/mcp-tools` is reached by Step 9: the page
 (`src/app/accounts/mcp-tools/page.tsx:69`) already calls the BFF route, so only the route changes.
 Agent MCP tools: none change (product spec § Consumer Surface(s)); the catalog only lists them.
 
@@ -33,32 +35,41 @@ Agent MCP tools: none change (product spec § Consumer Surface(s)); the catalog 
 
 | Scenario | Covered by |
 |---|---|
-| `@AC-1` catalog fetched from the internal endpoint | Step 5 |
-| `@AC-2` no fallback to the public URL | Step 5 (route rows 2a/2b and the "unset ⇒ `null`" client case) |
-| `@AC-3` catalog stays behind the UI session | Step 5 (characterization) |
+| `@AC-1` catalog fetched from the internal endpoint | Step 8 |
+| `@AC-2` no fallback to the public URL | Step 8 (route rows 2a/2b and the "unset ⇒ `null`" client case) |
+| `@AC-3` catalog stays behind the UI session | Step 8 (characterization) |
 | `@AC-4` public port no longer serves the catalog | Step 3 |
 | `@AC-5` only the UI may read the internal catalog | Step 3 |
 | `@AC-6` internal catalog lists every registered tool | Step 3 |
 
-Step 7 is a `test` step with `Covers: —`: it adds platform guards for the deployment values, not
-an acceptance scenario (D-16, D-25).
+Steps 4, 6, 10 and 11 are `test` steps with `Covers: —`, each stating its reason: Step 4 moves
+existing catalog assertions (the scenario is covered by Step 3), Step 6 tests operator-requested
+telemetry (D-30), and Steps 10 and 11 add platform guards for the deployment values (D-16, D-25).
 
 ## Step Dependencies
 
 - Steps 1+2 land together: a `.proto` edit needs its `proto-gen` step (`step-constraints.md` §C);
   `proto-freshness` fails on uncommitted stubs (`.github/workflows/ci.yml:255-313`).
-- Steps 3+4 land together: the Step 3 tests reference symbols Step 4 creates (§C "test references a
-  symbol a later step creates"), and Step 4 deletes the route the old tests read (§C "deletes a
-  referenced resource").
-- Steps 5+6 land together: `tsconfig.json` includes `**/*.ts`, so `tsc --noEmit` compiles the Step 5
-  tests, which reference `agentClient` created in Step 6.
-- Steps 3–6 require Steps 1+2: the agent imports `gen.agent.v1`, the UI imports
+- Steps 3+4+5 land together: the Step 3 and Step 4 tests reference symbols Step 5 creates (§C "test
+  references a symbol a later step creates"), and Step 5 deletes the route the old tests read (§C
+  "deletes a referenced resource"). One surface (`xstockstrat-agent`), three adjacent members.
+- Steps 6+7 land together: the Step 6 tests reference `telemetry._make_rpc_duration_processor` and
+  `telemetry.RPC_DURATION_BUCKETS_MS`, which Step 7 creates (§C "test references a symbol a later
+  step creates").
+- Steps 8+9 land together: `tsconfig.json` includes `**/*.ts`, so `tsc --noEmit` compiles the Step 8
+  tests, which reference `agentClient` created in Step 9.
+- Steps 3–9 require Steps 1+2: the agent imports `gen.agent.v1`, the UI imports
   `@xstockstrat/proto/agent/v1/agent_pb`.
-- Step 7 requires Steps 4 and 6. The deployment files for the new port (`GRPC_PORT`, Step 4) and the
-  new env var (`AGENT_ENDPOINT`, Step 6) live in Step 7, so that the guards go red before the values
-  are added (D-28). Until Step 7 the agent listens on its code default `50061` and the UI answers
-  `reachable: false`; nothing deploys before the single squash.
-- Step 8 requires Steps 4, 6 and 7 (it documents what they shipped).
+- Steps 6+7 are independent of Steps 3+4+5 (different files, except `tests/conftest.py`, where
+  Step 3 adds `catalog_tools()` and Step 6 edits `otel_reset`); they follow them only to keep the
+  agent work contiguous.
+- Steps 10 and 11 require Steps 5 and 9. The deployment files for the new port (`GRPC_PORT`,
+  Step 5) and the new env var (`AGENT_ENDPOINT`, Step 9) live in Steps 10 and 11, so that each guard
+  goes red before its values are added (D-28). Until then the agent listens on its code default
+  `50061` and the UI answers `reachable: false`; nothing deploys before the single squash.
+- Step 11's CI-filter line covers the parity test created by Step 3.
+- Steps 12–15 require Steps 5, 7, 9, 10 and 11 (they document what those shipped). Step 15 runs the
+  repository-wide `api/tools` survivor check and therefore comes last.
 - Operator gate before the feature PR merges (D-36): render the DO dev spec and run
   `doctl apps spec validate <file>` without `--schema-only` (confirm the subcommand with `--help`;
   fallback `doctl apps propose --spec <file> --app <id>`; if neither exists, stop). Record date, head
@@ -70,13 +81,13 @@ an acceptance scenario (D-16, D-25).
 - The integration PR text must state: a local agent without dev certificates no longer starts in
   HTTP mode (D-27).
 - Cross-feature: `345-authelia-sso` (`implementation-ready`) cites the agent route table at
-  `app/main.py:250-267`; Step 4 removes one line there. Whichever merges second re-anchors by symbol.
-  Its `.github/workflows/ci.yml` path-filter edit is on a line next to the one Step 7 edits
+  `app/main.py:250-267`; Step 5 removes one line there. Whichever merges second re-anchors by symbol.
+  Its `.github/workflows/ci.yml` path-filter edit is on a line next to the one Step 11 edits
   (rebase only).
 - Cross-feature: `337-metrics-host-provider-label` (`in-progress`) edits other functions in
   `services/xstockstrat-agent/app/telemetry.py`, and `docs/patterns/observability.md` and
-  `docs/sdd/business-rules/platform.feature` (rebase only; re-read the Step 4 and Step 8 anchors in
-  those files after it merges).
+  `docs/sdd/business-rules/platform.feature` (rebase only; re-read the Step 7, Step 12 and Step 15
+  anchors in those files after it merges).
 - Feature branch: `feature/fix-mcp-tools-page` is not on origin
   (`git ls-remote --heads origin feature/fix-mcp-tools-page` → no output). `/sdd-execute` BRANCH SYNC
   creates it from `main-dev` (`.claude/skills/sdd-execute/templates/branch-sync.md` step 3), which
@@ -180,6 +191,10 @@ substitute another baseline.
   - `packages/proto/gen/ts/dist/google/protobuf/wrappers.js`
   - `packages/proto/gen/ts/dist/google/protobuf/wrappers.d.ts`
 
+(More than five files: this is the generated output of one `./scripts/buf-gen.sh` run. A partial
+tree cannot pass `git diff --exit-code packages/proto/gen/`, so the step cannot be split, and F-08
+requires the full exact list.)
+
 **Reviewers**: inherited from Step 1
 
 **Codebase Evidence**:
@@ -220,7 +235,7 @@ ls packages/proto/gen/python/agent/v1/agent_pb2_grpc.py packages/proto/gen/ts/di
 
 ---
 
-### Step 3 — test: Agent catalog RPC, public-route removal, mTLS peer gate, telemetry and parity guard
+### Step 3 — test: Agent internal catalog RPC, public-route removal, mTLS peer gate and parity guard
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -228,12 +243,7 @@ ls packages/proto/gen/python/agent/v1/agent_pb2_grpc.py packages/proto/gen/ts/di
 - `services/xstockstrat-agent/tests/conftest.py` — modify
 - `services/xstockstrat-agent/tests/test_tools_endpoint.py` — modify
 - `services/xstockstrat-agent/tests/test_mtls.py` — modify
-- `services/xstockstrat-agent/tests/test_telemetry.py` — modify
 - `services/xstockstrat-agent/tests/test_peer_identity_parity.py` — create
-- `services/xstockstrat-agent/tests/test_account_tools.py` — modify
-- `services/xstockstrat-agent/tests/test_user_tools.py` — modify
-- `services/xstockstrat-agent/tests/test_watchlist_tools.py` — modify
-- `services/xstockstrat-agent/tests/test_config_tools.py` — modify (comment only)
 
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability, tool-count statements in
 sync, no secret values in the catalog; Platform Lead — port uniqueness, inter-service dependency
@@ -241,50 +251,42 @@ graph correctness
 
 **Codebase Evidence**:
 - Tests that read the catalog over HTTP today: `tests/test_tools_endpoint.py:24-27,80-82,166-169`,
-  `:181-185` (`test_list_tools_does_not_require_auth`), `tests/test_account_tools.py:43-50`,
-  `tests/test_user_tools.py:47-54`, `tests/test_watchlist_tools.py:49-56`. Comment only:
-  `tests/test_config_tools.py:488`. File docstring: `tests/test_tools_endpoint.py:1-6`.
+  `:181-185` (`test_list_tools_does_not_require_auth`). File docstring: `tests/test_tools_endpoint.py:1-6`.
 - `_catalog()` (`tests/test_tools_endpoint.py:80-82`) also feeds `:126,144,149`; `_TOOL_COUNT = 45`
   at `:15`. `src/lib/copilot.ts` in the UI names the test
   `test_list_tools_returns_all_registered_tools` — keep that name.
 - 401 path for an unauthenticated request: `app/main.py:164-166,179-190,227-233`.
 - Shared helpers live in `tests/conftest.py` as plain functions (`_ctx` `:23`, `_rpc_error` `:36`);
-  `HANG_GUARD_S` `:20`; dummy `MTLS_*` env `:99-101`; `otel_reset` `:301-333` neutralises only
-  `GrpcAioInstrumentorClient` (`:308,320`); `metric_reader` `:336-345`.
+  `HANG_GUARD_S` `:20`; dummy `MTLS_*` env `:99-101`.
 - Existing agent PKI fixture: `tests/test_mtls.py:25-82` (inline openssl calls, CA key not
   returned); `SVC = "xstockstrat-trading"` `:17`; `_set_env` `:85-88`; fail-closed test `:115-122`.
 - Handshake harness to copy: `services/xstockstrat-ingest/tests/test_mtls.py:27-60` (`_leaf`),
   `:117-167` (server, `_call`, foreign CA); peer-SAN proof
   `services/xstockstrat-ingest/tests/test_peer_identity_spike.py:50-90`.
-- Telemetry tests to port: `services/xstockstrat-ingest/tests/test_telemetry.py:113-115` (`VECTORS`),
-  `:166` (`_duration_points`), `:287-315` (status vectors), `:318` (non-server spans);
-  server-instrumentor neutralising in `services/xstockstrat-ingest/tests/conftest.py:118,130`.
 - Cross-service file guard precedent: `tests/test_tool_errors.py:25` (`_ROOT`), `:179-192`;
   byte-identity precedent `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts:101-107`.
 - The three copies today: `services/xstockstrat-ingest/app/peer_identity.py` and
   `services/xstockstrat-indicators/app/peer_identity.py` are identical (`diff` → no output); the
   agent has none.
 - `pyproject.toml:31-33` (`asyncio_mode = "auto"`), `:22` (dev deps; no new one needed).
-- **Not found** (created by Step 4): `app/catalog_service.py`, `app/peer_identity.py`,
-  `mtls.server_credentials`, `telemetry._make_rpc_duration_processor`.
+- **Not found** (created by Step 5): `app/catalog_service.py`, `app/peer_identity.py`,
+  `mtls.server_credentials`.
 
-**Lands with**: `Step 4`
+**Lands with**: `Step 4`, `Step 5`
 
 **TDD**: `red-green required` — red is captured against a behaviour-free skeleton written first
 inside this unit (D-34), never against an import error: `app/catalog_service.py` with
 `UI_PEER_SAN`, a `CatalogServicer.ListTools` that returns an empty `ListToolsResponse` with no peer
 check, and `build_catalog_server`; `mtls.server_credentials()` with server TLS only (no client
-auth); `telemetry.RPC_DURATION_BUCKETS_MS` and a `_make_rpc_duration_processor()` that returns a
-no-op span processor. The skeleton leaves `app/main.py` untouched and does not create
-`app/peer_identity.py`, so that file is absent during the red and the parity test fails on its
-existence assertion (it reads the three files by path; it imports none of them). The skeleton is
-an uncommitted working-tree stage of this unit: its three files (`app/catalog_service.py`,
-`app/mtls.py`, `app/telemetry.py`) are in Step 4's `**Files**`, nothing is committed under Step 3
-alone, and Step 4 replaces the skeleton before the unit's single commit (F-08, F-05). The PR lists
-the skeleton files beside the red output. Expected reds: empty
-catalog (`@AC-6` and every migrated catalog test), "DID NOT RAISE" for the three denial rows
-(`@AC-5`), status 200 instead of 401 (`@AC-4`), "DID NOT RAISE" for `_run_http`, zero duration
-points, instrumentor not called, agent `peer_identity.py` missing.
+auth). The skeleton leaves `app/main.py` untouched and does not create `app/peer_identity.py`, so
+that file is absent during the red and the parity test fails on its existence assertion (it reads
+the three files by path; it imports none of them). The skeleton is an uncommitted working-tree
+stage of this unit: its two files (`app/catalog_service.py`, `app/mtls.py`) are in Step 5's
+`**Files**`, nothing is committed under Step 3 or Step 4 alone, and Step 5 replaces the skeleton
+before the unit's single commit (F-08, F-05). The PR lists the skeleton files beside the red
+output. Expected reds: empty catalog (`@AC-6`), "DID NOT RAISE" for the three denial rows
+(`@AC-5`), status 200 instead of 401 (`@AC-4`), "DID NOT RAISE" for `_run_http`, agent
+`peer_identity.py` missing.
 
 **Covers**: `AC-4, AC-5, AC-6`
 
@@ -298,8 +300,6 @@ points, instrumentor not called, agent `peer_identity.py` missing.
      `{"name", "description", "inputSchema"}` with the schema projected by
      `google.protobuf.json_format.MessageToDict`. Import `app.catalog_service` and `gen.agent.v1`
      inside the function body with no fallback (AGENT-2, D-34). It is for sync tests only.
-   - In `otel_reset` (`:301-333`), also neutralise
-     `GrpcAioInstrumentorServer.instrument`, as `services/xstockstrat-ingest/tests/conftest.py:130` does.
 2. `tests/test_tools_endpoint.py`:
    - Rewrite the docstring (`:1-6`): the file tests the internal catalog and the removed public route.
    - `_catalog()` returns `{t["name"]: t for t in catalog_tools()}`.
@@ -309,12 +309,7 @@ points, instrumentor not called, agent `peer_identity.py` missing.
    - Replace `test_list_tools_does_not_require_auth` with the `@AC-4` test: `GET /api/tools` on
      `TestClient(build_http_app())` with no `Authorization` header returns 401, carries
      `WWW-Authenticate`, and the body is not a catalog (`"tools"` absent).
-3. `tests/test_account_tools.py:43-50`, `tests/test_user_tools.py:47-54`,
-   `tests/test_watchlist_tools.py:49-56`: take the names from `catalog_tools()`; drop the
-   `TestClient`/`build_http_app` imports those functions no longer use.
-4. `tests/test_config_tools.py:488`: reword the comment — the schema is the one the catalog serves;
-   no route name.
-5. `tests/test_mtls.py`:
+3. `tests/test_mtls.py`:
    - Add `_ca(tmp, name)` and `_leaf(tmp, name, ca, cakey)` helpers on the ingest model and express
      the existing `agent_pki` fixture through them (second consumer of the openssl recipe, C-13).
    - Add a fixture minting, off one test CA: a server leaf `xstockstrat-agent`, a client leaf
@@ -335,29 +330,71 @@ points, instrumentor not called, agent `peer_identity.py` missing.
    - `_run_http` fail-closed: with `MTLS_*` deleted and `uvicorn.Server.serve` replaced by a
      recording coroutine, `await main._run_http()` raises `RuntimeError` and `serve` was never
      awaited (port 9000 never listens).
-6. `tests/test_telemetry.py`: port `VECTORS`, `_duration_points`, the status-vector test and the
-   non-server/non-gRPC span test from the ingest file (anchors above) against the agent's
-   `_make_rpc_duration_processor`; add a test that, with `OTEL_ENABLED=true`, `init_telemetry()`
-   calls `GrpcAioInstrumentorServer.instrument` (replace the neutralised method with a recorder).
-7. `tests/test_peer_identity_parity.py` (D-35): the three files
+4. `tests/test_peer_identity_parity.py` (D-35): the three files
    `services/xstockstrat-{ingest,indicators,agent}/app/peer_identity.py` exist and are
    byte-identical.
-8. Test data (C-13): the only new shared helper is `catalog_tools()` in `tests/conftest.py`; no
+5. Test data (C-13): the only new shared helper is `catalog_tools()` in `tests/conftest.py`; no
    other domain literal gains a second consumer.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-agent && uv sync --extra dev
-uv run pytest tests/test_tools_endpoint.py tests/test_mtls.py tests/test_telemetry.py tests/test_peer_identity_parity.py tests/test_account_tools.py tests/test_user_tools.py tests/test_watchlist_tools.py -q
+uv run pytest tests/test_tools_endpoint.py tests/test_mtls.py tests/test_peer_identity_parity.py -q
 uv run pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
-grep -rn "api/tools" tests/   # expect only the @AC-4 request in tests/test_tools_endpoint.py
+grep -n "api/tools" tests/test_tools_endpoint.py   # expect only the @AC-4 request
 ```
 Confirm the handshake cases executed (not skipped): the `pytest -q` summary must count them.
 
 ---
 
-### Step 4 — service: Agent internal catalog server on port 50061; remove public GET /api/tools
+### Step 4 — test: Move the remaining agent catalog readers to the shared helper
+
+**Status**: `pending`
+**Service**: `xstockstrat-agent`
+**Files**:
+- `services/xstockstrat-agent/tests/test_account_tools.py` — modify
+- `services/xstockstrat-agent/tests/test_user_tools.py` — modify
+- `services/xstockstrat-agent/tests/test_watchlist_tools.py` — modify
+- `services/xstockstrat-agent/tests/test_config_tools.py` — modify (comment only)
+
+**Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability, tool-count statements in sync
+
+**Codebase Evidence**:
+- Tests that read the catalog over HTTP today: `tests/test_account_tools.py:43-50`,
+  `tests/test_user_tools.py:47-54`, `tests/test_watchlist_tools.py:49-56`. Comment only:
+  `tests/test_config_tools.py:488`.
+- The shared helper `catalog_tools()` is added to `tests/conftest.py` by Step 3 (same unit).
+- Step 5 deletes the `/api/tools` route these tests read (`app/main.py:263`).
+
+**Lands with**: `Step 3`, `Step 5`
+
+**TDD**: `red-green required` — red is captured in the same working tree as Step 3, against the
+same uncommitted skeleton (D-34): each migrated test fails on an empty catalog (the expected tool
+names are absent). Green is Step 5.
+
+**Covers**: — (moves existing catalog assertions to the internal catalog; `@AC-6` itself is covered
+by Step 3)
+
+**Instructions**:
+1. `tests/test_account_tools.py:43-50`, `tests/test_user_tools.py:47-54`,
+   `tests/test_watchlist_tools.py:49-56`: take the names from `catalog_tools()`; drop the
+   `TestClient`/`build_http_app` imports those functions no longer use.
+2. `tests/test_config_tools.py:488`: reword the comment — the schema is the one the catalog serves;
+   no route name.
+
+**Verification**:
+```bash
+cd services/xstockstrat-agent
+uv run pytest tests/test_account_tools.py tests/test_user_tools.py tests/test_watchlist_tools.py tests/test_config_tools.py -q
+uv run pytest --cov=app --cov-fail-under=40
+ruff check . && ruff format --check .
+grep -rn "api/tools" tests/   # expect only the @AC-4 request in tests/test_tools_endpoint.py
+```
+
+---
+
+### Step 5 — service: Agent internal catalog server on port 50061; remove public GET /api/tools
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -366,12 +403,10 @@ Confirm the handshake cases executed (not skipped): the `pytest -q` summary must
 - `services/xstockstrat-agent/app/peer_identity.py` — create
 - `services/xstockstrat-agent/app/mtls.py` — modify
 - `services/xstockstrat-agent/app/main.py` — modify
-- `services/xstockstrat-agent/app/telemetry.py` — modify
-- `services/xstockstrat-agent/app/tool_metrics.py` — modify
 
 (The new port's deployment files — `docker-compose.yml`, `deploy/homelab/compose.yml`,
-`.do/app.dev.yaml`, `.do/app.yaml` — are in Step 7; see § Step Dependencies. `GRPC_PORT` is absent
-from the agent block in all four today.)
+`.do/app.dev.yaml`, `.do/app.yaml` — are in Steps 10 and 11; see § Step Dependencies. `GRPC_PORT`
+is absent from the agent block in all four today.)
 
 **Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness, no
 secret values in the catalog; Platform Lead — port uniqueness (50061 is free; 50051–50060 taken),
@@ -392,19 +427,13 @@ service registry consistency
   `services/xstockstrat-ingest/app/main.py:31`, `services/xstockstrat-indicators/app/main.py:35`.
 - Struct from a dict: `app/client.py:1003,1040-1041` (`Struct().update(...)`), `:290,304` (`ParseDict`).
 - Lazy `gen.*` imports: agent constitution AGENT-2 (`docs/context-constitution.md`).
-- Telemetry: `app/telemetry.py:6-8` (client-only docstring), `:111,151`
-  (`GrpcAioInstrumentorClient`), `:126-128` (tracer provider); source to copy
-  `services/xstockstrat-ingest/app/telemetry.py:18` (buckets), `:105-116` (`grpc_status_code`),
-  `:119-152` (`_make_rpc_duration_processor`), `:255` (registration), `:274` (server instrumentor).
-- `app/tool_metrics.py:1` ("the agent has no gRPC server"), `:16-17` (`_BUCKETS_MS`), `:114` (its
-  one use).
-- Dependencies already present: `pyproject.toml:11` (`grpcio`), `:16`
-  (`opentelemetry-instrumentation-grpc`). No `pyproject.toml` or `uv.lock` change.
+- Dependencies already present: `pyproject.toml:11` (`grpcio`). No `pyproject.toml` or `uv.lock`
+  change.
 - Header propagation: the new RPC is inbound and reads no header; the agent adds no outbound call.
 
-**Lands with**: `Step 3`
+**Lands with**: `Step 3`, `Step 4`
 
-**TDD**: `red-green required` (green = the Step 3 suite passing against this step)
+**TDD**: `red-green required` (green = the Step 3 and Step 4 suites passing against this step)
 
 **Covers**: —
 
@@ -438,13 +467,8 @@ service registry consistency
      signal handler, no graceful-stop claim). `_run_stdio` is not changed — no gRPC server in stdio
      mode.
    - Add `GRPC_PORT` to the module docstring's transport notes in one line.
-5. `app/telemetry.py` (D-30, D-37): add `RPC_DURATION_BUCKETS_MS`, `grpc_status_code` and
-   `_make_rpc_duration_processor` as in the ingest file; register the processor on the tracer
-   provider and call `GrpcAioInstrumentorServer().instrument()` beside the client instrumentor;
-   rewrite the docstring at `:6-8`. Do **not** copy `_CancelStatusInterceptor` (R-13).
-6. `app/tool_metrics.py`: delete `_BUCKETS_MS` (`:16-17`) and use
-   `telemetry.RPC_DURATION_BUCKETS_MS` at `:114`; fix the `:1` docstring.
-7. Not changed: `Dockerfile` (`EXPOSE 9000` stays, D-25), `supervisord.conf`, `pyproject.toml`.
+5. Not changed: `Dockerfile` (`EXPOSE 9000` stays, D-25), `supervisord.conf`, `pyproject.toml`,
+   `app/telemetry.py` and `app/tool_metrics.py` (Step 7).
 
 **Verification**:
 ```bash
@@ -453,12 +477,111 @@ uv run pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
 cmp app/peer_identity.py ../xstockstrat-ingest/app/peer_identity.py
 grep -rn "list_tools_metadata\|api/tools" app/   # expect no output
-grep -rn "CLIENT only\|has no gRPC server\|rather than a gRPC server" app/   # expect no output
+grep -n "CLIENT only" app/mtls.py   # expect no output
 ```
 
 ---
 
-### Step 5 — test: UI route and client tests for the internal catalog; centralize the MCP tool fixture
+### Step 6 — test: Agent gRPC server telemetry
+
+**Status**: `pending`
+**Service**: `xstockstrat-agent`
+**Files**:
+- `services/xstockstrat-agent/tests/conftest.py` — modify
+- `services/xstockstrat-agent/tests/test_telemetry.py` — modify
+
+**Reviewers**: `xstockstrat-agent` owner — telemetry signals consistent with the other gRPC servers
+
+**Codebase Evidence**:
+- `tests/conftest.py`: `otel_reset` `:301-333` neutralises only `GrpcAioInstrumentorClient`
+  (`:308,320`); `metric_reader` `:336-345`.
+- Telemetry tests to port: `services/xstockstrat-ingest/tests/test_telemetry.py:113-115` (`VECTORS`),
+  `:166` (`_duration_points`), `:287-315` (status vectors), `:318` (non-server spans);
+  server-instrumentor neutralising in `services/xstockstrat-ingest/tests/conftest.py:118,130`.
+- Shared vectors file: `scripts/testdata/rpc-status-vectors.json`.
+- **Not found** (created by Step 7): `telemetry.RPC_DURATION_BUCKETS_MS`,
+  `telemetry._make_rpc_duration_processor`, a `GrpcAioInstrumentorServer` call in `app/telemetry.py`.
+
+**Lands with**: `Step 7`
+
+**TDD**: `red-green required` — red is captured against a behaviour-free skeleton written first
+inside this unit (D-34), never against an import error: `telemetry.RPC_DURATION_BUCKETS_MS` and a
+`_make_rpc_duration_processor()` that returns a no-op span processor, with no server instrumentor
+call. The skeleton is an uncommitted working-tree stage of this unit: its one file
+(`app/telemetry.py`) is in Step 7's `**Files**`, nothing is committed under Step 6 alone, and
+Step 7 replaces the skeleton before the unit's single commit (F-08, F-05). Expected reds: zero
+duration points for the status vectors, instrumentor not called.
+
+**Covers**: — (operator-requested telemetry, D-30/D-37; no `@AC-*` scenario)
+
+**Instructions**:
+1. `tests/conftest.py`:
+   - In `otel_reset` (`:301-333`), also neutralise
+     `GrpcAioInstrumentorServer.instrument`, as `services/xstockstrat-ingest/tests/conftest.py:130` does.
+2. `tests/test_telemetry.py`: port `VECTORS`, `_duration_points`, the status-vector test and the
+   non-server/non-gRPC span test from the ingest file (anchors above) against the agent's
+   `_make_rpc_duration_processor`; add a test that, with `OTEL_ENABLED=true`, `init_telemetry()`
+   calls `GrpcAioInstrumentorServer.instrument` (replace the neutralised method with a recorder).
+
+**Verification**:
+```bash
+cd services/xstockstrat-agent
+uv run pytest tests/test_telemetry.py -q
+uv run pytest --cov=app --cov-fail-under=40
+ruff check . && ruff format --check .
+```
+
+---
+
+### Step 7 — service: Agent gRPC server instrumentation and rpc.server.duration
+
+**Status**: `pending`
+**Service**: `xstockstrat-agent`
+**Files**:
+- `services/xstockstrat-agent/app/telemetry.py` — modify
+- `services/xstockstrat-agent/app/tool_metrics.py` — modify
+
+**Reviewers**: `xstockstrat-agent` owner — telemetry signals consistent with the other gRPC servers
+
+**Codebase Evidence**:
+- Telemetry: `app/telemetry.py:6-8` (client-only docstring), `:111,151`
+  (`GrpcAioInstrumentorClient`), `:126-128` (tracer provider); source to copy
+  `services/xstockstrat-ingest/app/telemetry.py:18` (buckets), `:105-116` (`grpc_status_code`),
+  `:119-152` (`_make_rpc_duration_processor`), `:255` (registration), `:274` (server instrumentor).
+- `app/tool_metrics.py:1` ("the agent has no gRPC server"), `:16-17` (`_BUCKETS_MS`), `:114` (its
+  one use); it already imports `app.telemetry` (`:10`).
+- Dependency already present: `pyproject.toml:16` (`opentelemetry-instrumentation-grpc`). No
+  `pyproject.toml` or `uv.lock` change.
+- Header propagation: no outbound call is added.
+- `scripts/check-otel-produced-signals.py` needs no change: `ListTools` is unary (`:197-231`).
+
+**Lands with**: `Step 6`
+
+**TDD**: `red-green required` (green = the Step 6 tests passing against this step)
+
+**Covers**: —
+
+**Instructions**:
+1. `app/telemetry.py` (D-30, D-37): add `RPC_DURATION_BUCKETS_MS`, `grpc_status_code` and
+   `_make_rpc_duration_processor` as in the ingest file; register the processor on the tracer
+   provider and call `GrpcAioInstrumentorServer().instrument()` beside the client instrumentor;
+   rewrite the docstring at `:6-8`. Do **not** copy `_CancelStatusInterceptor` (R-13).
+2. `app/tool_metrics.py`: delete `_BUCKETS_MS` (`:16-17`) and use
+   `telemetry.RPC_DURATION_BUCKETS_MS` at `:114`; fix the `:1` docstring.
+
+**Verification**:
+```bash
+cd services/xstockstrat-agent
+uv run pytest --cov=app --cov-fail-under=40
+ruff check . && ruff format --check .
+grep -rn "has no gRPC server\|rather than a gRPC server" app/   # expect no output
+grep -rn "_BUCKETS_MS" app/   # expect only RPC_DURATION_BUCKETS_MS in app/telemetry.py and its use in app/tool_metrics.py
+cd ../.. && python3 scripts/check-otel-produced-signals.py
+```
+
+---
+
+### Step 8 — test: UI route and client tests for the internal catalog; centralize the MCP tool fixture
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -493,9 +616,9 @@ grep -rn "CLIENT only\|has no gRPC server\|rather than a gRPC server" app/   # e
 - `vitest.config.ts:20` (`include: ['src/**/*.test.ts']`), `:25-33` (coverage scoped to `src/lib/**`,
   `connectClients.ts` excluded, 40% thresholds); `tsconfig.json` `include` has `**/*.ts`.
 - A Struct field arrives as a plain JSON object in the UI: `src/lib/performanceMetrics.ts:61`.
-- **Not found** (created by Step 6): `agentClient` in `src/lib/connectClients.ts`.
+- **Not found** (created by Step 9): `agentClient` in `src/lib/connectClients.ts`.
 
-**Lands with**: `Step 6`
+**Lands with**: `Step 9`
 
 **TDD**: `red-green required`. Reds on today's code: `@AC-1` wrong body (`reachable: false`);
 `@AC-2a`/`@AC-2b` the throwing `fetch` stub was called; client block `agentClient` is `undefined`
@@ -556,7 +679,7 @@ The route test is outside the coverage scope (`src/lib/**`); its proof is the fi
 
 ---
 
-### Step 6 — service: UI BFF reads the catalog over AgentService.ListTools
+### Step 9 — service: UI BFF reads the catalog over AgentService.ListTools
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -566,7 +689,7 @@ The route test is outside the coverage scope (`src/lib/**`); its proof is the fi
 - `services/xstockstrat-ui/src/lib/copilot.ts` — modify (comment only)
 
 (The new env var's deployment files — `docker-compose.yml`, `deploy/homelab/compose.yml`,
-`.do/app.dev.yaml`, `.do/app.yaml`, `playwright.config.ts` — are in Step 7; see § Step
+`.do/app.dev.yaml`, `.do/app.yaml`, `playwright.config.ts` — are in Steps 10 and 11; see § Step
 Dependencies. `AGENT_ENDPOINT` is absent from all five today: `grep -n AGENT_ENDPOINT` → no hits.)
 
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety, no secret values rendered in UI
@@ -590,9 +713,9 @@ Dependencies. `AGENT_ENDPOINT` is absent from all five today: `grep -n AGENT_END
 - Header propagation (C-03, PLAT-4): `restBackendHeaders` sends `x-user-id`, `x-access-scope` and
   `x-trace-id` (`src/lib/restBackendHeaders.ts:9-15`).
 
-**Lands with**: `Step 5`
+**Lands with**: `Step 8`
 
-**TDD**: `red-green required` (green = the Step 5 tests passing against this step)
+**TDD**: `red-green required` (green = the Step 8 tests passing against this step)
 
 **Covers**: —
 
@@ -629,17 +752,86 @@ git diff --quiet HEAD -- src/app/accounts/api/agent-health/route.ts src/app/acco
 
 ---
 
-### Step 7 — test: Deployment guards, then GRPC_PORT and AGENT_ENDPOINT in every run site
+### Step 10 — test: Homelab and local compose — guard, then GRPC_PORT and AGENT_ENDPOINT
 
 **Status**: `pending`
-**Service**: deployment specs (`xstockstrat-agent`, `xstockstrat-ui`); guard housed in the
-`xstockstrat-ui` Vitest suite and the homelab render test
+**Service**: deployment specs (`xstockstrat-agent`, `xstockstrat-ui`); guard housed in the homelab
+render test
 **Files**:
 - `deploy/homelab/render-assert.jq` — modify
 - `scripts/homelab-render.test.sh` — modify
-- `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts` — modify
 - `deploy/homelab/compose.yml` — modify
 - `docker-compose.yml` — modify
+
+**Reviewers**: Platform Lead — port uniqueness, service registry consistency, dependency graph
+correctness; `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness
+
+**Codebase Evidence**:
+- Homelab oracle: `deploy/homelab/render-assert.jq:15-26` (`project`; only the named env keys
+  survive, `:23-25`), `:52-54` (agent/UI checks; `:54` pins published ports to agent=9000, ui=3000).
+- Render test: `scripts/homelab-render.test.sh:56` (`envv`), `:70-71` (staging check + render),
+  `:92` (rendered-value assertion form), `:179` (unmodified production baseline), `:180-184`
+  (`mutate`), `:185-214` (mutation rows). Tools it requires: `:13-16`.
+- Homelab compose: UI endpoints `deploy/homelab/compose.yml:273-282`, `AGENT_PUBLIC_URL` `:284`;
+  agent `MCP_HTTP_PORT` `:319`, ports `:323-324`, healthcheck `:325-327`.
+- Local compose: UI "gRPC endpoints" block `docker-compose.yml:502-512`, `AGENT_PUBLIC_URL` `:520`;
+  agent `MCP_HTTP_PORT` `:572`, ports `:578-579`. `GRPC_PORT: "50055"` form at `:346`.
+- CI: `homelab` filter `.github/workflows/ci.yml:98-103`; job `homelab-render` `:1240-1251`; shell
+  lint `:834-838`.
+- `MTLS_*` for the agent is already wired in both files (`docker-compose.yml:557-558`,
+  `deploy/homelab/compose.yml:305-306`) — no new secret or placeholder (`fails.md:2833`).
+- `AGENT_ENDPOINT` and an agent `GRPC_PORT` are absent from both files (`grep` → no hits).
+
+**TDD**: `red-green required`, inside this one step: write the guard first and capture red on the
+current homelab spec (`check` reports `agent-endpoint`), then add the values and capture green.
+Mutation rows are "red N/A — guard self-check" and are valid only after their baseline assertion
+passes (O-15, O-19). `docker-compose.yml` has no guard (design.md: local-dev only).
+
+**Covers**: — (platform guard for the deployment values; no `@AC-*` scenario — D-16)
+
+**Instructions**:
+1. Tool preflight (D-17): `docker compose`, `jq`, `openssl`, `python3`, `shellcheck`, `shfmt`. A
+   missing tool is installed, or logged as a deviation naming the CI job that is the green proof
+   (`homelab-render`, shell lint) — never skipped silently.
+2. Guard first.
+   - `deploy/homelab/render-assert.jq`: add `AGENT_ENDPOINT` and `GRPC_PORT` to the env projection
+     (`:23`). Add one check with label `agent-endpoint`: it fires unless the agent's `GRPC_PORT`
+     is a non-empty string **and** the UI's `AGENT_ENDPOINT` equals
+     `"xstockstrat-agent:" + <that GRPC_PORT>`. No literal port (R-7).
+   - `scripts/homelab-render.test.sh`: in case 1, assert the rendered staging UI value equals
+     `xstockstrat-agent:` plus the rendered agent `GRPC_PORT` (via `envv`). In case 7 add three
+     `mutate agent-endpoint` rows: UI variable deleted; UI value with an `http://` scheme; agent
+     `GRPC_PORT` changed alone.
+3. Capture red (commands below), then add the values (D-25). Beside each `AGENT_ENDPOINT` line put a
+   ≤2-line comment: `host:port, no scheme` (D-10).
+   - `deploy/homelab/compose.yml`: agent `GRPC_PORT: "50061"` after `MCP_HTTP_PORT` (`:319`); UI
+     `AGENT_ENDPOINT: xstockstrat-agent:50061` after `INGEST_ENDPOINT` (`:282`). `ports:` unchanged.
+   - `docker-compose.yml`: agent `GRPC_PORT: "50061"` after `:572`; UI
+     `AGENT_ENDPOINT: xstockstrat-agent:50061` in the gRPC endpoint block after `:512`. Do **not**
+     publish 50061 (the agent's `ports:` stays `9000:9000`).
+4. `EXPOSE`, healthchecks and published ports are not changed.
+
+**Verification**:
+```bash
+bash scripts/homelab-render.test.sh
+shellcheck scripts/homelab-render.test.sh && shfmt -d -i 2 scripts/homelab-render.test.sh
+grep -n "AGENT_ENDPOINT" docker-compose.yml deploy/homelab/compose.yml   # one hit per file
+grep -n "50061" docker-compose.yml deploy/homelab/compose.yml   # GRPC_PORT + AGENT_ENDPOINT; never under ports:
+python3 scripts/check-otel-produced-signals.py
+cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 && cd ../..
+```
+This step adds no application code; the last command confirms the agent, whose port these files
+configure, still meets its ≥ 40% threshold (`--cov-fail-under=40`).
+
+---
+
+### Step 11 — test: DigitalOcean specs, Playwright and CI filter — guard, then values
+
+**Status**: `pending`
+**Service**: deployment specs (`xstockstrat-agent`, `xstockstrat-ui`); guard housed in the
+`xstockstrat-ui` Vitest suite
+**Files**:
+- `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts` — modify
 - `.do/app.yaml` — modify
 - `.do/app.dev.yaml` — modify
 - `services/xstockstrat-ui/playwright.config.ts` — modify
@@ -650,18 +842,9 @@ correctness; `xstockstrat-ui` owner — Connect-RPC call safety; `xstockstrat-ag
 edge-auth correctness and statelessness (`instance_count > 1` stays safe)
 
 **Codebase Evidence**:
-- Homelab oracle: `deploy/homelab/render-assert.jq:15-26` (`project`; only the named env keys
-  survive, `:23-25`), `:52-54` (agent/UI checks; `:54` pins published ports to agent=9000, ui=3000).
-- Render test: `scripts/homelab-render.test.sh:56` (`envv`), `:70-71` (staging check + render),
-  `:92` (rendered-value assertion form), `:179` (unmodified production baseline), `:180-184`
-  (`mutate`), `:185-214` (mutation rows). Tools it requires: `:13-16`.
 - DO guard file: `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts:1-2` (header),
   `:47-48` (`Env`, `Component` — no `internal_ports` yet), `:62-64` (`readSpec`), `:87-98`
   (positive `it.each` on both specs, then a clone mutation).
-- Homelab compose: UI endpoints `deploy/homelab/compose.yml:273-282`, `AGENT_PUBLIC_URL` `:284`;
-  agent `MCP_HTTP_PORT` `:319`, ports `:323-324`, healthcheck `:325-327`.
-- Local compose: UI "gRPC endpoints" block `docker-compose.yml:502-512`, `AGENT_PUBLIC_URL` `:520`;
-  agent `MCP_HTTP_PORT` `:572`, ports `:578-579`. `GRPC_PORT: "50055"` form at `:346`.
 - DO prod: agent `http_port: 9000` `.do/app.yaml:342`, `MCP_HTTP_PORT` `:383-384`;
   `internal_ports` form `:53-54`; `GRPC_PORT` form `:71-72`; UI endpoints `:630-649`
   (`${xstockstrat-ingest.PRIVATE_DOMAIN}:50055` at `:648-649`), `AGENT_PUBLIC_URL` `:652-653`.
@@ -671,33 +854,25 @@ edge-auth correctness and statelessness (`instance_count > 1` stays safe)
 - Playwright: endpoint env `services/xstockstrat-ui/playwright.config.ts:147-160`, dead-port
   `AGENT_PUBLIC_URL` `:168`; ports in use 9091–9093 and 9099 → 9094 is free.
 - CI: agent path filter `.github/workflows/ci.yml:59`; the UI filter already includes `.do/**`
-  (`:64`); `homelab` filter `:98-103`; jobs `homelab-render` `:1240-1251`, `sops-secrets`
-  `:1253-1271` (triggered by `.do/**`), shell lint `:834-838`.
-- `MTLS_*` for the agent is already wired in all four specs (`docker-compose.yml:557-558`,
-  `deploy/homelab/compose.yml:305-306`, `.do/app.yaml:349-358`) — no new secret or placeholder
-  (`fails.md:2833`).
+  (`:64`); job `sops-secrets` `:1253-1271` (triggered by `.do/**`).
+- `MTLS_*` for the agent is already wired in the DO specs (`.do/app.yaml:349-358`) — no new secret
+  or placeholder (`fails.md:2833`).
 - `AGENT_ENDPOINT` and an agent `GRPC_PORT` are absent from all of the above (`grep` → no hits).
+- The parity test whose inputs the CI filter must cover is created by Step 3
+  (`services/xstockstrat-agent/tests/test_peer_identity_parity.py`).
 
-**TDD**: `red-green required`, inside this one step: write the guards first and capture red on the
-current specs (homelab: `check` reports `agent-endpoint`; Vitest: the positive case returns a
-reason for both DO specs), then add the values and capture green. Mutation rows are "red N/A —
-guard self-check" and are valid only after their baseline assertion passes (O-15, O-19).
+**TDD**: `red-green required`, inside this one step: write the guard first and capture red on the
+current DO specs (the positive case returns a reason for both), then add the values and capture
+green. Mutation rows are "red N/A — guard self-check" and are valid only after their baseline
+assertion passes (O-15, O-19).
 
 **Covers**: — (platform guard for the deployment values; no `@AC-*` scenario — D-16)
 
 **Instructions**:
-1. Tool preflight (D-17): `docker compose`, `jq`, `openssl`, `python3`, `yq`, `sops`, `shellcheck`,
-   `shfmt`. A missing tool is installed, or logged as a deviation naming the CI job that is the
-   green proof — never skipped silently.
-2. Guards first.
-   - `deploy/homelab/render-assert.jq`: add `AGENT_ENDPOINT` and `GRPC_PORT` to the env projection
-     (`:23`). Add one check with label `agent-endpoint`: it fires unless the agent's `GRPC_PORT`
-     is a non-empty string **and** the UI's `AGENT_ENDPOINT` equals
-     `"xstockstrat-agent:" + <that GRPC_PORT>`. No literal port (R-7).
-   - `scripts/homelab-render.test.sh`: in case 1, assert the rendered staging UI value equals
-     `xstockstrat-agent:` plus the rendered agent `GRPC_PORT` (via `envv`). In case 7 add three
-     `mutate agent-endpoint` rows: UI variable deleted; UI value with an `http://` scheme; agent
-     `GRPC_PORT` changed alone.
+1. Tool preflight (D-17): `yq`, `sops`, `shellcheck`, `shfmt`, `python3` (for
+   `scripts/sops-secrets.test.sh`). A missing tool is installed, or logged as a deviation naming
+   the CI job that is the green proof (`sops-secrets`) — never skipped silently.
+2. Guard first.
    - `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts`: extend the file-local
      `Component` type with `internal_ports`; add ONE file-local predicate
      `agentEndpointDrift(spec): string | null` that fails closed (returns a reason) unless the
@@ -710,11 +885,6 @@ guard self-check" and are valid only after their baseline assertion passes (O-15
      endpoint. Do not rename the file or extract helpers (R-8).
 3. Capture red (commands below), then add the values (D-25). Beside each `AGENT_ENDPOINT` line put a
    ≤2-line comment: `host:port, no scheme` (D-10).
-   - `deploy/homelab/compose.yml`: agent `GRPC_PORT: "50061"` after `MCP_HTTP_PORT` (`:319`); UI
-     `AGENT_ENDPOINT: xstockstrat-agent:50061` after `INGEST_ENDPOINT` (`:282`). `ports:` unchanged.
-   - `docker-compose.yml`: agent `GRPC_PORT: "50061"` after `:572`; UI
-     `AGENT_ENDPOINT: xstockstrat-agent:50061` in the gRPC endpoint block after `:512`. Do **not**
-     publish 50061 (the agent's `ports:` stays `9000:9000`).
    - `.do/app.yaml` and `.do/app.dev.yaml`: agent `internal_ports: [50061]` (list form of
      `.do/app.yaml:53-54`) directly after `http_port: 9000`; agent env `GRPC_PORT` = `"50061"`
      after `MCP_HTTP_PORT`; UI env `AGENT_ENDPOINT` =
@@ -729,16 +899,13 @@ guard self-check" and are valid only after their baseline assertion passes (O-15
 
 **Verification**:
 ```bash
-bash scripts/homelab-render.test.sh
 bash scripts/sops-secrets.test.sh
-shellcheck scripts/homelab-render.test.sh && shfmt -d -i 2 scripts/homelab-render.test.sh
 cd services/xstockstrat-ui && pnpm exec vitest run src/lib/dbTlsPlatformGuard.test.ts \
   && pnpm run test:coverage \
   && pnpm run lint && pnpm exec tsc --noEmit \
   && pnpm exec playwright test e2e/accounts/mcp-tools.spec.ts && cd ../..
-grep -n "AGENT_ENDPOINT" docker-compose.yml deploy/homelab/compose.yml .do/app.yaml .do/app.dev.yaml services/xstockstrat-ui/playwright.config.ts   # one hit per file
-grep -n "50061" docker-compose.yml deploy/homelab/compose.yml .do/app.yaml .do/app.dev.yaml   # GRPC_PORT + AGENT_ENDPOINT (+ internal_ports on DO); never under ports:
-python3 scripts/check-otel-produced-signals.py
+grep -n "AGENT_ENDPOINT" .do/app.yaml .do/app.dev.yaml services/xstockstrat-ui/playwright.config.ts   # one hit per file
+grep -n "50061" .do/app.yaml .do/app.dev.yaml   # GRPC_PORT + AGENT_ENDPOINT + internal_ports
 python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/ci.yml'))"
 grep -n "^ *xstockstrat-agent: " .github/workflows/ci.yml \
   | grep -F "services/xstockstrat-ingest/app/peer_identity.py" \
@@ -749,48 +916,27 @@ no production code.
 
 ---
 
-### Step 8 — docs: Document the internal catalog endpoint and retire GET /api/tools mentions
+### Step 12 — docs: Root and shared docs for the internal catalog endpoint
 
 **Status**: `pending`
-**Service**: `docs/`, root and service `CLAUDE.md` files, durable business-rule suites
+**Service**: `docs/`, root `CLAUDE.md`
 **Files**:
 - `CLAUDE.md` — modify
-- `services/xstockstrat-agent/CLAUDE.md` — modify
-- `services/xstockstrat-agent/docs/oauth.md` — modify
-- `services/xstockstrat-agent/docs/context-constitution.md` — modify
-- `services/xstockstrat-agent/docs/context-constitution-findings.md` — modify
-- `services/xstockstrat-agent/acceptance/private-by-default-templates.feature` — modify
-- `services/xstockstrat-ui/CLAUDE.md` — modify
 - `docs/runbooks/mcp-tools.md` — modify
 - `docs/runbooks/reviewer-registry.md` — modify
 - `docs/patterns/inter-service-mtls.md` — modify
 - `docs/patterns/observability.md` — modify
-- `docs/sdd/business-rules/platform.feature` — modify
 
 **Reviewers**: none
 
 **Codebase Evidence** (each anchor read on the stamped tree):
 - Root `CLAUDE.md:109` (agent registry row: gRPC Port `—`), dependency tree `:286-305`.
-- Agent `CLAUDE.md` § Role ("port 9000"), § Observability, § Environment Variables (mTLS note says
-  "client dials"; env block has no `GRPC_PORT`).
-- `services/xstockstrat-agent/docs/oauth.md:27` (`GET /api/tools` row).
-- `services/xstockstrat-agent/docs/context-constitution.md:5` ("the only backend that speaks HTTP
-  and the only one that calls backends as a gRPC client"), `:39` (Pointers row: OTel instruments
-  the client channel, not a server).
-- `services/xstockstrat-agent/docs/context-constitution-findings.md:48` (open item on the
-  unauthenticated route).
-- `services/xstockstrat-agent/acceptance/private-by-default-templates.feature:9`
-  (`Given the agent MCP tool catalog at GET /api/tools`).
-- `services/xstockstrat-ui/CLAUDE.md:15-18` (BFF-only sentence, "backends"), `:138` (Dependencies
-  intro and table), `:215-217` (env list).
 - `docs/runbooks/mcp-tools.md:45-49` (Tool catalog paragraph);
   `services/xstockstrat-agent/tests/test_tools_endpoint.py:147-163` requires the phrase
   `forty-five tools` to stay in that file.
 - `docs/runbooks/reviewer-registry.md:24` ("the unauthenticated `GET /api/tools` catalog").
 - `docs/patterns/inter-service-mtls.md:52-74` (SAN-gated grants list).
 - `docs/patterns/observability.md:19-20` ("10 gRPC services"; the agent "is a gRPC client").
-- `docs/sdd/business-rules/platform.feature:795-798` ("and the /api/tools catalog").
-- C-16 sign-offs for the two rule changes: `context.md` (run 2 steer; gate 5).
 
 **TDD**: `N/A (docs)`
 
@@ -801,38 +947,139 @@ no production code.
    certificate only); add the edge `xstockstrat-ui → xstockstrat-agent (gRPC ListTools, internal
    tool catalog)` to the dependency tree. No naming-convention exception — `AGENT_ENDPOINT` is an
    ordinary gRPC `host:port`.
-2. Agent `CLAUDE.md`: Role names the second listener (gRPC 50061, mTLS, `xstockstrat-ui` peer
-   only, HTTP mode only); env block gains `GRPC_PORT=50061`; the mTLS note covers the server
-   (missing `MTLS_*` now stops the process at boot in HTTP mode); Observability names
-   `rpc.server.duration` for the catalog RPC. Keep the phrase `registers forty-five tools`.
-3. `docs/oauth.md`: delete the `GET /api/tools` row (`:27`).
-4. Agent `docs/context-constitution.md`: correct `:5` and the `:39` Pointers row (server
-   instrumentation and `rpc.server.duration` now exist beside `mcp.tool.duration`).
-5. Agent findings: mark `:48` closed by this feature; add one open entry — a cancelled or expired
-   `ListTools` records status 0 in `rpc.server.duration` because the cancel-status interceptor was
-   not copied (D-37, R-13).
-6. `private-by-default-templates.feature:9`: the Given reads the catalog through the internal
-   catalog RPC (signed off, C-16). `platform.feature:797`: replace "the /api/tools catalog" with
-   the internal catalog RPC; the count 45 is unchanged (signed off, C-16).
-7. UI `CLAUDE.md`: widen the BFF-only sentence to "the backends or the agent" — the durable home
-   of the operator's rule; Dependencies gains the agent row (gRPC 50061, `/accounts/mcp-tools`);
-   env list gains `AGENT_ENDPOINT` — "host:port, no scheme; unset ⇒ the MCP Tools page reports the
-   agent unreachable; never falls back to `AGENT_PUBLIC_URL`".
-8. `docs/runbooks/mcp-tools.md:45-49`: the catalog is served by the internal `ListTools` RPC to the
+2. `docs/runbooks/mcp-tools.md:45-49`: the catalog is served by the internal `ListTools` RPC to the
    UI BFF; the public `GET /api/tools` was removed and now answers 401. Keep `forty-five tools`.
-9. `docs/runbooks/reviewer-registry.md:24`: "no secret values in tool output or the internal tool
+3. `docs/runbooks/reviewer-registry.md:24`: "no secret values in tool output or the internal tool
    catalog".
-10. `docs/patterns/inter-service-mtls.md`: add to the SAN-gated list — agent `ListTools` ←
+4. `docs/patterns/inter-service-mtls.md`: add to the SAN-gated list — agent `ListTools` ←
     `xstockstrat-ui` (`UI_PEER_SAN` in `services/xstockstrat-agent/app/catalog_service.py`); the
     SAN is the only check.
-11. `docs/patterns/observability.md:19-20`: the agent joins the `rpc_server_duration` producers
+5. `docs/patterns/observability.md:19-20`: the agent joins the `rpc_server_duration` producers
     (one unary RPC) and still records `mcp_tool_duration`.
 
 **Verification**:
 ```bash
-npx --yes markdownlint-cli2 --config .markdownlint.yaml CLAUDE.md services/xstockstrat-agent/CLAUDE.md services/xstockstrat-ui/CLAUDE.md
+npx --yes markdownlint-cli2 --config .markdownlint.yaml CLAUDE.md
 python3 scripts/check-context-map.py
 python3 scripts/check-otel-produced-signals.py
+cd services/xstockstrat-agent && uv run pytest tests/test_tools_endpoint.py -q && cd ../..
+grep -n "50061" CLAUDE.md docs/patterns/inter-service-mtls.md docs/runbooks/mcp-tools.md   # at least one hit in CLAUDE.md
+grep -n "GET /api/tools" docs/runbooks/reviewer-registry.md   # expect no output
+```
+
+---
+
+### Step 13 — docs: Agent docs for the internal catalog endpoint
+
+**Status**: `pending`
+**Service**: `xstockstrat-agent` docs
+**Files**:
+- `services/xstockstrat-agent/CLAUDE.md` — modify
+- `services/xstockstrat-agent/docs/oauth.md` — modify
+- `services/xstockstrat-agent/docs/context-constitution.md` — modify
+- `services/xstockstrat-agent/docs/context-constitution-findings.md` — modify
+
+**Reviewers**: none
+
+**Codebase Evidence** (each anchor read on the stamped tree):
+- Agent `CLAUDE.md` § Role ("port 9000"), § Observability, § Environment Variables (mTLS note says
+  "client dials"; env block has no `GRPC_PORT`).
+- `services/xstockstrat-agent/docs/oauth.md:27` (`GET /api/tools` row).
+- `services/xstockstrat-agent/docs/context-constitution.md:5` ("the only backend that speaks HTTP
+  and the only one that calls backends as a gRPC client"), `:39` (Pointers row: OTel instruments
+  the client channel, not a server).
+- `services/xstockstrat-agent/docs/context-constitution-findings.md:48` (open item on the
+  unauthenticated route).
+- `services/xstockstrat-agent/tests/test_tools_endpoint.py:147-163` requires the phrase
+  `registers forty-five tools` to stay in the agent `CLAUDE.md`.
+
+**TDD**: `N/A (docs)`
+
+**Covers**: —
+
+**Instructions** (D-27):
+1. Agent `CLAUDE.md`: Role names the second listener (gRPC 50061, mTLS, `xstockstrat-ui` peer
+   only, HTTP mode only); env block gains `GRPC_PORT=50061`; the mTLS note covers the server
+   (missing `MTLS_*` now stops the process at boot in HTTP mode); Observability names
+   `rpc.server.duration` for the catalog RPC. Keep the phrase `registers forty-five tools`.
+2. `docs/oauth.md`: delete the `GET /api/tools` row (`:27`).
+3. Agent `docs/context-constitution.md`: correct `:5` and the `:39` Pointers row (server
+   instrumentation and `rpc.server.duration` now exist beside `mcp.tool.duration`).
+4. Agent findings: mark `:48` closed by this feature; add one open entry — a cancelled or expired
+   `ListTools` records status 0 in `rpc.server.duration` because the cancel-status interceptor was
+   not copied (D-37, R-13).
+
+**Verification**:
+```bash
+npx --yes markdownlint-cli2 --config .markdownlint.yaml services/xstockstrat-agent/CLAUDE.md
+python3 scripts/check-context-map.py
+cd services/xstockstrat-agent && uv run pytest tests/test_tools_endpoint.py -q && cd ../..
+grep -n "GRPC_PORT" services/xstockstrat-agent/CLAUDE.md   # at least one hit
+grep -n "api/tools" services/xstockstrat-agent/docs/oauth.md   # expect no output
+```
+
+---
+
+### Step 14 — docs: UI docs — BFF-only rule and AGENT_ENDPOINT
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui` docs
+**Files**:
+- `services/xstockstrat-ui/CLAUDE.md` — modify
+
+**Reviewers**: none
+
+**Codebase Evidence** (each anchor read on the stamped tree):
+- `services/xstockstrat-ui/CLAUDE.md:15-18` (BFF-only sentence, "backends"), `:138` (Dependencies
+  intro and table), `:215-217` (env list).
+
+**TDD**: `N/A (docs)`
+
+**Covers**: —
+
+**Instructions** (D-27):
+1. UI `CLAUDE.md`: widen the BFF-only sentence to "the backends or the agent" — the durable home
+   of the operator's rule; Dependencies gains the agent row (gRPC 50061, `/accounts/mcp-tools`);
+   env list gains `AGENT_ENDPOINT` — "host:port, no scheme; unset ⇒ the MCP Tools page reports the
+   agent unreachable; never falls back to `AGENT_PUBLIC_URL`".
+
+**Verification**:
+```bash
+npx --yes markdownlint-cli2 --config .markdownlint.yaml services/xstockstrat-ui/CLAUDE.md
+python3 scripts/check-context-map.py
+grep -n "AGENT_ENDPOINT" services/xstockstrat-ui/CLAUDE.md   # at least one hit
+```
+
+---
+
+### Step 15 — docs: Re-point the two durable business rules to the internal catalog
+
+**Status**: `pending`
+**Service**: durable business-rule suites
+**Files**:
+- `services/xstockstrat-agent/acceptance/private-by-default-templates.feature` — modify
+- `docs/sdd/business-rules/platform.feature` — modify
+
+**Reviewers**: none
+
+**Codebase Evidence** (each anchor read on the stamped tree):
+- `services/xstockstrat-agent/acceptance/private-by-default-templates.feature:9`
+  (`Given the agent MCP tool catalog at GET /api/tools`).
+- `docs/sdd/business-rules/platform.feature:795-798` ("and the /api/tools catalog").
+- C-16 sign-offs for the two rule changes: `context.md` (run 2 steer; gate 5).
+
+**TDD**: `N/A (docs)`
+
+**Covers**: —
+
+**Instructions** (D-27):
+1. `private-by-default-templates.feature:9`: the Given reads the catalog through the internal
+   catalog RPC (signed off, C-16). `platform.feature:797`: replace "the /api/tools catalog" with
+   the internal catalog RPC; the count 45 is unchanged (signed off, C-16).
+
+**Verification**:
+```bash
+python3 scripts/check-context-map.py
 cd services/xstockstrat-agent && uv run pytest tests/test_tools_endpoint.py -q && cd ../..
 grep -rn "api/tools" --include='*.py' --include='*.ts' --include='*.tsx' --include='*.md' --include='*.feature' --include='*.yml' --include='*.yaml' . \
   | grep -v node_modules | grep -v '/\.venv/' | grep -v '^\./docs/roadmap/' | grep -v '^\./docs/reports/' | grep -v '^\./packages/proto/gen/'

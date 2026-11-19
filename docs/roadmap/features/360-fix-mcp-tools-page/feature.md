@@ -18,6 +18,7 @@
 | 2026-11-19 | `design-approved` (unchanged) | /sdd-design | Design reopened by the operator and re-approved (run 2: 2 rounds, full): internal gRPC catalog endpoint on agent port 50061, public `/api/tools` removed; recon.md + debate.md + design.md rewritten |
 | 2026-11-19 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 | 2026-11-19 | `implementation-ready` (unchanged) | /sdd-spec | Re-run: implementation spec revised for the impl-spec review findings (1 failure, 6 warnings closed); still 8 steps |
+| 2026-11-19 | `implementation-ready` (unchanged) | /sdd-spec | Spec re-shaped to 15 steps (four atomic units) so no hand-written step lists more than five files; content and order unchanged |
 
 ---
 
@@ -28,7 +29,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — decisions, rejected alternatives, objections
 - [Design](design.md) — approved approach
-- [Implementation Spec](implementation-spec.md) — 8 steps (three atomic units)
+- [Implementation Spec](implementation-spec.md) — 15 steps (four atomic units)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -36,7 +37,7 @@
 ## Reviewers
 
 _Canonical snapshot from `/sdd-spec` (2026-11-19, re-run the same day — roles unchanged): the distinct
-`**Reviewers**` across all 8 steps of implementation-spec.md, per docs/runbooks/reviewer-registry.md.
+`**Reviewers**` across all 15 steps of implementation-spec.md, per docs/runbooks/reviewer-registry.md.
 Stable unless `/sdd-spec` re-runs._
 
 | Role | Review Focus |
