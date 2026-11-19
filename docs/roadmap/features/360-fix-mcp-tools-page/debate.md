@@ -1,6 +1,6 @@
 # Debate Register: fix-mcp-tools-page
 
-**State**: in-debate
+**State**: approved
 **Mode**: full (run 2, from round 5; run 1 was quick, rounds 1–4)
 **Rounds run**: 6 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 

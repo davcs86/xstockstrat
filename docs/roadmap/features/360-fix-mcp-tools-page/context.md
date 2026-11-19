@@ -97,3 +97,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   and its surfaces agree" (`docs/sdd/business-rules/platform.feature:795-798`) may be reworded from
   "the /api/tools catalog" to the new internal catalog RPC; the count (45) is unchanged.
 - Open for round 6 (blocking): O-32, O-34 (UI test design), O-35 (red for `@AC-5`/`@AC-6`); O-33.
+- Round 6 gate (operator, 2026-11-19T19:13Z): **Approve this design**.
+
+## Session 2026-11-19T19:13Z — sdd-design (run 2)
+
+- Phase 0 Recon: run-2 addendum in recon.md (services: xstockstrat-agent, xstockstrat-ui,
+  packages/proto, four deployment specs; key reuse patterns: ingest mTLS server +
+  `peer_identity.py`, UI `makeTransport`, homelab render oracle).
+- Phase 1 Grilling: 2 rounds (full; rounds 5–6). Chosen approach: `AgentService.ListTools` on agent
+  port 50061 over mTLS (UI certificate only), public `/api/tools` removed, BFF calls it via
+  `AGENT_ENDPOINT` with no fallback. Rejected: R-9..R-13 (plus run-1 R-2, R-5, R-7, R-8).
+- Constitution rules touched: C-01, C-03, C-04, C-08, C-09, C-10, C-12/C-13, C-14, C-15, C-16, C-18,
+  F-04, F-06, F-07, F-08, P-04, P-06. Floor breaches: none.
+- Status: design-approved (unchanged).
+
+## Open Threads (run 2 — replaces the run-1 list above)
+
+- Operator pre-merge DO schema check (D-36) → before the feature PR merges; record in this file.
+- DO dev-app page check (D-26) → after merge, hard gate before `main-dev` → `main`; on failure
+  revert the squash.
+- Homelab acceptance evidence (D-8) → after the staging deploy.
+- Cancel-status telemetry gap → agent findings file at the docs step.
+- Skeleton-first red: process finding for `tdd-gate.md`; deviation if impl-spec review rejects it.
+- `@FR-N` tag gap (`@AC-3..6` untagged) → resolve before C-16 promotion.
+- Branch: the feature directory lives on `ccr-a72ccc3e-9kr7yq` (PR #1588 → `main-dev`);
+  `feature/fix-mcp-tools-page` is created from `main-dev` after that PR merges.

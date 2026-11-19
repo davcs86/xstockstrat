@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-19 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from report `docs/reports/2026-11-19-mcp-tools-page-empty-on-homelab-defect.md` |
 | 2026-11-19 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, quick upgraded by the operator) and approved; recon.md + debate.md + design.md written |
+| 2026-11-19 | `design-approved` (unchanged) | /sdd-design | Design reopened by the operator and re-approved (run 2: 2 rounds, full): internal gRPC catalog endpoint on agent port 50061, public `/api/tools` removed; recon.md + debate.md + design.md rewritten |
 
 ---
 
@@ -33,8 +34,9 @@
 ## Summary
 
 `/accounts/mcp-tools` is empty on homelab because the UI BFF fetches the agent's tool catalog through
-the public URL, which the edge 404s. The BFF must reach the agent over the deployment's internal
-network instead.
+the public URL. The fix moves the catalog to an internal-only gRPC endpoint on the agent (port 50061,
+mTLS, UI certificate only), removes the public unauthenticated `GET /api/tools`, and has the BFF call
+the new endpoint.
 
 ## Next Action
 
