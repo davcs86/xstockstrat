@@ -520,3 +520,26 @@ Accountability (P-03):
 - Deviations: 1 (buf/codegen ran in the pinned Docker image), 2 (Playwright ran in CI mode).
 - Host note: Node v22.23.5 was used although the version table says 24; all UI checks passed, CI
   runs them on 24.
+
+## Session 2026-11-19 — CI validation of the DigitalOcean spec (operator-directed addition)
+
+- Operator (chat): expected the DO spec validation as a CI step, not a manual command. Decisions
+  via AskUserQuestion: **offline PR check + pre-deploy server-side check**; **land in PR #1589**.
+  This supersedes the manual pre-merge gate (D-29/D-36).
+- Findings that informed it: DigitalOcean's HTTP/2 guide documents a service with both `http_port`
+  and `internal_ports`, so the agent's new shape is a supported one;
+  `doctl apps spec validate --schema-only` is offline, while full validation calls the propose API
+  with a token. PR CI (`ci.yml`) holds no deploy credentials and still holds none.
+- Added: `ci.yml` job `do-spec-validate` (doctl pinned to 1.146.0 with `no_auth`, both DO specs,
+  in the CI Gate); `deploy.yml` step `doctl apps propose --spec … --app "$APP_ID" > /dev/null`
+  before the update; a static rule in `scripts/sops-secrets.test.sh`; a row in
+  `docs/patterns/ci-overview.md`. Deviation 3 in the spec's Deviation Log.
+- TDD: static rule red `ASSERT FAIL: deploy: no 'doctl apps propose' step` → green
+  `all assertions passed`. Offline check run locally with doctl 1.146.0: both specs exit 0
+  (including the dual-port agent); negative control (a mistyped field) exits 1
+  `unknown field "htp_port"`. shellcheck and `shfmt -d -i 2` clean on the test script.
+- Not verified here: the `deploy.yml` propose step itself (it needs the DO token and the rendered
+  spec; first exercised on the next dev deploy). If App Platform rejects the proposed spec, that
+  deploy stops before the update and the running app is untouched.
+- Operator gates remaining: the DO dev-app page check after merge (D-26; revert the squash on
+  failure) and homelab acceptance (D-8). The manual pre-merge `doctl` command is no longer needed.

@@ -1147,3 +1147,18 @@ request in `services/xstockstrat-agent/tests/test_tools_endpoint.py`, the closed
   CI timeouts, warm-up project included).
 - **Disposition**: CI-equivalent fallback. Same spec, same assertions.
 
+### Deviation 3 — post-completion addition (2026-11-19)
+- **Spec said**: the DigitalOcean spec check before merge is an operator-run `doctl` command
+  (D-29/D-36); no step adds CI for it.
+- **Actual**: at the operator's request after the integration PR opened, the manual check is
+  replaced by CI. `ci.yml` gains job `do-spec-validate` (offline
+  `doctl apps spec validate --schema-only` on both DO specs, no token or secrets, wired into the
+  CI Gate); `deploy.yml` gains a step that proposes the rendered spec to App Platform
+  (`doctl apps propose --spec … --app "$APP_ID"`, stdout discarded) before `doctl apps update`;
+  `scripts/sops-secrets.test.sh` pins that step (present, between render and update, no
+  soft-fail); `docs/patterns/ci-overview.md` lists the job.
+- **Files**: `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`,
+  `scripts/sops-secrets.test.sh`, `docs/patterns/ci-overview.md`.
+- **Disposition**: operator-directed scope addition (chat, 2026-11-19: offline PR check +
+  pre-deploy server-side check; land in PR #1589). Supersedes the operator gate in D-36.
+
