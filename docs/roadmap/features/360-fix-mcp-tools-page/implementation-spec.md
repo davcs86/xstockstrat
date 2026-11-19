@@ -80,14 +80,34 @@ telemetry (D-30), and Steps 10 and 11 add platform guards for the deployment val
 - Homelab acceptance after the staging deploy (D-8), recorded in `context.md`.
 - The integration PR text must state: a local agent without dev certificates no longer starts in
   HTTP mode (D-27).
-- Cross-feature: `345-authelia-sso` (`implementation-ready`) cites the agent route table at
-  `app/main.py:250-267`; Step 5 removes one line there. Whichever merges second re-anchors by symbol.
-  Its `.github/workflows/ci.yml` path-filter edit is on a line next to the one Step 11 edits
-  (rebase only).
-- Cross-feature: `337-metrics-host-provider-label` (`in-progress`) edits other functions in
-  `services/xstockstrat-agent/app/telemetry.py`, and `docs/patterns/observability.md` and
-  `docs/sdd/business-rules/platform.feature` (rebase only; re-read the Step 7, Step 12 and Step 15
-  anchors in those files after it merges).
+- Cross-feature (rebase only; no shared migration number, proto field, config key or env name):
+  whichever feature merges second re-reads its anchors in the shared files and re-anchors by
+  symbol. No merge-order row is required (WARN-level file overlaps only).
+  - `345-authelia-sso` (`implementation-ready`):
+    - `services/xstockstrat-agent/app/main.py` — Step 5 deletes the `/api/tools` route and
+      `list_tools_metadata`; 345 edits the same route table (`app/main.py:250-267`).
+    - `.github/workflows/ci.yml:59` — Step 11 and 345 both append paths to the **same**
+      `xstockstrat-agent` filter line; a textual conflict is certain, the two additions are kept.
+    - `services/xstockstrat-agent/app/tool_metrics.py` — Step 7 (`:1`, `:16-17`, `:114`); 345 edits
+      another docstring (`:39-42`).
+    - `services/xstockstrat-agent/tests/conftest.py` — Steps 3 and 6; 345 adds a fixture.
+    - Root `CLAUDE.md` dependency tree, `docs/patterns/inter-service-mtls.md` peer-certificate
+      list, `docs/runbooks/mcp-tools.md` — Step 12; 345 adds its own lines to the same blocks.
+    - `docker-compose.yml` UI environment block — Step 10; 345 adds `APP_URL` nearby.
+    - `services/xstockstrat-ui/playwright.config.ts` env block — Step 11.
+    - `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — Step 8.
+    - `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-agent/docs/oauth.md`,
+      `services/xstockstrat-agent/docs/context-constitution.md` — Step 13.
+    - `services/xstockstrat-ui/CLAUDE.md` Environment Variables section — Step 14.
+  - `337-metrics-host-provider-label` (`in-progress`):
+    - `services/xstockstrat-agent/app/telemetry.py` (other functions) — Step 7.
+    - `services/xstockstrat-agent/tests/test_telemetry.py` — Step 6.
+    - `docs/patterns/observability.md` — Step 12.
+    - `docs/sdd/business-rules/platform.feature` (337 appends at the end; Step 15 edits `:795-798`).
+    - 337 also edits `scripts/check-otel-produced-signals.py`, which Steps 1, 7, 10 and 12 run; no
+      file overlap.
+  - `357-fix-portfolio-internal-position` (`in-progress`): `.github/workflows/ci.yml` only, at
+    `:1065`; Step 11 edits `:59`.
 - Feature branch: `feature/fix-mcp-tools-page` is not on origin
   (`git ls-remote --heads origin feature/fix-mcp-tools-page` → no output). `/sdd-execute` BRANCH SYNC
   creates it from `main-dev` (`.claude/skills/sdd-execute/templates/branch-sync.md` step 3), which
@@ -302,6 +322,9 @@ output. Expected reds: empty catalog (`@AC-6`), "DID NOT RAISE" for the three de
      inside the function body with no fallback (AGENT-2, D-34). It is for sync tests only.
 2. `tests/test_tools_endpoint.py`:
    - Rewrite the docstring (`:1-6`): the file tests the internal catalog and the removed public route.
+     The docstring and every comment in this file must not contain the literal `api/tools`; the only
+     occurrence left in the file is the request path inside the `@AC-4` test (the Verification grep
+     and Step 15's survivor list depend on it).
    - `_catalog()` returns `{t["name"]: t for t in catalog_tools()}`.
    - `test_list_tools_returns_all_registered_tools` (name kept) and
      `test_list_tools_entries_have_description_and_input_schema` read `catalog_tools()` instead of
@@ -493,8 +516,10 @@ grep -n "CLIENT only" app/mtls.py   # expect no output
 **Reviewers**: `xstockstrat-agent` owner — telemetry signals consistent with the other gRPC servers
 
 **Codebase Evidence**:
-- `tests/conftest.py`: `otel_reset` `:301-333` neutralises only `GrpcAioInstrumentorClient`
-  (`:308,320`); `metric_reader` `:336-345`.
+- `tests/conftest.py`: the `otel_reset` fixture neutralises only `GrpcAioInstrumentorClient`; the
+  `metric_reader` fixture follows it. On the stamped tree these are at `:301-333` (`:308,320`) and
+  `:336-345`; Step 3 adds `catalog_tools()` above them in the same file, so locate both by symbol
+  name, not by line.
 - Telemetry tests to port: `services/xstockstrat-ingest/tests/test_telemetry.py:113-115` (`VECTORS`),
   `:166` (`_duration_points`), `:287-315` (status vectors), `:318` (non-server spans);
   server-instrumentor neutralising in `services/xstockstrat-ingest/tests/conftest.py:118,130`.
@@ -516,7 +541,7 @@ duration points for the status vectors, instrumentor not called.
 
 **Instructions**:
 1. `tests/conftest.py`:
-   - In `otel_reset` (`:301-333`), also neutralise
+   - In the `otel_reset` fixture (locate by name), also neutralise
      `GrpcAioInstrumentorServer.instrument`, as `services/xstockstrat-ingest/tests/conftest.py:130` does.
 2. `tests/test_telemetry.py`: port `VECTORS`, `_duration_points`, the status-vector test and the
    non-server/non-gRPC span test from the ingest file (anchors above) against the agent's
@@ -816,7 +841,8 @@ passes (O-15, O-19). `docker-compose.yml` has no guard (design.md: local-dev onl
 bash scripts/homelab-render.test.sh
 shellcheck scripts/homelab-render.test.sh && shfmt -d -i 2 scripts/homelab-render.test.sh
 grep -n "AGENT_ENDPOINT" docker-compose.yml deploy/homelab/compose.yml   # one hit per file
-grep -n "50061" docker-compose.yml deploy/homelab/compose.yml   # GRPC_PORT + AGENT_ENDPOINT; never under ports:
+grep -n "50061" docker-compose.yml deploy/homelab/compose.yml   # two hits per file: GRPC_PORT and AGENT_ENDPOINT
+python3 -c "import yaml; d=yaml.safe_load(open('docker-compose.yml')); assert not any('50061' in str(p) for s in d['services'].values() for p in (s.get('ports') or [])), '50061 is published'"   # local compose: 50061 is not under any ports: (homelab is covered by render-assert.jq:54 in the first command)
 python3 scripts/check-otel-produced-signals.py
 cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 && cd ../..
 ```
@@ -942,7 +968,8 @@ no production code.
 
 **Covers**: —
 
-**Instructions** (D-27):
+**Instructions** (D-27). New prose in these files must not contain the literal `api/tools`, except
+the one removal note in `docs/runbooks/mcp-tools.md` (item 2), which Step 15 lists as a survivor:
 1. Root `CLAUDE.md`: agent registry row gains gRPC port `50061` (internal tool catalog, UI
    certificate only); add the edge `xstockstrat-ui → xstockstrat-agent (gRPC ListTools, internal
    tool catalog)` to the dependency tree. No naming-convention exception — `AGENT_ENDPOINT` is an
@@ -997,7 +1024,8 @@ grep -n "GET /api/tools" docs/runbooks/reviewer-registry.md   # expect no output
 
 **Covers**: —
 
-**Instructions** (D-27):
+**Instructions** (D-27). New prose in these files must not contain the literal `api/tools`, except
+the closed findings entry (item 4), which Step 15 lists as a survivor:
 1. Agent `CLAUDE.md`: Role names the second listener (gRPC 50061, mTLS, `xstockstrat-ui` peer
    only, HTTP mode only); env block gains `GRPC_PORT=50061`; the mTLS note covers the server
    (missing `MTLS_*` now stops the process at boot in HTTP mode); Observability names
