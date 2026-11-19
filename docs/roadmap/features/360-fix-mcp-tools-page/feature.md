@@ -19,6 +19,7 @@
 | 2026-11-19 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 | 2026-11-19 | `implementation-ready` (unchanged) | /sdd-spec | Re-run: implementation spec revised for the impl-spec review findings (1 failure, 6 warnings closed); still 8 steps |
 | 2026-11-19 | `implementation-ready` (unchanged) | /sdd-spec | Spec re-shaped to 15 steps (four atomic units) so no hand-written step lists more than five files; content and order unchanged |
+| 2026-11-19 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (operator: no checkpoints); Steps 1+2 done |
 
 ---
 

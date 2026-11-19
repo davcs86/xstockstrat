@@ -280,3 +280,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   survivors are the check.
 - Round 4 did not re-read design.md, debate.md or acceptance.feature (round 3 did, against
   D-19..D-37 and each @AC); the round-3-to-4 change touched only Steps 3, 10 and 11.
+
+## Session 2026-11-19 — sdd-execute (sequential, no checkpoints)
+
+- Operator directive (chat, 2026-11-19): "merged, start execution in sequence mode, no checkpoints".
+  Taken as the mode-entry and up-front confirmations; checkpoint reports are printed without a gate.
+  Pushing `feature/fix-mcp-tools-page` authorized by the same directive.
+- Tree: `feature/fix-mcp-tools-page` created from `main-dev@7439fba` (PR #1588 merged).
+- Tooling setup (steps 1–15): uv ✓ 0.11 · ruff ✓ · python 3.13 ✓ · pnpm ✓ 9.15.9 · node v22.23.5
+  (table says 24 — used as-is) · go 1.27 ✓ · docker ✓ (daemon started) · jq ✓ · openssl ✓ ·
+  buf ✗ and Go codegen plugins ✗ → Docker codegen image (CI-equivalent) · shellcheck ✗ · shfmt ✗ ·
+  sops ✗ · mikefarah yq ✗ (host `yq` is a different tool) → decided per step at Steps 10/11 ·
+  doctl ✗ (operator gate only, not a step tool).
+- Re-spec gate: branch is `main-dev` itself, so anchors equal the spec's (no re-spec).
+
+### Step 1 — proto: Add package agent/v1 with AgentService.ListTools [done]
+- Created `packages/proto/agent/v1/agent.proto` (unit with Step 2). Toolchain preflight on the
+  untouched tree: empty `git diff packages/proto/gen/`. `buf lint` and `buf breaking` (against the
+  local feature branch) pass; `check-otel-produced-signals.py` exit 0. TDD: N/A (proto contract).
+- Files modified: `packages/proto/agent/v1/agent.proto`
+- Deviations: Deviation 1 (buf ran inside the codegen image).
+
+### Step 2 — proto-gen: Regenerate stubs for agent/v1 [done]
+- Generated the fourteen `agent/v1` stub files (unit with Step 1); no well-known-type file changed;
+  a second generation leaves `git diff --exit-code packages/proto/gen/` empty. TDD: N/A (generated).
+- Files modified: the fourteen `packages/proto/gen/{go,python,ts,ts/dist}/agent/v1/**` paths in the
+  step's `**Files**`.
+- Deviations: Deviation 1.

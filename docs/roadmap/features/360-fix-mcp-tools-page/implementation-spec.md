@@ -1,6 +1,6 @@
 # Implementation Spec: fix-mcp-tools-page
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-19
 **Feature**: `docs/roadmap/features/360-fix-mcp-tools-page/feature.md`
 **Total Steps**: 15
@@ -118,7 +118,7 @@ telemetry (D-30), and Steps 10 and 11 add platform guards for the deployment val
 
 ### Step 1 — proto: Add package agent/v1 with AgentService.ListTools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/agent/v1/agent.proto` — create
@@ -179,7 +179,7 @@ substitute another baseline.
 
 ### Step 2 — proto-gen: Regenerate stubs for agent/v1
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files** (names follow the committed `ledger/v1` trees — `git ls-files packages/proto/gen | grep ledger`):
 - `packages/proto/gen/go/agent/v1/agent.pb.go` — create
@@ -1128,4 +1128,11 @@ request in `services/xstockstrat-agent/tests/test_tools_endpoint.py`, the closed
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation 1 — Steps 1, 2 (2026-11-19)
+- **Spec said**: run `buf lint`, `buf breaking` and `./scripts/buf-gen.sh` on the host.
+- **Actual**: `buf` and the Go codegen plugins are not installed on the execute host. All three ran
+  inside the version-pinned `xstockstrat-codegen` image (`python3 scripts/localenv-setup.py`, and
+  `docker run … xstockstrat-codegen buf lint && buf breaking --against
+  "../../.git#branch=feature/fix-mcp-tools-page,subdir=packages/proto"`), with the same arguments.
+- **Disposition**: CI-equivalent fallback (sequential-mode verification fallback; Docker codegen is
+  the preferred path). No change to what was verified.
