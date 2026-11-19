@@ -9,7 +9,7 @@
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-19 | /sdd-design | 10 | 5 | 7 | 7 | 0 | yes |
-| 2 | 2026-11-19 | /sdd-design | 4 | 0 | 6 | 7 | 1 | yes |
+| 2 | 2026-11-19 | /sdd-design | 4 | 1 | 6 | 7 | 1 | yes |
 
 ## Settled Decisions
 
@@ -40,6 +40,7 @@
 | R-2 | 1 | Keep the public URL on DO, use `AGENT_ENDPOINT` only on homelab (or fall back when unset) | Contradicts D-1 (set everywhere, no fallback); two code paths; DO keeps hairpinning through public ingress | locked |
 | R-3 | 1 | Shared HTTP base-URL helper for the agent | One HTTP consumer; `connectClients.ts:17-26,55` builds gRPC transports (C-18 YAGNI) | locked |
 | R-5 | 1 | Server-side warn log when the catalog fetch throws or returns non-OK | User chose docs only at gate 1 (D-10); scope growth beyond the bug | locked |
+| R-6 | 2 | Pre-merge probe of the agent's private address from the running DO dev UI console | User chose the post-merge check only at gate 2 (D-7) | locked |
 | R-4 | 1 | Add a fetch timeout in this fix | Pre-existing gap shared with `agent-health/route.ts:15`; a new constant outside the bug's scope; logged to `services/xstockstrat-ui/docs/context-constitution-findings.md` instead | locked |
 
 ## Objections
@@ -50,7 +51,7 @@
 | O-1 | 1 | DO goes from a working public path to an unproven private address; a failure is a silent production regression, not a "safe" state (P-03) | no | closed @ round 1 (D-7: promotion gate + pre-decided remediation) |
 | O-2 | 1 | The `@AC-1` test asserted only fetch URLs, not the scenario's response body; stubbed `fetch` would leak without `vi.unstubAllGlobals()` (C-15) | no | closed @ round 1 (D-4) |
 | O-3 | 1 | `@AC-2` must unset the variable explicitly and make an unexpected fetch fail loudly (P-06, `fails.md:1556-1558`) | no | closed @ round 1 (D-4) |
-| O-4 | 1 | Nothing mechanical stops a spec from losing the variable again; `deploy/homelab/render-assert.jq` could assert the UI's `AGENT_ENDPOINT` (C-10, `fails.md:1553`) | no | closed @ round 1 (user: add the guard, D-9) |
+| O-4 | 1 | Nothing mechanical stops a spec from losing the variable again; `deploy/homelab/render-assert.jq` could assert the UI's `AGENT_ENDPOINT` (C-10, `fails.md:1553`) | no | reopened @ round 2 (user, context.md 2026-11-19 gate 2 — extend the guard to the DO specs) |
 | O-5 | 1 | Editing only the naming-table cell leaves the Rules bullet and the UI `*_ENDPOINT` count line contradicting it (C-18) | no | closed @ round 1 (D-6) |
 | O-6 | 1 | First plaintext inter-service hop is unrecorded against the mTLS contract (`inter-service-mtls.md:26`) | no | closed @ round 1 (D-6 scoped-exception line) |
 | O-7 | 1 | A malformed value (e.g. with a scheme) fails silently as `reachable: false`; optional warn log on the catch path (P-03) | no | closed @ round 1 (user: docs only, D-10; warn log locked as R-5) |
@@ -60,11 +61,11 @@
 | O-11 | 2 | A test-only first step lands red on its own step PR (C-08, step-constraints §C) | no | closed @ round 2 (D-12) |
 | O-12 | 2 | The route's own comment would still say "public" (root CLAUDE.md How to Act #5) | no | closed @ round 2 (D-13) |
 | O-13 | 2 | UI `CLAUDE.md:138` still says the UI consumes services "over gRPC" only; BFF-only sentence anchor is `:17-18` (C-18, C-01) | no | closed @ round 2 (D-14) |
-| O-14 | 2 | The manual post-merge DO gate is reactive: a failure is found only once `main-dev` carries the change, and `/promote` has no feature-specific prompt. A pre-merge probe from the running DO dev UI container (`wget http://<agent private domain>:9000/api/tools`) would turn it into a confirmation (P-03) | no | open |
+| O-14 | 2 | The manual post-merge DO gate is reactive: a failure is found only once `main-dev` carries the change, and `/promote` has no feature-specific prompt. A pre-merge probe from the running DO dev UI container (`wget http://<agent private domain>:9000/api/tools`) would turn it into a confirmation (P-03) | no | waived @ round 2 (user: post-merge check only; D-7 stands, pre-merge probe locked as R-6) |
 
 ## Reopen Petitions
 
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 2 | O-4 | `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts:87-98` already parses both DO specs inside the UI Vitest suite, so a DO-side `AGENT_ENDPOINT` presence guard needs no new harness (O-4/D-9 cited only the homelab jq check) | pending user |
+| P-1 | 2 | O-4 | `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts:87-98` already parses both DO specs inside the UI Vitest suite, so a DO-side `AGENT_ENDPOINT` presence guard needs no new harness (O-4/D-9 cited only the homelab jq check) | user reopened |

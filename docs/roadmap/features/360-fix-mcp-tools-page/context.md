@@ -42,3 +42,6 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   post-recon escalation signal; no CHANGE business rule.
 - Round 1 gate (operator): **Run another round**; O-4 → add the homelab render guard (D-9); O-7 →
   docs only, no warn log (D-10, R-5). Mode upgraded from 1 round to 2 at the operator's request.
+- Round 2 gate (operator): **Run another round**; O-14 waived — DO is verified post-merge only (D-7
+  stands; pre-merge probe locked as R-6); petition P-1 accepted — **O-4 reopened** to add a DO-side
+  `AGENT_ENDPOINT` guard in the UI Vitest suite (round 3 designs it).
