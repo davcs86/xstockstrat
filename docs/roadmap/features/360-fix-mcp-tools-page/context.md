@@ -89,3 +89,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   where still applicable.
 - Mode: full (proto change + two services are escalate signals). Scope now includes
   xstockstrat-agent and `packages/proto`.
+- Round 5 gate (operator): petitions P-2/P-3 accepted — **D-4 and D-11 reopened** (UI tests mock the
+  gRPC client; safeguards kept); petition P-4 accepted — **operator-run `doctl` schema check of the
+  rendered DO dev spec before merge** (D-29; the R-6 network probe stays locked); server telemetry on
+  the agent (D-30) and a `peer_identity.py` parity guard (D-31) added.
+- **C-16 sign-off (operator, 2026-11-19)**: `@AC-6 @FR-4 @feature-283` "The tool count is unchanged
+  and its surfaces agree" (`docs/sdd/business-rules/platform.feature:795-798`) may be reworded from
+  "the /api/tools catalog" to the new internal catalog RPC; the count (45) is unchanged.
+- Open for round 6 (blocking): O-32, O-34 (UI test design), O-35 (red for `@AC-5`/`@AC-6`); O-33.
