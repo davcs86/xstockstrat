@@ -26,3 +26,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `AGENT_PUBLIC_URL` to the internal address today (so the connector URL shown locally is internal) —
   pre-existing, not part of this fix unless design says otherwise.
 - Agent-side question (`GET /api/tools` unauthenticated) left open in the agent findings file
+- Operator constraint (2026-11-19, stated twice, "always"): the UI's BFF is the **only** entry point
+  for calls from the UI's client side. Browser code never calls the agent (or any backend) directly;
+  the authenticated BFF calls the agent inside the DO / homelab network. Recon must confirm no
+  client-side code reaches the agent today.
