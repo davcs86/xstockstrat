@@ -398,3 +398,21 @@ Deviations so far: Deviation 1 (buf via the codegen image). Next surface: ui (St
 Checkpoint report (no gate, per operator) — steps 1–9 done (surface: ui → backend), 6 pending.
 Out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none.
 Deviations: 1 (buf via codegen image), 2 (Playwright in CI mode). Next: Steps 10–11 (deployment).
+
+### Step 10 — test: Homelab and local compose — guard, then GRPC_PORT and AGENT_ENDPOINT [done]
+- Tool preflight: `shellcheck` 0.11.0 (`uv tool install shellcheck-py`) and `shfmt` v3.10.0
+  (`go install`) installed; `docker compose`, `jq`, `openssl`, `python3` present. Baseline before
+  any edit: render test passed, shell lint clean.
+- Guard first: `render-assert.jq` projects `AGENT_ENDPOINT`/`GRPC_PORT` and reports
+  `agent-endpoint` unless the UI value equals `xstockstrat-agent:<agent GRPC_PORT>`;
+  `homelab-render.test.sh` asserts the rendered value in case 1 and adds three mutation rows.
+- TDD red (guard on today's compose): `ASSERT FAIL: 1: render check failed (homelab-render-check:
+  render check failed: ["agent-endpoint"])`. Green after adding `GRPC_PORT: "50061"` (agent) and
+  `AGENT_ENDPOINT: xstockstrat-agent:50061` (UI) to both compose files: `all assertions passed`
+  (mutation rows: red N/A — guard self-check, after the unmodified-render baseline).
+- Verification: shellcheck + `shfmt -d -i 2` clean; one `AGENT_ENDPOINT` per file; 50061 not under
+  any `ports:` in `docker-compose.yml`; `check-otel-produced-signals.py` exit 0; agent suite
+  821 passed / 88.46% (≥ 40%).
+- Files modified: `deploy/homelab/render-assert.jq`, `scripts/homelab-render.test.sh`,
+  `deploy/homelab/compose.yml`, `docker-compose.yml`
+- Deviations: none.

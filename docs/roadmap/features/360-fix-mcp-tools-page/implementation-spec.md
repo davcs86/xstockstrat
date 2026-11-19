@@ -786,7 +786,7 @@ git diff --quiet HEAD -- src/app/accounts/api/agent-health/route.ts src/app/acco
 
 ### Step 10 — test: Homelab and local compose — guard, then GRPC_PORT and AGENT_ENDPOINT
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deployment specs (`xstockstrat-agent`, `xstockstrat-ui`); guard housed in the homelab
 render test
 **Files**:
