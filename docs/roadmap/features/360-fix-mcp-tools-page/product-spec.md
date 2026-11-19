@@ -32,28 +32,35 @@ agent's tools.
 
 ## Affected Services
 
-- xstockstrat-ui (BFF route)
-- Deployment specs that give the UI its environment: `deploy/homelab/compose.yml`,
-  `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml`
-- xstockstrat-agent: no code change (it already serves `GET /api/tools`)
+- xstockstrat-agent — new internal-only gRPC catalog endpoint (port 50061, mTLS, UI certificate only);
+  public `GET /api/tools` removed
+- xstockstrat-ui — BFF route calls the new RPC
+- `packages/proto` — new package `agent/v1`
+- Deployment specs: `deploy/homelab/compose.yml`, `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml`
+
+## Consumer Surface(s)
+
+- UI: `/accounts/mcp-tools` page (xstockstrat-ui, `/accounts` segment)
+- Agent MCP tools: none change (the catalog lists them; no tool behavior changes)
 
 ## Fix Scope
 
-- [x] No proto changes anticipated
+- [ ] Proto change: **yes** — new package `agent/v1` (additive)
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated (no `WatchConfig` key; one new UI runtime env var)
 
-Operator decisions (2026-11-19, binding on design/spec):
+Operator decisions (2026-11-19, binding on design/spec; run 2 supersedes run 1 where they differ):
 
-1. New UI runtime env var **`AGENT_ENDPOINT`** — `host:port`, no scheme (`xstockstrat-agent:9000`),
-   following the root CLAUDE.md `<SERVICE>_ENDPOINT` rule; the route builds the `http://` URL. The
-   report's suggested `AGENT_INTERNAL_URL` is rejected (no `_URL` suffix on connection vars).
-2. **Set everywhere, no fallback** — the var is added to homelab compose, local docker-compose and
-   both DO specs; when unset the route answers `reachable: false`. It never falls back to
-   `AGENT_PUBLIC_URL`.
-3. Call chain: browser → authenticated UI BFF → agent over the internal network (DO or homelab).
-4. `AGENT_PUBLIC_URL` keeps its remaining uses unchanged: connector URL on `/accounts`, OAuth
-   metadata, the `/auth/oauth-login` callback check, the `agent-health` discovery probe.
+1. The UI's BFF is always the only entry point for the UI's client side.
+2. The catalog leaves the agent's public HTTP surface: the unauthenticated `GET /api/tools` on port
+   9000 is **removed**.
+3. The agent serves the catalog on a new internal-only port **50061**, **gRPC over the platform
+   mTLS**, accepting only the `xstockstrat-ui` certificate.
+4. UI runtime env var **`AGENT_ENDPOINT`** — gRPC `host:port` like every other `<SERVICE>_ENDPOINT`;
+   set in every deployment spec; no fallback to `AGENT_PUBLIC_URL`.
+5. `AGENT_PUBLIC_URL` keeps its other uses unchanged (connector URL, OAuth metadata, oauth-login
+   callback check, agent-health probe).
+6. Superseded (run 1): "no agent code change", plain-HTTP `AGENT_ENDPOINT` to port 9000.
 
 ## Acceptance Criteria
 
@@ -64,14 +71,14 @@ dev.
 Deployment acceptance (from the report, verified on homelab staging after deploy):
 
 - `/accounts/mcp-tools` lists the agent's tools.
-- `GET https://<public host>/agent/api/tools` from the internet still returns 404.
+- `GET https://<public host>/agent/api/tools` no longer returns the catalog on any deployment
+  (homelab edge 404 as before; DigitalOcean no longer serves it).
+- Port 50061 is not reachable from outside the deployment's internal network.
 - No change to the OAuth discovery URLs or the connector URL shown to users.
 
 ## Out of Scope
 
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix
-- Whether the agent should require a credential on `GET /api/tools` or stop serving it on the
-  externally published port — stays the open item in
-  `services/xstockstrat-agent/docs/context-constitution-findings.md` (found 2026-11-04), to be decided
-  once the UI no longer needs the public path.
+- Any change to the MCP transport, OAuth flow or tool behavior on the agent's public port 9000 beyond
+  removing `GET /api/tools`.
