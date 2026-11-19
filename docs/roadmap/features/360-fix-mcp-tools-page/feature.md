@@ -16,6 +16,7 @@
 | 2026-11-19 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from report `docs/reports/2026-11-19-mcp-tools-page-empty-on-homelab-defect.md` |
 | 2026-11-19 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, quick upgraded by the operator) and approved; recon.md + debate.md + design.md written |
 | 2026-11-19 | `design-approved` (unchanged) | /sdd-design | Design reopened by the operator and re-approved (run 2: 2 rounds, full): internal gRPC catalog endpoint on agent port 50061, public `/api/tools` removed; recon.md + debate.md + design.md rewritten |
+| 2026-11-19 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 
 ---
 
@@ -26,8 +27,23 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — decisions, rejected alternatives, objections
 - [Design](design.md) — approved approach
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-mcp-tools-page`_
+- [Implementation Spec](implementation-spec.md) — 8 steps (three atomic units)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+_Canonical snapshot from `/sdd-spec` (2026-11-19): the distinct `**Reviewers**` across all 8 steps of
+implementation-spec.md, per docs/runbooks/reviewer-registry.md. Stable unless `/sdd-spec` re-runs._
+
+| Role | Review Focus |
+|---|---|
+| Proto Reviewer | Field number uniqueness per message, `buf lint` and `buf breaking` pass (new package `agent/v1`, additive) |
+| `packages/proto` owner | Naming conventions, backward compatibility |
+| `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape), tool-count statements in sync, OAuth 2.1 edge-auth correctness and statelessness (`instance_count > 1` stays safe), no secret values in the catalog |
+| `xstockstrat-ui` owner | Connect-RPC call safety, no secret values rendered in UI |
+| Platform Lead | Port uniqueness (agent gRPC 50061), service registry consistency, inter-service dependency graph correctness |
 
 ---
 
@@ -40,4 +56,4 @@ the new endpoint.
 
 ## Next Action
 
-`/sdd-spec fix-mcp-tools-page` — generate implementation spec from the approved design
+`/sdd-review fix-mcp-tools-page impl-spec` — validate implementation spec, then `/sdd-execute fix-mcp-tools-page`

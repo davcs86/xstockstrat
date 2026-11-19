@@ -122,3 +122,49 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `@FR-N` tag gap (`@AC-3..6` untagged) → resolve before C-16 promotion.
 - Branch: the feature directory lives on `ccr-a72ccc3e-9kr7yq` (PR #1588 → `main-dev`);
   `feature/fix-mcp-tools-page` is created from `main-dev` after that PR merges.
+
+## Session 2026-11-19T19:36Z — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- Tree: spec evidence read on `ccr-a72ccc3e-9kr7yq@6916759` (= `origin/main-dev@5142fc5` + docs-only
+  commits). The tree-freshness rule names `main-dev` as TARGET while `feature/fix-mcp-tools-page`
+  does not exist on origin; the checkout was not switched because the feature directory is only on
+  this branch (same call as the sdd-design sessions above). No working-tree changes at boot.
+- Discovery ran inline (no `codebase-discovery` subagent available in this session); recon.md
+  anchors were re-read on the stamped tree.
+- Step shape: 1 `proto` + 2 `proto-gen` (unit); 3 agent `test` + 4 agent `service` (unit); 5 UI
+  `test` + 6 UI `service` (unit); 7 `test` (guards, then the four specs, Playwright, CI filter);
+  8 `docs`. `@AC-1..3` → Step 5; `@AC-4..6` → Step 3.
+- Key codebase findings:
+  - `packages/proto/gen/ts/dist/` is committed and holds no `_connect` output
+    (`gen/ts/tsconfig.json` excludes `**/*_connect.ts`); the UI imports `AgentService` from
+    `@xstockstrat/proto/agent/v1/agent_pb`. Nothing but `scripts/check-otel-produced-signals.py:200`
+    enumerates proto packages.
+  - `deploy/homelab/render-assert.jq:23-25` projects only named env keys, so the `agent-endpoint`
+    check needs `AGENT_ENDPOINT` and `GRPC_PORT` added to the projection.
+  - `services/xstockstrat-ui/tsconfig.json` includes `**/*.ts`, so `tsc --noEmit` compiles tests —
+    the reason Steps 5+6 are one unit.
+  - Residual `api/tools` grep at spec time: 20 hits in 15 files outside `docs/roadmap` and
+    `docs/reports`; expected survivors after Step 8 are listed in that step.
+  - `buf`, `sops`, `shellcheck`, `shfmt` and `doctl` are not installed on this host; Steps 1 and 7
+    carry a tool preflight.
+- Spec-level choices not fixed by design.md (for impl-spec review):
+  - `build_catalog_server` returns `(server, bound_port)`; D-21 says "returning the bound port",
+    but the caller also needs the server handle to start and stop it.
+  - Names `CatalogServicer`, `resolve_grpc_port()` and the conftest helper `catalog_tools()`.
+  - The D-34 skeleton also carries a no-op `_make_rpc_duration_processor`, so the ported telemetry
+    tests go red on behaviour, not on an import error.
+  - DO guard mutations: UI env deleted; UI value with a scheme; agent `GRPC_PORT` env deleted; port
+    removed from `internal_ports` (D-25 says "four mutations" without listing them).
+  - Now-false comments are fixed in the step that owns the file (agent `app/*` in Step 4,
+    `copilot.ts` in Step 6, test comments in Steps 3 and 5) rather than in the docs step.
+  - `agent_pki` in the agent `tests/test_mtls.py` is re-expressed through new `_ca`/`_leaf` helpers
+    (second consumer of the openssl recipe).
+
+## Open Threads (after sdd-spec — adds to the run-2 list above)
+
+- `345-authelia-sso` (`implementation-ready`) cites the agent route table at `app/main.py:250-267`;
+  Step 4 removes a line there → whichever merges second re-anchors by symbol; raise at
+  `/sdd-review fix-mcp-tools-page impl-spec` (feature-overlap).
+- Feature branch: `feature/fix-mcp-tools-page` still does not exist; Step 1's `buf breaking`
+  command needs it as a local ref.
