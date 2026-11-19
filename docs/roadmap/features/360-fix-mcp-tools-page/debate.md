@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: quick
-**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-19 | /sdd-design | 10 | 5 | 7 | 7 | 0 | yes |
 | 2 | 2026-11-19 | /sdd-design | 4 | 1 | 6 | 7 | 1 | yes |
+| 3 | 2026-11-19 | /sdd-design | 1 | 2 | 6 | 5 | 0 | yes |
 
 ## Settled Decisions
 
@@ -30,6 +31,7 @@
 | D-12 | 2 | Step shape for `/sdd-spec`: the route test and the route change land as one atomic unit (`**Lands with**`), so no step PR is red on its own; the infra step holds its own red→green (jq guard and test lines first, then the value in the four specs and Playwright); docs last | `.claude/skills/sdd-spec/reference/step-constraints.md` §C | settled |
 | D-13 | 2 | The route's header comment is rewritten with the change (≤2 lines): catalog comes from `AGENT_ENDPOINT` on the internal network; unset or any failure ⇒ `{tools: [], reachable: false}`; never `AGENT_PUBLIC_URL` | `route.ts:11-12` | settled |
 | D-14 | 2 | D-6 additions: `services/xstockstrat-ui/CLAUDE.md` Dependencies intro (`:138`, "over gRPC") gains the internal-HTTP agent catalog; the BFF-only sentence (`:17-18`) is widened to "backends or the agent" and is the single durable home for the operator's BFF-only rule; D-9's guard is exercised by one rendered-value assertion and two mutations (var deleted; var set with a scheme) in `scripts/homelab-render.test.sh` | `services/xstockstrat-ui/CLAUDE.md:17-18,138`; `scripts/homelab-render.test.sh:56,92,180-189`; `deploy/homelab/render-assert.jq:23,53` | settled |
+| D-15 | 3 | DO-side guard (reopened O-4): a new `describe` in the existing `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts`, reusing its file-local `ROOT`/`readSpec`/`Env`/`Component`, with ONE file-local predicate `agentEndpointDrift(spec)` returning `null` or a reason. It compares the UI component's `AGENT_ENDPOINT` to `${xstockstrat-agent.PRIVATE_DOMAIN}:<agent http_port>` read from the agent's `services:` entry, and fails closed when the agent or its `http_port` is missing. Positive test: `null` on `.do/app.yaml` and `.do/app.dev.yaml`. Mutation test on a clone: baseline `null` first, then non-null after each of (a) env deleted, (b) value with a scheme, (c) agent `http_port` changed. No literal port pin. File header rewritten (≤2 lines) to cover the agent endpoint; `describe` named without an `AC-n` prefix; file not renamed. The file is in the infra step's `**Files**`; real red = positive test failing before the specs gain the value; mutation rows are "red N/A — guard self-check". `docker-compose.yml` is not guarded: local-dev only, not deployed, a regression there shows as an empty catalog; homelab is covered by D-9/D-14. No `@AC-*` addition. CI already runs it on DO-spec-only changes | `dbTlsPlatformGuard.test.ts:1-2,9,47-48,62-64,88,92-98`; `.do/app.yaml:336,342,607,652`; `.do/app.dev.yaml:338,344,604,649`; `.github/workflows/ci.yml:64,746,754,771-773,796` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -41,6 +43,8 @@
 | R-3 | 1 | Shared HTTP base-URL helper for the agent | One HTTP consumer; `connectClients.ts:17-26,55` builds gRPC transports (C-18 YAGNI) | locked |
 | R-5 | 1 | Server-side warn log when the catalog fetch throws or returns non-OK | User chose docs only at gate 1 (D-10); scope growth beyond the bug | locked |
 | R-6 | 2 | Pre-merge probe of the agent's private address from the running DO dev UI console | User chose the post-merge check only at gate 2 (D-7) | locked |
+| R-7 | 3 | DO guard as a literal-only pin (`...:9000` and `http_port == 9000`) | Fails a legitimate coordinated port move and tests a different predicate than its own mutation rows (C-18, P-06) | locked |
+| R-8 | 3 | Extract the YAML helpers into a shared module plus a separate `agentEndpointPlatformGuard.test.ts` | Refactors a file this bug does not own for ~25 lines; revisit when a third unrelated spec guard appears (C-18 YAGNI) | locked |
 | R-4 | 1 | Add a fetch timeout in this fix | Pre-existing gap shared with `agent-health/route.ts:15`; a new constant outside the bug's scope; logged to `services/xstockstrat-ui/docs/context-constitution-findings.md` instead | locked |
 
 ## Objections
@@ -51,7 +55,7 @@
 | O-1 | 1 | DO goes from a working public path to an unproven private address; a failure is a silent production regression, not a "safe" state (P-03) | no | closed @ round 1 (D-7: promotion gate + pre-decided remediation) |
 | O-2 | 1 | The `@AC-1` test asserted only fetch URLs, not the scenario's response body; stubbed `fetch` would leak without `vi.unstubAllGlobals()` (C-15) | no | closed @ round 1 (D-4) |
 | O-3 | 1 | `@AC-2` must unset the variable explicitly and make an unexpected fetch fail loudly (P-06, `fails.md:1556-1558`) | no | closed @ round 1 (D-4) |
-| O-4 | 1 | Nothing mechanical stops a spec from losing the variable again; `deploy/homelab/render-assert.jq` could assert the UI's `AGENT_ENDPOINT` (C-10, `fails.md:1553`) | no | reopened @ round 2 (user, context.md 2026-11-19 gate 2 — extend the guard to the DO specs) |
+| O-4 | 1 | Nothing mechanical stops a spec from losing the variable again; `deploy/homelab/render-assert.jq` could assert the UI's `AGENT_ENDPOINT` (C-10, `fails.md:1553`) | no | closed @ round 3 (homelab D-9/D-14 + DO D-15; reopened @ round 2 by user via P-1) |
 | O-5 | 1 | Editing only the naming-table cell leaves the Rules bullet and the UI `*_ENDPOINT` count line contradicting it (C-18) | no | closed @ round 1 (D-6) |
 | O-6 | 1 | First plaintext inter-service hop is unrecorded against the mTLS contract (`inter-service-mtls.md:26`) | no | closed @ round 1 (D-6 scoped-exception line) |
 | O-7 | 1 | A malformed value (e.g. with a scheme) fails silently as `reachable: false`; optional warn log on the catch path (P-03) | no | closed @ round 1 (user: docs only, D-10; warn log locked as R-5) |
@@ -62,6 +66,11 @@
 | O-12 | 2 | The route's own comment would still say "public" (root CLAUDE.md How to Act #5) | no | closed @ round 2 (D-13) |
 | O-13 | 2 | UI `CLAUDE.md:138` still says the UI consumes services "over gRPC" only; BFF-only sentence anchor is `:17-18` (C-18, C-01) | no | closed @ round 2 (D-14) |
 | O-14 | 2 | The manual post-merge DO gate is reactive: a failure is found only once `main-dev` carries the change, and `/promote` has no feature-specific prompt. A pre-merge probe from the running DO dev UI container (`wget http://<agent private domain>:9000/api/tools`) would turn it into a confirmation (P-03) | no | waived @ round 2 (user: post-merge check only; D-7 stands, pre-merge probe locked as R-6) |
+| O-15 | 3 | DO guard's mutation rows used a different predicate than the positive test and had no baseline, so they could pass vacuously (P-06, C-08) | yes | closed @ round 3 (D-15: one predicate, baseline first, fail-closed) |
+| O-16 | 3 | Literal `http_port == 9000` pin contradicts the "derived" expectation (C-18) | no | closed @ round 3 (D-15: derived only; R-7) |
+| O-17 | 3 | New describe makes the file header/name partly inaccurate (C-18) | no | closed @ round 3 (D-15: header rewritten, describe named, no rename) |
+| O-18 | 3 | Stated reason for excluding `docker-compose.yml` was wrong: a bad value degrades silently, it does not fail on first run (P-03) | no | closed @ round 3 (D-15 records the accurate reason) |
+| O-19 | 3 | "red N/A" for the mutation rows is valid only with a baseline assertion (P-06) | no | closed @ round 3 (D-15) |
 
 ## Reopen Petitions
 
