@@ -1005,7 +1005,7 @@ grep -n "GET /api/tools" docs/runbooks/reviewer-registry.md   # expect no output
 
 ### Step 13 — docs: Agent docs for the internal catalog endpoint
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` docs
 **Files**:
 - `services/xstockstrat-agent/CLAUDE.md` — modify

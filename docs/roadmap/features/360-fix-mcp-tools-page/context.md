@@ -453,3 +453,16 @@ Deviations: 1, 2. Next: Steps 12–15 (docs), then the integration PR.
 - Files modified: `CLAUDE.md`, `docs/runbooks/mcp-tools.md`, `docs/runbooks/reviewer-registry.md`,
   `docs/patterns/inter-service-mtls.md`, `docs/patterns/observability.md`
 - Deviations: none.
+
+### Step 13 — docs: Agent docs for the internal catalog endpoint [done]
+- Agent `CLAUDE.md`: second listener in Role, `GRPC_PORT` in the env block, mTLS note covers the
+  server and the boot failure, Observability names `rpc.server.duration`. `oauth.md`: old route row
+  deleted. Constitution: line 5 and the OTel Pointers row corrected. Findings: the 2026-11-04 item
+  closed by this feature; the cancel-status telemetry gap added as open (D-37, R-13).
+- Verification: markdownlint 0 issues; `check-context-map.py` exit 0; `tests/test_tools_endpoint.py`
+  11 passed; `GRPC_PORT` present in the agent `CLAUDE.md`; no old route name in `oauth.md`.
+  TDD: N/A (docs).
+- Files modified: `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-agent/docs/oauth.md`,
+  `services/xstockstrat-agent/docs/context-constitution.md`,
+  `services/xstockstrat-agent/docs/context-constitution-findings.md`
+- Deviations: none.
