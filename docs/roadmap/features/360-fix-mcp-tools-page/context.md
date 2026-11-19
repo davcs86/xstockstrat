@@ -466,3 +466,12 @@ Deviations: 1, 2. Next: Steps 12–15 (docs), then the integration PR.
   `services/xstockstrat-agent/docs/context-constitution.md`,
   `services/xstockstrat-agent/docs/context-constitution-findings.md`
 - Deviations: none.
+
+### Step 14 — docs: UI docs — BFF-only rule and AGENT_ENDPOINT [done]
+- UI `CLAUDE.md`: the BFF-only sentence now covers "the backends or the agent" and states the
+  operator's rule (the BFF is the only entry point for the UI's client side, always); Dependencies
+  gains the agent row (gRPC 50061); env list gains `AGENT_ENDPOINT`.
+- Verification: markdownlint 0 issues; `check-context-map.py` exit 0; `AGENT_ENDPOINT` present.
+  TDD: N/A (docs).
+- Files modified: `services/xstockstrat-ui/CLAUDE.md`
+- Deviations: none.

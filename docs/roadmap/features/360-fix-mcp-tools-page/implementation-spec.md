@@ -1057,7 +1057,7 @@ grep -n "api/tools" services/xstockstrat-agent/docs/oauth.md   # expect no outpu
 
 ### Step 14 — docs: UI docs — BFF-only rule and AGENT_ENDPOINT
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` docs
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify
