@@ -45,3 +45,5 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Round 2 gate (operator): **Run another round**; O-14 waived — DO is verified post-merge only (D-7
   stands; pre-merge probe locked as R-6); petition P-1 accepted — **O-4 reopened** to add a DO-side
   `AGENT_ENDPOINT` guard in the UI Vitest suite (round 3 designs it).
+- Round 3 gate (operator): **Run another round** (no open objection; round 4 is a whole-design
+  consistency pass over D-1..D-15).
