@@ -492,3 +492,31 @@ Deviations: 1, 2. Next: Steps 12–15 (docs), then the integration PR.
 All 15 steps done. `node scripts/check-config-wiring.mjs --final`: exit 0 (the two `REPORTED:`
 lines are pre-existing baseline findings in analysis and trading, unrelated to this feature; this
 feature declares no config key).
+
+## Session 2026-11-19 — sdd-execute (integration)
+**Steps this session**: 1–15 (units 1+2, 3+4+5, 6+7, 8+9; then 10–15)
+**Progress**: 15 done / 15 total
+**Stopped at**: all complete
+**Next**: operator gates on the integration PR (below)
+
+- Merge-order gate: no entry for this feature in `merge-order.md` — nothing blocks.
+- C-16 promotion (operator directive "no checkpoints" taken as the go-ahead; plan stated here and in
+  the PR): `@AC-1..3` → `services/xstockstrat-ui/acceptance/fix-mcp-tools-page.feature`,
+  `@AC-4..6` → `services/xstockstrat-agent/acceptance/fix-mcp-tools-page.feature`, verbatim with
+  `@feature-360`, no `@FR-N` (Track C form, as feature 353 was promoted; D-18). The promoted text
+  of `@AC-1` and `@AC-4` names the removed route, so the Step 15 survivor grep now also lists those
+  two suite lines — scenario text about the removal, not a stale reference.
+- Defect reports closed by this feature: none beyond its own report, whose sidecar already reads
+  `triaged` / `ref: feature:360-fix-mcp-tools-page` (resolution derives from `launched`).
+- Operator gates, not run here (no `doctl`, by design): D-36 pre-merge `doctl apps spec validate`
+  of the rendered DO dev spec; D-26 DO dev-app page check after merge (failure ⇒ revert the squash);
+  D-8 homelab acceptance after the staging deploy.
+
+Accountability (P-03):
+- Out-of-scope changes: none.
+- Open questions / items: the two DigitalOcean unknowns (dual-port component accepted; port
+  routable) — owned by the operator gates above.
+- Unaddressed review warnings: none.
+- Deviations: 1 (buf/codegen ran in the pinned Docker image), 2 (Playwright ran in CI mode).
+- Host note: Node v22.23.5 was used although the version table says 24; all UI checks passed, CI
+  runs them on 24.
