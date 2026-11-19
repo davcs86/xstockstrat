@@ -47,3 +47,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `AGENT_ENDPOINT` guard in the UI Vitest suite (round 3 designs it).
 - Round 3 gate (operator): **Run another round** (no open objection; round 4 is a whole-design
   consistency pass over D-1..D-15).
+- Round 4 gate (operator, 2026-11-19T15:45Z): **Approve this design**.
+
+## Session 2026-11-19T15:45Z — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui, xstockstrat-agent as callee, four
+  deployment specs; key reuse patterns: audit-route Vitest harness, `dbTlsPlatformGuard` spec parsing,
+  homelab render oracle).
+- Phase 1 Grilling: 4 rounds (quick, extended by the operator at gates 1–3). Chosen approach: BFF
+  fetches `http://${AGENT_ENDPOINT}/api/tools` on the internal network, value in every spec, no
+  fallback, guarded on homelab (jq oracle) and DO (Vitest spec check). Rejected: R-1..R-8 (debate.md).
+- Constitution rules touched: C-01, C-08, C-10, C-12/C-13, C-15, C-16, C-18, F-04, F-07, F-08, P-04,
+  P-06. Floor breaches: none.
+- Status: draft → design-approved.
+
+## Open Threads
+
+- DO private address unproven → D-7 manual gate before `main-dev` → `main` promotion (after step 3
+  deploys); remediation `internal_ports: [9000]`.
+- Homelab acceptance evidence (D-8) → after merge and staging deploy.
+- Fetch-timeout finding → written at step 4 (docs).
+- `@FR-N` tag gap (Track C template vs C-15; `@AC-3` untagged) → resolve before C-16 promotion.
+- Agent `GET /api/tools` auth → out of scope; agent findings file `:48`.
+- Branch: the feature directory currently lives on `ccr-a72ccc3e-9kr7yq` (PR #1588 → `main-dev`);
+  `feature/fix-mcp-tools-page` is created from `main-dev` after that PR merges.

@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-19 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from report `docs/reports/2026-11-19-mcp-tools-page-empty-on-homelab-defect.md` |
+| 2026-11-19 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, quick upgraded by the operator) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -21,6 +22,9 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Debate Register](debate.md) — decisions, rejected alternatives, objections
+- [Design](design.md) — approved approach
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-mcp-tools-page`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -34,4 +38,4 @@ network instead.
 
 ## Next Action
 
-`/sdd-design fix-mcp-tools-page quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-spec fix-mcp-tools-page` — generate implementation spec from the approved design
