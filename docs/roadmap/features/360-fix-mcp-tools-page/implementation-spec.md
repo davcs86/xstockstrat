@@ -514,7 +514,7 @@ grep -n "CLIENT only" app/mtls.py   # expect no output
 
 ### Step 6 — test: Agent gRPC server telemetry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/conftest.py` — modify
@@ -567,7 +567,7 @@ ruff check . && ruff format --check .
 
 ### Step 7 — service: Agent gRPC server instrumentation and rpc.server.duration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/telemetry.py` — modify

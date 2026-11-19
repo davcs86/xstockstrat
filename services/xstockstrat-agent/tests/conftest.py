@@ -338,7 +338,10 @@ def otel_reset(monkeypatch):
 
     from opentelemetry import metrics, trace
     from opentelemetry._logs import _internal as logs_internal
-    from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorClient
+    from opentelemetry.instrumentation.grpc import (
+        GrpcAioInstrumentorClient,
+        GrpcAioInstrumentorServer,
+    )
     from opentelemetry.metrics import _internal as metrics_internal
     from opentelemetry.util._once import Once
 
@@ -351,6 +354,7 @@ def otel_reset(monkeypatch):
     monkeypatch.setenv("NO_PROXY", "127.0.0.1")
     monkeypatch.setenv("no_proxy", "127.0.0.1")
     monkeypatch.setattr(GrpcAioInstrumentorClient, "instrument", lambda self, **kw: None)
+    monkeypatch.setattr(GrpcAioInstrumentorServer, "instrument", lambda self, **kw: None)
     root = logging.getLogger()
     handlers_before = list(root.handlers)
     yield

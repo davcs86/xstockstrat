@@ -341,3 +341,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `cmp` with the ingest copy identical; no `list_tools_metadata` / old route left in `app/`.
 - Files modified: `app/catalog_service.py`, `app/peer_identity.py`, `app/mtls.py`, `app/main.py`
 - Deviations: none. In scope for lint: removed the now-unused `JSONResponse` import in `app/main.py`.
+
+### Step 6 — test: Agent gRPC server telemetry [done]
+- Unit with Step 7. `otel_reset` also neutralises `GrpcAioInstrumentorServer`; `test_telemetry.py`
+  gains the shared status-vector cases, the non-server/non-gRPC case and an "init instruments the
+  gRPC server" case.
+- TDD red (against the uncommitted skeleton: bucket constant + no-op processor, no server
+  instrumentor): 8 failed / 19 passed — 7 status vectors `assert 0 == 1` (no duration point),
+  instrumentor `assert [] == [1]`. The non-server/non-gRPC case passes before and after
+  (characterization — red N/A).
+- TDD green: `tests/test_telemetry.py` 27 passed; full suite 821 passed, coverage 88.46% (≥ 40%).
+- Files modified: `tests/conftest.py`, `tests/test_telemetry.py`
+- Deviations: none.
+
+### Step 7 — service: Agent gRPC server instrumentation and rpc.server.duration [done]
+- Unit with Step 6. `app/telemetry.py`: `RPC_DURATION_BUCKETS_MS`, `grpc_status_code`,
+  `_make_rpc_duration_processor` (registered on the tracer provider), `GrpcAioInstrumentorServer`
+  beside the client instrumentor, docstrings corrected; no cancel-status interceptor (R-13).
+  `app/tool_metrics.py` uses the shared bucket constant; its docstring no longer says "no gRPC server".
+- Verification: full suite 821 passed / 88.46%; ruff clean; the two stale phrases are gone from
+  `app/`; `check-otel-produced-signals.py` exit 0.
+- Files modified: `app/telemetry.py`, `app/tool_metrics.py`
+- Deviations: none.
+
+Checkpoint report (no gate, per operator) — steps 1–7 done (surface: backend → agent), 8 pending.
+Out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none.
+Deviations so far: Deviation 1 (buf via the codegen image). Next surface: ui (Steps 8–9).
