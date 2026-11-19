@@ -16,9 +16,14 @@ then the UI BFF with its tests (Steps 5+6); then the deployment values behind tw
 docs last (Step 8). Three pairs are atomic units because neither member passes its own verification
 alone. One squash reaches `main-dev`.
 
-Evidence was read on `ccr-a72ccc3e-9kr7yq@6916759` (= `origin/main-dev@5142fc5` plus docs-only
-commits under `docs/`); every `path:line` below is from that tree. Re-check anchors after any
-`main-dev` merge into the feature branch (`fails.md:3926`).
+Evidence was read on `ccr-a72ccc3e-9kr7yq@6916759` and re-read on `ccr-a72ccc3e-9kr7yq@4fdea96`
+(both = `origin/main-dev@5142fc5` plus docs-only commits under `docs/`); every `path:line` below is
+from that tree. Re-check anchors after any `main-dev` merge into the feature branch
+(`fails.md:3926`).
+
+Steps 3, 7 and 8 each list more than five files. The step shape is fixed by `design.md` § Step
+shape (D-28): each of them is one red-green cycle or one sweep, and splitting it would leave a
+commit that fails its own verification.
 
 **Consumer surface (C-14).** UI `/accounts/mcp-tools` is reached by Step 6: the page
 (`src/app/accounts/mcp-tools/page.tsx:69`) already calls the BFF route, so only the route changes.
@@ -66,6 +71,17 @@ an acceptance scenario (D-16, D-25).
   HTTP mode (D-27).
 - Cross-feature: `345-authelia-sso` (`implementation-ready`) cites the agent route table at
   `app/main.py:250-267`; Step 4 removes one line there. Whichever merges second re-anchors by symbol.
+  Its `.github/workflows/ci.yml` path-filter edit is on a line next to the one Step 7 edits
+  (rebase only).
+- Cross-feature: `337-metrics-host-provider-label` (`in-progress`) edits other functions in
+  `services/xstockstrat-agent/app/telemetry.py`, and `docs/patterns/observability.md` and
+  `docs/sdd/business-rules/platform.feature` (rebase only; re-read the Step 4 and Step 8 anchors in
+  those files after it merges).
+- Feature branch: `feature/fix-mcp-tools-page` is not on origin
+  (`git ls-remote --heads origin feature/fix-mcp-tools-page` → no output). `/sdd-execute` BRANCH SYNC
+  creates it from `main-dev` (`.claude/skills/sdd-execute/templates/branch-sync.md` step 3), which
+  needs the feature directory on `main-dev` first (PR #1588). Step 1's `buf breaking` baseline is
+  that local branch.
 
 ---
 
@@ -91,6 +107,8 @@ Connect-RPC call safety
 - Lint profile: `packages/proto/buf.yaml:7-12` (STANDARD minus three rules).
 - `scripts/check-otel-produced-signals.py:197-231` reads every `packages/proto/<svc>/v1/*.proto` and
   fails if a stream RPC shares a name with a unary one; `ListTools` is unary and the name is unused.
+- `buf breaking` baseline: the local branch `feature/fix-mcp-tools-page`, created by BRANCH SYNC
+  before this step (§ Step Dependencies); it is not on origin at spec time.
 
 **Lands with**: `Step 2`
 
@@ -119,9 +137,12 @@ Connect-RPC call safety
 
 **Verification**:
 ```bash
+git rev-parse --verify --quiet feature/fix-mcp-tools-page   # must print a sha; the baseline branch exists locally
 cd packages/proto && buf lint && buf breaking --against "../../.git#branch=feature/fix-mcp-tools-page,subdir=packages/proto"
 cd ../.. && python3 scripts/check-otel-produced-signals.py
 ```
+If the first command prints nothing, stop: BRANCH SYNC did not create the feature branch. Do not
+substitute another baseline.
 
 ---
 
@@ -144,8 +165,20 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
 - `packages/proto/gen/ts/dist/agent/v1/agent.d.ts` — create
 - `packages/proto/gen/ts/dist/agent/v1/agent_pb.js` — create
 - `packages/proto/gen/ts/dist/agent/v1/agent_pb.d.ts` — create
-- `packages/proto/gen/**` — modify, only if `buf-gen.sh` rewrites another generated file
-  (comment-only refresh; `insights.md:895` says commit it)
+- The twelve committed well-known-type files — modify, each only if `buf-gen.sh` rewrites it with
+  a comment-only refresh (`insights.md:895-897` says commit it):
+  - `packages/proto/gen/ts/google/protobuf/field_mask.ts`
+  - `packages/proto/gen/ts/google/protobuf/struct.ts`
+  - `packages/proto/gen/ts/google/protobuf/timestamp.ts`
+  - `packages/proto/gen/ts/google/protobuf/wrappers.ts`
+  - `packages/proto/gen/ts/dist/google/protobuf/field_mask.js`
+  - `packages/proto/gen/ts/dist/google/protobuf/field_mask.d.ts`
+  - `packages/proto/gen/ts/dist/google/protobuf/struct.js`
+  - `packages/proto/gen/ts/dist/google/protobuf/struct.d.ts`
+  - `packages/proto/gen/ts/dist/google/protobuf/timestamp.js`
+  - `packages/proto/gen/ts/dist/google/protobuf/timestamp.d.ts`
+  - `packages/proto/gen/ts/dist/google/protobuf/wrappers.js`
+  - `packages/proto/gen/ts/dist/google/protobuf/wrappers.d.ts`
 
 **Reviewers**: inherited from Step 1
 
@@ -156,6 +189,8 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
 - `dist/` is committed and holds no `_connect` output: `packages/proto/gen/ts/tsconfig.json`
   excludes `**/*_connect.ts`; `git ls-files` shows `dist/ledger/v1/{ledger,ledger_pb}.{js,d.ts}` only.
 - TS exports are a wildcard: `packages/proto/gen/ts/package.json:5-7` (`"./*": "./dist/*.js"`).
+- Well-known types are generated for TypeScript only:
+  `git ls-files packages/proto/gen | grep google/protobuf` → the twelve paths listed above.
 - No top-level Python module named `agent` exists in any service
   (`grep -rnE "^(import|from) agent" services --include=*.py` → no hits), so the generated
   top-level `agent` package collides with nothing.
@@ -170,14 +205,15 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
 
 **Instructions**:
 1. Run `./scripts/buf-gen.sh` from the repo root.
-2. Stage every file it created or changed under `packages/proto/gen/`. Do not hand-edit generated
-   files. If a file outside the list above changes with more than a comment refresh, stop and
-   record a deviation.
+2. Stage every file it created or changed under `packages/proto/gen/` that is in `**Files**`. Do
+   not hand-edit generated files. If any path outside `**Files**` changes, or a well-known-type
+   file changes by more than a comment refresh, stop and record a deviation that names each path
+   exactly (F-08) — do not stage it.
 
 **Verification**:
 ```bash
 ./scripts/buf-gen.sh && git status --porcelain packages/proto/gen/
-# expect only the agent/v1 files (plus any comment-only refresh); after staging:
+# every path printed must be in this step's Files list; after staging:
 ./scripts/buf-gen.sh && git diff --exit-code packages/proto/gen/
 ls packages/proto/gen/python/agent/v1/agent_pb2_grpc.py packages/proto/gen/ts/dist/agent/v1/agent_pb.js
 ```
@@ -240,7 +276,12 @@ inside this unit (D-34), never against an import error: `app/catalog_service.py`
 check, and `build_catalog_server`; `mtls.server_credentials()` with server TLS only (no client
 auth); `telemetry.RPC_DURATION_BUCKETS_MS` and a `_make_rpc_duration_processor()` that returns a
 no-op span processor. The skeleton leaves `app/main.py` untouched and does not create
-`app/peer_identity.py`. The PR lists the skeleton files beside the red output. Expected reds: empty
+`app/peer_identity.py`, so that file is absent during the red and the parity test fails on its
+existence assertion (it reads the three files by path; it imports none of them). The skeleton is
+an uncommitted working-tree stage of this unit: its three files (`app/catalog_service.py`,
+`app/mtls.py`, `app/telemetry.py`) are in Step 4's `**Files**`, nothing is committed under Step 3
+alone, and Step 4 replaces the skeleton before the unit's single commit (F-08, F-05). The PR lists
+the skeleton files beside the red output. Expected reds: empty
 catalog (`@AC-6` and every migrated catalog test), "DID NOT RAISE" for the three denial rows
 (`@AC-5`), status 200 instead of 401 (`@AC-4`), "DID NOT RAISE" for `_run_http`, zero duration
 points, instrumentor not called, agent `peer_identity.py` missing.
@@ -411,7 +452,7 @@ cd services/xstockstrat-agent
 uv run pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
 cmp app/peer_identity.py ../xstockstrat-ingest/app/peer_identity.py
-grep -n "list_tools_metadata\|api/tools" app/   # expect no output
+grep -rn "list_tools_metadata\|api/tools" app/   # expect no output
 grep -rn "CLIENT only\|has no gRPC server\|rather than a gRPC server" app/   # expect no output
 ```
 
@@ -475,8 +516,15 @@ gate exists today).
      session for `TEST_USER_ID` and reset in `beforeEach`.
    - `@/lib/connectClients` mocked as `{ get agentClient() { return holder.client; } }` over a
      hoisted holder (O-32) whose default client has a `listTools` `vi.fn()`.
-   - In **every** case: `fetch` stubbed with a function that throws, and `AGENT_PUBLIC_URL` stubbed
-     to a public URL (O-34). `afterEach` calls `vi.unstubAllGlobals()` and `vi.unstubAllEnvs()`.
+   - Fallback, allowed by this spec (design.md § Open Risks: the getter mock is unexecuted): if
+     the getter does not hand each case its own client, mock per case with
+     `vi.doMock('@/lib/connectClients', …)`, `vi.resetModules()` and `await import('./route')`
+     (the form at `src/app/config-ui/api/audit/route.test.ts:32,40`). The cases and assertions
+     below do not change. Record which form was used in `context.md`.
+   - In **every** case: `fetch` stubbed with a `vi.fn()` that throws, and `AGENT_PUBLIC_URL`
+     stubbed to a public URL (O-34). Every "`fetch` not called" below is an assertion on that
+     stub's call count — the route's `catch` hides the throw (`fails.md:4231-4234`). `afterEach`
+     calls `vi.unstubAllGlobals()` and `vi.unstubAllEnvs()`.
    - `@AC-1`: `listTools` resolves `{ tools: SAMPLE_TOOLS }` → status 200, body
      `{ tools: SAMPLE_TOOLS, reachable: true }`; `listTools` called once with `{}` and headers
      whose `HEADER_USER_ID` is the session user; `fetch` not called.
@@ -533,9 +581,11 @@ Dependencies. `AGENT_ENDPOINT` is absent from all five today: `grep -n AGENT_END
   the public catalog), `:17-27`, `:30` (`withBffMetrics`, kept).
 - Page contract: `src/app/accounts/mcp-tools/page.tsx:69,105-110` (`reachable === false` message) —
   unchanged.
-- Other `AGENT_PUBLIC_URL` readers, not touched: `src/app/accounts/api/agent-health/route.ts:11`,
+- `grep -rn "process\.env\.AGENT_PUBLIC_URL" src` → six reads today: this route (`:17`) and five
+  that are not touched — `src/app/accounts/api/agent-health/route.ts:11`,
   `src/app/accounts/layout.tsx:19`, `src/app/api/oauth/authorization-server/route.ts:9`,
   `src/app/api/oauth/protected-resource/route.ts:9`, `src/app/auth/oauth-login/page.tsx:15`.
+  (The bare name also appears in comments and in `src/lib/oauthCallback*.ts`; those are not reads.)
 - Stale comment: `src/lib/copilot.ts:14` ("at runtime (GET /api/tools)").
 - Header propagation (C-03, PLAT-4): `restBackendHeaders` sends `x-user-id`, `x-access-scope` and
   `x-trace-id` (`src/lib/restBackendHeaders.ts:9-15`).
@@ -570,8 +620,11 @@ pnpm exec vitest run src/app/accounts/api/mcp-tools/route.test.ts src/lib/connec
 pnpm run test:coverage
 pnpm run lint && pnpm exec tsc --noEmit
 grep -n "restBackendHeaders" src/app/accounts/api/mcp-tools/route.ts          # header trio forwarded
-grep -n "AGENT_PUBLIC_URL\|api/tools\|fetch(" src/app/accounts/api/mcp-tools/route.ts   # expect no output
-grep -rn "AGENT_PUBLIC_URL" src --include=*.ts --include=*.tsx -l   # the five readers above, unchanged
+grep -n "process\.env\.AGENT_PUBLIC_URL\|api/tools\|fetch(" src/app/accounts/api/mcp-tools/route.ts   # expect no output (the header comment may name AGENT_PUBLIC_URL)
+grep -rn "process\.env\.AGENT_PUBLIC_URL" src --include=*.ts --include=*.tsx   # exactly the five reads listed in Codebase Evidence
+git diff --quiet HEAD -- src/app/accounts/api/agent-health/route.ts src/app/accounts/layout.tsx \
+  src/app/api/oauth/authorization-server/route.ts src/app/api/oauth/protected-resource/route.ts \
+  src/app/auth/oauth-login/page.tsx && echo "five readers unchanged"
 ```
 
 ---
@@ -687,6 +740,9 @@ grep -n "AGENT_ENDPOINT" docker-compose.yml deploy/homelab/compose.yml .do/app.y
 grep -n "50061" docker-compose.yml deploy/homelab/compose.yml .do/app.yaml .do/app.dev.yaml   # GRPC_PORT + AGENT_ENDPOINT (+ internal_ports on DO); never under ports:
 python3 scripts/check-otel-produced-signals.py
 python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/ci.yml'))"
+grep -n "^ *xstockstrat-agent: " .github/workflows/ci.yml \
+  | grep -F "services/xstockstrat-ingest/app/peer_identity.py" \
+  | grep -F "services/xstockstrat-indicators/app/peer_identity.py"   # one line: the agent filter carries both paths
 ```
 `pnpm run test:coverage` keeps the UI's ≥ 40% `src/lib/**` thresholds; the guard file itself adds
 no production code.

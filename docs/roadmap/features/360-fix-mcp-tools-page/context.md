@@ -176,16 +176,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   scenarios map to a test step; design fidelity confirmed for D-19..D-37.
 - Unresolved ✗ / ⚠ carried into execution:
   - Step 6: ✗ Verification contradicts Instruction 2 — the rewritten route comment must say "never
-    `AGENT_PUBLIC_URL`" while the grep for `AGENT_PUBLIC_URL` expects no output (F-05) — [ ] unaddressed
-  - Step 4: ⚠ `grep -n … app/` lacks `-r`, so it passes vacuously (P-06) — [ ] unaddressed
+    `AGENT_PUBLIC_URL`" while the grep for `AGENT_PUBLIC_URL` expects no output (F-05) — [x] addressed in implementation-spec.md (sdd-spec re-run 2026-11-19T19:56Z)
+  - Step 4: ⚠ `grep -n … app/` lacks `-r`, so it passes vacuously (P-06) — [x] addressed in implementation-spec.md (sdd-spec re-run 2026-11-19T19:56Z)
   - Step 2: ⚠ `packages/proto/gen/**` is a literal wildcard in `**Files**`; add unexpected files by
-    exact path (F-08) — [ ] unaddressed
+    exact path (F-08) — [x] addressed in implementation-spec.md (sdd-spec re-run 2026-11-19T19:56Z)
   - Step 1: ⚠ `buf breaking` baseline names `feature/fix-mcp-tools-page`, which does not exist yet;
-    use `main-dev` or create the branch first (C-09) — [ ] unaddressed
+    use `main-dev` or create the branch first (C-09) — [x] addressed in implementation-spec.md (sdd-spec re-run 2026-11-19T19:56Z)
   - Step 3: ⚠ state that the D-34 skeleton is a working-tree stage, not committed under Step 3, and
-    that `app/peer_identity.py` is absent during the red (F-08) — [ ] unaddressed
-  - Step 5: ⚠ record the `vi.doMock` + dynamic-import fallback for the getter-mock assumption — [ ] unaddressed
-  - Step 7: ⚠ the CI-filter check is only a YAML parse; grep for the two added paths (C-10) — [ ] unaddressed
+    that `app/peer_identity.py` is absent during the red (F-08) — [x] addressed in implementation-spec.md (sdd-spec re-run 2026-11-19T19:56Z)
+  - Step 5: ⚠ record the `vi.doMock` + dynamic-import fallback for the getter-mock assumption — [x] addressed in implementation-spec.md (sdd-spec re-run 2026-11-19T19:56Z)
+  - Step 7: ⚠ the CI-filter check is only a YAML parse; grep for the two added paths (C-10) — [x] addressed in implementation-spec.md (sdd-spec re-run 2026-11-19T19:56Z)
   - Steps 3, 7, 8: ⚠ more than 5 files each (accepted shape; noted) — [ ] unaddressed
 - Overlap findings (no FAIL-level; no merge-order row required):
   - `345-authelia-sso` (implementation-ready): same route table in
@@ -195,3 +195,50 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     — rebase-only.
   - `.github/workflows/ci.yml` path filters: adjacent lines with 345 — rebase-only.
   - 323 and 331 (spec-ready) also touch agent `main.py`; re-scan when they reach implementation-ready.
+
+## Session 2026-11-19T19:56Z — sdd-spec (re-run)
+
+- Re-ran `/sdd-spec` on an existing spec (status was already `implementation-ready`; design.md
+  unchanged since the first run). Revised implementation-spec.md in place — still 8 steps, same
+  step shape, same atomic units, same `**Covers**` mapping. Status → implementation-ready (unchanged).
+- Tree: `ccr-a72ccc3e-9kr7yq@4fdea96 ≡ origin/ccr-a72ccc3e-9kr7yq` (= `origin/main-dev@5142fc5` +
+  docs-only commits; 0 behind `origin/main-dev`). Same call as the earlier sessions: TARGET would be
+  `main-dev`, but the feature directory is only on this branch, so the checkout was not switched.
+  No working-tree changes at boot. Discovery ran inline (no `codebase-discovery` subagent in this
+  session); every anchor in the spec was re-read on this tree and matched.
+- Changes, each closing an item of the 19:45Z impl-spec review (checkboxes flipped in that entry):
+  - Step 6 (✗): the Verification grep now matches `process.env.AGENT_PUBLIC_URL` (a read), so the
+    header comment may name the variable; the "five readers unchanged" check is now a grep for the
+    five reads plus `git diff --quiet HEAD` on those five files.
+  - Step 4: `grep -rn` on `app/`.
+  - Step 2: the `packages/proto/gen/**` wildcard is replaced by the twelve committed
+    well-known-type paths (TypeScript only); any other changed path is a stop-and-deviate.
+  - Step 1: a `git rev-parse --verify` guard for the `buf breaking` baseline branch; stop if it is
+    missing, never substitute another baseline.
+  - Step 3: the D-34 skeleton is stated as an uncommitted working-tree stage whose files are in
+    Step 4's `**Files**`; `app/peer_identity.py` is absent during the red.
+  - Step 5: `vi.doMock` + dynamic import recorded as an allowed fallback; "`fetch` not called" is
+    stated as a call-count assertion (`fails.md:4231-4234`).
+  - Step 7: grep that the agent CI filter line carries both `peer_identity.py` paths.
+- Not changed: the "more than 5 files" warning for Steps 3, 7, 8 — the shape is fixed by D-28; the
+  reason is now stated in § Execution Summary. Its checkbox stays `[ ] unaddressed` for the operator.
+- Added to § Step Dependencies: the 337 and 345 rebase-only overlaps from the review, and the
+  feature-branch note below.
+- Key codebase findings (this run):
+  - `process.env.AGENT_PUBLIC_URL` has six read sites in the UI today (this route plus five); the
+    bare name also appears in comments and `src/lib/oauthCallback*.ts`, so a bare-name grep cannot
+    prove "readers unchanged".
+  - Committed well-known-type output exists for TypeScript only (twelve files under
+    `packages/proto/gen/ts/{,dist/}google/protobuf/`); Go and Python have none.
+  - `/sdd-execute` BRANCH SYNC creates `feature/fix-mcp-tools-page` from `main-dev`
+    (`templates/branch-sync.md` step 3), so the `buf breaking` baseline exists locally before Step 1.
+  - `packages/otel/produced-signals.tsv` names one producer file per language for
+    `rpc.server.duration`; the agent becoming a producer needs no registry row.
+  - Host tools: `buf`, `sops`, `shellcheck`, `shfmt`, `doctl` are still not installed here; `jq`,
+    `yq`, `docker` are.
+
+## Open Threads (after the sdd-spec re-run — adds to the lists above)
+
+- BRANCH SYNC branches from `main-dev`, so the feature directory must reach `main-dev` (PR #1588)
+  before `/sdd-execute` starts.
+- The impl-spec review predates this revision → re-run `/sdd-review fix-mcp-tools-page impl-spec`.
