@@ -615,7 +615,7 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
 
 ### Step 8 — test: UI route and client tests for the internal catalog; centralize the MCP tool fixture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/api/mcp-tools/route.test.ts` — create
@@ -713,7 +713,7 @@ The route test is outside the coverage scope (`src/lib/**`); its proof is the fi
 
 ### Step 9 — service: UI BFF reads the catalog over AgentService.ListTools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/connectClients.ts` — modify
@@ -1136,3 +1136,14 @@ request in `services/xstockstrat-agent/tests/test_tools_endpoint.py`, the closed
   "../../.git#branch=feature/fix-mcp-tools-page,subdir=packages/proto"`), with the same arguments.
 - **Disposition**: CI-equivalent fallback (sequential-mode verification fallback; Docker codegen is
   the preferred path). No change to what was verified.
+
+### Deviation 2 — Steps 8, 9, 11 (2026-11-19)
+- **Spec said**: `pnpm exec playwright test e2e/accounts/mcp-tools.spec.ts` (local dev-server mode).
+- **Actual**: on the execute host the dev server's cold compile exceeds the local 10 s test timeout
+  (the `warmup.setup.ts` project and `page.goto` both time out), and the Docker e2e runner
+  (`scripts/run-e2e.py`) cannot build its image here (the `corepack prepare pnpm` download is
+  refused inside the build). The spec was run as CI runs it:
+  `CI=1 pnpm exec playwright test e2e/accounts/mcp-tools.spec.ts --trace off` (production build,
+  CI timeouts, warm-up project included).
+- **Disposition**: CI-equivalent fallback. Same spec, same assertions.
+

@@ -367,3 +367,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 Checkpoint report (no gate, per operator) — steps 1–7 done (surface: backend → agent), 8 pending.
 Out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none.
 Deviations so far: Deviation 1 (buf via the codegen image). Next surface: ui (Steps 8–9).
+
+### Step 8 — test: UI route and client tests for the internal catalog; centralize the MCP tool fixture [done]
+- Unit with Step 9. `SAMPLE_TOOLS` moved to `e2e/fixtures/mcpTools.ts` (INVENTORY row added, the
+  "not centralized" row removed); new `route.test.ts` (`@AC-1`, `@AC-2` ×2, `@AC-3`) and an
+  `agentClient` block in `connectClients.test.ts`. Mock form used: the **getter** over a hoisted
+  holder worked as designed; the `vi.doMock` fallback was not needed.
+- TDD red (today's fetch-based route): 5 failed / 5 passed — `@AC-1`
+  `expected { tools: [], reachable: false } to deeply equal {…}`; `@AC-2` ×2
+  `expected "vi.fn()" to not be called at all, but actually been called 1 times` (the public-URL
+  fetch); client block `expected undefined to be null` / `to be defined`. `@AC-3` passes before and
+  after (characterization — red N/A).
+- TDD green: the two files 10 passed; `pnpm run test:coverage` 738 passed, 81.02% statements on
+  `src/lib/**` (≥ 40%); lint exit 0; `tsc --noEmit` exit 0; Playwright spec 5 passed (Deviation 2).
+- Files modified: `src/app/accounts/api/mcp-tools/route.test.ts`, `src/lib/connectClients.test.ts`,
+  `e2e/fixtures/mcpTools.ts`, `e2e/accounts/mcp-tools.spec.ts`, `e2e/fixtures/INVENTORY.md`
+- Deviations: Deviation 2 (Playwright run in CI mode).
+
+### Step 9 — service: UI BFF reads the catalog over AgentService.ListTools [done]
+- Unit with Step 8. `connectClients.ts`: `AGENT_ENDPOINT` (no default host) and `agentClient`
+  (`null` when unset); the route calls `agentClient.listTools` with `restBackendHeaders`, maps to
+  `{ name, description, inputSchema }`, and no longer reads `AGENT_PUBLIC_URL` or calls `fetch`;
+  `copilot.ts` comment reworded.
+- Verification: greps as specified — header trio forwarded; no `process.env.AGENT_PUBLIC_URL`,
+  old route name or `fetch(` in the route; exactly the five remaining readers, unchanged.
+- Files modified: `src/lib/connectClients.ts`, `src/app/accounts/api/mcp-tools/route.ts`,
+  `src/lib/copilot.ts`
+- Deviations: Deviation 2.
+
+Checkpoint report (no gate, per operator) — steps 1–9 done (surface: ui → backend), 6 pending.
+Out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none.
+Deviations: 1 (buf via codegen image), 2 (Playwright in CI mode). Next: Steps 10–11 (deployment).
