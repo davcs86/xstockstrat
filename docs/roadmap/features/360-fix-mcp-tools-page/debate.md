@@ -2,13 +2,14 @@
 
 **State**: in-debate
 **Mode**: quick
-**Rounds run**: 1 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-19 | /sdd-design | 10 | 5 | 7 | 7 | 0 | yes |
+| 2 | 2026-11-19 | /sdd-design | 4 | 0 | 6 | 7 | 1 | yes |
 
 ## Settled Decisions
 
@@ -25,6 +26,10 @@
 | D-9 | 1 | Homelab render guard (user, gate 1): `deploy/homelab/render-assert.jq` projects the UI's `AGENT_ENDPOINT` and fails unless it equals `xstockstrat-agent:9000`; its test fixture/script is updated with it | `deploy/homelab/render-assert.jq:23-25,54`; `scripts/homelab-render-check.sh:21` | settled |
 | D-10 | 1 | Malformed values (user, gate 1): documentation only — "host:port, no scheme" on the UI `CLAUDE.md` env line and beside the var in the specs; the catch path is not changed | `services/xstockstrat-ui/CLAUDE.md:216-217` | settled |
 | D-8 | 1 | Homelab acceptance by the operator after the staging deploy, evidence in `context.md`: logged-in BFF returns `reachable: true` with tools; external `GET /agent/api/tools` still 404; connector URL and OAuth discovery unchanged | `product-spec.md` § Acceptance Criteria | settled |
+| D-11 | 2 | Test detail, additive to D-4 (its throwing mock stays): every scenario also asserts on the mock — `@AC-2`/`@AC-3` `not.toHaveBeenCalled()`, `@AC-1` exactly one call to `http://xstockstrat-agent:9000/api/tools` — because the route's bare `catch` swallows a throw. `getSessionFromRequest` is a hoisted `vi.fn()` defaulting to a session and reset in `beforeEach`; `AGENT_PUBLIC_URL` is stubbed in every case; `@AC-1` stubs `AGENT_ENDPOINT` explicitly and keys the mock by URL (public → 404, internal → the fixture). `@AC-3` is a characterization test, stated as "red N/A" | `route.ts:25`; `audit/route.test.ts:5-8`; `fails.md:1556-1558`; `.claude/skills/sdd-execute/reference/tdd-gate.md:55-58` | settled |
+| D-12 | 2 | Step shape for `/sdd-spec`: the route test and the route change land as one atomic unit (`**Lands with**`), so no step PR is red on its own; the infra step holds its own red→green (jq guard and test lines first, then the value in the four specs and Playwright); docs last | `.claude/skills/sdd-spec/reference/step-constraints.md` §C | settled |
+| D-13 | 2 | The route's header comment is rewritten with the change (≤2 lines): catalog comes from `AGENT_ENDPOINT` on the internal network; unset or any failure ⇒ `{tools: [], reachable: false}`; never `AGENT_PUBLIC_URL` | `route.ts:11-12` | settled |
+| D-14 | 2 | D-6 additions: `services/xstockstrat-ui/CLAUDE.md` Dependencies intro (`:138`, "over gRPC") gains the internal-HTTP agent catalog; the BFF-only sentence (`:17-18`) is widened to "backends or the agent" and is the single durable home for the operator's BFF-only rule; D-9's guard is exercised by one rendered-value assertion and two mutations (var deleted; var set with a scheme) in `scripts/homelab-render.test.sh` | `services/xstockstrat-ui/CLAUDE.md:17-18,138`; `scripts/homelab-render.test.sh:56,92,180-189`; `deploy/homelab/render-assert.jq:23,53` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -49,9 +54,17 @@
 | O-5 | 1 | Editing only the naming-table cell leaves the Rules bullet and the UI `*_ENDPOINT` count line contradicting it (C-18) | no | closed @ round 1 (D-6) |
 | O-6 | 1 | First plaintext inter-service hop is unrecorded against the mTLS contract (`inter-service-mtls.md:26`) | no | closed @ round 1 (D-6 scoped-exception line) |
 | O-7 | 1 | A malformed value (e.g. with a scheme) fails silently as `reachable: false`; optional warn log on the catch path (P-03) | no | closed @ round 1 (user: docs only, D-10; warn log locked as R-5) |
+| O-8 | 2 | Round-2 proposal replaced D-4's throwing mock without a petition (register, P-03) | no | closed @ round 2 (D-11 is additive; D-4 stands) |
+| O-9 | 2 | Session mock under-specified: a `null` session in `@AC-3` could leak into later tests; `@AC-1` never stated its `AGENT_ENDPOINT` stub (C-15, P-06) | no | closed @ round 2 (D-11) |
+| O-10 | 2 | `@AC-3` has no red; the TDD gate needs "red N/A — characterization test" stated (P-06) | no | closed @ round 2 (D-11) |
+| O-11 | 2 | A test-only first step lands red on its own step PR (C-08, step-constraints §C) | no | closed @ round 2 (D-12) |
+| O-12 | 2 | The route's own comment would still say "public" (root CLAUDE.md How to Act #5) | no | closed @ round 2 (D-13) |
+| O-13 | 2 | UI `CLAUDE.md:138` still says the UI consumes services "over gRPC" only; BFF-only sentence anchor is `:17-18` (C-18, C-01) | no | closed @ round 2 (D-14) |
+| O-14 | 2 | The manual post-merge DO gate is reactive: a failure is found only once `main-dev` carries the change, and `/promote` has no feature-specific prompt. A pre-merge probe from the running DO dev UI container (`wget http://<agent private domain>:9000/api/tools`) would turn it into a confirmation (P-03) | no | open |
 
 ## Reopen Petitions
 
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
+| P-1 | 2 | O-4 | `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts:87-98` already parses both DO specs inside the UI Vitest suite, so a DO-side `AGENT_ENDPOINT` presence guard needs no new harness (O-4/D-9 cited only the homelab jq check) | pending user |
