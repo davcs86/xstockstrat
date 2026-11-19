@@ -186,7 +186,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     that `app/peer_identity.py` is absent during the red (F-08) — [x] addressed in implementation-spec.md (sdd-spec re-run 2026-11-19T19:56Z)
   - Step 5: ⚠ record the `vi.doMock` + dynamic-import fallback for the getter-mock assumption — [x] addressed in implementation-spec.md (sdd-spec re-run 2026-11-19T19:56Z)
   - Step 7: ⚠ the CI-filter check is only a YAML parse; grep for the two added paths (C-10) — [x] addressed in implementation-spec.md (sdd-spec re-run 2026-11-19T19:56Z)
-  - Steps 3, 7, 8: ⚠ more than 5 files each (accepted shape; noted) — [ ] unaddressed
+  - Steps 3, 7, 8: ⚠ more than 5 files each (accepted shape; noted) — [x] addressed (spec revisions 2–5; review round 4 clean)
 - Overlap findings (no FAIL-level; no merge-order row required):
   - `345-authelia-sso` (implementation-ready): same route table in
     `services/xstockstrat-agent/app/main.py` — whichever merges second re-anchors by symbol.
@@ -255,3 +255,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   red-before-green rules are unchanged. Step 2 (generated stubs) keeps more than five files and
   states why it cannot be split.
 - Step numbers in the earlier advisory review block above refer to the 8-step spec.
+
+## Session 2026-11-19T20:10Z — sdd-review impl-spec loop (advisory), rounds 2–4
+
+- Operator instruction: loop the review until every warning is addressed. Tree at the final round:
+  ccr-a72ccc3e-9kr7yq@d0cf431 (= origin/main-dev@5142fc5 + docs-only commits for 360).
+- Round 1 (8-step spec): 1 failure, 8 warnings → spec revision 2 (seven fixes) and revision 3
+  (re-shape to 15 steps so no hand-written step lists more than five files).
+- Round 2 (15 steps): 0 failures, 3 warnings (route literal in a test docstring; `conftest.py`
+  line anchors drifting after Step 3; an uncheckable "never under ports:" claim) plus incomplete
+  cross-feature notes → fixed (revision 4).
+- Round 3: 0 failures, 2 warnings (PyYAML undeclared for two check commands;
+  `resolve_grpc_port()` default untested) → fixed (revision 5: `uv run --with pyyaml`; three
+  port-resolver cases in `tests/test_transport_config.py`, stub added to the skeleton). Overlap
+  scan: no unaddressed item; no merge-order row required.
+- Round 4: **0 failures, 0 warnings.** No Floor risk.
+- Unresolved ✗ / ⚠ carried into execution: none.
+- Accepted, design-backed exceptions (not warnings): Step 2 lists more than five files (generated
+  stubs cannot be split); Steps 5 and 9 introduce a port / env var whose deployment files live in
+  Steps 10 and 11 (guard-first red→green).
+- Overlap findings (WARN-level, rebase only, all recorded in the spec's § Step Dependencies):
+  345-authelia-sso, 337-metrics-host-provider-label, 357-fix-portfolio-internal-position.
+- Note for execution: Step 15's "20 hits in 15 files" is a spec-time count; the three named
+  survivors are the check.
+- Round 4 did not re-read design.md, debate.md or acceptance.feature (round 3 did, against
+  D-19..D-37 and each @AC); the round-3-to-4 change touched only Steps 3, 10 and 11.
