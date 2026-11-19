@@ -1,6 +1,6 @@
 # Implementation Spec: fix-mcp-tools-page
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-11-19
 **Feature**: `docs/roadmap/features/360-fix-mcp-tools-page/feature.md`
 **Total Steps**: 15
@@ -1089,7 +1089,7 @@ grep -n "AGENT_ENDPOINT" services/xstockstrat-ui/CLAUDE.md   # at least one hit
 
 ### Step 15 — docs: Re-point the two durable business rules to the internal catalog
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: durable business-rule suites
 **Files**:
 - `services/xstockstrat-agent/acceptance/private-by-default-templates.feature` — modify

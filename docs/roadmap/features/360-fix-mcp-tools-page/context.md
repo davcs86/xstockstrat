@@ -475,3 +475,20 @@ Deviations: 1, 2. Next: Steps 12–15 (docs), then the integration PR.
   TDD: N/A (docs).
 - Files modified: `services/xstockstrat-ui/CLAUDE.md`
 - Deviations: none.
+
+### Step 15 — docs: Re-point the two durable business rules to the internal catalog [done]
+- `private-by-default-templates.feature` `@AC-25`: Given now reads the catalog "served by the
+  internal AgentService.ListTools RPC". `platform.feature` `@AC-6 @feature-283`: the surface list
+  names "the AgentService.ListTools catalog"; the count 45 is unchanged. Both changes were signed
+  off by the operator (C-16; run-2 steer and gate 5 above).
+- Verification: `check-context-map.py` exit 0; `tests/test_tools_endpoint.py` 11 passed; the
+  repository-wide survivor check returns exactly the three expected mentions (the `@AC-4` request
+  in `tests/test_tools_endpoint.py`, the closed findings entry, the runbook removal note).
+  TDD: N/A (docs).
+- Files modified: `services/xstockstrat-agent/acceptance/private-by-default-templates.feature`,
+  `docs/sdd/business-rules/platform.feature`
+- Deviations: none.
+
+All 15 steps done. `node scripts/check-config-wiring.mjs --final`: exit 0 (the two `REPORTED:`
+lines are pre-existing baseline findings in analysis and trading, unrelated to this feature; this
+feature declares no config key).
