@@ -71,3 +71,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Agent `GET /api/tools` auth → out of scope; agent findings file `:48`.
 - Branch: the feature directory currently lives on `ccr-a72ccc3e-9kr7yq` (PR #1588 → `main-dev`);
   `feature/fix-mcp-tools-page` is created from `main-dev` after that PR merges.
+
+## Session 2026-11-19 — sdd-design run 2 (in progress)
+
+- Operator reopened the approved design (status was `design-approved`; re-run confirmed by choosing
+  "Reopen feature 360"). Steer, recorded as D-19:
+  - move the catalog out of the public `/agent` route: **remove** the unauthenticated
+    `GET /api/tools` on the agent's port 9000;
+  - add an internal-only port **50061** on the agent, **gRPC over mTLS**, accepting only the
+    `xstockstrat-ui` peer certificate; new proto package `agent/v1`;
+  - the UI BFF calls the new port and endpoint.
+- **C-16 sign-off (operator, 2026-11-19)**: the existing rule `@AC-25 @feature-224` "Agent tools expose
+  templates and drop public arguments" (which reads the catalog via `GET /api/tools`) may be CHANGED
+  to read it through the new endpoint.
+- Reopened by the operator: D-1 (no-agent-change part), D-2, D-3, D-6, D-7, D-9, D-13, D-14, D-15,
+  D-16. Still standing: D-4/D-5/D-11 (route-test approach), D-8, D-10, D-12, D-17, D-18, R-1..R-8
+  where still applicable.
+- Mode: full (proto change + two services are escalate signals). Scope now includes
+  xstockstrat-agent and `packages/proto`.
