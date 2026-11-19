@@ -168,3 +168,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `/sdd-review fix-mcp-tools-page impl-spec` (feature-overlap).
 - Feature branch: `feature/fix-mcp-tools-page` still does not exist; Step 1's `buf breaking`
   command needs it as a local ref.
+
+## Session 2026-11-19T19:45Z — sdd-review impl-spec (advisory)
+
+- Tree: ccr-a72ccc3e-9kr7yq@618640d (= origin/main-dev@5142fc5 + docs-only commits for 360).
+- Result: 1 failure, 8 warnings (advisory — did not block). No Floor (`F-*`) risk. All six `@AC`
+  scenarios map to a test step; design fidelity confirmed for D-19..D-37.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 6: ✗ Verification contradicts Instruction 2 — the rewritten route comment must say "never
+    `AGENT_PUBLIC_URL`" while the grep for `AGENT_PUBLIC_URL` expects no output (F-05) — [ ] unaddressed
+  - Step 4: ⚠ `grep -n … app/` lacks `-r`, so it passes vacuously (P-06) — [ ] unaddressed
+  - Step 2: ⚠ `packages/proto/gen/**` is a literal wildcard in `**Files**`; add unexpected files by
+    exact path (F-08) — [ ] unaddressed
+  - Step 1: ⚠ `buf breaking` baseline names `feature/fix-mcp-tools-page`, which does not exist yet;
+    use `main-dev` or create the branch first (C-09) — [ ] unaddressed
+  - Step 3: ⚠ state that the D-34 skeleton is a working-tree stage, not committed under Step 3, and
+    that `app/peer_identity.py` is absent during the red (F-08) — [ ] unaddressed
+  - Step 5: ⚠ record the `vi.doMock` + dynamic-import fallback for the getter-mock assumption — [ ] unaddressed
+  - Step 7: ⚠ the CI-filter check is only a YAML parse; grep for the two added paths (C-10) — [ ] unaddressed
+  - Steps 3, 7, 8: ⚠ more than 5 files each (accepted shape; noted) — [ ] unaddressed
+- Overlap findings (no FAIL-level; no merge-order row required):
+  - `345-authelia-sso` (implementation-ready): same route table in
+    `services/xstockstrat-agent/app/main.py` — whichever merges second re-anchors by symbol.
+  - `337-metrics-host-provider-label` (in-progress): `services/xstockstrat-agent/app/telemetry.py`
+    (different functions), `docs/patterns/observability.md`, `docs/sdd/business-rules/platform.feature`
+    — rebase-only.
+  - `.github/workflows/ci.yml` path filters: adjacent lines with 345 — rebase-only.
+  - 323 and 331 (spec-ready) also touch agent `main.py`; re-scan when they reach implementation-ready.
