@@ -30,3 +30,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   for calls from the UI's client side. Browser code never calls the agent (or any backend) directly;
   the authenticated BFF calls the agent inside the DO / homelab network. Recon must confirm no
   client-side code reaches the agent today.
+
+## Session 2026-11-19 — sdd-design (in progress)
+
+- Entered at status `draft` (Track C, `/sdd-review` skipped) on the operator's explicit choice of
+  "Design quick, then stop".
+- Tree: design ran on `ccr-a72ccc3e-9kr7yq` (= `origin/main-dev@5142fc5` + docs-only commits) because
+  the feature directory is not on `main-dev` yet and this session may push only to that branch;
+  `feature/fix-mcp-tools-page` does not exist on origin.
+- Phase 0 Recon: wrote recon.md (xstockstrat-ui, xstockstrat-agent, four deployment specs). No
+  post-recon escalation signal; no CHANGE business rule.
+- Round 1 gate (operator): **Run another round**; O-4 → add the homelab render guard (D-9); O-7 →
+  docs only, no warn log (D-10, R-5). Mode upgraded from 1 round to 2 at the operator's request.
