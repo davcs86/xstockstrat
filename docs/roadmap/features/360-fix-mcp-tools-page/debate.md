@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: quick
-**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-19 | /sdd-design | 10 | 5 | 7 | 7 | 0 | yes |
 | 2 | 2026-11-19 | /sdd-design | 4 | 1 | 6 | 7 | 1 | yes |
 | 3 | 2026-11-19 | /sdd-design | 1 | 2 | 6 | 5 | 0 | yes |
+| 4 | 2026-11-19 | /sdd-design | 3 | 0 | 7 | 7 | 0 | yes |
 
 ## Settled Decisions
 
@@ -32,6 +33,9 @@
 | D-13 | 2 | The route's header comment is rewritten with the change (≤2 lines): catalog comes from `AGENT_ENDPOINT` on the internal network; unset or any failure ⇒ `{tools: [], reachable: false}`; never `AGENT_PUBLIC_URL` | `route.ts:11-12` | settled |
 | D-14 | 2 | D-6 additions: `services/xstockstrat-ui/CLAUDE.md` Dependencies intro (`:138`, "over gRPC") gains the internal-HTTP agent catalog; the BFF-only sentence (`:17-18`) is widened to "backends or the agent" and is the single durable home for the operator's BFF-only rule; D-9's guard is exercised by one rendered-value assertion and two mutations (var deleted; var set with a scheme) in `scripts/homelab-render.test.sh` | `services/xstockstrat-ui/CLAUDE.md:17-18,138`; `scripts/homelab-render.test.sh:56,92,180-189`; `deploy/homelab/render-assert.jq:23,53` | settled |
 | D-15 | 3 | DO-side guard (reopened O-4): a new `describe` in the existing `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts`, reusing its file-local `ROOT`/`readSpec`/`Env`/`Component`, with ONE file-local predicate `agentEndpointDrift(spec)` returning `null` or a reason. It compares the UI component's `AGENT_ENDPOINT` to `${xstockstrat-agent.PRIVATE_DOMAIN}:<agent http_port>` read from the agent's `services:` entry, and fails closed when the agent or its `http_port` is missing. Positive test: `null` on `.do/app.yaml` and `.do/app.dev.yaml`. Mutation test on a clone: baseline `null` first, then non-null after each of (a) env deleted, (b) value with a scheme, (c) agent `http_port` changed. No literal port pin. File header rewritten (≤2 lines) to cover the agent endpoint; `describe` named without an `AC-n` prefix; file not renamed. The file is in the infra step's `**Files**`; real red = positive test failing before the specs gain the value; mutation rows are "red N/A — guard self-check". `docker-compose.yml` is not guarded: local-dev only, not deployed, a regression there shows as an empty catalog; homelab is covered by D-9/D-14. No `@AC-*` addition. CI already runs it on DO-spec-only changes | `dbTlsPlatformGuard.test.ts:1-2,9,47-48,62-64,88,92-98`; `.do/app.yaml:336,342,607,652`; `.do/app.dev.yaml:338,344,604,649`; `.github/workflows/ci.yml:64,746,754,771-773,796` | settled |
+| D-16 | 4 | Step shape, refining D-12 (advisory for `/sdd-spec`): (1) `test` — `route.test.ts`, fixture move, spec import, `INVENTORY.md`; lands with (2) `service` — `route.ts`. (3) category `test`, not `config` (a `config` step skips the TDD gate) — guards first (`render-assert.jq`, `homelab-render.test.sh`, `dbTlsPlatformGuard.test.ts`), then the value in `deploy/homelab/compose.yml`, `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml`, `playwright.config.ts`, each with a ≤2-line "host:port, no scheme" comment; `Covers: —` with the reason stated (platform guard, D-15). (4) `docs`, including the R-4 fetch-timeout entry in `services/xstockstrat-ui/docs/context-constitution-findings.md`. `## Step Dependencies` records that the service step's deployment files live in step 3 (order 2→3), which is how the "new env var lists its deployment files" rule is met | `.claude/skills/sdd-spec/reference/spec-template.md:34-36,59,79`; `.claude/skills/sdd-execute/reference/tdd-gate.md:9-12`; `.claude/skills/sdd-review/reference/impl-spec-criteria.md:26` | settled |
+| D-17 | 4 | Verification commands: single files via `pnpm exec vitest run <file>`; both `test` steps state `pnpm run test:coverage` ≥40% (the route test itself is outside coverage scope); `pnpm run lint`; `pnpm exec tsc --noEmit` (no typecheck script); `pnpm exec playwright test e2e/accounts/mcp-tools.spec.ts`; `bash scripts/homelab-render.test.sh`; `bash scripts/sops-secrets.test.sh`; markdownlint on the two `CLAUDE.md` files; `python3 scripts/check-context-map.py`. Step 3 names a tool preflight (`docker compose`, `jq`, `openssl`, `yq`, `sops`, `shellcheck`, `shfmt`); a missing tool is installed or logged as a deviation naming the CI job as the green proof, never skipped silently | `services/xstockstrat-ui/package.json:10,17,19`; `vitest.config.ts:25,29-33`; `.github/workflows/ci.yml:117,1132,1145,1240-1271` | settled |
+| D-18 | 4 | Acceptance tags: nothing added before `/sdd-spec`. `@AC-1`/`@AC-2` carry `@regression` (Track C template form); `@AC-3` stays untagged as a characterization scenario and also stubs `AGENT_ENDPOINT` in its test. The Track C template vs C-15 `@FR-N` gap is recorded as a process finding, not fixed here. D-9's literal homelab check does not detect a container-port-only drift (the oracle pins the published port); recorded as-is | `.claude/skills/sdd-triage/reference/track-c-sdd.md:161`; `docs/sdd/business-rules/CLAUDE.md:34`; `deploy/homelab/render-assert.jq:54`; `deploy/homelab/compose.yml:319,324` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -71,6 +75,13 @@
 | O-17 | 3 | New describe makes the file header/name partly inaccurate (C-18) | no | closed @ round 3 (D-15: header rewritten, describe named, no rename) |
 | O-18 | 3 | Stated reason for excluding `docker-compose.yml` was wrong: a bad value degrades silently, it does not fail on first run (P-03) | no | closed @ round 3 (D-15 records the accurate reason) |
 | O-19 | 3 | "red N/A" for the mutation rows is valid only with a baseline assertion (P-06) | no | closed @ round 3 (D-15) |
+| O-20 | 4 | The service step introduces an env var but its deployment files sit in step 3, which the impl-spec per-step check flags (C-08, spec-template) | no | closed @ round 4 (D-16: Step Dependencies note) |
+| O-21 | 4 | `Covers: —` on a `test` step departs from the template (C-15) | no | closed @ round 4 (D-16: reason stated in the step) |
+| O-22 | 4 | Both `test` steps must state the coverage threshold (C-08) | no | closed @ round 4 (D-17) |
+| O-23 | 4 | Missing `@FR-N` tags; `@AC-3` has no tag at all (C-15) | no | closed @ round 4 (D-18) |
+| O-24 | 4 | Step 3's verification needs tools that past execute hosts lacked (P-06) | no | closed @ round 4 (D-17 preflight) |
+| O-25 | 4 | "The oracle pins the agent port" overstated: it pins the published port only (C-01) | no | closed @ round 4 (D-18 wording) |
+| O-26 | 4 | `pnpm run test:unit -- <file>` may not filter to the file | no | closed @ round 4 (D-17) |
 
 ## Reopen Petitions
 
