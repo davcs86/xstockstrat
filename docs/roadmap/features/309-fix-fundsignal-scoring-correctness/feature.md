@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: `docs/reports/2026-10-21-analysis-fundsignal-formula-partial-row-wire-zero-defect.md`, `docs/reports/2026-10-21-analysis-fundsignal-small-cross-section-quantile-defect.md`, `docs/reports/2026-10-21-analysis-zero-conviction-read-as-neutral-defect.md`, `docs/reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-10
+**Last Updated**: 2026-11-20
 
 ---
 
@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 4 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings) |
+| 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -22,6 +23,9 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
+- [Design](design.md) — approved approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-fundsignal-scoring-correctness`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -35,4 +39,4 @@ and fabricated 0.5 signals stored before feature 246 stay active.
 
 ## Next Action
 
-`/sdd-design fix-fundsignal-scoring-correctness` — full design recommended (proto/migration possible; 3 services; C-16 sign-off for durable @AC-8 @feature-201)
+`/sdd-spec fix-fundsignal-scoring-correctness` — generate implementation spec from the approved design
