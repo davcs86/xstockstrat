@@ -4567,3 +4567,8 @@ reusing.
   The zero count alone is near-vacuous. (c) is what proves no caller still needs the shim. This extends the existing positive-control rule.
 - **Evidence**: `docs/roadmap/features/306-config-keys-alias-removal/acceptance.feature` (@AC-7, amended Then); `docs/roadmap/features/306-config-keys-alias-removal/context.md` (Archive Synthesis, Why).
 - **Rule it implies**: A shim-removal earliest-start gate requires deployed-image ancestry of the consumer fix, in addition to a log zero-count with a positive control.
+
+### 2026-11-20 — fix-mcp-deadline-budget — design
+- **Pattern**: A heal migration that casts a text config value in its WHERE must put the cast inside `CASE WHEN value_data ~ re THEN value_data::numeric > N ELSE false END`. Postgres does not guarantee qual evaluation order, so `value_data ~ re AND value_data::numeric > N` can abort the migration on one non-numeric row.
+- **Evidence**: `docs/roadmap/features/314-fix-mcp-deadline-budget/debate.md` (O-20); `docs/roadmap/features/314-fix-mcp-deadline-budget/design.md` § 4.
+- **Rule it implies**: Guard every cast of `config.config_values.value_data` in a migration predicate with `CASE`, and test a non-numeric row.
