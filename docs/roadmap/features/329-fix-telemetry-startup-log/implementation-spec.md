@@ -504,7 +504,7 @@ cd services/xstockstrat-ui \
 
 ### Step 11 — test: analysis startup record carries the effective endpoint (U6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_telemetry.py` — modify
@@ -565,7 +565,7 @@ cd services/xstockstrat-analysis \
 
 ### Step 12 — service: analysis logs `"SDK default"` for an unset endpoint (U6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/telemetry.py` — modify
@@ -863,4 +863,10 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: `python3 ../../scripts/check-duplication.py src` and `&& grep -n "process.emit" src/telemetry.startupLog.test.ts; test $? -eq 1` (Verification block, union with Step 10).
 **Actual**: Ran `(cd ../.. && python3 scripts/check-duplication.py services/xstockstrat-ui/src)` (from the repo root, exit 0, `Found 0 clones.`) and guarded the grep as `&& { grep -n "process.emit" src/telemetry.startupLog.test.ts; test $? -eq 1; }`. Everything else in the block ran unchanged.
 **Reason**: In the spec's form, the trailing `; test $? -eq 1` decides the block's exit status by itself, so an earlier failure (vitest, coverage, lint or jscpd) could be masked. The operator decided on 2026-11-20 (Option A) to correct the command and to apply the same correction to any later step (11-18) whose Verification has the same pattern.
+**Disposition**: verification-command correction; step body not edited.
+
+### Deviation: Step 11 — test: analysis startup record carries the effective endpoint (U6)
+**Spec said**: `&& grep -n "conftest" tests/test_telemetry.py; test $? -eq 1` (Verification block, union with Step 12).
+**Actual**: Ran the grep guarded as `&& { grep -n "conftest" tests/test_telemetry.py; test $? -eq 1; }`. Everything else in the block ran unchanged.
+**Reason**: Same pattern as Step 9: the trailing `; test $? -eq 1` alone decides the block's exit status and could mask an earlier pytest, coverage or ruff failure. Applied under the operator's 2026-11-20 Option A decision, which extends the correction to Steps 11-18.
 **Disposition**: verification-command correction; step body not edited.

@@ -492,3 +492,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: green via Step 9's tests (above). Config-key wiring gate N/A (product-spec: no config key changes).
 - Files modified: `services/xstockstrat-ui/src/telemetry.ts`
 - Deviations: none (the Step 9 verification correction covers the shared block)
+
+### Step 11 — test: analysis startup record carries the effective endpoint (U6) [done]
+- Unit U6 (Steps 11+12, one commit). Added `test_startup_log_names_effective_endpoint` (unset / set / `""`) after `test_handler_is_instrumentation_logging_handler`; the per-signal endpoints point at the local receiver (O-2 option (a)).
+- TDD: AC-1 red: `assert None == 'SDK default'` on the `unset` case (`1 failed, 2 passed, 31 deselected`) → green: `3 passed, 31 deselected`; `tests/test_telemetry.py` 34 passed; full suite 1705 passed, `Total coverage: 91.52%`; ruff check and format clean. `set` and `""` are characterization cases (green before and after; Python logs `""` raw per D-10).
+- Files modified: `services/xstockstrat-analysis/tests/test_telemetry.py`
+- Deviations: verification-command correction (the `conftest` grep is guarded, per operator decision A of 2026-11-20); see Deviation Log.
+
+### Step 12 — service: analysis logs `"SDK default"` for an unset endpoint (U6) [done]
+- Unit U6 (Steps 11+12). `app/telemetry.py:246` is now followed by `if endpoint is None:` / `endpoint = "SDK default"`; the log line, exporters and try/except are unchanged.
+- TDD: green via Step 11's test (above). Config-key wiring gate N/A (product-spec: no config key changes).
+- Files modified: `services/xstockstrat-analysis/app/telemetry.py`
+- Deviations: none (the Step 11 verification correction covers the shared block)
