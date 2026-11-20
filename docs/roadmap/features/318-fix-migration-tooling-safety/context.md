@@ -504,3 +504,42 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design (approved)
+
+- Phase 0 Recon: recon.md was written on 2026-11-11 (services: platform tooling plus the migration dirs of indicators, ingest, identity, config, portfolio, analysis; key reuse patterns: the contract-gate script and job shape, and the guard's own recovery text).
+- Phase 1 Grilling: 3 rounds (full). The operator approved at the gate; termination: approved.
+  - Chosen approach: refuse-all. `db-migrate.sh up` loses its `force 0` arm and always exits 1 on a dirty service. The guard prints a ratchet recovery (`force <prev>`, or TRUNCATE for the first file, then `up`). A new `scripts/check-migration-order.py` runs in its own PR-only job `migration-order-gate`. `docs/patterns/database.md` gets the forward-only rule.
+  - Rejected: R-1..R-8 (debate.md), including hotfix renumbering, operation-keyed recovery text and the judgment-first three-branch text.
+- Constitution rules touched: C-16, F-01, C-11, C-15, C-18, P-01, P-03. Floor breaches: none.
+- debate.md: State approved. O-1, O-3 and O-4 are closed by the operator decisions below. O-7 (non-blocking) stays open. There were no reopen petitions.
+- Status: spec-ready → design-approved.
+- No ledger line was added. The debate produced nothing reusable beyond what fails.md and insights.md already hold.
+
+### Operator Decisions (binding, recorded 2026-11-20)
+
+- **O-1 (design gate): refuse-all.** `db-migrate.sh up` never auto-recovers a dirty service. It prints the state-keyed recovery and exits non-zero. This overrides the product-spec's "without manual intervention" outcome.
+  - The trade-off it was made on: up-files are atomic (R-2), so a bare-DDL replay fails loudly and only re-dirties the row. The real hazards of an automatic `force <prev>` plus `up` are a silent double-apply by a non-idempotent DML file, and a pointless re-dirty in the clean-flag-failed and failed-down states.
+  - Accepted cost: a dirty row blocks every later migrator run, including DO's automated rollback deploy, until an operator acts (fails.md:3687).
+- **O-3: C-16 sign-off** for the @AC-19 CHANGE and the @AC-28 last-clause CHANGE.
+  - @AC-19 replacement examples: a gap resolves to the previous existing version (up-files 001,002,003,005,006: `5 (dirty)` → exit 3, `force 3`); the first file names TRUNCATE (`1 (dirty)` → exit 3, `TRUNCATE public.x_schema_migrations`); an empty dir exits 2 ("cannot compute recovery"). design.md carries the full example set, including `4 (dirty)` → exit 2 and the 019,020,026,027 contract dir with `20 (dirty)` → `force 19`.
+  - @AC-28 last clause becomes: "the dirty guard refuses a dirty 041 with exit 3 naming force 40, leaving row counts and audit functions unchanged, after which migrate force 40 and up converge".
+- **O-4: confirmed.** Hotfix PRs into `main` carry no migration. This is enforced by `--forbid-new` on any base=main PR whose head is not the same-repo `main-dev`. A schema fix ships via main-dev and a promotion.
+  - Cost: an urgent production schema fix forces promotion of all unpromoted main-dev work.
+
+### Open Threads
+
+Each open risk from design.md, with its target. Step numbers do not exist until `/sdd-spec` runs.
+
+- Refuse-all stops PRE_DEPLOY and DO's automated rollback on any transient dirty state until an operator runs `migrate force` (fails.md:3687). Accepted under O-1. Target: the `database.md` step states it.
+- The ratchet's "already exists" escalation catches only DDL. A non-idempotent DML file that replays after `force <prev>` double-applies silently. Target: the guard-text step and the `database.md` step both say so.
+- Two golang-migrate 4.17.1 behaviours are unverified: NilVersion after TRUNCATE, and a loud failure on a duplicate version. Target: verify in the guard-text step.
+- The new `migration-order-gate` job and the `ci.yml:841` test-chain edit may collide with peer 298 and other batch peers. Target: the CI step and the integration PR.
+- The modify ban on base `*.up.sql` blocks even comment or typo fixes to merged files; the escape is a new numbered file. Target: the `database.md` step.
+- Promotion "pass by construction" assumes `main` has no historic main-only migration. Not verified. Target: the ordering-gate step.
+- The forward-only rule conflicts with the NNN pre-assignment in insights.md:900. Target: the `database.md` step.
+- The stale-base duplicate-NNN race is mitigated only by branch protection "up to date before merge" on `main-dev` and `main`, which the operator has not yet set. Target: operator action, outside the PR.
+- O-7 (non-blocking, open): confirm the guard pytest case table against D-5 and D-10. Target: the guard-test step.
+- For `/sdd-spec`:
+  - Pin the feature's own AC-1 `Then` to the refuse branch (O-1) and add `@AC` scenarios for the gap, first-file and empty-dir cases (C-15).
+  - Re-grep every target-file line number. recon.md ran on an older tree, design.md cites lines verified on `origin/main-dev` in round 3, and this feature branch predates the `.sh` → `.py` ports (`check-migration-contract.py`, `migration-rerun.py`, `scripts/shell-allowlist.txt` are absent here).
