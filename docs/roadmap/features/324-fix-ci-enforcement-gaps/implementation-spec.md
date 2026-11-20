@@ -92,7 +92,10 @@ and O-3 and O-9 stay moot.
 - Step 6 requires the unit: after it, the script is the only home of the threshold (D-1, C-18). Step 6 has no paired test because it deletes data that no step reads.
 - Step 7 requires Step 1 only. It needs `scripts/pyproject.toml` and the `scripts-python` job, which exist only after the sync.
 - Steps 8 and 9 require Steps 5 and 7: the docs may claim enforcement only after both proofs are recorded (C-01, C-10).
-- Peer overlap: `.github/workflows/ci.yml` is shared with features 297, 298 and 318, and the ledger and notify `package.json` with 323. If main-dev is merged again after Step 1, re-grep each step's cited lines before editing.
+- Peer overlap (rebase-level, no hard ordering; re-checked at `/sdd-review impl-spec`, 2026-11-20). If main-dev is merged again after Step 1, re-grep each step's cited lines before editing.
+  - `.github/workflows/ci.yml`: 318 adds a `migration-order-gate` job and appends to the `ci-gate` `needs:` and echo lists (its spec anchors `:1394` and `:1427`), next to the `scripts-python` entries at `:1392` and `:1425` that Step 7 only reads. 297 and 298 plan their own filter, job and `ci-gate` edits and have no implementation spec yet, so no line anchors exist to compare.
+  - The four leaf `package.json` files: 323 deletes the `migrate` script at `:11` and dead dependencies in all four (config, identity, ledger, notify), two to three lines above Step 5's `test:coverage` line. 316 depends on the `@grpc/grpc-js` pin at notify `package.json:21`. All are different keys from Step 5's.
+  - `pnpm-lock.yaml`: 323 regenerates it. This feature does not touch it (Step 5 adds no dependency).
 - Merge-train (O-21): before the integration PR merges, re-run only the wiring check in Step 7's Verification (block 1). Do not re-run the whole proof.
 
 ---
@@ -253,6 +256,8 @@ done
 ```
 Expected at the unit's commit: `guard=0` four times. Before Step 5's edit the same command prints `guard=1` four times (the RED).
 
+Coverage threshold: this step's guard carries none by design (D-5, C-18) and asserts that fact (`"40" not in g["run"]`). The 40% line threshold is enforced by Step 5's script (`c8 --check-coverage --lines 40`) and proven by Step 4, which land in the same commit.
+
 ---
 
 ### Step 4 — test: @AC-1 below-40 proof in notify
@@ -280,7 +285,7 @@ Expected at the unit's commit: `guard=0` four times. Before Step 5's edit the sa
 **Covers**: `AC-1`
 
 **Instructions**:
-1. Read T (sum of `LF`) and covered (sum of `LH`) for notify from the `coverage/lcov.info` that Step 2 produced. The module needs U uncovered lines with U > (covered + c) / 0.4 − T − c, where c is the module's own covered lines (42 at spec time). At spec-time numbers U must exceed 3582. Generate at least 300 lines more than the bound.
+1. Read T (sum of `LF`) and covered (sum of `LH`) for notify from the `coverage/lcov.info` that Step 2 produced. The module needs U uncovered lines with U > (covered + c) / 0.4 − T − c, where c is the module's own covered lines (42 at spec time). At spec-time numbers U must exceed 3582. Recompute the bound from Step 2's totals at the synced tip; 3582 holds only for T = 2776 and covered = 2518. Generate at least 300 lines more than the bound.
 2. Generate the module with the throwaway generator in Verification. Raise the function count if T or covered moved. The bodies are uncalled functions, because executed top-level statements count as covered.
 3. Load it from `src/__tests__/fanout.test.ts` by adding `import '../acProof.js';` directly below line 10.
 4. RED, on the unflagged script (before Step 5's edit): `pnpm run test:coverage` exits 0 while the table shows All files % Lines below 40, and `pnpm exec c8 check-coverage --lines 40` right after exits 1. This is @AC-1 failing on the buggy behavior. Record the exit codes and the table total.
@@ -315,7 +320,7 @@ rm -f src/acProof.ts dist/acProof.js dist/acProof.js.map
 git checkout -- src/__tests__/fanout.test.ts
 cd ../.. && git status --porcelain services/xstockstrat-notify/src
 ```
-Expected at the unit's commit (flag applied): `test:coverage rc=1`, an `All files` row below the 40% line threshold, a non-empty `acProof.js` row, the `(40%)` threshold error, `forced-miss rc=1`, and an empty `git status` listing. Before Step 5's edit the same block prints `test:coverage rc=0` with the same sub-40 total (the RED).
+Expected at the unit's commit (flag applied): `test:coverage rc=1`, an `All files` row below the 40% line threshold, a non-empty `acProof.js` row, the `(40%)` threshold error, `forced-miss rc=1`, and an empty `git status` listing. Before Step 5's edit the same block prints `test:coverage rc=0` with the same sub-40 total (the RED). The generator's `40` argument is the spec-time function count. If the `All files` row reads 40% or more in either half, the module is undersized: raise the count per instruction 1 and re-run. Do not record that run as a proof.
 
 ---
 
@@ -337,6 +342,7 @@ Expected at the unit's commit (flag applied): `test:coverage rc=1`, an `All file
 - No c8 config file exists in any leaf (`recon.md:31`), and none is added (`recon.md:58`).
 - Lint script: `"lint": "eslint src --ext .ts"` at config, identity, notify `package.json:14`, ledger `:16`.
 - The edit adds no dependency, so `pnpm-lock.yaml` is unchanged.
+- Peer 323 edits the same four files at other lines (`migrate` at `:11`, dead dependencies); see Step Dependencies. After any later main-dev merge, re-run the grep above before editing.
 - Dry run: with the flag, `pnpm run test:coverage` exited 0 in all four leaves.
 - No new env var, port or outbound gRPC call: deployment files and header propagation are untouched.
 
@@ -575,7 +581,8 @@ Expected: the first grep prints nothing; each file counts at least 1; the root `
 - The ruff report has no findings row: `grep -rln "scripts-ruff-lint-gap" services docs/context-constitution-findings.md` → no match.
 - Both sidecars read `triaged` / `ref: feature:324-fix-ci-enforcement-gaps`.
 - Sidecar format: `.claude/skills/sdd-qa/reference/defect-filing.md:26-47` — line 1 the status, line 2 `ref: <kind>:<target>`; kinds include `feature:<NNN-slug>` and `commit:<sha>` ("fixed directly, outside any track").
-- The ruff gap was closed by `c4b70c27` (#1514), not by code in this feature (design.md Part B).
+- The ruff gap was closed by `c4b70c27` (#1514), not by code in this feature (design.md Part B). `git merge-base --is-ancestor c4b70c27 origin/main-dev` exits 0 at `fb52065c`.
+- This step replaces the ruff sidecar's `feature:324-fix-ci-enforcement-gaps` ref with a `commit:` ref, so the sidecar no longer names this feature. `/sdd-archiver` may prune a `resolved` report before 324 launches; the Step 7 proof stays in this feature's `context.md`.
 
 **TDD**: `N/A (docs)`
 
@@ -584,18 +591,19 @@ Expected: the first grep prints nothing; each file counts at least 1; the root `
 **Instructions**:
 1. In each of the four findings files, append ` → fix: feature 324` to the second cell of the c8 row (config `:60`, identity `:62`, ledger `:63`, notify `:76`). Keep the link and the rest of the row. `/sdd-archiver` prunes the row with the report.
 2. Overwrite `docs/reports/2026-10-28-node-leaf-c8-check-coverage-unenforced-defect.status` with two lines: `resolved` and `ref: feature:324-fix-ci-enforcement-gaps`.
-3. Overwrite `docs/reports/2026-10-29-scripts-ruff-lint-gap-defect.status` with two lines: `resolved` and `ref: commit:c4b70c27`. The sidecar format has no third line, so the Step 7 proof and the pre-`c4b70c27` red state are cited in `context.md` (Step 7, instruction 5), which this `ref:` points back to through the commit.
+3. First confirm the fix commit is on main-dev: `git merge-base --is-ancestor c4b70c27 origin/main-dev` must exit 0 (it did at `fb52065c`). If it does not, stop and escalate; do not write the ref. Then overwrite `docs/reports/2026-10-29-scripts-ruff-lint-gap-defect.status` with two lines: `resolved` and `ref: commit:c4b70c27`. The sidecar format has no third line, so the Step 7 proof and the pre-`c4b70c27` red state are cited in `context.md` (Step 7, instruction 5), which this `ref:` points back to through the commit.
 4. Do not edit either report body.
 
 **Verification**:
 ```bash
+git merge-base --is-ancestor c4b70c27 origin/main-dev && git log -1 --format='%h %s' c4b70c27
 grep -c "c8-check-coverage-unenforced-defect.md) | .* → fix: feature 324 |" \
   services/xstockstrat-config/docs/context-constitution-findings.md services/xstockstrat-identity/docs/context-constitution-findings.md \
   services/xstockstrat-ledger/docs/context-constitution-findings.md services/xstockstrat-notify/docs/context-constitution-findings.md
 cat docs/reports/2026-10-28-node-leaf-c8-check-coverage-unenforced-defect.status docs/reports/2026-10-29-scripts-ruff-lint-gap-defect.status
 git diff --stat -- docs/reports/2026-10-28-node-leaf-c8-check-coverage-unenforced-defect.md docs/reports/2026-10-29-scripts-ruff-lint-gap-defect.md
 ```
-Expected: a count of 1 per findings file; `resolved`, `ref: feature:324-fix-ci-enforcement-gaps`, `resolved`, `ref: commit:c4b70c27`; an empty diff for the two report bodies.
+Expected: `c4b70c27 chore(scripts): pytest/ruff harness, shell freeze gate and tooling audit (port PR 1 of N) (#1514)`; a count of 1 per findings file; `resolved`, `ref: feature:324-fix-ci-enforcement-gaps`, `resolved`, `ref: commit:c4b70c27`; an empty diff for the two report bodies.
 
 ---
 
