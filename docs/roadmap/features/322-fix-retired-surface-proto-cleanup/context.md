@@ -396,3 +396,45 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] **WARN — AC-3 wording.** Under (B), reword acceptance.feature:28 and keep the @AC-3 ID (D-12).
 - [ ] **WARN — durable @AC-8 @feature-191.** The spec must include the step that edits `services/xstockstrat-analysis/acceptance/opportunities-latency-fix.feature:19-24` to drop the BatchGetBars clause (C-16 sign-off already recorded).
 - Overlap findings: config 048 is taken on main-dev, and 330 and 321 hold unpinned config seeds. 322 needs no NNN under D-4, so it has no collision unless a migration is reintroduced. Field 7 is free; indicators.proto is shared with 310 but at a different message. marketdata.proto and trading.proto have no peers. 337 has a text-level dependency on the `trading_mode` removal.
+
+## Session 2026-11-20 (operator decisions at the design gate)
+
+- **O-1, option (A)**: keep `ComputeIndicatorRequest.timeframe_enum = 7`. No acceptance or product-spec amendment is needed for it. This record satisfies D-11, so status may advance `spec-ready` → `design-approved`. The D-12 (B) edit set does not apply.
+- **D-14**: add `xstockstrat-ui` to product-spec.md Affected Services and to the feature.md reviewers (`useOhlcBars.ts` is a BatchGetBars producer).
+- **No config migration** in this feature (D-4/R-3). The stale "048 next-free" hint is dropped.
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: recon.md unchanged from 2026-11-13 (services: packages/proto, analysis, indicators, ingest, trading, portfolio, marketdata, config, identity, ledger, notify, agent, ui; key reuse patterns: the `marketdata.proto:89-92` timeframe-enum sibling and the `trading.proto:144` deprecated body `user_id`).
+- Phase 1 Grilling: 3 rounds (full), approved by the operator at the gate. No new register rows this session. No REOPEN petition was ever filed, so none was pending. O-1 is closed in debate.md on the operator's answer above.
+  - Chosen approach: a non-breaking proto deprecation PR-unit, with `timeframe_enum = 7` added to both BatchGetBarsRequest and ComputeIndicatorRequest. BatchGetBars reads the enum first and all three producers (analysis, portfolio, UI) send both fields. trading_mode watcher plumbing is removed in 10 services, keeping trading's `broker.paper` fallback. No config migration; a launch-gate query instead. The agent parity guard excludes deprecated fields. One hoisted `userID` carrier at trading.go:1174.
+  - Rejected: R-1..R-9 (enum-only producers, string-only producers, a duplicate migration, HasField, silence-as-answer, deferring the nolint shape, a dual-branch O-1 step, (B′), the false "once all callers migrate" comment).
+- Constitution rules touched: C-11, C-12, C-14, C-15, C-16, C-18, P-02, P-03, P-04, P-06, F-04, F-09, PLAT-4, PLAT-5. Floor breaches: none.
+- Artifacts edited: debate.md (O-1 status), design.md (O-1 answer, D-14, no-migration wording), product-spec.md (Affected Services gains `xstockstrat-ui`; Database migrations now "no"; the line numbers cited by D-12/design, :45/:89/:114, are unchanged), status.md, feature.md (history row, Reviewers, Next Action).
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- design.md is the approved design: D-1..D-14 settled, R-1..R-9 locked, O-1..O-3 closed.
+- `/sdd-spec` writes one unconditional proto step 1 that includes indicators field 7 (R-7).
+- The spec states that there is no config migration and claims no NNN.
+
+### Resolved threads (from the 2026-11-13 entries)
+
+- O-1 answer (D-11 gate): resolved, option (A).
+- D-14 scope amendment: applied to product-spec.md and feature.md.
+- Migration NNN warning: resolved, no migration and no 048 hint.
+- AC-3 wording warning: moot under (A); `acceptance.feature:28` stays as written.
+
+### Open Threads
+
+- [ ] `ComputeIndicatorRequest.timeframe_enum = 7` ships with no reader or producer (C-18). The D-13 "accepted but ignored by the server" comment must land. Target: proto step 1.
+- [ ] The tdd-gate may reject a compile-only Go RED, in which case record a P-06 deviation (D-10). Target: the Go watcher steps.
+- [ ] The hoisted `userID` touches the ownership gate at trading.go:1196. `trading_ownership_test.go` must stay green, and the rewritten :1193-1194 comment keeps the header-overwrites-body invariant. Target: the trading carrier step.
+- [ ] UI-owner review routing, and C-12 fixture homes for any `e2e/mock-backend.ts` edit. Target: the BatchGetBars producer step.
+- [ ] `buf breaking` is unverified for message-level deprecation on `common.v1.Decimal`/`Error`. The fallback is comment-only. Target: proto step 1.
+- [ ] Field 7 may collide with in-flight features 310 (indicators.proto) and 312 (trading.proto). Re-check merge order. Target: proto step 1.
+- [ ] The generated TS name `timeframeEnum` is unverified. Target: the UI producer step (after buf-gen).
+- [ ] Migration 046 may have left keep-and-report rows. Run the D-4 launch-gate query on dev and prod. Target: launch.
+- [ ] The agent projection silently drops deprecated fields. State this in the D-7 docstring. Target: the agent step.
+- [ ] No implementation spec exists yet. Run `/sdd-spec fix-retired-surface-proto-cleanup`, then `/sdd-review fix-retired-surface-proto-cleanup impl-spec`. The spec must split steps by PR-unit (proto first) and include the durable `@AC-8 @feature-191` edit at `opportunities-latency-fix.feature:19-24`.
