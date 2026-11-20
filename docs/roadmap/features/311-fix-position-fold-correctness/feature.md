@@ -16,6 +16,7 @@
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 3 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (11 rounds, full) and approved under the operator's standing authorisation (context.md:1522-1524); recon.md + debate.md + design.md written |
+| 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 27 steps |
 
 ---
 
@@ -26,8 +27,21 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections, petitions
 - [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-position-fold-correctness`_
+- [Implementation Spec](implementation-spec.md) — 27 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+Snapshot from the implementation spec's per-step `**Reviewers**` lines (stable unless `/sdd-spec` re-runs).
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| DBA | Migration NNN numbering, up+down pair, index correctness | 1, 2 |
+| xstockstrat-portfolio owner | P&L calculation accuracy, position snapshot consistency, concurrent write safety | 1, 3-13 |
+| xstockstrat-trading owner | Order execution correctness, broker API safety, fill detection | 2, 14-25 |
+| none (docs) | — | 26, 27 |
 
 ---
 
@@ -39,4 +53,4 @@ never sees bracket-leg exit fills because trading emits no ledger event for them
 
 ## Next Action
 
-`/sdd-spec fix-position-fold-correctness` — generate implementation spec from the approved design
+`/sdd-review fix-position-fold-correctness impl-spec` — validate implementation spec, then `/sdd-execute fix-position-fold-correctness`. Before `/sdd-execute`: run `/sdd-distill fix-position-fold-correctness` (context.md is over the 65536-byte limit) and have the operator confirm or overturn the adoption-only throttle (D-50, an orchestrator assumption).
