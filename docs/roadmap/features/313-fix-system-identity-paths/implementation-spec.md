@@ -30,6 +30,14 @@ files are byte-identical on both trees (`git diff --stat` empty). Steps anchor o
 (309), `fix-analysis-evidence-dry` (327) and `fix-agent-bearer-secret-orphan` (328) carry no diff against
 `origin/main-dev` under `services/xstockstrat-ingest` or `services/xstockstrat-analysis` as of 2026-11-20
 (`git diff --stat origin/main-dev...origin/feature/<slug> -- <both service dirs>` is empty for all four).
+Two peers plan edits in files this spec edits (their specs, read on their branches; no hard dependency):
+- 309 edits the same function as Steps 4 and 6, `_ingest_external_signal` (conviction handling, its
+  implementation-spec.md:432), plus `_build_external_signal` (`mcp_client_loop.py:88-94`, its `:448`) and
+  `tests/test_mcp_client_loop.py` (its `:473`). 309 names 313 as a co-editor at its `:104-106`.
+- 328 touches `mcp_client_loop.py:140` (`split_credentials_ref`, its implementation-spec.md:445), inside
+  `poll_one_source` above Step 6's `:156-160`.
+
+Whichever feature merges second re-greps its anchors; Steps 4, 6 and 7 carry that re-check.
 
 **Consumer surface (C-14).** The product spec has no `## Consumer Surface(s)` section yet; Step 1 adds it.
 The surface is the `/trader` ledger export (design D-7). It needs no UI or ledger code step: the route
@@ -64,8 +72,10 @@ omission. The analysis change is internal-only.
 - Open risk, `**kw` spy: the spy accepts any keyword, so a rename of `trace_id` would not fail the dedup
   test. Step 7's `correlation_id` assertion is the guard.
 - Open risk, append-only metadata: a caller passing both `trace_id` and an `x-trace-id` entry in
-  `propagation_meta` would send two headers. Step 6's docstring constraint is the only guard; no caller
-  does this today (`git grep -n "_ingest_external_signal" -- services/` shows two callers).
+  `propagation_meta` would send two headers. No caller does this today
+  (`git grep -n "_ingest_external_signal" -- services/` shows two callers). Guards: Step 6's docstring
+  constraint, and Step 7's assertion that each loop-path call sends exactly one `x-trace-id` entry. The
+  assertion covers today's loop caller only, not a future caller that passes both.
 - Open risk, marketdata headerless read: for a `system` owner the bars call runs with empty metadata, the
   same as the empty-owner path. It sits inside `_compose`'s `try`, so the event degrades either way; no step.
 - Proposed, not specced (outside the design's scope; decide at `/sdd-review impl-spec`):
@@ -303,6 +313,8 @@ grep -n "is_real_owner" services/xstockstrat-analysis/app/identity.py \
 - `grep -n '"system"' services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py` → **Not found**: no
   existing test feeds a `system` owner to the consumer.
 - `pyproject.toml:33` `asyncio_mode = "auto"`: no `@pytest.mark.asyncio` needed.
+- Coverage floor 40 is the CI value: `.github/workflows/ci.yml:431-432` (`xstockstrat-analysis`,
+  `coverage_threshold: 40`), applied at `:477` as `--cov-fail-under=${{ matrix.coverage_threshold }}`.
 
 **TDD**: `red-green required`
 
@@ -380,6 +392,9 @@ grep -n "def .*fixture\|from .conftest\|conftest" services/xstockstrat-analysis/
 
 **Instructions**:
 
+0. Before editing, re-grep the anchor (`grep -n 'event_type="ingest.signal.ingested"'
+   services/xstockstrat-ingest/app/handlers/servicer.py`): peer 309 edits this function and the line
+   numbers above move if it or `main-dev` has merged in.
 1. In `_ingest_external_signal`, add `user_id=owner,` to the `AppendEventRequest(...)` whose `event_type` is
    `"ingest.signal.ingested"`. Change nothing else: `metadata=propagation_meta` stays, no `x-user-id` entry
    is built (R-3), no helper is added, and the owner is never routed through `system`.
@@ -431,6 +446,8 @@ grep -n -A6 'event_type="ingest.signal.ingested"' services/xstockstrat-ingest/ap
   ingest test asserts `AppendEventRequest.user_id`.
 - The name `test_ac1_one_failing_item_does_not_drop_batch` is taken (`:426`); use the `test_feature313_`
   prefix (precedent `:465`).
+- Coverage floor 40 is the CI value: `.github/workflows/ci.yml:428-429` (`xstockstrat-ingest`,
+  `coverage_threshold: 40`), applied at `:477`.
 
 **TDD**: `red-green required`
 
@@ -494,7 +511,7 @@ grep -n "from tests.test_signal_ownership import\|from tests.conftest import" \
   `correlation_id=correlation_id` on the request and
   `metadata=(("x-trace-id", correlation_id),) if correlation_id else ()`.
 - Mint precedent, `servicer.py:762`: `meta = (("x-trace-id", str(uuid.uuid4())),)`.
-- `poll_one_source` at `services/xstockstrat-ingest/app/engine/mcp_client_loop.py:115`; owner at `:123`;
+- `poll_one_source` at `services/xstockstrat-ingest/app/engine/mcp_client_loop.py:116`; owner at `:123`;
   item loop `for item in parsed:` at `:156`; the per-item call at `:158-160`
   (`servicer._ingest_external_signal(_build_external_signal(slug, item), owner=owner)`); the per-item
   `except Exception` at `:163`.
@@ -518,6 +535,10 @@ grep -n "from tests.test_signal_ownership import\|from tests.conftest import" \
 
 **Instructions**:
 
+0. Before editing, re-grep the anchors, because peers 309 and 328 plan edits in both files:
+   `grep -n "for item in parsed\|_ingest_external_signal(" services/xstockstrat-ingest/app/engine/mcp_client_loop.py`
+   and `grep -n "async def _ingest_external_signal" services/xstockstrat-ingest/app/handlers/servicer.py`.
+   Edit by symbol; the line numbers in this step are hints.
 1. `servicer.py`, `_ingest_external_signal`:
    - Add one keyword-only parameter after `owner`: `trace_id: str = ""`.
    - Add one docstring line stating the constraint: `trace_id` is for callers with no inbound metadata; it
@@ -602,8 +623,9 @@ grep -n "x-user-id" services/xstockstrat-ingest/app/engine/mcp_client_loop.py   
      one distinct, non-empty `correlation_id`; the two sources' ids differ; no call's metadata has an
      `x-user-id` key.
    - Plain test assertions, not scenario Thens: for every call,
-     `("x-trace-id", req.correlation_id) in kwargs["metadata"]`; and, driving `IngestSignal` as in Step 5,
-     the RPC-path request has `correlation_id == ""`.
+     `("x-trace-id", req.correlation_id) in kwargs["metadata"]` and
+     `[k for k, _ in kwargs["metadata"]].count("x-trace-id") == 1` (the loop sends no duplicate header);
+     and, driving `IngestSignal` as in Step 5, the RPC-path request has `correlation_id == ""`.
 3. C-13: all domain data comes from `_mcp_source()` and `_item()`; nothing is declared inline.
 4. RED on the tree after Step 5 is a behaviour failure: every `correlation_id` is `""`. The spy fix alone
    is behaviour-neutral, so the unit's RED is this test.
