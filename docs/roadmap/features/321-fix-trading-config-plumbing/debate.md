@@ -1,6 +1,6 @@
 # Debate Register: fix-trading-config-plumbing
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -10,7 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-20 | /sdd-design | 6 | 7 | 7 | 12 | 0 | yes |
 | 2 | 2026-11-20 | /sdd-design | 9 | 1 | 15 | 10 | 1 | yes |
-| 3 | 2026-11-20 | /sdd-design | 4 | 1 | 8 | 8 | 0 | yes |
+| 3 | 2026-11-20 | /sdd-design | 5 | 1 | 8 | 8 | 0 | yes |
 
 ## Settled Decisions
 
@@ -36,6 +36,7 @@
 | D-17 | 3 | The accepted T = 10 s behaviour is pinned: rows `{10000, 3.0, 10 s}` in `TestAlpacaRateLimitBudget_FollowsConfig` and `{10 s, 30 s, 10 s}` in `TestRateLimitBudget`, one `IntVal` 10000 case on the `brokerTimeout` read path (the operator stores an int row), `staleThreshold` rows for T = 1000 and 10000 (both 30 s), and the matching row in the trading CLAUDE.md Adaptive-rate-limit table. | `trading_rate_limit_test.go:35-39,47-55,65-68`; `order_intent.go:100-117`; adversary r3 obj. 5 | settled |
 | D-18 | 3 | Unit order: U1a RED scaffold → U1b IBKR wiring → U2 AC-2 characterization → U3 `requires_approval` → U4+U5 as ONE atomic unit (`**Lands with**`; fallback change + migration 056 + baseline entry removal + stored-JSON regeneration; reviewers: trading owner, config owner, DBA) → U6 proto comment + regenerated stubs (Proto Reviewer + trading owner; comment-only is not a breaking change) → U7 docs. | `check-config-wiring.mjs:629,698-712,939-941`; `reviewer-registry.md:35,46-47`; adversary r3 obj. 6 | settled |
 | D-19 | 3 | Stored config descriptions that go stale (`order_intent.stale_multiplier` naming `IBKRRequestTimeout`; `broker.timeout_ms` "Alpaca… read at construction") are recorded as trading findings, not rewritten; `cfg.TradingMode`'s dead plumbing is left to feature 322. | `catalog.tsv:172,180`; `config-wiring-stored.json:4714,4726`; `cmd/server/main.go:70,75`; O-12 halt condition | settled |
+| D-20 | 3 | Operator ruling at the round-3 gate (2026-11-20): design approved, including the P-06 natural-RED waiver for AC-2; the pre-deploy action is TWO edits per environment — `trading.broker.timeout_ms` = 10000 and `trading.order_intent.stale_multiplier` = 4.0 (S = 40 s, Alpaca 429 budget B = 20 s: retry and pacing kept; orphaned PENDING intents reclaim after 40 s; CancelOrder worst case 50 s). D-16's stored-state pass condition covers both keys. | context.md 2026-11-20; O-24 | settled |
 
 ## Rejected Alternatives (locked)
 
