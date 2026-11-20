@@ -14,8 +14,9 @@ segment, `/accounts`, hosts the OAuth authorized-apps UI (feature 051) and the M
 
 It is the platform's **Backend-for-Frontend (BFF)**: backend services are gRPC-only, so the UI exposes
 per-segment Connect-RPC routers that authenticate the request (JWT cookie), forward identity headers,
-and proxy to the backend gRPC services. Browsers never talk to the backends directly — they call the
-segment's BFF, which holds the typed gRPC clients.
+and proxy to the backend gRPC services. Browsers never talk to the backends or the agent directly —
+they call the UI's BFF, which holds the typed gRPC clients. The BFF is the only entry point for
+anything the UI's client side needs, always.
 
 ## Styling
 
@@ -149,6 +150,7 @@ The UI consumes these backend services over gRPC via its segment BFFs (endpoints
 | xstockstrat-notify | 50059 | Trader — alert stream; `/accounts/notifications` inbox read state (`AlertInbox`, feature 203) |
 | xstockstrat-ledger | 50057 | Insights — ledger reads |
 | xstockstrat-config | 50060 | Config-UI — config read/write |
+| xstockstrat-agent | 50061 | Accounts — MCP tool catalog for `/accounts/mcp-tools` (`AgentService.ListTools`, internal only) |
 | TimescaleDB | — | Config-UI audit route only (see Database) |
 
 ## Auth + BFF
@@ -214,6 +216,7 @@ with an oneof-presence check (never `value || default`), so a stored `0` / empty
 ```text
 JWT_SECRET                  # required — src/lib/auth.ts jose verification
 *_ENDPOINT                  # the 10 backends — see docker-compose.yml
+AGENT_ENDPOINT              # agent tool catalog (internal gRPC): host:port, no scheme; unset ⇒ the MCP Tools page reports the agent unreachable; never falls back to AGENT_PUBLIC_URL
 AGENT_PUBLIC_URL            # runtime (never NEXT_PUBLIC_*): /accounts connector URL + the /auth/oauth-login callback check; unset ⇒ every OAuth agent login is rejected
 VAPID_PUBLIC_KEY            # feature 165 — Web Push public key, exposed to the browser via VapidKeyContext (server→client prop, NOT NEXT_PUBLIC_*); empty ⇒ push enable control reports "not configured"
 DATABASE_URL                # config-ui audit route only

@@ -794,7 +794,7 @@ Feature: Platform-wide guarantees
 
   @AC-6 @FR-4 @feature-283
   Scenario: The tool count is unchanged and its surfaces agree
-    When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the /api/tools catalog) are read
+    When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the AgentService.ListTools catalog) are read
     Then every statement states the count 45 (in words or digits) and the registered tool count is 45
 
   @AC-10 @FR-4 @feature-283

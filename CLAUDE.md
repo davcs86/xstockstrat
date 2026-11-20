@@ -106,7 +106,7 @@ to the frontends and the agent.
 | xstockstrat-notify | Node.js | gRPC streaming alert delivery | 50059 | — |
 | xstockstrat-config | Node.js | Live config WatchConfig stream | 50060 | — |
 | xstockstrat-ui | Next.js | Consolidated UI: trader dashboard, insights analytics, config management | — | 3000 |
-| xstockstrat-agent | Python | MCP server — AI agent tools for signal ingestion, alerting, backtesting | — | 9000 (Streamable HTTP) |
+| xstockstrat-agent | Python | MCP server — AI agent tools for signal ingestion, alerting, backtesting | 50061 (internal tool catalog, UI certificate only) | 9000 (Streamable HTTP) |
 
 ---
 
@@ -303,6 +303,7 @@ xstockstrat-notify → external HTTPS (allowlisted webhook origins; the commsgun
 xstockstrat-ingest → xstockstrat-marketdata (raw data push)
 xstockstrat-indicators → xstockstrat-ledger (audit.admin_read)
 xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted backtests)
+xstockstrat-ui → xstockstrat-agent (gRPC ListTools, internal tool catalog)
 ```
 
 ---

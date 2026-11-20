@@ -1,6 +1,6 @@
 # Implementation Spec: fix-mcp-tools-page
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-19
 **Feature**: `docs/roadmap/features/360-fix-mcp-tools-page/feature.md`
 **Total Steps**: 15
@@ -118,7 +118,7 @@ telemetry (D-30), and Steps 10 and 11 add platform guards for the deployment val
 
 ### Step 1 — proto: Add package agent/v1 with AgentService.ListTools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/agent/v1/agent.proto` — create
@@ -179,7 +179,7 @@ substitute another baseline.
 
 ### Step 2 — proto-gen: Regenerate stubs for agent/v1
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files** (names follow the committed `ledger/v1` trees — `git ls-files packages/proto/gen | grep ledger`):
 - `packages/proto/gen/go/agent/v1/agent.pb.go` — create
@@ -257,7 +257,7 @@ ls packages/proto/gen/python/agent/v1/agent_pb2_grpc.py packages/proto/gen/ts/di
 
 ### Step 3 — test: Agent internal catalog RPC, public-route removal, mTLS peer gate and parity guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/conftest.py` — modify
@@ -380,7 +380,7 @@ Confirm the handshake cases executed (not skipped): the `pytest -q` summary must
 
 ### Step 4 — test: Move the remaining agent catalog readers to the shared helper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_account_tools.py` — modify
@@ -426,7 +426,7 @@ grep -rn "api/tools" tests/   # expect only the @AC-4 request in tests/test_tool
 
 ### Step 5 — service: Agent internal catalog server on port 50061; remove public GET /api/tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/catalog_service.py` — create
@@ -514,7 +514,7 @@ grep -n "CLIENT only" app/mtls.py   # expect no output
 
 ### Step 6 — test: Agent gRPC server telemetry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/conftest.py` — modify
@@ -567,7 +567,7 @@ ruff check . && ruff format --check .
 
 ### Step 7 — service: Agent gRPC server instrumentation and rpc.server.duration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/telemetry.py` — modify
@@ -615,7 +615,7 @@ cd ../.. && python3 scripts/check-otel-produced-signals.py
 
 ### Step 8 — test: UI route and client tests for the internal catalog; centralize the MCP tool fixture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/api/mcp-tools/route.test.ts` — create
@@ -713,7 +713,7 @@ The route test is outside the coverage scope (`src/lib/**`); its proof is the fi
 
 ### Step 9 — service: UI BFF reads the catalog over AgentService.ListTools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/connectClients.ts` — modify
@@ -786,7 +786,7 @@ git diff --quiet HEAD -- src/app/accounts/api/agent-health/route.ts src/app/acco
 
 ### Step 10 — test: Homelab and local compose — guard, then GRPC_PORT and AGENT_ENDPOINT
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deployment specs (`xstockstrat-agent`, `xstockstrat-ui`); guard housed in the homelab
 render test
 **Files**:
@@ -860,7 +860,7 @@ configure, still meets its ≥ 40% threshold (`--cov-fail-under=40`).
 
 ### Step 11 — test: DigitalOcean specs, Playwright and CI filter — guard, then values
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deployment specs (`xstockstrat-agent`, `xstockstrat-ui`); guard housed in the
 `xstockstrat-ui` Vitest suite
 **Files**:
@@ -951,7 +951,7 @@ no production code.
 
 ### Step 12 — docs: Root and shared docs for the internal catalog endpoint
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, root `CLAUDE.md`
 **Files**:
 - `CLAUDE.md` — modify
@@ -1005,7 +1005,7 @@ grep -n "GET /api/tools" docs/runbooks/reviewer-registry.md   # expect no output
 
 ### Step 13 — docs: Agent docs for the internal catalog endpoint
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` docs
 **Files**:
 - `services/xstockstrat-agent/CLAUDE.md` — modify
@@ -1057,7 +1057,7 @@ grep -n "api/tools" services/xstockstrat-agent/docs/oauth.md   # expect no outpu
 
 ### Step 14 — docs: UI docs — BFF-only rule and AGENT_ENDPOINT
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` docs
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify
@@ -1089,7 +1089,7 @@ grep -n "AGENT_ENDPOINT" services/xstockstrat-ui/CLAUDE.md   # at least one hit
 
 ### Step 15 — docs: Re-point the two durable business rules to the internal catalog
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: durable business-rule suites
 **Files**:
 - `services/xstockstrat-agent/acceptance/private-by-default-templates.feature` — modify
@@ -1128,4 +1128,37 @@ request in `services/xstockstrat-agent/tests/test_tools_endpoint.py`, the closed
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation 1 — Steps 1, 2 (2026-11-19)
+- **Spec said**: run `buf lint`, `buf breaking` and `./scripts/buf-gen.sh` on the host.
+- **Actual**: `buf` and the Go codegen plugins are not installed on the execute host. All three ran
+  inside the version-pinned `xstockstrat-codegen` image (`python3 scripts/localenv-setup.py`, and
+  `docker run … xstockstrat-codegen buf lint && buf breaking --against
+  "../../.git#branch=feature/fix-mcp-tools-page,subdir=packages/proto"`), with the same arguments.
+- **Disposition**: CI-equivalent fallback (sequential-mode verification fallback; Docker codegen is
+  the preferred path). No change to what was verified.
+
+### Deviation 2 — Steps 8, 9, 11 (2026-11-19)
+- **Spec said**: `pnpm exec playwright test e2e/accounts/mcp-tools.spec.ts` (local dev-server mode).
+- **Actual**: on the execute host the dev server's cold compile exceeds the local 10 s test timeout
+  (the `warmup.setup.ts` project and `page.goto` both time out), and the Docker e2e runner
+  (`scripts/run-e2e.py`) cannot build its image here (the `corepack prepare pnpm` download is
+  refused inside the build). The spec was run as CI runs it:
+  `CI=1 pnpm exec playwright test e2e/accounts/mcp-tools.spec.ts --trace off` (production build,
+  CI timeouts, warm-up project included).
+- **Disposition**: CI-equivalent fallback. Same spec, same assertions.
+
+### Deviation 3 — post-completion addition (2026-11-19)
+- **Spec said**: the DigitalOcean spec check before merge is an operator-run `doctl` command
+  (D-29/D-36); no step adds CI for it.
+- **Actual**: at the operator's request after the integration PR opened, the manual check is
+  replaced by CI. `ci.yml` gains job `do-spec-validate` (offline
+  `doctl apps spec validate --schema-only` on both DO specs, no token or secrets, wired into the
+  CI Gate); `deploy.yml` gains a step that proposes the rendered spec to App Platform
+  (`doctl apps propose --spec … --app "$APP_ID"`, stdout discarded) before `doctl apps update`;
+  `scripts/sops-secrets.test.sh` pins that step (present, between render and update, no
+  soft-fail); `docs/patterns/ci-overview.md` lists the job.
+- **Files**: `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`,
+  `scripts/sops-secrets.test.sh`, `docs/patterns/ci-overview.md`.
+- **Disposition**: operator-directed scope addition (chat, 2026-11-19: offline PR check +
+  pre-deploy server-side check; land in PR #1589). Supersedes the operator gate in D-36.
+

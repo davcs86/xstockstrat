@@ -19,6 +19,8 @@
 | 2026-11-19 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 | 2026-11-19 | `implementation-ready` (unchanged) | /sdd-spec | Re-run: implementation spec revised for the impl-spec review findings (1 failure, 6 warnings closed); still 8 steps |
 | 2026-11-19 | `implementation-ready` (unchanged) | /sdd-spec | Spec re-shaped to 15 steps (four atomic units) so no hand-written step lists more than five files; content and order unchanged |
+| 2026-11-19 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (operator: no checkpoints); Steps 1+2 done |
+| 2026-11-19 | `in-progress` → `code-completed` | /sdd-execute | All 15 steps done on `feature/fix-mcp-tools-page`; integration PR opened |
 
 ---
 
@@ -59,4 +61,4 @@ the new endpoint.
 
 ## Next Action
 
-`/sdd-review fix-mcp-tools-page impl-spec` — validate implementation spec, then `/sdd-execute fix-mcp-tools-page`
+Review and merge the integration PR (`feature/fix-mcp-tools-page` → `main-dev`) after the operator's pre-merge `doctl` validation of the rendered DO dev spec (D-36); then the DO dev-app page check (D-26) and homelab acceptance (D-8)

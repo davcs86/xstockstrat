@@ -42,11 +42,12 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same forty-five tools' `name`,
-`description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
-capabilities (the same data documented below), never user data or credentials. It powers the
-`xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
-can see what the agent can do without connecting a client first.
+**Tool catalog (UI display).** The agent serves the same forty-five tools' `name`, `description`
+and `inputSchema` through the internal `AgentService.ListTools` gRPC RPC (port 50061, mutual TLS,
+`xstockstrat-ui` certificate only). The UI's `/accounts/api/mcp-tools` BFF route reads it via
+`AGENT_ENDPOINT` for the `/accounts/mcp-tools` page, so users can see what the agent can do without
+connecting a client first. The public `GET /api/tools` route was removed (feature 360); that path
+now answers 401 like any other unauthenticated request.
 
 ---
 

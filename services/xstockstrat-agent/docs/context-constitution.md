@@ -2,8 +2,8 @@
 
 Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-15
 (`main-dev` @ `d5de836`). Captures the **non-obvious** local invariants of
-the MCP agent (MCPServer, Streamable HTTP :9000) — the only backend that speaks HTTP and the only one
-that *calls* backends as a gRPC client. Does not restate documented/CI-enforced rules (see `## Pointers`).
+the MCP agent (MCPServer, Streamable HTTP :9000) — the only backend that speaks HTTP. It *calls*
+backends as a gRPC client and serves one internal gRPC RPC, the tool catalog (:50061). Does not restate documented/CI-enforced rules (see `## Pointers`).
 
 > Inherits all rules of the root constitution (`../../../docs/context-constitution.md`). This file lists only
 > what is specific to **xstockstrat-agent**.
@@ -36,7 +36,7 @@ that *calls* backends as a gRPC client. Does not restate documented/CI-enforced 
 | What | Where |
 |---|---|
 | OAuth 2.1 routes, single-transport `handle_mcp` (SSE removed by feature 079), `/agent` path-insertion quirk | `services/xstockstrat-agent/docs/oauth.md` (routes, `aud` binding, path insertion); `CLAUDE.md` §Role (single transport) |
-| OTel instruments the gRPC *client* channel (not a server); its RPC-level metric is `mcp.tool.duration` from `ToolMetricsMiddleware`, not `rpc.server.duration` | `app/telemetry.py` (client-channel docstring ~L6-8), `#GrpcAioInstrumentorClient().instrument() (~L80)`; `app/tool_metrics.py#ToolMetricsMiddleware` |
+| OTel instruments the gRPC *client* channel and the one gRPC *server* (the tool catalog); tool calls record `mcp.tool.duration` from `ToolMetricsMiddleware`, the catalog RPC records `rpc.server.duration` | `app/telemetry.py#GrpcAioInstrumentorClient().instrument()`, `#GrpcAioInstrumentorServer().instrument()`, `#_make_rpc_duration_processor`; `app/tool_metrics.py#ToolMetricsMiddleware` |
 | `mtls.secure_channel` for all backend calls (mutual TLS, feature 210) | `app/mtls.py`, `app/client.py` (root PLAT-N3) |
 | n8n/HTTP-webhook migration to gRPC left no residue | PR #441 |
 | `list_opportunities` gRPC deadline + the fixed policy-read cap | `CLAUDE.md` `opportunities.read_timeout_seconds` row; `app/tools.py#_POLICY_READ_TIMEOUT_S (~L2665)` |
