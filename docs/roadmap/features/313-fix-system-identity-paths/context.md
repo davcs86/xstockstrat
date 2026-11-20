@@ -988,3 +988,32 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design (approved)
+
+- Phase 0 Recon: recon.md was written on 2026-11-11 (services: xstockstrat-ingest, xstockstrat-analysis; xstockstrat-ledger reference only; key reuse patterns: the existing `AppendEventRequest.user_id` request field, and the empty-owner degrade branch in `_compose`).
+- Phase 1 Grilling: 5 rounds (full). Chosen approach: ingest sets `AppendEventRequest.user_id=owner` and sends one per-cycle id through a keyword-only `trace_id` as both `correlation_id` and `x-trace-id` metadata; analysis adds `is_real_owner()` so a `system` owner degrades and opens no window. Rejected: R-1 to R-12 in debate.md (header forging, NULL-row backfill, inline `system` comparisons, two-parameter or correlation_id-only id passing, and the vacuous-test shapes).
+- Constitution rules touched: C-11, C-14, C-15, C-16, C-18, F-09, P-02, P-03, P-06, PLAT-4. Floor breaches: none.
+- Status: spec-ready → design-approved. design.md written; debate.md State is `approved`.
+- Operator rulings, recorded 2026-11-20. They reached this step as workflow-computed text from the `/sdd-batch` gate:
+  - REOPEN D-9 is granted (P-2). The RPC-level assertion is re-targeted as an extra assertion inside the AC-1 test; D-9's FR-1 loop narrowing stands (D-14).
+  - REOPEN D-2 is granted (P-1 and P-3). The per-cycle id is sent as both `x-trace-id` metadata and `AppendEventRequest.correlation_id`, the existing idiom at `pnl_pattern_consumer.py:613,618` (D-17).
+  - C-16 sign-off for this feature's @AC-1 and @AC-2. AC-2 wording: "Then the event is processed on its first attempt with no retry backoff".
+  - Design APPROVED after round 5 under the operator's standing authorisation of the same day (round-5 adversary verdict SOUND, no Floor breach, no blocking objection, every C-16 CHANGE covered by a ruling).
+  - Binding on the spec from the round-5 synthesis: AC-3's Thens are limited to the persisted `correlation_id` (the `x-trace-id` metadata is a plain test assertion); the core appends and does not strip-and-replace; the spy at `tests/test_mcp_client_loop.py:196-197` forwards `**kw`; the ledger-export consumer-surface note is recorded (round-5 session above).
+- Register bookkeeping: P-1, P-2 and P-3 now read "user reopened". The gate step's generic instruction was to mark pending petitions "user declined"; that would contradict the rulings above, so they are recorded as reopened. No other register cell was changed: O-17, O-18 and O-19 still read "open", and D-2 / D-9 still read "reopened", not "superseded by D-17 / D-14".
+- No ledger line: the debate surfaced no pattern or trap that is not already in recon.md or the ledger.
+
+## Open Threads
+
+- [ ] Register status cells lag the rulings (O-17, O-18, O-19 "open"; D-2 / D-9 "reopened"). The O-17 and O-18 fixes are binding by operator ruling regardless. Target: step 1 (docs).
+- [ ] AC-3's wording becomes permanent at promotion. `/sdd-spec` must write the observable-only Thens into acceptance.feature, traced by `@FR-3` (C-15, not C-16). Target: step 1.
+- [ ] Peer 328 edits `mcp_client_loop.py:134-140`; possible textual conflict in `poll_one_source` near `:140-160`. Target: `/sdd-spec` (re-ground step 4 against 328's branch).
+- [ ] The `**kw` spy accepts any keyword, so a rename of `trace_id` would not fail the dedup test. The AC-3 `correlation_id` assertion is the guard. Target: step 4.
+- [ ] Append-only metadata: a future caller passing both `trace_id` and an `x-trace-id` in `propagation_meta` would send two headers. The docstring constraint is the only guard. Target: step 4.
+- [ ] The export's `correlation_id` column changes meaning on mcp_client rows (empty → poll-cycle id). `@AC-8 @feature-021` covers only the column's presence. Target: step 1 (context.md note).
+- [ ] Line drift: recon's citations are stale (core moved from `servicer.py:1015` to `:1237`); "now" lines come from a `ccr-*` working tree. Target: `/sdd-spec` (re-ground against `origin/main-dev`).
+- [ ] Re-expressing `owner_metadata` through `is_real_owner` touches a builder with 9+ callers. `tests/test_identity.py:13-36` stays unedited and green. Target: step 2.
+- [ ] Marketdata's handling of a headerless `system` bars read is unverified; it sits inside `_compose`'s `try`, so the event degrades either way. Target: step 2.
+- [ ] The ledger, analysis and peer-328 citations were not re-checked in round 5. Target: `/sdd-spec`.
+- Next: `/sdd-spec fix-system-identity-paths`.
