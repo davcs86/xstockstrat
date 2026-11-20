@@ -438,3 +438,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Migration 046 may have left keep-and-report rows. Run the D-4 launch-gate query on dev and prod. Target: launch.
 - [ ] The agent projection silently drops deprecated fields. State this in the D-7 docstring. Target: the agent step.
 - [ ] No implementation spec exists yet. Run `/sdd-spec fix-retired-surface-proto-cleanup`, then `/sdd-review fix-retired-surface-proto-cleanup impl-spec`. The spec must split steps by PR-unit (proto first) and include the durable `@AC-8 @feature-191` edit at `opportunities-latency-fix.feature:19-24`.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 34 steps. Status → implementation-ready.
+- Tree: `feature/fix-retired-surface-proto-cleanup` @ `42300c5a`, which is 168 commits behind `origin/main-dev`. Every cite was re-grepped at that tip. `main-dev` has since changed several cited files (for example trading `internal/service/trading.go`), so line numbers are hints and symbol names are the anchor; `/sdd-execute` re-greps after it syncs the branch.
+- Operator decisions applied (recorded above, 2026-11-20): O-1 option (A), so Step 1 is one unconditional proto step that includes `ComputeIndicatorRequest.timeframe_enum = 7`; D-14, so `xstockstrat-ui` has Steps 10–11 and is in the reviewer snapshot; no config migration, so the spec has no `migration` or `config` step and claims no NNN.
+- Key codebase findings:
+  - Field 7 is free on `ComputeIndicatorRequest` and `BatchGetBarsRequest` at the feature tip and on `origin/main-dev`. Step 1 re-checks it against `origin/feature/fix-sandbox-result-contract` (310).
+  - `packages/proto` has no test harness and the repo has no descriptor-deprecation test. Step 3 creates `services/xstockstrat-indicators/tests/test_proto_deprecations.py` and lands in one unit with Steps 1–2, which gives `@AC-3` a real red→green.
+  - Staticcheck flags deprecated fields in composite literals too (precedent `marketdata_service_test.go:3324`), so the Go test files need directives as well as the readers (D-6).
+  - The portfolio producer test already asserts the request shape (`offline_valuation_test.go:358`), and the analysis test already captures the request (`test_analysis_servicer.py:5697`); both get one extra assertion.
+  - The UI field name `timeframeEnum` has a generated precedent on `Bar` (`e2e/mock-backend.ts:154`). `e2e/mock-backend.ts` is not edited; a vitest payload test on the `useFormulas.test.ts` pattern covers the producer.
+
+### Decisions
+
+- Atomic units (`**Lands with**`): Steps 1+2+3; 14+15; 17+18; 19+20; 21+22; 23+24; 25+26; 27+28. Each is on one surface and at most 3 steps.
+- Portfolio and marketdata lose `Config.TradingMode` and its `TRADING_MODE` env read in Steps 25 and 27, because removing the watcher parameter (and marketdata's `Paper`) leaves nothing reading them. Trading keeps `Config.TradingMode` (D-3).
+- The Node watchers build the request with `WatchConfigRequest.fromPartial({...})`. ts-proto is generated with `useOptionals=messages`, so the enum field is required in a bare literal and cannot simply be deleted. This was inferred from `buf.gen.yaml` and the existing literal (which spells out `version: ''` and `userId: ''`), not from a `tsc` run; Steps 29 and 31 verify it with `pnpm run build`.
+- The findings logs (`context-constitution-findings.md`) are not edited; `/context-constitution` refreshes them. The agent's body `user_id` write on `SnapshotOfflinePositionsRequest` is left as is (design § 5 scopes the carrier work to trading).
+
+### Open Threads
+
+- [ ] **Design premise corrected — Go RED (D-10).** No `config_test.go` calls `NewWatcher` in trading, portfolio or marketdata; the only test tie is `TestResolveTradingMode`. So "update the test call sites first" yields a compile RED only for marketdata's `NewLiveClient` caller (`client_test.go:759`, Step 28). For the watcher packages the spec captures the compile RED after the resolver is deleted and before the test is (Steps 24, 26). If the tdd-gate rejects that, record a P-06 deviation. Target: Steps 24, 26, 28.
+- [ ] **Design premise corrected — Node RED.** design.md lists Node as RED-first, but the Node watchers already send `TRADING_MODE_UNSPECIFIED` and the request is byte-identical after the change. Steps 30 and 32 are characterization tests recorded under the tdd-gate "no behavior change" escape. Target: Steps 30, 32.
+- [ ] **Trading `NewWatcher` is variadic.** A caller left as `NewWatcher(endpoint, env, cfg.TradingMode, "trading")` still compiles and would subscribe to a namespace named `paper`. Step 23's grep is the only guard. Target: Step 23.
+- [ ] **Lint-red window.** After the Steps 1–3 commit, golangci-lint is red for marketdata, portfolio and trading until Steps 5, 7 and 13 land. Run Steps 4–13 straight after the unit. Target: Steps 4–13.
+- [ ] `ComputeIndicatorRequest.timeframe_enum = 7` ships with no reader or producer (C-18); the D-13 comment must land verbatim in intent. Target: Step 1.
+- [ ] `buf breaking` is unverified for message-level `option deprecated` on `common.v1.Decimal`/`Error`. The fallback is comment-only, which also drops two assertions from Step 3. Target: Step 1.
+- [ ] The hoisted `userID` touches the ownership gate; `trading_ownership_test.go` must stay green. Target: Steps 12–13.
+- [ ] CI's `buf breaking` still excludes `trading/v1/trading.proto` (`.github/workflows/ci.yml:210-211`), so only the local Step 1 run checks the `user_id` deprecation. Target: Step 1.
+- [ ] D-4 launch-gate query on dev and prod for the two pruned keys. Target: launch.
+- [ ] Next: `/sdd-review fix-retired-surface-proto-cleanup impl-spec`, then `/sdd-execute fix-retired-surface-proto-cleanup`.
