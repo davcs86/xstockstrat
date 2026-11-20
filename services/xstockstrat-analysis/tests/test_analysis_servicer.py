@@ -23,6 +23,7 @@ from gen.analysis.v1 import analysis_pb2
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
 from gen.ingest.v1 import ingest_pb2
+from gen.portfolio.v1 import portfolio_pb2
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -4704,7 +4705,9 @@ def _wl(bindings=None, symbols=None):
     """A Watchlist-shaped object: ``bindings`` = [(symbol, strategy_id), …]; ``symbols`` = the
     deprecated flat mirror for legacy-row coverage (FR-6)."""
     return SimpleNamespace(
-        bindings=[SimpleNamespace(symbol=s, strategy_id=st) for s, st in (bindings or [])],
+        bindings=[
+            portfolio_pb2.WatchlistBinding(symbol=s, strategy_id=st) for s, st in (bindings or [])
+        ],
         symbols=list(symbols or []),
     )
 
@@ -6515,6 +6518,42 @@ class TestScreenSymbolsHeld:
         assert by_symbol.get("AAPL") is True
         assert by_symbol.get("MSFT") is False
 
+    @pytest.mark.asyncio
+    async def test_failed_held_drain_marks_no_row_held(self, caplog):
+        svc = make_servicer()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(
+                bars=[SimpleNamespace(close=c) for c in [10.0, 11.0, 12.0]]
+            )
+        )
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            return_value=SimpleNamespace(result=[SimpleNamespace(value=50.0)])
+        )
+        svc._ingest = MagicMock()
+        svc._ingest.ListSignalSources = AsyncMock(return_value=SimpleNamespace(sources=[]))
+        page1 = SimpleNamespace(
+            positions=[SimpleNamespace(symbol="AAPL", market_value=100.0)],
+            page=SimpleNamespace(next_page_token="p2"),
+        )
+        svc._portfolio = SimpleNamespace(
+            ListPositions=AsyncMock(side_effect=[page1, aio_rpc_error(grpc.StatusCode.UNAVAILABLE)])
+        )
+
+        req = analysis_pb2.ScreenSymbolsRequest(symbols=["AAPL", "MSFT"])
+        with caplog.at_level(logging.WARNING):
+            resp = await svc.ScreenSymbols(req, _ctx(_HEADERS))
+        by_symbol = {r.symbol: r.held for r in resp.results}
+        assert set(by_symbol) == {"AAPL", "MSFT"}
+        assert by_symbol["AAPL"] is False
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "held cross-reference" in r.getMessage()
+        ]
+        assert len(warnings) == 1
+
 
 # ---------------------------------------------------------------------------
 # Feature 089 — honest strategy lifecycle (reactivate + live preconditions)
@@ -7212,6 +7251,112 @@ class TestGetIndicatorSeries:
         )
         with pytest.raises(Exception, match="aborted"):
             await svc.GetIndicatorSeries(req, _owned_ctx())
+
+    @pytest.mark.asyncio
+    async def test_first_value_bars_is_declared_per_component(self):
+        """feature 341 AC-2/AC-4 — each component declares its first-value bars: SMA 200 → 200,
+        SMA 20 → 20, a formula declaring warmup_period 30 → 31, from the one GetFormula pass."""
+        svc = make_servicer()
+        definition = self._definition(
+            [
+                analysis_pb2.StrategyComponent(
+                    ref_name="sma200",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 200.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="sma20",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 20.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="custom",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-warm",
+                ),
+            ]
+        )
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="f-warm", name="warm", warmup_period=30
+            )
+        )
+
+        with patch.object(
+            StrategyEvaluator,
+            "_compute_component",
+            new=AsyncMock(return_value={"value": [None, 1.0, 2.0]}),
+        ):
+            req = analysis_pb2.GetIndicatorSeriesRequest(
+                strategy_id="s1", symbol="AAPL", closes=[1.0, 2.0, 3.0]
+            )
+            resp = await svc.GetIndicatorSeries(req, _owned_ctx())
+
+        by_ref = {c.ref_name: c.first_value_bars for c in resp.components}
+        assert by_ref == {"sma200": 200, "sma20": 20, "custom": 31}
+        assert svc._indicators.GetFormula.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_first_value_bars_zero_on_error_and_fundamentals_formula(self):
+        """A failed component and a fundamentals-only formula both declare 0 first-value bars."""
+        svc = make_servicer()
+        definition = self._definition(
+            [
+                analysis_pb2.StrategyComponent(
+                    ref_name="bad",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 200.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="fund",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-fund",
+                ),
+            ]
+        )
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="f-fund",
+                name="fund",
+                warmup_period=30,
+                fundamental_inputs=[indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO],
+            )
+        )
+        svc._load_fundamentals = AsyncMock(return_value=[])
+        svc._load_fundamentals_snapshot = AsyncMock(return_value=[])
+
+        with (
+            patch.object(
+                StrategyEvaluator,
+                "_compute_component",
+                new=AsyncMock(side_effect=FormulaExecutionError("bad", "boom")),
+            ),
+            patch.object(
+                StrategyEvaluator,
+                "_assemble_component_series",
+                new=AsyncMock(return_value={"value": [1.0, 1.0, 1.0]}),
+            ),
+        ):
+            req = analysis_pb2.GetIndicatorSeriesRequest(
+                strategy_id="s1", symbol="AAPL", closes=[1.0, 2.0, 3.0]
+            )
+            resp = await svc.GetIndicatorSeries(req, _owned_ctx())
+
+        by_ref = {c.ref_name: c for c in resp.components}
+        assert "boom" in by_ref["bad"].error
+        assert by_ref["bad"].first_value_bars == 0
+        assert by_ref["fund"].error == ""
+        assert len(by_ref["fund"].series) == 1
+        assert by_ref["fund"].first_value_bars == 0
 
 
 # ---------------------------------------------------------------------------
@@ -8032,3 +8177,54 @@ class TestUnguardedReadinessParity_feature215:
             src = inspect.getsource(getattr(AnalysisServicer, name))
             assert "_load_fundamentals" in src or "_formula_fundamentals" in src, name
             assert "failures=" not in src, f"{name} must stay unguarded"
+
+
+def _delisted_binding(symbol, strategy_id=""):
+    return portfolio_pb2.WatchlistBinding(
+        symbol=symbol,
+        strategy_id=strategy_id,
+        delisted=common_pb2.DelistedState(
+            reason=common_pb2.UNSERVABLE_REASON_NOT_TRADABLE, first_unservable_date="2026-11-02"
+        ),
+    )
+
+
+async def _drain_bindings(*watchlists):
+    svc = make_servicer()
+    svc._portfolio = AsyncMock()
+    svc._portfolio.ListWatchlists = AsyncMock(
+        return_value=portfolio_pb2.ListWatchlistsResponse(watchlists=list(watchlists))
+    )
+    out = await svc._drain_watchlist_bindings((("x-user-id", "u1"),))
+    return out, svc._portfolio.ListWatchlists
+
+
+class TestDrainSkipsDelistedBindings:
+    """feature 352 @AC-8 — a flagged binding leaves the opportunity scan."""
+
+    async def test_delisted_binding_is_not_returned(self):
+        tech = portfolio_pb2.Watchlist(
+            name="Tech",
+            bindings=[
+                portfolio_pb2.WatchlistBinding(symbol="AAPL", strategy_id="sx"),
+                _delisted_binding("ROKU", "sx"),
+            ],
+        )
+        out, list_watchlists = await _drain_bindings(tech)
+        assert out == [("AAPL", "sx")]
+        assert list_watchlists.await_count == 1
+
+    async def test_all_delisted_list_never_falls_back_to_legacy_symbols(self):
+        only_flagged = portfolio_pb2.Watchlist(
+            name="Tech", bindings=[_delisted_binding("ROKU")], symbols=["ROKU"]
+        )
+        out, list_watchlists = await _drain_bindings(only_flagged)
+        assert out == []
+        assert list_watchlists.await_count == 1
+
+    async def test_binding_without_delisted_is_unchanged(self):
+        tech = portfolio_pb2.Watchlist(
+            name="Tech", bindings=[portfolio_pb2.WatchlistBinding(symbol="AAPL", strategy_id="sx")]
+        )
+        out, _ = await _drain_bindings(tech)
+        assert out == [("AAPL", "sx")]

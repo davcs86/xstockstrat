@@ -90,6 +90,10 @@ export interface MarkAlertReadRequest {
 }
 export interface MarkAlertReadResponse {
 }
+export interface GetAlertRequest {
+    /** Owner resolved from the propagated x-user-id header (C-03), never the body. */
+    alertId: string;
+}
 /** Web Push subscription registration (feature 165 — pwa-notifications). */
 export interface RegisterPushSubscriptionRequest {
     /**
@@ -135,6 +139,7 @@ export declare const ListAlertsRequest: MessageFns<ListAlertsRequest>;
 export declare const ListAlertsResponse: MessageFns<ListAlertsResponse>;
 export declare const MarkAlertReadRequest: MessageFns<MarkAlertReadRequest>;
 export declare const MarkAlertReadResponse: MessageFns<MarkAlertReadResponse>;
+export declare const GetAlertRequest: MessageFns<GetAlertRequest>;
 export declare const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptionRequest>;
 export declare const RegisterPushSubscriptionResponse: MessageFns<RegisterPushSubscriptionResponse>;
 export declare const UnregisterPushSubscriptionRequest: MessageFns<UnregisterPushSubscriptionRequest>;
@@ -204,6 +209,19 @@ export declare const NotifyServiceService: {
         readonly responseDeserialize: (value: Buffer) => MarkAlertReadResponse;
     };
     /**
+     * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+     * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+     */
+    readonly getAlert: {
+        readonly path: "/xstockstrat.notify.v1.NotifyService/GetAlert";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetAlertRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetAlertRequest;
+        readonly responseSerialize: (value: Alert) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => Alert;
+    };
+    /**
      * Register (or upsert) a Web Push subscription for the calling user.
      * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      */
@@ -258,6 +276,11 @@ export interface NotifyServiceServer extends UntypedServiceImplementation {
      */
     markAlertRead: handleUnaryCall<MarkAlertReadRequest, MarkAlertReadResponse>;
     /**
+     * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+     * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+     */
+    getAlert: handleUnaryCall<GetAlertRequest, Alert>;
+    /**
      * Register (or upsert) a Web Push subscription for the calling user.
      * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      */
@@ -296,6 +319,13 @@ export interface NotifyServiceClient extends Client {
     markAlertRead(request: MarkAlertReadRequest, callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void): ClientUnaryCall;
     markAlertRead(request: MarkAlertReadRequest, metadata: Metadata, callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void): ClientUnaryCall;
     markAlertRead(request: MarkAlertReadRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void): ClientUnaryCall;
+    /**
+     * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+     * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+     */
+    getAlert(request: GetAlertRequest, callback: (error: ServiceError | null, response: Alert) => void): ClientUnaryCall;
+    getAlert(request: GetAlertRequest, metadata: Metadata, callback: (error: ServiceError | null, response: Alert) => void): ClientUnaryCall;
+    getAlert(request: GetAlertRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: Alert) => void): ClientUnaryCall;
     /**
      * Register (or upsert) a Web Push subscription for the calling user.
      * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.

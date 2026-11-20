@@ -16,8 +16,8 @@ metrics to `/v1/metrics`, logs to `/v1/logs`. Each runtime's `OTEL_ENABLED` gate
 
 | Signal | Series / stream (as proven on the dev deploy, feature 274 G1) | Producers |
 |---|---|---|
-| Metric | `rpc_server_duration_milliseconds_{count,bucket,sum}` with `service_name`, `rpc_service`, `rpc_method`, `rpc_grpc_status_code` | 10 gRPC services (Go: otelgrpc server stats; Python and Node: derived from the gRPC server span) |
-| Metric | `mcp_tool_duration_milliseconds_{count,bucket,sum}` with `gen_ai_tool_name`, `outcome` | `xstockstrat-agent` (it is a gRPC client, so it records MCP tool calls instead) |
+| Metric | `rpc_server_duration_milliseconds_{count,bucket,sum}` with `service_name`, `rpc_service`, `rpc_method`, `rpc_grpc_status_code` | 10 gRPC services and `xstockstrat-agent`'s one unary RPC, the internal tool catalog (Go: otelgrpc server stats; Python and Node: derived from the gRPC server span) |
+| Metric | `mcp_tool_duration_milliseconds_{count,bucket,sum}` with `gen_ai_tool_name`, `outcome` | `xstockstrat-agent` (its MCP tool calls are not gRPC, so they are recorded here) |
 | Metric | `http_server_duration_milliseconds_{count,bucket,sum}` with `xstk_segment`, `http_response_status_code`, and `rpc_service` (Connect) or `http_route` (REST) | `xstockstrat-ui` BFF (unary Connect calls and the wrapped REST routes) |
 | Logs | Loki stream `{service_name="<short name>"}`, e.g. `{service_name="analysis"}`; `platform`, `trace_id`, `span_id`, `severity_text`, `detected_level` are structured metadata, not stream labels | all 12 runtimes (Go `slog`, Python `logging`, Node `winston`, UI `serverLog`) |
 
@@ -135,6 +135,14 @@ proxy in the path.
 - The first deploy with a fixed instance id relabels each runtime's series once: Go, Node and UI on DO dev (the old instance-less series go stale), Python on DO dev and homelab (the old per-process UUID series go stale).
 - Alerts are not provider-scoped yet: homelab errors page the same alerts as DO dev, and a live homelab analysis
   loop can mask a dead DO dev loop. The follow-up feature `otel-env-provider-scoped-alerts` scopes them.
+
+## Service `CLAUDE.md` Observability sections (feature 294 conventions)
+
+Each service's `CLAUDE.md` § Observability lists only its own loops, instruments and load-bearing logs; these conventions apply to all of them:
+
+- Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+- The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed).
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed.
 
 ## Per-language telemetry modules
 

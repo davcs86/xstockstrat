@@ -119,6 +119,10 @@
       "services/xstockstrat-marketdata/internal/service/marketdata_service.go:s.cfg": "marketdata",
       "services/xstockstrat-marketdata/internal/service/marketdata_service.go:s.fundCfg": "marketdata",
       "services/xstockstrat-notify/src/fanout/fanout.ts:this.config": "notify",
+      "services/xstockstrat-notify/src/fanout/emailProvider.ts:config": "notify",
+      "services/xstockstrat-notify/src/fanout/commsgunClient.ts:this.config": "notify",
+      "services/xstockstrat-notify/src/fanout/commsgunWorker.ts:this.config": "notify",
+      "services/xstockstrat-notify/src/fanout/sendgridSender.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/webPush.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/webhookWorker.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/webhookUrlRule.ts:config": "notify",
@@ -134,6 +138,7 @@
       "services/xstockstrat-trading/internal/service/trading.go:s.cfgW": "trading",
       "services/xstockstrat-trading/internal/service/trading.go:s.platformCfgW": "platform",
       "services/xstockstrat-ui/src/app/trader/positions/page.tsx:resp.values": "platform",
+      "services/xstockstrat-ui/src/lib/indicatorChart.ts:values": "ui",
       "services/xstockstrat-ui/src/lib/performanceMetrics.ts:values": "ui"
     }
   }

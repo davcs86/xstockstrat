@@ -10,6 +10,10 @@ import { NotifyServiceImpl } from './grpc/notifyServiceImpl';
 import { FanoutDispatcher } from './fanout/fanout';
 import { WebPushDispatcher } from './fanout/webPush';
 import { WebhookWorker } from './fanout/webhookWorker';
+import { SendgridSender } from './fanout/sendgridSender';
+import { CommsgunClient } from './fanout/commsgunClient';
+import { CommsgunWorker } from './fanout/commsgunWorker';
+import { createCommsgunSecret } from './services/commsgunSecret';
 import { describeDeliveryChannels } from './fanout/deliveryChannels';
 import { createAdminDirectory } from './services/adminDirectory';
 import { createNotifyServiceDefinition } from './grpc/serviceDefinition';
@@ -39,7 +43,14 @@ async function main() {
   await pool.query('SELECT 1');
   log.info('Database connected');
 
-  const fanout = new FanoutDispatcher(configWatcher);
+  const sendgrid = new SendgridSender(configWatcher);
+  // First resolve awaited so the startup line and the first tick see the key state; it never rejects.
+  const commsgunSecret = createCommsgunSecret(configWatcher, configEndpoint);
+  await commsgunSecret.start();
+  const commsgunWorker = new CommsgunWorker(pool, configWatcher,
+    { secret: commsgunSecret, client: new CommsgunClient(configWatcher), sendgrid },
+    (alert) => notifyImpl.emitInternalAlert(alert));
+  const fanout = new FanoutDispatcher(configWatcher, sendgrid, commsgunWorker);
   const webPush = new WebPushDispatcher(pool, configWatcher, createAdminDirectory());
   const notifyImpl = new NotifyServiceImpl(pool, configWatcher, fanout, webPush);
   log.info('delivery channels', describeDeliveryChannels(fanout, webPush));
@@ -56,18 +67,22 @@ async function main() {
       grpcServer.start();
       log.info(`Notify gRPC service listening on port ${port}`);
       webhookWorker.start();
+      commsgunWorker.start();
     }
   );
 
   const shutdown = () => {
     webhookWorker.stop();
+    // In-flight commsgun POSTs are aborted; a terminal step under way finishes before the pool closes.
+    const commsgunStopped = commsgunWorker.stop();
+    commsgunSecret.stop();
     // Open streams block tryShutdown, so flush telemetry in parallel and force the stop.
     const flush = shutdownTelemetry();
     setTimeout(() => {
       grpcServer.forceShutdown();
-      flush.finally(() => process.exit(0));
+      Promise.allSettled([flush, commsgunStopped]).then(() => process.exit(0));
     }, 5000).unref();
-    grpcServer.tryShutdown(async () => { await flush; pool.end(); process.exit(0); });
+    grpcServer.tryShutdown(async () => { await flush; await commsgunStopped; pool.end(); process.exit(0); });
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

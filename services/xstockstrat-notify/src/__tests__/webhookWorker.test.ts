@@ -12,6 +12,7 @@ import mtlsModule = require('../mtls');
 import loggerModule = require('../services/logger');
 import { counterValue, install, points } from './fixtures/collectingReader';
 import { fakeConfig, type Cfg } from './fixtures/fakeConfig';
+import { alertRecorder, scriptedPool, settle, type PoolCall, type PoolOpts } from './fixtures/scriptedPool';
 import { abortError, networkError, stubFetch, type FetchReply, type FetchStub } from './fixtures/stubFetch';
 
 type WorkerModule = typeof import('../fanout/webhookWorker');
@@ -80,11 +81,6 @@ function useFetch(reply: number | ((call: any, index: number) => FetchReply)): F
   return fetchStub;
 }
 
-// setImmediate is never mocked here, so this drains the un-awaited attempts under mock timers too.
-async function settle(): Promise<void> {
-  for (let i = 0; i < 20; i++) await new Promise<void>((resolve) => setImmediate(resolve));
-}
-
 function deliveryRow(over: Record<string, unknown> = {}): any {
   return {
     delivery_id: 'd-1',
@@ -96,68 +92,6 @@ function deliveryRow(over: Record<string, unknown> = {}): any {
     attempts: 0,
     created_at: new Date('2026-11-11T20:00:00.123Z'),
     ...over,
-  };
-}
-
-interface PoolCall {
-  sql: string;
-  params: any[];
-}
-interface PoolOpts {
-  /** Statements matching this reject. */
-  failOn?: RegExp;
-  /** rowCount reported for UPDATE statements (default 1). */
-  updateRowCount?: number;
-  /** The due-select never resolves. */
-  hangSelect?: boolean;
-}
-
-// Scripted pool: the due-select hands out each configured row once (minus the in-flight ids and up
-// to the LIMIT it is given); everything else is recorded. `connect` only counts — it must stay 0.
-function scriptedPool(dueRows: any[], opts: PoolOpts = {}) {
-  const calls: PoolCall[] = [];
-  let due = [...dueRows];
-  let connects = 0;
-  const obj = {
-    async query(sql: string, params: any[] = []) {
-      calls.push({ sql, params });
-      if (opts.failOn?.test(sql)) throw new Error('db down');
-      if (/^\s*SELECT/i.test(sql)) {
-        if (opts.hangSelect) return new Promise<never>(() => {});
-        const [inFlight, limit] = params;
-        const rows = due.filter((r) => !inFlight.includes(r.delivery_id)).slice(0, limit);
-        due = due.filter((r) => !rows.includes(r));
-        return { rows, rowCount: rows.length };
-      }
-      return { rows: [], rowCount: /^\s*UPDATE/i.test(sql) ? (opts.updateRowCount ?? 1) : 1 };
-    },
-    connect() {
-      connects++;
-      throw new Error('pool.connect must never be called');
-    },
-  };
-  const flat = (c: PoolCall) => c.sql.replace(/\s+/g, ' ');
-  const matching = (re: RegExp) => calls.filter((c) => re.test(flat(c)));
-  return {
-    obj,
-    calls,
-    connects: () => connects,
-    selects: () => matching(/^ ?SELECT/i),
-    updates: () => matching(/^ ?UPDATE notify\.webhook_deliveries/),
-    delivered: () => matching(/SET state = 'delivered'/),
-    dead: () => matching(/SET state = 'dead'/),
-    retried: () => matching(/make_interval\(secs => \$\d\)/),
-  };
-}
-
-function alertRecorder(fail = false) {
-  const alerts: any[] = [];
-  return {
-    alerts,
-    fn: async (alert: any) => {
-      alerts.push(alert);
-      if (fail) throw new Error('alert insert failed');
-    },
   };
 }
 

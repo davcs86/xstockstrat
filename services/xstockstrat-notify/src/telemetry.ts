@@ -355,7 +355,7 @@ export const KEY_CHANNEL = 'channel';
 export const KEY_OUTCOME = 'outcome';
 export const KEY_REASON = 'reason';
 
-export type DeliveryChannel = 'fanout' | 'slack' | 'sendgrid' | 'push' | 'webhook';
+export type DeliveryChannel = 'fanout' | 'slack' | 'sendgrid' | 'push' | 'webhook' | 'commsgun';
 export type DeliveryOutcome =
   | 'gated_severity'
   | 'gated_conviction'
@@ -369,7 +369,14 @@ export type DeliveryOutcome =
   | 'admin_lookup_error'
   | 'no_audience'
   | 'pruned'
-  | 'dead';
+  | 'dead'
+  | 'queued'
+  | 'enqueue_error'
+  | 'unconfigured'
+  | 'no_app_key'
+  | 'secret_unresolved'
+  | 'no_endpoint'
+  | 'rerouted';
 export type StreamEvictionReason = 'write_error' | 'stream_error';
 
 let readSubscribers: () => number = () => 0;

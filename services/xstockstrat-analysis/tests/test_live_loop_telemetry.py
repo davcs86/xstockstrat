@@ -7,8 +7,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 from gen.analysis.v1 import analysis_pb2
+from gen.common.v1 import common_pb2
+from gen.portfolio.v1 import portfolio_pb2
 
 import app.engine.live_loop as live_loop_module
+from app.handlers.servicer import _PositionsPageError
 from app.services.evaluator import StrategyEvaluator
 from tests import test_telemetry
 from tests.conftest import AAPL_PIT_PERIODS
@@ -121,8 +124,8 @@ async def test_ac15_ok_and_no_bars_pairs_counted(metric_reader):
 async def test_ac16_failed_held_drain_counted_without_owner(metric_reader):
     loop = _make_loop()
     _wire_drains(loop, list_positions=AsyncMock(side_effect=RuntimeError("portfolio down")))
-    held = await loop._drain_held("o-1")
-    assert held == set()
+    with pytest.raises(_PositionsPageError):
+        await loop._drain_held("o-1")
     assert metric_sum(metric_reader, "analysis.live_loop.drain_failures", source="held") == 1
     assert not [v for v in all_attribute_values(metric_reader) if "o-1" in v]
 
@@ -228,3 +231,25 @@ async def test_ac7_live_loop_writes_only_the_cycle_literal(monkeypatch, caplog):
     await _run_one_cycle(loop, monkeypatch, caplog)
     assert len(_messages(caplog, _CYCLE_COMPLETE)) == 1
     assert _messages(caplog, "loop tick ok") == []
+
+
+async def test_ac8_delisted_binding_leaves_the_live_loop_watchlist_drain():
+    loop = _make_loop()
+    _wire_drains(loop)
+    tech = portfolio_pb2.Watchlist(
+        name="Tech",
+        bindings=[
+            portfolio_pb2.WatchlistBinding(symbol="AAPL"),
+            portfolio_pb2.WatchlistBinding(
+                symbol="ROKU",
+                delisted=common_pb2.DelistedState(
+                    reason=common_pb2.UNSERVABLE_REASON_NOT_TRADABLE,
+                    first_unservable_date="2026-11-02",
+                ),
+            ),
+        ],
+    )
+    loop._portfolio.ListWatchlists = AsyncMock(
+        return_value=portfolio_pb2.ListWatchlistsResponse(watchlists=[tech])
+    )
+    assert await loop._drain_watchlist("o-1") == {"AAPL"}

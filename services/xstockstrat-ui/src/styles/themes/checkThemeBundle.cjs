@@ -190,4 +190,4 @@ function main(argv) {
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
 
-module.exports = { checkBundle, loadSources, main };
+module.exports = { checkBundle, loadSources, main, nonSharedTokens };

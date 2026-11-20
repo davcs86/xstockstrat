@@ -390,6 +390,11 @@ class _FundamentalsPageError(Exception):
     """Raised when PIT fundamentals pagination cannot complete safely (stalled cursor, page cap)."""
 
 
+class _PositionsPageError(Exception):
+    """Raised when positions pagination cannot complete safely (page error, repeated token,
+    page cap)."""
+
+
 def bucket_pnl_factors(samples, *, min_sample, bucket_count):
     """Query-time bucketing for QueryPnLPatterns (feature 042, design § 3). Pure — no I/O.
 
@@ -1912,14 +1917,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return out
 
     async def _formula_fundamentals(
-        self, definition, propagation_meta, *, cache=None, failures=None
+        self, definition, propagation_meta, *, cache=None, failures=None, warmups=None
     ):
         """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for the definition's
         custom-formula components that declare fundamentals inputs, via one ``GetFormula`` per
         distinct formula id (``cache`` dedups across a pass — mirrors ``_load_fundamentals``'s
         cache). An empty result means the definition has no fundamentals-formula operand. A
         refused ``GetFormula`` (NOT_FOUND/PERMISSION_DENIED) is "not a fundamentals formula" and
-        records no failure; an outage records UNKNOWN. Either caches ``[]``."""
+        records no failure; an outage records UNKNOWN. Either caches ``[]``. When ``warmups`` is
+        given, each fetched formula's declared ``warmup_period`` is recorded in it (feature 341)."""
         out: dict[str, list] = {}
         for comp in definition.components:
             if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA or not comp.formula_id:
@@ -1936,6 +1942,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         metadata=propagation_meta,
                     )
                     metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
+                    if warmups is not None:
+                        warmups[fid] = int(getattr(formula, "warmup_period", 0) or 0)
                 except grpc.RpcError as e:
                     metrics = []
                     if failures is not None and _rpc_code(e) not in UNREADABLE_FORMULA_CODES:
@@ -3929,7 +3937,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return
         # Mark rows the caller already holds (best-effort cross-ref).
         user_id = self._caller_user_id(context)
-        held = await self._drain_held_symbols(user_id, propagation_meta)
+        try:
+            held = await self._drain_held_symbols(user_id, propagation_meta)
+        except _PositionsPageError as e:
+            log.warning("ScreenSymbols: held cross-reference skipped for user=%s: %s", user_id, e)
+            held = {}
         for r in resp.results:
             # _drain_held_symbols keys by normalized symbol, so normalize the membership test
             # (no-op for uppercase broker tickers; correct for mixed case).
@@ -4545,7 +4557,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         closes = list(request.closes)
         component_series = []
         # feature 200 — fundamentals-only formula routing map (one GetFormula pass per RPC).
-        formula_fund_map = await self._formula_fundamentals(definition, propagation_meta)
+        formula_warmups: dict[str, int] = {}
+        formula_fund_map = await self._formula_fundamentals(
+            definition, propagation_meta, warmups=formula_warmups
+        )
         # Sequential loop (no gather) so the singleton semaphore bounds cross-request compute.
         # Benchmark components compute on the benchmark's own bars, aligned onto request.times.
         # Fundamental operands (feature 198) and fundamentals-only formulas (feature 200) also need
@@ -4620,7 +4635,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 ]
                 component_series.append(
                     analysis_pb2.ComponentSeries(
-                        ref_name=comp.ref_name, kind=comp.kind, series=named
+                        ref_name=comp.ref_name,
+                        kind=comp.kind,
+                        series=named,
+                        first_value_bars=warmup.first_value_bars(
+                            comp, formula_warmups, formula_fund_map
+                        ),
                     )
                 )
             # Per-component fault isolation: catches FormulaExecutionError + any sandbox/RPC error
@@ -6007,7 +6027,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 return out
             for wl in resp.watchlists:
                 if wl.bindings:
-                    out.extend((b.symbol, b.strategy_id) for b in wl.bindings)
+                    out.extend(
+                        (b.symbol, b.strategy_id) for b in wl.bindings if not b.HasField("delisted")
+                    )
                 else:  # legacy row: flat deprecated symbols mirror, unbound
                     out.extend((s, "") for s in wl.symbols)
             page_token = resp.page.next_page_token
@@ -6049,7 +6071,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     await self._replace_and_stamp_compute_state(uid, rows, meta)
             except Exception as e:  # one bad user never kills the pass
                 failed += 1
-                log.warning("opportunity daily refresh failed for user=%s: %s", uid, e)
+                telemetry.record_opportunity_recompute("full", "failed")
+                log.warning(
+                    "opportunity daily refresh failed for user=%s: %s", uid, e, exc_info=True
+                )
             await asyncio.sleep(0)  # cooperative pacing point
         # A completed pass advances to the next wall-clock hour.
         await schedule.advance(seconds_until_hour_utc(self._opportunity_refresh_hour()))
@@ -6401,28 +6426,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ``held_norm``, so a raw key would silently rank a real held symbol at 0.0."""
         if self._portfolio is None:
             return {}
+        rows = await _drain_positions_paged(self._portfolio, user_id, propagation_meta)
         held: dict[str, float] = {}
-        page_token = ""
-        for _ in range(_MAX_DRAIN_PAGES):
-            try:
-                resp = await self._portfolio.ListPositions(
-                    portfolio_pb2.ListPositionsRequest(
-                        user_id=user_id,
-                        page=common_pb2.PageRequest(
-                            page_size=_BAR_PAGE_SIZE, page_token=page_token
-                        ),
-                    ),
-                    metadata=propagation_meta,
-                )
-            except grpc.RpcError as e:
-                log.warning("ListOpportunities: ListPositions failed: %s", e)
-                return held
-            for p in resp.positions:
-                norm = _normalize_symbol(p.symbol)
-                held[norm] = held.get(norm, 0.0) + abs(p.market_value)
-            page_token = resp.page.next_page_token
-            if not page_token:
-                break
+        for p in rows:
+            norm = _normalize_symbol(p.symbol)
+            held[norm] = held.get(norm, 0.0) + abs(p.market_value)
         return held
 
     @owner_scoped
@@ -6689,6 +6697,38 @@ async def _fetch_historical_fundamentals_paged(stub, symbol, metadata) -> list[F
             return _fundamental_periods(periods)
     raise _FundamentalsPageError(
         f"{symbol}: fundamentals pagination exceeded {_MAX_FUND_PAGES} pages"
+    )
+
+
+async def _drain_positions_paged(stub, user_id, metadata) -> list:
+    """Drain every ``ListPositions`` page for ``user_id``; raises ``_PositionsPageError`` on a
+    page error, a repeated page token or the page cap, never returning partial rows."""
+    rows: list = []
+    token = ""
+    for _ in range(_MAX_DRAIN_PAGES):
+        try:
+            resp = await stub.ListPositions(
+                portfolio_pb2.ListPositionsRequest(
+                    user_id=user_id,
+                    page=common_pb2.PageRequest(page_size=_BAR_PAGE_SIZE, page_token=token),
+                ),
+                metadata=metadata,
+            )
+            page = list(resp.positions)
+            nxt = resp.page.next_page_token
+        except Exception as e:
+            raise _PositionsPageError(f"{user_id}: ListPositions failed: {e}") from e
+        rows.extend(page)
+        if not nxt:
+            return rows
+        if nxt == token:
+            raise _PositionsPageError(f"{user_id}: ListPositions repeated page token")
+        token = nxt
+    log.warning(
+        "ListPositions(%s) exceeded %d pages with a token pending", user_id, _MAX_DRAIN_PAGES
+    )
+    raise _PositionsPageError(
+        f"{user_id}: ListPositions pagination exceeded {_MAX_DRAIN_PAGES} pages"
     )
 
 

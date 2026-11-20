@@ -117,6 +117,7 @@ def test_init_logs_export_failure(otel_reset, monkeypatch, caplog):
 
 # ---- Feature 274: metrics + logs export, rpc.server.duration, cancel status, flush ----
 
+import json  # noqa: E402
 import os  # noqa: E402
 import pathlib  # noqa: E402
 import signal  # noqa: E402
@@ -124,6 +125,9 @@ import subprocess  # noqa: E402
 import sys  # noqa: E402
 
 SERVICE_DIR = pathlib.Path(__file__).resolve().parent.parent
+VECTORS = json.loads(
+    (SERVICE_DIR.parent.parent / "scripts" / "testdata" / "rpc-status-vectors.json").read_text()
+)
 AUTH = "Basic dGVzdDprZXk="
 HEADER_FORMS = ["Authorization=Basic dGVzdDprZXk=", "Authorization=Basic%20dGVzdDprZXk%3D"]
 
@@ -420,3 +424,80 @@ def test_agent_resource_and_warn_log_correlated_to_span(otel_reset, monkeypatch)
     assert len(recs) == 1
     assert recs[0].severity_text == "WARN"
     assert int.from_bytes(recs[0].trace_id, "big") == trace_id
+
+
+# ---- Feature 360: the agent serves one gRPC RPC, so it records rpc.server.duration too ----
+
+
+def _duration_points(reader):
+    data = reader.get_metrics_data()
+    points = []
+    for rm in data.resource_metrics if data else []:
+        for sm in rm.scope_metrics:
+            for m in sm.metrics:
+                if m.name == "rpc.server.duration":
+                    assert m.unit == "ms"
+                    points.extend(m.data.data_points)
+    return points
+
+
+@pytest.mark.parametrize(
+    "vector",
+    [v for v in VECTORS["vectors"] if "python" in v["applies_to"]],
+    ids=lambda v: v["name"],
+)
+def test_rpc_duration_status_vectors(metric_reader, vector):
+    # Shared status-derivation vectors; buckets are the shared boundaries.
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.trace import SpanKind, Status, StatusCode
+
+    from app.telemetry import _make_rpc_duration_processor
+
+    tp = TracerProvider()
+    tp.add_span_processor(_make_rpc_duration_processor())
+    spec = vector["span"]
+    span = tp.get_tracer("t").start_span(
+        "s", kind=getattr(SpanKind, spec["kind"]), attributes=spec["attributes"]
+    )
+    for ev in spec["events"]:
+        span.add_event(ev["name"], ev["attributes"])
+    if spec["status"] == "ERROR":
+        span.set_status(Status(StatusCode.ERROR))
+    span.end()
+    points = _duration_points(metric_reader)
+    assert len(points) == 1
+    assert points[0].attributes["rpc.grpc.status_code"] == vector["expected_code"]
+    assert isinstance(points[0].attributes["rpc.grpc.status_code"], int)
+    assert points[0].attributes["rpc.system"] == "grpc"
+    assert list(points[0].explicit_bounds) == VECTORS["bucket_boundaries_ms"]
+
+
+def test_rpc_duration_ignores_non_server_or_non_grpc_spans(metric_reader):
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.trace import SpanKind
+
+    from app.telemetry import _make_rpc_duration_processor
+
+    tp = TracerProvider()
+    tp.add_span_processor(_make_rpc_duration_processor())
+    tr = tp.get_tracer("t")
+    tr.start_span("c", kind=SpanKind.CLIENT, attributes={"rpc.system": "grpc"}).end()
+    tr.start_span("h", kind=SpanKind.SERVER, attributes={"rpc.system": "http"}).end()
+    assert _duration_points(metric_reader) == []
+
+
+def test_init_instruments_the_grpc_server(otel_reset, monkeypatch):
+    from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorServer
+
+    from app.telemetry import init_telemetry
+
+    calls = []
+    monkeypatch.setattr(GrpcAioInstrumentorServer, "instrument", lambda self, **kw: calls.append(1))
+    srv, _ = _start_body_receiver()
+    _enable(monkeypatch, srv)
+    try:
+        init_telemetry()
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert calls == [1]

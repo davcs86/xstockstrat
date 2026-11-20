@@ -51,7 +51,7 @@ function displayOrigin(raw: string): string {
   }
 }
 
-function networkErrorClass(error: any): string {
+export function networkErrorClass(error: any): string {
   const code = error?.cause?.code ?? error?.code;
   return `network: ${typeof code === 'string' && /^[A-Z0-9_]{1,40}$/.test(code) ? code : 'error'}`;
 }
