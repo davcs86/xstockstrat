@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-10-19-agent-mcp-transport-stdio-fallthrough-defect.md
 **Severity**: SEV-3
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-10
+**Last Updated**: 2026-11-20
 
 ---
 
@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 1 defect report(s) (clustered triage); converted from Track B to Track C by operator decision |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
+| 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -22,6 +23,9 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
+- [Design](design.md) — approved approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-agent-mcp-transport-fallthrough`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -33,4 +37,4 @@ With `MCP_TRANSPORT` unset or mistyped (e.g. `htp`), the agent silently starts t
 
 ## Next Action
 
-`/sdd-design fix-agent-mcp-transport-fallthrough quick` — quick design recommended (single service, no proto/migration; operator decisions recorded)
+`/sdd-spec fix-agent-mcp-transport-fallthrough` — generate implementation spec from the approved design
