@@ -630,3 +630,274 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-batch design gate (round 4)
+
+- `/sdd-design fix-position-fold-correctness` (full) halted at its approval gate after round 4 (gate policy: halt). design.md NOT written; status.md unchanged (spec-ready). Register: `debate.md` (D-1..D-22, R-1..R-17, O-1..O-36, P-1..P-3). Round 4 closed O-21, O-23, O-25, O-26, O-28, O-29, O-31, O-32; P-3 dropped (evidence already on record at P-2).
+
+## Open Threads
+
+- **Approach (round-4 synthesis).** Keeps D-1..D-16 and honours R-1..R-13; takes the proposer's r4 structure with four adversary corrections verified in code. Portfolio (`order.filled` consumer only): migration `019_fill_applied_events` and the `observed()` branches are unchanged from r3. `processOrderFill` now has a pinned transaction and lock order: below-floor returns `errFillAcked` with zero DB calls; otherwise `BEGIN`, applied-row `INSERT … ON CONFLICT DO NOTHING RETURNING` inside the fold tx (never autocommit); on conflict SELECT the stored `event_id` / `pending_closed`, `COMMIT`, re-emit under `position.closed:<STORED event_id>` if pending, return `errFillAcked` with no `positionsMu`, advisory lock, FOR UPDATE, risk or snapshot call; on a fresh row `positionsMu.Lock()`, then `pg_advisory_xact_lock`, `SELECT … FOR UPDATE`, fold, `COMMIT`, emits through `emitEventAs`, `Unlock`, then `checkRiskLimits` / `broadcastSnapshot`. No advisory or `positions` row lock is ever taken before `positionsMu`; `ApplyFill` stays one call on one `pgx.Tx` with a hook for the mutex. The AC-2 proof uses the existing harness (`portfolio-db-test`, `//go:build dbtest`, `testPool` / `serviceTestPool`, `PORTFOLIO_DB_TEST_URL`) with no CI change: a repo-level `apply_fill_dbtest_test.go` plus a service-level case with two `PortfolioService` instances folding the same event to qty 15. Trading (`pollFills` callee): migration `012_bracket_legs` with `not_found_ticks`; `ActivateBracket` writes `filled_qty = 0` and skips empty leg ids; `KnownBrokerOrderIDs` gains the `bracket_legs.leg_order_id` UNION; new `broker.ErrOrderNotFound` (Alpaca HTTP 404 only); IBKR `GetOrder` matches `OrderID == brokerOrderID`, and an IBKR miss or empty list is an ordinary error, never not-found, because `GetOrder` and `ListOrders` share `/iserver/account/orders` (R-10) — IBKR legs never auto-retire unless `/sdd-spec` verifies a definitive single-order not-found response (F-04). `pollBracketLegFills` runs after `logTick`, never feeds the parent counts, and retires a leg as `UNKNOWN` only after 3 consecutive `ErrOrderNotFound` ticks.
+- **Strongest open objection.** O-17 / O-11 (P-1, P-2), blocking: the D-4 reopen and the C-16 sign-off for the `@AC-5` amendment exist only in the workflow's computed steer. This file records no such ruling, so neither is recorded and the leg key stays `bracket-leg:<legID>:<status>:<filledQty>` (D-4). The amendment is fully specified and applies without another round once the operator's own ruling is recorded here: key `bracket-leg:<account_id>:<legID>:<status>:<filledQty>`, GetPnL's three dedup maps (`portfolio_service.go:993-1013`) on a composite `account_id + "\x00" + order_id`, a two-account same-leg-id test, and a required `/sdd-spec` grep of trading's partial- and full-fill payload history for a consistent `account_id`. If declined, the cross-account IBKR leg-id collision is a named residual. Three further blocking objections were adopted in the synthesis and await the proposer's confirmation: O-33 (fill-path tx and lock order, with a sync-versus-fill no-deadlock test), O-24 / O-20 (IBKR miss never counts as not-found, with an IBKR-miss-never-retires test), and O-27 / O-34 (AC-2 proof on the existing `dbtest` harness with the two-service case).
+- **Floor status.** No Floor breach. The design is not approvable this round: four blocking objections remain.
+- **Uncovered @AC changes.** `@AC-5` CHANGE is still not covered by an operator decision (O-11). All other rules (@AC-1..@AC-4, 294 @AC-56, 294 @AC-6, 251 @AC-17, 251 @AC-14, 290 @AC-3, 206 trading @AC-1) PRESERVE.
+- **Operator sign-offs still needed.** The D-4 ruling and the `@AC-5` sign-off (O-17, O-11), which also carry the GetPnL dedup-scope extension beyond the product spec's stated scope (O-35); O-3 cutover residuals (overlap double-apply, fills never folded before the first new boot, late-commit `recorded_at` before the floor, clock skew; stop-then-start first deploy as a numbered runbook step with a recorded result); O-8 parked post-floor fill re-parks with an ERROR on every boot; O-13 bracket-leg fills absent from `trading.orders` and `NetFilledQtyBySymbol`. Deferred to `/sdd-spec`: the `services/xstockstrat-analysis/acceptance/*` rule scan (O-30), the re-check of migration numbers 019 and 012 against feature 318, and the findings note that `trading.fill_poller` failed counts may rise for IBKR (O-36).
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "Round-4 synthesis. It keeps D-1..D-16, honours R-1..R-13, and takes the proposer's r4 structure with four corrections from the adversary that I verified in the code.\n\nVerified this round:\n- `/home/user/xstockstrat/docs/roadmap/features/311-fix-position-fold-correctness/context.md` (working tree and `origin/feature/fix-position-fold-correctness`) records no D-4 ruling and no @AC-5 sign-off. Lines 37-40 and 325 still list both as pending.\n- Portfolio already has a real-Postgres harness: job `portfolio-db-test` (`.github/workflows/ci.yml:1017-1065`) runs `go test -tags dbtest -race ./internal/repository/... ./internal/service/...` with `PORTFOLIO_DB_TEST_URL`; `testPool` (`services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go:22-29`) and `serviceTestPool` (`internal/service/position_drain_dbtest_test.go:24-31`) already skip locally and `t.Fatal` under `CI=true`. `ci.yml:510-512` is the analysis job and only installs binaries.\n- IBKR `GetOrder` and `ListOrders` call the same endpoint, `/iserver/account/orders` (`services/xstockstrat-trading/internal/broker/ibkr.go:415-421` vs `:449`); `GetOrder` returns `result.Orders[0]` unmatched (`:441-442`).\n- GetPnL's `filledOrderIDs`, `latest` and `partialOrder` are keyed on the bare `f.OrderID` (`services/xstockstrat-portfolio/internal/service/portfolio_service.go:993-1013`).\n\nLEG KEY (D-4) — not changed by this synthesis\n- The steer that reopens D-4 and signs off @AC-5 reached this step only inside the workflow's computed task text. The same text says \"OPERATOR DECISIONS: none recorded\", and `context.md` has no record. I therefore do not record a reopen or an operator-covered rule change.\n- Until the operator's ruling is recorded in `context.md`, the leg key stays `bracket-leg:<legID>:<status>:<filledQty>` (D-4).\n- The amendment is fully specified and applies with no further debate once the ruling is recorded:\n  - Key `bracket-leg:<account_id>:<legID>:<status>:<filledQty>`, where `account_id` is the `bracket_legs` PK column (D-7). The rest of D-4 is unchanged.\n  - GetPnL's three dedup maps (`portfolio_service.go:993-1013`) use a composite `account_id + \"\\x00\" + order_id`. Nothing else in GetPnL changes. Events with an empty `account_id` group exactly as today.\n  - Test: two accounts with the same leg id each fold their partial and full fill independently, and the ledger holds both appends.\n  - `/sdd-spec` required step: grep trading's partial- and full-fill payload history to confirm both always carried the same `account_id` (today both emit `order.AccountId`, `trading.go:1935,1956`).\n  - The GetPnL change extends the product spec's stated scope and is recorded in `context.md` with the ruling.\n- If the operator declines: no GetPnL change, and the cross-account IBKR leg-id collision is a named residual.\n\nPORTFOLIO (the `order.filled` consumer only; 290 @AC-3)\n\n(1) Migration `019_fill_applied_events`, unchanged from r3.\n\n(2) `observed()` branches, unchanged (D-12).\n\n(3) `processOrderFill`, with the transaction and lock order pinned:\n1. Parse the payload. If `recorded_at < floor`, return `errFillAcked` with zero DB calls.\n2. Sign with `signedQty` (`:1065`). Missing side returns `ErrFillUnattributable`.\n3. `BEGIN`.\n4. `INSERT applied … ON CONFLICT DO NOTHING RETURNING`, inside the fold tx (D-1). It is never autocommit.\n5. On conflict (duplicate): SELECT the stored `event_id` and `pending_closed`, `COMMIT`. If `pending_closed` is non-NULL, re-emit under `position.closed:<STORED event_id>` (D-13) and clear it on success. Return `errFillAcked`. No `positionsMu`, no advisory lock, no FOR UPDATE, no risk or snapshot call (R-9).\n6. Fresh row: `positionsMu.Lock()` (D-5), then `pg_advisory_xact_lock`, then `SELECT … FOR UPDATE`, the `pnl.FoldFrom` callback, upsert or delete, `pending_closed` bound as a string, `COMMIT`.\n7. Post-commit emits through `emitEventAs` (returns an error, key parameter, `emitEvent` stays the fail-soft wrapper). Clear `pending_closed` only on nil.\n8. `Unlock`, then `checkRiskLimits` and `broadcastSnapshot`, for applied fills only.\n- Lock-order invariant: no advisory lock and no `positions` row lock is ever taken before `positionsMu`. At step 6 the tx holds only the uncommitted applied row, which `processPositionSync` never touches, so the mutex wait cannot deadlock with sync.\n- Repo seam: `ApplyFill` stays one call on one `pgx.Tx` and takes a hook that the service uses to take `positionsMu` after a fresh INSERT and before the advisory lock. `/sdd-spec` picks the exact signature.\n- Tests on the `newFillSvc` scaffold (`portfolio_fill_errors_test.go:56`): a duplicate sets no snapshot or `portfolio.snapshot` expectations and the quote and notify fakes assert zero calls; below-floor makes zero DB calls; a duplicate with `pending_closed` appends once; sync and fill running concurrently do not deadlock.\n\n(4) AC-2 proof on the existing harness. No CI change, no new env var.\n- `services/xstockstrat-portfolio/internal/repository/apply_fill_dbtest_test.go`, `//go:build dbtest`, reusing `testPool` with a `DB_PGBOUNCER` exec-mode option. Cases: one `order_id` to two pools is applied once; two fills on one position serialize; a duplicate with `pending_closed` re-emits once.\n- A service-level case in `internal/service` (also `dbtest`, reusing `serviceTestPool`): two `PortfolioService` instances, each with its own `positionsMu`, run `processOrderFill` on the same event concurrently and the position ends at qty 15. This proves the database, not the in-process mutex, serializes.\n- Both run in `portfolio-db-test` and fail, never skip, under CI. This is not a downgrade.\n\n(5) Boot-replay residual (O-21): a duplicate costs up to 4 round trips (BEGIN, INSERT, SELECT, COMMIT) with no snapshot, risk, quote or ledger call. At the planning figure of 200 fills/day (an assumption) that is about 73k post-floor fills per year, roughly 300 s of boot replay per year of history over the pool of 2. It grows linearly until a rolling-floor follow-up, which is named and not scoped here.\n\nTRADING (`pollFills` callee; D-3; 294 @AC-6)\n\n(6) Migration `012_bracket_legs` per D-7, with `not_found_ticks SMALLINT NOT NULL DEFAULT 0`. Only the seed writes `filled_qty` NULL.\n\n(7) `BracketRepository.ActivateBracket` (D-14) writes `filled_qty = 0` and skips empty leg ids. Test: a leg already FILLED 10 @ 110 on its first observation emits `order.filled` qty 10.\n\n(8) `KnownBrokerOrderIDs` (`trading_repo.go:135-150`) gains the `bracket_legs.leg_order_id` UNION, with a test for a canceled leg blanked by resize.\n\n(9) Broker changes.\n- New `broker.ErrOrderNotFound`. Alpaca `GetOrder` wraps it on HTTP 404 (`alpaca.go:343-344`).\n- IBKR `GetOrder` selects the entry whose `OrderID == brokerOrderID` (R-11). Test: a response whose `Orders[0]` is another id never returns that order.\n- IBKR miss or empty list: this is the same endpoint as `ListOrders`, so it is list absence or a session blip, which R-10 locks out as a not-found signal. It returns an ordinary error, not `ErrOrderNotFound`. IBKR wraps `ErrOrderNotFound` only if `/sdd-spec` verifies (F-04) a definitive single-order not-found response. Until then IBKR legs never auto-retire: WARN and keep polling.\n- Parent `pollFills` (`trading.go:1822`): an IBKR miss is an ordinary failed poll, with no retirement and no status change. The trading findings entry (`services/xstockstrat-trading/docs/context-constitution-findings.md`) logs the latent defect and that `trading.fill_poller` failed counts may rise for IBKR.\n\n(10) `pollBracketLegFills` runs after `logTick` (`trading.go:1831`) and never feeds the parent counts.\n- One `ListOrders` per account with open legs, plus the capped `GetOrder` fallback (D-11). Absence from `ListOrders` never counts as not-found.\n- `ErrOrderNotFound` increments `not_found_ticks`; at 3 consecutive ticks the leg goes terminal `UNKNOWN` with a WARN. A successful read resets the counter. Every other error leaves it unchanged.\n- `held` and other unrecognised statuses stay open.\n- Per-leg emit rules, fees (D-16), synchronous keyed append and the first-failure tick budget (D-15) are unchanged from r3.\n- Tests: 5xx stays open across N ticks; 2 not-found then a success resets; 3 Alpaca not-found retires UNKNOWN; an IBKR miss never retires.\n\nBUILD ORDER\n1. Migrations.\n2. `observed()` branches, the pinned `ApplyFill` order, telemetry and duplicate tests.\n3. Fold rewrite and flip handling (D-10).\n4. The two `dbtest` AC-2 tests.\n5. Broker `ErrOrderNotFound`, IBKR id-match, tests.\n6. `ActivateBracket`, the `KnownBrokerOrderIDs` UNION, keyed append, the observer and its tests.\n7. Docs, the C-16 promotion, residuals in `context.md`, and the stop-then-start first deploy as a numbered runbook step with a recorded result.",
+    "open_objections": [
+      {
+        "text": "O-17 / O-11 (P-1, P-2): the D-4 reopen and the C-16 sign-off for the @AC-5 amendment exist only in the workflow's computed steer. They are not in context.md, and the task itself says no operator decisions are recorded. The orchestrator must get the operator's own ruling on both and record it in context.md. The account-scoped key and the GetPnL composite dedup key are fully specified and apply on that record without another round; if declined, the cross-account collision becomes a named residual.",
+        "blocking": true
+      },
+      {
+        "text": "Transaction and lock order for the fill path: the applied INSERT must be inside the fold tx (D-1), never autocommit. Pinned order: BEGIN, INSERT, on conflict SELECT + COMMIT + re-emit + errFillAcked; on a fresh row positionsMu.Lock, pg_advisory_xact_lock, FOR UPDATE, fold, COMMIT, emits, Unlock. No advisory or positions row lock before positionsMu. ApplyFill needs a hook for the mutex. A sync-versus-fill no-deadlock test is required. Adopted in the synthesis; the proposer must confirm.",
+        "blocking": true
+      },
+      {
+        "text": "O-24 / O-20: for IBKR, an empty list or an id miss from GetOrder must not count as not-found, because GetOrder uses the same /iserver/account/orders endpoint as ListOrders (ibkr.go:415-421, 449) and R-10 locks out list absence and session blips. IBKR wraps ErrOrderNotFound only on a definitive single-order not-found response verified at /sdd-spec (F-04); otherwise IBKR legs never auto-retire. Alpaca 404 keeps the 3-consecutive-tick rule. Adopted in the synthesis; the proposer must confirm with an IBKR-miss-never-retires test.",
+        "blocking": true
+      },
+      {
+        "text": "O-27: the AC-2 proof must use the existing harness, not new CI provisioning. Name it apply_fill_dbtest_test.go with //go:build dbtest, reuse testPool and PORTFOLIO_DB_TEST_URL in the portfolio-db-test job (ci.yml:1017-1065), and add a service-level dbtest case with two PortfolioService instances, each with its own positionsMu, folding the same event to qty 15. An untagged test with a new PORTFOLIO_PG_TEST_URL would fatal in the Go coverage job. Adopted in the synthesis; the proposer must confirm.",
+        "blocking": true
+      },
+      {
+        "text": "O-3: the cutover residuals (overlap double-apply, fills never folded before the first new boot, late-commit recorded_at before the floor, clock skew) still need operator sign-off, and the stop-then-start first deploy must be a numbered runbook step with a recorded result.",
+        "blocking": false
+      },
+      {
+        "text": "O-8: a parked post-floor fill re-parks with an ERROR on every boot and has no redelivery path. Operator acceptance is still needed.",
+        "blocking": false
+      },
+      {
+        "text": "O-13: bracket-leg fills stay absent from trading.orders and NetFilledQtyBySymbol. The proposer names it as a residual, but it has not been raised with the operator.",
+        "blocking": false
+      },
+      {
+        "text": "O-30: the services/xstockstrat-analysis/acceptance/* rule scan is deferred to /sdd-spec and the affected analysis ACs are still not listed. The D-10 flip-short window residual is named.",
+        "blocking": false
+      },
+      {
+        "text": "The GetPnL dedup-scope change goes beyond the product spec's stated scope. It rides on the D-4 ruling, must be recorded in context.md as a scope extension, and the /sdd-spec grep of trading's partial- and full-fill payload history for a consistent account_id is a required step.",
+        "blocking": false
+      },
+      {
+        "text": "The IBKR id-match also changes the parent pollFills path (trading.go:1822): a miss becomes an ordinary failed poll with no retirement and no status change. The spec must state this, and the findings entry must note that trading.fill_poller failed counts may rise for IBKR.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-56",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "251 @AC-17",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "251 @AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "290 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "206 trading @AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "An autocommit applied-row INSERT on the fill path (the reading of proposal r4's '2 autocommit round trips'). Lost: a crash between that commit and the fold commit marks a fill applied without folding it, which breaks D-1.",
+      "A new untagged apply_fill_realpg_test.go with PORTFOLIO_PG_TEST_URL and a PG install step in the portfolio Go job (proposal r4). Lost: it duplicates the existing portfolio-db-test job and testPool helper (ci.yml:1017-1065; dbtest_helpers_test.go:22-29), cites the analysis job as precedent, and without a build tag would fatal in the Go coverage job where the URL is unset.",
+      "A repo-only two-pool test as the whole AC-2 proof. Lost: AC-2 is about two portfolio processes, and two pools on ApplyFill do not show that the in-process positionsMu is not what serializes.",
+      "Treating an IBKR empty list or id miss as ErrOrderNotFound (proposal r4). Lost: it is locked R-10 under a new name, because IBKR GetOrder and ListOrders share one endpoint (ibkr.go:415-421, 449) and a gateway re-auth window of about 15 s would retire open legs and lose their exit fills.",
+      "A wall-clock retirement threshold in place of the 3-consecutive-tick count (adversary r4). Lost: once only a definitive not-found (Alpaca 404) counts, the window length no longer guards against transient reads, so the extra timestamp column buys nothing.",
+      "Leg order_id = <account_id>:<legID> instead of the GetPnL composite dedup key (adversary r4). Lost: leg ids would no longer match order_brackets and order.bracket_updated ids textually, and it changes more of D-4 (order_id = leg id) than the key amendment does.",
+      "Recording the D-4 reopen and the @AC-5 sign-off on the strength of the computed steer alone. Lost: context.md holds no such ruling and the task states no operator decisions are recorded (C-11, C-16)."
+    ],
+    "open_risks": [
+      "Until the operator's D-4 ruling is recorded, cross-account IBKR leg-id collisions can drop a second account's exit fill through the global ledger idempotency key, and GetPnL's bare-id dedup maps (portfolio_service.go:993-1013) can suppress the other account's partials.",
+      "If the composite GetPnL key is applied, a historical order whose partial and full fills carried different account_id values would stop being deduplicated. The mixed-group refusal turns the empty/non-empty case into FAILED_PRECONDITION, but the history grep at /sdd-spec is the only check.",
+      "IBKR legs the broker has genuinely forgotten are polled forever (WARN each tick, capped GetOrder budget) unless /sdd-spec finds a definitive single-order not-found response.",
+      "It is unverified whether IBKR /iserver/account/orders?orderId= filters at all. If it does not, legs outside the list result never resolve through the fallback.",
+      "The fresh fill path holds an open transaction and a PgBouncer connection (pool of 2) while it waits for positionsMu behind a position sync.",
+      "Cutover: one overlap fill double-applied, fills the old binary never folded, late-commit recorded_at before the floor, and ledger/portfolio clock skew. qty heals at sync; realized_accum and fees_accum may stay wrong.",
+      "Legs partially filled at cutover are BASELINE_RETIRED, so realized P&L for their post-cutover remainder is lost.",
+      "Boot replay re-walks every post-floor fill at up to 4 round trips each, and consumer_applied_events has no retention. The 200 fills/day figure is an assumption.",
+      "A parked post-floor fill re-parks with an ERROR on every boot.",
+      "A leg id is lost from tracking if the ActivateBracket tx fails; it is alerted, but its exit fill never folds.",
+      "Neither broker adapter populates BrokerOrder.Fees, so parent and leg fee totals both understate.",
+      "IBKR cumulative filledQuantity netting for legs is unverified (services/xstockstrat-trading/docs/ibkr.md unread).",
+      "The analysis pnl_pattern_consumer is affected and its acceptance rules are unscanned; a D-10 flip short never opens an analysis window.",
+      "Migration numbers 019 and 012 may collide with feature 318 and must be re-checked at /sdd-spec.",
+      "OQ-2 (repair of already-inflated accumulators) is out of scope, and instance_count must stay 1 because sync still relies on positionsMu."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-04",
+      "F-06",
+      "F-07",
+      "P-02",
+      "P-03",
+      "PLAT-N1"
+    ],
+    "rationale": "There is no Floor breach, but the design is not approvable this round: four blocking objections remain.\n\n**Operator rulings.** I did not record the D-4 reopen or the @AC-5 sign-off. The steer arrived only in the workflow's computed task text, which also says \"OPERATOR DECISIONS: none recorded\", and `context.md` on both the working tree and the feature branch still lists both as pending. The relayed user request (\"Yes, resume all together\") names neither. So `reopened` is empty, @AC-5 stays `covered_by_operator_decision = false`, and D-4's key stands. The amendment is written out in full so one recorded ruling applies it without another debate round.\n\n**Adversary claims I verified and adopted.**\n- The AC-2 CI plan duplicated existing infrastructure. `portfolio-db-test` (`ci.yml:1017-1065`) and `testPool` already do what the proposer proposed to build, and that job already runs `./internal/service/...`, so the two-service case fits with no CI change.\n- IBKR `GetOrder` and `ListOrders` share one endpoint (`ibkr.go:415-421`, `:449`). An IBKR miss is therefore list absence, which R-10 locks. The approach is corrected to honour R-10, not recorded as a new decision.\n- The duplicate path's transaction scope was unspecified. The pinned order keeps the INSERT inside the fold tx (D-1) and keeps the duplicate path off `positionsMu` (R-9). At the mutex wait the tx holds only the applied row, so it cannot deadlock with sync.\n\n**Where I did not follow the adversary.** The wall-clock threshold is dropped: with only Alpaca's definitive 404 counting, the 3-tick rule is enough. The leg-`order_id` prefix loses to the composite GetPnL key.\n\n**Closed this round** (confirmed by the proposer with tests, not contested): O-23, O-25, O-26, O-28, O-29, O-31, O-32, and O-21 with the cost corrected to 4 round trips.\n\n**Still open:** O-17 and O-11 (ruling not on record), O-24 and O-20 (IBKR rule corrected, awaiting confirmation), O-27 (harness corrected, awaiting confirmation), O-3, O-8, O-13, O-30.\n\nThe proposer's REOPEN D-4 cites `portfolio_service.go:993-1019`, which is already on record under P-2, so it is not new evidence.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "A duplicate or below-floor order.filled returns errFillAcked with no positionsMu, no advisory lock, no FOR UPDATE and no risk, snapshot or position.* call. Its only side effect is the pending_closed re-emit. Below-floor makes zero DB calls.",
+          "evidence": "portfolio_service.go:482-485; R-9; D-12; D-13; proposal r4 item 3(a) with the newFillSvc zero-call test (portfolio_fill_errors_test.go:56); adversary r4 contested only the tx and lock order"
+        },
+        {
+          "text": "IBKR GetOrder selects the entry whose OrderID equals the requested id and never returns Orders[0] unmatched. The latent parent pollFills defect is logged in the trading findings.",
+          "evidence": "ibkr.go:441-442; trading.go:1822; R-11; adversary r4 contested only how a miss is classified"
+        },
+        {
+          "text": "Rows written by ActivateBracket carry filled_qty = 0 and empty leg ids are skipped. Only the 012 seed writes NULL. Alpaca held and other unrecognised leg statuses stay non-terminal.",
+          "evidence": "R-13; trading.go:1853-1858; proposal r4 item 3(d) with the FILLED-on-first-observation test; adversary r4 did not contest"
+        },
+        {
+          "text": "KnownBrokerOrderIDs gains a UNION over trading.bracket_legs.leg_order_id for the account.",
+          "evidence": "trading_repo.go:135-150; trading.go:3612; 206 trading @AC-1; adversary r4 did not contest"
+        },
+        {
+          "text": "emitEventAs returns an error and takes the key parameter; emitEvent stays the fail-soft wrapper. pending_closed is cleared only on a nil return.",
+          "evidence": "portfolio_service.go:1342,1356; adversary r4 did not contest"
+        },
+        {
+          "text": "pollBracketLegFills runs after logTick and its outcomes never feed the parent polled/failed counts.",
+          "evidence": "trading.go:1831; 294 @AC-6; adversary r4 did not contest"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "An autocommit applied-row INSERT on the fill path, outside the fold transaction",
+          "why": "A crash between that commit and the fold commit marks a fill applied without folding it, which breaks D-1."
+        },
+        {
+          "text": "A new untagged real-PG test with PORTFOLIO_PG_TEST_URL and a PG install step in the portfolio Go CI job",
+          "why": "It duplicates the portfolio-db-test job and the testPool helper (ci.yml:1017-1065; dbtest_helpers_test.go:22-29), and without the dbtest build tag it would fatal in the Go coverage job where the URL is unset."
+        },
+        {
+          "text": "A wall-clock retirement threshold in place of the 3-consecutive-tick not-found count",
+          "why": "Once only a definitive not-found (Alpaca 404) counts, the window length no longer guards against transient reads, so the extra timestamp column is unneeded."
+        },
+        {
+          "text": "Leg order_id = <account_id>:<legID> as the way to scope legs by account",
+          "why": "Leg ids would no longer match order_brackets and order.bracket_updated ids textually, and it changes more of D-4 than the key amendment does."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Pin the fill-path transaction and lock order: applied INSERT inside the fold tx; on conflict SELECT, COMMIT, re-emit, errFillAcked; on a fresh row positionsMu.Lock, then pg_advisory_xact_lock, FOR UPDATE, fold, COMMIT, emits, Unlock. No advisory or positions row lock before positionsMu. ApplyFill exposes a hook for the mutex, and a sync-versus-fill no-deadlock test is required.",
+          "blocking": true
+        },
+        {
+          "text": "The AC-2 proof needs a service-level dbtest case: two PortfolioService instances, each with its own positionsMu, run processOrderFill on the same event concurrently and end at qty 15 (precedent position_drain_dbtest_test.go:24-31).",
+          "blocking": true
+        },
+        {
+          "text": "The GetPnL composite dedup key extends the product spec's scope. Record it in context.md with the D-4 ruling and make the /sdd-spec payload-history grep for a consistent account_id a required step.",
+          "blocking": false
+        },
+        {
+          "text": "State that the parent pollFills path treats an IBKR id miss as an ordinary failed poll with no retirement or status change, and note in the findings that trading.fill_poller failed counts may rise for IBKR.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-21",
+          "how": "Residual restated on the side-effect-free duplicate path with a growth estimate: up to 4 round trips per post-floor fill (BEGIN, INSERT, SELECT, COMMIT), about 73k fills and roughly 300 s of boot replay per year at an assumed 200 fills/day. The rolling-floor follow-up is named."
+        },
+        {
+          "id": "O-23",
+          "how": "Duplicate and below-floor paths return errFillAcked before positionsMu and every side effect, counted acked, with newFillSvc tests asserting zero snapshot, quote and notify calls. The tx and lock order is tracked as a new objection."
+        },
+        {
+          "id": "O-25",
+          "how": "IBKR GetOrder matches OrderID to the requested id, with a test that an Orders[0] of another id is never returned, and the parent pollFills defect is logged in the trading findings. How a miss is classified is tracked under O-24."
+        },
+        {
+          "id": "O-26",
+          "how": "ActivateBracket rows carry filled_qty = 0, with a test for a leg already FILLED 10 @ 110 on its first observation emitting order.filled qty 10."
+        },
+        {
+          "id": "O-28",
+          "how": "KnownBrokerOrderIDs gains the bracket_legs.leg_order_id UNION, with a test for a canceled leg blanked by resize."
+        },
+        {
+          "id": "O-29",
+          "how": "ActivateBracket skips empty leg ids, and held and other unrecognised statuses stay open."
+        },
+        {
+          "id": "O-31",
+          "how": "emitEventAs returns an error, emitEvent stays the fail-soft wrapper, and pending_closed is cleared only on success."
+        },
+        {
+          "id": "O-32",
+          "how": "pollBracketLegFills runs after logTick (trading.go:1831) and its outcomes never feed the parent counts."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "D-4",
+          "evidence": "Proposer r4: GetPnL's filledOrderIDs, latest and partialOrder maps are keyed on the bare order id (portfolio_service.go:993-1019), so the amendment must extend to GetPnL's dedup scope. This evidence is already on record at P-2 (:990-1013); it refines the remedy only.",
+          "is_new": false
+        }
+      ],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
