@@ -180,6 +180,11 @@ export interface MarkAlertReadRequest {
 export interface MarkAlertReadResponse {
 }
 
+export interface GetAlertRequest {
+  /** Owner resolved from the propagated x-user-id header (C-03), never the body. */
+  alertId: string;
+}
+
 /** Web Push subscription registration (feature 165 — pwa-notifications). */
 export interface RegisterPushSubscriptionRequest {
   /**
@@ -1445,6 +1450,70 @@ export const MarkAlertReadResponse: MessageFns<MarkAlertReadResponse> = {
   },
 };
 
+function createBaseGetAlertRequest(): GetAlertRequest {
+  return { alertId: "" };
+}
+
+export const GetAlertRequest: MessageFns<GetAlertRequest> = {
+  encode(message: GetAlertRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.alertId !== "") {
+      writer.uint32(10).string(message.alertId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetAlertRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetAlertRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.alertId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetAlertRequest {
+    return {
+      alertId: isSet(object.alertId)
+        ? globalThis.String(object.alertId)
+        : isSet(object.alert_id)
+        ? globalThis.String(object.alert_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetAlertRequest): unknown {
+    const obj: any = {};
+    if (message.alertId !== "") {
+      obj.alertId = message.alertId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetAlertRequest>, I>>(base?: I): GetAlertRequest {
+    return GetAlertRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetAlertRequest>, I>>(object: I): GetAlertRequest {
+    const message = createBaseGetAlertRequest();
+    message.alertId = object.alertId ?? "";
+    return message;
+  },
+};
+
 function createBaseRegisterPushSubscriptionRequest(): RegisterPushSubscriptionRequest {
   return { endpoint: "", p256dh: "", auth: "", userAgent: "" };
 }
@@ -2000,6 +2069,19 @@ export const NotifyServiceService = {
     responseDeserialize: (value: Buffer): MarkAlertReadResponse => MarkAlertReadResponse.decode(value),
   },
   /**
+   * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+   * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+   */
+  getAlert: {
+    path: "/xstockstrat.notify.v1.NotifyService/GetAlert" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetAlertRequest): Buffer => Buffer.from(GetAlertRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetAlertRequest => GetAlertRequest.decode(value),
+    responseSerialize: (value: Alert): Buffer => Buffer.from(Alert.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Alert => Alert.decode(value),
+  },
+  /**
    * Register (or upsert) a Web Push subscription for the calling user.
    * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
    */
@@ -2063,6 +2145,11 @@ export interface NotifyServiceServer extends UntypedServiceImplementation {
    * propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
    */
   markAlertRead: handleUnaryCall<MarkAlertReadRequest, MarkAlertReadResponse>;
+  /**
+   * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+   * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+   */
+  getAlert: handleUnaryCall<GetAlertRequest, Alert>;
   /**
    * Register (or upsert) a Web Push subscription for the calling user.
    * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
@@ -2154,6 +2241,22 @@ export interface NotifyServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+   * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+   */
+  getAlert(request: GetAlertRequest, callback: (error: ServiceError | null, response: Alert) => void): ClientUnaryCall;
+  getAlert(
+    request: GetAlertRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Alert) => void,
+  ): ClientUnaryCall;
+  getAlert(
+    request: GetAlertRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Alert) => void,
   ): ClientUnaryCall;
   /**
    * Register (or upsert) a Web Push subscription for the calling user.

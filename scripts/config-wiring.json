@@ -138,6 +138,7 @@
       "services/xstockstrat-trading/internal/service/trading.go:s.cfgW": "trading",
       "services/xstockstrat-trading/internal/service/trading.go:s.platformCfgW": "platform",
       "services/xstockstrat-ui/src/app/trader/positions/page.tsx:resp.values": "platform",
+      "services/xstockstrat-ui/src/lib/indicatorChart.ts:values": "ui",
       "services/xstockstrat-ui/src/lib/performanceMetrics.ts:values": "ui"
     }
   }

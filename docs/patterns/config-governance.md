@@ -163,6 +163,73 @@ config owner.
 |---|---|---|---|---|---|
 | `analysis` | `opportunity.live_enrich_ttl_seconds` | int | `20` | `app/handlers/servicer.py:_enrich_opportunities_live` | Seeded `20` (was `10`). Keep above the 15s `ListOpportunities` UI poll. `0` disables the memo. Unbounded. |
 
+### feature 352 — delisted-symbol-handling (`xstockstrat-marketdata` / `xstockstrat-config`)
+
+The confirmation window of marketdata's delisted-symbol detection: the number of trading days a watchlist
+symbol must stay unservable in every successful asset-set load before it is flagged delisted (the first
+unservable day counts as day 1). The key has a full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
+`xstockstrat-config` (`configServiceImpl.ts`) and is **seeded** `5` (staging + production, global, stored as
+`int`, insert-if-absent) by config migration `marketdata_delisting_confirmation_days`, with the number-free
+actor sentinel `system:config-migration-feature-delisted-symbol-handling`; the down deletes only a global row
+that still carries that sentinel and still holds `5`, so a value an operator has changed survives a rollback.
+No `scripts/config-wiring.json` baseline entry. Approval: owner + config team.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `marketdata.assets.delisting_confirmation_trading_days` | int | `5` | `[1,30]`; read clamp unset or `≤ 0` → `5`, `> 30` → `30` | Reader `resolveDelistingConfirmationDays` (`asset_servability.go`); re-read at each successful asset-set load, so a change applies on the next load without a restart. |
+
+### feature 347 — alpaca-adaptive-rate-limit (`xstockstrat-marketdata` / `xstockstrat-trading` / `xstockstrat-config`)
+
+Two kill switches for adaptive Alpaca pacing: each service's Alpaca REST client paces itself from the
+`X-RateLimit-Limit` / `Remaining` / `Reset` response headers and retries an HTTP 429; `false` restores the
+pre-feature single attempt. Both keys are **seeded** `true` (staging + production, global, non-secret,
+insert-if-absent) by config migration `052_alpaca_adaptive_rate_limit_keys`, with the number-free actor
+sentinel `system:config-migration-feature-alpaca-adaptive-rate-limit`; the down deletes only a global row
+that still carries that sentinel and still holds `true`, so a switch an operator has turned off survives a
+rollback. The same migration rewords the description of `marketdata` / `backfill.rate_limit_rps` (now a
+ceiling over the adaptive rate), guarded on the exact old text so an operator-edited description is left
+alone; the down swaps it back under the mirror guard. No `SCALAR_BOUNDS_REGISTRY` entry (both are bool). No
+`scripts/config-wiring.json` baseline entry remains (the two temporary `read-unseeded` entries were removed
+with the seed). The pacing constants are fixed invariants in code, not keys (each service's `CLAUDE.md`).
+Approval: owner + config team.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `marketdata` | `alpaca.adaptive_rate_limit_enabled` | bool | `true` | `cmd/server/main.go:alpacaAdaptiveRateLimit` | Explicit-true code default. Read live on every Alpaca request. Off = static `backfill.rate_limit_rps` limiter only; a 429 goes to the caller. |
+| `trading` | `broker.adaptive_rate_limit_enabled` | bool | `true` | `internal/service/trading.go:(*TradingService).alpacaRateLimitBudget` | Explicit-true code default. Read live on every Alpaca request. Off = one unpaced attempt per broker call. Alpaca only; the loop bounds and the cancel reorder do not depend on it. |
+
+### feature 343 — backtest-inline-backfill (`xstockstrat-ingest`)
+
+Caps the range a non-admin may request through ingest's self-serve `TriggerBackfill` envelope. The key is
+**seeded** (staging + production, global, non-secret, insert-if-absent) by config migration
+`051_ingest_backfill_self_serve_keys`; its down deletes only the global rows the migration wrote that still
+hold the seeded value. No `SCALAR_BOUNDS_REGISTRY` entries were added — the bound below is reader-side only.
+No `scripts/config-wiring.json` baseline entry. `backfill.max_concurrent_jobs` keeps its default and seed of
+3; the homelab alone sets 8 through `SetConfig` (see `docs/runbooks/config-rollout.md`). Approval: owner +
+config team.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `ingest` | `backfill.self_serve_max_range_days` | int | `730` | `app/config/watcher.py:backfill_self_serve_max_range_days` | `≤ 0` → `730`. Read on every non-admin `TriggerBackfill`. |
+
+### feature 341 — fix-indicator-pane-warmup (`xstockstrat-ui` / `xstockstrat-config`)
+
+Sets how many bars of history the `/trader` symbol page fetches for its indicator panes (it draws the
+latest 200). The key is **seeded** (staging + production, global, non-secret, insert-if-absent) at `200`
+by config migration `050_ui_chart_history_bars`, with the number-free actor sentinel
+`system:config-migration-feature-fix-indicator-pane-warmup`; the down deletes only a global row that still
+carries that sentinel and still holds `200`, so a row an admin has set survives a rollback. Write bound
+`SCALAR_BOUNDS_REGISTRY['ui.chart.indicator_history_bars']` = [200, 1000]. Read one-shot (no
+`WatchConfig`) through `/trader/api` (`traderConfigClient.getConfig({ namespace: 'ui' })`, `traderBff.ts`
+forward). Per deployment: `200` on DigitalOcean (staging and production share one database); `1000` on the
+homelab `staging` row only, set by `set_config` after the gate in `docs/runbooks/ohlcv-lock-budget-tuning.md`
+§ Homelab deep indicator history passes. No `scripts/config-wiring.json` baseline entry remains. Approval:
+owner + config team.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `ui` | `chart.indicator_history_bars` | int | `200` | `src/lib/indicatorChart.ts:readHistoryBars` | `intVal` only, clamped to [200, 1000]; absent, wrong type, error or timeout → `200`. Read once per page load (`staleTime: Infinity`), so an open tab keeps the depth it read. |
+
 ### feature 338 — notify-commsgun-channel (`xstockstrat-notify` / `xstockstrat-config`)
 
 Selects the provider of notify's alert email (SendGrid or the homelab commsgun hub) and bounds commsgun

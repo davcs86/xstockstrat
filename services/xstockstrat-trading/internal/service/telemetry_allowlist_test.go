@@ -36,7 +36,7 @@ var forbiddenLabelKeys = []string{
 
 var minInstruments = []string{
 	"trading.flatten.outcome", "trading.bracket.outcome", "trading.order_submit", "trading.ledger_emit",
-	"trading.alert_emit", "trading.escalation.systemic",
+	"trading.alert_emit", "trading.escalation.systemic", "trading.reconciliation.position_check_skipped",
 }
 
 var rpcServerKeys = []string{"rpc.system", "rpc.service", "rpc.method", "rpc.grpc.status_code"}
@@ -49,6 +49,9 @@ func driveAllInstruments(ctx context.Context) {
 	telemetry.RecordLedgerEmit(ctx, "not.a.known.type", "error")
 	telemetry.RecordAlertEmit(ctx, "bracket_unprotected", "ok")
 	telemetry.RecordEscalationSystemic(ctx)
+	telemetry.RecordReconcilePositionSkip(ctx, telemetry.ReconcileSkipRPCError)
+	telemetry.RecordReconcilePositionSkip(ctx, telemetry.ReconcileSkipDeadline)
+	telemetry.RecordReconcilePositionSkip(ctx, telemetry.ReconcileSkipCursorInvalid)
 }
 
 // keysByInstrument collects every attribute key recorded on each collected instrument.

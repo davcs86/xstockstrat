@@ -71,12 +71,12 @@ Feature: xstockstrat-marketdata — filter OTC symbols
     Then the call returns within the deadline with the stored bars for AAPL
     And ZZZZ was requested from the live fetch and BOSSY was not
 
-  @AC-15 @FR-3 @feature-282
+  @AC-15 @FR-3 @feature-282 @feature-352
   Scenario: The first successful load removes unservable symbols warmed while unloaded
     Given the asset set has not loaded and BOSSY and AAPL were warmed
     When the first load succeeds and lists AAPL but not BOSSY
     Then BOSSY is removed from the warm set and AAPL stays
-    And a later refresh that stops listing AAPL does not remove it from the warm set
+    And a later refresh that stops listing AAPL does not remove it from the warm set until AAPL is flagged delisted (feature 352)
 
   @AC-16 @FR-3 @feature-282
   Scenario: Quote and price paths are not gated

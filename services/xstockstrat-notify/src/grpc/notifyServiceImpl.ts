@@ -14,6 +14,7 @@ const log = getLogger('notify:impl');
 const FANOUT_WEBHOOK_PEER_SANS: readonly string[] = ['xstockstrat-ingest'];
 const WEBHOOK_NAME_MAX_CHARS = 256;
 const WEBHOOK_PAYLOAD_MAX_BYTES = 64 * 1024;
+const ALERT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function peerDnsSans(call: any): string[] {
   const raw: string = call.getAuthContext?.()?.sslPeerCertificate?.subjectaltname ?? '';
@@ -256,6 +257,36 @@ export class NotifyServiceImpl {
         alerts: result.rows.map(rowToAlert),
         unreadCount: parseInt(countResult.rows[0]?.count ?? '0', 10),
       });
+    } catch (err: any) {
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  // Identity is the x-user-id header only; a missing, not-visible and malformed id all answer the
+  // same code 5 so they are indistinguishable.
+  async getAlert(call: any, callback: any) {
+    const userId = (call.metadata?.get?.('x-user-id')?.[0] ?? '').toString();
+    if (!userId) {
+      return callback({ code: 3, message: 'x-user-id header required' });
+    }
+    const alertId = call.request.alertId;
+    if (!ALERT_ID_RE.test(alertId ?? '')) {
+      return callback({ code: 5, message: 'alert not found' });
+    }
+    try {
+      const result = await this.pool.query(
+        `SELECT a.*, ar.read_at
+         FROM notify.alerts a
+         LEFT JOIN notify.alert_reads ar ON ar.alert_id = a.alert_id AND ar.user_id = $1
+         WHERE (a.target_user_id = $1 OR a.target_user_id IS NULL)
+           AND a.alert_id = $2`,
+        [userId, alertId]
+      );
+      const row = result.rows[0];
+      if (!row) {
+        return callback({ code: 5, message: 'alert not found' });
+      }
+      callback(null, { ...rowToAlert(row), context: row.context ?? {} });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
     }

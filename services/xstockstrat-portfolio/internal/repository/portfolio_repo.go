@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -136,6 +137,10 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 	if pageSize <= 0 || pageSize > 500 {
 		pageSize = 100
 	}
+	cursor, err := decodePositionCursor(pageToken)
+	if err != nil {
+		return nil, "", fmt.Errorf("list positions: %w", err)
+	}
 
 	conds := []string{"user_id = $1"}
 	args := []any{userID}
@@ -158,8 +163,8 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 	case portfoliov1.PositionSide_POSITION_SIDE_SHORT:
 		conds = append(conds, "qty < 0")
 	}
-	args = append(args, pageToken)
-	conds = append(conds, fmt.Sprintf("($%d = '' OR symbol > $%d)", len(args), len(args)))
+	args = append(args, cursor)
+	conds = append(conds, fmt.Sprintf("(cardinality($%[1]d::text[]) = 0 OR (symbol, trading_mode, account_id) > (($%[1]d::text[])[1], ($%[1]d::text[])[2], ($%[1]d::text[])[3]))", len(args)))
 	args = append(args, pageSize+1)
 	limitIdx := len(args)
 
@@ -169,7 +174,7 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 		SELECT `+positionColumns+`
 		FROM portfolio.positions
 		WHERE %s
-		ORDER BY symbol ASC LIMIT $%d`, strings.Join(conds, " AND "), limitIdx)
+		ORDER BY symbol, trading_mode, account_id LIMIT $%d`, strings.Join(conds, " AND "), limitIdx)
 
 	rows, err := r.db.Query(ctx, q, args...)
 	if err != nil {
@@ -178,12 +183,14 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 	defer rows.Close()
 
 	var positions []*portfoliov1.Position
+	var modes []string
 	for rows.Next() {
-		p, err := scanPositionRow(rows)
+		p, mode, err := scanPositionRowWithMode(rows)
 		if err != nil {
 			return nil, "", err
 		}
 		positions = append(positions, p)
+		modes = append(modes, mode)
 	}
 	if rows.Err() != nil {
 		return nil, "", rows.Err()
@@ -191,10 +198,33 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 
 	nextToken := ""
 	if len(positions) > pageSize {
-		nextToken = positions[pageSize].Symbol
+		last := pageSize - 1
+		nextToken = encodePositionCursor(positions[last].Symbol, modes[last], positions[last].AccountId)
 		positions = positions[:pageSize]
 	}
 	return positions, nextToken, nil
+}
+
+func encodePositionCursor(symbol, tradingMode, accountID string) string {
+	b, _ := json.Marshal([]string{symbol, tradingMode, accountID})
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// Rejects (never resumes page 1, unlike marketdata parseHistCursor): a silent restart makes
+// paging consumers re-add rows (analysis _drain_held_symbols sums market_value).
+func decodePositionCursor(token string) ([]string, error) {
+	if token == "" {
+		return []string{}, nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return nil, ErrInvalidPageToken
+	}
+	var parts []string
+	if err := json.Unmarshal(raw, &parts); err != nil || len(parts) != 3 {
+		return nil, ErrInvalidPageToken
+	}
+	return parts, nil
 }
 
 // InsertSnapshot writes a portfolio snapshot to the hypertable.
@@ -246,11 +276,19 @@ func (r *PortfolioRepo) CountPositions(ctx context.Context, userID string, mode 
 // "no position" (NotFound) from a backend failure (Internal).
 var ErrPositionNotFound = errors.New("position not found")
 
+// ErrInvalidPageToken is returned for a malformed ListPositions page token; the handler maps it to InvalidArgument.
+var ErrInvalidPageToken = errors.New("invalid page token")
+
 type pgxRow interface {
 	Scan(dest ...any) error
 }
 
 func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
+	p, _, err := scanPositionRowWithMode(row)
+	return p, err
+}
+
+func scanPositionRowWithMode(row pgxRow) (*portfoliov1.Position, string, error) {
 	var (
 		symbol, modeStr, accountID                                 string
 		qty, avgEntry, costBasis                                   float64
@@ -265,9 +303,9 @@ func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 		&currentPrice, &marketValue, &unrealizedPnl, &unrealizedPnlPct, &dayPnl, &dayPnlPct,
 		&stopOrderID, &takeProfitOrderID, &source, &asOf); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrPositionNotFound
+			return nil, "", ErrPositionNotFound
 		}
-		return nil, fmt.Errorf("scan position: %w", err)
+		return nil, "", fmt.Errorf("scan position: %w", err)
 	}
 	pos := &portfoliov1.Position{
 		Symbol:            symbol,
@@ -289,7 +327,7 @@ func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 	if asOf != nil {
 		pos.AsOf = timestamppb.New(*asOf)
 	}
-	return pos, nil
+	return pos, modeStr, nil
 }
 
 // positionColumns is the SELECT list backing scanPositionRow — column order MUST stay in lockstep

@@ -3,6 +3,72 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-18
+
+### Features
+- fix-analysis-held-position-drains: Harden the two analysis consumers that page portfolio `ListPositions` (`live_loop._drain_held`, `servicer._drain_held_symbols`): reject a repeated token, make a page-cap hit visible, and stop returning a partial or duplicated held set as success.
+- fix-trading-reconcile-reads: `reconcileTick` reads one 500-row `ListPositions` page per broker account and drops the token; a held symbol past row 500 reads as platform qty 0 and can raise a false quantity-discrepancy finding that halts the account.
+
+### Summary
+5 commits, 2 feature merges since last promotion.
+
+---
+
+## 2026-11-17
+
+### Features
+- delisted-symbol-handling: Detect a watchlist symbol that stops being servable after it was added (delisted, acquired, moved to OTC), remove it from system-managed "Signals" watchlists and mark it on user watchlists, stop watchlist-driven work from requesting it, and make backfill jobs report it as `skipped` with a per-symbol reason instead of ending `PARTIAL`.
+- mediated-source-extraction-instructions: A mediated signal source's extraction logic is prose an LLM agent follows, so it gets a first-class `extraction_instructions` field, and the dead `extractor_module` (`app.extractors.noop`) stops being shown or asked for on `mediated_*` sources — the value a consuming agent reads as "no work to do".
+
+### Proto Changes
+- common/v1/common.proto
+- ingest/v1/ingest.proto
+- marketdata/v1/marketdata.proto
+- portfolio/v1/portfolio.proto
+
+### Summary
+6 commits, 2 feature merges since last promotion.
+
+---
+
+## 2026-11-17
+
+### Features
+- fix-symbol-page-alerts-ui: Four trader-segment display defects: the Fundamentals card overflows at mobile width, a strategy-less opportunity chip is labelled with the ticker, the header Alerts drawer never shows stored unread alerts, and a checked switch renders unchecked.
+- fix-fundamentals-roe-unit: Staging serves `roe ≈ 3.66` for LYFT (rendered `+366.34%`) because the EDGAR quarterly ROE divides a genuine TTM net income (2,809,866,000) by a comparative-column equity (767,016,000, dated 2024-12-31) instead of the `Q3-2026` quarter-end equity (2,980,873,000); the corrected LYFT value is `0.942632`.
+- fix-indicator-pane-warmup: On the symbol page indicator chart, a 200-period average over a ~190-bar window renders one dot because the series is computed without a warm-up prefix.
+- chart-series-palette: Give indicator chart series distinguishable colors: a dedicated 12-color categorical series palette in both themes, assigned uniquely across the whole chart, with matching legend swatches.
+- backtest-inline-backfill: Let a user fix an insufficient-data backtest in place: an inline action on the symbol page Backtests card backfills from the start of the missing range through the end of the backtest window (missing bars only), shows progress, then offers a re-run.
+- alert-detail-page: A dedicated, linkable page per alert showing everything the alert carries, reachable from the Notifications list, the header drawer and push notifications — plus readable backfill-failure alert text.
+- alpaca-adaptive-rate-limit: Make outbound Alpaca REST calls adapt to the vendor's own rate-limit signals (`X-RateLimit-*` response headers and HTTP 429) instead of relying only on a static requests-per-second guess.
+- fix-edgar-historical-fundamentals: EDGAR historical fundamentals rows are keyed by the filing's `fy`/`fp` pair, which filers repeat across years, so two fiscal periods a year apart can share one row: it carries the earlier filing's date and the later period's values (look-ahead for point-in-time reads), and one period is missing.
+- fix-replace-tif-before-intent: `ReplaceOrder` claims its dedup intent and marks the order PENDING before it validates the requested time-in-force, so a TIF the broker does not allow strands a PENDING intent for a request that never reached the broker.
+- fix-row-menu-stays-open: A row action that asks for confirmation (cancel an order, resume an account, and every other `confirm` action on the shared row menu) leaves the row's three-dots menu open and modal after the dialog is confirmed or cancelled, so the user's next click only closes the menu.
+- ensure-signals-watchlist-on-read: The per-user system-managed "Signals" watchlist (feature 127) exists only after an agent `ingest_signal(direction="watchlist")` side effect, so users who never ingested one (Homelab staging) have none.
+- fix-listpositions-nextpagetoken-skips: `PortfolioRepo.ListPositions` returns the look-ahead row's symbol as `next_page_token` (boundary row skipped) and keysets on `symbol` alone although the table is unique on (user_id, symbol, trading_mode, account_id), so multi-account symbols lose rows across page boundaries.
+- fix-listwatchlists-page-token: `ListWatchlists` returns the look-ahead row's id as `next_page_token`, and the exclusive keyset filter then skips that row, so every page boundary silently drops one watchlist.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- marketdata/v1/marketdata.proto
+- notify/v1/notify.proto
+
+### Summary
+79 commits, 6 feature merges since last promotion.
+
+---
+
+## 2026-11-15
+
+### Features
+- notify-commsgun-channel: Adds the homelab `commsgun` email hub (tailnet-only, Resend-backed) as a second email provider for `xstockstrat-notify`'s external fanout, beside SendGrid.
+- fix-commsgun-email-channel: Five feature-338 commsgun email defects in xstockstrat-notify: no `https:` check on `commsgun.enqueue_url`, unsanitised subjects (commsgun 422 `invalid_subject`), no standing key incident in pinned `commsgun` mode, 408 treated as permanent, three CLAUDE.md lines that say all email needs SendGrid, and (found in review) uncapped email text against commsgun's 256 KiB request limit.
+
+### Summary
+8 commits, 3 feature merges since last promotion.
+
+---
+
 ## 2026-11-13
 
 ### Features

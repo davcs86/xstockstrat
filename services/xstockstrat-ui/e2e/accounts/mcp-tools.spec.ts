@@ -1,33 +1,14 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import { SAMPLE_TOOLS } from '../fixtures/mcpTools';
 
 /**
- * E2E for the /accounts "MCP Tools" page — displays the tool catalog exposed by the agent's
- * GET /api/tools route. Stubbed at the browser level (page.route) since there's no mock HTTP
- * agent server in e2e, matching the agent-health stubbing pattern in authorized-apps.spec.ts.
+ * E2E for the /accounts "MCP Tools" page — displays the tool catalog the BFF reads from the
+ * agent's internal catalog RPC. Stubbed at the browser level (page.route) since there's no mock
+ * agent in e2e, matching the agent-health stubbing pattern in authorized-apps.spec.ts.
  */
 
 const TOOLS_BFF = '/accounts/api/mcp-tools';
-
-const SAMPLE_TOOLS = [
-  {
-    name: 'ingest_signal',
-    description: 'Ingest a trading signal into xstockstrat-ingest.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        symbol: { type: 'string', description: "Ticker symbol e.g. 'NVDA'." },
-        direction: { type: 'string' },
-      },
-      required: ['source', 'symbol', 'direction', 'valid_from'],
-    },
-  },
-  {
-    name: 'emit_alert',
-    description: 'Emit an alert via xstockstrat-notify.',
-    inputSchema: { type: 'object', properties: {} },
-  },
-];
 
 async function stubMcpTools(page: Page, body: unknown): Promise<void> {
   await page.route(TOOLS_BFF, (route) =>

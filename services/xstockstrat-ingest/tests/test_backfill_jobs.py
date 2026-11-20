@@ -42,6 +42,14 @@ async def test_update_job_builds_set_clause():
 
 
 @pytest.mark.asyncio
+async def test_update_job_accepts_symbol_results_as_the_json_text_given():
+    pool = AsyncMock()
+    await backfill_jobs.update_job(pool, "j1", symbol_results='{"c1": {}}')
+    assert "symbol_results = $1" in pool.execute.await_args.args[0]
+    assert pool.execute.await_args.args[1:] == ('{"c1": {}}', "j1")
+
+
+@pytest.mark.asyncio
 async def test_update_job_noop_when_empty():
     pool = AsyncMock()
     await backfill_jobs.update_job(pool, "j1")
@@ -78,6 +86,20 @@ async def test_list_jobs_with_and_without_filter():
     await backfill_jobs.list_jobs(pool, status_filter=3, limit=10, offset=5)
     assert "WHERE status = $1" in pool.fetch.await_args.args[0]
     assert pool.fetch.await_args.args[1] == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("row, expected", [({"?column?": 1}, True), (None, False)])
+async def test_has_active_job_binds_symbol_and_statuses(row, expected):
+    pool = AsyncMock()
+    pool.fetchrow.return_value = row
+    assert await backfill_jobs.has_active_job(pool, "AAPL", [1, 2]) is expected
+    pool.fetchrow.assert_awaited_once()
+    sql = pool.fetchrow.await_args.args[0]
+    assert "$1 = ANY(symbols)" in sql
+    assert "status = ANY($2::int[])" in sql
+    assert "AAPL" not in sql
+    assert pool.fetchrow.await_args.args[1:] == ("AAPL", [1, 2])
 
 
 @pytest.mark.asyncio
