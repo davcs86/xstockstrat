@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-11-04-cancel-warn-remaining-sites-defect.md, docs/reports/2026-11-04-marketdata-getbars-miss-path-refetch-every-call-defect.md
 **Severity**: SEV-3
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-10
+**Last Updated**: 2026-11-20
 
 ---
 
@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 2 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
+| 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -22,6 +23,9 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
+- [Design](design.md) — approved approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-marketdata-miss-path-noise`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -34,4 +38,4 @@ Repeated WARN noise masks real failures: cancel-caused WARN sites feature 290 le
 
 ## Next Action
 
-`/sdd-design fix-marketdata-miss-path-noise` — full design recommended (marketdata + portfolio)
+`/sdd-spec fix-marketdata-miss-path-noise` — generate implementation spec from the approved design
