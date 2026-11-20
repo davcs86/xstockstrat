@@ -2128,3 +2128,16 @@ Written by the orchestrating session itself. Each entry quotes the question and 
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — production scope, recorded by the orchestrator (verbatim)
+
+Written by the orchestrating session itself.
+
+- **Production is out of scope.** Operator, earlier the same day, on a pre-deploy action that named both environments:
+  "And leave production out. It's never been out/launched". The post-round-6 cutover question was put on that premise
+  ("Production has never launched, so the cutover happens once, on staging") and the operator selected
+  "Stop-then-start on staging (Recommended)". Effect for this design: no production stop-then-start procedure and no
+  production branch in the cutover. At most a check-only note that the first production promotion verifies the
+  production database holds no `portfolio.positions` rows and no `order.filled` ledger rows, and stops for the
+  operator if it does. How portfolio is stopped on each staging target is confirmed by the operator at execution
+  time (the runbook step), not at design time.
