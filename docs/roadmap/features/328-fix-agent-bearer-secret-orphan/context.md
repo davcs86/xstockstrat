@@ -622,3 +622,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Batch peers `fix-mcp-deadline-budget` and `fix-agent-mcp-transport-fallthrough` also edit `services/xstockstrat-agent/app/tools.py`. Target: text-edit step (symbol-named sites) and integration-PR rebase.
 - [ ] O-17..O-25 are open, non-blocking, and carried in design.md; each must map to a step. Target: `/sdd-spec`, checked at `/sdd-review impl-spec`.
 - Next: `/sdd-spec fix-agent-bearer-secret-orphan`.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status: design-approved → implementation-ready.
+- Tree: the feature branch (`70221104`) is 168 commits behind `main-dev` and holds docs only, so every `path:line` in the spec was read on `origin/main-dev@fb52065c`. No `main-dev` merge was made here (this run may edit only the feature directory); `/sdd-execute`'s BRANCH SYNC does it before Step 1.
+- Steps: 1 config SQL-text suite, 2 rerun assertion + CI filters, 3 sweep + preview SQL (1+2+3 land together, backend), 4 runbook section, 5 agent text, 6 agent pins + doc parity, 7 UI hook comment, 8 Playwright AC-3 pin, 9 remaining docs.
+- Key codebase findings:
+  - No migration ships (D-1), so the operator's "next free config migration" rule has nothing to number. Config tip on `main-dev` is `055_analysis_live_enrich_ttl_reseed`; ingest tip is `018`.
+  - The harness is `scripts/migration-rerun.py`; `split_assertions` (`:562-572`) routes `config-mcp-credential-sweep.sql` to the post loop (`:1112-1120`) with no harness edit. One psql process per assertion file, so block 2 must `\set grace_hours 0` before its `\ir`.
+  - The sweep, preview and assertion SQL in the spec were executed on PostgreSQL 16.15 against a stand-in schema (three tables, both audit triggers, both CHECKs, the scope unique index): exit 0, `deleted 4 / notified 2`, replay `0 / 0`, and nine single-conjunct mutations of the sweep each fail the assertion. They have not run against the real migration chain; the CI `migration-rerun` job is the first real execution.
+  - Survivor arrays must sort with `COLLATE "C"`: under the default collation `mcpXcredential.z` and `mcp_credential.*` order differently and the first draft failed on that alone.
+  - `uv run --no-project --with pglast` works for the offline pre-parse (1 / 1 / 9 statements after meta-command lines are stripped and `:'grace_hours'` is replaced).
+  - Citation drift corrected in the spec: the agent `tools.py` sites (`_write_source_bearer` `:479`, `credentials_ref:` doc `:1541`), the Playwright seam (`signal-sources.spec.ts:112-126` fulfills 503/`unavailable`, not 409), and the doc sites, several of which no longer contain the word "orphan".
+  - The insights page renders the register error as a plain `<p>` (`page.tsx:822`), not a `role="alert"` element, so Step 8 asserts the error text.
+
+### Open Threads
+
+- [ ] **Operator gate (Step 4): the target database list is still not confirmed.** Candidates: DO dev, DO prod, homelab `xstockstrat-staging`. The spec blocks Step 4 until the operator answers; it does not guess (P-03).
+- [ ] **Operator gate (Step 4): the sweep cadence.** The design names none. Proposed: on demand, and before each `main-dev` → `main` promotion; the operator confirms or replaces it.
+- [ ] **Cross-owner seeds use two seed users.** The binding decision names one user V, but case (i) needs V to have no source and cases (ii)/(iii) need V to have sources. Step 2 uses `sweep328-v1` (case i) and `sweep328-v2` (cases ii, iii) so every clause holds literally. To be checked at `/sdd-review impl-spec`.
+- [ ] `mcp-tools.md` `instantiate_template` rows are left unchanged (they never stated the orphan trade-off); only the `manage_signal_source` rows gain the sweep text. To be checked at `/sdd-review impl-spec`.
+- [ ] The product spec has no `## Consumer Surface(s)` section (bug template); the spec treats the fix as internal plus runbook and still lands text and pins on the agent and UI surfaces.
+- Next: `/sdd-review fix-agent-bearer-secret-orphan impl-spec`, then `/sdd-execute fix-agent-bearer-secret-orphan`.
