@@ -385,3 +385,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] `CountPositions` stays as dead code with an open findings row (`:37`, narrowed) — not in the report's ten items; a separate defect owns its deletion.
 - [ ] Peers 322, 311 and 324 may still shift anchors before execution — /sdd-execute re-greps in Phase 1.
 - [ ] Post-merge: affected services smoke-tested on dev (product-spec Acceptance Criteria); not a step.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 criteria warnings, overlap WARN (4 file-level collisions, no FAIL) — advisory, did not block. No Floor breaches. Lifecycle unchanged (implementation-ready).
+- Tree: `origin/feature/fix-orphaned-code` @ `1a416f7c` (detached); peer 322 read at `origin/feature/fix-retired-surface-proto-cleanup` @ `e1c1f040`.
+- Addressed in implementation-spec.md:
+  - [x] Steps 2, 5 and 9: `GOWORK=off COVERPKGS=$(go list …) && go test …` did not pass `GOWORK=off` to `go list` or `go test` (a bare prefix before an assignment sets an unexported shell variable). Each Go command now carries its own prefix: `COVERPKGS=$(GOWORK=off go list …) && GOWORK=off go test …`. A `## Step Dependencies` bullet states the rule.
+  - [x] Spec-time findings rows confirmed by re-reading the files: portfolio findings `:36` (the `r.pool` → `r.db` half-migration) and `:37` (`CountPositions` has zero non-test callers), ui findings `:30` (the `PortfolioPanel.tsx` combined fall-through). `AccountContext.tsx:43-48` (`firstActive?.id ?? null`) supports the Step 8 "reachable" claim. The spec records the confirmation; this closes the "confirm or strike" thread from the sdd-spec session.
+  - [x] Overlap with peer 322 on config's `configWatcher.ts`: 322's impl spec modifies `src/services/configWatcher.ts` (its Step 29) and `src/__tests__/configWatcher.test.ts` (its Step 30), which Step 3 deletes. `## Step Dependencies` now states that the deletion wins in either merge order, and that 322's Step 27 (`alpaca/client.go:50,94-98,113`) is disjoint from Step 5 (`:653-661`).
+- Accepted as written (no spec change; recorded decisions):
+  - Step 4 lists 11 files, above the 5-file advisory — design.md fixes one lock regeneration with same-step doc teardown.
+  - Steps 1+2 are one red-to-green commit (`**Lands with**`); Step 1's "write Step 2's tests first" instruction is the RED capture.
+  - Steps 3–7 are pure deletions paired with the trailing Step 9, which re-runs checks and adds no source (declared in `## Step Dependencies`).
+  - Step 8 has no Playwright step of its own; existing `e2e/trader/offline-pnl.spec.ts:109-119,195-205` runs in its Verification.
+  - `CountPositions` is swapped, not deleted (D-1; C-18 trade-off recorded).
+- Overlap findings (all WARN): `portfolio_repo.go` with 311 (`:217,241,341` here vs `:66` there, distinct lines); config `configWatcher.ts` with 322 (delete vs modify); `alpaca/client.go` with 322 (distinct lines); the four leaf `package.json` files and root `pnpm-lock.yaml` with 324. No migration NNN, proto field or config key collision.
+
+## Open Threads
+
+- [ ] Peer 322 Steps 29–30 modify the config `configWatcher.ts` and its test that Step 3 deletes; 322's spec does not yet know about the deletion. If 322 merges first, resolve the modify/delete conflict as delete at rebase; if 323 merges first, 322 must re-spec those two steps — Step 3 and merge. The 322 edit belongs to the 322 writer (this feature may not edit 322's files).
+- [ ] Peer 311 edits `portfolio_repo.go:66`; same file as Step 1, distinct lines, merge-conflict risk only — Step 1 (re-grep `r.pool` in Phase 1).
+- [ ] Peer 324 edits the same four leaf `package.json` files and the root lock — Step 4 (merge-order.md prose note; the later-merged feature regenerates the lock).
+- [ ] Step 4 has 11 files and needs Docker for `docker compose build`; if Docker is unavailable the step blocks, it is not skipped (D-12) — Step 4.
+- [ ] Step 9 is a verification-only `test` step (no new source); the per-step presence checks in Steps 3–7 are the RED evidence it re-runs — Step 9.
+- [ ] `CountPositions` stays as dead code with findings row `:37` narrowed and open; a separate defect owns its deletion — Step 1.
+- [ ] Peer impl specs other than 322's were not read at file level (311 and 324 overlap is from their product specs and context.md) — /sdd-execute Phase 1 re-grep.
