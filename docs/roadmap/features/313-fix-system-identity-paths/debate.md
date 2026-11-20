@@ -1,6 +1,6 @@
 # Debate Register: fix-system-identity-paths
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -87,6 +87,6 @@
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 2 | D-2 | services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:76-97: appendEvent reads only x-user-id from call metadata and persists correlation_id and metadata from request fields. A search for x-trace-id in ledger src matches only __tests__/mtls.test.ts:127, so the per-cycle id minted by D-2 is dropped on arrival. The options are to persist the id as AppendEventRequest.correlation_id, to drop OQ-1, or to keep D-2 with AC-3 reworded. | pending user |
-| P-2 | 3 | D-9 | services/xstockstrat-ingest/acceptance/private-by-default-templates.feature:40-44. AC-33 @feature-224 is 'mallory sends x-user-id system without grant → PERMISSION_DENIED and no signal row is written'. An AppendEventRequest.user_id==owner assertion on an accepted ingest exercises none of it, so tracing the RPC test there is false coverage. Proposed re-target: an untraced incidental-hardening assertion, or an extra assertion inside the AC-1 test. D-9's FR-1 loop narrowing stands. | pending user |
-| P-3 | 3 | D-2 | services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:613,618: analysis's ledger emits send one id as both AppendEventRequest.correlation_id and x-trace-id call metadata. That makes the P-1 correlation_id option an existing platform idiom, not a new design. This supplements P-1. | pending user |
+| P-1 | 2 | D-2 | services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:76-97: appendEvent reads only x-user-id from call metadata and persists correlation_id and metadata from request fields. A search for x-trace-id in ledger src matches only __tests__/mtls.test.ts:127, so the per-cycle id minted by D-2 is dropped on arrival. The options are to persist the id as AppendEventRequest.correlation_id, to drop OQ-1, or to keep D-2 with AC-3 reworded. | user reopened |
+| P-2 | 3 | D-9 | services/xstockstrat-ingest/acceptance/private-by-default-templates.feature:40-44. AC-33 @feature-224 is 'mallory sends x-user-id system without grant → PERMISSION_DENIED and no signal row is written'. An AppendEventRequest.user_id==owner assertion on an accepted ingest exercises none of it, so tracing the RPC test there is false coverage. Proposed re-target: an untraced incidental-hardening assertion, or an extra assertion inside the AC-1 test. D-9's FR-1 loop narrowing stands. | user reopened |
+| P-3 | 3 | D-2 | services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:613,618: analysis's ledger emits send one id as both AppendEventRequest.correlation_id and x-trace-id call metadata. That makes the P-1 correlation_id option an existing platform idiom, not a new design. This supplements P-1. | user reopened |
