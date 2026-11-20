@@ -391,3 +391,189 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 (sdd-batch design gate (round 4))
+
+- `/sdd-design fix-notify-stream-contract` full debate is at its approval gate after round 4 (gate policy: halt). design.md is not written and status.md is unchanged (spec-ready). The register is in `debate.md` (D-11..D-14, R-8, R-9, O-12, P-5..P-8 added; O-9, O-11 closed).
+
+## Open Threads
+
+- **Approach.** Two steps, both inside `services/xstockstrat-notify`, with no proto, migration or config-key change. `/sdd-spec` stays gated on the pre-spec spike results in this file **and** a recorded operator ruling on P-1..P-4.
+  - **Register status.** No reopen was applied this round. The steer to reopen D-2, D-6, R-2 and D-7 appeared only in the workflow's computed task text; no operator ruling is on record here or in `debate.md`. D-2, D-6, R-2 and D-7 stand as written. The proposer's four round-4 REOPENs repeat the P-1..P-4 evidence, so they are logged as P-5..P-8 and dropped as not new.
+  - **Step 1 (D-1, not contingent).** Type `StreamSubscriber.severities` as `AlertSeverity[]`, keep the string compare (NOTIFY-1), add the positive AC-1 test, convert numeric fixtures to string-enum form, retire the severity records.
+  - **Step 2, settled parts.** D-5 detection (`sub.call.writableLength >= MAX_QUEUED_ALERTS`, 1024 messages, before write; the evicting alert is neither written nor counted). D-6 order: map delete, `recordStreamEviction('backpressure')`, warn log, teardown inside `try` with a logging `catch` (D-10). The `'error'` listener is guarded by the `Map.delete` result; the spec states that a stream error arriving after the entry is gone is not counted as `stream_error` (D-14). `StreamEvictionReason` gains `'backpressure'` and notify `CLAUDE.md:115` is updated (D-3). D-8 records are retired and the AC-2 Given is amended.
+  - **Step 2, teardown call (blocked).** The binding text is still D-6's `call.destroy(new Error('backpressure'))`. Source predicts it sends no trailers and no RST (grpc-js 1.14.7 server-call.js:108-164), so the client never reconnects. It cannot be approved as is.
+  - **Contingent replacement (needs the P-1..P-3 verdict).** `sub.call.emit('error', { code: 8, details: 'slow consumer evicted' })`. grpc-js's own `'error'` listener sets the pending status and calls `end()` (server-call.js:121-124), and `_final` sends the status after the bounded queue flushes (:152-156). The client gets the queued alerts, then RESOURCE_EXHAUSTED, which is retryable (streamBackoff.ts:18). The code is the bare numeric 8 with no grpc import, matching the file's house style (D-13, R-9).
+  - **AC-2 test.** Emits 1-1024 are written with no eviction; emit 1025 evicts (`backpressure==1`, `stream_error==0`, teardown called once); emit 1026 leaves the write total at 1024. The teardown spy captures that the subscriber is already absent from the map and invokes any registered `'error'` listener (D-12). A throwing-teardown variant shows EmitAlert still succeeds (@AC-5). The unit test cannot show that a status reaches the client; only the spike can.
+  - **Spike.** Binding text is D-7 plus D-9, on grpc-js 1.14.5 and 1.14.7. D-11 adds one observation: right after the `emit('error')` teardown, record `call.writableEnded === true` and `call.writableErrored === null`. The 1.14.7-only run with pass (a)+(f)+(g) waits on P-4. If (g) fails, stop and return to the operator; both other options (R-2, R-4) are locked.
+- **Strongest open objection.** O-8 (blocking). The operator ruling on P-1..P-4 is not on record. Until it is written here and in `debate.md`, D-6's `destroy()` is binding and is predicted to strand recovered clients on a stream that never sends, which is worse than the defect. O-1 (the spike has not run) is also open and blocking. O-10 and O-12 are open and non-blocking.
+- **Floor status.** No Floor breaches.
+- **Uncovered @AC changes.** None of the following has an operator decision behind it:
+  - @AC-2 (316) EXTEND. The Given is amended to the queued-write-length trigger; the client-visible terminal status (RESOURCE_EXHAUSTED) depends on the teardown ruling.
+  - @AC-32 (signal-map-instrumentation) EXTEND. Eviction reasons gain `'backpressure'`; `stream_error` is counted only when the listener removes the entry.
+  - PRESERVEs of @AC-1 (316), @AC-4 (notify-external-fanout), @AC-5 (pwa-notifications: EmitAlert must not fail on a teardown error) and @AC-1 (fix-push-untargeted-broadcast).
+- **Residual design.md must carry (O-10).** After a status-path eviction, a peer paused at stream level but alive at session level keeps up to 1024 × largest alert plus the h2 window, invisible to the subscribers gauge, until it resumes, cancels or the connection dies. notify sets no keepalive (src/index.ts:48).
+- **Resume.** The next `/sdd-batch` run resumes the debate from the state block below.
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "Two steps, both inside services/xstockstrat-notify. No proto, migration or config-key change. /sdd-spec stays gated on (1) the pre-spec spike results in context.md and (2) a recorded operator ruling on P-1..P-4.\n\nREGISTER STATUS (why the reopens are not applied this round)\n- The round's \"operator steer\" (reopen D-2, D-6, R-2, D-7) appears only in the workflow's computed task text. The relayed user request is \"Yes, resume all together\", which names no register ID.\n- The task itself states \"OPERATOR DECISIONS: none recorded\". context.md on origin/feature/fix-notify-stream-contract has no ruling; its last entry says the debate halted at the gate awaiting the operator on P-1..P-4.\n- Only the operator reopens. So D-2, D-6, R-2 and D-7 stand as written, `reopened` is empty, and O-8 stays open and blocking.\n- Both sides and the source agree on the technical direction. The contingent approach below is ready to adopt unchanged once the operator's verdict on P-1..P-4 is written into context.md and debate.md.\n\nSTEP 1: severity typing (D-1, unchanged, not contingent)\n- Import AlertSeverity from '@xstockstrat/proto/notify/v1/notify' as at src/fanout/fanout.ts:6. Type StreamSubscriber.severities as AlertSeverity[] (src/grpc/notifyServiceImpl.ts:31).\n- Keep the string-vs-string includes in matchesSubscriber (NOTIFY-1).\n- Add the positive AC-1 test: filter [WARNING, CRITICAL], a CRITICAL alert is delivered and an INFO alert is not. Convert the numeric fixtures to string-enum form (C-13).\n- Retire the severity records and flip that report's sidecar.\n\nSTEP 2: detection (D-5, unchanged, not contingent)\n- Module constant MAX_QUEUED_ALERTS = 1024 (unit: messages).\n- In the matchesSubscriber branch, before write (notifyServiceImpl.ts:125), check `sub.call.writableLength >= MAX_QUEUED_ALERTS`.\n- The evicting alert is neither written nor counted in deliveredCount.\n\nSTEP 2: eviction order (D-6 order, D-10)\n1. this.subscribers.delete(subId)\n2. recordStreamEviction('backpressure')\n3. log.warn('StreamAlerts subscriber evicted', { reason: 'backpressure' })\n4. the teardown call inside try; the catch logs a warning\n5. continue\n\nSTEP 2: teardown call\n- Binding text (D-6 as settled): call.destroy(new Error('backpressure')). Source-predicted to fail: ServerWritableStreamImpl has no _destroy (grpc-js 1.14.7 server-call.js:108-164), so the client gets no trailers and no RST and never reconnects (useReconnectingStream.ts:46-63). It cannot be approved as is.\n- Contingent replacement (needs the P-2/P-3 verdict, and P-1 for the internal end()): `sub.call.emit('error', { code: 8, details: 'slow consumer evicted' })`.\n  - grpc-js's own 'error' listener sets pendingStatus = serverErrorToStatus(err) and calls end() (server-call.js:121-124). serverErrorToStatus honours an integer code and string details (:25-41). _final runs sendStatus after the bounded queue flushes (:152-156).\n  - grpc-js fails a serverStream the same way (server.js:104-110).\n  - The client gets the queued alerts, then grpc-status 8 (RESOURCE_EXHAUSTED), which is retryable (streamBackoff.ts:18), so the UI reconnects.\n  - Status code literal: bare numeric 8, matching the file's house style (code: 3 / 5 / 13 at notifyServiceImpl.ts:55, :68, :274) and the recorded invariant at services/xstockstrat-notify/docs/context-constitution.md:48 (\"grpc.status is never imported\"). No new import. This replaces the proposal's `import * as grpc`.\n  - A bare call.end() with OK status stays rejected under R-2.\n\nSTEP 2: listeners, telemetry, records (D-3, D-8)\n- Guard the 'error' listener (notifyServiceImpl.ts:178-180) as `if (this.subscribers.delete(subId)) recordStreamEviction('stream_error')`. The 'cancelled' listener is unchanged.\n- The spec states the consequence: a stream error that arrives after the entry is already gone (cancel or eviction) is not counted as stream_error.\n- Widen StreamEvictionReason (src/telemetry.ts:322) with 'backpressure'; update notify CLAUDE.md:115 in the same step.\n- Amend the AC-2 Given to the queued-write-length trigger. Retire notify docs/context-constitution.md:30 and context-constitution-findings.md:34 and :61. Flip both report sidecars.\n\nAC-2 TEST\n- Mock call: write returns false and increments writableLength; on() records listeners; the teardown is a spy that also invokes any registered 'error' listener (models synchronous dispatch).\n- Emits 1-1024: 1024 writes, no eviction.\n- Emit 1025: no write, subscriber removed, evictions{backpressure}==1, evictions{stream_error}==0, teardown called once.\n- Inside the teardown spy, capture that the subscriber is already absent from the map, so a reordering regression fails.\n- Under the contingent teardown, also assert the emitted object has integer code 8 and string details.\n- Emit 1026: write total stays 1024.\n- Negative case: writableLength stays 0, nothing is evicted.\n- Throwing-teardown variant: EmitAlert still succeeds and the warning is logged (@AC-5).\n- The AC-32 write_error test is unchanged.\n- The unit test cannot show that a status reaches the client; that is the spike's job.\n\nSPIKE (pre-spec, results in context.md before /sdd-spec)\n- Binding text: D-7 as settled plus the D-9 observations, on grpc-js 1.14.5 and the installed 1.14.7, against a raw http2 client that calls pause().\n- Additive observation this round: right after the emit('error') teardown, record call.writableEnded === true and call.writableErrored === null. It is an early, deterministic read on whether _final will run.\n- Contingent amendment (needs the P-4 verdict): 1.14.7 only; pass = (a) writableLength is a live numeric message depth, (f) with the client paused writableLength stays <= 1024 and no write runs after eviction, (g) after resume the client gets the queued alerts, then grpc-status 8 trailers, then close, with backpressure=1 and stream_error=0. (e') is recorded; the old (c) is dropped.\n- If (g) fails: stop and return to the operator. No silent switch. Both remaining options, bare end()/OK (R-2) and private h2 internals (R-4), are locked.\n\nRESIDUALS design.md MUST CARRY (O-10; additive to O-5's set)\n- After a status-path eviction, a peer paused at stream level but alive at session level keeps up to 1024 x largest alert plus the h2 window, invisible to the subscribers gauge, until it resumes, cancels or the connection dies.\n- notify sets no keepalive (src/index.ts:48). Exposure is linear in stalled streams and limited by mTLS to authorised peers.",
+    "open_objections": [
+      {
+        "text": "O-8 (still open): the operator ruling on P-1..P-4 (reopen D-2, D-6, R-2, D-7) is not on record. The steer exists only in the workflow's computed task text; context.md and the operator-decisions list hold no ruling. The orchestrator must get the operator's verdict and write it to context.md and debate.md before approval. Until then D-6's destroy() is binding and is source-predicted to strand clients (grpc-js 1.14.7 server-call.js:108-164).",
+        "blocking": true
+      },
+      {
+        "text": "O-1 (still open): the pre-spec spike has not run. The contingent teardown depends on a manually emitted 'error' not marking the Writable errored, so that end() reaches _final and sendStatus after the 1024-message queue drains. Results go in context.md before /sdd-spec.",
+        "blocking": true
+      },
+      {
+        "text": "O-10 (still open): design.md must carry the post-eviction held-queue residual verbatim (bounded queue invisible to the gauge, no keepalive at src/index.ts:48, linear in stalled streams, limited by mTLS). It closes when design.md is written.",
+        "blocking": false
+      },
+      {
+        "text": "C-16 @AC-32 / D-3: the spec must state that the guarded 'error' listener no longer counts a stream error arriving after the entry was already removed (cancel or eviction), and keep the notify CLAUDE.md:115 reason list accurate.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1 (316 acceptance.feature, severity filter)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 (316 acceptance.feature, backpressure eviction; Given amended to queued-write-length trigger per D-8; client-visible terminal status RESOURCE_EXHAUSTED pending the operator's teardown ruling)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-32 (signal-map-instrumentation.feature, eviction reasons gain 'backpressure'; stream_error counted only when the listener removes the entry)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 (notify-external-fanout.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 (pwa-notifications.feature, EmitAlert must not fail on a subscriber teardown error)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 (fix-push-untargeted-broadcast.feature)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Bare call.end() with OK status as the teardown. It flushes the same bounded queue but reports a false normal finish on an endless push stream, and an OK close is not retryable in every client. It stays locked as R-2.",
+      "emit('error') plus a hard-kill timer that drops the connection if no finish or cancel arrives. It would free the held queue, but every hard-kill path goes through grpc-js private internals (R-4, locked).",
+      "Importing grpc into notifyServiceImpl.ts for grpc.status.RESOURCE_EXHAUSTED. It contradicts the recorded house style (notify docs/context-constitution.md:48; bare codes at notifyServiceImpl.ts:55, :68, :274) and would need that row amended. Bare 8 needs no import.",
+      "Dropping the 1.14.5 spike run and D-7's condition (c) without an operator ruling. That amends settled D-7, so it waits on P-4.",
+      "Private h2 RST via grpc-js internals. Stays locked as R-4."
+    ],
+    "open_risks": [
+      "The operator ruling on P-1..P-4 is not recorded. Under the register as written (D-6 destroy), recovered clients are stranded on a stream that never sends, which is worse than the defect. Approval cannot proceed without the ruling.",
+      "Spike condition (g) may fail: a paused peer may never let the queue drain to _final, or Node's Writable may treat the manual 'error' emit as errored and skip _final. Then no status reaches the client, and the only alternatives (R-2, R-4) are locked.",
+      "After a status-path eviction, a paused-but-alive peer holds up to 1024 x largest alert plus the h2 window with no gauge visibility. notify has no keepalive (src/index.ts:48).",
+      "If a grpc-js upgrade drops or renames writableLength, eviction silently fails open (undefined >= 1024 is false). The AC-2 test pins behaviour only against the mock.",
+      "The per-stream memory bound scales with alert size because req.context is free-form.",
+      "Detection is lazy: a filtered, stalled subscriber keeps its queue until the next matching alert.",
+      "Alerts are lost between eviction and reconnect (accepted residual, O-5).",
+      "The AC-2 unit test cannot prove a status is sent, because the mock does not run grpc-js's own 'error' listener. Only the spike covers that.",
+      "Merge-order conflicts with peer features on notifyServiceImpl.ts and telemetry.ts (fix-alert-event-targeting and others in this batch)."
+    ],
+    "constitution_rules_touched": [
+      "C-05",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-04",
+      "F-07",
+      "P-02",
+      "P-03",
+      "NOTIFY-1",
+      "PLAT-N1"
+    ],
+    "rationale": "The technical dispute is over; the register dispute is not.\n\nTechnical. The adversary re-verified the proposal's citations against the installed grpc-js 1.14.7 source, and the notify line references match the current tree. emit('error', {code, details}) is grpc-js's own server-stream status path, and destroy() reaches neither trailers nor an RST. There is no Floor breach.\n\nRegister. The proposal treats D-2, D-6, R-2 and D-7 as reopened on an operator steer. I checked for a record of that steer and found none:\n- the task lists \"OPERATOR DECISIONS: none recorded\";\n- context.md on origin/feature/fix-notify-stream-contract ends at the round-3 halt, awaiting the operator on P-1..P-4;\n- the only user words relayed for this run are \"Yes, resume all together\", which do not name any register ID.\nThe steer text sits in the script-computed task, which cannot stand in for the operator. So I left `reopened` empty and kept O-8 open and blocking, as the adversary asked. If the operator did give this steer, recording it in context.md and debate.md is all that is needed; the contingent approach is already written to match it.\n\nThe proposer's four REOPENs cite the same evidence as P-1..P-4, so they are logged with is_new=false and merge into those petitions.\n\nChoices between the two sides:\n- Status code literal: I took the adversary's house-style option (bare 8, no grpc import). I confirmed notify docs/context-constitution.md:48 records \"grpc.status is never imported\" and that the file uses bare 3, 5 and 13. This avoids a new import and a record amendment.\n- Spike: the writableEnded/writableErrored read is additive, like D-9, so it is recorded as a decision without touching D-7.\n- Test: capturing map absence inside the teardown spy is teardown-agnostic, so it is recorded now.\n\nObjections closed: O-9 and O-11. D-10 already settles the try, the logging catch and the stream_error==0 assertion, D-6 fixes delete-before-teardown, and this round adds the in-spy order check. O-10 stays open until design.md exists. O-1 stays open until the spike runs.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The pre-spec spike also records, right after the emit('error') teardown, call.writableEnded === true and call.writableErrored === null. This is an additive observation; D-7's pass condition is unchanged.",
+          "evidence": "grpc-js 1.14.7 server-call.js:121-124 (listener only sets pendingStatus and calls end()), :152-156 (_final -> sendStatus)"
+        },
+        {
+          "text": "The AC-2 test's teardown spy captures that the subscriber is already absent from the map when the teardown is called, and invokes any registered 'error' listener to model synchronous dispatch.",
+          "evidence": "notifyServiceImpl.ts:128-130, :178-181; D-6 order; D-10; C-15"
+        },
+        {
+          "text": "If the operator approves a status-path teardown, the emitted error is { code: 8, details: <string> } with the bare numeric code and no grpc import in notifyServiceImpl.ts; the AC-2 test asserts integer code and string details.",
+          "evidence": "services/xstockstrat-notify/docs/context-constitution.md:48; notifyServiceImpl.ts:55, :68, :274; grpc-js 1.14.7 server-call.js:25-41"
+        },
+        {
+          "text": "The spec states that the guarded 'error' listener does not count a stream error that arrives after the entry was already removed, and the notify CLAUDE.md:115 reason list is kept accurate.",
+          "evidence": "D-3; notifyServiceImpl.ts:178-181; @AC-32"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "emit('error') teardown plus a hard-kill timer that drops the connection when no finish or cancel arrives",
+          "why": "Every hard-kill path goes through grpc-js private internals, which R-4 locks."
+        },
+        {
+          "text": "Importing grpc into notifyServiceImpl.ts to use grpc.status.RESOURCE_EXHAUSTED",
+          "why": "Contradicts the recorded house style (notify docs/context-constitution.md:48) and adds an import and a record amendment; bare 8 matches the file."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "C-16 @AC-32 / D-3: the spec must state that the guarded 'error' listener no longer counts a stream error arriving after the entry was already removed, and keep notify CLAUDE.md:115 accurate.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-9",
+          "how": "Covered by settled D-6 (map delete before teardown) and D-10 (teardown inside try; AC-2 test asserts stream_error==0 next to backpressure==1), plus this round's in-spy check that the subscriber is already absent when the teardown is called."
+        },
+        {
+          "id": "O-11",
+          "how": "Covered by settled D-10: the teardown catch logs a warning in the existing log.warn style instead of an empty catch."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "D-2",
+          "evidence": "Proposer r4: grpc-js 1.14.7 server-call.js:121-124, :152-156 show neither option tears down a zero-window stream out-of-band. Same evidence as P-2; merge into P-2.",
+          "is_new": false
+        },
+        {
+          "target": "D-6",
+          "evidence": "Proposer r4: server-call.js:108-164 has no _destroy, so destroy() sends no trailers or RST; replace step 4 with emit('error', {code: 8, details}). Same evidence as P-3; merge into P-3.",
+          "is_new": false
+        },
+        {
+          "target": "R-2",
+          "evidence": "Proposer r4: D-5's 1024 cap bounds what end() holds, and the status path calls end() internally (server-call.js:123). Proposed lock wording: bare end()/OK stays rejected; the internal end() via emit('error') is permitted. Same evidence as P-1; merge into P-1.",
+          "is_new": false
+        },
+        {
+          "target": "D-7",
+          "evidence": "Proposer r4: notify pins ^1.14.7 (package.json:21); spike on 1.14.7 only with pass (a)+(f)+(g), (e') recorded, (c) dropped. Same evidence as P-4; merge into P-4.",
+          "is_new": false
+        }
+      ],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
