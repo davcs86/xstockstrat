@@ -6,10 +6,13 @@
 **Total Steps**: 17
 **Feature Branch**: `feature/fix-analysis-per-symbol-isolation`
 **Tree**: docs read at `origin/feature/fix-analysis-per-symbol-isolation@2b660ff1`; that branch holds
-docs commits only and is 166 commits behind `origin/main-dev`. Every code `path:line` below was
+docs commits only and is 168 commits behind `origin/main-dev`. Every code `path:line` below was
 grepped on `origin/main-dev@36aed60b`, the code tree `/sdd-execute` BRANCH SYNC merges in before
-Step 1. Re-grep each anchor at execute time (peer features 309, 313, 323, 327, 329 share
-`servicer.py`).
+Step 1. Re-checked at `/sdd-review impl-spec` on `origin/main-dev@fb52065c`: between the two commits
+only `app/telemetry.py` and `tests/test_telemetry.py` changed in analysis and indicators, so no cited
+file moved. Re-grep each anchor at execute time. Peers that edit a file this spec edits: 327
+(analysis `servicer.py:7282`) and 310 (indicators `servicer.py:397,413`, see Step Dependencies).
+Peers 309 and 313 cite the ingest servicer, not this one.
 
 ---
 
@@ -47,7 +50,9 @@ documents it in `docs/runbooks/mcp-tools.md`.
   keeps a literal, like its three sibling clauses; Step 8 pins the two against each other.
 - **Not isolated (outside the design's five sites):** the per-strategy setup in the readiness kick
   (`get_by_owner_and_id`, `_load_benchmark_bars_windowed`, `_formula_fundamentals`,
-  `servicer.py:4310-4331`) and in the materializer still fails the whole kick or owner pass.
+  `servicer.py:4310-4331`) and in the materializer still fails the whole kick or owner pass. Defect
+  report 3 ("a transient outage does not discard the batch") is therefore only partly met for a
+  failure in that setup path; Step 17 records it in the analysis findings log.
 
 ## Step Dependencies
 
@@ -74,6 +79,12 @@ documents it in `docs/runbooks/mcp-tools.md`.
 - Step 15 requires Step 7 only by contract (the wire token); it has no build dependency.
 - Step 17 requires Steps 9-14: the durable scenarios it amends describe the post-fix behavior.
 - Deferred surfaces: `evaluation-failed-cue-parity` (O-9) and `analysis-isolation-degraded-counter`.
+  Neither has a feature number yet; `scripts/sdd-allocate-feature-number.py` allocates one when each
+  is storied. The O-9 deferral was decided without an operator and is an Open Thread in context.md.
+- Peer `fix-sandbox-result-contract` (310) edits the same indicators `servicer.py` and changes how
+  `exit_reason` is derived (its product-spec.md:40,55). Step 3 has no build dependency on it: the
+  field and the `"timeout"` map entry (`servicer.py:364`) exist today. Whichever feature lands
+  second re-greps Step 3's anchor and re-runs Step 4.
 
 ---
 
@@ -149,6 +160,9 @@ Runs as one unit with Step 2; use Step 2's commands.
   `test_backtest_fundamentals_guard.py:124`, `test_unreadable_formula.py:416,505`,
   `test_screener.py:549`.
 - Already carries the field: `test_fundamentals_scoring.py:16`.
+- Other shapes (checked on `origin/main-dev@fb52065c`): the multi-line grep in Instructions 1
+  returns nothing, and `grep -rn "ExecuteFormulaResponse(" tests` returns nothing, so every
+  ExecuteFormula response double is a single-line `SimpleNamespace(success=` or `_formula_stub`.
 - `_TIMEOUT = "Formula execution timed out after 5000ms"` at `test_unreadable_formula.py:214`.
 - Existing raise tests that pin the exception type: `test_strategy_evaluator.py:574-617`.
 
@@ -182,8 +196,10 @@ Runs as one unit with Step 2; use Step 2's commands.
 ```bash
 cd services/xstockstrat-analysis
 grep -rn "SimpleNamespace(success=" tests | grep -v exit_reason   # expect no output
+grep -rn -A4 "SimpleNamespace($" tests | grep "success="   # expect no output; a hit is a multi-line double to check by hand
+grep -rn "ExecuteFormulaResponse(" tests   # expect no output; a hit is a double the greps above do not cover
 uv run pytest tests/test_strategy_evaluator.py tests/test_unreadable_formula.py -q
-uv run pytest --cov=app --cov-fail-under=40
+uv run pytest --cov=app --cov-fail-under=40   # full suite: a missed success=False double fails here with AttributeError
 ruff check . && ruff format --check .
 ```
 
@@ -909,6 +925,11 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
   `page.getByTestId('snooze-MYSZ')` has count 0.
 - Mock filter that mirrors production: `MARKERS` at `e2e/mock-backend.ts:969-975` and the floor
   exemption at `:988-996` (ledger rule, `fails.md` 2026-11-10: list every such fake).
+- Import loading: no e2e file imports `readinessCue` today (`grep -rn "src/lib" e2e` shows
+  `deadlines`, `headers`, `auth`, `copilot`, `configNamespaces`). `mock-backend.ts` is loaded by
+  `e2e/global-setup.ts:3` in the Playwright process. With `@phosphor-icons/react` 2.1.10 in plain
+  Node, an ESM `import` loads the icons and a CJS `require` returns an empty object without
+  throwing. Not run under Playwright's own transform; Instructions 1 checks it.
 
 **TDD**: `red-green required`
 
@@ -919,9 +940,12 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
    `{ ...MYSZ_FORMULA_UNREADABLE_OPPORTUNITY, formulaUnreadable: false, provenance: ['watchlist',
    EVALUATION_FAILED_PROVENANCE] }`. Import the constant with a relative path, as
    `e2e/fixtures/alerts.ts:1` does (`'../../src/lib/deadlines'`). `readinessCue.ts` value-imports
-   the icon library; if that import does not load in the mock-backend Node process, declare the
-   token once in the fixture module instead and say so in the catalog row. Add its row to `INVENTORY.md` after line 44; state that it is not in
-   `OPPORTUNITIES`.
+   the icon library, so check the import first: after adding it, run
+   `pnpm exec playwright test e2e/insights/opportunities.spec.ts --list`. If the tests are listed,
+   keep the import. If the run fails on that import, declare the token once in the fixture module
+   instead. That is a second TS copy of the wire token, so record it in the Deviation Log and the
+   catalog row and report it at the checkpoint (P-03); do not take it silently. Add the fixture's
+   row to `INVENTORY.md` after line 44; state that it is not in `OPPORTUNITIES`.
 2. `mock-backend.ts`: add `'evaluation_failed'` to `MARKERS` and exempt a row whose provenance
    includes it from the conviction floor, mirroring the backend change in Step 7.
 3. `opportunities.spec.ts`: one test in a new `describe`, served through the existing `page.route`
@@ -968,8 +992,11 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md
 - `docs/runbooks/mcp-tools.md:1225-1230` documents `formula_unreadable` and its provenance marker
   for `list_opportunities`.
 - `docs/patterns/ui-ux-governance.md:259` — "## 9. Known deviations / convergence backlog".
-- `services/xstockstrat-analysis/docs/context-constitution-findings.md` — the service findings log.
-- C-16 sign-off: context.md `## Session 2026-11-20 — sdd-design`, Operator decisions.
+- `services/xstockstrat-analysis/docs/context-constitution-findings.md` — the service findings log;
+  `## Latent bugs (looks broken, not merely non-obvious)` at line 17.
+- C-16 sign-off: context.md `## Session 2026-11-20 — sdd-design`, Operator decisions. Confirmed on
+  the feature branch at `/sdd-review impl-spec` (the line starting "Operator (2026-11-20, design
+  gate, option A): C-16 sign-off to CHANGE feature-289 @AC-10").
 
 **TDD**: `N/A (docs)`
 
@@ -999,6 +1026,11 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md
 6. `ui-ux-governance.md` § 9: one backlog row — `evaluation_failed` shows no dedicated cue on the
    mobile `SignalRow` or the Signal-detail header; follow-up feature
    `evaluation-failed-cue-parity`.
+7. Findings log, `## Latent bugs`: one row recording that the per-strategy setup in the readiness
+   kick (`_kick_readiness_refresh`: `get_by_owner_and_id`, `_load_benchmark_bars_windowed`,
+   `_formula_fundamentals`) and in `_materialize_readiness_for_owner` is not isolated, so a failure
+   there still discards the whole kick or owner pass (feature 308 isolates the per-symbol body
+   only). Re-grep the symbols and cite them by `#symbol`, as the file's other rows do.
 
 **Verification**:
 ```bash
@@ -1007,6 +1039,7 @@ grep -n "@feature-308" services/xstockstrat-analysis/acceptance/opportunity-comp
 grep -n "FormulaExecutionError. still propagates" services/xstockstrat-analysis/docs/opportunities.md   # expect no output
 grep -n "evaluation_failed" services/xstockstrat-analysis/docs/opportunities.md docs/runbooks/mcp-tools.md
 grep -n "analysis-isolation-degraded-counter" services/xstockstrat-analysis/docs/context-constitution-findings.md
+grep -n "_kick_readiness_refresh" services/xstockstrat-analysis/docs/context-constitution-findings.md   # the per-strategy setup row
 grep -n "evaluation-failed-cue-parity" docs/patterns/ui-ux-governance.md
 ```
 
