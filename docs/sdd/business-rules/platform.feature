@@ -2692,3 +2692,21 @@ Feature: Platform-wide guarantees
     Given the 14 seeded strategy templates and the 9 seeded formula templates
     When non-admin "bob" instantiates each one
     Then all 14 calls succeed and each resulting definition passes strategy validation with every custom-formula component pointing to one of "bob"'s formula copies
+
+  # ─── telemetry startup log names the effective OTLP endpoint (feature 329) ──
+  # Cross-cutting: the Node and Python telemetry modules across services. Source defect:
+  # docs/reports/2026-10-19-telemetry-startup-log-raw-endpoint-defect.md
+
+  @AC-1 @regression @feature-329
+  Scenario Outline: the startup log names the effective export endpoint when the env var is unset
+    Given OTEL_ENABLED is "true" and OTEL_EXPORTER_OTLP_ENDPOINT is unset
+    When the <runtime> service <service> starts
+    Then its telemetry startup log names the SDK default endpoint (or "SDK default")
+    And the log contains neither "undefined" nor "None" as the endpoint
+
+    Examples:
+      | runtime | service                |
+      | Node    | xstockstrat-ui         |
+      | Node    | xstockstrat-config     |
+      | Python  | xstockstrat-analysis   |
+      | Python  | xstockstrat-agent      |
