@@ -1,6 +1,6 @@
 # Debate Register: fix-alert-event-targeting
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -47,11 +47,11 @@
 <!-- Status: open → closed @ round N (<how>) | waived @ round N (user) | reopened @ round N (user) -->
 | ID | Round | Objection | Blocking | Status |
 |---|---|---|---|---|
-| O-1 | 1 | O: Alert audience (owner-only vs owner-plus-admins) for trading halt/reconciliation alerts needs an explicit, recorded operator decision; owner-only removes admin push, live stream and inbox visibility. | yes | open |
-| O-2 | 2 | C-16: the admin-visibility loss (push, stream, inbox) for per-account halt/reconciliation alerts is an unclassified CHANGE. Add a CHANGE row, get operator sign-off in context.md, and cite whether any feature-242 scenario asserts admin delivery. | yes | open |
+| O-1 | 1 | O: Alert audience (owner-only vs owner-plus-admins) for trading halt/reconciliation alerts needs an explicit, recorded operator decision; owner-only removes admin push, live stream and inbox visibility. | yes | closed @ round 3 (operator decision at the design gate, context.md 2026-11-20: options (b) + (b′) together — owner-only delivery, paired with a named follow-on /sdd-story and a Grafana rule on trading.alert_emit halt/reconciliation; (c) and (d) rejected; double-push accepted, halt alert not suppressed) |
+| O-2 | 2 | C-16: the admin-visibility loss (push, stream, inbox) for per-account halt/reconciliation alerts is an unclassified CHANGE. Add a CHANGE row, get operator sign-off in context.md, and cite whether any feature-242 scenario asserts admin delivery. | yes | closed @ round 3 (operator C-16 sign-off at the design gate, context.md 2026-11-20: @AC-1, @AC-2 and the admin-delivery CHANGE signed off; no feature-242 scenario names halt or reconciliation alerts) |
 | O-3 | 2 | Check prod Slack/SendGrid fanout configuration before asking the operator, or state that it is unknown. | no | closed @ round 3 (Answered with evidence: prod Slack/SendGrid fanout is unknown from the repo (secrets/production.enc.yaml:2-15; do-render-app-spec.py:98-102; 018_notify_fanout seeds ''), and the packet declares it unknown, not as a mitigation. The adversary agreed.) |
 | O-4 | 2 | Record the ordering dependency on batch peer 312 (untargeted ListAlerts visibility) in context.md and merge-order.md. | no | closed @ round 3 (Answered: no file overlap with 312, and either merge order is code-safe. The semantic coupling (312 product-spec.md:94) is recorded as a prose note in merge-order.md and context.md. The adversary agreed.) |
-| O-5 | 3 | P-03/C-11/C-16: the operator packet and the CHANGE row must state that admins are the only people who can resume a halt (trading.go:3181) and have no in-product way to discover another user's halted account or its id (account_repo.go:90; tools.py:2456; trading.go:2895). The CHANGE 'After' line must say: owner notified but cannot resume; admins get no signal or id. Offer (b′), a Grafana rule on trading.alert_emit halt/reconciliation, and name the admin cross-user halted-accounts read as a follow-on target. Re-weigh, or pair, the (b) recommendation. | yes | open |
+| O-5 | 3 | P-03/C-11/C-16: the operator packet and the CHANGE row must state that admins are the only people who can resume a halt (trading.go:3181) and have no in-product way to discover another user's halted account or its id (account_repo.go:90; tools.py:2456; trading.go:2895). The CHANGE 'After' line must say: owner notified but cannot resume; admins get no signal or id. Offer (b′), a Grafana rule on trading.alert_emit halt/reconciliation, and name the admin cross-user halted-accounts read as a follow-on target. Re-weigh, or pair, the (b) recommendation. | yes | closed @ round 3 (operator decision at the design gate, context.md 2026-11-20: (b) is paired with both the named follow-on and (b′); the CHANGE After line states owner notified but cannot resume, admins get no in-product signal or id until the follow-on, only the Grafana rule + Loki line) |
 
 ## Reopen Petitions
 
