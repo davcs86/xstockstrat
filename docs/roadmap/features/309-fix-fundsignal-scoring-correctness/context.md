@@ -537,3 +537,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 (operator decisions at the design gate)
+
+- Operator (2026-11-20, design gate, option A): the direction gate is degenerate-only (folded set < 5 or `buy_cut <= sell_cut`) with a side tie-break at 0.5. The always-on side gate and the absolute-score-cut variant are rejected.
+- C-16 sign-off for the CHANGEs to `@AC-3 @feature-246` and `@AC-4` / `@AC-8 @feature-201`.
+- O-3 is closed by this record.
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: recon.md written 2026-11-11 (services: xstockstrat-analysis, xstockstrat-ingest, xstockstrat-indicators; consumer surfaces `/insights/opportunities` and MCP `list_opportunities`; key reuse patterns: the `_builtin_score` missing-metrics guard, the 260 `reference_scores` fold).
+- Phase 1 Grilling: 3 rounds (full), approved by the operator at the gate. Chosen approach: omit absent metrics from the formula input; a degenerate-only side gate in `_map_directions` (`_MIN_CROSS_SECTION = 5`, `_NEUTRAL_SCORE = 0.5`); an additive `bool conviction_provided = 12` on `ExternalSignal`; a `to_regclass`-guarded ingest retraction migration. Rejected: `R-1`..`R-8` (debate.md), plus the always-on and absolute-cut gate variants (operator).
+- Constitution rules touched: C-01, C-07, C-08, C-09, C-10, C-11, C-14, C-16, C-18, F-07, P-02, P-03, P-06. Floor breaches: none.
+- debate.md: State → approved; O-3 → closed @ round 3 (operator decision). No reopen petitions were on file. O-10 and O-13..O-18 stay `open` in the register (non-blocking); design.md adopts or accepts each.
+- Ledger: no line added. The MagicMock trap is already at fails.md:726, and the silent `to_regclass` no-op is unproven until execute.
+- Status: spec-ready → design-approved.
+
+## Open Threads (design approved)
+
+- [ ] O-14: stored wrong-direction `buy` rows from degenerate days expire naturally (up to `valid_days` 90). Approved as the synthesis default; the 2026-11-20 operator record does not name it. Confirm with the operator — target: `/sdd-spec`.
+- [ ] O-15: opportunity rows built from retracted signals stay readable for up to about 24h; no recompute is triggered. Same standing as O-14. Confirm with the operator — target: `/sdd-spec`.
+- [ ] Record the CI `buf breaking` verdict for `conviction_provided = 12` here — target: proto step.
+- [ ] Re-derive the ingest migration number (provisional 017) after feature 318 — target: `/sdd-spec`.
+- [ ] Re-grep every line anchor and the absence of TS/UI consumers of `ExternalSignal.conviction` — target: `/sdd-spec`.
+- [ ] Check the retraction cutoff `2026-10-31T00:00:00Z` against deploy logs; review EDGAR self-heal against the frozen list; DBA + marketdata-owner acknowledgement of the cross-schema read — target: migration PR.
+- [ ] Per-environment post-deploy check (O-18): RAISE NOTICE count vs the frozen-list SELECT, and no matching row still active. Also covers the unverified db-migrator SELECT grant — target: after the migration deploys.
+- [ ] Document the `_MIN_CROSS_SECTION` / default-quantile coupling and the [0,1] scale contract in the analysis CLAUDE.md — target: direction step.
+- [ ] Document the surviving legacy sentinel (`conviction != 0.0` without the flag reads as not given) — target: conviction docs step.
+- Accepted residuals, no action: n ≥ 5 all-weak top quantile is `buy`; degenerate hold band is exactly 0.5; budget-deferred mixed-label day (O-11); deploy-boundary dedup duplicate within `signals.dedup_window_hours` (O-17).
