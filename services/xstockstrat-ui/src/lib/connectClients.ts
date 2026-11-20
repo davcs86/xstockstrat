@@ -1,6 +1,7 @@
 import { checkServerIdentity, type PeerCertificate } from 'node:tls';
 import { Code, createClient, type Transport } from '@connectrpc/connect';
 import { createGrpcTransport } from '@connectrpc/connect-node';
+import { AgentService } from '@xstockstrat/proto/agent/v1/agent_pb';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
@@ -24,6 +25,9 @@ const CONFIG_ENDPOINT = process.env.CONFIG_ENDPOINT ?? 'xstockstrat-config:50060
 const INGEST_ENDPOINT = process.env.INGEST_ENDPOINT ?? 'xstockstrat-ingest:50055';
 const INDICATORS_ENDPOINT = process.env.INDICATORS_ENDPOINT ?? 'xstockstrat-indicators:50054';
 const LEDGER_ENDPOINT = process.env.LEDGER_ENDPOINT ?? 'xstockstrat-ledger:50057';
+// No default host: an unset AGENT_ENDPOINT must mean "tool catalog unavailable", never a dial
+// (and never the agent's public URL).
+const AGENT_ENDPOINT = process.env.AGENT_ENDPOINT ?? '';
 
 // Mutual-TLS material from boot-time env PEM (MTLS_CERT/MTLS_KEY/MTLS_CA_CERT), never WatchConfig.
 // Absent material throws at first dial (fail-closed — the BFF presents no client cert otherwise).
@@ -122,6 +126,9 @@ export const ledgerClient = createClient(
   LedgerService,
   makeTransport(LEDGER_ENDPOINT, 'xstockstrat-ledger'),
 );
+export const agentClient = AGENT_ENDPOINT
+  ? createClient(AgentService, makeTransport(AGENT_ENDPOINT, 'xstockstrat-agent'))
+  : null;
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────
 export function connectCodeToHttp(code: Code): number {

@@ -27,7 +27,7 @@ with provenance (`mark_source`/`mark_as_of`) and broker-style Day P&L from tradi
 close wins; otherwise the last close in the lookback; else `MARK_SOURCE_NONE` (listed, excluded from sums).
 An unreadable offline-state read degrades per account (PORTFOLIO-11).
 `GetPnL`, `broadcastSnapshot` and `checkRiskLimits` never use it (231 behaviour kept). Fixed invariants, not
-config: the NYSE calendar (`internal/marketsession`, rule holidays, no early closes), a bar's session date =
+config: the NYSE calendar (`contracts/marketsession` in `packages/proto/marketsession`, rule holidays, no early closes), a bar's session date =
 NY date of `time + 6h`, and the 1-minute truncation of the bars `End` (singleflight coalescing).
 
 **Account/portfolio-scoped reads are ownership-gated (2026-09-16 security audit, H-3).**
@@ -42,10 +42,20 @@ rejected `InvalidArgument` on both paths before subscribing (feature 264).
 
 **Cross-user watchlist enumeration (feature 154).** `ListAllWatchlistSymbols` is cross-user; it is gated on
 `x-internal-caller` `analysis-fundsignal` only, never the admin bit (PORTFOLIO-8).
+It returns the distinct set minus flagged-delisted symbols (feature 352); the repo union behind the delisting tick
+stays unfiltered. Every watchlist response carries `WatchlistBinding.delisted` from the delisted cache, so a flagged
+symbol on a system-managed list shows the marker from the tick that learns of it until a later tick removes it.
 
 **Watchlist servability filter (feature 282).** The three watchlist insert paths store only symbols marketdata
 `GetSymbolServability` calls servable and return the rest in `refused_symbols`; fail-open on error/timeout — see
 PORTFOLIO-19.
+
+**Delisted symbols (feature 352).** The last step of each signal-prune tick (`syncDelistings`) sends the
+cross-user symbol union to marketdata `SyncWatchlistDelistings`, replaces the in-memory delisted cache with the
+answer, removes the flagged symbols it is told to from system-managed lists, sends one `symbol_delisting` WARNING
+per newly claimed symbol (untargeted, no ledger event) and acknowledges what was sent with `AckDelistingAlerts`.
+Marketdata is the only decider; portfolio only supplies the union, removes, alerts and acknowledges. Each call has
+a fixed 15 s deadline; a failed sync removes nothing and keeps the cache, which is at most one tick stale.
 
 ## Docker Build Pattern
 
@@ -57,7 +67,7 @@ Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, stat
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config |
 | xstockstrat-ledger | gRPC stream | Consume `order.filled` events to update positions |
-| xstockstrat-marketdata | gRPC read | Current prices for unrealized P&L + `BatchGetBars` (`allow_partial`) daily closes for offline marks/Day P&L (feature 240) + `GetSymbolServability` on watchlist inserts (feature 282) |
+| xstockstrat-marketdata | gRPC read | Current prices for unrealized P&L + `BatchGetBars` (`allow_partial`) daily closes for offline marks/Day P&L (feature 240) + `GetSymbolServability` on watchlist inserts (feature 282) + `SyncWatchlistDelistings` / `AckDelistingAlerts` on the prune tick (feature 352) |
 | xstockstrat-notify | gRPC write | Risk limit breach alerts |
 | TimescaleDB | DB (schema: `portfolio`) | Positions + snapshots hypertable |
 
@@ -95,7 +105,7 @@ may print the FQN `portfolio.<key>`.
 - Table: `portfolio.positions` — current open positions plus the broker's last-synced valuation and intraday P&L, the display-only bracket leg order IDs (from trading's `order.bracket_updated`), and `source`/`as_of` provenance (feature 163). Broker valuation is authoritative for broker-synced positions; order-fill-only positions are enriched from the marketdata mark (`markOf`).
 - Table: `portfolio.account_balances` — latest broker balance snapshot per account (cash, buying power, equity, last_equity); upserted from `account.balance.synced`. **Offline accounts have no row here** (feature 157) — their equity derives from position market value and cash/buying-power/day-P&L are `0`.
 - Table: `portfolio.offline_account_realized` — the offline-exclusive account marker + account-grain realized P&L (feature 157/240); lifetime realized = `realized_carried + realized_pnl`; broker accounts never get a row. `ListPortfolios`' all-accounts view enumerates `account_balances` ∪ this offline set.
-- Table: `portfolio.watchlist_signal_expiry` — per-entry expiry of system-managed SIGNAL watchlist entries (feature 281, migration `018`): PK `(watchlist_id, symbol)`, `valid_until`, `signal_id`. FKs to `portfolio.watchlists` only (`ON DELETE CASCADE`), never `watchlist_symbols`, because replace-all `Update` deletes and reinserts bindings. No row = open-ended (never pruned); `signal_id NULL` = a backfill "untracked" mark.
+- Table: `portfolio.watchlist_signal_expiry` — per-entry expiry of system-managed SIGNAL watchlist entries (feature 281, migration `018`): PK `(watchlist_id, symbol)`, `valid_until`, `signal_id`. FKs to `portfolio.watchlists` only (`ON DELETE CASCADE`), never `watchlist_symbols`, because replace-all `Update` deletes and reinserts bindings. No row = open-ended (never pruned); `signal_id NULL` = a backfill "untracked" mark, due 72h after APPLY.
 - Hypertable: `portfolio.snapshots` — point-in-time portfolio state (partition by `time`, chunk = 1 day)
 
 ## Ledger Events Emitted
@@ -120,9 +130,9 @@ may print the FQN `portfolio.<key>`.
 ## Observability (feature 294-signal-map-instrumentation)
 
 - `loop tick ok` is written per event consumer (`order_fill`, `position_sync`, `deregistration`, `bracket`, `balance`) on outcome ok/acked only, throttled to one record per consumer per 60 s. These are event-driven, so there is no idle heartbeat and silence is ambiguous. `signal_prune` keeps its `signal watchlist prune tick` record. Trading also has a `position_sync` loop: filter on `service_name` too.
-- Instruments: `portfolio.consumer.events{consumer, outcome ok|error|parked|acked}`, `portfolio.marketdata_fetch{op=quotes, outcome ok|error|timeout}`, `portfolio.snapshot{outcome written|skipped_unpriced|db_error}`, `portfolio.mark_source{mark_source, path read|pnl|snapshot|risk}` (a rate, not a state).
+- Instruments: `portfolio.consumer.events{consumer, outcome ok|error|parked|acked}`, `portfolio.marketdata_fetch{op=quotes|delistings, outcome ok|error|timeout}`, `portfolio.snapshot{outcome written|skipped_unpriced|skipped_read_error|db_error}`, `portfolio.mark_source{mark_source, path read|pnl|snapshot|risk}` (a rate, not a state).
 - Stream consumers retry every 2 s (`streamRetryDelay`), log failures at N=10 (`streamLogEvery`) and reset their counters after a 10-minute quiet window (`streamQuietWindow`; counters only, never the retry timing). INFO `<name> stream resumed` marks a recovery.
-- Load-bearing logs: ERROR `portfolio snapshot insert failed` (the ledger emit and broadcast still run); WARN `latest quote has no usable price` is one aggregate per pass with `count` and at most 5 `sample_symbols`.
+- Load-bearing logs: ERROR `portfolio snapshot insert failed` (the ledger emit and broadcast still run); WARN `latest quote has no usable price` is one aggregate per pass with `count` and at most 5 `sample_symbols`; WARN `portfolio snapshot skipped: position read failed` (no persist/emit/broadcast); WARN `concentration check skipped: position read failed` (drawdown still runs).
 
 ## Environment Variables
 

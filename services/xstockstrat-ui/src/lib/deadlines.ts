@@ -7,3 +7,7 @@ export const ORDER_MUTATION_TIMEOUT_MS = 60_000;
 // Bounded deadline for snapshot-fundamentals reads: a stalled upstream must reject (→ the card's error
 // state), never leave the browser's query pending forever (feature 220).
 export const FUNDAMENTALS_TIMEOUT_MS = 15_000;
+
+// The symbol page's history-depth config read gates its first bars request, so it must fail fast
+// (a timeout falls back to the default depth, feature 341).
+export const HISTORY_CONFIG_TIMEOUT_MS = 3_000;

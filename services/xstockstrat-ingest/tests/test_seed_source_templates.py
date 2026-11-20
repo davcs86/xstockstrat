@@ -15,7 +15,7 @@ from gen.ingest.v1 import ingest_pb2
 from google.protobuf.json_format import ParseDict
 
 from app.handlers import servicer as servicer_mod
-from app.repositories.signal_sources import validate_config_json
+from app.repositories.signal_sources import validate_config_json, validate_extraction_instructions
 from tests._helpers import transaction_conn
 from tests.conftest import _ctx
 from tests.test_ingest_servicer import make_servicer
@@ -32,16 +32,30 @@ def _seed_file(suffix: str) -> str:
     return matches[0].read_text()
 
 
+def _instructions() -> dict[str, str]:
+    """Migration 017's (template id, instructions) literal pairs."""
+    text = (_MIGRATIONS / "017_signal_source_extraction_instructions.up.sql").read_text()
+    lits = re.findall(r"\$t\$(.*?)\$t\$", text, re.DOTALL)
+    assert lits and len(lits) % 2 == 0, len(lits)
+    pairs = dict(zip(lits[0::2], lits[1::2], strict=True))
+    assert len(pairs) == len(lits) // 2, "a template id repeats"
+    assert sorted(pairs) == sorted(f"tpl-{s}" for s in _SLUGS), sorted(pairs)
+    return pairs
+
+
 def _rows() -> list[dict]:
     lits = re.findall(r"\$t\$(.*?)\$t\$", _seed_file("up"), re.DOTALL)
     assert lits and len(lits) % 4 == 0, len(lits)
+    instructions = _instructions()
     return [
         {
             "template_id": lits[i],
             "name": lits[i + 1],
             "description": lits[i + 2],
             # The pool has no JSONB codec: asyncpg returns JSONB as JSON text.
-            "payload": json.dumps(json.loads(lits[i + 3])),
+            "payload": json.dumps(
+                {**json.loads(lits[i + 3]), "extraction_instructions": instructions[lits[i]]}
+            ),
             "version": 1,
             "retired_at": None,
             "created_by": "system",
@@ -66,6 +80,11 @@ def test_every_payload_is_a_valid_credential_free_source():
         assert "extractor_module" not in payload, row["template_id"]
         assert servicer_mod._template_payload(parsed) == payload, row["template_id"]
         assert row["name"] == payload["display_name"], row["template_id"]
+        prose = payload["extraction_instructions"]
+        assert prose.strip(), row["template_id"]
+        assert (
+            validate_extraction_instructions(payload["source_type"], prose, require=True) is None
+        ), row["template_id"]
 
 
 def test_ac19_ac22_the_seed_holds_exactly_the_four_system_templates():
@@ -124,3 +143,17 @@ def test_the_fundamentals_source_insert_matches_the_producer_and_the_down_spares
     assert "WHERE slug = 'fundamentals'" in up
     statements = "\n".join(line for line in down.splitlines() if not line.lstrip().startswith("--"))
     assert "signal_sources" not in statements and "source_templates" in statements
+
+
+@pytest.mark.asyncio
+async def test_ac9_an_instance_inherits_the_templates_instructions():
+    template = next(r for r in _rows() if r["template_id"] == "tpl-robinhood_snacks")
+    req, patches, ins, _stamp = _instantiate(template=template, slug="my_snacks")
+    db, _conn = transaction_conn()
+    svc = make_servicer(db=db)
+    with patches[0], patches[1], patches[2], patches[3]:
+        await svc.InstantiateTemplate(req, _ctx("0", user_id="bob"))
+    kwargs = ins.call_args.kwargs
+    assert kwargs["extraction_instructions"] == _payload(template)["extraction_instructions"]
+    assert kwargs["extraction_instructions"].strip()
+    assert kwargs["extractor_module"] == "app.extractors.noop"

@@ -145,6 +145,7 @@ export class WebPushDispatcher {
         body: alert.body,
         icon: '/icon-192.png',
         tag: alert.category || 'xstockstrat',
+        url: `/accounts/notifications/${alert.alertId}`,
       };
       const body = JSON.stringify(payload);
 

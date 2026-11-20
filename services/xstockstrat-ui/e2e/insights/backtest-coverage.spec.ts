@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { addAuthCookie } from '../helpers/auth';
+import { test, expect, type Page } from '@playwright/test';
+import { addAdminCookie, addAuthCookie } from '../helpers/auth';
 import { BACKTEST_EVAL_FAILED_WARNING } from '../fixtures';
 
 /**
@@ -16,6 +16,23 @@ function tsMillis(v: unknown): number {
     return Number((v as { seconds: string | number }).seconds) * 1000;
   }
   return NaN;
+}
+
+async function captureStrategyBackfill(page: Page) {
+  await page.goto('/insights/strategies/strat-high-001');
+  const backtestReq = page.waitForRequest(
+    (r) => r.url().includes('/RunBacktest') && r.method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Run Backtest' }).click();
+  const requestedStart = tsMillis(JSON.parse((await backtestReq).postData() ?? '{}').range?.start);
+  await expect(page.getByTestId('insufficient-data')).toBeVisible({ timeout: 10000 });
+
+  const backfillReq = page.waitForRequest(
+    (r) => r.url().includes('/TriggerBackfill') && r.method() === 'POST',
+  );
+  await page.getByTestId('backfill-action').click();
+  const body = JSON.parse((await backfillReq).postData() ?? '{}');
+  return { requestedStart, body, range: body.range ?? {} };
 }
 
 /**
@@ -75,6 +92,31 @@ test.describe('Backtest data coverage', () => {
     const range = JSON.parse((await backfillReq).postData() ?? '{}').range ?? {};
 
     // The backfilled span ends where the requested window begins and reaches back before it.
+    expect(tsMillis(range.end)).toBe(requestedStart);
+    expect(tsMillis(range.start)).toBeLessThan(requestedStart);
+  });
+
+  // feature 343 @AC-10 — a non-admin fills the exact gap under GAPS_ONLY.
+  test('non-admin backfill sends GAPS_ONLY over the exact gap', async ({ page }) => {
+    await addAuthCookie(page);
+    const { requestedStart, body, range } = await captureStrategyBackfill(page);
+
+    expect(body.fillMode).toBe('FILL_MODE_GAPS_ONLY');
+    expect(requestedStart).not.toBeNaN();
+    expect(tsMillis(range.end)).toBe(requestedStart);
+    expect(tsMillis(range.start)).toBeLessThan(requestedStart);
+    await expect(page.getByTestId('backfill-confirmation')).toContainText('job-e2e-1', {
+      timeout: 10000,
+    });
+  });
+
+  // feature 343 @AC-10 / 198@AC-7 — an admin's request is unchanged: no fill mode, exact gap.
+  test('admin backfill sends no fill mode over the exact gap', async ({ page }) => {
+    await addAdminCookie(page);
+    const { requestedStart, body, range } = await captureStrategyBackfill(page);
+
+    expect([undefined, 'FILL_MODE_UNSPECIFIED']).toContain(body.fillMode);
+    expect(requestedStart).not.toBeNaN();
     expect(tsMillis(range.end)).toBe(requestedStart);
     expect(tsMillis(range.start)).toBeLessThan(requestedStart);
   });

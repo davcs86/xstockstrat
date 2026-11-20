@@ -14,10 +14,35 @@ Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` bui
 
 ## Authorization
 
-`TriggerBackfill` (the provider-quota-spending op) and `CancelBackfill` are
-**admin-gated** — they abort `PERMISSION_DENIED` ("admin scope required")
+`CancelBackfill` is **admin-gated** — it aborts `PERMISSION_DENIED` ("admin scope required")
 unless the propagated `x-access-scope` carries the ADMIN bit (`0x04`), via the shared
-`IngestServicer._has_admin_scope`. `ManageSignalSource` is **owner-gated** (feature 224,
+`IngestServicer._has_admin_scope`.
+
+`TriggerBackfill` (the provider-quota-spending op) is **admin, or the self-serve envelope**
+(feature 343). The admin path is unchanged. A caller without the ADMIN bit is accepted only when
+every one of these eight conditions holds; otherwise it aborts `PERMISSION_DENIED` with the token of
+the **first** condition that fails, in this order:
+
+| # | Condition | Token |
+|---|---|---|
+| 1 | exactly one symbol | `multi_symbol` |
+| 2 | `data_kind` is UNSPECIFIED or BARS | `data_kind` |
+| 3 | `fill_mode` is `GAPS_ONLY` | `fill_mode` |
+| 4 | `overwrite` is false | `overwrite` |
+| 5 | `range` has a start and an end, start before end | `range_unset` |
+| 6 | `range` spans at most `backfill.self_serve_max_range_days` days | `range_too_long` |
+| 7 | no `callback_url` | `callback_url` |
+| 8 | `x-user-id` is set and is not `system` | `no_user` |
+
+The detail is `self-serve backfill denied: <token>`; for `range_too_long` it ends with a space and `(max <N> days)`,
+where `<N>` is the configured cap. The token set and format are a wire contract read by the UI and the
+agent, pinned by `tests/fixtures/self_serve_denial.json`. A self-serve request is also **de-duplicated
+per symbol**: when a QUEUED or RUNNING job already lists the symbol, it aborts `ALREADY_EXISTS`
+("a backfill for <symbol> is already queued or running", without the other job's id). The check and
+the insert run in one transaction under `pg_advisory_xact_lock`. Admin requests are never
+de-duplicated.
+
+`ManageSignalSource` is **owner-gated** (feature 224,
 § Ownership below). **Feature 143**: `TriggerBackfill` also rejects any
 timeframe other than `1d` (`INVALID_ARGUMENT`), independent of the admin gate — only daily bars are
 servable platform-wide, so a `15m`/`1h` job is refused before it is persisted or spends provider
@@ -88,6 +113,10 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   templates, and the `system` / `derived` `fundamentals` source inserted only when no owner holds that
   slug (an existing row is never modified); its down never touches `signal_sources`. System templates
   are read-only (PLAT-19). The two SEC templates carry a placeholder User-Agent contact each user must replace.
+- Migration `017_signal_source_extraction_instructions` (feature 355): adds
+  `signal_sources.extraction_instructions` (`TEXT NOT NULL DEFAULT ''`) and writes
+  `extraction_instructions` into the four system templates' payloads with no version bump; existing
+  source rows are not backfilled.
 - Table: `ingest.backfill_jobs` — durable backfill job state (plain table, **not** a hypertable);
   replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
   `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer
@@ -96,6 +125,12 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   skipping a job whose persisted status is `CANCELED` (feature 261). A job canceled while `QUEUED`
   never starts: it is not flipped to `RUNNING` once a backfill slot frees. Chunk-plan progress is tracked by the `chunks_total` /
   `chunks_completed` columns.
+- Per-symbol backfill results — migration `018_backfill_symbol_results` (feature 352) adds the nullable
+  JSONB column `ingest.backfill_jobs.symbol_results`: the outcome and reason of every symbol that was
+  not written, stored keyed by chunk (the chunk id, or `fundamentals`) and merged at read into
+  `BackfillJob.symbol_results` (failed > skipped > empty). It is never part of the webhook payload and
+  is absent for a job-level failure. After a restart a job can hold `FAILED` results for symbols of
+  earlier chunks that are not in `failed_symbols`.
 - Backfill completion webhook — migration `015_backfill_webhook_callback` adds three nullable columns to
   `ingest.backfill_jobs`: `callback_url`, `webhook_enqueued_at`, `webhook_rejected_at`.
   - **Trigger.** A non-empty `TriggerBackfillRequest.callback_url` is judged by notify
@@ -124,6 +159,7 @@ errors may print the FQN `ingest.<key>`.
 | `backfill.chunk_window_days` | int | `90` | Time-window size (days) the chunk planner splits a range into. A stored ≤ 0 reads as the default |
 | `backfill.max_concurrent_chunks` | int | `3` | Max chunks of one job fetched in parallel. A stored ≤ 0 reads as the default |
 | `backfill.webhook_sweep_interval_seconds` | int | `60` | Longest wait between two webhook hand-off cycles; a terminal status write also wakes the loop, so this bounds how soon a failed hand-off is retried. A stored ≤ 0 reads as the default. Seed migration `048_webhook_fanout_callback_keys` |
+| `backfill.self_serve_max_range_days` | int | `730` | Longest range, in days, a non-admin may request in one `TriggerBackfill` (feature 343). 730 = `prefix_calendar_days(200)` (300 days) + the 366-day card window; a 1000-bar warm-up needs 1830. A stored ≤ 0 reads as the default. Seed migration `051_ingest_backfill_self_serve_keys` |
 | `signals.dedup_window_hours` | int | `24` | Window within which a matching (source, symbol, direction, conviction, valid_until) signal is treated as a duplicate of the owner's existing `ingest.signal_dedup_claims` claim (feature 111; per owner since feature 224). A configured `0` is honoured: it disables the dedup window (feature 173) |
 | `mcp_client.poll_interval_seconds` | int | `300` | Server-side MCP query loop cadence for `mcp_client` sources (feature 166). A stored ≤ 0 reads as the default (a settable 0 cannot busy-loop). Seed migration `025_ingest_mcp_client_keys` |
 | `mcp_client.request_timeout_seconds` | int | `30` | Per-call outbound MCP request timeout for `mcp_client` sources (feature 166). A stored ≤ 0 reads as the default. Seed migration `025_ingest_mcp_client_keys` |

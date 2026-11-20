@@ -3,8 +3,8 @@ import { analysisClient } from '@/lib/browserClients/analysisClient';
 
 export type IndicatorSeriesInput = Parameters<typeof analysisClient.getIndicatorSeries>[0];
 
-// Cross-segment `/insights/api` client (sanctioned exception). The page passes the exact closes+times
-// it drew, so the panels' x-axis is parity-aligned and the server never re-fetches bars.
+// Cross-segment `/insights/api` client (sanctioned exception). The page sends the drawn window plus its
+// history prefix, so the server never re-fetches bars; the last bar's time keys the cache.
 export function useIndicatorSeries(req: {
   strategyId: string;
   symbol: string;
@@ -13,7 +13,13 @@ export function useIndicatorSeries(req: {
 }) {
   const enabled = Boolean(req.strategyId) && req.closes.length > 0 && (req.times?.length ?? 0) > 0;
   return useQuery({
-    queryKey: ['indicator-series', req.strategyId, req.symbol, req.closes.length],
+    queryKey: [
+      'indicator-series',
+      req.strategyId,
+      req.symbol,
+      req.closes.length,
+      String(req.times?.at(-1)?.seconds ?? ''),
+    ],
     queryFn: () =>
       analysisClient.getIndicatorSeries({
         strategyId: req.strategyId,

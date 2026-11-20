@@ -1,6 +1,6 @@
 # xstockstrat-analysis — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-13 (`ccr-7e428591-3j2he0` @ `52f6d5a`). Captures the **non-obvious**
+Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-15 (`claude/context-constitution-parity-zggeq3` @ `d5de836`). Captures the **non-obvious**
 local invariants of the analysis service (strategy scoring, backtesting, live evaluation,
 fundamentals-signal producer, gRPC 50056). Does not restate documented/CI-enforced rules (see `## Pointers`).
 

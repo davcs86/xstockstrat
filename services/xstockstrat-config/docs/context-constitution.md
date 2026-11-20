@@ -1,6 +1,6 @@
 # xstockstrat-config — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-13 (`main-dev` @ `52f6d5a`). Captures the **non-obvious** local invariants of the config service (the `WatchConfig`
+Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-15 (`claude/context-constitution-parity-zggeq3` @ `d5de836`). Captures the **non-obvious** local invariants of the config service (the `WatchConfig`
 stream producer every service blocks on at startup, gRPC 50060). Does not restate documented/CI-enforced
 rules (see `## Pointers`).
 

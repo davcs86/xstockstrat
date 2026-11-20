@@ -851,6 +851,14 @@ group_deploy() {
   upd_i="$(yq e '.jobs.deploy.steps | to_entries | .[] | select(.value.run // "" | test("doctl apps update")) | .key' "$wf")"
   [ -n "$db_i" ] && [ -n "$render_i" ] && [ -n "$upd_i" ] || fail "deploy: db / render / update step missing"
   [ "$db_i" -lt "$render_i" ] && [ "$render_i" -lt "$upd_i" ] || fail "deploy: order must be db < render < update"
+  # Feature 360: the rendered spec is proposed to App Platform before the update; stdout is discarded
+  local prop_i prop_run
+  prop_i="$(yq e '.jobs.deploy.steps | to_entries | .[] | select(.value.run // "" | test("doctl apps propose")) | .key' "$wf")"
+  [ -n "$prop_i" ] || fail "deploy: no 'doctl apps propose' step"
+  [ "$render_i" -lt "$prop_i" ] && [ "$prop_i" -lt "$upd_i" ] || fail "deploy: order must be render < propose < update"
+  prop_run="$(yq e ".jobs.deploy.steps[$prop_i].run" "$wf")"
+  case "$prop_run" in *'--app "$APP_ID"'*'> /dev/null'*) ;; *) fail "deploy: propose must target \$APP_ID and discard stdout" ;; esac
+  [ "$(yq e ".jobs.deploy.steps[$prop_i] | has(\"continue-on-error\")" "$wf")" = false ] || fail "deploy: propose must not soft-fail"
   db_wiring "$wf" deploy deploy '${{ inputs.app_spec }}'
   # AC-1: the real "Wait for deployment" step against stub doctl/sleep, one run per DO phase
   wait="$(yq e '.jobs.deploy.steps[] | select(.name == "Wait for deployment") | .run' "$wf")"
