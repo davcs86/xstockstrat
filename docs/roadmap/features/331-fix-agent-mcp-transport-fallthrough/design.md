@@ -156,7 +156,7 @@ resolves to `http`, an explicit `stdio` resolves to stdio, and any other value r
 - `C-11` — honored by: recon, a two-round full debate and this design precede any code.
 - `C-15` — honored by: AC-1..AC-3 each have a test that fails on today's code and passes after the fix
   (AC-1 in-process primary, subprocess secondary).
-- `C-16` — honored by: see Business Rules Touched; both CHANGE lines carry the operator sign-off.
+- `C-16` — honored by: see Business Rules Touched; every CHANGE line carries the operator sign-off.
 - `C-18` — honored by: the least mechanism (one default, one raise; no new helper, constant or config
   key); the AC-1 dispatch cases are one parametrized test on the existing harness; the full error
   message text is asserted in at most two places.
