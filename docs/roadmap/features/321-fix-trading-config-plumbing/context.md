@@ -66,3 +66,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] 277 halt condition: stop for an operator re-scope if anything pushes toward rewriting stored descriptions or touching `watchcore.go`.
 - [ ] C-16 promotion: 321 `@AC-4` to platform.feature with a "Superseded by @feature-321" comment above 304 `@AC-14` — integration PR.
 - [ ] /sdd-spec must amend product-spec.md and acceptance.feature per design.md § Spec amendments.
+
+## Session 2026-11-20 — pre-deploy operator action (D-13 / D-16 / D-20), staging
+
+- Applied on the operator's instruction through the agent MCP `set_config` (global scope, attributed to the operator's user; audited in `config.config_audit`):
+  - **DO staging** (`xstockstrat_staging`, environment `staging`): `trading`/`broker.timeout_ms` 5000 → **10000** (int) at 2026-11-20T13:59:10Z; `trading`/`order_intent.stale_multiplier` 3.0 → **4.0** (float) at 2026-11-20T13:59:12Z. Read back via `get_config`: 10000 / 4.0.
+  - **Homelab staging** (`xstockstrat_homelab_staging`, environment `staging`, a separate config store): the same two edits at 2026-11-20T13:59:38Z and 13:59:39Z.
+- **Production: NOT done** — no production agent MCP is connected to this session. D-16's pass condition is therefore met for staging only; the integration PR stays draft until production reads `broker.timeout_ms` >= 10000 and `order_intent.stale_multiplier` >= 4.0 with audit timestamps recorded here.
+- Live effect from the edit (321 is not deployed yet): on both staging deployments every Alpaca call's timeout and the T-bounded reconciliation / position-sync polls (all brokers) are now 10 s; S = 40 s; Alpaca 429 budget B = 20 s. IBKR signed requests are unaffected until 321 deploys.
