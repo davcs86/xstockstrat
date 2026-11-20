@@ -516,3 +516,39 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [x] Verbatim wrapper block and definition text — written in implementation-spec.md Steps 1 and 8.
 - [x] Boot self-test config/telemetry/latency check — resolved (Key codebase findings).
 - [x] Mocked-Popen fakes with no status line stay green — measured (571 passed); Step 2 adds the no-status fallback test.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 9 warnings; overlap WARN (file-level, rebase-only). Advisory — did not block; lifecycle unchanged. No Floor (`F-*`) breach.
+- Tree reviewed: `origin/feature/fix-sandbox-result-contract@8d01d15a`. implementation-spec.md edited in `ffb8420d`.
+
+### Addressed (implementation-spec.md)
+
+- [x] Tree pin: re-pinned from `@90a2fd0e` to `@8d01d15a`. `90a2fd0e..8d01d15a` is 6 commits that touch only this feature directory (`git diff --stat` outside it is empty), so every `path:line` anchor holds.
+- [x] Wording: "the deleted stderr test" → "the deleted stderr substring branch (`sandbox.py:809`)". Re-grepped: no file under `services/xstockstrat-indicators/tests` contains "is not allowed in sandbox".
+- [x] Step 3: the boot self-test's startup-latency trade-off (one real sandbox run per boot, about 50 ms on the prototype, after `init_telemetry()` at `app/main.py:46`, failures caught and logged) is now stated in Codebase Evidence.
+- [x] design.md § 7 sidecar narrowing (P-03): logged in the spec's Deviation Log as a spec-time deviation. design.md itself is not amended. Operator confirmation is still open (below).
+- [x] Step 1 review load: Step Dependencies now states why Step 1 is not split and that the `571 passed` prototype figure is advisory (the reviewer did not re-run it).
+- [x] Flake: Step Dependencies now says the Step 1, 2 and 3 full-suite Verification can go red on `test_ac8_fork_bomb…` alone and that the executor records such a run here.
+- [x] Overlap: Step Dependencies gains a rebase-only note. Re-verified on `origin/main-dev`: `345-authelia-sso` is `implementation-ready` and edits `services/xstockstrat-agent/app/tools.py` (its spec `:985`) and `docs/runbooks/mcp-tools.md` (`:2319`); `360-fix-mcp-tools-page` is `code-completed` and edits `mcp-tools.md` (`:958`). `300-fix-sandbox-memory-cap` is `launched`, so its `sandbox.py` and test edits are already in this tree and it is not an in-flight collision.
+
+### Unresolved ⚠ carried into execution
+
+- Step 7: C-14 — operator gate O-5 is not recorded; Step 7 is blocked until it is — [ ] unaddressed
+- Step 7: test-only step with `**TDD**: N/A` (characterisation); confirm or drop at the O-5 gate — [ ] unaddressed
+- Integration PR: OQ1 operator DB check of dev and prod `indicators.formulas` (saved formulas that never assign `result` will start failing) — [ ] unaddressed
+- Step 8: sidecar reading of design.md § 7 needs operator confirmation (logged in the Deviation Log, not confirmed) — [ ] unaddressed
+- Steps 1-3: `test_ac8_fork_bomb…` pre-existing flake has no defect report — [ ] unaddressed
+- Step 5: re-grep the `tools.py:1687-1689` and `mcp-tools.md:1060-1062` anchors after any rebase onto 345 or 360 — [ ] unaddressed
+
+- Overlap findings: file-level only (`tools.py` and `mcp-tools.md` vs 345; `mcp-tools.md` vs 360). No migration, proto-field or config-key collision. The 17 batch peer features' Step file lists were not verifiable in the scan (likely touchers of `tools.py`: fix-mcp-deadline-budget, fix-agent-bearer-secret-orphan, fix-agent-mcp-transport-fallthrough; of `e2e/insights/formulas.spec.ts`: fix-ui-gating-gaps).
+
+## Open Threads
+
+- [ ] O-5 / C-14: operator sign-off on "/insights surface unchanged, justified" (or a named follow-up feature for a memory display) is not recorded; the same answer confirms or drops Step 7 — target: `/sdd-execute` checkpoint before Step 7.
+- [ ] OQ1: operator check of dev and prod `indicators.formulas` for saved formulas that never assign `result` — target: before the integration PR; record the result here.
+- [ ] Sidecar reading of design.md § 7 (sidecars untouched, conditional wording in the findings row) is logged in the Deviation Log but not operator-confirmed — target: `/sdd-execute` checkpoint before Step 8.
+- [ ] The pre-existing `test_ac8_fork_bomb…` isolation flake needs a defect report via `/sdd-qa defect` — target: next session with write access outside this feature directory.
+- [ ] Batch peer features' file lists are unverified against Step 5 (`tools.py`) and Step 7 (`formulas.spec.ts`) — target: `/sdd-execute` Step 0 discovery, and `/merge-train` ordering.
+- [ ] DO App Platform may render no VmHWM under seccomp; record the first post-deploy `sandbox memory self-test` log line (or the ERROR) here — target: integration PR (D-14).
+- [ ] debate.md still shows O-1, O-3, O-4 and O-5 as `open`; O-1, O-3 and O-4 are answered — target: next register write (`/sdd-design` owns the register).
