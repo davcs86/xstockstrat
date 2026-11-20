@@ -747,7 +747,7 @@ The `-k startup_log` run must report 3 passed.
 
 ### Step 17 — test: agent startup record carries the effective endpoint (U9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_telemetry.py` — modify
@@ -792,7 +792,7 @@ The `-k startup_log` run must report 3 passed.
 
 ### Step 18 — service: agent logs `"SDK default"` for an unset endpoint (U9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/telemetry.py` — modify
@@ -881,4 +881,10 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: `&& grep -n "conftest" tests/test_telemetry.py; test $? -eq 1` (Verification block, union with Step 16).
 **Actual**: Ran the grep guarded as `&& { grep -n "conftest" tests/test_telemetry.py; test $? -eq 1; }`. Everything else in the block ran unchanged.
 **Reason**: Same pattern as Steps 9, 11 and 13: the trailing `; test $? -eq 1` alone decides the block's exit status and could mask an earlier pytest, coverage or ruff failure. Applied under the operator's 2026-11-20 Option A decision, which extends the correction to Steps 11-18.
+**Disposition**: verification-command correction; step body not edited.
+
+### Deviation: Step 17 — test: agent startup record carries the effective endpoint (U9)
+**Spec said**: `&& grep -n "conftest" tests/test_telemetry.py; test $? -eq 1` (Verification block, union with Step 18).
+**Actual**: Ran the grep guarded as `&& { grep -n "conftest" tests/test_telemetry.py; test $? -eq 1; }`. Everything else in the block ran unchanged.
+**Reason**: Same pattern as Steps 9, 11, 13 and 15: the trailing `; test $? -eq 1` alone decides the block's exit status and could mask an earlier pytest, coverage or ruff failure. Applied under the operator's 2026-11-20 Option A decision, which extends the correction to Steps 11-18.
 **Disposition**: verification-command correction; step body not edited.
