@@ -821,7 +821,7 @@ The `-k startup_log` run must report 3 passed.
 
 ### Step 19 — docs: UI CLAUDE.md documents the endpoint var as required when OTel is on
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify

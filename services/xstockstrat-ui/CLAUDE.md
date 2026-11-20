@@ -214,7 +214,7 @@ DATABASE_URL                # config-ui audit route only
 DATABASE_CA_CERT            # feature 266 — config-ui audit route only; DB CA PEM, required unless DATABASE_URL has exactly sslmode=disable. Missing on a TLS URL (or any ssl*/uselibpqcompat URL param) ⇒ the route logs the error and returns a generic 500
 DB_POOL_MAX=1               # config-ui audit pool cap
 HOST_PROVIDER               # resource attribute host.provider (digitalocean|homelab; else unknown)
-OTEL_EXPORTER_OTLP_ENDPOINT
+OTEL_EXPORTER_OTLP_ENDPOINT  # required when OTEL_ENABLED=true; unset ⇒ SDK default. Base var only (per-signal *_ENDPOINT not reflected in the startup log). Credentials go in OTEL_EXPORTER_OTLP_HEADERS, never the URL.
 ```
 
 ## Frontend gotchas

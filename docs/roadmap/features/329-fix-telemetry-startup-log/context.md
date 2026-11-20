@@ -540,3 +540,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: green via Step 17's test (above). Config-key wiring gate N/A (product-spec: no config key changes).
 - Files modified: `services/xstockstrat-agent/app/telemetry.py`
 - Deviations: none (the Step 17 verification correction covers the shared block)
+
+### Step 19 — docs: UI CLAUDE.md documents the endpoint var as required when OTel is on [done]
+- Replaced the bare `OTEL_EXPORTER_OTLP_ENDPOINT` line at `services/xstockstrat-ui/CLAUDE.md:217` (last line of the env code block) with the design § Docs text verbatim. It documents the var as required when `OTEL_ENABLED=true`, the `SDK default` fallback, the per-signal blind spot (D-5) and the credentials-in-headers convention (D-6).
+- TDD: N/A (docs). Verification: both greps matched `:217`; `git diff --stat` showed `1 insertion(+), 1 deletion(-)`; exit=0.
+- Config-key wiring gate: step-time N/A (no config key). `node scripts/check-config-wiring.mjs --final` exit=0, with 2 baseline `REPORTED:` lines unrelated to this feature (analysis `marketdata/fundamentals.provider`, trading `platform/trading_state`, both `readers-disagree`).
+- All 19 steps are done. Status: `in-progress` → `code-completed`. No insights.md entry, because nothing generalizes beyond the existing per-service telemetry pattern.
+- Files modified: `services/xstockstrat-ui/CLAUDE.md`
+- Deviations: none
