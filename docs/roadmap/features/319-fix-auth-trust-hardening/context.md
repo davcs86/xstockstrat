@@ -449,3 +449,31 @@ design.md is not written and status.md is unchanged. Register: `debate.md` (D-1.
 - [ ] A stale agent snapshot after a WatchConfig disconnect keeps serving the last-known DCR policy. Accepted under D-6. Target: Step 3 (note).
 - [ ] The agent 503 path is unreachable in a correctly booted process; a dead-code pass could remove it. Target: Step 3 (constraint comment, D-7).
 - [ ] Merge-order overlap: `configServiceImpl.ts` with feature 314; agent files with 314/322/328/331; `docs/context-constitution.md` is widely edited. Target: /sdd-spec (merge-order.md) and the integration PR.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- Tree: detached at `origin/feature/fix-auth-trust-hardening@307a0c2c` (merge-base with `origin/main-dev`: `c4fd48b0`, the recon tree); every cited `path:line` was re-grepped there.
+- Operator decision in force (2026-11-20, design gate, option A): C-16 sign-off for the in-place `@feature-319` Given amendments to config `@AC-2` (241), `@AC-5` (296) and `@AC-25` (295). O-1 closed. Realised as Step 4, in the same atomic unit as the grant (D-12).
+- Step shape: config = Step 1 (harness only, green under the old grant) then the Steps 2+3+4 unit; identity = Steps 5+6 unit; agent = Steps 7+8 unit. No proto, migration, config key, env var or port.
+- `acceptance.feature` `@AC-2` gained the `identity.revoke.unverifiable` counter `And` (design.md Step 2 / D-9, EXTEND). No ID was renumbered.
+- Key codebase findings:
+  - **`watch_core.py` is a byte-identical four-copy group** (`scripts/check-watcher-copies.sh:17-20`, root constitution `docs/context-constitution.md:99`, CI `config-wiring`). D-5's public `WatchCore.has_snapshot()` therefore edits the indicators, ingest and analysis copies too, in Step 7. The design did not record this; it widens the diff past the four affected services at file level only (an additive, unused-there method).
+  - `peerDnsSans` (`authz.ts:158`) is module-private; Step 2 exports it so the deny log can carry `peerSan` without a second parser (D-1, D-3). The two new log fields go only on the internal-caller ERROR branch.
+  - Config `tsc` compiles tests (`tsconfig.json` `include: ["src/**/*"]`), so the `hasInternalCallerAuthority` signature change is atomic with `internalCallerAuthz.test.ts`; `setConfigAuthz.test.ts:193-199` pins the deny-log field set and flips with it. `setConfigSpelling.test.ts` moves in Step 1 (harness) and needs no edit at the flip.
+  - No shared mTLS loopback helper exists; Step 1 adds `startMtlsLoopback` to `src/__tests__/mtlsTestPki.ts` (C-18; jscpd ignores tests).
+  - Identity `tsc` also compiles tests, and `telemetryAllowlist.test.ts` `drive()` must call `recordRevokeUnverifiable`, so Steps 5+6 are one unit. No RevokeToken behaviour test existed (`identityServiceImpl.test.ts:263-277` only checks no-crash); `revokeToken.test.ts` is new.
+  - Agent `@AC-3` must remove the `agent` watcher **inside** the `TestClient` block: the lifespan (`watcher.py:93-97`) re-creates a missing watcher and waits up to 90 s for its snapshot.
+  - `fix-config-keys-contract.feature:5-8` already marks 296 `@AC-5` retired by feature 306 ("left unedited"); the operator-signed Given amendment is applied anyway and the header is left alone.
+  - Dedup for the trading findings row (D-15): no existing report or findings row covers `escalateSystemic` alerting after a failed `SetConfig`; re-run the grep at execute time.
+- No ledger line: nothing recurred that the ledger does not hold (the copy-group rule is already PLAT/`fails.md` 2026-11-10 material).
+
+## Open Threads
+
+- [ ] O-3: the OQ3 resolution (ignore an unverifiable token, `success:true`, no UPDATE, WARN plus the counter) still has no explicit operator confirmation. Steps 5-6 implement settled D-4. Target: the `/sdd-execute` Phase-2 confirmation of the Steps 5+6 unit; a rejection means R-5 (operator-only reopen) and a re-spec of Steps 5-6.
+- [ ] F-A: Step 7 touches `watch_core.py` in indicators, ingest and analysis. If the operator does not want that, D-5 must be reopened (the alternative is `has_snapshot` on the agent's `ConfigWatcher` subclass). Target: `/sdd-review impl-spec`.
+- [x] O-5 / O-6: `docs/context-constitution.md` (PLAT-9) and `services/xstockstrat-trading/docs/context-constitution-findings.md` are in Step 4 Files, in the Steps 2+3+4 unit (D-14, D-15).
+- [ ] Grant ↔ generator SAN drift has no CI guard (R-11). Mitigation is Step 4's PLAT-9 contract note and the trading findings row. Target: follow-up on the trading finding.
+- [ ] Merge-order: `docs/roadmap/features/merge-order.md` has no row for 319 and is outside this feature's writable files. Overlaps: `configServiceImpl.ts` with 314; agent files with 314/322/328/331; `docs/context-constitution.md`; and the four `watch_core.py` copies. Target: `/sdd-review impl-spec` overlap scan and the integration PR (re-run `scripts/check-watcher-copies.sh` after merging `origin/main-dev`).
+- [ ] Post-deploy smoke on dev needs positive evidence; a systemic escalation is rare, so a trading `SetConfig` success may not occur in the window. Target: integration PR.
+- [ ] Accepted, carried: `identity.revoke.unverifiable` spikes after a `JWT_SECRET` rotation (Step 5 docs); `ignoreExpiration` lets an old signed token revoke; a stale agent snapshot keeps the last-known DCR policy (D-6); the agent 503 guard is unreachable after a correct boot (constraint comment, D-7).
