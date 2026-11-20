@@ -1,6 +1,6 @@
 # Debate Register: fix-orphaned-code
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -50,7 +50,7 @@
 <!-- Status: open → closed @ round N (<how>) | waived @ round N (user) | reopened @ round N (user) -->
 | ID | Round | Objection | Blocking | Status |
 |---|---|---|---|---|
-| O-1 | 1 | Operator choice on identity for the node-pg-migrate removal: (a) three leaves, and narrow root findings :57 to identity-only; or (b) amend the product spec to add identity and close :57. In either case the AC-2 Given clause must list the leaves actually covered. | yes | open |
+| O-1 | 1 | Operator choice on identity for the node-pg-migrate removal: (a) three leaves, and narrow root findings :57 to identity-only; or (b) amend the product spec to add identity and close :57. In either case the AC-2 Given clause must list the leaves actually covered. | yes | closed @ round 3 (operator decision at the design gate, 2026-11-20: option (b), four leaves, with the product-spec Affected Services amendment and the @AC-2 Given/When/Then amendment applied on the feature branch; recorded in context.md) |
 | O-2 | 1 | Re-verify every recon line number before it goes into implementation-spec.md (the config :14, marketdata :33 and agent :34 findings rows, and config-wiring.json:52-55). | no | closed @ round 2 (The proposer re-verified every named anchor at main-dev (config-wiring.json:52-55, config findings :14, marketdata :33, agent :34, plus extra config-doc hits), and the adversary confirmed them. A spec-time re-grep stays as a step note.) |
 | O-3 | 2 | Under (b), run a C-16 identity sweep: record services/xstockstrat-identity/acceptance/fix-identity-ledger-test-suites.feature @AC-1 @feature-252 as PRESERVE, discharged by `pnpm run test:coverage`, and grep the six other identity suites for build and dependency terms. | no | closed @ round 3 (The proposer grepped all seven identity suites. The one hit, fix-identity-ledger-test-suites.feature @AC-1 @feature-252, is PRESERVE: its Then clause (:8) is discharged by `pnpm build && pnpm test:coverage`, and its mutation clause (:9) is recorded as unaffected (no src/ change). The adversary confirmed. It applies under (b) and is N/A under (a).) |
 
