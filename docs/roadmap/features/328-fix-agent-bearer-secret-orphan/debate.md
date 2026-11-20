@@ -1,6 +1,6 @@
 # Debate Register: fix-agent-bearer-secret-orphan
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -67,7 +67,7 @@
 | O-13 | 2 | Assumption 2 (pglast pass 2d) is false. The spec must name the live migration-rerun CI job as the gate, plus a local stripped-meta-command pglast pre-parse. | no | closed @ round 3 (The gate is the live migration-rerun CI job plus a local stripped-meta-command pglast pre-parse (D-9).) |
 | O-14 | 2 | The AC-3 UI guard must be a Playwright failure-path spec in `services/xstockstrat-ui/e2e/insights/signal-sources.spec.ts` using fixture-inventory mocks (C-12). | no | closed @ round 3 (A Playwright AC-3 failure-path spec in `e2e/insights/signal-sources.spec.ts` (feature-224 block, `:200`) using the route.fulfill 409 seam at `:111-118`. The inline error body is allowed under C-12 as a scenario one-off.) |
 | O-15 | 2 | The runbook must state psql 10 or later as the minimum for `\if` and `:{?var}` on operator hosts. | no | closed @ round 3 (The runbook states psql 10 or later and `-v ON_ERROR_STOP=1` on every command.) |
-| O-16 | 3 | [C-16 @AC-35 / D-2] The cross-owner assertion seeds must test the owner-exact join, each older than the grace window: (i) V holds U's referenced key A and has no source, so it is DELETED; (ii) V's source references K and U holds an orphan K, so U's K is DELETED; (iii) V's own referenced key survives. | yes | open |
+| O-16 | 3 | [C-16 @AC-35 / D-2] The cross-owner assertion seeds must test the owner-exact join, each older than the grace window: (i) V holds U's referenced key A and has no source, so it is DELETED; (ii) V's source references K and U holds an orphan K, so U's K is DELETED; (iii) V's own referenced key survives. | yes | closed @ round 3 (Operator decision 2026-11-20 at the design gate: the three owner-exact seeds, each older than the grace window, are binding; design.md Chosen Approach §4b.) |
 | O-17 | 3 | Every must-survive seed must be older than the grace window and match every other conjunct. Add an old is_secret=false `ingest/mcp_credential.x` row and an old non-ingest-namespace secret `mcp_credential.y`, and make the global-secret seed old. | no | open |
 | O-18 | 3 | The audit count must filter on `changed_by = 'system:config-heal-mcp-credential-sweep'`, because the AFTER INSERT trigger (`017:81-91`) audits every seed insert. | no | open |
 | O-19 | 3 | Covers lines must name SQL block 1 as the RED coverage for AC-1..3; the agent and UI tests are writer pins. Block-1 orphans must be seeded in SetConfig's row shape (`configServiceImpl.ts:828-839`), and the agent tests must assert `credentials_ref == f"ingest.{key}"`. | no | open |
@@ -83,5 +83,5 @@
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 2 | O-3 | `scripts/migration-rerun.sh:768-780` catch-all loop already runs non-config-[0-9]*, non-fixtures-* assertions after db-migrate.sh up (`:759-766`), so the proposed explicit invocation runs the file twice (adversary). | pending user |
-| P-2 | 2 | O-5 | The proposed `DISTINCT ON ... min(key)` notify is invalid SQL; the listener ignores key and user_id (`configServiceImpl.ts:417-420`) (adversary). | pending user |
+| P-1 | 2 | O-3 | `scripts/migration-rerun.sh:768-780` catch-all loop already runs non-config-[0-9]*, non-fixtures-* assertions after db-migrate.sh up (`:759-766`), so the proposed explicit invocation runs the file twice (adversary). | user declined |
+| P-2 | 2 | O-5 | The proposed `DISTINCT ON ... min(key)` notify is invalid SQL; the listener ignores key and user_id (`configServiceImpl.ts:417-420`) (adversary). | user declined |
