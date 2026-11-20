@@ -100,9 +100,18 @@ not change. They pin the two facts the sweep depends on — one secret per attem
 - Step 1 [test] and Step 2 [test] cover Step 3 [service].
 - Step 4 requires Step 3: the runbook cites the two script paths.
 - Step 5 requires Step 4: the docstring and `mcp-tools.md` text point at the runbook section.
+- Steps 5+6 land together (P-06, red before green): Step 6's parity test
+  (`test_bearer_docs_name_the_orphan_sweep`) is the only red for Step 5's text edits, and it is green
+  only once those edits exist. Committed alone, Step 5 has no failing test and Step 6 fails its own
+  Verification (F-05). One agent surface, adjacent, 2 members. Order inside the unit: write Step 6's
+  tests, capture the parity red, apply Step 5's edits, one commit.
 - Step 6 [test] covers Step 5 [service].
 - Step 8 [test] covers Step 7 [service].
 - Step 9 requires Step 4: the docs link to the runbook section.
+- **Operator gate reach (P-03).** Step 4 is blocked until the operator confirms the target database
+  list and the cadence (§ Not confirmed at spec time). Steps 5+6 and Step 9 link to Step 4's runbook
+  anchor, so they are blocked with it. Steps 1–3 and Steps 7–8 do not depend on Step 4 (Step 7 names
+  the runbook file only, not the section) and can land while the gate is open.
 - Live SQL gate (D-9): `scripts/migration-assertions/**` is already in the `migrations` CI filter
   (`.github/workflows/ci.yml:95`), so the `migration-rerun` job (`ci.yml:898-934`) runs Step 2's
   assertion on the integration PR. A red there reopens the Steps 1–3 unit.
@@ -110,6 +119,23 @@ not change. They pin the two facts the sweep depends on — one secret per attem
   (`fix-mcp-deadline-budget`, `fix-agent-mcp-transport-fallthrough`; `merge-order.md:404-405`), and
   possibly `.github/workflows/ci.yml` (`fix-ci-enforcement-gaps`). Disjoint anchors; the second
   merger rebases and re-greps them.
+- Shared files with live features outside the batch (impl-spec overlap scan, 2026-11-20; file-level
+  only — no migration number, proto field or config key collides). Whichever merges second rebases
+  and re-greps its anchors:
+  - `345-authelia-sso`: `services/xstockstrat-agent/app/tools.py` (its spec `:985`),
+    `docs/runbooks/mcp-tools.md` (`:2319`, the DCR connector section, not `manage_signal_source`),
+    `.github/workflows/ci.yml` (`:603`, `:752`, `:1210`) and `docs/patterns/config-governance.md`
+    (`:2370`, § Per-Feature Registered Keys).
+  - `357-fix-portfolio-internal-position`: `.github/workflows/ci.yml:1065` only (its spec `:156`).
+  - `321-fix-trading-config-plumbing` and `330-fix-live-enrich-ttl-seed`:
+    `docs/patterns/config-governance.md`. 330's author-sentinel row is already on `main-dev` (`:144`);
+    Step 9 adds its row after the table's last row, wherever that is after the merge.
+  - `318-fix-migration-tooling-safety` and `324-fix-ci-enforcement-gaps` (batch peers, no
+    implementation spec on trunk yet, so unverified): `.github/workflows/ci.yml`, most likely at the
+    `migrations:` list Step 2 appends to (`merge-order.md:388-389`).
+  - The root `docs/context-constitution-findings.md` is **not** edited by this feature
+    (`git grep -c -i mcp_credential origin/main-dev -- docs/context-constitution-findings.md` → no
+    hit); only the agent-local findings file is (Step 5).
 - No deferred consumer surface. Follow-up option only (not planned): a read-only orphan-count signal
   (design § Rejected Alternatives, round 3).
 
@@ -389,6 +415,8 @@ EOF
 ```
 The binding live gate is the CI `migration-rerun` job on the integration PR (D-9). If `uv` cannot
 fetch `pglast` (no egress), that is a deviation to report, not a check to skip.
+No coverage threshold applies to this step (a SQL assertion and a CI filter edit, outside any
+service package); the unit's threshold is Step 1's `c8 check-coverage --lines 40`.
 
 ---
 
@@ -630,8 +658,11 @@ parity; no secret values in tool output
 - Shared file: `tools.py` is also edited by `fix-mcp-deadline-budget` and
   `fix-agent-mcp-transport-fallthrough` (`merge-order.md:404-405`) — locate the two sites by symbol.
 
-**TDD**: `red-green required` — paired with Step 6's parity test (`manage_signal_source` description
-and the runbook section both name the orphan sweep), which fails before these edits.
+**Lands with**: `Step 6`
+
+**TDD**: `red-green required` — one cycle for the Steps 5–6 unit. Step 6's parity test
+(`manage_signal_source` description and the runbook section both name the orphan sweep) is written
+first and captured red on the tree without these edits; these edits turn it green; one commit.
 
 **Covers**: —
 
@@ -698,7 +729,10 @@ grep -n "orphan sweep" app/tools.py CLAUDE.md docs/context-constitution-findings
 - C-13: the Python fixture home `tests/conftest.py` exists; `_rpc_error`, `ADMIN`, `_ctx` come from
   it. The slug `"dup-src"` and the token literal have one consumer each (these tests) — inline.
 
-**TDD**: `red-green required` — the parity test is red before Step 5's edits. The two writer pins
+**Lands with**: `Step 5`
+
+**TDD**: `red-green required` — same cycle as Step 5: write these tests first and capture the parity
+test red before Step 5's edits are applied (uncommitted), then apply them. The two writer pins
 use the allowed escape: "red N/A — no behavior change; characterization test added" (they are green
 on the pre-fix tree by design, O-19; the behavioral RED for AC-1/AC-2 is Step 2 block 1). State this
 in the red→green record.
@@ -869,6 +903,16 @@ No coverage threshold applies to the UI e2e suite; `INVENTORY.md` is unchanged (
   secret").
 - `config-governance.md` is scanned by `scripts/check-config-wiring.mjs:856-864` (`DOC_RULES`,
   `DOC_RULE_SENTENCES`, `DOC_BANNED`).
+- Site list checked repo-wide on `origin/main-dev@fb52065c` (`git grep -n -i -E "orphan|secret-first"`,
+  excluding feature directories, reports and generated code). The design's citations
+  (`config-governance.md:318,525`, agent `CLAUDE.md:175`) do not mention `mcp_credential`; the sites
+  above do. Hits that state the accepted orphan are all owned by a step: `tools.py:482` (Step 5),
+  `useSignalSourceMutations.ts:35-36` (Step 7), `insights.md:2837-2842` (item 6), agent findings
+  `:46` (Step 5). Hits that say only "secret-first" and make no orphan claim are left unchanged:
+  `docs/runbooks/mcp-tools.md:902`, `src/app/insights/signal-sources/page.tsx:322`,
+  `services/xstockstrat-agent/tests/test_template_tools.py:4`, `.gitleaks.toml:20`.
+  `docs/repo-surveyor/debt-radar-findings.md:553` (an open question about the UI docstring) is a
+  surveyor log, outside this feature's file set; it is carried as an Open Thread in `context.md`.
 
 **TDD**: `N/A (docs)`
 
@@ -900,6 +944,8 @@ grep -c "orphan sweep" docs/patterns/config-governance.md                    # >
 grep -n "system:config-heal-mcp-credential-sweep" docs/patterns/config-governance.md
 grep -n "orphan sweep" docs/patterns/inter-service-mtls.md services/xstockstrat-ingest/CLAUDE.md docs/roadmap/ledger/insights.md
 node --test scripts/config-wiring.test.mjs                                    # doc-rule and banned-phrase scans green
+# No missed site: every hit is a file edited by Steps 5, 7 or 9, or one of the four "secret-first only" sites in Codebase Evidence
+git grep -n -i -E "orphan|secret-first" -- . ':!docs/roadmap/features' ':!docs/reports' ':!packages/proto/gen' | grep -i -E "mcp_credential|secret-first|bearer|redacted"
 ```
 
 ---
