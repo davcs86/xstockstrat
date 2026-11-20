@@ -1,6 +1,6 @@
 # Debate Register: fix-ui-gating-gaps
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -72,4 +72,4 @@
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 2 | D-2 | Adversary r2: BatchGetLatestPrice → markWarmIfServable (marketdata_service.go:932; asset_servability.go:81-90) permanently warms every queued symbol into a global, unpruned set that the 30 s quote poller and the bar ingester re-fetch. Membership changes only on recompute or Take/Dismiss/Snooze, and those already invalidate ['opportunities']. The petition asks to lower D-2's 15 s membership refetchInterval to 60 s or to none (refocus plus invalidation). | pending user |
+| P-1 | 2 | D-2 | Adversary r2: BatchGetLatestPrice → markWarmIfServable (marketdata_service.go:932; asset_servability.go:81-90) permanently warms every queued symbol into a global, unpruned set that the 30 s quote poller and the bar ingester re-fetch. Membership changes only on recompute or Take/Dismiss/Snooze, and those already invalidate ['opportunities']. The petition asks to lower D-2's 15 s membership refetchInterval to 60 s or to none (refocus plus invalidation). | user declined |
