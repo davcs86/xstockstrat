@@ -441,3 +441,36 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-indicators fix site; xstockstrat-ui and xstockstrat-agent pass-through consumers; key reuse patterns: the `_fail` closure and feature-268 wording; "more specific evidence first" classification).
+- Phase 1 Grilling: 3 rounds (full). Termination: approved by the operator at the design gate (Floor clear). Chosen approach: a per-run nonce status line on the child's stdout carries the failure class, the missing-`result` signal and the leader VmHWM; the D-7 classifier keeps the stderr markers only as the no-status fallback; a boot self-test through the real wrapper owns the runtime fact. Rejected: R-1..R-12 (getrusage, mixed memory quantities, second pipe, exit codes, VmRSS fallback, proto comment, presence-only probe leg, per-run ERROR/gauge).
+- Constitution rules touched: P-02, P-03, P-06, C-09, C-11, C-13, C-14, C-15, C-16, C-18, F-01, F-04, F-06, F-07. Floor breaches: none.
+- Status: spec-ready → design-approved. design.md written; debate.md State → approved (no new rows, no reopen petitions).
+
+### Operator decisions (binding, recorded 2026-11-20)
+
+- **O-1** (design gate): `memory_used_bytes` is the total leader VmHWM, with 0 meaning "not measured".
+- **O-3**, OQ3 ruling text, verbatim: "Stderr-substring failure classification is NOT a fixed contract. It is replaced by the per-run nonce status line (D-1). The `_MEMORY_EXHAUSTED_MARKERS` stderr check survives only as the no-status fallback (D-2/D-7 step 4), which keeps 228@AC-4." This unblocks the `services/xstockstrat-indicators/docs/context-constitution.md:41` edit.
+- **O-4**: the self-forgery residuals are accepted, each limited to the forger's own run (frame traversal to the nonce or `_ImportBlocked`; `raise MemoryError()`; stderr `MemoryError` then `os._exit(1)`; printing an obtained nonce then `os._exit`; closing `_ms`, which reports 0).
+- **O-5** (C-14, non-blocking): no operator decision recorded. Still open; see Open Threads.
+
+### Decisions
+
+- Chosen approach is design.md § Chosen Approach (register D-1..D-14).
+- C-16: no CHANGE to any promoted guarantee. PRESERVE 228@AC-4, 300@AC-5, 300@AC-12, 268@AC-1, 268@AC-2, 268@AC-3, 294@AC-37. EXTEND 310@AC-1..4.
+- No ledger line written: the reusable trap (a runtime-fact check must exercise the real code path) is already on record at ledger fails 2026-11-09.
+
+## Open Threads
+
+- [ ] `acceptance.feature` @AC-2 still has the old `numpy.zeros > 0` text; apply the verbatim replacement in design.md § 6 (D-9, D-13) — target: before `/sdd-spec` traces scenarios.
+- [ ] O-5 / C-14: operator sign-off on "/insights surface unchanged, justified" (or a named follow-up feature) is not recorded — target: operator answer before the `/sdd-spec` consumer-surface step.
+- [ ] The verbatim proposal-r2 wrapper block and the round-3 `memory_used_bytes` definition text were not persisted in the register; design.md records their binding properties only — target: `/sdd-spec` writes the exact text (wrapper step, docs step).
+- [ ] DO App Platform may render no VmHWM under seccomp, so every run would report 0; the boot self-test only makes it loud — target: integration PR (record the first post-deploy boot log line, or the ERROR, here).
+- [ ] Boot self-test: confirm `execute_formula` needs no config snapshot at probe time, pollutes no per-run telemetry, and keeps boot latency acceptable — target: `/sdd-spec` boot self-test step.
+- [ ] Total VmHWM includes the interpreter and eager-import baseline (tens of MB for small formulas); leader only, grandchildren under-measured — target: docs step.
+- [ ] Under memory pressure `_status` may fail to print; classification falls to the stderr-marker fallback and AC-3 wording to "produced no output" — target: parent-changes step (test).
+- [ ] Implicit-`{}` reliance (recon risk 5): template seeds are settled (9 of 9 assign `result`); dev/prod `indicators.formulas` rows need the operator DB check (OQ1); tests, the UI default source and e2e fixtures need enumeration — target: build step 1.
+- [ ] Mocked-Popen fakes (`tests/test_sandbox_isolation.py:65`, `:225-239`) emit no status line and pass only through D-4 and the no-status fallback — target: parent-changes step.
+- [ ] debate.md still shows O-1, O-3, O-4 and O-5 as `open`: this run was given no Status-cell changes for them. O-1, O-3 and O-4 are answered by the operator decisions above; O-5 is not — target: next register write.
