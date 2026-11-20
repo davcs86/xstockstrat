@@ -34,6 +34,7 @@ that is a design decision, not an omission (design.md § Consumer surfaces; no T
 | `@AC-2` lone low-scoring symbol is not `buy` | Step 7 |
 | `@AC-3` explicit conviction 0.0 scored as 0.0 | Step 12 (scorer and screener path); Step 10 pins the store / read-back seam it depends on |
 | `@AC-4` pre-246 fabricated signals no longer active | Step 17 |
+| `@AC-5` mcp_client explicit conviction 0.0 ingested as 0.0 | Step 10 |
 
 ## Operator Gates (P-03 — execute blocks and asks; never guesses)
 
@@ -45,14 +46,23 @@ that is a design decision, not an omission (design.md § Consumer surfaces; no T
    `docs/roadmap/features/246-fix-fundsignal-neutral-score/feature.md:30` and is unchecked against
    deploy logs (design.md Open Risks). The operator confirms it, or supplies the corrected instant, in
    the same `context.md` entry.
-3. **Open at spec time — not confirmed.** design.md asks `/sdd-spec` to confirm two accepted residuals
-   with the operator. The 2026-11-20 operator record names neither, and this run had no operator to
-   ask, so the spec plans on the synthesis default and leaves both open for `/sdd-review impl-spec`:
+3. **O-14 / O-15 — not confirmed (ask before Step 1).** design.md asks `/sdd-spec` to confirm two
+   accepted residuals with the operator. The 2026-11-20 operator record names neither, and neither the
+   `/sdd-spec` run nor the `/sdd-review impl-spec` run had an operator to ask. The spec plans on the
+   synthesis default. `/sdd-execute` asks the operator at its up-front confirmation, before Step 1, and
+   records the answer in `context.md`:
    - O-14: stored wrong-direction `buy` rows from degenerate days expire naturally (up to
      `fundsignal.valid_days`, 90). No step retracts them.
    - O-15: opportunity rows built from retracted signals stay readable for up to about 24h
      (`opportunity.valid_window_hours`). No step triggers a recompute.
    Choosing otherwise for either adds steps and needs a re-spec.
+4. **Second cross-schema migration read (blocks Step 16).** Step 16 reads `marketdata.fundamentals` at
+   migration time. Root `CLAUDE.md` § Database records one such exception today (analysis `029`), so
+   this is a second one. `context.md` § Session 2026-11-10 holds approval in principle for the
+   retraction (operator, as DBA + ingest owner), written before the mechanism was chosen; it does not
+   name the cross-schema read. Before Step 16 lands, `context.md` must hold the operator's explicit
+   approval of the second exception and the marketdata owner's acknowledgement (root `CLAUDE.md`
+   § Approval Flow: DB migration = DBA + service owner). Without it, Step 16 blocks.
 
 ## Post-Deploy Checks (O-18 — per environment, recorded in `context.md`; not an execute step)
 
@@ -78,7 +88,7 @@ that is a design decision, not an omission (design.md § Consumer surfaces; no T
   `conviction_provided` truthy; Step 12 rebuilds the helper on a real proto.
 - Step 14 [test] covers Step 13 [service]. Not a unit: no existing agent test changes result under Step 13.
 - Step 15 [docs] requires Steps 9, 11 and 13.
-- Step 16 requires operator gates 1 and 2. Migration number `019` is the next free number on
+- Step 16 requires operator gates 1, 2 and 4. Migration number `019` is the next free number on
   `main-dev@36aed60b` (last: `018_backfill_symbol_results`). No peer branch in this batch claims an
   ingest `019` (grep of peer `design.md` / `implementation-spec.md`). Re-run
   `ls services/xstockstrat-ingest/migrations | sort | tail -2` at execute; if `019` is taken, take the
@@ -86,9 +96,25 @@ that is a design decision, not an omission (design.md § Consumer surfaces; no T
 - Step 17 [test] requires Step 16: the fixture `\ir`-includes the up file.
 - Step 18 [docs] requires Step 16.
 - The EXTEND of `services/xstockstrat-ingest/acceptance/mcp-client-signal-source.feature:34`
-  (design.md § Business Rules Touched) is realized by a test in Step 10. `acceptance.feature` has no
-  `@AC-*` for it, so no durable scenario text is added by a step; that gap is left for
-  `/sdd-review impl-spec` to rule on.
+  (design.md § Business Rules Touched) is `@AC-5` in `acceptance.feature`, added by
+  `/sdd-review impl-spec` on 2026-11-20 from the design.md wording. Step 10 covers it.
+- Branch sync and merge friction (advisory, `/sdd-review impl-spec` 2026-11-20). The feature branch is
+  166 commits behind `main-dev`; BRANCH SYNC runs before Step 1 and line numbers in this spec may
+  drift after it (re-grep by symbol). Shared files with peers:
+  - `services/xstockstrat-ingest/app/handlers/servicer.py` `_ingest_external_signal` and
+    `app/engine/mcp_client_loop.py` are also edited by `fix-system-identity-paths` (313; its
+    product-spec.md:46-47; `docs/roadmap/features/merge-order.md:404` on `main-dev`). 313 changes the
+    identity / owner handling, Step 9 changes the conviction sentinel and the builder. Whichever
+    merges second merges that function by hand and re-greps its anchors.
+  - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`: `fix-python-loop-supervision` (259)
+    is `launched` on `main-dev`, so its `run_forever` rewrite is already in the `main-dev@36aed60b`
+    anchors. Batch peers `fix-analysis-per-symbol-isolation` and `fix-analysis-evidence-dry` may edit
+    `fundsignal_loop.py` or `scoring.py`; their specs were not read. Re-grep the Step 3, 6 and 11
+    anchors after any merge of `main-dev`.
+- `_MIN_CROSS_SECTION = 5` stays a module constant (D-6, `R-2`). It is calibrated to the default
+  `fundsignal.buy_quantile` / `sell_quantile`, which are live keys, so a retuned quantile can make the
+  gate misfit without any error. Step 7 pins the default calibration and Step 8 documents the
+  coupling. Making it a config key is a possible follow-up feature, not part of this one.
 - Accepted residuals with no step (design.md Open Risks): n ≥ 5 all-weak top quantile is `buy`; the
   budget-deferred mixed-label day (O-11); the deploy-boundary dedup duplicate (O-17).
 
@@ -130,6 +156,7 @@ cd packages/proto && buf lint && buf breaking --against "$(git rev-parse --path-
 grep -n "conviction_provided = 12" ingest/v1/ingest.proto
 ```
 The `--against` path is `<repo-root>/.git`; `subdir=` is mandatory (PLAT-10). If the local branch is not yet readable, use the ledger form `#ref=HEAD,subdir=packages/proto` (insights.md, 2026-08-19).
+Run this only after BRANCH SYNC. The local `feature/fix-fundsignal-scoring-correctness` ref must be the synced tip; a stale local ref (166 commits behind `main-dev`) compares against an old `ingest.proto`. If the ref is stale or absent, use the `#ref=HEAD` form with the Step 1 edit uncommitted.
 
 ---
 
@@ -449,14 +476,14 @@ ruff check . && ruff format --check .
 
 **TDD**: `red-green required`
 
-**Covers**: —
+**Covers**: `AC-5`
 
 **Instructions**:
 1. In `TestIngestSignalConvictionValidation` add `test_explicit_zero_conviction_is_stored_as_zero`: a real `ExternalSignal(conviction=0.0, conviction_provided=True)`, its own `transaction_conn`, then assert `conn.fetchrow.await_args_list[0].args[4] == 0.0` and `…[1].args[6] == 0.0` (both `is not None`). RED today: `conviction_provided` is unknown / the value is `None`.
 2. Add `test_omitted_conviction_is_stored_as_null`: the same request without the flag → both arguments are `None` (the not-given pin).
 3. Fix the comment in `test_in_range_conviction_proceeds`: 0.0 without the flag is stored NULL.
 4. In `TestQuerySignals` add `test_conviction_presence_round_trip`: rows with `conviction` `Decimal("0.000")`, `None` and `0.9` → `(conviction_provided, conviction)` is `(True, 0.0)`, `(False, 0.0)`, `(True, 0.9)`.
-5. In `test_mcp_client_loop.py` add `test_explicit_zero_conviction_marks_presence` via `_run_cycle_with` and `_item(conviction=0.0)`: the built signal has `conviction == 0.0` and `conviction_provided is True`. This realizes the EXTEND next to `mcp-client-signal-source.feature:34`.
+5. In `test_mcp_client_loop.py` add `test_explicit_zero_conviction_marks_presence` via `_run_cycle_with` and `_item(conviction=0.0)`: the built signal has `conviction == 0.0` and `conviction_provided is True`. With test 1 (the stored 0) this covers `@AC-5`, the EXTEND next to `mcp-client-signal-source.feature:34`.
 6. C-13: request and row literals are scenario one-offs; `_item` and `transaction_conn` are reused.
 
 **Verification**:
@@ -679,7 +706,7 @@ grep -n "unknown confidence" services/xstockstrat-ingest/docs/context-constituti
 **Covers**: —
 
 **Instructions**:
-0. **Precondition (operator gates 1 and 2).** `context.md` must hold the `Frozen retraction list` entry and the cutoff confirmation. If either is missing, block and ask. The operator builds the list by running this read-only SELECT per environment and taking the union:
+0. **Precondition (operator gates 1, 2 and 4).** `context.md` must hold the `Frozen retraction list` entry, the cutoff confirmation, and the approval of the second cross-schema read. If any is missing, block and ask. `<frozen list>` in instruction 1 is a placeholder for the recorded list, and the cutoff literal is the confirmed instant; never commit the placeholder or a guessed list (F-04). The operator builds the list by running this read-only SELECT per environment and taking the union:
    ```sql
    SELECT DISTINCT s.symbol
      FROM ingest.newsletter_signals s
@@ -708,6 +735,7 @@ ls services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.
 ls services/xstockstrat-ingest/migrations | sort | tail -2          # 019 is the highest number, used once
 grep -c "to_regclass('marketdata.fundamentals')\|GET DIAGNOSTICS\|RAISE NOTICE" services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql   # >= 3
 grep -n "signal_dedup_claims\|SET conviction\|DELETE" services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql ; test $? -eq 1
+grep -n "<frozen" services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql ; test $? -eq 1   # no placeholder left
 # read both files: the up changes valid_until only; the down is a comment stating why there is no reverse
 ```
 
@@ -751,7 +779,7 @@ grep -c "019_retract_fabricated_fundsignals.up.sql" scripts/migration-assertions
 grep -n "CREATE TABLE" scripts/migration-assertions/ingest-019.sql ; test $? -eq 1
 uv run pytest scripts/tests/test_migration_rerun.py -q
 ```
-Record the CI `migration-rerun` result for the integration PR in `context.md`.
+No coverage threshold applies: the fixture is SQL outside every service's coverage scope, and the assertions run only in CI `migration-rerun`. Steps 16 and 17 therefore count as verified only when that job is green on the integration PR; record its result in `context.md` and do not mark `@AC-4` covered before then.
 
 ---
 
