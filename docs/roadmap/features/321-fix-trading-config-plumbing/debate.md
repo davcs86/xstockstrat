@@ -2,13 +2,14 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 1 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-20 | /sdd-design | 6 | 7 | 7 | 12 | 0 | yes |
+| 2 | 2026-11-20 | /sdd-design | 6 | 1 | 11 | 10 | 1 | yes |
 
 ## Settled Decisions
 
@@ -21,6 +22,12 @@
 | D-4 | 1 | `requires_approval` is bound in `UpsertOrder` from the insert-time status (`o.Status == ORDER_STATUS_PENDING_APPROVAL`) with a ≤2-line constraint comment at the bind; no signature, call-site or proto change. `approved_by` / `approved_at` are out of scope (no Approve RPC). | `trading.go:613-616`; `trading_repo.go:77-93`; adversary O-9 | settled |
 | D-5 | 1 | `broker.paper` has a single reader, `environmentIsPaper()` (`resolveTradingMode` calls it), and its fallback is `s.cfg.ApplicationEnv != "production"` instead of `TRADING_MODE`. | `trading.go:2362,2830-2832,3852`; `config.go:31,47,100-105` | settled |
 | D-6 | 1 | `broker.paper` is seeded per environment by a hand-written config migration (provisional 056): INSERT-if-absent, staging `true` / production `false`, `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`, with `description` + `consuming_service`, sentinel `system:config-migration-feature-321`, and a down guarded like 054's. The `config-wiring.json` baseline entry is removed and `config-wiring-stored.json` regenerated. `scripts/config-heal/catalog.tsv` is NOT edited (041's sha-pinned input evidence; 330 R-5 precedent). Conditional on the operator's C-16 sign-off (O-11). | `054_…up.sql:4-13`, `054_…down.sql:4-10`; `check-config-wiring.mjs:629,645,710`; `scripts/config-wiring.json:5-12`; `scripts/config-heal/signoff.md:19-20`; adversary O-6, O-7 | settled |
+| D-7 | 2 | One `func (s *TradingService) brokerTimeout() time.Duration` (returns `brokerCallTimeout(s.cfgW)`) feeds both brokers as a method value, replacing Alpaca's inline closure; `trading_rate_limit_test.go:176` uses it too. | `trading.go:3377-3379`; `trading_rate_limit_test.go:176`; adversary r2 obj. 11 | settled |
+| D-8 | 2 | AC-1 is RED-first: a scaffold declares every new symbol the tests reference (`IBKRConfig.Timeout`, `callTimeout`, `IBKRDefaultHandshakeTimeout`) with behaviour unwired, so the black-hole test fails by waiting ~10 s, not by a compile error. In test (a) `Next` answers `GET /iserver/secdef/search` and black-holes only the order POST; the `callTimeout` unit test lives in an internal (`package broker`) test file. Tests also cover a live value change on one client and a slow handshake succeeding under a small T. | `ibkr_do_test.go:1,77-89`; `internal/testdata/ibkr.go:131-136,185-224`; `order_intent_test.go:175-176`; adversary r2 obj. 7-9 | settled |
+| D-9 | 2 | AC-3 is proven through `PlaceOrder` on `auditSvc` (non-default threshold float 20, qty 21) with a pgxmock capture of the `$17` bind, plus a repo table test (PENDING_APPROVAL → true, NEW → false). `traceHarness` is not used (it bypasses the threshold decision). | `trading_order_state_audit_test.go:105-133`; `trading_offline_test.go:1601-1609,1652-1659`; `trading.go:586-589,710` | settled |
+| D-10 | 2 | The C-16 CHANGE to 304 `@AC-14` is a supersede: at promotion 321 `@AC-4` is added to `platform.feature` tagged `@feature-321` and a 2-line "Superseded by @feature-321" comment goes directly above 304 `@AC-14`; the 304 scenario text is not deleted or rewritten. Conditional on the operator's sign-off (O-11). | `platform.feature:270-271` (feature 335 precedent), `:2095-2100` | settled |
+| D-11 | 2 | AC-2 is a characterization test (`{max_retries int 1 → 2 submissions; int 5 → 6}`, attempts = 1 + max_retries, definitive rejections, populated `snapshotInts` watcher replacing the zero watcher, elapsed < 400 ms). It passes at HEAD; discrimination is shown by mutation (`maxRetries := 3` at `trading.go:3083` → 4 and 4; `retryDelay` 500 ms → elapsed fail) under a P-06 natural-RED waiver recorded in context.md. AC-4's trading test cases are chosen so HEAD's `TRADING_MODE` fallback fails them. | `trading_flatten_rejection_test.go:99-155,187-197,216`; `trading_ibkr_auth_test.go:121-126`; `trading.go:3083-3107`; `tdd-gate.md:55-58` | settled |
+| D-12 | 2 | A small `s.ibkrClientConfig(rec, creds)` builds the IBKR config for both `instantiateBrokerLocked` and the `ibkrAuthService` test helper (which layers its test seams on top), so the production `Timeout` and `Timing` wiring is pinned by the service tests. Both sides named the unpinned wiring as a risk; the proposer's own runner-up, recommended by the adversary. | `trading.go:3355-3365`; `trading_ibkr_auth_test.go:88-108`; adversary r2 obj. 10 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -34,6 +41,7 @@
 | R-5 | 1 | Keep the `TRADING_MODE` fallback for `broker.paper` | Fail-paper scar (`fails.md:3456`); the env axis is the one that already scopes the watcher's rows. | locked |
 | R-6 | 1 | A proto field, or an explicit `requiresApproval` param on `UpsertOrder` | Proto change is out of scope; the param churns six call sites and two pinned positional tests for the same result. | locked |
 | R-7 | 1 | Per-request deadline on `send` too, or a per-request `max(T, 10 s)` for IBKR | The first double-bounds the handshake and silently caps `ibkr.handshake_timeout_ms` at T; the second defeats the defect (AC-1 needs 2 s). | locked |
+| R-8 | 2 | Pin the production `Timeout` wiring with a source-level grep/AST check, or leave it unpinned on the Alpaca precedent | A text check is brittle and tests no behaviour; unpinned, a dropped field is invisible while the stored value equals the 5 s fallback. Superseded by D-12. | locked |
 
 ## Objections
 
@@ -42,7 +50,7 @@
 |---|---|---|---|---|
 | O-1 | 1 | P-03/C-11: undisclosed live change — every signed IBKR request bound drops from 10 s to the stored `broker.timeout_ms` (int 5000 in both environments). More uncertain outcomes / PENDING→UNKNOWN reclaims. Needs to be stated in design.md and signed off by the operator; optional operator action "raise `trading.broker.timeout_ms` before deploy". No code for it. | yes | open |
 | O-2 | 1 | The per-request deadline belongs on `sendSigned` only; `send` is already bounded by the handshake context. AC-1 narrows to "each signed IBKR request"; add a test that a slow handshake under `handshake_timeout_ms` still succeeds with a small T. | yes | closed @ round 1 (adopted as D-1 / R-7; AC-1 amendment + handshake test carried into the approach) |
-| O-3 | 1 | P-06: the AC-2 mutation evidence is wrong (removing `GetFloat`'s int arm yields default 3 → 4 attempts, not 1). Use the mutation that models the defect (hardwire `maxRetries := 3` at `trading.go:3083`), drive the flatten with definitive rejections (`errBuyingPower`, `trading_flatten_rejection_test.go:133-146`) so each attempt reaches the broker, replace `cfgW: &config.Watcher{}` (`:111`) with `snapshotInts`, cite the fixture lines (`fails.md:4219`), record the no-natural-RED waiver. | yes | open |
+| O-3 | 1 | P-06: the AC-2 mutation evidence is wrong (removing `GetFloat`'s int arm yields default 3 → 4 attempts, not 1). Use the mutation that models the defect (hardwire `maxRetries := 3` at `trading.go:3083`), drive the flatten with definitive rejections (`errBuyingPower`, `trading_flatten_rejection_test.go:133-146`) so each attempt reaches the broker, replace `cfgW: &config.Watcher{}` (`:111`) with `snapshotInts`, cite the fixture lines (`fails.md:4219`), record the no-natural-RED waiver. | yes | closed @ round 2 (answered: D-11 — corrected mutation, snapshot harness, cited fixtures, counts 2/6, waiver wording) |
 | O-4 | 1 | The floor does not guarantee the sweeper never reclaims an in-flight intent: `IBKRClient.do` can chain handshake + T + reinit + T (≥ 20 s + 2T vs S=30 s). Not a regression (HEAD is worse). Record as a known gap; do not widen scope. | no | closed @ round 1 (adopted: design.md Open Risk, no code) |
 | O-5 | 1 | C-18 DRY: a new `10*time.Second` literal would be the third copy of the IBKR handshake default. | no | closed @ round 1 (adopted in D-2: one exported broker constant) |
 | O-6 | 1 | Do not edit `scripts/config-heal/catalog.tsv` (041 sha-pinned evidence; 330 R-5). Put corrected descriptions in trading CLAUDE.md, the config-governance log and trading findings. | no | closed @ round 1 (adopted in D-6) |
@@ -52,9 +60,20 @@
 | O-10 | 1 | AC-3 harness: `newConfirmHarness` needs a `brokers` entry, `platformCfgW` `trading_state` and a satisfied risk check for PlaceOrder — cite fixture lines; AC-3 wording uses the code default 500, amend to a non-default threshold. | no | closed @ round 1 (adopted: test plan + AC-3 amendment) |
 | O-11 | 1 | C-16: 304 `@AC-14` (`platform.feature:2095`) is CHANGED by D-6 — needs operator sign-off recorded in context.md. | yes | open |
 | O-12 | 1 | Scope: under-scope items (056 down, config-governance text, findings resolved) and the halt condition — stop for an operator re-scope if anything pushes toward rewriting stored descriptions or touching `watchcore.go` (the 277 pattern). | no | closed @ round 1 (adopted: items in scope list; halt condition recorded) |
+| O-13 | 2 | P-03: the O-8 text was factually wrong — no service reads `TRADING_MODE` behaviourally: marketdata's `Paper` flag has no reader (`alpaca/client.go:62,114,149`; root findings `:23`) and trading's `Watcher.tradingMode` is a dead, never-sent field (`config.go:79,87-93`). There is no "marketdata acts paper" split; the real pairing effect is that an `APPLICATION_ENV=production` + `TRADING_MODE=paper` target labels registrations/orders paper at HEAD and live after the change. | yes | closed @ round 2 (O-8 text corrected in the synthesis) |
+| O-14 | 2 | P-03: the O-1 text mis-cited — `trading.go:2169` is `reconcileTick` (bounded at T), not the credential poller, which uses a hardcoded 5 s (`:2837`) and is unaffected by the key; the credential classifier is `credentialStatusFromError` (`:3214-3221`). | yes | closed @ round 2 (O-1 text corrected; the 5 s literal recorded as a pre-existing finding, not fixed) |
+| O-15 | 2 | P-03: the O-1 text omitted the emergency-flatten consequence — an IBKR flatten submit that takes 5–10 s now times out as uncertain, the PENDING intent blocks every retry (1 submission), and the account halts with the position possibly open until reconciliation; a timed-out bracket-leg submit leads to the protection-window watchdog and then the flatten. | yes | closed @ round 2 (added to the O-1 text) |
+| O-16 | 2 | O-1 completeness: handshake is bounded only by its key after the change (an operator value above 10000 now takes effect); say "seeded 5000 by 041; check the current value"; a conid-lookup timeout also leaves the order PENDING; a submit is several signed calls each bounded by T; raising the key to 10000 also doubles every Alpaca call's timeout. | no | closed @ round 2 (added to the O-1 text) |
+| O-17 | 2 | O-8 addition: a config-ui flip of the seeded key changes the `trading_mode` stamp and registration mode while existing accounts keep routing by persisted `is_paper` — a production flip would label live-routed orders PAPER. | no | closed @ round 2 (added to the O-8 text) |
+| O-18 | 2 | U4 alone (the fallback change) already makes paper/live depend on `APPLICATION_ENV`; gate U4, not only U5, on the O-8 sign-off. | no | closed @ round 2 (adopted: U4 and U5 both gated) |
+| O-19 | 2 | AC-1 test precision: black hole in `Next` for the order POST only; `callTimeout` test in an internal test file; the RED scaffold must declare every referenced symbol. | no | closed @ round 2 (adopted in D-8) |
+| O-20 | 2 | C-18/P-03: the production `Timeout` (and `Timing`) wiring in `instantiateBrokerLocked` is unpinned; reverse the proposer's rejection of `ibkrClientConfig()`. | no | closed @ round 2 (adopted as D-12 / R-8) |
+| O-21 | 2 | C-10/C-14 docs drift: `packages/proto/trading/v1/trading.proto:264` comment names `TRADING_MODE env` (fix as a comment-only proto step with buf-gen, or list as out of scope); root `docs/context-constitution-findings.md:23`; Consumer Surface names `GetTradingEnvironment` (UI display, unchanged). | no | open |
+| O-22 | 2 | C-15: amended `@AC-2` must state attempts = 1 + max_retries so "exactly 2" for 1 is unambiguous; `&config.Config{}` test harnesses move from LIVE to PAPER under the new fallback — a full-suite run must confirm nothing pins LIVE. | no | closed @ round 2 (adopted in D-11 and the test plan) |
 
 ## Reopen Petitions
 
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
+| P-1 | 2 | O-8 (wording) | `services/xstockstrat-marketdata/internal/alpaca/client.go:62,114,149`; `services/xstockstrat-trading/internal/config/config.go:79,87-93` — no service reads `TRADING_MODE` behaviourally | dropped (target O-8 is still open, not locked; the correction is folded into the O-8 text via O-13) |
