@@ -450,3 +450,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Update all three `-1` sentinel invariant texts so the overloaded sentinel does not mislead — design build step 7.
 - [ ] Agent `test_formula` shows TIMEOUT instead of UNSPECIFIED for a deadline-refused run — accepted; note at the indicators step.
 - [ ] Peer overlap on the analysis servicer (309, 313, 323, 327, 329): re-grep every anchor at `/sdd-spec`.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 17 steps. Status → implementation-ready.
+- Tree: docs at `origin/feature/fix-analysis-per-symbol-isolation@2b660ff1`, which is 166 commits behind `origin/main-dev`. Code anchors were grepped on `origin/main-dev@36aed60b` (read through `git archive`, no merge made). `/sdd-execute` BRANCH SYNC merges main-dev before Step 1; re-grep each anchor then.
+- Operator decision in force (design gate, option A, 2026-11-20): the C-16 sign-off to CHANGE feature-289 @AC-10 / @AC-13 and this feature's @AC-2 / @AC-3. The spec uses the debate default (a TIMEOUT isolates to `unavailable` / readiness `-1`); the D-11 fallback is not specced.
+- `acceptance.feature` @AC-2 and @AC-3 reworded to the signed-off amendment (design.md § 2): @AC-2's failing symbol is an empty `SymbolReadiness` with nothing staged; @AC-3 is split by site (kick and materializer cache the `-1` sentinel; the heal keeps `unavailable`, writes no cache row and logs a WARN tally).
+
+### Decisions
+
+- **O-9 closed at /sdd-spec: deferred.** Cue parity on the mobile `SignalRow` and the Signal-detail header goes to a named follow-up feature, slug `evaluation-failed-cue-parity` (number not allocated). It needs a new `SignalItem` field through `sections.ts`; the surfaces have no act controls, so the misread is display-only. Step 17 records it in `docs/patterns/ui-ux-governance.md` § 9. This is a C-14 deferral made without an operator in the loop — confirm or overturn it at `/sdd-review impl-spec`.
+- **Degraded-rate alerting deferred** to a named follow-up feature, slug `analysis-isolation-degraded-counter`. Step 17 records it in the analysis findings log.
+- **One Python constant for the token**: `EVALUATION_FAILED_PROVENANCE` in `app/repositories/opportunities.py`. The SQL floor clause stays a literal like its siblings; Step 8 pins the literal to the constant.
+- **Atomic units** (`**Lands with**`): Steps 1+2 (the `resp.exit_reason` read breaks every `success=False` double), 9+10 and 11+12 (each service step breaks a feature-289 pinning test that its test step rewrites). The other pairs are additive and stand alone; their RED runs against the prior step's app files.
+- **Agent surface**: no code step. `list_opportunities` already returns `provenance` verbatim (`services/xstockstrat-agent/app/client.py:902`); Step 17 documents the token in `docs/runbooks/mcp-tools.md`.
+
+### Key codebase findings
+
+- Main-dev anchors differ from recon.md (written at c4fd48b0a): `_readiness_for` `servicer.py:4051`, gather `:4123`; kick loop `:4332`; heal `_retry_unavailable_symbols` `:4998`, eval catch `:5190-5192`; `_row_for` `:5771`, eval catch `:5853`, gather `:5945`; materializer `:6119`, per-symbol compute `:6199`.
+- `FormulaExecutionError.__init__` already has a third parameter `code` (feature 289), so `exit_reason` is added as a keyword after it (`evaluator.py:114`).
+- The "`FormulaExecutionError` still propagates" sentence and the `-1` scope note now live in `services/xstockstrat-analysis/docs/opportunities.md:7,36`, not in the service CLAUDE.md. The three `-1` invariant texts are `app/services/readiness.py:92-94`, `app/handlers/servicer.py:330-332` and `docs/opportunities.md:36`.
+- Test doubles (O-10): nine `success=False` doubles reach `_decode_formula_output` and turn red without `exit_reason` (`test_strategy_evaluator.py:521`, `test_analysis_servicer.py:1758,1789,1790,2044`, `test_fundamentals_formula_operand.py:141`, `test_unreadable_formula.py:287,675,695`). Step 2 lists the rest.
+- Fakes that mirror production filtering and need the new marker: `_FakeOppRepo.read` (`tests/test_analysis_servicer.py:4540-4549`, Step 8) and the UI `MARKERS` / floor exemption (`e2e/mock-backend.ts:969-996`, Step 16).
+- No migration: analysis migrations on main-dev end at `029_seed_fundamentals_blend_strategy`; the marker is a JSONB token.
+
+### Open Threads
+
+- [ ] The per-strategy setup in the readiness kick (`servicer.py:4310-4331`) and in the materializer is outside the design's five sites and still fails the whole kick or owner pass. Not specced; raise at `/sdd-review impl-spec` if it should be.
+- [ ] Step 16 imports the token from `src/lib/readinessCue`, which value-imports the icon library; if that does not load in the mock-backend Node process, the fixture module declares the token (the step states the fallback).
+- [ ] `EvaluateReadiness` returns OK even when every requested symbol failed (the tally logs ERROR). This follows design.md § 2; no alert covers it until `analysis-isolation-degraded-counter`.
