@@ -1,6 +1,6 @@
 # Debate Register: fix-agent-mcp-transport-fallthrough
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -43,7 +43,7 @@
 | O-1 | 1 | [P-06] The subprocess AC-1 test must use `stdin=DEVNULL`, `capture_output`, a timeout with `TimeoutExpired` turned into `pytest.fail`, and a mandatory stderr match, with `OTEL_ENABLED` off in the child. The red run is documented as timeout or exit 0. The proposer must confirm this and confirm the child can import `app.main`. | yes | closed @ round 2 (The proposer confirmed the hang guard (`stdin=DEVNULL`, `capture_output`, 20s timeout, `TimeoutExpired` to `pytest.fail`, `OTEL_ENABLED=false`) and that the child imports `app.main` without the conftest `gen` setup: the only top-level `gen` import in `app/` is `app/auth.py:13`, which loads lazily. The remaining stderr-discriminator defect is carried by a new blocking objection.) |
 | O-2 | 1 | [P-03/C-15] AC-1's Given says "container" but the proof is process-level, and supervisord keeps the container alive. The operator should confirm the process reading and the rewording of the Given to "the agent process starts". | no | open |
 | O-3 | 1 | Merge order: verify whether `fix-mcp-deadline-budget` or `fix-agent-bearer-secret-orphan` touch `app/main.py`, `tests/test_transport_config.py`, `tests/conftest.py` or the agent docs before spec. | no | closed @ round 2 (No file overlap with features 314 and 328: their shared file is `app/tools.py`, which this feature does not touch. The spec carries a re-run note naming the conftest `MCP_TRANSPORT`, `CONFIG_ENDPOINT` and `MTLS_*` defaults (`tests/conftest.py:126,128,132-134`). The adversary agrees.) |
-| O-4 | 2 | [P-06/C-15] The subprocess AC-1 test must assert `"expected 'http' or 'stdio'"` in stderr and `"falling back to stdio"` not in stderr, since `MCP_TRANSPORT='htp'` already appears on today's code (`app/main.py:44,64`). The red outcome is restated as a timeout or an exit with the old warning, never the new error text. The proposer must confirm. | yes | open |
+| O-4 | 2 | [P-06/C-15] The subprocess AC-1 test must assert `"expected 'http' or 'stdio'"` in stderr and `"falling back to stdio"` not in stderr, since `MCP_TRANSPORT='htp'` already appears on today's code (`app/main.py:44,64`). The red outcome is restated as a timeout or an exit with the old warning, never the new error text. The proposer must confirm. | yes | closed @ round 2 (operator ruling at the approval gate, 2026-11-20: the design is approved with this fix binding — the subprocess test's RED must not rest on a stderr token today's code also prints; it asserts the non-zero exit and an error text only the fixed code emits) |
 | O-5 | 2 | [C-15] If the subprocess test is dropped as flaky, record a P-03 deviation in `context.md`. The in-process `pytest.raises` through `main()` is the primary AC-1 proof and must exist either way. | no | open |
 
 ## Reopen Petitions
