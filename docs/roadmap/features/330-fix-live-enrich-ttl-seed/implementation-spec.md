@@ -38,10 +38,11 @@ design cited an older tree, so these lines moved:
 
 Step 4 cites the `5c4cc935` lines. After the precondition merge, re-grep every Step 4 anchor before editing.
 
-**Migration number: `050`, not design's `049`.** D-13's own procedure re-checks the number at spec, and
-`git log --all` now finds `049_notify_commsgun_channel_keys.{up,down}.sql`. Feature 338 holds it on unmerged
-branch `origin/ccr-2d98935d-na9x6j` (commit `a10a086d`). `origin/main-dev` tops out at `048`. No other remote
-branch holds `049`–`059`. The file content is number-free, so a renumber at merge is still only a rename plus
+**Migration number: `055`, not design's `049` or spec-time `050`.** At the integration-PR merge checklist (2026-11-20),
+trunk held `050`–`052` and `054`, so the reseed was renumbered to `055` = max(trunk) + 1. At spec, D-13's own procedure re-checked the number, and
+`git log --all` then found `049_notify_commsgun_channel_keys.{up,down}.sql`. Feature 338 then held it on unmerged
+branch `origin/ccr-2d98935d-na9x6j` (commit `a10a086d`), `origin/main-dev` topped out at `048`, and no other remote
+branch held `049`–`059`. The file content is number-free, so a renumber at merge is still only a rename plus
 a regeneration (D-13, D-15).
 
 **Consumer surface (C-14).** The fix is internal and platform-only. The corrected value reaches the analysis
@@ -259,7 +260,7 @@ pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40   # GREEN only;
 
 ---
 
-### Step 2 — migration: `050_analysis_live_enrich_ttl_reseed` up/down + regenerated stored set
+### Step 2 — migration: `055_analysis_live_enrich_ttl_reseed` up/down + regenerated stored set
 
 **Status**: `done`
 **Service**: `xstockstrat-config`
@@ -309,7 +310,7 @@ pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40   # GREEN only;
 **Covers**: —
 
 **Instructions**:
-1. Create `050_analysis_live_enrich_ttl_reseed.up.sql` with exactly this content. The comment header is
+1. Create `055_analysis_live_enrich_ttl_reseed.up.sql` with exactly this content. The comment header is
    two lines. The literals contain no `;`. Below, `<OLD>` is the 028 description, copied byte for byte from
    `028_analysis_opportunity_keys.up.sql:112`: `Short TTL for the success-only per-symbol live-quote/sparkline memo (feature 177). Read via get_int_present (0 = memo disabled -> always fetch). Seeded unbounded.`
    ```sql
@@ -340,7 +341,7 @@ pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40   # GREEN only;
    - Every CASE in `SET` reads the pre-update row, so the value guard and the actor guards agree.
    - A replay matches no row: no `'10'` remains and no description equals `<OLD>`. It writes no audit row
      (`@AC-26`, `@AC-28`).
-2. Create `050_analysis_live_enrich_ttl_reseed.down.sql`, the mirror. Let `<NEW>` be the up's new description,
+2. Create `055_analysis_live_enrich_ttl_reseed.down.sql`, the mirror. Let `<NEW>` be the up's new description,
    byte for byte.
    ```sql
    -- Migration: analysis_live_enrich_ttl_reseed (down). Service: xstockstrat-config, feature 330 (fix-live-enrich-ttl-seed).
