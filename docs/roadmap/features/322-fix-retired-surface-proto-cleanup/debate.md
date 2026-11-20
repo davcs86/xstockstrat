@@ -52,7 +52,7 @@
 <!-- Status: open → closed @ round N (<how>) | waived @ round N (user) | reopened @ round N (user) -->
 | ID | Round | Objection | Blocking | Status |
 |---|---|---|---|---|
-| O-1 | 1 | ComputeIndicatorRequest.timeframe_enum has no reader or producer (C-18). It is kept only for AC-3, and dropping it needs an operator-sanctioned AC-3 amendment. | no | open |
+| O-1 | 1 | ComputeIndicatorRequest.timeframe_enum has no reader or producer (C-18). It is kept only for AC-3, and dropping it needs an operator-sanctioned AC-3 amendment. | no | closed @ round 3 (operator answer recorded 2026-11-20, option (A): keep `ComputeIndicatorRequest.timeframe_enum = 7`; no acceptance or product-spec amendment; satisfies D-11 — context.md) |
 | O-2 | 1 | Trading keeps deprecated SnapshotOfflinePositionsRequest.user_id as the internal identity carrier under nolint. The alternative is an explicit userID parameter. | no | closed @ round 2 (Settled with one hoisted local under a scoped nolint at trading.go:1174, plus the handler :90 directive. The explicit userID parameter is the recorded fallback, deferred to the field-removal follow-up.) |
 | O-3 | 1 | Go watchers have no failing-first test, covered by a P-06 waiver instead of a guard. | no | closed @ round 2 (Waived with an accurate record: compile-failure RED captured after updating the test call sites first, with the compile-time signature removal as the guard. A P-06 deviation is logged if the tdd-gate rejects a compile RED.) |
 
