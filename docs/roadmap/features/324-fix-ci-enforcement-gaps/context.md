@@ -696,3 +696,32 @@ The /sdd-design full debate stopped at the approval gate after round 4 (gate pol
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design (approved)
+
+- Phase 0 Recon: recon.md was written on 2026-11-11 (services: config, identity, ledger, notify, plus `scripts/` and `ci.yml`; key reuse patterns: the leaves' own c8 command line, the existing path-filtered scripts job). It predates c4b70c27 (#1514) and is re-stamped at the sync step (D-7).
+- Phase 1 Grilling: 4 rounds (full). Termination: approved at the gate.
+- **Operator decisions (2026-11-20).** These reached this writer as the `/sdd-batch` gate answer (the workflow's `decisions`/`approvals` input), launched on the user request "Do the 3 suggested actions". This writer saw the request and the relayed rulings, not the text of the suggested actions.
+  - REOPEN D-2, D-3 and D-6 granted (P-1, P-2, P-3 → `user reopened`): extend the existing `[tool.ruff]` in `scripts/pyproject.toml` and the existing path-filtered `scripts-python` CI job; no `scripts/ruff.toml`, no second job; the py312 target comes from `requires-python`.
+  - The spec must carry per-leaf measurement records for @AC-1 and a step showing `ruff check scripts/` exits non-zero for the @AC-2 negative clause.
+  - Design approved at the gate.
+- Register changes made at approval (debate.md): State → approved; P-1/P-2/P-3 → `user reopened`; D-2, D-3 and D-6 → `superseded by D-9`; new row D-9 records the ruling; O-11 → closed. The script supplied no new rows, so D-9 was added by this writer to keep the register consistent with the ruling. The round-4 Rounds row counts are unchanged.
+- Chosen approach: one PR, built 0 → A → B → C. (0) sync to main-dev; (A) `--check-coverage` in the four leaf `test:coverage` scripts, matrix `coverage_threshold` lines deleted, one structural guard step, per-leaf `## c8 measurement` table, notify red proof; (B) proof-only ruff sequence against the existing `scripts-python` job, no ruff code shipped; (C) docs and both `.status` sidecars.
+- Rejected: R-1 to R-8 (see design.md), chiefly a CI-only c8 step, lowering the threshold, and a second ruff config or job.
+- Constitution rules touched: C-01, C-10, C-11, C-15, C-16, C-18, P-02, P-03, P-06, F-04, F-08. Floor breaches: none.
+- Business rules (C-16): EXTEND feature @AC-1 and @AC-2; PRESERVE platform @AC-3, @AC-4, @AC-5, @AC-6, @AC-24. No CHANGE.
+- Status: spec-ready → design-approved.
+- Ledger: no new line. The stale-recon trap is already covered by D-7 and existing fails.md entries.
+
+## Open Threads
+
+- [ ] Sync the feature branch to main-dev and re-stamp recon.md; expect conflicts in `ci.yml` (297, 298, 318) and the ledger/notify `package.json` (323) — target: first spec step (D-7).
+- [ ] A leaf may measure below 40% once `--check-coverage` is on, adding unsized test work — target: Part A measurement step.
+- [ ] c8 without `--all` measures only loaded files; the non-zero implementation-rows column must be recorded — target: Part A measurement step.
+- [ ] The @AC-1 proof module can be sized too small and give a false green; record T, covered and N — target: @AC-1 red-proof step.
+- [ ] `scripts-python` (including pytest) could be red at spec time; if so, block and escalate (O-3 and O-9 apply only then) — target: /sdd-spec.
+- [ ] Part B ships no ruff code; cite the pre-c4b70c27 tree as @AC-2's red state in context.md and the ruff sidecar (O-19) — target: Part B proof step.
+- [ ] The Part B green proof must include `uv run --no-sync pytest` (O-20) — target: Part B proof step.
+- [ ] O-4 (ruff pin): answered by the 0.17.4 lock only while `scripts-python` is the sole ruff gate; confirm and close — target: /sdd-spec.
+- [ ] Drop the root `CLAUDE.md` docs touchpoint unless the re-grep finds a "not enforced" claim; re-cite `ci-overview.md` (O-18) — target: Part C docs step.
+- [ ] Re-check that `scripts-python` and its `ci-gate` entries survive peer `ci.yml` edits (O-21) — target: merge-train time.
