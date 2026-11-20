@@ -901,3 +901,282 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-batch design gate (round 5)
+
+- `/sdd-design fix-position-fold-correctness` (full) halted at its approval gate after round 5 (gate policy: halt). design.md NOT written; status.md unchanged (spec-ready). Register: `debate.md` (D-1..D-27, R-1..R-22, O-1..O-42, P-1..P-3). Round 5 reopened D-17 (superseded by D-23) and closed O-20, O-24, O-27, O-33, O-34, O-36.
+
+## Open Threads
+
+- **Approach (round-5 synthesis).** D-1..D-3, D-5..D-16 and D-18..D-22 stand and R-1..R-17 are honoured. D-17 is reopened on the user's relayed words ("Do your best to prevent the race condition and fix the bug report") and replaced by D-23. Portfolio fill path (`processOrderFill`, `order.filled` consumer only): below-floor returns `errFillAcked` with zero DB calls; `signedQty` and any pre-251 `orderSide` fallback run before the mutex and `BEGIN`; an autocommit duplicate pre-check `SELECT event_id, pending_closed` by the applied PK takes no tx and no `positionsMu` (a hit re-emits `pending_closed` under `position.closed:<STORED event_id>`, clears it on a nil return, and returns `errFillAcked`; a pre-check DB error returns an error and never falls through). On a miss: `positionsMu.Lock()` before `BEGIN`, then one tx with the applied `INSERT … ON CONFLICT DO NOTHING RETURNING`, `pg_advisory_xact_lock`, one `SELECT … FOR UPDATE` returning qty, cost_basis, avg_entry, realized_accum and fees_accum, a pure `pnl.FoldFrom` callback, upsert or delete, `COMMIT`, `Unlock`. The pool reads at `portfolio_service.go:455` and `:460` are removed. An INSERT conflict is the only duplicate that takes the mutex. `position.*` emits, `checkRiskLimits` and `broadcastSnapshot` run after `Unlock`, for applied fills only (D-24). Repo seam: `FillApplied` (pre-check) and `ApplyFill` (one `pgx.Tx`, begun through a separate `txBeginner`; `queryRower` is not widened; no mutex hook, D-25). Tests: pgxmock on `newFillSvc`, repo-level `apply_fill_dbtest_test.go` on `testPool` in default and `DB_PGBOUNCER` exec mode (including the deterministic conflict-path case), and service-level cases on `serviceTestPool` (two instances to qty 15; sync-versus-fill with no `40P01`), all in the existing `portfolio-db-test` job with no CI change (D-27). Trading is as round 4 and now confirmed by both sides (D-26): only an Alpaca 404 wraps `broker.ErrOrderNotFound`, with `UNKNOWN` retirement after 3 consecutive not-found ticks; an IBKR miss is an ordinary error and never retires a leg. The leg key (D-4) is unchanged. Build order: migrations `019` and `012` (re-check against feature 318), `observed()` branches plus `FillApplied`/`ApplyFill`, fold rewrite, `dbtest` cases, broker `ErrOrderNotFound` and IBKR id-match, `ActivateBracket` and the observer, then docs and the stop-then-start first deploy as a numbered runbook step.
+- **Strongest open objection.** O-17 / O-11 (P-1, P-2), blocking: the D-4 reopen and the C-16 sign-off for the `@AC-5` amendment appear only in the workflow's computed text. This file (the "Operator sign-offs still needed" thread of the round-4 entry) still lists both as pending, and the user's relayed words name neither. The leg key stays `bracket-leg:<legID>:<status>:<filledQty>`. The amendment is fully specified (key `bracket-leg:<account_id>:<legID>:<status>:<filledQty>`; GetPnL's three dedup maps keyed on `account_id + "\x00" + order_id`; a two-account same-leg-id test; the `/sdd-spec` payload-history grep; `@AC-5` reworded to `order.partially_filled` 4 then `order.filled` qty 10 at average 110, position 0, realized 100) and applies with no further round once the operator's own words are recorded here. If declined, the cross-account IBKR leg-id collision is a named residual. Three more blocking objections are new this round and await proposer confirmation: O-37 (real-Postgres conflict-path `dbtest`), O-38 (every fold read from the one `FOR UPDATE` row, pure `foldFn`), O-39 (separate `txBeginner`; `portfolio_fill_sync_race_test.go` retired or re-pointed and listed in the spec's Files, F-08).
+- **Floor status.** No Floor breach. The design is not approvable this round: four blocking objections remain (O-17/O-11, O-37, O-38, O-39).
+- **Uncovered @AC changes.** `@AC-5` CHANGE is still not covered by an operator decision (O-11). All other rules (@AC-1..@AC-4, 294 @AC-56, 294 @AC-6, 251 @AC-17, 251 @AC-14, 290 @AC-3, 206 trading @AC-1) PRESERVE.
+- **Operator sign-offs still needed.** The D-4 ruling and the `@AC-5` sign-off (O-17, O-11), which also carry the GetPnL dedup-scope extension beyond the product spec's stated scope (O-35); O-3 cutover residuals (overlap double-apply, fills never folded before the first new boot, late-commit `recorded_at` before the floor, clock skew; stop-then-start first deploy as a numbered runbook step with a recorded result), now with the two post-`Unlock` emit-ordering residuals named beside them (O-42); O-8 (a parked post-floor fill re-parks with an ERROR on every boot); O-13 (bracket-leg fills stay absent from `trading.orders` and `NetFilledQtyBySymbol`). O-30 (analysis acceptance rule scan) is deferred to `/sdd-spec`.
+
+```sdd-batch-design-state
+{
+  "round": 5,
+  "synth": {
+    "approach": "Round-5 synthesis. D-1..D-3, D-5..D-16 and D-18..D-22 stand, and R-1..R-17 are honoured. D-17 is reopened on the user's relayed words and replaced by the order below. D-4 is not changed: its reopen is not on record (see LEG KEY).\n\nVerified this round:\n- `/home/user/xstockstrat/docs/roadmap/features/311-fix-position-fold-correctness/context.md:641-645` still lists the D-4 ruling and the @AC-5 sign-off as pending. No operator ruling for either is recorded anywhere in the file.\n- `queryRower` (`services/xstockstrat-portfolio/internal/repository/portfolio_repo.go:23-27`) has only `QueryRow`, `Query` and `Exec`. It is also used by `watchlist_repo.go`, and the hand-written fakes `syncRecorderDB` (`internal/service/portfolio_offline_test.go:220`), `cancelingDB` (`portfolio_sync_cancel_test.go:16`) and `interleaveDB` (`portfolio_fill_sync_race_test.go:27`) do not implement `Begin`.\n- The close branch reads `GetRealizedAccum` (`internal/service/portfolio_service.go:455`) and `GetFeesAccum` (`:460`) as separate pool calls.\n- `positionsMu` is taken at `:399`, `:1602-1603` and `:1649-1650`. `pool.go:15,23` sets MaxConns 2 and no isolation override.\n\nPORTFOLIO FILL PATH (`processOrderFill`, the `order.filled` consumer only; 290 @AC-3)\n1. Parse. Below the floor: return `errFillAcked` with zero DB calls.\n2. Sign with `signedQty` (`:1065`). Any `orderSide` fallback for pre-251 events (`:1080`) runs here, before the mutex and `BEGIN`. A missing side returns `ErrFillUnattributable` (D-12).\n3. Duplicate pre-check: one autocommit `SELECT event_id, pending_closed` by the applied PK. No tx, no lock, no `positionsMu`.\n   - Hit: re-emit a non-NULL `pending_closed` under `position.closed:<STORED event_id>` (D-13). On a nil return, clear it with an autocommit UPDATE keyed by the full PK plus `pending_closed IS NOT NULL` (D-21). A failed clear is a WARN only. Return `errFillAcked`.\n   - A pre-check DB error returns an error for redelivery. It never falls through to the fresh path.\n4. Miss: `positionsMu.Lock()` before `BEGIN`. Then one tx: applied `INSERT … ON CONFLICT DO NOTHING RETURNING` (inside the fold tx, R-14), `pg_advisory_xact_lock`, one `SELECT … FOR UPDATE` returning qty, cost_basis, avg_entry, realized_accum and fees_accum, `pnl.FoldFrom`, upsert or delete, `pending_closed` bound as a string, `COMMIT`, `Unlock`.\n   - `foldFn` is pure: no `s.repo`, ledger, `orderSide` or quote call. The `:455` and `:460` pool reads are removed.\n5. Conflict at the INSERT (another process applied it after our pre-check): SELECT the stored row, `COMMIT`, `Unlock`, re-emit as in step 3, return `errFillAcked`. This is the only duplicate that takes the mutex.\n6. After `Unlock`, for applied fills only: keyed `position.*` emits through `emitEventAs`, then `checkRiskLimits` and `broadcastSnapshot`. Neither duplicate kind runs risk, snapshot or `position.*` (R-9).\n- Lock order: `positionsMu` → `BEGIN` → applied row → advisory → position row. Sync and deregistration take `positionsMu` and then only autocommit single statements, and never an advisory lock.\n- Repo seam: `PortfolioRepo.FillApplied(ctx, key)` (pre-check) and `PortfolioRepo.ApplyFill(ctx, key, foldFn)` (one `pgx.Tx`). `ApplyFill` begins its tx through a separate `txBeginner` interface. `queryRower` is not widened. No mutex hook.\n- `portfolio_fill_sync_race_test.go` (`interleaveDB`) tests the old non-tx path. The spec's Files list must retire or re-point it explicitly (F-08).\n\nTESTS\n- pgxmock, on `newFillSvc` (`portfolio_fill_errors_test.go:56`): with `positionsMu` held, a new fill issues only the pre-check SELECT and no `Begin`; a pre-check hit never touches the mutex; no query runs outside the Begin/Commit bracket on the fresh path; a pre-check error returns an error.\n- `dbtest`, repo level, `internal/repository/apply_fill_dbtest_test.go` on `testPool`, in default and `DB_PGBOUNCER` exec mode (precedent `list_positions_dbtest_test.go:22-23`):\n  - one `order_id` to two pools is applied once; two fills on one position serialize;\n  - conflict path: a raw tx inserts the applied row and does not commit; `ApplyFill` on the same key blocks; on commit it reports conflict, the position is unchanged and `pending_closed` re-emits once; on rollback it applies exactly once.\n- `dbtest`, service level, on `serviceTestPool` (`position_drain_dbtest_test.go:24-31`):\n  - two `PortfolioService` instances fold the same event concurrently and end at qty 15;\n  - instance A runs a real multi-symbol `processPositionSync` (including the fill's symbol and a `DeletePositionsNotInSync`) while instance B folds a fill on that position; both finish under a deadline with no `40P01`.\n- All run in the existing `portfolio-db-test` job (`.github/workflows/ci.yml:1017-1065`) with no CI change and no downgrade (R-15).\n\nLEG KEY (D-4) — unchanged\n- The key stays `bracket-leg:<legID>:<status>:<filledQty>`. The D-4 reopen and the @AC-5 C-16 sign-off appear only in the workflow's computed text. The user's relayed words name the race fix and the bug report, not D-4, GetPnL's dedup scope or @AC-5.\n- The amendment is fully specified and applies with no further round once the operator's own words are in `context.md`: key `bracket-leg:<account_id>:<legID>:<status>:<filledQty>`; GetPnL's three dedup maps (`portfolio_service.go:993-1013`) keyed on `account_id + \"\\x00\" + order_id`; a two-account same-leg-id test; the `/sdd-spec` payload-history grep; @AC-5 reworded to `order.partially_filled` 4 then `order.filled` qty 10 at average 110, position 0, realized 100.\n- If declined: no GetPnL change, and the cross-account IBKR leg-id collision is a named residual.\n\nTRADING — as round 4, now confirmed by both sides\n- Alpaca `GetOrder` wraps `broker.ErrOrderNotFound` on 404; a leg retires `UNKNOWN` after 3 consecutive not-found ticks.\n- IBKR: an id miss or empty list is an ordinary error, never `ErrOrderNotFound` (`ibkr.go:415-421,449`; R-10). IBKR legs never auto-retire unless `/sdd-spec` verifies a definitive single-order not-found response (F-04).\n- Parent `pollFills` (`trading.go:1822`): an IBKR miss is an ordinary failed poll. The trading findings note that `trading.fill_poller` failed counts may rise.\n- Migration `012_bracket_legs`, `ActivateBracket`, the `KnownBrokerOrderIDs` UNION and `pollBracketLegFills` are unchanged.\n\nBUILD ORDER\n1. Migrations `019` and `012` (re-check numbers against feature 318).\n2. `observed()` branches, `FillApplied`, `ApplyFill` with `txBeginner`, the pgxmock tests.\n3. Fold rewrite with in-tx reads and flip handling (D-10).\n4. The `dbtest` cases.\n5. Broker `ErrOrderNotFound`, IBKR id-match, tests.\n6. `ActivateBracket`, the UNION, keyed append, the observer and its tests.\n7. Docs, residuals in `context.md`, and the stop-then-start first deploy as a numbered runbook step.",
+    "open_objections": [
+      {
+        "text": "O-17 / O-11 (P-1, P-2): the D-4 reopen and the C-16 sign-off for the @AC-5 amendment are not on record. They appear only in the workflow's computed text; context.md:641-645 still lists both as pending, and the user's relayed words name neither. The orchestrator must get the operator's own ruling on both into context.md. The amendment then applies without another round; if declined, the cross-account collision is a named residual.",
+        "blocking": true
+      },
+      {
+        "text": "The INSERT-conflict path (pre-check miss, then conflict) is the whole race fix and needs a real-Postgres proof. Add the dbtest in apply_fill_dbtest_test.go, in default and DB_PGBOUNCER exec mode: an uncommitted raw tx holds the applied row, ApplyFill blocks, commit gives conflict with the position unchanged and one re-emit, rollback gives exactly one apply. Adopted in the synthesis; the proposer must confirm.",
+        "blocking": true
+      },
+      {
+        "text": "Every read the fold uses must come from the one FOR UPDATE row inside the tx. GetRealizedAccum (portfolio_service.go:455) and GetFeesAccum (:460) are pool calls today, which risks a lost update on the accumulators and a second connection from a pool of 2. foldFn must be pure, any orderSide fallback must run before the mutex, and a pgxmock test must assert no query outside the Begin/Commit bracket. Adopted in the synthesis; the proposer must confirm.",
+        "blocking": true
+      },
+      {
+        "text": "queryRower must not gain Begin: syncRecorderDB, cancelingDB and interleaveDB do not implement it and watchlist_repo.go shares the interface. ApplyFill uses a separate txBeginner interface, and portfolio_fill_sync_race_test.go is retired or re-pointed and listed in the spec's Files (F-08). Adopted in the synthesis; the proposer must confirm.",
+        "blocking": true
+      },
+      {
+        "text": "The no-deadlock claim needs a real-Postgres service-level dbtest: instance A runs a real multi-symbol processPositionSync with DeletePositionsNotInSync while instance B folds a fill on the same position, both finishing under a deadline with no 40P01. Optionally assert no idle-in-transaction session for B in pg_stat_activity. Adopted in the synthesis.",
+        "blocking": false
+      },
+      {
+        "text": "Pin pre-check and clear error handling: a pre-check DB error returns an error and never falls through to the fresh path; the clear is keyed by the full PK plus pending_closed IS NOT NULL; a failed clear is a WARN only. Adopted in the synthesis.",
+        "blocking": false
+      },
+      {
+        "text": "Emits now run after Unlock. Name two ordering residuals next to O-3: a position.updated emitted after a same-process sync has overwritten the row, and the two processes' emits for one position during the cutover overlap.",
+        "blocking": false
+      },
+      {
+        "text": "O-3: the cutover residuals (overlap double-apply, fills never folded before the first new boot, late-commit recorded_at before the floor, clock skew) still need operator sign-off, and the stop-then-start first deploy must be a numbered runbook step with a recorded result.",
+        "blocking": false
+      },
+      {
+        "text": "O-8: a parked post-floor fill re-parks with an ERROR on every boot and has no redelivery path. Operator acceptance is still needed.",
+        "blocking": false
+      },
+      {
+        "text": "O-13: bracket-leg fills stay absent from trading.orders and NetFilledQtyBySymbol. It is named as a residual but has not been raised with the operator.",
+        "blocking": false
+      },
+      {
+        "text": "O-30: the services/xstockstrat-analysis/acceptance/* rule scan is deferred to /sdd-spec and the affected analysis ACs are still not listed.",
+        "blocking": false
+      },
+      {
+        "text": "O-35: the GetPnL composite dedup key extends the product spec's scope. It rides on the D-4 ruling, must be recorded in context.md with it, and the /sdd-spec payload-history grep is a required step.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-56",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "251 @AC-17",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "251 @AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "290 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "206 trading @AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Round-4 order: BEGIN and the applied INSERT before positionsMu. Lost: a new fill waits for the mutex behind a sync batch (portfolio_service.go:1649-1650, 1602-1603) while idle in transaction on 1 of 2 client connections.",
+      "positionsMu then BEGIN with no pre-check, every fill transactional (adversary r5). Lost: boot replay of every post-floor fill would take the mutex and a 4-round-trip tx, which is the O-21 cost the pre-check removes.",
+      "Keep BEGIN before the mutex but TryLock, ROLLBACK and retry (adversary r5). Lost: the busy-retry churns the applied INSERT and inflates the error and acked counters (294 @AC-56).",
+      "An advisory lock taken in its own short transaction ahead of the fold (proposer r5 runner-up). Lost: it splits the D-1 transaction.",
+      "Widening queryRower with Begin (proposal r5). Lost: syncRecorderDB, cancelingDB and interleaveDB do not implement Begin and watchlist_repo.go shares the interface, so about 10 test sites break; a separate txBeginner is the smaller diff.",
+      "A mutex hook on ApplyFill (round-4 O-33). Lost: with the mutex outside the transaction the hook has no use.",
+      "pgxmock as the proof of the INSERT-conflict path (proposal r5). Lost: pgxmock cannot show that READ COMMITTED makes ON CONFLICT DO NOTHING wait on an uncommitted row, and the two-instance qty-15 test reaches that window only sometimes.",
+      "Recording the D-4 reopen and the @AC-5 sign-off from the computed task text. Lost: context.md holds no such ruling and the user's relayed words name neither (C-11, C-16)."
+    ],
+    "open_risks": [
+      "Until the operator's D-4 ruling is recorded, cross-account IBKR leg-id collisions can drop a second account's exit fill through the global ledger idempotency key, and GetPnL's bare-id dedup maps (portfolio_service.go:993-1013) can suppress the other account's partials.",
+      "If the composite GetPnL key is applied, a historical order whose partial and full fills carried different account_id values would stop being deduplicated. The /sdd-spec history grep is the only check.",
+      "A fill transaction can still wait server-side: on the applied-row conflict behind another process's fill tx, and on FOR UPDATE behind a sync's autocommit upsert. It holds 1 of 2 client connections and the process's positionsMu for that wait.",
+      "The pre-check has a TOCTOU window. Only the in-tx INSERT conflict path covers it, so the conflict-path dbtest is load-bearing.",
+      "Emits run after Unlock, so a position.updated can be emitted after a same-process sync has overwritten the row, and the two processes' emits can interleave during the cutover overlap.",
+      "IBKR legs the broker has genuinely forgotten are polled forever (WARN each tick, capped GetOrder budget) unless /sdd-spec finds a definitive single-order not-found response.",
+      "It is unverified whether IBKR /iserver/account/orders?orderId= filters at all. If it does not, legs outside the list result never resolve through the fallback.",
+      "Cutover: one overlap fill double-applied, fills the old binary never folded, late-commit recorded_at before the floor, and clock skew. qty heals at sync; realized_accum and fees_accum may stay wrong.",
+      "Legs partially filled at cutover are BASELINE_RETIRED, so realized P&L for their post-cutover remainder is lost.",
+      "Boot replay re-walks every post-floor fill (now 1 round trip each) and consumer_applied_events has no retention. The 200 fills/day figure is an assumption.",
+      "A parked post-floor fill re-parks with an ERROR on every boot.",
+      "A leg id is lost from tracking if the ActivateBracket tx fails; it is alerted, but its exit fill never folds.",
+      "Neither broker adapter populates BrokerOrder.Fees, so parent and leg fee totals both understate.",
+      "The analysis pnl_pattern_consumer is affected and its acceptance rules are unscanned; a D-10 flip short never opens an analysis window.",
+      "Migration numbers 019 and 012 may collide with feature 318 and must be re-checked at /sdd-spec.",
+      "OQ-2 (repair of already-inflated accumulators) is out of scope, and instance_count must stay 1 because sync still relies on positionsMu."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-04",
+      "F-06",
+      "F-07",
+      "F-08",
+      "P-02",
+      "P-03",
+      "P-04",
+      "PLAT-N1"
+    ],
+    "rationale": "No Floor breach, but the design is not approvable this round: four blocking objections remain.\n\n**What I recorded from the steer, and what I did not.**\n- **D-17 reopened.** The user's relayed words (\"Do your best to prevent the race condition and fix the bug report\") support it. The new order (mutex before `BEGIN`, pre-check for duplicates) replaces it and keeps its no-side-effect clause for both duplicate kinds.\n- **D-4 not reopened, @AC-5 not signed off.** Both appear only in the computed task text. `context.md:641-645` still lists them as pending and the user's words name neither. Proposer and adversary both reached the same reading. So `reopened` is `[\"D-17\"]` only, P-1/P-2 stay pending, @AC-5 stays uncovered, and O-17/O-11 stay open and blocking. The amendment is written out so one recorded ruling applies it.\n- **AC-2 on the existing `dbtest` harness.** Adopted on its merits; it matches locked R-15 and both sides agree.\n\n**Adversary claims I verified and adopted.**\n- `queryRower` has no `Begin` and three hand-written fakes plus `watchlist_repo.go` depend on it, so the proposer's \"pgxmock already implements it\" does not hold for this tree. `ApplyFill` gets a separate `txBeginner`.\n- `GetRealizedAccum` (`:455`) and `GetFeesAccum` (`:460`) are pool calls outside any row lock. The fold now reads everything from the one `FOR UPDATE` row.\n- The conflict path cannot be proved in pgxmock, so a deterministic real-Postgres case is added.\n\n**Closed this round:** O-33 (order re-pinned, hook dropped), O-24 and O-20 (IBKR rule confirmed by both sides), O-27 and O-34 (harness and two-service case confirmed), O-36.\n\n**Still open:** O-17, O-11, O-35 (ruling not on record); the three new blocking items awaiting proposer confirmation; O-3, O-8, O-13, O-30.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Fill-path order, superseding D-17: below-floor returns errFillAcked with zero DB calls. An autocommit pre-check SELECT by the applied PK runs with no tx and no positionsMu; a hit re-emits pending_closed and returns errFillAcked. On a miss, positionsMu.Lock comes before BEGIN, then the applied INSERT inside the fold tx, pg_advisory_xact_lock, FOR UPDATE, fold, COMMIT, Unlock. An INSERT conflict is the only duplicate that takes the mutex. Neither duplicate kind runs risk, snapshot or position.* calls.",
+          "evidence": "portfolio_service.go:399,1602-1603,1649-1650; pool.go:15,23; R-9; R-14; user-approved reopen of D-17; proposal r5 steps 1-5; adversary r5 confirmed the order and contested only its tests and the reads"
+        },
+        {
+          "text": "On an applied fill, position.* emits, checkRiskLimits and broadcastSnapshot run after positionsMu.Unlock. The pending_closed outbox makes the emits durable.",
+          "evidence": "D-9; D-21; portfolio_service.go:1342,1356; proposal r5 step 6; adversary r5 asked only that the ordering residual be named"
+        },
+        {
+          "text": "ApplyFill takes no mutex hook. The repo seam is FillApplied (autocommit pre-check) and ApplyFill (one pgx.Tx with a fold callback).",
+          "evidence": "proposal r5 Repo seam; C-18; adversary r5 contested only how Begin is obtained"
+        },
+        {
+          "text": "Only an Alpaca 404 wraps broker.ErrOrderNotFound, and a leg retires UNKNOWN after 3 consecutive not-found ticks. An IBKR id miss or empty list is an ordinary error; IBKR legs never auto-retire unless /sdd-spec verifies a definitive single-order not-found response. In the parent pollFills an IBKR miss is an ordinary failed poll, noted in the trading findings.",
+          "evidence": "ibkr.go:415-421,449; alpaca.go:343-344; trading.go:1822; R-10; proposal r5 confirmed with the IBKR-miss-never-retires test; adversary r5 did not contest"
+        },
+        {
+          "text": "The AC-2 proof runs on the existing dbtest harness with no CI change: repo-level apply_fill_dbtest_test.go on testPool plus a service-level case where two PortfolioService instances fold the same event to qty 15.",
+          "evidence": "ci.yml:1017-1065; dbtest_helpers_test.go:22-29; position_drain_dbtest_test.go:24-31; R-15; proposal r5; adversary r5 asked only for added cases"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Opening the fill transaction (BEGIN and the applied INSERT) before taking positionsMu",
+          "why": "A new fill waits for the mutex behind a sync batch while idle in transaction on 1 of portfolio's 2 client connections (portfolio_service.go:1649-1650, 1602-1603)."
+        },
+        {
+          "text": "Taking positionsMu and a transaction for every fill, with no duplicate pre-check",
+          "why": "Boot replay of every post-floor fill would take the mutex and a 4-round-trip transaction."
+        },
+        {
+          "text": "TryLock on positionsMu inside the transaction with ROLLBACK and retry",
+          "why": "The busy-retry churns the applied INSERT and inflates the error and acked counters (294 @AC-56)."
+        },
+        {
+          "text": "An advisory lock taken in its own short transaction ahead of the fold",
+          "why": "It splits the D-1 transaction."
+        },
+        {
+          "text": "Adding Begin to the queryRower interface",
+          "why": "syncRecorderDB, cancelingDB and interleaveDB do not implement it and watchlist_repo.go shares the interface, so about 10 test sites break; a separate txBeginner is the smaller diff."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "The INSERT-conflict path needs a real-Postgres dbtest in apply_fill_dbtest_test.go, in default and DB_PGBOUNCER exec mode: an uncommitted raw tx holds the applied row, ApplyFill blocks, commit gives conflict with the position unchanged and one re-emit, rollback gives exactly one apply.",
+          "blocking": true
+        },
+        {
+          "text": "Every read the fold uses must come from the one FOR UPDATE row inside the tx, replacing the pool calls at portfolio_service.go:455 and :460. foldFn is pure, any orderSide fallback runs before the mutex, and a pgxmock test asserts no query outside the Begin/Commit bracket.",
+          "blocking": true
+        },
+        {
+          "text": "ApplyFill must begin its tx through a separate txBeginner interface, leaving queryRower unchanged, and portfolio_fill_sync_race_test.go must be retired or re-pointed and listed in the spec's Files (F-08).",
+          "blocking": true
+        },
+        {
+          "text": "The no-deadlock claim needs a service-level dbtest in which one instance runs a real multi-symbol processPositionSync with DeletePositionsNotInSync while another folds a fill on the same position, both finishing under a deadline with no 40P01.",
+          "blocking": false
+        },
+        {
+          "text": "Pin pre-check and clear error handling: a pre-check DB error returns an error and never falls through; the clear is keyed by the full PK plus pending_closed IS NOT NULL; a failed clear is a WARN only.",
+          "blocking": false
+        },
+        {
+          "text": "Name the post-Unlock emit-ordering residuals next to O-3: a position.updated emitted after a same-process sync overwrote the row, and cross-process emit interleave during the cutover overlap.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-33",
+          "how": "Order re-pinned under the D-17 reopen: positionsMu before BEGIN on a new fill, applied INSERT inside the fold tx, pre-check duplicates off the mutex, no ApplyFill hook. The real-Postgres no-deadlock test is tracked as a new objection."
+        },
+        {
+          "id": "O-24",
+          "how": "Only an Alpaca 404 wraps ErrOrderNotFound, with retirement after 3 consecutive not-found ticks. An IBKR miss or empty list is an ordinary error and never retires a leg, with an IBKR-miss-never-retires test."
+        },
+        {
+          "id": "O-20",
+          "how": "Alpaca legs retire UNKNOWN with a WARN after 3 consecutive 404 ticks. IBKR legs keep polling under the capped budget, named as a residual, unless /sdd-spec finds a definitive single-order not-found response."
+        },
+        {
+          "id": "O-27",
+          "how": "The AC-2 proof is apply_fill_dbtest_test.go under //go:build dbtest on testPool and PORTFOLIO_DB_TEST_URL in the existing portfolio-db-test job, with no CI change and no downgrade."
+        },
+        {
+          "id": "O-34",
+          "how": "A service-level dbtest case with two PortfolioService instances, each with its own positionsMu, folding the same event to qty 15 is in the plan."
+        },
+        {
+          "id": "O-36",
+          "how": "The parent pollFills treats an IBKR id miss as an ordinary failed poll with no retirement or status change, and the trading findings note that trading.fill_poller failed counts may rise."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": [
+        "D-17"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
