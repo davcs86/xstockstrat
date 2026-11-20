@@ -548,3 +548,64 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - All 19 steps are done. Status: `in-progress` → `code-completed`. No insights.md entry, because nothing generalizes beyond the existing per-service telemetry pattern.
 - Files modified: `services/xstockstrat-ui/CLAUDE.md`
 - Deviations: none
+
+## Session 2026-11-20 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-telemetry-startup-log (feature 329)
+
+Source: docs/roadmap/features/329-fix-telemetry-startup-log/acceptance.feature, read from the local tree (not from origin/feature/fix-telemetry-startup-log). It has 2 scenarios: AC-1 (a Scenario Outline with 4 example rows) and AC-2.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | The outline spans Node and Python runtimes and 4 services (ui, config, analysis, agent). No single service owns it, so it goes in the cross-cutting suite. |
+| AC-2 | /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-telemetry-startup-log.feature | CREATE | NEW | The subject is xstockstrat-ui's startup log. The ui acceptance/ dir already exists, so only the file is new. |
+
+Dedup: grep of all *.feature files for "startup log", "SDK default" and "@feature-329" found nothing outside the source file. Nearby suites cover other behavior: otel-metrics-logs-export (274) and the 332 host.provider scenarios. At platform.feature line 415, "Then it is http://otel-collector:4318" is about the docker-compose value, not the startup log, so it is not an overlap. There are no CONFLICTs.
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+```
+  # ─── telemetry startup log names the effective OTLP endpoint (feature 329) ──
+  # Cross-cutting: the Node and Python telemetry modules across services. Source defect:
+  # docs/reports/2026-10-19-telemetry-startup-log-raw-endpoint-defect.md
+
+  @AC-1 @regression @feature-329
+  Scenario Outline: the startup log names the effective export endpoint when the env var is unset
+    Given OTEL_ENABLED is "true" and OTEL_EXPORTER_OTLP_ENDPOINT is unset
+    When the <runtime> service <service> starts
+    Then its telemetry startup log names the SDK default endpoint (or "SDK default")
+    And the log contains neither "undefined" nor "None" as the endpoint
+
+    Examples:
+      | runtime | service                |
+      | Node    | xstockstrat-ui         |
+      | Node    | xstockstrat-config     |
+      | Python  | xstockstrat-analysis   |
+      | Python  | xstockstrat-agent      |
+```
+
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-telemetry-startup-log.feature (CREATE) ---
+```
+Feature: fix-telemetry-startup-log
+  Promoted from docs/roadmap/features/329-fix-telemetry-startup-log/acceptance.feature (feature 329, bug fix).
+  The telemetry startup log names the configured OTLP endpoint.
+
+  @AC-2 @regression @feature-329
+  Scenario: the startup log names the configured endpoint when the env var is set
+    Given OTEL_ENABLED is "true" and OTEL_EXPORTER_OTLP_ENDPOINT is "http://otel-collector:4318"
+    When xstockstrat-ui starts
+    Then its telemetry startup log names "http://otel-collector:4318"
+```
+
+### Notes / ambiguities / conflicts
+- Neither source scenario carries an @FR-* tag, although docs/sdd/business-rules/CLAUDE.md expects one. I did not invent one, because rule 2 says to promote verbatim. The orchestrator may add the FR tag from product-spec.md if it wants one. Provenance is kept through @AC-n and the new @feature-329.
+- The source "# guards: docs/reports/2026-10-19-..." comments are not carried into the per-scenario blocks. The platform block has the report path in its section comment. The ui file's header cites the source feature instead.
+- AC-1 is routed to platform.feature because splitting the outline per service would change the scenario. Its examples are only 4 of the 9 services in the design scope. I did not extend them, because that would be invention.
+- AC-2 could also be cross-cutting, but its Then asserts only on xstockstrat-ui, so it is attributed to ui.
+
+### Coverage check
+- Source scenarios: 2 (AC-1, AC-2). Planned: 2 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing was skipped.
+````
