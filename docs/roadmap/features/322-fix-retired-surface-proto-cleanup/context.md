@@ -470,3 +470,41 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] CI's `buf breaking` still excludes `trading/v1/trading.proto` (`.github/workflows/ci.yml:210-211`), so only the local Step 1 run checks the `user_id` deprecation. Target: Step 1.
 - [ ] D-4 launch-gate query on dev and prod for the two pruned keys. Target: launch.
 - [ ] Next: `/sdd-review fix-retired-surface-proto-cleanup impl-spec`, then `/sdd-execute fix-retired-surface-proto-cleanup`.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 9 warnings, 0 Floor breaches (PASS WITH WARNINGS; advisory — did not block). Overlap: WARN, file-level only. Lifecycle unchanged (`implementation-ready`).
+- Run by the batch workflow, which directs this review to edit `implementation-spec.md` for clearly-correct warnings. Commit `1bfa5c21`.
+
+### Addressed (implementation-spec.md edited)
+
+- [x] Step 23 variadic trap (trading `NewWatcher`): Verification now has exit-code guards (no caller passes a trading mode; both `main.go` calls match the new shape; a service-wide caller listing), plus an explicit read of both `main.go` lines. Step 24 re-runs the guard. Re-verified: exactly two callers, `cmd/server/main.go:70,75`, also unchanged on `origin/main-dev`. No Go test was added — `cmd/server` has no test harness and the review did not find one to extend.
+- [x] Steps 24, 26, 28 compile-only RED (P-06): each TDD line now says where a deviation is recorded (`## Deviation Log` and `context.md`) and states plainly that Steps 24 and 26 capture the RED after the implementation edit; only Step 28 is test-first.
+- [x] Steps 29, 31 ts-proto assumption: marked as an unproven assumption (`buf.gen.yaml:30`, `useOptionals=messages`). Step 29 has a stop-and-record path if `fromPartial` does not compile. Step 31 now requires Step 29 green, and edits and builds one file before copying it to the other two.
+- [x] Stale base: a pre-flight bullet in `## Step Dependencies` requires the sync and the re-grep before Step 1. Spot check: `environmentIsPaper` moved to `trading.go:2830` on `origin/main-dev`; `SnapshotOfflinePositions` is still at `:1174`.
+- [x] Overlap findings: recorded in `## Step Dependencies` as rebase-only file overlaps with 321, 330, 347 and 323.
+- [x] Lint-red window, in part: the spec now names `sequential` mode as preferred (one integration PR, so the window never reaches PR CI) and records why the pairs are not units.
+
+### Still open (carried into execution)
+
+- Step 4–13: lint-red window (F-05 advisory) — [ ] unaddressed. After the Steps 1–3 unit, `golangci-lint` (SA1019) is red for marketdata, portfolio and trading until Steps 5, 7 and 13. Pairs 4+5, 6+7 and 12+13 were not folded into units: no step-constraints §C trigger applies, and pairing would not clear the other two services. Operator call at the `/sdd-execute` checkpoint: run `sequential`, or accept red Go lint jobs on the per-step PRs.
+- Step 6: adds a `nolint` directive and runs no lint itself; lint is in paired Step 7 — [ ] unaddressed (compliant under the paired-test rule; same window as above).
+- Steps 24, 26, 28: the tdd-gate may reject a compile-only RED (P-06) — [ ] unaddressed until execute records the outcome in the Deviation Log.
+- Steps 29, 31: the `fromPartial` shape is still uncompiled — [ ] unaddressed until Step 29's `pnpm run build` passes.
+- Step 3: the descriptor test lives in `xstockstrat-indicators` but also asserts trading, analysis and common descriptors (weak ownership fit) — [ ] unaddressed. Kept: `packages/proto` has no test harness, and the unit stays on the backend surface within the 4-step cap.
+- Step 1: `ComputeIndicatorRequest.timeframe_enum = 7` has no reader or producer (C-18) — [ ] unaddressed by design. Operator decision O-1 option (A); anchored by Step 3.
+- Step 10: no new Playwright step; existing `opportunities.spec.ts` coverage applies and Step 11 adds a vitest test — [ ] unaddressed (accepted by the review).
+- product-spec.md still carries the stale "next free 048" migration hint (`:93-96`). Not edited here (this review edits only the implementation spec); 322 claims no `NNN`, so it has no effect on execution.
+
+### Overlap findings
+
+- No FAIL-level collision (no migration `NNN`, proto field number or config key).
+- File-level, rebase-only: `321-fix-trading-config-plumbing` (`trading.go`, trading `CLAUDE.md`, `config-governance.md` registered-keys log, `trading.proto`); `330-fix-live-enrich-ttl-seed` (analysis `servicer.py`); `347-alpaca-adaptive-rate-limit` and `323-fix-orphaned-code` (marketdata `cmd/server/main.go`, `internal/alpaca/client.go`).
+
+### Open Threads
+
+- [ ] Lint-red window after Steps 1–3: choose `sequential` mode or accept red Go lint on per-step PRs. Target: `/sdd-execute` mode-entry checkpoint.
+- [ ] Compile-only Go RED may need a P-06 deviation record. Target: Steps 24, 26, 28.
+- [ ] `WatchConfigRequest.fromPartial` shape is unproven until Step 29 builds. Target: Steps 29, 31.
+- [ ] Rebase onto `origin/main-dev` (168 commits behind) and re-grep symbols before Step 1; expect doc merges with 321 in `config-governance.md`. Target: pre-flight.
+- [ ] Next: `/sdd-execute fix-retired-surface-proto-cleanup` (preferably `sequential`).
