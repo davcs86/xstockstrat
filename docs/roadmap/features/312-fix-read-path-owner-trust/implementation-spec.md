@@ -66,6 +66,16 @@ D-17, operator decision 2026-11-20). They are promoted as durable trading `@AC`s
   (D-12). Rebase, then re-grep the `listAlerts` anchors before editing.
 - If feature 326 touches `services/xstockstrat-trading/internal/handler/trading.go`, 312 merges
   after 326 and Step 5 re-greps its anchors (D-12).
+- Feature 326's implementation spec (`origin/main-dev`, `code-completed`) modifies no trading file;
+  it cites `handler/trading.go:223-237` as evidence only. It does modify
+  `services/xstockstrat-portfolio/internal/service/portfolio_service.go` and that package's
+  `export_test.go`, and feature 357 (`in-progress`) edits the same service file in regions it
+  records as disjoint from this spec's. Step 8 therefore rebases and re-greps its anchors if either
+  has merged first.
+- Feature 321 edits `internal/service/trading.go` (Steps 3–5 here) and a comment in
+  `trading.proto` `RegisterBrokerAccountRequest` (a different message from Step 12's; no field
+  number changes). Whichever merges second rebases, re-greps its anchors and re-runs
+  `./scripts/buf-gen.sh` for the Step 13 stubs.
 - Step 18 must merge in the same PR as Step 3: after Step 3 no RPC returns cross-user orders, so the
   runbook's flat-book check needs its DB-query substitute (design Open Risk 1, O-9).
 - Step 20 is an operator gate before the integration PR merges (O-11).
@@ -1065,7 +1075,9 @@ cd services/xstockstrat-analysis \
    fallback wording to `MarkAlertRead` and remove "with no identity at all `ListAlerts` is unscoped".
 5. Portfolio `CLAUDE.md:127-131`: on the four rows, state that an event without `user_id`
    (`account_id` for `order.filled`) is acked, WARN-logged and skipped, and that legacy
-   pre-`user_id` events are therefore dropped on replay.
+   pre-`user_id` events are therefore dropped on replay. Use the literal phrase
+   `acked, WARN-logged and skipped` on each of the four rows; the **Verification** counts it (the
+   file has no such phrase today, and a bare `skipped` already matches `:32` and `:199`).
 6. Proto constitution `:38`: move `trading.proto` `ListOrdersRequest.user_id` (~L169) and
    `StreamOrderUpdatesRequest.user_id` (~L190) and `notify.proto` `ListAlertsRequest.user_id` (~L99)
    into the deprecated + server-ignored list; leave `StreamAlertsRequest` / `AcknowledgeAlertRequest`
@@ -1079,7 +1091,7 @@ cd services/xstockstrat-analysis \
 ! grep -n "empty = all users" services/xstockstrat-trading/CLAUDE.md docs/context-constitution.md \
   && ! grep -n "is unscoped" services/xstockstrat-notify/CLAUDE.md services/xstockstrat-notify/docs/context-constitution.md \
   && grep -n "ResolveOrderOwner" services/xstockstrat-trading/CLAUDE.md \
-  && grep -n "skipped" services/xstockstrat-portfolio/CLAUDE.md \
+  && test "$(grep -c 'acked, WARN-logged and skipped' services/xstockstrat-portfolio/CLAUDE.md)" -eq 4 \
   && grep -n "ListOrdersRequest" packages/proto/docs/context-constitution.md
 ```
 
@@ -1206,8 +1218,9 @@ done
 1. This step needs database access the executor does not have. Ask the operator to run, read-only,
    in each environment (staging and production):
    `SELECT count(*) FROM trading.broker_accounts WHERE user_id = '' AND is_active;`
-2. Append the two counts to `context.md` under the step's session entry as one line starting
-   `O-11 row count:` with the environment, the count and the date for each.
+2. Append the two counts to `context.md` under the step's session entry as one bullet line that
+   starts at column zero with `- O-11 row count:` (the **Verification** greps that exact prefix),
+   with the environment, the count and the date for each.
 3. Never invent a count. If the operator cannot supply one, block the step and keep the integration
    PR unmerged (P-03).
 4. A non-zero count does not block the merge; it sizes the Step 19 cleanup follow-up.
@@ -1222,3 +1235,10 @@ grep -n "^- O-11 row count:" docs/roadmap/features/312-fix-read-path-owner-trust
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+Spec-time deviations from design.md, recorded at `/sdd-review impl-spec` (2026-11-20):
+
+| Step | design.md says | This spec does | Why | Sign-off |
+|---|---|---|---|---|
+| 6 | §8: the `export_test.go` constructor sets `repo`, `orders` and `subs` "and nothing else" | `NewOwnerScopeTestService` takes a third parameter, `accounts repository.AccountRepository` | The same test carries the agent `@AC-7` wire proof, which reaches the unexported `accountRepo` (`trading.go:140`). `export_test.go` stays at two funcs (constructor plus broadcast shim), so the C-18 minimality bound holds | Trading owner ack pending (context.md Open Thread) |
+| 12+13 | Build order puts the proto deprecation first | Proto and proto-gen land after Steps 3, 5, 6 and 10 | `[deprecated = true]` trips staticcheck SA1019 (`services/xstockstrat-trading/.golangci.yml:7`) at the body `UserId` read sites until those steps remove them. `nolintlint` is not enabled, so the `//nolint:staticcheck` lines Step 6 adds before the deprecation lands are inert | Proto reviewer and trading owner ack pending (context.md Open Thread) |
