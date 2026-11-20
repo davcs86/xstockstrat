@@ -477,3 +477,26 @@ design.md is not written and status.md is unchanged. Register: `debate.md` (D-1.
 - [ ] Merge-order: `docs/roadmap/features/merge-order.md` has no row for 319 and is outside this feature's writable files. Overlaps: `configServiceImpl.ts` with 314; agent files with 314/322/328/331; `docs/context-constitution.md`; and the four `watch_core.py` copies. Target: `/sdd-review impl-spec` overlap scan and the integration PR (re-run `scripts/check-watcher-copies.sh` after merging `origin/main-dev`).
 - [ ] Post-deploy smoke on dev needs positive evidence; a systemic escalation is rare, so a trading `SetConfig` success may not occur in the window. Target: integration PR.
 - [ ] Accepted, carried: `identity.revoke.unverifiable` spikes after a `JWT_SECRET` rotation (Step 5 docs); `ignoreExpiration` lets an old signed token revoke; a stale agent snapshot keeps the last-known DCR policy (D-6); the agent 503 guard is unreachable after a correct boot (constraint comment, D-7).
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 8 warnings; overlap WARN, file-level only (no migration, proto field or config-key collision). Advisory — did not block; lifecycle unchanged (implementation-ready). No floor breach.
+- Addressed in implementation-spec.md (each claim re-verified at `@24b8aa72`):
+  - [x] Step 7: the indicators, ingest and analysis owners had only ruff checks. Verification now also runs each service's `tests/test_config_watcher.py` (the file exists in all three and builds that service's `ConfigWatcher`), and states that `has_snapshot` behaviour is tested only in the agent, with the copies held equal by `scripts/check-watcher-copies.sh`.
+  - [x] Step 7: Verification mixed `cd` and repo-root commands. Every line now runs from the repo root through subshells.
+  - [x] Step 2: anchor wording. The `internalCallerAuthorized` statement spans `configServiceImpl.ts:679-686`; the call expression is at `:681`, `call.metadata` at `:682`. The Tree note now says `/sdd-execute` re-greps anchors.
+  - [x] Steps 2+3+4 fold: Step Dependencies now says only Step 3 is a build trigger; Step 4 is folded by D-12 / C-16 alone.
+  - [x] Step 5: the `validateToken` HS256 pin is now marked as a validate-path behaviour change that product-spec.md does not name, sourced to design.md (`:57-59`, `:163`, C-10) and pinned by Step 6's HS384 case.
+  - [x] Merge-order note: the trunk peers from the overlap scan (345, 330, 321, 329, 337) and the scan's limitation are listed in Step Dependencies.
+- Not changed: Step 7's `WatchCore.has_snapshot` on the shared core (D-5, C-18 compliant; the alternative needs an operator reopen).
+- Overlap findings: `authz.ts`, `identityServiceImpl.ts` and agent `watcher.py` with 345-authelia-sso; `configServiceImpl.ts` with 330-fix-live-enrich-ttl-seed (in-progress) and 321-fix-trading-config-plumbing; identity `telemetry.ts` with 329-fix-telemetry-startup-log and 337-metrics-host-provider-label; the four `watch_core.py` copies (no peer edit found); `/oauth/register` and `tests/test_oauth.py` with 345 (behavioural, below).
+
+## Open Threads
+
+- [ ] unaddressed — O-3: ignoring an unverifiable RevokeToken with `success:true` (D-4) still has no explicit operator decision. Steps 5-6 depend on it; a rejection means R-5 and a re-spec of both. Target: the `/sdd-execute` Phase-2 confirmation of the Steps 5+6 unit.
+- [ ] unaddressed — `/oauth/register` contract with 345-authelia-sso (implementation-ready on `origin/main-dev`). 345 `@AC-43` expects 404 for the route once SSO is configured and keeps `tests/test_oauth.py` green as its legacy net (its spec `:1191-1193`); 319 Steps 7-8 rename a test in that file and return 503 in legacy mode when no `agent` snapshot is readable. The two may be compatible (404 when SSO is configured, 503 only on the legacy route), but that reading is not confirmed. Needs an operator decision on the status under SSO and on which feature merges first. Target: the `/sdd-execute` checkpoint before the Steps 7+8 unit.
+- [ ] unaddressed — merge-order: `docs/roadmap/features/merge-order.md` has no row for 319 and is outside this feature's writable files. Add a row before the integration PR, covering the overlap findings above plus this spec's own unverified note (`configServiceImpl.ts` with 314; agent files with 314/322/328/331; `docs/context-constitution.md`).
+- [ ] unaddressed — overlap scan limitation: specs of batch peers that live only on `origin/feature/<slug>` branches were not read. Re-run the scan against those branches before sequencing.
+- [ ] unaddressed — F-A / D-5: Step 7 edits `watch_core.py` in indicators, ingest and analysis for a single consumer (the agent). Accepted by design; moving `has_snapshot` to the agent's `ConfigWatcher` subclass needs an operator reopen of D-5. Target: the `/sdd-execute` Phase-2 confirmation of the Steps 7+8 unit.
+- [ ] unaddressed — Step 5 scope: the `validateToken` HS256 pin is on a hot path and is not named in product-spec.md. Confirm with the Steps 5+6 unit.
+- [ ] Carried unchanged from the sdd-spec session: grant ↔ generator SAN drift has no CI guard (R-11); the post-deploy smoke needs positive evidence; the accepted risks (counter spike after a `JWT_SECRET` rotation, `ignoreExpiration`, stale agent snapshot under D-6, the unreachable 503 guard under D-7).
