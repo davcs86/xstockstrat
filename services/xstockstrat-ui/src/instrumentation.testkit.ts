@@ -97,7 +97,13 @@ export function defineExportSuite(headers: string, opts: { delta?: boolean } = {
   test('the instrumentation hook lives in src/ and registers telemetry', () => {
     expect(existsSync(new URL('./instrumentation.ts', import.meta.url))).toBe(true);
     expect(existsSync(new URL('../instrumentation.ts', import.meta.url))).toBe(false);
-    expect(calls.info.some((m) => m.includes('[otel] tracing enabled'))).toBe(true);
+    expect(
+      calls.info.some((m) =>
+        m.includes(
+          `[otel] tracing enabled → http://127.0.0.1:${(server.address() as AddressInfo).port}/otlp`,
+        ),
+      ),
+    ).toBe(true);
     expect(initFailed()).toBe(false);
   });
 

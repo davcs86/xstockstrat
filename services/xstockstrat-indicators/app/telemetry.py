@@ -240,6 +240,8 @@ def init_telemetry() -> None:
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+        if endpoint is None:
+            endpoint = "SDK default"
         svc_name = os.getenv("SERVICE_NAME", "indicators")
 
         resource = _build_resource()
