@@ -2141,3 +2141,230 @@ Written by the orchestrating session itself.
   production database holds no `portfolio.positions` rows and no `order.filled` ledger rows, and stops for the
   operator if it does. How portfolio is stopped on each staging target is confirmed by the operator at execution
   time (the runbook step), not at design time.
+
+## Session 2026-11-20 — sdd-batch design gate (round 9)
+
+- `/sdd-design fix-position-fold-correctness` (full) halted at its approval gate after round 9 (gate policy: halt). design.md NOT written; status.md unchanged (spec-ready). Register: `debate.md` (D-1..D-47, R-1..R-34, O-1..O-64, P-1..P-8). Round 9 settled D-46 and D-47, locked R-34, closed O-58, O-59, O-60 and O-62, opened O-63 and O-64, and filed P-8 (REOPEN D-40, pending user). Nothing was reopened; P-5..P-7 are still pending user.
+
+## Open Threads
+
+- **Approach (round-9 synthesis).** The round-8 synthesis stands as written (D-1..D-3, D-5..D-16, D-18..D-45). Round 9 only pins the adoption trigger and the production form.
+  - **Adoption trigger (D-46).** Each tick, `pollBracketLegFills` runs the D-40 candidate query first. It then makes one `Broker.ListOrders` call per account, for the union of accounts with a non-retired `trading.bracket_legs` row and accounts with at least one adoption candidate. The same call serves adoption and tracked-leg observation. Adoption runs every tick and makes no `GetOrder` call.
+  - **Failure cases.** A failed `ListOrders` inserts nothing and the account's candidates are retried next tick. If the candidate query fails, accounts with tracked legs are still listed and observed, nothing is adopted, and the error is logged once.
+  - **Production (D-47).** Check only. Before the first production promotion, record the `portfolio.positions` and ledger `order.filled` row counts on each production database, and stop for the operator if either is non-zero. No production stop-then-start or HALTED procedure is designed (R-34), following the operator ruling "And leave production out. It's never been out/launched" (`context.md:2137`).
+  - **Tests added (trading).** Zero `bracket_legs` rows plus one open ACTIVE leg is adopted with exactly one `ListOrders` call and no `GetOrder` call. An account with no candidates and no tracked rows gets no `ListOrders` call. The candidate-query-error case behaves as above.
+- **Strongest open objection.** O-63, non-blocking: steady-state adoption cost. Nothing moves a bracket off ACTIVE, and under D-40 a candidate the broker does not list as open is never inserted, so it stays a candidate forever. Every account with such bracket history gets a `ListOrders` call and a candidate re-scan on every 5 s tick, plus a failure WARN each tick while its broker is down. `/sdd-spec` must state the cost per account and the candidate query's row count, or add a partial index in `012`. The adversary's fix (insert a closed-out row so each candidate is evaluated once) contradicts settled D-40, so it is filed as P-8 for the operator.
+- **Floor status.** No Floor breach, and no blocking objection is open. Both round-8 blocking objections (O-58, O-59) are closed and the adversary rates the design sound. The gate waits on the operator.
+- **Uncovered @AC changes.** None; unchanged from round 8. `@AC-5` CHANGE is covered by the operator's C-16 sign-off. 251 @AC-17, 206 trading @AC-1 and 294 @AC-56 are EXTEND, each covered by a recorded ruling. @AC-1..@AC-4, 251 @AC-14, 206 trading @AC-2, 294 @AC-6 and 290 @AC-3 are PRESERVE.
+- **Operator sign-offs still needed.**
+  - **P-8 (REOPEN D-40).** Whether a candidate that a successful `ListOrders` does not show open gets a closed-out row (no emit, `observed_filled_qty = 0`). Declining keeps the per-tick cost named in O-63.
+  - **Cutover confirmations (O-61),** to be answered before `/sdd-execute` reaches the integration step; the list is unchanged from the round-8 entry. The same item now carries the question to ask if a production count is non-zero.
+  - **Register verdicts (O-56).** P-5, P-6 and P-7 recorded as "user reopened" citing `context.md:1535-1541`, and P-4 as withdrawn.
+- **Non-blocking, for `/sdd-spec`.**
+  - **O-64 (test scaffolding).** `fakeBroker.ListOrders` panics on purpose (`trading_bracket_test.go:85-87`), so every existing `pollFills` or bracket test whose fake repo holds an ACTIVE bracket with leg ids will panic, e.g. `TestPollFills_PartialFillResizesActiveBracket` (`:416`). The spec's Files list must include a `fakeBroker` `listOrdersFn` and call counter (precedent: `fakeReconciliationBroker`, `trading_reconciliation_test.go:80,101-102`), the `fakeBracketRepo` candidate query, and each affected test.
+  - **O-30.** The analysis AC ids in `order-snapshots-pnl-patterns.feature` and `fix-python-loop-supervision.feature` are still to be enumerated, and the D-10 flip-short window residual stays named.
+  - **Carried under O-63.** The `012` DDL comment gives the `adopted` column's single purpose.
+
+```sdd-batch-design-state
+{
+  "round": 9,
+  "synth": {
+    "approach": "Round-9 synthesis. The round-8 synthesis stands as written (sections 1-3 and 6-8, cutover, rollback rule, 012 as DDL only, adoption, tests, build order; D-1..D-3, D-5..D-16, D-18..D-28, D-31..D-45). This round only pins the adoption trigger and the production form. All paths are under `/home/user/xstockstrat/.claude/worktrees/orch-311`.\n\nVerified this round\n- `fakeBroker.ListOrders` panics on purpose (`services/xstockstrat-trading/internal/service/trading_bracket_test.go:85-87`).\n- The `listOrdersFn` precedent exists on `fakeReconciliationBroker` (`services/xstockstrat-trading/internal/service/trading_reconciliation_test.go:80,101-102`).\n- The operator's words 'And leave production out. It's never been out/launched' are in `docs/roadmap/features/311-fix-position-fold-correctness/context.md:2137`, in the worktree and on `origin/feature/fix-position-fold-correctness`.\n- `reconcileTick` throttles halted accounts through `shouldPollHaltedAccount` (`services/xstockstrat-trading/internal/service/trading.go:2075,2848`).\n\n1. ADOPTION TRIGGER (closes O-58; fills the gap D-40 left open)\n- Each tick, `pollBracketLegFills` (the D-22 callee after `logTick`) runs the D-40 candidate query first.\n- The accounts it lists are the union of (a) accounts with at least one non-retired `trading.bracket_legs` row and (b) accounts with at least one adoption candidate. `order_brackets.account_id` exists (`services/xstockstrat-trading/migrations/005_broker_accounts_halted.up.sql:15`), so no join is needed to group by account.\n- One `Broker.ListOrders` call per account per tick (`services/xstockstrat-trading/internal/broker/broker.go:74`), shared by adoption and tracked-leg observation. An account in both groups is listed once.\n- Adoption makes no `GetOrder` call. Under D-15, the first leg-emit failure stops emits for the tick but not adoption inserts.\n- A failed `ListOrders` for an account inserts nothing; its candidates are retried next tick (R-10).\n- If the candidate query fails, accounts with tracked legs are still listed and observed that tick, nothing is adopted, and the error is logged once.\n- Cadence: adoption runs every tick, so brackets activated by an old trading instance during a rolling overlap are picked up.\n- D-40 is honoured as settled: a candidate the broker does not list as open is not inserted. The adversary's tombstone row is not adopted this round; it is a pending REOPEN D-40 petition.\n- Named residual: nothing moves a bracket off ACTIVE, so a candidate that is never listed open stays a candidate. Every account with such bracket history gets one `ListOrders` call and a candidate re-scan on every tick, and a `ListOrders` failure WARN every tick while its broker or credentials are down. The proposal's claim that the D-11 budget is unchanged is wrong for these accounts.\n\n2. PRODUCTION (closes O-59)\n- Check only. Before the first production promotion, record the counts of `portfolio.positions` rows and ledger `order.filled` rows on each production database, and stop for the operator if either is non-zero.\n- No production stop-then-start, HALTED procedure or other production mechanism is designed. The proposer's production stop-then-start is withdrawn.\n- A non-zero count contradicts the 'never launched' premise and is an operator stop, not a designed branch.\n\nTESTS added this round (trading)\n- Zero `bracket_legs` rows plus one ACTIVE `order_brackets` row whose leg the broker lists open at fill 0: exactly one `ListOrders` call for the account; one row inserted with `adopted = true`, `filled_qty = 0`, `observed_filled_qty = 0`; no `GetOrder` call.\n- An account with no candidates and no tracked rows gets no `ListOrders` call.\n- Candidate query errors: tracked-leg accounts are still listed and observed, nothing is adopted, one error log.\n\nSPEC FILES (for /sdd-spec, verified fact)\n- `fakeBroker` gains a `listOrdersFn` and a call counter, following `fakeReconciliationBroker`.\n- `fakeBracketRepo` gains the candidate query.\n- Every existing `pollFills` or bracket test whose fake repo holds an ACTIVE bracket with leg ids now reaches `ListOrders` and would panic. The clearest case is `TestPollFills_PartialFillResizesActiveBracket` (`trading_bracket_test.go:416`, leg `s1` at `:433`). Each such test goes in the spec's Files list.\n\nBUILD ORDER: unchanged from round 8.",
+    "open_objections": [
+      {
+        "text": "Steady-state adoption cost. Nothing moves a bracket off ACTIVE (R-31), and under D-40 a candidate not listed open is not inserted, so it stays a candidate forever. Every account with bracket history gets a ListOrders call and a candidate re-scan on each 5 s tick, plus a failure WARN each tick while its broker is down. /sdd-spec must state the cost per account and the candidate query's row count, or add a partial index in 012. The tombstone fix needs the pending REOPEN D-40. Carried from O-60: the 012 DDL comment gives the adopted column's single purpose.",
+        "blocking": false
+      },
+      {
+        "text": "Test scaffolding (F-08, C-13). fakeBroker.ListOrders panics (trading_bracket_test.go:85-87), so existing pollFills and bracket tests whose fake repo holds an ACTIVE bracket with leg ids will panic once candidates trigger ListOrders (e.g. TestPollFills_PartialFillResizesActiveBracket, :416). The spec's Files list must include the fakeBroker listOrdersFn and call counter, the fakeBracketRepo candidate query, and every affected existing test.",
+        "blocking": false
+      },
+      {
+        "text": "O-61: operator-confirmation gate item, to be recorded in context.md and answered before /sdd-execute reaches the integration step (DO spec with portfolio removed versus the PRIVATE_DOMAIN references; doctl spec round-trip of secrets; homelab stop method; gate deploy exit code on rollback; trading's failed portfolio calls on paper staging; Alpaca listing bracket legs as top-level orders). The same item carries the question to ask the operator if a production count is non-zero.",
+        "blocking": false
+      },
+      {
+        "text": "O-30: the analysis AC ids in order-snapshots-pnl-patterns.feature and fix-python-loop-supervision.feature are still to be enumerated at /sdd-spec, and the D-10 flip-short window residual stays named.",
+        "blocking": false
+      },
+      {
+        "text": "O-56: the orchestrator still has to record P-5, P-6 and P-7 as 'user reopened' citing context.md:1535-1541, and P-4 as withdrawn.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "251 @AC-17",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "251 @AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "206 trading @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "206 trading @AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-56",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "294 @AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "290 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "A stop-then-start (or HALTED-during-stop) procedure on production. Lost: the operator ruled production out of scope ('And leave production out. It's never been out/launched', context.md:2137); only the check-only form remains. Locked this round.",
+      "Listing only accounts with tracked bracket_legs rows. Lost: with 012 DDL-only every account starts with zero rows, so adoption would never fire.",
+      "A tombstone row for a candidate not listed open (adversary r9). Not adopted this round: it contradicts settled D-40 ('anything else is not inserted') and the steer says to change nothing else. It is a pending REOPEN D-40 petition, not locked.",
+      "Adopting only in the first N ticks after boot plus a slow periodic sweep (adversary r9, self-rejected). Lost: it adds a cadence knob and misses legs activated by an old trading instance between sweeps. Not locked; only one side weighed it.",
+      "Throttling candidate-only accounts to the 60 s reconciliation cadence (adversary r9). Not chosen: the candidate set stays unbounded and adoption is delayed. Not locked."
+    ],
+    "open_risks": [
+      "New: every account with a never-listed-open ACTIVE or CANCELING candidate gets a ListOrders call and a candidate re-scan on every tick indefinitely, and a failure WARN each tick while its broker or credentials are down. The cost grows with bracket history.",
+      "New: the candidate query now gates a broker call and scans unindexed status 3 rows (005:29-31); a slow query delays listing for candidate-only accounts.",
+      "New: existing trading tests that hold an ACTIVE bracket with leg ids panic on fakeBroker.ListOrders until the fakes are extended.",
+      "If a production count is non-zero, the promotion stops with no designed procedure; it waits on an operator ruling.",
+      "The DO stop is unverified: .do/app.dev.yaml:78 and :319 reference ${xstockstrat-portfolio.PRIVATE_DOMAIN}, so a spec with the portfolio service removed may be rejected.",
+      "The merge precondition and the main-dev freeze are not enforced; an overlap double-applies fills and only the recorded evidence shows it.",
+      "On the homelab VM an unattended rollback of the integration deploy restores the pre-019 portfolio after the floor is stamped; noticing it depends on gate deploy exiting non-zero, which is unconfirmed.",
+      "Fills appended between T_stop and the first new boot are acked: qty heals at the next sync, realized P&L for them is lost.",
+      "While portfolio is stopped on staging, trading's portfolio calls fail: the risk check warns only, reconciliation skips, and flattenAndHalt cannot flatten.",
+      "Adoption depends on Alpaca listing bracket legs as top-level orders in every open state; this is unverified.",
+      "Reconciliation covers only tracked legs; the D-42 forward-only gap stays uncounted.",
+      "A BASELINE_RETIRED leg's post-cutover remainder is neither emitted nor observed.",
+      "Adopted IBKR legs that later vanish from the gateway are polled indefinitely (D-26).",
+      "Late-commit appends whose recorded_at is below the floor are acked (operator-accepted).",
+      "The floor assumes ledger and portfolio share one Postgres server clock.",
+      "With the composite GetPnL key, a historical order whose partial and full fills carried different account_id values stops being deduplicated; the /sdd-spec history grep is the only check.",
+      "A parked fill is retried only after a manual delete of its parked row.",
+      "A fill transaction can wait server-side on the applied-row conflict or FOR UPDATE, holding 1 of 2 client connections and positionsMu.",
+      "The pre-check has a TOCTOU window covered only by the in-tx INSERT conflict path.",
+      "A position.updated can be emitted after a same-process sync has overwritten the row.",
+      "Boot replay re-walks every post-floor fill and consumer_applied_events has no retention.",
+      "A leg id is lost from tracking if the ActivateBracket tx fails; it is alerted, but its exit fill never folds.",
+      "Neither broker adapter populates BrokerOrder.Fees, so fee totals understate.",
+      "Migration numbers 019 and 012 may collide with feature 318.",
+      "OQ-2 (repair of already-inflated accumulators) is out of scope, and instance_count must stay 1."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-01",
+      "F-02",
+      "F-04",
+      "F-06",
+      "F-07",
+      "F-08",
+      "P-02",
+      "P-03",
+      "P-04",
+      "PLAT-N1"
+    ],
+    "rationale": "The design has no blocking objection and no Floor breach left. The adversary rates it SOUND, and both round-8 blocking pins are closed.\n\n**What I checked myself**\n- `fakeBroker.ListOrders` does panic (`trading_bracket_test.go:85-87`), and the `listOrdersFn` precedent exists (`trading_reconciliation_test.go:80,101-102`). The adversary's scaffolding objection is a fact, not something to discover at /sdd-spec.\n- The operator's production ruling is at `context.md:2137`, in the worktree and on the feature branch.\n\n**O-58 (closed).** The proposer answered it concretely: list the union of tracked-row accounts and candidate accounts, candidate query first, one call per account, with the zero-rows adoption test and a no-candidate no-call companion. The adversary confirmed it fills only the gap D-40 left open.\n\n**O-59 (closed).** The proposer withdrew the production stop-then-start and confirmed the check-only form, matching the operator ruling. The non-zero case is an operator stop; its question wording rides on the O-61 gate item.\n\n**What I took from the adversary (all non-blocking)**\n- **Candidate-query error test:** made required. The proposer already said tracked accounts must still be listed, so there is no dispute.\n- **Test scaffolding:** recorded as an open /sdd-spec item with the verified panic.\n- **Steady-state cost:** the adversary is right that the 'budget unchanged' claim is wrong. I named it as a residual and left it open for /sdd-spec to quantify.\n- **Tombstone fix:** not adopted. It contradicts settled D-40 and the steer says to change nothing else. I filed it as a REOPEN D-40 petition with new evidence, for the operator.\n\n**Housekeeping**\n- O-60 and O-62 are closed. The proposer confirmed the round-8 synthesis as written, which carried their items, and the every-tick trigger answers the cadence question. O-60's two leftovers (row count or index, DDL comment) move into the new cost objection.\n- O-30, O-56 and O-61 stay open and non-blocking.\n\n**Register check:** no settled D-n is contradicted, no locked R-n returns, nothing is reopened. Business rules are unchanged from round 8.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Adoption trigger and cadence, filling the gap D-40 left open: each tick pollBracketLegFills runs the D-40 candidate query first and issues one Broker.ListOrders per account for the union of accounts with a non-retired bracket_legs row and accounts with at least one adoption candidate, shared by adoption and D-11 observation. Adoption runs every tick and makes no GetOrder call. A failed ListOrders inserts nothing and retries next tick. If the candidate query fails, tracked-leg accounts are still listed and observed, nothing is adopted and the error is logged once. Required tests: zero bracket_legs rows plus one open ACTIVE leg is adopted with exactly one ListOrders and no GetOrder; an account with no candidates and no tracked rows gets no ListOrders; the candidate-query-error case.",
+          "evidence": "operator steer r9 pin (1); D-11; D-39; D-40; R-10; broker.go:74; 005_broker_accounts_halted.up.sql:15; proposal r9 item 1 and Strongest risk; adversary r9 rated it sound and asked only that the error test be required"
+        },
+        {
+          "text": "Production is check-only: before the first production promotion, record the counts of portfolio.positions rows and ledger order.filled rows on each production database and stop for the operator if either is non-zero. No production stop-then-start, HALTED procedure or other production mechanism is designed; a non-zero count is an operator stop.",
+          "evidence": "context.md:2137 (operator: 'And leave production out. It's never been out/launched'); operator steer r9 pin (2); D-43; proposal r9 item 2; adversary r9 confirmed"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "A stop-then-start or HALTED-during-stop procedure on production",
+          "why": "The operator ruled production out of scope because it has never launched (context.md:2137); only the check-only form remains, and the proposer withdrew the branch in round 9."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Steady-state adoption cost: nothing moves a bracket off ACTIVE, and under D-40 a candidate not listed open is never inserted, so every account with bracket history gets a ListOrders call and a candidate re-scan on each tick indefinitely, plus a failure WARN each tick while its broker is down. /sdd-spec must state the per-account cost and the candidate query's row count or add a partial index in 012; the tombstone fix waits on the REOPEN D-40 petition. Carried from O-60: the 012 DDL comment gives the adopted column's single purpose.",
+          "blocking": false
+        },
+        {
+          "text": "Test scaffolding: fakeBroker.ListOrders panics (trading_bracket_test.go:85-87), so existing pollFills and bracket tests holding an ACTIVE bracket with leg ids will panic (e.g. TestPollFills_PartialFillResizesActiveBracket, :416). The spec's Files list must include the fakeBroker listOrdersFn and call counter, the fakeBracketRepo candidate query, and every affected existing test.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-58",
+          "how": "pollBracketLegFills issues ListOrders for the union of accounts with tracked rows and accounts with at least one adoption candidate, with the zero-rows/one-open-ACTIVE-leg adoption test and the no-candidate no-call companion. The resulting steady-state cost is tracked as a new objection."
+        },
+        {
+          "id": "O-59",
+          "how": "The proposer withdrew the production stop-then-start and confirmed the check-only form under the operator ruling at context.md:2137. A non-zero count is an operator stop; the question to ask then is carried on the O-61 gate item."
+        },
+        {
+          "id": "O-60",
+          "how": "The proposer confirmed the round-8 synthesis as written, which carries the D-19 non-terminal predicate with the held-leg test and the full parent-derived column join with the 251-payload test; adoption now runs every tick, which covers the rolling overlap. The row-count-or-index and DDL-comment items are tracked under the new cost objection."
+        },
+        {
+          "id": "O-62",
+          "how": "The proposer confirmed the round-8 synthesis as written, which carries the freeze evidence in the recorded result and the statement that the DELETE-floor step applies on DO only after a deliberate console rollback (D-43, D-44)."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "D-40",
+          "evidence": "Adversary r9: with the union trigger pinned this round, D-40's 'anything else is not inserted' leaves every never-listed-open ACTIVE or CANCELING candidate a candidate forever (nothing moves a bracket off ACTIVE, R-31), so each such account gets a ListOrders call and re-scan on every 5 s tick indefinitely; reconcileTick makes the same call only every 60 s and throttles halted accounts (trading.go:2075,2848). Requested amendment: after a successful ListOrders that does not show a candidate open, insert a closed-out row (no emit, observed_filled_qty = 0) so each candidate is evaluated once. The trigger was not on record before round 9.",
+          "is_new": true
+        }
+      ],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
