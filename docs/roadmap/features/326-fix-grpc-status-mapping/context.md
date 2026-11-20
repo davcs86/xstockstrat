@@ -672,9 +672,9 @@ Feature: fix-grpc-status-mapping (bug fix)
   # guards: docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.md
   @AC-2 @regression @feature-326
   Scenario: a raw context deadline on GetSectorHistory reaches the caller as DEADLINE_EXCEEDED
-    Given the GetSectorHistory service call returns context.DeadlineExceeded
-    When a client calls GetSectorHistory over gRPC
-    Then the client receives gRPC status DEADLINE_EXCEEDED, not INTERNAL
+    Given the classification store returns the caller's expired context error for a non-empty symbol set
+    When the GetSectorHistory gRPC handler is called with that expired context
+    Then the GetSectorHistory handler returns gRPC status DEADLINE_EXCEEDED, not INTERNAL
 ```
 
 --- services/xstockstrat-portfolio/acceptance/fix-grpc-status-mapping.feature (CREATE) ---
@@ -699,7 +699,7 @@ Feature: fix-grpc-status-mapping (bug fix)
 ```
 
 ### Notes / ambiguities / conflicts
-- **Source copy:** I read acceptance.feature from the working tree at docs/roadmap/features/326-fix-grpc-status-mapping/acceptance.feature, not from origin/feature/fix-grpc-status-mapping. I had no git access. The orchestrator should confirm the branch copy is identical before writing.
+- **Source copy (corrected 2026-11-20 by the orchestrator):** the AC-2 block above now carries the branch-tip wording (Step 8 reworded AC-2; the planner had read a stale checkout copy). Originally: I read acceptance.feature from the working tree at docs/roadmap/features/326-fix-grpc-status-mapping/acceptance.feature, not from origin/feature/fix-grpc-status-mapping. I had no git access. The orchestrator should confirm the branch copy is identical before writing.
 - **No @FR tags:** the source scenarios carry only `@AC-n @regression`, with no `@FR-*`. I added `@feature-326` and did not invent `@FR` tags. Other suites such as 257 do carry `@FR`, so this is a source-side gap.
 - **Dedup:** I grepped the marketdata and portfolio acceptance suites and platform.feature for ALREADY_EXISTS, DEADLINE_EXCEEDED, toGRPCError, CreateWatchlist and GetSectorHistory. Nothing asserts the same outcome, so there is no DUP, OVERLAP or CONFLICT.
   - platform.feature:325 and :1338 mention ALREADY_EXISTS, but they are about source ownership and InstantiateTemplate.
