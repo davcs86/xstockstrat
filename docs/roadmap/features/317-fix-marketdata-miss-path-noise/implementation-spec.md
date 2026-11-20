@@ -109,8 +109,9 @@ or a rejected alternative.
    holds the lock (O-18), and the WARN fires only when no entry exists (design (B)). An expired entry swept by
    another key's write therefore makes that symbol's next empty refetch WARN again instead of logging Debug.
    The WARN is once per change into the empty state as far as the map remembers. Step 9's expiry control uses a
-   single key, so no sweep interferes. This follows design.md literally; a longer sweep horizon would be a
-   design change.
+   single key, so no sweep interferes, and `TestLiveRefetch_CrossKeySweep_ExpiredEntryWarnsAgain` (Step 9) pins
+   the cross-key case so the behaviour cannot change unnoticed. This follows design.md literally; a longer
+   sweep horizon would be a design change.
 6. **The migration number is `056`, provisional.** See § Step Dependencies, merge checklist.
 
 ## Step Dependencies
@@ -156,6 +157,9 @@ or a rejected alternative.
   even when its freshness diff fails. If no local Postgres is available, commit that artifact unedited and
   record the run URL in `context.md`. The JSON is never written by hand. If neither route works, Step 8 is
   blocked (P-03).
+  - **Preflight before Step 7 (the first step of unit B2).** Confirm which of the two routes is available and
+    record it in `context.md`. Unit B2 is one commit, so starting it with neither route leaves Steps 7, 9 and
+    10 written and uncommittable.
 - **Merge checklist — migration number and key overlap (O-20; fails.md 2026-11-10
   fix-marketdata-dead-symbol-ingest — migration).** Run before unit B2 and again after every `origin/main-dev`
   merge into the branch.
@@ -172,6 +176,19 @@ or a rejected alternative.
      `storedInputsSha256`).
   - Spec-time result (2026-11-20, `36aed60b`): the trunk tail is `055_analysis_live_enrich_ttl_reseed`; `053`
     was never used on any ref; commands 2 and 3 return nothing. `056` is free and no ref carries the key.
+  - Peers that move the number or the hash (impl-spec review, 2026-11-20, read on `36aed60b`):
+    `345-authelia-sso` plans a config migration as `053_authelia_sso_keys`
+    (`docs/roadmap/features/345-authelia-sso/implementation-spec.md:223-224`), a number below the trunk tail,
+    so it will be renumbered and can take `056` if it merges first. Both 345 (`:225`) and
+    `330-fix-live-enrich-ttl-seed` (`implementation-spec.md:270`, already on trunk as `055`) regenerate
+    `scripts/config-wiring-stored.json`. Whichever feature merges last regenerates it again (item 6).
+- **Shared files with peers (file-level only, no key or number clash; impl-spec review 2026-11-20).**
+  - `scripts/config-wiring.json`: `345-authelia-sso` also adds registry entries
+    (`docs/roadmap/features/345-authelia-sso/implementation-spec.md:751`). The keys are disjoint; on a merge
+    conflict keep both sets and re-run Step 10's two config-wiring commands.
+  - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`: `323-fix-orphaned-code`
+    (`product-spec.md:46`, `r.pool` at `:217,241,341`) and `311-fix-position-fold-correctness`
+    (`product-spec.md:67`, `:66`) name other lines of this file. Step 4 changes line `:379` only.
 - **`fetchAndCacheBars` peer edits (design open risk).** Spec-time
   `git log --all --since=2026-11-10 -G"fetchAndCacheBars|no bars stored and live fetch"` on
   `marketdata_service.go` finds only `e19bb53f` and `927c42de` (#1499, on trunk). Re-run before unit B2.
@@ -669,7 +686,10 @@ ls services/xstockstrat-config/migrations | sort | tail -2   # this pair is the 
 grep -c "056_marketdata_bars_miss_backoff.up.sql" scripts/config-wiring-stored.json   # 2 (staging, production)
 node scripts/check-config-wiring.mjs --keys marketdata.bars.miss_backoff_ms --final   # exit 0, with Step 10 applied
 ```
-The apply-and-rollback runs in CI and at deploy, not here.
+On the local-Postgres route the generator applies every config migration's `up` on a scratch database, one
+file at a time (`scripts/config-wiring-stored.py:77-80`, `db.migrate("up", "1")`), so the `up` of this migration
+is executed there. On the CI-artifact route the same generator runs in CI. The `down` is not executed locally
+on either route: Step 7's test pins its SQL text, and the rollback itself runs in CI and at deploy.
 
 ---
 
@@ -728,6 +748,12 @@ The apply-and-rollback runs in CI and at deploy, not here.
    - `TestLiveRefetch_WindowExpiry_RefetchesOnceWithDebug` — positive control. After the first call, a call at
      `now + window + 1s` makes `src.calls == 2`, records a Debug line with the miss message and adds no WARN;
      the next call inside the new window makes no further vendor call. One key only (spec-time decision 5).
+   - `TestLiveRefetch_CrossKeySweep_ExpiredEntryWarnsAgain` — pins spec-time decision 5. Two keys that differ
+     by timeframe or by symbol (a second symbol, if used, is declared in this file only, C-13). Key A gets a
+     confirmed empty at `now`. At `now + window + 1s` key B gets a confirmed empty, which sweeps A's expired
+     entry. A call for key A at that same time makes one more vendor call and records a second WARN for A, not
+     a Debug line. An entry still inside the window is not swept: a control call for key B right after makes no
+     vendor call (`@AC-2` unaffected).
    - `TestLiveRefetch_WindowZero_FetchesAndWarnsEveryCall` — disabled control. `budgetCfg:
      &fakeCfg{ints: map[string]int64{barsMissBackoffKey: 0}}`: three calls, three vendor calls, three WARNs,
      and `lastEmptyFetch` holds no entry. A negative value behaves the same.
@@ -835,6 +861,10 @@ coverage threshold applies to it.
    `registry.receivers`: `"services/xstockstrat-marketdata/internal/service/bar_hold.go:resolveOffMs":
    "marketdata"` and `"services/xstockstrat-marketdata/internal/service/bars_miss.go:resolveOffMs":
    "marketdata"`. Keep the file's existing formatting and ordering.
+   - **Check first.** Run `node scripts/check-config-wiring.mjs --final` and `node --test
+     scripts/config-wiring.test.mjs` right after instructions 2 and 3, before writing `bars_miss.go`. The only
+     finding allowed at that point is the new key's `seeded-unread` (its reader arrives in instruction 4);
+     `stream.bar_ingest_backoff_ms` must be clean. Anything else red means the fallback.
    - **Fallback (O-15 "otherwise").** If `check-config-wiring.mjs --final` or `node --test
      scripts/config-wiring.test.mjs` cannot be made green with the wrapper, revert instructions 2 and 3, give
      `resolveBarsMissBackoff` its own body in `bars_miss.go` reading `cfg.GetInt(barsMissBackoffKey, …)`, add
@@ -894,10 +924,10 @@ Plus the Verification of Steps 7, 8 and 9, which together are the unit's green r
 
 ---
 
-### Step 11 — docs: key table, GetBars / cancel-stop invariants, registered keys, product-spec correction
+### Step 11 — docs: key table, GetBars / cancel-stop invariants, registered keys, product-spec corrections
 
 **Status**: `pending`
-**Service**: `services/*/CLAUDE.md`, `services/*/docs/`, `docs/patterns/`, feature directory
+**Service**: `xstockstrat-marketdata`, `xstockstrat-portfolio` (service docs); `docs/patterns/`; feature directory
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
 - `services/xstockstrat-marketdata/docs/alpaca-integration.md` — modify
@@ -925,6 +955,9 @@ Plus the Verification of Steps 7, 8 and 9, which together are the unit's green r
   352` at `:166-179`. The generic sentinel row `system:config-migration-feature-<slug>` is at `:143`.
 - `product-spec.md:17-19` lists "the `ackAlways` consumers draining at shutdown (balance sync, bracket update,
   order-fill)".
+- `product-spec.md` § Fix Scope (`:60-64`): "DB migrations anticipated: **no**" (`:63`) and "Config key changes
+  anticipated: **no** — unless design chooses a new negative-cache TTL / back-off key" (`:64`). Steps 6, 8 and
+  10 add the key `marketdata` / `bars.miss_backoff_ms` and one config seed migration, so both lines are stale.
 
 **Lands with**: —
 
@@ -967,6 +1000,9 @@ Plus the Verification of Steps 7, 8 and 9, which together are the unit's green r
 6. `product-spec.md:17-19`: correct the order-fill claim (O-9) — the `ackAlways` consumers are balance sync and
    bracket update only; `processOrderFill` returns its error and is not `ackAlways`-wrapped, so it has no
    cancel-caused WARN site. Make the smallest edit that removes the false claim and cite design O-9.
+   In § Fix Scope (`:63-64`) bring the two stale lines in line with the design: config key changes **yes** —
+   `marketdata` / `bars.miss_backoff_ms` (design (B), D-5); DB migrations — no service-schema migration, one
+   config seed migration (`marketdata_bars_miss_backoff`). The proto line (`:62`) stays **no**.
 7. Do not use the phrases the doc check bans (`scripts/check-config-wiring.mjs:862`).
 
 **Verification**:
@@ -977,6 +1013,7 @@ grep -n "bars.miss_backoff_ms" services/xstockstrat-marketdata/CLAUDE.md service
 grep -n "fires on every window" services/xstockstrat-marketdata/docs/context-constitution.md   # no match
 grep -n "feature 317" docs/patterns/config-governance.md
 grep -n "order-fill" docs/roadmap/features/317-fix-marketdata-miss-path-noise/product-spec.md   # only inside the correction
+grep -n "bars.miss_backoff_ms\|marketdata_bars_miss_backoff" docs/roadmap/features/317-fix-marketdata-miss-path-noise/product-spec.md   # Fix Scope names the key and the seed
 ```
 
 ---
