@@ -589,3 +589,44 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
   and on the next promotion PR (no flag).
 - `ci.yml` may collide with peer 298 and other batch peers at merge; Step 10's wiring test fails if the job is lost.
 - Next: `/sdd-review fix-migration-tooling-safety impl-spec`.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 9 warnings; overlap WARN (file-level and ordering only; no same-NNN migration, proto field
+  or config-key clash). Floor breaches: none. Advisory — did not block; lifecycle unchanged.
+- Addressed in implementation-spec.md (each claim re-verified on `origin/main-dev@fb52065c`):
+  - [x] Steps 1/5/7/9 red order (C-08/P-06): Step Dependencies gains "Red order for the service-first pairs" —
+    write and run the paired test before the service edit, per `sdd-execute/reference/tdd-gate.md`; the TDD
+    lines of Steps 1, 5 and 9 point at it. Step 7 already carried its own RED protocol.
+  - [x] Unsynced-branch risk: Step Dependencies gains a Step 1 precondition check (`scripts/tests/`,
+    `check-migration-contract.py`, `migration-rerun.py`, `shell-allowlist.txt` must exist, else stop).
+  - [x] Step 9 anchor: the `migration-contract-gate` job key is `:938` (comment `:936-937`); now stated.
+  - [x] Step 7 Verification: `git fetch --no-tags origin main-dev` added before the `origin/main-dev` run.
+  - [x] Step 13: instruction 0 added — confirm the O-3 sign-off line in this file before editing either suite.
+  - [x] Step 9: a `FORBID_NEW` truth table (four cases) added to check the first CI logs against.
+  - [x] Overlap: the open-risks list now names peers 324 and 297 for `ci.yml`, and the 345 config `053` case.
+- Unresolved ⚠ carried into execution:
+  - Step 9: the `FORBID_NEW` expression still cannot run locally; Step 10 checks it as text only. First real
+    runs are the integration PR and the next promotion PR — [ ] unaddressed
+  - Steps 1–2: between Step 2 and Step 4 a dirty service with no contract file is refused with no recovery
+    text. Do not open the integration PR in that window — [ ] unaddressed
+  - Steps 11–12: `scripts/migration-rerun.py` docstring and log lines (`:7`, `:735`, `:1067-1068`) still describe
+    a contract floor; deferred as a Step 12 findings row, not fixed — [ ] unaddressed
+  - Step 11: refuse-all stops every later PRE_DEPLOY and rollback deploy until an operator acts. Accepted cost
+    (O-1), documented, not removed — [ ] unaddressed
+- Overlap findings:
+  - `.github/workflows/ci.yml` is also edited by 324, 298 and 297 (rebase-level; no merge-order row needed).
+  - 330 (`fix-live-enrich-ttl-seed`) reads the `up` path of `scripts/db-migrate.sh` and names 318 as its
+    re-check trigger; it does not edit the file.
+  - Peers 308–320, 322–325, 327–328 and 331 have no implementation-spec yet, so only their product-specs were
+    scanned.
+
+### Open Threads
+
+- Tell the operator: 345 (`authelia-sso`) plans config `053`, but trunk already holds `054` and `055`. Once
+  `migration-order-gate` is live that file is refused; 345 must renumber at its merge. Name it in the 318
+  integration PR description.
+- If 318 merges before 330, 330 must re-read the `up` path of `scripts/db-migrate.sh`.
+- The four `[ ] unaddressed` items above must be announced at each `/sdd-execute` checkpoint (P-03).
+- Still open from the sdd-spec session: branch protection "up to date before merge" on `main-dev` and `main`
+  (operator action).
