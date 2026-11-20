@@ -565,3 +565,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] External ledger readers of `portfolio:risk` may depend on concentration arriving as `drawdown_breach`; only in-repo consumers were checked. Target: Step 6 and the integration PR description.
 - [ ] Peer 312 may narrow untargeted ListAlerts visibility mid-batch; peer 333 edits the same alert-rules file. Target: the merge-order.md note in Step 6.
 - [ ] The feature branch is 168 commits behind main-dev. Target: `/sdd-execute` BRANCH SYNC; re-grep every anchor by symbol after it, and treat a tree that still holds the `.sh` guard as a Step 5 blocker.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 9 criteria warnings; overlap level WARN (file overlaps only — no migration, proto field or config-key collision). Advisory; lifecycle unchanged (`implementation-ready`). No Floor breach.
+- The criteria reviewer could not read the full spec (it had a condensed copy and no git access). This session re-read the spec at `92080aec` and re-checked its main-dev anchors on `origin/main-dev`@`fb52065c`: the `haltAccount` / `emitReconciliationFinding` definitions and callers, the `reconcileTick` loop, and the portfolio anchors (`evaluateDrawdowns` `:1291`, `checkRiskLimits` `:1307`, `emitRiskAlert` `:1349` with calls at `:1336` / `:1344`, `emitEventAs` `:1371`) all match the Anchor Table. A `## Step Dependencies` section with both Lands-with pairs exists.
+- **Addressed** (edits to `implementation-spec.md` and `acceptance.feature`):
+  - [x] C-15 ordering: `@AC-3` is now in `acceptance.feature` (text unchanged from the spec; design.md D-7, C-16 EXTEND row). Step 4 no longer edits that file; it confirms the scenario's values instead.
+  - [x] Step 1 / Step 2, every mismatch class and call site: all four `emitReconciliationFinding` calls sit inside the one `for accountID, entry := range brokerMap` loop body (main-dev `trading.go:2173-2342`), so `entry.userID` is in scope at each, including the position-level call (`:2334`). Step 2 now also asserts the owner in `TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState` and `TestReconcileTick_PositionQuantityDiscrepancy_CaughtViaPositionSide`, so all three classes and all four sites are pinned.
+  - [x] Verification runnable: the coverage commands in Steps 2 and 4 wrote `GOWORK=off COVERPKGS=$(…) && go test …`, which sets a shell variable and does not reach `go list` or `go test`. They now `export GOWORK=off` (found by this session, not by the reviewer).
+  - [x] Step 5 category: a note states that `config` is the nearest template category and that no config-key contract applies (the product spec declares no key).
+  - [x] C-10: the three operator checks (Grafana import and routing, prod fanout, the `drawdown_breach` behaviour change) are to be copied into the integration PR description as a checklist.
+  - [x] Overlap: § Step Dependencies now lists 357, 321, 337 and 311 next to 312 and 333, and Step 6 records them in `merge-order.md` (which has no 315 entry today). Peer facts were re-read: 357 `in-progress`, its Steps 6–7 rewrite the position read in `checkRiskLimits` / `broadcastSnapshot`; 321 `implementation-ready` on its branch, `maxRetries` in the `flattenAndHalt` retry loop; 337 `in-progress`, edits the guard's pytest module at other tests.
+- **Checked, no edit needed**:
+  - C-14: design.md § "Audience and admin reachability — operator decision (b) + (b′)" and the operator decisions in the sdd-design session above record owner-only delivery and the accepted double push as decisions, not open questions. The deferral is named in § Step Dependencies.
+  - design.md names one `haltAccount` call in `flattenAndHalt`; main-dev has two (`:3096`, `:3120`). The spec already handles both; design.md is stale on this point only.
+  - Trading-domain checks (trading-mode gate, broker symmetry, order types, fill states, deployment-file parity) do not apply; no order path, env var or port changes.
+- **Not verified**: the overlap reviewer's line anchors inside 357's and 321's specs were spot-checked, not all re-read. 333's spec was not inspected. 311 and 312 have no implementation spec, so their overlap is a forecast.
+
+## Open Threads
+
+Carried into `/sdd-execute`; announce every unchecked item at each checkpoint and at session end (P-03).
+
+- [ ] Same-function overlap with 357 (`in-progress`) in `checkRiskLimits`, `portfolio_service.go`. Whichever feature merges second resolves it by hand and re-runs both features' `TestCheckRiskLimits*` tests. Target: Step 3 discovery (re-read 357's status and the merged tree first).
+- [ ] Rebase-only overlaps: 321 (`flattenAndHalt` retry loop, next to the Step 1 `haltAccount` calls), 337 (guard pytest module, Step 5), 333 (`alert-rules.yaml`, README, rule count, Step 5), 311 / 312 (`portfolio_service.go`, forecast). Target: re-grep at each step's discovery; Step 6 writes the `merge-order.md` note.
+- [ ] The follow-on `admin-halted-accounts-read` still has no feature number (C-14 deferral is named, not opened). Only `/sdd-story` may allocate one. Target: operator, no later than this feature's integration PR.
+- [ ] Step 5 is category `config` with no `packages/otel` row in the reviewer registry (Platform Lead named as reviewer). Target: operator confirms the reviewer at the Step 5 checkpoint.
+- [ ] Import the Step 5 rule `xstk-trading-account-halt` into Grafana Cloud and confirm it routes to a contact point; the YAML is not auto-provisioned. Target: operator; integration PR checklist item.
+- [ ] Prod Slack/SendGrid fanout configuration is unknown from the repo. Target: operator; integration PR checklist item.
+- [ ] Concentration breaches stop arriving as `portfolio.risk.drawdown_breach`; external readers of `portfolio:risk` were not checked. Target: Step 6 docs and the integration PR description.
+- [ ] The new Step 2 assertions on the unknown-order and position-side tests assume each finding records exactly one `halt` and one `reconciliation` alert. If RED fails for another reason, stop and report. Target: Step 2.
+- [ ] The feature branch is 168 commits behind main-dev (measured by the sdd-spec session). Target: `/sdd-execute` BRANCH SYNC; re-grep every anchor by symbol, and treat a tree that still holds the `.sh` guard as a Step 5 blocker.
+- [ ] Still open from earlier sessions and unchanged: the accepted double CRITICAL push (Step 2 pins it), the reachable `user_id=''` account (Step 2 empty-owner test; the guard is out of scope), and the undeduplicated risk events (Step 6 documents it).
