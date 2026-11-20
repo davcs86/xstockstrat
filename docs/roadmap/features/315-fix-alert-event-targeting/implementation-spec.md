@@ -42,13 +42,22 @@ The admin surface is **deferred** to a named follow-on (§ Step Dependencies).
 - Spec decision **S-1**: the empty-owner WARN (D-2) is logged at **each** of the two emit sites with an `alert_kind`
   attribute, because design.md does not say where it is logged.
 
+**Revised 2026-11-20 by `/sdd-review impl-spec`** (advisory; anchors re-read on `origin/main-dev`@`fb52065c`):
+
+- `@AC-3` now exists in `acceptance.feature` (added by the review, text unchanged from this spec), so Step 4 traces to
+  an existing scenario and no longer edits that file (C-15).
+- Step 2 also pins the owner on the `unknown_broker_order` finding and on the position-side `quantity_discrepancy`
+  finding, so every `emitReconciliationFinding` call site has an owner assertion.
+- The coverage commands in Steps 2 and 4 now `export GOWORK=off`; the previous prefix form did not reach `go test`.
+- § Step Dependencies lists the peer overlaps the review found (357, 321, 337, 311), and Step 6 records them.
+
 ## Scenario Coverage (C-15)
 
 | Scenario | Covered by |
 |---|---|
 | `@AC-1` halt + reconciliation alerts target the owner; systemic stays untargeted | Step 2 (and the direct `haltAccount` assertion in Step 1) |
 | `@AC-2` concentration breach is a concentration event with `user_id` + `symbol` | Step 4 |
-| `@AC-3` drawdown breach keeps `portfolio.risk.drawdown_breach`, owner-attributed with `account_id` | Step 4 — the step **adds** this scenario to `acceptance.feature` (design.md D-7, C-16 EXTEND row) |
+| `@AC-3` drawdown breach keeps `portfolio.risk.drawdown_breach`, owner-attributed with `account_id` | Step 4 (the scenario is already in `acceptance.feature`; design.md D-7, C-16 EXTEND row) |
 
 ## Anchor Table
 
@@ -74,6 +83,7 @@ Line numbers on the two trees. Steps cite the symbol plus the feature-tree line;
 | `TestHaltAccount_DBWriteFailureDoesNotRollBack` | same | `:620` | `:624` |
 | `fakeNotifyClient` | same | `:176` | `:180` |
 | Reconcile templates | `…/service/trading_reconciliation_test.go` | `:539`, `:576`; systemic `:762`; `noopAccountRepo` `:250` | `:547`, `:584`; systemic `:770`; `noopAccountRepo` `:258` |
+| `TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState` / `TestReconcileTick_PositionQuantityDiscrepancy_CaughtViaPositionSide` | `…/service/trading_reconciliation_test.go` | `:258` / `:608` | `:266` / `:616` |
 | `captureLogs` | `…/service/trading_sync_test.go` | `:16` | `:16` |
 | `newFlattenHarness` / `TestFlattenAndHalt_AlwaysRejected_HaltsAccount` | `…/service/trading_flatten_rejection_test.go` | `:88` / `:124` | `:99` / `:135` |
 | `evaluateDrawdowns` | `services/xstockstrat-portfolio/internal/service/portfolio_service.go` | `:1263` | `:1291` |
@@ -105,13 +115,29 @@ Line numbers on the two trees. Steps cite the symbol plus the feature-tree line;
   **`admin-halted-accounts-read`** (an admin cross-user halted-accounts read, or a notify admin-audience field). It has no
   `NNN` yet; the operator opens it with `/sdd-story admin-halted-accounts-read` **no later than this feature's integration
   PR**. Until it ships admins rely on the Step 5 rule plus the Loki ERROR line `account halted`.
-- **Operator checks before the integration PR** (design.md § Open Risks; not executor steps):
+- **Operator checks before the integration PR** (design.md § Open Risks; not executor steps). `/sdd-execute` copies
+  these three into the integration PR description as an unchecked checklist (C-10):
   - import the Step 5 rule into Grafana Cloud and confirm it routes to a contact point (the YAML is not auto-provisioned);
   - confirm the prod Slack/SendGrid fanout configuration, which is unknown from the repo;
   - state in the PR description that concentration breaches stop arriving as `portfolio.risk.drawdown_breach`.
-- **Peer overlap, non-blocking.** `fix-read-path-owner-trust` (312) may narrow untargeted `ListAlerts` visibility; either
-  merge order is code-safe (D-11). `otel-env-provider-scoped-alerts` (333, `spec-ready`) edits the same
-  `packages/otel/alerts/alert-rules.yaml`; whichever merges second re-greps and re-pins the rule count. Step 6 records both.
+- **Peer overlap, non-blocking** (no migration, proto or config-key collision; statuses read on 2026-11-20). Step 6
+  records all of these in `merge-order.md`:
+  - `fix-read-path-owner-trust` (312, `spec-ready`) may narrow untargeted `ListAlerts` visibility; either merge order is
+    code-safe (D-11).
+  - `otel-env-provider-scoped-alerts` (333, `spec-ready`) edits the same `packages/otel/alerts/alert-rules.yaml`;
+    whichever merges second re-greps and re-pins the rule count.
+  - `fix-portfolio-internal-position` (357, `in-progress`) rewrites the position read inside `checkRiskLimits` and
+    `broadcastSnapshot` in the same `portfolio_service.go` (357 `implementation-spec.md` Steps 6–7). Step 3 here edits
+    the two `emitRiskAlert` call sites and `evaluateDrawdowns` in that function block, so this is a same-function
+    overlap: whichever merges second resolves it by hand and re-runs both features' `TestCheckRiskLimits*` tests. 357
+    Step 6 asserts the drawdown notify body, which Step 3 keeps byte-identical (D-4).
+  - `fix-trading-config-plumbing` (321, `implementation-ready` on its branch) replaces the `maxRetries` value used by the
+    `flattenAndHalt` retry loop (321 `implementation-spec.md:330-332`, `:358`). Step 1 here edits the two `haltAccount`
+    calls in and after that loop. Adjacent lines, different statements; rebase-only.
+  - `metrics-host-provider-label` (337, `in-progress`) edits `scripts/tests/test_check_otel_produced_signals.py` at
+    other tests (337 `implementation-spec.md:509-514`); Step 5 here edits the two rule-count sites. Rebase-only.
+  - `fix-position-fold-correctness` (311, `spec-ready`) is expected to touch `portfolio_service.go` near `:260` and
+    `:419` (per 357 `implementation-spec.md:66`); 311 and 312 have no implementation spec yet, so this is a forecast.
 - Line anchors drift when `main-dev` moves again; re-grep each symbol in § Anchor Table before editing.
 
 ---
@@ -134,6 +160,9 @@ Line numbers on the two trees. Steps cite the symbol plus the feature-tree line;
   `flattenAndHalt` call at `trading.go:3096` (`errors.Is(err, broker.ErrRateLimited)` branch).
 - Current halt alert, `trading.go:2892-2898`: `Category: "halt"`, `Title: fmt.Sprintf("Account halted: %s", accountID)`,
   no `TargetUserId`. Current reconciliation alert, `trading.go:2026-2032`: `Category: "reconciliation"`, no `TargetUserId`.
+- All four `emitReconciliationFinding` calls — the three order-level ones and the position-level one — sit inside the
+  single `for accountID, entry := range brokerMap` loop body (`main-dev` `trading.go:2173-2342`; calls at `:2222`,
+  `:2232`, `:2266`, `:2334`), so `entry.userID` is in scope at each; the position block already reads it at `:2291`.
 - Owner sources: `for accountID, entry := range brokerMap` (`trading.go:2067`; `entry.userID` already used at `:2188`);
   `accountEntry, ok := s.brokers[bracket.AccountID]` (`trading.go:2910`).
 - Pattern to reuse: `TargetUserId:  order.UserId` (`trading.go:3509`).
@@ -208,6 +237,10 @@ grep -n "haltAccount(\|emitReconciliationFinding(" internal/service/*.go  # ever
 - Templates: `TestReconcileTick_QuantityDiscrepancy_PastGraceWindow_HaltsAndEmits` (`trading_reconciliation_test.go:539`)
   and `TestReconcileTick_MissingBrokerOrder_HaltsAndEmits` (`:576`). Both build the pool entry with `userID: "u-1"` and
   pass `&fakeNotifyClient{}` inline to `newTestReconciliationService` (`:168`).
+- Other finding sites: `TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState` (`:258`, sub-tests `filled`
+  and `new`, class `unknown_broker_order`) and `TestReconcileTick_PositionQuantityDiscrepancy_CaughtViaPositionSide`
+  (`:608`, the position-level call). Both build the pool entry with `userID: "u-1"`, pass `&fakeNotifyClient{}` inline
+  and today assert only the `reconciliation.mismatch_found` event.
 - Systemic home: `TestReconcileTick_SystemicThresholdCrossed_EscalatesToReduceOnly` (`:762`); both accounts fail
   `ListOrders`, so the systemic alert is the only alert that test emits.
 - `fakeNotifyClient` records `calls []*notifyv1.EmitAlertRequest` under `mu` (`trading_bracket_test.go:176-187`).
@@ -235,6 +268,11 @@ grep -n "haltAccount(\|emitReconciliationFinding(" internal/service/*.go  # ever
 3. In both templates (`:539`, `:576`): hoist the notify fake into a variable and assert, after the existing checks:
    exactly two alerts; the `halt` alert and the `reconciliation` alert are both `ALERT_SEVERITY_CRITICAL` with
    `TargetUserId == "u-1"`. This pins the accepted double push: both are targeted and neither is suppressed.
+   Then, in the unknown-order test (`:258`, inside each sub-test) and the position-side test (`:608`): read
+   `svc.notify.(*fakeNotifyClient)` and assert with the helper that the `halt` alert and the `reconciliation` alert both
+   have `TargetUserId == "u-1"`. With the two templates this covers all three mismatch classes and all four call
+   sites. If the helper's exactly-one check fails at RED for a reason other than an empty `TargetUserId`, stop and
+   report it; do not loosen the helper.
 4. In the systemic test (`:762`): hoist the notify fake and assert exactly one alert whose `Title` starts with
    `Systemic broker-reconciliation failure` and whose `TargetUserId == ""`. This is a guard: it is green before and after.
 5. Add `TestReconcileTick_EmptyOwner_WarnsAndAlertsUntargeted`, modelled on the `:576` template with `userID: ""`:
@@ -246,18 +284,20 @@ grep -n "haltAccount(\|emitReconciliationFinding(" internal/service/*.go  # ever
    `Category == "halt"` has `TargetUserId == "user-1"`. Filter by category; the flatten path may record other alerts.
 7. Test data (C-13): the owner and account ids are string sentinels already inline in these files; no domain object gets a
    second consumer, so they stay inline and `internal/testdata` is not extended.
-8. Fill-state and broker constraints: fill handling and broker dispatch are unaffected; the templates already cover the
-   partial-fill (`:539`) and missing-order (`:576`) findings.
+8. Fill-state and broker constraints: fill handling and broker dispatch are unaffected; the templates cover the
+   partial-fill (`:539`) and missing-order (`:576`) findings, and instruction 3 adds the unknown-order and
+   position-side findings.
 9. New logic is in the CI-excluded `service/` package — no coverage threshold applies to it; the run below still reports
    the service total.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-trading
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
+export GOWORK=off
+COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
   && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
   && go tool cover -func=coverage.out | grep "^total:"        # confirm >= 40%
-GOWORK=off golangci-lint run --modules-download-mode=mod
+golangci-lint run --modules-download-mode=mod
 git diff --exit-code go.mod go.sum                             # the lint run must not rewrite them (fails.md 2026-11-10)
 grep -c 'userID: "u-1"' internal/service/trading_reconciliation_test.go   # C-13: inline ids, no new fixture home
 ```
@@ -330,7 +370,6 @@ grep -n 'emitEventAs(ctx, userID, eventType, "portfolio:risk"' internal/service/
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go` — modify
 - `services/xstockstrat-portfolio/internal/service/portfolio_risk_test.go` — modify
-- `docs/roadmap/features/315-fix-alert-event-targeting/acceptance.feature` — modify (append `@AC-3`)
 
 **Reviewers**: `xstockstrat-portfolio` owner — P&L calculation accuracy, position snapshot consistency, concurrent write safety
 
@@ -348,8 +387,9 @@ grep -n 'emitEventAs(ctx, userID, eventType, "portfolio:risk"' internal/service/
 - `TestEvaluateDrawdowns` (`portfolio_risk_test.go:27`) treats the result as `[]string` at `:33-58`.
 - Fixture home exists: `internal/testdata` — `Aapl` (`offline_pnl.go:15`), `Tsla` (`:23`), `Lyft` / `Msft` / `Elwt`
   (`marks.go:7`, `:15`, `:19`).
-- `acceptance.feature` holds `@AC-1` and `@AC-2` only; its scenarios carry `@regression` and a `# guards:` comment, no
-  `@FR-*` tag (bug template).
+- `acceptance.feature` holds `@AC-1`, `@AC-2` and `@AC-3` (`grep -c "@AC-"` → 3); `@AC-3` was added by
+  `/sdd-review impl-spec` on 2026-11-20. Its scenarios carry `@regression` and a `# guards:` comment, no `@FR-*` tag
+  (bug template).
 
 **Lands with**: `Step 3`
 
@@ -358,17 +398,8 @@ grep -n 'emitEventAs(ctx, userID, eventType, "portfolio:risk"' internal/service/
 **Covers**: `AC-2, AC-3`
 
 **Instructions**:
-1. Append this scenario to `acceptance.feature` (IDs are append-only; do not touch `@AC-1` / `@AC-2`):
-   ```gherkin
-     # guards: docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md
-     @AC-3 @regression
-     Scenario: a drawdown breach still emits a drawdown event, attributed to the owner and account
-       Given portfolio.risk.max_drawdown_pct is 0.10
-       And user "user-1" has account "acct-1" with equity 8500.00 and peak equity 10000.00 and no concentration breach
-       When checkRiskLimits runs for "user-1"
-       Then the appended ledger event type is "portfolio.risk.drawdown_breach"
-       And the event is owned by "user-1" and its payload carries user_id "user-1" and account_id "acct-1"
-   ```
+1. Do not edit `acceptance.feature`: `@AC-3` is already there. Read it and confirm that test (b) below matches its
+   values (limit `0.10`, user `user-1`, account `acct-1`, equity `8500.00`, peak `10000.00`).
 2. **RED first.** Tests (a) and (b) below compile against the pre-Step-3 tree. Write them before Step 3 and capture the
    failing run. Expected RED: (a) the event type is `portfolio.risk.drawdown_breach` and the payload has no `user_id` or
    `symbol`; (b) the payload has no `user_id` or `account_id` and `UserId` is empty.
@@ -404,10 +435,11 @@ grep -n 'emitEventAs(ctx, userID, eventType, "portfolio:risk"' internal/service/
 ```bash
 cd services/xstockstrat-portfolio
 GOWORK=off go test ./internal/service/ -race -count=1 -run 'TestCheckRiskLimits|TestEvaluateDrawdowns|TestEmitRiskAlert'
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
+export GOWORK=off
+COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
   && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
   && go tool cover -func=coverage.out | grep "^total:"        # confirm >= 40%
-GOWORK=off golangci-lint run --modules-download-mode=mod
+golangci-lint run --modules-download-mode=mod
 git diff --exit-code go.mod go.sum
 grep -n "testdata\.\(Aapl\|Lyft\|Msft\|Elwt\|Tsla\)" internal/service/portfolio_quote_deadline_test.go   # C-13: symbols from the fixture home
 grep -c "@AC-" ../../docs/roadmap/features/315-fix-alert-event-targeting/acceptance.feature               # 3
@@ -419,6 +451,8 @@ grep -c "@AC-" ../../docs/roadmap/features/315-fix-alert-event-targeting/accepta
 
 **Status**: `pending`
 **Service**: `packages/otel` (provisioning asset; not a config key, so the C-05 config-key contract does not apply)
+**Category note**: `config` is the nearest of the seven template categories for a provisioning file. The product spec
+declares no config key, and this step adds no namespace, key, `value_type`, seed migration or reader.
 **Files** (paths on the `main-dev`-merged tree):
 - `packages/otel/alerts/alert-rules.yaml` — modify
 - `packages/otel/produced-signals.tsv` — modify
@@ -524,6 +558,7 @@ grep -n "Four alert rules" packages/otel/alerts/README.md
   **ordinary, per-account** halt" (`main-dev` `docs/reconciliation.md:31`).
 - `merge-order.md`: non-blocking prose sections end the file (`## Textual overlap: 300 ↔ 304 (2026-11-09, non-blocking)`,
   feature tree `:355-364`); each closes with "Operator-approved as a prose note so it does not gate either integration PR."
+- `grep -n "315\|alert-event" docs/roadmap/features/merge-order.md` → no match; the file has no entry for this feature.
 - Peer 312: `docs/roadmap/features/312-fix-read-path-owner-trust/product-spec.md:94` (Open Question 2, untargeted
   `ListAlerts` visibility). Peer 333: `packages/otel/docs/context-constitution-findings.md:14` on `main-dev`.
 
@@ -553,7 +588,10 @@ grep -n "Four alert rules" packages/otel/alerts/README.md
    - 315 ↔ 312: no file overlap; either merge order is code-safe; 312 Open Question 2 may narrow untargeted `ListAlerts`
      visibility, which changes who sees 315's empty-owner fallback and the systemic alert;
    - 315 ↔ 333: both edit `packages/otel/alerts/alert-rules.yaml`, its README and the guard's rule-count test; whichever
-     merges second re-greps and re-pins the count, and 333 scopes the new rule by environment with the others.
+     merges second re-greps and re-pins the count, and 333 scopes the new rule by environment with the others;
+   - 315 ↔ 357, 321, 337 and 311: one line each, taken from § Step Dependencies (same-function overlap with 357 in
+     `checkRiskLimits`, resolved by hand by whichever merges second; rebase-only for the rest). Re-read each peer's
+     status first and drop a peer that has already merged.
    Add no table row: there is no hard ordering constraint.
 6. Keep each edit to the named section; do not reformat neighbouring rows.
 
