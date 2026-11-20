@@ -529,3 +529,32 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ### Open Threads
 - **Outside Step 4's Files, not edited:** `docs/context-constitution-findings.md:95` still lists the `2026-10-19-live-enrich-ttl-seed-below-poll-defect` report in the open defect-report index; it closes with the report's sidecar at launch (`/sdd-archiver`). `services/xstockstrat-ui/src/hooks/useOhlcBars.ts:9` comments "matches the server-side live_enrich_ttl_seconds bump" next to `120_000`; it names no seed value, so it is not a stale-`10` surface.
+
+## Session 2026-11-20 — integration-PR prep (branch sync, renumber, stored-set regen)
+
+- **BRANCH SYNC.** Merged `origin/main-dev` @ `831618f3` into `feature/fix-live-enrich-ttl-seed` (merge commit
+  `4b59d436`). Conflicts: `scripts/config-wiring-stored.json` took main-dev's side (regenerated below);
+  `docs/patterns/config-governance.md` § Per-Feature Registered Keys kept both sides, with the feature-330 entry
+  first (newest first) above main-dev's 352/347/343/341 entries. `ledger-guard --own-slug … --base origin/main-dev --fix`: clean.
+  The post-merge diff vs `origin/main-dev` touches only this feature's files.
+- **Merge checklist → renumber `050` → `055`** (commit `e9aff843`). Trunk now holds `050_ui_chart_history_bars`,
+  `051`, `052` and `054` (no `053`). No `origin/feature/*`, `origin/ccr-*` or `origin/claude/*` ref (164 scanned)
+  holds `053` or anything above `054`, and `git log --all` finds no `053*`/`055*`/`056*`/`06*`; so `055` =
+  max(trunk) + 1. The SQL, test and docs are number-free (grep: no hits); the spec's Step 2 Files/Evidence/Verification
+  text names `055`. Key-overlap re-scan (`git grep -l live_enrich_ttl_seconds` over 214 remote refs, migrations +
+  `scripts/migration-assertions`): only `028`, `041` and this feature's reseed.
+- **Stored-set regen (commit `59a72463`).** CI-equivalent fallback again (operator authorization 2026-11-13,
+  re-confirmed 2026-11-20): throwaway PostgreSQL 16 cluster from `/usr/lib/postgresql/16/bin`, run as the
+  `postgres` user on a `mktemp -d` dir under `/var/tmp` (`127.0.0.1:55433`), `migrate` from `~/go/bin`
+  (postgres driver). `DATABASE_URL=<that cluster> python3 scripts/config-wiring-stored.py` applied 001…055; the output
+  is committed unedited. Diff vs main-dev: `inputs_sha256` plus the staging/production `analysis` /
+  `opportunity.live_enrich_ttl_seconds` descriptions only. The cluster was stopped and its directory deleted.
+- **Re-verification (offline, after the cluster was deleted):** Step 1 suite `# tests 8 / # pass 8`; config
+  `test:coverage` `# tests 392 / # pass 392`, c8 lines 92.26 (≥ 40); `pnpm run lint` 0 errors;
+  `check-config-wiring --keys analysis.opportunity.live_enrich_ttl_seconds` silent; `--final` exit 0 (two baseline
+  `REPORTED:` lines); `config-wiring.test.mjs` `# tests 75 / # pass 75`; analysis `test_live_enrich_memo.py` 5 passed,
+  full suite 1757 passed at 91.63% (≥ 40); `ruff check` / `ruff format --check` clean; C-13 import grep hit `:22`.
+- **Re-check trigger (318).** `scripts/db-migrate.sh` is unchanged on trunk since #1327; its `up` path still runs
+  plain `migrate -path "$dir" -database "$url" up` (`:104`, after `render-migrations.sh`), no `x-multi-statement`.
+  Feature 318 is `spec-ready` and its branch adds only SDD docs. No migration-ordering CI gate was added since
+  `d5de836b`; `check-migration-contract.py` checks only `-- contract-of:` headers.
