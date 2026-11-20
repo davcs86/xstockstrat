@@ -42,6 +42,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go` — `toGRPCError(ctx, err)` cast / inbound-ctx / Internal branches, 19 call sites (Steps 1+2).
 - `services/xstockstrat-marketdata/internal/handler/marketdata_handler_test.go` — translator tables and the AC-2 chain test (Steps 1+2).
 - `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go` — `toGRPCError` numeric cast, signature unchanged (Step 3).
+- `services/xstockstrat-portfolio/internal/handler/portfolio_handler_test.go` — `TestToGRPCError` AlreadyExists, Aborted and Unknown rows (Step 4).
 - `docs/roadmap/features/326-fix-grpc-status-mapping/implementation-spec.md` — written in sdd-spec, patched in sdd-review, re-specced for steps 2, 3 and 6 in `498e07c0`.
 - `docs/roadmap/ledger/insights.md` — union-resolved merge conflict in the main-dev sync merge `c1b5428f`.
 - Feature dir: status.md, feature.md, product-spec.md, acceptance.feature, context.md (triage); recon.md, debate.md, design.md (design).
@@ -576,4 +577,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Replaced the seven-case switch with the D-1 cast: a `*connect.Error` other than Internal/Unknown returns `status.Error(codes.Code(connectErr.Code()), connectErr.Message())`, else the unchanged `codes.Internal` with `err.Error()`. The signature is unchanged (D-6), so none of the 18 call sites is edited and `classifyGetPnLError` is untouched.
 - TDD: AC-3 (translator half) red with Step 4's three rows applied temporarily: "already exists: got Internal, want AlreadyExists" and "aborted: got Internal, want Aborted" (`.sdd-logs/v-1.log`, exit=1) → green: `ok github.com/xstockstrat/portfolio/internal/handler` (`.sdd-logs/v-2.log`, exit=0). The rows were then reverted because they belong to Step 4's Files. Step 3 Verification on the committed tree: exit=0 (`.sdd-logs/v-3.log`).
 - Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`
+- Deviations: none
+
+## Session 2026-11-20 — sdd-execute sequential (sdd-batch-execute), Step 4
+
+- Tooling setup (step 4): go1.27 ✓ · golangci-lint ✓ v2.14.0 (`/root/go/bin`, built with go1.27.0, run ahead of the v2.5.0 on PATH).
+
+### Step 4 — test: portfolio `TestToGRPCError` AlreadyExists, Aborted and Unknown rows [done]
+- Appended three rows to the `TestToGRPCError` table: `already exists` → AlreadyExists (AC-3 translator half), `aborted` → Aborted, `unknown stays internal` → Internal (the design.md §2 cast exclusion).
+- TDD: AC-3 red (the pre-cast translator from `69e1328e` restored temporarily in the worktree, then reverted): "already exists: got Internal, want AlreadyExists" and "aborted: got Internal, want Aborted", FAIL (`.sdd-logs/v-1.log`, exit=1) → green on the committed Step 3 translator: `--- PASS: TestToGRPCError`, all packages ok, total 81.8% (≥ 40%), golangci-lint v2.14.0 "0 issues." (`.sdd-logs/v-2.log`, exit=0).
+- Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler_test.go`
 - Deviations: none

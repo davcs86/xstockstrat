@@ -349,7 +349,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... \
 
 ### Step 4 — test: portfolio `TestToGRPCError` AlreadyExists, Aborted and Unknown rows
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/handler/portfolio_handler_test.go` — modify
