@@ -556,7 +556,8 @@ Accountability (P-03):
   logged in. Operator's curl results from outside the tailnet against the public staging host:
   `/agent/api/tools` → 404; anonymous `/accounts/api/mcp-tools` → 307 to `/auth/login`; both
   OAuth discovery documents → 200; port 50061 → connection timed out.
-- Not verified live: the agent's own 401 on the removed route. The public 404 comes from the
-  homelab edge, which blocked that path before the fix too; the agent tests assert the 401.
+- Removed route, verified live on the staging VM (operator): `http://127.0.0.1:9000/api/tools`
+  → 401 from the agent itself. The public 404 above comes from the homelab edge, which blocked
+  that path before the fix too.
 - Status stays `code-completed`; `launched` is set at promotion to `main`. The defect report
   sidecar stays `triaged` (ref feature 360) until then.
