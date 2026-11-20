@@ -21,9 +21,9 @@ Feature: fix-grpc-status-mapping (bug fix)
   # guards: docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.md
   @AC-2 @regression
   Scenario: a raw context deadline on GetSectorHistory reaches the caller as DEADLINE_EXCEEDED
-    Given the GetSectorHistory service call returns context.DeadlineExceeded
-    When a client calls GetSectorHistory over gRPC
-    Then the client receives gRPC status DEADLINE_EXCEEDED, not INTERNAL
+    Given the classification store returns the caller's expired context error for a non-empty symbol set
+    When the GetSectorHistory gRPC handler is called with that expired context
+    Then the GetSectorHistory handler returns gRPC status DEADLINE_EXCEEDED, not INTERNAL
 
   # guards: docs/reports/2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect.md
   @AC-3 @regression
