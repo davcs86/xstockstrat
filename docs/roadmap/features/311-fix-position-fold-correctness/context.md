@@ -1848,3 +1848,283 @@ Written by the orchestrating session itself. Each entry quotes the question and 
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-batch design gate (round 8)
+
+- `/sdd-design fix-position-fold-correctness` (full) halted at its approval gate after round 8 (gate policy: halt). design.md NOT written; status.md unchanged (spec-ready). Register: `debate.md` (D-1..D-45, R-1..R-33, O-1..O-62, P-1..P-7). Round 8 settled D-39..D-45, locked R-31..R-33, closed O-46, O-52..O-55 and O-57, and opened O-58..O-62. Nothing was reopened and no petition was filed; P-5..P-7 are still pending user.
+
+## Open Threads
+
+- **Approach (round-8 synthesis).** Sections 1-3 and 6-8 of the round-7 synthesis stand (D-1..D-3, D-5..D-16, D-18..D-28, D-31..D-38). Round 8 changes only the cutover, the trading `012` migration and the rollback rule.
+  - **Leg adoption replaces the seed.** Trading `012_bracket_legs` is DDL only, with `filled_qty NOT NULL` and an `adopted` flag whose only reader is the D-11 fallback sort (D-39). Pre-existing open legs are adopted inside `pollBracketLegFills`: candidates are `order_brackets` leg ids on ACTIVE or CANCELING brackets that are not yet in `bracket_legs`, each matched only against the `ListOrders` result the tick already holds, with no GetOrder call. A leg listed open at fill 0 is tracked; one listed open at fill > 0 is inserted `BASELINE_RETIRED` with no emit; anything else is not inserted (D-40). The parent's `trading.orders` row is joined read-only, which D-3 permits (D-41). The forward-only gap is restated to match the code (D-42).
+  - **Cutover.** The numbered step runs at the first deploy of a post-019 portfolio image to each staging target (DO `xstockstrat-staging`, and the homelab staging VM while enabled), with one recorded result per database. The DO stop removes the portfolio service from the live spec; the homelab stop is `gate deploy` or a manual compose stop. Neither method can be verified from this repo. "Portfolio stopped, T_stop recorded, main-dev frozen" is an unenforced checklist item on the integration PR and in `merge-order.md` (D-43).
+  - **Rollback.** If a pre-019 image ran after the floor was stamped: stop portfolio, delete the `order_fill` floor row, repeat the cutover step. A rollback is noticed through the Deploy runs; there is no boot-time detection, because the old binary's writes carry no marker (D-44). The floor is stamped only at boot and is not lowered to T_stop (D-45).
+  - **Production.** Check only: before the first promotion, record the `portfolio.positions` and ledger `order.filled` counts per production database; a non-zero count blocks the promotion until the operator rules. The proposer's stop-then-start-on-production branch is withdrawn from the approach.
+- **Strongest open objection.** O-58, blocking: adoption may never fire. With `012` DDL-only, every account starts with zero `bracket_legs` rows, and nothing in the register forces the D-11 `ListOrders` call for an account with no tracked legs. Without that call the O-46 fix is a silent no-op. The proposer must confirm that `pollBracketLegFills` issues `ListOrders` for every account with at least one adoption candidate, with a test that starts from zero `bracket_legs` rows and one open ACTIVE leg. One more blocking objection is open, O-59: the proposal's production stop-then-start goes beyond the staging-only ruling (`context.md:1535-1541`) and stops portfolio on a live account, where `flattenAndHalt` and the reduce-only exposure check then fail. The proposer must confirm the check-only form, and the non-zero case goes to the operator.
+- **Floor status.** No Floor breach. The design is not approvable this round: the three round-7 blocking objections (O-46, O-52, O-53) are answered, but two new blocking objections remain (O-58, O-59) and the proposer has answered neither.
+- **Uncovered @AC changes.** None; unchanged from round 7. `@AC-5` CHANGE is covered by the operator's C-16 sign-off (`context.md:1530-1534`). 251 @AC-17, 206 trading @AC-1 and 294 @AC-56 are EXTEND, each covered by a recorded ruling. @AC-1..@AC-4, 251 @AC-14, 206 trading @AC-2, 294 @AC-6 and 290 @AC-3 PRESERVE.
+- **Operator sign-offs still needed.**
+  - **Production with fold history (O-59).** What happens when the production counts are non-zero. The adversary's candidate is to set `platform.trading_state=HALTED` before the stop, restore it after the boot log line, and record both config changes.
+  - **Cutover confirmations (O-61),** to be answered before `/sdd-execute` reaches the integration step:
+    1. DO accepts a spec with the portfolio service removed while `.do/app.dev.yaml:78` and `:319` still reference `${xstockstrat-portfolio.PRIVATE_DOMAIN}`.
+    2. `doctl apps spec get` round-trips the encrypted secret values.
+    3. Homelab `gate deploy` recreates portfolio stop-then-start, or the operator can stop it on the VM.
+    4. `gate deploy` exits non-zero when the VM rolls back.
+    5. Trading's failed portfolio calls during the stop are acceptable on paper staging.
+    6. Alpaca lists bracket legs as top-level orders in every open state.
+    If 1 or 2 fails there is no verified DO stop, and scoping DO staging as disposable for this cutover needs its own ruling.
+  - **Register verdicts (O-56).** P-5, P-6 and P-7 recorded as "user reopened" citing `context.md:1535-1541`, and P-4 as withdrawn.
+- **Non-blocking, for the proposer.** O-60 (adoption details: the D-19 terminal predicate so a `held` leg is adopted, every parent-derived column filled, the adoption cadence across a rolling overlap, the candidate query's row count or a partial index, the DDL comment on `adopted`); O-62 (confirm the freeze evidence in the recorded result and that the delete-floor step applies on DO only after a deliberate console rollback); O-30 (enumerate the affected analysis AC ids at `/sdd-spec`).
+
+```sdd-batch-design-state
+{
+  "round": 8,
+  "synth": {
+    "approach": "Round-8 synthesis. Sections 1-3 and 6-8 of the round-7 synthesis and its tests stand unchanged (D-1..D-3, D-5..D-16, D-18..D-28, D-31..D-38). Only section 4 (cutover), section 5 (trading 012 and leg adoption) and the rollback rule change. All paths are under `/home/user/xstockstrat/.claude/worktrees/orch-311`.\n\nVerified this round\n- Bracket status constants are NONE 0, SUBMITTING 1, PENDING_VERIFY 2, ACTIVE 3, CANCELING 4, CANCELED 5, FAILED 6 (`services/xstockstrat-trading/internal/service/trading.go:3451-3459`; `services/xstockstrat-trading/migrations/005_broker_accounts_halted.up.sql:17`). The partial index covers only `status IN (0,1,2,4)` (`005:29-31`), so status 3 is unindexed.\n- The DO deploy applies the whole rendered spec with `doctl apps update \"$APP_ID\" --spec … --update-sources` (`.github/workflows/deploy.yml:101`) and exits 1 on phase ERROR or CANCELED (`:129-131`).\n- Two staging targets deploy on a main-dev push: DO app `xstockstrat-staging` and the homelab staging VM, the latter only while `HOMELAB_STAGING_ENABLED` is true (`docs/patterns/ci-overview.md:58,60,68`). The homelab VM rolls back on its own (`:76`). The gate exposes only `put`, `deploy`, `status` (`.github/workflows/deploy-homelab.yml:189-194`).\n- Other components reference `${xstockstrat-portfolio.PRIVATE_DOMAIN}` (`.do/app.dev.yaml:78,319`). Neither side raised this. A spec with the portfolio service removed leaves those references dangling, so DO may reject it.\n- The operator's cutover ruling is staging-only and rests on the premise that production has never launched (`docs/roadmap/features/311-fix-position-fold-correctness/context.md:1535-1541`).\n\n4. CUTOVER (D-36 stands; this fills in targets, stop method and result)\n- Scope: the numbered runbook step runs at the first deploy of a post-019 portfolio image to each staging target: DO `xstockstrat-staging`, and the homelab staging VM while enabled. One recorded result per database.\n- DO stop: `doctl apps spec get <APP_ID>`, delete the `xstockstrat-portfolio` service block, `doctl apps update --spec`, wait for ACTIVE, record the finish time as T_stop. The integration push re-creates the component from `.do/app.dev.yaml:99-107` with no old instance running. Instance count 0 is not relied on. This method is NOT verified from the repo (see the operator gate item).\n- Homelab stop: either `gate deploy` recreates the single portfolio container stop-then-start, or the operator runs `docker compose stop xstockstrat-portfolio` on the VM before the merge. Not verifiable from this repo (implementation lives in homelab-edge).\n- Merge precondition: 'portfolio stopped on every enabled staging target, T_stop recorded, main-dev frozen (merge-train included)' is a checklist item in the integration PR body and in `docs/roadmap/features/merge-order.md`. It is not enforced; the recorded result is the audit. If the freeze breaks, the stop is redone.\n- Recorded result per database, written to context.md: target name; T_stop; `consumer_floors.floor_recorded_at`; the boot log line naming it with `stamped_now=true`; the count of `order.filled` ledger rows in `[T_stop, floor)`; the green deploy run. Adopted from adversary r8 as freeze evidence: the main-dev SHA at T_stop, which must equal the integration merge's first parent, and the list of Deploy workflow runs between T_stop and the integration run, which must be empty.\n- Production: check only. Before the first production promotion, record the counts of `portfolio.positions` rows and ledger `order.filled` rows on each production database. If either is non-zero, the promotion does not proceed until the operator rules. No production stop is designed here: the ruling is staging-only, and a stopped portfolio on a live account breaks `flattenAndHalt` and the reduce-only exposure check. The proposer's stop-then-start-on-production branch is withdrawn from the approach.\n- The boot stamp alone is kept (O-54). The floor is not lowered to T_stop.\n\nROLLBACK (after the floor is stamped)\n- Rule: if a pre-019 portfolio image ran after the floor was stamped, (1) stop portfolio by the same method, (2) `DELETE FROM portfolio.consumer_floors WHERE consumer = 'order_fill'`, (3) repeat the cutover step.\n- Where the hazard exists: the integration deploy on the homelab VM, and any deliberate old-image deploy (a `deploy-homelab.yml` `image_tag` dispatch, or a DO console rollback). On DO, the deployment before the integration deploy is the stop spec with no portfolio component, so an automatic DO rollback restores no old portfolio (adversary r8 correction, adopted).\n- How it is noticed: the DO Deploy run goes red on ERROR (`deploy.yml:129-131`); on homelab, `gate deploy` and `gate status`. The runbook step requires both runs green before the result is recorded.\n- No boot-time detection, with the recorded reason: a pre-019 binary writes nothing that tells its writes apart from position sync or normal catch-up, and the operator ruled out writer markers (`context.md:1538-1540`). The `stamped_now` log field is for the audit only.\n\n5. TRADING MIGRATION `012_bracket_legs` AND LEG ADOPTION (replaces the seed)\n- `012` is DDL only, with no seed INSERT. Columns as in D-7 and D-37, plus `filled_qty NOT NULL` and `adopted BOOLEAN NOT NULL DEFAULT false`. `adopted` has one reader, the D-11 fallback sort.\n- Adoption runs inside `pollBracketLegFills` (the D-22 callee after `logTick`).\n- Candidates, one read-only query: `trading.order_brackets` leg ids where `status = ANY($1)`, with `$1` bound from `bracketStatusActive` and `bracketStatusCanceling`; leg id non-empty; not already in `bracket_legs`; joined read-only to the parent's latest `trading.orders` row.\n- Each candidate is matched only against the `ListOrders` result the tick already holds. No GetOrder call is made for adoption.\n  - Listed, non-terminal, `FilledQty == 0`: insert tracked, `filled_qty = 0`, `observed_filled_qty = 0`, `adopted = true`.\n  - Listed, non-terminal, `FilledQty > 0`: insert `BASELINE_RETIRED`, no emit, `observed_filled_qty = FilledQty` (R-7, R-12).\n  - Otherwise: not inserted. No tracked leg is retired for absence (R-10).\n- Inserts are `ON CONFLICT (account_id, leg_order_id) DO NOTHING`. A failed query or `ListOrders` retries next tick.\n- In the D-11 GetOrder fallback, `adopted = true` rows sort after rows written by `ActivateBracket`.\n- Adopted from adversary r8, pending proposer confirmation:\n  - `ListOrders` is issued for every account that has at least one adoption candidate, even with zero tracked rows. Without this, adoption never fires after a DDL-only 012.\n  - 'Non-terminal' is the D-19 terminal predicate (`held` and unrecognised statuses count as open).\n  - The join fills every parent-derived column `ActivateBracket` writes: user_id, trading_mode, account, symbol, side (through the `UpsertOrder` helper and `oppositeSide`), parent order id.\n- Accepted forward-only gap, matching the code. Never tracked: legs not open on the adoption tick (every leg filled or cancelled before cutover); ids blanked by `resizeBracket` (`trading.go:3612`); legs on CANCELED (5) or FAILED (6) brackets; Alpaca open legs outside the newest 500 of `status=all` (`services/xstockstrat-trading/internal/broker/alpaca.go:376`); IBKR legs the gateway no longer returns. The remainder of a `BASELINE_RETIRED` leg is not observed.\n\nTESTS added this round (trading)\n- Adoption at fill 0 tracks; at fill > 0 retires with no emit.\n- A status 5 or 6 bracket is never adopted; a leg absent from the list is never inserted.\n- Adopted rows sort after `ActivateBracket` rows in the fallback; a second adoption run is a no-op.\n- Zero `bracket_legs` rows plus one open ACTIVE leg: the leg is adopted.\n- A `held` leg at fill 0 is adopted as tracked.\n- An adopted leg's later fill emits the full 251 payload.\n\nBUILD ORDER: unchanged from round 7, except step 1 (012 is DDL only), step 6 (adds adoption) and step 7 (the runbook gains the per-target cutover step, the rollback rule and the production check).",
+    "open_objections": [
+      {
+        "text": "Adoption may never fire. With 012 DDL-only, every account starts with zero bracket_legs rows, and nothing in the register forces the D-11 ListOrders call for an account with no tracked legs (broker.go:74). The proposer must confirm that pollBracketLegFills issues ListOrders for every account with at least one adoption candidate, and add a test that starts with zero bracket_legs rows and one open ACTIVE leg and asserts the leg is adopted.",
+        "blocking": true
+      },
+      {
+        "text": "The proposal's production branch (a full stop-then-start on production when positions or order.filled counts are non-zero) goes beyond the operator's staging-only ruling (context.md:1535-1541) and stops portfolio on a live account, where flattenAndHalt and the reduce-only exposure check then fail. The synthesis reduces it to a check that blocks the promotion on a non-zero count. The proposer must confirm the check-only form, and the non-zero case must go to the operator as a gate item (the adversary's candidate: set platform.trading_state=HALTED before the stop, restore after the boot log line, record both config changes).",
+        "blocking": true
+      },
+      {
+        "text": "Adoption details for the proposer to confirm: (a) 'non-terminal' is the D-19 terminal predicate, so an Alpaca held stop leg is adopted, with a test; (b) the join fills every parent-derived column ActivateBracket writes (user_id, trading_mode, account, symbol, side, parent order id), with a test that an adopted leg's later fill emits the full 251 payload; (c) once-per-process adoption misses brackets an old trading instance activates during a rolling overlap, so state the cadence (repeat until a pass adopts nothing, or re-run on the reconciliation interval); (d) the candidate query scans unindexed status 3 rows joined to the trading.orders hypertable (005:29-31), so state the expected row count or add a partial index in 012; (e) the DDL comment gives the adopted column's single purpose.",
+        "blocking": false
+      },
+      {
+        "text": "Operator-confirmation gate item, to be recorded in context.md and answered before /sdd-execute reaches the integration step: (1) DO accepts a spec with the portfolio service removed while .do/app.dev.yaml:78 and :319 still reference ${xstockstrat-portfolio.PRIVATE_DOMAIN}; (2) doctl apps spec get round-trips the encrypted secret values; (3) homelab gate deploy recreates portfolio stop-then-start, or the operator can stop it on the VM; (4) gate deploy exits non-zero when the VM rolls back; (5) trading's failed portfolio calls during the stop are acceptable on paper staging; (6) Alpaca lists bracket legs as top-level orders in every open state. If (1) or (2) fails there is no verified DO stop, and the fallback (the operator scopes DO staging as disposable for this cutover) needs its own ruling.",
+        "blocking": false
+      },
+      {
+        "text": "Proposer to confirm the runbook additions adopted from adversary r8: the recorded result carries the main-dev SHA at T_stop (equal to the integration merge's first parent) and an empty list of Deploy runs between T_stop and the integration run; and the rollback rule states that an automatic DO rollback of the integration deploy restores the stop spec with no portfolio, so the DELETE-floor step applies on DO only after a deliberate console rollback.",
+        "blocking": false
+      },
+      {
+        "text": "O-30: the analysis AC ids in order-snapshots-pnl-patterns.feature and fix-python-loop-supervision.feature are still to be enumerated at /sdd-spec, and the D-10 flip-short window residual stays named.",
+        "blocking": false
+      },
+      {
+        "text": "O-56: the orchestrator still has to record P-5, P-6 and P-7 as 'user reopened' citing context.md:1535-1541, and P-4 as withdrawn. The proposer agrees.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "251 @AC-17",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "251 @AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "206 trading @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "206 trading @AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-56",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "294 @AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "290 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "A 012 migration seed of status 3 and 4 brackets with its own GetOrder budget. Lost: nothing moves a bracket off ACTIVE, so it still inserts every historically exited bracket, and under D-26 forgotten IBKR legs are never retired and would be polled forever even on a separate budget.",
+      "Lowering the floor to T_stop so window fills fold (O-54). Lost: it needs a manual UPDATE and another restart, and window fills a sync already applied would fold a second time, doubling qty until the next sync. Both sides rejected it.",
+      "Taking an adopted leg's symbol and side from in-memory s.orders in place of the read-only trading.orders join. Lost: the parents of open legs are FILLED and LoadInflightOrders does not hydrate them, so most adoptees would be skipped. BrokerOrder carries no symbol or side (broker.go:21-35), so the join is required.",
+      "A full stop-then-start on production when its tables hold history (proposal r8). Not adopted: the operator's ruling is staging-only and the stop breaks flattenAndHalt on a live account. It is not locked; it goes to the operator as a gate item.",
+      "A boot-time detector for a pre-019 binary having run after the floor was stamped. Lost: the old binary's writes cannot be told apart from position sync or normal catch-up without a writer marker, which the operator ruled out (context.md:1538-1540).",
+      "Scoping DO staging as disposable for this cutover. Not chosen now: the acked window becomes unbounded and unrecorded. It stays the named fallback if the DO stop cannot be confirmed, and needs an operator ruling."
+    ],
+    "open_risks": [
+      "The DO stop is unverified, and there is a concrete reason to doubt it: .do/app.dev.yaml:78 and :319 reference ${xstockstrat-portfolio.PRIVATE_DOMAIN}, so a spec with the portfolio service removed may be rejected.",
+      "The merge precondition and the main-dev freeze are not enforced. If portfolio is not stopped, or a push lands during the freeze, an overlap double-applies fills and only the recorded evidence shows it.",
+      "On the homelab VM an unattended rollback of the integration deploy restores the pre-019 portfolio after the floor is stamped. Noticing it depends on gate deploy exiting non-zero, which is unconfirmed.",
+      "Fills appended between T_stop and the first new boot are acked: qty heals at the next sync, realized P&L for them is lost. The window covers the stop, the freeze and the deploy.",
+      "While portfolio is stopped on staging, trading's portfolio calls fail: the risk check warns only, reconciliation skips, and flattenAndHalt cannot flatten.",
+      "If production holds fold history, the promotion is blocked on an operator ruling that does not exist yet.",
+      "Adoption depends on Alpaca listing bracket legs as top-level orders in every open state; this is unverified.",
+      "Reconciliation covers only tracked legs. Legs not open at the adoption tick, resize-blanked ids, legs on CANCELED or FAILED brackets, Alpaca legs outside the newest 500 and forgotten IBKR legs stay uncounted.",
+      "A BASELINE_RETIRED leg's post-cutover remainder is neither emitted nor observed, so realized P&L for it is lost and NetFilledQtyBySymbol can lag for that symbol.",
+      "Adopted IBKR legs that later vanish from the gateway are polled indefinitely (D-26); the set is bounded to legs open at adoption.",
+      "The adoption candidate query scans status 3 rows with no index and grows with bracket history.",
+      "Late-commit appends whose recorded_at is below the floor are acked (operator-accepted).",
+      "The floor assumes ledger and portfolio share one Postgres server clock.",
+      "If the composite GetPnL key is applied, a historical order whose partial and full fills carried different account_id values stops being deduplicated; the /sdd-spec history grep is the only check.",
+      "A parked fill is retried only after a manual delete of its parked row.",
+      "A fill transaction can wait server-side on the applied-row conflict or FOR UPDATE, holding 1 of 2 client connections and positionsMu.",
+      "The pre-check has a TOCTOU window covered only by the in-tx INSERT conflict path.",
+      "A position.updated can be emitted after a same-process sync has overwritten the row.",
+      "Boot replay re-walks every post-floor fill and consumer_applied_events has no retention.",
+      "A leg id is lost from tracking if the ActivateBracket tx fails; it is alerted, but its exit fill never folds.",
+      "Neither broker adapter populates BrokerOrder.Fees, so fee totals understate.",
+      "Migration numbers 019 and 012 may collide with feature 318.",
+      "OQ-2 (repair of already-inflated accumulators) is out of scope, and instance_count must stay 1."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-01",
+      "F-02",
+      "F-04",
+      "F-06",
+      "F-07",
+      "F-08",
+      "P-02",
+      "P-03",
+      "P-04",
+      "PLAT-N1"
+    ],
+    "rationale": "The design is not approvable this round. There is no Floor breach, and the three round-7 blocking objections (O-46, O-52, O-53) are answered. Two new blocking objections from the adversary remain, and the proposer has not yet answered either.\n\n**What I checked myself**\n- The status constants and the SMALLINT encoding match the proposal's predicate.\n- `deploy.yml:101` applies the full spec on every push, so the proposer is right that a console change is reset.\n- The cutover ruling in `context.md:1535-1541` is staging-only and assumes production has never launched.\n- New finding: `.do/app.dev.yaml:78,319` reference `${xstockstrat-portfolio.PRIVATE_DOMAIN}`. Removing the portfolio service leaves those dangling. Neither side saw this. I added it to the operator gate item and the risks.\n\n**What I took from each side**\n- **Adoption in place of a seed (proposer):** adopted. The operator steer asked for both options to be weighed. The seed loses because nothing moves a bracket off ACTIVE. The adversary agreed it honours R-7, R-10, R-12 and R-13 and found no register violation.\n- **Adoption trigger (adversary, blocking):** adopted into the approach, but it stays open and blocking until the proposer confirms it. Without it the whole O-46 fix can be a silent no-op.\n- **Production branch (adversary, blocking):** the adversary is right. I corrected the approach to a check that blocks the promotion, which stays inside the operator's ruling. The non-zero case needs the operator.\n- **Cutover and rollback (proposer):** adopted. The steer allows stop methods the repo cannot verify, provided the operator's confirmations are stated exactly; they are now one gate item.\n- **Freeze evidence and the DO rollback correction (adversary):** adopted.\n- **No boot-time detection (proposer):** accepted with the recorded reason. The steer allows that, and the adversary did not contest it.\n\n**Register check**\n- D-19 is narrowed, not reversed: no NULL writer remains.\n- D-3 is clarified, not changed: the join only reads `trading.orders`.\n- No locked R-n returns. Nothing is reopened this round and no petition was filed.\n\n**Closed:** O-46, O-52, O-53, O-54, O-55, O-57. **Still open:** O-30, O-56, and five new items.\n\n**Business rules:** unchanged from round 7.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Trading migration 012_bracket_legs is DDL only, with no seed INSERT. filled_qty is NOT NULL, and an adopted BOOLEAN NOT NULL DEFAULT false column is added whose only reader is the D-11 fallback sort. D-19 is narrowed: with no seed, nothing writes NULL.",
+          "evidence": "operator steer r8 (weigh a seed against a broker-side adoption); trading.go:3451-3459; 005_broker_accounts_halted.up.sql:17; D-19; R-13; proposal r8 item 1; adversary r8 found no register violation and accepted the column"
+        },
+        {
+          "text": "Pre-existing open legs are adopted inside pollBracketLegFills. Candidates are order_brackets leg ids with status bound from bracketStatusActive and bracketStatusCanceling, non-empty, not already in bracket_legs. Each is matched only against the tick's ListOrders result, with no GetOrder call. Listed and open at fill 0 is inserted tracked with adopted = true; listed and open at fill > 0 is inserted BASELINE_RETIRED with no emit and observed_filled_qty = FilledQty; anything else is not inserted. Inserts are ON CONFLICT DO NOTHING, and adopted rows sort after ActivateBracket rows in the D-11 fallback. What triggers the ListOrders call and how often adoption repeats are not part of this decision.",
+          "evidence": "D-11; R-7; R-10; R-12; broker.go:73-74; alpaca.go:407-413; ibkr.go:478-479; proposal r8 item 1; adversary r8 called it better than any seed and contested only the trigger, the classifier, the columns and the cadence"
+        },
+        {
+          "text": "D-3 clarified: it forbids leg writes to trading.orders or s.orders and the lifecycle calls (applyBrokerOrderStatus, maybeSubmitBracket). A read-only join to the parent's trading.orders row is permitted.",
+          "evidence": "D-3; R-30; trading.go:337-345,1903,1921; proposal r8 Assumptions; adversary r8 Register section"
+        },
+        {
+          "text": "The accepted forward-only gap is: legs not open on the adoption tick; ids blanked by resizeBracket; legs on CANCELED or FAILED brackets; Alpaca open legs outside the newest 500; IBKR legs the gateway no longer returns; and the unobserved remainder of a BASELINE_RETIRED leg.",
+          "evidence": "context.md:1546-1548 (operator ruling, forward-only); trading.go:3612; alpaca.go:376; proposal r8 item 1; adversary r8 did not contest"
+        },
+        {
+          "text": "Cutover scope and result: the step runs at the first deploy of a post-019 portfolio image to DO xstockstrat-staging and to the homelab staging VM while enabled, with one recorded result per database (target, T_stop, floor value, boot log line with stamped_now, order.filled count in [T_stop, floor), green deploy run, main-dev SHA at T_stop, empty list of Deploy runs in between). 'Portfolio stopped, T_stop recorded, main-dev frozen' is an unenforced checklist item in the integration PR body and merge-order.md. The DO stop is removal of the portfolio service from the live spec and the homelab stop is gate deploy or a manual compose stop; both are subject to the operator-confirmation gate item.",
+          "evidence": "ci-overview.md:58,60,68; deploy.yml:101; deploy-homelab.yml:189-194; .do/app.dev.yaml:99-107; D-36; fails.md:3687; proposal r8 item 2; adversary r8 added only the freeze evidence and the gate item"
+        },
+        {
+          "text": "Rollback rule: if a pre-019 portfolio image ran after the floor was stamped, stop portfolio, DELETE FROM portfolio.consumer_floors WHERE consumer = 'order_fill', and repeat the cutover step. A rollback is noticed through the Deploy runs, both of which must be green before the result is recorded. There is no boot-time detection, because the old binary's writes cannot be told apart from sync or catch-up without a writer marker. An automatic DO rollback of the integration deploy restores the stop spec with no portfolio.",
+          "evidence": "deploy.yml:129-131; ci-overview.md:71,76; context.md:1538-1540; proposal r8 item 3; adversary r8 accepted it with the DO correction"
+        },
+        {
+          "text": "The floor is stamped only at boot (D-35) and is not lowered to T_stop. The window count is recorded in the cutover result.",
+          "evidence": "context.md:1540-1541; proposal r8 Key Decisions (O-54); adversary r8 agreed"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "A 012 migration seed of status 3 and 4 brackets with its own GetOrder budget",
+          "why": "Nothing moves a bracket off ACTIVE, so it still inserts every historically exited bracket, and under D-26 forgotten IBKR legs would be polled forever even on a separate budget."
+        },
+        {
+          "text": "Lowering the fill floor to T_stop so window fills fold",
+          "why": "It needs a manual UPDATE and another restart, and window fills a sync already applied would fold a second time, doubling qty until the next sync. Both sides rejected it in round 8."
+        },
+        {
+          "text": "Taking an adopted leg's symbol and side from in-memory s.orders in place of the read-only trading.orders join",
+          "why": "Parents of open legs are FILLED and not hydrated by LoadInflightOrders, so most adoptees would be skipped; BrokerOrder carries no symbol or side (broker.go:21-35)."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Adoption may never fire: with 012 DDL-only every account starts with zero bracket_legs rows, and nothing forces the D-11 ListOrders call for an account with no tracked legs. The proposer must confirm that pollBracketLegFills issues ListOrders for every account with at least one adoption candidate, with a test that starts from zero bracket_legs rows and one open ACTIVE leg and asserts the leg is adopted.",
+          "blocking": true
+        },
+        {
+          "text": "The proposal's production stop-then-start branch goes beyond the staging-only ruling (context.md:1535-1541) and stops portfolio on a live account. The proposer must confirm the check-only form (record the portfolio.positions and order.filled counts per production database; a non-zero count blocks the promotion), and the non-zero case must be put to the operator as a gate item, with the HALTED-during-stop procedure as the candidate.",
+          "blocking": true
+        },
+        {
+          "text": "Adoption details to confirm: the non-terminal test is the D-19 predicate (a held leg is adopted, with a test); the join fills every parent-derived column ActivateBracket writes, with a full-251-payload test; the adoption cadence covers brackets activated by an old trading instance during a rolling overlap; the candidate query's row count is stated or a partial index is added in 012; the DDL comment gives the adopted column's single purpose.",
+          "blocking": false
+        },
+        {
+          "text": "Operator-confirmation gate item, recorded in context.md and answered before /sdd-execute reaches the integration step: DO accepts a spec with the portfolio service removed while .do/app.dev.yaml:78 and :319 reference ${xstockstrat-portfolio.PRIVATE_DOMAIN}; doctl apps spec get round-trips the encrypted secrets; homelab gate deploy is stop-then-start or a manual stop is possible; gate deploy exits non-zero on a VM rollback; trading's failed portfolio calls during the stop are acceptable on paper staging; Alpaca lists bracket legs as top-level orders. If the DO stop cannot be confirmed, scoping DO staging as disposable needs its own operator ruling.",
+          "blocking": false
+        },
+        {
+          "text": "Proposer to confirm the runbook additions adopted from adversary r8: the freeze evidence in the recorded result (main-dev SHA at T_stop equal to the integration merge's first parent; no Deploy runs in between), and the statement that the DELETE-floor step applies on DO only after a deliberate console rollback.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-46",
+          "how": "The migration seed is replaced by a broker-side adoption that tracks only legs the broker reports open, with the predicate bound from bracketStatusActive and bracketStatusCanceling, no GetOrder budget used, adopted rows sorted last in the fallback, and the forward-only gap restated to match the code. Whether the ListOrders call fires for an account with no tracked rows is tracked as a new objection."
+        },
+        {
+          "id": "O-52",
+          "how": "Both staging targets are named with one recorded result per database, 'portfolio stopped' is a checklist precondition on the integration PR, and a stop method is stated for each target. The methods cannot be verified from the repo, so the exact operator confirmations are tracked as a new gate-item objection."
+        },
+        {
+          "id": "O-53",
+          "how": "Runbook rule given (stop, DELETE the order_fill floor row, repeat the cutover step); a rollback is noticed through the Deploy runs; the reason for no boot-time detection is recorded. The homelab exit-code confirmation is part of the operator gate item."
+        },
+        {
+          "id": "O-54",
+          "how": "The boot stamp alone is kept. Lowering the floor to T_stop is rejected because window fills already applied by a sync would fold twice; the window count is recorded."
+        },
+        {
+          "id": "O-55",
+          "how": "The cutover step is extended to the first production promotion as a check with a recorded result. What happens on a non-zero count is tracked as a new objection."
+        },
+        {
+          "id": "O-57",
+          "how": "Proposer confirmed: service dbtests pre-insert the floor and assert an applied row; bracket_legs.side goes through the UpsertOrder helper with a mixed orders-plus-legs sum test; consumer_floors gets no generic API."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
