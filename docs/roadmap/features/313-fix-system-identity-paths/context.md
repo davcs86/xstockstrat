@@ -1047,3 +1047,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] The `**kw` spy accepts any keyword; Step 7's `correlation_id` assertion is the guard. Target: Step 7.
 - [ ] Append-only metadata; Step 6's docstring constraint is the only guard. Target: Step 6.
 - Next: `/sdd-review fix-system-identity-paths impl-spec`, then `/sdd-execute fix-system-identity-paths`.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings (advisory — did not block). Overall PASS WITH WARNINGS; no Floor breach. Lifecycle unchanged (implementation-ready).
+- implementation-spec.md was edited to address the clearly-correct warnings. This reached the step as workflow-computed text from the `/sdd-batch` impl-review phase; MODE B on its own does not edit the spec.
+- Addressed (each re-verified on `origin/feature/fix-system-identity-paths@35c0dd1a` before editing):
+  - [x] Step 7, duplicate-header guard: the AC-3 test now also asserts exactly one `x-trace-id` entry per loop-path `AppendEvent` call. The Step Dependencies open-risk bullet says what the assertion does and does not cover.
+  - [x] Steps 3 and 5, coverage floor: 40 matches the CI matrix for both services (`.github/workflows/ci.yml:428-429` ingest, `:431-432` analysis, applied at `:477`). Recorded as Codebase Evidence in both steps.
+  - [x] Steps 4 and 6, line hints: each step now starts with a re-grep of its anchors before editing. The Step 6 citation for `poll_one_source` was off by one (`:115` → `:116`) and is corrected.
+  - [x] Overlap (WARN), peers 309 and 328: the spec's Peers paragraph now names the planned same-function overlap with 309 (`_ingest_external_signal`, `_build_external_signal`, `tests/test_mcp_client_loop.py`) and the near-miss with 328 (`mcp_client_loop.py:140`), cited from the peers' specs on their branches. Both peer branches still carry no code diff under either service directory.
+- Unresolved ⚠ carried into execution:
+  - Step 1: the AC-1 Then wording ("the ingest.signal.ingested AppendEvent request carries user_id "user-a"" / "no x-user-id call metadata is sent with it") is spec-authored, not operator-verbatim; C-16 promotion makes it permanent — [ ] unaddressed (needs the operator)
+  - Steps 4 and 6: `services/xstockstrat-ingest/docs/context-constitution-findings.md:38` (open-finding row) and `services/xstockstrat-ingest/CLAUDE.md:146` (event row) go stale once these land. Adding a docs step widens the approved design scope, so it was not added. Operator decides: add a docs step, or record a deviation (P-03) — [ ] unaddressed
+  - Step 7: the `**kw` spy accepts any keyword, so a rename of `trace_id` would not fail the dedup test; the `correlation_id` assertion is the only guard. The spy shape is binding by design D-19, so it was not changed — [ ] unaddressed (accepted risk unless the operator rules otherwise)
+  - Step 6: a future caller passing both `trace_id` and an inbound `x-trace-id` would still send two headers; the new Step 7 assertion covers only today's loop caller — [ ] unaddressed (residual)
+  - Tooling: the pre-commit hook prints a missing `scripts/check-duplication.py` on this branch base, so the DRY guard rail did not run on the spec commits (seen again on this session's commits). Not a spec defect; it clears when `main-dev` is merged into the feature branch — [ ] unaddressed
+- Overlap findings: WARN, no FAIL. No migration, proto-field or config-key collision. Same-file overlap with 309 (same function in `servicer.py`; `mcp_client_loop.py`; `tests/test_mcp_client_loop.py`) and a textual near-miss with 328 (`mcp_client_loop.py:140`). Shared-helper dependency only: peers 308, 312 and 327 call analysis `owner_metadata`, whose behaviour Step 2 keeps unchanged.
+
+## Open Threads
+
+- [ ] Confirm the AC-1 Then wording in Step 1 with the operator before Step 1 lands. Target: `/sdd-execute` checkpoint, Step 1.
+- [ ] Decide on the stale ingest docs (findings row `:38`, CLAUDE.md event row `:146`): docs step or recorded deviation. Target: `/sdd-execute` checkpoint, before Step 6.
+- [ ] `docs/roadmap/features/merge-order.md` has no row for 313. The overlap scan recommends an optional soft row for 313 and 309 (whichever merges second re-greps its anchors). Not written here: the file is outside this step's write scope. Target: operator.
+- [ ] `**kw` spy rename risk (Step 7) and the residual two-header risk for a future caller (Step 6). Target: Steps 6-7.
+- [ ] DRY guard rail did not run on this branch's doc commits (missing `scripts/check-duplication.py` on the branch base). Target: first `/sdd-execute` step (merge `main-dev` first).
+- Next: `/sdd-execute fix-system-identity-paths`.
