@@ -1,6 +1,6 @@
 # Debate Register: fix-migration-tooling-safety
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -51,10 +51,10 @@
 <!-- Status: open → closed @ round N (<how>) | waived @ round N (user) | reopened @ round N (user) -->
 | ID | Round | Objection | Blocking | Status |
 |---|---|---|---|---|
-| O-1 | 1 | OQ1 (refuse-all vs auto force<prev>+up) needs an operator decision recorded in context.md, made on the corrected trade-off (up-files are atomic; the real issue is direction ambiguity). If refuse-all is chosen, the record must say it overrides the spec's 'without manual intervention' outcome. | yes | open |
+| O-1 | 1 | OQ1 (refuse-all vs auto force<prev>+up) needs an operator decision recorded in context.md, made on the corrected trade-off (up-files are atomic; the real issue is direction ambiguity). If refuse-all is chosen, the record must say it overrides the spec's 'without manual intervention' outcome. | yes | closed @ round 3 (operator decision O-1, 2026-11-20, context.md: refuse-all, overriding the product-spec's 'without manual intervention' outcome) |
 | O-2 | 1 | Verify the NilVersion recovery form (force -1 vs force -- -1) against golang-migrate 4.17.1 and pin it in the guard test before approval. | yes | closed @ round 2 (No NilVersion CLI form is printed. The first-file case prints TRUNCATE only under the guarded precondition (file n exists and is the lowest; otherwise exit 2). The adversary accepted this with the objection-1 fix.) |
-| O-3 | 1 | C-16 sign-off required for the @AC-19 reversal and the @AC-28 last-clause rewording. | yes | open |
-| O-4 | 1 | The operator must confirm the 'hotfixes carry no migration' rule (vs renumbering unpromoted main-dev migrations above the hotfix), and database.md must state the gate's verdict on promotion PRs. | yes | open |
+| O-3 | 1 | C-16 sign-off required for the @AC-19 reversal and the @AC-28 last-clause rewording. | yes | closed @ round 3 (operator decision O-3, 2026-11-20, context.md: C-16 sign-off for the @AC-19 CHANGE and the @AC-28 last-clause CHANGE) |
+| O-4 | 1 | The operator must confirm the 'hotfixes carry no migration' rule (vs renumbering unpromoted main-dev migrations above the hotfix), and database.md must state the gate's verdict on promotion PRs. | yes | closed @ round 3 (operator decision O-4, 2026-11-20, context.md: hotfix PRs into main carry no migration, enforced by --forbid-new) |
 | O-5 | 1 | The stale-base duplicate-NNN race is undecided: run the order step on push against HEAD~1, or require branch-protection 'up to date before merge'. | no | closed @ round 2 (Decided as a recommendation for the operator to set branch protection 'up to date before merge' on main-dev and main. The push-leg alternative is rejected. The adversary accepted this as non-blocking, and the residual duplicate-version assumption is tracked as an open risk.) |
 | O-6 | 1 | Confirm that dropping the guard's contract-of header exit-2 paths leaves no durable @AC or test leg uncovered. | no | closed @ round 2 (No durable @AC pins the guard's header exit-2 paths (platform.feature grep: only :355 and @AC-19 at :386). Case (i) flips to 3, and the cross-dir header gap goes to findings. The adversary accepted this.) |
 | O-7 | 3 | Confirm that the guard pytest case table matches D-5 and D-10 as the adversary re-derived them. Under D-5, legacy cases (a), (c), (d), (f), (h) and (i) all change outcome. | no | open |
