@@ -38,6 +38,14 @@ MCP tool, argument or response shape changes; this is a decision, not an omissio
 AC-1 is read at process level (design.md § Open Risks, O-2): the Given says "the agent container
 starts", but supervisord keeps the container alive. `acceptance.feature` is unchanged by this spec.
 
+C-16 — feature 079 AC-4 supersession: product-spec.md:52-53 asks `/sdd-design` to mark the promoted
+feature-079 scenario superseded. design.md:78-79 and :170-171 (D-4) settle it as sign-off-only: no
+promoted 079 scenario exists (recon.md:63; re-grepped 2026-11-20 — `docs/sdd/business-rules/` holds
+only `platform.feature`, with no `MCP_TRANSPORT` or `079` match), so **no step edits a durable
+business-rules suite**. The operator sign-off is `context.md` Session 2026-11-10. The surviving pins
+of the old rule are removed by Step 2 (`app/main.py:62-63` comment) and Step 1
+(`tests/test_transport_config.py:74-75` comment).
+
 ## Step Dependencies
 
 - Steps 1+2 land together: Step 2 changes the return behavior of `resolve_transport()` and three
@@ -66,6 +74,28 @@ starts", but supervisord keeps the container alive. `acceptance.feature` is unch
   top-level `gen` import to a module `app/main.py` imports at module level (today only
   `app/auth.py:13` has one, and `main.py` does not import it at module level), re-run Step 1's
   Verification at the integration PR.
+- Peer overlap (impl-spec review 2026-11-20, WARN, rebase-only — no merge-order entry): re-anchor
+  every `path:line` in the step being executed if a peer lands on `main-dev` first.
+  - `360-fix-mcp-tools-page` (code-completed, not on `main-dev@fb52065c`). Measured on
+    `origin/feature/fix-mcp-tools-page@34ee88a6`: `app/main.py` gains a third docstring line directly
+    under the `http` entry (`:7`), next to Step 2's `:5-6` edit, so expect a textual conflict there —
+    keep 360's `GRPC_PORT` line and apply Step 2's default wording. `resolve_transport()` is still
+    `:52-65` and `main()` `:281-286` on that tip. `tests/test_transport_config.py` gains
+    `class TestResolveGrpcPort` (3 tests, appended at `:105`); Step 1's anchors `:34`, `:64`, `:71`,
+    `:92` are unchanged there, but the file counts become 18 before / 21 after and the suite totals
+    in the Verification blocks rise accordingly — re-measure the baseline rather than trusting 825/828.
+    Its `tests/conftest.py` change leaves the `MCP_TRANSPORT`/`CONFIG_ENDPOINT`/`MTLS_*` defaults at
+    `:126,128,132-134`. It also edits `docs/runbooks/mcp-tools.md` (hunk at `:42`, not the Transport
+    Modes table), the agent `CLAUDE.md` (`:14`, `:129`) and the agent findings file (`:45`) — none is
+    a Step 3 line.
+  - `345-authelia-sso` (implementation-ready): its spec modifies `app/main.py`
+    (`docs/roadmap/features/345-authelia-sso/implementation-spec.md:1074`) and `tests/conftest.py`
+    (`:849`, `:941`, `:1151`). Not yet executed, so nothing to measure; the conftest re-run trigger
+    above applies.
+  - Step 3 documents are also edited by in-flight specs 308, 309, 310, 314 and 319 (doc sections
+    only, no shared line found; the Transport Modes table `mcp-tools.md:18-21` is cited by no other
+    spec). In the findings file, rows are appended by peers, so locate the `:30` and `:82` rows by
+    their text, not by number.
 - Not in scope (design.md § 4): `supervisord.conf`, a DO `health_check`, `claude_mcp_config.json`,
   `tests/conftest.py`, `acceptance.feature`, any grep gate (R-5).
 
@@ -191,6 +221,14 @@ Edit only `services/xstockstrat-agent/tests/test_transport_config.py`.
 
    **Binding (operator ruling 2026-11-20, O-4/R-6)**: do not assert on `MCP_TRANSPORT='htp'` — today's
    warning prints it. Keep all three assertions; do not shorten the timeout.
+
+   **Flake fallback (O-5)**: this is the only test in the step that starts a process. If it fails
+   for a reason other than the three assertions (the 20s timeout on a cold import, or a
+   `ModuleNotFoundError` raised before `resolve_transport()` runs), do not retry it into green, mark
+   it skip/xfail or raise the timeout silently. Stop and report at the checkpoint. Dropping it is
+   allowed only as a recorded P-03 deviation (`context.md` and `## Deviation Log`, naming the
+   observed failure), and AC-1 then rests on the in-process `main()` test from instruction 2, which
+   must exist and pass either way. With it dropped the counts are 17 in the file and 827 in the suite.
 5. C-13: the test uses no mocked domain data (env-var strings only), so there is no fixture-home
    question; the literals stay inline. `tests/conftest.py` is not edited.
 6. Capture RED on the tree without Step 2:
@@ -315,6 +353,8 @@ the old behavior (atomic unit).
   "`MCP_TRANSPORT` default is `"stdio"` …". The resolved-row convention is at `:29`:
   `~~<old text>~~ **RESOLVED (feature 093):** <what changed>`.
 - Same file `:82` — the report row for `2026-10-19-agent-mcp-transport-stdio-fallthrough-defect`.
+  The table (`:79-84`) has two columns, `| Report | Title |`; Title is the last cell, closed by the
+  row's trailing ` |`. `:83` carries its suffix inside the Title cell, before that closing pipe.
   The convention for a fixed-but-not-yet-closed report is at `:83`:
   `— **triaged; fixed in code (feature 273, verified 2026-11-04)**`. `:77` says a row stays until its
   report is resolved; the report sidecar reads `triaged` and closing it is a launch-time step.
@@ -349,8 +389,10 @@ the old behavior (atomic unit).
    - `:30` — strike the Issue text and add `**RESOLVED (feature 331):**` in the `:29` form: unset
      now resolves to `http`, only an explicit `stdio` starts stdio, any other value raises
      `RuntimeError` in `resolve_transport()`; the missing DO `health_check` remains a follow-up.
-   - `:82` — append `— **triaged; fixed in code (feature 331)**` to the Title cell, in the `:83`
-     form. Do not remove the row and do not edit the report sidecar.
+   - `:82` — append ` — **triaged; fixed in code (feature 331)**` to the Title cell, in the `:83`
+     form: the suffix goes after "…unset or mistyped" and before the row's closing ` |`. Add no new
+     pipe and no third cell; the row must still have exactly two cells. Do not remove the row and do
+     not edit the report sidecar.
 4. No grep gate for stale strings is added anywhere (R-5).
 
 **Verification**:
@@ -365,7 +407,7 @@ Then read the changed lines and confirm they match the Instructions:
 ```bash
 sed -n '18,24p' docs/runbooks/mcp-tools.md
 sed -n '4p' services/xstockstrat-agent/CLAUDE.md
-sed -n '30p;82p' services/xstockstrat-agent/docs/context-constitution-findings.md
+sed -n '30p;79,84p' services/xstockstrat-agent/docs/context-constitution-findings.md
 npx --yes markdownlint-cli2 --config .markdownlint.yaml services/xstockstrat-agent/CLAUDE.md
 ```
 
