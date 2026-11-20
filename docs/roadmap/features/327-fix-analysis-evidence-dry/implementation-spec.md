@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/327-fix-analysis-evidence-dry/feature.md`
-**Total Steps**: 15
+**Total Steps**: 18
 **Feature Branch**: `feature/fix-analysis-evidence-dry`
 
 **Tree**: detached @ `f7d02e7e` ≡ `origin/feature/fix-analysis-evidence-dry` (merged `origin/main-dev`
@@ -20,18 +20,33 @@ AC-2 first (Steps 1–2, the entry-backfill reads through `StrategiesRepository.
 then the formula-aware evidence fingerprint bottom-up — pure helpers (3–4), digests on the existing
 single `GetFormula` read (5–6), the owner-scoped prefix read (7–8), the `_run_backtest` stamp (9–10),
 the `_fetch_and_aggregate` / `ScoreStrategy` read side (11–12), the ManageStrategy UPDATE pop guard
-(13–14) — and the docs last (15). Each layer only adds optional keyword arguments or new symbols, so
-no existing caller has to change in the step that introduces it.
+(13–14) — the analysis docs (15), then the agent consumer surface: the `manage_strategy` score
+allow-list (16–17) and its docs (18). Each layer only adds optional keyword arguments or new symbols,
+so no existing caller has to change in the step that introduces it.
 
-`xstockstrat-indicators` is **read only** (existing `GetFormula`) and gets no step. No proto,
+`xstockstrat-indicators` is **read only** (existing `GetFormula`) and gets no step;
+`xstockstrat-agent` gets Steps 16–18 (allow-list, pin test, docs — no tool signature change). No proto,
 migration, config key, env var, port or pool change (design.md "Chosen Approach"; next free analysis
 migration would be `030` — `028`/`029` exist — but none is needed).
 
-**Consumer surface (C-14)**: `None — internal/platform-only` (design.md "Consumer surface"). No UI
-segment or Agent tool gains or loses a field; the effect reaches `services/xstockstrat-ui`
-(`insightsBff.ts` `scoreStrategy`) and the agent (`_score_strategy`) through the unchanged
-`ScoreStrategy` / `RunBacktest` RPCs (one new UNAVAILABLE message, one new NOT_FOUND message, one new
-run warning — all free-text). This is a decision, not an omission.
+**Consumer surface (C-14)** — corrected at impl-spec review 2026-11-20. product-spec.md names two
+surfaces for `ScoreStrategy`; no field is added or removed on either (design.md "Consumer surface"),
+but the messages are not all free-text to the agent:
+- **Agent `manage_strategy` score (`_score_strategy`) — Steps 16–18.** The agent forwards an
+  UNAVAILABLE detail only when it is in `_SCORE_UNAVAILABLE_PASS`
+  (`services/xstockstrat-agent/app/tools.py:242`, exactly one string today); any other UNAVAILABLE
+  text collapses to `upstream unavailable; …` (`_grpc_error_message`, `tools.py:278-282`). Without a
+  step the new gate-off abort `"formula version unavailable — grade unchanged"` (Step 11) would be
+  withheld from the MCP caller, so Step 16 adds it to the allow-list and Step 17 pins it (AGENT-10).
+  The new NOT_FOUND text needs no agent code change: `_score_strategy` passes
+  `not_found=e.details() or "no eligible evidence"` (`tools.py:296`) and `_grpc_error_message` returns
+  the details verbatim when they contain `not_found` (`tools.py:273-274`).
+- **Insights BFF (`services/xstockstrat-ui/src/lib/insightsBff.ts:40-42` `scoreStrategy`) — no step,
+  by decision.** It is a bare `forward(...)` of the RPC with no message-specific handling (no
+  "grade unchanged" string exists under `services/xstockstrat-ui/src`), so the new texts reach the UI
+  through the existing error path unchanged.
+
+The `RunBacktest` run warning is a free-text entry in the existing `warnings` field on both surfaces.
 
 **Trading-domain constraints (step-constraints §A)**: not applicable — `entry_backfill.run_once` only
 *reads* `ListOrders`; no broker dispatch, order placement, order type or fill handling is touched.
@@ -43,7 +58,7 @@ run warning — all free-text). This is a decision, not an omission.
 | `@AC-1` editing a referenced formula stops pre-edit evidence feeding the grade | Step 12 (end to end); Steps 4, 6, 10 (the parts) |
 | `@AC-2` entry-backfill selects through `LIVE_ENABLED_PREDICATE_SQL` | Step 2 |
 | `@AC-3` score-time refusal grades on the newest formula-aware evidence | Step 12; Step 8 (the prefix read) |
-| `@AC-4` gate off + `GetFormula` outage → UNAVAILABLE, grade untouched | Step 12 |
+| `@AC-4` gate off + `GetFormula` outage → UNAVAILABLE, grade untouched | Step 12; Step 17 (the message reaches the agent caller verbatim) |
 | `@AC-5` rename during a `GetFormula` outage keeps the grade | Step 14 |
 
 `@AC-3`–`@AC-5` were appended to `acceptance.feature` by `/sdd-spec` (design.md step 7 mandates
@@ -65,7 +80,9 @@ them; IDs are append-only).
 
 ## Step Dependencies
 
-- Step 2 [test] covers Step 1 [service].
+- Step 2 [test] covers Step 1 [service]. They are not a `Lands with` pair (no §C trigger), so executed
+  in order Step 2's tests are green the first time they run; the P-06 red proof is produced inside
+  Step 2 as its instruction 3 describes (the literal temporarily restored in the working tree).
 - Steps 3+4 land together: Step 4's tests import symbols Step 3 creates (§C "adds a test that
   references a symbol a later step creates").
 - Steps 5+6 land together: same trigger (`digests=` keyword, `_FormulaRead` cache values).
@@ -76,7 +93,14 @@ them; IDs are append-only).
   Step 12 amends the existing `test_ac23_*` mock that Step 11's new repository call reaches.
 - Steps 13+14 land together: Step 14's pin test fails on any tree without Step 13 and is the only
   proof of the guard (open risk "stale `pre` read").
-- Every unit is backend-only (one consumer surface), adjacent, and 2 steps (cap 4).
+- Steps 16+17 land together: Step 16 changes `_SCORE_UNAVAILABLE_PASS`, which the existing
+  `tests/test_tool_errors.py::test_unavailable_pass_strings_match_backend_sources` pins by equality,
+  so Step 16 cannot pass its own Verification without Step 17.
+- Every unit stays on one consumer surface (Steps 1–15 backend, Steps 16–18 the agent), is adjacent,
+  and is 2 steps (cap 4).
+- Step 16 requires Step 11 (`_FORMULA_VERSION_UNKNOWN_MSG` must exist in the analysis source that
+  Step 17's pin reads).
+- Step 18 requires Steps 16–17 (it documents the landed agent behaviour).
 - Step 5 requires Step 3 (`_formula_digest`, `_FormulaRead`, `_UNREADABLE`).
 - Step 9 requires Steps 3 and 5 (`_evidence_fingerprint`, `digests=`).
 - Step 11 requires Steps 3, 5 and 7.
@@ -89,7 +113,9 @@ them; IDs are append-only).
   CUSTOM_FORMULA strategy; strategies whose formula is refused at rollout and that hold only
   pre-feature cells answer NOT_FOUND until the formula is readable again (028 template instances,
   the 029 blend). context.md Open Threads still asks for the operator's explicit acknowledgement of
-  that population before Step 15 — confirm it at Step 15's Phase-2 gate.
+  that population. The behaviour ships in Steps 11–12, so the acknowledgement is confirmed at
+  **Step 11's** Phase-2 gate (before any Step 11 write) and recorded in `context.md`; Step 15 only
+  checks that the record exists.
 
 ---
 
@@ -153,6 +179,7 @@ Add two tests to `TestRunOnce`, reusing `_strategy_row`, `_fake_live_loop`, `_cf
 1. `test_ac2_selects_through_the_live_enabled_predicate`: build a `fetch` fake (`AsyncMock(side_effect=...)`) that records the SQL it receives and returns `[_strategy_row("s1")]` (S1 — active, live_enabled) only when the SQL equals what `StrategiesRepository(db_pool).list_live_enabled()` emits for the **current** value of `app.repositories.strategies.LIVE_ENABLED_PREDICATE_SQL`, i.e. `f"SELECT * FROM analysis.strategies WHERE {strategies.LIVE_ENABLED_PREDICATE_SQL}"`, else `[]`. Run `run_once` with a `ListOrders` stub returning one filled BUY. Assert: exactly one SQL was recorded, it contains `strategies.LIVE_ENABLED_PREDICATE_SQL`, and `("u1", "s1", "AAPL")` was seeded in `live_loop._last_entry_at` — S2 (active, not live_enabled) and S3 (inactive, live_enabled) are excluded by the predicate itself, so the test states that in its docstring instead of faking rows the SQL would never return.
 2. `test_ac2_narrowed_predicate_selects_nothing`: `monkeypatch.setattr("app.repositories.strategies.LIVE_ENABLED_PREDICATE_SQL", "live_enabled = TRUE AND active = TRUE AND strategy_id <> 's1'")`, then a `fetch` fake that returns `[_strategy_row("s1")]` when the SQL contains the **original** predicate *without* the narrowing clause and `[]` when it contains the narrowed text. Assert the recorded SQL contains the narrowed predicate, `trading_stub.ListOrders` was never awaited and `live_loop._last_entry_at == {}`.
    RED on the pre-Step-1 tree: the literal ignores the monkeypatch, so the fake returns S1 and `ListOrders` is awaited.
+3. Red proof (P-06). Step 1 is already committed when this step runs, so both tests pass on first run. Show the red explicitly: temporarily put the Step 1 literal back in `run_once` in the working tree (an uncommitted edit — do **not** use `git stash`; the stash stack is shared across worktrees), run `uv run pytest tests/test_entry_backfill.py -q -k ac2` and record that `test_ac2_narrowed_predicate_selects_nothing` fails, then discard that edit (`git checkout -- app/engine/entry_backfill.py`) and re-run for GREEN. `test_ac2_selects_through_the_live_enabled_predicate` is green on both trees while the constant equals the literal; the narrowed-predicate test is the regression proof.
 
 **Verification**:
 ```bash
@@ -483,7 +510,7 @@ Create `tests/test_run_backtest_fingerprint.py`; reuse `make_servicer`, `_owned_
 2. Outage: `GetFormula` UNAVAILABLE → every inserted cell (if any) has `definition_fingerprint is None` and `_FORMULA_VERSION_WARNING` is in `result.warnings` exactly once.
 3. Refusal: `GetFormula` NOT_FOUND → fingerprint `None`, and `_FORMULA_VERSION_WARNING` is **not** in `result.warnings`.
 4. An inline / id-mismatch run with a formula outage carries **no** `_FORMULA_VERSION_WARNING` (it never records evidence).
-5. Single read: with `svc._recompute_headline = AsyncMock(return_value=None)`, the call's `formula_cache` kwarg holds `_FormulaRead` for the readable fid (digest equal to the stamped one) and `_FormulaRead([], _UNREADABLE)` for a refused fid; with the real recompute on a registered strategy `svc._indicators.GetFormula.await_count == 1` for the whole run.
+5. Single read: with `svc._recompute_headline = AsyncMock(return_value=None)`, the call's `formula_cache` kwarg holds `_FormulaRead` for the readable fid (digest equal to the stamped one) and `_FormulaRead([], _UNREADABLE)` for a refused fid; with the real recompute on a registered strategy `svc._indicators.GetFormula.await_count == 1` for the whole run. Pin that count with a strategy that has **one** CUSTOM_FORMULA component per formula id. Add a separate duplicate-component case (two components on the same non-fundamentals `f-9`): `_formula_fundamentals` skips a repeated fid only once it is in `out`, i.e. only for a fundamentals formula (`if fid in out: continue`, `servicer.py:1934-1935`), and the unprefixed path calls it without `cache=` (`:1002-1004`), so that shape issues a second `GetFormula` today (existing behaviour, not changed by this feature; the `digests` write is idempotent). For that case assert only that the stamp equals the one-component stamp — do **not** assert `await_count == 1` on the unprefixed path; if the prefixed path (`_prefetch_formula_warmups`, cached per id) shows more than one read, stop and report.
 6. Run the full suite. If an existing assertion in `tests/test_analysis_servicer.py` fails **only** because a registered own run of a CUSTOM_FORMULA strategy now stamps the composite instead of the bare hash, update that assertion to `_evidence_fingerprint(...)`; any other failure is a blocker to report, not to patch.
 7. When `_recompute_headline` raises `_FormulaVersionUnknown("f-9")`, the run still returns OK and the log carries "formula version unavailable — grade unchanged" (mirror `tests/test_grade_fundamentals_exclusion.py:310-317`).
 
@@ -510,11 +537,13 @@ ruff check . && ruff format --check .
 **Codebase Evidence**:
 - `_fetch_and_aggregate(self, user_id, strategy_id, strategy_row, *, fund_cache=None, formula_cache=None, failures=None, meta=None, sem=None, excluded=None)` at `servicer.py:2867-2923`: `fingerprint = _definition_fingerprint(strategy_row["definition_json"])` (`:2890`), `definition = _row_to_strategy_definition(strategy_row)` (`:2891`), `guarded` (`:2892-2896`), gate-off read `fetch_eligible` (`:2898-2902`), gate-on read `fetch_all_for_fingerprint` (`:2904-2906`), `_exclude_refused_cells(... formula_cache=formula_cache if formula_cache is not None else {}, failures=failures if failures is not None else {}, meta=meta if meta is not None else owner_metadata(user_id), sem=sem)` (`:2909-2917`), the `excluded` out-list pattern (`:2918-2919`).
 - `_exclude_refused_cells` reads the same cache: `await self._formula_fundamentals(definition, meta, cache=formula_cache, failures=failures)` at `:2815-2817`.
-- The four callers (O-11; `grep -n "_fetch_and_aggregate(" app/handlers/servicer.py`): `ScoreStrategy` `:2655-2661`; `_recompute_headline_locked` `:2950`, reached from `_recompute_headline` (`:2925-2941`) by `_run_backtest` (`:1414`) and the boot pass `recompute_unscored_pairs` (`:3104-3110`, per-owner `formula_caches.setdefault(user_id, {})` at `:3108`, one shared `failures` dict at `:3101`), and directly by ManageStrategy UPDATE (`:3405-3407`).
+- The four callers (O-11; `grep -n "_fetch_and_aggregate(" app/handlers/servicer.py`): `ScoreStrategy` `:2655-2661`; `_recompute_headline_locked` `:2950`, reached from `_recompute_headline` (`:2925-2941`) by `_run_backtest` (`:1414`) and the boot pass `recompute_unscored_pairs` (`:3104-3110`, per-owner `formula_caches.setdefault(user_id, {})` at `:3108`, one shared `failures` dict at `:3101`), and directly by ManageStrategy UPDATE (`:3399-3401`).
 - `ScoreStrategy` error mapping: `except _GradeInputsUnknown as e:` → `log.warning("score: fundamentals availability unknown for %s", e.symbol)` → UNAVAILABLE `"fundamentals availability unknown — grade unchanged"` at `:2662-2668`; `excluded: list[str] = []` at `:2653`; the no-evidence branch `:2673-2694` ending `NOT_FOUND "no eligible evidence — run a backtest"` (`:2691-2693`).
 - Gate read: `self._cfg.get_bool("backtest.fundamentals.enabled", False)` (`:2892`) — an existing seeded key; no new config reader (C-05 not triggered).
 - Durable rule to preserve: `@AC-23 @feature-289` (`services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature:97-102`) — refusal succeeds with trailer `"[]"`, outage keeps the pinned message.
 - Header propagation (§B): no new outbound RPC; the formula read reuses `_formula_fundamentals` with the caller's `meta` (inbound trio for interactive paths, `owner_metadata(user_id)` for the boot path — `:2915`).
+- Gate-off behaviour change (acknowledged): every CUSTOM_FORMULA strategy now issues `GetFormula` on `ScoreStrategy` and on each recompute even with `backtest.fundamentals.enabled` off, and a formula outage then aborts UNAVAILABLE where it did not before. The C-16 sign-off for this coupling and for the `@AC-23 @feature-289` treatment **is recorded**: context.md "Session 2026-11-20 — sdd-design", bullet "Operator decision (binding, recorded 2026-11-20, design gate)"; design.md "Business Rules Touched (C-16)".
+- Agent contract: the UNAVAILABLE text added here is allow-listed by the agent in Step 16 and pinned against this file's source in Step 17 as the literal assignment `_FORMULA_VERSION_UNKNOWN_MSG = "formula version unavailable — grade unchanged"` — keep it a single-line module-level assignment with exactly that text (AGENT-10, `services/xstockstrat-agent/docs/context-constitution.md:25`).
 
 **Lands with**: `Step 12`
 
@@ -523,6 +552,7 @@ ruff check . && ruff format --check .
 **Covers**: —
 
 **Instructions**:
+0. Phase-2 gate, before any write: obtain the operator's explicit acknowledgement of the unrecoverable refused population (O-18 — a strategy whose formula is refused at rollout and that holds only pre-feature cells answers NOT_FOUND until the formula is readable; 028 template instances, the 029 blend) and record it in `context.md`. This step ships that behaviour; without the acknowledgement, stop and report.
 1. `_fetch_and_aggregate`: add keyword `unreadable=None` (an out-list, mirroring `excluded`). At the top, bind once: `formula_cache = formula_cache if formula_cache is not None else {}`, `failures = failures if failures is not None else {}`, `meta = meta if meta is not None else owner_metadata(user_id)`; pass those bound names (no inline defaults) to `_exclude_refused_cells` at `:2909-2917` (D-11).
 2. Replace `:2890` with: `def_hash = _definition_fingerprint(strategy_row["definition_json"])`, build `definition` (existing `:2891`), `fingerprint = def_hash`. When the definition has at least one `COMPONENT_KIND_CUSTOM_FORMULA` component with a `formula_id`:
    - `digests: dict = {}`; `await self._formula_fundamentals(definition, meta, cache=formula_cache, failures=failures, digests=digests)` — **before** any cell read;
@@ -602,8 +632,8 @@ ruff check . && ruff format --check .
 **Reviewers**: xstockstrat-analysis service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- UPDATE branch of `ManageStrategy` (`servicer.py:3232`): the unlocked pre-read `pre = await self._strategies_repo.get_by_owner_and_id(...)` at `:3324-3326` (**not** the guard's source — open risk); `async def _apply(current, _defn=definition, _mask=mask_paths, _has=has_mask):` at `:3344` with `old_json = current["definition_json"] or {}` at `:3345` (the row locked by `update_locked`); `row = await self._strategies_repo.update_locked(caller_user_id, definition.strategy_id, _apply)` at `:3378-3380`.
-- Pop + recompute at `:3399-3409`: `async with self._lock_for(caller_user_id, sid): self._strategies.pop((caller_user_id, sid), None)` then `try: await self._recompute_headline_locked(caller_user_id, sid, row, meta=propagation_meta)` / `except Exception as e: log.warning("failed to recompute headline after update: %s", e)`.
+- UPDATE branch of `ManageStrategy` (`servicer.py:3232`): the unlocked pre-read `pre = await self._strategies_repo.get_by_owner_and_id(...)` at `:3324-3326` (**not** the guard's source — open risk); `async def _apply(current, _defn=definition, _mask=mask_paths, _has=has_mask):` at `:3344` with `old_json = current["definition_json"] or {}` at `:3345` (the row locked by `update_locked`); `row = await self._strategies_repo.update_locked(caller_user_id, definition.strategy_id, _apply)` at `:3379-3381`.
+- Pop + recompute at `:3396-3403` (re-grepped at impl-spec review: comment `:3393-3394`, `sid = …` `:3395`, lock `:3396`, pop `:3397`, recompute `:3398-3401`, `except` `:3402-3403`): `async with self._lock_for(caller_user_id, sid): self._strategies.pop((caller_user_id, sid), None)` then `try: await self._recompute_headline_locked(caller_user_id, sid, row, meta=propagation_meta)` / `except Exception as e: log.warning("failed to recompute headline after update: %s", e)`.
 - `update_locked` runs `apply_fn(_to_dict(row))` inside `SELECT … FOR UPDATE` (`app/repositories/strategies.py:100-143`, call at `:126`); `apply_fn` must do no I/O — hashing is pure.
 - `_recompute_headline_locked` itself clears the grade on zero evidence (`:2951-2958`), so an unchanged hash with no evidence still clears.
 - Binding operator decision 2026-11-20 (context.md, design.md step 6); rejected alternative R-7 (unconditional pop). Durable rule: `@AC-2 @regression @feature-194` (`services/xstockstrat-analysis/acceptance/fix-strategy-signal-params-dead-keys.feature:18-23`).
@@ -616,8 +646,8 @@ ruff check . && ruff format --check .
 
 **Instructions**:
 1. Before `_apply` (`:3344`), declare a one-slot holder `locked_hash: list[str] = []`. As the first statement after `old_json = …` (`:3345`), `locked_hash[:] = [_definition_fingerprint(old_json)]` — the hash of the **locked** row's definition, never of `pre`.
-2. At `:3399-3409`, replace the unconditional pop with: `changed = not locked_hash or locked_hash[0] != _definition_fingerprint(row["definition_json"])`; inside the lock, `if changed: self._strategies.pop((caller_user_id, sid), None)`. The recompute call and its `except Exception` are unchanged (an unchanged hash still recomputes; `_FormulaVersionUnknown` is swallowed there and the grade stays).
-3. Replace the two-line comment at `:3397-3398` with the constraint: the grade is cleared first only when the definition hash of the row locked by `update_locked` differs from the written one; a rename must keep the grade when the recompute cannot run.
+2. At `:3396-3403`, replace the unconditional pop (`:3397`) with: `changed = not locked_hash or locked_hash[0] != _definition_fingerprint(row["definition_json"])`; inside the lock, `if changed: self._strategies.pop((caller_user_id, sid), None)`. The recompute call and its `except Exception` are unchanged (an unchanged hash still recomputes; `_FormulaVersionUnknown` is swallowed there and the grade stays).
+3. Replace the two-line comment at `:3393-3394` with the constraint: the grade is cleared first only when the definition hash of the row locked by `update_locked` differs from the written one; a rename must keep the grade when the recompute cannot run.
 Known limitation (documented in Step 15, not handled here): a behavioural edit during a `GetFormula` outage still clears the in-memory grade.
 
 **Verification**:
@@ -696,7 +726,7 @@ ruff check . && ruff format --check .
 2. ANALYSIS-7 (`:20`): the entry-backfill now reads through `StrategiesRepository.list_live_enabled` (never a name-bound import of the constant); the remaining non-constant mirrors are the two Python-side checks. Adjust the "four sites / two do not import" sentence accordingly.
 3. `docs/scoring.md`: rewrite the "Fingerprint eligibility" bullet for the composite; in "Recompute triggers" replace "unconditionally clears" with the hash-changed guard (locked-row comparison) and add the two new `ScoreStrategy` outcomes (UNAVAILABLE `"formula version unavailable — grade unchanged"` with the gate off; NOT_FOUND naming an unreadable formula) and the `RunBacktest` run warning `"evidence not recorded: formula version unavailable — rerun"`.
 4. Add a "Known limitations (feature 327)" list to `docs/scoring.md` (design.md step 7): readiness verdicts stay on the definition-only fingerprint until `valid_until`; the `ListStrategies` / `GetStrategyReport` headline stays stale until the next recompute; a behavioural UPDATE during a `GetFormula` outage clears the grade; a refusal grades on the last readable version; with mixed refused and readable formulas the newest composite is used as a whole; when indicators is not ready at boot, `recompute_unscored_pairs` leaves CUSTOM_FORMULA pairs unscored until the next pass; rollout is a one-time evidence reset for every CUSTOM_FORMULA strategy, and a strategy whose formula is refused at rollout and holds only pre-feature cells answers NOT_FOUND until the formula is readable (028 template instances, the 029 blend).
-5. Before writing, confirm at the Phase-2 gate the operator's explicit acknowledgement of that unrecoverable refused population (context.md Open Threads, O-18) and record it in `context.md`.
+5. Before writing, check that `context.md` holds the operator's explicit acknowledgement of that unrecoverable refused population (O-18), recorded at Step 11's Phase-2 gate; if it is missing, stop and report rather than documenting an unacknowledged limitation.
 
 **Verification**:
 ```bash
@@ -709,6 +739,123 @@ grep -n "Known limitations (feature 327)\|formula version unavailable" services/
 
 ---
 
+### Step 16 — service: the agent allow-lists the new `ScoreStrategy` UNAVAILABLE message
+
+**Status**: `pending`
+**Service**: `xstockstrat-agent`
+**Files**:
+- `services/xstockstrat-agent/app/tools.py` — modify
+
+**Reviewers**: xstockstrat-agent service owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity
+
+**Codebase Evidence**:
+- `_SCORE_UNAVAILABLE_PASS = frozenset({"fundamentals availability unknown — grade unchanged"})` at `services/xstockstrat-agent/app/tools.py:242`, under the comment at `:240-241` ("Exact backend strings a call site allow-lists for UNAVAILABLE; a cross-service contract pinned by tests/test_tool_errors.py::test_unavailable_pass_strings_match_backend_sources").
+- `_grpc_error_message(exc, not_found="not found", *, deadline_s=None, write=False, pass_messages=frozenset())` at `:250-285`: `if code == grpc.StatusCode.UNAVAILABLE and details in pass_messages: return f"{name}: {details}"` (`:278-279`); any other UNAVAILABLE detail is logged and replaced by `f"{name}: upstream unavailable; {tail}"` (`:280-282`). NOT_FOUND returns the details verbatim when they contain `not_found` (`:273-274`).
+- `_score_strategy(ctx, strategy_id)` at `:288`: `not_found=e.details() or "no eligible evidence"`, `write=True`, `pass_messages=_SCORE_UNAVAILABLE_PASS` (`:294-299`) — so the Step 11 NOT_FOUND text already passes through and only the UNAVAILABLE text is withheld.
+- `manage_strategy` tool description, score errors at `:1201-1207`: "NOT_FOUND (no eligible evidence — the stale grade is cleared; includes the "all evidence symbols excluded (fundamentals unavailable: …)" variant); UNAVAILABLE ('fundamentals availability unknown — grade unchanged' is passed through verbatim; a store outage surfaces as …)".
+- Backend source of the string: `_FORMULA_VERSION_UNKNOWN_MSG` (created by Step 11 in `services/xstockstrat-analysis/app/handlers/servicer.py`).
+- Rule: AGENT-10 (`services/xstockstrat-agent/docs/context-constitution.md:25`) — an allow-list entry is a byte-exact copy of the backend detail and must be added to the pin test.
+- Header propagation (§B): no new outbound call; `client.score_strategy` is unchanged.
+- strat-lab plugin (`docs/patterns/strat-lab-plugin.md` guard-rail table): none of the listed behaviours (update semantics, diagnostics payload size, multi-symbol capital handling, backfill contracts, tool names) changes, so the `backtest` skill is not edited.
+
+**Lands with**: `Step 17`
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+1. Add `"formula version unavailable — grade unchanged"` to the `_SCORE_UNAVAILABLE_PASS` frozenset (`:242`), byte-exact with Step 11's `_FORMULA_VERSION_UNKNOWN_MSG` (same em dash). Do not import the analysis constant (the agent does not depend on the analysis package; the copy is pinned by Step 17).
+2. In the `manage_strategy` description (`:1201-1207`), extend the score error sentence: the NOT_FOUND list also includes the "formula … is not readable" variant, and the UNAVAILABLE clause names both verbatim messages ('fundamentals availability unknown — grade unchanged' and 'formula version unavailable — grade unchanged'). Keep the rest of the description byte-identical.
+3. Change nothing else: no parameter, return shape or tool name changes.
+
+**Verification**:
+```bash
+cd services/xstockstrat-agent
+grep -n "formula version unavailable — grade unchanged" app/tools.py    # allow-list entry + description
+uv run pytest tests/test_tool_errors.py tests/test_tools.py tests/test_score_trailer_loopback.py -q
+ruff check . && ruff format --check .
+```
+
+---
+
+### Step 17 — test: the new message survives the agent verbatim and is pinned to the analysis source
+
+**Status**: `pending`
+**Service**: `xstockstrat-agent`
+**Files**:
+- `services/xstockstrat-agent/tests/test_tool_errors.py` — modify
+- `services/xstockstrat-agent/tests/test_tools.py` — modify
+
+**Reviewers**: xstockstrat-agent service owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity
+
+**Codebase Evidence**:
+- `tests/test_tool_errors.py`: `_SCORE_MSG` at `:22`, `_ROOT = pathlib.Path(__file__).resolve().parents[3]` at `:25`; the mapping-table rows `"unavail_pass"` (`:111-116`) and `"unavail_not_listed"` (`:117-123`); `test_unavailable_pass_strings_match_backend_sources` at `:179-196` — reads `services/xstockstrat-analysis/app/handlers/servicer.py`, asserts `re.search(rf'StatusCode\.UNAVAILABLE,\s*"{re.escape(_SCORE_MSG)}"', analysis)` (`:187`) and `tools._SCORE_UNAVAILABLE_PASS == frozenset({_SCORE_MSG})` (`:194`). The constant-assignment pin form already exists for ingest: `f'CALLBACK_URL_UNVALIDATED_DETAIL = "{_BACKFILL_MSG}"' in ingest` (`:192`).
+- The regex at `:187` must keep matching after Step 11: the existing `except _GradeInputsUnknown` abort (`servicer.py:2662-2668`) keeps the literal `"fundamentals availability unknown — grade unchanged"` directly after `StatusCode.UNAVAILABLE,`.
+- `tests/test_tools.py:1254-1273`: the `test_server_detail_surfaces_in_error` parametrize (`("UNAVAILABLE", "fundamentals availability unknown — grade unchanged")` at `:1259`; NOT_FOUND variants at `:1258` and `:1260-1264`), driven through `self._score(...)`.
+- Durable agent rules that stay as written (C-16 PRESERVE — nothing is reworded): `@AC-4 @feature-283` (`services/xstockstrat-agent/acceptance/expose-score-strategy-mcp.feature:24-28`) and `@AC-5 @feature-303` (`acceptance/fix-agent-mcp-tools.feature:57-61`) both quote the existing string, which stays allow-listed.
+
+**Lands with**: `Step 16`
+
+**TDD**: `red-green required`
+
+**Covers**: `AC-4`
+
+**Instructions**:
+1. `tests/test_tool_errors.py`: add `_FORMULA_MSG = "formula version unavailable — grade unchanged"` beside `_SCORE_MSG` (`:22`). In `test_unavailable_pass_strings_match_backend_sources` add `assert f'_FORMULA_VERSION_UNKNOWN_MSG = "{_FORMULA_MSG}"' in analysis` (the ingest pattern at `:192`) and change the equality at `:194` to `frozenset({_SCORE_MSG, _FORMULA_MSG})`. Do not add a second regex on the abort call: Step 11 selects the message by the gate, so the assignment pin is the contract.
+2. `tests/test_tool_errors.py`: add a mapping-table row beside `"unavail_pass"`: details `_FORMULA_MSG`, kwargs `{"pass_messages": tools._SCORE_UNAVAILABLE_PASS}` → `f"UNAVAILABLE: {_FORMULA_MSG}"`.
+3. `tests/test_tools.py`: add `("UNAVAILABLE", "formula version unavailable — grade unchanged")` (327 `AC-4`) and one NOT_FOUND row carrying the Step 11 unreadable-formula text for `f-9` to the `test_server_detail_surfaces_in_error` parametrize (`:1254-1266`).
+   RED before Step 16: the tool answers `UNAVAILABLE: upstream unavailable; outcome unknown, verify before retrying`, so the new UNAVAILABLE row and the equality pin fail. The NOT_FOUND row is green on both trees (it documents the existing pass-through; it is not the regression proof).
+4. No new fixture: the rows are inline in existing parametrize tables (C-13 — single consumer, inline).
+
+**Verification**:
+```bash
+cd services/xstockstrat-agent
+uv run pytest tests/test_tool_errors.py tests/test_tools.py tests/test_score_trailer_loopback.py -q
+grep -n "_FORMULA_MSG" tests/test_tool_errors.py
+grep -n "def .*fixture" tests/test_tool_errors.py    # C-13: no new fixture introduced by this step
+uv run pytest --cov=app --cov-fail-under=40
+ruff check . && ruff format --check .
+```
+
+---
+
+### Step 18 — docs: `mcp-tools.md` score errors and AGENT-10
+
+**Status**: `pending`
+**Service**: `xstockstrat-agent`
+**Files**:
+- `docs/runbooks/mcp-tools.md` — modify
+- `services/xstockstrat-agent/docs/context-constitution.md` — modify
+
+**Reviewers**: none
+
+**Codebase Evidence**:
+- `docs/runbooks/mcp-tools.md:108-109`: "**`UNAVAILABLE`:** only `fundamentals availability unknown — grade unchanged` (`manage_strategy` score) and `positions not published; re-confirm to retry` (`manage_offline_account`) pass through."
+- `docs/runbooks/mcp-tools.md:616-621`: the `manage_strategy` score error rows — `score` with no eligible evidence (`:617`), every evidence symbol excluded (`:618`), "`score` while fundamentals availability is unknown | `UNAVAILABLE: fundamentals availability unknown — grade unchanged` (passed through verbatim)" (`:619`), store down (`:620`).
+- AGENT-10 row at `services/xstockstrat-agent/docs/context-constitution.md:25` — lists `app/tools.py#_SCORE_UNAVAILABLE_PASS (~L240)` ↔ `services/xstockstrat-analysis/app/handlers/servicer.py` as one of its N=3 sites.
+- Reviewer-registry focus for the agent (`docs/runbooks/reviewer-registry.md:24`): `docs/runbooks/mcp-tools.md` parity with the tool contract.
+
+**TDD**: `N/A (docs)`
+
+**Covers**: —
+
+**Instructions**:
+1. `mcp-tools.md:108-109`: add `formula version unavailable — grade unchanged` (`manage_strategy` score) to the pass-through list. Do not rewrite the rest of the bullet.
+2. `mcp-tools.md` score table (`:616-621`): after `:618` add a row "`score` when a referenced formula is not readable and no evidence exists for a readable version | `no eligible evidence — formula <ids> is not readable and no evidence was recorded for a readable version; …` (NOT_FOUND); the stale grade is cleared"; after `:619` add a row "`score` while a referenced formula's version cannot be read (fundamentals gate off) | `UNAVAILABLE: formula version unavailable — grade unchanged` (passed through verbatim)".
+3. AGENT-10 (`context-constitution.md:25`): state that `_SCORE_UNAVAILABLE_PASS` now carries two analysis strings, the second mirrored from `servicer.py#_FORMULA_VERSION_UNKNOWN_MSG`; the site count stays N=3 (one allow-list per call site).
+
+**Verification**:
+```bash
+grep -n "formula version unavailable — grade unchanged" docs/runbooks/mcp-tools.md    # pass-through bullet + table row
+grep -n "is not readable" docs/runbooks/mcp-tools.md
+grep -n "_FORMULA_VERSION_UNKNOWN_MSG" services/xstockstrat-agent/docs/context-constitution.md
+```
+
+---
+
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- 2026-11-20 (impl-spec review, before execution): design.md "Consumer surface (C-14)" calls the feature internal-only. The review showed the agent withholds any UNAVAILABLE text outside `_SCORE_UNAVAILABLE_PASS`, so Steps 16–18 were added and `xstockstrat-agent` joins the touched services. `feature.md` (Affected Services, Reviewers table) still lists analysis and indicators only; context.md Open Threads carries the operator confirmation of this scope addition to the `/sdd-execute` checkpoint. The insights BFF gets no step (a bare `forward`; recorded in the Execution Summary).
+
+_Further entries are added by /sdd-execute as implementation proceeds._
