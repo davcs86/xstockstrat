@@ -483,3 +483,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Notify test conversion to metadata callers may expose tests relying on the unscoped fallback; rebase on 315 first. Target: notify step.
 - Two defect reports to file: notify `StreamAlerts`/`AcknowledgeAlert` body `user_id` (D-11), and trading `broker_accounts` `user_id=''` cleanup (D-9). Target: final docs step.
 - Every `path:line` that entered in rounds 2–3 (debate.md D-7..D-18 evidence) post-dates recon.md and must be re-grepped by `/sdd-spec`.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 20 steps. Status → implementation-ready.
+- Appended `@AC-4`, `@AC-5`, `@AC-6` to `acceptance.feature` (D-17, operator decision 2026-11-20). Every scenario `@AC-1`..`@AC-6` is covered by a test step (spec § Scenario Coverage).
+- Tree: `origin/feature/fix-read-path-owner-trust` @ `6474bdb6`. All recon and debate.md D-7..D-18 anchors were re-grepped and hold, with the corrections below.
+- Key codebase findings:
+  - `ResolveOrderOwner` is specced as `(*TradingService).ResolveOrderOwner(ctx) (string, error)` above `GetOrder` (`trading.go:1626`). `GetOrder`'s absent case returns a plain `fmt.Errorf` today (`:1638`), so the fix must return a gRPC `NotFound` status for the absent and non-owner cases alike.
+  - The header-only read breaks three existing tests, edited in the same step: `trading_ownership_test.go:120` (the `""` all-users subscriber), `trading_offline_test.go:1860` and `trading_order_race_test.go:34` (`GetOrder` with `context.Background()`).
+  - Broker-account handlers return `toGRPCError(err)` on a gRPC status error (`handler/trading.go:277,289,300,315`), which falls through to `Internal`; five `connectCodeFromErr` returns already exist (`:40,53,66,80,93`).
+  - No trading migration, config key, env var or port is needed. Last trading migration is `011`; a cleanup `012` is only the candidate in the Step 19 follow-up report.
+  - Local `golangci-lint` is built with go1.25 and refuses the go1.27 module, so the SA1019 behaviour below was reasoned, not run.
+
+### Decisions
+
+- **Proto unit moved after the code steps (deviation from design.md's build order).** `[deprecated = true]` makes generated Go `UserId` trip staticcheck SA1019 (`.golangci.yml:7`) at the seven read sites; a proto-first tree could not pass the trading lint in the next step's verification. Steps 12+13 (proto + proto-gen) are the only atomic unit. No D-n depends on the order.
+- **`export_test.go` constructor takes `accounts repository.AccountRepository`.** design.md §8 limits it to `repo`/`orders`/`subs` but also puts the agent `@AC-7` wire proof in the same test, and that proof reaches the unexported `accountRepo`. Flagged in the spec for impl-spec review.
+- **Design claims corrected by the re-grep.** The two `RegisterBrokerAccount` tests (`trading_offline_test.go:320`, `trading_ibkr_auth_test.go:290`) already pass `"user-1"`, so no step edits them. All existing `listAlerts` tests already use `metaCall`, so the notify test step only adds cases.
+- **Consumer surfaces.** ui, agent and analysis each get a comment or wording step only; behaviour is unchanged for an identified caller (design § Consumer surfaces).
+- **Portfolio `order.filled` without `account_id`** is skipped with a WARN (D-5) and the dead `"alpaca-default"` block is deleted.
+
+### Open Threads
+
+- Impl-spec review should confirm the two flagged items above (proto order, `accounts` parameter).
+- Step 10 needs feature 315 merged into the base first; Step 5 re-greps if 326 touches `handler/trading.go` (D-12).
+- Step 20 is an operator gate: the `user_id = ''` active `trading.broker_accounts` count per environment (O-11).
+- `debate.md` still shows O-2, O-6 and O-8 as `open`; not changed by this run.
+- `scripts/integration-test.sh:446-448` still sends a headerless `ListOrders` on the retired Connect port; out of scope, already dead.
