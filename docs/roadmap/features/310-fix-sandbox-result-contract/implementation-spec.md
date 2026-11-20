@@ -6,8 +6,10 @@
 **Total Steps**: 8
 **Feature Branch**: `feature/fix-sandbox-result-contract`
 
-**Tree**: `origin/feature/fix-sandbox-result-contract@90a2fd0e`. Every `path:line` below was re-read
-at this tree; the `sandbox.py` lines match recon.md (`origin/main-dev@c4fd48b0`). design.md's
+**Tree**: `origin/feature/fix-sandbox-result-contract@8d01d15a`. Every `path:line` below was read at
+`@90a2fd0e`; `90a2fd0e..8d01d15a` changes only this feature directory (`git diff --stat` outside it
+is empty, re-checked by `/sdd-review impl-spec` 2026-11-20), so the anchors hold at `@8d01d15a`.
+The `sandbox.py` lines match recon.md (`origin/main-dev@c4fd48b0`). design.md's
 "(debate.md)" citations were re-grepped here (F-04): `sandbox_probe.py:309-320`,
 `sandbox.py:670-679`, `FormulaRunResult.tsx:92-98` all hold.
 
@@ -44,7 +46,8 @@ There is no proto step (D-8, R-8), no migration and no config key (F-01, F-07).
 - **Break radius, measured not inferred.** The full Step 1 + Step 3 change was applied to the
   working tree temporarily and the unchanged suite was run through the service venv: `571 passed`
   before the change, `571 passed` with it (then reverted; nothing committed). So no existing indicators test
-  relies on the implicit `{}`, on the deleted stderr test, or on `memory_used_bytes == 0`, and
+  relies on the implicit `{}`, on the deleted stderr substring branch (`sandbox.py:809`; no test
+  contains "is not allowed in sandbox"), or on `memory_used_bytes == 0`, and
   neither service step needs a `**Lands with**` unit.
 - **Implicit-`{}` enumeration (design build step 1).** In-repo: no test source relies on it (above);
   the 9 template seed rows assign `result` (design.md Open Risks); the seeded system formula assigns
@@ -85,13 +88,29 @@ There is no proto step (D-8, R-8), no migration and no config key (F-01, F-07).
   contract (`.claude/skills/sdd-qa/reference/defect-filing.md:26-48`) allows only a status token and
   a `ref:` line, and says a `triaged` report whose feature launches "counts as resolved — nothing
   re-stamps it". All three sidecars already read `triaged` / `ref: feature:310-fix-sandbox-result-contract`.
-  The D-14 conditional wording therefore lives in the findings row (Step 8). Flagged for
-  `/sdd-review impl-spec`.
+  The D-14 conditional wording therefore lives in the findings row (Step 8). `/sdd-review impl-spec`
+  (2026-11-20) found the reading reasonable; it narrows design.md § 7 and is logged in the Deviation
+  Log below. Operator confirmation is still open (context.md Open Threads).
 - **Known pre-existing flake, not this feature's.** On this kernel
   `tests/test_sandbox_watchdog.py::test_ac8_fork_bomb_is_not_a_success_the_service_recovers_and_nothing_is_unobservable`
   (`:432`) fails about 1 run in 4 when run **alone on the unmodified tree** (7 of 25), on the
   `CANNOT_OBSERVE_MSG` assertion. Full-suite runs passed 4 of 4. An executor that sees it must not
-  attribute it to a step here.
+  attribute it to a step here. The full-suite `**Verification**` of Steps 1, 2 and 3 can therefore
+  go red on this test alone; the executor records any such run in context.md (P-03) and does not
+  hide it. No defect report is filed yet (context.md Open Threads).
+- **Step 1 review load.** Step 1 edits one file but carries the wrapper template, the parent parser,
+  the classifier, the nonce and the memory read. It is not split because `{nonce}` and
+  `.format(nonce=…)` cannot be committed apart. The `571 passed` prototype figure is advisory and was
+  not re-run by `/sdd-review impl-spec`; Step 1's own `**Verification**` is the owner.
+- **Rebase-only file overlaps** (`/sdd-review impl-spec` overlap scan, 2026-11-20; no migration,
+  proto-field or config-key collision). `services/xstockstrat-agent/app/tools.py` and
+  `docs/runbooks/mcp-tools.md` (Step 5) are also edited by `345-authelia-sso`
+  (`implementation-ready` on `origin/main-dev`; its spec `:985`, `:2319`), and `mcp-tools.md` by
+  `360-fix-mcp-tools-page` (`code-completed` on `origin/main-dev`; its spec `:958`). Step 5's
+  executor re-greps the `tools.py:1687-1689` and `mcp-tools.md:1060-1062` anchors after any rebase.
+  `300-fix-sandbox-memory-cap` (shares `sandbox.py`, `tests/test_sandbox.py`,
+  `tests/test_sandbox_isolation.py`) is `launched`, so it is already in this tree. The batch peer
+  features' file lists were not verifiable in the scan.
 - Run every indicators test command through the service venv (ledger fails 2026-09-28), as written
   in each `**Verification**`.
 
@@ -447,6 +466,8 @@ RED evidence on the pre-Step-1 tree: `test_ac1_…` reports `import_blocked`, `t
   `_warn_unobservable_once` (`sandbox.py:237-240`, reached from `:315` and `:445`) and the
   once-latched `oom_score_adj` warning (`:484`); both are truthful runtime facts that the first user
   run would latch anyway. Measured latency for this call on the prototype: about 50 ms.
+- Startup-latency trade-off (accepted): the self-test adds one real sandbox subprocess run to every
+  boot, after `init_telemetry()` (`app/main.py:46`). Its failures are caught and logged, never fatal.
 - Existing tests monkeypatch `sandbox_probe._PROBE_SCRIPT`, `_PROBE_TIMEOUT_S`, `_child_headroom`
   and `_sample` (`tests/test_sandbox_probe.py:83,113,115,139`) and count `"sandbox memory probe "`
   INFO records (`:58`); the new message must not contain that substring.
@@ -849,3 +870,9 @@ grep -n "status: \*\*open\*\*" services/xstockstrat-indicators/docs/context-cons
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-11-20 (spec-time, `/sdd-review impl-spec`)** — design.md § 7 says the report sidecars are
+  "updated" and that the report-2 sidecar carries the D-14 conditional wording. This spec leaves all
+  three sidecars untouched and puts the wording in the findings row (Step 8), because the sidecar
+  contract (`.claude/skills/sdd-qa/reference/defect-filing.md:26-48`) allows only a status token and
+  a `ref:` line. design.md is not amended. Operator confirmation pending (context.md Open Threads).
