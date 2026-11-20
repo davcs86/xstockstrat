@@ -16,6 +16,7 @@
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 3 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 
 ---
 
@@ -26,7 +27,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections
 - [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-mcp-deadline-budget`_
+- [Implementation Spec](implementation-spec.md) — 9 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -37,6 +38,18 @@ Deadline budgets are not enforced end to end: `extract_*` tools and `list_opport
 client's 60 s timeout, and `SetConfig` bounds each timeout key independently so cross-hop ordering (PLAT-13) can
 be inverted by two individually valid writes.
 
+## Reviewers
+
+Snapshot from `docs/runbooks/reviewer-registry.md`, taken by `/sdd-spec` on 2026-11-20.
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| xstockstrat-config owner | Config key naming (`<service>.<category>.<key>`), environment (`production`/`staging`) / global-per-user scoping, WatchConfig stream stability | 1, 2, 3, 4, 9 |
+| DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present, run-order compliance with `scripts/db-migrate.sh` | 3 |
+| xstockstrat-agent owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; no secret values in tool output | 5, 6, 7 |
+
+Step 8 (docs) has no reviewer.
+
 ## Next Action
 
-`/sdd-spec fix-mcp-deadline-budget` — generate implementation spec from the approved design
+`/sdd-review fix-mcp-deadline-budget impl-spec` — validate implementation spec, then `/sdd-execute fix-mcp-deadline-budget`
