@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-20 | /sdd-design | 6 | 7 | 7 | 12 | 0 | yes |
 | 2 | 2026-11-20 | /sdd-design | 9 | 1 | 15 | 10 | 1 | yes |
+| 3 | 2026-11-20 | /sdd-design | 4 | 1 | 8 | 8 | 0 | yes |
 
 ## Settled Decisions
 
@@ -31,6 +32,10 @@
 | D-13 | 2 | Operator ruling (2026-11-20): the live IBKR request-bound change is accepted, WITH a recorded pre-deploy operator action — set `trading.broker.timeout_ms` to 10000 in both environments before 321 deploys, keeping IBKR signed requests at today's 10 s. Known consequences accepted for round 3 to verify: every Alpaca call's timeout also becomes 10 s and the Alpaca 429 retry budget becomes a single attempt (B = max(T, S−2T) = 10 s at S = 30 s). | context.md 2026-11-20; O-1, O-14..O-16 | settled |
 | D-14 | 2 | Operator ruling (2026-11-20): `APPLICATION_ENV` alone decides trading's paper/live; `broker.paper` is seeded per environment (D-6) and is an ordinary config-ui-editable row; C-16 CHANGE signed — 304 `@AC-14` is superseded by 321 `@AC-4` (D-10). U4 and U5 are both released by this sign-off. | context.md 2026-11-20; O-8, O-11, O-13, O-17, O-18 | settled |
 | D-15 | 2 | Operator ruling (2026-11-20): the stale `TRADING_MODE env` comment at `packages/proto/trading/v1/trading.proto:264` is fixed in 321 as a comment-only proto step (buf lint + buf breaking + regenerated stubs, C-09). The product spec's "Proto changes anticipated: no" is amended to "comment-only". | context.md 2026-11-20; O-21 | settled |
+| D-16 | 3 | The D-13 operator action is made mechanical and post-merge-evaluable: an operator-only step in the implementation spec whose pass condition is STORED STATE — the global `trading`/`broker.timeout_ms` row is an int >= 10000 in staging and in production, each with a `config.config_audit` row, both audit timestamps recorded in context.md (a value above 10000 is recorded too, since it raises S and IBKR's bound above HEAD); the step states that after 321 the key also governs IBKR signed requests (the stored description is Alpaca-only); the integration PR is opened as a DRAFT and leaves draft only once this is recorded, with the stored value re-checked just before. Residual risk: the row being reverted between the record and the deploy. | `fails.md:3750-3760`; `scripts/config-heal/catalog.tsv:172`; adversary r3 obj. 3, 4, 8 | settled |
+| D-17 | 3 | The accepted T = 10 s behaviour is pinned: rows `{10000, 3.0, 10 s}` in `TestAlpacaRateLimitBudget_FollowsConfig` and `{10 s, 30 s, 10 s}` in `TestRateLimitBudget`, one `IntVal` 10000 case on the `brokerTimeout` read path (the operator stores an int row), `staleThreshold` rows for T = 1000 and 10000 (both 30 s), and the matching row in the trading CLAUDE.md Adaptive-rate-limit table. | `trading_rate_limit_test.go:35-39,47-55,65-68`; `order_intent.go:100-117`; adversary r3 obj. 5 | settled |
+| D-18 | 3 | Unit order: U1a RED scaffold → U1b IBKR wiring → U2 AC-2 characterization → U3 `requires_approval` → U4+U5 as ONE atomic unit (`**Lands with**`; fallback change + migration 056 + baseline entry removal + stored-JSON regeneration; reviewers: trading owner, config owner, DBA) → U6 proto comment + regenerated stubs (Proto Reviewer + trading owner; comment-only is not a breaking change) → U7 docs. | `check-config-wiring.mjs:629,698-712,939-941`; `reviewer-registry.md:35,46-47`; adversary r3 obj. 6 | settled |
+| D-19 | 3 | Stored config descriptions that go stale (`order_intent.stale_multiplier` naming `IBKRRequestTimeout`; `broker.timeout_ms` "Alpaca… read at construction") are recorded as trading findings, not rewritten; `cfg.TradingMode`'s dead plumbing is left to feature 322. | `catalog.tsv:172,180`; `config-wiring-stored.json:4714,4726`; `cmd/server/main.go:70,75`; O-12 halt condition | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -45,6 +50,7 @@
 | R-6 | 1 | A proto field, or an explicit `requiresApproval` param on `UpsertOrder` | Proto change is out of scope; the param churns six call sites and two pinned positional tests for the same result. | locked |
 | R-7 | 1 | Per-request deadline on `send` too, or a per-request `max(T, 10 s)` for IBKR | The first double-bounds the handshake and silently caps `ibkr.handshake_timeout_ms` at T; the second defeats the defect (AC-1 needs 2 s). | locked |
 | R-8 | 2 | Pin the production `Timeout` wiring with a source-level grep/AST check, or leave it unpinned on the Alpaca precedent | A text check is brittle and tests no behaviour; unpinned, a dropped field is invisible while the stored value equals the 5 s fallback. Superseded by D-12. | locked |
+| R-9 | 3 | A guarded reseed of `broker.timeout_ms` (5000 → 10000) inside migration 056, making the D-13 action mechanical | Rewrites an operator-owned value in a migration (277 scar; config `@AC-24`); the operator ruled it an operator action (D-13). | locked |
 
 ## Objections
 
@@ -73,6 +79,14 @@
 | O-20 | 2 | C-18/P-03: the production `Timeout` (and `Timing`) wiring in `instantiateBrokerLocked` is unpinned; reverse the proposer's rejection of `ibkrClientConfig()`. | no | closed @ round 2 (adopted as D-12 / R-8) |
 | O-21 | 2 | C-10/C-14 docs drift: `packages/proto/trading/v1/trading.proto:264` comment names `TRADING_MODE env` (fix as a comment-only proto step with buf-gen, or list as out of scope); root `docs/context-constitution-findings.md:23`; Consumer Surface names `GetTradingEnvironment` (UI display, unchanged). | no | closed @ round 2 (operator ruling 2026-11-20: fix the proto comment in 321 — D-15) |
 | O-22 | 2 | C-15: amended `@AC-2` must state attempts = 1 + max_retries so "exactly 2" for 1 is unambiguous; `&config.Config{}` test harnesses move from LIVE to PAPER under the new fallback — a full-suite run must confirm nothing pins LIVE. | no | closed @ round 2 (adopted in D-11 and the test plan) |
+| O-23 | 3 | P-03: "an early edit moves only Alpaca" is false — `reconcileTick` (`trading.go:2169,2185`) and position sync (`:2572-2616`) bound every broker call by T on every account type, so an early edit also lengthens IBKR read-only polls 5 → 10 s. Harmless; wording only. | no | closed @ round 3 (wording corrected in the synthesis / design.md) |
+| O-24 | 3 | P-03: the Alpaca consequence at T = 10 s is understated — at B = T not only the 429 retry but pacing goes away: a used-up window is refused with `ErrRateLimited` before sending (`alpacapace/pace.go:134-136`) and requests are never spread to a later slot (`:146-148`), so bursts hit 429 more often, submits are definitively REJECTED more often, and an emergency flatten halts on its first 429. Optional operator mitigation, no code: also set `trading.order_intent.stale_multiplier` to 4.0 (S = 40 s, B = 20 s — restores retry and spreading and closes the O-4 chain gap; orphaned PENDING intents reclaim after 40 s; CancelOrder worst case 50 s). | no | closed @ round 3 (stated in design.md Open Risks; the multiplier option is put to the operator at the gate) |
+| O-25 | 3 | fails.md:3758-3760: D-16's pass condition must not require exactly 10000 — accept int >= 10000 with an audit row. | no | closed @ round 3 (adopted in D-16) |
+| O-26 | 3 | The proposer's named risk is mostly moot: the draft PR blocks both environments mechanically; the residual risk is a revert between record and deploy. | no | closed @ round 3 (adopted in D-16) |
+| O-27 | 3 | D-17's rows use `FloatVal`; add an `IntVal` 10000 case for the read path the operator action exercises. | no | closed @ round 3 (adopted in D-17) |
+| O-28 | 3 | F-08 / approval flow: U4+U5 must be written as an atomic unit with trading owner, config owner and DBA as reviewers. | no | closed @ round 3 (adopted in D-18) |
+| O-29 | 3 | C-01: cite `services/xstockstrat-config/src/grpc/configServiceImpl.ts:114`; 056 = last + 1 locally (053 absent), provisional because feature 317's spec also claims it. | no | closed @ round 3 (adopted) |
+| O-30 | 3 | P-03: the stored description the operator sees at the edit is Alpaca-only; the operator step must say the key governs IBKR signed requests after 321. | no | closed @ round 3 (adopted in D-16) |
 
 ## Reopen Petitions
 
