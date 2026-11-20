@@ -2615,3 +2615,259 @@ Written by the orchestrating session itself.
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-batch design gate (round 11)
+
+- `/sdd-design fix-position-fold-correctness` (full) halted at its approval gate after round 11 (gate policy: halt). design.md NOT written; status.md unchanged (spec-ready). Register: `debate.md` (D-1..D-50, R-1..R-40, O-1..O-68, P-1..P-8). Round 11 settled D-49 and D-50, locked R-37..R-40, closed O-64, O-65 and O-66, and opened O-67 and O-68 (both non-blocking). No petition was filed and nothing was reopened; P-4..P-8 still carry "pending user" in the register (O-56).
+
+## Open Threads
+
+- **Approach (round-11 synthesis).** The round-10 synthesis stands as written (D-1..D-3, D-5..D-16, D-18..D-28, D-31..D-39, D-41..D-48). Round 11 only closes O-65. `trading.go` below means `services/xstockstrat-trading/internal/service/trading.go`.
+  - **Complete-list gate (D-49).** After a successful `Broker.ListOrders`, a candidate absent from the list is tombstoned only when the list is non-empty, and for Alpaca also shorter than 500 rows. An empty IBKR 200, an Alpaca list of exactly 500 rows or a failed `ListOrders` inserts nothing; the candidate is re-evaluated on the account's next adoption list. A candidate listed in a terminal state is tombstoned on any successful list (D-48). Listed-open handling is unchanged.
+  - **Adoption-only throttle (D-50).** An account with candidates but no non-retired `bracket_legs` row gets its adoption `ListOrders` only when a per-account cooldown has elapsed. The cooldown is `trading.reconciliation.interval_ms` (default 60000, live read), or `haltedPollInterval()` when the account is halted. No config key is added.
+  - **Throttle mechanics.** The body of `shouldPollHaltedAccount` becomes one shared helper. `shouldPollHaltedAccount` keeps its signature and behaviour over `haltedLastPolled`; adoption uses a separate in-memory `adoptionLastListed` map under `haltedMu`. The stamp is taken when the call is allowed, so a failed list is throttled too. The map is empty at boot, so the first tick lists every adoption-only account. The change sits inside `pollBracketLegFills`, with no `StartFillPoller` or `reconcileTick` hunk.
+  - **Tracked accounts.** An account with at least one non-retired tracked leg keeps one `ListOrders` per fill-poller tick (D-11, D-46), and adoption shares that list. An account that gains a tracked leg is listed every tick from the next tick.
+  - **Steady-state `ListOrders` rate per account from `pollBracketLegFills`** (defaults: tick 5 s, interval 60 s, halted poll 300 s): tracked 12/min, unchanged; adoption-only 1/min, down from 12/min; adoption-only halted 0.2/min; no candidates and no tracked legs 0. `reconcileTick`'s own list is separate and unchanged, so an idle IBKR account totals about 2/min instead of 13/min.
+  - **Adopted from adversary r11, not yet in a decision.** The proposer has not confirmed these four items (O-67, O-68):
+    - **New-candidate bypass.** An adoption-only account whose candidate set contains an id not seen at its last allowed list is listed on this tick. This keeps the round-10 latency of about 5 s for a bracket activated by an old trading instance.
+    - **`interval_ms <= 0`.** Adoption reads it as the 60000 default. `trading.go:1977-1983` keeps the previous interval on `<= 0`; it does not mean "every tick". "Always list" comes only from `halted_poll_interval_ms <= 0` on a halted account.
+    - **Injected clock.** The shared helper takes `now`: `time.Now()` from `shouldPollHaltedAccount`, `s.clock()` from `pollBracketLegFills`.
+    - **Invalid credentials.** Adoption-only accounts with `credentialsKnownInvalid` status are skipped before the list, and `broker.ErrInvalidCredentials` is handled as `reconcileTick` handles it: WARN and skip, no failure count (`trading.go:2068,2083-2086`).
+  - **Tests added (trading, 11-20, each asserting the call count over N ticks).** 500-row Alpaca list without the candidate; idle IBKR with an empty 200; `interval_ms = 0` versus `halted_poll_interval_ms = 0`; tracked account with a candidate; halted adoption-only; `ListOrders` error on tick 1; candidate adopted and listed on the next tick; independence of the two maps, with `trading_reconciliation_test.go:486-503` unchanged; new-candidate bypass; known-invalid credentials.
+- **Strongest open objection.** O-67, non-blocking: the proposer has to confirm the new-candidate bypass.
+  - **Why it matters.** Without the bypass, the 60 s cooldown widens an existing path from about 5 s to about 60 s. A bracket activated by an old trading instance can fill inside the window and be tombstoned with `observed_filled_qty = 0` (D-48, R-36). Its exit never reaches the ledger or the fold, and `NetFilledQtyBySymbol` keeps the entry quantity against a flat broker position, which can halt the account (206 trading @AC-1).
+  - **If declined.** The residual must name the false halt as well as the lost fill.
+- **Floor status.** No Floor breach. No blocking objection is open, and the adversary rates the round SOUND. O-65 is closed, so the "evaluated exactly once" reading does not need to go back to the operator.
+- **Uncovered @AC changes.** None; the list is unchanged from round 10. `@AC-5` CHANGE is covered by the operator's C-16 sign-off. 251 @AC-17, 206 trading @AC-1 and 294 @AC-56 are EXTEND, each covered by a recorded ruling. @AC-1..@AC-4, 251 @AC-14, 206 trading @AC-2 and @AC-3, 294 @AC-6 and 290 @AC-3 are PRESERVE.
+- **Operator sign-offs still needed.**
+  - **Design approval** at this gate (policy: halt).
+  - **Cutover confirmations (O-61),** to be answered before `/sdd-execute` reaches the integration step; the list is unchanged from the round-8 entry.
+  - **Register verdicts (O-56).** P-5, P-6 and P-7 recorded as "user reopened" citing `context.md:1535-1541`, P-4 as withdrawn, and P-8 as "user reopened" citing `context.md:2372-2383`.
+- **Non-blocking, for the proposer and `/sdd-spec`.**
+  - **O-68.** Proposer to confirm the other three adopted items above (`interval_ms <= 0`, injected clock, invalid credentials). `/sdd-spec` wires the test config fake through `GetFloat` (ledger `fails.md:1392`) and logs the doc drift at `services/xstockstrat-trading/CLAUDE.md:119` in the trading findings.
+  - **O-30.** The analysis AC ids are still to be enumerated, and the D-10 flip-short window residual stays named.
+- **New named residuals.**
+  - An idle IBKR account with an empty list, or an Alpaca account pinned at 500 rows, never tombstones its candidates. It keeps one adoption `ListOrders` per reconciliation interval (1/min by default) indefinitely.
+  - The cooldown and the candidate-set memory are in process, so every restart lists each adoption-only account once.
+  - The candidate anti-join still runs every tick; only the broker call is throttled.
+  - The `services/xstockstrat-trading/CLAUDE.md:119` row implies `interval_ms <= 0` means "every tick". This feature logs the drift and does not fix it.
+
+```sdd-batch-design-state
+{
+  "round": 11,
+  "synth": {
+    "approach": "Round-11 synthesis. The round-10 synthesis stands as written (D-1..D-3, D-5..D-16, D-18..D-28, D-31..D-39, D-41..D-48, build order, cutover, production check-only, tombstone row, tests 1-10). This round only closes O-65. All paths are under `/home/user/xstockstrat/.claude/worktrees/orch-311`; `trading.go` means `services/xstockstrat-trading/internal/service/trading.go`.\n\nVerified this round\n- `reconciliation.interval_ms` is read live and a value `<= 0` keeps the reconciler's previous interval; it does not mean \"every tick\" (`trading.go:1977-1983`).\n- `shouldPollHaltedAccount` uses `time.Now()`, stamps when it returns true, and treats `intervalMs <= 0` as \"always poll\" (`trading.go:2848-2859`).\n- `reconcileTick` skips known-invalid-credential accounts before `ListOrders` and applies the halted throttle (`trading.go:2068,2075`); on `broker.ErrInvalidCredentials` it logs a WARN and skips without counting a failure (`trading.go:2083-2086`).\n- `haltAccount` pre-stamps `haltedLastPolled` (`trading.go:2883`); `haltedPollInterval()` defaults to 300000 (`trading.go:2573`).\n\n1. COMPLETE-LIST GATE (confirmed by both sides, as round 10 wrote it; runs after a successful `Broker.ListOrders`)\n- Listed in a terminal state: `NOT_OPEN_AT_ADOPTION` tombstone on any successful list (D-48).\n- Absent from the list: tombstone only when the list is non-empty, and for Alpaca also shorter than 500 rows.\n- Empty IBKR 200, Alpaca list of exactly 500 rows, or a failed `ListOrders`: nothing is inserted; the candidate is re-evaluated on the account's next adoption list.\n- Listed open: unchanged (fill 0 tracked with `adopted = true`; fill > 0 `BASELINE_RETIRED`, no emit).\n\n2. ADOPTION-ONLY THROTTLE (inside `pollBracketLegFills`, after `logTick`; no `StartFillPoller` or `reconcileTick` hunk)\n- Each tick still runs the D-40 candidate query and builds the D-46 union, then splits it per account.\n- Tracked account (at least one non-retired `bracket_legs` row): one `ListOrders` per fill-poller tick, unchanged (D-11, D-46). Adoption shares that list.\n- Adoption-only account (candidates, no non-retired tracked leg): listed only when its cooldown has elapsed.\n  - Cooldown = `trading.reconciliation.interval_ms` (default 60000, live read). If the account is halted, cooldown = `haltedPollInterval()`.\n  - No new config key.\n  - The body of `shouldPollHaltedAccount` becomes one shared helper taking the last-polled map and the interval. `shouldPollHaltedAccount` keeps its signature and behaviour and delegates over `haltedLastPolled`. Adoption calls the helper over a separate `adoptionLastListed` map under `haltedMu`, so neither path consumes the other's slot.\n  - The stamp is taken when the call is allowed, not when it succeeds: a broker that stays down costs one failed call and one WARN per interval.\n  - The map is in memory and empty at boot, so the first tick lists every adoption-only account.\n  - An account that gains a tracked leg is listed every tick from the next tick, whatever its stamp. An account whose last tracked leg retires becomes adoption-only at its next allowed list.\n\n3. ADOPTED FROM ADVERSARY r11, awaiting proposer confirmation (non-blocking)\n- New-candidate bypass: keep the candidate id set seen at the account's last allowed list next to the stamp (under `haltedMu`). An adoption-only account whose current candidate set contains an id not in that set is listed on this tick, and the stamp and set are refreshed. An unchanged or shrunken set stays throttled. This keeps the round-10 latency of about 5 s for a bracket activated by an old trading instance.\n- `reconciliation.interval_ms <= 0` is read as the 60000 default for adoption, matching what the reconciler does from a fresh boot. \"Always list\" comes only from `halted_poll_interval_ms <= 0` on a halted account, which is that key's documented meaning.\n- The shared helper takes `now time.Time`. `shouldPollHaltedAccount` passes `time.Now()`; `pollBracketLegFills` passes `s.clock()`. Tests advance the injected clock and do not touch the map.\n- Adoption-only accounts with `credentialsKnownInvalid` status are skipped before the list, as `reconcileTick` does. A `broker.ErrInvalidCredentials` result is handled as `reconcileTick` handles it: WARN and skip, no failure count. (The adversary called this a \"non-WARN skip\"; the code WARNs.)\n\n4. STEADY-STATE `ListOrders` RATE PER ACCOUNT from `pollBracketLegFills` (defaults: tick 5 s, interval 60 s, halted poll 300 s)\n- Tracked legs: 12/min (17,280/day), unchanged.\n- Adoption-only, not halted (idle IBKR with an empty list; Alpaca pinned at 500 rows): 1/min (1,440/day), down from 12/min. Plus one extra call on a tick where a new candidate id appears.\n- Adoption-only, halted: 0.2/min (288/day).\n- Adoption-only, credentials known invalid: 0.\n- No candidates and no non-retired tracked legs: 0.\n- `reconcileTick`'s own list (1/min, 0.2/min halted) is separate and unchanged, so an idle IBKR account totals about 2/min instead of 13/min.\n\nTESTS (trading; added to round-10 tests 1-10; each asserts the call count over N ticks)\n11. Adoption-only Alpaca, 500-row list without the candidate, interval 60000, three ticks: 1 `ListOrders`, no insert, candidate still present.\n12. Idle IBKR, empty 200, interval 60000, three ticks: 1 call, no tombstone; after the injected clock passes the interval the next tick lists again.\n13. `interval_ms = 0`, not halted, three ticks: 1 call (default applies). `halted_poll_interval_ms = 0` on a halted adoption-only account: 3 calls.\n14. Tracked account with one candidate, interval 60000: 3 calls over 3 ticks, adoption runs on each.\n15. Halted adoption-only, `halted_poll_interval_ms = 300000`: 1 call over 3 ticks.\n16. `ListOrders` errors on tick 1: no call on ticks 2-3, one WARN, nothing inserted.\n17. Candidate listed open on tick 1 and adopted: the account is listed on tick 2 inside the window.\n18. The two maps are independent in both directions; `trading_reconciliation_test.go:486-503` passes unchanged.\n19. Adoption-only account inside its cooldown gains a new candidate id: listed on the next tick; a third tick with the same set makes no call.\n20. Adoption-only account with known-invalid credentials: no `ListOrders`, no WARN.\n\nSPEC FILES (O-64 and O-66 as confirmed): `fakeBroker` `listOrdersFn` and call counter; `fakeBracketRepo` candidate query, tombstone insert and retired-status filter; settable `reconciliation.interval_ms` and `reconciliation.halted_poll_interval_ms` in the test config fake, wired through `GetFloat` (ledger `fails.md:1392`); every existing ACTIVE-bracket test (e.g. `trading_bracket_test.go:416`). /sdd-spec also logs the doc drift at `services/xstockstrat-trading/CLAUDE.md:119` (\"matching `interval_ms`'s own convention\") in the trading findings.",
+    "open_objections": [
+      {
+        "text": "Proposer to confirm the new-candidate bypass adopted from adversary r11: an adoption-only account whose candidate set contains an id not seen at its last allowed list is listed on the next tick (candidate id set kept next to adoptionLastListed under haltedMu), with test 19. Without it the 60 s cooldown widens an existing path from about 5 s to about 60 s: a bracket activated by an old trading instance fills inside the window, is tombstoned with observed_filled_qty = 0 (D-48, R-36), its exit never reaches the ledger or the fold, and NetFilledQtyBySymbol keeps the entry quantity against a flat broker position, which can halt the account (206 trading @AC-1). If the proposer declines the bypass, the residual must name the false halt, not only the lost fill.",
+        "blocking": false
+      },
+      {
+        "text": "Proposer to confirm the other items adopted from adversary r11: adoption reads reconciliation.interval_ms <= 0 as the 60000 default (trading.go:1977-1983 keeps the previous interval on <= 0; it does not mean every tick) with test 13 rewritten; the shared throttle helper takes now as a parameter (time.Now() from shouldPollHaltedAccount, s.clock() from pollBracketLegFills) so tests 11-17 advance the injected clock; adoption-only accounts with credentialsKnownInvalid status are skipped before ListOrders and broker.ErrInvalidCredentials is handled as reconcileTick handles it (trading.go:2068,2083-2086), with test 20. /sdd-spec wires the test config fake through GetFloat (fails.md:1392) and logs the trading CLAUDE.md:119 doc drift in the trading findings.",
+        "blocking": false
+      },
+      {
+        "text": "O-61: operator-confirmation gate item, recorded in context.md and answered before /sdd-execute reaches the integration step (DO spec with portfolio removed versus the PRIVATE_DOMAIN references; doctl spec round-trip of secrets; homelab stop method; gate deploy exit code on rollback; trading's failed portfolio calls on paper staging; Alpaca listing bracket legs as top-level orders). It also carries the question to ask if a production count is non-zero.",
+        "blocking": false
+      },
+      {
+        "text": "O-30: the analysis AC ids in order-snapshots-pnl-patterns.feature and fix-python-loop-supervision.feature are still to be enumerated at /sdd-spec, and the D-10 flip-short window residual stays named.",
+        "blocking": false
+      },
+      {
+        "text": "O-56: the orchestrator still has to record P-5, P-6 and P-7 as 'user reopened' citing context.md:1535-1541, P-4 as withdrawn, and P-8 as 'user reopened' citing context.md:2372-2383.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "251 @AC-17",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "251 @AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "206 trading @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "206 trading @AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "206 trading @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-56",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "294 @AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "290 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Tombstone on absence from any successful list, whatever its completeness (proposal r10). Lost: an empty IBKR 200 or a full 500-row Alpaca list would permanently tombstone open legs (ibkr.go:448-482; alpaca.go:376). The proposer withdrew it in r11 by confirming the gate. Locked this round.",
+      "Sharing reconcileTick's own ListOrders result with adoption (proposer r11 runner-up). Lost: it needs a reconcileTick hunk that couples adoption to the 206 @AC-1..3 path, and it makes adoption latency 60 s for every account. Both sides rejected it. Locked this round.",
+      "A new config key for the adoption cadence. Lost: the operator steer for round 11 says to reuse reconciliation.interval_ms and the halted throttle rather than add a key. Locked this round.",
+      "Throttling adoption through the existing haltedLastPolled map. Lost: an adoption list would consume reconcile's halted re-observation slot, and haltAccount pre-stamps that map (trading.go:2883). The adversary did not contest. Locked this round.",
+      "A fixed post-boot full-rate window as a code constant (adversary r11, self-rejected). Lost: a hardcoded duration breaks config governance and misses brackets an old instance activates after the window. Not locked; only one side weighed it.",
+      "Tombstone only on a listed terminal status, never on absence (adversary r10). Not needed now that the empty-list case is bounded by the throttle. Not locked.",
+      "Tombstone on absence across N consecutive successful lists (adversary r10). Lost: it still fails on a truncated Alpaca list and needs a counter column. Not locked.",
+      "A partial index in 012 for the candidate query. Not chosen: /sdd-spec states the scan cost first. Not locked."
+    ],
+    "open_risks": [
+      "An idle IBKR account with an empty list, or an Alpaca account pinned at 500 rows, never tombstones its candidates; it keeps one adoption ListOrders per reconciliation interval (1/min by default) indefinitely.",
+      "If the new-candidate bypass is not confirmed, a bracket activated by an old trading instance on an adoption-only account can fill within the 60 s cooldown, be tombstoned with no emit, and false-halt the account through NetFilledQtyBySymbol.",
+      "The cooldown and candidate-set memory are in process; every restart lists each adoption-only account once.",
+      "The candidate anti-join still runs every tick; only the broker call is throttled (005_broker_accounts_halted.up.sql:29-31).",
+      "reconciliation.interval_ms <= 0 means 'keep the previous interval' in the code but the trading CLAUDE.md:119 row implies 'every tick'; the doc drift is only logged, not fixed, in this feature.",
+      "A genuinely open leg absent from a complete list on its evaluation tick is tombstoned permanently; its exit fill never reaches the ledger, the fold or reconciliation.",
+      "A tombstone is undone only by a manual delete of its bracket_legs row.",
+      "Existing trading tests that hold an ACTIVE bracket with leg ids panic on fakeBroker.ListOrders until the fakes are extended.",
+      "If a production count is non-zero, the promotion stops with no designed procedure; it waits on an operator ruling.",
+      "The DO stop is unverified: .do/app.dev.yaml:78 and :319 reference ${xstockstrat-portfolio.PRIVATE_DOMAIN}, so a spec with the portfolio service removed may be rejected.",
+      "The merge precondition and the main-dev freeze are not enforced; an overlap double-applies fills and only the recorded evidence shows it.",
+      "On the homelab VM an unattended rollback of the integration deploy restores the pre-019 portfolio after the floor is stamped; noticing it depends on gate deploy exiting non-zero, which is unconfirmed.",
+      "Fills appended between T_stop and the first new boot are acked: qty heals at the next sync, realized P&L for them is lost.",
+      "While portfolio is stopped on staging, trading's portfolio calls fail: the risk check warns only, reconciliation skips, and flattenAndHalt cannot flatten.",
+      "Adoption depends on Alpaca listing bracket legs as top-level orders in every open state; this is unverified.",
+      "Reconciliation covers only tracked legs; the D-42 forward-only gap stays uncounted.",
+      "A BASELINE_RETIRED leg's post-cutover remainder is neither emitted nor observed.",
+      "Adopted IBKR legs that later vanish from the gateway are polled indefinitely (D-26).",
+      "Late-commit appends whose recorded_at is below the floor are acked (operator-accepted).",
+      "The floor assumes ledger and portfolio share one Postgres server clock.",
+      "With the composite GetPnL key, a historical order whose partial and full fills carried different account_id values stops being deduplicated; the /sdd-spec history grep is the only check.",
+      "A parked fill is retried only after a manual delete of its parked row.",
+      "A fill transaction can wait server-side on the applied-row conflict or FOR UPDATE, holding 1 of 2 client connections and positionsMu.",
+      "The pre-check has a TOCTOU window covered only by the in-tx INSERT conflict path.",
+      "A position.updated can be emitted after a same-process sync has overwritten the row.",
+      "Boot replay re-walks every post-floor fill and consumer_applied_events has no retention.",
+      "A leg id is lost from tracking if the ActivateBracket tx fails; it is alerted, but its exit fill never folds.",
+      "Neither broker adapter populates BrokerOrder.Fees, so fee totals understate.",
+      "Migration numbers 019 and 012 may collide with feature 318.",
+      "OQ-2 (repair of already-inflated accumulators) is out of scope, and instance_count must stay 1."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-05",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-01",
+      "F-02",
+      "F-04",
+      "F-06",
+      "F-07",
+      "F-08",
+      "P-02",
+      "P-03",
+      "P-04",
+      "PLAT-N1"
+    ],
+    "rationale": "The design has no blocking objection left. The adversary rates it SOUND with no Floor breach, and O-65 is closed.\n\n**What closed O-65.** The proposer confirmed the complete-list gate exactly as round 10 wrote it, and bounded the two cases where a tombstone is unsafe. An adoption-only account is now listed once per `reconciliation.interval_ms` (once per halted interval when halted) instead of every 5 s tick. That is 1 call/min by default, down from 12, with no new config key. This is what the operator steer asked for, so the \"evaluated exactly once\" reading does not need to go back to the operator.\n\n**What I adopted from the adversary, unconfirmed.** I checked each of the four objections against the code and put the fixes into the approach as non-blocking confirm items:\n- **New-candidate bypass.** The 60 s cooldown widens an existing lost-fill and false-halt path about 12x for brackets an old trading instance activates. The bypass restores the 5 s latency for that population and leaves idle accounts at 1/min. It lives inside the throttle this round adds, so it stays within the steer.\n- **`interval_ms <= 0`.** The proposer's claim that it means \"every tick\" is wrong; `trading.go:1977-1983` keeps the previous interval. Adoption reads it as the 60000 default.\n- **Injected clock.** The helper takes `now`, so tests do not reach into the map.\n- **Invalid credentials.** Adoption-only accounts are skipped as `reconcileTick` skips them. I corrected one adversary detail: `reconcileTick` does log a WARN on `ErrInvalidCredentials` (`trading.go:2083-2086`).\n\nThe two new decisions record only what both sides agree. The four adversary items are left out of them until the proposer confirms.\n\n**Housekeeping.** O-64 and O-66 are closed on the proposer's confirmations, which match their register text. O-30, O-56 and O-61 stay open and non-blocking. No settled D-n is contradicted, no locked R-n returns (R-10 and R-36 are honoured), and nothing is reopened this round. Business rules are unchanged from round 10.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Complete-list gate, filling the gap D-48 left open: after a successful ListOrders, a candidate absent from the list gets the NOT_OPEN_AT_ADOPTION tombstone only when the list is non-empty, and for Alpaca also shorter than 500 rows. An empty IBKR 200, an Alpaca list of exactly 500 rows or a failed ListOrders inserts nothing, and the candidate is re-evaluated on the account's next adoption list. Listed-terminal candidates are tombstoned on any successful list (D-48). Required tests: Alpaca 499 rows tombstones; Alpaca 500 rows does not; empty IBKR 200 does not.",
+          "evidence": "operator steer r11 ('confirm the complete-list gate as the synthesis wrote it'); ibkr.go:448-482; alpaca.go:373-376; R-10; D-48; proposal r11 item 1; adversary r11 rated it sound"
+        },
+        {
+          "text": "Adoption-only throttle, amending D-46's 'adoption runs every tick' for accounts with candidates but no non-retired bracket_legs row: such an account gets its adoption ListOrders only when a per-account cooldown has elapsed. The cooldown is trading.reconciliation.interval_ms (default 60000, live read), or haltedPollInterval() when the account is halted; no config key is added. The body of shouldPollHaltedAccount becomes one shared helper; shouldPollHaltedAccount keeps its signature and behaviour over haltedLastPolled, and adoption uses a separate in-memory adoptionLastListed map under haltedMu. The stamp is taken when the call is allowed, so a failed list is throttled too. The map is empty at boot, so the first tick lists every adoption-only account. Tracked accounts keep one ListOrders per tick (D-11, D-46), and an account that gains a tracked leg is listed every tick from the next tick. The throttle sits inside pollBracketLegFills with no StartFillPoller or reconcileTick hunk. Steady-state calls per account from pollBracketLegFills at defaults: tracked 12/min; adoption-only 1/min; adoption-only halted 0.2/min; no candidates and no tracked legs 0. Tests assert the call count over N ticks for each state. The meaning of interval_ms <= 0, the clock source, a new-candidate bypass and a credential gate are not part of this decision.",
+          "evidence": "operator steer r11 (reuse reconciliation.interval_ms and shouldPollHaltedAccount, no new key); trading.go:1977,2075,2573,2848-2859,2883; D-11; D-22; D-46; 294 @AC-6; trading_reconciliation_test.go:486-503; proposal r11 items 2-3 and tests 11-18; adversary r11 rated it sound and contested only the four excluded points"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Tombstoning a candidate on absence from any successful ListOrders, whatever the list's completeness",
+          "why": "An empty IBKR 200 (ibkr.go:448-482) or a full 500-row Alpaca list (alpaca.go:376) would permanently tombstone open legs. The proposer withdrew it in round 11 by confirming the complete-list gate."
+        },
+        {
+          "text": "Sharing reconcileTick's own ListOrders result with adoption",
+          "why": "It needs a reconcileTick hunk that couples adoption to the 206 @AC-1..3 path and makes adoption latency 60 s for every account. Proposer r11 did not choose it and adversary r11 agreed."
+        },
+        {
+          "text": "A new config key for the adoption ListOrders cadence",
+          "why": "The operator steer for round 11 directs reuse of reconciliation.interval_ms and the halted-account throttle rather than a new key."
+        },
+        {
+          "text": "Throttling adoption through the existing haltedLastPolled map",
+          "why": "An adoption list would consume reconcile's halted re-observation slot, and haltAccount pre-stamps that map (trading.go:2883). Proposal r11 rejected it and adversary r11 did not contest."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Proposer to confirm the new-candidate bypass adopted from adversary r11: an adoption-only account whose candidate set contains an id not seen at its last allowed list is listed on the next tick, with the candidate id set kept next to adoptionLastListed under haltedMu and a test. Without it the 60 s cooldown widens the path where a bracket activated by an old trading instance fills unobserved, is tombstoned with no emit, and can false-halt the account through NetFilledQtyBySymbol (206 trading @AC-1). If declined, the residual must name the false halt as well as the lost fill.",
+          "blocking": false
+        },
+        {
+          "text": "Proposer to confirm the other items adopted from adversary r11: adoption reads reconciliation.interval_ms <= 0 as the 60000 default (trading.go:1977-1983), with the throttle-disabled test driven through halted_poll_interval_ms <= 0; the shared helper takes now as a parameter (time.Now() from shouldPollHaltedAccount, s.clock() from pollBracketLegFills) and the throttle tests advance the injected clock; adoption-only accounts with credentialsKnownInvalid status are skipped before ListOrders and broker.ErrInvalidCredentials is handled as in reconcileTick (trading.go:2068,2083-2086), with a test. /sdd-spec wires the test config fake through GetFloat (fails.md:1392) and logs the trading CLAUDE.md:119 doc drift in the trading findings.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-65",
+          "how": "The proposer confirmed the complete-list gate as written, with the empty-IBKR, 500-row and 499-row tests, and bounded the idle-IBKR and pinned-at-500 cases at one adoption ListOrders per reconciliation.interval_ms (one per halted interval when halted) through the reused throttle, with call-count tests. Adversary r11 rated it sound. The cooldown's latency for newly activated brackets is tracked as a new objection."
+        },
+        {
+          "id": "O-66",
+          "how": "The proposer confirmed every item: the INFO log per tombstone, the runbook delete-the-row path, the single retired-status constant read by the fakes, the corrected KnownBrokerOrderIDs statement with the resize-blanked test, the /sdd-spec scan-cost statement against the 005 indexes, and the 012 DDL comment for the adopted column."
+        },
+        {
+          "id": "O-64",
+          "how": "The proposer confirmed the spec's Files list: the fakeBroker listOrdersFn and call counter, the fakeBracketRepo candidate query with tombstone insert and retired filter, settable reconciliation interval keys in the test config fake, and every existing ACTIVE-bracket test (e.g. trading_bracket_test.go:416)."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
