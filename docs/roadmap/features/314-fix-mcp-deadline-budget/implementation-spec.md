@@ -52,7 +52,7 @@ applies. Lines that moved since recon.md and design.md:
 | Scenario | Covered by |
 |---|---|
 | `@AC-1` extract_email_content returns partial results before the MCP client timeout | Step 6 (behaviour), Step 4 (the seeded budget key) |
-| `@AC-2` list_opportunities worst case stays under the MCP client timeout | Step 2 (ceiling + budget arithmetic), Step 4 (stored-row clamp), Step 7 (agent worst case), Step 9 (live rows) |
+| `@AC-2` list_opportunities worst case stays under the MCP client timeout | Step 2 (ceiling + budget arithmetic), Step 4 (stored-row clamp), Step 7 (agent worst case); Step 9 (live rows) is advisory operator evidence, not a gate |
 | `@AC-3` SetConfig rejects a value that inverts portfolio-over-marketdata quote deadline ordering | Step 2 |
 
 ## Spec-time Decisions and Findings
@@ -62,6 +62,12 @@ These are recorded in context.md (Session 2026-11-20 — sdd-spec) as well.
 1. **Migration number: `056`.** `origin/main-dev` @ `fb52065c` holds `…052, 054, 055`. `053` is claimed by
    feature 345 (spec-only, not on trunk — 352 context.md:63). The operator decision is "next free above the
    main-dev tip", so the number is `056`. It stays provisional until merge (see the renumber checklist below).
+   **Known collision (impl-spec review, 2026-11-20):** feature 321 `fix-trading-config-plumbing`
+   (`implementation-ready`, not on trunk) also specs `056`
+   (`056_trading_broker_paper_per_environment.{up,down}.sql`, its implementation-spec.md:630-631 on
+   `origin/feature/fix-trading-config-plumbing`). golang-migrate cannot apply two `056` files, so whichever
+   of 314 and 321 merges second renumbers to max + 1 with the checklist below. Neither spec is renumbered
+   now: the merge order is not decided, and this feature's SQL, sentinel, tests and docs are number-free.
 2. **Enumeration result and sign-off (operator condition).**
    - Staging, global rows, read 2026-11-20 through the staging agent MCP `get_config` (read-only):
      `agent` / `opportunities.read_timeout_seconds` = `40.0` (float); `portfolio` /
@@ -101,7 +107,11 @@ These are recorded in context.md (Session 2026-11-20 — sdd-spec) as well.
 8. **Not changed: the stored description of `opportunities.read_timeout_seconds`.** The `041` seed text says
    "SetConfig-bounded `[30,55]`" (`scripts/config-wiring-stored.json:154,166`). design.md § 4 fixes the
    clamp's SET list to four columns and does not rewrite descriptions, so the stored text stays stale.
-   **Flag for impl-spec review** (Open Thread in context.md).
+   The text is user-visible (`ListKeys`, config-ui), and the PREPARE-copy pin (Step 4) makes a later change
+   to the clamp statement costly. **Impl-spec review outcome (2026-11-20):** the default is that Step 8
+   records the staleness as a config findings row, so it is not left silent. Rewriting the description (a
+   separate statement or a follow-up migration) departs from design.md § 4 and stays an operator decision
+   (Open Thread in context.md); if the operator picks it before Step 3, the findings row is dropped.
 9. **No measured real-time `@AC-2` variant.** At ceiling 44 the modelled worst case is exactly 57 s. A
    wall-clock test with zero slack would be flaky, so Step 7 uses an injected clock. The design's fallback to
    43 applies only if an unmodelled latency term is found (Step 9 smoke, or a later report); that is an
@@ -136,7 +146,9 @@ These are recorded in context.md (Session 2026-11-20 — sdd-spec) as well.
   - Fallback: that CI job uploads the regenerated file as artifact `config-wiring-stored`; commit it unedited
     and record the run URL in context.md.
   - If neither route works, Step 3 is blocked (P-03). The JSON is never written by hand. Starting a throwaway
-    database for this needs the operator's go-ahead (precedent: 347 context.md:18).
+    database for this needs the operator's go-ahead (precedent: 347 context.md:18). **Settle the route at
+    the /sdd-execute confirmation, before Step 1 starts** (impl-spec review): Steps 3 + 4 are one unit, so a
+    block found at Step 3 strands the unit.
 - **Steps 5 + 6 land together** (§C, "changes a … return shape": `tests/test_tools.py:2472-2477` asserts the
   exact set of policy keys an extract call reads, and the new read adds a fifth; plus "adds a test that
   references a symbol a later step creates"). One commit, agent surface. Step 6 is authored first and run RED.
@@ -145,11 +157,14 @@ These are recorded in context.md (Session 2026-11-20 — sdd-spec) as well.
 - **Step 7 requires Step 1** (the ceiling it reads from the registry). It stands alone.
 - **Step 8 requires Steps 1–7**: the docs describe the shipped behaviour and name the migration.
 - **Step 9 requires the integration PR to be merged and deployed.** Its pre-deploy query runs before that
-  merge. It is operator-run; it does not block `code-completed`.
+  merge. It is an operator-run docs step (results recorded in context.md), not a test step: it has no
+  coverage threshold and it does not block `code-completed`.
 - **Step 2 [test] covers Step 1 [service]; Step 4 [test] covers Step 3 [migration]; Step 6 [test] covers
   Step 5 [service]; Step 7 [test] covers `@AC-2` at the agent** (C-08).
 - **Renumber checklist (at the integration PR, and after every `origin/main-dev` merge).**
-  1. `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -4`.
+  1. `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -4`. Also check
+     the in-flight claims: feature 321 specs `056` and feature 345 specs `053` (decision 1); neither is on
+     trunk at `fb52065c`.
   2. If `056` is taken, rename both files to max + 1. The SQL, the sentinel, the tests (which resolve by
      suffix) and the docs are number-free, so nothing else changes; `grep -rn "056_mcp_deadline_budget"` in
      the files this feature changed must come back empty apart from this spec.
@@ -467,7 +482,7 @@ cases and every cross-key rejection case.
 ```bash
 ls services/xstockstrat-config/migrations/056_mcp_deadline_budget.up.sql services/xstockstrat-config/migrations/056_mcp_deadline_budget.down.sql
 ls services/xstockstrat-config/migrations | tail -4          # 056 is the highest number; no duplicate 056
-grep -c "UPDATE\|opportunities.read_timeout_seconds" services/xstockstrat-config/migrations/056_mcp_deadline_budget.down.sql   # expect 0
+! grep -q "UPDATE\|opportunities.read_timeout_seconds" services/xstockstrat-config/migrations/056_mcp_deadline_budget.down.sql   # exit 0 = no hit
 node scripts/check-config-wiring.mjs --final                  # exit 0: stored set fresh, the one temporary entry is not STALE
 node --test scripts/config-wiring.test.mjs
 ```
@@ -623,7 +638,7 @@ RED capture (before Step 3's files exist): the suite fails with `expected exactl
 cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --check .
 grep -n "extract.call_budget_seconds\|_EXTRACT_CALL_BUDGET_DEFAULT_S\|asyncio.timeout\|PARTIAL:\|FETCH_FAILED" app/tools.py
 cd ../.. && node scripts/check-config-wiring.mjs --final     # exit 0, no STALE entry, key seeded and read under the same string
-grep -c "extract.call_budget_seconds" scripts/config-wiring.json   # expect 0
+! grep -q "extract.call_budget_seconds" scripts/config-wiring.json   # exit 0 = no hit (temporary entry removed)
 ```
 The agent test suite is green only with Step 6's edits in the tree (atomic unit).
 
@@ -656,6 +671,11 @@ The agent test suite is green only with Step 6's edits in the tree (atomic unit)
 - `tests/test_tool_errors.py:430-446` `test_tools_py_raises_only_tool_error`; `:353-355` list both extract
   tools in the backend-refusal table.
 - Shared test helpers: `tests/conftest.py` (`_ctx` `:23`, `_rpc_error` `:69`, `config_snapshots` `:146`).
+- `config_snapshots` is autouse and installs empty `agent` / `indicators` watchers, so policy reads fall back
+  to code defaults (`tests/conftest.py:145-163`). A test sets snapshot values with
+  `install_watcher(monkeypatch, namespace, **values)` (`tests/test_config_watcher.py:46-50`), imported by
+  other suites as `from tests.test_config_watcher import _tool, install_watcher`
+  (`tests/test_formula_deadline.py:10`, used at `:60`).
 - Cross-source pin precedent in the agent suite: `test_unavailable_pass_strings_match_backend_sources`
   (`tests/test_tool_errors.py:179`).
 - Coverage threshold: agent 40 % (`.github/workflows/ci.yml`, python matrix, `--cov-fail-under`).
@@ -694,6 +714,12 @@ The agent test suite is green only with Step 6's edits in the tree (atomic unit)
      `httpx.ConnectError` → `ToolError("FETCH_FAILED: ConnectError")`; neither message contains the source URL.
    - Budget guard: `_extract_call_budget_s()` returns `35.0` for a policy value of `0.0`, `-1.0`, `nan`,
      `inf`, and returns a valid value (e.g. `12.0`) unchanged.
+   - Real reader against a snapshot (config-key wiring, impl-spec review): **without** patching
+     `tools._agent_policy`, call `install_watcher(monkeypatch, "agent", **{"extract.call_budget_seconds":
+     12.0})` (import it from `tests.test_config_watcher`; do not copy it) and assert
+     `await tools._extract_call_budget_s() == 12.0`; then, with only the autouse empty snapshot (key absent),
+     assert it returns `35.0`. This is the one case that runs the real `_agent_policy` →
+     `read_config_value("agent", …)` path under the seeded key string.
 2. `tests/test_tools.py:2472-2477`: add `"extract.call_budget_seconds": 35.0` to the expected `policy_reads`
    (the default policy now includes the whole-call budget — C-16 CHANGE to `@AC-2 @feature-247`, signed off
    2026-11-20). `pinned_calls` (`:2471`) stays as is.
@@ -711,7 +737,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 grep -n "def .*fixture\|from .conftest\|conftest" tests/test_extract_call_budget.py   # C-13: shared helpers imported, no second inline copy
 ```
 RED capture (before Step 5's edit): the `@AC-1` case fails on the hang guard / missing `error` key, the
-website cases raise no `ToolError`, the budget-guard cases fail on the missing helper, and
+website cases raise no `ToolError`, the budget-guard and real-reader cases fail on the missing helper, and
 `tests/test_tools.py` fails on the `policy_reads` equality.
 
 ---
@@ -765,7 +791,10 @@ website cases raise no `ToolError`, the budget-guard cases fail on the missing h
      `within {ceiling:g}s`, and assert `clock.now <= 57.0`.
 2. Add a non-tautology check in the same test: the same composition with the defect's ceiling `55` (a
    scenario one-off from the defect report) gives `> 57`.
-3. **RED capture (working-tree mutation, never committed).** Step 1 already landed the ceiling, so capture
+3. **RED capture (working-tree mutation, never committed).** The committed history therefore holds no
+   red-before-green for this test (C-08 / P-06, accepted trade-off — decision 6: the in-unit red→green for
+   `@AC-2` is Step 2). The committed regression evidence is instruction 2's `55` → `> 57` check. Step 1
+   already landed the ceiling, so capture
    RED by temporarily changing the registry row back to `maxValue: 55` in the working tree, running the new
    test (it must fail on `clock.now <= 57.0` with 68), then restoring the file with
    `git checkout -- services/xstockstrat-config/src/grpc/configServiceImpl.ts` and confirming `git status`
@@ -860,6 +889,11 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_list_opportunities_
    `opportunities.read_timeout_seconds` ≤ 44; auth 10 + source lookup 10 + `extract.call_budget_seconds` ≤ 35).
 7. Findings: remove the three latent-bug rows (root `:51`, config `:24`, portfolio `:27`) or mark them
    resolved by feature 314, following the convention each file already uses for resolved rows.
+   Add one new row to `services/xstockstrat-config/docs/context-constitution-findings.md` (doc-drift, in the
+   file's existing row format): the stored description of `agent` / `opportunities.read_timeout_seconds`
+   (seeded by `041`) still says "SetConfig-bounded `[30,55]`" while the enforced bound is `[30,44]`; the
+   registry bounds returned by `ListKeys` are authoritative (decision 8). Skip this row only if the operator
+   chose to rewrite the description instead.
 8. Durable `acceptance/*.feature` suites are not edited here: this feature's scenarios are promoted at the
    integration PR (C-16), where the four signed-off CHANGEs (`@AC-2` of this feature, `@AC-6 @feature-207`,
    `@AC-2 @feature-247`, `@AC-1 @feature-229`) are applied.
@@ -876,7 +910,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_extraction_instruction
 
 ---
 
-### Step 9 — test: enumeration and read-back per environment (operator-run)
+### Step 9 — docs: enumeration and read-back per environment (operator-run)
 
 **Status**: `pending`
 **Service**: `xstockstrat-config` (live databases; results recorded in `context.md`)
@@ -895,10 +929,11 @@ cd services/xstockstrat-agent && uv run pytest tests/test_extraction_instruction
 
 **TDD**: `N/A (operator-run observation of live rows)`
 
-**Covers**: `AC-2`
+**Covers**: — (advisory live-row evidence for `AC-2`; not a coverage step)
 
-**Gate strength (impl-spec review).** This step is advisory evidence, not an automated gate. The automated
-`@AC-2` gates are Steps 2, 4 and 7. It exists because live rows can differ from the repo tree and because
+**Gate strength (impl-spec review).** This step is advisory evidence, not an automated gate, and is
+categorised `docs` (operator-run, results in context.md) rather than `test`: it has no coverage threshold
+and its pass criteria are the operator's readings. The automated `@AC-2` gates are Steps 2, 4 and 7. It exists because live rows can differ from the repo tree and because
 the heal scope was not enumerated at spec time.
 
 **Instructions**:
