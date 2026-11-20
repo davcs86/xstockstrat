@@ -985,3 +985,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [x] The about-330 threshold and the O-9 lines: re-cited in § Accepted Cost (e).
 - [x] C-16 sign-off for `@AC-1` and `@AC-2`: restated by the operator ruling of 2026-11-20.
 - [x] Badges past 3,000 queue rows: Step 4 instruction 2. Fail-open legibility: Step 1 case 1d.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 9 warnings, no Floor breach (PASS WITH WARNINGS; advisory, lifecycle unchanged). Overlap: WARN, file-level and rebase-only.
+- Re-verified in this run: `origin/main-dev` is still `fb52065c` and the feature branch is 168 commits behind it; `test:coverage` exists in `services/xstockstrat-ui/package.json:19`; feature 308's spec (on `origin/feature/fix-analysis-per-symbol-isolation`, `:911-912`) and features 345 (`:2130`) and 360 (`:625`) name the shared fixture files; `INVENTORY.md:45` is the `LYFT_SOURCE_LABEL_OPPORTUNITIES` row.
+- Addressed in implementation-spec.md (commit `c7a38a99`):
+  - [x] Steps 1 and 3: Verification now runs `pnpm run test:coverage` (B2 "threshold explicit").
+  - [x] Step 4: Verification adds `--repeat-each=10` on the new watchlist spec as the flake check for the fake-clock request counts (Cases A and C). It sits in Step 4 because the cases are RED until then.
+  - [x] Step 3 instruction 2: the `INVENTORY.md` row is placed by neighbouring symbol, with `:45` as the `fb52065c` anchor.
+  - [x] § Step Dependencies: records the rebase-only file overlap with 308, 345 and 360. No `merge-order.md` entry is needed.
+- No change needed: the Steps 1+2 and 3+4 pairing was judged justified; `e2e/mock-backend.ts` is not touched by this feature.
+- Unresolved ⚠ carried into execution:
+  - Whole feature: O-5 scale. The ruling was given against the design's 50-row example; staging shows 437 rows per viewer and about 595,584 headline writes per day. The operator must confirm at these figures or reopen P-1 — [ ] unaddressed
+  - Whole feature: warm-set growth has no code guard before deploy; it is recorded only by the Step 5 docs row — [ ] unaddressed
+  - Whole feature: the spec-time `list_opportunities` read with `page_size` 1000 on staging ran a full-window enrichment that the operator did not ask for. Harmless (cleared by a marketdata restart) but unauthorized; the operator should know — [ ] unaddressed
+  - § Payload: O-11 is an estimate from agent JSON (about 448 KB per 15 s poll, roughly 10× today), not the dev BFF measurement design.md asked for. Measure at § Post-Deploy Verification item 3 and watch the poll growth — [ ] unaddressed
+  - Follow-up `marketdata-warm-set-ttl-prune` has no reserved number, so the structural fix is untracked. Reserve via `/sdd-story` before or at execute — [ ] unaddressed
+  - Steps 1 to 4: evidence anchors are from `fb52065c`. `/sdd-execute` BRANCH SYNC must merge `main-dev` first and re-check the anchors (P-03) — [ ] unaddressed
+  - Step 2: the "self-service" per-user text will sit beside the read-only notice for non-admins. Out of scope; file via `/sdd-qa defect` — [ ] unaddressed
+- Overlap findings: `e2e/fixtures/opportunities.ts` (308) and `e2e/fixtures/INVENTORY.md` (308, 345, 360), rebase-only. No migration, proto field or config-key collision. The marketdata findings log was not checked against feature 317.
+- Run note: the pre-commit hook printed a missing `scripts/check-duplication.py` on this branch (it predates that script); the commit still passed. The `main-dev` merge at BRANCH SYNC brings the script in.
+
+## Open Threads
+
+- [ ] **For the operator.** Confirm the O-5 ruling at the staging figures (437 rows per viewer, about 188 newly warm symbols, about 595,584 headline writes per day, 10× payload) before `/sdd-execute`, or reopen P-1. There is no code guard on warm-set growth.
+- [ ] **For the operator.** The spec run's staging read with `page_size` 1000 was not requested. It may have warmed up to 396 symbols on staging marketdata until its next restart.
+- [ ] O-11: measure the BFF body on dev (§ Post-Deploy Verification item 3).
+- [ ] Reserve a number for `marketdata-warm-set-ttl-prune` via `/sdd-story`.
+- [ ] `/sdd-execute` BRANCH SYNC: merge `main-dev` (168 commits) and re-check every `path:line` anchor before Step 1.
+- [ ] Out of scope: the NamespaceEditor "self-service" text beside the read-only notice. Target: `/sdd-qa defect`.
+- [ ] Marketdata findings log vs feature 317: overlap not checked. Re-check at Step 5.
