@@ -6,18 +6,23 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.repositories.signal_sources import (
+    _LIST_COLS,
+    EXTRACTION_INSTRUCTIONS_MAX_CHARS,
     deactivate_source,
     get_source,
     insert_source,
+    is_mediated_source_type,
     list_all_sources,
     list_sources,
     mark_source_error,
     mark_source_fed,
+    normalize_extraction_instructions,
     reactivate_source,
     slug_holders,
     touch_source_last_seen,
     update_source,
     validate_config_json,
+    validate_extraction_instructions,
 )
 
 # ---------------------------------------------------------------------------
@@ -264,16 +269,19 @@ class TestInsertUpdateSource:
             config_json=None,
             reliability_weight=1.0,  # feature 134 — kwarg now required
             user_id="bob",
+            extraction_instructions="",
         )
         assert result["slug"] == "uw"
         sql = db.fetchrow.call_args[0][0]
         assert "INSERT INTO" in sql and "RETURNING" in sql
         assert "ON CONFLICT" not in sql
         # feature 134: reliability_weight follows active, so the config_json index (6) that the
-        # next test asserts stays valid; feature 224 appends the owner after it.
-        assert db.fetchrow.call_args[0][-2] == 1.0
+        # next test asserts stays valid; feature 224 appends the owner after it, feature 355 the
+        # extraction instructions.
+        assert db.fetchrow.call_args[0][-3] == 1.0
         assert "reliability_weight" in sql
-        assert "user_id" in sql and db.fetchrow.call_args[0][-1] == "bob"
+        assert "user_id" in sql and db.fetchrow.call_args[0][-2] == "bob"
+        assert "extraction_instructions" in sql and db.fetchrow.call_args[0][-1] == ""
 
     @pytest.mark.asyncio
     async def test_insert_config_json_passed_as_json_text(self):
@@ -289,7 +297,9 @@ class TestInsertUpdateSource:
             config_json={"url": "https://example.com", "scrape_selector": "entry"},
             reliability_weight=1.0,  # feature 134 — appended after active; index 6 stays config
             user_id="bob",
+            extraction_instructions="Each entry is a filing.",
         )
+        assert db.fetchrow.call_args[0][-1] == "Each entry is a filing."
         config_arg = db.fetchrow.call_args[0][6]
         assert isinstance(config_arg, str)
         assert json.loads(config_arg) == {"url": "https://example.com", "scrape_selector": "entry"}
@@ -308,13 +318,16 @@ class TestInsertUpdateSource:
             credentials_ref="secret.x",
             config_json=None,
             reliability_weight=0.5,  # feature 134 — kwarg now required
+            extraction_instructions="Each entry is a filing.",
         )
         sql = db.fetchrow.call_args[0][0]
         assert sql.strip().startswith("UPDATE ingest.signal_sources")
         assert "active" not in sql  # lifecycle stays reactivate/deactivate only
         assert "reliability_weight" in sql  # feature 134 — written in the SET clause
-        assert db.fetchrow.call_args[0][-2] == 0.5
-        assert "user_id = $8" in sql and db.fetchrow.call_args[0][-1] == "bob"  # feature 224
+        assert db.fetchrow.call_args[0][-3] == 0.5
+        assert "user_id = $8" in sql and db.fetchrow.call_args[0][-2] == "bob"  # feature 224
+        assert "extraction_instructions = $9" in sql
+        assert db.fetchrow.call_args[0][-1] == "Each entry is a filing."
 
     @pytest.mark.asyncio
     async def test_get_source_returns_none_when_missing(self):
@@ -425,3 +438,68 @@ class TestOwnerKeyedQueries:
         db.fetch = AsyncMock(return_value=[])
         await list_sources(db, "bob", 0, include_inactive=True)
         assert "active = TRUE" not in db.fetch.call_args[0][0]
+
+
+# ---------------------------------------------------------------------------
+# extraction_instructions helpers (feature 355) — sync, no DB needed
+# ---------------------------------------------------------------------------
+
+
+class TestExtractionInstructionsHelpers:
+    @pytest.mark.parametrize(
+        "source_type",
+        [
+            "mediated_simple_email",
+            "mediated_email_attachment",
+            "mediated_linked_email",
+            "mediated_simple_website",
+            "mediated_authenticated_website",
+        ],
+    )
+    def test_every_mediated_type_is_mediated(self, source_type):
+        assert is_mediated_source_type(source_type)
+
+    @pytest.mark.parametrize("source_type", ["simple_email", "derived", "mcp_client"])
+    def test_other_types_are_not_mediated(self, source_type):
+        assert not is_mediated_source_type(source_type)
+
+    def test_normalize_maps_whitespace_only_to_empty_and_keeps_other_text_verbatim(self):
+        assert normalize_extraction_instructions("   ") == ""
+        assert normalize_extraction_instructions("\n\t ") == ""
+        assert normalize_extraction_instructions(" a ") == " a "
+
+    def test_every_message_names_the_field(self):
+        too_long = "x" * (EXTRACTION_INSTRUCTIONS_MAX_CHARS + 1)
+        messages = [
+            validate_extraction_instructions("mediated_simple_email", too_long, require=True),
+            validate_extraction_instructions("mediated_simple_email", "", require=True),
+            validate_extraction_instructions("simple_email", "prose", require=True),
+        ]
+        assert all(m and "extraction_instructions" in m for m in messages)
+        assert len(set(messages)) == 3
+
+    def test_valid_combinations_pass(self):
+        assert validate_extraction_instructions("mediated_simple_email", "p", require=True) is None
+        assert validate_extraction_instructions("mediated_simple_email", "", require=False) is None
+        assert validate_extraction_instructions("simple_email", "", require=True) is None
+
+    def test_the_length_check_wins_over_the_other_two(self):
+        too_long = "x" * (EXTRACTION_INSTRUCTIONS_MAX_CHARS + 1)
+        on_mediated = validate_extraction_instructions(
+            "mediated_simple_email", too_long, require=True
+        )
+        on_other = validate_extraction_instructions("simple_email", too_long, require=True)
+        assert on_mediated == on_other and "at most 16000" in on_mediated
+
+    def test_the_cap_counts_code_points(self):
+        astral = "\U0001f4c8"  # one code point, two UTF-16 units
+        at_cap = astral * EXTRACTION_INSTRUCTIONS_MAX_CHARS
+        assert (
+            validate_extraction_instructions("mediated_simple_email", at_cap, require=True) is None
+        )
+        assert validate_extraction_instructions(
+            "mediated_simple_email", at_cap + astral, require=True
+        )
+
+    def test_the_list_columns_include_the_field(self):
+        assert "extraction_instructions" in _LIST_COLS

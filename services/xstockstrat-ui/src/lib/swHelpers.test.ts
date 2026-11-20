@@ -39,6 +39,11 @@ describe('parsePushPayload', () => {
     expect(p.body).toBe('You have a new alert'); // fallback
     expect(p.icon).toBe('/icon-192.png'); // fallback
   });
+
+  it('keeps an alert page url (@AC-7)', () => {
+    const url = '/accounts/notifications/a1f3c0de-0000-4000-8000-000000000001';
+    expect(parsePushPayload(JSON.stringify({ title: 'Backfill failed', url })).url).toBe(url);
+  });
 });
 
 describe('pickClientUrl', () => {
@@ -56,5 +61,12 @@ describe('pickClientUrl', () => {
 
   it('returns null when there are no open windows', () => {
     expect(pickClientUrl([], '/trader')).toBeNull();
+  });
+
+  it('opens a new window for an alert page url unless one is already on it (@AC-7)', () => {
+    const alertUrl = '/accounts/notifications/a1f3c0de-0000-4000-8000-000000000001';
+    expect(pickClientUrl(['https://app.example/trader'], alertUrl)).toBeNull();
+    const onAlert = `https://app.example${alertUrl}`;
+    expect(pickClientUrl(['https://app.example/trader', onAlert], alertUrl)).toBe(onAlert);
   });
 });

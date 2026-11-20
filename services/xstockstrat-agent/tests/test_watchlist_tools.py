@@ -17,7 +17,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client
 from app.tools import register_tools
-from tests.conftest import TRADER, _ctx
+from tests.conftest import TRADER, _ctx, catalog_tools
 
 _WATCHLIST_TOOLS = [
     "list_watchlists",
@@ -47,12 +47,7 @@ def test_all_four_watchlist_tools_registered():
 
 
 def test_endpoint_catalog_lists_the_new_tools():
-    from starlette.testclient import TestClient
-
-    from app.main import build_http_app
-
-    with TestClient(build_http_app()) as tc:
-        names = {t["name"] for t in tc.get("/api/tools").json()["tools"]}
+    names = {t["name"] for t in catalog_tools()}
     assert set(_WATCHLIST_TOOLS) <= names
 
 

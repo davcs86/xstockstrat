@@ -100,3 +100,19 @@ class TestResolveHttpPort:
         monkeypatch.setenv("MCP_HTTP_PORT", "")
         monkeypatch.setenv("MCP_SSE_PORT", "9222")
         assert main_mod.resolve_http_port() == 9222
+
+
+class TestResolveGrpcPort:
+    """The internal catalog gRPC port (feature 360)."""
+
+    def test_unset_defaults_to_50061(self, monkeypatch):
+        monkeypatch.delenv("GRPC_PORT", raising=False)
+        assert main_mod.resolve_grpc_port() == 50061
+
+    def test_grpc_port_is_honored(self, monkeypatch):
+        monkeypatch.setenv("GRPC_PORT", "50999")
+        assert main_mod.resolve_grpc_port() == 50999
+
+    def test_empty_value_falls_back_to_the_default(self, monkeypatch):
+        monkeypatch.setenv("GRPC_PORT", "")
+        assert main_mod.resolve_grpc_port() == 50061

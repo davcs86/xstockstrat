@@ -1,4 +1,5 @@
 import type { CommsgunKeyState } from '../services/commsgunSecret';
+import { checkHttpsUrl } from './webhookUrlRule';
 
 export type EmailMode = 'auto' | 'commsgun' | 'sendgrid';
 export type KeyKind = CommsgunKeyState['kind'];
@@ -24,10 +25,15 @@ export function emailMode(config: ProviderConfig): EmailMode {
 
 /** The base configuration: commsgun can be addressed only when all three are non-empty. */
 export function commsgunSettings(config: ProviderConfig): CommsgunSettings {
-  const url = config.getString('commsgun.enqueue_url', '').trim();
+  const url = httpsOnly(config.getString('commsgun.enqueue_url', '').trim());
   const appId = config.getString('commsgun.app_id', '').trim();
   const to = config.getString('commsgun.to_email', '').trim();
   return { url, appId, to, baseSet: !!url && !!appId && !!to };
+}
+
+// The bearer app key goes with every enqueue: a URL failing the webhook URL rule (sans allowlist) reads as unset.
+function httpsOnly(url: string): string {
+  return checkHttpsUrl(url).ok ? url : '';
 }
 
 /** What dispatch does with a qualifying alert's email. */

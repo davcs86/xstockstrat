@@ -1,6 +1,6 @@
 # xstockstrat-indicators — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-13 (`ccr-7e428591-3j2he0` @ `52f6d5a`). For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-15 (`claude/context-constitution-parity-zggeq3` @ `d5de836`). For triage/fixing, not
 governance. The fictional ledger/notify dependency is a repeated pattern also recorded at the root.
 
 ## Documentation that lies (docs claim behavior the code lacks)

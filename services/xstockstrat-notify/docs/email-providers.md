@@ -5,10 +5,14 @@ outbox behaves. Summary in `CLAUDE.md` § Email providers; operator rules in `op
 
 A qualifying alert produces at most one email, through SendGrid or
 through the homelab commsgun hub. `src/fanout/emailProvider.ts` holds the rules; `src/fanout/emailRender.ts`
-renders the one subject and text both providers send; `src/fanout/sendgridSender.ts` is the SendGrid POST.
+renders the one subject and text both providers send (the subject has CR/LF replaced by a space and is cut to
+998 code points, commsgun's `invalid_subject` limit; the text is cut, with a trailing `[truncated]` line, so the
+commsgun request stays within its 256 KiB body limit, counted as JSON-escaped bytes); `src/fanout/sendgridSender.ts` is the SendGrid POST.
 
 - **Base and readiness.** The *base* is `commsgun.enqueue_url`, `commsgun.app_id` and `commsgun.to_email`,
-  all non-empty. The app key has three states (`src/services/commsgunSecret.ts`): `key`, `absent`
+  all non-empty. An enqueue URL that fails the webhook URL rule without its allowlist (`webhookUrlRule.ts#checkHttpsUrl`: `https`
+  only, ≤ 2048 characters, no whitespace or control characters, no userinfo, no trailing-dot host) reads as empty, so
+  the bearer key never goes out in clear text or to a URL carrying credentials. The app key has three states (`src/services/commsgunSecret.ts`): `key`, `absent`
   (resolved, not set) and `unknown` (no resolve has succeeded yet). A failed refresh keeps the last
   resolved state.
 - **Dispatch** (email branch of `FanoutDispatcher`, after the gates, dedup and Slack):
@@ -41,7 +45,7 @@ renders the one subject and text both providers send; `src/fanout/sendgridSender
 
 - **Attempt**: POST `{channel:"email", to:[recipient], subject, text}` with `X-Commsgun-App`,
   `Authorization: Bearer <key>`, `Idempotency-Key: alert:<alert_id>` and `redirect: 'manual'`; every retry
-  of a row is byte-identical. 2xx → `delivered`. 429, 5xx, a timeout or a network error → retried with the
+  of a row is byte-identical. 2xx → `delivered`. 408, 429, 5xx, a timeout or a network error → retried with the
   backoff above. 401, 403, 409, 413, 422, a redirect or any other status → the row ends at once. With no
   URL or app id (`no_endpoint`), an unset key (`no_app_key`) or a key never resolved (`secret_unresolved`)
   no request is made and the attempt counts as a retry.
@@ -56,6 +60,6 @@ renders the one subject and text both providers send; `src/fanout/sendgridSender
   `undelivered` row gets its own alert. Rerouted rows get one alert per drain — always for `lost_config`,
   and for `deliberate` only when an email was dropped or its SendGrid send was not confirmed. Two standing
   conditions alert when they start and again every 24 hours: mode `commsgun` without the base, and `auto`
-  with the base set while the key is unset or could not be read on two consecutive tries.
+  or `commsgun` with the base set while the key is unset or could not be read on two consecutive tries.
 - **Shutdown**: an in-flight commsgun POST is aborted and its row stays `pending` with the attempt not
   counted; a row already past its terminal UPDATE finishes before the pool closes.

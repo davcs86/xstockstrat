@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math"
 	"net"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -50,6 +51,8 @@ type PortfolioService struct {
 	// Watchlists — held behind interfaces so cap/ownership rules can be unit-tested with stubs.
 	watchlists WatchlistStore
 	wlCfg      intConfig
+	// delisted is marketdata's flagged set as of the last successful delisting tick.
+	delisted delistedCache
 	// quoteCfg holds the live portfolio.marketdata.quote_timeout_ms read; nil (test literals) means the 4000ms default.
 	quoteCfg intConfig
 
@@ -784,7 +787,7 @@ func sideOf(qty float64) portfoliov1.PositionSide {
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
 	// Caller identity comes from the trusted x-user-id header, never the deprecated request-body user_id.
 	userID := middleware.FromContext(ctx).UserID
-	positions, _, err := s.repo.ListPositions(ctx, userID, req.TradingMode, 500, "", req.GetAccountId(), "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	positions, err := s.listAllPositions(ctx, userID, req.TradingMode, req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}
@@ -929,7 +932,7 @@ var ErrLedgerUnavailable = errors.New("ledger unavailable")
 // (the ONE realized-P&L implementation) — no second formula lives here (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
 	userID := middleware.FromContext(ctx).UserID
-	positions, _, err := s.repo.ListPositions(ctx, userID, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	positions, err := s.listAllPositions(ctx, userID, req.TradingMode, "")
 	if err != nil {
 		return nil, err
 	}
@@ -1167,6 +1170,29 @@ func (s *PortfolioService) collectFills(ctx context.Context, eventType, userID s
 	}
 }
 
+// positionDrainPageSize must stay <= the repo cap: ListPositions turns any larger page size into 100.
+const positionDrainPageSize = 500
+
+// listAllPositions follows the ListPositions cursor to the last page; a page error fails the whole read.
+func (s *PortfolioService) listAllPositions(ctx context.Context, userID string, mode commonv1.TradingMode, accountID string) ([]*portfoliov1.Position, error) {
+	var out []*portfoliov1.Position
+	var token string
+	for {
+		page, next, err := s.repo.ListPositions(ctx, userID, mode, positionDrainPageSize, token, accountID, "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+		if err != nil {
+			return nil, fmt.Errorf("list positions page: %w", err)
+		}
+		out = append(out, page...)
+		if next == "" {
+			return out, nil
+		}
+		if next == token {
+			return nil, fmt.Errorf("list positions page: repeated page token")
+		}
+		token = next
+	}
+}
+
 // GetSnapshot retrieves a historical portfolio snapshot.
 func (s *PortfolioService) GetSnapshot(ctx context.Context, req *portfoliov1.GetSnapshotRequest) (*portfoliov1.PortfolioSnapshot, error) {
 	// Ownership gate: a snapshot's portfolio_id IS the owning user_id (snapshots are written as
@@ -1211,8 +1237,10 @@ func (s *PortfolioService) Unsubscribe(id string) {
 }
 
 func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string, mode commonv1.TradingMode) {
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	positions, err := s.listAllPositions(ctx, userID, mode, "")
 	if err != nil {
+		slog.WarnContext(ctx, "portfolio snapshot skipped: position read failed", "user_id", userID, "error", err)
+		telemetry.RecordSnapshot(ctx, "skipped_read_error")
 		return
 	}
 	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
@@ -1280,22 +1308,23 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	maxDrawdownPct := s.cfg.GetFloat("risk.max_drawdown_pct", 0.10)
 	concentrationLimitPct := s.cfg.GetFloat("risk.concentration_limit_pct", 0.20)
 
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
-	if err != nil {
-		return
-	}
 	var totalValue float64
 	posValues := make(map[string]float64)
-	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
-	applyQuotes(positions, quotes)
-	observeQuotePass(ctx, positions, quotes, "risk")
-	// Any unpriced position would skew the denominator — skip concentration (drawdown below still runs).
-	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
-		slog.WarnContext(ctx, "concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+	positions, err := s.listAllPositions(ctx, userID, mode, "")
+	if err != nil {
+		slog.WarnContext(ctx, "concentration check skipped: position read failed", "user_id", userID, "error", err)
 	} else {
-		for _, p := range positions {
-			posValues[p.Symbol] += p.MarketValue
-			totalValue += p.MarketValue
+		quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+		applyQuotes(positions, quotes)
+		observeQuotePass(ctx, positions, quotes, "risk")
+		// Any unpriced position would skew the denominator — skip concentration (drawdown below still runs).
+		if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
+			slog.WarnContext(ctx, "concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+		} else {
+			for _, p := range positions {
+				posValues[p.Symbol] += p.MarketValue
+				totalValue += p.MarketValue
+			}
 		}
 	}
 
@@ -2022,6 +2051,8 @@ type WatchlistStore interface {
 	// PruneExpiredSignalEntries returns already-committed removals even when err != nil; the caller
 	// must still emit their events.
 	PruneExpiredSignalEntries(ctx context.Context) (repository.PruneResult, error)
+	// RemoveDelistedFromSystemLists returns already-committed removals even when err != nil.
+	RemoveDelistedFromSystemLists(ctx context.Context, symbols []string) ([]repository.DelistedRemoval, error)
 }
 
 // intConfig is the int config slice the watchlist caps and the quote deadline read (injectable in tests).
@@ -2211,6 +2242,7 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 	s.emitEvent(ctx, "portfolio.watchlist.created", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId, "name": wl.Name,
 	})
+	s.decorateWatchlists(wl)
 	return &portfoliov1.CreateWatchlistResponse{Watchlist: wl, RefusedSymbols: refused}, nil
 }
 
@@ -2225,6 +2257,7 @@ func (s *PortfolioService) EnsureSignalWatchlist(ctx context.Context, _ *portfol
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.decorateWatchlists(wl)
 	return &portfoliov1.EnsureSignalWatchlistResponse{Watchlist: wl}, nil
 }
 
@@ -2239,7 +2272,14 @@ func (s *PortfolioService) ListAllWatchlistSymbols(ctx context.Context, _ *portf
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return &portfoliov1.ListAllWatchlistSymbolsResponse{Symbols: syms}, nil
+	// The repo union stays unfiltered: the delisting tick sends it to marketdata.
+	servable := make([]string, 0, len(syms))
+	for _, sym := range syms {
+		if s.delisted.lookup(sym) == nil {
+			servable = append(servable, sym)
+		}
+	}
+	return &portfoliov1.ListAllWatchlistSymbolsResponse{Symbols: servable}, nil
 }
 
 // GetWatchlist returns a single watchlist owned by the caller.
@@ -2252,10 +2292,12 @@ func (s *PortfolioService) GetWatchlist(ctx context.Context, req *portfoliov1.Ge
 	if err != nil {
 		return nil, err
 	}
+	s.decorateWatchlists(wl)
 	return &portfoliov1.GetWatchlistResponse{Watchlist: wl}, nil
 }
 
-// ListWatchlists returns the caller's watchlists, paginated.
+// ListWatchlists returns the caller's watchlists, paginated. A first page without a system-managed
+// list idempotently ensures it, so this read can write; an ensure failure never fails the read.
 func (s *PortfolioService) ListWatchlists(ctx context.Context, req *portfoliov1.ListWatchlistsRequest) (*portfoliov1.ListWatchlistsResponse, error) {
 	userID, err := requireUserID(ctx)
 	if err != nil {
@@ -2271,10 +2313,39 @@ func (s *PortfolioService) ListWatchlists(ctx context.Context, req *portfoliov1.
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	if pageToken == "" && !slices.ContainsFunc(wls, (*portfoliov1.Watchlist).GetSystemManaged) {
+		wls, next = s.ensureSignalListOnFirstPage(ctx, userID, pageSize, wls, next)
+	}
+	s.decorateWatchlists(wls...)
 	return &portfoliov1.ListWatchlistsResponse{
 		Watchlists: wls,
 		Page:       &commonv1.PageResponse{NextPageToken: next},
 	}, nil
+}
+
+// ensureSignalListOnFirstPage never returns an error: any failure logs a WARN and returns the
+// original page, so a degraded write path cannot break the read.
+func (s *PortfolioService) ensureSignalListOnFirstPage(ctx context.Context, userID string, pageSize int, wls []*portfoliov1.Watchlist, next string) ([]*portfoliov1.Watchlist, string) {
+	ensured, err := s.watchlists.EnsureSystemManaged(ctx, userID, signalWatchlistDefaultName)
+	if err != nil {
+		if ctx.Err() == nil {
+			slog.WarnContext(ctx, "ListWatchlists: ensure system watchlist failed; returning existing lists", "error", err)
+		}
+		return wls, next
+	}
+	// Go string order equals Postgres uuid order (pgx renders canonical lowercase text); compares
+	// ids, never the token, so a later token fix cannot break it.
+	if next != "" && len(wls) > 0 && ensured.GetWatchlistId() > wls[len(wls)-1].GetWatchlistId() {
+		return wls, next
+	}
+	relisted, relistNext, err := s.watchlists.ListByUser(ctx, userID, pageSize, "")
+	if err != nil {
+		if ctx.Err() == nil {
+			slog.WarnContext(ctx, "ListWatchlists: re-list after ensure failed; returning first page", "error", err)
+		}
+		return wls, next
+	}
+	return relisted, relistNext
 }
 
 // watchlistMaskPaths is the closed allowlist of maskable UpdateWatchlist paths (scalar only —
@@ -2329,6 +2400,7 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 		s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 			"user_id": userID, "watchlist_id": wl.WatchlistId,
 		})
+		s.decorateWatchlists(wl)
 		return &portfoliov1.UpdateWatchlistResponse{Watchlist: wl}, nil
 	}
 
@@ -2354,6 +2426,7 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId,
 	})
+	s.decorateWatchlists(wl)
 	return &portfoliov1.UpdateWatchlistResponse{Watchlist: wl, RefusedSymbols: refused}, nil
 }
 
@@ -2382,6 +2455,7 @@ func (s *PortfolioService) UpdateWatchlistBinding(ctx context.Context, req *port
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+req.GetWatchlistId(), map[string]interface{}{
 		"user_id": userID, "watchlist_id": req.GetWatchlistId(), "symbol": symbol,
 	})
+	s.decorateBindings(binding)
 	return &portfoliov1.UpdateWatchlistBindingResponse{
 		Binding:   binding,
 		UpdatedAt: timestamppb.New(updatedAt),
@@ -2413,6 +2487,7 @@ func (s *PortfolioService) UpdateWatchlistBindings(ctx context.Context, req *por
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+req.GetWatchlistId(), map[string]interface{}{
 		"user_id": userID, "watchlist_id": req.GetWatchlistId(),
 	})
+	s.decorateBindings(bindings...)
 	return &portfoliov1.UpdateWatchlistBindingsResponse{
 		Bindings:  bindings,
 		UpdatedAt: timestamppb.New(updatedAt),
@@ -2463,6 +2538,7 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	}
 	add, refused := s.refuseUnservable(ctx, add)
 	if len(refused) > 0 && len(add) == 0 {
+		s.decorateWatchlists(existing)
 		return &portfoliov1.AddWatchlistSymbolsResponse{Watchlist: existing, RefusedSymbols: refused}, nil
 	}
 	intent, err := expiryIntentFor(req, existing, add)
@@ -2482,6 +2558,7 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId,
 	})
+	s.decorateWatchlists(wl)
 	return &portfoliov1.AddWatchlistSymbolsResponse{Watchlist: wl, RefusedSymbols: refused}, nil
 }
 
@@ -2501,5 +2578,6 @@ func (s *PortfolioService) RemoveWatchlistSymbols(ctx context.Context, req *port
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId,
 	})
+	s.decorateWatchlists(wl)
 	return &portfoliov1.RemoveWatchlistSymbolsResponse{Watchlist: wl}, nil
 }

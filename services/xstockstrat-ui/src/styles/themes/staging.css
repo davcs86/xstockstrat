@@ -28,6 +28,22 @@
      by the lightweight-charts grid options via src/lib/chartColors.ts; opacity tuned against the
      rendered chart in the diagnosed e2e run. */
   --chart-grid: oklch(0.42 0.01 56.043 / 0.55);
+  /* Series palette (feature 342): values must stay identical in both themes, which keeps them
+     outside checkThemeBundle.cjs check (b). */
+  /* jscpd:ignore-start */
+  --series-1: rgb(135 240 30);
+  --series-2: rgb(165 0 255);
+  --series-3: rgb(255 150 165);
+  --series-4: rgb(165 90 0);
+  --series-5: rgb(60 210 255);
+  --series-6: rgb(0 135 105);
+  --series-7: rgb(105 240 210);
+  --series-8: rgb(165 150 0);
+  --series-9: rgb(15 120 150);
+  --series-10: rgb(240 225 165);
+  --series-11: rgb(210 45 90);
+  --series-12: rgb(120 150 255);
+  /* jscpd:ignore-end */
   --sidebar: oklch(0.216 0.006 56.043);
   --sidebar-foreground: oklch(0.985 0.001 106.423);
   --sidebar-primary: oklch(0.696 0.17 162.48);

@@ -159,3 +159,20 @@ func TestGetSectorHistory_AC2_ExpiredCtxDeadlineExceeded(t *testing.T) {
 		t.Fatalf("AC-2: handler must return DEADLINE_EXCEEDED, not INTERNAL (got %v)", got)
 	}
 }
+
+// The adapter forwards the gRPC context and maps the service's PermissionDenied to the gRPC code.
+func TestSyncWatchlistDelistings_AdapterMapsPermissionDenied(t *testing.T) {
+	adapter := NewMarketDataHandler(&service.MarketDataService{}).GRPCHandler()
+	_, err := adapter.SyncWatchlistDelistings(context.Background(), &marketdatav1.SyncWatchlistDelistingsRequest{Symbols: []string{"AAPL"}})
+	if status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("SyncWatchlistDelistings without a grant = %v, want PermissionDenied", err)
+	}
+}
+
+func TestAckDelistingAlerts_AdapterMapsPermissionDenied(t *testing.T) {
+	adapter := NewMarketDataHandler(&service.MarketDataService{}).GRPCHandler()
+	_, err := adapter.AckDelistingAlerts(context.Background(), &marketdatav1.AckDelistingAlertsRequest{Symbols: []string{"AAPL"}})
+	if status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("AckDelistingAlerts without a grant = %v, want PermissionDenied", err)
+	}
+}

@@ -37,7 +37,7 @@
     - img
   - button "Alerts":
     - img
-    - text: "2"
+    - text: "5"
   - button "Toggle copilot":
     - img
   - navigation "Section":

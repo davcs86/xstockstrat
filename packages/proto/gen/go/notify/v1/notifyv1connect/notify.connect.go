@@ -47,6 +47,8 @@ const (
 	// NotifyServiceMarkAlertReadProcedure is the fully-qualified name of the NotifyService's
 	// MarkAlertRead RPC.
 	NotifyServiceMarkAlertReadProcedure = "/xstockstrat.notify.v1.NotifyService/MarkAlertRead"
+	// NotifyServiceGetAlertProcedure is the fully-qualified name of the NotifyService's GetAlert RPC.
+	NotifyServiceGetAlertProcedure = "/xstockstrat.notify.v1.NotifyService/GetAlert"
 	// NotifyServiceRegisterPushSubscriptionProcedure is the fully-qualified name of the NotifyService's
 	// RegisterPushSubscription RPC.
 	NotifyServiceRegisterPushSubscriptionProcedure = "/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription"
@@ -72,6 +74,9 @@ type NotifyServiceClient interface {
 	// Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
 	// propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
 	MarkAlertRead(context.Context, *connect.Request[v1.MarkAlertReadRequest]) (*connect.Response[v1.MarkAlertReadResponse], error)
+	// Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+	// the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+	GetAlert(context.Context, *connect.Request[v1.GetAlertRequest]) (*connect.Response[v1.Alert], error)
 	// Register (or upsert) a Web Push subscription for the calling user.
 	// The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
 	RegisterPushSubscription(context.Context, *connect.Request[v1.RegisterPushSubscriptionRequest]) (*connect.Response[v1.RegisterPushSubscriptionResponse], error)
@@ -123,6 +128,12 @@ func NewNotifyServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(notifyServiceMethods.ByName("MarkAlertRead")),
 			connect.WithClientOptions(opts...),
 		),
+		getAlert: connect.NewClient[v1.GetAlertRequest, v1.Alert](
+			httpClient,
+			baseURL+NotifyServiceGetAlertProcedure,
+			connect.WithSchema(notifyServiceMethods.ByName("GetAlert")),
+			connect.WithClientOptions(opts...),
+		),
 		registerPushSubscription: connect.NewClient[v1.RegisterPushSubscriptionRequest, v1.RegisterPushSubscriptionResponse](
 			httpClient,
 			baseURL+NotifyServiceRegisterPushSubscriptionProcedure,
@@ -151,6 +162,7 @@ type notifyServiceClient struct {
 	acknowledgeAlert           *connect.Client[v1.AcknowledgeAlertRequest, v1.AcknowledgeAlertResponse]
 	listAlerts                 *connect.Client[v1.ListAlertsRequest, v1.ListAlertsResponse]
 	markAlertRead              *connect.Client[v1.MarkAlertReadRequest, v1.MarkAlertReadResponse]
+	getAlert                   *connect.Client[v1.GetAlertRequest, v1.Alert]
 	registerPushSubscription   *connect.Client[v1.RegisterPushSubscriptionRequest, v1.RegisterPushSubscriptionResponse]
 	unregisterPushSubscription *connect.Client[v1.UnregisterPushSubscriptionRequest, v1.UnregisterPushSubscriptionResponse]
 	fanoutWebhook              *connect.Client[v1.FanoutWebhookRequest, v1.FanoutWebhookResponse]
@@ -179,6 +191,11 @@ func (c *notifyServiceClient) ListAlerts(ctx context.Context, req *connect.Reque
 // MarkAlertRead calls xstockstrat.notify.v1.NotifyService.MarkAlertRead.
 func (c *notifyServiceClient) MarkAlertRead(ctx context.Context, req *connect.Request[v1.MarkAlertReadRequest]) (*connect.Response[v1.MarkAlertReadResponse], error) {
 	return c.markAlertRead.CallUnary(ctx, req)
+}
+
+// GetAlert calls xstockstrat.notify.v1.NotifyService.GetAlert.
+func (c *notifyServiceClient) GetAlert(ctx context.Context, req *connect.Request[v1.GetAlertRequest]) (*connect.Response[v1.Alert], error) {
+	return c.getAlert.CallUnary(ctx, req)
 }
 
 // RegisterPushSubscription calls xstockstrat.notify.v1.NotifyService.RegisterPushSubscription.
@@ -210,6 +227,9 @@ type NotifyServiceHandler interface {
 	// Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
 	// propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
 	MarkAlertRead(context.Context, *connect.Request[v1.MarkAlertReadRequest]) (*connect.Response[v1.MarkAlertReadResponse], error)
+	// Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+	// the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+	GetAlert(context.Context, *connect.Request[v1.GetAlertRequest]) (*connect.Response[v1.Alert], error)
 	// Register (or upsert) a Web Push subscription for the calling user.
 	// The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
 	RegisterPushSubscription(context.Context, *connect.Request[v1.RegisterPushSubscriptionRequest]) (*connect.Response[v1.RegisterPushSubscriptionResponse], error)
@@ -257,6 +277,12 @@ func NewNotifyServiceHandler(svc NotifyServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(notifyServiceMethods.ByName("MarkAlertRead")),
 		connect.WithHandlerOptions(opts...),
 	)
+	notifyServiceGetAlertHandler := connect.NewUnaryHandler(
+		NotifyServiceGetAlertProcedure,
+		svc.GetAlert,
+		connect.WithSchema(notifyServiceMethods.ByName("GetAlert")),
+		connect.WithHandlerOptions(opts...),
+	)
 	notifyServiceRegisterPushSubscriptionHandler := connect.NewUnaryHandler(
 		NotifyServiceRegisterPushSubscriptionProcedure,
 		svc.RegisterPushSubscription,
@@ -287,6 +313,8 @@ func NewNotifyServiceHandler(svc NotifyServiceHandler, opts ...connect.HandlerOp
 			notifyServiceListAlertsHandler.ServeHTTP(w, r)
 		case NotifyServiceMarkAlertReadProcedure:
 			notifyServiceMarkAlertReadHandler.ServeHTTP(w, r)
+		case NotifyServiceGetAlertProcedure:
+			notifyServiceGetAlertHandler.ServeHTTP(w, r)
 		case NotifyServiceRegisterPushSubscriptionProcedure:
 			notifyServiceRegisterPushSubscriptionHandler.ServeHTTP(w, r)
 		case NotifyServiceUnregisterPushSubscriptionProcedure:
@@ -320,6 +348,10 @@ func (UnimplementedNotifyServiceHandler) ListAlerts(context.Context, *connect.Re
 
 func (UnimplementedNotifyServiceHandler) MarkAlertRead(context.Context, *connect.Request[v1.MarkAlertReadRequest]) (*connect.Response[v1.MarkAlertReadResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.notify.v1.NotifyService.MarkAlertRead is not implemented"))
+}
+
+func (UnimplementedNotifyServiceHandler) GetAlert(context.Context, *connect.Request[v1.GetAlertRequest]) (*connect.Response[v1.Alert], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.notify.v1.NotifyService.GetAlert is not implemented"))
 }
 
 func (UnimplementedNotifyServiceHandler) RegisterPushSubscription(context.Context, *connect.Request[v1.RegisterPushSubscriptionRequest]) (*connect.Response[v1.RegisterPushSubscriptionResponse], error) {

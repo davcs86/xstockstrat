@@ -943,6 +943,106 @@ describe('listAlerts — read state (feature 203)', () => {
   });
 });
 
+describe('getAlert (feature 344)', () => {
+  const ALERT_ID = 'a1f3c0de-0000-4000-8000-000000000001';
+
+  function alertRow(over: any = {}): any {
+    return {
+      alert_id: ALERT_ID,
+      severity: 3,
+      category: 'backfill',
+      title: 'Backfill failed',
+      body: 'Backfill job 67276d1f failed',
+      source_service: 'xstockstrat-ingest',
+      target_user_id: 'u1',
+      created_at: new Date('2026-11-15T10:00:00Z'),
+      acknowledged: false,
+      correlation_id: 'c-77',
+      tags: [],
+      context: { job_id: '67276d1f' },
+      read_at: null,
+      ...over,
+    };
+  }
+
+  function callGetAlert(pool: any, call: any): Promise<{ err: any; res: any }> {
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    return new Promise((resolve) => impl.getAlert(call, (err: any, res: any) => resolve({ err, res })));
+  }
+
+  it('@AC-9 returns a targeted alert with source, correlation id, context and read state', async () => {
+    const pool = capturingPool([alertRow()]);
+    const { err, res } = await callGetAlert(pool, metaCall('u1', { alertId: ALERT_ID }));
+    assert.equal(err, null);
+    assert.equal(res.alertId, ALERT_ID);
+    assert.equal(res.sourceService, 'xstockstrat-ingest');
+    assert.equal(res.correlationId, 'c-77');
+    assert.equal(res.context.job_id, '67276d1f');
+    assert.equal(res.read, false);
+  });
+
+  it('@AC-3 returns a broadcast alert with an empty targetUserId', async () => {
+    const pool = capturingPool([alertRow({ target_user_id: null })]);
+    const { err, res } = await callGetAlert(pool, metaCall('u1', { alertId: ALERT_ID }));
+    assert.equal(err, null);
+    assert.equal(res.targetUserId, '');
+  });
+
+  it("@AC-2 another user's alert is code 5, through the caller-scoped predicate", async () => {
+    const pool = capturingPool([]);
+    const { err } = await callGetAlert(pool, metaCall('u1', { alertId: ALERT_ID }));
+    assert.equal(err?.code, 5);
+    assert.equal(pool.calls.length, 1);
+    const sql = pool.calls[0].sql.replace(/\s+/g, ' ');
+    assert.match(sql, /a\.target_user_id = \$1 OR a\.target_user_id IS NULL/);
+    assert.match(sql, /a\.alert_id = \$2/);
+    assert.doesNotMatch(sql, /\$1::text IS NULL/);
+    assert.deepEqual(pool.calls[0].params, ['u1', ALERT_ID]);
+  });
+
+  it('a malformed id is the same code 5 and message as a missing alert, with no query', async () => {
+    const missing = await callGetAlert(capturingPool([]), metaCall('u1', { alertId: ALERT_ID }));
+    const pool = capturingPool([alertRow()]);
+    const { err } = await callGetAlert(pool, metaCall('u1', { alertId: 'a1f3' }));
+    assert.equal(err?.code, 5);
+    assert.equal(err.message, missing.err?.message);
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('a missing x-user-id header is code 3 with no query; the body userId is ignored', async () => {
+    const pool = capturingPool([alertRow()]);
+    const { err } = await callGetAlert(pool, metaCall(null, { alertId: ALERT_ID, userId: 'u1' }));
+    assert.equal(err?.code, 3);
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it("@AC-1 returns the caller's read state from the per-user join", async () => {
+    const pool = capturingPool([alertRow({ read_at: new Date('2026-11-15T11:00:00Z') })]);
+    const { err, res } = await callGetAlert(pool, metaCall('u1', { alertId: ALERT_ID }));
+    assert.equal(err, null);
+    assert.equal(res.read, true);
+    assert.ok(res.readAt instanceof Date);
+    assert.match(
+      pool.calls[0].sql.replace(/\s+/g, ' '),
+      /LEFT JOIN notify\.alert_reads ar ON ar\.alert_id = a\.alert_id AND ar\.user_id = \$1/,
+    );
+  });
+
+  it('@AC-1 context survives an Alert encode/decode round-trip', async () => {
+    for (const context of [{ job_id: '67276d1f', failed_symbols: ['AAPL', 'TSLA'], attempts: 3, extra: {} }, {}]) {
+      const { err, res } = await callGetAlert(capturingPool([alertRow({ context })]), metaCall('u1', { alertId: ALERT_ID }));
+      assert.equal(err, null);
+      const decoded = Alert.decode(Alert.encode(res).finish());
+      assert.deepEqual(decoded.context, context);
+    }
+  });
+
+  it('ListAlerts is unchanged: rowToAlert does not map context', () => {
+    const a = rowToAlert(alertRow({ context: { a: 1 } }));
+    assert.equal('context' in a, false);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // FanoutWebhook accept handler (feature 334)
 // ---------------------------------------------------------------------------

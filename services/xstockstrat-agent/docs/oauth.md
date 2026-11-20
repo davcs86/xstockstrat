@@ -24,7 +24,6 @@ Registered in `app/main.py` `build_http_app`:
 | `POST /oauth/token` | `authorization_code` + `refresh_token` grants (tokens in JSON body only) |
 | `/` (GET/POST) | **Streamable HTTP** MCP endpoint (Claude.ai remote connector) |
 | `/sse` + `/messages` | **Removed** (feature 079) — return `404 text/plain` naming the replacement URL, *before* the auth gate |
-| `GET /api/tools` | Tool catalog (name/description/inputSchema) — **unauthenticated**, capability metadata only; powers the `xstockstrat-ui` `/accounts/mcp-tools` page |
 
 ## `aud` binding and discovery path insertion
 

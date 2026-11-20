@@ -47,6 +47,7 @@ message BackfillJob {
   int32 chunks_total = 13;      // planned chunk count (FR-5)
   int32 chunks_completed = 14;  // chunks in COMPLETED state (FR-5)
   BackfillDataKind data_kind = 15;  // what the job backfills; UNSPECIFIED == BARS (feature 198)
+  repeated xstockstrat.common.v1.BackfillSymbolResult symbol_results = 16;
 }
 
 enum BackfillStatus {
@@ -190,6 +191,9 @@ message SignalSource {
   // Owner of the source (feature 224). "system" = platform-owned, read-only to every user.
   string user_id = 13;
   xstockstrat.common.v1.TemplateOrigin origin = 14;  // set when instantiated from a template
+  // Prose an LLM agent follows to extract signals from a mediated_* source.
+  // Empty on every other source type.
+  string extraction_instructions = 15;
 }
 
 // Health of a registered signal source (feature 083). Closed set → enum (C-04).

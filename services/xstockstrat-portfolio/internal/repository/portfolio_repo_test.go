@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -10,7 +12,15 @@ import (
 	"github.com/pashagolub/pgxmock/v4"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 )
+
+// positionRowCols mirrors positionColumns for pgxmock result rows.
+var positionRowCols = []string{
+	"symbol", "qty", "avg_entry_price", "cost_basis", "opened_at", "trading_mode", "account_id",
+	"current_price", "market_value", "unrealized_pnl", "unrealized_pnl_pct", "day_pnl",
+	"day_pnl_pct", "stop_order_id", "take_profit_order_id", "source", "as_of",
+}
 
 // fakeNoRowsRow simulates a pgx.Row whose Scan reports no matching row.
 type fakeNoRowsRow struct{}
@@ -57,11 +67,7 @@ func TestGetPosition_ScopesToRequestedAccount(t *testing.T) {
 
 	// The requested account ("acc-target") holds qty 10; the other account ("acc-other", the
 	// most-recently-opened) holds qty 999. Only the account-scoped query returns qty 10.
-	rows := mock.NewRows([]string{
-		"symbol", "qty", "avg_entry_price", "cost_basis", "opened_at", "trading_mode", "account_id",
-		"current_price", "market_value", "unrealized_pnl", "unrealized_pnl_pct", "day_pnl",
-		"day_pnl_pct", "stop_order_id", "take_profit_order_id", "source", "as_of",
-	}).AddRow(
+	rows := mock.NewRows(positionRowCols).AddRow(
 		"AAPL", 10.0, 150.0, 1500.0, time.Now(), "TRADING_MODE_PAPER", "acc-target",
 		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "", "", 0, nil,
 	)
@@ -204,5 +210,139 @@ func TestUpsertAccountBalance_RaisesPeakEquityWithGreatest(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+// emptyStringSlice matches only a non-nil, zero-length []string: a nil slice binds SQL NULL, which
+// turns the first-page cursor predicate into NULL and returns no rows.
+type emptyStringSlice struct{}
+
+func (emptyStringSlice) Match(v interface{}) bool {
+	s, ok := v.([]string)
+	return ok && s != nil && len(s) == 0
+}
+
+func positionRow(rows *pgxmock.Rows, symbol, mode, account string) *pgxmock.Rows {
+	return rows.AddRow(symbol, 1.0, 1.0, 1.0, time.Now(), mode, account,
+		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "", "", 0, nil)
+}
+
+func TestListPositions_FirstPageBindsEmptyCursorArray(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &PortfolioRepo{db: mock}
+
+	rows := mock.NewRows(positionRowCols)
+	for _, r := range [][3]string{
+		{"AAPL", "TRADING_MODE_PAPER", "a"},
+		{"AAPL", "TRADING_MODE_PAPER", "b"},
+		{"AAPL", "TRADING_MODE_PAPER", "c"},
+		{"MSFT", "TRADING_MODE_PAPER", "a"},
+	} {
+		positionRow(rows, r[0], r[1], r[2])
+	}
+	mock.ExpectQuery(`(?s)cardinality\(\$\d+::text\[\]\).*\(\$\d+::text\[\]\)\[1\]`).
+		WithArgs("u1", emptyStringSlice{}, 4).
+		WillReturnRows(rows)
+
+	got, next, err := repo.ListPositions(context.Background(), "u1", commonv1.TradingMode_TRADING_MODE_UNSPECIFIED,
+		3, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	if err != nil {
+		t.Fatalf("ListPositions: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d positions, want 3", len(got))
+	}
+	cursor, err := decodePositionCursor(next)
+	if err != nil {
+		t.Fatalf("decodePositionCursor(%q): %v", next, err)
+	}
+	if want := []string{"AAPL", "TRADING_MODE_PAPER", "c"}; !reflect.DeepEqual(cursor, want) {
+		t.Fatalf("next token decodes to %q, want the last returned row %q (not the look-ahead row)", cursor, want)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestListPositions_CursorPageBindsDecodedTuple(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &PortfolioRepo{db: mock}
+
+	mock.ExpectQuery(`(?s)cardinality\(\$\d+::text\[\]\)`).
+		WithArgs("u1", []string{"AAPL", "TRADING_MODE_PAPER", "c"}, 4).
+		WillReturnRows(positionRow(mock.NewRows(positionRowCols), "MSFT", "TRADING_MODE_PAPER", "a"))
+
+	token := encodePositionCursor("AAPL", "TRADING_MODE_PAPER", "c")
+	got, next, err := repo.ListPositions(context.Background(), "u1", commonv1.TradingMode_TRADING_MODE_UNSPECIFIED,
+		3, token, "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	if err != nil {
+		t.Fatalf("ListPositions: %v", err)
+	}
+	if len(got) != 1 || next != "" {
+		t.Fatalf("got %d positions, next %q; want 1 position and an empty token", len(got), next)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestListPositions_MalformedTokenIssuesNoQuery(t *testing.T) {
+	for _, token := range []string{"AAPL", "BRK.B"} {
+		t.Run(token, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("pgxmock.NewPool: %v", err)
+			}
+			defer mock.Close()
+			repo := &PortfolioRepo{db: mock}
+
+			_, _, err = repo.ListPositions(context.Background(), "u1", commonv1.TradingMode_TRADING_MODE_UNSPECIFIED,
+				3, token, "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+			if !errors.Is(err, ErrInvalidPageToken) {
+				t.Fatalf("got err %v, want ErrInvalidPageToken", err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("a malformed token must not issue a query: %v", err)
+			}
+		})
+	}
+}
+
+func TestPositionCursorCodec(t *testing.T) {
+	for _, tuple := range [][3]string{
+		{"AAPL", "TRADING_MODE_PAPER", "a"},
+		{"BRK|B", "TRADING_MODE_LIVE", "x,\"{}\\ y"},
+		{"", "", ""},
+	} {
+		got, err := decodePositionCursor(encodePositionCursor(tuple[0], tuple[1], tuple[2]))
+		if err != nil {
+			t.Fatalf("round trip %q: %v", tuple, err)
+		}
+		if want := tuple[:]; !reflect.DeepEqual(got, want) {
+			t.Fatalf("round trip got %q, want %q", got, want)
+		}
+	}
+
+	empty, err := decodePositionCursor("")
+	if err != nil || empty == nil || len(empty) != 0 {
+		t.Fatalf(`decodePositionCursor("") = %#v, %v; want a non-nil empty slice`, empty, err)
+	}
+
+	b64 := func(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
+	for _, token := range []string{
+		"AAPL", "BRK.B", "!!!",
+		b64(`["a","b"]`), b64(`[1,2,3]`), b64(`{"a":"b"}`), b64(`null`),
+	} {
+		if _, err := decodePositionCursor(token); !errors.Is(err, ErrInvalidPageToken) {
+			t.Errorf("decodePositionCursor(%q) err = %v, want ErrInvalidPageToken", token, err)
+		}
 	}
 }

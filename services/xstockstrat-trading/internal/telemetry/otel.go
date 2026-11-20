@@ -335,6 +335,8 @@ var (
 	ledgerEmit         = NewCounter("trading.ledger_emit")
 	alertEmit          = NewCounter("trading.alert_emit")
 	escalationSystemic = NewCounter("trading.escalation.systemic")
+
+	reconcilePositionSkip = NewCounter("trading.reconciliation.position_check_skipped")
 )
 
 // ledgerEventTypes bounds the event_type label; any other type is recorded as "other".
@@ -374,4 +376,17 @@ func RecordAlertEmit(ctx context.Context, alertKind, outcome string) {
 
 func RecordEscalationSystemic(ctx context.Context) {
 	escalationSystemic.Add(ctx, 1)
+}
+
+// ReconcileSkipOutcome is a closed outcome set; no per-account attribute is ever recorded (cardinality).
+type ReconcileSkipOutcome string
+
+const (
+	ReconcileSkipRPCError      ReconcileSkipOutcome = "rpc_error"
+	ReconcileSkipDeadline      ReconcileSkipOutcome = "deadline"
+	ReconcileSkipCursorInvalid ReconcileSkipOutcome = "cursor_invalid"
+)
+
+func RecordReconcilePositionSkip(ctx context.Context, outcome ReconcileSkipOutcome) {
+	reconcilePositionSkip.Add(ctx, 1, attribute.String(KeyOutcome, string(outcome)))
 }

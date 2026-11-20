@@ -174,6 +174,24 @@ func (h *MarketDataHandler) GetSymbolServability(ctx context.Context, req *conne
 	return connect.NewResponse(resp), nil
 }
 
+// SyncWatchlistDelistings is internal: xstockstrat-portfolio only (feature 352).
+func (h *MarketDataHandler) SyncWatchlistDelistings(ctx context.Context, req *connect.Request[marketdatav1.SyncWatchlistDelistingsRequest]) (*connect.Response[marketdatav1.SyncWatchlistDelistingsResponse], error) {
+	resp, err := h.svc.SyncWatchlistDelistings(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// AckDelistingAlerts is internal: xstockstrat-portfolio only (feature 352).
+func (h *MarketDataHandler) AckDelistingAlerts(ctx context.Context, req *connect.Request[marketdatav1.AckDelistingAlertsRequest]) (*connect.Response[marketdatav1.AckDelistingAlertsResponse], error) {
+	resp, err := h.svc.AckDelistingAlerts(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // GetSectorAsOf serves sector classification from the local SCD store only (feature 217).
 func (h *MarketDataHandler) GetSectorAsOf(ctx context.Context, req *connect.Request[marketdatav1.GetSectorAsOfRequest]) (*connect.Response[marketdatav1.GetSectorAsOfResponse], error) {
 	resp, err := h.svc.GetSectorAsOf(ctx, req.Msg)
@@ -376,6 +394,22 @@ func (a *grpcMarketDataAdapter) GetEtfFlags(ctx context.Context, req *marketdata
 
 func (a *grpcMarketDataAdapter) GetSymbolServability(ctx context.Context, req *marketdatav1.GetSymbolServabilityRequest) (*marketdatav1.GetSymbolServabilityResponse, error) {
 	resp, err := a.h.GetSymbolServability(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(ctx, err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) SyncWatchlistDelistings(ctx context.Context, req *marketdatav1.SyncWatchlistDelistingsRequest) (*marketdatav1.SyncWatchlistDelistingsResponse, error) {
+	resp, err := a.h.SyncWatchlistDelistings(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(ctx, err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) AckDelistingAlerts(ctx context.Context, req *marketdatav1.AckDelistingAlertsRequest) (*marketdatav1.AckDelistingAlertsResponse, error) {
+	resp, err := a.h.AckDelistingAlerts(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(ctx, err)
 	}

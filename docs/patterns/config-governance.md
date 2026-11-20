@@ -141,12 +141,94 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 | `system` | `xstockstrat-indicators` | Not a config write: the `Formula.author` ownership sentinel on the seeded fundamentals-scoring formula, set from the module's `AUTHOR` constant (`app/formulas/fundamentals_value_quality.py`), never from a request body |
 | `system:config-migration-<NNN>` | `xstockstrat-config` (SQL migration) | A config migration's raw-SQL data write sets `updated_by` to this sentinel and `caller_identity` to NULL (not a SetConfig write); first used by 031 (feature 243) |
 | `system:config-migration-feature-<slug>` | `xstockstrat-config` (SQL migration) | A number-free actor sentinel for a config migration whose content must not carry its number, so a merge-time renumber renames files only; first used by feature 305 |
+| `system:config-migration-feature-330` | `xstockstrat-config` (SQL migration) | Feature 330's guarded reseed of `analysis` / `opportunity.live_enrich_ttl_seconds` (`*_analysis_live_enrich_ttl_reseed`): set only on the global rows whose value it moved `10 → 20`, with `caller_identity` NULL. Its down reverts only rows still carrying it, so an operator `SetConfig` (which rewrites `updated_by`) is never reverted |
 
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
 Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
+
+### feature 330 — fix-live-enrich-ttl-seed (`xstockstrat-config` / `xstockstrat-analysis`)
+
+No key is added. Config migration `*_analysis_live_enrich_ttl_reseed` moves the stored value of the global
+staging/production rows from the 028 seed `10` to `20`, and only where the row still holds `10`: operator
+values are kept, and per-user rows are untouched. It rewrites the stale "live-quote/sparkline memo"
+description and writes no `default_value` (already `20` via `041`). It notifies `config_changed`, so
+analysis picks the value up without a restart. This entry supersedes the feature-184 row (default `10`), the
+feature-177 row ("seeded `10`") and the feature-227 note ("migration `028` seeds `10`"). Approval: DBA +
+config owner.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `analysis` | `opportunity.live_enrich_ttl_seconds` | int | `20` | `app/handlers/servicer.py:_enrich_opportunities_live` | Seeded `20` (was `10`). Keep above the 15s `ListOpportunities` UI poll. `0` disables the memo. Unbounded. |
+
+### feature 352 — delisted-symbol-handling (`xstockstrat-marketdata` / `xstockstrat-config`)
+
+The confirmation window of marketdata's delisted-symbol detection: the number of trading days a watchlist
+symbol must stay unservable in every successful asset-set load before it is flagged delisted (the first
+unservable day counts as day 1). The key has a full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
+`xstockstrat-config` (`configServiceImpl.ts`) and is **seeded** `5` (staging + production, global, stored as
+`int`, insert-if-absent) by config migration `marketdata_delisting_confirmation_days`, with the number-free
+actor sentinel `system:config-migration-feature-delisted-symbol-handling`; the down deletes only a global row
+that still carries that sentinel and still holds `5`, so a value an operator has changed survives a rollback.
+No `scripts/config-wiring.json` baseline entry. Approval: owner + config team.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `marketdata.assets.delisting_confirmation_trading_days` | int | `5` | `[1,30]`; read clamp unset or `≤ 0` → `5`, `> 30` → `30` | Reader `resolveDelistingConfirmationDays` (`asset_servability.go`); re-read at each successful asset-set load, so a change applies on the next load without a restart. |
+
+### feature 347 — alpaca-adaptive-rate-limit (`xstockstrat-marketdata` / `xstockstrat-trading` / `xstockstrat-config`)
+
+Two kill switches for adaptive Alpaca pacing: each service's Alpaca REST client paces itself from the
+`X-RateLimit-Limit` / `Remaining` / `Reset` response headers and retries an HTTP 429; `false` restores the
+pre-feature single attempt. Both keys are **seeded** `true` (staging + production, global, non-secret,
+insert-if-absent) by config migration `052_alpaca_adaptive_rate_limit_keys`, with the number-free actor
+sentinel `system:config-migration-feature-alpaca-adaptive-rate-limit`; the down deletes only a global row
+that still carries that sentinel and still holds `true`, so a switch an operator has turned off survives a
+rollback. The same migration rewords the description of `marketdata` / `backfill.rate_limit_rps` (now a
+ceiling over the adaptive rate), guarded on the exact old text so an operator-edited description is left
+alone; the down swaps it back under the mirror guard. No `SCALAR_BOUNDS_REGISTRY` entry (both are bool). No
+`scripts/config-wiring.json` baseline entry remains (the two temporary `read-unseeded` entries were removed
+with the seed). The pacing constants are fixed invariants in code, not keys (each service's `CLAUDE.md`).
+Approval: owner + config team.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `marketdata` | `alpaca.adaptive_rate_limit_enabled` | bool | `true` | `cmd/server/main.go:alpacaAdaptiveRateLimit` | Explicit-true code default. Read live on every Alpaca request. Off = static `backfill.rate_limit_rps` limiter only; a 429 goes to the caller. |
+| `trading` | `broker.adaptive_rate_limit_enabled` | bool | `true` | `internal/service/trading.go:(*TradingService).alpacaRateLimitBudget` | Explicit-true code default. Read live on every Alpaca request. Off = one unpaced attempt per broker call. Alpaca only; the loop bounds and the cancel reorder do not depend on it. |
+
+### feature 343 — backtest-inline-backfill (`xstockstrat-ingest`)
+
+Caps the range a non-admin may request through ingest's self-serve `TriggerBackfill` envelope. The key is
+**seeded** (staging + production, global, non-secret, insert-if-absent) by config migration
+`051_ingest_backfill_self_serve_keys`; its down deletes only the global rows the migration wrote that still
+hold the seeded value. No `SCALAR_BOUNDS_REGISTRY` entries were added — the bound below is reader-side only.
+No `scripts/config-wiring.json` baseline entry. `backfill.max_concurrent_jobs` keeps its default and seed of
+3; the homelab alone sets 8 through `SetConfig` (see `docs/runbooks/config-rollout.md`). Approval: owner +
+config team.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `ingest` | `backfill.self_serve_max_range_days` | int | `730` | `app/config/watcher.py:backfill_self_serve_max_range_days` | `≤ 0` → `730`. Read on every non-admin `TriggerBackfill`. |
+
+### feature 341 — fix-indicator-pane-warmup (`xstockstrat-ui` / `xstockstrat-config`)
+
+Sets how many bars of history the `/trader` symbol page fetches for its indicator panes (it draws the
+latest 200). The key is **seeded** (staging + production, global, non-secret, insert-if-absent) at `200`
+by config migration `050_ui_chart_history_bars`, with the number-free actor sentinel
+`system:config-migration-feature-fix-indicator-pane-warmup`; the down deletes only a global row that still
+carries that sentinel and still holds `200`, so a row an admin has set survives a rollback. Write bound
+`SCALAR_BOUNDS_REGISTRY['ui.chart.indicator_history_bars']` = [200, 1000]. Read one-shot (no
+`WatchConfig`) through `/trader/api` (`traderConfigClient.getConfig({ namespace: 'ui' })`, `traderBff.ts`
+forward). Per deployment: `200` on DigitalOcean (staging and production share one database); `1000` on the
+homelab `staging` row only, set by `set_config` after the gate in `docs/runbooks/ohlcv-lock-budget-tuning.md`
+§ Homelab deep indicator history passes. No `scripts/config-wiring.json` baseline entry remains. Approval:
+owner + config team.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `ui` | `chart.indicator_history_bars` | int | `200` | `src/lib/indicatorChart.ts:readHistoryBars` | `intVal` only, clamped to [200, 1000]; absent, wrong type, error or timeout → `200`. Read once per page load (`staleTime: Infinity`), so an open tab keeps the depth it read. |
 
 ### feature 338 — notify-commsgun-channel (`xstockstrat-notify` / `xstockstrat-config`)
 

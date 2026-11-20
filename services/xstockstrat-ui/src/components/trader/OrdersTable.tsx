@@ -1,7 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { EllipsisVertical } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { Order } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { OrderStatus, OrderType } from '@xstockstrat/proto/trading/v1/trading_pb';
@@ -10,23 +9,11 @@ import { pickFresherOrder } from '@/lib/orderFreshness';
 import { useOrderUpdates } from '@/hooks/useOrderUpdates';
 import { useCancelOrder } from '@/hooks/useCancelOrder';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Button } from '../ui/button';
 import { Alert, AlertDescription } from '../ui/alert';
 import { DataTable } from '../ui/data-table';
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from '../ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from '../ui/alert-dialog';
 import { EditOrderDialog } from './EditOrderDialog';
 import { QueryStateMessages } from '../shared/QueryStateMessages';
+import { RowActionsMenu } from '../shared/RowActionsMenu';
 import { TYPE_LABEL, formatUsd, OrderSideBadge, OrderStatusBadge } from './orderShared';
 
 // `HH:MM` local time an order was placed, from a protobuf-es Timestamp ({ seconds: bigint }).
@@ -61,7 +48,6 @@ export function OrdersTable({
   const { updates: liveUpdates, disconnected, terminal } = useOrderUpdates();
   const { mutate: cancelOrder } = useCancelOrder();
   const [editing, setEditing] = useState<Order | null>(null);
-  const [cancelling, setCancelling] = useState<Order | null>(null);
 
   // Wrapped in useMemo — TanStack Table requires a referentially-stable `data` array.
   const merged = useMemo(
@@ -156,44 +142,30 @@ export function OrdersTable({
           const order = row.original;
           const isTerminal = TERMINAL.has(order.status);
           return (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Actions"
-                  data-testid={`actions-${order.orderId}`}
-                >
-                  <EllipsisVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  disabled={isTerminal}
-                  onClick={() => setEditing(order)}
-                  data-testid={`edit-${order.orderId}`}
-                >
-                  Edit
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isTerminal}
-                  variant="destructive"
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    setCancelling(order);
-                  }}
-                  data-testid={`cancel-${order.orderId}`}
-                >
-                  Cancel
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <RowActionsMenu
+              testId={`actions-${order.orderId}`}
+              triggerLabel={`Actions for order ${order.orderId}`}
+              actions={[
+                { label: 'Edit', disabled: isTerminal, onSelect: () => setEditing(order) },
+                {
+                  label: 'Cancel',
+                  destructive: true,
+                  disabled: isTerminal,
+                  onSelect: () => cancelOrder({ orderId: order.orderId }),
+                  confirm: {
+                    title: 'Cancel order',
+                    description: `Cancel this ${order.symbol} order?`,
+                    cancelLabel: 'Dismiss',
+                    confirmLabel: 'Confirm',
+                  },
+                },
+              ]}
+            />
           );
         },
       },
     ],
-    [],
+    [cancelOrder],
   );
 
   return (
@@ -231,27 +203,6 @@ export function OrdersTable({
           if (!o) setEditing(null);
         }}
       />
-      <AlertDialog
-        open={!!cancelling}
-        onOpenChange={(o) => {
-          if (!o) setCancelling(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogCancel data-testid={`cancel-${cancelling?.orderId}-dismiss`}>
-            Dismiss
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => {
-              if (cancelling) cancelOrder({ orderId: cancelling.orderId });
-              setCancelling(null);
-            }}
-            data-testid={`cancel-${cancelling?.orderId}-confirm`}
-          >
-            Confirm
-          </AlertDialogAction>
-        </AlertDialogContent>
-      </AlertDialog>
     </Card>
   );
 }

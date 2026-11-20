@@ -6,6 +6,8 @@
 Feature: xstockstrat-marketdata — stored EDGAR periods are re-derived to the current D/E convention
   Stored EDGAR periods that predate feature 211's financial-debt D/E are upgraded in place, and the
   EDGAR snapshot served from them reflects the re-derived values rather than a stale cached row.
+  Since feature 348 a stored period the current derivation no longer reproduces is replaced, not
+  upgraded in place.
 
   @AC-1 @regression @feature-223
   Scenario: Stored AXP periods carry financial-debt D/E after re-derivation
