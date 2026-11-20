@@ -543,3 +543,49 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - For `/sdd-spec`:
   - Pin the feature's own AC-1 `Then` to the refuse branch (O-1) and add `@AC` scenarios for the gap, first-file and empty-dir cases (C-15).
   - Re-grep every target-file line number. recon.md ran on an older tree, design.md cites lines verified on `origin/main-dev` in round 3, and this feature branch predates the `.sh` → `.py` ports (`check-migration-contract.py`, `migration-rerun.py`, `scripts/shell-allowlist.txt` are absent here).
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 13 steps. Status: design-approved → implementation-ready.
+- Evidence tree: `origin/main-dev@fb52065c2`, read without merging. This branch is 168 commits behind it and still
+  holds the pre-port `.sh` tooling; `/sdd-execute` BRANCH SYNC brings `scripts/tests/`, `check-migration-contract.py`,
+  `migration-rerun.py` and `shell-allowlist.txt` in before Step 1.
+- acceptance.feature: AC-1's `Then` is pinned to the refuse branch (O-1). AC-3 (gap), AC-4 (first file) and AC-5
+  (cannot compute) were added (design §10, O-3). IDs are append-only.
+- Step shape:
+  - 1–2 migrator (`db-migrate.sh` loses `force 0`; new `scripts/tests/test_db_migrate.py`).
+  - 3+4 one atomic unit: guard rewrite, pytest port, deletion of `migration-dirty-guard.test.sh` with its
+    `shell-allowlist.txt:18` line and `ci.yml:841` chain entry.
+  - 5–6 ahead-check reword. 7–8 `scripts/check-migration-order.py` and its tests. 9–10 CI job
+    `migration-order-gate` and a wiring test.
+  - 11 docs, 12 findings, 13 the two operator-signed durable-rule edits.
+- Key codebase findings:
+  - The migrator goes first because, once the new guard exists, the old `if ! guard; then exit 1` already refuses
+    and the migrator test has no red. Run in a scratch copy: the Step 2 test fails on the unmodified script
+    (exit 0 after `force 0`) and passes after Step 1; the recovery-line assertion stays red until the Step 3 guard.
+  - The Step 3 guard body is in the spec verbatim. It passes `shellcheck` and `shfmt -d -i 2` and produces every
+    row of the case table, which closes debate objection O-7 in substance (the register itself is unchanged).
+  - golang-migrate 4.17.1, by source read: an empty tracking table reads as NilVersion
+    (`database/postgres/postgres.go:391-396`) and a duplicate version fails at source init
+    (`source/iofs/iofs.go:70`). The TRUNCATE wording is final.
+  - `origin/main` holds no up-file that `origin/main-dev` lacks, so a promotion PR passes the gate by construction.
+  - `migration-rerun.py` is unedited; the strings it asserts (`force 40`, `force 43`, `force 42`, `force 12`,
+    `force 25`) all name files that exist. Its CI job on the integration PR is the first real run.
+  - The `--forbid-new` workflow expression must be the positive form
+    `(base == 'main' && !(head == 'main-dev' && same repo)) && '--forbid-new' || ''`. The inverse form always yields
+    the flag because `''` is falsy.
+- Deviations from design.md, none touching the Chosen Approach:
+  - Three findings entries, not four: the `database.md` run-order drift is already fixed on main-dev (`:35`).
+  - Step 11 also edits `script-tooling.md:54,62`, `config-rollout.md:248-250` and `context-constitution.md:82`,
+    which go stale with this change.
+  - The exact `Recover:` assertion of the migrator test lands in Step 4, not Step 2.
+  - Exit-2 guard cases assert "no `postgres://`" only; they print no recovery text, so no literal `$DATABASE_URL`.
+  - One extra guard case: an up-file name with no numeric prefix exits 2.
+
+### Open Threads
+
+- Operator action outside the PR: set branch protection "up to date before merge" on `main-dev` and `main`.
+- The `migration-order-gate` flag expression cannot run locally. Check its outcome on the integration PR (no flag)
+  and on the next promotion PR (no flag).
+- `ci.yml` may collide with peer 298 and other batch peers at merge; Step 10's wiring test fails if the job is lost.
+- Next: `/sdd-review fix-migration-tooling-safety impl-spec`.
