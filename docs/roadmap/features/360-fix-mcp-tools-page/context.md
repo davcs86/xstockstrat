@@ -543,3 +543,21 @@ Accountability (P-03):
   deploy stops before the update and the running app is untouched.
 - Operator gates remaining: the DO dev-app page check after merge (D-26; revert the squash on
   failure) and homelab acceptance (D-8). The manual pre-merge `doctl` command is no longer needed.
+
+## Session 2026-11-20 — post-merge verification (operator)
+
+- PR #1589 squash-merged to `main-dev` as `51da5e0`. "Deploy dev" run 44647631487: 20/20 jobs
+  green, including the first real run of "Validate the rendered spec against App Platform"
+  (`doctl apps propose`), the DO dev-app update, and the homelab staging release (no rollback).
+  This closes the two DigitalOcean unknowns: the dual-port agent component is accepted and
+  `${xstockstrat-agent.PRIVATE_DOMAIN}:50061` is routable from the UI.
+- Operator gate D-26 (DO dev app) — **passed** (operator, chat): `/accounts/mcp-tools` lists tools.
+- Operator gate D-8 (homelab staging) — **passed** (operator, chat): the page lists tools when
+  logged in. Operator's curl results from outside the tailnet against the public staging host:
+  `/agent/api/tools` → 404; anonymous `/accounts/api/mcp-tools` → 307 to `/auth/login`; both
+  OAuth discovery documents → 200; port 50061 → connection timed out.
+- Removed route, verified live on the staging VM (operator): `http://127.0.0.1:9000/api/tools`
+  → 401 from the agent itself. The public 404 above comes from the homelab edge, which blocked
+  that path before the fix too.
+- Status stays `code-completed`; `launched` is set at promotion to `main`. The defect report
+  sidecar stays `triaged` (ref feature 360) until then.
