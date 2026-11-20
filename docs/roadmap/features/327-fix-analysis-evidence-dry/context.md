@@ -543,3 +543,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: recon.md was written on 2026-11-11 (services: xstockstrat-analysis, with xstockstrat-indicators read-only; key reuse patterns: `StrategiesRepository.list_live_enabled` for the live gate, and the lazy one-`GetFormula`-per-formula cache for formula content).
+- Phase 1 Grilling: 3 rounds (full). Chosen approach: the backfill reads through `list_live_enabled()`; the evidence fingerprint becomes the composite `def_hash.sha256(sorted fid=digest)` at the two evidence sites only, with an owner-scoped newest-suffix fallback on a score-time refusal and a pop-only-on-`def_hash`-change guard on ManageStrategy UPDATE. Rejected: R-1 to R-9 (hashing `updated_at`, widening all 7 callers, name-bound import, separate digest resolver, dropping refused formulas, the "unreadable" sentinel, the unconditional UPDATE pop, a byte-range predicate, a per-cell digest migration).
+- Constitution rules touched: C-07, C-10, C-11, C-13, C-15, C-16, C-18, P-02, P-03. Floor breaches: none.
+- Status: spec-ready → design-approved. Wrote design.md; debate.md State → approved (no new rows, no petitions).
+- **Operator decision (binding, recorded 2026-11-20, design gate):** "the round-3 synthesis fix is binding — the UPDATE path pops the grade only when def_hash changes, comparing against the old definition_json from the locked row, with a pin test, so @AC-2 @regression @feature-194 is PRESERVED. C-16 sign-off for the CHANGE to @AC-23 @feature-289 and the gate-off availability coupling as synthesized."
+  - As synthesized in round 3, `@AC-23 @feature-289` is PRESERVE (the composite fingerprint keeps it as written) and the gate-off coupling is EXTEND (new 327 `@AC-4`). design.md therefore has no CHANGE line; the sign-off covers both as synthesized.
+  - This decision resolves O-17 (the only blocking objection). No status transition was supplied for the register, so O-11 and O-17 to O-24 still read `open` in debate.md.
+- OQ1 (invalidate vs re-fingerprint): re-fingerprint; old cells are kept and stop matching (D-4). OQ2 (rollout shift): the one-time evidence reset for CUSTOM_FORMULA strategies is accepted, with no migration (D-4).
+- Tree note: design.md line cites are from the round-3 tree. The feature branch base (`c4fd48b0a`) has analysis migrations up to 027; `origin/main-dev` also has 028 and 029, so recon.md's "next free is 028" is stale (O-24) and any future fallback would be 030.
+
+## Open Threads
+
+- **UPDATE guard source row** — build the pop guard against the locked row (`current['definition_json']` in `_apply`), not the earlier `pre` read; pin test for a rename during a `GetFormula` outage. Target: UPDATE-guard step.
+- **Unrecoverable refused population (O-18)** — strategies whose formula is refused at rollout and that hold only pre-feature cells go permanently NOT_FOUND (028 template instances, the 029 blend). The operator approved the synthesis that lists this, but the decision text above does not acknowledge it explicitly. Target: confirm the acknowledgement before the docs step; distinct NOT_FOUND message at the `_fetch_and_aggregate` step.
+- **Mixed refused and readable formulas (O-19)** — edits to the readable formula are not enforced while another is refused; accepted limitation (the positional suffix is the remedy if it is later rejected). Target: docs step.
+- **`completed_at` ordering** — may pick a slightly older composite under concurrent runs. Target: repository-method step.
+- **Fallback query cost (O-20)** — `(user_id, strategy_id)` index prefix plus an in-memory sort; cost grows with the cell count. Target: repository-method step.
+- **Indicators availability coupling (O-23)** — an outage now affects gate-off ScoreStrategy and every recompute path; boot scoring depends on indicators being ready. Target: `@AC-4` and the docs step.
+- **One-time evidence reset (D-4)** plus readiness and headline staleness limitations. Target: docs step and the integration PR rollout note.
+- **Owner isolation of digests** rests on the per-owner formula cache (`:3092-3100`) sharing one `failures` dict; the isolation test is load-bearing. Target: owner-isolation test step.
+- **Line drift and stale recon claim (O-24)** — `/sdd-spec` re-greps every cite against a tree rebased on `origin/main-dev`. Target: `/sdd-spec`.
+- **Register bookkeeping** — `/sdd-spec` confirms O-11 and O-17 to O-24 are each covered by a numbered step (O-21 outage-only warning, O-22 refused-fid seed, O-23 log branch). Target: `/sdd-spec`.
