@@ -115,7 +115,7 @@ test.describe('Backfills page — list, create, cancel (AC-1/2/3)', () => {
     await addAdminCookie(page);
     await stubList(page, []);
 
-    let triggered: Record<string, unknown> | null = null;
+    let triggered = null as Record<string, unknown> | null;
     await page.route(IngestPath('TriggerBackfill'), async (route) => {
       triggered = route.request().postDataJSON() as Record<string, unknown>;
       await fulfillJson(route, { jobId: 'job-fund', status: 'BACKFILL_STATUS_QUEUED' });

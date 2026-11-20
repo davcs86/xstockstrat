@@ -1,4 +1,4 @@
-"""`mcp.tool.duration` histogram for every MCP `tools/call` (the agent has no gRPC server)."""
+"""`mcp.tool.duration` histogram for every MCP `tools/call`."""
 
 import logging
 import time
@@ -13,9 +13,6 @@ from app.scopes import MCP_CLAIMS_SCOPE_KEY
 log = logging.getLogger(__name__)
 
 UNREGISTERED = "unregistered"
-# Matches scripts/testdata/rpc-status-vectors.json bucket bounds (shared by all runtimes).
-_BUCKETS_MS = [0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000]
-
 
 _BACKENDS = frozenset(
     {
@@ -111,7 +108,7 @@ class ToolMetricsMiddleware:
             self._histogram = metrics.get_meter(__name__).create_histogram(
                 "mcp.tool.duration",
                 unit="ms",
-                explicit_bucket_boundaries_advisory=_BUCKETS_MS,
+                explicit_bucket_boundaries_advisory=telemetry.RPC_DURATION_BUCKETS_MS,
             )
         self._histogram.record(
             (time.perf_counter() - started) * 1000.0,

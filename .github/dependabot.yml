@@ -36,6 +36,13 @@ updates:
       interval: daily
     open-pull-requests-limit: 0
 
+  - package-ecosystem: pip
+    directory: /scripts
+    target-branch: main-dev
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 0
+
   # Go services
   - package-ecosystem: gomod
     directory: /services/xstockstrat-trading

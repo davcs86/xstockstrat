@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.repositories import backfill_jobs
+from tests._helpers import job_row
 
 
 @pytest.mark.asyncio
@@ -38,6 +39,14 @@ async def test_update_job_builds_set_clause():
     assert "WHERE job_id = $3::uuid" in sql
     # values then job_id
     assert pool.execute.await_args.args[1:] == (3, 42, "j1")
+
+
+@pytest.mark.asyncio
+async def test_update_job_accepts_symbol_results_as_the_json_text_given():
+    pool = AsyncMock()
+    await backfill_jobs.update_job(pool, "j1", symbol_results='{"c1": {}}')
+    assert "symbol_results = $1" in pool.execute.await_args.args[0]
+    assert pool.execute.await_args.args[1:] == ('{"c1": {}}', "j1")
 
 
 @pytest.mark.asyncio
@@ -80,6 +89,20 @@ async def test_list_jobs_with_and_without_filter():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("row, expected", [({"?column?": 1}, True), (None, False)])
+async def test_has_active_job_binds_symbol_and_statuses(row, expected):
+    pool = AsyncMock()
+    pool.fetchrow.return_value = row
+    assert await backfill_jobs.has_active_job(pool, "AAPL", [1, 2]) is expected
+    pool.fetchrow.assert_awaited_once()
+    sql = pool.fetchrow.await_args.args[0]
+    assert "$1 = ANY(symbols)" in sql
+    assert "status = ANY($2::int[])" in sql
+    assert "AAPL" not in sql
+    assert pool.fetchrow.await_args.args[1:] == ("AAPL", [1, 2])
+
+
+@pytest.mark.asyncio
 async def test_reconcile_interrupted_returns_count():
     pool = AsyncMock()
     pool.fetch = AsyncMock(return_value=[{"job_id": "a"}, {"job_id": "b"}])
@@ -96,3 +119,93 @@ async def test_reconcile_interrupted_returns_count():
     assert "WHERE status IN ($3, $4)" in sql
     # failed_status, error_msg, running_status, queued_status
     assert pool.fetch.await_args.args[1:] == (4, "interrupted by restart", 2, 1)
+
+
+_CALLBACK_URL = "https://webhooks.ts.example.net:8443/hooks/h1"
+
+
+async def _insert(pool, **over):
+    await backfill_jobs.insert_job(
+        pool,
+        job_id="j1",
+        symbols=["AAPL"],
+        timeframe="1d",
+        range_start=None,
+        range_end=None,
+        status=1,
+        **over,
+    )
+
+
+@pytest.mark.asyncio
+async def test_insert_job_binds_callback_url_as_eighth_value():
+    """@AC-2 (feature 334): the callback URL is stored on the job row."""
+    pool = AsyncMock()
+    await _insert(pool, callback_url=_CALLBACK_URL)
+    sql, *params = pool.execute.await_args.args
+    assert "data_kind, callback_url)" in sql
+    assert "$8" in sql
+    assert len(params) == 8
+    assert params[7] == _CALLBACK_URL
+
+
+@pytest.mark.asyncio
+async def test_insert_job_without_callback_url_binds_null():
+    pool = AsyncMock()
+    await _insert(pool)
+    params = pool.execute.await_args.args[1:]
+    assert len(params) == 8
+    assert params[7] is None
+
+
+@pytest.mark.asyncio
+async def test_list_webhook_handoff_candidates_sql_and_params():
+    """@AC-21 / @AC-29 (feature 334): only terminal jobs with a callback and no marker."""
+    row = job_row("j1", 3, callback_url=_CALLBACK_URL)
+    pool = AsyncMock()
+    pool.fetch = AsyncMock(return_value=[row])
+    rows = await backfill_jobs.list_webhook_handoff_candidates(
+        pool, terminal_statuses=[3, 4, 5, 6], limit=50
+    )
+    assert rows == [row]
+    sql, *params = pool.fetch.await_args.args
+    assert "FROM ingest.backfill_jobs" in sql
+    assert "callback_url IS NOT NULL" in sql
+    assert "status = ANY($1::smallint[])" in sql
+    assert "webhook_enqueued_at IS NULL" in sql
+    assert "webhook_rejected_at IS NULL" in sql
+    assert " OR " not in sql
+    assert "ORDER BY completed_at, created_at" in sql
+    assert "LIMIT $2" in sql
+    assert params == [[3, 4, 5, 6], 50]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fn_name", "marker"),
+    [
+        ("mark_webhook_enqueued", "webhook_enqueued_at"),
+        ("mark_webhook_rejected", "webhook_rejected_at"),
+    ],
+)
+async def test_webhook_marker_update_is_guarded_and_reports_change(fn_name, marker):
+    fn = getattr(backfill_jobs, fn_name)
+    pool = AsyncMock()
+    pool.execute = AsyncMock(return_value="UPDATE 1")
+    assert await fn(pool, "j1") is True
+    sql, *params = pool.execute.await_args.args
+    assert f"UPDATE ingest.backfill_jobs SET {marker} = NOW()" in sql
+    assert "WHERE job_id = $1::uuid" in sql
+    assert "AND webhook_enqueued_at IS NULL AND webhook_rejected_at IS NULL" in sql
+    assert "status" not in sql
+    assert params == ["j1"]
+
+    pool.execute = AsyncMock(return_value="UPDATE 0")
+    assert await fn(pool, "j1") is False
+
+
+def test_webhook_columns_are_not_dynamically_updatable():
+    """INGEST-2: the markers and the URL are written only by their dedicated static statements."""
+    assert not {"callback_url", "webhook_enqueued_at", "webhook_rejected_at"} & set(
+        backfill_jobs._UPDATABLE_COLUMNS
+    )

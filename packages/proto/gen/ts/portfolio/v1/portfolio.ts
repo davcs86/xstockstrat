@@ -21,6 +21,7 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import {
+  DelistedState,
   PageRequest,
   PageResponse,
   TimeRange,
@@ -590,6 +591,8 @@ export interface WatchlistBinding {
    * Unspecified on read → treat as MANUAL.
    */
   source: WatchlistEntrySource;
+  /** Server-set, output only; presence means flagged delisted. */
+  delisted?: DelistedState | undefined;
 }
 
 /** A symbol refused by a watchlist write because marketdata reports it unservable (feature 282). */
@@ -3030,7 +3033,12 @@ export const ListPortfoliosResponse: MessageFns<ListPortfoliosResponse> = {
 };
 
 function createBaseWatchlistBinding(): WatchlistBinding {
-  return { symbol: "", strategyId: "", source: WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED };
+  return {
+    symbol: "",
+    strategyId: "",
+    source: WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED,
+    delisted: undefined,
+  };
 }
 
 export const WatchlistBinding: MessageFns<WatchlistBinding> = {
@@ -3043,6 +3051,9 @@ export const WatchlistBinding: MessageFns<WatchlistBinding> = {
     }
     if (message.source !== WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED) {
       writer.uint32(24).int32(watchlistEntrySourceToNumber(message.source));
+    }
+    if (message.delisted !== undefined) {
+      DelistedState.encode(message.delisted, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -3078,6 +3089,14 @@ export const WatchlistBinding: MessageFns<WatchlistBinding> = {
           message.source = watchlistEntrySourceFromJSON(reader.int32());
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.delisted = DelistedState.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3098,6 +3117,7 @@ export const WatchlistBinding: MessageFns<WatchlistBinding> = {
       source: isSet(object.source)
         ? watchlistEntrySourceFromJSON(object.source)
         : WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED,
+      delisted: isSet(object.delisted) ? DelistedState.fromJSON(object.delisted) : undefined,
     };
   },
 
@@ -3112,6 +3132,9 @@ export const WatchlistBinding: MessageFns<WatchlistBinding> = {
     if (message.source !== WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED) {
       obj.source = watchlistEntrySourceToJSON(message.source);
     }
+    if (message.delisted !== undefined) {
+      obj.delisted = DelistedState.toJSON(message.delisted);
+    }
     return obj;
   },
 
@@ -3123,6 +3146,9 @@ export const WatchlistBinding: MessageFns<WatchlistBinding> = {
     message.symbol = object.symbol ?? "";
     message.strategyId = object.strategyId ?? "";
     message.source = object.source ?? WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED;
+    message.delisted = (object.delisted !== undefined && object.delisted !== null)
+      ? DelistedState.fromPartial(object.delisted)
+      : undefined;
     return message;
   },
 };

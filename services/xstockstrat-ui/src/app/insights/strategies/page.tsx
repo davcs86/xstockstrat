@@ -1,28 +1,16 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, EllipsisVertical } from 'lucide-react';
-import type { ColumnDef } from '@tanstack/react-table';
+import { Plus } from 'lucide-react';
+import type { CellContext, ColumnDef } from '@tanstack/react-table';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StatTile } from '@/components/shared/StatTile';
 import { DataTable } from '@/components/ui/data-table';
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from '@/components/ui/alert-dialog';
+import { RowActionsMenu } from '@/components/shared/RowActionsMenu';
 import { useStrategies } from '@/hooks/useStrategies';
 import { useStrategyDefinitions, useManageStrategy } from '@/hooks/useStrategyDefinitions';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
@@ -40,7 +28,6 @@ export default function StrategiesPage() {
   // Scores are merged in by id; a definition without a score renders a
   // "not scored yet" state instead of being hidden.
   const { data: scoresData } = useStrategies();
-  const manage = useManageStrategy();
 
   const scoreById = new Map((scoresData?.strategies ?? []).map((s) => [s.strategyId, s]));
   const definitions = defsData?.definitions ?? [];
@@ -54,10 +41,6 @@ export default function StrategiesPage() {
     ? scoredDefs.reduce((s, d) => s + Number(scoreById.get(d.strategyId)?.overallScore ?? 0), 0) /
       scoredCount
     : null;
-
-  function handleDeactivate(strategyId: string) {
-    manage.mutate({ operation: StrategyOperation.DEACTIVATE, definition: { strategyId } });
-  }
 
   const columns = useMemo<ColumnDef<StrategyDefinition>[]>(
     () => [
@@ -166,28 +149,10 @@ export default function StrategiesPage() {
         header: isAdmin ? 'Actions' : '',
         enableSorting: false,
         meta: { className: 'text-right whitespace-nowrap' },
-        cell: ({ row }) => {
-          const d = row.original;
-          return isAdmin ? (
-            <StrategyActionsCell
-              strategyId={d.strategyId}
-              active={d.active}
-              deactivating={manage.isPending}
-              onEdit={() => router.push(`/insights/strategies/${d.strategyId}/edit`)}
-              onDeactivate={() => handleDeactivate(d.strategyId)}
-            />
-          ) : (
-            <Link
-              href={`/insights/strategies/${d.strategyId}`}
-              className="text-sm text-primary hover:underline"
-            >
-              Open →
-            </Link>
-          );
-        },
+        cell: StrategyActionsCell,
       },
     ],
-    [scoreById, isAdmin, manage.isPending, router, handleDeactivate],
+    [scoreById, isAdmin],
   );
 
   return (
@@ -268,70 +233,50 @@ function AnalyticsCell({
   return <>{render(a)}</>;
 }
 
-/** Actions cell: Edit/Deactivate `DropdownMenu` + confirmation `AlertDialog` (admin only). */
-function StrategyActionsCell({
-  strategyId,
-  active,
-  deactivating,
-  onEdit,
-  onDeactivate,
-}: {
-  strategyId: string;
-  active: boolean;
-  deactivating: boolean;
-  onEdit: () => void;
-  onDeactivate: () => void;
-}) {
-  const [confirmOpen, setConfirmOpen] = useState(false);
+/** Module-level on purpose: an inline `cell` would remount with every `columns` rebuild. */
+function StrategyActionsCell({ row }: CellContext<StrategyDefinition, unknown>) {
+  const router = useRouter();
+  const { data: isAdmin } = useIsAdmin();
+  const { mutate, isPending } = useManageStrategy();
+  const { strategyId, active } = row.original;
+
+  if (!isAdmin) {
+    return (
+      <Link
+        href={`/insights/strategies/${strategyId}`}
+        className="text-sm text-primary hover:underline"
+      >
+        Open →
+      </Link>
+    );
+  }
   return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Actions"
-            data-testid={`actions-${strategyId}`}
-          >
-            <EllipsisVertical className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
-          {active && (
-            <DropdownMenuItem
-              disabled={deactivating}
-              variant="destructive"
-              onSelect={(e) => {
-                e.preventDefault();
-                setConfirmOpen(true);
-              }}
-            >
-              Deactivate
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogDescription>
-            Deactivate strategy &quot;{strategyId}&quot;? It will no longer appear in the active
-            list.
-          </AlertDialogDescription>
-          <AlertDialogCancel disabled={deactivating}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            disabled={deactivating}
-            onClick={(e) => {
-              e.preventDefault();
-              onDeactivate();
-              setConfirmOpen(false);
-            }}
-          >
-            Confirm
-          </AlertDialogAction>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    <RowActionsMenu
+      testId={`actions-${strategyId}`}
+      triggerLabel={`Actions for ${strategyId}`}
+      actions={[
+        { label: 'Edit', onSelect: () => router.push(`/insights/strategies/${strategyId}/edit`) },
+        ...(active
+          ? [
+              {
+                label: 'Deactivate',
+                destructive: true,
+                disabled: isPending,
+                onSelect: () =>
+                  mutate({ operation: StrategyOperation.DEACTIVATE, definition: { strategyId } }),
+                confirm: {
+                  title: 'Deactivate strategy',
+                  description: (
+                    <>
+                      Deactivate strategy &quot;{strategyId}&quot;? It will no longer appear in the
+                      active list.
+                    </>
+                  ),
+                },
+              },
+            ]
+          : []),
+      ]}
+    />
   );
 }
