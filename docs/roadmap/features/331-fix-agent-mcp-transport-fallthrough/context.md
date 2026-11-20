@@ -156,3 +156,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-agent; key reuse patterns: the fail-closed raise shape at `app/mtls.py:25-26`, the `TestMainDispatch` harness at `tests/test_transport_config.py:29-47`).
+- Phase 1 Grilling: 2 rounds (full). Chosen approach: `resolve_transport()` defaults an unset `MCP_TRANSPORT` to `http` and raises `RuntimeError` for any value other than `http`, `stdio` or the `sse` alias (including `""`, no normalization); `main()` is untouched; tests go red first, in-process dispatch test primary and a `python -m app.main` subprocess test secondary; docs change in the same PR. Rejected: R-1..R-7 (`SystemExit`, validation in `main()`, empty-as-unset, supervisord tuning, a grep gate, the `MCP_TRANSPORT='htp'` stderr discriminator, the `-c` child entry).
+- Constitution rules touched: P-02, P-03, P-06, C-08, C-11, C-15, C-16, C-18, F-04, F-07. Floor breaches: none.
+- Status: spec-ready → design-approved. Wrote design.md; debate.md State → approved.
+
+### Operator decisions (2026-11-20, recorded at the approval gate)
+
+- Not a duplicate of demoted feature 018 `agent-mcp-oauth`.
+- Design approved with the round-2 synthesis fix binding: the subprocess test's RED must not rest on a stderr token today's code also prints; it asserts the non-zero exit and an error text that only the fixed code emits (`"expected 'http' or 'stdio'"` present, `"falling back to stdio"` absent). O-4 is closed on this ruling.
+- C-16: the AC-1 and AC-2 CHANGE lines and the feature-079 AC-4 reversal rest on the operator decision at line 24 of this file (Session 2026-11-10). The 079 reversal is sign-off-only: no promoted scenario exists, so there is no suite edit (D-4). This corrects product-spec Open Question 1.
+- No reopen petitions were raised, so none were declined.
+
+### Open Threads
+
+- [ ] O-2 (open, non-blocking): AC-1's Given says "the agent container starts", but the proof is process-level and supervisord keeps the container alive. Rewording to "the agent process starts" needs the operator's confirmation; `acceptance.feature` is unchanged. Target: before the test (red) step.
+- [ ] O-5 (open, non-blocking): if the subprocess test is dropped as flaky, record a P-03 deviation here; the in-process `pytest.raises` through `main()` must exist either way. Target: test and code steps, CI.
+- [ ] Risk: a mistyped value leaves the container alive under supervisord with nothing on :9000; on DO there is no `health_check`, so the failure shows only in logs. Accepted (D-5). Target: docs step note; `health_check` follow-up is out of scope.
+- [ ] Risk: if importing `app.main` takes longer than supervisord's default `startsecs=1`, supervisord restarts forever with a traceback each time. Target: dev smoke-test step.
+- [ ] Risk: the red run of the subprocess test costs the full 20s timeout (the 90s snapshot wait at `app/config/watch_core.py:36` outlasts it); red-path timing depends on the conftest `CONFIG_ENDPOINT` and `MTLS_*` dummies (`tests/conftest.py:128,132-134`). Target: test (red) step, recorded in the spec.
+- [ ] Risk: a peer adding a top-level `gen` import on the `app.main` import chain makes the child die with `ModuleNotFoundError` before `resolve_transport()` runs; the test fails confusingly, it does not pass falsely. Target: test step and the integration PR.
+- [ ] Risk: the 20s timeout may be tight for a cold import on a slow CI runner (flaky green). Target: code (green) step and CI.
+- [ ] Risk: a bare local `python -m app.main` with no env now takes the http path and fails on missing mTLS material (`app/mtls.py:25`); only the runbook edit mitigates it. Target: docs step.
+- [ ] Risk: `HTTP`, `http ` and `""` now fail closed; an undiscovered deploy that blanks or mis-cases the variable will crash-loop. Target: dev smoke-test step.
+- Spec note: if a peer changes the conftest `MCP_TRANSPORT`, `CONFIG_ENDPOINT` or `MTLS_*` defaults (`tests/conftest.py:126,128,132-134`), re-run this suite. `/sdd-spec` must cite the re-grepped lines (recon § Risks, product-spec line drift).
+- Next: `/sdd-spec fix-agent-mcp-transport-fallthrough`.
