@@ -45,6 +45,16 @@ CHANGEd in Step 13 under operator sign-off O-3; `@AC-27` (279) is EXTENDed by th
 
 ## Step Dependencies
 
+- **Precondition for Step 1 (BRANCH SYNC done).** Every Verification command in Steps 1–13 needs files that
+  reach this branch only through the `main-dev` merge. Before Step 1 run
+  `test -d scripts/tests && test -f scripts/check-migration-contract.py && test -f scripts/migration-rerun.py && test -f scripts/shell-allowlist.txt`.
+  If it fails, stop: BRANCH SYNC has not run, and no step may start on the unsynced branch.
+- **Red order for the service-first pairs (C-08 / P-06).** Steps 1, 5 and 9 precede the test step that gives
+  their red (Steps 2, 6, 10); Steps 3+4 and 7–8 name their own protocol. For each pair follow
+  `.claude/skills/sdd-execute/reference/tdd-gate.md` "Write/confirm the failing test first": author the paired
+  test step's test in the working tree **before** applying the service step's edit, run it, capture the red
+  named in that step's TDD line, then apply the service edit and capture green. The test file is still
+  committed under its own step number. Never produce the red by stashing the service edit.
 - Step 2 [test] covers Step 1 [service]. Steps 1–2 leave a dirty service without a contract file refused with
   no recovery text (the old guard prints nothing for it); Steps 3+4 supply the text. Do not open the integration
   PR between Step 2 and Step 4.
@@ -77,9 +87,14 @@ CHANGEd in Step 13 under operator sign-off O-3; `@AC-27` (279) is EXTENDed by th
     with `ErrDuplicateMigration`). The TRUNCATE wording in Step 3 is final.
   - Promotion passes by construction → **verified**: `origin/main` holds no up-file that `origin/main-dev` lacks
     (165 on main; main-dev adds only config `055`).
-  - Peer collisions in `ci.yml` (298 edits `migration-contract-gate`; other peers edit the `:841` chain) → Steps
-    4 and 9 touch separate lines; Step 10 fails if a merge drops the new job's wiring. Resolve at the
-    integration PR.
+  - Peer collisions in `ci.yml` (298 edits `migration-contract-gate`; other peers edit the `:841` chain; 324
+    (`node-test` job, `scripts/` ruff gate) and 297 (`changes` filter, `ci-gate` needs) edit the same file) →
+    Steps 4 and 9 touch separate lines; Step 10 fails if a merge drops the new job's wiring. Rebase-level only;
+    resolve at the integration PR.
+  - Once `migration-order-gate` is live, an in-flight feature whose new NNN is at or below the trunk maximum is
+    refused at its own PR. Known case at review time: 345 (`authelia-sso`) plans config `053` while trunk
+    already holds `054` and `055`. That renumber is 345's action at its merge; name it in this feature's
+    integration PR description.
   - The modify ban and the insights.md:900 conflict → Step 11.
   - Branch protection "up to date before merge" on `main-dev` and `main` → operator action, outside the PR.
   - Debate objection O-7 (non-blocking) → the Step 4 case table was re-derived against D-5 and D-10; every row
@@ -116,7 +131,8 @@ CHANGEd in Step 13 under operator sign-off O-3; `@AC-27` (279) is EXTENDed by th
   refuses it at or above a contract floor." and `:69` "... before force 0 can replay."
 - The ahead-check block at `:70-76` runs before the dirty arm and is unchanged.
 
-**TDD**: `red-green required` — RED is Step 2's test on the unmodified script.
+**TDD**: `red-green required` — RED is Step 2's test on the unmodified script: write and run it before
+instruction 1 (Step Dependencies "Red order").
 
 **Covers**: —
 
@@ -428,7 +444,8 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
   `migration-rerun.py:1169-1170`), literal `$DATABASE_URL`, no `postgres://` (`:67-69`; durable `@AC-25`).
 - D-8: the script keeps `n-1` because the older image cannot see the newer release's files.
 
-**TDD**: `red-green required` — RED is Step 6's test against the current wording.
+**TDD**: `red-green required` — RED is Step 6's test against the current wording: write and run it before
+instruction 1 (Step Dependencies "Red order").
 
 **Covers**: —
 
@@ -542,6 +559,7 @@ assertion (AC-2: `mo.main(["main"]) == 1` gets 0), then implement the checks.
 **Verification**:
 ```bash
 python3 scripts/check-migration-order.py; test $? -eq 2
+git fetch --no-tags origin main-dev   # the remote ref may be absent in a fresh sandbox
 python3 scripts/check-migration-order.py origin/main-dev   # exit 0: this branch adds no migration
 cd scripts && uv run --extra dev ruff check . && uv run --extra dev ruff format --check .
 ```
@@ -614,8 +632,8 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
 **Reviewers**: Platform Lead — cross-service architecture; DBA — migration NNN numbering (no conflicts)
 
 **Codebase Evidence**:
-- Job to clone: `migration-contract-gate` at `.github/workflows/ci.yml:936-954` — comment `:936-937`,
-  `needs: changes`, `if:` `:941-944` (`github.event_name == 'pull_request' && (` `migrations` or `ci` filter
+- Job to clone: `migration-contract-gate` at `.github/workflows/ci.yml:936-954` — comment `:936-937`, job key
+  `:938`, `needs: changes`, `if:` `:941-944` (`github.event_name == 'pull_request' && (` `migrations` or `ci` filter
   `)`), `actions/checkout@v7` with `fetch-depth: 0` `:947-949`, run block `:952-954`
   (`git fetch --no-tags origin main "${{ github.base_ref }}"`).
 - Env-passing precedent for PR context: `shell-freeze` `:850-852` (`env: BASE_REF: ${{ github.base_ref }}`).
@@ -629,7 +647,8 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
   (`.github/workflows/promote.yml:233-234`).
 - It is a separate job, not a step of `migration-contract-gate`, because peer 298 edits that job (design §6).
 
-**TDD**: `red-green required` — RED is Step 10's wiring test against the pre-step workflow (job absent).
+**TDD**: `red-green required` — RED is Step 10's wiring test against the pre-step workflow (job absent): write
+and run it before instruction 1 (Step Dependencies "Red order").
 
 **Covers**: —
 
@@ -672,7 +691,17 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
    `          echo "migration-order-gate: ${{ needs.migration-order-gate.result }}"` after `:1427`.
 5. The expression cannot be executed locally. Its first real runs are this feature's integration PR (base
    `main-dev` → no flag) and the next promotion PR (base `main`, head `main-dev` → no flag); note both outcomes
-   in the integration PR description.
+   in the integration PR description. Expected value of `FORBID_NEW` per case, to check the job log against:
+
+   | `base_ref` | `head_ref` | head repo | `FORBID_NEW` |
+   |---|---|---|---|
+   | `main-dev` | any | any | empty |
+   | `main` | `main-dev` | this repository | empty |
+   | `main` | `main-dev` | a fork | `--forbid-new` |
+   | `main` | anything else (e.g. `hotfix/<slug>`) | any | `--forbid-new` |
+
+   A wrong flag on a base-`main` PR blocks every hotfix or promotion PR that touches the `migrations` or `ci`
+   filter; if the promotion PR's log shows `--forbid-new`, fix the expression before merging that PR.
 
 **Verification**:
 ```bash
@@ -893,6 +922,11 @@ npx --yes markdownlint-cli2 --config .markdownlint.yaml docs/context-constitutio
 **Covers**: —
 
 **Instructions**:
+0. Before editing either suite, confirm the sign-off is on record:
+   `grep -n '^- \*\*O-3: C-16 sign-off\*\*' docs/roadmap/features/318-fix-migration-tooling-safety/context.md`
+   must match (block "Operator Decisions (binding, recorded 2026-11-20)"). If it does not, stop — `business-rules/CLAUDE.md`
+   lets a rule enter a durable suite by promotion only, and this hand edit is valid solely as that signed C-16
+   CHANGE.
 1. `platform.feature:386-390` — keep the tags; replace the scenario with:
    ```gherkin
      # Changed by @feature-318 (fix-migration-tooling-safety), operator-signed 2026-11-20 (C-16 CHANGE, 318 context.md O-3):
