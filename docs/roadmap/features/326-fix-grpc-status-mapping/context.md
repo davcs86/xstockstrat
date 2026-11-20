@@ -711,3 +711,13 @@ Feature: fix-grpc-status-mapping (bug fix)
 ### Coverage check
 - Source scenarios: 4 (AC-1 is an outline with 6 examples). Planned: 4 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC is accounted for and none were skipped.
 ````
+
+## Session 2026-11-20 — main-dev sync (BRANCH SYNC, PR #1593 conflicts)
+
+- Merged `origin/main-dev` @ `36aed60b` into the branch as merge commit `4ea3dbb0` (normal merge, no rebase).
+- Conflicts, all resolved by hand keeping both sides:
+  - `docs/roadmap/ledger/insights.md` — main-dev's entries first, then this feature's 2026-11-13 design entry; `ledger-guard.py --fix` printed clean.
+  - `services/xstockstrat-marketdata/internal/handler/marketdata_handler_test.go` — kept the feature 326 imports, translator tables and AC-2 chain test, plus main-dev's two feature-352 adapter tests (`SyncWatchlistDelistings`/`AckDelistingAlerts` PermissionDenied).
+  - `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go` — imports `os` + `sort`; `fakeWatchlistStore` keeps main-dev's 351/352 fields plus `createErr/updateErr/updatePartialErr`.
+- Non-conflicting but required: main-dev added two adapter call sites (`SyncWatchlistDelistings`, `AckDelistingAlerts`) calling `toGRPCError(err)`; both now pass `ctx` (21 call sites; `grep "toGRPCError(err)"` in marketdata/internal is empty). `classifyWatchlistWriteErr` is still called at Create, UpdatePartial and the legacy Update; main-dev added no new name-write site.
+- Verification after the merge: marketdata and portfolio `go build`/`go vet`/`go test ./...` green (Go 1.27.0, `GOWORK=off`); golangci-lint v2.14.0 0 issues in both; peer-merge re-checks green — marketdata `TestToGRPCError_*`, `TestGetSectorHistory_AC2_*`, `AC53`/`AC54`, `feature254`; portfolio `TestToGRPCError`, `TestWatchlist*`, `TestWire_CreateWatchlistDuplicateName_AC3`; agent `tests/test_watchlist_tools.py` 26 passed, ruff check and format clean, `uv.lock` unchanged.
