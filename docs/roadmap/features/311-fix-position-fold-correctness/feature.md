@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: `docs/reports/2026-10-06-portfolio-fill-fold-not-exactly-once-defect.md`, `docs/reports/2026-10-21-portfolio-live-fold-sell-sign-loss-defect.md`, `docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-10
+**Last Updated**: 2026-11-20
 
 ---
 
@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 3 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
+| 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (11 rounds, full) and approved under the operator's standing authorisation (context.md:1522-1524); recon.md + debate.md + design.md written |
 
 ---
 
@@ -22,6 +23,9 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections, petitions
+- [Design](design.md) — approved approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-position-fold-correctness`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -35,4 +39,4 @@ never sees bracket-leg exit fills because trading emits no ledger event for them
 
 ## Next Action
 
-`/sdd-design fix-position-fold-correctness` — full design recommended (DB migration (portfolio 019); trading + portfolio)
+`/sdd-spec fix-position-fold-correctness` — generate implementation spec from the approved design
