@@ -577,3 +577,132 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — D-7 spike results (grpc-js 1.14.7)
+
+Pre-spec spike for O-1 (D-7 + D-9 + D-11). Scratch harness only (`.sdd-logs/spike-316/spike.cjs`, git-ignored, not committed). No register entry is changed here; `debate.md` and `status.md` are untouched.
+
+**Environment**
+
+- Node v24.22.1 (`/opt/node24/bin/node --expose-gc`), Linux, loopback, insecure credentials.
+- `@grpc/grpc-js` 1.14.7 at `/home/user/xstockstrat/node_modules/.pnpm/@grpc+grpc-js@1.14.7/node_modules/@grpc/grpc-js` (its `package.json` says `"version": "1.14.7"`). It is the only grpc-js copy on the host.
+- Pin: `origin/main-dev` has `^1.14.7` (`services/xstockstrat-notify/package.json:21`, `pnpm-lock.yaml:1165`). This feature branch's own copy still reads `^1.14.5` / lock `1.14.5` (it predates the bump).
+- **Not exercised: grpc-js 1.14.5.** It is not installed and the spike may not install packages, so D-9's "1.14.5 as well" run did not happen.
+
+**Method**
+
+- A real grpc-js server with one server-streaming method (identity serializers) and a handler that mirrors `emitAlert`: check `call.writableLength >= 1024` before each `write` of a 1 KiB message; on eviction do map delete, count `backpressure`, then the teardown candidate. The `'error'` listener counts `stream_error` only when `Map.delete` returns true (D-3).
+- Two stalled clients per candidate: a raw `node:http2` client with no `'data'` listener (wire view: trailers, `rstCode`, `localWindowSize`), and a real grpc-js client in a child process frozen with SIGSTOP (status as a grpc client sees it). An in-process grpc-js client with no `'data'` listener does not stall the server (it keeps reading and buffers), so it was not used.
+- Per case: fill to the cap, evict, hold the stall 1.1 s, then the client resumes (attach `'data'` / SIGCONT) and is given 5 s to terminate. Server-side `_write` (= `sendMessage`) calls are counted; the server's `ServerHttp2Stream` is read for `rstCode` / `sentTrailers` / `writableLength` (observation only).
+- A second variant never resumes: the stalled client cancels, then `global.gc()` + `WeakRef` show whether the call and its queued chunks are still reachable.
+- Extra cases: `none` (map delete only, R-6) and `emit('error')` followed by one late `write()`.
+
+**Results** (identical for both client kinds unless noted)
+
+| Observation | (1) `call.destroy(err)` | (2) `call.emit('error', {code: 8, details})` | (3) `call.end()` | (3') `call.end(metadata)` |
+|---|---|---|---|---|
+| Client status while stalled (1.1 s) | none | none | none | none |
+| Trailers / RST on the wire while stalled | neither (`h2.rstCode=0`, `sentTrailers=null`, h2 stream not destroyed) | neither; the status is queued behind the window | neither; queued | neither; queued |
+| `writableLength` during the stall | 1024, held | 1024, held | 1024, held | 1024, held |
+| Unit of `writableLength` | messages (object mode); includes the one in-flight message | same | same | same |
+| Right after teardown | `destroyed=true`, `writableEnded=false`, `errored=Error: backpressure` | `writableEnded=true`, `errored=null`, `destroyed=false` | `writableEnded=true`, `errored=null`, `destroyed=false` | same as (3) |
+| Handler writes after eviction | 0 | 0 | 0 | 0 |
+| `sendMessage` calls during the stall, after eviction | 0 | 0 | 0 | 0 |
+| `sendMessage` calls after resume | 0 (the 1023 queued alerts are dropped) | 1023 (the queue flushes) | 1023 | 1023 |
+| Raw client after resume, in order | the 64 already-sent messages, then nothing: no trailers, no RST, no status. Still open at the 5 s timeout | 1087 messages (all), then trailers `grpc-status: 8`, `grpc-message: slow%20consumer%20evicted`, then END_STREAM (`rstCode=0`), within about 40 ms of the resume | 1087 messages, then `grpc-status: 0`, `grpc-message: OK` | 1087 messages, then `grpc-status: 0` plus trailer `x-evicted: backpressure` |
+| grpc-js client after resume | no `status`, no `error`, no `end` (hangs; its message count was not reported because the child prints counts only on events) | 1087 messages, `error` code=8 details="slow consumer evicted", then `status` code=8, then `end` | 1087 messages, `status` code=0 details="OK", `end` (a clean end, no error) | 1087 messages, `status` code=0 with metadata `x-evicted` |
+| Server events | `error`, `close` at eviction; `cancelled` only when the client later cancels | `error(8)` at eviction (synchronous); after the flush `finish`, `cancelled`, `close` | after the flush `finish`, `cancelled`, `close` | same as (3) |
+| Counters | `backpressure=1`, `stream_error=0` | `backpressure=1`, `stream_error=0` | `backpressure=1`, `stream_error=0` | same |
+| Memory held during the stall | 1024 queued messages, bounded by the cap; not released by `destroy()` | 1024 queued messages, bounded by the cap | same | same |
+| Released on peer cancel (never-resume variant, after gc) | yes (call and chunks unreachable) | yes | yes | not run |
+
+Other observations:
+
+- **Detection (D-5).** `typeof call.writableLength === 'number'`. Depth by messages written: `1->1 16->15 64->13 100->49 200->137 600->537 1000->937`, and 1024 at the eviction (attempt 1088 = 63 messages inside the 65,535-byte window + 1024 on the call + the evicting one, which is not written). `write()` first returns false at message 17. After a resume the depth returns to 0. The http2 stream itself holds only the one in-flight frame (1029 bytes).
+- **No status ever arrives (`destroy`, and `none`).** The recovered client hangs: the stream stays open with no trailers and no RST until the client itself cancels. With `none` it first receives all 1087 messages; with `destroy` it receives only the 64 sent before the stall and the other 1023 are lost silently.
+- **Late write after `emit('error')`.** One `write()` after the teardown raises `ERR_STREAM_WRITE_AFTER_END`, Node destroys the stream (`destroyed=true`), the queue is dropped and **no status is ever sent**: the client ends up exactly like the `destroy` case. So D-6's map-delete-before-teardown order is load-bearing for a status-path teardown.
+- **`'cancelled'` after a normal finish.** On the status path the server emits `finish`, then `cancelled`, then `close`. notify's `'cancelled'` listener will therefore log a disconnect for an evicted subscriber; its map delete is a no-op.
+- **D-11.** `call.writableEnded === true` holds. `call.writableErrored` is `undefined`, not `null`, because Node has no such property (`'writableErrored' in new Writable()` is false). The real property is `call.errored`, which is `null` after `emit('error')`.
+- Heap + external delta over the stall was between -0.9 and +0.4 MB per case (noise; observation only, R-7).
+
+**Verdict per pass condition**
+
+| Condition | Verdict |
+|---|---|
+| (a) `writableLength` is a number | holds |
+| (b) it is a live depth in messages, back to about 0 after resume | holds |
+| (c) `destroy(err)` sends close/RST within 1 s and releases the buffer | **fails**: no RST, no trailers, and the 1024-message queue stays held until the peer reads or cancels |
+| (d) order of the error and cancelled events | recorded: `destroy` gives `error`, `close`, and `cancelled` only on a later peer cancel. `emit('error')` gives `error` synchronously, then `finish`, `cancelled`, `close` once the queue has flushed |
+| (e) a status/trailer write queues behind the zero window | **holds** for `emit('error')` and both `end()` forms |
+| (e') whether `destroy()` sends trailers or an RST at all | neither, ever (stalled or after resume) |
+| (f) `emit('error')` with the client paused: `writableLength` ≤ 1024, no write after eviction | holds (1024 held, 0 handler writes, 0 `sendMessage` calls) |
+| (g) after resume: queued alerts, then grpc-status 8, counters `backpressure=1`, `stream_error=0` | holds (1087 messages, then `grpc-status: 8` / "slow consumer evicted") |
+
+- **D-7 as written (pass = (a), (b), (c) hold and (e) does not): FAIL.** (c) fails and (e) holds, so by D-7's own rule the teardown returns to the operator. This is the outcome P-1..P-4 predicted from source.
+- **Teardown-matched condition from P-4 ((a) + (f) + (g), with (e') recorded): PASS for `emit('error', { code: 8, details })` on 1.14.7.** It does not apply until the operator rules on P-4.
+
+**Conclusion.** Only `call.emit('error', { code: 8, details })` gives a recovered client the queued alerts followed by a retryable RESOURCE_EXHAUSTED; `destroy()` strands the client with no status, `end()` reports a clean OK, and no candidate frees the stalled stream's 1024-message queue before the peer reads or cancels.
+
+Key output lines (verbatim from the run, lines elided within each case; `client=raw` is the http2 client, `client=grpc` the SIGSTOP child):
+
+```text
+NODE-BASELINE fresh Writable: writableErrored=undefined ('writableErrored' in w: false) errored=null
+ENV node=v24.22.1 grpc-js=1.14.7 dir=/home/user/xstockstrat/node_modules/.pnpm/@grpc+grpc-js@1.14.7/node_modules/@grpc/grpc-js CAP=1024 MSG_BYTES=1024
+
+=== teardown=destroy client=raw ===
+  typeofWritableLength: number
+  depthAtEviction: 1024
+  h2BytesAtEviction: 1029
+  rightAfterTeardown: writableEnded=false writableErrored=undefined errored=Error: backpressure destroyed=true writableLength=1024 writableFinished=false
+  written: 1087
+  firstFalseWriteAt: 17
+  evictedAtAttempt: 1088
+  depthSamples_written_to_writableLength: 1->1 16->15 64->13 100->49 200->137 600->537 1000->937
+  postEvictionHandlerWrites: 0
+  stall100ms: writableLength=1024 h2.writableLength(bytes)=1029 clientLocalWindow=0
+  stall1100ms: writableLength=1024 h2.writableLength(bytes)=1029 h2.destroyed=false h2.rstCode=0 h2.sentTrailers=null
+  sendMessageCallsDuringStallAfterEviction: 0
+  serverEventsDuringStall: [error(backpressure)@30ms, close@30ms]
+  resumeWaitMs: 5002
+  afterResume: clientMsgs=64 status=NONE terminated=false server.writableLength=0 h2.rstCode=0 h2.sentTrailers=null
+  clientEventsAfterResume: []
+  sendMessageCallsAfterResume: 0
+  countersFinal: {"backpressure":1,"stream_error":0,"write_error":0}
+
+=== teardown=emit-error client=raw ===
+  rightAfterTeardown: writableEnded=true writableErrored=undefined errored=null destroyed=false writableLength=1024 writableFinished=false
+  stall1100ms: writableLength=1024 h2.writableLength(bytes)=1029 h2.destroyed=false h2.rstCode=0 h2.sentTrailers=null
+  sendMessageCallsDuringStallAfterEviction: 0
+  serverEventsDuringStall: [error(8)@29ms]
+  resumeWaitMs: 41
+  afterResume: clientMsgs=1087 status=grpc-status=8 grpc-message=slow%20consumer%20evicted terminated=true server.writableLength=0 h2.rstCode=0 h2.sentTrailers={"grpc-status":8,"grpc-message":"slow%20consumer%20evicted"}
+  clientEventsAfterResume: [trailers:grpc-status=8 grpc-message=slow%20consumer%20evicted@1155ms(msgs=1087), end@1155ms(msgs=1087), close:rstCode=0@1155ms(msgs=1087)]
+  serverEventsAfterResume: [finish@1153ms, cancelled@1153ms, close@1153ms]
+  sendMessageCallsAfterResume: 1023
+  countersFinal: {"backpressure":1,"stream_error":0,"write_error":0}
+
+=== teardown=emit-error client=grpc ===
+  afterResume: clientMsgs=1087 status=code=8 details="slow consumer evicted" md={} terminated=true server.writableLength=0 h2.rstCode=0 h2.sentTrailers={"grpc-status":8,"grpc-message":"slow%20consumer%20evicted"}
+  clientEventsAfterResume: [error:code=8 details="slow consumer evicted"@child+1178ms(msgs=1087), status:code=8 details="slow consumer evicted" md={}@child+1179ms(msgs=1087), end@child+1179ms(msgs=1087)]
+
+=== teardown=end client=raw ===
+  afterResume: clientMsgs=1087 status=grpc-status=0 grpc-message=OK terminated=true server.writableLength=0 h2.rstCode=0 h2.sentTrailers={"grpc-status":0,"grpc-message":"OK"}
+
+=== teardown=end+metadata client=grpc ===
+  afterResume: clientMsgs=1087 status=code=0 details="OK" md={"x-evicted":"backpressure"} terminated=true server.writableLength=0 h2.rstCode=0 h2.sentTrailers={"grpc-status":0,"grpc-message":"OK","x-evicted":"backpressure"}
+
+=== teardown=none(map-delete-only) client=raw ===
+  afterResume: clientMsgs=1087 status=NONE terminated=false server.writableLength=0 h2.rstCode=0 h2.sentTrailers=null
+
+=== teardown=emit-error+late-write client=raw ===
+  rightAfterTeardown: writableEnded=true writableErrored=undefined errored=Error [ERR_STREAM_WRITE_AFTER_END]: write after end destroyed=true writableLength=1024 writableFinished=false
+  afterResume: clientMsgs=64 status=NONE terminated=false server.writableLength=0 h2.rstCode=0 h2.sentTrailers=null
+
+=== stalled-then-peer-cancel (never resumes) teardown=destroy written=1087 ===
+  whileStalledAfterTeardown+gc: callReachable=true lastQueuedChunkReachable=true writableLength=1024 destroyed=true
+  afterPeerCancel+gc: callReachable=false lastQueuedChunkReachable=false writableLength=n/a destroyed=n/a serverEvents=[error, close, cancelled]
+
+=== stalled-then-peer-cancel (never resumes) teardown=emit-error written=1087 ===
+  whileStalledAfterTeardown+gc: callReachable=true lastQueuedChunkReachable=true writableLength=1024 destroyed=false
+  afterPeerCancel+gc: callReachable=false lastQueuedChunkReachable=false writableLength=n/a destroyed=n/a serverEvents=[error, cancelled, close]
+```
