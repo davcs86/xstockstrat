@@ -568,3 +568,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Owner isolation of digests** rests on the per-owner formula cache (`:3092-3100`) sharing one `failures` dict; the isolation test is load-bearing. Target: owner-isolation test step.
 - **Line drift and stale recon claim (O-24)** — `/sdd-spec` re-greps every cite against a tree rebased on `origin/main-dev`. Target: `/sdd-spec`.
 - **Register bookkeeping** — `/sdd-spec` confirms O-11 and O-17 to O-24 are each covered by a numbered step (O-21 outage-only warning, O-22 refused-fid seed, O-23 log branch). Target: `/sdd-spec`.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 15 steps. Status → implementation-ready.
+- Tree: `/sdd-spec` Step 0.5 merged `origin/main-dev` into `feature/fix-analysis-evidence-dry` (merge `f7d02e7e`, no conflicts) before discovery; every cite in the spec was re-grepped on that tree (resolves the "line drift" thread and O-24: analysis migrations `028`/`029` exist, next free is `030`, none needed).
+- Operator decisions carried as binding (recorded 2026-11-20, design gate): the UPDATE path pops the grade only when `def_hash` changes, compared against the old `definition_json` of the locked row, with a pin test (Steps 13–14; `@AC-2 @regression @feature-194` PRESERVED); C-16 sign-off for the `@AC-23 @feature-289` treatment and the gate-off availability coupling as synthesized (Steps 11–12).
+- `acceptance.feature`: appended `@AC-3`, `@AC-4`, `@AC-5` (design.md step 7 mandates them; IDs append-only) so every `**Covers**` ID exists. Coverage: AC-1 → Step 12 (+4, 6, 10), AC-2 → Step 2, AC-3 → Step 12 (+8), AC-4 → Step 12, AC-5 → Step 14.
+- Atomic units (`**Lands with**`): 3+4, 5+6, 7+8, 9+10, 11+12, 13+14 — each test step imports a symbol its service step creates. Steps 1–2 are a plain service → test pair.
+- Key codebase findings:
+  - `_formula_fundamentals` gained a `warmups=` keyword on main-dev (feature 341, `servicer.py:1919-1920`, caller `:4561`); the new `digests=` keyword sits beside it and all three read helpers only gain optional keywords, so no existing caller or test call site changes (`tests/test_fundamentals_pit_pager.py:307`, `tests/test_owner_header_guard.py:343-344`).
+  - `_apply` (`servicer.py:3344-3345`) already holds the locked row's `old_json`; `_stub_update_repo` (`tests/test_analysis_servicer.py:2500`) really awaits `apply_fn`, so the guard is testable without a DB.
+  - The `_derivation_svc` cells repo is a bare `AsyncMock()` (`tests/test_analysis_servicer.py:130`), so after Step 11 a refusal's `latest_formula_fingerprint` returns a truthy mock — `test_ac23_refused_formula_*` (`tests/test_grade_fundamentals_exclusion.py:501`) is amended in Step 12 with an explicit return.
+  - `real_pg` is provisioned in CI (`.github/workflows/ci.yml:508-512`; `local_pg` fails rather than skips under `CI=true`), so Step 8's prefix-read test is proven there.
+- Spec-time clarifications (design left the wording open; flag at impl-spec review):
+  - Exact strings: run warning `"evidence not recorded: formula version unavailable — rerun"` (D-7 text), gate-off abort `"formula version unavailable — grade unchanged"` (design.md step 5), and a NOT_FOUND `"no eligible evidence — formula <ids> is not readable and no evidence was recorded for a readable version; restore access to the formula or rebind the component, then run a backtest"` (design fixed only "a distinct message naming the unreadable formula").
+  - The run warning is emitted only on a run that would stamp a fingerprint (registered own run) — an inline run never records evidence, so "evidence not recorded" would mislead there.
+  - `_UNREADABLE` is an `object()` sentinel and `_evidence_fingerprint` raises on a non-string digest, so a refused digest can never be hashed (R-6).
+  - `_fetch_and_aggregate` reports the refused formula ids through an `unreadable=` out-list, mirroring the existing `excluded=` out-list.
+  - UPDATE guard: when `apply_fn` never ran (only possible with a repo mock that skips it) the guard treats the hash as changed and pops, i.e. today's behaviour.
+- Debate bookkeeping: O-11 and O-17 to O-24 each map to a numbered step (table in implementation-spec.md); debate.md is unchanged (no status transition was supplied).
+
+## Open Threads
+
+- **Unrecoverable refused population (O-18)** — still needs the operator's explicit acknowledgement; the spec gates it at Step 15's Phase-2 confirmation and repeats it in the integration-PR rollout note.
+- **Branch-only interim** — between Step 9 and Step 11 CUSTOM_FORMULA strategies stamp composites the read side does not ask for yet; no `main-dev` PR between those steps.
+- **Existing-test fallout** — Steps 10 and 12 allow amending an existing assertion only when it fails solely because of the composite stamp / the bare-mock `latest_formula_fingerprint`; anything else is a blocker to report.
+- **Mixed refused and readable formulas (O-19)**, **`completed_at` ordering**, **fallback query cost (O-20)**, **indicators availability coupling (O-23)**, **one-time evidence reset (D-4)** — accepted limitations, documented at Step 15.
