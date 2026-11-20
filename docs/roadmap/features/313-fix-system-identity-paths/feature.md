@@ -16,6 +16,7 @@
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 2 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
 
 ---
 
@@ -26,8 +27,20 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, rejected alternatives, objections, petitions
 - [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-system-identity-paths`_
+- [Implementation Spec](implementation-spec.md) — 7 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+_(Snapshot finalized by /sdd-spec on 2026-11-20. Re-run /sdd-spec if registry changes.)_
+
+| Role | Review Focus |
+|---|---|
+| Service owner `xstockstrat-analysis` | Backtest reproducibility, strategy scoring determinism, no look-ahead bias (steps 2-3) |
+| Service owner `xstockstrat-ingest` | Signal normalization correctness, idempotent ingestion, newsletter source schema stability (steps 4-7) |
+| none | Step 1 (docs) |
 
 ---
 
@@ -39,4 +52,4 @@ a `system` owner instead of degrading.
 
 ## Next Action
 
-`/sdd-spec fix-system-identity-paths` — generate implementation spec from the approved design
+`/sdd-review fix-system-identity-paths impl-spec` — validate implementation spec, then `/sdd-execute fix-system-identity-paths`
