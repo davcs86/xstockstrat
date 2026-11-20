@@ -304,7 +304,7 @@ declaration site.
 
 ### Step 3 — service: portfolio `toGRPCError` numeric cast
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go` — modify

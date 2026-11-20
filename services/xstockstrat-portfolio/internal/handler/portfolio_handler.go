@@ -442,23 +442,8 @@ func classifyGetPnLError(ctx context.Context, err error) connect.Code {
 
 func toGRPCError(err error) error {
 	var connectErr *connect.Error
-	if errors.As(err, &connectErr) {
-		switch connectErr.Code() {
-		case connect.CodeInvalidArgument:
-			return status.Error(codes.InvalidArgument, connectErr.Message())
-		case connect.CodeNotFound:
-			return status.Error(codes.NotFound, connectErr.Message())
-		case connect.CodePermissionDenied:
-			return status.Error(codes.PermissionDenied, connectErr.Message())
-		case connect.CodeUnavailable:
-			return status.Error(codes.Unavailable, connectErr.Message())
-		case connect.CodeFailedPrecondition:
-			return status.Error(codes.FailedPrecondition, connectErr.Message())
-		case connect.CodeDeadlineExceeded:
-			return status.Error(codes.DeadlineExceeded, connectErr.Message())
-		case connect.CodeCanceled:
-			return status.Error(codes.Canceled, connectErr.Message())
-		}
+	if errors.As(err, &connectErr) && connectErr.Code() != connect.CodeInternal && connectErr.Code() != connect.CodeUnknown {
+		return status.Error(codes.Code(connectErr.Code()), connectErr.Message())
 	}
 	return status.Error(codes.Internal, err.Error())
 }
