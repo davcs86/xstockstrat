@@ -70,6 +70,11 @@ migration here (R-3).
 
 ## Step Dependencies
 
+- **Pre-flight (before Step 1).** The branch is 168 commits behind `origin/main-dev`. `/sdd-execute`
+  syncs it first and then re-greps every cited symbol; no step relies on a line number. Spot check on
+  2026-11-20: on `origin/main-dev`, `SnapshotOfflinePositions` is still at `trading.go:1174` and the two
+  trading `NewWatcher` calls are still at `cmd/server/main.go:70,75`, but `environmentIsPaper` has moved
+  to `:2830` (cited as `:2729` in Step 23).
 - Steps 1+2+3 land together: a `.proto` edit needs its `proto-gen` step, and Step 3's test references
   descriptor state only Steps 1–2 create (step-constraints §C rows 2 and 3). One backend unit, 3 steps.
 - Steps 4–34 all require Step 2 (regenerated stubs).
@@ -78,7 +83,11 @@ migration here (R-3).
   land (D-6: directives are added only where the linter flags them after buf-gen). The unit's own
   Verification is buf + build + tests, so it passes; the three services cannot join the unit without
   breaking the 4-step cap. Run Steps 4–13 immediately after the unit. With per-step PRs, the Go lint
-  jobs on those PRs are expected red until each service's step lands.
+  jobs on those PRs are expected red until each service's step lands. **Preferred mode:
+  `/sdd-execute fix-retired-surface-proto-cleanup sequential`** — one commit per step and a single
+  integration PR, so the red window never reaches a PR's CI. The pairs 4+5, 6+7 and 12+13 are not
+  declared `**Lands with**` units: each `service` step passes its own Verification alone, so no
+  step-constraints §C trigger applies, and pairing would not close the window for the other two services.
 - Step 5 [test] covers Step 4 [service]. Lint runs in Step 5 because the existing
   `BatchGetBarsRequest` test literals are flagged until Step 5 annotates them.
 - Steps 6, 8 and 10 (producers send both fields) require Step 4 on the branch first (R-1: the server
@@ -95,6 +104,9 @@ migration here (R-3).
   the Node request is unchanged on the wire, so both tests pass before and after.
 - Step 31 edits three byte-identical files in one step because `scripts/check-watcher-copies.sh`
   (CI) fails on drift between them.
+- Step 31 requires Step 29 green: Step 29's `pnpm run build` is the first compile of the
+  `WatchConfigRequest.fromPartial({...})` shape, which was inferred from `buf.gen.yaml`
+  (`useOptionals=messages`), not compiled. Do not start the three-file edit until that build passes.
 - Steps 27–28 require Step 5 (both edit `xstockstrat-marketdata`; Step 5 leaves its lint green).
 - Step 33 requires Steps 18–32 (the docs must describe the code as it then stands).
 - Not in scope, by design: the agent's body `user_id` write on `SnapshotOfflinePositionsRequest`
@@ -107,6 +119,16 @@ migration here (R-3).
   `origin/main-dev` (checked 2026-11-20). Step 1 re-checks it against
   `origin/feature/fix-sandbox-result-contract` (310, `indicators.proto`) and
   `origin/feature/fix-read-path-owner-trust` (312, `trading.proto`).
+- File-level overlaps with in-flight features (impl-spec review, 2026-11-20; all rebase-only, disjoint
+  hunks; no migration `NNN`, proto field-number or config-key collision):
+  - `321-fix-trading-config-plumbing`: `services/xstockstrat-trading/internal/service/trading.go`
+    (Step 12), `services/xstockstrat-trading/CLAUDE.md` (Step 33), `docs/patterns/config-governance.md`
+    (Step 34, both features edit the registered-keys log — expect a doc merge) and
+    `packages/proto/trading/v1/trading.proto` (Step 1, a different message and field).
+  - `330-fix-live-enrich-ttl-seed`: `services/xstockstrat-analysis/app/handlers/servicer.py` (Step 8).
+  - `347-alpaca-adaptive-rate-limit` and `323-fix-orphaned-code`:
+    `services/xstockstrat-marketdata/cmd/server/main.go` and `internal/alpaca/client.go` (Steps 27–28).
+  Whichever feature lands second rebases and re-greps its symbols.
 
 ---
 
@@ -1025,7 +1047,7 @@ Unit Verification = Steps 21 + 22 commands together.
 
 **Codebase Evidence**:
 - `internal/config/config.go`: `Watcher` field `tradingMode commonv1.TradingMode` (`:64`); doc comment `:68` "applicationEnv/tradingMode scope every WatchConfig request…"; `func NewWatcher(endpoint, applicationEnv, tradingMode string, namespaces ...string) (*Watcher, error)` (`:69`); `w.tradingMode = resolveTradingMode(tradingMode)` (`:79`); `resolveTradingMode` (`:107-114`). The request built in `newWatcher` (`:87-93`) already omits `trading_mode`.
-- Callers: `cmd/server/main.go:70` `config.NewWatcher(cfg.ConfigEndpoint, cfg.ApplicationEnv, cfg.TradingMode, "trading")` and `:75` (same with `"platform"`). No `_test.go` calls `NewWatcher` (`grep -rn "NewWatcher(" --include=*_test.go services/xstockstrat-trading` → no match).
+- Callers: `cmd/server/main.go:70` `config.NewWatcher(cfg.ConfigEndpoint, cfg.ApplicationEnv, cfg.TradingMode, "trading")` and `:75` (same with `"platform"`) — exactly two call sites in the service (re-confirmed at the impl-spec review, and unchanged on `origin/main-dev`). No `_test.go` calls `NewWatcher` (`grep -rn "NewWatcher(" --include=*_test.go services/xstockstrat-trading` → no match).
 - **Keep** (live consumer, D-3, feature 321): `Config.TradingMode` (`:30`, `:46` `getEnv("TRADING_MODE", "paper")`), read by `func (s *TradingService) environmentIsPaper()` (`internal/service/trading.go:2729-2730`) and `func (s *TradingService) resolveTradingMode(…)` (`:3739-3743`) as `s.cfgW.GetBool("broker.paper", s.cfg.TradingMode == "paper")`; test fixtures `config.Config{TradingMode: "paper"}` and `internal/config/config_test.go:522-541`.
 
 **Lands with**: `Step 24`
@@ -1042,7 +1064,9 @@ Unit Verification = Steps 21 + 22 commands together.
 2. `cmd/server/main.go:70,75`: remove the `cfg.TradingMode` argument from **both** calls.
    **Trap**: because `namespaces` is variadic, a call left as
    `NewWatcher(endpoint, env, cfg.TradingMode, "trading")` still compiles and would subscribe to a
-   namespace named `paper`. The compiler will not catch a missed call — the grep below is the guard.
+   namespace named `paper`. The compiler will not catch a missed call, and `cmd/server` has no test,
+   so the exit-code guards in Verification are the check. Before committing, also read both
+   `NewWatcher` lines in `main.go` and confirm the third argument is the namespace string literal.
 3. Trading-mode gate: order placement is not touched; the existing gate (`environmentIsPaper`,
    `TradingService.resolveTradingMode`) and `Config.TradingMode` are reused unchanged, so paper mode
    still never submits live orders. Deployment values stay `TRADING_MODE: paper` in
@@ -1052,7 +1076,9 @@ Unit Verification = Steps 21 + 22 commands together.
 **Verification**:
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./...
-grep -n "NewWatcher(" cmd/server/main.go                      # two calls, neither passes cfg.TradingMode
+grep -rn "NewWatcher(" --include="*.go" . | grep -v "func NewWatcher"   # exactly the two main.go calls; any other caller must be fixed too
+! grep -rnE "NewWatcher\([^)]*TradingMode" --include="*.go" .           # must exit 0: no caller passes a trading mode
+test "$(grep -cE 'NewWatcher\(cfg\.ConfigEndpoint, cfg\.ApplicationEnv, "(trading|platform)"\)' cmd/server/main.go)" = 2   # must exit 0: both calls have the new shape
 grep -n "tradingMode\|func resolveTradingMode" internal/config/config.go   # no match
 grep -n "TradingMode" internal/config/config.go               # Config.TradingMode field + TRADING_MODE env read remain
 grep -n "TRADING_MODE" ../../docker-compose.yml ../../.do/app.dev.yaml ../../.do/app.yaml   # paper / paper / live, unchanged
@@ -1077,7 +1103,7 @@ grep -n 'GetBool("broker.paper"' internal/service/trading.go   # two hits: the f
 
 **Lands with**: `Step 23`
 
-**TDD**: `red-green required` — compile-only RED per D-10: with Step 23's `config.go` edit applied and this file untouched, `go vet ./internal/config/` fails to compile the test package (`undefined: resolveTradingMode`); capture that, then apply this step for GREEN. Record it as "compile-only RED; no assertion-level RED because trading_mode is already omitted". If the tdd-gate rejects a compile RED, record a P-06 deviation with that text. Never record "no RED possible".
+**TDD**: `red-green required` — compile-only RED per D-10: with Step 23's `config.go` edit applied and this file untouched, `go vet ./internal/config/` fails to compile the test package (`undefined: resolveTradingMode`); capture that, then apply this step for GREEN. Record it as "compile-only RED; no assertion-level RED because trading_mode is already omitted". If the tdd-gate rejects a compile RED, record a P-06 deviation with that text in `## Deviation Log` and in `context.md`. Never record "no RED possible". Note this RED is captured after the implementation edit, not test-first: no test call site of `NewWatcher` exists to change first (D-10 premise corrected).
 
 **Covers**: `AC-1`
 
@@ -1094,6 +1120,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
   && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
   && go tool cover -func=coverage.out | grep "^total:"   # confirm ≥ 40%
 grep -rn "resolveTradingMode(" internal/config   # no match (the TradingService method lives in internal/service)
+! grep -rnE "NewWatcher\([^)]*TradingMode" --include="*.go" .   # must exit 0: re-run of the Step 23 variadic-trap guard
 ```
 Unit Verification = Steps 23 + 24 commands together.
 
@@ -1154,7 +1181,7 @@ grep -n "TRADING_MODE" ../../docker-compose.yml ../../.do/app.dev.yaml ../../.do
 
 **Lands with**: `Step 25`
 
-**TDD**: `red-green required` — compile-only RED per D-10: with Step 25's edits applied and this file untouched, `go vet ./internal/config/` fails to compile the test package (`undefined: resolveTradingMode`, `cfg.TradingMode undefined`); capture it, then apply this step. Record "compile-only RED; no assertion-level RED because trading_mode is already omitted", or a P-06 deviation if the tdd-gate rejects a compile RED.
+**TDD**: `red-green required` — compile-only RED per D-10: with Step 25's edits applied and this file untouched, `go vet ./internal/config/` fails to compile the test package (`undefined: resolveTradingMode`, `cfg.TradingMode undefined`); capture it, then apply this step. Record "compile-only RED; no assertion-level RED because trading_mode is already omitted", or a P-06 deviation (in `## Deviation Log` and `context.md`) if the tdd-gate rejects a compile RED. As in Step 24, this RED is captured after the implementation edit, not test-first.
 
 **Covers**: `AC-1`
 
@@ -1241,7 +1268,7 @@ grep -n "TRADING_MODE" ../../docker-compose.yml ../../.do/app.dev.yaml ../../.do
 
 **Lands with**: `Step 27`
 
-**TDD**: `red-green required` — D-10 RED: first change `client_test.go:763` to the one-argument call; `go vet ./internal/alpaca/` then fails to compile against the old `NewLiveClient(settings, paper)` (too few arguments) — capture that as the RED, then apply Step 27 and the `config_test.go` edits for GREEN. Record "compile-only RED; no assertion-level RED because trading_mode is already omitted", or a P-06 deviation if the tdd-gate rejects a compile RED.
+**TDD**: `red-green required` — D-10 RED: first change `client_test.go:763` to the one-argument call; `go vet ./internal/alpaca/` then fails to compile against the old `NewLiveClient(settings, paper)` (too few arguments) — capture that as the RED, then apply Step 27 and the `config_test.go` edits for GREEN. This is the only true test-first compile RED of the three Go units. Record "compile-only RED; no assertion-level RED because trading_mode is already omitted", or a P-06 deviation (in `## Deviation Log` and `context.md`) if the tdd-gate rejects a compile RED.
 
 **Covers**: `AC-1`
 
@@ -1277,7 +1304,7 @@ Unit Verification = Steps 27 + 28 commands together.
 **Codebase Evidence**:
 - `services/xstockstrat-config/src/services/configWatcher.ts:7-8`: `import { ConfigServiceClient, ConfigSnapshot, ConfigValue } from '@xstockstrat/proto/config/v1/config';` / `import { Environment, TradingMode } from '@xstockstrat/proto/common/v1/common';`.
 - `:40-53` `startWatch()`: comment `:41-42` "…paper/live is derived from environment; trading_mode is deprecated and ignored by the server."; `this.stub.watchConfig({ namespace: this.namespace, clientId: …, version: '', environment, tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED, userId: '' })` (`:46-53`).
-- The literal spells out `version: ''` and `userId: ''`, and `packages/proto/buf.gen.yaml` generates ts-proto with `useOptionals=messages` (only message-typed fields optional), so a bare literal without `tradingMode` does not satisfy the request type. `fromPartial` is available on the same generated module (precedent `services/xstockstrat-identity/src/__tests__/configWatcher.test.ts:86-87`, `configProto.ConfigSnapshot.fromPartial(…)`).
+- The literal spells out `version: ''` and `userId: ''`, and `packages/proto/buf.gen.yaml:30` generates ts-proto with `useOptionals=messages` (only message-typed fields optional), so a bare literal without `tradingMode` should not satisfy the request type. **Assumption — inferred from the generator option, not compiled**; this step's `pnpm run build` is its first proof. `fromPartial` is available on the same generated module (precedent `services/xstockstrat-identity/src/__tests__/configWatcher.test.ts:86-87`, `configProto.ConfigSnapshot.fromPartial(…)`).
 - This copy is **not** in `scripts/check-watcher-copies.sh` (its `node` group lists ledger, identity, notify only).
 
 **TDD**: `red-green required` — expected record: "red N/A — no behavior change; characterization test added" (tdd-gate.md escape). The request is byte-identical on the wire: `TRADING_MODE_UNSPECIFIED` is the proto3 default.
@@ -1289,6 +1316,10 @@ Add `WatchConfigRequest` to the `:7` import, remove `TradingMode` from the `:8` 
 request as `this.stub.watchConfig(WatchConfigRequest.fromPartial({ namespace: this.namespace, clientId: …, version: '', environment, userId: '' }))`
 — the `tradingMode:` property is deleted. Reword the `:41-42` comment to drop the `trading_mode`
 clause (keep the environment scoping sentence, ≤2 lines). No outbound call is added.
+If the build rejects `WatchConfigRequest.fromPartial` (not exported, or a type error), stop: do not
+guess another shape. Record a deviation in `## Deviation Log`, choose the shape the compiler accepts
+(a bare literal without `tradingMode` if the generated type allows it), and carry the same shape into
+Step 31.
 
 **Verification**:
 ```bash
@@ -1355,7 +1386,9 @@ grep -n "__tests__/fixtures" src/__tests__/configWatcher.test.ts   # none: singl
 Apply the Step 29 edit **identically** to all three files: add `WatchConfigRequest` to the `:7` import,
 remove `TradingMode` from the `:8` import, wrap the request in `WatchConfigRequest.fromPartial({ … })`
 without the `tradingMode:` property, and reword the `:80` comment to "Config is scoped by environment."
-Edit one file and copy it over the other two so they stay byte-identical. No outbound call is added.
+Use the request shape that Step 29's build accepted (including any deviation recorded there). Edit
+`xstockstrat-identity`'s file first and run its `pnpm run build`; only when that is green copy it over
+the other two so they stay byte-identical. No outbound call is added.
 
 **Verification**:
 ```bash
