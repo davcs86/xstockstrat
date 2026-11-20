@@ -645,3 +645,43 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] `mcp-tools.md` `instantiate_template` rows are left unchanged (they never stated the orphan trade-off); only the `manage_signal_source` rows gain the sweep text. To be checked at `/sdd-review impl-spec`.
 - [ ] The product spec has no `## Consumer Surface(s)` section (bug template); the spec treats the fix as internal plus runbook and still lands text and pins on the agent and UI surfaces.
 - Next: `/sdd-review fix-agent-bearer-secret-orphan impl-spec`, then `/sdd-execute fix-agent-bearer-secret-orphan`.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 8 warnings (advisory — did not block). Lifecycle unchanged (`implementation-ready`). Floor breaches: none.
+- Overlap: WARN (file-level only). No migration number, proto field number or config key collides; this feature ships none of the three.
+- Re-verified on `origin/main-dev@fb52065c` before editing the spec: the `Lands with` rule (`.claude/skills/sdd-spec/reference/step-constraints.md` §C), the live features' file lists (345, 321, 330, 357 implementation specs), `merge-order.md:384-405`, and a repo-wide `git grep -i -E "orphan|secret-first"`.
+
+### Addressed in implementation-spec.md
+
+- [x] Steps 5 / 6 ordering (P-06): Steps 5 and 6 are now one unit (`**Lands with**` on both; reason in § Step Dependencies). Order inside the unit: write Step 6's tests, capture the parity red, apply Step 5's edits, one commit.
+- [x] Step 2: added the "no coverage threshold applies; the unit's threshold is Step 1's" note.
+- [x] Operator gate reach (P-03): § Step Dependencies now states that Steps 5+6 and Step 9 are blocked with Step 4, and that Steps 1–3 and 7–8 are not.
+- [x] C-10 site list: Step 9 § Codebase Evidence records the repo-wide grep result, and Step 9's Verification runs the grep. No orphan-stating site is missed. Four "secret-first only" sites are left unchanged on purpose: `docs/runbooks/mcp-tools.md:902`, `src/app/insights/signal-sources/page.tsx:322`, `services/xstockstrat-agent/tests/test_template_tools.py:4`, `.gitleaks.toml:20`.
+- [x] Overlap: § Step Dependencies lists the shared files with 345, 357, 321, 330, 318 and 324. Correction to the overlap report: this feature does **not** edit the root `docs/context-constitution-findings.md` (no `mcp_credential` hit there); only the agent-local findings file (Step 5).
+
+### Unresolved ⚠ carried into execution
+
+- Step 4: target database list and sweep cadence are not confirmed by the operator (P-03). Blocks Step 4, and with it Steps 5+6 and 9 — [ ] unaddressed
+- Step 2: cross-owner seeds use two users (`sweep328-v1`, `sweep328-v2`) where the binding operator decision names one V. The single-V reading contradicts itself (case i needs no source, cases ii/iii need sources). The operator has not confirmed the refinement — [ ] unaddressed
+- Steps 1–3: the sweep and assertion SQL have run only on a stand-in schema. The CI `migration-rerun` job is the first real run; a red there reopens the unit — [ ] unaddressed
+- Step 8: the UI instantiate writer (`src/app/insights/templates/page.tsx:40`) has no pin (intentional skip, O-25) — [ ] unaddressed
+- Product spec: no `## Consumer Surface(s)` section (C-14, bug template). The spec's note stays; the product spec was not edited in this review — [ ] unaddressed
+- Step 9: `docs/repo-surveyor/debt-radar-findings.md:553` asks whether the defect report covers the UI path (it does: AC-3, Steps 7–8). The file is outside this feature's file set and is not edited; the operator decides whether to answer it there — [ ] unaddressed
+
+### Overlap findings
+
+- `345-authelia-sso`: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`, `.github/workflows/ci.yml`, `docs/patterns/config-governance.md` — different functions and sections.
+- `357-fix-portfolio-internal-position`: `.github/workflows/ci.yml:1065` only.
+- `321-fix-trading-config-plumbing`, `330-fix-live-enrich-ttl-seed`: `docs/patterns/config-governance.md` (append-only logs; 330's sentinel row is already on `main-dev`).
+- Batch peers (no implementation spec on trunk, unverified): `314`, `331`, and per `merge-order.md` 319, 322, 327 on `tools.py` / `tests/test_tools.py`; `318`, `324` on `.github/workflows/ci.yml`.
+- Rule for all of them: the second merger rebases and re-greps its anchors. No merge-order row is needed (no FAIL-level overlap).
+
+### Open Threads
+
+- [ ] **Operator gate (Step 4): confirm the target database list and the cadence** before Step 4; Steps 5+6 and 9 wait on it.
+- [ ] **Confirm the two-seed-user reading** of the cross-owner decision (Step 2) at the `/sdd-execute` checkpoint.
+- [ ] A red `migration-rerun` job on the integration PR reopens Steps 1–3.
+- [ ] UI instantiate writer stays unpinned (O-25).
+- [ ] `docs/repo-surveyor/debt-radar-findings.md:553` is unanswered and outside this feature's file set.
+- Next: `/sdd-execute fix-agent-bearer-secret-orphan`.
