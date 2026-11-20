@@ -105,7 +105,7 @@ verification, and the CI coverage command still runs so the service total does n
 
 ### Step 1 — service: marketdata `toGRPCError(ctx, err)` with cast, inbound-ctx and Internal branches
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go` — modify
@@ -197,7 +197,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 
 ### Step 2 — test: marketdata translator table (AC-1, R-2, @AC-53, f254) and the AC-2 handler chain test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/handler/marketdata_handler_test.go` — modify

@@ -29,8 +29,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ## Open Threads
 
 - [ ] Peer merge overlap: `portfolio_service.go` is shared with 311/312/315/317; overlap on `marketdata_handler.go` with 317/320/314 is unverified (re-check when their specs land). After each peer merge re-run f254 `@AC-5`/`@AC-7`, the Step 2 tests and `TestWire_CreateWatchlistDuplicateName_AC3` — the signature change will not catch a reintroduced raw Internal wrap or a lost classifier call. — final integration PR
-- [ ] Keep connect-go and grpc-go codes 1-16 aligned; pinned by the translator table test. — Steps 1/2
-- [ ] Document branch (b) masking, and state the branch (c) out-of-scope exposure in the spec and PR body. — Step 1
+- [x] Keep connect-go and grpc-go codes 1-16 aligned; pinned by the translator table test. — Steps 1/2 (done 2026-11-20: `TestToGRPCError_ConnectCodeCast`)
+- [ ] Document branch (b) masking, and state the branch (c) out-of-scope exposure in the spec and PR body. — Step 1 (masking doc comment landed 2026-11-20; the D-12 branch (c) out-of-scope statement still goes in the integration PR body)
 - [ ] Record "red N/A — no behavior change; characterization test added" in context.md and the PR body, and capture the green run; use the main-dev `tools.py` line numbers only after the main-dev merge, re-grep if main-dev moved. — Step 7
 - [ ] Run the two AC-2 sign-off greps before rewording and stop to ask the operator if either fails; record the follow-ups, the C-14 UI disposition and the R-6 grep result; fix "about 24 call-site edits" to 18. — Step 8
 - [ ] File `fix-trading-grpc-status-mapping` (`trading.go:223-237`, four-code collapse) and `fix-portfolio-grpc-ctx-mapping` (D-6 symmetry) through the allocator. — after Step 8
@@ -39,7 +39,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Files Modified
 
-- No service code changed yet; execute has started but no step has completed.
+- `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go` — `toGRPCError(ctx, err)` cast / inbound-ctx / Internal branches, 19 call sites (Steps 1+2).
+- `services/xstockstrat-marketdata/internal/handler/marketdata_handler_test.go` — translator tables and the AC-2 chain test (Steps 1+2).
 - `docs/roadmap/features/326-fix-grpc-status-mapping/implementation-spec.md` — written in sdd-spec, patched in sdd-review, re-specced for steps 2, 3 and 6 in `498e07c0`.
 - `docs/roadmap/ledger/insights.md` — union-resolved merge conflict in the main-dev sync merge `c1b5428f`.
 - Feature dir: status.md, feature.md, product-spec.md, acceptance.feature, context.md (triage); recon.md, debate.md, design.md (design).
@@ -550,3 +551,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - Distilled 6 sessions → header + Superseded Sessions; kept 2 verbatim.
 - context.md 681 → 552 lines. Original prose preserved in git history.
+
+## Session 2026-11-20 — sdd-execute sequential (sdd-batch-execute), Steps 1+2
+
+- Tooling setup (steps 1+2): go1.27 ✓ · golangci-lint ⬇ v2.14.0 (`GOTOOLCHAIN=go1.27.0 go install`, built with go1.27.0; run from `/root/go/bin` ahead of the v2.5.0 on PATH).
+
+### Step 1 — service: marketdata `toGRPCError(ctx, err)` with cast, inbound-ctx and Internal branches [done]
+- Atomic unit Steps 1+2 (one commit). `toGRPCError` now takes the inbound ctx: (a) numeric cast for any `*connect.Error` other than Internal/Unknown, (b) `ctx.Err()` → DEADLINE_EXCEEDED "deadline exceeded" / CANCELLED "request canceled" (fixed text, no log/span), (c) unchanged Internal with `err.Error()`; all 19 adapter call sites pass `ctx`. Step 1 Verification exit=0 (`.sdd-logs/v-2.log`: build, vet, 19 `toGRPCError(ctx, err)`, no `toGRPCError(err)`, no `FromContextError`).
+- Files modified: `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go`
+- Deviations: none
+
+### Step 2 — test: marketdata translator table (AC-1, R-2, @AC-53, f254) and the AC-2 handler chain test [done]
+- Atomic unit Steps 1+2. Added `sectorHistoryStub` (single declaration), `TestToGRPCError_ConnectCodeCast`, `TestToGRPCError_InboundCtx` (rows i-vii) and `TestGetSectorHistory_AC2_ExpiredCtxDeadlineExceeded`.
+- TDD: AC-1 red: "AC-1: connect deadline_exceeded must map to DeadlineExceeded, got Internal" (and the other five rows); AC-2 red: "AC-2: handler must return DEADLINE_EXCEEDED, not INTERNAL (got Internal)"; D-8 red: message leaked `apikey=x&token=y` → green: all 4 named tests PASS, service AC53/AC54/feature254 ok, total 83.2% (≥ 40%), golangci-lint v2.14.0 "0 issues." (`.sdd-logs/v-1.log` red, `.sdd-logs/v-3.log` green).
+- Files modified: `services/xstockstrat-marketdata/internal/handler/marketdata_handler_test.go`
+- Deviations: none
