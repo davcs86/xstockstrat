@@ -480,3 +480,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] The per-strategy setup in the readiness kick (`servicer.py:4310-4331`) and in the materializer is outside the design's five sites and still fails the whole kick or owner pass. Not specced; raise at `/sdd-review impl-spec` if it should be.
 - [ ] Step 16 imports the token from `src/lib/readinessCue`, which value-imports the icon library; if that does not load in the mock-backend Node process, the fixture module declares the token (the step states the fallback).
 - [ ] `EvaluateReadiness` returns OK even when every requested symbol failed (the tally logs ERROR). This follows design.md § 2; no alert covers it until `analysis-isolation-degraded-counter`.
+
+---
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 11 criteria warnings, overlap WARN (advisory — did not block). Lifecycle unchanged (`implementation-ready`).
+- Run by `/sdd-batch`, which had this session edit implementation-spec.md for the clearly-correct warnings (commit `00595da8`). No step was added, removed or reordered.
+
+### Addressed (implementation-spec.md)
+
+- [x] Stale tree (C-01): anchors re-checked on `origin/main-dev@fb52065c`. Between `36aed60b` and `fb52065c` only `app/telemetry.py` and `tests/test_telemetry.py` changed in analysis and indicators, so no cited file moved. Spot-greps matched the spec for `evaluator.py`, the indicators refusal, `opportunities.py`, the analysis `servicer.py` anchors of Steps 9, 11 and 13, and the two pinning tests. The Tree header says so; execute still re-greps after BRANCH SYNC.
+- [x] Step 2: the multi-line double grep and an `ExecuteFormulaResponse(` grep are now Verification lines. Both return nothing on `fb52065c`, so every ExecuteFormula double is a single-line `SimpleNamespace(success=` or `_formula_stub`.
+- [x] Step 16: the import hedge is now a checked decision (`playwright test … --list` after adding the import). The fixture-local token is allowed only as a recorded deviation. Evidence added: no e2e file imports `readinessCue` today; in plain Node the icon package loads under ESM `import` and returns an empty object under CJS `require` without throwing.
+- [x] Step 17: C-16 sign-off confirmed present on this branch (session "sdd-design", Operator decisions). A seventh instruction adds a findings-log row for the unisolated per-strategy setup, with its own Verification grep.
+- [x] Peer note corrected: on main-dev only 327 cites the analysis servicer (`:7282`); 309 and 313 cite the ingest servicer. Peer 310 edits the indicators servicer that Step 3 edits; Step Dependencies now records that Step 3 has no build dependency on 310 and that the second to land re-greps.
+- Checked and left as written (the reviewer accepted them): the 40 / 50 coverage thresholds (they match each service CLAUDE.md), the `Lands with` units 1+2, 9+10 and 11+12, the combined Steps 9 and 11, Step 5 without its own coverage line (Step 6 carries it), and Step 15's line-number anchors (matched on `fb52065c`).
+
+### Open Threads
+
+- [ ] O-9 deferral needs the operator: cue parity on mobile `SignalRow` and the Signal-detail header was deferred to `evaluation-failed-cue-parity` at `/sdd-spec` without an operator. Confirm or overturn at the `/sdd-execute` checkpoint before Step 15.
+- [ ] Follow-up features `evaluation-failed-cue-parity` and `analysis-isolation-degraded-counter` have no feature number. Allocate each through `scripts/sdd-allocate-feature-number.py` when it is storied; until then Step 17 names slugs only.
+- [ ] Merge order with `fix-sandbox-result-contract` (310): no row exists in `docs/roadmap/features/merge-order.md`, and this session may not edit that file. The overlap scan proposed a soft row "308 waits for 310". Verified here: 308 does not need 310 (`exit_reason` and the `"timeout"` map entry exist today), so either order works with a re-grep of Step 3. Operator to decide whether to add a soft row.
+- [ ] Step 16 fallback: if the `readinessCue` import fails under Playwright, the fixture declares a second TS copy of the token. Report it at the checkpoint and in the Deviation Log (P-03).
+- [ ] Defect report 3 is only partly met: a failure in the per-strategy setup of the kick or the materializer still discards the whole kick or owner pass. Out of scope by design; Step 17 logs it as a finding. Operator to decide whether it needs its own fix.
+- [ ] Rebase overlap with `fix-analysis-evidence-dry` (327) in the analysis `servicer.py`: the regions are disjoint today, so this is a re-grep only.
+- [ ] recon.md:150, design.md:203 and the "sdd-review product-spec" entry above still say peers 309, 313, 323 and 329 share the analysis servicer. That is wrong for 309 and 313 (ingest servicer); this session did not edit them (prior entries are append-only, and recon and design are closed artifacts).
+- [ ] Still open from "sdd-spec": `EvaluateReadiness` returns OK when every symbol failed, with no alert until `analysis-isolation-degraded-counter`.
