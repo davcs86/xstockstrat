@@ -2959,3 +2959,33 @@ Written by the orchestrating session itself.
   - The parent `pollFills` path maps IBKR statuses through `alpacaStatusToProto` without lower-casing. That defect is outside this feature; Step 27 logs it.
 - **Housekeeping closed by this session.** `@AC-5` wording applied. Migration numbers re-checked. O-67 and O-68 are treated as settled: Steps 23-25 carry the new-candidate bypass, `interval_ms <= 0` read as 60000, the injected clock and the known-invalid-credentials skip.
 - **Unchanged from the sdd-design (approved) session's Open Threads.** The O-61 operator confirmations before the cutover step, and every accepted residual listed there, still stand. Step 26 writes them into the runbook.
+
+## Session 2026-11-20 — sdd-review impl-spec
+
+- Result: 1 failure, 11 warnings; overlap WARN (advisory, did not block). Lifecycle unchanged (`implementation-ready`).
+- **Written from the workflow's computed task, not by the operator.** Nothing here is an operator ruling. The task told this run to edit `implementation-spec.md` for every FAIL and clearly-correct WARN; the skill's MODE B on its own only records findings.
+- Every claim was re-checked on `origin/main-dev@fb52065c` (still the tip of `main-dev`) before the spec was changed.
+- **Addressed in `implementation-spec.md`:**
+  - [x] FAIL, Step 7 (B3b, F-05, C-08): the A-2 skip class made Step 7 fail its own whole-package run. Confirmed: `fillEvent` (`portfolio_fill_errors_test.go:24-34`) has no `order_id`, and the three tests at `:67-109` expect `errDBBlip`. Fix: the skip class moved from Step 7 to Step 9, where the applied key it protects first exists; its tests moved from Step 8 to Step 10. Step 7 now says not to add it. No step was renumbered and no `Lands with` chain changed.
+  - [x] WARN, Steps 18-19 side type: `BracketLegParent.Side` is now stated as a `tradingv1.OrderSide` holding the leg side, flipped by the caller with `oppositeSide`'s rule and written through `sideStr`. `oppositeSide` itself returns the broker wire string and is left alone. Recorded as spec assumption A-13.
+  - [x] WARN, C-14: a `## Step Dependencies` line now records that ui `/trader` and agent `get_positions` get no step (read-only consumers, verified by the acceptance-suite scan). No follow-up feature is named because no change is planned.
+  - [x] WARN, line hints: a hard `/sdd-execute` step now says to locate every cited site by symbol after BRANCH SYNC; the symbol wins over the number. The reviewer's tree predated feature 347; the spec's numbers were spot-checked on `fb52065c` (`processOrderFill` `:376`, `oppositeSide` `:3572`, `sideStr` `:436`) and match.
+  - [x] WARN, Steps 7 and 9 both edit the head of `processOrderFill`: a Step Dependencies note says Step 9 re-reads Step 7's result and where the skip class goes.
+  - [x] WARN, A-10 analysis consumer: checked. `_handle_order_event` (`pnl_pattern_consumer.py:348-404`) only stores `order_id`; the column has no foreign key or unique constraint (analysis migration `016`, lines 12 and 25-26). An unknown `order_id` is stored, not rejected. A-10 now carries this evidence.
+  - [x] WARN, D-50 and the `context.md` size: both are now listed in the spec as gating preconditions; D-50 gates Steps 23-25 only.
+  - [x] Overlap: the same-file findings (312, 315, 317, 321, 326) are recorded in Step Dependencies. No migration, proto or config collision.
+- **Not changed, with the reason:**
+  - Spec header `**Status**: pending`. The spec template (`.claude/skills/sdd-spec/reference/spec-template.md:8`) sets this value; it is step progress, not lifecycle. `status.md` reads `implementation-ready` and is the only lifecycle source. No mismatch.
+  - Step 10 touches 8 files. It is not split: Step 9 deletes the repo methods that `portfolio_repo_test.go` and `position_drain_dbtest_test.go` call, so those two files do not compile outside the Step 9+10 unit. The reason is now in Step Dependencies.
+
+## Open Threads
+
+- **Unresolved impl-spec review items carried into execution.** `/sdd-execute` announces each one at every checkpoint until its box is ticked.
+  - [ ] unaddressed — Steps 23-25 (D-50): the adoption-only throttle is an orchestrator assumption, not an operator ruling. Target: the operator confirms or overturns it before Step 23 starts.
+  - [ ] unaddressed — `context.md` is far over the 65536-byte limit. Target: `/sdd-distill fix-position-fold-correctness` before the first step.
+  - [ ] unaddressed — Steps 1-2 migration numbers (portfolio `019`, trading `012`) are free on `fb52065c`; unmerged branches of other features were not inspected. Target: the re-check after BRANCH SYNC.
+  - [ ] unaddressed — Step 20 (A-5): the `KnownBrokerOrderIDs` and `NetFilledQtyBySymbol` changes are proven only by pgxmock SQL-shape tests. A wrong `UNION`, `DISTINCT ON` or sign would pass. Trading has no real-Postgres test job. Target: operator decision on a follow-up CI job; none is designed.
+  - [ ] unaddressed — Step 21 (A-4, C-2): only the leg observer lower-cases IBKR statuses. The parent `pollFills` path still mismatches them. Step 27 logs it as a finding; it is not fixed here. Target: separate fix.
+  - [ ] unaddressed — A-10 residual: a bracket-leg fill that reaches the analysis consumer when no P&L window is open would open one. Whether a leg fill can arrive after its position's close event was not checked. Target: check at Step 22, when the leg emit order is in code.
+  - [ ] unaddressed — Overlap: 312 edits the same `alpaca-default` lines of `portfolio_service.go` that Step 9 builds on (`:434-437`); 315, 317, 321 and 326 edit other ranges of files this feature changes. All from product-spec evidence only. Target: whichever merges second rebases; re-run the overlap scan when a peer becomes implementation-ready.
+- **Carried forward unchanged.** The O-61 operator confirmations before the cutover step and every accepted residual in the "sdd-design (approved)" and "sdd-spec" Open Threads above still stand.
