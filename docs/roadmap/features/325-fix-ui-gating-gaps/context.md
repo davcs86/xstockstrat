@@ -926,3 +926,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui; key reuse patterns: `useIsAdmin()` threaded through `EditState` like `isNativeEnv`, and the `useOpportunities` request params hoisted as `QUEUE_DEFAULT_FILTERS`).
+- Phase 1 Grilling: 5 rounds (full). Chosen approach: one UI-only PR with a three-state namespace-editor gate (D-1) and a bounded queue-membership drain under `['opportunities','membership']` (D-2 to D-6), carrying the operator-accepted O-5 cost text (D-7 to D-10). Rejected: R-1 to R-5 (per-symbol fan-out, fail-closed gate, proto/analysis-side fixes, 50-row paging, storing Opportunity objects).
+- Constitution rules touched: C-01, C-11, C-12, C-13, C-15, C-16, C-17, C-18, P-02, P-03, F-06, F-07. Floor breaches: none.
+- Status: spec-ready → design-approved.
+- Operator rulings recorded 2026-11-20:
+  - C-16 sign-off for this feature's @AC-1 and @AC-2 (both CHANGE).
+  - The O-5 warm-set cost is accepted ("I accept the bound") at |W_new| × (2,880 + 288) write statements per calendar day, a union since the last marketdata restart, with the round-5 caveats. O-5 is closed and P-1 is declined, so D-2's 15 s cadence stands.
+  - Design approved after round 5 under the operator's standing authorisation of the same day. The round-5 adversary verdict was SOUND, with no Floor breach and no blocking objection.
+- The adversary's two accuracy corrections bind the spec and do not change the accepted bound: retained quote rows are at most 2,880 × 90 per symbol, in practice the distinct vendor quote timestamps; and the 288 counts bar-cycle transactions, not statements.
+- debate.md: State approved, P-1 verdict "user declined". No new rows. O-11, O-18, O-19 and O-20 stay open and non-blocking.
+- Wrote design.md. Next: `/sdd-spec fix-ui-gating-gaps`.
+
+## Open Threads
+
+- [ ] O-11: measure B_row from a dev BFF JSON `ListOpportunities` body and state bytes per 15 s poll. Target: `/sdd-spec`, checked at `/sdd-review impl-spec`.
+- [ ] O-18: spec keeps "2,880 upsert statements per day" and states quote retention as "at most 2,880 × 90 rows; in practice the distinct vendor quote timestamps". Target: `/sdd-spec`.
+- [ ] O-19: spec keeps 2,880 + 288 and labels the 288 as bar transactions of about 2 to 3 row upserts each (about 3,456 to 3,744 statements per symbol per day, 9 to 18% above the 3,168 headline). The operator should see the relabel. Target: `/sdd-spec`, checked at `/sdd-review impl-spec`.
+- [ ] O-20: one tripwire key name everywhere, `opportunity.max_universe_size` (namespace `analysis`). Target: `/sdd-spec`.
+- [ ] Warm-set growth has no ceiling below the servable signal-symbol universe until marketdata restarts. Target: spec carries the cost text, adds the row to `services/xstockstrat-marketdata/docs/context-constitution-findings.md` and references a follow-up warm-set TTL-prune feature (numbered by the allocator at spec time).
+- [ ] Bar upserts land on `marketdata.ohlcv`, which has a recorded lock-table exhaustion risk. The pool gauges and `out_of_memory_errors{op=insert_bars}` only detect saturation. Target: post-deploy dev verification step.
+- [ ] Two live-tunable keys can break the bound: `marketdata.classification.enabled = true` and `opportunity.max_universe_size` > 100. The UI has no guard. Target: tripwire text in the spec and the marketdata findings row.
+- [ ] The about-330 `GetBarsMulti` pagination threshold and the O-9 fallback lines were not re-derived in round 5. Target: re-cite at the step SHA in `/sdd-spec`.
+- [ ] The C-16 sign-off for @AC-1 and @AC-2 rests on the recorded ruling. The operator's relayed words cover only the O-5 bound. Target: confirm at the `/sdd-spec` gate if the operator wants it restated.
+- [ ] Badges past 3,000 queue rows are silently dropped. The badge is a cue, not an authority. Target: hook step.
+- [ ] Fail-open shows an enabled Edit trigger to a non-admin when `/me` fails, so the BFF's rejection must be legible. Target: Unit 1 e2e step.
