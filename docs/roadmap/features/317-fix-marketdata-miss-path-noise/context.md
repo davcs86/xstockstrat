@@ -534,3 +534,57 @@ written and status.md is unchanged. The register is in `debate.md` (D-1..D-7, R-
   main-dev merge before build step 3.
 - Peers may edit `fetchAndCacheBars`. Re-grep at `/sdd-spec` and before build step 3.
 - design.md lines marked *(debate)* are not in recon.md. `/sdd-spec` re-greps each before citing it in a step.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 11 steps. Status → implementation-ready.
+- Tree: detached@52f410ca ≡ origin/feature/fix-marketdata-miss-path-noise. Code evidence was read on
+  `origin/main-dev` @ `36aed60b`; the branch is 166 commits behind it and was NOT merged in this run (the run may
+  write only inside the feature directory). The tree-freshness sync is deferred to `/sdd-execute` BRANCH SYNC and
+  is the spec's precondition before Step 1.
+- Units (test step numbered first, one commit each): 1+2 marketdata cancel-quiet (AC-1); 3+4 portfolio
+  cancel-quiet; 5+6 config `SetConfig` bounds; 7+8+9+10 seed migration + miss cache + reader (AC-2); 11 docs.
+- Key codebase findings:
+  - recon/design anchors moved on trunk; the spec carries the old → new table. `ingestRecentBarsForTimeframe` now
+    takes `(ctx, fetchCtx)` (`marketdata_service.go:1410`) with a new fetch-deadline WARN (`:1422`) that stays a
+    WARN; D-1's early return and `warnUnlessDone` key on the process `ctx`.
+  - The live-fetch block sits inside `if pageToken == ""` (`:344`), so at its one call site "implicit first page"
+    equals `startImplicit`; `liveRefetch` takes one `implicitFirstPage` bool and passes it on as `recent`.
+  - `fetchAndCacheBars` has two callers: `:357` and the test helper `fetchAAPLDaily`
+    (`marketdata_service_test.go:5918`). No sibling ref edits it beyond #1499, which is on trunk.
+  - Config migrations on trunk end at `055`; `053` was never used on any ref; no ref carries `056`+ or the string
+    `miss_backoff_ms`. The seed is `056_marketdata_bars_miss_backoff`, provisional until merge. A config seed also
+    needs `scripts/config-wiring-stored.json` regenerated (Postgres + `migrate`, or the CI artifact).
+  - `UpdatePositionBracket` runs on `r.pool.Exec` (`portfolio_repo.go:379`), nil under `NewPortfolioRepoWithDB`,
+    so `processBracketUpdate` had no behavioural test seam.
+  - The GetBars and cancel-stop prose moved out of the two service `CLAUDE.md` files into
+    `services/xstockstrat-marketdata/docs/{alpaca-integration,context-constitution}.md` and
+    `services/xstockstrat-portfolio/docs/context-constitution.md` (PORTFOLIO-3). MARKETDATA-8 says "the DB-miss
+    fallback fires on every window", which (B) makes false; Step 11 corrects it.
+
+### Decisions
+
+- O-17..O-20 are closed by the spec: O-17 Step 7 (bespoke suite on `migrationSql.ts`; `globalIntSeedCases.ts`
+  and `barIngestBackoffSeedMigration.test.ts` untouched); O-18 and O-19 Steps 9 + 10; O-20 the merge checklist in
+  § Step Dependencies, run at spec time with a clean result.
+- Spec-time choices, listed in the spec under "Spec-time decisions to confirm at `/sdd-review impl-spec`":
+  1. (B) lands as two commits (bounds unit 5+6, then 7–10), because one commit would be five steps, above the
+     four-step unit cap. Bounds land first, so the seeded key never exists without write bounds.
+  2. The `resolveOffMs` wrapper needs one forwarder and two receiver entries in `scripts/config-wiring.json`
+     (registry entries, not baseline findings). Prototyped on a scratch copy of `36aed60b`: without them
+     `stream.bar_ingest_backoff_ms` turns `seeded-unread`. Fallback per O-15: a parallel reader.
+  3. The miss line (`GetBars: no bars stored and live fetch returned none`) is logged through `warnUnlessDone`
+     in `liveRefetch`, so a client cancel on an implicit miss logs Debug. design.md did not list this site.
+  4. `UpdatePositionBracket` moves to `r.db.Exec` (one line) so the bracket test can reuse `cancelingDB`.
+
+### Open Threads
+
+- Operator / impl-spec review: confirm the four spec-time choices above.
+- Sweep versus "Debug after the window": `noteMissResult` sweeps entries older than the window, and the WARN
+  fires when no entry exists. An expired entry swept by another key's write makes that symbol's next empty
+  refetch WARN again. The spec follows design.md literally; a longer sweep horizon would be a design change.
+- The migration number `056` is provisional: re-run the merge checklist before unit 7–10 and after every
+  `origin/main-dev` merge; regenerate `scripts/config-wiring-stored.json` each time a config migration arrives.
+- Step 8 is blocked without a Postgres + `migrate` toolchain or the CI `config-wiring-stored` artifact.
+- After the integration deploy: read the key back per environment and re-run the O-1 Loki query (the KEEP
+  evidence is bursty).
