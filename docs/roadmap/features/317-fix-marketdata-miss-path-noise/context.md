@@ -493,3 +493,44 @@ written and status.md is unchanged. The register is in `debate.md` (D-1..D-7, R-
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-marketdata, xstockstrat-portfolio; key reuse patterns:
+  feature 290's cancel-stop closure, `staleCheckDue`'s mutex + `symbol|tf` map).
+- Phase 1 Grilling: 3 rounds (full). Approved by the operator at the design gate. Chosen approach: (A) marketdata
+  `warnUnlessDone` at the cancel-caused WARN sites (D-1); (C) portfolio cancel-quiet (D-2); (B) a GetBars miss-path
+  negative cache on implicit first-page reads, windowed by the seeded key `marketdata`/`bars.miss_backoff_ms`
+  (D-3, D-4, D-5). Rejected: R-1 (interval as the window), R-2 (returning `ctx.Err()` from bracket/balance), R-3
+  (servability cross-check in the gate), R-4 (entry delete on the hit path).
+- Constitution rules touched: C-05, C-07, C-11, C-13, C-15, C-16, C-18, P-02, P-03, P-06, F-07. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- **Operator (2026-11-20, design gate) O-11: option (1) KEEP.** Part (B) is built as designed and AC-2 stays; no
+  acceptance change. The `@AC-2` CHANGE line in design.md references this decision.
+- **O-1 gate result (2026-11-20).** Run by the orchestrator in Grafana Cloud Loki, datasource `grafanacloud-logs`.
+  Query: `sum by (symbol) (count_over_time({service_name="marketdata", deployment_environment="staging"} |= "GetBars: no bars stored and live fetch returned none" [24h]))`.
+  - Defined window (feature 282 reached staging 2026-11-05; 2026-11-06..2026-11-12): 0 hits, while marketdata
+    logged 10k-350k lines/day, so the selector matches.
+  - After the window: the 24h window ending 2026-11-16T00:00Z had NAVI 12, PLAB 12, PLBY 12, EPRT 11, EXR 11 and
+    FICO 11 (>= 10). There were 2177 hits over the last 7 days, then 1-3/day (ADBT).
+  - The operator ruled KEEP on that evidence, knowing the defined window alone reads DROP. O-1 is closed by this
+    record.
+- debate.md: State approved, 3 rounds. No reopen petitions were filed, so none was pending to decline.
+- O-17..O-20 (non-blocking) are adopted into the chosen approach in design.md.
+- No ledger line was written.
+
+### Open Threads
+
+- The KEEP evidence sits outside the gate's defined window and the flood is bursty (1-3/day lately). Re-check the
+  miss-WARN volume in Loki at the dev smoke test after build step 3 ((B)).
+- Accepted herd: concurrent cold first calls can each make one vendor call. State it in the marketdata `CLAUDE.md`
+  GetBars bullet at build step 4 (docs).
+- A window of up to 30 min can delay the first live fetch for a newly populated symbol. The window-expiry positive
+  control at build step 3 covers it; window `0` is the rollback lever.
+- Peers may claim config migration `049`+ or the same key. Run the O-20 overlap scan at `/sdd-spec` and after each
+  main-dev merge before build step 3.
+- Peers may edit `fetchAndCacheBars`. Re-grep at `/sdd-spec` and before build step 3.
+- design.md lines marked *(debate)* are not in recon.md. `/sdd-spec` re-greps each before citing it in a step.
