@@ -500,3 +500,36 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design (approved at the gate)
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-trading, xstockstrat-portfolio; key reuse patterns: caller-held `brokerPoolEntry.userID` + `TargetUserId: order.UserId`; `emitEventAs` with `user_id` in the payload).
+- Phase 1 Grilling: 3 rounds (full). Termination: operator approval at the gate; Floor clear. No register rows were added at approval (D-1 to D-11 and R-1 to R-7 stand; no reopen petition was ever filed, so none is pending).
+- **Operator decisions (binding, recorded 2026-11-20 at the design gate; relayed to this session by the /sdd-batch workflow input). These close O-1, O-2 and O-5 in debate.md.**
+  1. **Audience (O-1, O-5).** Options (b) + (b′) together. Per-account halt and reconciliation alerts are delivered to the owner only, PAIRED with:
+     - (b) a named follow-on `/sdd-story` for an admin cross-user halted-accounts read (or a notify admin-audience field); and
+     - (b′) a Grafana rule on `trading.alert_emit{alert_kind=halt|reconciliation}`. Admins get the account_id from the Loki ERROR line `account halted` until the follow-on ships.
+
+     Option (c) (notify proto audience field now) and option (d) (ship AC-2, hold AC-1) are rejected.
+  2. **Double-push.** Accept both pushes. The halt alert is not suppressed, and feature-294 @AC-4 is unchanged.
+  3. **C-16 sign-off.** Signed off: @AC-1, @AC-2, and the CHANGE that admins lose in-product delivery of these alerts. The CHANGE row reads:
+     - Before: per-account halt/reconciliation CRITICAL alerts are untargeted: Web Push to admins; stream and inbox to every user; admins learn the account_id from them.
+     - After: owner notified but cannot resume; admins (the only resumers, trading.go `ResumeAccountSvc`) get no in-product signal or id until the follow-on, only the Grafana rule + Loki line.
+- Chosen approach: a caller-passed `ownerUserID` sets `TargetUserId` on the trading halt and reconciliation alerts (empty owner → WARN plus untargeted); portfolio `emitRiskAlert` splits the ledger event by kind on `portfolio:risk` via `emitEventAs` with the owner; one Grafana alert rule is added for (b′). No proto, migration or config change.
+- Rejected: R-1 to R-7 (pool-lookup helper, DB fallback, untargeted admin copy, per-user stream key, `order.UserId` secondary owner, narrowed operator question, the "admins lose only Web Push" framing). Operator-declined options: (a) unpaired, (c), (d), halt-alert suppression.
+- Constitution rules touched: P-03, P-05, C-11, C-15, C-16, C-18, C-08, C-14, C-10, C-01, F-04. Floor breaches: none.
+- Scope note for `/sdd-spec`: (b′) adds one rule to `packages/otel/alerts/alert-rules.yaml`, which is outside the two affected services. The merge-order.md prose note for peer 312 (D-11) and the service doc edits (D-9) are spec steps; this session edited only the feature directory and the ledger.
+- Named deferral (D-8): the `reconciliation.mismatch_found` ledger owner stays "" (trading.go:2018).
+- Peer 312 (D-11): no file overlap; either merge order is code-safe. 312 Open Question 2 (312 product-spec.md:94) may narrow `target_user_id IS NULL` visibility for non-admins.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Open the follow-on story with `/sdd-story` (admin cross-user halted-accounts read, or a notify admin-audience field). It has no slug or number yet. Until it ships, admins have no in-product signal or account id for another user's halted account. Target: named in the implementation spec, opened no later than this feature's integration PR.
+- [ ] The (b′) rule depends on the Grafana contact points the existing rules use, and `trading.alert_emit` has no account_id label, so admins need Loki to get the id. Target: the alert-rule step.
+- [ ] Prod Slack/SendGrid fanout configuration is unknown from the repo, so it is not counted as a mitigation. Target: operator check before the integration PR.
+- [ ] The owner gets two CRITICAL pushes per reconciliation finding (accepted by the operator). Target: the trading test step pins that both alerts are targeted.
+- [ ] An account with `user_id=''` is reachable (no empty-caller guard at trading.go:2595). Its halts take the D-2 untargeted path and still broadcast to every user. Target: the empty-owner test in the trading test step; the guard itself is out of scope.
+- [ ] Owner-attributed risk events are re-emitted on every `checkRiskLimits` run with no dedup, and they now appear in owner_only QueryEvents/ExportEvents. Target: the portfolio step (document it in the service CLAUDE.md; no dedup in this fix).
+- [ ] External ledger readers of `portfolio:risk` may depend on concentration arriving as `drawdown_breach`; only in-repo consumers were checked. Target: the docs step and the integration PR description.
+- [ ] Peer 312 may narrow untargeted ListAlerts visibility mid-batch. Target: the merge-order.md note in the docs step.
