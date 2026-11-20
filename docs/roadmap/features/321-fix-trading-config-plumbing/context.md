@@ -58,14 +58,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Open Threads
 
-- [ ] Pre-deploy operator action (timeout_ms 10000 + stale_multiplier 4.0, both environments), recorded with audit timestamps; integration PR draft until then — operator step / integration PR.
+- [ ] Pre-deploy operator action: staging deployments done and recorded 2026-11-20 (production is out, operator ruling). Re-check the stored values just before the integration PR leaves draft — implementation-spec Step 13.
+- [ ] Production first launch: bring `trading` `broker.timeout_ms` to >= 10000 and `order_intent.stale_multiplier` to >= 4.0 before trading goes live there (seeds are 5000 / 3.0) — production launch checklist.
 - [ ] Migration 056 is provisional (feature 317's spec also claims 056); regenerate `scripts/config-wiring-stored.json` after each main-dev merge — U4+U5 and integration PR.
 - [ ] IBKR call chain (40 s) equals S = 40 s with no margin; conid-lookup timeout leaves the order PENDING — known gap, not widened.
 - [ ] Credential poller hardcoded 5 s (`trading.go:2837`); stale stored descriptions (`stale_multiplier`, `broker.timeout_ms`); no DO env-pairing assertion — record as findings in the docs unit.
 - [ ] `&config.Config{}` harnesses move LIVE → PAPER under the new fallback — full-suite run in U4+U5.
 - [ ] 277 halt condition: stop for an operator re-scope if anything pushes toward rewriting stored descriptions or touching `watchcore.go`.
 - [ ] C-16 promotion: 321 `@AC-4` to platform.feature with a "Superseded by @feature-321" comment above 304 `@AC-14` — integration PR.
-- [ ] /sdd-spec must amend product-spec.md and acceptance.feature per design.md § Spec amendments.
+- [x] /sdd-spec must amend product-spec.md and acceptance.feature per design.md § Spec amendments — done 2026-11-20 (/sdd-spec).
+- [ ] impl-spec review to confirm the five spec-time findings in implementation-spec.md § Execution Summary, first of all the deletion of the non-empty-baseline assertion at `scripts/config-wiring.test.mjs:618` — /sdd-review impl-spec.
+- [ ] Before Step 6: record which route regenerates `scripts/config-wiring-stored.json` (local scratch Postgres with `migrate` + `psql`, or the `config-wiring-stored` CI artifact); this host has no `migrate` on PATH — /sdd-execute, unit Steps 6–9.
 
 ## Session 2026-11-20 — pre-deploy operator action (D-13 / D-16 / D-20), staging
 
@@ -79,3 +82,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - Operator (2026-11-20): **leave production out** — production has never been launched, so there is no production config to edit and no live IBKR/Alpaca traffic there. This amends D-13 / D-16 / D-20: the pre-deploy action and its stored-state pass condition apply to the **staging deployments only** (DO staging and homelab staging — both done 2026-11-20, see the previous entry). The integration PR's draft gate is satisfied by the staging record.
 - Carried forward as an Open Thread: when production is first launched, its `trading` config must be brought to `broker.timeout_ms` >= 10000 and `order_intent.stale_multiplier` >= 4.0 before trading goes live there (the seeds are 5000 / 3.0).
+
+## Session 2026-11-20 — sdd-spec
+
+- Tree: `feature/fix-trading-config-plumbing@b5756b2 ≡ origin/feature/fix-trading-config-plumbing` (origin/main-dev merged). Trading, proto and scripts are unchanged since recon's `3da4293d`; every cited line was re-read on this tree.
+- Generated implementation-spec.md with 13 steps. Status → implementation-ready.
+- Amended product-spec.md and acceptance.feature per design.md § Spec amendments (`@AC-1..4` IDs unchanged). product-spec.md gained `## Consumer Surface(s)` (none, internal), `## Config Key Changes` (`trading.broker.paper`, `trading.broker.timeout_ms` — the keys sdd-execute's step-time wiring gate reads), and the staging-only pre-deploy action.
+- Step map (D-18): 1+2 IBKR live timeout (one unit) · 3 AC-2 characterization test · 4, 5 `requires_approval` · 6+7+8+9 `broker.paper` fallback + config migration 056 + wiring gate (one unit) · 10+11 proto comment + stubs (one unit) · 12 docs · 13 operator-only stored-state re-check.
+- Key codebase findings:
+  - **Not in recon or design:** `scripts/config-wiring.test.mjs:618` asserts the committed baseline is non-empty. The `broker.paper` entry is the only finding, so removing it fails `baseline 2 @AC-8`; Step 9 deletes that one assertion. Needs confirming at impl-spec review.
+  - Wiring gate prototyped on a scratch copy of `b5756b2` (reader change + two stored rows + entry removed + line 618 deleted): `--final` exits 0 with no `broker.paper` line and the checker tests pass 75/75. With the entry kept: `STALE: config-wiring.json:broker.paper:read-unseeded`. With a new migration file and no regeneration: `STALE-STORED`.
+  - AC-2 test prototyped on the same copy: passes at HEAD; `maxRetries := 3` → `submissions = 4, want 2`; `retryDelay` 500 ms → `elapsed 502ms, want < 400ms`.
+  - Config migration tail is `055`; no ref carries `056`+; feature 317 also plans `056` (provisional, merge checklist in the spec). `config-heal-dryrun.py` (goto 40/41) and `migration-rerun.py` (computed top) are not affected by a new config migration.
+  - No existing test exercises `environmentIsPaper` / `GetTradingEnvironment`; eleven `&config.Config{}` test harnesses move LIVE → PAPER under the new fallback and none asserts LIVE.
+  - `buf` and `migrate` are not on this host's PATH; `psql`, `docker`, `go` and `golangci-lint` are.
+- Decisions taken at spec time (within the approved design): U1a + U1b are one atomic unit (a scaffold-only commit cannot pass F-05); `callTimeout` lives in `internal/broker/broker.go`; pin rows added for the D-20 stored state (`10000 × 4.0` → S 40 s, B 20 s); the AC-4 trading test is a new file `trading_paper_env_test.go`; migration name `056_trading_broker_paper_per_environment`.
