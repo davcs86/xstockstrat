@@ -356,3 +356,32 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] pgxmock proves the handle and SQL shape, not live SQL semantics — step 1 (accepted limit; dev smoke test).
 - [ ] Peers 322, 311 and 324 may shift line anchors — /sdd-spec (re-grep every anchor).
 - [ ] Dangling `extractor_module` labels stay visible until a separate defect fixes them — step 5 (ingest findings `:24` annotation; accepted).
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status: design-approved → implementation-ready.
+- Tree: `origin/feature/fix-orphaned-code` @ `d97bb9c4` (detached). Every recon anchor was re-grepped at this stamp; all still resolve (peers 322, 311 and 324 have not shifted them).
+- Operator decision carried in (2026-11-20, design gate): identity scope is option (b), four leaves; O-1 closed. Step 4's Files list holds `services/xstockstrat-identity/package.json` and nothing else from identity.
+- Step numbering differs from design.md: design steps 1–7 map to spec Steps 1+2, 3, 4, 5, 6, 7, 8, and the design's final AC-2 verification is Step 9. The step references in the Open Threads above use design numbering.
+- Step shape: Steps 1+2 (portfolio swap + pgxmock tests) are one atomic unit (`**Lands with**`), because the service step's Verification runs the tests the test step adds and they are RED without the swap. Steps 3–7 are pure deletions that each pass their own gate alone; their paired `test` step is Step 9 (declared in `## Step Dependencies`), with the presence-check RED captured pre-edit inside each step. Step 8 (ui) is comment-only and relies on the existing `offline-pnl.spec.ts`.
+- Scenario coverage (C-15): @AC-1 → Step 2; @AC-2 → Step 9; @AC-3 → Step 9 (gate also runs in Step 7).
+- Key codebase findings:
+  - Portfolio: `r.pool` call sites are still `portfolio_repo.go:217,241,341`; `Pool()` at `:55-57` keeps `r.pool`. `CountPositions` has zero non-test callers (portfolio findings `:37`); D-1 settles a swap, so the method is swapped, not deleted.
+  - Existing repository tests construct `&PortfolioRepo{db: mock}` (`portfolio_repo_test.go:56`); the new tests use `NewPortfolioRepoWithDB(mock)` because @AC-1's Given names it.
+  - Root lock anchors: importers config `:46`, identity `:149`, ledger `:264`, notify `:373`; `node-pg-migrate@7.9.1` at `packages:` `:5209` and `snapshots:` `:11194`. `pnpm why -r node-pg-migrate` (run at the stamp, pnpm 9.15.9) lists exactly the four leaves; `pnpm why -r bcrypt jsonwebtoken` lists identity and notify.
+  - CI installs the Node leaves with `--no-frozen-lockfile` at `.github/workflows/ci.yml:522,653,806` (recon cited older lines), so Step 4's local frozen install and compose build stay required evidence (D-12).
+  - `fundsignal_loop.py:623` is in `services/xstockstrat-analysis/app/engine/`, not ingest. Unchanged either way (R-3).
+  - `scripts/check-watcher-copies.sh:24-26` lists only the ledger, identity and notify watchers, so deleting config's copy does not affect it.
+- Spec-time additions beyond recon.md (surfaced here, not silently folded in — P-03): three findings rows that recon did not list are in scope under recon's own teardown rule (recon.md:154) — portfolio findings `:36` (resolve) and `:37` (narrow) in Step 1, and ui findings `:30` in Step 8, which calls the combined branch "effectively unreachable" and is disproved by `AccountContext.tsx:43-48` and `offline-pnl.spec.ts`.
+- merge-order.md: Step 4 adds a non-blocking prose note for 323 ↔ 324 in the `:355-363` form (300 ↔ 304 precedent), not a table row, because there is no hard ordering — the later-merged feature regenerates the root lock (D-9, R-5).
+- No ledger line: no new cross-feature pattern or trap surfaced; the spec applies insights.md:2935-2957 and fails.md:2386-2390 as written.
+
+## Open Threads
+
+- [ ] Step 4 needs Docker for `docker compose build` of the four leaves; if it is unavailable where /sdd-execute runs, the step blocks rather than skipping the gate (D-12).
+- [ ] Step 4's lock diff is expected to be removal-only; any added line or removal outside the `pnpm why`-confirmed closure is drift and stops the step (D-7).
+- [ ] Step 4 lists eleven files (above the five-file advisory) because design.md fixes one lock regeneration and same-step doc teardown; expect an advisory warning at `/sdd-review impl-spec`.
+- [ ] The three spec-time findings-row additions (portfolio `:36,37`, ui `:30`) go beyond design.md's per-step doc list; confirm or strike them at `/sdd-review impl-spec`.
+- [ ] `CountPositions` stays as dead code with an open findings row (`:37`, narrowed) — not in the report's ten items; a separate defect owns its deletion.
+- [ ] Peers 322, 311 and 324 may still shift anchors before execution — /sdd-execute re-greps in Phase 1.
+- [ ] Post-merge: affected services smoke-tested on dev (product-spec Acceptance Criteria); not a step.
