@@ -2381,3 +2381,237 @@ Written by the orchestrating session itself.
   Operator selected: "Reopen D-40, add tombstone (Recommended)". Effect: after a successful `ListOrders` that does not
   show a candidate open, insert a closed-out `trading.bracket_legs` row for it (no emit, `observed_filled_qty = 0`),
   so each candidate is evaluated once. A failed `ListOrders` still inserts nothing (R-10).
+
+## Session 2026-11-20 — sdd-batch design gate (round 10)
+
+- `/sdd-design fix-position-fold-correctness` (full) halted at its approval gate after round 10 (gate policy: halt). design.md NOT written; status.md unchanged (spec-ready). Register: `debate.md` (D-1..D-48, R-1..R-36, O-1..O-66, P-1..P-8). Round 10 settled D-48, locked R-35 and R-36, closed O-63, opened O-65 (blocking) and O-66, and reopened D-40 on the operator steer (`context.md:2372-2383`). No petition was filed; P-4..P-8 still carry "pending user" in the register (O-56).
+
+## Open Threads
+
+- **Approach (round-10 synthesis).** The round-9 synthesis stands as written (D-1..D-3, D-5..D-16, D-18..D-28, D-31..D-39, D-41..D-47). Round 10 changes only the D-40 adoption classifier, under the operator's REOPEN D-40.
+  - **Tombstone row (D-48).** After a successful `Broker.ListOrders`, a candidate listed in a terminal state gets a `trading.bracket_legs` row with `status = 'NOT_OPEN_AT_ADOPTION'`, `filled_qty = 0`, `observed_filled_qty = 0` and `adopted = true`. Symbol and side come from the read-only parent join (D-41). There is no ledger emit and no `GetOrder` call, and the insert is `ON CONFLICT DO NOTHING`.
+  - **Retired everywhere.** `NOT_OPEN_AT_ADOPTION` counts as retired in the D-46 tracked-account set, the D-11 observation set and the `GetOrder` fallback. An account with only retired rows and no candidates gets no `ListOrders` call.
+  - **Unchanged cases.** A candidate listed open at fill 0 is inserted as tracked; one listed open at fill > 0 is inserted `BASELINE_RETIRED`. A failed `ListOrders` inserts nothing (R-10).
+  - **Insert failure.** A failed tombstone INSERT is one WARN for the tick. The candidate is retried next tick and tracked-leg observation in that tick is unaffected.
+  - **Reconciliation.** A tombstone adds 0 to `NetFilledQtyBySymbol` (D-37). Its leg id stays known through the D-20 `bracket_legs` branch, including after `resizeBracket` blanks the `order_brackets` leg ids (`trading.go:3612`).
+  - **Absent candidates (not settled).** The synthesis carries the adversary's complete-list gate: absence tombstones a candidate only when the list is non-empty, and under the 500-row cap for Alpaca. Otherwise nothing is inserted and the candidate is retried next tick. D-48 deliberately leaves this condition out.
+  - **Tests added (trading).** Listed-terminal tombstone; absent from a 499-row Alpaca list; exactly 500 Alpaca rows without the candidate (no insert); empty IBKR 200 (no insert); `ListOrders` error; tombstone INSERT error; a mixed account with exactly one `ListOrders`; repo dbtests for `NetFilledQtyBySymbol` and `KnownBrokerOrderIDs`. The listed-open tests are kept unchanged.
+- **Strongest open objection.** O-65, blocking: absence from an empty or truncated `ListOrders` must not tombstone a candidate.
+  - **Evidence.** IBKR `ListOrders` returns an empty slice with a nil error on any 200 with no orders (`ibkr.go:448-482`), so one empty response would permanently tombstone every candidate on the account. Alpaca's list is capped at 500 rows with no paging (`alpaca.go:373-376`).
+  - **What the proposer owes.** Confirm the complete-list gate with the empty-IBKR, 500-row and 499-row tests, or give a better gate. The proposer has not answered yet.
+  - **IBKR residual.** An idle IBKR account legitimately returns an empty list, so under the gate it never tombstones and keeps its per-tick `ListOrders` call. That is the cost the operator reopened D-40 to remove. The gate also narrows the operator's "evaluated once" (`context.md:2381-2383`); if the proposer cannot bound this case, the reading goes to the operator.
+- **Floor status.** No Floor breach. The design is not approvable this round: O-65 is open and blocking, and the adversary rates the round NEEDS WORK.
+- **Uncovered @AC changes.** None. `@AC-5` CHANGE is covered by the operator's C-16 sign-off. 251 @AC-17, 206 trading @AC-1 and 294 @AC-56 are EXTEND, each covered by a recorded ruling. @AC-1..@AC-4, 251 @AC-14, 206 trading @AC-2 and @AC-3, 294 @AC-6 and 290 @AC-3 are PRESERVE; 206 trading @AC-3 is new to the list this round.
+- **Operator sign-offs still needed.**
+  - **O-65 reading,** only if the proposer cannot bound the idle-IBKR case: whether "evaluated once" may be narrowed by the complete-list gate.
+  - **Cutover confirmations (O-61),** to be answered before `/sdd-execute` reaches the integration step; the list is unchanged from the round-8 entry.
+  - **Register verdicts (O-56).** P-5, P-6 and P-7 recorded as "user reopened" citing `context.md:1535-1541`, P-4 as withdrawn, and now P-8 as "user reopened" citing `context.md:2372-2383`.
+- **Non-blocking, for the proposer and `/sdd-spec`.**
+  - **O-66.** Proposer to confirm the items adopted from adversary r10: one INFO log per tombstone (`reason`, `account_id`, `leg_order_id`, bracket `order_id`); the runbook redelivery path (delete the `bracket_legs` row); one Go constant for the retired-status set, read by the fakes (C-18); the corrected `KnownBrokerOrderIDs` statement with a resize-blanked tombstone test. `/sdd-spec` states the candidate anti-join's scan cost against the 005 indexes, and the `012` DDL comment gives the `adopted` column's single purpose.
+  - **O-64, extended.** The fakes also need the tombstone insert and the retired-status filter.
+  - **O-30.** The analysis AC ids are still to be enumerated, and the D-10 flip-short window residual stays named.
+- **New named residuals.**
+  - An Alpaca account that always returns 500 rows keeps the per-tick call for candidates outside the list.
+  - A genuinely open leg that is absent from a complete list on its evaluation tick is tombstoned for good; its exit fill never reaches the ledger, the fold or reconciliation.
+  - A tombstone is undone only by a manual delete of its `bracket_legs` row.
+
+```sdd-batch-design-state
+{
+  "round": 10,
+  "synth": {
+    "approach": "Round-10 synthesis. The round-9 synthesis stands as written (D-1..D-3, D-5..D-16, D-18..D-28, D-31..D-39, D-41..D-47, build order, cutover, production check-only). The only change is the D-40 adoption classifier, amended under the operator's REOPEN D-40. All paths are under `/home/user/xstockstrat/.claude/worktrees/orch-311`.\n\nVerified this round\n- The operator ruling is recorded verbatim at `docs/roadmap/features/311-fix-position-fold-correctness/context.md:2372-2383` (\"Reopen D-40, add tombstone (Recommended)\").\n- `IBKRClient.ListOrders` returns an empty slice with a nil error on any 200 whose `orders` array is empty or missing (`services/xstockstrat-trading/internal/broker/ibkr.go:448-482`).\n- Alpaca `ListOrders` is `status=all&limit=500` with no paging (`services/xstockstrat-trading/internal/broker/alpaca.go:373-376`).\n- `KnownBrokerOrderIDs` already unions both `order_brackets` leg-id columns (`services/xstockstrat-trading/internal/repository/trading_repo.go:135-150`).\n\n1. AMENDED ADOPTION CLASSIFIER (inside `pollBracketLegFills`, after a successful `Broker.ListOrders` for the account; candidates as in D-40)\n- Listed and open (D-19 non-terminal predicate) at fill 0: unchanged. Insert tracked, `adopted = true`, `filled_qty = 0`.\n- Listed and open at fill > 0: unchanged. Insert `BASELINE_RETIRED`, no emit, `observed_filled_qty = FilledQty`.\n- Listed in a terminal state: insert a tombstone on any successful list.\n- Absent from the list: insert a tombstone only when the list is complete evidence. Complete means non-empty and shorter than the 500 cap for Alpaca, and non-empty for IBKR. Otherwise nothing is inserted and the candidate is retried next tick (the D-46 retry). This gate is adopted from adversary r10 and is not yet confirmed by the proposer; see the blocking objection.\n- `ListOrders` failed: nothing is inserted (R-10).\n- Tombstone INSERT failed: one WARN for the tick, the candidate is retried next tick, and tracked-leg observation in the same tick is unaffected.\n\n2. THE TOMBSTONE ROW\n- `status = 'NOT_OPEN_AT_ADOPTION'`, a new retired status next to `BASELINE_RETIRED` and `UNKNOWN`.\n- `filled_qty = 0`, `observed_filled_qty = 0`, `adopted = true`.\n- Symbol and side come from the read-only parent `trading.orders` join (D-41).\n- No ledger emit and no `GetOrder` call.\n- `INSERT ... ON CONFLICT (account_id, leg_order_id) DO NOTHING`.\n- Every non-retired predicate counts it as retired: the D-46 tracked-account set, the D-11 observation set and the D-11 `GetOrder` fallback. An account whose only rows are retired and that has no candidates gets no `ListOrders` call.\n- If 012 declares a status CHECK or list, it gains the new value. 012 stays DDL only (D-39).\n\n3. EFFECT ON RECONCILIATION\n- `NetFilledQtyBySymbol` (D-37): a tombstone adds 0 to the `observed_filled_qty` sum, so the result is the same with or without the row.\n- `KnownBrokerOrderIDs` (D-20): at insert time the tombstone's id is already in the `order_brackets` union, so the set is unchanged. After `resizeBracket` blanks the `order_brackets` leg ids (`services/xstockstrat-trading/internal/service/trading.go:3612`), the id survives only through the D-20 `bracket_legs` branch and stays known. That is the intended D-20 effect. The proposal's \"set is unchanged\" holds only at insert time.\n\n4. ADOPTED FROM ADVERSARY r10, awaiting proposer confirmation (non-blocking)\n- One INFO log per tombstone with `reason=listed_terminal|absent`, `account_id`, `leg_order_id` and the bracket `order_id`.\n- The runbook names the redelivery path: delete the `bracket_legs` row and the next tick re-evaluates the leg.\n- The retired-status set is one Go constant bound into every SQL predicate; the fakes read the same constant (C-18).\n\nTESTS (trading, this round)\n1. Candidate listed FILLED or CANCELED: one row with `NOT_OPEN_AT_ADOPTION`, both quantities 0, `adopted = true`; no ledger append, no `GetOrder`; next tick the account gets zero `ListOrders` calls and the candidate query returns nothing for it.\n2. Candidate absent from a complete list (Alpaca 499 rows): tombstone, same assertions.\n3. Alpaca list of exactly 500 rows without the candidate: no insert; listed again next tick.\n4. Empty IBKR 200: no insert; listed again next tick.\n5. `ListOrders` error: no insert; the candidate is still present next tick and `ListOrders` is called again.\n6. Tombstone INSERT error: one WARN, retry next tick, tracked legs still observed.\n7. Mixed account (one tracked leg, one tombstone, one new open candidate): exactly one `ListOrders`; the tombstone never enters the `GetOrder` fallback.\n8. Repo dbtest, `NetFilledQtyBySymbol`: an orders row plus a tombstone on the same symbol equals the orders row alone.\n9. Repo dbtest, `KnownBrokerOrderIDs`: same set with and without a tombstone for an id still in `order_brackets`; a resize-blanked tombstoned leg stays known.\n10. The listed-open fill-0 and fill>0 tests are kept unchanged.\n\nSPEC FILES (extends O-64): the `fakeBroker` `listOrdersFn` and call counter and the `fakeBracketRepo` candidate query also need the tombstone insert and the retired-status filter.\n\nNAMED RESIDUALS\n- An IBKR account whose gateway returns an empty order list keeps its candidates and its per-tick `ListOrders` call. An idle IBKR account with old ACTIVE brackets may sit in this state indefinitely, so the cost bound the operator asked for is not reached there.\n- An Alpaca account that always returns 500 rows keeps the per-tick call for candidates outside the list.\n- A genuinely open leg that is absent from a complete list on its evaluation tick is tombstoned for good. Its exit fill never reaches the ledger, the fold or reconciliation (the D-42 gap made final).",
+    "open_objections": [
+      {
+        "text": "Absence from an empty or truncated ListOrders must not tombstone a candidate (adversary r10; D-26's rationale and R-10's reason). IBKR ListOrders returns an empty slice with nil error on any 200 with no orders (ibkr.go:448-482), so one gateway blip would permanently tombstone every candidate on the account; Alpaca's list is capped at 500 (alpaca.go:376). The synthesis adopts the complete-list gate (terminal-listed tombstones on any successful list; absence tombstones only when the list is non-empty, and under 500 rows for Alpaca) with the three tests. The proposer has not answered. The proposer must confirm the gate or give a better one, and must address the IBKR residual: an idle IBKR account that legitimately returns an empty list never tombstones, so its per-tick call continues. The gate narrows the operator's words 'evaluated exactly once' (context.md:2381-2383); if the proposer cannot bound the IBKR case, that reading goes to the operator.",
+        "blocking": true
+      },
+      {
+        "text": "Proposer to confirm the items adopted from adversary r10: one INFO log per tombstone with reason, account_id, leg_order_id and bracket order_id; the runbook delete-the-row redelivery path; one Go constant for the retired-status set bound into every predicate and read by the fakes (C-18); the corrected KnownBrokerOrderIDs statement with the resize-blanked tombstone test. /sdd-spec must also state the candidate anti-join's scan cost against the 005 indexes (005_broker_accounts_halted.up.sql:29-31), not only the returned row count, and the 012 DDL comment must give the adopted column's single purpose (carried from O-63).",
+        "blocking": false
+      },
+      {
+        "text": "O-64 (test scaffolding), extended: the spec's Files list must include the fakeBroker listOrdersFn and call counter, the fakeBracketRepo candidate query with the tombstone insert and retired-status filter, and every existing test that holds an ACTIVE bracket with leg ids (e.g. TestPollFills_PartialFillResizesActiveBracket, trading_bracket_test.go:416).",
+        "blocking": false
+      },
+      {
+        "text": "O-61: operator-confirmation gate item, recorded in context.md and answered before /sdd-execute reaches the integration step (DO spec with portfolio removed versus the PRIVATE_DOMAIN references; doctl spec round-trip of secrets; homelab stop method; gate deploy exit code on rollback; trading's failed portfolio calls on paper staging; Alpaca listing bracket legs as top-level orders). It also carries the question to ask if a production count is non-zero.",
+        "blocking": false
+      },
+      {
+        "text": "O-30: the analysis AC ids in order-snapshots-pnl-patterns.feature and fix-python-loop-supervision.feature are still to be enumerated at /sdd-spec, and the D-10 flip-short window residual stays named.",
+        "blocking": false
+      },
+      {
+        "text": "O-56: the orchestrator still has to record P-5, P-6 and P-7 as 'user reopened' citing context.md:1535-1541, P-4 as withdrawn, and now P-8 as 'user reopened' citing context.md:2372-2383.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "251 @AC-17",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "251 @AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "206 trading @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "206 trading @AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "206 trading @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-56",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "294 @AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "290 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Reusing the UNKNOWN status for the tombstone. Lost: UNKNOWN means the 3-tick Alpaca 404 retirement (D-26), and mixing the two would muddle triage. The adversary did not contest. Locked this round.",
+      "A listed-terminal tombstone that records the listed FilledQty as observed_filled_qty. Lost: it contradicts the operator ruling's observed_filled_qty = 0 (context.md:2382) and changes the reconciliation sums. Locked this round.",
+      "Tombstone on absence from any successful list, whatever its completeness (proposal r10). Not chosen in this synthesis: an empty IBKR 200 or a full 500-row Alpaca list would permanently tombstone open legs. Not locked; it is the subject of the blocking objection.",
+      "Tombstone only on a listed terminal status, never on absence (adversary r10, self-rejected). Lost: candidates missing from the list keep the per-tick call, and it is narrower than the ruling's 'does not show open'. Not locked; it may return if the IBKR empty-list case cannot be bounded.",
+      "Tombstone on absence across N consecutive successful lists (adversary r10, self-rejected). Lost: it still fails on a truncated Alpaca list and needs a counter column. Not locked; only one side weighed it.",
+      "A partial index in 012 for the candidate query. Not chosen: the tombstone shrinks the returned set through the existing anti-join. Not locked; /sdd-spec states the scan cost first."
+    ],
+    "open_risks": [
+      "New: an IBKR account that returns an empty order list never tombstones its candidates, so its per-tick ListOrders call continues; this may be the normal state of an idle IBKR account.",
+      "New: an Alpaca account that always returns 500 rows keeps the per-tick call for candidates outside the list.",
+      "New: a genuinely open leg absent from a complete list on its evaluation tick is tombstoned permanently; its exit fill never reaches the ledger, the fold or reconciliation.",
+      "New: a tombstone is undone only by a manual delete of its bracket_legs row.",
+      "The candidate anti-join still scans every ACTIVE or CANCELING order_brackets row each tick; only the returned set shrinks (005:29-31).",
+      "Existing trading tests that hold an ACTIVE bracket with leg ids panic on fakeBroker.ListOrders until the fakes are extended.",
+      "If a production count is non-zero, the promotion stops with no designed procedure; it waits on an operator ruling.",
+      "The DO stop is unverified: .do/app.dev.yaml:78 and :319 reference ${xstockstrat-portfolio.PRIVATE_DOMAIN}, so a spec with the portfolio service removed may be rejected.",
+      "The merge precondition and the main-dev freeze are not enforced; an overlap double-applies fills and only the recorded evidence shows it.",
+      "On the homelab VM an unattended rollback of the integration deploy restores the pre-019 portfolio after the floor is stamped; noticing it depends on gate deploy exiting non-zero, which is unconfirmed.",
+      "Fills appended between T_stop and the first new boot are acked: qty heals at the next sync, realized P&L for them is lost.",
+      "While portfolio is stopped on staging, trading's portfolio calls fail: the risk check warns only, reconciliation skips, and flattenAndHalt cannot flatten.",
+      "Adoption depends on Alpaca listing bracket legs as top-level orders in every open state; this is unverified.",
+      "Reconciliation covers only tracked legs; the D-42 forward-only gap stays uncounted.",
+      "A BASELINE_RETIRED leg's post-cutover remainder is neither emitted nor observed.",
+      "Adopted IBKR legs that later vanish from the gateway are polled indefinitely (D-26).",
+      "Late-commit appends whose recorded_at is below the floor are acked (operator-accepted).",
+      "The floor assumes ledger and portfolio share one Postgres server clock.",
+      "With the composite GetPnL key, a historical order whose partial and full fills carried different account_id values stops being deduplicated; the /sdd-spec history grep is the only check.",
+      "A parked fill is retried only after a manual delete of its parked row.",
+      "A fill transaction can wait server-side on the applied-row conflict or FOR UPDATE, holding 1 of 2 client connections and positionsMu.",
+      "The pre-check has a TOCTOU window covered only by the in-tx INSERT conflict path.",
+      "A position.updated can be emitted after a same-process sync has overwritten the row.",
+      "Boot replay re-walks every post-floor fill and consumer_applied_events has no retention.",
+      "A leg id is lost from tracking if the ActivateBracket tx fails; it is alerted, but its exit fill never folds.",
+      "Neither broker adapter populates BrokerOrder.Fees, so fee totals understate.",
+      "Migration numbers 019 and 012 may collide with feature 318.",
+      "OQ-2 (repair of already-inflated accumulators) is out of scope, and instance_count must stay 1."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-01",
+      "F-02",
+      "F-04",
+      "F-06",
+      "F-07",
+      "F-08",
+      "P-02",
+      "P-03",
+      "P-04",
+      "PLAT-N1"
+    ],
+    "rationale": "The design is not approvable this round: one blocking objection is open. The adversary rates it NEEDS WORK, with no Floor breach.\n\n**What is settled.** The tombstone itself is agreed by both sides and matches the operator's ruling (context.md:2372-2383): status `NOT_OPEN_AT_ADOPTION`, both quantities 0, no emit, no `GetOrder`, counted as retired everywhere, nothing inserted on a failed `ListOrders`. A candidate listed in a terminal state is tombstoned on any successful list. I recorded that as the new decision and left the absence condition out of it.\n\n**The blocking objection.** The proposal tombstones a candidate that is merely absent from any successful list. I checked the code: IBKR `ListOrders` returns an empty slice with a nil error on any 200 with no orders (ibkr.go:448-482), and Alpaca's list is capped at 500 (alpaca.go:376). One empty IBKR response would permanently tombstone every candidate on the account. That is the failure R-10 was locked to prevent, although R-10's letter covers tracked legs only.\n\nI put the adversary's complete-list gate into the approach because it is the reversible choice: a candidate left alone is retried, a tombstone is permanent. The proposer has not answered it, so the objection stays open and blocking.\n\n**One thing the adversary understated.** An idle IBKR account legitimately returns an empty list. Under the gate such an account never tombstones, so its per-tick call continues. That is the cost the operator reopened D-40 to remove, and it may be the common IBKR case, not \"a few accounts\". The gate also narrows the operator's \"evaluated exactly once\". The proposer must bound this case or the reading goes to the operator.\n\n**Register note on D-26.** The adversary called the proposal in tension with D-26. D-26's text is about `GetOrder` responses, so I treat this as a conflict with its rationale, not a register violation.\n\n**Other adversary items (non-blocking).** I adopted the INFO log, the runbook delete path, the single retired-status constant and the corrected `KnownBrokerOrderIDs` statement, all pending proposer confirmation. The scan-cost statement goes to /sdd-spec.\n\n**Housekeeping.** O-63 is closed: the cost fix it waited on is now decided, and its leftovers move to the new confirm objection. O-64, O-61, O-30 and O-56 stay open and non-blocking. D-40 is reopened by the operator steer. No other settled D-n is contradicted and no locked R-n returns. Business rules are unchanged; I added 206 trading @AC-3 as PRESERVE because the adversary checked it.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "D-40 amended under the operator's reopen, superseding its 'anything else is not inserted' clause: after a successful ListOrders, a candidate listed in a terminal state gets a tombstone row in trading.bracket_legs with status NOT_OPEN_AT_ADOPTION, filled_qty = 0, observed_filled_qty = 0, adopted = true, symbol and side from the read-only parent join, no ledger emit, no GetOrder call, INSERT ON CONFLICT DO NOTHING. NOT_OPEN_AT_ADOPTION is a retired status in every non-retired predicate (the D-46 tracked-account set, the D-11 observation set and the GetOrder fallback). A failed ListOrders inserts nothing. A failed tombstone INSERT is one WARN per tick with a retry next tick and does not affect tracked-leg observation. A tombstone adds 0 to NetFilledQtyBySymbol and keeps its leg id known through the D-20 branch. When absence from the list tombstones a candidate is not part of this decision. All other D-40 clauses stand.",
+          "evidence": "context.md:2372-2383 (operator: 'Reopen D-40, add tombstone (Recommended)'); operator steer r10; P-8; trading_repo.go:135-150,171-186; trading.go:3612; D-37; D-20; D-39; D-41; R-10; proposal r10; adversary r10 contested only absence from an empty or truncated list"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Reusing the UNKNOWN status for the adoption tombstone",
+          "why": "UNKNOWN means the 3-consecutive-tick Alpaca 404 retirement (D-26); one status for both would muddle triage. Proposal r10 rejected it and adversary r10 did not contest."
+        },
+        {
+          "text": "A listed-terminal tombstone that records the listed FilledQty as observed_filled_qty",
+          "why": "It contradicts the operator ruling's observed_filled_qty = 0 (context.md:2382) and changes the reconciliation sums. Adversary r10 raised it only as an out-of-bounds alternative."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Absence from an empty or truncated ListOrders must not tombstone a candidate: IBKR ListOrders returns an empty slice with nil error on any 200 with no orders (ibkr.go:448-482) and Alpaca's list is capped at 500 (alpaca.go:376). The proposer must confirm the complete-list gate (terminal-listed tombstones on any successful list; absence tombstones only when the list is non-empty, and under 500 rows for Alpaca) with the empty-IBKR, 500-row and 499-row tests, or give a better gate, and must bound the case of an idle IBKR account that legitimately returns an empty list and so never tombstones. The gate narrows the operator's 'evaluated exactly once' (context.md:2381-2383); if the IBKR case cannot be bounded, the reading goes to the operator.",
+          "blocking": true
+        },
+        {
+          "text": "Proposer to confirm the items adopted from adversary r10: one INFO log per tombstone with reason, account_id, leg_order_id and bracket order_id; the runbook delete-the-row redelivery path; one Go constant for the retired-status set bound into every predicate and read by the fakes; the corrected KnownBrokerOrderIDs statement with a resize-blanked tombstone test. /sdd-spec states the candidate anti-join's scan cost against the 005 indexes (005_broker_accounts_halted.up.sql:29-31), the 012 DDL comment gives the adopted column's single purpose, and the O-64 fakes gain the tombstone insert and retired-status filter.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-63",
+          "how": "The operator granted REOPEN D-40 and the tombstone removes evaluated candidates from the per-tick set. The scan-cost statement and the adopted-column DDL comment are tracked under the new confirm objection; the accounts that still keep the per-tick call are tracked under the new blocking objection."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": [
+        "D-40"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
