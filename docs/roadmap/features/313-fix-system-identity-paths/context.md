@@ -1017,3 +1017,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Marketdata's handling of a headerless `system` bars read is unverified; it sits inside `_compose`'s `try`, so the event degrades either way. Target: step 2.
 - [ ] The ledger, analysis and peer-328 citations were not re-checked in round 5. Target: `/sdd-spec`.
 - Next: `/sdd-spec fix-system-identity-paths`.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 7 steps. Status: design-approved → implementation-ready.
+- Steps: 1 docs (acceptance.feature rewordings + `@AC-3`, FR-1 to FR-3, Consumer Surface, register cells); 2-3 analysis `is_real_owner` + AC-2; 4-5 ingest `AppendEventRequest.user_id` + AC-1; 6-7 ingest per-cycle `trace_id` + AC-3, one atomic unit (`Lands with`).
+- Key codebase findings:
+  - Evidence tree is the feature branch (`8c12eacf`, code base `c4fd48b0a`). Against `origin/main-dev@fb52065c` only ingest `app/handlers/servicer.py` moved: `_ingest_external_signal` `:1015` → `:1237`, the `ingest.signal.ingested` emit `:1174-1182` → `:1396-1404`. `mcp_client_loop.py`, `test_mcp_client_loop.py`, `test_signal_ownership.py`, analysis `identity.py`, `pnl_pattern_consumer.py`, `test_pnl_pattern_consumer.py` and `test_identity.py` are identical on both trees.
+  - The ledger citations hold on both trees: owner precedence `ledgerServiceImpl.ts:76-78`, `req.correlationId` persisted at `:89`, `AppendEventRequest.user_id = 9` at `ledger.proto:51`, `correlation_id = 3` at `:41`.
+  - Peers 308, 309, 327 and 328 carry no diff against `origin/main-dev` under either service directory yet, so there is nothing to re-ground against. 328's planned `mcp_client_loop.py:134-140` edit is still a future textual-conflict risk near Step 6's `:156-160`.
+  - `_ingest_external_signal` has two callers (`IngestSignal`, `poll_one_source`). The only site that mirrors its signature is the test spy at `tests/test_mcp_client_loop.py:196-197`; that is why Steps 6+7 are one unit.
+  - `mcp_client_loop.py` has no `import uuid`; Step 6 adds it.
+  - `owner_metadata` has 9 call sites besides `_compose`; none changes, because its signature, raise and message are untouched.
+- Assumptions made by this spec (to confirm at `/sdd-review impl-spec`):
+  - The acceptance.feature and product-spec.md edits are specced as Step 1 (design build order D-16), not written by `/sdd-spec` itself. `@AC-3` therefore does not exist in acceptance.feature until Step 1 runs.
+  - The AC-1 Thens in Step 1 ("the ingest.signal.ingested AppendEvent request carries user_id "user-a"" and "no x-user-id call metadata is sent with it") are this spec's wording of the signed-off shape; the register holds no verbatim text for them. The AC-2 first Then is the operator's wording verbatim.
+  - The AC-1 and AC-3 tests drive `run_one_cycle`, which calls `poll_one_source`, with the real core (the harness at `tests/test_mcp_client_loop.py:173-212`).
+  - The untraced RPC-path assertion lives inside the AC-1 test function, importing `_fresh_ingest_svc` and `_signal_req` from `tests/test_signal_ownership.py`.
+  - The `_compose` log text at `pnl_pattern_consumer.py:547` ("has no owner") is left unchanged for a `system` owner.
+- Proposed, not specced: the open finding at `services/xstockstrat-ingest/docs/context-constitution-findings.md:38` and the event row at `services/xstockstrat-ingest/CLAUDE.md:146` go stale once Steps 4 and 6 land. Neither is in the design's scope.
+- No ledger line: nothing surfaced that is not already in recon.md or the ledger.
+- Tooling note: each commit's pre-commit hook printed `can't open file .../scripts/check-duplication.py` (the script is absent on this branch's base `c4fd48b0a`). The commits went through; `--no-verify` was not used.
+
+## Open Threads
+
+- [ ] Confirm the AC-1 Then wording in Step 1 (spec-authored under the operator's C-16 sign-off). Target: `/sdd-review impl-spec`.
+- [ ] Decide whether the ingest findings row (`:38`) and the CLAUDE.md event row (`:146`) get a docs step. Target: `/sdd-review impl-spec`.
+- [ ] Peer 328's planned edit near `mcp_client_loop.py:134-140`. Target: Step 6 (re-check before editing).
+- [ ] The `**kw` spy accepts any keyword; Step 7's `correlation_id` assertion is the guard. Target: Step 7.
+- [ ] Append-only metadata; Step 6's docstring constraint is the only guard. Target: Step 6.
+- Next: `/sdd-review fix-system-identity-paths impl-spec`, then `/sdd-execute fix-system-identity-paths`.
