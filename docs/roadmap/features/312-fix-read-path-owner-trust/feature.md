@@ -16,6 +16,7 @@
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 3 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 20 steps |
 
 ---
 
@@ -26,8 +27,22 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
 - [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-read-path-owner-trust`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+_(Snapshot from docs/runbooks/reviewer-registry.md, finalized at /sdd-spec time — re-run /sdd-spec
+if the registry changes.)_
+
+| Role | Review Focus |
+|---|---|
+| `xstockstrat-trading` owner | Order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement |
+| `xstockstrat-portfolio` owner | P&L calculation accuracy, position snapshot consistency, concurrent write safety |
+| `xstockstrat-notify` owner | Stream delivery guarantees, backpressure handling, alert deduplication |
+| Proto Reviewer | Field number uniqueness per message, no breaking changes without deprecation comment, `buf lint` passes, `buf breaking` passes against dev trunk |
 
 ---
 
@@ -40,4 +55,4 @@ can produce.
 
 ## Next Action
 
-`/sdd-spec fix-read-path-owner-trust` — generate implementation spec from the approved design
+`/sdd-review fix-read-path-owner-trust impl-spec` — validate implementation spec, then `/sdd-execute fix-read-path-owner-trust`
