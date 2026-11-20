@@ -35,7 +35,9 @@ identity edit is `services/xstockstrat-identity/package.json` only (D-13, F-08).
   them: `services/xstockstrat-portfolio/docs/context-constitution-findings.md:36,37` (Step 1) and
   `services/xstockstrat-ui/docs/context-constitution-findings.md:30` (Step 8). They are included
   under recon's own rule that a findings row goes in the step that changes its subject
-  (recon.md:154).
+  (recon.md:154). Row numbers and contents were re-read at `/sdd-review impl-spec` (2026-11-20) and
+  match: portfolio `:36` is the `r.pool` → `r.db` half-migration row, `:37` the `CountPositions`
+  row, ui `:30` the `PortfolioPanel.tsx` combined fall-through row.
 - `PortfolioRepo.CountPositions` has zero non-test callers (portfolio findings `:37`). D-1 settles
   a handle swap for all three methods, so Step 1 swaps it and narrows the row; deleting the method is
   not in the report's ten items and is not done here.
@@ -73,6 +75,16 @@ identity edit is `services/xstockstrat-identity/package.json` only (D-13, F-08).
   regeneration protocol; if 323 merges first, 324 does the same (D-9, R-5).
 - Peers 322 (`configWatcher.ts`, `alpaca/client.go`) and 311 (`portfolio_repo.go`) may shift line
   anchors. `/sdd-execute` re-greps each anchor in Phase 1 before editing (design Open Risks).
+- Peer 322 (`fix-retired-surface-proto-cleanup`) modifies files Step 3 deletes: its impl spec at
+  `origin/feature/fix-retired-surface-proto-cleanup` @ `e1c1f040` edits config's
+  `src/services/configWatcher.ts` (its Step 29) and `src/__tests__/configWatcher.test.ts` (its
+  Step 30). The deletion wins either way: if 322 merges first, this feature rebases and Step 3 still
+  deletes both files (resolve the modify/delete conflict as delete); if 323 merges first, 322's
+  Steps 29–30 have no target and 322 must re-spec them. 322's Step 27 edits
+  `alpaca/client.go:50,94-98,113`, disjoint from Step 5's `:653-661`.
+- Every Go command in a Verification block carries its own `GOWORK=off` prefix, including the
+  `go list` inside `$(…)`: a bare `GOWORK=off VAR=$(…)` only sets an unexported shell variable, so
+  the root `go.work` would apply.
 - Open risks carried from design.md, with their step: stale per-service locks (Step 4 findings row);
   CI's `--no-frozen-lockfile` for Node leaves (Step 4 recorded evidence); identity scope
   (Step 4 Files); lock drift (Step 4 expected-diff check); config c8 shift (Step 3); pgxmock proves
@@ -177,8 +189,8 @@ Accepted limit (design Open Risks): pgxmock proves the handle and the SQL shape,
 cd services/xstockstrat-portfolio
 GOWORK=off go test ./internal/repository/ -race -count=1 \
   -run 'TestGetSnapshot_UsesMockableDB|TestCountPositions_UsesMockableDB|TestUpdatePositionBracket_UsesMockableDB' -v   # all PASS, subtests listed
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
-  && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
+COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
+  && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
   && go tool cover -func=coverage.out | grep "^total:"    # confirm >= 40%
 GOWORK=off golangci-lint run --modules-download-mode=mod
 # C-13: no second inline copy of the new literals
@@ -366,8 +378,8 @@ grep -n "323" docs/roadmap/features/merge-order.md                              
 git grep -n "AlpacaAsset" -- '*.go' '*.ts' '*.py'        # expect: no output
 cd services/xstockstrat-marketdata
 GOWORK=off go build ./... && GOWORK=off go vet ./...
-GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
-  && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
+COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
+  && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
   && go tool cover -func=coverage.out | grep "^total:"    # confirm >= 40%
 GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
@@ -560,8 +572,8 @@ for s in config ledger identity notify; do
     && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40 && pnpm run lint ) || exit 1
 done
 ( cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go vet ./... \
-  && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
-  && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
+  && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
+  && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
   && go tool cover -func=coverage.out | grep "^total:" )                               # confirm >= 40%
 ( cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check . )
 ( cd services/xstockstrat-agent  && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check . )
