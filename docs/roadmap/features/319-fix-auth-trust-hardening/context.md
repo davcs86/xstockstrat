@@ -423,3 +423,29 @@ design.md is not written and status.md is unchanged. Register: `debate.md` (D-1.
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 (operator decisions at the design gate)
+
+- Operator (2026-11-20, design gate, option A): **C-16 sign-off** for the in-place `@feature-319` Given amendments to config `@AC-2` (`@feature-241`), `@AC-5` (`@feature-296`) and `@AC-25` (`@feature-295`) — the SAN-bound poller success path ("from an mTLS peer with DNS SAN `xstockstrat-trading`"; Thens unchanged). **O-1 is closed by this record.**
+- The operator approved the design instead of reopening anything. No REOPEN petition was on file.
+- No decision names the OQ3 resolution (O-3). It stands as settled D-4 and is carried as an open thread below.
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-config, xstockstrat-trading, xstockstrat-identity, xstockstrat-agent; key reuse patterns: the `GetSecret` `peerSan` predicate in `authz.ts`, the `validateToken` `jwt.verify` idiom).
+- Phase 1 Grilling: 3 rounds (full); termination: approved. Chosen approach: bind the SetConfig poller grant to peer SAN `xstockstrat-trading` and persist caller_identity only when authorized; RevokeToken verifies the signature (HS256, ignoreExpiration) and ignores an unverifiable token with a WARN plus `identity.revoke.unverifiable`; agent DCR returns 503 when no `agent` snapshot is readable; the four durable scenarios are amended in place (D-1..D-16). Rejected: R-1..R-12 (a second denial-reason gate, a stream-liveness signal, an error on unverifiable revoke, a cross-language SAN contract test, trading code changes).
+- Constitution rules touched: C-01, C-08, C-10, C-11, C-15, C-16, C-18, F-05, F-08, P-02, P-03, P-06, IDENTITY-4, PLAT-9, PLAT-N1. Floor breaches: none.
+- Register: debate.md State approved; O-1 closed (operator sign-off above). O-3, O-5 and O-6 stay open, non-blocking.
+- No ledger line: the debate surfaced no pattern or trap that the ledger does not already hold (fails.md 2026-11-04 covers the in-place amendment rule).
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] O-3: the OQ3 resolution (ignore an unverifiable token, success:true, no UPDATE, WARN plus the counter) has no explicit operator confirmation. A rejection implies R-5, which only the operator can reopen. Target: /sdd-spec, before Step 2 is written.
+- [ ] O-5 / O-6: the spec must list `docs/context-constitution.md` (PLAT-9 row) and `services/xstockstrat-trading/docs/context-constitution-findings.md` in Step 1 Files (D-14, D-15). Target: /sdd-spec, Step 1 Files.
+- [ ] Grant and generator SAN drift: an FQDN SAN or a hand-minted leaf silently denies the poller's HALTED/REDUCE_ONLY escalation while trading still alerts that the halt succeeded. No CI guard (R-11). Target: Step 1 docs; follow-up on the trading finding.
+- [ ] `identity.revoke.unverifiable` spikes after every JWT_SECRET rotation and is not a forgery signal on its own. Target: Step 2 (counter description).
+- [ ] With ignoreExpiration, a years-old leaked but validly signed token can still trigger a revoke. Accepted. Target: Step 2 (note).
+- [ ] A stale agent snapshot after a WatchConfig disconnect keeps serving the last-known DCR policy. Accepted under D-6. Target: Step 3 (note).
+- [ ] The agent 503 path is unreachable in a correctly booted process; a dead-code pass could remove it. Target: Step 3 (constraint comment, D-7).
+- [ ] Merge-order overlap: `configServiceImpl.ts` with feature 314; agent files with 314/322/328/331; `docs/context-constitution.md` is widely edited. Target: /sdd-spec (merge-order.md) and the integration PR.
