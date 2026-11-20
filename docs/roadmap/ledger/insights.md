@@ -4856,3 +4856,12 @@ reusing.
 - **Pattern**: A brand-new module cannot give a behavioural red on its own: the first run fails on the import. Writing a behaviour-free skeleton first (functions exist, return empty results, enforce nothing) inside the same atomic unit, capturing red against it, then replacing it before the unit's single commit turned 19 agent tests and 8 telemetry tests into assertion failures ("0 == 45", "DID NOT RAISE", "0 == 1") instead of `ModuleNotFoundError`.
 - **Evidence**: `docs/roadmap/features/360-fix-mcp-tools-page/context.md` Steps 3–7 (red/green captures); `debate.md` D-34; `.claude/skills/sdd-execute/reference/tdd-gate.md` (forbids an import-error red, names no new-module shape); precedent `insights.md` 2026-08 feature 226 (install the dependency before capturing red).
 - **Rule it implies**: For a step that creates a new module, name the skeleton in the step's `**TDD**` line, keep it uncommitted, and list its files under the paired service step; propose adding this shape to `tdd-gate.md`.
+
+### 2026-11-13 — fix-grpc-status-mapping — design
+- **Pattern**: A Go handler's connect→gRPC translator decides DEADLINE_EXCEEDED/CANCELLED from the inbound caller ctx, `toGRPCError(ctx, err)`. It does not use `errors.Is(err, context.*)` or `status.FromContextError(err)`. The branch order is:
+  1. A numeric cast for any connect code other than Internal/Unknown.
+  2. Inbound `ctx.Err()`, mapped to the context code with fixed text.
+  3. INTERNAL.
+
+  Why not `errors.Is`: an Internal wrapper hides the context error from a connect-first switch, while an `errors.Is` that sees through the wrapper reclassifies detached `context.WithoutCancel` budget timeouts as the caller's deadline. Fixed text keeps a wrapped vendor URL's `apikey=` out of the status. Pin it with an R-2 row: a live ctx plus `CodeInternal` wrapping `context.DeadlineExceeded` must give INTERNAL. Changing the signature makes the compiler catch every call site.
+- **Evidence**: `docs/roadmap/features/326-fix-grpc-status-mapping/design.md` (Chosen Approach §1; R-1, R-2, R-4); `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go:513-532`; `classification_service.go:171` (Internal wrap).

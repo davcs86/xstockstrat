@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
@@ -54,6 +56,8 @@ type fakeWatchlistStore struct {
 	ensureCalls int
 	listCalls   int
 	listErrAt   int
+	// feature 326: injected write errors for the name-write sites.
+	createErr, updateErr, updatePartialErr error
 }
 
 func newFakeStore() *fakeWatchlistStore {
@@ -98,6 +102,9 @@ func setBindings(wl *portfoliov1.Watchlist, binds []*portfoliov1.WatchlistBindin
 }
 
 func (f *fakeWatchlistStore) Create(_ context.Context, userID, name, description, defaultStrategyID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
+	if f.createErr != nil {
+		return nil, f.createErr
+	}
 	f.seq++
 	id := fmt.Sprintf("wl-%d", f.seq)
 	wl := &portfoliov1.Watchlist{WatchlistId: id, UserId: userID, Name: name, Description: description, DefaultStrategyId: defaultStrategyID}
@@ -112,6 +119,9 @@ func (f *fakeWatchlistStore) UpdatePartial(_ context.Context, watchlistID string
 	wl, ok := f.byID[watchlistID]
 	if !ok {
 		return nil, repository.ErrWatchlistNotFound
+	}
+	if f.updatePartialErr != nil {
+		return nil, f.updatePartialErr
 	}
 	if patch.SetName {
 		wl.Name = patch.Name
@@ -190,6 +200,9 @@ func (f *fakeWatchlistStore) Update(_ context.Context, watchlistID, name, descri
 	wl, ok := f.byID[watchlistID]
 	if !ok {
 		return nil, repository.ErrWatchlistNotFound
+	}
+	if f.updateErr != nil {
+		return nil, f.updateErr
 	}
 	wl.Name, wl.Description = name, description
 	setBindings(wl, append([]*portfoliov1.WatchlistBinding{}, bindings...))
@@ -2257,4 +2270,86 @@ func TestAddWatchlistSymbols_RefusedSymbolGetsNoExpiry(t *testing.T) {
 			t.Errorf("AddSymbols called %d times, want 1", store.addSymbolsCnt)
 		}
 	})
+}
+
+// ─── feature 326: duplicate watchlist name → ALREADY_EXISTS ──────────────────
+
+func TestWatchlistNameCollision_AlreadyExists_AC3(t *testing.T) {
+	nameDup := fmt.Errorf("insert watchlist: %w", &pgconn.PgError{Code: "23505", ConstraintName: watchlistNameUniqueIdx})
+	cases := []struct {
+		name string
+		run  func(t *testing.T, store *fakeWatchlistStore, svc *PortfolioService) error
+	}{
+		{"create", func(t *testing.T, store *fakeWatchlistStore, svc *PortfolioService) error {
+			store.createErr = nameDup
+			_, err := svc.CreateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.CreateWatchlistRequest{Name: "A"})
+			return err
+		}},
+		{"masked rename", func(t *testing.T, store *fakeWatchlistStore, svc *PortfolioService) error {
+			seedWatchlist(store, "wl-1", "u-1", false, nil)
+			store.updatePartialErr = nameDup
+			_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{
+				WatchlistId: "wl-1", Name: "A", UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"name"}},
+			})
+			return err
+		}},
+		{"legacy rename", func(t *testing.T, store *fakeWatchlistStore, svc *PortfolioService) error {
+			seedWatchlist(store, "wl-1", "u-1", false, nil)
+			store.updateErr = nameDup
+			_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{WatchlistId: "wl-1", Name: "A"})
+			return err
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeStore()
+			err := tc.run(t, store, newSvc(store, wideCaps(), &fakeLedger{}))
+			if connect.CodeOf(err) != connect.CodeAlreadyExists {
+				t.Fatalf("code = %v (err=%v), want AlreadyExists", connect.CodeOf(err), err)
+			}
+			if strings.Contains(err.Error(), "duplicate key") {
+				t.Fatalf("message leaks pgx detail: %q", err.Error())
+			}
+		})
+	}
+}
+
+func createWithErr(t *testing.T, injected error) error {
+	t.Helper()
+	store := newFakeStore()
+	store.createErr = injected
+	_, err := newSvc(store, wideCaps(), &fakeLedger{}).CreateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.CreateWatchlistRequest{Name: "A"})
+	return err
+}
+
+// Synthetic: watchlist_symbols_pkey cannot raise 23505 on the create path; this guards against a generic 23505 mapping.
+func TestWatchlistWriteErr_OtherConstraintInternal(t *testing.T) {
+	err := createWithErr(t, &pgconn.PgError{Code: "23505", ConstraintName: "watchlist_symbols_pkey"})
+	if connect.CodeOf(err) != connect.CodeInternal {
+		t.Fatalf("code = %v (err=%v), want Internal", connect.CodeOf(err), err)
+	}
+}
+
+func TestWatchlistWriteErr_NonUniqueInternal_AC4(t *testing.T) {
+	for name, injected := range map[string]error{
+		"08006": &pgconn.PgError{Code: "08006"},
+		"plain": errors.New("boom"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := createWithErr(t, injected)
+			if connect.CodeOf(err) != connect.CodeInternal {
+				t.Fatalf("code = %v (err=%v), want Internal", connect.CodeOf(err), err)
+			}
+		})
+	}
+}
+
+func TestWatchlistNameUniqueIdx_MatchesMigration011(t *testing.T) {
+	sql, err := os.ReadFile("../../migrations/011_watchlist_system_managed_source.up.sql")
+	if err != nil {
+		t.Fatalf("read migration 011: %v", err)
+	}
+	if !strings.Contains(string(sql), watchlistNameUniqueIdx) {
+		t.Fatalf("migration 011 no longer defines index %q", watchlistNameUniqueIdx)
+	}
 }

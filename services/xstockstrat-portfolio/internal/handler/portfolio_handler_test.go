@@ -119,6 +119,9 @@ func TestToGRPCError(t *testing.T) {
 		{"deadline exceeded", connect.NewError(connect.CodeDeadlineExceeded, errors.New("x")), codes.DeadlineExceeded},
 		{"canceled", connect.NewError(connect.CodeCanceled, errors.New("x")), codes.Canceled},
 		{"non-connect error", errors.New("boom"), codes.Internal},
+		{"already exists", connect.NewError(connect.CodeAlreadyExists, errors.New("x")), codes.AlreadyExists},
+		{"aborted", connect.NewError(connect.CodeAborted, errors.New("x")), codes.Aborted},
+		{"unknown stays internal", connect.NewError(connect.CodeUnknown, errors.New("x")), codes.Internal},
 	}
 	for _, c := range cases {
 		if got := status.Code(toGRPCError(c.err)); got != c.want {
