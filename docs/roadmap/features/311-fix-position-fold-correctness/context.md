@@ -1180,3 +1180,315 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-batch design gate (round 6)
+
+- `/sdd-design fix-position-fold-correctness` (full) halted at its approval gate after round 6 (gate policy: halt). design.md NOT written; status.md unchanged (spec-ready). Register: `debate.md` (D-1..D-33, R-1..R-27, O-1..O-51, P-1..P-4). Round 6 reopened D-4 (amended by D-28), closed O-8, O-17, O-35 and O-37..O-42, and filed P-4 (REOPEN R-2, pending user; the synthesis does not need it).
+
+## Open Threads
+
+- **Approach (round-6 synthesis).** D-1..D-3, D-5..D-16 and D-18..D-27 stand and R-1..R-22 are honoured, R-2 included. Portfolio cutover: migration `019` creates `consumer_applied_events`, `fill_fence`, `fill_cutover` and a row trigger on `portfolio.positions` that is a no-op while `fill_cutover` is empty. The new binary's first boot arms it in one transaction (`LOCK TABLE portfolio.positions IN SHARE ROW EXCLUSIVE MODE`, snapshot each row's key and full-precision `updated_at` into `fill_fence`, insert `fill_cutover(fenced_at)`), and the fill consumer starts only after the cutover row exists (D-29). Once armed, the trigger rejects any writer not identified as fold-v2, so an overlapping old binary stalls without writing. The floor is per row and held in memory: a fill folds iff `recorded_at >= ` the row's fence `updated_at`, or `>= fenced_at` when the row was absent at the fence; otherwise it is acked with zero DB calls (D-30). Fill path (D-23 order): parse, below-floor ack, autocommit pre-check by applied PK, `orderSide` fallback, then park or `positionsMu.Lock`, `BEGIN`, applied `INSERT`, `pg_advisory_xact_lock`, one `SELECT … FOR UPDATE`, pure `pnl.FoldFrom`, `COMMIT`, `Unlock`, then emits, risk and snapshot. A park is persisted as an applied-table row with `outcome='parked'`, so it logs ERROR and counts once (D-31). All fold reads come from the one `FOR UPDATE` row and `ApplyFill` begins through a separate `txBeginner` (D-32, D-33). D-4 is amended (D-28): leg key `bracket-leg:<account_id>:<legID>:<status>:<filledQty>`, and GetPnL's three dedup maps key on `account_id + order_id`. Trading migration `012_bracket_legs` adds `symbol`, `side` and `observed_filled_qty`; `NetFilledQtyBySymbol` gains a `UNION ALL` over `trading.bracket_legs` using `observed_filled_qty`, while `filled_qty` stays the emit cursor. D-3 is not changed. The rest of trading is as round 5 (D-18..D-22, D-26). All tests run in the existing `portfolio-db-test` job with no CI change.
+- **Strongest open objection.** O-43, blocking (C-11 provenance): the operator rulings this round designs to (the D-4 reopen with the GetPnL extension, "None — fix in scope", the decision-packet acceptance) reach this step only through the workflow's computed task text. This file records only the D-17 words. The operator's own words must be written here before the design is approved; any ruling not confirmed reverts its part of the design to the round-5 state. Four more blocking objections are open: O-44 (fence writer identification is unverified under real PgBouncer in both directions; needs a dev smoke through the `:25061` pool at pool size 1, else the `writer_rev` / transaction-local `set_config` fallback), O-45 (ruling (c) says "present in `trading.orders`", which conflicts with settled D-3; the operator must confirm the `bracket_legs` UNION reading or grant REOPEN D-3), O-46 (the `012` seed scope and how historical leg quantities are obtained are not pinned; the unrecoverable set goes to the operator), O-47 (two pre-fence cases stay undecidable and must be presented to the operator as a gate item, after `/sdd-spec` evaluates the `portfolio.position.closed` narrowing).
+- **Floor status.** No Floor breach. The design is not approvable this round: five blocking objections remain (O-43..O-47), three of which need the operator (O-43, O-45, O-47).
+- **Uncovered @AC changes.** `@AC-5` CHANGE is still not covered by an operator decision (O-11); both wordings are designed, and keeping "qty 6" would need a CHANGE to 251 @AC-17 with its own C-16 sign-off. 251 @AC-17 (GetPnL dedup scope), 206 trading @AC-1 (legs in reconciliation) and 294 @AC-56 (parked counted once) are EXTEND, each covered only by a relayed ruling that O-43 requires to be recorded here. @AC-1..@AC-4, 251 @AC-14, 294 @AC-6 and 290 @AC-3 PRESERVE.
+- **Operator sign-offs still needed.** The rulings' own words (O-43); the `bracket_legs` reading of ruling (c) or REOPEN D-3 (O-45); the unrecoverable historical leg set (O-46); the pre-fence undecidable cases (O-3, O-47); the `@AC-5` C-16 sign-off (O-11); P-4 (REOPEN R-2, recommended against by the adversary and not needed by this synthesis). Non-blocking and still open: O-48 (sweep every `portfolio.positions` writer, test pools included), O-49 (name the migration that drops the trigger, plus a disarm-before-image-rollback runbook step), O-50 (proposer to confirm the synthesis-adopted items), O-51 (boot-arming proofs), O-30 (analysis AC ids enumerated at `/sdd-spec`).
+
+```sdd-batch-design-state
+{
+  "round": 6,
+  "synth": {
+    "approach": "Round-6 synthesis. D-1..D-3, D-5..D-16 and D-18..D-27 stand; R-1..R-22 are honoured (R-2 included: the floor is stamped by the new binary's first boot, not by the migration). D-4 is amended per the relayed operator ruling. D-3 is NOT changed, so ruling (c) is met through `trading.bracket_legs`, pending operator confirmation.\n\nVerified this round\n- `origin/feature/fix-position-fold-correctness:docs/roadmap/features/311-fix-position-fold-correctness/context.md` records only the D-17 words (lines 911, 1076). \"Approve both\", \"None — fix in scope\" and the decision-packet acceptance are in no copy of context.md (working tree, feature branch, main-dev). They reach this step only through the computed task text.\n- `db-migrator` is `kind: PRE_DEPLOY` (`/home/user/xstockstrat/.do/app.yaml:679-681`).\n- `newPool` sets no `application_name` (`services/xstockstrat-portfolio/internal/repository/pool.go:19-35`); neither does `testPool` (`internal/repository/dbtest_helpers_test.go:31`), which DELETEs and INSERTs positions at `:53` and `:69`.\n- `LoadInflightOrders` hydrates NEW/PARTIALLY_FILLED `trading.orders` rows into `s.orders` (`services/xstockstrat-trading/internal/service/trading.go:337-345`).\n- The ledger serialises `recordedAt: new Date(row.recorded_at)` (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:472`), i.e. milliseconds.\n\n1. CUTOVER FENCE, armed at first new-binary boot (ruling (a); adversary r6 objection 1 adopted)\n- Portfolio migration `019` creates `consumer_applied_events`, `fill_fence`, `fill_cutover` and a `BEFORE INSERT OR UPDATE OR DELETE` row trigger on `portfolio.positions`. The trigger is a no-op while `fill_cutover` is empty. A failed or rolled-back deploy before any new binary runs therefore leaves the old binary untouched.\n- The new binary's boot runs one transaction: `LOCK TABLE portfolio.positions IN SHARE ROW EXCLUSIVE MODE`; copy each row's key (account after the `alpaca-default` fallback, D-8) and full-precision `updated_at` into `fill_fence`; `INSERT fill_cutover(fenced_at = clock_timestamp()) ON CONFLICT DO NOTHING`; COMMIT. A second new instance finds it armed and only loads it. The fill consumer starts only after the cutover row exists.\n- Once armed, the trigger rejects any writer not identified as fold-v2. The old binary's fill handler errors, `streamEventsFrom` does not advance (`portfolio_service.go:336-337`) and it retries without writing, so an overlapping old and new instance cannot double-apply.\n- Writer identification is NOT settled (see open objections). Primary: `application_name LIKE 'xstockstrat-portfolio/fold-v2%'`, set once in `newPool` via `cfg.ConnConfig.RuntimeParams`. Fallback if the real-PgBouncer smoke fails in either direction: a `writer_rev` column bumped by the new INSERT/UPDATE SQL, with DELETEs carrying a transaction-local `set_config`.\n- Every writer of `portfolio.positions` is swept: `testPool`, `serviceTestPool` (`position_drain_dbtest_test.go:24-45`), scripts, `db-migrator` data statements, the D-6 repair. Test pools use the same app-name constant; both helper files go in the spec's Files (F-08).\n\n2. PER-ROW FLOOR (replaces the single boot-time floor)\n- The consumer loads `fill_fence` and `fenced_at` into memory once at boot. The floor test makes zero DB calls (D-23).\n- A fill on row r folds iff `recorded_at(e) >= fence_updated_at(r)`; if r was absent at the fence the threshold is `fenced_at`. Otherwise it is acked.\n- The fence timestamp is never truncated. The ledger's millisecond `recorded_at` only errs toward acking. A same-millisecond test is required.\n- Both timestamps come from one Postgres server clock; `/sdd-spec` verifies this from the DSNs.\n- Known undecidable pre-fence cases (acked even if the old binary never folded them): a fill on a row something else wrote after the fill was appended, and a fill on a row absent at the fence with `recorded_at < fenced_at`. A late commit below `fenced_at` falls in one of these. `/sdd-spec` must evaluate the adversary's narrowing (use the old binary's last `portfolio.position.closed` `recorded_at` as the threshold for a closed-and-absent row, `portfolio_service.go:469-470`). What remains goes to the operator as a gate item, not as a design-accepted residual.\n\n3. PORTFOLIO FILL PATH (D-23 order, park step pinned)\n- Order: parse → below-floor `errFillAcked` (zero DB calls) → autocommit pre-check by applied PK → `orderSide` fallback → park or `positionsMu.Lock` → BEGIN → applied INSERT → `pg_advisory_xact_lock` → one `SELECT … FOR UPDATE` → `pnl.FoldFrom` → COMMIT → Unlock → emits, risk, snapshot (D-24).\n- Pre-check hit on an applied row: re-emit `pending_closed` under `position.closed:<STORED event_id>` (D-13), clear keyed by full PK plus `pending_closed IS NOT NULL`, failed clear is a WARN, return `errFillAcked`. Pre-check hit on a parked row: `errFillAcked`, DEBUG log, no ledger query. A pre-check DB error returns an error and never falls through.\n- Park (ruling (b)): `consumer_applied_events` gains `outcome text NOT NULL DEFAULT 'applied'` and nullable `parked_reason`. On `ErrFillUnattributable`, an autocommit `INSERT … outcome='parked' ON CONFLICT DO NOTHING RETURNING`. ERROR \"event parked\" and the `parked` count fire only when the insert returns a row. A DB error on the park insert returns an error and does not count `parked`. `observed()`'s D-12 mapping is unchanged. Redelivery: a runbook step deletes the parked row and the next boot retries.\n- Round-5 fixes, confirmed by the proposer: every fold read comes from the one `FOR UPDATE` row (the pool reads at `portfolio_service.go:455` and `:460` are deleted); `foldFn` is pure; `ApplyFill` begins through a separate `txBeginner` and `queryRower` (`portfolio_repo.go:23-27`) is unchanged; `portfolio_fill_sync_race_test.go` is re-pointed at `FillApplied`/`ApplyFill` over pgxmock, `interleaveDB` is deleted, and the file is listed in the spec's Files.\n\n4. D-4 AMENDMENT (relayed operator ruling)\n- Leg key `bracket-leg:<account_id>:<legID>:<status>:<filledQty>`, passed as the `appendLedgerEvent` key parameter (R-5).\n- GetPnL's `filledOrderIDs`, `latest` and `partialOrder` maps (`portfolio_service.go:993-1013`) key on `account_id + \"\\x00\" + order_id`.\n- Two-account same-leg-id tests at the ledger-key level and the GetPnL level. The `/sdd-spec` payload-history grep for a consistent `account_id` per order is a required step.\n\n5. LEG FILLS IN RECONCILIATION (ruling (c), via `bracket_legs`; D-3 stands)\n- Trading migration `012_bracket_legs` adds `symbol`, `side` and `observed_filled_qty`. `ActivateBracket` writes symbol and `side = oppositeSide` (`trading.go:3463`) in the `trading.orders` encoding.\n- `NetFilledQtyBySymbol` (`trading_repo.go:171-186`) gains `UNION ALL` over `trading.bracket_legs` using `observed_filled_qty`, written on every observation. `filled_qty` stays the emit cursor, advanced only after a nil keyed append. A ledger outage therefore does not make reconciliation lag broker truth.\n- `BASELINE_RETIRED` legs store their observed cumulative qty with no emit (R-7, R-12 hold).\n- Not yet pinned: the `012` seed scope and how historical leg quantities are obtained (see open objections).\n\n6. @AC-5, both variants (sign-off pending)\n- Amended wording: `order.partially_filled` with `filled_qty 4`, then `order.filled` qty 10 at cumulative average 110; position 0, realized 100. Consistent with 251 @AC-17.\n- If the operator keeps \"qty 6\": GetPnL reads 6 as the order total (realized 60) and the live fold leaves qty 4. Honouring it needs a CHANGE to 251 @AC-17 for leg ids (fold by cumulative `filled_qty`, live fold consumes leg partials) with its own C-16 sign-off. The emitter is the same; only the `qty` field differs.\n\n7. TRADING — unchanged from round 5 (D-18..D-22, D-26).\n\nTESTS (all in the existing `portfolio-db-test` job, no CI change)\n- `apply_fill_dbtest_test.go`, default and `DB_PGBOUNCER` exec mode: one order to two pools applies once; conflict path (uncommitted raw tx holds the applied row, `ApplyFill` blocks, commit gives conflict with unchanged position and one re-emit, rollback gives exactly one apply).\n- Service level: two `PortfolioService` instances fold one event to qty 15; real multi-symbol `processPositionSync` with `DeletePositionsNotInSync` versus a fill, no `40P01`.\n- Fence: an unidentified pool is rejected on INSERT, UPDATE and DELETE once armed and admitted while unarmed; a statement blocked on the arming lock is rejected after it; arming twice is idempotent.\n- Floor: a fill newer than its row's fence folds once; an older one is acked; a row absent at the fence uses `fenced_at`; same-millisecond case.\n- Park: a parked fill is not re-parked and issues no ledger query on the next consumer start.\n- pgxmock: no query outside Begin/Commit on the fresh path; mutex held gives only the pre-check SELECT.\n\nBUILD ORDER\n1. Migrations `019` and `012` (re-check numbers against feature 318).\n2. `newPool` writer identification, boot arming, test-pool sweep.\n3. `observed()` branches, `FillApplied`, `ApplyFill`, `txBeginner`.\n4. Fold rewrite with in-tx reads and the D-10 flip; per-row floor; persisted park.\n5. dbtests.\n6. Broker `ErrOrderNotFound`, IBKR id-match.\n7. `ActivateBracket` with symbol/side, both UNIONs, keyed append, observer, GetPnL composite key.\n8. Docs and runbook: disarm-before-image-rollback step, parked-row redelivery step, the follow-up migration that drops the trigger.",
+    "open_objections": [
+      {
+        "text": "Provenance gate (C-11): the operator rulings (D-4 reopen with the GetPnL extension, 'None — fix in scope', the decision-packet acceptance) reach this step only through the computed task text. context.md on origin/feature/fix-position-fold-correctness records only the D-17 words. This synthesis designs to them as relayed; the orchestrator must write the operator's own words into context.md before the design is approved. If any is not confirmed, the matching part (sections 1-2, 3 park, 4, 5) reverts to the round-5 state.",
+        "blocking": true
+      },
+      {
+        "text": "Fence writer identification is unverified under PgBouncer in both directions. Outage direction: application_name_add_host would break an equality match (use LIKE 'xstockstrat-portfolio/fold-v2%'). Silent direction: in transaction pooling an old-binary client that never sent application_name may inherit fold-v2 from a shared server connection, so the fence admits it. The DB_PGBOUNCER dbtest covers pgx exec mode only. Required before approval: a dev smoke through the real :25061 pool with pool size 1 — a tagged write, then an untagged write on the same backend that must be rejected. If not proven, use the writer_rev / transaction-local set_config fallback.",
+        "blocking": true
+      },
+      {
+        "text": "O-13 / ruling (c): 'present in trading.orders' is met here through a NetFilledQtyBySymbol UNION over trading.bracket_legs because settled D-3 forbids leg rows in trading.orders. The literal reading would route legs through LoadInflightOrders (trading.go:337-345), pollFills, applyBrokerOrderStatus and maybeSubmitBracket, bracketing an exit and double-emitting. The operator must confirm the bracket_legs reading or grant REOPEN D-3.",
+        "blocking": true
+      },
+      {
+        "text": "Ruling (c) completeness: the UNION covers only legs the observer tracks. Not covered: legs of brackets exited or canceled before cutover, leg ids already blanked by resizeBracket (trading.go:3612), and IBKR historical legs that never return. Pin the 012 seed scope (every order_brackets row with a leg id, any status), state how a historical leg's filled qty is obtained (Alpaca GetOrder within the cap; IBKR none), and present the unrecoverable set to the operator.",
+        "blocking": true
+      },
+      {
+        "text": "O-3 / ruling (a): the per-row floor cannot decide two pre-fence cases against an opaque old binary — a fill on a row written by something else after the fill was appended, and a fill on a row absent at the fence with recorded_at < fenced_at (this includes late commits below fenced_at). The operator rejected this as a residual, so the orchestrator must present it. /sdd-spec must first evaluate narrowing a closed-and-absent row's threshold to the old binary's last portfolio.position.closed recorded_at (portfolio_service.go:469-470).",
+        "blocking": true
+      },
+      {
+        "text": "O-11: the C-16 sign-off for the @AC-5 amendment is still pending with the operator. Both variants are designed; 'qty 6' would need a CHANGE to 251 @AC-17 with its own sign-off. Does not block the rest of the design.",
+        "blocking": false
+      },
+      {
+        "text": "Sweep every writer of portfolio.positions for the armed fence: testPool (dbtest_helpers_test.go:31,53,69), serviceTestPool (position_drain_dbtest_test.go:38-45), scripts, db-migrator data statements, the D-6 repair and manual psql. Test pools take the same writer constant; both helper files are listed in the spec's Files. State whether the migrator role is admitted.",
+        "blocking": false
+      },
+      {
+        "text": "The trigger outlives the cutover (C-18). Name the follow-up migration that drops it once cutover is verified, or record it as a permanent invariant in the portfolio CLAUDE.md. Also name the post-arming rollback hazard: a pre-019 image run after arming cannot write positions until disarmed, so the runbook needs a disarm-before-image-rollback step.",
+        "blocking": false
+      },
+      {
+        "text": "Adopted in this synthesis from adversary r6, proposer to confirm: observed_filled_qty (written on every observation) feeds the reconciliation UNION while filled_qty stays the emit cursor; the fence timestamp is never truncated, with a same-millisecond test; park order is below-floor, pre-check, orderSide, park, and a park-insert DB error returns an error without counting parked; the @AC-5 wording says 'filled_qty 4'.",
+        "blocking": false
+      },
+      {
+        "text": "Boot arming needs its own proofs: the app role can take SHARE ROW EXCLUSIVE on portfolio.positions; a statement blocked on the arming lock sees the fence armed when it resumes; two new instances arming concurrently produce one cutover row; and the cost of the per-row armed check on every positions write is stated.",
+        "blocking": false
+      },
+      {
+        "text": "O-30: the affected analysis ACs are still not listed. The proposer named order-snapshots-pnl-patterns.feature and fix-python-loop-supervision.feature as position.closed readers; their AC ids must be enumerated at /sdd-spec, and the D-10 flip-short window residual stays named.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "251 @AC-17",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "251 @AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "206 trading @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "294 @AC-56",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "294 @AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "290 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Arming the fence inside the PRE_DEPLOY migration 019 (proposal r6). Lost: db-migrator runs before any service restarts (.do/app.yaml:679-681) and DO rolls back images, not the DB, so a failed deploy would leave the old binary unable to write positions until a manual down.",
+      "Equality match on application_name (proposal r6). Lost: PgBouncer application_name_add_host appends a suffix, which would reject the new binary; a prefix LIKE is used and the whole mechanism stays gated on a real-PgBouncer smoke.",
+      "A single boot-time floor timestamp for all rows (rounds 1-5). Lost: it cannot close fills never folded before the first new boot, late commits, or clock skew, which the operator made requirements.",
+      "A two-release cutover: release A acks without folding, release B folds (adversary r6). Lost: it adds a deploy-ordering dependency, which is the runbook reliance the operator rejected, and doubles the deploy.",
+      "Feeding the reconciliation UNION from filled_qty, the emit cursor (proposal r6). Lost: under D-15 a ledger outage stops leg emits, so NetFilledQtyBySymbol would lag broker truth and could halt the account; observed_filled_qty is used instead.",
+      "Re-parking with an ERROR on every boot (D-12 as first wired). Lost: the operator required that a parked post-floor fill not re-park; the park is persisted as an applied-table outcome.",
+      "REOPEN R-2 to stamp the floor in the migration (proposal r6 petition). Not adopted: boot arming stamps the floor at the new binary's first boot, so R-2 need not be reopened.",
+      "Designing the pre-fence undecidable cases in as an accepted residual (proposal r6). Lost: the operator rejected the residuals, so the bound goes to the operator as a gate item."
+    ],
+    "open_risks": [
+      "If the fence's writer identification fails in the silent direction (PgBouncer leaks application_name to old-binary clients), the old binary keeps folding and an overlap fill double-applies with no error.",
+      "If it fails in the outage direction, the armed trigger rejects the new binary too: a full portfolio positions write outage at first boot.",
+      "After arming, an image rollback to a pre-019 binary cannot write positions until someone disarms the fence.",
+      "During the overlap the old binary's sync, deregistration and bracket-update writes fail; they heal only through the new binary's replay (290 @AC-3).",
+      "Two pre-fence cases stay undecidable and are acked: a fill on a row written by something else after the fill was appended (qty is broker-true from sync, the realized delta is lost), and a fill on a row absent at the fence.",
+      "The fence and floor assume ledger and portfolio share one Postgres server clock, and that nothing outside the portfolio binary writes portfolio.positions.",
+      "Leg fills from brackets exited before cutover, ids blanked by resizeBracket, and IBKR historical legs cannot be counted in NetFilledQtyBySymbol, so reconciliation may still mismatch for those symbols.",
+      "If the composite GetPnL key is applied, a historical order whose partial and full fills carried different account_id values stops being deduplicated; the /sdd-spec history grep is the only check.",
+      "A parked fill is retried only after a manual delete of its parked row.",
+      "A fill transaction can still wait server-side on the applied-row conflict or on FOR UPDATE, holding 1 of 2 client connections and positionsMu.",
+      "The pre-check has a TOCTOU window covered only by the in-tx INSERT conflict path, so the conflict-path dbtest is load-bearing.",
+      "A position.updated can be emitted after a same-process sync has overwritten the row (emits run after Unlock).",
+      "IBKR legs the broker has forgotten are polled forever unless /sdd-spec finds a definitive single-order not-found response.",
+      "Legs partially filled at cutover are BASELINE_RETIRED, so realized P&L for their post-cutover remainder is lost.",
+      "Boot replay re-walks every post-floor fill (1 round trip each) and consumer_applied_events has no retention.",
+      "A leg id is lost from tracking if the ActivateBracket tx fails; it is alerted, but its exit fill never folds.",
+      "Neither broker adapter populates BrokerOrder.Fees, so parent and leg fee totals understate.",
+      "Migration numbers 019 and 012 may collide with feature 318.",
+      "OQ-2 (repair of already-inflated accumulators) is out of scope, and instance_count must stay 1."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-04",
+      "F-06",
+      "F-07",
+      "F-08",
+      "P-02",
+      "P-03",
+      "P-04",
+      "PLAT-N1"
+    ],
+    "rationale": "No Floor breach, but the design is not approvable this round: five blocking items remain, three of which need the operator.\n\n**Provenance.** I checked all three copies of `context.md`. Only the D-17 words are recorded. The other rulings exist only in the computed task text, which I cannot verify. I designed to them as relayed and recorded D-4 as reopened on the same basis the D-17 reopen was taken last round (relayed operator words that name the item). The orchestrator must put the operator's own words in `context.md` before approval; that is the first blocking item.\n\n**What I took from each side.**\n- **Per-row floor (proposer):** kept. Both sides agree it is sound.\n- **Boot arming (adversary):** adopted. I confirmed `db-migrator` is `PRE_DEPLOY`, so a migration-armed trigger turns a failed deploy into a write outage. Boot arming also keeps R-2 intact, so the proposer's REOPEN R-2 is not needed.\n- **Writer identification:** not settled. Neither binary sets `application_name` today and the exec-mode dbtest proves nothing about real PgBouncer. It stays blocking behind a dev smoke, with the `writer_rev` fallback named.\n- **Ruling (c):** the literal text conflicts with settled D-3. I kept D-3 and the `bracket_legs` UNION, and left O-13 open for the operator to confirm the reading or reopen D-3. Historical leg coverage is also unpinned.\n- **Pre-fence undecidable cases:** the operator rejected residuals, so this goes back as a gate item, with the adversary's `position.closed` narrowing to evaluate first.\n- **Smaller adversary points adopted:** `observed_filled_qty`, never truncating the fence, park ordering, the writer sweep including test pools, and the @AC-5 wording.\n\n**Closed this round:** O-17 and O-35 (D-4 amendment with the GetPnL composite key), O-8 (persisted park), O-37, O-38, O-39 (confirmed by the proposer), O-40, O-41, O-42.\n\n**Still open:** O-3, O-13, O-11, O-30, plus the new items above.\n\n**Business rules.** 251 @AC-17 (GetPnL dedup scope), 206 trading @AC-1 (legs in reconciliation) and 294 @AC-56 (parked counted once) are EXTEND, each sanctioned by a relayed ruling. @AC-5 stays CHANGE and uncovered.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "D-4 amended, superseding D-4's key: the leg ledger idempotency key is bracket-leg:<account_id>:<legID>:<status>:<filledQty>, and GetPnL's filledOrderIDs, latest and partialOrder maps key on account_id + order_id. Two-account same-leg-id tests at the ledger-key and GetPnL levels are required, and the /sdd-spec payload-history grep for a consistent account_id per order is a required step. The rest of D-4 (order_id and stream key = leg id, side always set) stands.",
+          "evidence": "ledger 002_idempotency_keys.up.sql:10; ibkr.go:343; portfolio_service.go:993-1013; P-1, P-2; relayed operator ruling 2026-11-20 ('Approve both'); proposal r6 item 5; adversary r6 did not contest"
+        },
+        {
+          "text": "The cutover fence is armed by the new binary's first boot, not by the migration. Migration 019 creates a positions row trigger that is a no-op while fill_cutover is empty. Boot runs one tx: LOCK TABLE portfolio.positions IN SHARE ROW EXCLUSIVE MODE, snapshot fill_fence, INSERT fill_cutover(fenced_at) ON CONFLICT DO NOTHING. The fill consumer starts only once the cutover row exists. How a fold-v2 writer is identified is not part of this decision.",
+          "evidence": ".do/app.yaml:679-681 (PRE_DEPLOY migrator); portfolio_service.go:336-337 (old binary stalls on a handler error); adversary r6 objection 1; relayed operator ruling (a); R-2 honoured"
+        },
+        {
+          "text": "The fill floor is per row and loaded into memory once at boot: a fill folds iff recorded_at >= the row's fence updated_at, or >= fenced_at when the row was absent at the fence; otherwise it is acked with zero DB calls. The fence timestamp is never truncated.",
+          "evidence": "portfolio_repo.go:67 (upsert sets updated_at = NOW()); ledger 001:20 (recorded_at DEFAULT NOW()); ledgerServiceImpl.ts:472 (millisecond recordedAt); D-23; proposal r6 item 2; adversary r6 called it sound and contested only precision and the undecidable cases"
+        },
+        {
+          "text": "A park is persisted: consumer_applied_events gains outcome and parked_reason, and ErrFillUnattributable writes an autocommit parked row with ON CONFLICT DO NOTHING RETURNING. ERROR 'event parked' and the parked count fire only when the insert returns a row. The fill-path order is below-floor, pre-check, orderSide, then park or mutex; a pre-check hit on a parked row returns errFillAcked at DEBUG. A park-insert DB error returns an error. D-12's observed() mapping is unchanged.",
+          "evidence": "portfolio_service.go:185-190,231-242; D-12; R-14 (a park writes no position state); relayed operator ruling (b); proposal r6 item 3; adversary r6 objection 10"
+        },
+        {
+          "text": "Every read the fold uses comes from the single FOR UPDATE row inside the tx; the GetRealizedAccum and GetFeesAccum pool reads are removed and foldFn is pure. ApplyFill begins its tx through a separate txBeginner interface. portfolio_fill_sync_race_test.go is re-pointed at FillApplied/ApplyFill over pgxmock, interleaveDB is deleted, and the file is listed in the spec's Files.",
+          "evidence": "portfolio_service.go:455,460; portfolio_repo.go:23-27; R-22; proposal r6 item 7 confirmed; adversary r6 did not contest"
+        },
+        {
+          "text": "Pre-check and clear error handling: a pre-check DB error returns an error and never falls through; the pending_closed clear is keyed by the full PK plus pending_closed IS NOT NULL; a failed clear is a WARN only. The dbtest set includes the INSERT-conflict case in default and DB_PGBOUNCER exec mode and the sync-versus-fill no-40P01 service case.",
+          "evidence": "D-21; D-27; proposal r6 item 7 (O-37, O-40, O-41 adopted); adversary r6 did not contest"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Arming the cutover fence inside the PRE_DEPLOY migration",
+          "why": "db-migrator runs before any service restarts and DO rolls back images, not the DB (.do/app.yaml:679-681), so a failed or rolled-back deploy would leave the old binary unable to write positions."
+        },
+        {
+          "text": "An equality match on application_name as the fence test",
+          "why": "PgBouncer application_name_add_host appends a host suffix, which would reject the new binary."
+        },
+        {
+          "text": "A single boot-time floor timestamp for all rows",
+          "why": "It cannot close fills never folded before the first new boot, late commits or clock skew, which the operator made design requirements."
+        },
+        {
+          "text": "A two-release cutover (release A acks without folding, release B folds)",
+          "why": "It adds a deploy-ordering dependency, which is the runbook reliance the operator rejected, and doubles the deploy."
+        },
+        {
+          "text": "Using filled_qty, the emit cursor, as the quantity in the NetFilledQtyBySymbol UNION",
+          "why": "Under D-15 a ledger outage stops leg emits, so reconciliation would lag broker truth and could halt the account."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Provenance gate (C-11): the operator rulings behind the D-4 reopen, the in-scope residuals and the decision-packet acceptance are relayed only through the computed task text; context.md on the feature branch records only the D-17 words. The operator's own words must be written to context.md before the design is approved.",
+          "blocking": true
+        },
+        {
+          "text": "Fence writer identification is unverified under PgBouncer in both directions (suffix breaks the match; a shared server connection may leak application_name to an old-binary client). Require a dev smoke through the real :25061 pool at pool size 1, with a tagged write followed by an untagged write that must be rejected; otherwise use the writer_rev / transaction-local set_config fallback.",
+          "blocking": true
+        },
+        {
+          "text": "Ruling (c) says 'present in trading.orders', which conflicts with settled D-3. The operator must confirm the bracket_legs UNION reading or grant REOPEN D-3 (hazard of the literal reading: LoadInflightOrders, pollFills, maybeSubmitBracket on a leg row, trading.go:337-345,1903,1921).",
+          "blocking": true
+        },
+        {
+          "text": "Leg coverage in NetFilledQtyBySymbol is limited to legs the observer tracks. Pin the 012 seed scope (every order_brackets row with a leg id, any status), state how historical leg quantities are obtained per broker, and present the unrecoverable set (resize-blanked ids, IBKR historical legs) to the operator.",
+          "blocking": true
+        },
+        {
+          "text": "The pre-fence undecidable cases (a fill on a row written by something else after the fill; a fill on a row absent at the fence below fenced_at, including late commits) must be presented to the operator as a gate item, after /sdd-spec evaluates narrowing the absent-row threshold to the last portfolio.position.closed recorded_at.",
+          "blocking": true
+        },
+        {
+          "text": "Sweep every writer of portfolio.positions for the armed fence: testPool, serviceTestPool, scripts, db-migrator data statements, the D-6 repair and manual psql. Test pools use the same writer constant and both helper files go in the spec's Files.",
+          "blocking": false
+        },
+        {
+          "text": "Name the follow-up migration that drops the fence trigger after cutover (or record its permanence in the portfolio CLAUDE.md), and add a disarm-before-image-rollback runbook step for the post-arming rollback hazard.",
+          "blocking": false
+        },
+        {
+          "text": "Proposer to confirm the synthesis-adopted items: observed_filled_qty feeds the reconciliation UNION while filled_qty stays the emit cursor; a same-millisecond fence test; the @AC-5 wording 'filled_qty 4'.",
+          "blocking": false
+        },
+        {
+          "text": "Boot arming needs proofs: the app role can take SHARE ROW EXCLUSIVE on portfolio.positions; a statement blocked on the arming lock is rejected when it resumes; two instances arming concurrently produce one cutover row; and the per-write cost of the armed check is stated.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-17",
+          "how": "D-4 amended under the relayed operator ruling: account-scoped leg key bracket-leg:<account_id>:<legID>:<status>:<filledQty>, with two-account same-leg-id tests. Recording the ruling in context.md is tracked as a new objection."
+        },
+        {
+          "id": "O-35",
+          "how": "The GetPnL composite dedup key is an operator-approved extension of the product spec's scope, and the /sdd-spec payload-history grep is a required step."
+        },
+        {
+          "id": "O-8",
+          "how": "A park is persisted as an applied-table outcome; a parked fill logs ERROR and counts parked once, later boots ack it at DEBUG, and a runbook step deletes the row to redeliver."
+        },
+        {
+          "id": "O-37",
+          "how": "Proposer confirmed the INSERT-conflict dbtest in apply_fill_dbtest_test.go in default and DB_PGBOUNCER exec mode."
+        },
+        {
+          "id": "O-38",
+          "how": "Proposer confirmed: all fold reads from the one FOR UPDATE row, pool reads at :455 and :460 deleted, foldFn pure, orderSide before the mutex, pgxmock asserts no query outside Begin/Commit."
+        },
+        {
+          "id": "O-39",
+          "how": "Proposer confirmed: ApplyFill uses a separate txBeginner, queryRower is unchanged, and portfolio_fill_sync_race_test.go is re-pointed over pgxmock and listed in the spec's Files."
+        },
+        {
+          "id": "O-40",
+          "how": "The sync-versus-fill no-40P01 service-level dbtest is adopted."
+        },
+        {
+          "id": "O-41",
+          "how": "Pre-check error returns an error, the clear is keyed by full PK plus pending_closed IS NOT NULL, and a failed clear is a WARN."
+        },
+        {
+          "id": "O-42",
+          "how": "The same-process sync-after-fold position.updated ordering is named as a residual. The cross-process half is removed by the fence, whose verification is tracked as a new objection."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "R-2",
+          "evidence": "Proposer r6: a 019 fence trigger stops the pre-019 binary writing portfolio.positions from the migration's lock instant (portfolio_service.go:336-337; portfolio_repo.go:64-69), so R-2's premise that the old binary still folds after the migration no longer holds. No fence was on record before. The adversary agrees the evidence is new but recommends against reopening: the boot-armed fence adopted in this synthesis stamps the floor at first boot, so R-2 need not be reopened.",
+          "is_new": true
+        }
+      ],
+      "reopened": [
+        "D-4"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
