@@ -41,9 +41,9 @@ There is no proto step (D-8, R-8), no migration and no config key (F-01, F-07).
 
 ### Discovery results this spec relies on
 
-- **Break radius, measured not inferred.** The full Step 1 + Step 3 change was applied to a scratch
-  copy of the tree and the unchanged suite was run through the service venv: `571 passed` before the
-  change, `571 passed` with it (then reverted; nothing committed). So no existing indicators test
+- **Break radius, measured not inferred.** The full Step 1 + Step 3 change was applied to the
+  working tree temporarily and the unchanged suite was run through the service venv: `571 passed`
+  before the change, `571 passed` with it (then reverted; nothing committed). So no existing indicators test
   relies on the implicit `{}`, on the deleted stderr test, or on `memory_used_bytes == 0`, and
   neither service step needs a `**Lands with**` unit.
 - **Implicit-`{}` enumeration (design build step 1).** In-repo: no test source relies on it (above);
