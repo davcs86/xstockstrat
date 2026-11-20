@@ -479,3 +479,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: green via Step 7's tests (above). Config-key wiring gate N/A (product-spec: no config key changes).
 - Files modified: `services/xstockstrat-notify/src/telemetry.ts`
 - Deviations: none
+
+### Step 9 — test: UI startup log names `SDK default` when unset, and the full set endpoint when set (U5) [done]
+- Unit U5 (Steps 9+10, one commit). Added `src/telemetry.startupLog.test.ts` with one `AC-1:` test. It records `console.info`/`console.warn` before the import, points the per-signal endpoints at a local receiver (O-2 option (a)), and in teardown awaits the one SIGTERM listener it added and then removes it. It never emits SIGTERM. Also tightened `instrumentation.testkit.ts:100` (AC-2) to the full `→ http://127.0.0.1:<port>/otlp` suffix.
+- TDD: AC-1 red: `[otel] tracing enabled → SDK default` was not found; the line still read `→ undefined` (4 files, 1 failed, 22 passed, 2 skipped) → green: 4 files passed (23 passed, 2 skipped); `test:coverage` 79 files / 550 passed, All files lines 79.36%; lint 0 errors; jscpd `Found 0 clones.`. AC-2: red N/A (AC-2 PRESERVE, characterization). The tightened assertion passed in all three `defineExportSuite` files before and after.
+- Open risk "UI AC-1 shutdown may hang": did not occur. The awaited `sdk.shutdown()` finished against the local receiver (AC-1 file run ≈ 0.26 s).
+- Files modified: `services/xstockstrat-ui/src/telemetry.startupLog.test.ts` (new), `services/xstockstrat-ui/src/instrumentation.testkit.ts`
+- Deviations: verification-command correction (operator decision A, 2026-11-20). jscpd now runs from the repo root, and the `process.emit` grep is guarded so it cannot hide an earlier failure. Step body not edited; see Deviation Log.
+
+### Step 10 — service: UI logs `SDK default` for an unset endpoint (U5) [done]
+- Unit U5 (Steps 9+10). `src/telemetry.ts:80` now reads `process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'SDK default'`. The log line, the exporters and the try/catch are unchanged.
+- TDD: green via Step 9's tests (above). Config-key wiring gate N/A (product-spec: no config key changes).
+- Files modified: `services/xstockstrat-ui/src/telemetry.ts`
+- Deviations: none (the Step 9 verification correction covers the shared block)

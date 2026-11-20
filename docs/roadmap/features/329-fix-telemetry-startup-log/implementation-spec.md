@@ -398,7 +398,7 @@ Confirm that both `AC-1:` tests executed and passed.
 
 ### Step 9 — test: UI startup log names `SDK default` when unset, and the full set endpoint when set (U5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.startupLog.test.ts` — create
@@ -474,7 +474,7 @@ cd services/xstockstrat-ui \
 
 ### Step 10 — service: UI logs `SDK default` for an unset endpoint (U5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.ts` — modify
@@ -858,3 +858,9 @@ The diff must show exactly 1 insertion and 1 deletion.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 9 — test: UI startup log names `SDK default` when unset, and the full set endpoint when set (U5)
+**Spec said**: `python3 ../../scripts/check-duplication.py src` and `&& grep -n "process.emit" src/telemetry.startupLog.test.ts; test $? -eq 1` (Verification block, union with Step 10).
+**Actual**: Ran `(cd ../.. && python3 scripts/check-duplication.py services/xstockstrat-ui/src)` (from the repo root, exit 0, `Found 0 clones.`) and guarded the grep as `&& { grep -n "process.emit" src/telemetry.startupLog.test.ts; test $? -eq 1; }`. Everything else in the block ran unchanged.
+**Reason**: In the spec's form, the trailing `; test $? -eq 1` decides the block's exit status by itself, so an earlier failure (vitest, coverage, lint or jscpd) could be masked. The operator decided on 2026-11-20 (Option A) to correct the command and to apply the same correction to any later step (11-18) whose Verification has the same pattern.
+**Disposition**: verification-command correction; step body not edited.
