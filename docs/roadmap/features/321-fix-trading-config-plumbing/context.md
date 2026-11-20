@@ -74,3 +74,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - **Homelab staging** (`xstockstrat_homelab_staging`, environment `staging`, a separate config store): the same two edits at 2026-11-20T13:59:38Z and 13:59:39Z.
 - **Production: NOT done** — no production agent MCP is connected to this session. D-16's pass condition is therefore met for staging only; the integration PR stays draft until production reads `broker.timeout_ms` >= 10000 and `order_intent.stale_multiplier` >= 4.0 with audit timestamps recorded here.
 - Live effect from the edit (321 is not deployed yet): on both staging deployments every Alpaca call's timeout and the T-bounded reconciliation / position-sync polls (all brokers) are now 10 s; S = 40 s; Alpaca 429 budget B = 20 s. IBKR signed requests are unaffected until 321 deploys.
+
+## Session 2026-11-20 — operator ruling: production is out of the pre-deploy action
+
+- Operator (2026-11-20): **leave production out** — production has never been launched, so there is no production config to edit and no live IBKR/Alpaca traffic there. This amends D-13 / D-16 / D-20: the pre-deploy action and its stored-state pass condition apply to the **staging deployments only** (DO staging and homelab staging — both done 2026-11-20, see the previous entry). The integration PR's draft gate is satisfied by the staging record.
+- Carried forward as an Open Thread: when production is first launched, its `trading` config must be brought to `broker.timeout_ms` >= 10000 and `order_intent.stale_multiplier` >= 4.0 before trading goes live there (the seeds are 5000 / 3.0).
