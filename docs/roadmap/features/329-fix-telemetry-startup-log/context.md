@@ -609,3 +609,19 @@ Feature: fix-telemetry-startup-log
 ### Coverage check
 - Source scenarios: 2 (AC-1, AC-2). Planned: 2 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing was skipped.
 ````
+
+## Session 2026-11-20 — branch sync with main-dev (PR #1594 conflicts)
+
+- Merged `origin/main-dev` @ `36aed60b` into `feature/fix-telemetry-startup-log` (normal merge, commit `4b8ad743`).
+- Conflicted file: `docs/sdd/business-rules/platform.feature` only — both sides appended at EOF. Kept
+  main-dev's feature-352 scenarios first, then this feature's 329 block once, at the end.
+- Auto-merged, both sides verified present: `services/xstockstrat-agent/app/telemetry.py` and
+  `tests/test_telemetry.py` (main-dev's instance-id / host.provider work plus the `SDK default`
+  fallback and its tests), `services/xstockstrat-ui/CLAUDE.md`. No main-dev change touched a startup
+  log line; the other eight telemetry modules were untouched by main-dev.
+- `git diff origin/main-dev HEAD` shows only this feature's 29 files. `ledger-guard --fix`: clean.
+- Verification, all pass: config / identity / ledger / notify `pnpm run build`, `lint`,
+  `test:coverage` (394 / 161 / 168 / 416 tests, Node 24); ui `pnpm run lint`,
+  `vitest run src/telemetry.startupLog.test.ts`, `test:unit` (745 passed, 2 skipped); analysis /
+  indicators / ingest / agent `pytest tests/test_telemetry.py` (34 / 29 / 31 / 30), `ruff check`,
+  `ruff format --check`; `check-otel-produced-signals.py`; `check-duplication.py services/xstockstrat-ui/src`.
