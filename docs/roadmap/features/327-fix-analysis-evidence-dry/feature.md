@@ -16,6 +16,7 @@
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 2 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 
 ---
 
@@ -26,8 +27,18 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections
 - [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-analysis-evidence-dry`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| xstockstrat-analysis service owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 |
+
+Step 15 is a `docs` step (no reviewer).
 
 ---
 
@@ -37,4 +48,4 @@ Two analysis single-source-of-truth gaps: the evidence-eligibility fingerprint i
 
 ## Next Action
 
-`/sdd-spec fix-analysis-evidence-dry` — generate implementation spec from the approved design
+`/sdd-review fix-analysis-evidence-dry impl-spec` — validate implementation spec, then `/sdd-execute fix-analysis-evidence-dry`
