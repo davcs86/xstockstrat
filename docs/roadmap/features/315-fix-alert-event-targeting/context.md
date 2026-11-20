@@ -533,3 +533,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Owner-attributed risk events are re-emitted on every `checkRiskLimits` run with no dedup, and they now appear in owner_only QueryEvents/ExportEvents. Target: the portfolio step (document it in the service CLAUDE.md; no dedup in this fix).
 - [ ] External ledger readers of `portfolio:risk` may depend on concentration arriving as `drawdown_breach`; only in-repo consumers were checked. Target: the docs step and the integration PR description.
 - [ ] Peer 312 may narrow untargeted ListAlerts visibility mid-batch. Target: the merge-order.md note in the docs step.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status → implementation-ready.
+- Tree: detached@f7d12673 ≡ origin/feature/fix-alert-event-targeting (docs-only commits), 168 commits behind origin/main-dev@fb52065c. This docs-only writer did not merge main-dev. Every anchor was read on both trees and the spec carries an Anchor Table with both columns; `/sdd-execute` BRANCH SYNC merges main-dev before Step 1.
+- Steps: 1+2 trading (atomic unit), 3+4 portfolio (atomic unit), 5 Grafana rule, 6 docs. No proto, migration or config-key step.
+- Key codebase findings:
+  - main-dev added a **second** `haltAccount` call inside `flattenAndHalt` (rate-limit branch, trading.go:3096 on main-dev). Step 1 passes `accountEntry.userID` at every call. design.md names one call site because it was read on the older tree.
+  - The produced-signals guard was ported to Python on main-dev (`scripts/check-otel-produced-signals.py` + `scripts/tests/test_check_otel_produced_signals.py`); the `.sh` pair on the feature tree is deleted there. The guard requires the queried series in `packages/otel/produced-signals.tsv`, and a rule count that matches `packages/otel/alerts/README.md:9` and two pytest sites (`:487-488`, `:647`). Step 5 therefore edits four files, not the one design.md names.
+  - The exported series is `trading_alert_emit_total` with labels `alert_kind`, `outcome`, `service_name`, `deployment_environment` (read-only check against the live Mimir datasource, 2026-11-20). `increase()` alone misses the first emit after a process start, because that emit creates the series; the rule expression has a second `unless … offset 15m` arm for it. The expression parsed on the live datasource and matched a staging series in the last 30 days.
+  - The rule also fires on the systemic escalation alert, which records the same `alert_kind=reconciliation` (trading.go:2289).
+  - `evaluateDrawdowns` has four test callers in `portfolio_risk_test.go` (`:33`, `:43`, `:49`, `:55`); the return-shape change is why Steps 3+4 are one unit.
+  - Service docs moved on main-dev: the trading reconciliation paragraph is now `services/xstockstrat-trading/docs/reconciliation.md:31`; portfolio `CLAUDE.md` drawdown row is `:117`, ledger stream-key row `:97`. design.md's `merge-order.md:389-399` exists only on main-dev (the feature tree's file ends at `:364`).
+- Spec decisions (not in design.md; flagged in the spec's Execution Summary for the impl-spec review):
+  - **S-1.** The D-2 WARN `alert owner unresolved` is logged at each of the two emit sites with an `alert_kind` attribute. design.md does not say where it is logged.
+  - `@AC-3` is appended to `acceptance.feature` by Step 4 (design.md build order 4), not by this session; the spec carries the exact Gherkin text.
+  - Step 2 adds one `TargetUserId` assertion to `TestFlattenAndHalt_AlwaysRejected_HaltsAccount`, the only test that proves `flattenAndHalt` passes the pool owner (D-5).
+  - Step 6 also edits the trading reconciliation doc, which design.md's Docs list omits.
+- Follow-on story (operator decision (b)): proposed slug `admin-halted-accounts-read`. No number allocated; the operator opens it with `/sdd-story` no later than the integration PR.
+- Peer overlap added: `otel-env-provider-scoped-alerts` (333, spec-ready) edits the same `alert-rules.yaml`; non-blocking, recorded by Step 6 in merge-order.md alongside the 312 note.
+
+## Open Threads
+
+- [ ] Open the follow-on story `/sdd-story admin-halted-accounts-read` (admin cross-user halted-accounts read, or a notify admin-audience field). Until it ships, admins have no in-product signal or account id for another user's halted account. Target: no later than this feature's integration PR.
+- [ ] Import the Step 5 rule `xstk-trading-account-halt` into Grafana Cloud and confirm it routes to a contact point; the checked-in YAML is not auto-provisioned. `trading_alert_emit_total` has no account_id label, so admins need the Loki ERROR line `account halted`. Target: operator, before the integration PR.
+- [ ] Prod Slack/SendGrid fanout configuration is unknown from the repo, so it is not counted as a mitigation. Target: operator check before the integration PR.
+- [ ] The owner gets two CRITICAL pushes per reconciliation finding (accepted by the operator). Target: Step 2 pins that both alerts are targeted.
+- [ ] An account with `user_id=''` is reachable (no empty-caller guard in `RegisterBrokerAccount`). Its halts take the D-2 untargeted path and still broadcast to every user. Target: the empty-owner test in Step 2; the guard itself is out of scope.
+- [ ] Owner-attributed risk events are re-emitted on every `checkRiskLimits` run with no dedup, and they now appear in owner_only QueryEvents/ExportEvents. Target: Step 6 documents it; no dedup in this fix.
+- [ ] External ledger readers of `portfolio:risk` may depend on concentration arriving as `drawdown_breach`; only in-repo consumers were checked. Target: Step 6 and the integration PR description.
+- [ ] Peer 312 may narrow untargeted ListAlerts visibility mid-batch; peer 333 edits the same alert-rules file. Target: the merge-order.md note in Step 6.
+- [ ] The feature branch is 168 commits behind main-dev. Target: `/sdd-execute` BRANCH SYNC; re-grep every anchor by symbol after it, and treat a tree that still holds the `.sh` guard as a Step 5 blocker.
