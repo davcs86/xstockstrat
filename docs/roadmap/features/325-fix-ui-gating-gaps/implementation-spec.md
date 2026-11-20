@@ -49,6 +49,12 @@ sees the cited tree. Lines moved since recon (`c4fd48b0`): `WatchlistDetail.tsx`
   `marketdata-warm-set-ttl-prune`. Its number is **not reserved**. design.md asks for it to be
   numbered at spec time, but the allocator writes the `sdd/feature-cursor` ref and this run may
   push only `feature/fix-ui-gating-gaps`. Reserve it with `/sdd-story marketdata-warm-set-ttl-prune`.
+- File overlap with other in-flight specs (impl-spec review 2026-11-20, rebase-only, no
+  `merge-order.md` entry needed): Step 3's `e2e/fixtures/opportunities.ts` and
+  `e2e/fixtures/INVENTORY.md` are also edited by feature 308 (its spec `:911-912`, adds
+  `MYSZ_EVALUATION_FAILED_OPPORTUNITY` and a row after `INVENTORY.md:44`); features 345 (`:2130`)
+  and 360 (`:625`) also add `INVENTORY.md` rows. The exports are disjoint. Whichever lands second
+  re-places its catalog row by neighbouring symbol, not by line number.
 
 ## Accepted Cost (O-5) — operator ruling 2026-11-20
 
@@ -236,9 +242,10 @@ cd services/xstockstrat-ui
 pnpm exec playwright test e2e/config-ui/namespace-editor-admin-gate.spec.ts   # 4 cases executed, 0 skipped
 pnpm run lint && pnpm exec tsc --noEmit
 grep -n "from '../fixtures'\|helpers/auth" e2e/config-ui/namespace-editor-admin-gate.spec.ts
+pnpm run test:coverage        # vitest floor (≥ 40% on src/lib/**) still holds
 ```
-No coverage threshold applies to `xstockstrat-ui` e2e (spec-template table: n/a). The vitest floor
-(40% on `src/lib/**`) is untouched by this unit.
+No coverage threshold applies to `xstockstrat-ui` e2e (spec-template table: n/a). This unit
+touches no file under `src/lib/**`, so the vitest floor is expected to be unchanged.
 
 ---
 
@@ -358,7 +365,8 @@ the spec imports nothing Step 4 creates.
    descending `conviction`, `strategyId: ''`, `source: 'watchlist'`, `provenance: ['watchlist']`,
    `opportunityKey` `u1|<SYMBOL>|`, and no `validUntil`, following
    `LYFT_SOURCE_LABEL_OPPORTUNITIES`. It is **not** added to `OPPORTUNITIES`.
-2. `e2e/fixtures/INVENTORY.md`: add a canonical row after `:45` (symbol `membershipQueueRows`,
+2. `e2e/fixtures/INVENTORY.md`: add a canonical row after the `LYFT_SOURCE_LABEL_OPPORTUNITIES`
+   row (`:45` on `fb52065c`; place by symbol if the line moved) (symbol `membershipQueueRows`,
    module `e2e/fixtures/opportunities.ts`, shape `xstockstrat.analysis.v1.Opportunity`
    Connect-JSON for `page.route` bodies only, consumer the new spec).
 3. Create the spec. A local helper routes
@@ -392,9 +400,11 @@ pnpm exec playwright test e2e/insights/watchlist-queue-membership.spec.ts   # 3 
 pnpm run lint && pnpm exec tsc --noEmit
 grep -n "from '../fixtures'\|helpers/auth\|helpers/watchlistMock" e2e/insights/watchlist-queue-membership.spec.ts
 grep -n "membershipQueueRows" e2e/fixtures/opportunities.ts e2e/fixtures/INVENTORY.md
+pnpm run test:coverage        # vitest floor (≥ 40% on src/lib/**) still holds
 ```
-No coverage threshold applies to `xstockstrat-ui` e2e (spec-template table: n/a). The vitest floor
-(40% on `src/lib/**`) is untouched by this unit.
+No coverage threshold applies to `xstockstrat-ui` e2e (spec-template table: n/a). This unit
+touches no file under `src/lib/**`, so the vitest floor is expected to be unchanged. The flake
+check for the fake-clock cases runs in Step 4's Verification, where they are green.
 
 ---
 
@@ -489,11 +499,14 @@ pnpm run test:coverage        # vitest floor (≥ 40% on src/lib/**) still holds
 pnpm exec playwright test e2e/insights/watchlist-queue-membership.spec.ts \
   e2e/insights/watchlists.spec.ts e2e/insights/watchlist-readiness-list.spec.ts \
   e2e/insights/opportunities.spec.ts e2e/copilot.spec.ts e2e/trader/position-detail.spec.ts
+pnpm exec playwright test e2e/insights/watchlist-queue-membership.spec.ts --repeat-each=10   # 30 runs, 0 failed, 0 flaky
 grep -rn "inQueue\|useOpportunities" src/components/insights/WatchlistDetail.tsx   # expect no output
 grep -rn "setQueriesData\|getQueriesData\|setQueryData" src                        # only useWatchlists.ts
 ```
-The sibling specs are in the run because a data-source swap reddened `watchlists.spec.ts` once
-before (fails.md 2026-09-16, feature 181); its in-queue cases are at `:84` and `:448-465`.
+The repeat run is the flake check for Cases A and C, which count `pageSize` 1000 requests under a
+fake clock (impl-spec review 2026-11-20). The sibling specs are in the run because a data-source
+swap reddened `watchlists.spec.ts` once before (fails.md 2026-09-16, feature 181); its in-queue
+cases are at `:84` and `:448-465`.
 
 ---
 
