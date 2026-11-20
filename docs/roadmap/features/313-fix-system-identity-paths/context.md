@@ -512,3 +512,240 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 (sdd-batch design gate (round 4))
+
+- The `/sdd-design fix-system-identity-paths` full debate is at its approval gate after round 4 (gate policy: halt). design.md is not written and status.md is unchanged. The register is in `debate.md`. Round 4 added D-14 to D-16, R-9, R-10 and O-13 to O-16, closed O-10 to O-12, and marked D-9 reopened (operator steer). P-1, P-2 and P-3 keep their recorded verdicts.
+
+## Open Threads
+
+- **Approach.** The code core is unchanged (D-1, D-3, D-4, D-13). Round 4 applies the operator's D-9 reopen and AC-2 wording, and tightens the AC-2 test:
+  - Ingest sets `AppendEventRequest.user_id=owner` on `ingest.signal.ingested` in `_ingest_external_signal` (D-1). FR-1 stays scoped to the mcp_client loop.
+  - `poll_one_source` mints one `x-trace-id` per source per cycle and passes it via `propagation_meta` only, with no `x-user-id` (D-2 as written). The proposer's `correlation_id` variant is not adopted, because the steer supports the P-1 option without saying "reopen D-2". The variant is ready to apply if the operator rules for it; a ruling rewrites only step 4 and the AC-3/FR-3 wording.
+  - Analysis adds `is_real_owner()` to `app/identity.py` and uses it in `_compose` and at the window guard. A system order writes a degraded snapshot, opens no window and writes no system-owned ledger row.
+  - AC-2's Then reads "the event is processed on its first attempt with no retry backoff" (D-15). Its test drives `_process_with_retry`, not `process_event`, because `asyncio.sleep` is awaited only there (`pnl_pattern_consumer.py:228-232`). It asserts no awaited sleep, one `process_event` run, no parking, a degraded snapshot and no `pnl_positions` window.
+  - The RPC-path `AppendEventRequest.user_id` check is an untraced incidental-hardening assertion inside the AC-1 test, with no "Covers: AC-33" (D-14, superseding D-9's trace clause).
+  - AC-1 and AC-3 tests drive `poll_one_source` through the real `_ingest_external_signal` with a dedup-miss fake DB (`tests/test_mcp_client_loop.py:173-201`).
+  - Build order (D-16):
+    1. Docs and context.md, including a note that step 4 and the AC-3/FR-3 wording are contingent on the P-1 ruling.
+    2. Analysis AC-2, RED then GREEN.
+    3. Ingest D-1/AC-1, with the in-test RPC assertion.
+    4. Ingest FR-3/AC-3 as a separate final step.
+  - `/sdd-spec` must re-ground every cited line against `origin/main-dev` and peers 308, 309, 327 and 328. The round-4 line checks ran on a `feature/fix-trading-config-plumbing` tree, where the AppendEvent is at `servicer.py:1397` and the core at `:1237`.
+- **Strongest open objection.** O-13 is blocking. The operator must give an explicit verdict on P-1 and P-3 before approval: reopen D-2 for the `correlation_id` option, or decline.
+  - If reopened, step 4 sends the per-cycle id as both `x-trace-id` metadata and `AppendEventRequest.correlation_id`, and AC-3/FR-3 are reworded to "persisted as the ledger event's correlation_id". O-14 to O-16 (non-blocking) then apply: the spy at `tests/test_mcp_client_loop.py:196` must accept the new keyword, one keyword-only `trace_id` should feed both channels, and the consumer-surface note must cover the export's `correlation_id` column.
+  - If declined, D-2 and the outbound-only AC-3 stand. The per-cycle id is then dropped at the ledger, so AC-3 proves outbound metadata only.
+  - AC-3's wording becomes permanent at promotion, so this must be settled first.
+- **Floor status.** No Floor breach.
+- **Uncovered @AC changes.** @AC-3 (EXTEND) is not covered by an operator decision; the C-16 sign-off of 2026-11-20 covers the @AC-1 and @AC-2 CHANGEs only. All other touched scenarios are PRESERVE.
+- **Unverified.** The operator decisions and steer reached this step as workflow-computed text and are not yet confirmed against context.md. Check they are recorded here before `/sdd-spec`.
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "Round 4 synthesis. The code core is unchanged (D-1, D-3, D-4, D-13). This round applies the operator's D-9 reopen and AC-2 wording, and tightens the AC-2 test. The per-cycle id stays as D-2 wrote it, because the steer does not explicitly reopen D-2.\n\nINGEST, OWNER (D-1 / AC-1, FR-1 loop-scoped)\n- Add user_id=owner to the ingest.signal.ingested AppendEventRequest in _ingest_external_signal.\n- On the tree I checked (branch feature/fix-trading-config-plumbing, not main-dev) the request is at services/xstockstrat-ingest/app/handlers/servicer.py:1397 and the core at :1237. Recon recorded :1174-1182.\n\nINGEST, PER-CYCLE ID (FR-3 / AC-3) — D-2 as written\n- poll_one_source (services/xstockstrat-ingest/app/engine/mcp_client_loop.py:116,153-160) mints one uuid4 per source per cycle.\n- It passes the id only as propagation_meta=[(\"x-trace-id\", id)], with no x-user-id.\n- AC-3 Thens: each source's two AppendEvents carry the same non-empty x-trace-id call metadata and no x-user-id; the two sources' ids differ.\n- Scenario comments stay as in round 3: the @AC-41/@AC-28/@AC-29/@AC-53 @feature-294 PRESERVE, and \"outbound call metadata only; ledger does not read x-trace-id\".\n- The proposer's correlation_id variant is NOT adopted. It contradicts D-2's \"only via propagation_meta\" clause, and the steer takes P-3 \"as support for\" the P-1 option without saying \"reopen D-2\". P-1 and P-3 stay pending.\n- The variant is technically sound and ready to apply if the operator rules for it:\n  - Ledger persists req.correlationId (services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:89).\n  - Analysis already pairs correlation_id with x-trace-id (services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:613,618).\n  - A ruling rewrites only step 4 and the AC-3/FR-3 wording.\n\nANALYSIS (D-3 / D-4, unchanged)\n- Add is_real_owner() to services/xstockstrat-analysis/app/identity.py. owner_metadata reuses it, with its raise and message unchanged.\n- Use it in _compose (pnl_pattern_consumer.py:539,546) and at the window guard (:388).\n- A system order writes a degraded snapshot, opens no window, and writes no system-owned ledger row (D-13). _POISON and tests/test_identity.py are not touched.\n\nAC-2 (operator wording, 2026-11-20)\n- Then: \"the event is processed on its first attempt with no retry backoff\".\n- The test must drive consumer._process_with_retry(event), not process_event. asyncio.sleep is awaited only inside _process_with_retry (pnl_pattern_consumer.py:228-232), so a direct process_event call passes with or without the bug.\n- With the sleeps fixture (services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py:483-486), assert:\n  - sleeps.await_count == 0;\n  - process_event ran exactly once;\n  - not parked;\n  - an order_snapshots insert with empty indicators and signals;\n  - analysis.snapshot.degraded emitted;\n  - no pnl_positions window opened.\n- RED evidence before the fix: two awaited sleeps and PARKED after three attempts, with the exact message \"owner-scoped call needs a real owner, got 'system'\".\n\nAC-1 TEST (D-9 reopened by the operator)\n- Drive poll_one_source through the real _ingest_external_signal with a dedup-miss fake DB (the services/xstockstrat-ingest/tests/test_mcp_client_loop.py:173-201 pattern).\n- Assert AppendEvent's request has user_id == \"user-a\" and the call metadata has no x-user-id.\n- The same test function adds one untraced incidental-hardening assertion: IngestSignal with an x-user-id: user-a header yields AppendEventRequest.user_id == \"user-a\" (the tests/test_signal_ownership.py:138-139 request-object pattern).\n- It carries no \"Covers: AC-33\". @AC-33 @feature-224 is a plain PRESERVE that this feature does not exercise. D-9's FR-1 loop narrowing stands.\n\nAC-3 TEST\n- Same real-core harness as AC-1 (R-8).\n- Given two sources owned by user-a, each returning two distinct, non-duplicate signals.\n\nBUILD ORDER\n1. Docs and context.md:\n   - AC-1 and AC-2 rewordings, with the operator's C-16 sign-off (2026-11-20);\n   - FR-1 loop-only; FR-2 per D-10; FR-3 outbound-only;\n   - the D-12 drift fix; D-5 and D-6;\n   - the D-9 re-target;\n   - a note that step 4 and the AC-3/FR-3 wording are contingent on the operator's P-1 ruling.\n2. Analysis AC-2, RED then GREEN, via _process_with_retry.\n3. Ingest D-1 / AC-1, including the in-test RPC assertion.\n4. Ingest FR-3 / AC-3 as a separate final step.\n\n/sdd-spec must re-ground every cited line against origin/main-dev and peers 308, 309, 327 (pnl_pattern_consumer.py) and 328 (mcp_client_loop.py and the _ingest_external_signal signature).",
+    "open_objections": [
+      {
+        "text": "Register: the operator must give an explicit verdict on P-1 (and P-3) before approval. The steer takes P-3 'as support for the P-1 correlation_id option' but does not say 'reopen D-2', unlike its explicit 'reopen D-9'. If reopened, step 4 sends the per-cycle id as both x-trace-id metadata and AppendEventRequest.correlation_id, and AC-3/FR-3 are reworded to 'persisted as the ledger event's correlation_id'. If declined, D-2 and the outbound-only AC-3 stand as synthesised here. AC-3's wording becomes permanent at promotion, so this must be settled first.",
+        "blocking": true
+      },
+      {
+        "text": "Contingent on a P-1 reopen: the real-core spy at services/xstockstrat-ingest/tests/test_mcp_client_loop.py:196 is `async def spy(signal, propagation_meta=None, owner=None)`. A new correlation_id keyword would raise TypeError, which the per-item except in mcp_client_loop.py swallows as a skipped item. The @AC-4 @feature-166 dedup test would then fail or pass for the wrong reason. Step 4's Files must include that test, and the spy must accept and forward the new keyword. The proposal did not answer this.",
+        "blocking": false
+      },
+      {
+        "text": "Contingent on a P-1 reopen (C-18): passing the same id through two channels (propagation_meta and correlation_id) lets a future caller send mismatched values. Prefer one keyword-only trace_id on _ingest_external_signal that the core turns into both, or state the equality constraint in the docstring. The RPC path passes neither, so D-9's no-behaviour-change premise holds either way. The proposal did not answer this.",
+        "blocking": false
+      },
+      {
+        "text": "Contingent on a P-1 reopen (C-14 / D-7): correlation_id is an export-row column (services/xstockstrat-ledger/acceptance/ledger-event-export.feature:40). The context.md consumer-surface note must say mcp_client rows show a poll-cycle id there, not a request trace, and that RPC rows stay empty.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-11 @feature-021",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8 @feature-021",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @feature-166",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-33 @feature-224",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8 @feature-225",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-14 @feature-225",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-15 @feature-225",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-16 @feature-225",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-17 @feature-225",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-259",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @feature-259",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-28 @feature-294",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-29 @feature-294",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-41 @feature-294",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-53 @feature-294",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Adopt the correlation_id variant now (id sent as x-trace-id metadata and AppendEventRequest.correlation_id): it contradicts settled D-2 and the steer does not explicitly reopen D-2. It stays under P-1/P-3 pending an explicit operator verdict.",
+      "Derive correlation_id from any x-trace-id entry in propagation_meta: it would start storing inbound trace ids on RPC-path ledger rows, a behaviour change outside FR-1/FR-3 that breaks D-9's no-behaviour-change premise.",
+      "Trace the RPC-path user_id assertion to @AC-33 @feature-224: AC-33 is a PERMISSION_DENIED refusal with no row written (services/xstockstrat-ingest/acceptance/private-by-default-templates.feature:40-44), so that trace is false coverage. The operator reopened D-9 on this.",
+      "Observe AC-2's 'no retry backoff' by calling process_event directly: asyncio.sleep is awaited only in _process_with_retry (pnl_pattern_consumer.py:228-232), so the Then would pass with the bug present."
+    ],
+    "open_risks": [
+      "P-1 is unruled. If the operator reopens D-2 after /sdd-spec, AC-3, FR-3 and step 4 change. The step split limits this to one unexecuted step, but AC-3's wording must be fixed before promotion.",
+      "Under D-2 as written, the per-cycle id is dropped at the ledger (ledgerServiceImpl.ts reads only x-user-id from metadata), so AC-3 proves outbound metadata only.",
+      "The operator decisions and steer reached this step as workflow-computed text. I could not confirm them against context.md, so the orchestrator should check they are recorded there before /sdd-spec.",
+      "Peer 328 also edits mcp_client_loop.py and the _ingest_external_signal signature. A conflicting metadata or keyword change there is a semantic merge conflict with AC-1 and AC-3.",
+      "Line drift: I checked the tree on branch feature/fix-trading-config-plumbing, where the AppendEvent is at servicer.py:1397 and the core at :1237. Recon's ingest citations are stale, and /sdd-spec must re-ground against origin/main-dev.",
+      "Re-expressing owner_metadata through is_real_owner touches a builder with 9+ callers. The mitigation is that tests/test_identity.py:13-36 stays unedited and green.",
+      "Marketdata's handling of a headerless system bars read is unverified. It sits inside _compose's try, so the event degrades either way."
+    ],
+    "constitution_rules_touched": [
+      "C-11",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-09",
+      "P-02",
+      "P-03",
+      "P-06"
+    ],
+    "rationale": "There is no Floor breach. The one blocker is a register question: the proposal adopts the correlation_id design, which contradicts settled D-2, and the steer does not explicitly reopen D-2.\n\nWhat I applied from the operator:\n- D-9 is explicitly reopened. The RPC-path assertion moves inside the AC-1 test, untraced, and the FR-1 loop narrowing stands.\n- AC-2 takes the wording \"processed on its first attempt with no retry backoff\".\n- The C-16 sign-off covers @AC-1 and @AC-2 only, so @AC-3 is not marked covered.\n\nWhy D-2 is not treated as reopened:\n- The steer says \"reopen D-9 — accept the petition\" for D-9, but only \"take the D-2 petition's evidence as support for the P-1 correlation_id option\" for D-2.\n- The task limits `reopened` to ids the steer explicitly reopens. The proposer's own strongest-risk section and the adversary both flag the same gap.\n- So I corrected the approach to D-2 as written and raised the ruling as the blocking objection.\n\nWhat I verified on the tree:\n- The spy signature at tests/test_mcp_client_loop.py:196 has no correlation_id parameter.\n- asyncio.sleep is awaited inside _process_with_retry at pnl_pattern_consumer.py:228-232.\n- Ledger persists req.correlationId at ledgerServiceImpl.ts:89.\n- AC-33's text at private-by-default-templates.feature:40-44 is the PERMISSION_DENIED scenario.\n- The AppendEvent is at servicer.py:1397 and the core at :1237.\n\nObjections:\n- O-10 closes: the operator wording is adopted and the test is specified to drive _process_with_retry, which answers the adversary's vacuous-test point.\n- O-11 closes: the ingest steps are split with AC-3 last, and the P-1 contingency is recorded in step 1.\n- O-12 closes: both AC-1 and AC-3 use the real-core harness.\n- The adversary's spy-signature, two-channel and export-column points apply only if D-2 is reopened. The proposal did not answer them, so they stay open as non-blocking.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Supersedes D-9's trace clause (operator reopen, 2026-11-20): the RPC-path AppendEventRequest.user_id check is an untraced incidental-hardening assertion inside the AC-1 test, with no 'Covers: AC-33'. @AC-33 @feature-224 is a plain PRESERVE. FR-1 stays scoped to the mcp_client loop.",
+          "evidence": "services/xstockstrat-ingest/acceptance/private-by-default-templates.feature:40-44; services/xstockstrat-ingest/tests/test_signal_ownership.py:138-139; operator steer 2026-11-20"
+        },
+        {
+          "text": "AC-2's Then reads 'the event is processed on its first attempt with no retry backoff'. Its test drives _process_with_retry with the sleeps fixture and asserts no awaited sleep, one process_event run, no parking, a degraded snapshot and no pnl_positions window.",
+          "evidence": "operator decision 2026-11-20; services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:228-232; services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py:483-486"
+        },
+        {
+          "text": "Build order: docs and context.md first, then analysis AC-2, then ingest D-1/AC-1, then ingest FR-3/AC-3 as a separate final step. AC-1 and AC-3 tests drive poll_one_source through the real _ingest_external_signal with a dedup-miss fake DB.",
+          "evidence": "docs/roadmap/ledger/fails.md:441; services/xstockstrat-ingest/tests/test_mcp_client_loop.py:173-201"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Derive AppendEventRequest.correlation_id from an x-trace-id entry in propagation_meta",
+          "why": "It would start storing inbound trace ids on RPC-path ledger rows, a behaviour change outside FR-1/FR-3 (servicer.py:1216,1237)."
+        },
+        {
+          "text": "Observe AC-2's 'no retry backoff' Then by calling process_event directly",
+          "why": "asyncio.sleep is awaited only in _process_with_retry (pnl_pattern_consumer.py:228-232), so the Then passes with the bug present."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "The operator must give an explicit verdict on P-1/P-3 (reopen D-2 for the correlation_id option, or decline) before approval. The round-4 steer supports the option but does not say 'reopen D-2'.",
+          "blocking": true
+        },
+        {
+          "text": "If D-2 is reopened: step 4's Files must include tests/test_mcp_client_loop.py, and the spy at :196 must accept and forward the new keyword, or the @AC-4 @feature-166 dedup test breaks silently.",
+          "blocking": false
+        },
+        {
+          "text": "If D-2 is reopened: use one keyword-only trace_id that the core turns into both x-trace-id metadata and correlation_id, or state the equality constraint in the docstring (C-18).",
+          "blocking": false
+        },
+        {
+          "text": "If D-2 is reopened: the context.md consumer-surface note must say the export's correlation_id column shows a poll-cycle id for mcp_client rows (ledger-event-export.feature:40).",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-10",
+          "how": "AC-2 adopts the operator wording 'Then the event is processed on its first attempt with no retry backoff', observed by driving _process_with_retry with the sleeps fixture."
+        },
+        {
+          "id": "O-11",
+          "how": "The proposer confirms separate ingest steps with FR-3/AC-3 last. The P-1 contingency is recorded in step 1's context.md entry."
+        },
+        {
+          "id": "O-12",
+          "how": "The proposer confirms that AC-1 and AC-3 drive poll_one_source through the real _ingest_external_signal with a dedup-miss fake DB (test_mcp_client_loop.py:173-201)."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": [
+        "D-9"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
