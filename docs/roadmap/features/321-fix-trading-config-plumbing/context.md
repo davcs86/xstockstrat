@@ -97,3 +97,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - No existing test exercises `environmentIsPaper` / `GetTradingEnvironment`; eleven `&config.Config{}` test harnesses move LIVE → PAPER under the new fallback and none asserts LIVE.
   - `buf` and `migrate` are not on this host's PATH; `psql`, `docker`, `go` and `golangci-lint` are.
 - Decisions taken at spec time (within the approved design): U1a + U1b are one atomic unit (a scaffold-only commit cannot pass F-05); `callTimeout` lives in `internal/broker/broker.go`; pin rows added for the D-20 stored state (`10000 × 4.0` → S 40 s, B 20 s); the AC-4 trading test is a new file `trading_paper_env_test.go`; migration name `056_trading_broker_paper_per_environment`.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Tree: feature/fix-trading-config-plumbing@5c416868 (≡ origin; main-dev fb52065c merged).
+- Result: 0 failures, 8 warnings (advisory — did not block). No Floor risk. `@AC-1..4` all covered; atomic units 1+2, 6+7+8+9, 10+11 are symmetric and can pass their own Verification.
+- Unresolved ⚠ carried into execution:
+  - Step 10: `buf breaking --against …branch=feature/fix-trading-config-plumbing` compares the branch with itself after the commit (vacuous) — run it against `main-dev`; CI's breaking check currently excludes `trading/v1/trading.proto` (`ci.yml:253`), so the local run is the only real check (C-09) — [ ] unaddressed
+  - Step 9: replace the deleted `scripts/config-wiring.test.mjs:618` assertion with `assert.ok(Array.isArray(findings), …)` rather than removing it outright; never assert an empty baseline (it is a ratchet later features may refill) — [ ] unaddressed
+  - Steps 4/5: add a PARTIALLY_FILLED row to the `requires_approval` table (expect false) — [ ] unaddressed
+  - Step 5: say how the "RED before Step 4" run is captured, since Step 4 precedes it (P-06) — [ ] unaddressed
+  - Step 3: state the coverage-threshold position in the Verification block (C-08) — [ ] unaddressed
+  - Step 8: confirm the stored-JSON regeneration route (scratch Postgres + migrate, or the CI artifact) and re-check `056` before starting (C-07) — [ ] unaddressed
+  - Step 13: the grep-only Verification proves a log entry exists, not the stored values; keep the operator read-back of the staging config — [ ] unaddressed
+  - Steps 1/2: the RED run uses an uncommitted scaffold; record it in context.md and the PR body (P-06) — [ ] unaddressed
+- Overlap findings:
+  - **Config migration `056` is claimed by three features** — 321 (`056_trading_broker_paper_per_environment`), 317 (`056_marketdata_bars_miss_backoff`), 314 (`056_mcp_deadline_budget`), each verified on its own branch. Free on main-dev today (tail 055). Whichever merges second and third renumbers to max(main-dev)+1 and regenerates `scripts/config-wiring-stored.json`. No merge-order.md row exists yet.
+  - Textual only: `trading.go` with 311/312/315; `trading.proto` with 322 (a different message, ~`:336`, vs 321's `:263-265`); `order_intent.go` with 347 (merged).
+  - Not a collision: 330's `055` is on main-dev via #1592 (330 is `in-progress` only for its post-deploy step).
