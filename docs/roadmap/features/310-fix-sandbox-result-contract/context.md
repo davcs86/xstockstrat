@@ -474,3 +474,45 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Implicit-`{}` reliance (recon risk 5): template seeds are settled (9 of 9 assign `result`); dev/prod `indicators.formulas` rows need the operator DB check (OQ1); tests, the UI default source and e2e fixtures need enumeration — target: build step 1.
 - [ ] Mocked-Popen fakes (`tests/test_sandbox_isolation.py:65`, `:225-239`) emit no status line and pass only through D-4 and the no-status fallback — target: parent-changes step.
 - [ ] debate.md still shows O-1, O-3, O-4 and O-5 as `open`: this run was given no Status-cell changes for them. O-1, O-3 and O-4 are answered by the operator decisions above; O-5 is not — target: next register write.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status: design-approved → implementation-ready.
+- Tree: `origin/feature/fix-sandbox-result-contract@90a2fd0e`. recon.md's `sandbox.py` lines still hold; design.md's "(debate.md)" citations were re-grepped.
+- `acceptance.feature` @AC-2 replaced with the design.md § 6 verbatim two-run scenario (D-9, D-13) before tracing scenarios.
+- Operator decisions O-1, O-3 and O-4 (recorded 2026-11-20, above) are applied as binding. O-5 was not answered in this run.
+
+### Decisions
+
+- Steps: 1 service + 2 test (the whole contract in `app/services/sandbox.py`); 3 service + 4 test (boot self-test in `sandbox_probe.py`); 5 service + 6 test (agent `test_formula` docstring + `docs/runbooks/mcp-tools.md`); 7 test (`/insights` Playwright, test-only); 8 docs.
+- No proto, migration or config step (D-8, F-01, F-07). No `**Lands with**` unit: each step passes its own Verification alone.
+- Wrapper and parent land in one service step: the template's `{nonce}` field and the parent's `.format(nonce=…)` cannot be committed apart.
+- The verbatim wrapper block, `_split_status`, the D-7 classifier, the self-test code and the `memory_used_bytes` definition text (O-10) are now written out in implementation-spec.md Steps 1, 3 and 8. This closes the "verbatim texts not persisted" thread.
+- Promotion of `@AC-1..4` with `@feature-310` is left to `/sdd-execute` at integration; it is not a spec step.
+- Report sidecars are **not** edited: the sidecar contract (`.claude/skills/sdd-qa/reference/defect-filing.md:26-48`) allows only a status token and a `ref:` line, and a `triaged` report counts as resolved when its feature launches. The D-14 conditional wording goes into the findings row (Step 8). This narrows design.md § 7 and is flagged for `/sdd-review impl-spec`.
+
+### Key codebase findings
+
+- **Break radius measured.** The full Step 1 + Step 3 change was applied to the working tree temporarily, the unchanged suite was run through the service venv, and the change was reverted (nothing committed): 571 passed before, 571 passed with it. No existing indicators test relies on the implicit `{}`, on the deleted stderr test, or on `memory_used_bytes == 0`.
+- Implicit-`{}` enumeration in the repo is complete: tests (above), the seeded system formula (`app/formulas/fundamentals_value_quality.py:186`), the five UI starter templates (`formulaReference.ts:209,227,256,276,309`); the UI e2e suite stubs `ExecuteFormula` (`formulas.spec.ts:231`). Saved dev/prod `indicators.formulas` rows remain an operator check.
+- Prototype figures on this kernel (advisory): `result = {}` with `allowed_imports=["numpy"]` reported 50,663,424 bytes and the @AC-2 run B exceeded it by 80,027,648 (threshold 41,943,040); with `[]` it reported about 15.7 MB in about 50 ms. The @AC-2 test gives both runs `allowed_imports=["numpy"]` so the import baseline is common.
+- A `dict` subclass whose `items()` raises `MemoryError` is a working recipe for "MemoryError inside `json.dumps`" (a `float` subclass with a raising `__repr__` is not: the C encoder bypasses it).
+- Boot self-test risk resolved by reading the code: `execute_formula` (`sandbox.py:670-679`) reads no config and records no per-run telemetry (`record_sandbox_execution` is in the servicer, `servicer.py:383`). It can only latch the existing once-flags (`_warn_unobservable_once`, the `oom_score_adj` warning).
+- `run_startup_probe`'s early `return` is at `sandbox_probe.py:318`; the spec moves the existing body into `_run_memory_probe()` so the self-test always runs.
+- Agent: `memory_used_bytes` is already returned as a JSON string (`client.py:1178-1180`, `always_print_fields_with_no_presence=True`); `docs/runbooks/mcp-tools.md:1060-1062` mirrors the docstring's return list.
+- The findings file has no row for the 2026-10-22 missing-result report; only `:22`, `:23` and the link rows `:62-63` change.
+- Pre-existing flake, unrelated to this feature: `tests/test_sandbox_watchdog.py::test_ac8_fork_bomb_is_not_a_success_the_service_recovers_and_nothing_is_unobservable` failed 7 of 25 runs **alone on the unmodified tree** on this kernel (`CANNOT_OBSERVE_MSG` assertion); full-suite runs passed 4 of 4. Not recorded as a defect report in this run (this session may write only this feature directory).
+
+## Open Threads
+
+- [ ] O-5 / C-14: operator sign-off on "/insights surface unchanged, justified" (or a named follow-up feature for a memory display) is still not recorded — target: before `/sdd-execute` runs Step 7.
+- [ ] OQ1: operator check of dev and prod `indicators.formulas` for saved formulas that never assign `result` — target: before the integration PR; record the result here.
+- [ ] DO App Platform may render no VmHWM under seccomp; record the first post-deploy `sandbox memory self-test` log line (or the ERROR) here — target: integration PR (D-14).
+- [ ] Sidecar reading of design.md § 7 (sidecars untouched, conditional wording in findings `:23`) needs confirmation — target: `/sdd-review fix-sandbox-result-contract impl-spec`.
+- [ ] Step 7 is a characterisation test (`**TDD**: N/A`), added so the UI surface has a step without changing UI code — target: `/sdd-review fix-sandbox-result-contract impl-spec` confirms or drops it.
+- [ ] The pre-existing `test_ac8_fork_bomb…` isolation flake needs a defect report via `/sdd-qa defect` — target: next session with write access outside this feature directory.
+- [ ] debate.md still shows O-1, O-3, O-4 and O-5 as `open`; O-1, O-3 and O-4 are answered — target: next register write (`/sdd-design` owns the register).
+- [x] `acceptance.feature` @AC-2 rewrite — done this session.
+- [x] Verbatim wrapper block and definition text — written in implementation-spec.md Steps 1 and 8.
+- [x] Boot self-test config/telemetry/latency check — resolved (Key codebase findings).
+- [x] Mocked-Popen fakes with no status line stay green — measured (571 passed); Step 2 adds the no-status fallback test.
