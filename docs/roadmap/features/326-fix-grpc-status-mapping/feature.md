@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.md, docs/reports/2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect.md
 **Severity**: SEV-3
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-13
+**Last Updated**: 2026-11-20
 
 ---
 
@@ -18,6 +18,7 @@
 | 2026-11-13 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-13 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 | 2026-11-13 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); main-dev d5de836b merged, steps 2,3,6 re-specced (conditional) |
+| 2026-11-20 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done (sequential, sdd-batch-execute); `check-config-wiring.mjs --final` exit 0 |
 
 ---
 

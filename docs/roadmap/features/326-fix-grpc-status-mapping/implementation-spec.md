@@ -650,7 +650,7 @@ cd services/xstockstrat-agent \
 
 ### Step 8 — docs: AC-2 server-side rewording, product-spec Observed correction, context.md records
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/326-fix-grpc-status-mapping/`
 **Files**:
 - `docs/roadmap/features/326-fix-grpc-status-mapping/acceptance.feature` — modify
@@ -725,3 +725,8 @@ grep -n "fix-trading-grpc-status-mapping\|fix-portfolio-grpc-ctx-mapping\|a watc
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 8 — follow-up record figures corrected (2026-11-20)
+- **Spec said**: Instruction 3 describes `fix-trading-grpc-status-mapping` as "the identical six-code collapse" and `fix-portfolio-grpc-ctx-mapping` as "about 24 call-site edits".
+- **Found**: `trading.go:223-237` maps four connect codes (InvalidArgument, NotFound, FailedPrecondition, PermissionDenied); portfolio has 18 production `toGRPCError` call sites (the 24 counted test references too; sdd-execute record n=3, context.md D-6).
+- **Disposition**: context.md records the accurate figures (four codes, 18 call sites), as the context.md Step 8 open thread directed. Record wording only; no file or scope change.

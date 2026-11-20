@@ -32,7 +32,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [x] Keep connect-go and grpc-go codes 1-16 aligned; pinned by the translator table test. — Steps 1/2 (done 2026-11-20: `TestToGRPCError_ConnectCodeCast`)
 - [ ] Document branch (b) masking, and state the branch (c) out-of-scope exposure in the spec and PR body. — Step 1 (masking doc comment landed 2026-11-20; the D-12 branch (c) out-of-scope statement still goes in the integration PR body)
 - [x] Record "red N/A — no behavior change; characterization test added" in context.md and the PR body, and capture the green run; use the main-dev `tools.py` line numbers only after the main-dev merge, re-grep if main-dev moved. — Step 7 (done 2026-11-20; the PR-body line goes in the integration PR body)
-- [ ] Run the two AC-2 sign-off greps before rewording and stop to ask the operator if either fails; record the follow-ups, the C-14 UI disposition and the R-6 grep result; fix "about 24 call-site edits" to 18. — Step 8
+- [x] Run the two AC-2 sign-off greps before rewording and stop to ask the operator if either fails; record the follow-ups, the C-14 UI disposition and the R-6 grep result; fix "about 24 call-site edits" to 18. — Step 8 (done 2026-11-20)
 - [ ] File `fix-trading-grpc-status-mapping` (`trading.go:223-237`, four-code collapse) and `fix-portfolio-grpc-ctx-mapping` (D-6 symmetry) through the allocator. — after Step 8
 - [ ] C-16 promotion: AC-1/AC-2 → marketdata acceptance suite, AC-3/AC-4 → portfolio suite, f148 `@AC-4` gains the duplicate-name case. — integration PR
 - [ ] Optional non-blocking `merge-order.md` note for the shared `portfolio_service.go`. — router / integration PR
@@ -48,6 +48,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `docs/roadmap/features/326-fix-grpc-status-mapping/implementation-spec.md` — written in sdd-spec, patched in sdd-review, re-specced for steps 2, 3 and 6 in `498e07c0`.
 - `docs/roadmap/ledger/insights.md` — union-resolved merge conflict in the main-dev sync merge `c1b5428f`.
 - Feature dir: status.md, feature.md, product-spec.md, acceptance.feature, context.md (triage); recon.md, debate.md, design.md (design).
+- `docs/roadmap/features/326-fix-grpc-status-mapping/{acceptance.feature,product-spec.md}` — @AC-2 reworded server-side (ID kept) and the marketdata Observed bullet corrected (Step 8).
 - `docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.status` and `docs/reports/2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect.status` — stamped `triaged` at triage.
 
 ## Superseded Sessions
@@ -616,3 +617,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: red N/A — no behavior change; characterization test added (AC-3 agent surface; `ALREADY_EXISTS` already passes through at `tools.py:231`) → green: "5 passed, 21 deselected", full suite "763 passed", "Total coverage: 88.11%" (≥ 40%), ruff "All checks passed!" / "75 files already formatted" (`.sdd-logs/v-1.log`, exit=0).
 - Files modified: `services/xstockstrat-agent/tests/test_watchlist_tools.py`
 - Deviations: none
+
+## Session 2026-11-20 — sdd-execute sequential (sdd-batch-execute), Step 8
+
+- Tooling setup (step 8): none needed (docs step; Verification uses grep only) ✓.
+
+### Step 8 — docs: AC-2 server-side rewording, product-spec Observed correction, context.md records [done]
+- Sign-off check passed before the reword: "C-16 operator sign-off" at context.md:25 and the `@AC-2` CHANGE sign-off at design.md:257 (`.sdd-logs/v-1.log`, pre-edit). `@AC-2` keeps its ID and tags; only its Given/When/Then are reworded to the server-side form. The product-spec marketdata Observed bullet now says the sector RPCs' handlers return raw but the service wraps store failures as `connect.CodeInternal` (`classification_service.go:120, :140, :171`).
+- **Follow-ups** (to file through `scripts/sdd-allocate-feature-number.py`):
+  - `fix-trading-grpc-status-mapping` — the same collapse in `services/xstockstrat-trading/internal/handler/trading.go:223-237`, which maps only four codes (InvalidArgument, NotFound, FailedPrecondition, PermissionDenied) and sends everything else to Internal. Deferred: trading is not among this feature's affected services.
+  - `fix-portfolio-grpc-ctx-mapping` — a ctx-aware portfolio `toGRPCError(ctx, err)` symmetric with marketdata. Deferred: it edits all 18 production call sites in `portfolio_handler.go` in a feature set that conflicts with peers 311/312/315/317 on portfolio, and no AC requires it (D-6).
+- **C-14 UI disposition**: no UI code change. `insightsBff.ts:136` `createWatchlist: forward(...)`, `bffShared.ts:199-209` passes the downstream status and body through unchanged, and `insights/watchlists/page.tsx:119-120` renders `.message`. The user-visible create error changes from the raw pgx text "insert watchlist: ERROR: duplicate key value violates unique constraint …" to "a watchlist with this name already exists".
+- **R-6 bounded grep result** (re-run 2026-11-20 on this branch): the non-test marketdata grep for `CodeUnauthenticated|CodeUnimplemented|CodeAborted|CodeAlreadyExists|CodeDeadlineExceeded|CodeCanceled|CodeOutOfRange|CodeDataLoss` returns no hits, so no marketdata site emits a newly passed-through code and the UI `Unauthenticated` redirect cannot fire. No non-test caller branches on `INTERNAL` from a marketdata RPC; the only hits are telemetry label sets, the UI stream retry set `streamBackoff.ts:13-22` (Internal, DeadlineExceeded and Canceled alike) and `context.abort` producers.
+- TDD: N/A (docs). Verification exit=0 (`.sdd-logs/v-3.log`). `node scripts/check-config-wiring.mjs --final` exit=0, two baseline `REPORTED:` lines only (analysis `fundamentals.provider`, trading `platform/trading_state`, both readers-disagree, unrelated) (`.sdd-logs/v-2.log`). All 8 steps done → `code-completed`.
+- Files modified: `docs/roadmap/features/326-fix-grpc-status-mapping/acceptance.feature`, `docs/roadmap/features/326-fix-grpc-status-mapping/product-spec.md`, `docs/roadmap/features/326-fix-grpc-status-mapping/context.md`
+- Deviations: record-accuracy only (Deviation Log): the follow-ups record 18 call sites (not "about 24") and a four-code trading collapse (not "six-code").
