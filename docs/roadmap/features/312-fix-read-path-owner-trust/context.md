@@ -455,3 +455,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-trading, xstockstrat-portfolio, xstockstrat-notify, xstockstrat-ui, xstockstrat-agent, plus xstockstrat-analysis as a preserved `ListOrders` caller; key reuse patterns: the inline fail-closed caller check at `trading.go:482,967,1317,1490`, and notify's header-only code-3 rejection at `notifyServiceImpl.ts:240-243`).
+- Phase 1 Grilling: 3 rounds (full). Chosen approach: every read and consume path takes the owner from `x-user-id` only — trading order reads (including `GetOrder`) through one `ResolveOrderOwner(ctx)` behind a new stream interceptor, fail-closed broker-account guards, portfolio ack-and-skip for owner-less events, notify `ListAlerts` header-only, additive proto deprecations. Rejected: any admin body `user_id` selector or "empty = all users" on order reads (R-3, R-4), and the unbuildable or vacuous test harness layouts (R-2, R-7).
+- Constitution rules touched: C-01, C-08, C-10, C-11, C-13, C-15, C-16, C-18, F-04, P-02, P-03, P-06, PROTO-10, NOTIFY-5, PLAT-4, PLAT-5, PLAT-13. Floor breaches: none.
+- Status: spec-ready → design-approved. Wrote design.md; debate.md State → approved (Rounds run 3). No reopen petitions were on the register, so none was marked declined. No ledger line: the per-RPC audit trap is already recorded in fails.md.
+
+### Operator decisions (2026-11-20, binding)
+
+- **D-7 signed (design gate, option A).** Order reads resolve the owner from the header only. ADMIN loses cross-user order RPCs, and the runbook consumer (`docs/runbooks/inter-service-mtls-rollout.md`) gets the DB-query substitute (D-18). This overrides the trading `CLAUDE.md` "admin empty user_id = all users" contract and the product-spec "admin selector" Expected line. It is the C-16 sign-off for both CHANGE lines in design.md. Resolves O-2.
+- **Round-3 synthesis items are binding.** `GetOrder` is in scope (`ResolveOrderOwner` first; headerless → `PermissionDenied`; non-owner → `NotFound` identical to absent). The test harness is `internal/service/export_test.go` plus `trading_owner_scope_test.go` on the bufconn chain with pgxmock. The acceptance edits (scope `3` + body user-b rows, headerless scenario tagged `@AC-5`, multi-line Examples) are adopted. Resolves O-6 and O-8.
+
+### Open Threads
+
+- `debate.md` still shows O-2, O-6 and O-8 as `open`; the decisions above resolve them, but no register status change was supplied with the approval. Reconcile at the next register update.
+- `acceptance.feature` does not yet contain `@AC-4`, `@AC-5`, `@AC-6` (D-17). Target: `/sdd-spec` acceptance step.
+- Flat-book check depends on the DB-query substitute landing in the same PR as D-7; the predicate is copied verbatim from `ListSubmittedOrders` and the "trader surface / ListOrders" option is removed (O-9). Target: runbook docs step.
+- The bufconn interceptor chain is hand-mirrored from `main.go:155` and can drift silently (accepted, C-18). Target: harness test step.
+- Keep `export_test.go` to the constructor plus the broadcast shim, so later tests cannot bypass the production chain. Target: harness step.
+- The handler status remap (`handler/trading.go:104,112,277,289,300,315`) changes wire codes UI and agent mappers may assume; list every refusal code per broker-account RPC and prove agent `@AC-7` on the wire (O-10); D-12 governs any overlap with 326. Target: trading handler step.
+- The `LoadBrokerPool` skip changes `resolveAccount` sole-account behaviour and drops phantom accounts from hydration; their in-flight orders cannot be reconciled by `pollFills`. Target: trading service step and the cleanup follow-up report.
+- Before merge, record here the read-only count of active `user_id=''` `trading.broker_accounts` rows per environment (O-11). Target: final docs step.
+- Audit every trading stream RPC for behaviour change under the new `StreamServerInterceptor`. Target: middleware step.
+- Legacy pre-`user_id` events are dropped on replay, including the `DeleteOfflineRealized` purge on deregister (accepted, D-5). Target: portfolio step.
+- Notify test conversion to metadata callers may expose tests relying on the unscoped fallback; rebase on 315 first. Target: notify step.
+- Two defect reports to file: notify `StreamAlerts`/`AcknowledgeAlert` body `user_id` (D-11), and trading `broker_accounts` `user_id=''` cleanup (D-9). Target: final docs step.
+- Every `path:line` that entered in rounds 2–3 (debate.md D-7..D-18 evidence) post-dates recon.md and must be re-grepped by `/sdd-spec`.
