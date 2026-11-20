@@ -1,6 +1,6 @@
 # Debate Register: fix-fundsignal-scoring-correctness
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -53,7 +53,7 @@
 |---|---|---|---|---|
 | O-1 | 1 | O-1 [P-03/C-01] The fix-4 retraction mechanism was built on a false separate-database premise. Correct recon and adopt the in-database guard, with an absent-table guard and marketdata-owner acknowledgement of the cross-schema read. | yes | closed @ round 2 (Recon corrected (D-2). The cross-schema read is to_regclass-guarded per the 013 precedent, the in-database NOT EXISTS leg is intersected with the frozen operator list, and the marketdata owner acknowledges the read in the PR. The adversary judged it substantively addressed in r2.) |
 | O-2 | 1 | O-2 [C-09] buf breaking on the in-place optional conviction is unverified; run it, record it, and pre-decide the additive field-12 fallback. | yes | closed @ round 2 (The design now uses the additive field conviction_provided=12, which is buf-safe by construction, based on the PROTO-7 record. The CI proto-lint buf breaking verdict is still recorded in context.md.) |
-| O-3 | 1 | O-3 [How-to-Act #1/#3, P-03] The always-on side gate changes labels on all cross-sections (062 FR-6) and creates a first-deploy dedup overlap. Needs an operator decision: always-on or degenerate-only. | yes | open |
+| O-3 | 1 | O-3 [How-to-Act #1/#3, P-03] The always-on side gate changes labels on all cross-sections (062 FR-6) and creates a first-deploy dedup overlap. Needs an operator decision: always-on or degenerate-only. | yes | closed @ round 3 (Operator decision 2026-11-20, design gate, option A: the gate is degenerate-only (folded set < 5 or buy_cut <= sell_cut) with a side tie-break at 0.5. The always-on side gate and the absolute-score-cut variant are rejected. Recorded in context.md.) |
 | O-4 | 1 | O-4 [C-18/F-07-adjacent] The side gate assumes the system scoring formula composite is in [0,1], centred on 0.5. Document the contract with a test, or clamp. | no | closed @ round 2 (The [0,1], 0.5-neutral composite contract is documented in analysis CLAUDE.md and pinned by a range test on value_quality and _builtin_score; no clamp. Accepted by the adversary in r2.) |
 | O-5 | 1 | O-5 [C-10/C-14] Conviction-semantics docs must be updated on every surface (tools.py, mcp-tools.md:251, signal_extraction.md:70-71, ingest.proto:127, INGEST-4, strat-lab skill), and the mcp_client_loop.py:94 explicit-0.0 path must be tested. | no | closed @ round 2 (All doc surfaces are listed (proto comment, INGEST-4, tools.py, mcp-tools.md:251, signal_extraction.md, the strat-lab skill, analysis CLAUDE.md, the 201 @AC-4 comment) plus the PROTO-7 entry. The mcp_client_loop.py:94 explicit-0.0 path is tested next to mcp-client-signal-source.feature:34.) |
 | O-6 | 1 | O-6 [C-08/P-06] MagicMock HasField is always truthy; use a real proto. AC-3 is screener-only. | no | closed @ round 2 (D-4 adopted: real ingest_pb2.ExternalSignal in the tests; AC-3 is screener-only.) |
