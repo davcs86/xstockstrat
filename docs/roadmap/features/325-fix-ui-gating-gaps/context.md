@@ -954,3 +954,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] The C-16 sign-off for @AC-1 and @AC-2 rests on the recorded ruling. The operator's relayed words cover only the O-5 bound. Target: confirm at the `/sdd-spec` gate if the operator wants it restated.
 - [ ] Badges past 3,000 queue rows are silently dropped. The badge is a cue, not an authority. Target: hook step.
 - [ ] Fail-open shows an enabled Edit trigger to a non-admin when `/me` fails, so the BFF's rejection must be legible. Target: Unit 1 e2e step.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status: design-approved → implementation-ready.
+- Step shape: Steps 1+2 (test + service, namespace-editor gate) and Steps 3+4 (test + service, queue-membership drain) are atomic units (`**Lands with**`); Step 5 is docs (findings rows). `@AC-1` → Step 1, `@AC-2` → Step 3.
+- Operator rulings recorded 2026-11-20 and applied: C-16 sign-off for `@AC-1` and `@AC-2`; the O-5 bound accepted at |W_new| × (2,880 + 288) per calendar day ("I accept the bound"), P-1 declined; design approved after round 5. The spec carries the two binding accuracy corrections (quote retention at most 2,880 × 90 rows; the 288 are bar-cycle transactions).
+- Tree: evidence read on `origin/main-dev@fb52065c` (detached). The feature branch (`20742720`) is 168 commits behind `main-dev`. This run did not merge `main-dev` into it, because the run may write only this feature directory; `/sdd-execute` BRANCH SYNC does the merge.
+- Assumptions made in this run:
+  - The task named the directory `docs/roadmap/features/docs/roadmap/features/325-fix-ui-gating-gaps/`; the real directory `docs/roadmap/features/325-fix-ui-gating-gaps/` was used (the doubled prefix does not exist).
+  - design.md build-order items 2 and 3 (hoist + hook, then consumer swap) are one `service` step, because they must commit together anyway and one step is the smallest unit.
+  - The post-deploy dev checks are a spec section, not a numbered step, because an execute step must verify in-tree (F-05).
+- Key codebase findings:
+  - Line drift since recon: `WatchlistDetail.tsx` `useOpportunities()` is at `:72`, the Set at `:91-93`, the prop at `:367`; `WatchlistReadiness.tsx` `queued` is at `:329`, the badge at `:376-378`. `WatchlistReadiness` has one caller and `inQueue` is in no test.
+  - Every spec that drives the namespace editor's Edit already uses `addAdminCookie`; no spec mocks `/api/auth/me` today.
+  - The shared `e2e/mock-backend.ts` `listOpportunities` returns the whole fixture in one page with no token, so the existing in-queue cases in `watchlists.spec.ts` (`:84`, `:448-465`) keep passing under the drain.
+  - `GetBarsMulti`'s limit is `barsLimit()` = `marketdata.backfill.batch_size` (default 1000, cap 10,000; `alpaca/client.go:413-418`, `cmd/server/main.go:93`), not a literal 1000. The about-330 threshold holds at the default. O-9 fallback re-cited at `marketdata_service.go:1246-1259` and `:1262-1280`. The analysis cites stand (`servicer.py:4688`, `:4744-4749`, `:4792`, `:5627-5639`).
+- Staging observation (2026-11-20, one account, via the agent `list_opportunities` tool with `page_size` 1000): 487 queue rows over 396 symbols with `opportunity.max_universe_size = 100`. The per-viewer snapshot term is 437 rows, not the design's worked "50". About 188 symbols are the |W_new| estimate for that one viewer (595,584 headline writes per day). B_row ≈ 921 bytes, so about 448 KB per 15 s poll against about 46 KB today.
+- Side effect of that read: it ran the full-window enrichment once, so it may have warmed up to those symbols on staging marketdata until its next restart.
+
+## Open Threads
+
+- [ ] **For the operator.** The accepted bound's formula is unchanged, but the staging account above puts one viewer at about 188 newly warm symbols and a 10× payload. Confirm the ruling still stands at those figures before `/sdd-execute`, or reopen P-1.
+- [ ] O-11: B_row is estimated from the agent's JSON, not a dev BFF body. Target: implementation-spec.md § Post-Deploy Verification item 3.
+- [ ] Follow-up feature `marketdata-warm-set-ttl-prune` has no number. This run could not run the allocator (it pushes `sdd/feature-cursor`). Target: `/sdd-story marketdata-warm-set-ttl-prune`.
+- [ ] Out of scope, proposed only: `NamespaceEditor.tsx:345-353` tells a per-user-scope viewer they are "Editing your own per-user overrides … self-service", while `SetConfig` is admin-only at the BFF. After Step 2 a non-admin sees that text beside "Admin only: read-only view". Target: a defect report via `/sdd-qa defect`.
+- [ ] Bar upserts land on `marketdata.ohlcv` (lock-table risk); the watch signals only detect saturation. Target: § Post-Deploy Verification item 4.
+- [ ] Two live-tunable keys can break the bound (`marketdata.classification.enabled`, `opportunity.max_universe_size`). Target: Step 5 findings row and § Post-Deploy Verification item 5.
+- [x] O-18, O-19, O-20: carried in implementation-spec.md § Accepted Cost (d) and (f).
+- [x] The about-330 threshold and the O-9 lines: re-cited in § Accepted Cost (e).
+- [x] C-16 sign-off for `@AC-1` and `@AC-2`: restated by the operator ruling of 2026-11-20.
+- [x] Badges past 3,000 queue rows: Step 4 instruction 2. Fail-open legibility: Step 1 case 1d.
