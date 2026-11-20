@@ -632,3 +632,82 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: N/A (docs). Verification exit=0 (`.sdd-logs/v-3.log`). `node scripts/check-config-wiring.mjs --final` exit=0, two baseline `REPORTED:` lines only (analysis `fundamentals.provider`, trading `platform/trading_state`, both readers-disagree, unrelated) (`.sdd-logs/v-2.log`). All 8 steps done → `code-completed`.
 - Files modified: `docs/roadmap/features/326-fix-grpc-status-mapping/acceptance.feature`, `docs/roadmap/features/326-fix-grpc-status-mapping/product-spec.md`, `docs/roadmap/features/326-fix-grpc-status-mapping/context.md`
 - Deviations: record-accuracy only (Deviation Log): the follow-ups record 18 call sites (not "about 24") and a four-code trading collapse (not "six-code").
+
+## Session 2026-11-20 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-grpc-status-mapping (feature 326)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-marketdata/acceptance/fix-grpc-status-mapping.feature | CREATE | NEW | Scenario Outline, 6 examples. The subject is marketdata's toGRPCError. |
+| AC-2 | services/xstockstrat-marketdata/acceptance/fix-grpc-status-mapping.feature | CREATE | NEW | The subject is the GetSectorHistory RPC in marketdata. |
+| AC-3 | services/xstockstrat-portfolio/acceptance/fix-grpc-status-mapping.feature | CREATE | NEW | The subject is the portfolio CreateWatchlist RPC. |
+| AC-4 | services/xstockstrat-portfolio/acceptance/fix-grpc-status-mapping.feature | CREATE | NEW | Same subject as AC-3. It is the negative case, so a non-23505 failure stays INTERNAL. |
+
+### Ready-to-write blocks
+--- services/xstockstrat-marketdata/acceptance/fix-grpc-status-mapping.feature (CREATE) ---
+```gherkin
+# Promoted from feature 326 (fix-grpc-status-mapping) at launch, C-16. Do not hand-edit; scenarios are verbatim.
+Feature: fix-grpc-status-mapping (bug fix)
+  Regression guard: marketdata toGRPCError preserves distinct error codes instead of collapsing them to INTERNAL.
+
+  # guards: docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.md
+  @AC-1 @regression @feature-326
+  Scenario Outline: marketdata preserves the connect error code on the gRPC boundary
+    Given a marketdata handler error connect.NewError(connect.Code<connect_code>, err)
+    When it is translated for the gRPC response
+    Then the gRPC status code is <grpc_code>, not INTERNAL
+
+    Examples:
+      | connect_code     | grpc_code         |
+      | DeadlineExceeded | DEADLINE_EXCEEDED |
+      | Canceled         | CANCELLED         |
+      | AlreadyExists    | ALREADY_EXISTS    |
+      | Unimplemented    | UNIMPLEMENTED     |
+      | Unauthenticated  | UNAUTHENTICATED   |
+      | Aborted          | ABORTED           |
+
+  # guards: docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.md
+  @AC-2 @regression @feature-326
+  Scenario: a raw context deadline on GetSectorHistory reaches the caller as DEADLINE_EXCEEDED
+    Given the GetSectorHistory service call returns context.DeadlineExceeded
+    When a client calls GetSectorHistory over gRPC
+    Then the client receives gRPC status DEADLINE_EXCEEDED, not INTERNAL
+```
+
+--- services/xstockstrat-portfolio/acceptance/fix-grpc-status-mapping.feature (CREATE) ---
+```gherkin
+# Promoted from feature 326 (fix-grpc-status-mapping) at launch, C-16. Do not hand-edit; scenarios are verbatim.
+Feature: fix-grpc-status-mapping (bug fix)
+  Regression guard: CreateWatchlist reports a duplicate name as ALREADY_EXISTS, and other insert failures stay INTERNAL.
+
+  # guards: docs/reports/2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect.md
+  @AC-3 @regression @feature-326
+  Scenario: creating a duplicate non-system watchlist name returns ALREADY_EXISTS
+    Given user U already has a non-system watchlist named "A"
+    When user U calls CreateWatchlist with name "A"
+    Then the call fails with gRPC status ALREADY_EXISTS, not INTERNAL
+
+  # guards: docs/reports/2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect.md
+  @AC-4 @regression @feature-326
+  Scenario: a non-unique-violation insert failure still returns INTERNAL
+    Given the watchlist insert fails with a database error other than SQLSTATE 23505
+    When user U calls CreateWatchlist with name "B"
+    Then the call fails with gRPC status INTERNAL
+```
+
+### Notes / ambiguities / conflicts
+- **Source copy:** I read acceptance.feature from the working tree at docs/roadmap/features/326-fix-grpc-status-mapping/acceptance.feature, not from origin/feature/fix-grpc-status-mapping. I had no git access. The orchestrator should confirm the branch copy is identical before writing.
+- **No @FR tags:** the source scenarios carry only `@AC-n @regression`, with no `@FR-*`. I added `@feature-326` and did not invent `@FR` tags. Other suites such as 257 do carry `@FR`, so this is a source-side gap.
+- **Dedup:** I grepped the marketdata and portfolio acceptance suites and platform.feature for ALREADY_EXISTS, DEADLINE_EXCEEDED, toGRPCError, CreateWatchlist and GetSectorHistory. Nothing asserts the same outcome, so there is no DUP, OVERLAP or CONFLICT.
+  - platform.feature:325 and :1338 mention ALREADY_EXISTS, but they are about source ownership and InstantiateTemplate.
+  - portfolio/fix-ledger-query-pagination.feature:22-24 is about GetPnL deadlines.
+  - portfolio/ensure-signals-watchlist-on-read.feature:75 calls CreateWatchlist but asserts a different outcome.
+- **Routing:** all four scenarios belong to a single service, so none go to platform.feature. Neither target file exists yet. The marketdata and portfolio acceptance directories exist, so no new directory is needed.
+- **Consumers:** the ui and agent consumers named in feature.md get no scenarios because acceptance.feature has none for them.
+
+### Coverage check
+- Source scenarios: 4 (AC-1 is an outline with 6 examples). Planned: 4 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC is accounted for and none were skipped.
+````
