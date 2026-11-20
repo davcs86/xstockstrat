@@ -2368,3 +2368,16 @@ Written by the orchestrating session itself.
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — D-40 reopen, recorded by the orchestrator (verbatim)
+
+Written by the orchestrating session itself.
+
+- **REOPEN D-40 granted.** Question: "round 9 is rated sound with no blocking objection. One cost is left for you.
+  Because nothing ever moves a bracket off ACTIVE, every account with any bracket history gets one broker ListOrders
+  call on every 5-second fill-poller tick, forever, even when nothing is left to adopt … The adversary's fix is a
+  'tombstone': once a successful ListOrders shows a candidate leg is not open, write a closed-out row for it so it is
+  evaluated only once. That changes settled decision D-40 and costs one more debate round. Which do you want?"
+  Operator selected: "Reopen D-40, add tombstone (Recommended)". Effect: after a successful `ListOrders` that does not
+  show a candidate open, insert a closed-out `trading.bracket_legs` row for it (no emit, `observed_filled_qty = 0`),
+  so each candidate is evaluated once. A failed `ListOrders` still inserts nothing (R-10).
