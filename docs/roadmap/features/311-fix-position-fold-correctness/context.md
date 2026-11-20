@@ -2927,3 +2927,35 @@ Written by the orchestrating session itself.
   - Adopted IBKR legs that later vanish from the gateway are polled indefinitely (D-26). Target: accepted.
   - A leg id is lost from tracking if the `ActivateBracket` transaction fails; it is alerted, but its exit fill never folds. Target: accepted.
   - Neither broker adapter populates `BrokerOrder.Fees`, so fee totals understate. Target: trading findings.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 27 steps. Status → implementation-ready. `acceptance.feature` `@AC-5` now carries the operator-signed wording (D-38); the `@AC` ID is kept (C-15).
+- **Written from the workflow's computed task, not by the operator.** The operator's own words are only in the sessions titled "recorded by the orchestrator (verbatim)" above. Nothing here is an operator ruling.
+- **Tree.** Service evidence was read from `origin/main-dev@fb52065c`. `origin/feature/fix-position-fold-correctness` was 168 commits behind `main-dev` and differed from the merge base `c4fd48b0` only inside this directory. This run did not merge `main-dev` (its task allowed edits only inside this directory); `/sdd-execute` BRANCH SYNC does. `recon.md`, `debate.md` and `design.md` cite `c4fd48b0` line numbers; the spec's numbers are the current ones.
+- Key codebase findings:
+  - Migration numbers: portfolio `019` and trading `012` are free on `main-dev@fb52065c` (max `018_watchlist_signal_expiry`, `011_offline_fees_snapshot_headers`). Feature 318 (`spec-ready`) adds no migration file. Unmerged branches of other features were not checked; `/sdd-execute` re-checks after BRANCH SYNC.
+  - Portfolio sites: `processOrderFill` `portfolio_service.go:376-490`; `observed` `:234-245`; `emitEventAs` `:1371` (callers `:1367`, `signal_prune.go:60,70`); `GetPnL` dedup maps `:993-1020`; `queryRower` `portfolio_repo.go:23-27`. The service dbtests build the repo with `NewPortfolioRepoWithDB(pool)`, so `ApplyFill` begins its transaction from `r.db` through `txBeginner`, not from `Pool()`.
+  - Trading sites: `pollFills` `trading.go:1816-1878` (`logTick` at `:1877`); the three ACTIVE bracket writes `:3680`, `:3697`, `:3739`; `appendLedgerEvent` `:3945` (callers `:1123`, `:3989`, `trading_offline_test.go:2215,2228`); `shouldPollHaltedAccount` `:2949-2960`; `reconcileTick` credential and halted gates `:2174-2193`; `KnownBrokerOrderIDs` `trading_repo.go:130`, `NetFilledQtyBySymbol` `:171`.
+  - The v1 scope-limitation paragraph D-10 rewrites is now in `services/xstockstrat-portfolio/docs/position-closed-contract.md`, not in the portfolio `CLAUDE.md`.
+  - The `reconciliation.interval_ms` doc row the design cites at trading `CLAUDE.md:119` is now at `:95` (halted row `:98`). `TestShouldPollHaltedAccount_ThrottlesAndRecovers` is at `trading_reconciliation_test.go:491-513`.
+  - `.do/app.dev.yaml:439` and `:701-707`: on DO staging, ledger (direct) and portfolio (PgBouncer pool) use the same `xstockstrat` cluster, so they share one server clock. The homelab DSNs are not in this repository and were not checked.
+- **Spec assumptions (A-1..A-12 in implementation-spec.md).** These are spec choices, not operator rulings:
+  - A fill payload with `qty` 0 or an empty `order_id`, `user_id` or `symbol` is skipped before the applied key is taken. Without this the 294 `@AC-56` fixture's partial-shaped event would take `ord-56`'s key and the test's "4 ok" would break.
+  - The D-11 `GetOrder` fallback cap has no number in the register; the spec uses a constant of 5 per account per tick.
+  - The leg observer lower-cases the broker status before mapping it, because `alpacaStatusToProto` does not match IBKR's capitalised statuses and IBKR passes them through raw. Without it `@AC-4` and `@AC-5` would hold for Alpaca only.
+  - Round-10 trading tests 8-9 are specified as pgxmock SQL-shape tests: trading has no `dbtest` harness and CI has no trading DB job.
+  - A floor stamp or load failure is retried every `streamRetryDelay`; the fill stream never opens without a floor.
+  - `trading.bracket_legs` also carries `order_id`, `user_id`, `trading_mode` and `not_found_ticks` (round-4 and round-8 syntheses); `design.md` § 2 lists the columns in short form.
+  - `PortfolioRepo.GetRealizedAccum`, `GetFeesAccum`, `ClosePosition` and `UpsertPosition` lose their last production caller and are deleted with the fill-path rewrite.
+
+## Open Threads
+
+- **ORCHESTRATOR ASSUMPTION, not an operator ruling (carried forward unchanged).** The adoption-only throttle (D-50: adoption `ListOrders` at the reconciler cadence for accounts with candidates but no live tracked legs, no new config key) was chosen by the orchestrator to meet the operator's stated reason for the D-40 reopen (remove the permanent per-tick broker load) where a tombstone is unsafe. The operator was told and has not objected or confirmed. The operator can overturn it. Steps 23-25 of the spec implement it. It is also listed in `design.md` § Open Risks. Target: operator confirmation before `/sdd-execute`.
+- **Before `/sdd-execute`.** This file is far over the 65536-byte `/sdd-execute` limit. `/sdd-distill fix-position-fold-correctness` must run first.
+- **Found after the design was approved (the design debated the `c4fd48b0` tree).** Target: `/sdd-review fix-position-fold-correctness impl-spec`, then the operator if a change is wanted.
+  - Feature 347 (Alpaca adaptive rate limit) is on `main-dev`. Its trading `@AC-34` ("The fill poller does not stall on a throttled Alpaca account") is a PRESERVE the design did not list. The spec bounds leg `ListOrders` and `GetOrder` calls with `alpacaCallContext`, as the parent poll does.
+  - `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:48-49` consumes `order.filled` and `order.partially_filled`. Bracket-leg events will reach it with a broker leg id as `order_id`. No step changes analysis; Step 27 logs it in the trading findings. O-30's list: analysis 042 `@AC-1` (snapshot on fill), `@AC-2` (close triggers pattern analysis), `@AC-7`, and 259 `@AC-6`, `@AC-7`, `@AC-9` (consumer retry and park).
+  - The parent `pollFills` path maps IBKR statuses through `alpacaStatusToProto` without lower-casing. That defect is outside this feature; Step 27 logs it.
+- **Housekeeping closed by this session.** `@AC-5` wording applied. Migration numbers re-checked. O-67 and O-68 are treated as settled: Steps 23-25 carry the new-candidate bypass, `interval_ms <= 0` read as 60000, the injected clock and the known-invalid-credentials skip.
+- **Unchanged from the sdd-design (approved) session's Open Threads.** The O-61 operator confirmations before the cutover step, and every accepted residual listed there, still stand. Step 26 writes them into the runbook.
