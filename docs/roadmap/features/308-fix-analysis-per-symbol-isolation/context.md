@@ -417,3 +417,36 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-analysis; key reuse patterns: the feature-245 `ScreenerEngine._eval_symbol_isolated` isolation shape, the `bar_epoch = -1` readiness sentinel).
+- Phase 1 Grilling: 3 rounds (full), run by `/sdd-batch`; approved by the operator at the design gate. Chosen approach: per-symbol isolation at the five callers through a shared `app/services/isolation.py`, with opportunity faults classified on the typed `exit_reason` (transient → `unavailable`, otherwise structural `evaluation_failed`) and a degraded readiness row cached only as the `-1` sentinel. Rejected: R-1 to R-10 in debate.md (seam catch in `compute_readiness_row`, text-matched timeouts, MEMORY_EXCEEDED as transient, a new proto enum value).
+- Constitution rules touched: C-01, C-04, C-09, C-10, C-11, C-14, C-16, C-17, C-18, P-02, P-03, DRY guard rail, PLAT-N1. Floor breaches: none.
+- Status: spec-ready → design-approved.
+- debate.md: State `approved`; O-1 closed by the operator decision below. O-9 and O-10 stay open (non-blocking). No reopen petitions were filed.
+
+### Operator decisions (C-16)
+
+- Operator (2026-11-20, design gate, option A): C-16 sign-off to CHANGE feature-289 @AC-10 (`opportunity-compute-robustness.feature`) and @AC-13 (`readiness-caching-poll-discipline.feature`) — a formula TIMEOUT isolates to `unavailable` / readiness `-1` (the debate default) — and for this feature's amended @AC-2 and @AC-3. O-1 is closed by this record.
+- Consequence: the D-11 declined-sign-off fallback is not exercised. The rewrites of `services/xstockstrat-analysis/tests/test_unreadable_formula.py:671,691` may now land.
+
+### Decisions
+
+- **In-scope cross-service touch (D-9).** The indicators deadline refusal (`services/xstockstrat-indicators/app/handlers/servicer.py:352-359`) sets `exit_reason=SANDBOX_EXIT_REASON_TIMEOUT`, with an indicators test asserting it. Consumers only display the field (agent `tools.py:1688`, analysis `fundamentals_scoring.py:64`); metrics do not change. xstockstrat-indicators is a second touched service beyond the product spec's "xstockstrat-analysis (only)".
+- **MEMORY_EXCEEDED is terminal `evaluation_failed`** (D-8, R-8).
+- **`fetch_failed` race (product-spec Open Question 3) is in scope**: the outage flag becomes row-local (D-5).
+- No ledger entry: the swallowed-test-double trap behind O-10 is already on record at `docs/roadmap/ledger/fails.md:3113` and `:3794`.
+
+### Open Threads
+
+- [ ] O-9: choose between rendering `EVALUATION_FAILED_CUE` on mobile `SignalRow` (`SectionRenderer.tsx:248-256`) and the Signal-detail header (`trader/positions/[symbol]/page.tsx:1014-1020`), or a named C-14 follow-up feature with the risk stated. The debate did not choose — decide and record at `/sdd-spec`, before the UI step.
+- [ ] O-10: enumerate the analysis test doubles by grep (including `_formula_stub`, `tests/test_strategy_evaluator.py:521,581`) and assert the classifier's input in the regression tests — test-double step (design build step 7).
+- [ ] Reword `acceptance.feature` @AC-2 and @AC-3 to the signed-off amendment (design.md § 2). The round-2 replacement wording is not on disk — at `/sdd-spec`.
+- [ ] Amend feature-289 @AC-10 and @AC-13 in the durable suites, rewrite the two pinning tests, and update the service CLAUDE.md "FormulaExecutionError still propagates" sentence — same PR, design build step 7.
+- [ ] A cgroup-OOM bystander row stays `evaluation_failed` until the next recompute — accepted; no step.
+- [ ] File the named C-14 degraded-rate counter follow-up (`fails.md:3229-3232`); until it lands a sustained degraded rate shows only in WARN logs and span attributes — design build step 7.
+- [ ] The gather-level `isolated(...)` backstop can drop a candidate on a row-assembly bug for one cycle — cover with the tally WARN at the `_compute_opportunities` step.
+- [ ] Update all three `-1` sentinel invariant texts so the overloaded sentinel does not mislead — design build step 7.
+- [ ] Agent `test_formula` shows TIMEOUT instead of UNSPECIFIED for a deadline-refused run — accepted; note at the indicators step.
+- [ ] Peer overlap on the analysis servicer (309, 313, 323, 327, 329): re-grep every anchor at `/sdd-spec`.
