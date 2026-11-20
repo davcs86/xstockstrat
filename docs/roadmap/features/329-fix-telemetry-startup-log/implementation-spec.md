@@ -602,7 +602,7 @@ cd services/xstockstrat-analysis \
 
 ### Step 13 — test: indicators startup record carries the effective endpoint (U7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_telemetry.py` — modify
@@ -646,7 +646,7 @@ cd services/xstockstrat-indicators \
 
 ### Step 14 — service: indicators logs `"SDK default"` for an unset endpoint (U7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/telemetry.py` — modify
@@ -869,4 +869,10 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: `&& grep -n "conftest" tests/test_telemetry.py; test $? -eq 1` (Verification block, union with Step 12).
 **Actual**: Ran the grep guarded as `&& { grep -n "conftest" tests/test_telemetry.py; test $? -eq 1; }`. Everything else in the block ran unchanged.
 **Reason**: Same pattern as Step 9: the trailing `; test $? -eq 1` alone decides the block's exit status and could mask an earlier pytest, coverage or ruff failure. Applied under the operator's 2026-11-20 Option A decision, which extends the correction to Steps 11-18.
+**Disposition**: verification-command correction; step body not edited.
+
+### Deviation: Step 13 — test: indicators startup record carries the effective endpoint (U7)
+**Spec said**: `&& grep -n "conftest" tests/test_telemetry.py; test $? -eq 1` (Verification block, union with Step 14).
+**Actual**: Ran the grep guarded as `&& { grep -n "conftest" tests/test_telemetry.py; test $? -eq 1; }`. Everything else in the block ran unchanged.
+**Reason**: Same pattern as Steps 9 and 11: the trailing `; test $? -eq 1` alone decides the block's exit status and could mask an earlier pytest, coverage or ruff failure. Applied under the operator's 2026-11-20 Option A decision, which extends the correction to Steps 11-18.
 **Disposition**: verification-command correction; step body not edited.
