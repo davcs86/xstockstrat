@@ -1548,3 +1548,303 @@ Written by the orchestrating session itself. Each entry quotes the question and 
   (Recommended)". Track legs from cutover on; the unrecoverable historical set is a recorded, accepted gap.
 - **Former residual (b), O-8** stays in scope as ruled ("None — fix in scope"): a parked fill must not re-park with
   an ERROR on every boot.
+
+## Session 2026-11-20 — sdd-batch design gate (round 7)
+
+- `/sdd-design fix-position-fold-correctness` (full) halted at its approval gate after round 7 (gate policy: halt). design.md NOT written; status.md unchanged (spec-ready). Register: `debate.md` (D-1..D-38, R-1..R-30, O-1..O-57, P-1..P-7). Round 7 reopened D-29, D-30 and R-25 on the operator steer (superseded by D-34/D-35), closed O-3, O-11, O-13, O-43..O-45 and O-47..O-51, and filed P-5..P-7 (REOPEN R-25, D-29, D-30; pending user).
+
+## Open Threads
+
+- **Approach (round-7 synthesis).** The write fence is removed under the operator ruling (`context.md:1535-1541`): D-29 and D-30 are withdrawn, and D-1..D-3, D-5..D-16, D-18..D-28 and D-31..D-33 stand. Portfolio migration `019` creates only `consumer_applied_events` and `consumer_floors(consumer PK, floor_recorded_at)`; no trigger, no `fill_fence`/`fill_cutover`, no `application_name` (D-34). The floor is one row per consumer, never written by the migration (R-2 honoured): every boot runs `INSERT … date_trunc('milliseconds', clock_timestamp()) ON CONFLICT DO NOTHING`, then loads and caches it before the fill consumer starts; a below-floor fill is acked with zero DB calls, a same-millisecond fill folds, and a stamp or load error keeps the consumer from starting (D-35). The fill path is unchanged from D-23, D-24 and D-31..D-33. Cutover is a numbered stop-then-start runbook step with a recorded result per database (floor value, boot log line, count of `order.filled` rows between stop and floor); window fills are acked as the operator-accepted consequence (D-36). Bracket-leg fills reach reconciliation through `trading.bracket_legs` (`symbol`, `side`, `observed_filled_qty`) in a `NetFilledQtyBySymbol` `UNION ALL`, with `filled_qty` staying the emit cursor and D-3 standing (D-37). `@AC-5` uses the signed-off wording: `order.partially_filled` qty 4, then `order.filled` qty 10 at average 110, position 0, realized 100 (D-38). The trading `012_bracket_legs` seed predicate and the cutover procedure itself are NOT settled.
+- **Strongest open objection.** O-46, blocking (seed scope): the proposed seed predicate names an "exited" bracket state that does not exist (status is SMALLINT 0-6; nothing moves a bracket off ACTIVE when a leg fills), so "not CANCELED or FAILED" seeds the historical set the operator excluded, and old IBKR legs then sit in the D-11 capped GetOrder fallback forever and starve new legs, putting AC-4 at risk. The proposer must pin the predicate by numeric status code, isolate seeded legs from the new-leg budget (or use a first-tick broker-side seed) and restate the accepted gap to match the code; retiring a seeded leg on its first ordinary miss is locked R-10. Two more blocking objections are open: O-52 (the stop-then-start step cannot be executed as written, because a main-dev push auto-deploys both the DO app `xstockstrat-staging` and the homelab staging VM and a DO deploy is rolling; the step must name each target, make "portfolio stopped" a merge precondition on the integration PR and state a verified way to stop the component on DO, or the operator scopes DO dev as disposable) and O-53 (an automatic image rollback after the floor is stamped lets the old binary fold above the floor without applied rows, so the next roll-forward folds again; needs a runbook rule, a statement of how the rollback is noticed, and a boot-time detection or a recorded reason for none).
+- **Floor status.** No Floor breach. The design is not approvable this round: three blocking objections remain (O-46, O-52, O-53).
+- **Uncovered @AC changes.** None. `@AC-5` CHANGE is now covered by the operator's C-16 sign-off (`context.md:1530-1534`). 251 @AC-17 (GetPnL dedup scope), 206 trading @AC-1 (legs in reconciliation) and 294 @AC-56 (parked counted once) are EXTEND, each covered by a recorded ruling. @AC-1..@AC-4, 251 @AC-14, 206 trading @AC-2, 294 @AC-6 and 290 @AC-3 PRESERVE.
+- **Operator sign-offs still needed.** The verdicts on P-5..P-7 (REOPEN R-25, D-29, D-30), recorded as "user reopened" citing `context.md:1535-1541`, and P-4 as withdrawn (O-56; the phrase "return to the simplest floor" is only in the computed task text, not in this file); how portfolio is stopped on DO App Platform, or DO dev scoped as disposable (O-52); confirmation that the production portfolio and ledger tables hold no fold history, or the cutover step extended to the first production deploy (O-55). Non-blocking and still open: O-54 (evaluate a workable stamp-the-floor-at-the-stop variant, or record why the boot stamp alone is kept), O-57 (proposer to confirm the adopted adversary items: dbtests pre-insert the floor and assert an applied row, `bracket_legs.side` through the `UpsertOrder` helper, no generic floor API), O-30 (enumerate the affected analysis AC ids at `/sdd-spec`).
+
+```sdd-batch-design-state
+{
+  "round": 7,
+  "synth": {
+    "approach": "Round-7 synthesis. The write fence is removed under the operator ruling. D-1..D-3, D-5..D-16, D-18..D-28 and D-31..D-33 stand. D-29 and D-30 are withdrawn. R-2 is honoured: the migration never writes the floor. All paths are under `/home/user/xstockstrat/.claude/worktrees/orch-311`.\n\nVerified this round\n- The operator rulings are recorded verbatim at `docs/roadmap/features/311-fix-position-fold-correctness/context.md:1496-1550`.\n- Bracket status has no exited state. It is a SMALLINT, 0=NONE to 6=FAILED (`services/xstockstrat-trading/migrations/005_broker_accounts_halted.up.sql:17`; `services/xstockstrat-trading/internal/service/trading.go:3452-3458`).\n- A main-dev push deploys two staging targets: the DO app `xstockstrat-staging` and the homelab staging VM (`docs/patterns/ci-overview.md:58,60`). The homelab VM rolls back on its own if a release is unhealthy (`:76`).\n\n1. PORTFOLIO MIGRATION `019_fill_applied_events` (additive, with `.down.sql`)\n- `portfolio.consumer_applied_events`: PK `(consumer, user_id, account_id, order_id)`; `event_id`; nullable `pending_closed`; `outcome` ('applied' or 'parked'); nullable `parked_reason`; `applied_at` (D-8, D-9, D-31).\n- `portfolio.consumer_floors(consumer PRIMARY KEY, floor_recorded_at timestamptz NOT NULL)`. Only `order_fill` uses it. No generic floor API is built around it (C-18).\n- No trigger, no `fill_fence`, no `fill_cutover`, no `application_name`.\n\n2. FLOOR (single per consumer; needs R-25 reopened, see register)\n- On every boot, before the fill consumer starts: `INSERT … ('order_fill', date_trunc('milliseconds', clock_timestamp())) ON CONFLICT DO NOTHING`, then SELECT and cache.\n- A fill with `recorded_at < floor` returns `errFillAcked` with zero DB calls (D-23).\n- A fill in the floor's own millisecond folds; a test covers it.\n- A DB error while stamping or loading keeps the consumer from starting.\n- The DB clock is used, the same clock that writes ledger `recorded_at`. `/sdd-spec` confirms from the DSNs that ledger and portfolio share one server.\n\n3. FILL PATH (unchanged from D-23, D-24, D-31, D-32, D-33)\n- Order: parse → below-floor ack → autocommit pre-check → side resolution (`orderSide` fallback) → persisted park, or `positionsMu.Lock` → BEGIN via `txBeginner` → applied INSERT → `pg_advisory_xact_lock` → one `SELECT … FOR UPDATE` → pure `pnl.FoldFrom` with the D-10 flip → COMMIT → Unlock → keyed emits, risk, snapshot.\n\n4. CUTOVER (operator ruling: stop-then-start; the procedure itself is NOT settled, see blocking objections)\n- One numbered runbook step with a recorded result per database: the `consumer_floors.floor_recorded_at` value, the boot log line naming it, and the count of `order.filled` ledger rows between the stop time and the floor.\n- The step must name each target (DO `xstockstrat-staging`, homelab staging VM) and be a merge precondition on the integration PR, because the deploy fires on the push.\n- A second runbook step covers redelivering a parked fill: delete its parked row, restart.\n- Fills appended between stop and first boot are acked. The operator accepted this.\n\n5. TRADING MIGRATION `012_bracket_legs` (D-7, plus `symbol`, `side`, `observed_filled_qty`)\n- The seed predicate is NOT settled. The proposal's 'not CANCELED, FAILED or exited' does not work: an exited bracket stays ACTIVE (status 3), so that predicate seeds the historical set the operator ruled out.\n- Direction for the next proposer, staying inside the register:\n  - Seed by numeric status codes (3 ACTIVE, 4 CANCELING), non-empty leg ids, `filled_qty NULL` (D-19).\n  - Give un-baselined seeded rows (`filled_qty IS NULL`) their own per-account GetOrder budget, so they never consume the D-11 fallback budget of legs written by `ActivateBracket`.\n  - A seeded leg first seen with fill > 0 is `BASELINE_RETIRED` with no emit (R-7, R-12). A seeded leg first seen open at fill 0 is baselined and tracked.\n  - Do NOT retire a seeded leg on its first ordinary miss. A seeded open leg can emit once baselined at 0, so that is R-10 under another name.\n  - Restate the accepted gap to match the code: CANCELED and FAILED brackets, resize-blanked ids, and IBKR legs the gateway no longer returns.\n  - Alternative to weigh: a first-tick broker-side seed that tracks only legs the broker reports open.\n\n6. RECONCILIATION (ruling (c); D-3 stands)\n- `NetFilledQtyBySymbol` (`services/xstockstrat-trading/internal/repository/trading_repo.go:171-186`) sums the latest-per-order `trading.orders` subquery `UNION ALL` the account's `trading.bracket_legs` rows, using `observed_filled_qty`.\n- `observed_filled_qty` is written on every observation. `filled_qty` stays the emit cursor (R-27, D-15).\n- `bracket_legs.side` is written through the same enum-to-string helper `UpsertOrder` uses, so the `side = 'sell'` CASE at `trading_repo.go:177` matches. A mixed orders-plus-legs sum test for one symbol is required.\n- `KnownBrokerOrderIDs` gains the `bracket_legs` UNION (D-20).\n\n7. LEG KEY AND GetPnL (D-28) — unchanged.\n\n8. @AC-5 (signed off)\n- Then: `order.partially_filled` qty 4, then `order.filled` qty 10 at average fill price 110; position 0; realized 100. The step binds 'qty 4' to the partial's cumulative `filled_qty`. The 'qty 6' variant is dropped.\n\nTESTS (existing `portfolio-db-test` job, no CI change)\n- All D-27 and D-33 cases stand.\n- Service-level dbtests pre-insert the floor before their fixtures (for example `-infinity`) and assert that an applied row exists. Otherwise the qty-15 case can pass without folding anything.\n- Floor: below-floor makes zero DB calls; same-millisecond folds; a second boot keeps the first floor.\n- Trading: two-account same-leg-id at the ledger key and GetPnL; mixed orders-plus-legs sum; a seeded leg does not use the new-leg budget.\n\nBUILD ORDER\n1. Migrations `019` and `012` (re-check numbers against feature 318).\n2. Floor stamp and load; `observed()` branches; `FillApplied`, `ApplyFill`, `txBeginner`.\n3. Fold rewrite with in-tx reads and the D-10 flip; persisted park.\n4. dbtests.\n5. Broker `ErrOrderNotFound`, IBKR id-match.\n6. `ActivateBracket` with symbol and side, both UNIONs, keyed append, observer, GetPnL composite key.\n7. Runbook: the cutover step, the rollback rule, parked-row redelivery; portfolio CLAUDE.md.",
+    "open_objections": [
+      {
+        "text": "O-46 (seed scope) is not closed. The proposal's seed predicate names an 'exited' bracket state that does not exist (status is SMALLINT 0-6, 005_broker_accounts_halted.up.sql:17; trading.go:3452-3458). Nothing moves a bracket off ACTIVE when a leg fills, so 'not CANCELED or FAILED' seeds every historically exited bracket. Old IBKR legs then sit in the D-11 capped GetOrder fallback forever (D-26 never retires them) and starve new legs, which puts AC-4 at risk. The proposer must pin the predicate by numeric status code, isolate seeded legs from the new-leg budget (or use a first-tick broker-side seed), and restate the accepted gap to match the code. Retiring a seeded leg on its first ordinary miss is not available: a seeded open leg can emit after it is baselined at 0, so that is locked R-10.",
+        "blocking": true
+      },
+      {
+        "text": "The stop-then-start step cannot be executed as written. A main-dev push automatically deploys two staging targets, the DO app xstockstrat-staging and the homelab staging VM (ci-overview.md:58,60), and a DO deploy is rolling, so old and new instances overlap unless portfolio is stopped first. The runbook step must (a) name each target and record one result per database, (b) make 'portfolio stopped' a merge precondition on the integration PR, and (c) state how the portfolio component is stopped on DO App Platform, verified as possible, or have the operator scope DO dev as disposable. Ledger precedent for an unenforced merge-order instruction: fails.md:3687.",
+        "blocking": true
+      },
+      {
+        "text": "Rollback after the floor is stamped double-applies fills. DO and the homelab VM both roll back images automatically and leave the database alone (.do/app.yaml:679-681; ci-overview.md:76). The restored old binary folds fills above the floor without writing applied rows, and the next roll-forward folds them again. This was the rollback half of O-49 and is now unhandled. Required: a runbook rule (any return to a pre-019 portfolio image needs a stop, DELETE FROM portfolio.consumer_floors, and a repeat of the cutover step), plus either a boot-time detection (for example a WARN) or a recorded reason for not having one. An automatic rollback happens without the operator, so the rule must say how it is noticed.",
+        "blocking": true
+      },
+      {
+        "text": "Adversary r7 proposes stamping the floor at the stop so window fills (up to a 15-minute CI and deploy window, ci-overview.md:63) fold and are not acked. As written it cannot work: consumer_floors is created by the PRE_DEPLOY migration, which runs after the stop. The proposer should evaluate a workable variant (for example recording the stop timestamp and lowering the floor to it afterwards, checking the interaction with position sync) or record why the boot stamp alone is kept. 'About 0' window fills is not a safe expectation while staging trading keeps polling.",
+        "blocking": false
+      },
+      {
+        "text": "C-11 assumption to record: the ruling's premise is that production has never launched, but the product spec headline says '(SEV-2, production)' and OQ-2 / D-6 refer to inflated production accumulators. Either record the operator's confirmation that the production portfolio and ledger tables hold no fold history, or extend the cutover step to the first production deploy (DO prod and the homelab production VM) as a check with a recorded result.",
+        "blocking": false
+      },
+      {
+        "text": "Register verdicts to record: the round-7 design needs R-25, D-29 and D-30 reopened. The verbatim ruling at context.md:1535-1541 removes the trigger, fill_fence, fill_cutover and the application_name fence, which makes D-29 and D-30 impossible. The words 'return to the simplest floor' appear only in the computed task text, not in context.md. The orchestrator should record all three as 'user reopened' citing those lines, and P-4 (REOPEN R-2) as withdrawn.",
+        "blocking": false
+      },
+      {
+        "text": "Proposer to confirm the items adopted here from adversary r7: service-level dbtests pre-insert the floor before their fixtures and assert an applied row exists; bracket_legs.side is written through the helper UpsertOrder uses, with a mixed orders-plus-legs sum test; consumer_floors gets no generic floor API.",
+        "blocking": false
+      },
+      {
+        "text": "O-30: the affected analysis ACs are still not listed. The AC ids in order-snapshots-pnl-patterns.feature and fix-python-loop-supervision.feature must be enumerated at /sdd-spec, and the D-10 flip-short window residual stays named.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "251 @AC-17",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "251 @AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "206 trading @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "206 trading @AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-56",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "294 @AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "290 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "The boot-armed write fence with a per-row floor (round 6, D-29/D-30). Lost: the operator ruled it out (context.md:1535-1541); writer identification was unproven through PgBouncer and two pre-fence cases stayed undecidable.",
+      "Seeding an applied row for every historical order.filled at first boot in place of a floor (proposer's runner-up). Lost: it needs a 'seed complete' marker, and a crash mid-seed can mark fills applied that were never folded. Both sides rejected it.",
+      "The @AC-5 'qty 6' variant with a CHANGE to 251 @AC-17. Lost: the operator signed off the qty 10 at average 110 wording.",
+      "A 012 seed of every bracket that is not CANCELED or FAILED, sharing the new-leg budget (proposal r7). Lost: no exited state exists, so it seeds the historical set the operator excluded and starves new legs on IBKR. The replacement predicate is still open.",
+      "Retiring a seeded leg on its first ordinary miss (adversary r7 fix option). Not available: a seeded open leg can emit once baselined at 0, so this is locked R-10.",
+      "Stamping consumer_floors from the runbook at the stop, as written (adversary r7). Not adopted as written: the table is created by the PRE_DEPLOY migration after the stop. A workable variant is left for the proposer to evaluate.",
+      "Leg rows in trading.orders to satisfy ruling (c). Lost: the operator chose the bracket_legs UNION and D-3 stands."
+    ],
+    "open_risks": [
+      "With no fence there is no code-level guard: if portfolio is not stopped before the deploy, an overlap double-applies fills and nothing reports it.",
+      "An automatic image rollback after the floor is stamped lets the old binary fold above the floor; the next roll-forward folds those fills again, and accumulators keep the error.",
+      "Fills appended between the stop and the first new boot are acked: qty heals at the next sync, realized P&L for them is lost. The window can be the whole CI and deploy time.",
+      "Late-commit appends whose recorded_at is below the floor are acked (operator-accepted O-3 case).",
+      "The floor assumes ledger and portfolio share one Postgres server clock, and that nothing outside the portfolio binary writes portfolio.positions or consumer_floors.",
+      "If production does hold fold history, its first deploy is an unfenced rolling cutover.",
+      "Reconciliation covers only tracked legs. CANCELED or FAILED brackets, resize-blanked ids and IBKR legs the gateway forgot stay uncounted, so NetFilledQtyBySymbol may still mismatch for those symbols.",
+      "Seeded IBKR legs that never return are polled indefinitely (D-26).",
+      "If the composite GetPnL key is applied, a historical order whose partial and full fills carried different account_id values stops being deduplicated; the /sdd-spec history grep is the only check.",
+      "A parked fill is retried only after a manual delete of its parked row.",
+      "A fill transaction can wait server-side on the applied-row conflict or on FOR UPDATE, holding 1 of 2 client connections and positionsMu.",
+      "The pre-check has a TOCTOU window covered only by the in-tx INSERT conflict path, so the conflict-path dbtest is load-bearing.",
+      "A position.updated can be emitted after a same-process sync has overwritten the row.",
+      "Legs partially filled at cutover are BASELINE_RETIRED, so realized P&L for their post-cutover remainder is lost.",
+      "Boot replay re-walks every post-floor fill and consumer_applied_events has no retention.",
+      "A leg id is lost from tracking if the ActivateBracket tx fails; it is alerted, but its exit fill never folds.",
+      "Neither broker adapter populates BrokerOrder.Fees, so fee totals understate.",
+      "Migration numbers 019 and 012 may collide with feature 318.",
+      "OQ-2 (repair of already-inflated accumulators) is out of scope, and instance_count must stay 1."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-04",
+      "F-06",
+      "F-07",
+      "F-08",
+      "P-02",
+      "P-03",
+      "P-04",
+      "PLAT-N1"
+    ],
+    "rationale": "The design is not approvable this round. There is no Floor breach, but three blocking objections remain: the seed predicate, the cutover procedure, and rollback after the floor is stamped. The adversary rated the round NEEDS WORK and I agree with all three.\n\n**Provenance.** I read `context.md:1496-1550` in the worktree. The rulings are there verbatim: the D-4 reopen with the GetPnL extension, the @AC-5 sign-off, stop-then-start with the fence removed, legs via `bracket_legs`, forward-only history, and the park staying in scope. O-43 closes.\n\n**What I took from each side.**\n- **Fence removal and single floor (proposer):** adopted. The ruling removes the trigger and both fence tables, so D-29 and D-30 cannot stand, and with R-1 and R-2 locked a single floor is what remains. I recorded R-25, D-29 and D-30 as reopened on the operator steer.\n- **Seed predicate (adversary):** the adversary is right. I confirmed the status enum has no exited state, so the proposal's predicate seeds the excluded historical set. O-46 stays open. I did not adopt the adversary's \"retire a seeded leg on first miss\" fix, because a seeded open leg can still emit after it is baselined, which makes that fix locked R-10.\n- **Cutover executability (adversary):** adopted as a blocking objection. I confirmed the two automatic staging targets in `ci-overview.md`.\n- **Rollback (adversary):** adopted as blocking. It is the surviving half of O-49.\n- **Floor at the stop (adversary):** not adopted as written. `consumer_floors` does not exist until the PRE_DEPLOY migration runs, which is after the stop. It stays as a non-blocking item for the proposer.\n- **Smaller adversary points adopted:** dbtests pre-insert the floor; `side` goes through the existing helper; no generic floor API.\n\n**Closed this round:** O-3, O-11, O-13, O-43, O-45, O-50, and the fence-only items O-44, O-47, O-48, O-49, O-51.\n\n**Still open:** O-46 (blocking), O-30, plus the new items.\n\n**Business rules.** @AC-5 is CHANGE and now covered by the operator's sign-off. 251 @AC-17, 206 trading @AC-1 and 294 @AC-56 are EXTEND, each covered by a recorded ruling.\n\n**One caveat on the reopen.** The phrase \"return to the simplest floor\" is in the computed task text but not in `context.md`. The verbatim ruling still makes D-29 and D-30 impossible, so I treated the reopen as granted and asked the orchestrator to record the three verdicts.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The write fence is removed, superseding D-29 and D-30. Portfolio migration 019 creates only consumer_applied_events and consumer_floors. There is no trigger on portfolio.positions, no fill_fence or fill_cutover table, no application_name writer identification and no per-row floor.",
+          "evidence": "context.md:1535-1541 (operator ruling, stop-then-start on staging); proposal r7 item 1; adversary r7 confirmed the removal follows the ruling"
+        },
+        {
+          "text": "The fill floor is a single row per consumer in portfolio.consumer_floors(consumer PK, floor_recorded_at). The migration never writes it. Every boot runs INSERT ('order_fill', date_trunc('milliseconds', clock_timestamp())) ON CONFLICT DO NOTHING, then loads and caches the value before the fill consumer starts. A fill below the floor is acked with zero DB calls, a fill in the floor's millisecond folds, and a stamp or load error keeps the consumer from starting. Only order_fill uses the table and no generic floor API is added.",
+          "evidence": "R-2 honoured; ledger 001_ledger_events_hypertable.up.sql:20; ledgerServiceImpl.ts:472; D-23; operator ruling context.md:1535-1541; proposal r7 item 2; adversary r7 contested only the stamping moment and rollback, and accepted the single-consumer table"
+        },
+        {
+          "text": "The cutover is a numbered stop-then-start runbook step with a recorded result per database: the consumer_floors value, the boot log line naming it, and the count of order.filled ledger rows between the stop time and the floor. Fills in that window are acked as the operator-accepted consequence. Which targets the step covers and how the stop is done are not part of this decision.",
+          "evidence": "context.md:1535-1541; proposal r7 item 4; adversary r7 contested only targets, merge ordering and rollback"
+        },
+        {
+          "text": "Bracket-leg fills reach reconciliation through trading.bracket_legs: the table carries symbol, side and observed_filled_qty, and NetFilledQtyBySymbol sums the trading.orders subquery UNION ALL the account's bracket_legs rows using observed_filled_qty, written on every observation. side is written through the same enum-to-string helper UpsertOrder uses, with a mixed orders-plus-legs sum test. D-3 stands and no leg row enters trading.orders.",
+          "evidence": "context.md:1542-1545 (operator ruling, via bracket_legs); trading_repo.go:171-186; R-27; D-15; proposal r7; adversary r7 objection 8 contested only the side encoding"
+        },
+        {
+          "text": "@AC-5 amended Then, signed off under C-16: the ledger holds an order.partially_filled event with qty 4 and an order.filled event with qty 10 at average fill price 110 for that leg; position 0; realized 100. The step binds 'qty 4' to the partial payload's cumulative filled_qty, and the order.filled qty is the leg total, consistent with 251 @AC-17.",
+          "evidence": "context.md:1530-1534 (operator selected 'Sign off'); proposal r7; adversary r7 found no @AC regression"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Seeding an applied row for every historical order.filled at first boot in place of a floor",
+          "why": "It needs a 'seed complete' marker, and a crash mid-seed can mark fills applied that were never folded. Proposer and adversary both rejected it in round 7."
+        },
+        {
+          "text": "The @AC-5 'qty 6' variant, with a CHANGE to 251 @AC-17 so leg fills fold by cumulative filled_qty",
+          "why": "The operator signed off the amended wording (qty 10 at average fill price 110) and dropped this variant (context.md:1530-1534)."
+        },
+        {
+          "text": "Bracket-leg rows in trading.orders as the way to bring leg fills into reconciliation",
+          "why": "The operator chose the bracket_legs UNION and declined to reopen D-3 (context.md:1542-1545); leg rows would pass through LoadInflightOrders, pollFills and maybeSubmitBracket (trading.go:337-345)."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "The stop-then-start step cannot be executed as written: a main-dev push automatically deploys both the DO app xstockstrat-staging and the homelab staging VM (ci-overview.md:58,60), and a DO deploy is rolling. The runbook step must name each target with one recorded result per database, make 'portfolio stopped' a merge precondition on the integration PR, and state a verified way to stop the portfolio component on DO App Platform, or have the operator scope DO dev as disposable.",
+          "blocking": true
+        },
+        {
+          "text": "Rollback after the floor is stamped double-applies fills: DO and the homelab VM roll back images automatically and leave the database alone, so the restored old binary folds above the floor without applied rows and the next roll-forward folds again. Required: a runbook rule (a return to a pre-019 image needs a stop, DELETE FROM portfolio.consumer_floors and a repeat of the cutover step), a statement of how an automatic rollback is noticed, and either a boot-time detection or a recorded reason for not having one.",
+          "blocking": true
+        },
+        {
+          "text": "Evaluate stamping the floor at the stop so window fills fold. The adversary's version cannot work as written because consumer_floors is created by the PRE_DEPLOY migration after the stop. The proposer should give a workable variant, checking the interaction with position sync, or record why the boot stamp alone is kept.",
+          "blocking": false
+        },
+        {
+          "text": "Record the operator's confirmation that the production portfolio and ledger tables hold no fold history (the product spec headline says 'SEV-2, production'), or extend the cutover step to the first production deploy as a check with a recorded result.",
+          "blocking": false
+        },
+        {
+          "text": "The orchestrator should record R-25, D-29 and D-30 as 'user reopened' citing context.md:1535-1541, and P-4 as withdrawn. The words 'return to the simplest floor' appear only in the computed task text, not in context.md.",
+          "blocking": false
+        },
+        {
+          "text": "Proposer to confirm the items adopted from adversary r7: service-level dbtests pre-insert the floor before their fixtures and assert an applied row exists; bracket_legs.side goes through the helper UpsertOrder uses; consumer_floors gets no generic floor API.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-3",
+          "how": "Operator ruling: stop-then-start as one numbered runbook step with a recorded result, and the remaining pre-cutover cases accepted (context.md:1535-1541). Whether the step can be executed on the automatic deploy path is tracked as a new objection."
+        },
+        {
+          "id": "O-11",
+          "how": "Operator gave the C-16 sign-off for the @AC-5 amendment (context.md:1530-1534); the 'qty 6' variant is dropped."
+        },
+        {
+          "id": "O-13",
+          "how": "Operator ruling: leg fills reach reconciliation through the NetFilledQtyBySymbol UNION over trading.bracket_legs (context.md:1542-1545)."
+        },
+        {
+          "id": "O-43",
+          "how": "The operator's rulings are recorded verbatim in context.md:1496-1550 on the feature branch (commits d3b641a2, f7e82d15), verified this round."
+        },
+        {
+          "id": "O-44",
+          "how": "Moot: the operator removed the write fence, so no writer identification exists."
+        },
+        {
+          "id": "O-45",
+          "how": "Operator confirmed the bracket_legs reading; D-3 stands and no REOPEN D-3 is granted (context.md:1542-1545)."
+        },
+        {
+          "id": "O-47",
+          "how": "Moot: the per-row fence floor is removed, and the operator accepted the remaining pre-cutover cases as the consequence of stop-then-start."
+        },
+        {
+          "id": "O-48",
+          "how": "Moot: no fence is armed, so no writer of portfolio.positions needs identifying and the test pools are unchanged."
+        },
+        {
+          "id": "O-49",
+          "how": "Moot for the fence: no trigger exists to drop or disarm. The rollback hazard carries over in a new form and is tracked as a new objection."
+        },
+        {
+          "id": "O-50",
+          "how": "Proposer confirmed: observed_filled_qty feeds the UNION and filled_qty stays the emit cursor; the floor is truncated to the millisecond with a same-millisecond fold test; @AC-5 uses the operator's wording with filled_qty 4 asserted in the step."
+        },
+        {
+          "id": "O-51",
+          "how": "Moot: there is no boot arming, table lock or per-write fence check."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "R-25",
+          "evidence": "Proposer r7: the operator ruling at context.md:1535-1541 reverses 'fix in scope' for residual (a), chooses stop-then-start, removes the fence tables and accepts the remaining O-3 pre-cutover cases. R-25's only stated reason was that the operator had made those cases design requirements. The ruling postdates round 6. Adversary r7 agrees the evidence is new.",
+          "is_new": true
+        },
+        {
+          "target": "D-29",
+          "evidence": "Proposer r7: context.md:1538-1540 rules 'no portfolio.positions trigger, no fill_fence/fill_cutover, no application_name fence', which removes the boot-armed fence. The ruling postdates round 6. Adversary r7 agrees.",
+          "is_new": true
+        },
+        {
+          "target": "D-30",
+          "evidence": "Proposer r7: context.md:1538-1540 removes fill_fence, the table the per-row floor is loaded from, and the operator steer names 'no per-row fence floor'. The ruling postdates round 6. Adversary r7 agrees.",
+          "is_new": true
+        }
+      ],
+      "reopened": [
+        "D-29",
+        "D-30",
+        "R-25"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
