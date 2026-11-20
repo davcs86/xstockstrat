@@ -591,3 +591,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Record the CI `migration-rerun` result for `ingest-019.sql` — target: Step 17 / integration PR.
 - [ ] Post-deploy check per environment (O-18): NOTICE count vs the frozen-list SELECT; no matching row still active — target: after the migration deploys.
 - [ ] DBA + marketdata-owner acknowledgement of the cross-schema read; EDGAR self-heal reviewed against the list — target: migration PR (Steps 16, 18).
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Verdict: PASS WITH WARNINGS — 0 FAIL, 8 warnings, no Floor breaches. Overlap: WARN (no proto field, migration number or config key clash). Lifecycle unchanged (`implementation-ready`).
+- Addressed (edits to `implementation-spec.md`, plus one scenario in `acceptance.feature`):
+  - mcp_client explicit-0.0 EXTEND had no `@AC-*` (C-15 / C-16). Added `@AC-5` to `acceptance.feature`, worded from design.md § Business Rules Touched (the EXTEND next to `mcp-client-signal-source.feature:34`, approved at the design gate). Step 10 now carries `**Covers**: AC-5`; the Scenario Coverage table has the row. No new test was added: Step 10 tests 1 and 5 already assert it.
+  - Step 16 placeholder (F-04 / P-03). The precondition now says `<frozen list>` and the cutoff literal are placeholders that are never committed, and the verification greps that no `<frozen` text is left in the up file.
+  - Second cross-schema migration read. New Operator Gate 4: Step 16 blocks until this file holds the operator's explicit approval of the second exception and the marketdata owner's acknowledgement. The 2026-11-10 approval in principle predates the mechanism and does not name the cross-schema read.
+  - O-14 / O-15. Operator Gate 3 now tells `/sdd-execute` to ask at its up-front confirmation, before Step 1, instead of deferring to this review.
+  - Stale branch and `buf breaking`. Step 1 verification now says to run after BRANCH SYNC and to use the `#ref=HEAD` form when the local feature ref is stale or absent.
+  - Overlap. Step Dependencies now names the shared files: ingest `servicer.py` `_ingest_external_signal` and `mcp_client_loop.py` with `fix-system-identity-paths` (313; `merge-order.md:404` on `main-dev`), merged by hand by whichever lands second. `fix-python-loop-supervision` (259) is `launched` on `main-dev`, so its `fundsignal_loop.py` rewrite is already in the spec anchors and is not a live collision.
+  - `_MIN_CROSS_SECTION` (F-07 adjacent). Step Dependencies records the quantile coupling, the Step 7 calibration test and the Step 8 docs note, and names a config key as a possible follow-up.
+  - Step 17 threshold. Step 17 now states that no coverage threshold applies and that Steps 16 and 17 count as verified only when CI `migration-rerun` is green on the integration PR.
+- Not changed: step sizes (Steps 4, 12, 13 touch 3-4 files, inside the 5-file limit; advisory only).
+- Reviewer claim not adopted as written: the verdict cites "DBA plus platform lead" for the cross-schema exception. Root `CLAUDE.md` § Approval Flow says DB migration = DBA + service owner, and `docs/runbooks/approval-flow.md` covers order approval only. Gate 4 asks for the operator's approval and the marketdata owner's acknowledgement; the operator decides whether platform-lead sign-off is also wanted.
+
+## Open Threads (after impl-spec review — surface at the /sdd-execute checkpoint)
+
+- [ ] **O-14 and O-15 need the operator's answer before Step 1** (Operator Gate 3). Defaults planned: wrong-direction `buy` rows expire naturally (up to 90 days); opportunity rows from retracted signals stay readable for about 24h. A different choice needs a re-spec.
+- [ ] **Frozen retraction list** (Gate 1) and **cutoff `2026-10-31T00:00:00Z` confirmation** (Gate 2): both block Step 16. Steps 1-15 are not blocked.
+- [ ] **Approval of the second migration-time cross-schema read** (Gate 4): operator approval and marketdata-owner acknowledgement recorded here before Step 16 lands; operator to say whether platform-lead sign-off is also required.
+- [ ] **`@AC-5` was added by this review without an operator in the loop.** Its wording comes from the approved design.md EXTEND. Operator to confirm or reword at the execute checkpoint (C-16: it extends `@AC-4 @feature-166`, it does not change it).
+- [ ] Peer specs for `fix-analysis-per-symbol-isolation` and `fix-analysis-evidence-dry` were not read. They may edit `fundsignal_loop.py` or `scoring.py`. Re-grep the Step 3, 6 and 11 anchors after BRANCH SYNC and after any later merge of `main-dev`.
+- [ ] `fix-system-identity-paths` (313) edits the same ingest function as Step 9. Whichever merges second merges `_ingest_external_signal` by hand.
+- [ ] Possible follow-up feature: make `_MIN_CROSS_SECTION` a config key or derive it from the quantiles. Not in scope here.
+- [ ] Steps 16 and 17 have offline greps only; their real check is CI `migration-rerun` on the integration PR. Record that result here.
+- Earlier threads still open: `buf breaking` verdict (Step 1); post-deploy check per environment (O-18); EDGAR self-heal review against the list (Step 16).
