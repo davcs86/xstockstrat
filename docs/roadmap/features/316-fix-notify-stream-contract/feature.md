@@ -16,6 +16,7 @@
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 2 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 
 ---
 
@@ -26,7 +27,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections, reopen petitions
 - [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-notify-stream-contract`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -37,6 +38,15 @@ notify's `StreamAlerts` fan-out has two contract gaps: the subscriber severity f
 string enums arrive at runtime (tested only with numbers), and `call.write()` backpressure is ignored, so a stalled
 client buffers every alert in notify's memory without bound.
 
+## Reviewers
+
+_(Snapshot from docs/runbooks/reviewer-registry.md, finalized at /sdd-spec time — re-run /sdd-spec if the
+registry changes.)_
+
+| Role | Review Focus |
+|---|---|
+| `xstockstrat-notify` owner | Stream delivery guarantees, backpressure handling, alert deduplication |
+
 ## Next Action
 
-`/sdd-spec fix-notify-stream-contract` — generate implementation spec from the approved design
+`/sdd-review fix-notify-stream-contract impl-spec` — validate implementation spec, then `/sdd-execute fix-notify-stream-contract`
