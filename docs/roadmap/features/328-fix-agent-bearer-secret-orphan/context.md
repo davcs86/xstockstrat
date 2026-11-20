@@ -595,3 +595,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design (approved)
+
+- Phase 0 Recon: recon.md (written 2026-11-11; services: xstockstrat-agent, xstockstrat-config, xstockstrat-ingest, xstockstrat-ui; key reuse patterns: the config 046 single-statement data-modifying CTE, the `migration-assertions` BEGIN…`\ir`…ROLLBACK block template).
+- Phase 1 Grilling: 3 rounds (full); termination: approved by the operator at the design gate (Floor clear). Chosen approach: an operator-run, re-runnable SQL sweep `scripts/config-heal/mcp-credential-orphan-sweep.sql` plus a byte-identical-predicate read-only preview and a runbook section in `config-rollout.md`; no migration, no proto change, no new config key. Rejected: R-1..R-11 (config/ingest migration, reaper loop or delete RPC, periodic job, snapshot, DISTINCT ON notify, explicit harness invocation, BEGIN/ROLLBACK preview, UI Vitest, LIKE prefix, UPDATE backdate).
+- Constitution rules touched: C-01, C-08, C-10, C-11, C-12, C-15, C-16, C-18, F-07, P-03, P-06, CONFIG-4, PLAT-N1. Floor breaches: none.
+- Business rules (C-16): all PRESERVE, no CHANGE, `acceptance.feature` not edited.
+- Wrote design.md. debate.md: State approved; petitions P-1 and P-2 marked `user declined` (the operator approved instead of reopening; both were already moot); O-16 closed by the operator decision below. O-17..O-25 (non-blocking) stay `open` in the register and are folded into design.md's Chosen Approach.
+- Status: spec-ready → design-approved.
+
+### Operator decisions (binding, recorded 2026-11-20)
+
+- Operator (2026-11-20, design gate): the round-3 synthesis fix is binding — the assertion's cross-owner seeds are the three owner-exact cases, each older than the grace window: (i) V holds U's referenced key A with no source → DELETED; (ii) V's source references K and U holds an orphan K → U's K DELETED; (iii) V's own referenced key survives. The migration number is the next free config migration above the main-dev tip at spec time (main-dev now holds 055).
+- Note on the second sentence: the approved design ships no migration (D-1), so there is nothing to number. If `/sdd-spec` finds a migration is needed, that contradicts D-1 and goes back to the operator.
+
+### Open Threads
+
+- [ ] Reclaim depends on an operator running the script against the right databases; orphans pile up between runs and AC-1..3 hold only after a manual run. Target: runbook step (state the cadence); the read-only orphan-count signal is a follow-up option.
+- [ ] A credential staged longer ago than `grace_hours` is reclaimed; a source later pointed at it gets GetSecret `found=false` (config @AC-16). Documented, not prevented. Target: runbook step + the `credentials_ref:` param-doc text edit.
+- [ ] The prod operator role's privileges on `ingest.signal_sources` and `config.*` are unverified (fails.md ~L2819). Target: runbook step (privilege pre-check) and the first operator run.
+- [ ] The target database list (DO dev, DO prod, homelab) is not yet confirmed by the operator (fails.md:3941-3947). Target: `/sdd-spec` — record the confirmed list.
+- [ ] No CI step statically parses the sweep; only the live `migration-rerun` job catches SQL defects. Target: sweep and assertion steps (local pglast pre-parse).
+- [ ] The assertion runs in the shared rerun database; isolation depends on BEGIN…ROLLBACK blocks and one-statement scripts. Target: config SQL-text test step + assertion step.
+- [ ] An operator's host psql older than 10 fails on `\if` and `:{?var}`. Target: runbook step (minimum version).
+- [ ] Batch peers `fix-mcp-deadline-budget` and `fix-agent-mcp-transport-fallthrough` also edit `services/xstockstrat-agent/app/tools.py`. Target: text-edit step (symbol-named sites) and integration-PR rebase.
+- [ ] O-17..O-25 are open, non-blocking, and carried in design.md; each must map to a step. Target: `/sdd-spec`, checked at `/sdd-review impl-spec`.
+- Next: `/sdd-spec fix-agent-bearer-secret-orphan`.
