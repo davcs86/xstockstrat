@@ -31,7 +31,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Peer merge overlap: `portfolio_service.go` is shared with 311/312/315/317; overlap on `marketdata_handler.go` with 317/320/314 is unverified (re-check when their specs land). After each peer merge re-run f254 `@AC-5`/`@AC-7`, the Step 2 tests and `TestWire_CreateWatchlistDuplicateName_AC3` — the signature change will not catch a reintroduced raw Internal wrap or a lost classifier call. — final integration PR
 - [x] Keep connect-go and grpc-go codes 1-16 aligned; pinned by the translator table test. — Steps 1/2 (done 2026-11-20: `TestToGRPCError_ConnectCodeCast`)
 - [ ] Document branch (b) masking, and state the branch (c) out-of-scope exposure in the spec and PR body. — Step 1 (masking doc comment landed 2026-11-20; the D-12 branch (c) out-of-scope statement still goes in the integration PR body)
-- [ ] Record "red N/A — no behavior change; characterization test added" in context.md and the PR body, and capture the green run; use the main-dev `tools.py` line numbers only after the main-dev merge, re-grep if main-dev moved. — Step 7
+- [x] Record "red N/A — no behavior change; characterization test added" in context.md and the PR body, and capture the green run; use the main-dev `tools.py` line numbers only after the main-dev merge, re-grep if main-dev moved. — Step 7 (done 2026-11-20; the PR-body line goes in the integration PR body)
 - [ ] Run the two AC-2 sign-off greps before rewording and stop to ask the operator if either fails; record the follow-ups, the C-14 UI disposition and the R-6 grep result; fix "about 24 call-site edits" to 18. — Step 8
 - [ ] File `fix-trading-grpc-status-mapping` (`trading.go:223-237`, four-code collapse) and `fix-portfolio-grpc-ctx-mapping` (D-6 symmetry) through the allocator. — after Step 8
 - [ ] C-16 promotion: AC-1/AC-2 → marketdata acceptance suite, AC-3/AC-4 → portfolio suite, f148 `@AC-4` gains the duplicate-name case. — integration PR
@@ -604,4 +604,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Atomic unit Steps 5+6. Added `createErr`/`updateErr`/`updatePartialErr` fake fields (update checks after the not-found lookup), `SetWatchlistCreateErr` + `WatchlistNameUniqueIdx` alias, `wireAdapterFor` (the `wireAdapter` signature is unchanged), the three service tests, the migration-011 guard and the two wire tests.
 - TDD: AC-3 red (constant + seams/tests only): "code = internal (err=internal: insert watchlist: :  (SQLSTATE 23505)), want AlreadyExists" for create, masked rename and legacy rename, and wire "status code = Internal … want AlreadyExists" (`.sdd-logs/v-1.log`, exit=1) → green: all named tests PASS (26 top-level PASS lines), all packages ok, total 81.8% (≥ 40%), golangci-lint v2.14.0 "0 issues.", index literal declared once in `internal/*.go` (`.sdd-logs/v-3.log`, exit=0). AC-4 rows (08006, plain, other-constraint) pass both before and after, as preserved behavior.
 - Files modified: `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`, `services/xstockstrat-portfolio/internal/service/export_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_grpc_wire_test.go`
+- Deviations: none
+
+## Session 2026-11-20 — sdd-execute sequential (sdd-batch-execute), Step 7
+
+- Tooling setup (step 7): python3.13 ✓ · uv ✓ 0.11.32 · ruff ✓ · `uv sync --extra dev` ⬇ in `services/xstockstrat-agent` (worktree `.venv`).
+- Re-grepped `app/tools.py` on the branch (main-dev merged at `c1b5428f`): `_PASS_THROUGH_CODES` `:226-237` with `ALREADY_EXISTS` `:231`, `_grpc_error_message` `:248` (pass-through `:274-275`), `manage_watchlist` `:2179`, create `:2234`, `except` `:2259-2267`; the main-dev numbers hold.
+
+### Step 7 — test: agent `manage_watchlist create` surfaces `ALREADY_EXISTS` (C-14 consumer surface) [done]
+- Added `test_manage_watchlist_create_duplicate_surfaces_already_exists` beside `test_manage_watchlist_create_dispatches`: `client.create_watchlist` raises ALREADY_EXISTS with Step 5's fixed text and the tool raises `ToolError` matching `^ALREADY_EXISTS: a watchlist with this name already exists$`. No agent code or `conftest.py` change.
+- TDD: red N/A — no behavior change; characterization test added (AC-3 agent surface; `ALREADY_EXISTS` already passes through at `tools.py:231`) → green: "5 passed, 21 deselected", full suite "763 passed", "Total coverage: 88.11%" (≥ 40%), ruff "All checks passed!" / "75 files already formatted" (`.sdd-logs/v-1.log`, exit=0).
+- Files modified: `services/xstockstrat-agent/tests/test_watchlist_tools.py`
 - Deviations: none

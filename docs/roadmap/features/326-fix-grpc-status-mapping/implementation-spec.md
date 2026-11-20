@@ -585,7 +585,7 @@ cd services/xstockstrat-portfolio \
 
 ### Step 7 — test: agent `manage_watchlist create` surfaces `ALREADY_EXISTS` (C-14 consumer surface)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_watchlist_tools.py` — modify
