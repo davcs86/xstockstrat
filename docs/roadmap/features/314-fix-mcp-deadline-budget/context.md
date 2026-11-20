@@ -723,3 +723,89 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Edit collisions with features 319, 322, 328, 331 and a migration-number race [/sdd-spec + integration PR].
   - Attachment parsing is CPU-bound and outside the budget [follow-up, out of scope].
   - `HTTPStatusError` still aborts the whole extract call [follow-up, out of scope].
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status: design-approved → implementation-ready.
+- Evidence tree: `origin/main-dev` @ `fb52065c`. The feature branch tip (`1640bc78`) is 168 commits behind it
+  (config migrations stop at `047`), so the spec's precondition is to merge `origin/main-dev` into
+  `feature/fix-mcp-deadline-budget` before Step 1 and re-grep every cited line.
+- Steps: 1+2 config gate, ceiling and tests (one unit); 3+4 config migration `056_mcp_deadline_budget`,
+  assertion file and static test (one unit); 5+6 agent extract budget and tests (one unit); 7 agent `@AC-2`
+  injected-clock test; 8 docs; 9 operator-run enumeration and read-back.
+- Scenario coverage: `@AC-1` → Steps 6, 4; `@AC-2` → Steps 2, 4, 7, 9; `@AC-3` → Step 2.
+
+### Enumeration and sign-off (operator condition, design gate 2026-11-20)
+
+- Run: staging only, global rows only, read-only, through the staging agent MCP `get_config` on 2026-11-20.
+  - `agent` / `opportunities.read_timeout_seconds` = `40.0` (float) — not above 44.
+  - `portfolio` / `marketdata.quote_timeout_ms` = `4000`; `marketdata` / `quotes.batch_timeout_ms` = `2500`,
+    `quotes.mark_timeout_ms` = `500` — not inverted (4000 > 2500).
+  - `analysis` / `opportunity.live_enrich_timeout_ms` = `3000`; `marketdata` / `price.batch_timeout_ms` =
+    `2500` — not inverted.
+  - `agent` / `extract.call_budget_seconds` is absent, as expected before the seed.
+- Not run: production (no read path from this session); per-user rows in either environment; the raw
+  `value_data` text (the tool returns the parsed value, so a spelling the regex does not match cannot be
+  seen); the homelab staging deployment.
+- **Sign-off: "unenumerated".** No operator sign-off on an enumeration was obtained in this run. Per the
+  operator condition the clamp ships in its defensive form and the down stays forward-only. Step 9 runs the
+  full query on both databases before the integration PR merges and again after the rollout, and replaces or
+  confirms this sign-off.
+- No inverted pair was found on staging, so the spec carries no ordered post-deploy `SetConfig` list. Step 9
+  re-checks both environments.
+
+### Spec-time decisions
+
+- Migration number `056`: trunk holds `…052, 054, 055`; `053` is claimed by feature 345 (not on trunk). The
+  number is provisional until merge; the SQL, sentinel, tests and docs are number-free.
+- Regex (the open "widen vs enumerate" thread): the clamp matches a bounded strict decimal,
+  `^[+-]?([0-9]{1,30}(\.[0-9]{0,30})?|\.[0-9]{1,30})([eE][+-]?[0-9]{1,3})?$`. The read edge uses
+  `parseFloat(row.value_data)` (`configServiceImpl.ts:935`), which accepts trailing garbage that `::numeric`
+  rejects, so no regex makes every such row castable. Non-matching global rows are listed by Step 9's query
+  and fixed by operator `SetConfig`.
+- Seed-before-reader: Step 3 adds one temporary `seeded-unread` entry to `scripts/config-wiring.json`; Step 5
+  (the reader) deletes it (insights.md:4681-4683).
+- `@AC-2` red-before-green: the cycle is in the config unit (Step 2). Step 7's agent test lands after the
+  ceiling, so its RED is a working-tree mutation of the registry row (55), restored before commit.
+- `extract_website_content`: only the whole-call budget expiring is `DEADLINE_EXCEEDED`; every
+  `httpx.TransportError`, timeout subclasses included, is `FETCH_FAILED: <ExceptionClass>`. In
+  `extract_email_content` a per-URL `httpx.TimeoutException` counts under `deadline`.
+- The reader default is a module constant `_EXTRACT_CALL_BUDGET_DEFAULT_S = 35.0` in `tools.py`; the 35 and 44
+  ceilings live only in the config registry (R-4).
+
+### Key codebase findings
+
+- `tests/test_tools.py:2472-2477` asserts the exact set of policy keys an extract call reads; the new budget
+  read adds a fifth, which is why Steps 5 + 6 are one unit.
+- `setConfigScalarBounds.test.ts:276` and `:370-378` pin the 55 ceiling; they change with the registry row
+  (Steps 1 + 2 are one unit). The suite's recording pool keys on `SELECT key, is_secret`, so the gate's
+  sibling read must not contain that text.
+- `tools.py` does not import `httpx` today (`app/egress.py:16` does); Step 5 adds the import.
+- `scripts/config-wiring-stored.json` must be regenerated on a scratch Postgres 16 with `psql` and `migrate`
+  (CI job `config-wiring-stored`); without it `check-config-wiring --final` fails `STALE-STORED`.
+- A file named `config-mcp-deadline-budget.sql` under `scripts/migration-assertions/` runs after all
+  migrations (`scripts/migration-rerun.py:562-572`); no test pins a PREPARE copy to its source today, so
+  Step 4's pin is new.
+- No `agent.extract.*` row exists in `SCALAR_BOUNDS_REGISTRY`; Step 1 adds `[5,35]` for the new key.
+
+### Open Threads
+
+- **For impl-spec review / the operator**:
+  - The `RAISE NOTICE` for per-user rows above 44 is in the assertion file (CI only), following
+    `config-046.sql:78-86`, because design.md keeps the up migration a single statement. The live count is
+    reported by Step 9's query. Emitting it on the live databases would need a second statement in the up.
+  - The stored description of `agent` / `opportunities.read_timeout_seconds` still says "SetConfig-bounded
+    `[30,55]`" (`scripts/config-wiring-stored.json:154,166`). design.md's clamp does not rewrite descriptions,
+    so it stays stale unless the operator asks for it.
+  - The enumeration sign-off is "unenumerated" until Step 9's pre-deploy run.
+- **For /sdd-execute**:
+  - Step 3 needs a throwaway Postgres to generate the stored set; starting one needs the operator's go-ahead
+    (precedent: 347 context.md:18), or use the CI artifact.
+  - Re-check the migration number and dedup the seed by key at the integration PR and after every
+    `origin/main-dev` merge; regenerate the stored set each time another config migration arrives.
+  - `tools.py` and `configServiceImpl.ts` are also edited by features 319, 322, 328, 331 and by batch peers;
+    expect line drift.
+  - A fallback to ceiling 43 is an operator decision if an unmodelled latency term shows up; no measured
+    real-time `@AC-2` variant is specced (zero slack at 44 would make it flaky).
+- Design risks carried unchanged: attachment parsing stays outside the budget; `HTTPStatusError` still aborts
+  the whole extract call (both out of scope, follow-ups).
