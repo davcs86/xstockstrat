@@ -14,6 +14,8 @@ Step 1 is design.md's "Step 0": it brings the feature branch up to `origin/main-
 
 All work is inside `services/xstockstrat-notify`, plus two report sidecars and this feature's `acceptance.feature`. There is no proto, migration, config-key, env-var or port change (design.md § Chosen Approach; recon.md § Dependencies).
 
+**Divergence from product-spec.md (F-07, D-4).** product-spec.md:58 says "Config key changes anticipated: **yes (likely)**". The design decided otherwise, and this spec follows the design: `MAX_QUEUED_ALERTS = 1024` is a code constant (Step 7), recorded as a memory-safety bound with no operator tuning (design.md:94-96 "Why the cap is a code constant"; design.md:145, `F-07` honored). This is a recorded trade-off, not an omission; the reviewer of Step 7 should see both documents. If operators later want to tune the cap, that is a new change carrying the full config-key contract (a seed migration in `xstockstrat-config`, a reader in notify, and the live `WatchConfig` mechanism; `docs/patterns/config-governance.md`). It is not part of this feature.
+
 **Consumer surface (C-14).** None: internal/platform-only. This is a decision, not an omission. The bug-template product spec has no `## Consumer Surface(s)` section, and design.md records that `StreamAlerts` keeps its contract. The one client-visible difference is that an evicted slow consumer receives a terminal `RESOURCE_EXHAUSTED` status, which the UI's existing reconnect hook already handles (`services/xstockstrat-ui/src/hooks/useReconnectingStream.ts:23`; D-2 evidence). No UI or agent step is needed.
 
 **Citation tree.** Every `path:line` below was read at `origin/main-dev` `fb52065c`, which is the tree the feature branch holds after Step 1. The branch itself is at merge-base `c4fd48b0a`, 168 commits behind, where recon.md's line numbers apply. Two things moved since recon and matter here:
@@ -22,6 +24,8 @@ All work is inside `services/xstockstrat-notify`, plus two report sidecars and t
 - `services/xstockstrat-notify/docs/context-constitution.md` no longer carries the two gotchas recon cited at `:30` and `:31`.
 
 If `origin/main-dev` has moved past `fb52065c` when Step 1 runs, `/sdd-execute` re-greps each anchor by symbol name before editing.
+
+Re-verified on 2026-11-20 by `/sdd-review impl-spec`: `origin/main-dev` is still `fb52065c` and the branch is still 168 commits behind. These anchors were re-grepped there and hold: `notifyServiceImpl.ts` `:31`, `:79`, `:122`, `:125`, `:129`, `:162`, `:174`, `:178`, `:180`, `:392`; `telemetry.ts:380` and `:397`; `package.json:21` (`^1.14.7`); `fanout.test.ts:13` and `:243`; notify `CLAUDE.md:4` and `:125`.
 
 ## Scenario Coverage (C-15)
 
@@ -40,7 +44,15 @@ Existing durable rules the tests also pin (C-16, design.md § Business Rules Tou
 - Steps 5+6+7 land together: Steps 5 and 6 add tests that are red until Step 7's eviction exists, so neither can pass its own Verification on a tree without Step 7 (`step-constraints.md` §C, test-first pairing; precedent: feature 329's test → service units). Three adjacent steps, one consumer surface (backend).
 - Step 7 [service] is covered by Step 5 [test] and Step 6 [test].
 - Step 8 requires Step 7: the `NOTIFY-*` invariant and the retired records describe code that must already exist.
+- Step 8 follows the Steps 5+6+7 unit directly. No `origin/main-dev` merge and no lockfile change goes between them, so the `NOTIFY-*` invariant is written against the same grpc-js version the eviction was tested on. Step 8's Verification re-checks the version.
+- TDD evidence that is never committed: Step 2's mutation red and Step 3's "no natural red" note exist only as `/sdd-execute` records in `context.md` and the PR body (`tdd-gate.md:55-58`, P-03). Neither step is `done` until its record is written.
 - Before `/sdd-execute`: check `docs/roadmap/features/merge-order.md` for features 312, 323 and 324, which also touch `notifyServiceImpl.ts` and `telemetry.ts` (design.md Open Risks; recon.md:104). Feature 334's overlap is already merged into `main-dev` and is absorbed by Step 1.
+- File overlaps found by the `/sdd-review impl-spec` scan on 2026-11-20. All are rebase-only (WARN); none is a FAIL, and `merge-order.md` has no row for 316 (it names 316 only in prose at `:403`). Whichever feature merges second re-greps its anchors:
+  - `src/grpc/notifyServiceImpl.ts`: 312 (`spec-ready`) modifies `listAlerts` `:196-229` (its spec `:713`, `:718`, on `origin/feature/fix-read-path-owner-trust`). A different function from Steps 3 and 7.
+  - `src/telemetry.ts`: 337 (`in-progress`) modifies it (its spec `:190`). Step 7 edits only the `StreamEvictionReason` union at `:380`. Feature 329's edit is already in `fb52065c` and is absorbed by Step 1.
+  - `src/__tests__/fanout.test.ts`: 337's spec (`:242`) relies on this file's existing tests staying unchanged. Step 5 moves only `withLogs` (`:243-256`) and edits no test.
+  - `services/xstockstrat-notify/CLAUDE.md`: 323 (`spec-ready`) modifies it (its spec `:269`, on `origin/feature/fix-orphaned-code`); the scan reports its edit is the dead `jsonwebtoken`/`bcrypt` phrase in the `:4` banner, the same line Step 4 edits. Expect a textual conflict there; keep both removals.
+  - No evidence was found on `origin/main-dev` that 324 touches a notify file (it has no implementation spec there yet); the design.md mention stands unverified.
 - Open Risks from design.md and where they land: grpc-js 1.14.5 never exercised → Step 1. Status path verified on 1.14.7 only, caret range floats, `writableLength` could be renamed → Step 6 (runs in CI on whatever the lockfile resolves) and Step 8 (invariant). Recon line drift → resolved by the citation tree above. The four accepted residuals (held queue after eviction, bound scales with alert size, lazy detection, alerts lost until reconnect) have no step by design.
 
 ---
@@ -73,6 +85,7 @@ Existing durable rules the tests also pin (C-16, design.md § Business Rules Tou
 2. Expected conflict: `docs/roadmap/ledger/fails.md` is append-only on both sides. Keep both sides' entries. Any other conflict is unexpected: stop and report it (P-03).
 3. After the merge, refresh `node_modules` with `pnpm install --frozen-lockfile` from the repo root so the installed grpc-js matches the lockfile.
 4. The category is `docs` only because no step category fits a branch sync; it authors no documentation.
+5. **Explicit exception for `/sdd-execute` (F-08).** This step's diff is the merge commit: about 168 commits of `main-dev` files, almost all outside the two-file list above. That is expected, and this is the one step where the file list does not bound the diff. `/sdd-execute` states this exception at its Phase-2 confirmation, and proceeds only when (a) the commit is a true merge of `origin/main-dev` with two parents, and (b) `git diff origin/main-dev HEAD --stat` after the merge shows only this feature's directory and `docs/roadmap/ledger/fails.md`. Any other path in that diff is a hand edit that does not belong in this step: stop and report (P-03).
 
 **Verification**:
 ```bash
@@ -84,6 +97,12 @@ cd services/xstockstrat-notify && pnpm ls @grpc/grpc-js --depth 0
 # expect: @grpc/grpc-js 1.14.7
 cd services/xstockstrat-notify && pnpm run test
 # expect: exit 0 (the synced tree is green before any step edits it)
+git rev-list --parents -n 1 HEAD | wc -w
+# expect: 3 (the merge commit and its two parents)
+git diff origin/main-dev HEAD --stat
+# expect: only docs/roadmap/features/316-fix-notify-stream-contract/ and docs/roadmap/ledger/fails.md
+git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c '^-[^-]'
+# expect: 0 (the fails.md resolution kept every main-dev line; this branch only adds)
 ```
 If either of the first two checks fails, the eviction unit (Steps 5–7) does not start.
 
@@ -109,7 +128,7 @@ If either of the first two checks fails, the eviction unit (Steps 5–7) does no
 
 **Lands with**: —
 
-**TDD**: `red-green required`. The runtime compare is already string-vs-string, so this test passes on the unfixed tree: the defect is the type annotation plus the missing test, not live behaviour. The RED is therefore a **mutation red**, taken from product-spec.md § Reproduction Steps 1 and never committed: temporarily change `notifyServiceImpl.ts:392` to compare `alertSeverityToNumber(alert.severity)`, run the suite, and capture (a) the new `@AC-1` test failing on "the subscriber receives the alert", and (b) the pre-existing numeric test at `:696-701`, in its pre-edit form, still passing. Revert the mutation, re-run, capture green. Record it in `context.md` as "AC-1 mutation red" (the `tdd-gate.md` "behavior already exists" case, stated explicitly, P-03).
+**TDD**: `red-green required`. The runtime compare is already string-vs-string, so this test passes on the unfixed tree: the defect is the type annotation plus the missing test, not live behaviour. The RED is therefore a **mutation red**, taken from product-spec.md § Reproduction Steps 1 and never committed: temporarily change `notifyServiceImpl.ts:392` to compare `alertSeverityToNumber(alert.severity)`, run the suite, and capture (a) the new `@AC-1` test failing on "the subscriber receives the alert", and (b) the pre-existing numeric test at `:696-701`, in its pre-edit form, still passing. Revert the mutation, re-run, capture green. Record it in `context.md` as "AC-1 mutation red" (the `tdd-gate.md` "behavior already exists" case, stated explicitly, P-03). Because the mutation is never committed, that `context.md` entry and the PR body are the only evidence: both carry the three command outputs (mutated red, the old numeric test passing under the mutation, reverted green), and the step is not marked `done` without them. Before committing, `git diff -- services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts` must be empty (the mutation is fully reverted).
 
 **Covers**: `AC-1`
 
@@ -155,7 +174,7 @@ grep -n "__tests__/fixtures" services/xstockstrat-notify/src/__tests__/notifySer
 
 **Lands with**: —
 
-**TDD**: `red-green required`. Paired with Step 2; the type change has no runtime effect, so the red is Step 2's mutation red and this step's proof is `tsc` plus the suite staying green.
+**TDD**: `red-green required`. Paired with Step 2; the type change has no runtime effect, so this step has no natural red of its own. The red is Step 2's mutation red and this step's proof is `tsc` plus the suite staying green. `/sdd-execute` states that explicitly instead of skipping the gate: it records "red N/A — no behavior change (type-only); covered by Step 2's AC-1 mutation red" in `context.md` and the PR body, with this step's green run (`tdd-gate.md:55-58`, P-03).
 
 **Covers**: —
 
@@ -328,6 +347,7 @@ cd services/xstockstrat-notify && pnpm exec tsc && node --test --test-name-patte
    - `evictions{backpressure} === 1` and `evictions{stream_error} === 0` (`counterValue`).
 8. Clean up in `finally`: destroy the http2 session and `server.forceShutdown()`.
 9. Do not assert the exact eviction attempt (the spike's 1088): it depends on the h2 window. The test hardcodes no port.
+10. Timing bounds. The test has three: the 3000-emit cap, the 100 ms hold and the 5 s wait for `'end'`. Every wait is a bounded poll on a condition, except the 100 ms hold, which is a negative check (no trailers while the client is paused). This is also the first `node:http2` use in notify, and CI runs it on whatever grpc-js the lockfile resolves. If the repeat run in Verification shows a failure, `/sdd-execute` does not widen a bound, add a retry or skip the test on its own: it stops, records the failing output in the Deviation Log and `context.md`, and reports (P-03). A failure here may be the grpc-js status path changing, which is what the test exists to catch.
 
 **Verification**:
 ```bash
@@ -336,6 +356,8 @@ cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-c
 # expect: exit 0 (green only together with Steps 5 and 7 — one unit)
 cd services/xstockstrat-notify && pnpm exec tsc && node --test --test-name-pattern="real grpc-js" dist/__tests__/notifyServiceImpl.test.js
 # expect: the one real-grpc-js test ran (1 test executed, 0 failed) — not 0 tests matched
+cd services/xstockstrat-notify && for i in 1 2 3 4 5 6 7 8 9 10; do node --test --test-name-pattern="real grpc-js" dist/__tests__/notifyServiceImpl.test.js > /dev/null 2>&1 || echo "run $i failed"; done
+# expect: no output (10 consecutive passes; run once Step 7 is in, as part of the unit's union Verification)
 grep -n "node:http2\|createInsecure" services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts
 # expect: the raw http2 client and the insecure in-process server are present
 ```
@@ -481,9 +503,12 @@ grep -n "1024 alerts queued" docs/roadmap/features/316-fix-notify-stream-contrac
 2. `context-constitution-findings.md`: delete the `:37` open question; add one entry at the top of `## Resolved`: fan-out backpressure is resolved by feature `316-fix-notify-stream-contract` (a subscriber with 1024 queued alerts is evicted with status 8). Append "— **resolved (feature 316)**, see the Resolved section" to the `:73` report row.
 3. Sidecar: line 1 becomes `resolved`; line 2 stays `ref: feature:316-fix-notify-stream-contract` (D-8; same note as Step 4 instruction 4).
 4. Do not record the accepted residuals here; they live in design.md § Accepted residuals.
+5. Before writing the row, confirm the lockfile still resolves the grpc-js version Step 1 verified (first Verification command). If it changed between Step 7 and this step, stop: the row's "verified on 1.14.7 only" would be false, and the spike must be re-run first (P-03).
 
 **Verification**:
 ```bash
+grep -n -A8 "^  services/xstockstrat-notify:" pnpm-lock.yaml
+# expect: unchanged since Step 1 — '@grpc/grpc-js' / specifier: ^1.14.7 / version: 1.14.7
 grep -n "NOTIFY-18\|sendStatus" services/xstockstrat-notify/docs/context-constitution.md
 # expect: the new rule row, naming the 'error' → end() → _final → sendStatus chain, 1.14.7 only, re-run the spike on a bump
 grep -n "ignores \`call.write()\` backpressure" services/xstockstrat-notify/docs/context-constitution-findings.md
