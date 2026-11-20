@@ -1,6 +1,6 @@
 # Debate Register: fix-notify-stream-contract
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -84,10 +84,10 @@
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 3 | R-2 | The grpc-js 1.14.7 source is installed (node_modules/.pnpm/@grpc+grpc-js@1.14.7/.../server-call.js:108-164), contrary to D-7's 'no grpc-js source on host'. destroy() has no _destroy, so it never reaches the h2 stream. D-5's 1024 cap, settled after R-2 was locked, makes the memory end() holds bounded, not unbounded. | pending user |
-| P-2 | 3 | D-2 | server-call.js:121-124,152-156 and server-interceptors.js:736-749: neither destroy nor the status-error path tears down a zero-window stream out-of-band, so D-2's 'without flushing' premise is false for both options. destroy strands recovered clients (useReconnectingStream.ts:46-63). | pending user |
-| P-3 | 3 | D-6 | Same source as above. The step-4 teardown call.destroy(err) is predicted to send no trailers or RST. Proposed replacement: emit('error', {code:8}), grpc-js's own server-stream status path (server.js:106-107), or end() (proposer). | pending user |
-| P-4 | 3 | D-7 | notify pins ^1.14.7 (package.json:21, pnpm-lock.yaml:1165), not the 1.14.5 the report used. D-7's pass condition (c) close/RST is predicted to fail by source, so it would need the teardown-matched condition (g) instead. | pending user |
+| P-1 | 3 | R-2 | The grpc-js 1.14.7 source is installed (node_modules/.pnpm/@grpc+grpc-js@1.14.7/.../server-call.js:108-164), contrary to D-7's 'no grpc-js source on host'. destroy() has no _destroy, so it never reaches the h2 stream. D-5's 1024 cap, settled after R-2 was locked, makes the memory end() holds bounded, not unbounded. | user reopened |
+| P-2 | 3 | D-2 | server-call.js:121-124,152-156 and server-interceptors.js:736-749: neither destroy nor the status-error path tears down a zero-window stream out-of-band, so D-2's 'without flushing' premise is false for both options. destroy strands recovered clients (useReconnectingStream.ts:46-63). | user reopened |
+| P-3 | 3 | D-6 | Same source as above. The step-4 teardown call.destroy(err) is predicted to send no trailers or RST. Proposed replacement: emit('error', {code:8}), grpc-js's own server-stream status path (server.js:106-107), or end() (proposer). | user reopened |
+| P-4 | 3 | D-7 | notify pins ^1.14.7 (package.json:21, pnpm-lock.yaml:1165), not the 1.14.5 the report used. D-7's pass condition (c) close/RST is predicted to fail by source, so it would need the teardown-matched condition (g) instead. | user reopened |
 | P-5 | 4 | D-2 | Proposer r4: grpc-js 1.14.7 server-call.js:121-124, :152-156 show neither option tears down a zero-window stream out-of-band. Same evidence as P-2; merge into P-2. | dropped (evidence not new) |
 | P-6 | 4 | D-6 | Proposer r4: server-call.js:108-164 has no _destroy, so destroy() sends no trailers or RST; replace step 4 with emit('error', {code: 8, details}). Same evidence as P-3; merge into P-3. | dropped (evidence not new) |
 | P-7 | 4 | R-2 | Proposer r4: D-5's 1024 cap bounds what end() holds, and the status path calls end() internally (server-call.js:123). Proposed lock wording: bare end()/OK stays rejected; the internal end() via emit('error') is permitted. Same evidence as P-1; merge into P-1. | dropped (evidence not new) |
