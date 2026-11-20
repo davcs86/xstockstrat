@@ -1522,3 +1522,29 @@ operator and the operator's own answer. These are operator consent (C-11, C-16);
 - **Round cap.** Operator: "Override round cap until design is sound" — debates may run past 5 rounds until the
   adversary rates the design sound; a sound design with every C-16 change covered is approved on the operator's
   behalf. Round 6 ran under this authorisation.
+
+## Session 2026-11-20 — operator rulings after round 6, recorded by the orchestrator (verbatim)
+
+Written by the orchestrating session itself. Each entry quotes the question and the operator's own selection.
+
+- **@AC-5 — C-16 sign-off GIVEN.** Question: "311 AC-5 (examples shown above): sign off the amended wording, where
+  the bracket leg's full-fill event carries qty 10 at the cumulative average price instead of qty 6?" Operator
+  selected: "Sign off (Recommended)". `@AC-5` is covered by an operator decision; O-11 closes. Amended Then: "the
+  ledger holds an order.partially_filled event with qty 4 and an order.filled event with qty 10 at average fill price
+  110 for that leg".
+- **Cutover (former residual (a), O-3) — stop-then-start on staging.** Question: the write-fence trigger's writer
+  identification is unproven through PgBouncer and two pre-cutover cases stay undecidable; production has never
+  launched, so the cutover happens once, on staging; how should the first deploy be made safe? Operator selected:
+  "Stop-then-start on staging (Recommended)". This REVERSES "None — fix in scope" for item (a) only: no
+  `portfolio.positions` trigger, no `fill_fence`/`fill_cutover`, no application_name fence. The cutover is one
+  numbered runbook step with a recorded result (stop portfolio, deploy, start); the overlap case cannot occur. The
+  remaining O-3 pre-cutover cases are accepted as the consequence of this choice.
+- **Bracket-leg fills in reconciliation (former residual (c), O-13) — via `trading.bracket_legs`.** Question: D-3
+  forbids leg rows in `trading.orders`; the design makes `NetFilledQtyBySymbol` include legs from
+  `trading.bracket_legs`; is that what "fix in scope" meant? Operator selected: "Via bracket_legs (Recommended)".
+  D-3 stands; no REOPEN D-3.
+- **Historical legs — forward-only.** Question: legs of brackets exited/canceled before cutover, ids blanked by a
+  resize and old IBKR legs cannot all be recovered; how should history be handled? Operator selected: "Forward-only
+  (Recommended)". Track legs from cutover on; the unrecoverable historical set is a recorded, accepted gap.
+- **Former residual (b), O-8** stays in scope as ruled ("None — fix in scope"): a parked fill must not re-park with
+  an ERROR on every boot.
