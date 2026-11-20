@@ -1,15 +1,14 @@
 # Design: fix-retired-surface-proto-cleanup
 
 **Created**: 2026-11-13
-**Rounds**: 3 (full; termination: approved — operator approval at the gate, Floor clear, O-1 unanswered)
-**Approved by**: user @ 2026-11-13 (design-approval gate, /sdd-batch)
+**Rounds**: 3 (full; termination: approved — operator approval at the gate, Floor clear)
+**Approved by**: user @ 2026-11-13 (design-approval gate, /sdd-batch); O-1 answered (A) and D-14 confirmed by the operator @ 2026-11-20
 **Grounded in**: recon.md
 **Debate register**: debate.md
 
-> **Status hold (D-11).** The operator approved the design but recorded no answer to O-1. Under
-> settled D-11, a recorded O-1 answer is a precondition for `spec-ready → design-approved`, so
-> `status.md` stays `spec-ready`. `/sdd-spec` must not draft step 1 until an O-1 answer is recorded
-> in context.md, and must then write exactly one unconditional step 1 (R-7).
+> **O-1 answered (D-11 satisfied).** Operator, 2026-11-20, option (A): keep
+> `ComputeIndicatorRequest.timeframe_enum = 7`. No acceptance or product-spec amendment is needed.
+> Status advances `spec-ready → design-approved`, and `/sdd-spec` writes one unconditional step 1 (R-7).
 
 ---
 
@@ -34,9 +33,9 @@ All edits are additive or deprecations. Field numbers are kept and no `reserved`
   form "deprecated; ignored by the server". The indicators servicer reads neither field
   (`app/handlers/servicer.py:214-241`), and no caller switches (D-2), so the marketdata "once all
   callers migrate" wording must NOT be copied (D-13, R-9; recon.md:43).
-  - Field 7 `timeframe_enum` depends on the O-1 answer (see § O-1 below). Under (A) it is added with
-    the comment "accepted but ignored by the server; carried for contract parity with
-    BatchGetBarsRequest". Under (B) it is not added.
+  - `Timeframe timeframe_enum = 7` is added (O-1 answer (A), see § 6) with the comment "accepted but
+    ignored by the server; carried for contract parity with BatchGetBarsRequest". No caller switches
+    (D-2).
 - `trading.proto:336`: `SnapshotOfflinePositionsRequest.user_id = 2` is deprecated, reusing the
   `trading.proto:144` wording ("caller identity resolved from the x-user-id header; body value
   ignored") (recon.md:45, :186).
@@ -86,7 +85,7 @@ All edits are additive or deprecations. Field numbers are kept and no `reserved`
 
 ### 4. Sparkline residue and config (D-4, D-7, D-8, R-3; recon.md:23-30, :161-165, :204-205, :269)
 
-- No config migration 048 (R-3). Migration `046_config_dead_rows_prune.up.sql:11-14` already prunes
+- No config migration is added, so the feature claims no migration number (D-4, R-3). Migration `046_config_dead_rows_prune.up.sql:11-14` already prunes
   `analysis`/`opportunity.sparkline_bars` and `marketdata`/`alpaca.paper`, gated on signed sha256
   matches (`:18-22`) (recon.md:28-30).
 - AC-1's `alpaca.paper` clause is verified by a launch-gate query on dev and prod: query
@@ -115,27 +114,22 @@ All edits are additive or deprecations. Field numbers are kept and no `reserved`
   `:1398`; `trading_ownership_test.go:104`), are added only where golangci-lint flags them after
   buf-gen (D-6).
 
-### 6. O-1: ComputeIndicatorRequest field 7 — UNANSWERED (D-11, D-12, R-5, R-7, R-8)
+### 6. O-1: ComputeIndicatorRequest field 7 — answered (A) (D-2, D-11, R-5, R-7, R-8)
 
-The operator must answer exactly one of these, recorded in context.md:
-
-- **(A) keep field 7 `timeframe_enum`** — recommended. Matches `acceptance.feature:28` as written,
-  and product-spec `:89` / Q5 `:114`. No artifact amendment is needed.
-- **(B) deprecation-only** — deprecate the string and add no enum field. The D-12 edit set applies:
-  - Drop indicators field 7 and its collision check against feature 310.
-  - Reword `acceptance.feature:28`, keeping the `@AC-3` ID (C-15).
-  - Amend product-spec.md `:45` (Expected), `:89` (Fix Scope row: split ComputeIndicatorRequest
-    out as deprecation-only) and `:114` (Q5).
-  - Append a context.md entry recording the answer.
-  - This is a 322-local AC, so no C-16 durable sign-off is needed.
-
-Silence is not an answer (R-5). Until an answer is recorded, status stays `spec-ready` (D-11).
+- **Operator, 2026-11-20, option (A): keep `ComputeIndicatorRequest.timeframe_enum = 7`.** This
+  matches `acceptance.feature:28` as written, and product-spec `:89` / Q5 `:114`. No acceptance or
+  product-spec amendment is needed, and the record satisfies D-11 (context.md, "Session 2026-11-20").
+- The field ships in the contract only: no reader, no producer, and the D-13 "accepted but ignored by
+  the server" comment says so (C-18).
+- Option (B) (deprecation-only) was not chosen, so the D-12 edit set does not apply. `@AC-3` and
+  product-spec `:45`/`:89`/`:114` stay as written.
+- `/sdd-spec` writes a single unconditional proto step 1. There is no (A)/(B) branching (R-7).
 
 ### 7. Scope record (D-14)
 
-`xstockstrat-ui` is a D-1 producer (`useOhlcBars.ts:25`), but product-spec.md:74-80 Affected
-Services and the feature.md reviewers omit it. Add it to both, and record the amendment in
-context.md, before `/sdd-spec` routes reviewers (C-14).
+`xstockstrat-ui` is a D-1 producer (`useOhlcBars.ts:25`). The operator confirmed D-14 on 2026-11-20:
+`xstockstrat-ui` is added to product-spec.md Affected Services and to the feature.md reviewers, and
+the amendment is recorded in context.md, so reviewer routing reaches the UI owner (C-14).
 
 ### Consumer surfaces (C-14)
 
@@ -170,10 +164,10 @@ context.md, before `/sdd-spec` routes reviewers (C-14).
 
 ## Open Risks
 
-- [ ] **O-1 unanswered (non-blocking objection; D-11 hold).** Approval came without an O-1 answer, so status stays `spec-ready` and 322 is stalled in the batch until the operator records (A) or (B) in context.md — to be addressed before `/sdd-spec` (gate precondition).
+- [ ] `ComputeIndicatorRequest.timeframe_enum = 7` ships with no reader or producer (O-1 answer (A), C-18). The D-13 comment is the only signal a caller gets, so it must land verbatim in intent ("accepted but ignored by the server") — to be addressed at proto step 1.
 - [ ] The tdd-gate may reject a compile failure as RED for the Go watcher steps. If so, record a P-06 deviation (D-10) — to be addressed at the Go watcher steps.
 - [ ] The hoisted-local refactor touches the ownership gate at `trading.go:1196`. `trading_ownership_test.go` must stay green, and the rewritten `:1193-1194` comment must keep the header-overwrites-body invariant — to be addressed at the trading carrier step.
-- [ ] Adding `xstockstrat-ui` to scope (D-14) pulls the UI owner into review routing, and any `mock-backend.ts` edit must respect C-12 fixture homes — to be addressed before `/sdd-spec` (scope amendment) and at the BatchGetBars producer step.
+- [ ] `xstockstrat-ui` is now in scope (D-14), which pulls the UI owner into review routing, and any `mock-backend.ts` edit must respect C-12 fixture homes — to be addressed at the BatchGetBars producer step.
 - [ ] `buf breaking` has not been run with message-level deprecation on `common.v1.Decimal`/`Error`. The fallback is comment-only — to be addressed at proto step 1.
 - [ ] Field number 7 may collide with in-flight features 310 (`indicators.proto`) and 312 (`trading.proto`). Re-check merge order — to be addressed at proto step 1.
 - [ ] The generated TS field name `timeframeEnum` is unverified — to be addressed at the UI producer step (after buf-gen).
@@ -182,18 +176,18 @@ context.md, before `/sdd-spec` routes reviewers (C-14).
 
 ## Constitution Rules Touched
 
-- `C-11` — honored by: the design gate ran 3 full rounds with operator approval. The one operator question (O-1) is recorded as unanswered rather than defaulted, and status is held under D-11.
+- `C-11` — honored by: the design gate ran 3 full rounds with operator approval. The one operator question (O-1) was held open rather than defaulted (R-5) until the operator answered (A) on 2026-11-20, which satisfies D-11.
 - `C-12` — honored by: any `e2e/mock-backend.ts` edit uses the canonical `xstockstrat-ui` fixture homes (D-14).
 - `C-14` — honored by: consumer surfaces (agent `list_opportunities`, UI OHLC strip) are named, and `xstockstrat-ui` is added to Affected Services and reviewers (D-14).
-- `C-15` — honored by: `acceptance.feature` stays the single source of acceptance truth. Under (B), `@AC-3` is reworded with its ID kept.
+- `C-15` — honored by: `acceptance.feature` stays the single source of acceptance truth. Under the O-1 answer (A), `@AC-3` is unchanged.
 - `C-16` — honored by: the one durable CHANGE (`@AC-8 @feature-191`) carries the 2026-11-10 operator sign-off. Every other durable rule is PRESERVE.
-- `C-18` — honored by: O-1 records that `ComputeIndicatorRequest.timeframe_enum` would have no reader or producer, and leaves its fate to the operator rather than shipping it silently.
+- `C-18` — honored by: O-1 records that `ComputeIndicatorRequest.timeframe_enum` has no reader or producer. The operator chose to keep it (2026-11-20, option (A)), and the proto comment states that the server ignores it (D-13).
 - `P-02` — honored by: the proposer and adversary reported only to the orchestrator and never coordinated laterally in any of the three rounds.
-- `P-03` — honored by: O-1 is escalated to the operator rather than guessed (R-5), and unverified items (buf behavior, TS names, live 046 rows) are listed under Open Risks.
-- `P-04` — honored by: design approval is recorded (feature.md Status History + context.md). The status transition itself waits for the recorded O-1 answer required by D-11.
+- `P-03` — honored by: O-1 was escalated to the operator rather than guessed (R-5), and unverified items (buf behavior, TS names, live 046 rows) are listed under Open Risks.
+- `P-04` — honored by: design approval is recorded (feature.md Status History + context.md). The status transition waited for the recorded O-1 answer required by D-11, and is made on 2026-11-20 with that answer on record.
 - `P-06` — honored by: RED-first tests for Python and Node. Go uses a compile-only RED, with a recorded deviation path (D-10).
 - `F-04` — honored by: nothing invented. buf behavior, TS names and live 046 row state are flagged as unverified.
-- `F-09` — honored by: no design choice is left for an implementer to settle by editing step bodies (R-6, R-7). O-1 gates status instead of branching steps (D-11), so implementation-spec.md step 1 is written once, unconditionally.
+- `F-09` — honored by: no design choice is left for an implementer to settle by editing step bodies (R-6, R-7). O-1 gated status instead of branching steps (D-11) and is now answered, so implementation-spec.md step 1 is written once, unconditionally.
 - `PLAT-4` — honored by: identity propagation is unchanged. The deprecated `SnapshotOfflinePositionsRequest.user_id` stays handler-overwritten from `x-user-id` (D-9), and no outbound call changes its header forwarding.
 - `PLAT-5` — honored by: no `x-access-scope` handling changes. The trading carrier refactor renames only the local that feeds the ownership gate at `trading.go:1196`, and `trading_ownership_test.go` must stay green.
 
@@ -204,7 +198,7 @@ Floor (`F-*`) status: no breaches.
 - CHANGE `@AC-8 @FR-6 @feature-191` "Live enrichment uses batch RPCs instead of per-symbol calls" (`services/xstockstrat-analysis/acceptance/opportunities-latency-fix.feature:19-25`) — drops only the `:24` "calls BatchGetBars once for all 30 symbols (sparkline)" clause. Signed off by the operator on 2026-11-10 (context.md, "Session 2026-11-10 (operator decisions before /sdd-design)").
 - EXTEND `@AC-1 (322)` "No service sends or documents the retired trading_mode axis except the recorded trading fallback" — feature-local regression guard. It is not yet promoted, so no durable sign-off is needed.
 - EXTEND `@AC-2 (322)` "The opportunity contract and consumers reflect the client-side sparkline" — feature-local regression guard. It is not yet promoted.
-- EXTEND `@AC-3 (322)` "Proto contracts carry no stalled migrations or mislabelled caller identity" — feature-local regression guard. Its wording depends on the O-1 answer (D-12).
+- EXTEND `@AC-3 (322)` "Proto contracts carry no stalled migrations or mislabelled caller identity" — feature-local regression guard. Its wording stays as written under the O-1 answer (A) (operator, 2026-11-20).
 - PRESERVE `@AC-3..@AC-5 @feature-305` (`docs/sdd/business-rules/platform.feature`) — not regressed by: no migration is added and `deadRowVerdict` evaluator behavior is unchanged (D-4).
 - PRESERVE `@AC-2 @feature-305` (`services/xstockstrat-config/acceptance/config-dead-rows-prune.feature`) — not regressed by: migration 046 stays the single prune path (R-3).
 - PRESERVE `@AC-5 @FR-4 @regression @feature-196` (`platform.feature`) — not regressed by: deprecations keep field numbers and add no `reserved`, and `buf breaking` stays clean.
@@ -219,4 +213,4 @@ Floor (`F-*`) status: no breaches.
 | 2 | 2026-11-11 | 2 | 2 | 2 | 0 | yes |
 | 3 | 2026-11-13 | 4 | 3 | 0 | 0 | yes |
 
-**Termination**: approved by the operator at the design gate after round 3 (full mode, within the 2–5 bound). The adversary judged round 3 SOUND, with no Floor breach and no REOPEN petitions. O-1 stays open (non-blocking) because no operator answer was recorded. Under D-11 that holds `status.md` at `spec-ready`.
+**Termination**: approved by the operator at the design gate after round 3 (full mode, within the 2–5 bound). The adversary judged round 3 SOUND, with no Floor breach and no REOPEN petitions. No petition was pending. O-1 was left open at the gate, which held `status.md` at `spec-ready` under D-11. The operator answered it on 2026-11-20 with option (A), closing O-1 and releasing the flip to `design-approved`.
