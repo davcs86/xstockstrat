@@ -725,3 +725,70 @@ The /sdd-design full debate stopped at the approval gate after round 4 (gate pol
 - [ ] O-4 (ruff pin): answered by the 0.17.4 lock only while `scripts-python` is the sole ruff gate; confirm and close — target: /sdd-spec.
 - [ ] Drop the root `CLAUDE.md` docs touchpoint unless the re-grep finds a "not enforced" claim; re-cite `ci-overview.md` (O-18) — target: Part C docs step.
 - [ ] Re-check that `scripts-python` and its `ci-gate` entries survive peer `ci.yml` edits (O-21) — target: merge-train time.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- Operator decisions applied (2026-11-20, relayed through the `/sdd-batch` task input): D-9 (extend the existing `[tool.ruff]` and the `scripts-python` job; no `scripts/ruff.toml`, no second job, py312 from `requires-python`); the spec carries per-leaf measurement records for @AC-1 and a step showing `ruff check scripts/` exits non-zero for the @AC-2 negative clause (Step 7).
+- Assumptions made by this writer:
+  - The task named the directory as `docs/roadmap/features/docs/roadmap/features/324-fix-ci-enforcement-gaps/`. That path does not exist; the doubled prefix was read as a templating slip and `docs/roadmap/features/324-fix-ci-enforcement-gaps/` was used.
+  - "The spec must carry per-leaf measurement records" was read as both: the spec holds the spec-time records, and Step 2 repeats them at the synced tip into `context.md` (D-8).
+  - The ruff sidecar gets `ref: commit:c4b70c27`, because the sidecar format has no third line; the Step 7 proof is cited in `context.md` instead (O-16, O-19).
+  - CI edits to the `node-test` job are reviewed by the four leaf service owners; the reviewer registry has no CI-workflow or `scripts/` owner row.
+- Tree: the feature branch tip `867a0380` is 168 commits behind `origin/main-dev` and lacks `scripts/pyproject.toml`, so every citation in the spec was grepped on an export of `origin/main-dev@fb52065c`. `git merge-tree --write-tree HEAD origin/main-dev` reports a clean merge. Step 1 performs the merge and re-stamps recon.md (D-7).
+- Key codebase findings (all at `fb52065c`):
+  - `test:coverage` at config, identity, notify `package.json:13` and ledger `:14`; `node-test` matrix values at `ci.yml:764,766,768,770,774`, coverage step at `:794-796`; Go and Python consumers at `:384` and `:519`.
+  - `scripts-python` at `ci.yml:861-894`, in `ci-gate` at `:1392` and `:1425`; `[tool.ruff]` at `scripts/pyproject.toml:25-27`; ruff 0.17.4 at `scripts/uv.lock:402-403`.
+  - Doc claims: `ci-overview.md:25,90`, `spec-template.md:163`, `lang-node.md:9,47,48,52-54`; findings rows at config `:60` (design said `:58`), identity `:62`, ledger `:63`, notify `:76`. The root `CLAUDE.md` holds no "not enforced" claim, so that touchpoint is dropped (O-18).
+- Spec-time dry runs (scratch export, node v22.23.4, c8 10.1.3; nothing in the repo was edited):
+  - c8 baseline, All files % Lines: config 92.26, identity 84.82, ledger 85.78, notify 90.7. Every impl row is non-zero. No leaf is below 40, so D-4 adds no test step.
+  - With the flag, `pnpm run test:coverage` exits 0 in all four leaves. The guard exits 1 on the unflagged script, 0 on the flagged one, and 1 when the flag sits after `node`.
+  - Notify proof (40 functions × 101 lines): 37.32% Lines; exit 0 unflagged, exit 1 flagged with the `(40%)` threshold error.
+  - `scripts-python` is green: both ruff forms exit 0 and pytest passes 491. A planted `import os` fails both forms in `ledger-guard.py` and `test_manage_users.py` (F401) and is ignored in a fixture. The block-and-escalate condition does not apply; O-3 and O-9 stay moot.
+- Spec shape: Steps 3+4+5 are one atomic unit (guard, notify proof, flag) with one red→green cycle. The proof also records the unflagged run, so @AC-1 has a RED on the buggy behavior. This orders the proof before the flag inside the unit, where design.md lists it after; the design content is unchanged.
+- Ledger: no new line.
+
+## Open Threads
+
+- [ ] Step 1: merge origin/main-dev and re-stamp recon.md; log any citation that moved in the spec's Deviation Log.
+- [ ] Step 2: a leaf below 40 at the synced tip blocks the feature and returns it to /sdd-spec (D-4). Spec-time values are 84.82 or higher.
+- [ ] Step 4: re-size the proof module from the Step 2 lcov totals; record T, covered and the module size.
+- [ ] Step 7: if `scripts-python` turns red before execute, stop and escalate; do not fix `scripts/` here.
+- [ ] Peer `ci.yml` edits (297, 298, 318) and the ledger/notify `package.json` (323): re-grep cited lines after any later main-dev merge.
+- [ ] Merge-train (O-21): re-run Step 7's wiring check only.
+- [x] O-4 (ruff pin): closed at /sdd-spec. `scripts-python` is the only ruff gate over `scripts/`, and its lock pins 0.17.4.
+- [x] O-18: closed at /sdd-spec. The root `CLAUDE.md` touchpoint is dropped.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 6 warnings, 0 Floor breaches (PASS WITH WARNINGS; advisory, did not block). Lifecycle unchanged (`implementation-ready`).
+- Run under `/sdd-batch`: the two verdicts arrived as task input, and this writer edited `implementation-spec.md` to clear the clearly-correct warnings. That departs from Mode B's "do not modify the spec" line; the batch task asked for it.
+- Re-verified before editing: `origin/main-dev` is still `fb52065c` (0 commits since the spec's tree); `git merge-base --is-ancestor c4b70c27 origin/main-dev` exits 0; the ruff sidecar reads `triaged` / `ref: feature:324-fix-ci-enforcement-gaps`; 323's spec edits all four leaf `package.json` files (`:11` plus dead dependencies, its Step at `implementation-spec.md:304-307`); 318's spec appends `migration-order-gate` to `ci-gate` at `:1394` and `:1427`; 316's context cites notify `package.json:21`.
+- Addressed (spec edited):
+  - [x] Step 3: Verification now states where the 40% line threshold is enforced (Step 5's script, proven by Step 4) and that the guard holds none by design (D-5, C-18).
+  - [x] Step 4: the U > 3582 bound is marked as valid only for the spec-time totals and must be recomputed from Step 2's lcov. Verification now says a run at 40% or more is an undersized module, not a proof.
+  - [x] Step 9: the executor confirms `c4b70c27` is an ancestor of `origin/main-dev` before writing `ref: commit:c4b70c27`, and Verification checks it. Evidence now records that the step drops the sidecar's feature ref.
+  - [x] Overlap: the Step Dependencies peer line was wrong on 323 (it named only ledger and notify; 323 edits all four manifests). It now lists 318's `ci-gate` anchors, 297/298, 323, 316 and the lock file. Step 5's evidence points to it.
+- Accepted as is (no edit; the criteria verdict called each acceptable):
+  - Steps 3+4+5 as one 6-file commit with a symmetric three-member `Lands with` chain.
+  - Step 7 has no coverage threshold, because none applies to `scripts/` (`ci-overview.md:22`).
+  - Line numbers are provisional if main-dev moves; Step 1 and the Step Dependencies line already require a re-grep.
+- Unresolved ⚠ carried into execution:
+  - Step 9: `resolved` + `ref: commit:c4b70c27` removes the sidecar's link to feature 324 while the Step 7 proof lives only in this `context.md`, and `/sdd-archiver` may prune a `resolved` report before 324 launches. The spec keeps the `commit:` ref (sdd-spec assumption, O-16/O-19). Operator to confirm or rule for keeping `feature:324-fix-ci-enforcement-gaps` — [ ] unaddressed
+  - 323's spec (`implementation-spec.md:323` on `origin/feature/fix-orphaned-code`) says both 323 and 324 rewrite the root `pnpm-lock.yaml`. 324 does not touch the lock. The text sits in 323's directory, outside this writer's scope — [ ] unaddressed
+- Overlap findings (WARN, all rebase-level, no ordering change, no merge-order proposal needed):
+  - `.github/workflows/ci.yml` with 318 (`ci-gate` lists are the likely shared edit point), 297 and 298 (no impl-spec yet).
+  - The four leaf `package.json` files with 323 (distinct lines); notify `package.json` with 316 (different key).
+- Hook note: the pre-commit hook printed `can't open file … scripts/check-duplication.py` on this branch, which is 168 commits behind main-dev and lacks that script. The commit still succeeded; `--no-verify` was not used. Step 1's merge brings the script in.
+- Ledger: no new line.
+
+## Open Threads
+
+- [ ] Step 9: operator to confirm `ref: commit:c4b70c27` for the ruff sidecar, or rule for keeping the feature ref — surface at the /sdd-execute checkpoint.
+- [ ] 323's spec claims 324 rewrites `pnpm-lock.yaml`; it does not. Raise with the 323 writer or at merge-train time.
+- [ ] Step 1: merge origin/main-dev and re-stamp recon.md; log any citation that moved in the spec's Deviation Log.
+- [ ] Step 2: a leaf below 40 at the synced tip blocks the feature and returns it to /sdd-spec (D-4).
+- [ ] Step 4: re-size the proof module from the Step 2 lcov totals; record T, covered and the module size.
+- [ ] Step 7: if `scripts-python` turns red before execute, stop and escalate; do not fix `scripts/` here.
+- [ ] Peer edits to `ci.yml` (297, 298, 318) and the four leaf `package.json` files (323, 316): re-grep cited lines after any later main-dev merge.
+- [ ] Merge-train (O-21): re-run Step 7's wiring check only.

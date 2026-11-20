@@ -1,8 +1,8 @@
 # Debate Register: fix-system-identity-paths
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
-**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -12,6 +12,7 @@
 | 2 | 2026-11-11 | /sdd-batch | 4 | 2 | 3 | 6 | 1 | yes |
 | 3 | 2026-11-13 | /sdd-batch | 1 | 2 | 6 | 3 | 2 | yes |
 | 4 | 2026-11-20 | /sdd-batch | 3 | 2 | 3 | 4 | 0 | yes |
+| 5 | 2026-11-20 | /sdd-batch | 3 | 2 | 4 | 3 | 0 | yes |
 
 ## Settled Decisions
 
@@ -19,7 +20,7 @@
 | ID | Round | Decision | Evidence | Status |
 |---|---|---|---|---|
 | D-1 | 1 | Ingest attributes the ledger owner by setting AppendEventRequest.user_id=owner in _ingest_external_signal, not by forging an x-user-id header. | packages/proto/ledger/v1/ledger.proto:51; services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:76-78; services/xstockstrat-ingest/app/handlers/servicer.py:1167,1175-1180 | settled |
-| D-2 | 1 | OQ-1 is in scope: poll_one_source mints one x-trace-id per source per poll cycle and passes it only via propagation_meta, with no x-user-id. It is traced by a new @AC-3. | services/xstockstrat-ingest/app/engine/mcp_client_loop.py:116,153-160; servicer.py:762,1181 | settled |
+| D-2 | 1 | OQ-1 is in scope: poll_one_source mints one x-trace-id per source per poll cycle and passes it only via propagation_meta, with no x-user-id. It is traced by a new @AC-3. | services/xstockstrat-ingest/app/engine/mcp_client_loop.py:116,153-160; servicer.py:762,1181 | reopened @ round 5 (operator steer) |
 | D-3 | 1 | Analysis adds is_real_owner() to app/identity.py and uses it at _compose:539,546 and the window guard :388. owner_metadata reuses it, with its raise and message unchanged and test_identity.py left unedited as the regression proof. | services/xstockstrat-analysis/app/identity.py:3,8; app/engine/pnl_pattern_consumer.py:388,539,546-548; tests/test_identity.py:13-36 | settled |
 | D-4 | 1 | A system-owned order writes a degraded snapshot and opens no pnl_positions window. position_id keeps the raw owner, and a later close for system is a documented no-op. | pnl_pattern_consumer.py:358,388,434,546-548 | settled |
 | D-5 | 1 | OQ-2: existing NULL-owner ledger rows are left as they are, because ledger.events is append-only. | services/xstockstrat-ledger/migrations/003_events_user_id.up.sql (deny_mutation triggers) | settled |
@@ -34,6 +35,9 @@
 | D-14 | 4 | Supersedes D-9's trace clause (operator reopen, 2026-11-20): the RPC-path AppendEventRequest.user_id check is an untraced incidental-hardening assertion inside the AC-1 test, with no 'Covers: AC-33'. @AC-33 @feature-224 is a plain PRESERVE. FR-1 stays scoped to the mcp_client loop. | services/xstockstrat-ingest/acceptance/private-by-default-templates.feature:40-44; services/xstockstrat-ingest/tests/test_signal_ownership.py:138-139; operator steer 2026-11-20 | settled |
 | D-15 | 4 | AC-2's Then reads 'the event is processed on its first attempt with no retry backoff'. Its test drives _process_with_retry with the sleeps fixture and asserts no awaited sleep, one process_event run, no parking, a degraded snapshot and no pnl_positions window. | operator decision 2026-11-20; services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:228-232; services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py:483-486 | settled |
 | D-16 | 4 | Build order: docs and context.md first, then analysis AC-2, then ingest D-1/AC-1, then ingest FR-3/AC-3 as a separate final step. AC-1 and AC-3 tests drive poll_one_source through the real _ingest_external_signal with a dedup-miss fake DB. | docs/roadmap/ledger/fails.md:441; services/xstockstrat-ingest/tests/test_mcp_client_loop.py:173-201 | settled |
+| D-17 | 5 | Supersedes D-2's 'only via propagation_meta' clause (operator reopen, 2026-11-20, P-1/P-3): poll_one_source mints one uuid4 per source per poll cycle and passes it as a keyword-only trace_id to _ingest_external_signal. On the ingest.signal.ingested AppendEvent the core sets AppendEventRequest.correlation_id and appends x-trace-id call metadata from that one value, with no x-user-id. The RPC path passes no trace_id and is unchanged. OQ-1 stays in scope, traced by @AC-3. | operator ruling 2026-11-20; services/xstockstrat-ingest/app/handlers/servicer.py:1237-1239,1206-1217; services/xstockstrat-ingest/app/engine/mcp_client_loop.py:115,158-160; services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:613,618; services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:77-78,89 | settled |
+| D-18 | 5 | Revises D-11's ledger clause as a consequence of the D-2 reopen: FR-3 and the AC-3 scenario comment read 'the id persists as the ledger event's correlation_id; ledger ignores the x-trace-id header'. D-11's distinct-signals Given and the @feature-294 PRESERVE comment stand. | services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:77-78,89; operator ruling 2026-11-20 | settled |
+| D-19 | 5 | Step 4's Files include tests/test_mcp_client_loop.py: the real-core spy at :196-197 takes and forwards **kw so the @AC-4 @feature-166 dedup test keeps its meaning. Step 1's context.md consumer-surface note (extending D-7) says the export's correlation_id column shows a poll-cycle id on mcp_client ingest.signal.ingested rows and stays empty on RPC rows. The 'step 4 contingent on P-1' note is dropped. | services/xstockstrat-ingest/tests/test_mcp_client_loop.py:196-197; services/xstockstrat-ledger/acceptance/ledger-event-export.feature:40 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -50,6 +54,8 @@
 | R-8 | 3 | Observe AC-3's AppendEvent Then through the AsyncMock-stubbed loop harness | The stub never reaches the dedup gate or AppendEvent (servicer.py:1191,1221), so the Then is vacuous. The real-core pattern exists at tests/test_mcp_client_loop.py:173-201. | locked |
 | R-9 | 4 | Derive AppendEventRequest.correlation_id from an x-trace-id entry in propagation_meta | It would start storing inbound trace ids on RPC-path ledger rows, a behaviour change outside FR-1/FR-3 (servicer.py:1216,1237). | locked |
 | R-10 | 4 | Observe AC-2's 'no retry backoff' Then by calling process_event directly | asyncio.sleep is awaited only in _process_with_retry (pnl_pattern_consumer.py:228-232), so the Then passes with the bug present. | locked |
+| R-11 | 5 | Pass the per-cycle id through two separate parameters (a propagation_meta x-trace-id entry plus a correlation_id keyword) | A caller could send mismatched values (C-18). One keyword-only trace_id feeds both channels (servicer.py:1237-1239). | locked |
+| R-12 | 5 | Send the per-cycle id as correlation_id only, with no x-trace-id call metadata | It contradicts the operator ruling of 2026-11-20 ('sent as both') and the existing idiom at pnl_pattern_consumer.py:613,618. | locked |
 
 ## Objections
 
@@ -68,16 +74,19 @@
 | O-10 | 3 | AC-2 'Then _compose does not raise' is an implementation step that would be promoted permanently. Replace it with 'Then the event is processed on its first attempt with no retry backoff', observed via the sleeps fixture (test_pnl_pattern_consumer.py:483-486). | yes | closed @ round 4 (AC-2 adopts the operator wording 'Then the event is processed on its first attempt with no retry backoff', observed by driving _process_with_retry with the sleeps fixture.) |
 | O-11 | 3 | Split D-1/AC-1 and FR-3/AC-3 into separate ingest steps, with AC-3 last and marked contingent on P-1 in context.md, so a ruling does not force an F-09 Deviation-Log swap (fails.md:441). | no | closed @ round 4 (The proposer confirms separate ingest steps with FR-3/AC-3 last. The P-1 contingency is recorded in step 1's context.md entry.) |
 | O-12 | 3 | AC-3's test must drive poll_one_source through the real _ingest_external_signal with a dedup-miss fake DB (the test_mcp_client_loop.py:173-201 pattern), not the AsyncMock stub. | no | closed @ round 4 (The proposer confirms that AC-1 and AC-3 drive poll_one_source through the real _ingest_external_signal with a dedup-miss fake DB (test_mcp_client_loop.py:173-201).) |
-| O-13 | 4 | The operator must give an explicit verdict on P-1/P-3 (reopen D-2 for the correlation_id option, or decline) before approval. The round-4 steer supports the option but does not say 'reopen D-2'. | yes | open |
-| O-14 | 4 | If D-2 is reopened: step 4's Files must include tests/test_mcp_client_loop.py, and the spy at :196 must accept and forward the new keyword, or the @AC-4 @feature-166 dedup test breaks silently. | no | open |
-| O-15 | 4 | If D-2 is reopened: use one keyword-only trace_id that the core turns into both x-trace-id metadata and correlation_id, or state the equality constraint in the docstring (C-18). | no | open |
-| O-16 | 4 | If D-2 is reopened: the context.md consumer-surface note must say the export's correlation_id column shows a poll-cycle id for mcp_client rows (ledger-event-export.feature:40). | no | open |
+| O-13 | 4 | The operator must give an explicit verdict on P-1/P-3 (reopen D-2 for the correlation_id option, or decline) before approval. The round-4 steer supports the option but does not say 'reopen D-2'. | yes | closed @ round 5 (The operator ruled on 2026-11-20: REOPEN D-2 is granted (P-1 and P-3), and the per-cycle id is sent as both x-trace-id metadata and AppendEventRequest.correlation_id.) |
+| O-14 | 4 | If D-2 is reopened: step 4's Files must include tests/test_mcp_client_loop.py, and the spy at :196 must accept and forward the new keyword, or the @AC-4 @feature-166 dedup test breaks silently. | no | closed @ round 5 (Step 4's Files include tests/test_mcp_client_loop.py, and the spy at :196-197 takes and forwards **kw to the real core.) |
+| O-15 | 4 | If D-2 is reopened: use one keyword-only trace_id that the core turns into both x-trace-id metadata and correlation_id, or state the equality constraint in the docstring (C-18). | no | closed @ round 5 (One keyword-only trace_id on _ingest_external_signal feeds both correlation_id and the x-trace-id call metadata, so the two cannot disagree.) |
+| O-16 | 4 | If D-2 is reopened: the context.md consumer-surface note must say the export's correlation_id column shows a poll-cycle id for mcp_client rows (ledger-event-export.feature:40). | no | closed @ round 5 (The step-1 context.md consumer-surface note says the export's correlation_id column (ledger-event-export.feature:40) shows a poll-cycle id on mcp_client rows and stays empty on RPC rows.) |
+| O-17 | 5 | AC-3's Thens must assert only the observable outcome (same non-empty correlation_id per source cycle, ids differ across sources, no x-user-id). The 'matching x-trace-id call metadata' check stays a plain test assertion, because ledger never reads the header (ledgerServiceImpl.ts:77-78; the R-7 rationale). Adopted in the synthesis; the proposer has not confirmed it. | no | open |
+| O-18 | 5 | Drop the 'propagation_meta minus any x-trace-id' strip branch: no caller passes both trace_id and propagation_meta, so it is dead code (C-18). Append the header and state the constraint in a one-line docstring, or keep the replace with a named test. Adopted as append in the synthesis; the proposer has not confirmed it. | no | open |
+| O-19 | 5 | Before the gate closes, record the operator's 2026-11-20 rulings in the feature files: P-1 and P-3 'user reopened' (D-2), P-2 'user reopened' (D-9), D-2 marked superseded, and an ISO-dated entry in context.md. On the checked tree all three petitions still read 'pending user'. | no | open |
 
 ## Reopen Petitions
 
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 2 | D-2 | services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:76-97: appendEvent reads only x-user-id from call metadata and persists correlation_id and metadata from request fields. A search for x-trace-id in ledger src matches only __tests__/mtls.test.ts:127, so the per-cycle id minted by D-2 is dropped on arrival. The options are to persist the id as AppendEventRequest.correlation_id, to drop OQ-1, or to keep D-2 with AC-3 reworded. | pending user |
-| P-2 | 3 | D-9 | services/xstockstrat-ingest/acceptance/private-by-default-templates.feature:40-44. AC-33 @feature-224 is 'mallory sends x-user-id system without grant → PERMISSION_DENIED and no signal row is written'. An AppendEventRequest.user_id==owner assertion on an accepted ingest exercises none of it, so tracing the RPC test there is false coverage. Proposed re-target: an untraced incidental-hardening assertion, or an extra assertion inside the AC-1 test. D-9's FR-1 loop narrowing stands. | pending user |
-| P-3 | 3 | D-2 | services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:613,618: analysis's ledger emits send one id as both AppendEventRequest.correlation_id and x-trace-id call metadata. That makes the P-1 correlation_id option an existing platform idiom, not a new design. This supplements P-1. | pending user |
+| P-1 | 2 | D-2 | services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:76-97: appendEvent reads only x-user-id from call metadata and persists correlation_id and metadata from request fields. A search for x-trace-id in ledger src matches only __tests__/mtls.test.ts:127, so the per-cycle id minted by D-2 is dropped on arrival. The options are to persist the id as AppendEventRequest.correlation_id, to drop OQ-1, or to keep D-2 with AC-3 reworded. | user reopened |
+| P-2 | 3 | D-9 | services/xstockstrat-ingest/acceptance/private-by-default-templates.feature:40-44. AC-33 @feature-224 is 'mallory sends x-user-id system without grant → PERMISSION_DENIED and no signal row is written'. An AppendEventRequest.user_id==owner assertion on an accepted ingest exercises none of it, so tracing the RPC test there is false coverage. Proposed re-target: an untraced incidental-hardening assertion, or an extra assertion inside the AC-1 test. D-9's FR-1 loop narrowing stands. | user reopened |
+| P-3 | 3 | D-2 | services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:613,618: analysis's ledger emits send one id as both AppendEventRequest.correlation_id and x-trace-id call metadata. That makes the P-1 correlation_id option an existing platform idiom, not a new design. This supplements P-1. | user reopened |

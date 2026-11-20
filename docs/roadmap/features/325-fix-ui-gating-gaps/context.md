@@ -701,3 +701,318 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-batch design gate (round 5)
+
+`/sdd-design fix-ui-gating-gaps` (full mode) stopped at its approval gate after round 5. The gate policy is halt, so design.md is not written and status.md is unchanged (spec-ready). The register is in `debate.md`: D-1..D-10, R-1..R-5, O-1..O-20 and P-1. The operator's ruling this run was "I accept the bound", which closes O-5.
+
+## Open Threads
+
+- **Approach (round-5 synthesis).** The mechanism is unchanged and rests on D-1..D-8: one UI-only PR in xstockstrat-ui, with no proto, migration or config change. With the O-5 bound accepted (D-9), no blocking objection remains.
+  - **Unit 1, namespace-editor gate (D-1).** NamespaceEditor derives `editGate` (`'loading' | 'edit' | 'readonly'`) from `useIsAdmin()` and the `['auth-me']` userId, threaded through EditState like `isNativeEnv`. `loading` disables the trigger, `readonly` hides it and shows one CardNotice, and `edit` fails open when `/me` fails. `requireAdminScope` (`configUiBff.ts:39`) stays authoritative.
+  - **Unit 2, membership drain (D-2..D-6).** `useQueueMembership()` on `['opportunities','membership']` uses `QUEUE_DEFAULT_FILTERS`, `pageSize` 1000 and `MAX_MEMBERSHIP_PAGES` = 3, returns a sorted, unique, upper-cased `string[]`, throws on `computing`/`computeFailed` with `retry: false`, is enabled only with bound rows, and polls every 15 s. WatchlistReadiness consumes it; WatchlistDetail's `useOpportunities()`, Set and `inQueue` prop are removed. The AC-2 Case A request count includes only requests with `page.pageSize == 1000`, inside the first 15 s.
+  - **O-5 cost text the spec carries (operator-accepted; it replaces the "780 per market day" text everywhere).**
+    - (a) Baseline (D-8): the drain replaces the page-1 read that already warms ranks 1 to 50, so new warm entries are at most the rows ranked 51 and lower.
+    - (b) Per-recompute snapshot: max(0, Q_u − 50) per viewer, with Q_u ≤ max(`max_universe_size`, |curated_u| + |muted_only_u|); 50 at the default. The cut is at `servicer.py:5627-5639`.
+    - (c) Bound over time, as accepted: |W_new| is a union since the last marketdata restart over every tail any viewer has drained. `markWarm` only adds; removals are the first-load unservable prune, the feature-352 delisting removal, or a restart. There is no structural bound below the servable signal-symbol universe until restart.
+    - (d) Cost per newly warm symbol per calendar day, with both pollers running 24/7: the accepted total is |W_new| × (2,880 + 288) on marketdata's 2-connection pool.
+      - Quote upserts: 2,880 statements per day. Retained rows are the distinct vendor quote timestamps, at most 2,880 × 90 (D-10, O-18).
+      - Bar cycles: 288 per day. These are transactions of about 2 to 3 INSERTs each, so about 576 to 864 row upserts into `marketdata.ohlcv` (D-10, O-19). Feature 291's dead-symbol hold drops symbols that keep returning nothing.
+      - FMP classification: 0 while `marketdata.classification.enabled=false`; when true, |W_new|/250 of the shared daily budget.
+    - (e) Caveats: GetBarsMulti paginates past about 330 total warm symbols, the FMP 250/day cap is a tripwire, servability fails open before the first asset load, and the O-9 fallback makes one vendor call per warm symbol every 30 s when the multi-quote call fails.
+    - (f) Tripwires, each requiring a re-check of the bound before the key changes: `marketdata.classification.enabled = true`, and `opportunity.max_universe_size` (namespace `analysis`) > 100. The spec uses that one key name everywhere (O-20).
+    - (g) Watch signals on dev after deploy: `marketdata.db.pool.{acquired,empty_acquire_wait}` and `marketdata.ohlcv.out_of_memory_errors{op=insert_bars}`.
+    - (h) Records: a row in `services/xstockstrat-marketdata/docs/context-constitution-findings.md`, and a referenced follow-up feature for a marketdata warm-set TTL prune, numbered at spec time and out of scope here.
+    - (i) Cadence: D-2 stays at 15 s.
+- **Strongest open objection: O-11 (non-blocking).** The spec must state payload bytes per 15 s poll. The proposal gives only rows × B_row, so B_row must be measured from a dev BFF JSON ListOpportunities body at spec time, and `/sdd-review impl-spec` checks for the figure.
+- **Other open objections (non-blocking, all spec-text fixes).** O-18 (quote retention is a ceiling of 2,880 × 90 rows, not "about 259k"), O-19 (label the 288 as bar transactions with the 2 to 3 rows multiplier) and O-20 (one name for the tripwire key). None changes the accepted bound. O-5, O-10 and O-12 to O-17 closed this round.
+- **Floor status.** No Floor breaches and no register violations.
+- **@AC changes.** This feature's @AC-1 and @AC-2 are CHANGE and are covered by the recorded 2026-11-20 C-16 sign-off, so no @AC change is uncovered. The eleven prior-feature scenarios (@AC-10/11/12 @feature-219, @AC-2/3 @feature-181, @AC-2/3/5/7 @feature-187, @AC-1 @feature-213, @AC-15 @feature-215) are PRESERVE.
+- **Reopen petitions.** None new. The synthesis treats P-1 (lower D-2's 15 s cadence) as declined, because the operator accepted the bound instead of reopening D-2. The P-1 row in `debate.md` still reads "pending user"; this run's register update did not include a verdict change for it.
+- **Open risks.**
+  - The accepted bound has no ceiling below the signal-symbol universe until marketdata restarts, and the bar upserts land on `marketdata.ohlcv`, which has a recorded lock-table exhaustion risk. The watch signals detect saturation after the fact; the two-key tripwire is the only in-scope lever.
+  - Real statement volume is about 3,456 to 3,744 per symbol per day, 9 to 18% above the 3,168 headline, because the 288 are transactions. This is treated as a relabel and not a changed bound, and the operator should see it in the spec.
+  - The about-330 pagination threshold and the O-9 fallback lines were not re-derived this round; the spec re-cites both at the step SHA.
+  - The operator's words in this run cover only the O-5 bound. The C-16 sign-off for @AC-1 and @AC-2 rests on the earlier recorded decision.
+  - B_row is unmeasured. Badges past 3,000 queue rows are silently dropped. Fail-open shows an enabled Edit trigger to a non-admin when `/me` fails, so the BFF's rejection must be legible.
+
+```sdd-batch-design-state
+{
+  "round": 5,
+  "synth": {
+    "approach": "The mechanism is unchanged and rests on D-1 to D-8: one UI-only PR in services/xstockstrat-ui, with no proto, migration or config change. With the operator's acceptance of the O-5 bound, no blocking objection remains.\n\nUNIT 1: namespace-editor gate (D-1)\n- services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx derives editGate ('loading' | 'edit' | 'readonly') from useIsAdmin() and the ['auth-me'] userId (src/hooks/useLiveStrategies.ts:42-70).\n- The gate is threaded through EditState the same way isNativeEnv is (:38-60, 293-316; uses at :48, :144, :174, :303). COLUMNS stays at module scope (:193-195).\n- 'loading' disables the trigger. 'readonly' hides it and shows one CardNotice reading \"Admin only: read-only view\". 'edit' fails open when /me fails; requireAdminScope (src/lib/configUiBff.ts:39) stays authoritative.\n\nUNIT 2: membership drain (D-2 to D-6; cadence stays 15 s)\n- useQueueMembership() goes in src/hooks/useOpportunities.ts under the key ['opportunities','membership'].\n- It uses QUEUE_DEFAULT_FILTERS (hoisted from :26-29), pageSize 1000 and MAX_MEMBERSHIP_PAGES = 3, and returns a sorted, unique, upper-cased string[].\n- It throws on computing/computeFailed with retry: false, and is enabled only when the watchlist has at least one bound row.\n- WatchlistReadiness consumes it. src/components/insights/WatchlistDetail.tsx drops useOpportunities() (:74), the Set (:93-95) and the inQueue prop (:369).\n- AC-2 tests follow D-5. The Case A request count includes only requests whose JSON body has page.pageSize == 1000 (src/lib/browserClients/transport.ts:57), in a window that ends before the first 15 s refetch.\n\nO-5 COST TEXT THE SPEC CARRIES (operator-accepted; replaces the \"780 per market day\" text everywhere)\n\n(a) Baseline (D-8). Enrichment covers only the returned window (services/xstockstrat-analysis/app/handlers/servicer.py:4744-4749). The page-1 read at WatchlistDetail.tsx:74 already warms ranks 1 to 50, and the drain replaces that read. New warm entries are therefore at most the rows ranked 51 and lower. This is a row count; new distinct symbols are at most that many, minus symbols already warm under D-7.\n\n(b) Per-recompute snapshot. Per viewer u the term is max(0, Q_u − 50), where Q_u ≤ max(max_universe_size, |curated_u| + |muted_only_u|). The cut is at servicer.py:5627-5639 and the speculative tail is sorted by signal_axis at :5637. At the default the term is max_universe_size − 50 = 50.\n\n(c) Bound over time, as accepted. |W_new| is a union since the last marketdata restart over every tail any viewer has drained, with V meaning distinct viewers since boot.\n- markWarm only adds (services/xstockstrat-marketdata/internal/service/marketdata_service.go:1171-1177).\n- Removals are the first-load unservable prune, the feature-352 flagged-delisting removal, or a restart.\n- The ceiling is the servable symbols that, since boot, carried an active signal for, or were curated or muted by, any watchlist viewer. There is no structural bound below that universe until restart.\n\n(d) Cost per newly warm symbol per calendar day. Both pollers run 24/7 (marketdata_service.go:1194-1231, 1306-1332). The accepted total is |W_new| × (2,880 + 288), on marketdata's 2-connection PgBouncer client pool.\n1. Quote upserts: 2,880 statements per day, one sequential cacheQuote per 30 s cycle (:1246-1252). InsertQuote is ON CONFLICT (symbol, time) DO UPDATE (internal/repository/marketdata_repo.go:299-304), so retained rows are the distinct vendor quote timestamps, at most 2,880 × 90. The proposal's \"about 259k rows per symbol\" is a ceiling, not an estimate.\n2. Bar cycles: 288 per day. Each 5-min cycle adds one symbol to GetBarsMulti and, when bars come back, one InsertBars call (:1382-1383, 1425-1432). InsertBars is one transaction with one INSERT per bar (marketdata_repo.go:77-111), about 2 to 3 daily bars per cycle. So 288 counts transactions, about 576 to 864 row upserts into marketdata.ohlcv. Feature 291's dead-symbol hold (internal/service/bar_hold.go:47-77) drops symbols that keep returning nothing.\n3. FMP classification: 0 while marketdata.classification.enabled=false. When true, one FetchSector per symbol per 24 h against the shared 250/day cap (classification_service.go:82, 199-200), which is |W_new|/250 of the budget.\nThe figures scale linearly with stream.warm_interval_ms and stream.bar_ingest_interval_ms, and each extra bar-ingest timeframe adds another 288.\n\n(e) Caveats, as listed in the ruling.\n- GetBarsMulti paginates once the warm set passes about 330 symbols in total (limit 1000 bars at about 3 per symbol; internal/alpaca/client.go:672-674, 708-711).\n- The FMP 250/day cap is a tripwire.\n- GetSymbolServability fails open before the first asset load, so unservable symbols can warm in that window.\n- O-9 residual: if the multi-quote call fails, the fallback makes one vendor call per warm symbol every 30 s. Re-cite at the step SHA.\n\n(f) Tripwires. Re-check the bound before changing either key:\n- marketdata.classification.enabled = true;\n- opportunity.max_universe_size (namespace analysis) > 100. It is SetConfig-bounded to [1,1000], and at 1000 the per-viewer term is about 950. Use this one key name everywhere in the spec.\n\n(g) Watch signals, checked on dev after deploy: marketdata.db.pool.{acquired,empty_acquire_wait} and marketdata.ohlcv.out_of_memory_errors{op=insert_bars} (docs/runbooks/ohlcv-lock-budget-tuning.md).\n\n(h) Records and follow-up.\n- Add a row to services/xstockstrat-marketdata/docs/context-constitution-findings.md covering warm-set growth and the classification-flag exposure.\n- Reference a follow-up feature for a marketdata warm-set TTL prune, numbered by scripts/sdd-allocate-feature-number.py at spec time. It is out of scope here.\n\n(i) Cadence. D-2 stays at 15 s; P-1 is declined.\n\nPAYLOAD (O-11, still open)\n- Bytes per poll are rows × B_row, with rows ≤ max(max_universe_size, |curated| + |muted_only|) against 50 or fewer today.\n- B_row must be measured at spec time from a dev BFF JSON ListOpportunities body. /sdd-review impl-spec checks that the spec carries the measured figure.",
+    "open_objections": [
+      {
+        "text": "O-11 (still open): the spec must state payload bytes per 15 s poll. The proposal gives only the formula rows × B_row and defers the number. It closes when the spec carries B_row measured from a dev BFF JSON body, checked at /sdd-review impl-spec.",
+        "blocking": false
+      },
+      {
+        "text": "The quote-retention figure in (d)1 is wrong as an estimate. InsertQuote upserts on (symbol, time) (marketdata_repo.go:299-304), so repeated polls of an unchanged quote update one row. The spec must keep \"2,880 upsert statements per day\" and replace \"about 259k rows per symbol\" with \"at most 2,880 × 90 rows; in practice the distinct vendor quote timestamps\".",
+        "blocking": false
+      },
+      {
+        "text": "The \"288\" in the accepted total counts bar transactions, not statements. InsertBars runs one INSERT per bar inside one transaction (marketdata_repo.go:77-111), about 2 to 3 daily bars per cycle, so about 576 to 864 row upserts per symbol per day. The spec must keep the accepted 2,880 + 288 figures and label the 288 as transactions with that multiplier, so the ohlcv lock-budget reading is not understated.",
+        "blocking": false
+      },
+      {
+        "text": "The tripwire key is named two ways: opportunity.max_universe_size in (f) and analysis.opportunity.max_universe_size in Touchpoints. The spec must use the namespace-relative opportunity.max_universe_size (namespace analysis) in both places.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1 (feature 325, non-admin cannot see/use namespace edit action)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-2 (feature 325, watchlist in-queue badge reflects full queue, not page 1)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-10 @feature-219",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-11 @feature-219",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-12 @feature-219",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-181",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-181",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-187",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-187",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-187",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-187",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 @feature-213",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-15 @feature-215",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "P-1: lowering the membership cadence to 60 s, or to refocus plus invalidation only. The operator accepted the O-5 bound instead, and by D-7 cadence moves none of the warm-set, quote, bar or FMP figures. D-2 stays at 15 s.",
+      "A marketdata-side warm-set TTL prune inside this PR. It is the structural fix, but it puts a cross-service change into a SEV-3 UI-only fix. The spec references it as a follow-up feature.",
+      "Restating the accepted bar cost in rows instead of cycles. It is the more useful number for lock budgeting, but it would change the figures the operator accepted. The spec keeps 288 and adds the 2 to 3 rows-per-transaction multiplier.",
+      "Suppressing read-time enrichment for membership reads. It would remove the new warm entries but needs a proto/analysis request flag, which locked R-3 rules out."
+    ],
+    "open_risks": [
+      "The accepted bound has no ceiling below the servable signal-symbol universe until marketdata restarts. Each extra warm symbol adds 2,880 quote upserts and 288 bar transactions per day on a 2-connection pool.",
+      "The accepted total was worded as \"write statements\", but the 288 bar cycles are transactions of about 2 to 3 INSERTs each. Real statement volume is about 3,456 to 3,744 per symbol per day, 9 to 18% above the 3,168 headline. The ruling's own wording (\"288 bar cycles\") is accurate, so I treated this as a label fix and not a changed bound; the operator should see the relabel in the spec.",
+      "The bar upserts land on marketdata.ohlcv, which has a recorded lock-table exhaustion risk. The pool gauges and out_of_memory_errors{op=insert_bars} detect saturation after the fact; they do not prevent it. The only in-scope lever is the two-key tripwire.",
+      "Two live-tunable keys can break the bound: marketdata.classification.enabled = true spends the shared FMP 250/day budget, and opportunity.max_universe_size toward 1000 lifts the per-viewer term to about 950. The UI has no guard for either.",
+      "The about-330 GetBarsMulti pagination threshold and the O-9 fallback lines were not re-derived this round. The spec must re-cite both at the step SHA.",
+      "The C-16 sign-off for @AC-1 and @AC-2 is taken from the recorded-decisions block and context.md; the user's relayed words in this run cover only the O-5 bound.",
+      "B_row for the payload figure is unmeasured, so the per-poll byte cost is still unknown.",
+      "If the queue exceeds 3,000 rows, badges past the cap are silently dropped. The badge is a cue, not an authority.",
+      "Fail-open on an unknown identity shows an enabled Edit trigger to a non-admin when /me fails. The BFF rejects the write, so its error must be legible."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-11",
+      "C-12",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-17",
+      "C-18",
+      "P-02",
+      "P-03",
+      "F-06",
+      "F-07"
+    ],
+    "rationale": "The design is approvable: there are no Floor breaches, no register violations, and no blocking objection remains after the operator accepted the O-5 bound. Four non-blocking spec-text items stay open.\n\n**What I checked at HEAD:**\n- `InsertBars` opens one transaction and runs one `INSERT … ON CONFLICT` per bar (`marketdata_repo.go:77-111`). The adversary's point that 288 counts transactions is correct.\n- `InsertQuote` is `ON CONFLICT (symbol, time) DO UPDATE` (`marketdata_repo.go:299-304`). The \"about 259k rows\" figure is a ceiling, not an estimate.\n- `minIngestLookback` exists (`marketdata_service.go:1372`), which supports the 2 to 3 bars-per-cycle multiplier.\n- I did not re-check the 24/7 tickers, the `servicer.py:5627-5639` cut or `bar_hold.go`; the adversary reports verifying all three.\n\n**Objections closed this round:**\n- **O-5** closes on the operator's acceptance (\"I accept the bound\") of |W_new| × (2,880 + 288) per calendar day, as a union since restart, with the listed caveats.\n- **O-13** closes: the bar-ingester line, the watch signal and the feature-291 hold are in the text.\n- **O-14** closes: the bound is a time union, V is distinct viewers since boot, and the ceiling is stated as unbounded below the signal-symbol universe until restart.\n- **O-10, O-15, O-16, O-17** close: the restatement, the `max_universe_size − 50` term with its tripwire, the corrected cite, and the findings row plus follow-up are all carried.\n- **O-12** closes: the request count is filtered on `page.pageSize == 1000` inside the first 15 s.\n\n**Still open, non-blocking:**\n- **O-11** stays open. The proposal defers the measured `B_row` to spec time, so it closes at impl-spec review.\n- Three new text fixes from the adversary: the quote-retention wording, the bar-transaction label, and one name for the tripwire key. None changes the accepted bound.\n\n**Petitions:** P-1 is declined. The operator accepted the bound instead of reopening D-2, so the cadence stays at 15 s. No new petitions were filed and nothing is reopened.\n\n**@AC coverage:** this feature's @AC-1 and @AC-2 are marked covered on the recorded 2026-11-20 C-16 sign-off (context.md:507). The eleven prior-feature scenarios are PRESERVE.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The O-5 warm-set cost is accepted by the operator at |W_new| × (2,880 + 288) per calendar day: 2,880 quote upsert statements and 288 bar cycles per newly warm symbol, with both pollers running 24/7. |W_new| is a union since the last marketdata restart, with no structural bound below the servable signal-symbol universe. Caveats: GetBarsMulti paginates past about 330 total warm symbols, the FMP 250/day tripwire, fail-open before the first asset load, and the O-9 residual re-cited at the step SHA. The spec carries these figures, not the earlier 780-per-market-day text, and D-2's 15 s cadence stands.",
+          "evidence": "Operator ruling 2026-11-20 ('I accept the bound'); services/xstockstrat-marketdata/internal/service/marketdata_service.go:1194-1231,1306-1332 (no market-hours gate), :1246-1252, :1382-1383, :1425-1432; services/xstockstrat-analysis/app/handlers/servicer.py:5627-5639"
+        },
+        {
+          "text": "The spec labels the accepted 288 as bar transactions, each about 2 to 3 row upserts into marketdata.ohlcv, and states quote retention as at most 2,880 × 90 rows, in practice the distinct vendor quote timestamps. Neither label changes the accepted figures.",
+          "evidence": "services/xstockstrat-marketdata/internal/repository/marketdata_repo.go:77-111 (one tx, one INSERT per bar), :299-304 (ON CONFLICT (symbol, time) DO UPDATE); marketdata_service.go:1372 (minIngestLookback)"
+        }
+      ],
+      "new_rejected": [],
+      "new_objections": [
+        {
+          "text": "The quote-retention figure in the O-5 cost text is wrong as an estimate. InsertQuote upserts on (symbol, time) (marketdata_repo.go:299-304). The spec must keep \"2,880 upsert statements per day\" and replace \"about 259k rows per symbol\" with \"at most 2,880 × 90 rows; in practice the distinct vendor quote timestamps\".",
+          "blocking": false
+        },
+        {
+          "text": "The \"288\" in the accepted total counts bar transactions, not statements. InsertBars runs one INSERT per bar in one transaction (marketdata_repo.go:77-111), about 2 to 3 bars per cycle, so about 576 to 864 row upserts per symbol per day. The spec must keep the accepted figures and label the 288 as transactions with that multiplier.",
+          "blocking": false
+        },
+        {
+          "text": "The tripwire key is named two ways in the proposal. The spec must use the namespace-relative opportunity.max_universe_size (namespace analysis) everywhere.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-5",
+          "how": "Operator accepted the bound on 2026-11-20 ('I accept the bound'): |W_new| × (2,880 + 288) per calendar day (2,880 quote upserts and 288 bar cycles per newly warm symbol, pollers 24/7), a union since the last marketdata restart, with the listed caveats. P-1 is declined and D-2 stays at 15 s."
+        },
+        {
+          "id": "O-10",
+          "how": "The bound is restated as a per-viewer snapshot max(0, Q_u − 50) with Q_u ≤ max(max_universe_size, |curated_u| + |muted_only_u|), a union across viewers and over time since restart, citing the cut at servicer.py:5627-5639."
+        },
+        {
+          "id": "O-12",
+          "how": "The Case A count includes only requests whose JSON body has page.pageSize == 1000 (transport.ts:57), in a window that ends before the first 15 s refetch."
+        },
+        {
+          "id": "O-13",
+          "how": "The bar ingester is the third cost line: 288 cycles per symbol per day, each adding one symbol to GetBarsMulti and one InsertBars call (marketdata_service.go:1382-1383, 1425-1432). marketdata.ohlcv.out_of_memory_errors{op=insert_bars} is named as a watch signal and feature 291's dead-symbol hold (bar_hold.go:47-77) as the mitigation."
+        },
+        {
+          "id": "O-14",
+          "how": "The bound is a union since the last marketdata restart, V is distinct viewers since boot, and the ceiling is the servable signal-symbol universe, with no structural bound below it until restart. The removal paths are the first-load prune and the feature-352 delisting removal."
+        },
+        {
+          "id": "O-15",
+          "how": "The per-viewer term is written as max_universe_size − 50, and opportunity.max_universe_size > 100 is a second tripwire next to marketdata.classification.enabled = true."
+        },
+        {
+          "id": "O-16",
+          "how": "Re-cited to servicer.py:5627-5639 (max_universe at :5629, signal_axis sort at :5637, cut at :5639), verified by the adversary at HEAD. The spec re-cites at the step SHA."
+        },
+        {
+          "id": "O-17",
+          "how": "The spec adds a row to services/xstockstrat-marketdata/docs/context-constitution-findings.md for warm-set growth and the classification-flag exposure, and references a follow-up feature for a marketdata warm-set TTL prune."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui; key reuse patterns: `useIsAdmin()` threaded through `EditState` like `isNativeEnv`, and the `useOpportunities` request params hoisted as `QUEUE_DEFAULT_FILTERS`).
+- Phase 1 Grilling: 5 rounds (full). Chosen approach: one UI-only PR with a three-state namespace-editor gate (D-1) and a bounded queue-membership drain under `['opportunities','membership']` (D-2 to D-6), carrying the operator-accepted O-5 cost text (D-7 to D-10). Rejected: R-1 to R-5 (per-symbol fan-out, fail-closed gate, proto/analysis-side fixes, 50-row paging, storing Opportunity objects).
+- Constitution rules touched: C-01, C-11, C-12, C-13, C-15, C-16, C-17, C-18, P-02, P-03, F-06, F-07. Floor breaches: none.
+- Status: spec-ready → design-approved.
+- Operator rulings recorded 2026-11-20:
+  - C-16 sign-off for this feature's @AC-1 and @AC-2 (both CHANGE).
+  - The O-5 warm-set cost is accepted ("I accept the bound") at |W_new| × (2,880 + 288) write statements per calendar day, a union since the last marketdata restart, with the round-5 caveats. O-5 is closed and P-1 is declined, so D-2's 15 s cadence stands.
+  - Design approved after round 5 under the operator's standing authorisation of the same day. The round-5 adversary verdict was SOUND, with no Floor breach and no blocking objection.
+- The adversary's two accuracy corrections bind the spec and do not change the accepted bound: retained quote rows are at most 2,880 × 90 per symbol, in practice the distinct vendor quote timestamps; and the 288 counts bar-cycle transactions, not statements.
+- debate.md: State approved, P-1 verdict "user declined". No new rows. O-11, O-18, O-19 and O-20 stay open and non-blocking.
+- Wrote design.md. Next: `/sdd-spec fix-ui-gating-gaps`.
+
+## Open Threads
+
+- [ ] O-11: measure B_row from a dev BFF JSON `ListOpportunities` body and state bytes per 15 s poll. Target: `/sdd-spec`, checked at `/sdd-review impl-spec`.
+- [ ] O-18: spec keeps "2,880 upsert statements per day" and states quote retention as "at most 2,880 × 90 rows; in practice the distinct vendor quote timestamps". Target: `/sdd-spec`.
+- [ ] O-19: spec keeps 2,880 + 288 and labels the 288 as bar transactions of about 2 to 3 row upserts each (about 3,456 to 3,744 statements per symbol per day, 9 to 18% above the 3,168 headline). The operator should see the relabel. Target: `/sdd-spec`, checked at `/sdd-review impl-spec`.
+- [ ] O-20: one tripwire key name everywhere, `opportunity.max_universe_size` (namespace `analysis`). Target: `/sdd-spec`.
+- [ ] Warm-set growth has no ceiling below the servable signal-symbol universe until marketdata restarts. Target: spec carries the cost text, adds the row to `services/xstockstrat-marketdata/docs/context-constitution-findings.md` and references a follow-up warm-set TTL-prune feature (numbered by the allocator at spec time).
+- [ ] Bar upserts land on `marketdata.ohlcv`, which has a recorded lock-table exhaustion risk. The pool gauges and `out_of_memory_errors{op=insert_bars}` only detect saturation. Target: post-deploy dev verification step.
+- [ ] Two live-tunable keys can break the bound: `marketdata.classification.enabled = true` and `opportunity.max_universe_size` > 100. The UI has no guard. Target: tripwire text in the spec and the marketdata findings row.
+- [ ] The about-330 `GetBarsMulti` pagination threshold and the O-9 fallback lines were not re-derived in round 5. Target: re-cite at the step SHA in `/sdd-spec`.
+- [ ] The C-16 sign-off for @AC-1 and @AC-2 rests on the recorded ruling. The operator's relayed words cover only the O-5 bound. Target: confirm at the `/sdd-spec` gate if the operator wants it restated.
+- [ ] Badges past 3,000 queue rows are silently dropped. The badge is a cue, not an authority. Target: hook step.
+- [ ] Fail-open shows an enabled Edit trigger to a non-admin when `/me` fails, so the BFF's rejection must be legible. Target: Unit 1 e2e step.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status: design-approved → implementation-ready.
+- Step shape: Steps 1+2 (test + service, namespace-editor gate) and Steps 3+4 (test + service, queue-membership drain) are atomic units (`**Lands with**`); Step 5 is docs (findings rows). `@AC-1` → Step 1, `@AC-2` → Step 3.
+- Operator rulings recorded 2026-11-20 and applied: C-16 sign-off for `@AC-1` and `@AC-2`; the O-5 bound accepted at |W_new| × (2,880 + 288) per calendar day ("I accept the bound"), P-1 declined; design approved after round 5. The spec carries the two binding accuracy corrections (quote retention at most 2,880 × 90 rows; the 288 are bar-cycle transactions).
+- Tree: evidence read on `origin/main-dev@fb52065c` (detached). The feature branch (`20742720`) is 168 commits behind `main-dev`. This run did not merge `main-dev` into it, because the run may write only this feature directory; `/sdd-execute` BRANCH SYNC does the merge.
+- Assumptions made in this run:
+  - The task named the directory `docs/roadmap/features/docs/roadmap/features/325-fix-ui-gating-gaps/`; the real directory `docs/roadmap/features/325-fix-ui-gating-gaps/` was used (the doubled prefix does not exist).
+  - design.md build-order items 2 and 3 (hoist + hook, then consumer swap) are one `service` step, because they must commit together anyway and one step is the smallest unit.
+  - The post-deploy dev checks are a spec section, not a numbered step, because an execute step must verify in-tree (F-05).
+- Key codebase findings:
+  - Line drift since recon: `WatchlistDetail.tsx` `useOpportunities()` is at `:72`, the Set at `:91-93`, the prop at `:367`; `WatchlistReadiness.tsx` `queued` is at `:329`, the badge at `:376-378`. `WatchlistReadiness` has one caller and `inQueue` is in no test.
+  - Every spec that drives the namespace editor's Edit already uses `addAdminCookie`; no spec mocks `/api/auth/me` today.
+  - The shared `e2e/mock-backend.ts` `listOpportunities` returns the whole fixture in one page with no token, so the existing in-queue cases in `watchlists.spec.ts` (`:84`, `:448-465`) keep passing under the drain.
+  - `GetBarsMulti`'s limit is `barsLimit()` = `marketdata.backfill.batch_size` (default 1000, cap 10,000; `alpaca/client.go:413-418`, `cmd/server/main.go:93`), not a literal 1000. The about-330 threshold holds at the default. O-9 fallback re-cited at `marketdata_service.go:1246-1259` and `:1262-1280`. The analysis cites stand (`servicer.py:4688`, `:4744-4749`, `:4792`, `:5627-5639`).
+- Staging observation (2026-11-20, one account, via the agent `list_opportunities` tool with `page_size` 1000): 487 queue rows over 396 symbols with `opportunity.max_universe_size = 100`. The per-viewer snapshot term is 437 rows, not the design's worked "50". About 188 symbols are the |W_new| estimate for that one viewer (595,584 headline writes per day). B_row ≈ 921 bytes, so about 448 KB per 15 s poll against about 46 KB today.
+- Side effect of that read: it ran the full-window enrichment once, so it may have warmed up to those symbols on staging marketdata until its next restart.
+
+## Open Threads
+
+- [ ] **For the operator.** The accepted bound's formula is unchanged, but the staging account above puts one viewer at about 188 newly warm symbols and a 10× payload. Confirm the ruling still stands at those figures before `/sdd-execute`, or reopen P-1.
+- [ ] O-11: B_row is estimated from the agent's JSON, not a dev BFF body. Target: implementation-spec.md § Post-Deploy Verification item 3.
+- [ ] Follow-up feature `marketdata-warm-set-ttl-prune` has no number. This run could not run the allocator (it pushes `sdd/feature-cursor`). Target: `/sdd-story marketdata-warm-set-ttl-prune`.
+- [ ] Out of scope, proposed only: `NamespaceEditor.tsx:345-353` tells a per-user-scope viewer they are "Editing your own per-user overrides … self-service", while `SetConfig` is admin-only at the BFF. After Step 2 a non-admin sees that text beside "Admin only: read-only view". Target: a defect report via `/sdd-qa defect`.
+- [ ] Bar upserts land on `marketdata.ohlcv` (lock-table risk); the watch signals only detect saturation. Target: § Post-Deploy Verification item 4.
+- [ ] Two live-tunable keys can break the bound (`marketdata.classification.enabled`, `opportunity.max_universe_size`). Target: Step 5 findings row and § Post-Deploy Verification item 5.
+- [x] O-18, O-19, O-20: carried in implementation-spec.md § Accepted Cost (d) and (f).
+- [x] The about-330 threshold and the O-9 lines: re-cited in § Accepted Cost (e).
+- [x] C-16 sign-off for `@AC-1` and `@AC-2`: restated by the operator ruling of 2026-11-20.
+- [x] Badges past 3,000 queue rows: Step 4 instruction 2. Fail-open legibility: Step 1 case 1d.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 9 warnings, no Floor breach (PASS WITH WARNINGS; advisory, lifecycle unchanged). Overlap: WARN, file-level and rebase-only.
+- Re-verified in this run: `origin/main-dev` is still `fb52065c` and the feature branch is 168 commits behind it; `test:coverage` exists in `services/xstockstrat-ui/package.json:19`; feature 308's spec (on `origin/feature/fix-analysis-per-symbol-isolation`, `:911-912`) and features 345 (`:2130`) and 360 (`:625`) name the shared fixture files; `INVENTORY.md:45` is the `LYFT_SOURCE_LABEL_OPPORTUNITIES` row.
+- Addressed in implementation-spec.md (commit `c7a38a99`):
+  - [x] Steps 1 and 3: Verification now runs `pnpm run test:coverage` (B2 "threshold explicit").
+  - [x] Step 4: Verification adds `--repeat-each=10` on the new watchlist spec as the flake check for the fake-clock request counts (Cases A and C). It sits in Step 4 because the cases are RED until then.
+  - [x] Step 3 instruction 2: the `INVENTORY.md` row is placed by neighbouring symbol, with `:45` as the `fb52065c` anchor.
+  - [x] § Step Dependencies: records the rebase-only file overlap with 308, 345 and 360. No `merge-order.md` entry is needed.
+- No change needed: the Steps 1+2 and 3+4 pairing was judged justified; `e2e/mock-backend.ts` is not touched by this feature.
+- Unresolved ⚠ carried into execution:
+  - Whole feature: O-5 scale. The ruling was given against the design's 50-row example; staging shows 437 rows per viewer and about 595,584 headline writes per day. The operator must confirm at these figures or reopen P-1 — [ ] unaddressed
+  - Whole feature: warm-set growth has no code guard before deploy; it is recorded only by the Step 5 docs row — [ ] unaddressed
+  - Whole feature: the spec-time `list_opportunities` read with `page_size` 1000 on staging ran a full-window enrichment that the operator did not ask for. Harmless (cleared by a marketdata restart) but unauthorized; the operator should know — [ ] unaddressed
+  - § Payload: O-11 is an estimate from agent JSON (about 448 KB per 15 s poll, roughly 10× today), not the dev BFF measurement design.md asked for. Measure at § Post-Deploy Verification item 3 and watch the poll growth — [ ] unaddressed
+  - Follow-up `marketdata-warm-set-ttl-prune` has no reserved number, so the structural fix is untracked. Reserve via `/sdd-story` before or at execute — [ ] unaddressed
+  - Steps 1 to 4: evidence anchors are from `fb52065c`. `/sdd-execute` BRANCH SYNC must merge `main-dev` first and re-check the anchors (P-03) — [ ] unaddressed
+  - Step 2: the "self-service" per-user text will sit beside the read-only notice for non-admins. Out of scope; file via `/sdd-qa defect` — [ ] unaddressed
+- Overlap findings: `e2e/fixtures/opportunities.ts` (308) and `e2e/fixtures/INVENTORY.md` (308, 345, 360), rebase-only. No migration, proto field or config-key collision. The marketdata findings log was not checked against feature 317.
+- Run note: the pre-commit hook printed a missing `scripts/check-duplication.py` on this branch (it predates that script); the commit still passed. The `main-dev` merge at BRANCH SYNC brings the script in.
+
+## Open Threads
+
+- [ ] **For the operator.** Confirm the O-5 ruling at the staging figures (437 rows per viewer, about 188 newly warm symbols, about 595,584 headline writes per day, 10× payload) before `/sdd-execute`, or reopen P-1. There is no code guard on warm-set growth.
+- [ ] **For the operator.** The spec run's staging read with `page_size` 1000 was not requested. It may have warmed up to 396 symbols on staging marketdata until its next restart.
+- [ ] O-11: measure the BFF body on dev (§ Post-Deploy Verification item 3).
+- [ ] Reserve a number for `marketdata-warm-set-ttl-prune` via `/sdd-story`.
+- [ ] `/sdd-execute` BRANCH SYNC: merge `main-dev` (168 commits) and re-check every `path:line` anchor before Step 1.
+- [ ] Out of scope: the NamespaceEditor "self-service" text beside the read-only notice. Target: `/sdd-qa defect`.
+- [ ] Marketdata findings log vs feature 317: overlap not checked. Re-check at Step 5.

@@ -184,3 +184,46 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Risk: `HTTP`, `http ` and `""` now fail closed; an undiscovered deploy that blanks or mis-cases the variable will crash-loop. Target: dev smoke-test step.
 - Spec note: if a peer changes the conftest `MCP_TRANSPORT`, `CONFIG_ENDPOINT` or `MTLS_*` defaults (`tests/conftest.py:126,128,132-134`), re-run this suite. `/sdd-spec` must cite the re-grepped lines (recon § Risks, product-spec line drift).
 - Next: `/sdd-spec fix-agent-mcp-transport-fallthrough`.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 3 steps. Status → implementation-ready.
+- Steps: 1 test (transport regression tests, red first), 2 service (`resolve_transport()` fails closed), 3 docs. Steps 1+2 are one atomic unit (`**Lands with**`): three existing tests pin the old behavior (`tests/test_transport_config.py:34`, `:64-69`, `:71-78`), so neither step passes its own Verification alone.
+- Tree: `feature/fix-agent-mcp-transport-fallthrough@c2321849` (contains `origin/main-dev@fb52065c`). All recon/design line citations re-grepped and still exact.
+- Operator decisions carried (2026-11-20): not a duplicate of demoted 018 `agent-mcp-oauth`; design approved with the round-2 fix binding (subprocess RED rests on text only the fixed code emits).
+- Key codebase findings:
+  - **Subprocess red path differs from design.md's expectation.** Measured on today's code with the child env the test builds: `python -m app.main` with `MCP_TRANSPORT=htp` exits 1 in about 1s, not at the 20s timeout. stderr shows the old "falling back to stdio" warning, then `ModuleNotFoundError: No module named 'gen'` from `app/config/watcher.py:26` (the child has no conftest `gen` path). So `returncode != 0` already holds on buggy code; the RED is the `"expected 'http' or 'stdio'"` assertion. This is the other outcome design.md allows ("an exit with the old fall-back warning") and it is exactly why the operator's ruling matters. The spec records it in Step 1.
+  - **The agent is in the CI `python-lint` matrix** (`.github/workflows/ci.yml:405-423`). design.md § 5 cites `fails.md:432` for it being absent; that is stale. The spec uses the whole-service `ruff check . && ruff format --check .` (clean on this tree).
+  - Baseline: agent suite 825 passed, 88.47% coverage, about 116s; `tests/test_transport_config.py` 15 passed. Expected after Steps 1+2: 828 and 18. Cold import of `app.main` is under 1s.
+  - `resolve_transport` has no caller outside `app/main.py:286` and `tests/test_transport_config.py`.
+  - Docs: `services/xstockstrat-agent/docs/context-constitution-findings.md:29` and `:83` give the resolved-row and fixed-report-row forms Step 3 follows. `markdownlint-cli2` is not in the repo `node_modules`; the CI `markdown-lint` job (`ci.yml:1118-1132`) gates the agent `CLAUDE.md`.
+- Spec-level choices (not in design.md, flagged for `/sdd-review impl-spec`):
+  - The `TestMainDispatch` harness (`:38-43`) becomes one class-local `recorded` fixture shared by the three dispatch tests, rather than being cloned (C-18).
+  - The dev smoke test is a post-merge note in `## Step Dependencies`, not an execute step: it needs the deployed stack, which `/sdd-execute` must not bring up.
+
+### Open Threads
+
+- [ ] O-2 (open, non-blocking): AC-1's Given still says "the agent container starts"; the reword needs the operator's confirmation. No step edits `acceptance.feature`.
+- [ ] O-5 (open, non-blocking): a dropped subprocess test must be recorded as a P-03 deviation.
+- [ ] Post-merge dev smoke test: agent serves :9000 with `MCP_TRANSPORT=http`; watch for a supervisord restart loop.
+- Next: `/sdd-review fix-agent-mcp-transport-fallthrough impl-spec`, then `/sdd-execute fix-agent-mcp-transport-fallthrough`.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 4 criteria warnings, overlap WARN (advisory — did not block). No Floor breaches. Lifecycle unchanged (`implementation-ready`).
+- Tree reviewed: `feature/fix-agent-mcp-transport-fallthrough@87dcc3cd`; `origin/main-dev@fb52065c` is its merge-base, so the six files the spec touches are identical on both.
+- Addressed in `implementation-spec.md` (each claim re-verified on this tree):
+  - [x] Step 3, findings report row (`:82`): the table at `:79-84` is two-column (`| Report | Title |`), Title is the last cell. The instruction now says the suffix goes inside the Title cell before the closing pipe, with no new cell, and the Verification prints `:79-84` instead of `:82` alone.
+  - [x] Step 1, subprocess flake (O-5): the fallback is now written into Step 1 instruction 4 — no silent retry, skip or longer timeout; a drop is a recorded P-03 deviation; the in-process `main()` test must exist either way; counts with it dropped are 17 / 827.
+  - [x] C-16, feature 079 AC-4 supersession: the spec now states it under `## Scenario Coverage`. design.md:78-79 and :170-171 (D-4) settle it as sign-off-only; `docs/sdd/business-rules/` holds only `platform.feature`, which has no `MCP_TRANSPORT` or `079` match, so no step edits a durable suite.
+  - [x] Overlap with `360-fix-mcp-tools-page` (code-completed, not on `main-dev`): measured on `origin/feature/fix-mcp-tools-page@34ee88a6` and recorded in `## Step Dependencies`. Its `app/main.py` adds a docstring line at `:7`, next to Step 2's `:5-6` edit (expect a textual conflict); `resolve_transport()` is still `:52-65`. Its `tests/test_transport_config.py` only appends `TestResolveGrpcPort` (3 tests), so Step 1's anchors hold but the counts become 18 before / 21 after. Its conftest change leaves the `:126,128,132-134` defaults alone.
+  - [x] Overlap with `345-authelia-sso`, and the Step 3 doc overlaps with 308/309/310/314/319: recorded in `## Step Dependencies` as rebase-only, with the instruction to locate the findings rows by text.
+- Overlap findings: WARN only, rebase-only — same files as 345 and 360 (`app/main.py`, `tests/test_transport_config.py`), shared `tests/conftest.py` (not edited by 331), and doc-section overlap on `docs/runbooks/mcp-tools.md`, the agent `CLAUDE.md` and the agent findings file. No migration, proto or config-key collision. No merge-order entry.
+
+### Open Threads
+
+- [ ] O-2 (open, non-blocking, unaddressed by this review): AC-1's Given says "the agent container starts" but the proof is process-level. The reword to "the agent process starts" needs the operator's confirmation; `acceptance.feature` is unchanged and no step edits it. `/sdd-execute` must raise this at the Step 1 checkpoint.
+- [ ] O-5 (open, non-blocking): the subprocess test may flake; the fallback is in Step 1. Announce at the Steps 1+2 checkpoint whether it ran green or was dropped as a P-03 deviation.
+- [ ] Peer landing order: if 360 or 345 reaches `main-dev` before Steps 1+2 run, re-anchor the cited lines and re-measure the 825/828 and 15/18 counts before capturing RED. Not measured for 345 (not yet executed).
+- [ ] Post-merge dev smoke test: agent serves :9000 with `MCP_TRANSPORT=http`; watch for a supervisord restart loop.
+- Next: `/sdd-execute fix-agent-mcp-transport-fallthrough`.

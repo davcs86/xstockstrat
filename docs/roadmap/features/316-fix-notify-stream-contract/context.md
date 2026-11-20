@@ -908,3 +908,118 @@ ENV node=v24.22.1 grpc-js=1.14.7 dir=/home/user/xstockstrat/node_modules/.pnpm/@
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-notify; key reuse patterns: the `AlertSeverity` import from `src/fanout/fanout.ts`, and the map-delete + `recordStreamEviction` + `log.warn` eviction idiom).
+- Phase 1 Grilling: 5 rounds (full). Chosen approach: type `severities` as `AlertSeverity[]`; evict a subscriber whose `call.writableLength` reaches 1024 queued alerts by map delete, then `call.emit('error', { code: 8, details })`. Rejected: `call.destroy()` (no status, drops the queue), bare `call.end()` (reports OK), private h2 internals, a config key, an exact grpc-js pin.
+- Constitution rules touched: C-05, C-11, C-13, C-15, C-16, C-18, F-04, F-07, P-02, P-03, NOTIFY-1, PLAT-N1. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+**Operator decisions recorded (2026-11-20).** These reached this session through the `/sdd-batch` workflow's operator-decisions list, not through a message typed in this session. They are recorded here as that list gave them (answers O-13).
+
+- **Reopen ruling.** REOPEN D-2, D-6, R-2 and D-7 are granted: petitions P-1..P-4 are "user reopened" (flipped in `debate.md` in this session).
+  - The eviction teardown is `call.emit('error', { code: RESOURCE_EXHAUSTED, details })`, with the subscriber removed from the map before the teardown.
+  - D-7's pass condition is the teardown-matched one: (a) + (f) + (g).
+  - The same ruling authorises the D-11 wording change: `call.errored === null`; `writableErrored` does not exist.
+- **Approval.** The design is approved after round 5. The adversary's verdict was SOUND, with no Floor breach and no blocking objection.
+- **Standing authorisation, given the same day.** A design debate may run past the 5-round cap until the adversary rates it sound. A sound design (no Floor breach, no blocking objection, every C-16 change covered by an operator ruling) is approved on the operator's behalf.
+- **Binding from round 5.**
+  - Step 0 branch-sync precondition: the `services/xstockstrat-notify` importer block in the root `pnpm-lock.yaml` must show `@grpc/grpc-js` `version: 1.14.7` before the eviction step starts.
+  - A `NOTIFY-*` invariant records that the status-path teardown relies on grpc-js's server-stream `'error'` → `end()` → `_final` → `sendStatus` chain, verified on 1.14.7 only, and that a grpc-js bump must re-run the spike.
+  - The spike's `emit('error')` case is also committed as a real-grpc-js test covering conditions (f) and (g). This answers O-14 with its first option.
+  - design.md carries the residual that an evicted stream's queue (up to 1024 alerts plus the h2 window) is held until the peer reads or cancels and is invisible to the subscribers gauge. This answers O-10.
+
+**Register state at approval.** `debate.md` is State approved, 5 rounds, with no new rows. O-10, O-13 and O-14 still read "open" there, because this run was given no status change for them. All three are non-blocking and are answered as noted above. The C-16 list in design.md has no CHANGE line. Two EXTENDs (the AC-2 Given amendment, and `@AC-32` gaining `backpressure`) have no separate operator ruling.
+
+## Decisions
+
+- Severity filter: `StreamSubscriber.severities` is `AlertSeverity[]`; the fan-out keeps the string compare (D-1, NOTIFY-1).
+- Detection: `sub.call.writableLength >= MAX_QUEUED_ALERTS` (code constant 1024, messages) before the write; the evicting alert is neither written nor counted (D-5).
+- Eviction, all synchronous: map delete, `recordStreamEviction('backpressure')`, warn log, then `try { sub.call.emit('error', { code: 8, details: 'slow consumer evicted' }) } catch { log.warn(...) }`. Never `destroy()`, never bare `end()` (D-15, R-10, R-11).
+- Both the `'error'` and `'cancelled'` listeners act only when `Map.delete` returns true (D-14, D-16).
+- `StreamEvictionReason` gains `'backpressure'`; no new instrument, no config key (D-3, D-4).
+- Step 0 gate: notify on grpc-js 1.14.7 in the lockfile before the eviction step (D-19).
+- A `NOTIFY-*` invariant and a real-grpc-js test guard the status path against a grpc-js bump (D-20, operator ruling).
+
+## Open Threads
+
+- [ ] Branch still pins `@grpc/grpc-js` `^1.14.5` (lock 1.14.5), never exercised by the spike — target: Step 0 (branch sync gate).
+- [ ] The status path depends on grpc-js's own `'error'` listener behaviour, verified on 1.14.7 only — target: Step 2 (NOTIFY invariant and the real-grpc-js test).
+- [ ] `^1.14.7` lets a lockfile refresh float to a newer 1.x without re-running the spike — target: Step 2 (the real-grpc-js test).
+- [ ] If grpc-js drops or renames `writableLength`, eviction silently fails open — target: Step 2 (the real-grpc-js test's condition (f)).
+- [ ] An evicted stream's queue (up to 1024 alerts plus the h2 window) is held until the peer reads or cancels, with no gauge or log visibility and no keepalive — accepted residual; no step.
+- [ ] The per-stream memory bound scales with alert size (`req.context` is free-form) — accepted residual; no step.
+- [ ] Detection is lazy for a filtered, stalled subscriber — accepted residual; no step.
+- [ ] Alerts emitted between eviction and reconnect are lost — accepted residual (O-5); no step.
+- [ ] Recon line references have drifted (`telemetry.ts:322` is now `:380`; the filter at `:288` is now `:392`) — target: `/sdd-spec` (re-grep every citation).
+- [ ] Possible conflicts with features 312, 323 and 324 on `notifyServiceImpl.ts` and `telemetry.ts` — target: before `/sdd-execute` (check `merge-order.md`).
+- [ ] `debate.md` still shows O-10, O-13 and O-14 as open although each is answered — target: `/sdd-spec` (confirm the real-grpc-js test and the NOTIFY invariant appear as steps).
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `f34fe1b2`. Code citations were read at `origin/main-dev` `fb52065c`, the tree the branch holds after spec Step 1 (the branch is 168 commits behind, merge-base `c4fd48b0a`).
+- Step map: spec Step 1 = design "Step 0" (branch sync gate). Steps 2–4 = design "Step 1" (AC-1). Steps 5–8 = design "Step 2" (AC-2). Steps 5+6+7 are one atomic unit (two test steps, then the eviction).
+- Key codebase findings:
+  - The fan-out loop moved: it is now in `persistAndBroadcast` (`notifyServiceImpl.ts:79`, loop `:122-133`), called by both `emitAlert` and `emitInternalAlert`. design.md's "the `emitAlert` loop" means this loop. Other anchors at `fb52065c`: `severities: number[]` `:31`, listeners `:174-181`, filter `:392`, `StreamEvictionReason` `telemetry.ts:380`.
+  - **Not found**: the two gotchas recon and D-8 cite in `services/xstockstrat-notify/docs/context-constitution.md` (`:30` backpressure, `:31` severity). Neither exists on main-dev any more, so the spec retires only the findings rows (`context-constitution-findings.md:24`, `:37`, `:72`, `:73`) and the `CLAUDE.md:4` banner mention.
+  - The next free invariant ID is `NOTIFY-18` (last rule `NOTIFY-17`, `context-constitution.md:29`).
+  - Both report sidecars already read `triaged` / `ref: feature:316-fix-notify-stream-contract`. D-8's "flip" is specced as `triaged` → `resolved` with the ref kept.
+  - `withLogs` is private to `fanout.test.ts:243-256`. The AC-2 tests are its second consumer, so Step 5 moves it to `src/__tests__/fixtures/withLogs.ts`.
+  - notify has no `node:http2` use today; the real-grpc-js test's raw client is new. The test goes in `notifyServiceImpl.test.ts` so it reuses `makeImpl` and `REQ` without a second consumer of `REQ` (C-13).
+  - No test reaches `StreamSubscriber` except through `any`, so the type change breaks no call site and Steps 2 and 3 are not an atomic unit.
+- Assumptions made by this session (for `/sdd-review impl-spec` to confirm or reject):
+  - AC-1 cannot be red on the unfixed tree, because the runtime compare is already string-vs-string. Step 2 specs a mutation red (product-spec.md Reproduction Step 1, never committed). Basis: `tdd-gate.md` "behavior already exists" case.
+  - The branch sync is written as a numbered step of category `docs` (no category fits a merge), numbered 1 rather than 0 so the step parser sees a normal sequence. Its merge commit is not bounded by a per-step file list. Basis: design.md "Step 0" and D-19.
+  - The AC-2 Given amendment and the `CLAUDE.md` reason list are in the service step (Step 7), because design.md puts both "in the same step" as the trigger. The `NOTIFY-*` invariant and the record retirement follow in docs Step 8.
+  - The amended AC-2 Given reads "a StreamAlerts subscriber whose stream has 1024 alerts queued and unwritten". design.md fixes the trigger, not the wording.
+  - `resolved` sidecars are written by a spec step although `defect-filing.md:41` does not list a spec step as a writer and `:45-46` would accept `triaged` until launch. Basis: D-8 is the mandatory design.
+
+## Open Threads
+
+- [ ] Branch still pins `@grpc/grpc-js` `^1.14.5` (lock 1.14.5) — target: spec Step 1 (branch sync gate).
+- [ ] The status path depends on grpc-js's own `'error'` listener behaviour, verified on 1.14.7 only — target: spec Step 6 (real-grpc-js test) and Step 8 (`NOTIFY-18`).
+- [ ] `^1.14.7` lets a lockfile refresh float to a newer 1.x without re-running the spike — target: spec Step 6.
+- [ ] If grpc-js drops or renames `writableLength`, eviction silently fails open — target: spec Step 6, condition (f).
+- [ ] Possible conflicts with features 312, 323 and 324 on `notifyServiceImpl.ts` and `telemetry.ts` — target: before `/sdd-execute` (check `merge-order.md`).
+- [ ] If `origin/main-dev` moves past `fb52065c` before Step 1 runs, the spec's line numbers drift again — target: `/sdd-execute` Phase 1 (re-grep each anchor by symbol).
+- [ ] The five assumptions listed in this session — target: `/sdd-review fix-notify-stream-contract impl-spec`.
+- [ ] Accepted residuals, no step: held queue after eviction (up to 1024 alerts plus the h2 window, invisible to the gauge, no keepalive); bound scales with alert size; lazy detection for a filtered subscriber; alerts lost between eviction and reconnect.
+- [x] Recon line references had drifted — closed: every citation re-read at `fb52065c`.
+- [x] `debate.md` shows O-10, O-13 and O-14 as open although each is answered — closed for the spec: O-14 is Step 6, the D-20 invariant is Step 8, O-10 is in design.md § Accepted residuals. `debate.md` itself is unchanged.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 6 warnings, no Floor breaches (advisory — did not block). Overall: PASS WITH WARNINGS. Lifecycle unchanged (`implementation-ready`).
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `0617f6d6`. `origin/main-dev` is still `fb52065c`; the branch is still 168 commits behind.
+- Overlap: WARN, all rebase-only, no FAIL, so no merge-order proposal was made.
+- The five `/sdd-spec` assumptions were reviewed and none was rejected. Two became warnings (the Step 1 merge not bounded by a file list; AC-1's mutation red) and are handled below.
+
+**Addressed in implementation-spec.md** (each claim re-verified on `origin/main-dev` `fb52065c` before the edit):
+
+- Step 1 (F-08): added an explicit `/sdd-execute` exception for the merge commit, stated at the Phase-2 confirmation, with three new Verification checks: the commit has two parents; `git diff origin/main-dev HEAD --stat` shows only this feature's directory and `fails.md`; the `fails.md` resolution dropped no main-dev line.
+- F-07 / product-spec divergence: the Execution Summary now states that product-spec.md:58 anticipated a config key ("yes (likely)") and the design chose a code constant (design.md:94-96, :145), and that operator tuning later would be a separate change with the full config-key contract.
+- Steps 2 and 3 (P-03): Step 2's mutation-red evidence (three command outputs) must be in `context.md` and the PR body, and the mutation must be fully reverted before the commit. Step 3 keeps `red-green required` but records "red N/A — no behavior change (type-only)" explicitly (`tdd-gate.md:55-58`). Step Dependencies says neither step is `done` without its record.
+- Step 6: added a 10-run repeat check to Verification, and an instruction that a flaky result is reported, never fixed by widening a bound, adding a retry or skipping the test.
+- Steps 7 → 8: Step Dependencies says Step 8 follows the 5+6+7 unit with no main-dev merge or lockfile change between; Step 8 re-checks the lockfile's grpc-js version before writing `NOTIFY-18`.
+- Citation drift: the Citation tree records the 2026-11-20 re-verification (anchors hold at `fb52065c`).
+- Overlap: Step Dependencies lists the verified file overlaps. 312 (`spec-ready`) on `notifyServiceImpl.ts` `listAlerts`; 337 (`in-progress`) on `telemetry.ts` and `fanout.test.ts`; 323 (`spec-ready`) on notify `CLAUDE.md` (the `:4` banner line Step 4 also edits). 334 (`launched`) and 329 (`code-completed`, already in `fb52065c`) are absorbed by Step 1.
+
+**Corrections to the overlap verdict** (verified, not carried into the spec as written):
+
+- The verdict asked whether 316 edits `telemetry.ts`. It does: Step 7 widens `StreamEvictionReason` at `:380`. The overlap with 337 is live; the one with 329 is already merged.
+- The verdict placed the notify `CLAUDE.md:4` banner edit in Step 7/8. It is in Step 4. Step 7 edits `CLAUDE.md:125`.
+- `src/__tests__/fixtures/withLogs.ts` (created by Step 5) is cited by no other in-flight feature.
+
+## Open Threads
+
+- [ ] Step 1's merge commit carries about 168 commits outside its file list. The spec now states the exception, but the operator still has to accept it at the `/sdd-execute` Phase-2 confirmation — target: `/sdd-execute` Step 1 checkpoint.
+- [ ] The Step 2 mutation red and the Step 3 "red N/A" note exist only as `/sdd-execute` records; nothing in CI checks them — target: `/sdd-execute` Steps 2 and 3 (write the records before marking `done`).
+- [ ] Step 6 may still be flaky in CI: it is timing-dependent and is notify's first `node:http2` use. The 10-run local check lowers the risk; it does not remove it — target: `/sdd-execute` Step 6, then CI on the integration PR.
+- [ ] Step 7 touches four files (two code, `CLAUDE.md`, `acceptance.feature`). This is within the file threshold and follows design.md, so it was left as is — target: reviewer of Step 7.
+- [ ] `MAX_QUEUED_ALERTS` is a code constant although product-spec.md anticipated a config key. Recorded trade-off (D-4); product-spec.md itself was not edited — target: reviewer of Step 7; a separate feature if operators want to tune it.
+- [ ] Rebase-only overlaps with 312, 337 and 323 on notify files; `merge-order.md` has no row for 316. Whichever merges second re-greps its anchors, and the `CLAUDE.md:4` banner line is a likely textual conflict with 323 — target: before `/sdd-execute`, and again at the integration PR.
+- [ ] No evidence was found that feature 324 touches a notify file, although design.md's Open Risks names it — target: before `/sdd-execute` (re-check once 324 has an implementation spec).
+- [ ] If `origin/main-dev` moves past `fb52065c` before Step 1 runs, line numbers drift again — target: `/sdd-execute` Phase 1 (re-grep each anchor by symbol).
+- [ ] Earlier threads still open and unchanged by this review: the grpc-js status path is verified on 1.14.7 only; `^1.14.7` can float; a renamed `writableLength` fails open (Steps 6 and 8); the four accepted residuals have no step.
