@@ -1,6 +1,6 @@
 # Debate Register: fix-auth-trust-hardening
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -57,7 +57,7 @@
 <!-- Status: open → closed @ round N (<how>) | waived @ round N (user) | reopened @ round N (user) -->
 | ID | Round | Objection | Blocking | Status |
 |---|---|---|---|---|
-| O-1 | 1 | C-16: The operator must explicitly sign off the in-place Given amendments to config @AC-2/241, @AC-5/296 and @AC-25/295 (SAN-bound poller success path), and the sign-off must be recorded in context.md before design concludes. | yes | open |
+| O-1 | 1 | C-16: The operator must explicitly sign off the in-place Given amendments to config @AC-2/241, @AC-5/296 and @AC-25/295 (SAN-bound poller success path), and the sign-off must be recorded in context.md before design concludes. | yes | closed @ round 3 (operator sign-off at the design gate, option A, 2026-11-20; recorded in context.md) |
 | O-2 | 1 | Add a closed-label counter for unverifiable RevokeToken calls (reuse an existing identity instrument or add identity.revoke.rejected{reason=unverifiable}), or record a waiver. | no | closed @ round 2 (Answered by the label-free identity.revoke.unverifiable counter (verify-catch only), with concrete MIN_INSTRUMENTS and drive() allowlist edits, a rotation-aware description, a fixed WARN, and an acceptance And on 319 @AC-2.) |
 | O-3 | 1 | Operator confirmation of the OQ3 resolution (ignore an unverifiable token, success:true, no revoke). | no | open |
 | O-4 | 2 | Confirm that homelab mTLS leaves are minted by the same gen-dev-certs render path (DNS:${svc}) before Step 1 merges, or check them directly. | no | closed @ round 3 (Closed by new, verified evidence: homelab leaves are minted by homelab-release-env.sh:37-38 → gen-dev-certs.sh:50 (DNS:${svc}), the owned regex at :39 drops overrides, homelab-mtls-env.py:30-37 maps them to TRADING_MTLS_*, and compose.yml:216-217 injects them. Local dev uses the same generator. D-11 had cited only do-render-app-spec.py.) |
