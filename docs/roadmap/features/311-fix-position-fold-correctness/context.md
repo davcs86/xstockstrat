@@ -1492,3 +1492,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — operator rulings recorded by the orchestrator (verbatim)
+
+Written by the orchestrating session itself, not by a workflow step. Each entry quotes the question put to the
+operator and the operator's own answer. These are operator consent (C-11, C-16); later rounds treat them as fixed.
+
+- **Decision packet (round 3 gate).** Packet item, as shown to the operator: "311 (Rec steer): reopen D-4 and scope
+  the leg key by account, `bracket-leg:<account_id>:<legID>:…`. The new evidence is that GetPnL also suppresses other
+  accounts' partial fills. Bind the synthesis's other 5 fixes. Also choose: run the real-Postgres test in CI (Rec), or
+  downgrade it." Operator: "Let's go with the recommendations in the decision packet". Effect: REOPEN D-4 granted;
+  the AC-2 two-writer proof runs as a real-Postgres test in CI, no downgrade.
+- **D-17.** Question: reopen D-17 for the cross-process race-conflict case only, or accept the idle-in-transaction
+  cost. Operator: "Do your best to prevent the race condition and fix the bug report", then, to the orchestrator's
+  reading (fill path takes `positionsMu` before BEGIN; a cross-process duplicate may take the mutex): "Yes, that's
+  what I meant for 311". Effect: REOPEN D-17 granted, narrowly.
+- **D-4 scope extension (O-17, O-35).** Question: "the account-scoped bracket-leg key (the D-4 reopen you accepted in
+  the decision packet) also requires GetPnL's three de-duplication maps to key on account_id + order_id instead of the
+  bare order id. That edits GetPnL, which the bug's product spec did not list in scope. … Do you approve this scope
+  extension?" Operator selected: "Approve both (Recommended)". Effect: P-1/P-2 'user reopened'; composite GetPnL key
+  approved as a scope extension; two-account same-leg-id test required.
+- **Residuals (O-3, O-8, O-13).** Question: "Feature 311 carries three residuals the design does not fix and wants
+  accepted: (a) first-deploy cutover must be stop-then-start, as a runbook step, because old and new instances
+  overlapping could double-apply a fill; (b) a parked post-cutover fill re-parks with an ERROR log on every boot until
+  handled; (c) bracket-leg fills stay absent from trading.orders and NetFilledQtyBySymbol. Accept these as recorded
+  residuals?" Operator selected: "None — fix in scope". Effect: all three are design requirements.
+- **@AC-5 amendment — NOT signed off.** Question put; operator answered "Show me the full examples". The examples
+  were shown; no sign-off has been given. `@AC-5` stays `covered_by_operator_decision = false` (O-11 open).
+- **Round cap.** Operator: "Override round cap until design is sound" — debates may run past 5 rounds until the
+  adversary rates the design sound; a sound design with every C-16 change covered is approved on the operator's
+  behalf. Round 6 ran under this authorisation.
