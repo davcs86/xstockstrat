@@ -1,6 +1,6 @@
 # Debate Register: fix-analysis-per-symbol-isolation
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -52,7 +52,7 @@
 <!-- Status: open → closed @ round N (<how>) | waived @ round N (user) | reopened @ round N (user) -->
 | ID | Round | Objection | Blocking | Status |
 |---|---|---|---|---|
-| O-1 | 1 | O-1: C-16 operator sign-off required to CHANGE feature-289 @AC-10 and @AC-13, recorded in context.md. | yes | open |
+| O-1 | 1 | O-1: C-16 operator sign-off required to CHANGE feature-289 @AC-10 and @AC-13, recorded in context.md. | yes | closed @ round 3 (Operator C-16 sign-off at the design gate, option A, 2026-11-20: CHANGE feature-289 @AC-10/@AC-13 and this feature's amended @AC-2/@AC-3; recorded in context.md Session 2026-11-20.) |
 | O-2 | 1 | O-2: The timeout predicate couples to the indicators error text; pin it with a contract test or a PLAT-* note. | no | closed @ round 2 (The text coupling is removed: classification uses the typed exit_reason enum (D-8), and the deadline refusal is tagged TIMEOUT (D-9). An analysis-side test builds the error through _decode_formula_output.) |
 | O-3 | 1 | O-3: State and justify the readiness-side 300 s perpetual re-kick for deterministic faults versus the opportunity-side terminal marker. | no | closed @ round 2 (The asymmetry is accepted with a corrected bound (k components × pairs per 300 s while polled); recorded as D-10.) |
 | O-4 | 1 | O-4: Confirm the evaluation_failed row's UI rendering (0-conviction + raw provenance chip) is not read as an evaluated 0/N. | no | closed @ round 2 (0/0 → 'nodata' (not 'quiet') is verified at readinessRollup.ts:27 and evaluator.py:1162-1170. The remaining act-control gap is split out as O-7.) |
