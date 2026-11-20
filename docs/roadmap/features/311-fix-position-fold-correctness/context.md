@@ -2871,3 +2871,59 @@ Written by the orchestrating session itself.
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design (approved)
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-portfolio, xstockstrat-trading; consumer surfaces xstockstrat-ui `/trader` and xstockstrat-agent `get_positions` read the folded rows, no code change designed there; key reuse patterns: `pnl.FoldFrom` for the signed fold, `orderSide` for side resolution).
+- Phase 1 Grilling: 11 rounds (full). Chosen approach: an applied-event table and boot-stamped floor make the portfolio fill fold exactly-once and signed in one transaction; trading tracks bracket legs in `trading.bracket_legs`, emits keyed leg fills synchronously, adopts pre-existing open legs with a complete-list gate and an adoption-only throttle. Rejected: R-1..R-40 (R-25 reopened and now the chosen floor); see design.md.
+- Constitution rules touched: C-01, C-05, C-08, C-10, C-11, C-13, C-15, C-16, C-18, F-01, F-02, F-04, F-06, F-07, F-08, P-02, P-03, P-04, PLAT-N1. Floor breaches: none.
+- Status: spec-ready → design-approved.
+- **Approval provenance.** The design was approved after round 11 under the operator's standing authorisation ("Override round cap until design is sound", `context.md:1522-1524`): the round-11 adversary verdict was SOUND, with no Floor breach, no blocking objection, and every C-16 CHANGE covered by an operator ruling. The operator did not approve this round in person. This entry was written by the /sdd-design completion step from the workflow's computed task; the operator's own words are only in the sessions titled "recorded by the orchestrator (verbatim)" above.
+- **Binding on the spec.** The round-11 synthesis as written, including its section 3 items adopted from the adversary: the new-candidate bypass, `reconciliation.interval_ms <= 0` read as the 60000 default for adoption, the shared throttle helper taking an injected clock, and the known-invalid-credentials skip.
+- **Register changes at approval (`debate.md`).** State `approved`. Petition verdicts recorded from the rulings above: P-1 and P-2 "user reopened" (`context.md:1501-1505`, `1510-1514`); P-5, P-6 and P-7 "user reopened" (`context.md:1535-1541`); P-8 "user reopened" (`context.md:2376-2383`); P-4 "user declined" (R-2 was not reopened). The completion task said to mark every pending petition "user declined"; that would contradict the recorded grants for D-4, D-29, D-30, R-25 and D-40, so only P-4 was marked that way. No row was added, reworded or deleted, and no objection status was changed.
+- **Before `/sdd-execute`.** This file is far over the 65536-byte `/sdd-execute` limit. `/sdd-distill fix-position-fold-correctness` must run before `/sdd-execute`.
+- **For `/sdd-spec`.** Re-check migration numbers (portfolio `019`, trading `012`) against `main-dev` and feature 318.
+- No ledger line was written: the debate's reusable lessons (an empty or capped broker list cannot prove absence) are already covered by R-10's evidence and belong to `/sdd-execute` once proven in code.
+
+## Open Threads
+
+- **ORCHESTRATOR ASSUMPTION, not an operator ruling.** The adoption-only throttle (D-50: adoption `ListOrders` at the reconciler cadence for accounts with candidates but no live tracked legs, no new config key) was chosen by the orchestrator to meet the operator's stated reason for the D-40 reopen (remove the permanent per-tick broker load) where a tombstone is unsafe. The operator was told and has not objected or confirmed. The operator can overturn it. Target: operator confirmation before `/sdd-execute`.
+- **Housekeeping.**
+  - `acceptance.feature` `@AC-5` still reads "qty 6"; the signed-off wording (D-38, `context.md:1530-1534`) is not applied yet. Target: `/sdd-spec`, keeping the `@AC` ID (C-15).
+  - O-67 and O-68 stay "open" in `debate.md`; the approval ruling makes their four items binding. Target: `/sdd-spec` treats them as settled.
+  - O-56 stays "open" in `debate.md` although its verdicts are now recorded; P-4 reads "user declined" because the register has no "withdrawn" verdict. Target: none.
+  - O-30: the analysis AC ids in `order-snapshots-pnl-patterns.feature` and `fix-python-loop-supervision.feature` are not enumerated; the D-10 flip-short window residual stays named. Target: `/sdd-spec`.
+  - Migration numbers `019` and `012` may collide with feature 318. Target: `/sdd-spec`.
+- **Operator confirmations before the integration step (O-61).** Target: before the cutover runbook step.
+  - The DO stop is unverified: `.do/app.dev.yaml:78` and `:319` reference `${xstockstrat-portfolio.PRIVATE_DOMAIN}`, so a spec with the portfolio service removed may be rejected.
+  - On the homelab VM an unattended rollback of the integration deploy restores the pre-019 portfolio after the floor is stamped; noticing it depends on `gate deploy` exiting non-zero, which is unconfirmed.
+  - Adoption depends on Alpaca listing bracket legs as top-level orders in every open state; this is unverified.
+  - While portfolio is stopped on staging, trading's portfolio calls fail: the risk check warns only, reconciliation skips, and `flattenAndHalt` cannot flatten.
+  - If a production count is non-zero, the promotion stops with no designed procedure; it waits on an operator ruling.
+  - The merge precondition and the `main-dev` freeze are not enforced; an overlap double-applies fills and only the recorded evidence shows it.
+- **Accepted residuals: cutover.** Target: recorded in the cutover result or runbook.
+  - Fills appended between `T_stop` and the first new boot are acked: qty heals at the next sync, realized P&L for them is lost.
+  - Late-commit appends whose `recorded_at` is below the floor are acked (operator-accepted).
+  - The floor assumes ledger and portfolio share one Postgres server clock.
+- **Accepted residuals: portfolio fold.**
+  - A parked fill is retried only after a manual delete of its parked row. Target: runbook step.
+  - A fill transaction can wait server-side on the applied-row conflict or `FOR UPDATE`, holding 1 of 2 client connections and `positionsMu`. Target: accepted.
+  - The pre-check has a TOCTOU window covered only by the in-transaction INSERT conflict path. Target: the INSERT-conflict dbtest step.
+  - A `position.updated` can be emitted after a same-process sync has overwritten the row. Target: accepted.
+  - Boot replay re-walks every post-floor fill and `consumer_applied_events` has no retention. Target: follow-up feature (rolling floor).
+  - With the composite `GetPnL` key, a historical order whose partial and full fills carried different `account_id` values stops being deduplicated. Target: the `/sdd-spec` payload-history grep.
+  - OQ-2 (repair of already-inflated accumulators) is out of scope, and `instance_count` must stay 1. Target: separate data-repair change.
+- **Accepted residuals: bracket legs and adoption.**
+  - An idle IBKR account with an empty list, or an Alpaca account pinned at 500 rows, never tombstones its candidates; it keeps one adoption `ListOrders` per reconciliation interval (1/min by default) indefinitely. Target: accepted.
+  - If the spec dropped the new-candidate bypass, a bracket activated by an old trading instance on an adoption-only account could fill within the 60 s cooldown, be tombstoned with no emit, and false-halt the account through `NetFilledQtyBySymbol`. Target: test 19 at `/sdd-spec`.
+  - The cooldown and candidate-set memory are in process; every restart lists each adoption-only account once. Target: accepted.
+  - The candidate anti-join still runs every tick; only the broker call is throttled (`005_broker_accounts_halted.up.sql:29-31`). Target: `/sdd-spec` states the scan cost.
+  - `reconciliation.interval_ms <= 0` means "keep the previous interval" in the code, but `services/xstockstrat-trading/CLAUDE.md:119` implies "every tick"; the drift is logged, not fixed. Target: trading findings at `/sdd-spec`.
+  - A genuinely open leg absent from a complete list on its evaluation tick is tombstoned permanently; its exit fill never reaches the ledger, the fold or reconciliation. Target: accepted.
+  - A tombstone is undone only by a manual delete of its `bracket_legs` row. Target: runbook step.
+  - Existing trading tests that hold an ACTIVE bracket with leg ids panic on `fakeBroker.ListOrders` until the fakes are extended. Target: first trading test step.
+  - Reconciliation covers only tracked legs; the D-42 forward-only gap stays uncounted. Target: accepted (`context.md:1546-1548`).
+  - A `BASELINE_RETIRED` leg's post-cutover remainder is neither emitted nor observed. Target: accepted.
+  - Adopted IBKR legs that later vanish from the gateway are polled indefinitely (D-26). Target: accepted.
+  - A leg id is lost from tracking if the `ActivateBracket` transaction fails; it is alerted, but its exit fill never folds. Target: accepted.
+  - Neither broker adapter populates `BrokerOrder.Fees`, so fee totals understate. Target: trading findings.
