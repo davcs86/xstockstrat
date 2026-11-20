@@ -511,3 +511,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Step 20 is an operator gate: the `user_id = ''` active `trading.broker_accounts` count per environment (O-11).
 - `debate.md` still shows O-2, O-6 and O-8 as `open`; not changed by this run.
 - `scripts/integration-test.sh:446-448` still sends a headerless `ListOrders` on the retired Connect port; out of scope, already dead.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 criteria warnings, overlap WARN (file-level only; no migration NNN, proto field-number or config-key collision). Advisory — did not block; lifecycle unchanged. Floor breaches: none.
+
+### Addressed (implementation-spec.md edited)
+
+- [x] Step 20: Instruction 2 now asks for a bullet line starting `- O-11 row count:`, matching the Verification grep.
+- [x] Step 17: the portfolio Verification counts the literal phrase `acked, WARN-logged and skipped` (4 rows) instead of a bare `skipped`, which already matches `services/xstockstrat-portfolio/CLAUDE.md:32,199`. Instruction 5 requires the phrase.
+- [x] Step 6 `accounts` parameter and the Steps 12+13 proto reorder are recorded as spec-time rows in the spec's Deviation Log (design.md is not edited). The reviewer confirmed `staticcheck` at `services/xstockstrat-trading/.golangci.yml:7` and that `nolintlint` is not enabled.
+- [x] Step Dependencies gained the peer overlaps that were re-verified: 326 (`origin/main-dev`, `code-completed`) modifies no trading file but does modify `portfolio_service.go` and the portfolio `export_test.go`; 357 (`in-progress`) records its regions as disjoint from 312's; 321 (`origin/feature/fix-trading-config-plumbing`) edits `trading.go` and a comment in `trading.proto` `RegisterBrokerAccountRequest`.
+
+### Open Threads
+
+- [ ] unaddressed — Steps 12+13 reorder and the Step 6 `accounts` parameter need an ack from the proto reviewer and the trading owner (C-18, P-03). Target: `/sdd-execute` mode-entry checkpoint.
+- [ ] unaddressed — `docs/roadmap/features/merge-order.md` (`origin/main-dev`) has no table row for "312 after 315" (Step 10, D-12). It names 312 only in prose overlap notes (`notifyServiceImpl.ts` with 316 and 334; `trading.go` with 311, 321 and 347). This run may not edit that file. Target: add the row before `/sdd-execute` reaches Step 10.
+- [ ] unaddressed — Step 17 lists 7 files and Step 13 lists 16 generated files, over the 5-file advisory threshold. Not split: Step 13's list is generated output and Step 17 is docs-only; splitting would renumber the spec. Operator call.
+- [ ] unaddressed — Steps 3, 4, 5 and 10 cannot go red on their own Verification; the behaviour proof is in the paired test steps 6, 7 and 11. Compliant with the pairing rule; the executor runs the paired test step before reporting the service step verified.
+- [ ] unaddressed — Step 20 cannot pass until the operator supplies the two O-11 counts (P-03).
+- [ ] unaddressed — Overlap scan scope: the overlap pass read only a trunk checkout, so the impl-specs of peers that exist only on their feature branches (308–311, 313–316, 318–319, 322–325, 327–328, 331) were not scanned. Re-check them on `origin/feature/<slug>` before execute, in particular 315 and 316 (`notifyServiceImpl.ts`) and 322 (`trading.proto`, other messages per D-12).
+- [ ] unaddressed — `packages/proto/gen/**` conflicts with 321 and 322: the second merger re-runs `./scripts/buf-gen.sh` (Step 13).
+- [ ] unaddressed — Steps 14–17 doc and comment edits: 360 (`code-completed`) references `services/xstockstrat-ui/src/lib/connectClients.ts`, adjacent to Step 14's `traderBff.ts`; not verified to collide. Re-grep at Step 14.
