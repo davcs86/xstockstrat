@@ -331,3 +331,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design
+
+- Operator decision (2026-11-20, design gate): identity scope is option (b) — four leaves (ledger, config, identity, notify) — with the product-spec Affected Services amendment and the @AC-2 Given/When/Then amendment applied on the feature branch. O-1 is closed by this record.
+- Amendments applied this session, per D-8/D-10: `acceptance.feature` @AC-2 (Given lists the four leaves' node-pg-migrate migrate script and devDependency; When is now the scoped inspection; Then unchanged) and `product-spec.md` Affected Services (adds xstockstrat-identity, `package.json` only).
+- Phase 0 Recon: wrote recon.md (services: config, ledger, notify, marketdata, analysis, ingest, agent, ui, portfolio; key reuse patterns: the pgxmock `NewPortfolioRepoWithDB` test shape, and the feature-175 pure-deletion presence check plus real compile gate).
+- Phase 1 Grilling: 3 rounds (full). Chosen approach: seven service-scoped cleanup steps (portfolio r.db swap, config configWatcher deletion, Node package hygiene over four leaves with one root-lock regeneration, marketdata, ingest, agent, ui comment) plus a scoped final AC-2 verification. Rejected: R-1..R-8 (see design.md), notably deleting the PortfolioPanel combined branch and touching the per-service locks.
+- Operator approved at the gate after round 3. debate.md State is approved; no reopen petitions were filed, so none needed a verdict.
+- Constitution rules touched: C-01, C-08, C-11, C-15, C-16, C-18, F-08, P-03, P-06. Floor breaches: none.
+- Business rules (C-16): no CHANGE. EXTEND @AC-1 and @AC-2 (the @AC-2 extension is covered by the operator decision above). PRESERVE @AC-3, @AC-30, @AC-14, @AC-12, @AC-4, @AC-1@feature-252.
+- No ledger line: the lock and findings traps are recorded by D-11/D-12 and land as a findings row in step 3.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Per-service `pnpm-lock.yaml` files stay stale against their manifests; "not build input" rests on a negative grep plus the four Dockerfiles — step 3 (root findings row).
+- [ ] CI installs the Node leaves with `--no-frozen-lockfile`, so a drifted root lock fails only at image build — step 3 (record local `pnpm install --frozen-lockfile` and `docker compose build` output here).
+- [ ] Identity scope is `package.json:11,55` only; anything more is off-spec (F-08/P-03) — /sdd-spec (step 3 Files list).
+- [ ] Lock regeneration may drop a needed transitive package or bring in drift — step 3 (`pnpm why` expected output, expected-diff check, frozen install).
+- [ ] Peer 324 edits the same four leaf `package.json` files and the root lock — step 3 and merge (merge-order.md entry; the later-merged feature regenerates after rebase).
+- [ ] The identity C-16 sweep was keyword-based — step 3 (identity `pnpm build && pnpm test:coverage`).
+- [ ] Config c8 line coverage can shift when `configWatcher.ts` and its test go together — step 2 (re-run `--lines 40` after `rm -rf dist`).
+- [ ] pgxmock proves the handle and SQL shape, not live SQL semantics — step 1 (accepted limit; dev smoke test).
+- [ ] Peers 322, 311 and 324 may shift line anchors — /sdd-spec (re-grep every anchor).
+- [ ] Dangling `extractor_module` labels stay visible until a separate defect fixes them — step 5 (ingest findings `:24` annotation; accepted).
