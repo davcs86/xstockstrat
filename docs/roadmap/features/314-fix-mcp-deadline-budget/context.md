@@ -656,3 +656,70 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-20 — sdd-design (approved)
+
+- Phase 0 Recon: recon.md was written 2026-11-11 (services: agent, config, portfolio, marketdata, analysis; key
+  reuse patterns: the `_agent_policy` snapshot read with the non-finite/<=0 guard, and the per-key `SetConfig`
+  code-3 gate shape).
+- Phase 1 Grilling: 3 rounds (full). Terminated by operator approval at the gate; Floor clear.
+  - Chosen approach: a config-sourced 35 s whole-call extract budget with PARTIAL results; the
+    `opportunities.read_timeout_seconds` ceiling 55 → 44; a two-row strict-`>` `CROSS_KEY_ORDERING` gate on global
+    `SetConfig` writes; one config migration (seed + global-only CASE-guarded clamp + DISTINCT notify). No proto.
+  - Rejected: R-1..R-13 (design.md § Rejected Alternatives), notably any SQL heal of inverted pairs (R-11), an
+    all-scope clamp (R-12) and dropping the clamp (R-13).
+- Constitution rules touched: C-01, C-05, C-07, C-11, C-15, C-16, C-18, F-01, F-06, F-07, P-02, P-03, PLAT-N1.
+  Floor breaches: none.
+- Status: spec-ready → design-approved. Wrote design.md; debate.md State → approved.
+
+### Operator decisions (binding, recorded 2026-11-20)
+
+- Operator (2026-11-20, design gate): binding conditions —
+  - the clamp is scoped to global rows only (`user_id IS NULL`); per-user rows above 44 are reported with
+    RAISE NOTICE, never rewritten;
+  - the WHERE uses `CASE WHEN value_data ~ re THEN value_data::numeric > 44 ELSE false END`;
+  - the heal scope is a read-only prod/staging enumeration at spec time with operator sign-off, and if the
+    enumeration cannot be run the clamp ships and the sign-off is recorded as "unenumerated";
+  - the down is forward-only for the clamp;
+  - inverted pairs go to ordered operator SetConfig, not SQL.
+- Operator (2026-11-20): C-16 sign-off for the CHANGEs to this feature's @AC-2, @AC-6 feature-207, @AC-2
+  feature-247 and @AC-1 feature-229.
+- The migration number is the next free config migration above the main-dev tip at spec time (main-dev now holds
+  055). The register's `049` (D-12) and recon's `048` are stale placeholders.
+
+### Register state at approval
+
+- No rows were added. No reopen petitions exist, so none was marked "user declined".
+- O-13 and O-19..O-25 keep Status `open` in debate.md: the operator approved at the gate instead of running
+  round 4, and no status transition was recorded for them. All eight are adopted in design.md and bind
+  `/sdd-spec` (O-13/O-19/O-20 through the operator conditions above; O-21..O-25 in design.md sections 3-4).
+
+### Open Threads
+
+- **Blocking for /sdd-spec**: run the read-only staging + prod enumeration — (a) global
+  `opportunities.read_timeout_seconds` rows > 44 plus any value the numeric regex does not match, (b) global
+  inverted cross-hop pairs — and record the lists and the operator's sign-off here. If it cannot be run, record
+  the sign-off as "unenumerated".
+- **/sdd-spec**: fix the migration number (next free above the main-dev tip), dedup the seed by key, and
+  re-grep every `tools.py` / `configServiceImpl.ts` line (they drifted since recon).
+- **/sdd-spec**: decide regex widening to Python `float()` syntax vs. enumerating non-matching rows.
+- Open risks carried from design.md (target step in brackets):
+  - Concurrent greater/lesser writes can each pass against the other's old value — accepted residual, R-10
+    [docs step: config-rollout.md].
+  - 57 s worst case at ceiling 44 has zero slack; fallback is 43 [AC-2 test step].
+  - The 35 s extract cap can cut off fetches that finish at 35-40 s or later today [docs step: mcp-tools.md].
+  - Strict `>` prevents inversion only; portfolio can still time out just after marketdata [config gate step].
+  - The cross-key rule is invisible in ListKeys / config-ui [config gate step: rejection message; docs step].
+  - Global quote=2500 is unwritable while the global batch is 2500 — sanctioned by the C-16 sign-off above
+    [config gate step: rejection test].
+  - The clamp changes a live global value raised above 44 after the enumeration [migration step; pre-deploy
+    re-run + audit row].
+  - Old config image window accepts 45-55 writes between the db-migrator run and the new image [docs step:
+    post-rollout query].
+  - Per-user rows above 44 stay stored; a future per-user watch must re-run the heal [docs step: agent CLAUDE.md].
+  - Float-syntax rows the regex misses keep the 68 s path [spec-time enumeration].
+  - The heal scope is unverified if the enumeration cannot be run ("unenumerated" sign-off) [/sdd-spec].
+  - The PREPARE copy can drift from the migration [migration test step: static pin].
+  - Edit collisions with features 319, 322, 328, 331 and a migration-number race [/sdd-spec + integration PR].
+  - Attachment parsing is CPU-bound and outside the budget [follow-up, out of scope].
+  - `HTTPStatusError` still aborts the whole extract call [follow-up, out of scope].
