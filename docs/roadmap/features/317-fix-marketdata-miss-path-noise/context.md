@@ -588,3 +588,58 @@ written and status.md is unchanged. The register is in `debate.md` (D-1..D-7, R-
 - Step 8 is blocked without a Postgres + `migrate` toolchain or the CI `config-wiring-stored` artifact.
 - After the integration deploy: read the key back per environment and re-run the O-1 Loki query (the KEEP
   evidence is bursty).
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 10 warnings (advisory — did not block). Overlap: WARN, file-level only. Lifecycle unchanged
+  (`implementation-ready`). No Floor (`F-*`) breach.
+- Each claim was re-read on `origin/main-dev` @ `36aed60b` before the spec was edited.
+
+### Addressed in implementation-spec.md
+
+- [x] Step 8 toolchain: § Step Dependencies now has a preflight before Step 7. The execute session confirms the
+  local-Postgres route or the CI `config-wiring-stored` artifact route and records it here before unit B2 starts.
+- [x] Step 8 apply check: the Verification note now says what is and is not executed. The generator applies each
+  config migration `up` on a scratch database (`scripts/config-wiring-stored.py:77-80`). The `down` is not run
+  locally; Step 7 pins its SQL text.
+- [x] Spec decision 5 (cross-key sweep): Step 9 gains `TestLiveRefetch_CrossKeySweep_ExpiredEntryWarnsAgain`,
+  which pins the behaviour the spec takes literally from design.md.
+- [x] Step 10 wrapper: the two config-wiring commands now run right after instructions 2 and 3, before
+  `bars_miss.go` is written; anything red other than the new key's `seeded-unread` takes the O-15 fallback.
+- [x] Product-spec drift: Step 11 instruction 6 now also corrects § Fix Scope (`product-spec.md:63-64`) — config
+  key yes, one config seed migration — with a Verification grep.
+- [x] Step 11 **Service** field: glob text replaced by the service names.
+- [x] Overlap: the merge checklist names the peers. `345-authelia-sso` plans `053_authelia_sso_keys` (below the
+  trunk tail, so it will be renumbered and can take `056`) and regenerates `scripts/config-wiring-stored.json`;
+  a new "Shared files with peers" entry covers `scripts/config-wiring.json` (345) and `portfolio_repo.go`
+  (323, 311 — other lines).
+- Checked, no spec change needed: `portfolio_repo.go:46` sets `db: pool` in production, and `:379` is the only
+  `r.pool.Exec` in the file (`:247` and `:271` are `r.pool.QueryRow`), so Step 4's `no match` grep holds.
+
+### Open Threads
+
+Unresolved ⚠ carried into execution (`/sdd-execute` announces each at every checkpoint, C-02 / P-03):
+
+- Units A–C: evidence tree. Anchors were read on `36aed60b`, the branch is behind it. Re-grep every step's
+  anchors after the BRANCH SYNC merge — [ ] unaddressed
+- Step 8: migration number `056` is provisional. Re-run the merge checklist before unit B2 and after every
+  `origin/main-dev` merge; regenerate `scripts/config-wiring-stored.json` when another config migration lands
+  (F-01 / C-07). Peers 330 and 345 touch the same file — [ ] unaddressed
+- Step 8: confirm a regeneration route (Postgres + `psql` + `migrate`, or the CI artifact) at the new preflight;
+  otherwise Step 8 is blocked (P-03) — [ ] unaddressed
+- Step 8: the migration `down` is not executed locally on either route — [ ] unaddressed
+- Steps 9 + 10: operator to confirm that spec decision 5 matches design intent (an expired entry swept by another
+  key's write makes the next empty refetch WARN, not Debug). The new test pins it; changing it is a design
+  change — [ ] unaddressed
+- Step 10: the `resolveOffMs` wrapper costs three registry entries (C-18). Take the O-15 parallel-reader fallback
+  if either config-wiring command is red — [ ] unaddressed
+- Step 4: the portfolio owner confirms the `r.pool.Exec` → `r.db.Exec` change in `UpdatePositionBracket` (the
+  only non-logging production change in unit C) — [ ] unaddressed
+- Step 4: trading-domain B2b treated as not applicable (no fill, broker, order-type or `TRADING_MODE` edit) —
+  note only.
+- Operator: the four spec-time choices from the sdd-spec session are still to be confirmed (1 two commits for (B),
+  2 wrapper registry entries, 3 miss line through `warnUnlessDone`, 4 the repo seam).
+- Overlap, not checkable yet: spec-ready peers 320, 322, 323 and 326 share the marketdata service and have no
+  impl-spec. Re-run the `fetchAndCacheBars` peer grep before unit B2. `configServiceImpl.ts` peer 294 is
+  historical, low risk.
+- Overlap scan limit: the scan read a local checkout and could not read branch refs.
