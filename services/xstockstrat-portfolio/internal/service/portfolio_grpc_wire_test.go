@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -22,7 +23,11 @@ const wirePaper = "TRADING_MODE_PAPER"
 
 func wireAdapter(t *testing.T, l ledgerv1.LedgerServiceClient, positions ...service.WirePosition) portfoliov1.PortfolioServiceServer {
 	t.Helper()
-	return handler.NewPortfolioHandler(service.NewWireTestService(t, l, positions...)).GRPCHandler()
+	return wireAdapterFor(service.NewWireTestService(t, l, positions...))
+}
+
+func wireAdapterFor(svc *service.PortfolioService) portfoliov1.PortfolioServiceServer {
+	return handler.NewPortfolioHandler(svc).GRPCHandler()
 }
 
 func wireGetPnL(t *testing.T, a portfoliov1.PortfolioServiceServer, ctx context.Context) error {
@@ -92,4 +97,18 @@ func TestWire251_MissingUserIDInvalidArgument(t *testing.T) {
 func TestWire_GetPnLQuoteGap_F229AC5(t *testing.T) {
 	a := wireAdapter(t, &testdata.Ledger{}, service.WirePosition{Symbol: "AAPL", AccountID: "a1", Qty: 10, Avg: 100, Current: 0})
 	wantCode(t, wireGetPnL(t, a, service.CtxWithUser(t, "u-1")), codes.Unavailable)
+}
+
+func TestWire_CreateWatchlistDuplicateName_AC3(t *testing.T) {
+	svc := service.NewWireTestService(t, &testdata.Ledger{})
+	service.SetWatchlistCreateErr(svc, &pgconn.PgError{Code: "23505", ConstraintName: service.WatchlistNameUniqueIdx})
+	_, err := wireAdapterFor(svc).CreateWatchlist(service.CtxWithUser(t, "u-1"), &portfoliov1.CreateWatchlistRequest{Name: "A"})
+	wantCode(t, err, codes.AlreadyExists)
+}
+
+func TestWire_CreateWatchlistConnFailure_AC4(t *testing.T) {
+	svc := service.NewWireTestService(t, &testdata.Ledger{})
+	service.SetWatchlistCreateErr(svc, &pgconn.PgError{Code: "08006"})
+	_, err := wireAdapterFor(svc).CreateWatchlist(service.CtxWithUser(t, "u-1"), &portfoliov1.CreateWatchlistRequest{Name: "A"})
+	wantCode(t, err, codes.Internal)
 }

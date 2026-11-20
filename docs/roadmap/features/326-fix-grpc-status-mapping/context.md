@@ -43,6 +43,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `services/xstockstrat-marketdata/internal/handler/marketdata_handler_test.go` — translator tables and the AC-2 chain test (Steps 1+2).
 - `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go` — `toGRPCError` numeric cast, signature unchanged (Step 3).
 - `services/xstockstrat-portfolio/internal/handler/portfolio_handler_test.go` — `TestToGRPCError` AlreadyExists, Aborted and Unknown rows (Step 4).
+- `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — `watchlistNameUniqueIdx` + `classifyWatchlistWriteErr` at the three name-write sites (Steps 5+6).
+- `services/xstockstrat-portfolio/internal/service/{watchlist_service_test,export_test,portfolio_grpc_wire_test}.go` — fake-store error seams, `SetWatchlistCreateErr`/`WatchlistNameUniqueIdx`, `wireAdapterFor`, AC-3/AC-4 service, wire and migration-guard tests (Steps 5+6).
 - `docs/roadmap/features/326-fix-grpc-status-mapping/implementation-spec.md` — written in sdd-spec, patched in sdd-review, re-specced for steps 2, 3 and 6 in `498e07c0`.
 - `docs/roadmap/ledger/insights.md` — union-resolved merge conflict in the main-dev sync merge `c1b5428f`.
 - Feature dir: status.md, feature.md, product-spec.md, acceptance.feature, context.md (triage); recon.md, debate.md, design.md (design).
@@ -587,4 +589,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Appended three rows to the `TestToGRPCError` table: `already exists` → AlreadyExists (AC-3 translator half), `aborted` → Aborted, `unknown stays internal` → Internal (the design.md §2 cast exclusion).
 - TDD: AC-3 red (the pre-cast translator from `69e1328e` restored temporarily in the worktree, then reverted): "already exists: got Internal, want AlreadyExists" and "aborted: got Internal, want Aborted", FAIL (`.sdd-logs/v-1.log`, exit=1) → green on the committed Step 3 translator: `--- PASS: TestToGRPCError`, all packages ok, total 81.8% (≥ 40%), golangci-lint v2.14.0 "0 issues." (`.sdd-logs/v-2.log`, exit=0).
 - Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler_test.go`
+- Deviations: none
+
+## Session 2026-11-20 — sdd-execute sequential (sdd-batch-execute), Steps 5+6
+
+- Tooling setup (steps 5+6): go1.27 ✓ · golangci-lint ✓ v2.14.0 (`/root/go/bin`, built with go1.27.0, run ahead of the v2.5.0 on PATH).
+
+### Step 5 — service: portfolio `classifyWatchlistWriteErr` at the three name-write sites [done]
+- Atomic unit Steps 5+6 (one commit). Added `watchlistNameUniqueIdx` and `classifyWatchlistWriteErr` (23505 on that index → AlreadyExists "a watchlist with this name already exists", else Internal) beside `classifyConsumerErr`, which is untouched; it replaces the Internal wrap at CreateWatchlist, the UpdatePartial mask path (after the NotFound check) and the legacy rename. Step 5 Verification exit=0 (`.sdd-logs/v-2.log`: build ok, 3 call sites).
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: none
+
+### Step 6 — test: fake-store error seams, export setter and alias, `wireAdapterFor`, service, wire and schema-guard tests [done]
+- Atomic unit Steps 5+6. Added `createErr`/`updateErr`/`updatePartialErr` fake fields (update checks after the not-found lookup), `SetWatchlistCreateErr` + `WatchlistNameUniqueIdx` alias, `wireAdapterFor` (the `wireAdapter` signature is unchanged), the three service tests, the migration-011 guard and the two wire tests.
+- TDD: AC-3 red (constant + seams/tests only): "code = internal (err=internal: insert watchlist: :  (SQLSTATE 23505)), want AlreadyExists" for create, masked rename and legacy rename, and wire "status code = Internal … want AlreadyExists" (`.sdd-logs/v-1.log`, exit=1) → green: all named tests PASS (26 top-level PASS lines), all packages ok, total 81.8% (≥ 40%), golangci-lint v2.14.0 "0 issues.", index literal declared once in `internal/*.go` (`.sdd-logs/v-3.log`, exit=0). AC-4 rows (08006, plain, other-constraint) pass both before and after, as preserved behavior.
+- Files modified: `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`, `services/xstockstrat-portfolio/internal/service/export_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_grpc_wire_test.go`
 - Deviations: none

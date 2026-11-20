@@ -390,7 +390,7 @@ threshold applies to it. C-13: no domain data.
 
 ### Step 5 — service: portfolio `classifyWatchlistWriteErr` at the three name-write sites
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -459,7 +459,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... \
 
 ### Step 6 — test: fake-store error seams, export setter and alias, `wireAdapterFor`, service, wire and schema-guard tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go` — modify
