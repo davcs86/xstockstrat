@@ -21,7 +21,9 @@ agent slices are each one service + test unit. No proto, migration, config-key, 
 the `SetConfig` and `RevokeToken` RPCs and the agent's HTTP `POST /oauth/register`; no UI segment or MCP tool changes.
 
 **Tree**: every `path:line` below was re-grepped at spec time on `origin/feature/fix-auth-trust-hardening@307a0c2c`
-(merge-base with `origin/main-dev`: `c4fd48b0`, the recon tree).
+(merge-base with `origin/main-dev`: `c4fd48b0`, the recon tree). The `/sdd-review impl-spec` pass (2026-11-20)
+re-checked the Step 2 `configServiceImpl.ts` anchors and the `watch_core.py` md5 at `@24b8aa72`; later merges can
+shift lines, so `/sdd-execute` re-greps each anchor in its discovery phase.
 
 ### Scenario Coverage (C-15)
 
@@ -64,7 +66,8 @@ the `SetConfig` and `RevokeToken` RPCs and the agent's HTTP `POST /oauth/registe
   build compiles tests (`services/xstockstrat-config/tsconfig.json` `include: ["src/**/*"]`; `pnpm test` runs
   `tsc` first), so `internalCallerAuthz.test.ts` must change in the same commit; it also changes the deny-log
   field set that `setConfigAuthz.test.ts:193-199` pins. Step 4's three durable-scenario amendments land with the
-  code, never after it (`D-12`, `R-10`, C-16).
+  code, never after it (`D-12`, `R-10`, C-16). Only Step 3 is a build trigger for Step 2; Step 4 is docs and
+  Gherkin, compiles nothing, and is folded into the unit by that rule alone.
 - Step 3 [test] covers Step 2 [service]; Step 1 [test] is a harness-only step with no paired service step.
 - Steps 5+6 land together: `telemetryAllowlist.test.ts` `drive()` references `recordRevokeUnverifiable`, which
   Step 5 creates, and identity's `tsc` build compiles tests (`services/xstockstrat-identity/tsconfig.json`
@@ -86,6 +89,16 @@ the `SetConfig` and `RevokeToken` RPCs and the agent's HTTP `POST /oauth/registe
   314/322/328/331; `docs/context-constitution.md` is widely edited; and, new at spec time (F-A), the four
   `watch_core.py` copies — re-run `bash scripts/check-watcher-copies.sh` after merging `origin/main-dev` at the
   integration PR (fails.md 2026-11-10, signal-map-instrumentation).
+  - Trunk peers found by the `/sdd-review impl-spec` overlap scan (2026-11-20), all file-level: `authz.ts` and
+    `identityServiceImpl.ts` and agent `watcher.py` with 345-authelia-sso; `configServiceImpl.ts` with
+    330-fix-live-enrich-ttl-seed and 321-fix-trading-config-plumbing; identity `telemetry.ts` with
+    329-fix-telemetry-startup-log and 337-metrics-host-provider-label. The second merger re-anchors.
+  - `POST /oauth/register` is shared with 345-authelia-sso, whose spec (`origin/main-dev`, `:1191-1193`, its
+    `@AC-43`) returns 404 for the route once SSO is configured and keeps `tests/test_oauth.py` green as its legacy
+    net. Steps 7-8 here change that file and the legacy-mode status (503 with no snapshot). Which status the
+    route returns under SSO, and the merge order of the two, is an operator decision — context.md Open Threads.
+  - The scan could not read the specs of batch peers that exist only on `origin/feature/<slug>` branches; the
+    314/322/328/331 overlaps above are this spec's own note, not independently verified.
 - Launch promotion (C-16, integration PR): 319 `@AC-1` → config suite, `@AC-2` → identity suite (extending the
   sibling instruments of identity `@AC-52` in `signal-map-instrumentation.feature`), `@AC-3` → agent suite. The
   CHANGE amendments are not deferred to launch; they are Steps 4 and 7.
@@ -180,8 +193,8 @@ Security — auth scope, `x-internal-caller` allow-list
   `export interface SecretCallerCall { metadata?; getAuthContext? }` (`:152`); `function peerDnsSans(call)`
   (`:158`, module-private); predicate `(grant.peerSan === undefined || peerDnsSans(call).includes(grant.peerSan))`
   (`:185`); `export function hasPeerDnsSan(call)` (`:228`).
-- Only non-test caller: `configServiceImpl.ts:679-686` — `hasInternalCallerAuthority(call.metadata, …)`,
-  `call.metadata` at `:682`. Imports at `configServiceImpl.ts:14-15` (`hasInternalCallerAuthority`, `hasPeerDnsSan`).
+- Only non-test caller: the `internalCallerAuthorized` statement at `configServiceImpl.ts:679-686` — the call
+  expression `hasInternalCallerAuthority(` is at `:681`, its `call.metadata` argument at `:682`. Imports at `configServiceImpl.ts:14-15` (`hasInternalCallerAuthority`, `hasPeerDnsSan`).
 - Deny path: `configServiceImpl.ts:687-711`; `fields` built at `:690-694` with `reason:
   'no_admin_or_internal_grant'`; the internal-caller ERROR branch at `:697-706`; `callback(ADMIN_SCOPE_ERROR)` `:709`.
 - `configServiceImpl.ts:217-220` `LOG_ID_MAX = 64`, `truncateForLog`.
@@ -434,7 +447,10 @@ minimal, identity/auth scope
    (`R-9`); do not reuse `identity.token.validate_failures` (`R-7`).
 2. `identityServiceImpl.ts`:
    - Add `recordRevokeUnverifiable` to the import block (`:11-17`).
-   - `validateToken` (`:218`): pass `{ algorithms: ['HS256'] }` as the third `verify` argument.
+   - `validateToken` (`:218`): pass `{ algorithms: ['HS256'] }` as the third `verify` argument. This is a
+     behaviour change on the validate path that product-spec.md does not name; it comes from design.md
+     § Chosen Approach (`:57-59`, `:163`; C-10 parity with `revokeToken`) and is pinned by Step 6's HS384 case.
+     Signing (`:320`) uses the default HS256, so no token this service mints is affected.
    - `revokeToken` (`:279`): inside the existing outer `try`, read `this.jwtSecret` first (a missing secret still
      reaches the outer catch → `code: 13`, and does not touch the counter). Then verify in an inner `try`:
      `(jwt as any).verify(token, secret, { ignoreExpiration: true, algorithms: ['HS256'] })`. On an inner failure:
@@ -616,15 +632,19 @@ shared `watch_core.py` copy only
 
 **Verification**:
 ```bash
+# Every line runs from the repo root; the subshells keep the working directory there.
 bash scripts/check-watcher-copies.sh   # "all groups byte-identical"
-cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run pytest --cov=app --cov-fail-under=40
-for s in indicators ingest analysis; do (cd services/xstockstrat-$s && ruff check app/config/watch_core.py && ruff format --check app/config/watch_core.py); done
+(cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run pytest --cov=app --cov-fail-under=40)
+for s in indicators ingest analysis; do (cd services/xstockstrat-$s && ruff check app/config/watch_core.py && ruff format --check app/config/watch_core.py && uv run pytest tests/test_config_watcher.py -q); done
 grep -n "def has_snapshot" services/xstockstrat-agent/app/config/watch_core.py services/xstockstrat-agent/app/config/watcher.py
 grep -n "defaulting to" services/xstockstrat-agent/app/oauth_server.py   # expect no match
 grep -n "_snapshot" services/xstockstrat-agent/app/oauth_server.py   # expect no match (R-3)
 grep -n "@feature-319\|HTTP 503" services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature
 ```
-(Run the `for` loop and the last four greps from the repo root.) Run as the Steps 7+8 unit.
+The per-service `tests/test_config_watcher.py` run is a smoke for the three other owners: each file builds that
+service's `ConfigWatcher` on the edited `watch_core.py`. `has_snapshot` has no caller in those services, so its
+behaviour is tested only in the agent (Step 8); the copies are held equal by `check-watcher-copies.sh`.
+Run as the Steps 7+8 unit.
 
 ---
 
