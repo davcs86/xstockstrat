@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-11 | /sdd-batch | 8 | 4 | 0 | 3 | 0 | yes |
 | 2 | 2026-11-11 | /sdd-batch | 4 | 2 | 3 | 6 | 1 | yes |
 | 3 | 2026-11-13 | /sdd-batch | 1 | 2 | 6 | 3 | 2 | yes |
+| 4 | 2026-11-20 | /sdd-batch | 3 | 2 | 3 | 4 | 0 | yes |
 
 ## Settled Decisions
 
@@ -25,11 +26,14 @@
 | D-6 | 1 | OQ-3: no trading-side system guard is added. Trading is out of scope. | recon Open Question 3; product-spec affected services | settled |
 | D-7 | 1 | The C-14 consumer surface is the /trader ledger export. No code step is needed because the route forwards caller-scoped ExportEvents with no event-type allowlist. | services/xstockstrat-ui/src/app/trader/api/ledger/export/route.ts:12,97-111; src/app/trader/portfolio/page.tsx | settled |
 | D-8 | 1 | AC-1's second Then is reworded to the AppendEventRequest.user_id assertion, with the export guarantee kept as a cited PRESERVE of ledger @AC-11 @feature-021. AC-2's second Then is reworded to the degraded-snapshot, no-window outcome. Both rewordings are recorded in context.md before spec. | fails.md:3174-3177; ledgerServiceImpl.test.ts:675 | settled |
-| D-9 | 2 | FR-1 is scoped to the mcp_client loop path. Setting AppendEventRequest.user_id on the RPC path is incidental hardening with no behaviour change, and its test traces to a PRESERVE of AC-33 @feature-224. | services/xstockstrat-ingest/app/handlers/servicer.py:984-995,1175-1180 | settled |
+| D-9 | 2 | FR-1 is scoped to the mcp_client loop path. Setting AppendEventRequest.user_id on the RPC path is incidental hardening with no behaviour change, and its test traces to a PRESERVE of AC-33 @feature-224. | services/xstockstrat-ingest/app/handlers/servicer.py:984-995,1175-1180 | reopened @ round 4 (operator steer) |
 | D-10 | 2 | FR-2 reads 'a system owner alone never causes parking'. Poison payloads still park under @AC-7 @feature-259. | services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:65-73,368-386 | settled |
 | D-11 | 2 | AC-3's Given uses distinct, non-duplicate signals. Its metric-label clause is replaced by a PRESERVE comment citing @AC-41/@AC-28/29/53 @feature-294, and it states that ledger does not read gRPC x-trace-id. | servicer.py:1145,1185; services/xstockstrat-ingest/tests/test_telemetry_allowlist.py:68; services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:76-97 | settled |
 | D-12 | 2 | The product-spec Problem Statement is corrected: the loop forwards an empty propagation_meta list, not metadata=None. The correction is logged in context.md with the other rewordings. | servicer.py:1024; docs/roadmap/features/313-fix-system-identity-paths/product-spec.md:16 | settled |
 | D-13 | 3 | A system-owned degraded snapshot writes no system-owned ledger row, because _emit sets no AppendEventRequest.user_id. @AC-14/@AC-15 @feature-225 are therefore safe under D-4 with no extra guard. | services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:608-619 | settled |
+| D-14 | 4 | Supersedes D-9's trace clause (operator reopen, 2026-11-20): the RPC-path AppendEventRequest.user_id check is an untraced incidental-hardening assertion inside the AC-1 test, with no 'Covers: AC-33'. @AC-33 @feature-224 is a plain PRESERVE. FR-1 stays scoped to the mcp_client loop. | services/xstockstrat-ingest/acceptance/private-by-default-templates.feature:40-44; services/xstockstrat-ingest/tests/test_signal_ownership.py:138-139; operator steer 2026-11-20 | settled |
+| D-15 | 4 | AC-2's Then reads 'the event is processed on its first attempt with no retry backoff'. Its test drives _process_with_retry with the sleeps fixture and asserts no awaited sleep, one process_event run, no parking, a degraded snapshot and no pnl_positions window. | operator decision 2026-11-20; services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:228-232; services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py:483-486 | settled |
+| D-16 | 4 | Build order: docs and context.md first, then analysis AC-2, then ingest D-1/AC-1, then ingest FR-3/AC-3 as a separate final step. AC-1 and AC-3 tests drive poll_one_source through the real _ingest_external_signal with a dedup-miss fake DB. | docs/roadmap/ledger/fails.md:441; services/xstockstrat-ingest/tests/test_mcp_client_loop.py:173-201 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -44,6 +48,8 @@
 | R-6 | 2 | Restate the no-identifier metric-label rule as an AC-3 Then | test_telemetry_allowlist.py:68 (@AC-41 @feature-294) already enforces it. A second promoted rule would break C-18. | locked |
 | R-7 | 3 | Keep 'Then _compose does not raise' in AC-2 and rely on promoting only the behavioural Thens | Promotion is whole-scenario and /sdd-archiver never rewrites a promoted scenario (docs/sdd/business-rules/CLAUDE.md:23-30). Thens must be observable outcomes (:37-38). | locked |
 | R-8 | 3 | Observe AC-3's AppendEvent Then through the AsyncMock-stubbed loop harness | The stub never reaches the dedup gate or AppendEvent (servicer.py:1191,1221), so the Then is vacuous. The real-core pattern exists at tests/test_mcp_client_loop.py:173-201. | locked |
+| R-9 | 4 | Derive AppendEventRequest.correlation_id from an x-trace-id entry in propagation_meta | It would start storing inbound trace ids on RPC-path ledger rows, a behaviour change outside FR-1/FR-3 (servicer.py:1216,1237). | locked |
+| R-10 | 4 | Observe AC-2's 'no retry backoff' Then by calling process_event directly | asyncio.sleep is awaited only in _process_with_retry (pnl_pattern_consumer.py:228-232), so the Then passes with the bug present. | locked |
 
 ## Objections
 
@@ -59,9 +65,13 @@
 | O-7 | 2 | Drop AC-3's metric-label Then (duplicates test_telemetry_allowlist.py:68) in favour of a PRESERVE comment. | no | closed @ round 3 (The metric-label Then is dropped and replaced by a PRESERVE comment citing @AC-41/@AC-28/@AC-29/@AC-53 @feature-294 (test_telemetry_allowlist.py:68).) |
 | O-8 | 2 | Correct the product-spec.md:16 'metadata=None' drift (actually an empty list, servicer.py:1024). | no | closed @ round 3 (The Problem Statement now reads 'an empty propagation_meta list (defaulted in _ingest_external_signal)', logged in context.md (D-12).) |
 | O-9 | 2 | AC-3 must not imply ledger-side traceability, because ledger never reads gRPC x-trace-id. | no | closed @ round 3 (FR-3 and an AC-3 scenario comment state that the id is outbound call metadata only and that ledger appendEvent does not read x-trace-id (ledgerServiceImpl.ts:76-97).) |
-| O-10 | 3 | AC-2 'Then _compose does not raise' is an implementation step that would be promoted permanently. Replace it with 'Then the event is processed on its first attempt with no retry backoff', observed via the sleeps fixture (test_pnl_pattern_consumer.py:483-486). | yes | open |
-| O-11 | 3 | Split D-1/AC-1 and FR-3/AC-3 into separate ingest steps, with AC-3 last and marked contingent on P-1 in context.md, so a ruling does not force an F-09 Deviation-Log swap (fails.md:441). | no | open |
-| O-12 | 3 | AC-3's test must drive poll_one_source through the real _ingest_external_signal with a dedup-miss fake DB (the test_mcp_client_loop.py:173-201 pattern), not the AsyncMock stub. | no | open |
+| O-10 | 3 | AC-2 'Then _compose does not raise' is an implementation step that would be promoted permanently. Replace it with 'Then the event is processed on its first attempt with no retry backoff', observed via the sleeps fixture (test_pnl_pattern_consumer.py:483-486). | yes | closed @ round 4 (AC-2 adopts the operator wording 'Then the event is processed on its first attempt with no retry backoff', observed by driving _process_with_retry with the sleeps fixture.) |
+| O-11 | 3 | Split D-1/AC-1 and FR-3/AC-3 into separate ingest steps, with AC-3 last and marked contingent on P-1 in context.md, so a ruling does not force an F-09 Deviation-Log swap (fails.md:441). | no | closed @ round 4 (The proposer confirms separate ingest steps with FR-3/AC-3 last. The P-1 contingency is recorded in step 1's context.md entry.) |
+| O-12 | 3 | AC-3's test must drive poll_one_source through the real _ingest_external_signal with a dedup-miss fake DB (the test_mcp_client_loop.py:173-201 pattern), not the AsyncMock stub. | no | closed @ round 4 (The proposer confirms that AC-1 and AC-3 drive poll_one_source through the real _ingest_external_signal with a dedup-miss fake DB (test_mcp_client_loop.py:173-201).) |
+| O-13 | 4 | The operator must give an explicit verdict on P-1/P-3 (reopen D-2 for the correlation_id option, or decline) before approval. The round-4 steer supports the option but does not say 'reopen D-2'. | yes | open |
+| O-14 | 4 | If D-2 is reopened: step 4's Files must include tests/test_mcp_client_loop.py, and the spy at :196 must accept and forward the new keyword, or the @AC-4 @feature-166 dedup test breaks silently. | no | open |
+| O-15 | 4 | If D-2 is reopened: use one keyword-only trace_id that the core turns into both x-trace-id metadata and correlation_id, or state the equality constraint in the docstring (C-18). | no | open |
+| O-16 | 4 | If D-2 is reopened: the context.md consumer-surface note must say the export's correlation_id column shows a poll-cycle id for mcp_client rows (ledger-event-export.feature:40). | no | open |
 
 ## Reopen Petitions
 
