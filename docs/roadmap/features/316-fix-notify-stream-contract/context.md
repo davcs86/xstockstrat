@@ -988,3 +988,38 @@ ENV node=v24.22.1 grpc-js=1.14.7 dir=/home/user/xstockstrat/node_modules/.pnpm/@
 - [ ] Accepted residuals, no step: held queue after eviction (up to 1024 alerts plus the h2 window, invisible to the gauge, no keepalive); bound scales with alert size; lazy detection for a filtered subscriber; alerts lost between eviction and reconnect.
 - [x] Recon line references had drifted — closed: every citation re-read at `fb52065c`.
 - [x] `debate.md` shows O-10, O-13 and O-14 as open although each is answered — closed for the spec: O-14 is Step 6, the D-20 invariant is Step 8, O-10 is in design.md § Accepted residuals. `debate.md` itself is unchanged.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 6 warnings, no Floor breaches (advisory — did not block). Overall: PASS WITH WARNINGS. Lifecycle unchanged (`implementation-ready`).
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `0617f6d6`. `origin/main-dev` is still `fb52065c`; the branch is still 168 commits behind.
+- Overlap: WARN, all rebase-only, no FAIL, so no merge-order proposal was made.
+- The five `/sdd-spec` assumptions were reviewed and none was rejected. Two became warnings (the Step 1 merge not bounded by a file list; AC-1's mutation red) and are handled below.
+
+**Addressed in implementation-spec.md** (each claim re-verified on `origin/main-dev` `fb52065c` before the edit):
+
+- Step 1 (F-08): added an explicit `/sdd-execute` exception for the merge commit, stated at the Phase-2 confirmation, with three new Verification checks: the commit has two parents; `git diff origin/main-dev HEAD --stat` shows only this feature's directory and `fails.md`; the `fails.md` resolution dropped no main-dev line.
+- F-07 / product-spec divergence: the Execution Summary now states that product-spec.md:58 anticipated a config key ("yes (likely)") and the design chose a code constant (design.md:94-96, :145), and that operator tuning later would be a separate change with the full config-key contract.
+- Steps 2 and 3 (P-03): Step 2's mutation-red evidence (three command outputs) must be in `context.md` and the PR body, and the mutation must be fully reverted before the commit. Step 3 keeps `red-green required` but records "red N/A — no behavior change (type-only)" explicitly (`tdd-gate.md:55-58`). Step Dependencies says neither step is `done` without its record.
+- Step 6: added a 10-run repeat check to Verification, and an instruction that a flaky result is reported, never fixed by widening a bound, adding a retry or skipping the test.
+- Steps 7 → 8: Step Dependencies says Step 8 follows the 5+6+7 unit with no main-dev merge or lockfile change between; Step 8 re-checks the lockfile's grpc-js version before writing `NOTIFY-18`.
+- Citation drift: the Citation tree records the 2026-11-20 re-verification (anchors hold at `fb52065c`).
+- Overlap: Step Dependencies lists the verified file overlaps. 312 (`spec-ready`) on `notifyServiceImpl.ts` `listAlerts`; 337 (`in-progress`) on `telemetry.ts` and `fanout.test.ts`; 323 (`spec-ready`) on notify `CLAUDE.md` (the `:4` banner line Step 4 also edits). 334 (`launched`) and 329 (`code-completed`, already in `fb52065c`) are absorbed by Step 1.
+
+**Corrections to the overlap verdict** (verified, not carried into the spec as written):
+
+- The verdict asked whether 316 edits `telemetry.ts`. It does: Step 7 widens `StreamEvictionReason` at `:380`. The overlap with 337 is live; the one with 329 is already merged.
+- The verdict placed the notify `CLAUDE.md:4` banner edit in Step 7/8. It is in Step 4. Step 7 edits `CLAUDE.md:125`.
+- `src/__tests__/fixtures/withLogs.ts` (created by Step 5) is cited by no other in-flight feature.
+
+## Open Threads
+
+- [ ] Step 1's merge commit carries about 168 commits outside its file list. The spec now states the exception, but the operator still has to accept it at the `/sdd-execute` Phase-2 confirmation — target: `/sdd-execute` Step 1 checkpoint.
+- [ ] The Step 2 mutation red and the Step 3 "red N/A" note exist only as `/sdd-execute` records; nothing in CI checks them — target: `/sdd-execute` Steps 2 and 3 (write the records before marking `done`).
+- [ ] Step 6 may still be flaky in CI: it is timing-dependent and is notify's first `node:http2` use. The 10-run local check lowers the risk; it does not remove it — target: `/sdd-execute` Step 6, then CI on the integration PR.
+- [ ] Step 7 touches four files (two code, `CLAUDE.md`, `acceptance.feature`). This is within the file threshold and follows design.md, so it was left as is — target: reviewer of Step 7.
+- [ ] `MAX_QUEUED_ALERTS` is a code constant although product-spec.md anticipated a config key. Recorded trade-off (D-4); product-spec.md itself was not edited — target: reviewer of Step 7; a separate feature if operators want to tune it.
+- [ ] Rebase-only overlaps with 312, 337 and 323 on notify files; `merge-order.md` has no row for 316. Whichever merges second re-greps its anchors, and the `CLAUDE.md:4` banner line is a likely textual conflict with 323 — target: before `/sdd-execute`, and again at the integration PR.
+- [ ] No evidence was found that feature 324 touches a notify file, although design.md's Open Risks names it — target: before `/sdd-execute` (re-check once 324 has an implementation spec).
+- [ ] If `origin/main-dev` moves past `fb52065c` before Step 1 runs, line numbers drift again — target: `/sdd-execute` Phase 1 (re-grep each anchor by symbol).
+- [ ] Earlier threads still open and unchanged by this review: the grpc-js status path is verified on 1.14.7 only; `^1.14.7` can float; a renamed `writableLength` fails open (Steps 6 and 8); the four accepted residuals have no step.
