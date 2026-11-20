@@ -558,3 +558,32 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   plain `migrate -path "$dir" -database "$url" up` (`:104`, after `render-migrations.sh`), no `x-multi-statement`.
   Feature 318 is `spec-ready` and its branch adds only SDD docs. No migration-ordering CI gate was added since
   `d5de836b`; `check-migration-contract.py` checks only `-- contract-of:` headers.
+
+## Session 2026-11-20 — integration-PR prep (operator decisions, C-16 promotion)
+
+- **Operator decisions (binding, 2026-11-20):**
+  1. Story owner authorized amending `acceptance.feature`: `@AC-1 @FR-1`, `@AC-2 @FR-2`, and the `@AC-1` Given gains
+     "…, and the row still holds the seeded '10'" (design.md § Business Rules Touched, signed C-16 CHANGE). The Then
+     is unchanged (`4029a6ff`). The spec's three C-15 gate greps each print a match.
+  2. `product-spec.md` § Functional Requirements: FR-1 and FR-2, one line each, restating the existing Expected
+     behaviour only (`126cb634`).
+  3. `implementation-spec.md`: Step 2's title and Instructions and the Execution Summary name `055` (wording
+     only, no status change; `fa2843e8`).
+  4. C-16 promotion as planned: `@AC-1` → new `services/xstockstrat-config/acceptance/fix-live-enrich-ttl-seed.feature`
+     (`a6074197`); `@AC-2` appended after `@AC-9` in `services/xstockstrat-analysis/acceptance/opportunities-latency-fix.feature`
+     as its EXTEND (`b16b2253`). Both carry `@feature-330`. Dedup: no config suite covers this key; `@AC-9` (code
+     default) is left unedited and differs from `@AC-2` (migrated stored value). That file's Feature-level
+     `@feature-191` tag is inherited by the appended scenario.
+- **ALL-DONE gates (integration-PR part):**
+  - 0, F-09: `node scripts/check-config-wiring.mjs --final` on the tip exits 0 (two baseline `REPORTED:` lines:
+    `fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree`, `trading.go:platform/trading_state:readers-disagree`).
+    `--doc-check` exits 0.
+  - 1, merge order: `merge-order.md` has no table row for 330, only non-blocking prose notes on config numbering, and the renumber already handles those.
+  - 2.6, defect reports: none to close. 330's only C-16 CHANGE is against its own `@AC-1`, so there are no
+    other-feature candidates. Its own report `2026-10-19-live-enrich-ttl-seed-below-poll-defect` stays `triaged` /
+    `ref: feature:330-fix-live-enrich-ttl-seed`. `defect-filing.md` § The status sidecar says a `triaged` report
+    counts as resolved once its feature is `launched`, that nothing re-stamps it, and that `/sdd-archiver` derives it.
+  - The PR is not opened (operator instruction). Status stays `in-progress`, not `code-completed`.
+- **Step 5 deferred to after deploy.** The post-deploy read-back stays `pending`. It is operator-run on the dev database after
+  the `main-dev` deploy, and again on production after promotion. Its pass verdicts are recorded here and confirmed by
+  the operator before the promotion PR.
