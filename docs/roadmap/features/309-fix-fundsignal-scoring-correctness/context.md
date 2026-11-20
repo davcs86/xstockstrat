@@ -565,3 +565,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Document the `_MIN_CROSS_SECTION` / default-quantile coupling and the [0,1] scale contract in the analysis CLAUDE.md — target: direction step.
 - [ ] Document the surviving legacy sentinel (`conviction != 0.0` without the flag reads as not given) — target: conviction docs step.
 - Accepted residuals, no action: n ≥ 5 all-weak top quantile is `buy`; degenerate hold band is exactly 0.5; budget-deferred mixed-label day (O-11); deploy-boundary dedup duplicate within `signals.dedup_window_hours` (O-17).
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 18 steps. Status: design-approved → implementation-ready.
+- Operator decisions carried in (recorded above, 2026-11-20): direction gate is degenerate-only with the 0.5 side tie-break (option A); C-16 sign-off for the CHANGEs to `@AC-3 @feature-246` and `@AC-4` / `@AC-8 @feature-201`; O-3 closed.
+- Tree: the feature branch tip `9a9c62cf` sits on base `c4fd48b0a`, 166 commits behind `main-dev`. This run did not merge `main-dev` (the batch protocol allows edits under this directory only), so the tree-freshness Sync was not run. Discovery read `origin/main-dev@36aed60b` through a read-only `git archive` snapshot, and every spec anchor is a `main-dev@36aed60b` line. `/sdd-execute` BRANCH SYNC must merge `main-dev` before Step 1.
+- Key codebase findings:
+  - Ingest migration number is `019`: `main-dev` already holds `015`..`018`, so design.md's provisional `017` is taken. No peer branch in the batch claims ingest `019`.
+  - `fundsignal_loop.py`, `scoring.py` and the analysis tests named by the design are identical on the feature tip and `main-dev`. Ingest `servicer.py` anchors moved again: write sentinel `:1277`, range check `:1257`, `QuerySignals` builder `:1519-1528`.
+  - The analysis doc anchors moved out of `CLAUDE.md`: the "Unscored symbols" bullet is `services/xstockstrat-analysis/docs/fundsignal.md:18`; the "diverges by design" line is `docs/fundamentals-guard.md:12`.
+  - Exactly four non-test `ExternalSignal(` constructions (agent `client.py:250`, ingest `mcp_client_loop.py:90`, ingest `servicer.py:1519`, analysis `fundsignal_loop.py:654`). No `ExternalSignal` descriptor-parity guard exists, and no TS/UI or Go consumer of `ExternalSignal` / `QuerySignals` was found.
+  - `scripts/migration-rerun.py` globs `scripts/migration-assertions/*.sql`, so `ingest-019.sql` needs no harness edit. The shared fixture's fundamentals rows are `FX<i>` symbols ingested after the cutoff, so migration 019 changes none of them.
+  - The strat-lab skill has no ingest-conviction statement; it gets no edit.
+  - The degenerate rule was checked with a throwaway script: 260 `@AC-9` and `test_quantile_buckets` keep their labels; only the lone-0.10 assertion at `tests/test_fundsignal_loop.py:1370` flips. At 0.80 / 0.20, every n in 5..50 has a hold band and a buy share ≤ 40%; n = 4 has neither.
+- Atomic units (`**Lands with**`): Steps 1+2 (proto + proto-gen), 3+4 (formula input), 6+7 (direction gate), 11+12 (producer flag + scorer, with the real-proto `_make_signal`).
+
+## Open Threads (implementation-ready)
+
+- [ ] **Operator gate — frozen retraction list.** Step 16 blocks until this file holds a `Frozen retraction list` entry: the union over environments of the read-only SELECT in Step 16. The list is not in the repo.
+- [ ] **Operator gate — retraction cutoff.** Confirm `2026-10-31T00:00:00Z` against deploy logs, or supply the corrected instant, in the same entry.
+- [ ] **O-14 and O-15 are still unconfirmed.** design.md asked `/sdd-spec` to confirm them with the operator. The 2026-11-20 operator record names neither and this run had no operator to ask. The spec plans on the synthesis defaults (natural expiry of wrong-direction `buy` rows; about 24h opportunity lag, no recompute). A different choice needs a re-spec — target: `/sdd-review impl-spec`.
+- [ ] The mcp_client explicit-0.0 EXTEND (`mcp-client-signal-source.feature:34`) is covered by a test in Step 10 but has no `@AC-*` in `acceptance.feature`, so no durable scenario text is added — target: `/sdd-review impl-spec`.
+- [ ] Record the `buf breaking` verdict for `conviction_provided = 12` — target: Step 1.
+- [ ] Record the CI `migration-rerun` result for `ingest-019.sql` — target: Step 17 / integration PR.
+- [ ] Post-deploy check per environment (O-18): NOTICE count vs the frozen-list SELECT; no matching row still active — target: after the migration deploys.
+- [ ] DBA + marketdata-owner acknowledgement of the cross-schema read; EDGAR self-heal reviewed against the list — target: migration PR (Steps 16, 18).
