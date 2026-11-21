@@ -144,11 +144,15 @@ Runs as one unit with Step 2; use Step 2's commands.
 - `services/xstockstrat-analysis/tests/test_fundamentals_guard.py` — modify
 - `services/xstockstrat-analysis/tests/test_backtest_fundamentals_guard.py` — modify
 - `services/xstockstrat-analysis/tests/test_screener.py` — modify
+- `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify
+- `services/xstockstrat-analysis/tests/test_owner_header_guard.py` — modify
+- `services/xstockstrat-analysis/tests/test_opportunities_fundamentals_guard.py` — modify
 
 **Reviewers**: xstockstrat-analysis owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `grep -rn "SimpleNamespace(success=" tests` (O-10, D-13 inventory). Doubles that reach
+- `grep -rn "SimpleNamespace(success=" tests` (O-10, D-13 inventory; re-run on
+  `feature/fix-analysis-per-symbol-isolation@985d694c`, which contains `origin/main-dev@8baf3976`). Doubles that reach
   `_decode_formula_output` with `success=False` and turn red under Step 1:
   `test_strategy_evaluator.py:521` (`_formula_stub`, called with `success=False` at `:581`),
   `test_analysis_servicer.py:1758,1789,1790,2044`, `test_fundamentals_formula_operand.py:141`,
@@ -158,9 +162,13 @@ Runs as one unit with Step 2; use Step 2's commands.
   `test_fundamentals_formula_servicer.py:111,161`, `test_sector_params.py:183`,
   `test_fundamentals_guard.py:212`, `test_fundamentals_formula_operand.py:48,167`,
   `test_backtest_fundamentals_guard.py:124`, `test_unreadable_formula.py:416,505`,
-  `test_screener.py:549`.
+  `test_screener.py:45` (the `formula_resp` helper), `test_fundsignal_loop.py:688`,
+  `test_owner_header_guard.py:229`, `test_opportunities_fundamentals_guard.py:202`.
+- `success=False` double that does not reach `_decode_formula_output` (the screener checks
+  `resp.success` itself at `app/services/screener.py:382`), so it stays green under Step 1 and
+  gains `exit_reason=0` only to satisfy the Verification grep: `test_screener.py:549`.
 - Already carries the field: `test_fundamentals_scoring.py:16`.
-- Other shapes (checked on `origin/main-dev@fb52065c`): the multi-line grep in Instructions 1
+- Other shapes (re-checked on `985d694c`): the multi-line grep in Instructions 1
   returns nothing, and `grep -rn "ExecuteFormulaResponse(" tests` returns nothing, so every
   ExecuteFormula response double is a single-line `SimpleNamespace(success=` or `_formula_stub`.
 - `_TIMEOUT = "Formula execution timed out after 5000ms"` at `test_unreadable_formula.py:214`.
@@ -924,12 +932,17 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
   `routeWithUnreadableRow(page, row)` `page.route` helper, and asserting
   `page.getByTestId('snooze-MYSZ')` has count 0.
 - Mock filter that mirrors production: `MARKERS` at `e2e/mock-backend.ts:969-975` and the floor
-  exemption at `:988-996` (ledger rule, `fails.md` 2026-11-10: list every such fake).
+  exemption at about `:987-994` (ledger rule, `fails.md` 2026-11-10: list every such fake). The
+  exemption is keyed on boolean row flags (`o.muted || o.dataUnavailable ||
+  fundamentalsUnavailable || formulaUnreadable`), not on provenance, so a provenance check is a
+  new condition there, not a copy of an existing one.
 - Import loading: no e2e file imports `readinessCue` today (`grep -rn "src/lib" e2e` shows
-  `deadlines`, `headers`, `auth`, `copilot`, `configNamespaces`). `mock-backend.ts` is loaded by
-  `e2e/global-setup.ts:3` in the Playwright process. With `@phosphor-icons/react` 2.1.10 in plain
-  Node, an ESM `import` loads the icons and a CJS `require` returns an empty object without
-  throwing. Not run under Playwright's own transform; Instructions 1 checks it.
+  `alertShared`, `auth`, `configNamespaces`, `connectClients`, `copilot`, `deadlines`, `headers`,
+  `indicatorChart`, `positionLineage`, `traderBff`). `mock-backend.ts` is loaded by
+  `e2e/global-setup.ts:3` in the Playwright process. `package.json` pins `@phosphor-icons/react`
+  `^2.1.7`; the installed version was not re-checked at re-spec (no worktree `node_modules`). In
+  plain Node an ESM `import` of that package loads the icons and a CJS `require` returns an empty
+  object without throwing. Not run under Playwright's own transform; Instructions 1 checks it.
 
 **TDD**: `red-green required`
 
@@ -946,8 +959,9 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
    instead. That is a second TS copy of the wire token, so record it in the Deviation Log and the
    catalog row and report it at the checkpoint (P-03); do not take it silently. Add the fixture's
    row to `INVENTORY.md` after line 44; state that it is not in `OPPORTUNITIES`.
-2. `mock-backend.ts`: add `'evaluation_failed'` to `MARKERS` and exempt a row whose provenance
-   includes it from the conviction floor, mirroring the backend change in Step 7.
+2. `mock-backend.ts`: add `'evaluation_failed'` to `MARKERS` and add a new condition to the
+   conviction-floor exemption for a row whose provenance includes it (the existing exemptions are
+   boolean row flags; this one is provenance-based), mirroring the backend change in Step 7.
 3. `opportunities.spec.ts`: one test in a new `describe`, served through the existing `page.route`
    helper. Assert `opportunity-evaluation-failed-MYSZ` is visible with text `evaluation failed`;
    `snooze-MYSZ` has count 0; `opportunity-unavailable-MYSZ` and
