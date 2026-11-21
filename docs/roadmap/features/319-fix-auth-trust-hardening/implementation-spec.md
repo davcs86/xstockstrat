@@ -174,7 +174,7 @@ The full suite passes with the same test count as before the step.
 
 ### Step 2 — service: bind the poller grant to the mTLS peer SAN; attribute only authorized callers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify
@@ -257,7 +257,7 @@ Run as the Steps 2+3+4 unit: the union of the three steps' verifications.
 
 ### Step 3 — test: 319 @AC-1, the forged-attribution case and the unit flip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/internalCallerAuthz.test.ts` — modify
@@ -330,7 +330,7 @@ Preserved rules stay green in the same run: 254 `@AC-3/@AC-4/@AC-6` (`secretsAnd
 
 ### Step 4 — docs: C-16 durable-scenario amendments, PLAT-9 contract, trading finding
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + `services/xstockstrat-config/acceptance/` + `services/xstockstrat-trading/docs/`
 **Files**:
 - `services/xstockstrat-config/acceptance/fix-config-audit-author-spoof.feature` — modify

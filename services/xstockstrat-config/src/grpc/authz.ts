@@ -79,6 +79,8 @@ interface InternalCallerGrant {
   key: string;
   /** The only values this caller may write to (namespace, key) — never the unrestricted value. */
   allowedTargetValues: ReadonlyArray<string>;
+  /** When set, the mTLS peer certificate must carry this exact DNS SAN — the header alone is spoofable. */
+  peerSan?: string;
 }
 
 const INTERNAL_CALLER_ALLOWLIST: ReadonlyArray<InternalCallerGrant> = [
@@ -88,6 +90,9 @@ const INTERNAL_CALLER_ALLOWLIST: ReadonlyArray<InternalCallerGrant> = [
     // Exact key match; keep in step with SetConfig's trading_state enum guard.
     key: 'trading_state',
     allowedTargetValues: ['REDUCE_ONLY', 'HALTED'], // never 'ACTIVE' — escalation only
+    // Must equal the leaf DNS SAN minted by scripts/gen-dev-certs.sh (DNS:${svc}); any other
+    // SAN form silently denies the poller's escalation.
+    peerSan: 'xstockstrat-trading',
   },
 ];
 
@@ -99,22 +104,24 @@ export function canonical(namespace: string, key: string): string {
 
 /**
  * True when the internal-caller identity is allow-listed to write targetValue at (namespace, key).
- * Fails closed on an absent header, unlisted callerID, or a targetValue outside the caller's set.
+ * Fails closed on an absent header, unlisted callerID, a targetValue outside the caller's set, or
+ * (for a grant with peerSan) an mTLS peer that does not present that exact DNS SAN.
  */
 export function hasInternalCallerAuthority(
-  md: Metadata | undefined,
+  call: PeerCall,
   namespace: string,
   key: string,
   targetValue: string,
 ): boolean {
-  const callerID = first(md, HEADER_INTERNAL_CALLER);
+  const callerID = first(call?.metadata, HEADER_INTERNAL_CALLER);
   if (!callerID) return false;
   return INTERNAL_CALLER_ALLOWLIST.some(
     (grant) =>
       grant.callerID === callerID &&
       grant.namespace === namespace &&
       grant.key === key &&
-      grant.allowedTargetValues.includes(targetValue),
+      grant.allowedTargetValues.includes(targetValue) &&
+      (grant.peerSan === undefined || peerDnsSans(call).includes(grant.peerSan)),
   );
 }
 
@@ -160,8 +167,10 @@ export interface SecretCallerCall {
   getAuthContext?: () => { sslPeerCertificate?: { subjectaltname?: string } } | undefined;
 }
 
+export type PeerCall = SecretCallerCall;
+
 /** DNS SANs of the mTLS peer (`subjectaltname` is a comma list like "DNS:a, IP Address:…"); [] when absent. */
-function peerDnsSans(call: SecretCallerCall): string[] {
+export function peerDnsSans(call: SecretCallerCall): string[] {
   const raw = call.getAuthContext?.()?.sslPeerCertificate?.subjectaltname ?? '';
   return raw
     .split(',')

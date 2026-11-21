@@ -14,6 +14,7 @@ import {
   hasInternalCallerAuthority,
   hasPeerDnsSan,
   hasSecretCallerAuthority,
+  peerDnsSans,
   secretDenialReason,
   userIdFrom,
 } from './authz';
@@ -684,7 +685,7 @@ export class ConfigServiceImpl {
     const internalCallerAuthorized =
       userIdParam === null &&
       hasInternalCallerAuthority(
-        call.metadata,
+        call,
         call.request?.namespace,
         call.request?.key,
         rawValue,
@@ -707,7 +708,12 @@ export class ConfigServiceImpl {
           ) {
             fields.targetState = truncateForLog(rawValue);
           }
-          log.error(msg, { ...fields, internalCaller: truncateForLog(internalCaller) });
+          log.error(msg, {
+            ...fields,
+            internalCaller: truncateForLog(internalCaller),
+            hadPeerSan: hasPeerDnsSan(call),
+            peerSan: truncateForLog(peerDnsSans(call)[0] ?? ''),
+          });
         } else {
           log.warn(msg, fields);
         }
@@ -726,7 +732,7 @@ export class ConfigServiceImpl {
       callback(PER_USER_SCOPE_ERROR);
       return;
     }
-    const callerIdentity = first(call.metadata, HEADER_INTERNAL_CALLER) || null;
+    const callerIdentity = internalCallerAuthorized ? first(call.metadata, HEADER_INTERNAL_CALLER) || null : null;
 
     const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);
