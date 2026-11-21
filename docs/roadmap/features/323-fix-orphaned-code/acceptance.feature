@@ -11,8 +11,8 @@ Feature: fix-orphaned-code (bug fix)
   # guards: docs/reports/2026-10-19-orphaned-code-defect.md
   @AC-2 @regression
   Scenario: Orphaned modules, scripts and dependencies are gone
-    Given the orphaned items listed in the report (config configWatcher.ts, ledger migrate script, notify jsonwebtoken and bcrypt, marketdata AlpacaAsset, ingest example_simple_email.py and noop.py, agent signal_extraction.md)
-    When the repository is searched for each item
+    Given the orphaned items listed in the report (config configWatcher.ts, the ledger, config, identity and notify node-pg-migrate migrate script and devDependency, notify jsonwebtoken and bcrypt, marketdata AlpacaAsset, ingest example_simple_email.py and noop.py, agent signal_extraction.md)
+    When each touched leaf's package.json and the root pnpm-lock.yaml importers are inspected, and git ls-files is searched for the deleted paths
     Then none of them exists and every affected service still builds and passes its tests
 
   # guards: docs/reports/2026-10-19-orphaned-code-defect.md

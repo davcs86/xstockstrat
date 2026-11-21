@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from gen.analysis.v1 import analysis_pb2
+from gen.portfolio.v1 import portfolio_pb2
 
 from app.handlers.servicer import _definition_fingerprint
 
@@ -58,7 +59,9 @@ def _materializer_svc(live_rows, bindings_by_owner, bars_by_symbol, *, enabled=T
         owner = dict(metadata or []).get("x-user-id")
         binds = bindings_by_owner.get(owner, [])
         wl = SimpleNamespace(
-            bindings=[SimpleNamespace(symbol=s, strategy_id=sid) for (s, sid) in binds],
+            bindings=[
+                portfolio_pb2.WatchlistBinding(symbol=s, strategy_id=sid) for (s, sid) in binds
+            ],
             symbols=[],
         )
         return SimpleNamespace(watchlists=[wl], page=SimpleNamespace(next_page_token=""))

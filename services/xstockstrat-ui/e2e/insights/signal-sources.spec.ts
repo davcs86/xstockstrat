@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
 import {
+  SIGNAL_SOURCE_MEDIATED_LEGACY,
   SIGNAL_SOURCE_SYSTEM,
   SIGNAL_SOURCE_WEIGHTED,
   SIGNAL_SOURCES,
@@ -282,4 +283,148 @@ test.describe('mcp_client bearer — per-user secret (feature 224)', () => {
       expect(JSON.stringify(body)).toContain('mcp_credential');
     });
   }
+});
+
+test.describe('Extraction instructions (feature 355)', () => {
+  const LIST_SOURCES_BFF = '/insights/api/xstockstrat.ingest.v1.IngestService/ListSignalSources';
+  const PROSE = 'Each bolded ticker with a call sweep over $1M is a buy signal.';
+  const REQUIRED = 'Extraction instructions are required';
+  type ManageBody = { source: Record<string, unknown>; updateMask?: string };
+
+  async function openNewForm(page: Page, sourceType: string) {
+    await openPage(page);
+    await page.getByRole('button', { name: 'Register New Source' }).click();
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: sourceType, exact: true }).click();
+  }
+
+  async function fillEmailSource(page: Page, slug: string) {
+    await page.getByPlaceholder('e.g. unusual_whales').fill(slug);
+    await page.getByPlaceholder('Display name').fill('Whale Alerts');
+    await page.getByPlaceholder('*@unusualwhales.com, noreply@*').fill('alerts@example.com');
+    await page.getByPlaceholder('Daily Flow, *Alert*').fill('*');
+  }
+
+  async function submit(page: Page, button: string): Promise<ManageBody> {
+    const req = page.waitForRequest((r) => isManage(r.url()) && r.method() === 'POST');
+    await page.getByRole('button', { name: button, exact: true }).click();
+    return (await req).postDataJSON() as ManageBody;
+  }
+
+  // The legacy source is served by route stubs: the shared mock holds no mediated source.
+  async function openLegacyEdit(page: Page) {
+    await page.route(`**${LIST_SOURCES_BFF}`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sources: [SIGNAL_SOURCE_MEDIATED_LEGACY] }),
+      }),
+    );
+    await page.route(`**${MANAGE_SOURCE_BFF}`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ source: SIGNAL_SOURCE_MEDIATED_LEGACY }),
+      }),
+    );
+    await openPage(page);
+    await page
+      .getByRole('button', { name: `Actions for ${SIGNAL_SOURCE_MEDIATED_LEGACY.slug}` })
+      .click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
+  }
+
+  test('@AC-11 a mediated type shows Extraction instructions and no Extractor Module', async ({
+    page,
+  }) => {
+    await openNewForm(page, 'mediated_simple_email');
+    await expect(page.getByLabel('Extraction instructions')).toBeVisible();
+    await expect(page.getByText('Extractor Module', { exact: true })).toHaveCount(0);
+  });
+
+  test('@AC-12 a non-mediated type keeps Extractor Module and has no instructions input', async ({
+    page,
+  }) => {
+    await openNewForm(page, 'simple_email');
+    await expect(page.getByText('Extractor Module', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Extraction instructions')).toHaveCount(0);
+  });
+
+  test('@AC-13 a mediated source with no instructions is blocked client-side', async ({ page }) => {
+    await openNewForm(page, 'mediated_simple_email');
+    await fillEmailSource(page, 'no-prose');
+    let sawManage = false;
+    page.on('request', (r) => {
+      if (isManage(r.url()) && r.method() === 'POST') sawManage = true;
+    });
+    await page.getByRole('button', { name: 'Register', exact: true }).click();
+    await expect(page.getByText(REQUIRED)).toBeVisible();
+
+    await page.getByLabel('Extraction instructions').fill('   ');
+    await page.getByRole('button', { name: 'Register', exact: true }).click();
+    await expect(page.getByText(REQUIRED)).toBeVisible();
+    expect(sawManage).toBe(false);
+  });
+
+  test('registering a mediated source sends the instructions as typed', async ({ page }) => {
+    await openNewForm(page, 'mediated_simple_email');
+    await fillEmailSource(page, 'whale-alerts');
+    await page.getByLabel('Extraction instructions').fill(PROSE);
+    const body = await submit(page, 'Register');
+    expect(body.source.extractionInstructions).toBe(PROSE);
+  });
+
+  test('instructions over 16,000 characters are blocked client-side', async ({ page }) => {
+    await openNewForm(page, 'mediated_simple_email');
+    await fillEmailSource(page, 'long-prose');
+    await page.getByLabel('Extraction instructions').fill('x'.repeat(16001));
+    let sawManage = false;
+    page.on('request', (r) => {
+      if (isManage(r.url()) && r.method() === 'POST') sawManage = true;
+    });
+    await page.getByRole('button', { name: 'Register', exact: true }).click();
+    await expect(
+      page.getByText('Extraction instructions must be at most 16,000 characters'),
+    ).toBeVisible();
+    expect(sawManage).toBe(false);
+  });
+
+  test('editing a legacy mediated source saves other fields and leaves the instructions alone', async ({
+    page,
+  }) => {
+    await openLegacyEdit(page);
+    await expect(page.getByLabel('Extraction instructions')).toHaveValue('');
+    await page.getByPlaceholder('Display name').fill('Snacks');
+    const body = await submit(page, 'Save');
+    expect(body.source).not.toHaveProperty('extractionInstructions');
+    expect(body.updateMask).toContain('displayName');
+    expect(body.updateMask).not.toContain('extractionInstructions');
+  });
+
+  test('typing whitespace on a legacy mediated source is blocked client-side', async ({ page }) => {
+    await openLegacyEdit(page);
+    await page.getByLabel('Extraction instructions').fill('   ');
+    let sawManage = false;
+    page.on('request', (r) => {
+      if (isManage(r.url()) && r.method() === 'POST') sawManage = true;
+    });
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText(REQUIRED)).toBeVisible();
+    expect(sawManage).toBe(false);
+  });
+
+  test('adding instructions on edit names the field in the update mask', async ({ page }) => {
+    await openLegacyEdit(page);
+    await page.getByLabel('Extraction instructions').fill(PROSE);
+    const body = await submit(page, 'Save');
+    expect(body.source.extractionInstructions).toBe(PROSE);
+    expect(body.updateMask).toContain('extractionInstructions');
+  });
+
+  test('a non-mediated register sends no instructions', async ({ page }) => {
+    await openNewForm(page, 'simple_email');
+    await fillEmailSource(page, 'plain-mail');
+    const body = await submit(page, 'Register');
+    expect(body.source).not.toHaveProperty('extractionInstructions');
+  });
 });

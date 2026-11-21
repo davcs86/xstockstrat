@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: sync-main-to-maindev
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -49,7 +53,7 @@ jobs:
             exit 0
           fi
 
-          if ! git merge origin/main \
+          if ! git merge --no-ff origin/main \
             --no-edit \
             -m "chore: sync main into main-dev [post-promote]"; then
             git merge --abort

@@ -490,6 +490,58 @@ func (UnservableReason) EnumDescriptor() ([]byte, []int) {
 	return file_common_v1_common_proto_rawDescGZIP(), []int{7}
 }
 
+type BackfillSymbolOutcome int32
+
+const (
+	BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED BackfillSymbolOutcome = 0
+	BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_EMPTY       BackfillSymbolOutcome = 1
+	BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_SKIPPED     BackfillSymbolOutcome = 2
+	BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_FAILED      BackfillSymbolOutcome = 3
+)
+
+// Enum value maps for BackfillSymbolOutcome.
+var (
+	BackfillSymbolOutcome_name = map[int32]string{
+		0: "BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED",
+		1: "BACKFILL_SYMBOL_OUTCOME_EMPTY",
+		2: "BACKFILL_SYMBOL_OUTCOME_SKIPPED",
+		3: "BACKFILL_SYMBOL_OUTCOME_FAILED",
+	}
+	BackfillSymbolOutcome_value = map[string]int32{
+		"BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED": 0,
+		"BACKFILL_SYMBOL_OUTCOME_EMPTY":       1,
+		"BACKFILL_SYMBOL_OUTCOME_SKIPPED":     2,
+		"BACKFILL_SYMBOL_OUTCOME_FAILED":      3,
+	}
+)
+
+func (x BackfillSymbolOutcome) Enum() *BackfillSymbolOutcome {
+	p := new(BackfillSymbolOutcome)
+	*p = x
+	return p
+}
+
+func (x BackfillSymbolOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BackfillSymbolOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_v1_common_proto_enumTypes[8].Descriptor()
+}
+
+func (BackfillSymbolOutcome) Type() protoreflect.EnumType {
+	return &file_common_v1_common_proto_enumTypes[8]
+}
+
+func (x BackfillSymbolOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BackfillSymbolOutcome.Descriptor instead.
+func (BackfillSymbolOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_common_v1_common_proto_rawDescGZIP(), []int{8}
+}
+
 // Pagination
 type PageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -832,15 +884,18 @@ func (x *TimeRange) GetEnd() *timestamppb.Timestamp {
 }
 
 type TemplateMeta struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TemplateId    string                 `protobuf:"bytes,1,opt,name=template_id,json=templateId,proto3" json:"template_id,omitempty"`
-	Kind          TemplateKind           `protobuf:"varint,2,opt,name=kind,proto3,enum=xstockstrat.common.v1.TemplateKind" json:"kind,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Version       int32                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
-	Retired       bool                   `protobuf:"varint,6,opt,name=retired,proto3" json:"retired,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	TemplateId  string                 `protobuf:"bytes,1,opt,name=template_id,json=templateId,proto3" json:"template_id,omitempty"`
+	Kind        TemplateKind           `protobuf:"varint,2,opt,name=kind,proto3,enum=xstockstrat.common.v1.TemplateKind" json:"kind,omitempty"`
+	Name        string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Version     int32                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
+	Retired     bool                   `protobuf:"varint,6,opt,name=retired,proto3" json:"retired,omitempty"`
+	CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Server-set: true for a platform-seeded (created_by = 'system') template, which ManageTemplate
+	// refuses to UPDATE or RETIRE.
+	ReadOnly      bool `protobuf:"varint,9,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -931,6 +986,13 @@ func (x *TemplateMeta) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *TemplateMeta) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
+}
+
 // Provenance of an instance; empty template_id = not instantiated from a template.
 type TemplateOrigin struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
@@ -1000,6 +1062,120 @@ func (x *TemplateOrigin) GetUpdateAvailable() bool {
 	return false
 }
 
+// Lists non-written symbols only; reason is the source's error text, empty for EMPTY.
+type BackfillSymbolResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Outcome       BackfillSymbolOutcome  `protobuf:"varint,2,opt,name=outcome,proto3,enum=xstockstrat.common.v1.BackfillSymbolOutcome" json:"outcome,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BackfillSymbolResult) Reset() {
+	*x = BackfillSymbolResult{}
+	mi := &file_common_v1_common_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BackfillSymbolResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BackfillSymbolResult) ProtoMessage() {}
+
+func (x *BackfillSymbolResult) ProtoReflect() protoreflect.Message {
+	mi := &file_common_v1_common_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BackfillSymbolResult.ProtoReflect.Descriptor instead.
+func (*BackfillSymbolResult) Descriptor() ([]byte, []int) {
+	return file_common_v1_common_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *BackfillSymbolResult) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *BackfillSymbolResult) GetOutcome() BackfillSymbolOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED
+}
+
+func (x *BackfillSymbolResult) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// first_unservable_date is YYYY-MM-DD (NYSE session date), never a timestamp.
+type DelistedState struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Reason              UnservableReason       `protobuf:"varint,1,opt,name=reason,proto3,enum=xstockstrat.common.v1.UnservableReason" json:"reason,omitempty"`
+	FirstUnservableDate string                 `protobuf:"bytes,2,opt,name=first_unservable_date,json=firstUnservableDate,proto3" json:"first_unservable_date,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *DelistedState) Reset() {
+	*x = DelistedState{}
+	mi := &file_common_v1_common_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DelistedState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DelistedState) ProtoMessage() {}
+
+func (x *DelistedState) ProtoReflect() protoreflect.Message {
+	mi := &file_common_v1_common_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DelistedState.ProtoReflect.Descriptor instead.
+func (*DelistedState) Descriptor() ([]byte, []int) {
+	return file_common_v1_common_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *DelistedState) GetReason() UnservableReason {
+	if x != nil {
+		return x.Reason
+	}
+	return UnservableReason_UNSERVABLE_REASON_UNSPECIFIED
+}
+
+func (x *DelistedState) GetFirstUnservableDate() string {
+	if x != nil {
+		return x.FirstUnservableDate
+	}
+	return ""
+}
+
 var File_common_v1_common_proto protoreflect.FileDescriptor
 
 const file_common_v1_common_proto_rawDesc = "" +
@@ -1031,7 +1207,7 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"assetClass\"k\n" +
 	"\tTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xc8\x02\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xe5\x02\n" +
 	"\fTemplateMeta\x12\x1f\n" +
 	"\vtemplate_id\x18\x01 \x01(\tR\n" +
 	"templateId\x127\n" +
@@ -1043,13 +1219,21 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xae\x01\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1b\n" +
+	"\tread_only\x18\t \x01(\bR\breadOnly\"\xae\x01\n" +
 	"\x0eTemplateOrigin\x12\x1f\n" +
 	"\vtemplate_id\x18\x01 \x01(\tR\n" +
 	"templateId\x12)\n" +
 	"\x10template_version\x18\x02 \x01(\x05R\x0ftemplateVersion\x12%\n" +
 	"\x0elatest_version\x18\x03 \x01(\x05R\rlatestVersion\x12)\n" +
-	"\x10update_available\x18\x04 \x01(\bR\x0fupdateAvailable*Z\n" +
+	"\x10update_available\x18\x04 \x01(\bR\x0fupdateAvailable\"\x8e\x01\n" +
+	"\x14BackfillSymbolResult\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12F\n" +
+	"\aoutcome\x18\x02 \x01(\x0e2,.xstockstrat.common.v1.BackfillSymbolOutcomeR\aoutcome\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\x84\x01\n" +
+	"\rDelistedState\x12?\n" +
+	"\x06reason\x18\x01 \x01(\x0e2'.xstockstrat.common.v1.UnservableReasonR\x06reason\x122\n" +
+	"\x15first_unservable_date\x18\x02 \x01(\tR\x13firstUnservableDate*Z\n" +
 	"\vTradingMode\x12\x1c\n" +
 	"\x18TRADING_MODE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12TRADING_MODE_PAPER\x10\x01\x12\x15\n" +
@@ -1099,7 +1283,12 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"\x10UnservableReason\x12!\n" +
 	"\x1dUNSERVABLE_REASON_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UNSERVABLE_REASON_OTC\x10\x01\x12\"\n" +
-	"\x1eUNSERVABLE_REASON_NOT_TRADABLE\x10\x02B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
+	"\x1eUNSERVABLE_REASON_NOT_TRADABLE\x10\x02*\xac\x01\n" +
+	"\x15BackfillSymbolOutcome\x12'\n" +
+	"#BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dBACKFILL_SYMBOL_OUTCOME_EMPTY\x10\x01\x12#\n" +
+	"\x1fBACKFILL_SYMBOL_OUTCOME_SKIPPED\x10\x02\x12\"\n" +
+	"\x1eBACKFILL_SYMBOL_OUTCOME_FAILED\x10\x03B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
 
 var (
 	file_common_v1_common_proto_rawDescOnce sync.Once
@@ -1113,8 +1302,8 @@ func file_common_v1_common_proto_rawDescGZIP() []byte {
 	return file_common_v1_common_proto_rawDescData
 }
 
-var file_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
+var file_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_common_v1_common_proto_goTypes = []any{
 	(TradingMode)(0),              // 0: xstockstrat.common.v1.TradingMode
 	(Environment)(0),              // 1: xstockstrat.common.v1.Environment
@@ -1124,29 +1313,34 @@ var file_common_v1_common_proto_goTypes = []any{
 	(TemplateKind)(0),             // 5: xstockstrat.common.v1.TemplateKind
 	(TemplateOperation)(0),        // 6: xstockstrat.common.v1.TemplateOperation
 	(UnservableReason)(0),         // 7: xstockstrat.common.v1.UnservableReason
-	(*PageRequest)(nil),           // 8: xstockstrat.common.v1.PageRequest
-	(*PageResponse)(nil),          // 9: xstockstrat.common.v1.PageResponse
-	(*Error)(nil),                 // 10: xstockstrat.common.v1.Error
-	(*Decimal)(nil),               // 11: xstockstrat.common.v1.Decimal
-	(*Asset)(nil),                 // 12: xstockstrat.common.v1.Asset
-	(*TimeRange)(nil),             // 13: xstockstrat.common.v1.TimeRange
-	(*TemplateMeta)(nil),          // 14: xstockstrat.common.v1.TemplateMeta
-	(*TemplateOrigin)(nil),        // 15: xstockstrat.common.v1.TemplateOrigin
-	nil,                           // 16: xstockstrat.common.v1.Error.DetailsEntry
-	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
+	(BackfillSymbolOutcome)(0),    // 8: xstockstrat.common.v1.BackfillSymbolOutcome
+	(*PageRequest)(nil),           // 9: xstockstrat.common.v1.PageRequest
+	(*PageResponse)(nil),          // 10: xstockstrat.common.v1.PageResponse
+	(*Error)(nil),                 // 11: xstockstrat.common.v1.Error
+	(*Decimal)(nil),               // 12: xstockstrat.common.v1.Decimal
+	(*Asset)(nil),                 // 13: xstockstrat.common.v1.Asset
+	(*TimeRange)(nil),             // 14: xstockstrat.common.v1.TimeRange
+	(*TemplateMeta)(nil),          // 15: xstockstrat.common.v1.TemplateMeta
+	(*TemplateOrigin)(nil),        // 16: xstockstrat.common.v1.TemplateOrigin
+	(*BackfillSymbolResult)(nil),  // 17: xstockstrat.common.v1.BackfillSymbolResult
+	(*DelistedState)(nil),         // 18: xstockstrat.common.v1.DelistedState
+	nil,                           // 19: xstockstrat.common.v1.Error.DetailsEntry
+	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
 }
 var file_common_v1_common_proto_depIdxs = []int32{
-	16, // 0: xstockstrat.common.v1.Error.details:type_name -> xstockstrat.common.v1.Error.DetailsEntry
-	17, // 1: xstockstrat.common.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
-	17, // 2: xstockstrat.common.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
+	19, // 0: xstockstrat.common.v1.Error.details:type_name -> xstockstrat.common.v1.Error.DetailsEntry
+	20, // 1: xstockstrat.common.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
+	20, // 2: xstockstrat.common.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
 	5,  // 3: xstockstrat.common.v1.TemplateMeta.kind:type_name -> xstockstrat.common.v1.TemplateKind
-	17, // 4: xstockstrat.common.v1.TemplateMeta.created_at:type_name -> google.protobuf.Timestamp
-	17, // 5: xstockstrat.common.v1.TemplateMeta.updated_at:type_name -> google.protobuf.Timestamp
-	6,  // [6:6] is the sub-list for method output_type
-	6,  // [6:6] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	20, // 4: xstockstrat.common.v1.TemplateMeta.created_at:type_name -> google.protobuf.Timestamp
+	20, // 5: xstockstrat.common.v1.TemplateMeta.updated_at:type_name -> google.protobuf.Timestamp
+	8,  // 6: xstockstrat.common.v1.BackfillSymbolResult.outcome:type_name -> xstockstrat.common.v1.BackfillSymbolOutcome
+	7,  // 7: xstockstrat.common.v1.DelistedState.reason:type_name -> xstockstrat.common.v1.UnservableReason
+	8,  // [8:8] is the sub-list for method output_type
+	8,  // [8:8] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_common_v1_common_proto_init() }
@@ -1159,8 +1353,8 @@ func file_common_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_v1_common_proto_rawDesc), len(file_common_v1_common_proto_rawDesc)),
-			NumEnums:      8,
-			NumMessages:   9,
+			NumEnums:      9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

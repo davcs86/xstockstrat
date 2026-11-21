@@ -33,6 +33,7 @@ Feature: signal-map-instrumentation (analysis)
     Then the log record has exc_info set
     And the evaluator's "fundamentals formula=" line is emitted at DEBUG, not INFO
 
+  # Feature 337: apart from the platform-wide `host.provider` export label added after aggregation, the keys are unchanged (sign-off in 337 context.md).
   @AC-51 @FR-5 @feature-294
   Scenario: Live-loop triggers, cycle duration and opportunity recompute are recorded
     Given a live cycle of 60 seconds interval that sends 1 entry alert, throttles 1 exit alert and takes 1.4 seconds

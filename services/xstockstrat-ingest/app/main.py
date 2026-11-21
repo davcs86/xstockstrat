@@ -129,6 +129,16 @@ async def serve():
     except Exception as e:
         log.warning("failed to start mcp_client query loop: %s", e)
 
+    # Non-fatal, and after resume_incomplete_jobs(): a resumed job must be RUNNING again before
+    # the first hand-off cycle can select it.
+    try:
+        from app.engine.webhook_handoff_loop import run_webhook_handoff_loop
+
+        asyncio.create_task(run_webhook_handoff_loop(servicer, cfg_watcher))
+        log.info("started webhook hand-off loop")
+    except Exception as e:
+        log.warning("failed to start webhook hand-off loop: %s", e)
+
     def handle_shutdown(sig, _):
         async def _stop():
             await grpc_server.stop(grace=5)

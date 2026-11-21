@@ -50,11 +50,12 @@ type period struct {
 func cannedCompanyFacts(periods []period) map[string]any {
 	var niUnits, epsUnits []map[string]any
 	for _, p := range periods {
+		accn := "accn-" + p.filed // one accession per filing
 		niUnits = append(niUnits, map[string]any{
-			"start": p.start, "end": p.end, "val": p.ni, "accn": "x", "fy": p.fy, "fp": p.fp, "form": p.form, "filed": p.filed,
+			"start": p.start, "end": p.end, "val": p.ni, "accn": accn, "fy": p.fy, "fp": p.fp, "form": p.form, "filed": p.filed,
 		})
 		epsUnits = append(epsUnits, map[string]any{
-			"start": p.start, "end": p.end, "val": p.eps, "accn": "x", "fy": p.fy, "fp": p.fp, "form": p.form, "filed": p.filed,
+			"start": p.start, "end": p.end, "val": p.eps, "accn": accn, "fy": p.fy, "fp": p.fp, "form": p.form, "filed": p.filed,
 		})
 	}
 	return map[string]any{
@@ -110,14 +111,32 @@ func TestFetchHistorical_MapsFiledPeriod_AC1(t *testing.T) {
 	if p.PeriodType != "quarterly" {
 		t.Errorf("period_type = %q, want quarterly", p.PeriodType)
 	}
-	if p.FiscalPeriod != "Q1-2020" {
-		t.Errorf("fiscal_period = %q, want Q1-2020", p.FiscalPeriod)
+	// No annual filing in the payload: the quarter is labelled against Dec 31 of its own year.
+	if p.FiscalPeriod != "Q4-2019" {
+		t.Errorf("fiscal_period = %q, want Q4-2019", p.FiscalPeriod)
 	}
 	if p.Source != "edgar" {
 		t.Errorf("source = %q, want edgar", p.Source)
 	}
 	if p.EPS == nil || *p.EPS != 4.99 {
 		t.Errorf("eps = %v, want 4.99", p.EPS)
+	}
+}
+
+// The same quarter, with Apple's annual filings present, is the first quarter of fiscal 2020.
+func TestFetchHistorical_MapsFiledPeriod_WithAnnualBoundaries_feature348(t *testing.T) {
+	c := newTestClient([]period{
+		{fy: 2020, fp: "Q1", start: "2019-09-29", end: "2019-12-28", filed: "2020-01-29", form: "10-Q", ni: 22236e6, eps: 4.99},
+		{fy: 2018, fp: "FY", start: "2017-10-01", end: "2018-09-29", filed: "2018-11-05", form: "10-K", eps: 11.9},
+		{fy: 2019, fp: "FY", start: "2018-09-30", end: "2019-09-28", filed: "2019-10-31", form: "10-K", eps: 11.8},
+		{fy: 2020, fp: "FY", start: "2019-09-29", end: "2020-09-26", filed: "2020-10-30", form: "10-K", eps: 3.28},
+	})
+	periods, err := c.FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, []string{"quarterly"})
+	if err != nil {
+		t.Fatalf("FetchHistorical: %v", err)
+	}
+	if len(periods) != 1 || periods[0].FiscalPeriod != "Q1-2020" || periods[0].PeriodEnd.Format("2006-01-02") != "2019-12-28" {
+		t.Fatalf("periods = %+v, want one Q1-2020 ending 2019-12-28", periods)
 	}
 }
 
@@ -422,6 +441,32 @@ func TestDebtToEquity_NilWhenNoDebtTag_feature211(t *testing.T) {
 	}
 	if _, ok := p.ExtraMetrics["total_debt"]; ok {
 		t.Errorf("total_debt present, want absent when no debt tag")
+	}
+}
+
+// feature 340: the re-derive strip removes exactly source.DerivationOwnedExtraKeys, so the builder's
+// extra_metrics keys and that list must stay the same set.
+func TestDerivationOwnedExtraKeys_ParityWithBuilder_feature340(t *testing.T) {
+	cf := debtCF211(50000e6, map[string]float64{"LongTermDebt": 20000e6, "Assets": 150000e6, "Liabilities": 100000e6})
+	flow := func(val float64) map[string]any {
+		return map[string]any{"units": map[string]any{"USD": []map[string]any{{"start": "2024-10-01", "end": "2025-09-30", "val": val, "accn": "x", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2025-11-01"}}}}
+	}
+	gaap := cf["facts"].(map[string]any)["us-gaap"].(map[string]any)
+	gaap["Revenues"] = flow(90000e6)
+	gaap["NetIncomeLoss"] = flow(9000e6)
+
+	p := onlyPeriodDE(t, cf)
+	owned := map[string]bool{}
+	for _, k := range source.DerivationOwnedExtraKeys {
+		owned[k] = true
+		if _, ok := p.ExtraMetrics[k]; !ok {
+			t.Errorf("owned key %q not produced by the builder", k)
+		}
+	}
+	for k := range p.ExtraMetrics {
+		if !owned[k] {
+			t.Errorf("builder key %q missing from source.DerivationOwnedExtraKeys", k)
+		}
 	}
 }
 
