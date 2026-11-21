@@ -1016,3 +1016,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] `/sdd-execute` BRANCH SYNC: merge `main-dev` (168 commits) and re-check every `path:line` anchor before Step 1.
 - [ ] Out of scope: the NamespaceEditor "self-service" text beside the read-only notice. Target: `/sdd-qa defect`.
 - [ ] Marketdata findings log vs feature 317: overlap not checked. Re-check at Step 5.
+
+## Session 2026-11-21 — operator ruling, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.1): "Feature 325 (fix-ui-gating-gaps): at staging scale the accepted write bound works out to about 188 newly warm symbols, about 595,584 headline writes per day (real statement volume 9–18% higher), about 437 rows per viewer and about 448 KB per poll. Do you confirm the bound you accepted earlier ("I accept the bound"), or reopen petition P-1 (lower the 15 s membership refetchInterval to 60 s or refocus-plus-invalidation only)?"
+
+Operator's answer (option selected): "Confirm bound, but measure first".
+
+Option text as offered: "Accept it in principle but require a staging B_row measurement before Step 1; 325 stays gated."
+
+Orchestrator reading (not an operator quote): the O-5 bound stands; P-1 is not reopened by this answer; a staging B_row measurement is required before `/sdd-execute` Step 1, so 325 stays gated until it is recorded here. The measurement has not been taken; no staging read was made in this session for it.
