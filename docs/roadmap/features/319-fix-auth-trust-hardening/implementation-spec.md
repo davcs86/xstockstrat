@@ -403,7 +403,7 @@ git diff --stat -- services/xstockstrat-trading/internal   # expect empty (R-12)
 
 ### Step 5 — service: RevokeToken verifies the signature; HS256 pinned; unverifiable counter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -483,7 +483,7 @@ Run as the Steps 5+6 unit.
 
 ### Step 6 — test: 319 @AC-2 and the counter allowlist
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/revokeToken.test.ts` — create
