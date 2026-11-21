@@ -646,3 +646,11 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 ```sdd-batch-setup
 {"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","date":"2026-11-21"}
 ```
+
+### Step 1 — service: remove the `force 0` arm from `db-migrate.sh up` [done]
+- The `up` dirty arm of `scripts/db-migrate.sh` now runs `migration-dirty-guard.sh ... || true` for its text and then `exit 1`; the `force 0` call, its echo and the stale `:66-67` comment are gone, a one-line refuse comment sits above the dirty `case`, and the ahead-check comment is reworded. The `force` subcommand and header are untouched.
+- TDD (Red order): Step 2's test was authored in the working tree first and run on the unmodified script. AC-1 red: `assert proc.returncode == 1` failed with `E       assert 0 == 1` (output showed `[dirty] force-resetting xstockstrat-indicators to version 0`) → green: `1 passed in 0.48s`, ruff `All checks passed!`, `61 files already formatted`. The test file was removed before this commit; it is committed under Step 2.
+- Verification: shellcheck 0.11.0 + shfmt v3.8.0 clean, `migration-dirty-guard.test.sh: all assertions passed`, `migration-ahead-check.test.sh: all assertions passed`, no `force 0` in `scripts/db-migrate.sh`; `exit=0`. Tools came from the spec's own documented fallbacks (`uv tool install shellcheck-py`, `go install mvdan.cc/sh/v3/cmd/shfmt@v3.8.0`). No coverage gate applies to `scripts/`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/db-migrate.sh`
+- Deviations: none

@@ -115,7 +115,7 @@ CHANGEd in Step 13 under operator sign-off O-3; `@AC-27` (279) is EXTENDed by th
 
 ### Step 1 — service: remove the `force 0` arm from `db-migrate.sh up`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/db-migrate.sh` — modify
