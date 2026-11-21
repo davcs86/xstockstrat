@@ -144,7 +144,7 @@ Line numbers on the two trees. Steps cite the symbol plus the feature-tree line;
 
 ### Step 1 — service: owner-targeted halt and reconciliation alerts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -223,7 +223,7 @@ grep -n "haltAccount(\|emitReconciliationFinding(" internal/service/*.go  # ever
 
 ### Step 2 — test: AC-1 regression — both alerts reach the owner, systemic stays untargeted
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go` — modify
@@ -616,3 +616,18 @@ python3 scripts/check-otel-produced-signals.py     # the docs scan still passes
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 2 — second test helper (2026-11-21)
+- **Spec said**: instruction 2 adds one test helper (the recorded alert for a `Category`, exactly-one check).
+- **Actual**: that helper (`alertByCategory`) plus a second helper, `assertOwnerTargetedFindingAlerts`, in
+  `trading_reconciliation_test.go`. The second helper holds the instruction-3 template assertions (exactly two alerts,
+  `halt` + `reconciliation`, both CRITICAL and owner-targeted) so the two templates do not repeat the same block (DRY
+  guard rail). It is built on `alertByCategory` and loosens no check.
+- **Disposition**: within step scope; test structure only, assertions unchanged from the instructions.
+
+### Steps 1+2 — pinned linter on PATH (2026-11-21)
+- **Spec said**: Step 2 Verification runs `golangci-lint run --modules-download-mode=mod`.
+- **Actual**: the host's `golangci-lint` is v2.5.0 (built with go1.25). The pinned v2.14.0 was installed with
+  `GOTOOLCHAIN=go1.27.0 go install …@v2.14.0` into `/root/go/bin`, and the block ran unchanged with that directory first
+  on `PATH`.
+- **Disposition**: CI-equivalent fallback (same tool, CI-pinned version).

@@ -613,3 +613,15 @@ Carried into `/sdd-execute`; announce every unchecked item at each checkpoint an
 ```sdd-batch-setup
 {"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","date":"2026-11-21"}
 ```
+
+### Step 1 — service: owner-targeted halt and reconciliation alerts [done]
+- Atomic unit steps 1+2 (one commit). `haltAccount` and `emitReconciliationFinding` take `ownerUserID` and set `TargetUserId` on their CRITICAL alerts. An empty owner logs WARN `alert owner unresolved` with `alert_kind` at each emit site (S-1). `reconcileTick` passes `entry.userID` at all four finding calls; `flattenAndHalt` passes `accountEntry.userID` at both halt calls (no `order.UserId` fallback, R-5). The `reconciliation.mismatch_found` owner stays `""` (D-8). The systemic and resume alerts are untouched. `TestHaltAccount_DBWriteFailureDoesNotRollBack` pins the bracket-protection halt alert (halt, CRITICAL, `TargetUserId == "user-owner"`).
+- TDD (AC-1) red: `.sdd-logs/v-1.log` — `TestReconcileTick_MissingBrokerOrder_HaltsAndEmits` "halt alert TargetUserId = \"\", want \"u-1\"", `TestReconcileTick_EmptyOwner_WarnsAndAlertsUntargeted` "missing WARN \"alert owner unresolved\"", `TestFlattenAndHalt_AlwaysRejected_HaltsAccount` "halt alert TargetUserId = \"\", want the pool owner \"user-1\"" failed → green: `.sdd-logs/v-2.log` `ok github.com/xstockstrat/trading/internal/service`; `grep -c` TargetUserId ownerUserID = 2; two `alert owner unresolved` lines. The block's `exit=` reflects only its last grep (exit=0 on both runs), so RED/GREEN were judged from the `go test` lines.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`, `services/xstockstrat-trading/internal/service/trading_bracket_test.go`
+- Deviations: pinned linter on PATH (CI-equivalent fallback) — see Deviation Log
+
+### Step 2 — test: AC-1 regression — both alerts reach the owner, systemic stays untargeted [done]
+- Atomic unit steps 1+2. Added `alertByCategory` (exactly-one) and `assertOwnerTargetedFindingAlerts`. Both templates pin exactly two CRITICAL alerts targeted at `u-1` (the accepted double push). The unknown-order (both sub-tests) and position-side tests pin owner `u-1` on both alerts. The systemic test pins one untargeted `Systemic broker-reconciliation failure` alert (guard; green before and after). New `TestReconcileTick_EmptyOwner_WarnsAndAlertsUntargeted`. The flatten test pins halt `TargetUserId == "user-1"`. Ids stay inline (C-13: 19 `userID: "u-1"` sites, `internal/testdata` unchanged).
+- TDD (AC-1) red: same run `.sdd-logs/v-1.log` (6 tests FAIL, each on the missing TargetUserId/WARN; no exactly-one helper failure) → green: `.sdd-logs/v-3.log` exit=0, every package `ok`, `total: (statements) 84.8%` (≥ 40%), golangci-lint v2.14.0 `0 issues.`, go.mod/go.sum unchanged, `19`, `rc=0`. Executed-case check `.sdd-logs/v-4.log`: 9 `--- PASS` for the touched tests.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go`, `services/xstockstrat-trading/internal/service/trading_flatten_rejection_test.go`
+- Deviations: second test helper (within scope) — see Deviation Log
