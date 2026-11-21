@@ -55,7 +55,8 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, forceFlush
 		return nil, nil, err
 	}
 
-	res, err := newResource(ctx)
+	p := hostProvider()
+	res, err := newResource(ctx, p)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -69,7 +70,7 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, forceFlush
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(mexp)),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(newHostLabelExporter(mexp, p))),
 		sdkmetric.WithResource(res),
 		sdkmetric.WithView(serverMetricViews()...),
 	)
@@ -119,14 +120,26 @@ func serviceName() string {
 	return "marketdata"
 }
 
+// hostProvider accepts only the exact lowercase deploy-target names; anything else (unset, wrong
+// case, unrecognised) is "unknown", never an error.
+func hostProvider() string {
+	switch p := os.Getenv("HOST_PROVIDER"); p {
+	case "digitalocean", "homelab":
+		return p
+	}
+	return "unknown"
+}
+
 // newResource builds the sole OTel Resource input to Init (its omissions are guarded by
 // TestNewResourceOmitsTradingMode).
-func newResource(ctx context.Context) (*resource.Resource, error) {
+func newResource(ctx context.Context, p string) (*resource.Resource, error) {
 	return resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(serviceName()),
 			semconv.DeploymentEnvironment(os.Getenv("APPLICATION_ENV")),
+			semconv.ServiceInstanceID(p+"-"+serviceName()),
 			attribute.String("platform", "xstockstrat"),
+			attribute.String("host.provider", p),
 		),
 	)
 }
@@ -300,6 +313,7 @@ const (
 	KeyOutcome = "outcome"
 	KeyResult  = "result"
 	KeyKind    = "kind"
+	KeyReason  = "reason"
 )
 
 // Marketdata loop names. LoopBarIngest, LoopClassificationRefresh and LoopAssetRefresh keep their own
@@ -348,14 +362,37 @@ const (
 	BackfillFundamentals = "fundamentals"
 	BackfillWritten      = "written"
 	BackfillEmpty        = "empty"
+	BackfillSkipped      = "skipped"
 	BackfillFailed       = "failed"
 )
 
+const (
+	LeftOutLabelCollision = "label_collision"
+	LeftOutYearEndQuarter = "year_end_quarter"
+)
+
+const (
+	DelistingHookTimeout = "timeout"
+	DelistingHookError   = "error"
+)
+
 var (
-	vendorRequests  = NewCounter("marketdata.vendor.requests")
-	vendorDuration  = NewHistogram("marketdata.vendor.request.duration", metric.WithUnit("s"))
-	streamReconnect = NewCounter("marketdata.stream.reconnects")
-	backfillSymbols = NewCounter("marketdata.backfill.symbols")
+	vendorRequests   = NewCounter("marketdata.vendor.requests")
+	vendorDuration   = NewHistogram("marketdata.vendor.request.duration", metric.WithUnit("s"))
+	streamReconnect  = NewCounter("marketdata.stream.reconnects")
+	backfillSymbols  = NewCounter("marketdata.backfill.symbols")
+	periodsLeftOut   = NewCounter("marketdata.backfill.periods_left_out")
+	ohlcvOutOfMemory = NewCounter("marketdata.ohlcv.out_of_memory_errors")
+
+	delistingHookFailures = NewCounter("marketdata.delisting.hook_failures")
+)
+
+// OHLCV repository op labels for RecordOhlcvOutOfMemory.
+const (
+	OhlcvOpBars       = "bars"
+	OhlcvOpRecentBars = "recent_bars"
+	OhlcvOpBarsBatch  = "bars_batch"
+	OhlcvOpInsertBars = "insert_bars"
 )
 
 // HTTPErrorOutcome classifies a non-success status; it never returns VendorOK.
@@ -389,6 +426,18 @@ func RecordStreamReconnect(ctx context.Context, result string) {
 
 func RecordBackfillSymbol(ctx context.Context, kind, outcome string) {
 	backfillSymbols.Add(ctx, 1, attribute.String(KeyKind, kind), attribute.String(KeyOutcome, outcome))
+}
+
+func RecordPeriodLeftOut(ctx context.Context, reason string) {
+	periodsLeftOut.Add(ctx, 1, attribute.String(KeyReason, reason))
+}
+
+func RecordDelistingHookFailure(ctx context.Context, reason string) {
+	delistingHookFailures.Add(ctx, 1, attribute.String(KeyReason, reason))
+}
+
+func RecordOhlcvOutOfMemory(ctx context.Context, op string) {
+	ohlcvOutOfMemory.Add(ctx, 1, attribute.String(KeyOp, op))
 }
 
 type lastFrameSource struct {

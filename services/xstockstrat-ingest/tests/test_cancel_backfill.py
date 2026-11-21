@@ -54,6 +54,41 @@ async def test_cancel_running_job_transitions_to_canceled():
 
 
 @pytest.mark.asyncio
+async def test_cancel_wakes_the_webhook_handoff_loop_after_the_canceled_write():
+    """Feature 334 (T5): the CANCELED write wakes the hand-off loop and calls notify for nothing."""
+    svc = _make_servicer(db=MagicMock())
+    svc._notify = MagicMock()
+    svc._notify.FanoutWebhook = AsyncMock()
+    running = _job_row("j1", ingest_pb2.BACKFILL_STATUS_RUNNING)
+    canceled = _job_row("j1", ingest_pb2.BACKFILL_STATUS_CANCELED)
+    woken_at_write = []
+    with (
+        patch(f"{_REPO}.get_job", AsyncMock(side_effect=[running, canceled])),
+        patch(
+            f"{_REPO}.update_job",
+            AsyncMock(
+                side_effect=lambda *a, **k: woken_at_write.append(svc._webhook_wake.is_set())
+            ),
+        ),
+    ):
+        assert not svc._webhook_wake.is_set()
+        await svc.CancelBackfill(ingest_pb2.CancelBackfillRequest(job_id="j1"), _ctx("4"))
+    assert woken_at_write == [False]
+    assert svc._webhook_wake.is_set()
+    svc._notify.FanoutWebhook.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_refused_cancel_does_not_wake_the_webhook_handoff_loop():
+    svc = _make_servicer(db=MagicMock())
+    completed = _job_row("j1", ingest_pb2.BACKFILL_STATUS_COMPLETED)
+    with patch(f"{_REPO}.get_job", AsyncMock(return_value=completed)):
+        with pytest.raises(Exception, match="aborted"):
+            await svc.CancelBackfill(ingest_pb2.CancelBackfillRequest(job_id="j1"), _ctx("4"))
+    assert not svc._webhook_wake.is_set()
+
+
+@pytest.mark.asyncio
 async def test_cancel_without_admin_scope_aborts_permission_denied():
     svc = _make_servicer(db=MagicMock())
     ctx = _ctx("0")  # no ADMIN bit

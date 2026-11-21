@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/xstockstrat/trading/internal/alpacapace"
 )
 
 // ClientConfig holds Alpaca broker API credentials and routing config.
@@ -20,6 +24,9 @@ type ClientConfig struct {
 	Paper     bool   // when true, routes to PaperURL; when false, routes to LiveURL
 	// Timeout is read before every request; nil or a non-positive result falls back to defaultTimeoutMs.
 	Timeout func() time.Duration
+	// RateLimitBudget is read before every request; nil or a non-positive result means the adaptive
+	// rate limit is off and do makes exactly one unpaced attempt (trading.broker.adaptive_rate_limit_enabled).
+	RateLimitBudget func() time.Duration
 }
 
 // defaultTimeoutMs matches the documented trading.broker.timeout_ms default.
@@ -29,6 +36,12 @@ const defaultTimeoutMs = 5000
 type Client struct {
 	cfg        ClientConfig
 	httpClient *http.Client
+
+	pacer *alpacapace.Pacer
+	// Test seams. Deadlines are derived from durations measured on now, never from a now timestamp.
+	now    func() time.Time
+	sleep  func(ctx context.Context, d time.Duration) error
+	jitter func() time.Duration
 }
 
 func NewClient(cfg ClientConfig) *Client {
@@ -41,6 +54,21 @@ func NewClient(cfg ClientConfig) *Client {
 	return &Client{
 		cfg:        cfg,
 		httpClient: &http.Client{},
+		pacer:      alpacapace.NewPacer(),
+		now:        time.Now,
+		sleep:      sleepContext,
+		jitter:     func() time.Duration { return rand.N(alpacapace.MaxJitter) },
+	}
+}
+
+func sleepContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 
@@ -55,6 +83,11 @@ func (c *Client) timeout() time.Duration {
 
 // do sends req under a deadline of c.timeout(); the deadline is released when the caller closes resp.Body.
 func (c *Client) do(req *http.Request) (*http.Response, error) {
+	if c.cfg.RateLimitBudget != nil {
+		if budget := c.cfg.RateLimitBudget(); budget > 0 {
+			return c.doPaced(req, budget)
+		}
+	}
 	ctx, cancel := context.WithTimeout(req.Context(), c.timeout())
 	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
@@ -63,6 +96,82 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	}
 	resp.Body = &cancelOnClose{ReadCloser: resp.Body, cancel: cancel}
 	return resp, nil
+}
+
+// doPaced paces from Alpaca's rate-limit headers and retries a 429 only, inside budget. Trading fails fast:
+// a non-zero wait starts only if the wait plus one full timeout still ends by the call's end (inclusive).
+func (c *Client) doPaced(req *http.Request, budget time.Duration) (*http.Response, error) {
+	timeout, start := c.timeout(), c.now()
+	end := start.Add(budget)
+	if deadline, ok := req.Context().Deadline(); ok {
+		if callerEnd := start.Add(time.Until(deadline)); callerEnd.Before(end) {
+			end = callerEnd
+		}
+	}
+	// A mutation, once it may have been sent, must run to an answer or a timeout: caller cancellation
+	// mid-retry would turn a broker-accepted order into a local REJECTED.
+	loopCtx, release := req.Context(), context.CancelFunc(func() {})
+	if req.Method != http.MethodGet {
+		loopCtx, release = context.WithTimeout(context.WithoutCancel(req.Context()), max(end.Sub(start), 0))
+	}
+	host := req.URL.Host
+	key := c.pacer.Key(host, c.cfg.APIKey)
+	for attempt := 1; ; attempt++ {
+		jitter := c.jitter()
+		if r := c.pacer.Reserve(key, c.now(), end.Add(-timeout-jitter), jitter); r.Wait > 0 {
+			if err := c.pause(loopCtx, host, key, r.Wait, r.Fits, r.Hold); err != nil {
+				release()
+				return nil, err
+			}
+		}
+		attemptCtx, cancel := context.WithTimeout(loopCtx, min(timeout, max(end.Sub(c.now()), 0)))
+		send := req.Clone(attemptCtx)
+		if attempt > 1 && req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				cancel()
+				release()
+				return nil, fmt.Errorf("replay request body: %w", err)
+			}
+			send.Body = body
+		}
+		resp, err := c.httpClient.Do(send)
+		if err != nil {
+			cancel()
+			release()
+			return nil, err
+		}
+		if headers, ok := alpacapace.ParseHeaders(resp.Header); ok {
+			c.pacer.Observe(key, headers, c.now())
+		}
+		if resp.StatusCode != http.StatusTooManyRequests {
+			resp.Body = &cancelOnClose{ReadCloser: resp.Body, cancel: func() { cancel(); release() }}
+			return resp, nil
+		}
+		reset, _ := alpacapace.ParseReset(resp.Header)
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		cancel()
+		now := c.now()
+		wait := alpacapace.RetryWait(attempt, now, reset, c.jitter())
+		if err := c.pause(loopCtx, host, key, wait, !now.Add(wait+timeout).After(end), true); err != nil {
+			release()
+			return nil, err
+		}
+	}
+}
+
+// pause sleeps one adaptive wait or refuses it. The error wraps only ErrRateLimited, so the outcome stays
+// definite even when a context ended the wait. throttled is a hold or a 429 wait; a spread slot is not logged.
+func (c *Client) pause(ctx context.Context, host string, key alpacapace.Key, wait time.Duration, fits, throttled bool) error {
+	now := c.now()
+	if throttled && c.pacer.WarnOnce(key, now, now.Add(wait)) {
+		slog.WarnContext(ctx, "alpaca broker rate limit: throttled", "host", host, "wait_ms", wait.Milliseconds())
+	}
+	if !fits || c.sleep(ctx, wait) != nil {
+		return fmt.Errorf("alpaca broker rate limited by %s: %w", host, ErrRateLimited)
+	}
+	return nil
 }
 
 type cancelOnClose struct {

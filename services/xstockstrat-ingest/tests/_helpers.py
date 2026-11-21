@@ -62,10 +62,12 @@ def transaction_conn(
 def job_row(job_id: str, status: int, **over) -> dict:
     """A backfill_jobs row dict as asyncpg would return it.
 
-    The 16 keys are exactly the DDL columns: `get_job`/`list_jobs` are
+    The 20 keys are exactly the DDL columns: `get_job`/`list_jobs` are
     `SELECT *`, so the mapper's input keys are the table's columns and nothing
     else. Do not add a key the database cannot produce. (`data_kind` added by
-    migration 012 — feature 198.)
+    migration 012 — feature 198; `callback_url` and the two `webhook_*_at`
+    markers by migration 015 — feature 334; `symbol_results` by migration 018 —
+    feature 352.)
     """
     row = {
         "job_id": job_id,
@@ -84,6 +86,10 @@ def job_row(job_id: str, status: int, **over) -> dict:
         "completed_at": None,
         "created_at": None,
         "data_kind": "BARS",
+        "callback_url": None,
+        "webhook_enqueued_at": None,
+        "webhook_rejected_at": None,
+        "symbol_results": None,
     }
     row.update(over)
     return row

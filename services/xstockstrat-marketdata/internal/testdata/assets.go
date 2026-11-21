@@ -20,6 +20,17 @@ const (
 	ExchangeOTC    = "OTC"
 )
 
+// Feature 352 givens (docs/roadmap/features/352-delisted-symbol-handling/acceptance.feature); none is in ServableAssets.
+const (
+	Roku = "ROKU"
+	Atch = "ATCH"
+	Shph = "SHPH"
+	Psky = "PSKY"
+	Nwe  = "NWE"
+	Kpti = "KPTI"
+	Axia = "AXIA"
+)
+
 // ServableAssets is the loaded active+tradable asset list: AAPL, MSFT, ZZZZ on NASDAQ; BOSSY, CRTD, FORL on OTC.
 func ServableAssets() []*commonv1.Asset {
 	return []*commonv1.Asset{
@@ -30,6 +41,15 @@ func ServableAssets() []*commonv1.Asset {
 		{Symbol: Crtd, Exchange: ExchangeOTC},
 		{Symbol: Forl, Exchange: ExchangeOTC},
 	}
+}
+
+// ServableAssetsWith is ServableAssets plus the given symbols on NASDAQ.
+func ServableAssetsWith(symbols ...string) []*commonv1.Asset {
+	out := ServableAssets()
+	for _, sym := range symbols {
+		out = append(out, &commonv1.Asset{Symbol: sym, Exchange: ExchangeNasdaq})
+	}
+	return out
 }
 
 // SyntheticAssets returns n distinct NASDAQ assets (SYN0000…), for asset-set size (shrink-guard) cases.

@@ -5,8 +5,8 @@
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "prepare": "husky",
-    "check:dup": "bash scripts/check-duplication.sh",
-    "check:dup:report": "DUP_REPORT_ONLY=1 bash scripts/check-duplication.sh"
+    "check:dup": "python3 scripts/check-duplication.py",
+    "check:dup:report": "DUP_REPORT_ONLY=1 python3 scripts/check-duplication.py"
   },
   "devDependencies": {
     "husky": "^9.1.7",

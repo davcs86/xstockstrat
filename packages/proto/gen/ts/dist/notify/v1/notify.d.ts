@@ -90,6 +90,10 @@ export interface MarkAlertReadRequest {
 }
 export interface MarkAlertReadResponse {
 }
+export interface GetAlertRequest {
+    /** Owner resolved from the propagated x-user-id header (C-03), never the body. */
+    alertId: string;
+}
 /** Web Push subscription registration (feature 165 — pwa-notifications). */
 export interface RegisterPushSubscriptionRequest {
     /**
@@ -114,6 +118,17 @@ export interface UnregisterPushSubscriptionRequest {
 export interface UnregisterPushSubscriptionResponse {
     deleted: boolean;
 }
+export interface FanoutWebhookRequest {
+    callbackUrl: string;
+    eventName: string;
+    payload?: {
+        [key: string]: any;
+    } | undefined;
+    idempotencyKey: string;
+    validateOnly: boolean;
+}
+export interface FanoutWebhookResponse {
+}
 export declare const Alert: MessageFns<Alert>;
 export declare const EmitAlertRequest: MessageFns<EmitAlertRequest>;
 export declare const EmitAlertResponse: MessageFns<EmitAlertResponse>;
@@ -124,10 +139,13 @@ export declare const ListAlertsRequest: MessageFns<ListAlertsRequest>;
 export declare const ListAlertsResponse: MessageFns<ListAlertsResponse>;
 export declare const MarkAlertReadRequest: MessageFns<MarkAlertReadRequest>;
 export declare const MarkAlertReadResponse: MessageFns<MarkAlertReadResponse>;
+export declare const GetAlertRequest: MessageFns<GetAlertRequest>;
 export declare const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptionRequest>;
 export declare const RegisterPushSubscriptionResponse: MessageFns<RegisterPushSubscriptionResponse>;
 export declare const UnregisterPushSubscriptionRequest: MessageFns<UnregisterPushSubscriptionRequest>;
 export declare const UnregisterPushSubscriptionResponse: MessageFns<UnregisterPushSubscriptionResponse>;
+export declare const FanoutWebhookRequest: MessageFns<FanoutWebhookRequest>;
+export declare const FanoutWebhookResponse: MessageFns<FanoutWebhookResponse>;
 /**
  * NotifyService — gRPC server-streaming alert delivery.
  * Services emit alerts via EmitAlert; subscribers receive via StreamAlerts.
@@ -191,6 +209,19 @@ export declare const NotifyServiceService: {
         readonly responseDeserialize: (value: Buffer) => MarkAlertReadResponse;
     };
     /**
+     * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+     * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+     */
+    readonly getAlert: {
+        readonly path: "/xstockstrat.notify.v1.NotifyService/GetAlert";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetAlertRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetAlertRequest;
+        readonly responseSerialize: (value: Alert) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => Alert;
+    };
+    /**
      * Register (or upsert) a Web Push subscription for the calling user.
      * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      */
@@ -213,6 +244,19 @@ export declare const NotifyServiceService: {
         readonly responseSerialize: (value: UnregisterPushSubscriptionResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => UnregisterPushSubscriptionResponse;
     };
+    /**
+     * Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+     * (mTLS peer SAN). validate_only checks the URL and stores nothing.
+     */
+    readonly fanoutWebhook: {
+        readonly path: "/xstockstrat.notify.v1.NotifyService/FanoutWebhook";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: FanoutWebhookRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => FanoutWebhookRequest;
+        readonly responseSerialize: (value: FanoutWebhookResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => FanoutWebhookResponse;
+    };
 };
 export interface NotifyServiceServer extends UntypedServiceImplementation {
     /** Emit an alert from any service */
@@ -232,12 +276,22 @@ export interface NotifyServiceServer extends UntypedServiceImplementation {
      */
     markAlertRead: handleUnaryCall<MarkAlertReadRequest, MarkAlertReadResponse>;
     /**
+     * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+     * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+     */
+    getAlert: handleUnaryCall<GetAlertRequest, Alert>;
+    /**
      * Register (or upsert) a Web Push subscription for the calling user.
      * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      */
     registerPushSubscription: handleUnaryCall<RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse>;
     /** Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()). */
     unregisterPushSubscription: handleUnaryCall<UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse>;
+    /**
+     * Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+     * (mTLS peer SAN). validate_only checks the URL and stores nothing.
+     */
+    fanoutWebhook: handleUnaryCall<FanoutWebhookRequest, FanoutWebhookResponse>;
 }
 export interface NotifyServiceClient extends Client {
     /** Emit an alert from any service */
@@ -266,6 +320,13 @@ export interface NotifyServiceClient extends Client {
     markAlertRead(request: MarkAlertReadRequest, metadata: Metadata, callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void): ClientUnaryCall;
     markAlertRead(request: MarkAlertReadRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: MarkAlertReadResponse) => void): ClientUnaryCall;
     /**
+     * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+     * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+     */
+    getAlert(request: GetAlertRequest, callback: (error: ServiceError | null, response: Alert) => void): ClientUnaryCall;
+    getAlert(request: GetAlertRequest, metadata: Metadata, callback: (error: ServiceError | null, response: Alert) => void): ClientUnaryCall;
+    getAlert(request: GetAlertRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: Alert) => void): ClientUnaryCall;
+    /**
      * Register (or upsert) a Web Push subscription for the calling user.
      * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      */
@@ -276,6 +337,13 @@ export interface NotifyServiceClient extends Client {
     unregisterPushSubscription(request: UnregisterPushSubscriptionRequest, callback: (error: ServiceError | null, response: UnregisterPushSubscriptionResponse) => void): ClientUnaryCall;
     unregisterPushSubscription(request: UnregisterPushSubscriptionRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UnregisterPushSubscriptionResponse) => void): ClientUnaryCall;
     unregisterPushSubscription(request: UnregisterPushSubscriptionRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UnregisterPushSubscriptionResponse) => void): ClientUnaryCall;
+    /**
+     * Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+     * (mTLS peer SAN). validate_only checks the URL and stores nothing.
+     */
+    fanoutWebhook(request: FanoutWebhookRequest, callback: (error: ServiceError | null, response: FanoutWebhookResponse) => void): ClientUnaryCall;
+    fanoutWebhook(request: FanoutWebhookRequest, metadata: Metadata, callback: (error: ServiceError | null, response: FanoutWebhookResponse) => void): ClientUnaryCall;
+    fanoutWebhook(request: FanoutWebhookRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: FanoutWebhookResponse) => void): ClientUnaryCall;
 }
 export declare const NotifyServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): NotifyServiceClient;
