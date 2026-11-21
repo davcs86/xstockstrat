@@ -253,7 +253,7 @@ ruff check . && ruff format --check .
 
 ### Step 4 — test: assert the refusal's `exit_reason`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox_deadline.py` — modify

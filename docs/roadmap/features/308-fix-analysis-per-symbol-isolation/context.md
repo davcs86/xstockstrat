@@ -545,3 +545,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Tooling: the indicators `.venv` was synced with `uv sync --extra dev`.
 - Files modified: `services/xstockstrat-indicators/app/handlers/servicer.py`
 - Deviations: RED captured with a temporary untracked probe test, deleted before the commit (Deviation Log).
+
+### Step 4 — test: assert the refusal's `exit_reason` [done]
+- `test_too_little_remaining_deadline_fails_without_spawning` now asserts `resp.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT`, using the module's existing `indicators_pb2` import. This is the indicators test for the D-9 touch (O-8). No domain literal was added (C-13).
+- TDD red, run with `servicer.py` checked out at the pre-Step-3 commit `8fe8fcb8` and restored before GREEN: `assert 0 == 2` at `tests/test_sandbox_deadline.py:82` (`1 failed, 4 passed`). Green: `5 passed`, full suite `610 passed`, coverage 87.14% (`Required test coverage of 50% reached`), ruff "All checks passed!" and "65 files already formatted", exit=0.
+- The RED full-suite run also failed `test_sandbox_watchdog.py::test_ac8_fork_bomb_is_not_a_success_the_service_recovers_and_nothing_is_unobservable` (`sandbox memory watchdog cannot observe child`). It passed in the GREEN run with no related change, so it looks like a timing flake in the fork-bomb test, not something this step caused.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-indicators/tests/test_sandbox_deadline.py`
+- Deviations: none
