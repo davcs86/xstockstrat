@@ -33,8 +33,8 @@ Languages, ports, roles, dependencies, and config keys → [`CLAUDE.md`](CLAUDE.
 
 ```bash
 cp .env.example .env          # fill in ALPACA_API_KEY, ALPACA_API_SECRET, JWT_SECRET
-./scripts/localenv-setup.sh   # build the proto-gen container, generate stubs (no host toolchains needed)
-./scripts/bootstrap.sh        # install deps, start TimescaleDB, run migrations
+python3 scripts/localenv-setup.py   # build the proto-gen container, generate stubs (no host toolchains needed)
+python3 scripts/bootstrap.py        # install deps, start TimescaleDB, run migrations
 docker compose up -d          # start all services
 ```
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Print the mTLS dotenv lines for deploy/homelab/compose.yml from a gen-dev-certs.sh tree at $CERTS_DIR.
+"""Print the mTLS dotenv lines for deploy/homelab/compose.yml from a gen-dev-certs.sh tree at $CERTS_DIR,
+plus DATABASE_CA_CERT from the $DB_CA_CERT PEM.
 
 Values are double-quoted with \\n escapes, which compose's dotenv parser turns back into PEM newlines.
 """
@@ -8,12 +9,16 @@ import os
 import sys
 
 
+def quote_pem(pem: str, label: str) -> str:
+    pem = pem.replace("\r", "").rstrip("\n") + "\n"
+    if any(c in pem for c in '"$\\'):
+        sys.exit(f"homelab-mtls-env: {label} has a character dotenv would reinterpret")
+    return '"' + pem.replace("\n", "\\n") + '"'
+
+
 def quoted(path: str) -> str:
     with open(path) as f:
-        pem = f.read()
-    if any(c in pem for c in '"$\\'):
-        sys.exit(f"homelab-mtls-env: {path} has a character dotenv would reinterpret")
-    return '"' + pem.replace("\n", "\\n") + '"'
+        return quote_pem(f.read(), path)
 
 
 def main() -> None:
@@ -35,6 +40,10 @@ def main() -> None:
         sys.exit(f"homelab-mtls-env: missing {missing}")
     for name, path in paths.items():
         print(f"{name}={quoted(path)}")
+    db_ca = os.environ.get("DB_CA_CERT") or sys.exit(
+        "homelab-mtls-env: DB_CA_CERT is required"
+    )
+    print(f"DATABASE_CA_CERT={quote_pem(db_ca, 'DB_CA_CERT')}")
 
 
 if __name__ == "__main__":

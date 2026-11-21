@@ -132,6 +132,9 @@ message TemplateMeta {
   bool retired = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
+  // Server-set: true for a platform-seeded (created_by = 'system') template, which ManageTemplate
+  // refuses to UPDATE or RETIRE.
+  bool read_only = 9;
 }
 
 // Provenance of an instance; empty template_id = not instantiated from a template.
@@ -148,4 +151,24 @@ enum UnservableReason {
   UNSERVABLE_REASON_UNSPECIFIED = 0;
   UNSERVABLE_REASON_OTC = 1;
   UNSERVABLE_REASON_NOT_TRADABLE = 2;
+}
+
+enum BackfillSymbolOutcome {
+  BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED = 0;
+  BACKFILL_SYMBOL_OUTCOME_EMPTY = 1;
+  BACKFILL_SYMBOL_OUTCOME_SKIPPED = 2;
+  BACKFILL_SYMBOL_OUTCOME_FAILED = 3;
+}
+
+// Lists non-written symbols only; reason is the source's error text, empty for EMPTY.
+message BackfillSymbolResult {
+  string symbol = 1;
+  BackfillSymbolOutcome outcome = 2;
+  string reason = 3;
+}
+
+// first_unservable_date is YYYY-MM-DD (NYSE session date), never a timestamp.
+message DelistedState {
+  UnservableReason reason = 1;
+  string first_unservable_date = 2;
 }

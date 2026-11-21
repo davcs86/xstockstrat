@@ -699,6 +699,14 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         if not meta.template_id:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "template_id required")
             return
+        if op in (common_pb2.TEMPLATE_OPERATION_UPDATE, common_pb2.TEMPLATE_OPERATION_RETIRE):
+            existing = await self._templates_repo.get(meta.template_id)
+            if existing is not None and existing.get("created_by") == SYSTEM_AUTHOR:
+                await context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    f"system template '{meta.template_id}' is read-only",
+                )
+                return
         if op in (common_pb2.TEMPLATE_OPERATION_CREATE, common_pb2.TEMPLATE_OPERATION_UPDATE):
             try:
                 _validate_register_payload(request.template.payload)
@@ -860,6 +868,7 @@ def _row_to_template(row: dict) -> "indicators_pb2.FormulaTemplate":
             retired=row.get("retired_at") is not None,
             created_at=_dt_to_ts(row.get("created_at")),
             updated_at=_dt_to_ts(row.get("updated_at")),
+            read_only=row.get("created_by") == SYSTEM_AUTHOR,
         ),
         payload=ParseDict(row["payload"], indicators_pb2.RegisterFormulaRequest()),
     )

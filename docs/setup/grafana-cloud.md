@@ -170,7 +170,7 @@ The deploy chain (`deploy-dev.yml` / `deploy-prod.yml` → `deploy.yml`) and the
 
 Each component inherits the global `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` and sets its own `SERVICE_NAME`.
 
-Resource attributes (`service.name`, `deployment.environment`, `platform`) are set at startup from each service's `SERVICE_NAME` and `APPLICATION_ENV` env vars — no `OTEL_RESOURCE_ATTRIBUTES` setting required.
+Resource attributes (`service.name`, `deployment.environment`, `platform`, `host.provider`) are set at startup from each service's `SERVICE_NAME`, `APPLICATION_ENV` and `HOST_PROVIDER` env vars — do not set `OTEL_RESOURCE_ATTRIBUTES`; see `docs/patterns/observability.md`.
 
 **All runtimes (Go, Python, Node.js, Next.js) use OTLP/HTTP**, configured only by these env vars: the SDK appends `/v1/traces` to the gateway URL (`…/otlp` → `…/otlp/v1/traces`), uses TLS for the `https://` scheme, and sends the `Authorization` header. Never pass an endpoint/url option to an exporter in code — it overrides all three (feature 226).
 

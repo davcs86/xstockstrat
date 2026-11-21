@@ -24,7 +24,7 @@ classes:
 |---|---|---|---|
 | any open-ended row (`valid_until IS NULL`) | open-ended | nothing | Never pruned (`open_ended_skipped` in TOTALS) |
 | only dated rows | **SEED** | `valid_until = max(valid_until)` and `signal_id` = that row's id | Pruned when that instant passes. `seed_expired = Y` means it has already passed, so the entry is pruned on the next tick |
-| none | **UNTRACKED** | a mark: `valid_until = now()`, `signal_id NULL` | **Pruned on the next tick** |
+| none | **UNTRACKED** | a mark: `valid_until = now() + 72 hours`, `signal_id NULL` | **Pruned on the first tick after APPLY + 72h**, unless a live signal added in that window rescues it |
 
 **Known strictness (signed off at design time):** UNTRACKED counts only rows under the **owner's own**
 user id. Rows that ingest migration `013` reassigned to the legacy seed owner do not count. The strict
@@ -63,8 +63,9 @@ record** approved by the DBA and the `xstockstrat-portfolio` service owner.
   database path to the pool name (`staging` or `production`). See
   [`docs/patterns/database.md`](../patterns/database.md) § Connection pooling. `DB_PGBOUNCER=true`
   switches pgx to unnamed statements, which transaction pooling requires. Leave `DB_POOL_MAX` unset.
-  REPORT is one read-only transaction and APPLY is one autocommit statement per row, so both fit the
-  transaction pool and stay off the direct-connection budget.
+  REPORT is one read-only transaction and APPLY is one short transaction per row (it locks the
+  watchlist row, then inserts), so both fit the transaction pool and stay off the direct-connection
+  budget.
 - **The legacy owner.** Use the `SEED_USER_ID` value of the `db-migrator` job in `.do/app.yaml`
   (production) or `.do/app.dev.yaml` (staging). This is the id that ingest `013` assigned the legacy
   rows to.
@@ -147,21 +148,30 @@ GOWORK=off go run ./cmd/server backfill-signal-expiry --mode=apply --legacy-owne
   non-zero. The binary returns `3`; `go run` reports any child failure as `1`. When that happens,
   re-run REPORT and get a fresh approval. **N and M are at-most bounds**: lower live counts are
   accepted.
-- APPLY then writes one autocommit `INSERT … ON CONFLICT DO NOTHING` per row, in
-  `(watchlist_id, symbol)` order. Each statement **recomputes the class from ingest at statement
-  time**, so a row whose class changed since REPORT (for example, a new live signal arrived) writes
-  nothing and is printed as `changed since REPORT`. Output: `RESULT watchlist_id symbol outcome`
-  lines (`seeded` / `marked` / `changed since REPORT`), then
+- APPLY then writes one short transaction per row, in `(watchlist_id, symbol)` order. Each
+  transaction locks the parent watchlist row (`FOR NO KEY UPDATE`), then runs
+  `INSERT … ON CONFLICT DO NOTHING`, so the class is **recomputed from ingest after any concurrent
+  signal add commits**. A row whose class changed since REPORT (for example, a new live signal
+  arrived) writes nothing and is printed as `changed since REPORT`. A row printed as
+  `changed since REPORT` stays untracked until REPORT and APPLY are re-run. Output:
+  `RESULT watchlist_id symbol outcome` lines (`seeded` / `marked` / `changed since REPORT`), then
   `DONE seeded=… marked=… changed_since_report=…`.
+- APPLY sets no lock timeout; a row waits behind an in-flight signal add for that watchlist, and an
+  APPLY wedged on one can be interrupted and re-run (idempotent).
 - If APPLY aborts part-way, it prints `ABORTED seeded=… marked=… changed_since_report=…
   (re-run is idempotent)`. Re-running the same command is safe: rows already written are skipped.
 - Paste the APPLY output into the change record next to the REPORT.
 
-## 8. No grace period — the clock starts at APPLY
+## 8. 3-day grace for marks; none for seed_expired — the clock starts at APPLY
 
-**Marks and `seed_expired` seeds are due on the very next prune tick.** The tick interval is
+**`seed_expired` seeds are due on the very next prune tick.** The tick interval is
 `portfolio.watchlist.signal_prune_interval_seconds` (default `300` s), and **every portfolio restart
-runs a tick at startup**. Once APPLY finishes, you have at most one interval to stop the removals.
+runs a tick at startup**. Once APPLY finishes, you have at most one interval to stop those removals.
+
+**Marks are due 72 hours after their APPLY row** (`valid_until = now() + 72 hours`, where `now()` is
+that row's transaction start). A live agent watchlist signal added for the symbol within that window
+rescues the mark: the add-path merge overwrites the `signal_id NULL` row with the signal's id and
+`valid_until`, so the entry is no longer untracked.
 
 Each removal emits an owner-visible ledger event. The owner rides in `AppendEventRequest.user_id`
 and the stream key is `watchlist:<watchlist_id>`:
@@ -176,7 +186,8 @@ removal. **The pasted REPORT is the authoritative record of what the backfill ma
 
 ## 9. Emergency stop and undo
 
-Act **within one interval of APPLY**. Run the SQL through
+Act **within one interval of APPLY** for `seed_expired` removals, and **within 72 hours of APPLY**
+for marks. Run the SQL through
 [`operator-db-access.md`](operator-db-access.md) and record each statement and its row count in the
 change record.
 
@@ -220,6 +231,7 @@ These behaviors were signed off at design time. They are not defects:
 
 ## 11. Order of environments
 
-1. **Staging first.** Complete §3–§8 against the `staging` pool and watch the next tick's events.
+1. **Staging first.** Complete §3–§8 against the `staging` pool and watch the next tick's events for
+   `seed_expired` removals, and the ticks after APPLY + 72h for mark removals.
 2. **Then production**, with its own REPORT, approval and APPLY. A staging REPORT or its bounds are
    never reused.

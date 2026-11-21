@@ -1,0 +1,107 @@
+- main:
+  - heading "Alpaca Paper" [level=3]
+  - text: /Alpaca Equity \$\d+,\d+\.\d+ Cash \$\d+,\d+\.\d+ Buying Power \$\d+,\d+\.\d+ Day P&L \+\$\d+\.\d+ \(\+\d+\.\d+%\) Total P&L \+\$\d+,\d+\.\d+/
+  - paragraph: Positions
+  - text: /AAPL \+\$\d+\.\d+/
+  - heading "Place Order" [level=3]
+  - textbox "Symbol (e.g. AAPL)"
+  - radiogroup:
+    - radio "BUY" [checked]
+    - radio "SELL"
+  - combobox: Market
+  - combobox "Time in force": Day
+  - spinbutton "Quantity"
+  - button "BUY —"
+  - heading "Orders" [level=3]
+  - table:
+    - rowgroup:
+      - row "Symbol Side Qty Filled Avg Price Status":
+        - columnheader "Symbol"
+        - columnheader "Side"
+        - columnheader "Qty":
+          - button "Qty":
+            - text: ""
+            - img
+        - columnheader "Filled":
+          - button "Filled":
+            - text: ""
+            - img
+        - columnheader "Avg Price":
+          - button "Avg Price":
+            - text: ""
+            - img
+        - columnheader "Status"
+    - rowgroup:
+      - row /AAPL BUY \d+ \d+ \$\d+\.\d+ FILLED/:
+        - cell "AAPL":
+          - link "AAPL":
+            - /url: /trader/orders/mock-order-001
+        - cell "BUY"
+        - cell /\d+/
+        - cell /\d+/
+        - cell /\$\d+\.\d+/
+        - cell "FILLED"
+      - row "TSLA SELL 5 0 — NEW":
+        - cell "TSLA":
+          - link "TSLA":
+            - /url: /trader/orders/mock-order-002
+        - cell "SELL"
+        - cell "5"
+        - cell "0"
+        - cell "—"
+        - cell "NEW"
+      - row "MSFT BUY 3 0 — NEW Uncertain — verify with broker":
+        - cell "MSFT":
+          - link "MSFT":
+            - /url: /trader/orders/mock-order-003
+        - cell "BUY"
+        - cell "3"
+        - cell "0"
+        - cell "—"
+        - cell "NEW Uncertain — verify with broker"
+  - heading "Chart" [level=3]
+  - group:
+    - combobox "Chart symbol": AAPL
+    - group
+  - combobox: /\d+ bars/
+  - table:
+    - row:
+      - cell
+      - cell:
+        - link "Charting by TradingView":
+          - /url: https://www.tradingview.com/?utm_medium=lwc-link&utm_campaign=lwc-chart&utm_source=localhost/trader
+          - img
+      - cell
+    - row:
+      - cell
+      - cell
+      - cell
+  - heading "Live Strategies" [level=3]
+  - table:
+    - rowgroup:
+      - row "Strategy Status Live":
+        - columnheader "Strategy":
+          - button "Strategy":
+            - text: ""
+            - img
+        - columnheader "Status":
+          - button "Status":
+            - text: ""
+            - img
+        - columnheader "Live":
+          - button "Live":
+            - text: ""
+            - img
+    - rowgroup:
+      - button "Live Test Strategy active on":
+        - cell "Live Test Strategy"
+        - cell "active"
+        - cell "on"
+      - button "Inactive Strategy active off":
+        - cell "Inactive Strategy"
+        - cell "active"
+        - cell "off"
+      - button "Deny List Strategy active on":
+        - cell "Deny List Strategy"
+        - cell "active"
+        - cell "on"

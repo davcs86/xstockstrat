@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from gen.analysis.v1 import analysis_pb2
+from gen.portfolio.v1 import portfolio_pb2
 
 from app import main as app_main
 from app.engine import entry_backfill
@@ -312,7 +313,9 @@ async def test_screen_symbols():
 async def test_readiness_materializer():
     svc = _svc()
     svc._portfolio = MagicMock()
-    wl = SimpleNamespace(bindings=[SimpleNamespace(symbol="MSFT", strategy_id="s-bob")], symbols=[])
+    wl = SimpleNamespace(
+        bindings=[portfolio_pb2.WatchlistBinding(symbol="MSFT", strategy_id="s-bob")], symbols=[]
+    )
     svc._portfolio.ListWatchlists = AsyncMock(
         return_value=SimpleNamespace(watchlists=[wl], page=_EOF)
     )

@@ -124,7 +124,7 @@ Feature: xstockstrat-portfolio — signal watchlist expiry pruning
     When APPLY runs with --legacy-owner "SEED" --expect-seed-expired 0 --expect-untracked 0
     Then "AAPL" has an expiry record valid_until 2026-12-01T00:00:00Z and signal_id 7
 
-  @AC-16 @FR-7 @feature-281
+  @AC-16 @FR-7 @feature-281 @feature-359
   Scenario: Strict untracked removal, including the accepted pre-224 legacy-owner case
     Given user-2's signal watchlist holds SIGNAL "PLTR" bound to "strat-3" with no expiry record
     And user-2 has no signal rows, while legacy owner "SEED" holds a live watchlist signal for "PLTR"
@@ -132,11 +132,15 @@ Feature: xstockstrat-portfolio — signal watchlist expiry pruning
     Then REPORT lists untracked (user-2, the watchlist_id, "PLTR", "strat-3") with legacy_live Y and flags user-2 NO_OWN_SIGNALS
     When APPLY runs with --legacy-owner "SEED" --expect-untracked 0
     Then APPLY refuses before writing anything
-    When APPLY runs with --legacy-owner "SEED" --expect-untracked 1 and the next prune tick runs
+    When APPLY runs with --legacy-owner "SEED" --expect-untracked 1
+    Then "PLTR" has an expiry record with signal_id NULL and valid_until 3 days after APPLY
+    When a prune tick runs within those 3 days
+    Then "PLTR" is still on user-2's signal watchlist
+    When a prune tick runs after those 3 days
     Then "PLTR" is absent from user-2's signal watchlist and one signal_entry_removed_untracked event names user-2, "PLTR", "strat-3"
 
-  @AC-17 @FR-7 @feature-281
-  Scenario: A marked entry is rescued by a live signal before the next tick
+  @AC-17 @FR-7 @feature-281 @feature-359
+  Scenario: A marked entry is rescued by a live signal before it is pruned
     Given the backfill marked SIGNAL "ORCL" on user-1's signal watchlist as untracked
     When the agent records a non-deduplicated watchlist signal 110 for "ORCL" with valid_until 2026-12-01T00:00:00Z
     And the prune runs at 2026-11-01T00:00:00Z

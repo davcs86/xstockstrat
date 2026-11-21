@@ -1,5 +1,5 @@
-// Platform check housed in the UI suite: reads repo-root .do specs and the five DB services' src/ trees,
-// so a deploy-spec or resolver-wiring drift in any of them fails this vitest run.
+// Platform check housed in the UI suite: reads repo-root .do specs (DB CA binding, the UI's agent
+// endpoint) and the five DB services' src/ trees, so a drift in any of them fails this vitest run.
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -63,6 +63,24 @@ function readSpec(rel: string): unknown {
   return parse(readFileSync(ROOT + rel, 'utf8'));
 }
 
+type PortedComponent = Component & { internal_ports?: unknown };
+
+// null when the UI's AGENT_ENDPOINT names the agent's private domain and its internal gRPC port.
+function agentEndpointDrift(spec: unknown): string | null {
+  const services = (spec as Record<string, PortedComponent[] | undefined>).services ?? [];
+  const agent = services.find((c) => c.name === 'xstockstrat-agent');
+  const ui = services.find((c) => c.name === 'xstockstrat-ui');
+  if (!agent || !ui) return 'agent or ui component missing';
+  const port = (agent.envs ?? []).find((e) => e.key === 'GRPC_PORT')?.value;
+  if (typeof port !== 'string' || port === '') return 'agent GRPC_PORT missing';
+  const internal = Array.isArray(agent.internal_ports) ? agent.internal_ports : [];
+  if (!internal.some((p) => String(p) === port)) return 'agent GRPC_PORT not in internal_ports';
+  const endpoint = (ui.envs ?? []).find((e) => e.key === 'AGENT_ENDPOINT')?.value;
+  return endpoint === `\${xstockstrat-agent.PRIVATE_DOMAIN}:${port}`
+    ? null
+    : 'ui AGENT_ENDPOINT does not match the agent';
+}
+
 function sourceFiles(dir: string): string[] {
   return readdirSync(ROOT + dir, { withFileTypes: true }).flatMap((entry) => {
     const rel = `${dir}/${entry.name}`;
@@ -95,6 +113,51 @@ describe('AC-5: every direct-DB component binds DATABASE_CA_CERT', () => {
     expect(ui).toBeDefined();
     ui!.envs = (ui!.envs ?? []).filter((e) => e.key !== 'DATABASE_CA_CERT');
     expect(missingCa(clone)).toEqual(['xstockstrat-ui']);
+  });
+});
+
+describe('DO specs: the UI AGENT_ENDPOINT targets the agent internal gRPC port (feature 360)', () => {
+  it.each(['.do/app.yaml', '.do/app.dev.yaml'])('%s wires the UI to the agent', (rel) => {
+    expect(agentEndpointDrift(readSpec(rel))).toBeNull();
+  });
+
+  const mutations: [string, (agent: PortedComponent, ui: PortedComponent) => void][] = [
+    [
+      'UI env deleted',
+      (_agent, ui) => {
+        ui.envs = (ui.envs ?? []).filter((e) => e.key !== 'AGENT_ENDPOINT');
+      },
+    ],
+    [
+      'UI value with a scheme',
+      (_agent, ui) => {
+        const env = (ui.envs ?? []).find((e) => e.key === 'AGENT_ENDPOINT');
+        if (env) env.value = `http://${String(env.value)}`;
+      },
+    ],
+    [
+      'agent GRPC_PORT env deleted',
+      (agent) => {
+        agent.envs = (agent.envs ?? []).filter((e) => e.key !== 'GRPC_PORT');
+      },
+    ],
+    [
+      'port removed from internal_ports',
+      (agent) => {
+        agent.internal_ports = [];
+      },
+    ],
+  ];
+
+  it.each(mutations)('flags the spec once: %s', (_name, mutate) => {
+    const clone = structuredClone(readSpec('.do/app.yaml')) as Record<string, PortedComponent[]>;
+    expect(agentEndpointDrift(clone)).toBeNull();
+    const agent = clone.services.find((c) => c.name === 'xstockstrat-agent');
+    const ui = clone.services.find((c) => c.name === 'xstockstrat-ui');
+    expect(agent).toBeDefined();
+    expect(ui).toBeDefined();
+    mutate(agent!, ui!);
+    expect(agentEndpointDrift(clone)).not.toBeNull();
   });
 });
 

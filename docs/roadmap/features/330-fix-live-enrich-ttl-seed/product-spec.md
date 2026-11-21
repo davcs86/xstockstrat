@@ -65,6 +65,11 @@ Deferred to `/sdd-design`; AC-1 (rows still at the seeded `'10'`) holds under ei
 1. Overwrite policy: rewrite only rows still holding the seeded `'10'` (preserving any operator-set
    value), or every global row for the key? Per-user override rows in or out?
 
+## Functional Requirements
+
+- **FR-1**: the `analysis` / `opportunity.live_enrich_ttl_seconds` global row still holding the seeded `'10'` is reseeded to `'20'` (above the 15s UI poll); a row holding an operator value keeps it.
+- **FR-2**: a warm 15s `ListOpportunities` re-poll is served from the live-enrich memo.
+
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass

@@ -13,8 +13,8 @@ import (
 
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
+	"github.com/xstockstrat/contracts/marketsession"
 	"github.com/xstockstrat/contracts/pnl"
-	"github.com/xstockstrat/portfolio/internal/marketsession"
 	"github.com/xstockstrat/portfolio/internal/middleware"
 	"github.com/xstockstrat/portfolio/internal/repository"
 	"github.com/xstockstrat/portfolio/internal/telemetry"
