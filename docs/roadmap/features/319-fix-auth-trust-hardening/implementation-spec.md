@@ -190,18 +190,18 @@ Security — auth scope, `x-internal-caller` allow-list
 - `authz.ts:104-119` `export function hasInternalCallerAuthority(md: Metadata | undefined, namespace, key,
   targetValue)`.
 - Reuse targets in the same file: `peerSan?: string` on `SecretCallerGrant` (`:133`, doc comment `:132`);
-  `export interface SecretCallerCall { metadata?; getAuthContext? }` (`:152`); `function peerDnsSans(call)`
-  (`:158`, module-private); predicate `(grant.peerSan === undefined || peerDnsSans(call).includes(grant.peerSan))`
-  (`:185`); `export function hasPeerDnsSan(call)` (`:228`).
-- Only non-test caller: the `internalCallerAuthorized` statement at `configServiceImpl.ts:679-686` — the call
-  expression `hasInternalCallerAuthority(` is at `:681`, its `call.metadata` argument at `:682`. Imports at `configServiceImpl.ts:14-15` (`hasInternalCallerAuthority`, `hasPeerDnsSan`).
-- Deny path: `configServiceImpl.ts:687-711`; `fields` built at `:690-694` with `reason:
-  'no_admin_or_internal_grant'`; the internal-caller ERROR branch at `:697-706`; `callback(ADMIN_SCOPE_ERROR)` `:709`.
-- `configServiceImpl.ts:217-220` `LOG_ID_MAX = 64`, `truncateForLog`.
-- Attribution: `configServiceImpl.ts:724` `const callerIdentity = first(call.metadata, HEADER_INTERNAL_CALLER) ||
-  null;` (raw header, unconditional); `:729` `author` already gates on `internalCallerAuthorized`; `callerIdentity`
-  is INSERT param 11 (`:839`).
-- `services/xstockstrat-config/CLAUDE.md:44` invariant 7 (header-only wording); `:122` the `GetSecret` denial-log
+  `export interface SecretCallerCall { metadata?; getAuthContext? }` (`:158`); `function peerDnsSans(call)`
+  (`:164`, module-private); predicate `(grant.peerSan === undefined || peerDnsSans(call).includes(grant.peerSan))`
+  (`:191`); `export function hasPeerDnsSan(call)` (`:234`).
+- Only non-test caller: the `internalCallerAuthorized` statement at `configServiceImpl.ts:684-691` — the call
+  expression `hasInternalCallerAuthority(` is at `:686`, its `call.metadata` argument at `:687`. Imports at `configServiceImpl.ts:14-15` (`hasInternalCallerAuthority`, `hasPeerDnsSan`).
+- Deny path: `configServiceImpl.ts:692-716`; `fields` built at `:695-699` with `reason:
+  'no_admin_or_internal_grant'`; the internal-caller ERROR branch at `:703-711`; `callback(ADMIN_SCOPE_ERROR)` `:714`.
+- `configServiceImpl.ts:222-224` `LOG_ID_MAX = 64`, `truncateForLog`.
+- Attribution: `configServiceImpl.ts:729` `const callerIdentity = first(call.metadata, HEADER_INTERNAL_CALLER) ||
+  null;` (raw header, unconditional); `:734` `author` already gates on `internalCallerAuthorized`; `callerIdentity`
+  is INSERT param 11 (`:844`).
+- `services/xstockstrat-config/CLAUDE.md:41` invariant 7 (header-only wording); `:105` the `GetSecret` denial-log
   line in Observability.
 - Legitimate caller presents its own leaf: `services/xstockstrat-trading/internal/config/config.go:70`
   (recon.md); leaf SAN `DNS:${svc}` from `scripts/gen-dev-certs.sh:50`, `xstockstrat-trading` in `SERVICES` (`:28`).
@@ -219,27 +219,27 @@ Security — auth scope, `x-internal-caller` allow-list
      constraint comment states that the literal must equal the leaf DNS SAN minted by `scripts/gen-dev-certs.sh`.
    - Add `export type PeerCall = SecretCallerCall;`.
    - Change `hasInternalCallerAuthority` to take `call: PeerCall` as its first parameter (replacing `md`), read the
-     header with `first(call?.metadata, HEADER_INTERNAL_CALLER)`, and add the `:185` predicate
+     header with `first(call?.metadata, HEADER_INTERNAL_CALLER)`, and add the `:191` predicate
      `(grant.peerSan === undefined || peerDnsSans(call).includes(grant.peerSan))` to the `.some(...)`. Update its
      doc comment: it also fails closed on a peer that does not present the grant's DNS SAN.
-   - Add `export` to `peerDnsSans` (`:158`). Do not write a second SAN parser. Do not add a
+   - Add `export` to `peerDnsSans` (`:164`). Do not write a second SAN parser. Do not add a
      `setConfigDenialReason` (`R-1`). Leave `SECRET_CALLER_ALLOWLIST`, `hasSecretCallerAuthority` and
      `secretDenialReason` untouched (C-10).
 2. `configServiceImpl.ts`:
-   - `:682` pass `call` instead of `call.metadata`.
-   - `:724` persist `caller_identity` only for an authorized internal-caller write:
+   - `:687` pass `call` instead of `call.metadata`.
+   - `:729` persist `caller_identity` only for an authorized internal-caller write:
      `const callerIdentity = internalCallerAuthorized ? first(call.metadata, HEADER_INTERNAL_CALLER) || null : null;`
-     (`D-2`). `:729` is unchanged.
-   - In the internal-caller ERROR branch only (`:697-706`), add two log fields: `hadPeerSan: hasPeerDnsSan(call)`
+     (`D-2`). `:734` is unchanged.
+   - In the internal-caller ERROR branch only (`:703-711`), add two log fields: `hadPeerSan: hasPeerDnsSan(call)`
      and `peerSan: truncateForLog(peerDnsSans(call)[0] ?? '')` (import `peerDnsSans`). Keep `reason:
      'no_admin_or_internal_grant'`, the ERROR level, `ADMIN_SCOPE_ERROR` and the WARN branch as they are. No config
      value is logged (`@AC-54`).
 3. `services/xstockstrat-config/CLAUDE.md`:
-   - Invariant 7 (`:44`): the `trading-reconciliation-poller` grant also requires the mTLS peer certificate to
+   - Invariant 7 (`:41`): the `trading-reconciliation-poller` grant also requires the mTLS peer certificate to
      carry DNS SAN `xstockstrat-trading` (`peerSan`, checked by `hasInternalCallerAuthority(call, …)` via
      `getAuthContext()`), so the header alone never suffices; `caller_identity` is persisted only when the
      internal-caller grant authorized the write, and is `NULL` otherwise even if the header was sent.
-   - Observability (after `:122`): the `SetConfig` internal-caller denial log also carries `hadPeerSan` and a
+   - Observability (after `:105`): the `SetConfig` internal-caller denial log also carries `hadPeerSan` and a
      truncated `peerSan`.
 4. No trading code change (`R-12`). Header propagation: no new outbound call.
 
@@ -349,14 +349,14 @@ Preserved rules stay green in the same run: 254 `@AC-3/@AC-4/@AC-6` (`secretsAnd
   "trading-reconciliation-poller"`; retirement header at `:5-8` (feature 306).
 - `fix-config-keys-drift.feature:88-90` — `@AC-25 @FR-1 @regression @feature-295`, Given
   `the grant for "trading-reconciliation-poller" on "platform" / "platform.trading_state"`.
-- `docs/context-constitution.md:47` PLAT-9 row: "it has **no** `peerSan`"; anchors
+- `docs/context-constitution.md:33` PLAT-9 row: "it has **no** `peerSan`"; anchors
   `authz.ts#InternalCallerGrant (~L76-82)`, `#INTERNAL_CALLER_ALLOWLIST (~L84)`, `#hasInternalCallerAuthority
   .some( (~L112)`, verified-against `(~L104-119)`.
-- `services/xstockstrat-trading/docs/context-constitution-findings.md:16-18` — `## Latent bugs` table, columns
-  `| Issue | Impact | Evidence |`.
-- The pre-existing trading defect: `services/xstockstrat-trading/internal/service/trading.go:2270`
-  (`s.configSetter.SetConfig(ctx, "trading-reconciliation-poller", …)`), `:2278-2280` (WARN only on error),
-  `:2285` (alert title "… trading reduced to REDUCE_ONLY", emitted regardless).
+- `services/xstockstrat-trading/docs/context-constitution-findings.md:19` `## Latent bugs`, table header row
+  `:21`, columns `| Issue | Impact | Evidence |`.
+- The pre-existing trading defect, in `escalateSystemic` (`services/xstockstrat-trading/internal/service/trading.go:2359`):
+  `:2365` (`s.configSetter.SetConfig(ctx, "trading-reconciliation-poller", …)`), `:2373-2375` (WARN only on error),
+  `:2380` (alert title "… trading reduced to REDUCE_ONLY", emitted regardless).
 - Dedup (fails.md 2026-11-04, fix-agent-getconfig-deadline): `grep -rli "escalateSystemic\|reduced to
   REDUCE_ONLY\|systemic escalation" docs/reports/ services/xstockstrat-trading/docs/` → only
   `docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md`, which is about alert targeting, not a
@@ -375,7 +375,7 @@ Preserved rules stay green in the same run: 254 `@AC-3/@AC-4/@AC-6` (`secretsAnd
    above with `from an mTLS peer with DNS SAN "xstockstrat-trading"`. Do not change any `When`/`Then`/`And`, do not
    add a scenario "alongside" (`R-10`), do not edit the `:5-8` retirement header of
    `fix-config-keys-contract.feature`.
-2. `docs/context-constitution.md:47` (PLAT-9): rewrite the write-direction clause — the allowlist is
+2. `docs/context-constitution.md:33` (PLAT-9): rewrite the write-direction clause — the allowlist is
    `{callerID, namespace, key, allowedTargetValues, peerSan}`, and the `trading-reconciliation-poller` grant
    requires the mTLS peer DNS SAN `xstockstrat-trading`, exactly as the read direction does. Record the
    cross-module contract naming both ends: the grant's `peerSan` literal
@@ -424,11 +424,11 @@ minimal, identity/auth scope
 - `validateFailureReason` `:24-29` maps `JsonWebTokenError` → `invalid`, so an algorithm-rejected token under the
   HS256 pin is counted as `invalid`.
 - Telemetry import block `identityServiceImpl.ts:11-17`.
-- `telemetry.ts:340-354` the `BoundCounter` declarations (`refreshRejections` at `:349`); `:360-380` the
-  `record*` exports (`recordRefreshRejection` at `:372`).
+- `telemetry.ts:390-405` the `BoundCounter` declarations (`refreshRejections` at `:399`); from `:410` the
+  `record*` exports (`recordRefreshRejection` at `:422`).
 - `jsonwebtoken` `^9.0.2` (`package.json:34`).
-- `services/xstockstrat-identity/CLAUDE.md:4` constitution pointer `defects (⚠ unsigned-token revoke)`; `:92`
-  Instruments line; `:93` "No token, email or hash is ever logged or labelled."
+- `services/xstockstrat-identity/CLAUDE.md:4` constitution pointer `defects (⚠ unsigned-token revoke)`; `:71`
+  Instruments line; `:72` "No token, email or hash is ever logged or labelled."
 - `services/xstockstrat-identity/docs/context-constitution-findings.md:60` — the
   `2026-10-19-identity-revoketoken-unverified-decode-defect` row; `:58` shows the resolved-row convention
   (`— **resolved (…)**`).
@@ -440,10 +440,10 @@ minimal, identity/auth scope
 **Covers**: —
 
 **Instructions**:
-1. `telemetry.ts`: after `refreshRejections` (`:349-351`) add a label-free counter
+1. `telemetry.ts`: after `refreshRejections` (`:399`) add a label-free counter
    `new BoundCounter('identity.revoke.unverifiable', { description: 'RevokeToken calls ignored because the token
    failed signature verification (forged, malformed, or pre-rotation)' })`, and after `recordRefreshRejection`
-   (`:372-374`) add `export function recordRevokeUnverifiable(): void` that adds 1 with no attributes. No label
+   (`:422`) add `export function recordRevokeUnverifiable(): void` that adds 1 with no attributes. No label
    (`R-9`); do not reuse `identity.token.validate_failures` (`R-7`).
 2. `identityServiceImpl.ts`:
    - Add `recordRevokeUnverifiable` to the import block (`:11-17`).
@@ -460,7 +460,7 @@ minimal, identity/auth scope
      existing `decoded?.user_id` UPDATE and `Tokens revoked` INFO run unchanged. Do not require `aud`
      (IDENTITY-4). Replace the `:283` comment with a constraint comment of at most two lines: expired tokens must
      still revoke, so expiry is ignored but the signature is not.
-3. `services/xstockstrat-identity/CLAUDE.md`: `:92` add `identity.revoke.unverifiable` (label-free) to the
+3. `services/xstockstrat-identity/CLAUDE.md`: `:71` add `identity.revoke.unverifiable` (label-free) to the
    Instruments line, with the constraint that it is not a forgery signal on its own — a `JWT_SECRET` rotation makes
    legitimate logouts of pre-rotation tokens increment it. `:4` change `defects (⚠ unsigned-token revoke) in` to
    `defects in`.
@@ -572,9 +572,11 @@ shared `watch_core.py` copy only
   `self._snapshot`; `:153-160` `wait_for_snapshot`; `:189-196` `_lookup` reads
   `snapshot = getattr(self, "_snapshot", None)` and returns `None` when it is `None`. No `has_snapshot` exists
   (**Not found** — created).
-- Copy group: `scripts/check-watcher-copies.sh:17-20` lists the four `watch_core.py` files; all four have md5
-  `17d555e01c1cdbfeb4aa57fb2590033e` at spec time; `docs/context-constitution.md:99` — "edit every copy in a group
-  or none"; CI `config-wiring` job.
+- Copy group: `scripts/check-watcher-copies.py:20-23` lists the four `watch_core.py` files (the `.sh` was ported
+  to Python; CI runs `python3 scripts/check-watcher-copies.py`, `.github/workflows/ci.yml:1319`); all four have md5
+  `13dc1f2497c20f17b34b349d9c8ee4cb` at re-spec time (content changed since spec time, still byte-identical —
+  re-read before editing); `docs/context-constitution.md:88` — "edit every copy in a group or none"; CI
+  `config-wiring` job.
 - `services/xstockstrat-agent/app/config/watcher.py:13` imports `WatchCore`; `:16` `WATCHED_NAMESPACES =
   ("agent", "indicators")`; `:19` `_WATCHERS`; `:64` `get_watcher`; `:68-77` `read_value` (returns `None` for no
   watcher, no snapshot, or key absent); `:97` boot blocks on `wait_for_snapshot`.
@@ -583,10 +585,10 @@ shared `watch_core.py` copy only
   failure must not 500 DCR."; read 1 `:86-90` (`except` logs "defaulting to enabled"); 403 `:91-94`;
   `redirect_uris` 400 `:96-101`; read 2 `:104-108` (`except` logs "defaulting to empty allowlist"); error shape
   `JSONResponse({"error": "server_error"}, 500)` `:138`.
-- `services/xstockstrat-agent/CLAUDE.md:208` — `oauth.registration_enabled` row, "(disabled ⇒ 403)".
+- `services/xstockstrat-agent/CLAUDE.md:122` — `oauth.registration_enabled` row, "(disabled ⇒ 403)".
 - `services/xstockstrat-agent/docs/oauth.md:21` — the `POST /oauth/register` route row; the file makes no
   fail-open claim (grep `fail-open|best-effort|defaults to enabled` → no match), so it is not edited (`D-16`).
-- `services/xstockstrat-agent/docs/context-constitution-findings.md:91` — the
+- `services/xstockstrat-agent/docs/context-constitution-findings.md:94` — the
   `2026-10-29-agent-dcr-fail-closed-defect` row.
 - `services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature:37-43` — `@AC-4 @FR-2 @regression
   @feature-247` "OAuth dynamic client registration does not hang", `Then … with HTTP 201` (`:42`), `And the body
@@ -621,9 +623,9 @@ shared `watch_core.py` copy only
    - Unchanged: a readable snapshot with the key unset keeps the defaults (`true` / `""`); a readable `false`
      still returns 403; the `:138` 500 for an identity failure stays. The 503 path adds no metric label
      (agent `@AC-47` preserved).
-4. `services/xstockstrat-agent/CLAUDE.md:208`: "(disabled ⇒ 403)" becomes "(disabled ⇒ 403; policy snapshot
+4. `services/xstockstrat-agent/CLAUDE.md:122`: "(disabled ⇒ 403)" becomes "(disabled ⇒ 403; policy snapshot
    absent ⇒ 503)".
-5. `docs/context-constitution-findings.md:91`: mark the row resolved by feature 319 (fail-closed 503).
+5. `docs/context-constitution-findings.md:94`: mark the row resolved by feature 319 (fail-closed 503).
 6. `acceptance/fix-agent-getconfig-deadline.feature` `@AC-4` — amend in place (`D-8`): add `@feature-319` to the
    tag line; the Given at `:39` becomes "the agent has no readable config snapshot for namespace \"agent\"";
    `:42` becomes "Then the endpoint responds within 2 × D plus 1 second with HTTP 503" (the no-hang bound is
@@ -633,7 +635,7 @@ shared `watch_core.py` copy only
 **Verification**:
 ```bash
 # Every line runs from the repo root; the subshells keep the working directory there.
-bash scripts/check-watcher-copies.sh   # "all groups byte-identical"
+python3 scripts/check-watcher-copies.py   # all groups byte-identical
 (cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run pytest --cov=app --cov-fail-under=40)
 for s in indicators ingest analysis; do (cd services/xstockstrat-$s && ruff check app/config/watch_core.py && ruff format --check app/config/watch_core.py && uv run pytest tests/test_config_watcher.py -q); done
 grep -n "def has_snapshot" services/xstockstrat-agent/app/config/watch_core.py services/xstockstrat-agent/app/config/watcher.py
@@ -643,7 +645,7 @@ grep -n "@feature-319\|HTTP 503" services/xstockstrat-agent/acceptance/fix-agent
 ```
 The per-service `tests/test_config_watcher.py` run is a smoke for the three other owners: each file builds that
 service's `ConfigWatcher` on the edited `watch_core.py`. `has_snapshot` has no caller in those services, so its
-behaviour is tested only in the agent (Step 8); the copies are held equal by `check-watcher-copies.sh`.
+behaviour is tested only in the agent (Step 8); the copies are held equal by `check-watcher-copies.py`.
 Run as the Steps 7+8 unit.
 
 ---
@@ -662,19 +664,19 @@ Run as the Steps 7+8 unit.
   unset); `:154-157` non-https 400; `:160-165` `test_register_disabled_returns_403` (sets
   `get_watcher("agent")._snapshot.values["oauth.registration_enabled"].bool_val = False`);
   `:168-183` `test_register_survives_config_read_failure` asserts **201** with `read_config_value` raising.
-- `tests/conftest.py:112-130` autouse `config_snapshots` registers a dial-free watcher per namespace with
-  `monkeypatch.setitem(watcher._WATCHERS, ns, w)`; a bare instance is built with
-  `watcher.ConfigWatcher.__new__(watcher.ConfigWatcher)`.
+- `tests/conftest.py:145-163` autouse `config_snapshots` registers a dial-free watcher per namespace with
+  `monkeypatch.setitem(watcher._WATCHERS, ns, w)` (`:163`); a bare instance is built with
+  `watcher.ConfigWatcher.__new__(watcher.ConfigWatcher)` (`:158`).
 - The lifespan re-creates a missing watcher and waits up to 90 s for its snapshot:
   `app/config/watcher.py:93-97` (`if ns not in _WATCHERS: _WATCHERS[ns] = ConfigWatcher(endpoint, ns)`), started
-  from `app/main.py:92`. So the `agent` watcher must be removed **after** `TestClient(_app())` has entered, never
+  from `app/main.py:228` inside `lifespan` (`:224`; also `:98` on the stdio path). So the `agent` watcher must be removed **after** `TestClient(_app())` has entered, never
   before.
 - `tests/test_config_watcher.py:46-50` `install_watcher(monkeypatch, namespace, **values)` — the public way to set
-  snapshot values (imported by `tests/test_tools.py:24`).
-- `tests/conftest.py:134` `hung_config_server` patches the `GetConfig` path and cannot drive `@AC-3` (recon.md).
+  snapshot values (imported by `tests/test_tools.py:30`).
+- `tests/conftest.py:167` `hung_config_server` patches the `GetConfig` path and cannot drive `@AC-3` (recon.md).
 - No other test posts to `/oauth/register` or patches `oauth_server.read_config_value`
   (`grep -rn "oauth/register\|read_config_value" tests` → `test_oauth.py` and one unrelated `tools` patch at
-  `test_tools.py:445`).
+  `test_tools.py:451`).
 
 **Lands with**: `Step 7`
 
