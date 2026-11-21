@@ -72,7 +72,7 @@ Existing durable rules the tests also pin (C-16, design.md § Business Rules Tou
 - Feature branch: `git grep -n -A8 "^  services/xstockstrat-notify:" HEAD -- pnpm-lock.yaml` → `:373` importer block, `:378-380` `'@grpc/grpc-js'` / `specifier: ^1.14.5` / `version: 1.14.5`.
 - `origin/main-dev` `fb52065c`: the same two greps give `package.json:21` `"^1.14.7"` and `pnpm-lock.yaml:378-380` `specifier: ^1.14.7` / `version: 1.14.7`.
 - `git rev-list --count HEAD..origin/main-dev` → 168. `git diff --stat origin/main-dev...HEAD` shows the branch changed only this feature's directory and `docs/roadmap/ledger/fails.md` (+5 lines).
-- The spike ran on 1.14.7 only; 1.14.5 is not installed on the host (context.md:253-255).
+- The spike ran on 1.14.7 only; 1.14.5 is not installed on the host (context.md:588-590).
 
 **Lands with**: —
 
@@ -310,9 +310,9 @@ cd services/xstockstrat-notify && pnpm exec tsc && node --test --test-name-patte
 **Reviewers**: `xstockstrat-notify` owner — Stream delivery guarantees, backpressure handling, alert deduplication
 
 **Codebase Evidence**:
-- Binding: operator ruling of 2026-11-20 (context.md:33-37, § Decisions › Operator decisions, "Binding from round 5"; the former "Session 2026-11-20 — sdd-design" section was folded into Decisions by distill 4a4d9f13) and design.md § Real-grpc-js test: an in-process server plus a paused raw `node:http2` client, asserting (f) and (g). It answers O-14.
-- Spike method and results this test reproduces: context.md:259-263 and the `emit('error')` column at `:267-282`; verbatim run `=== teardown=emit-error client=raw ===` at `:337-347` (trailers `grpc-status: 8`, `grpc-message: slow%20consumer%20evicted`; `sendMessageCallsDuringStallAfterEviction: 0`).
-- Why a raw http2 client: an in-process grpc-js client with no `'data'` listener keeps reading and does not stall the server (context.md:260; product-spec.md § Reproduction Steps 2).
+- Binding: operator ruling of 2026-11-20 (context.md "Session 2026-11-20 — sdd-design", Binding from round 5) and design.md § Real-grpc-js test: an in-process server plus a paused raw `node:http2` client, asserting (f) and (g). It answers O-14.
+- Spike method and results this test reproduces: context.md:594-598 and the `emit('error')` column at `:602-617`; verbatim run `=== teardown=emit-error client=raw ===` at `:672-682` (trailers `grpc-status: 8`, `grpc-message: slow%20consumer%20evicted`; `sendMessageCallsDuringStallAfterEviction: 0`).
+- Why a raw http2 client: an in-process grpc-js client with no `'data'` listener keeps reading and does not stall the server (context.md:595; product-spec.md § Reproduction Steps 2).
 - Real server wiring to copy: `src/index.ts:59-60` `new grpc.Server()` + `addService(createNotifyServiceDefinition(), notifyImpl as unknown as grpc.UntypedServiceImplementation)`; `createNotifyServiceDefinition` is `src/grpc/serviceDefinition.ts:4`.
 - In-process insecure bind precedent: `src/__tests__/telemetry.export.test.ts:359-361` (`new grpc.Server()`, `addService`, `server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (err, port) => …)`), teardown `server.forceShutdown()` (`:369`).
 - grpc import form in notify tests: `import * as grpc from '@grpc/grpc-js';` (`src/__tests__/webPush.test.ts:13`).
@@ -411,7 +411,7 @@ grep -n "node:http2\|createInsecure" services/xstockstrat-notify/src/__tests__/n
 - No other consumer of the union: `grep -rn "StreamEvictionReason\|stream_error\|write_error" services/xstockstrat-notify/src` hits only `telemetry.ts`, `notifyServiceImpl.ts`, `__tests__/telemetryAllowlist.test.ts:36` (records `write_error` only; pins instrument names, not label values) and the `@AC-32` test. Repo-wide, `git grep -l "stream_error"` outside notify hits only the agent's unrelated OAuth metric.
 - Doc line: `services/xstockstrat-notify/CLAUDE.md:125`, in `## Observability` (`:122`): "`notify.stream.evictions{reason write_error|stream_error}`".
 - Scenario text: `acceptance.feature:16` `Given a StreamAlerts subscriber whose call.write returns false and never emits drain`.
-- Spike facts the code rests on (grpc-js 1.14.7): `writableLength` is a number and a live depth in messages, 1024 at the eviction (context.md:286); `emit('error', { code: 8, details })` flushes the capped queue then sends `grpc-status: 8` (`:277-278`); one write after the emit raises `ERR_STREAM_WRITE_AFTER_END` and no status is ever sent (`:288`); the status path emits `finish`, `cancelled`, `close` on the server (`:289`).
+- Spike facts the code rests on (grpc-js 1.14.7): `writableLength` is a number and a live depth in messages, 1024 at the eviction (context.md:621); `emit('error', { code: 8, details })` flushes the capped queue then sends `grpc-status: 8` (`:612-613`); one write after the emit raises `ERR_STREAM_WRITE_AFTER_END` and no status is ever sent (`:623`); the status path emits `finish`, `cancelled`, `close` on the server (`:624`).
 - Header propagation: no new outbound gRPC call is added; §B does not apply.
 - Break radius: no signature, constructor or return shape changes. Widening a string union and adding a module constant breaks no caller. Existing mocks carry no `writableLength`, so `undefined >= 1024` is false and they behave as before.
 
@@ -438,7 +438,7 @@ grep -n "node:http2\|createInsecure" services/xstockstrat-notify/src/__tests__/n
      continue;
    }
    ```
-   - The map delete comes before the emit; this order is load-bearing (context.md:288).
+   - The map delete comes before the emit; this order is load-bearing (context.md:623).
    - The code is the bare numeric `8`; do not import `grpc` (R-9).
    - Never `call.destroy()` and never a bare `call.end()` (R-10, R-11). Add no timer, no `'drain'` listener, no private grpc-js access (R-1, R-4, R-8), and no `typeof` guard (D-5).
    - The evicting alert is not written and `deliveredCount` is not incremented.
@@ -487,7 +487,7 @@ grep -n "1024 alerts queued" docs/roadmap/features/316-fix-notify-stream-contrac
 - `context-constitution-findings.md:73`, the report row for `2026-10-19-notify-stream-ignores-backpressure-defect`; `## Resolved` starts at `:46`.
 - Sidecar today: line 1 `triaged`, line 2 `ref: feature:316-fix-notify-stream-contract`.
 - **Not found**: the backpressure gotcha recon and D-8 cited at `services/xstockstrat-notify/docs/context-constitution.md:30`. `grep -n -i "backpressure" services/xstockstrat-notify/docs/context-constitution.md` returns nothing at `fb52065c`; there is nothing to retire in that file.
-- Content of the invariant (D-20; operator ruling of 2026-11-20): grpc-js 1.14.7 `server-call.js:121-124` (the server-stream `'error'` listener sets the pending status and calls `end()`) and `:152-156` (`_final` → `sendStatus`); verified on 1.14.7 only (context.md:255).
+- Content of the invariant (D-20; operator ruling of 2026-11-20): grpc-js 1.14.7 `server-call.js:121-124` (the server-stream `'error'` listener sets the pending status and calls `end()`) and `:152-156` (`_final` → `sendStatus`); verified on 1.14.7 only (context.md:590).
 
 **Lands with**: —
 
