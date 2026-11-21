@@ -1,7 +1,7 @@
 package config
 
 // Byte-identical in xstockstrat-{trading,portfolio,marketdata}/internal/config; edit all three
-// together (scripts/check-watcher-copies.sh fails CI on drift).
+// together (scripts/check-watcher-copies.py fails CI on drift).
 
 import (
 	"context"

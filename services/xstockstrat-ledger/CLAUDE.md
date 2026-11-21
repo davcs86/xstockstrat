@@ -24,8 +24,7 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 
 This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing
 `AppendEvent`, `QueryEvents`, `GetEvent`, `StreamEvents`, and the server-streaming `ExportEvents`). All callers connect over gRPC
-`50057`. The former HTTP/Connect-RPC server on `8057` (and the `src/connect/` Connect router)
-was removed.
+`50057`.
 
 ## Critical Invariants
 
@@ -46,21 +45,10 @@ subscribes to the notifier first, then replays history in bounded pool batches (
 `max(sequence)` bound captured after subscribe, releasing the connection between batches), then flushes the
 buffered live rows synchronously and goes live.
 
-`QueryEvents` pages by an opaque `sequence` keyset token (`page_token`); page size defaults to 100 and is capped at 1000.
-
-This decoupling is load-bearing: `xstockstrat-portfolio` holds **five** permanent `StreamEvents`
-subscriptions (`order.filled`, `account.positions.synced`, `account.deregistered`,
-`order.bracket_updated`, `account.balance.synced`), and `xstockstrat-analysis` holds a single unfiltered
-P&L stream. Under the old per-stream design each held one of the pool's 2 connections, so the pool was permanently
-exhausted and **every `AppendEvent` blocked until the caller's deadline** (`DeadlineExceeded`) —
-which is why position/balance-sync ledger writes silently froze. The query pool is therefore now
-`DB_POOL_MAX=1` (+ 1 dedicated listener = 2 total, unchanged budget). Subscriptions are released on
+Never hold a pooled connection for a stream's lifetime: query pool = 1 + 1 dedicated LISTEN connection (the old
+per-stream design froze every `AppendEvent`; consumers: LEDGER-3). Subscriptions are released on
 `cancelled`/`close`/`error` (leak-proof), and on listener reconnect the handler ends the call so
 the client reconnects and replays the gap.
-
-The trigger NOTIFYs a payload-less row for payloads over ~7000 chars; `EventNotifier` resolves it once, on the
-LISTEN connection, by PK `(event_id, recorded_at)` before fan-out. On a resolve failure the matching streams end
-with 13 (not found) or 14 (error/timeout) and clients replay from their last sequence.
 
 ## Dependencies
 
@@ -70,9 +58,6 @@ with 13 (not found) or 14 (error/timeout) and clients replay from their last seq
 | TimescaleDB | DB (schema: `ledger`) | Append-only events hypertable |
 
 ## Config Keys Consumed
-
-> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
-> by a config migration.
 
 Namespace: `ledger`
 
@@ -99,7 +84,6 @@ dedup).
 ## Database
 
 - Schema: `ledger`
-- Hypertable: `ledger.events` — partition by `recorded_at`, chunk = 1 day
 - Table: `ledger.idempotency_keys` — caller-supplied `AppendEvent` dedup map (`idempotency_key` PK → `event_id`); migration `002_idempotency_keys`
 - Compression / retention: **not implemented** — no migration or script adds a Timescale compression or
   retention policy, and no config key controls either
@@ -120,28 +104,18 @@ dedup).
 
 ## Observability (feature 294-signal-map-instrumentation)
 
-Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
-
 - No `loop tick ok`: `EventNotifier` is a reconnect loop, not a tick loop.
 - Instruments (no labels): `ledger.notify.listener_up` (1 when connected, 0 from the start of a reconnect) and `ledger.notify.listener_reconnects`. Reconnect failures log at the 1st and every 10th consecutive attempt (N=10).
 
 ## Environment Variables
 
-> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
+> mTLS: requires `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` (fail-closed) — see root `CLAUDE.md` § Environment Variable Naming Convention.
 
 ```text
 GRPC_PORT=50057
 CONFIG_ENDPOINT=xstockstrat-config:50060
-DATABASE_CA_CERT=<PEM>                 # feature 266 — required unless DATABASE_URL has exactly sslmode=disable (local compose); unset on a TLS URL ⇒ boot exits naming DATABASE_CA_CERT. Any ssl*/uselibpqcompat URL param is refused. The sslmode=disable carve-out is DB-only — gRPC mTLS stays fail-closed
+DATABASE_CA_CERT=<PEM>                 # required unless sslmode=disable — docs/patterns/database.md
 DB_POOL_MAX=1                          # query pool size; live streaming uses a separate dedicated LISTEN connection (1 + 1 = 2 total, see Live Streaming Architecture)
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
-```
-
-## Running Locally
-
-```bash
-pnpm install
-# schema: run ../../scripts/db-migrate.sh from repo root (golang-migrate, not node-pg-migrate)
-pnpm run dev
 ```

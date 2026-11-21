@@ -30,12 +30,10 @@ import {
 } from '@/hooks/useWatchlists';
 import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
 import { useOpportunities } from '@/hooks/useOpportunities';
-import { WatchlistReadiness } from '@/components/insights/WatchlistReadiness';
+import { WatchlistReadiness, type Binding } from '@/components/insights/WatchlistReadiness';
 import { RefusedSymbolsNotice } from '@/components/insights/RefusedSymbolsNotice';
 import type { RefusedSymbol } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { BASE_PATH_INSIGHTS } from '@/lib/basepath';
-
-type Binding = { symbol: string; strategyId: string; source?: number };
 
 type WatchlistLike = {
   watchlistId: string;

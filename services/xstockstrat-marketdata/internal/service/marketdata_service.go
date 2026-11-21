@@ -28,6 +28,7 @@ import (
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/middleware"
 	"github.com/xstockstrat/marketdata/internal/mtls"
+	"github.com/xstockstrat/marketdata/internal/reconcile"
 	"github.com/xstockstrat/marketdata/internal/repository"
 	"github.com/xstockstrat/marketdata/internal/source"
 	"github.com/xstockstrat/marketdata/internal/telemetry"
@@ -102,6 +103,10 @@ type MarketDataService struct {
 	etf etfFlagState
 	// assets is the Alpaca us_equity asset-set snapshot (feature 282); zero value = not loaded (every symbol servable).
 	assets assetServabilityState
+
+	// delisting is the delisted-symbol state (feature 352); zero value = no store wired (hook is a no-op).
+	delisting delistingState
+
 	// quotaAlert dedupes the 80%-quota WARNING to one emit per active window (UTC day for FMP,
 	// rolling window for Finnhub — see maybeAlertQuota/fundamentalsQuota).
 	quotaAlertMu     sync.Mutex
@@ -179,14 +184,16 @@ type fundamentalsRepo interface {
 // histFundamentalsRepo is the persistence surface for the point-in-time fundamentals store
 // (feature 198), behind an interface so the RPC logic is unit-testable with stubs.
 type histFundamentalsRepo interface {
-	InsertHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) error
 	QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string, pageSize int, pageToken string) ([]source.HistoricalFundamentalsPeriod, string, error)
 	LatestHistoricalFundamental(ctx context.Context, symbol string, asOf time.Time) (*source.HistoricalFundamentalsPeriod, error)
 	CloseAt(ctx context.Context, symbol string, date, since time.Time) (*float64, error)
 	UpsertDividends(ctx context.Context, divs []source.CashDividend) error
 	SumDividendsInWindow(ctx context.Context, symbol string, asOf, windowStart time.Time) (float64, bool, error)
-	// feature 216: price-join recovery methods.
-	GetHistoricalPriceState(ctx context.Context, symbol, fiscalPeriod, periodType string) (*source.HistoricalPriceState, error)
+	// feature 348: the backfill reads every stored row of a symbol and replaces the ones the
+	// derivation no longer reproduces in one transaction.
+	ListHistoricalRows(ctx context.Context, symbol string) ([]source.HistoricalPriceState, error)
+	ReplaceHistoricalFundamentals(ctx context.Context, symbol string, deletes []source.HistoricalPriceState, inserts []source.HistoricalFundamentalsPeriod) error
+	// feature 216: price-join recovery of an existing row.
 	UpdateHistoricalPriceJoin(ctx context.Context, symbol, fiscalPeriod, periodType string, price, marketCap, peRatio, pbRatio, dividendYield *float64) error
 	// feature 223: derivation-version upgrade of stored rows + edgar snapshot-cache invalidation.
 	RederiveHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) (bool, error)
@@ -1217,13 +1224,16 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 				telemetry.LogTickOK(ctx, telemetry.LoopWarmQuote, time.Since(tickStart), "idle")
 				continue
 			}
-			s.warmQuotesOnce(ctx, symbols)
+			fetchCtx, cancel := context.WithTimeout(ctx, interval)
+			s.warmQuotesOnce(ctx, fetchCtx, symbols)
+			cancel()
 		}
 	}
 }
 
-// warmQuotesOnce runs one warm-poller cycle over symbols.
-func (s *MarketDataService) warmQuotesOnce(ctx context.Context, symbols []string) {
+// warmQuotesOnce runs one warm-poller cycle over symbols. Only the vendor fetches use fetchCtx (the cycle's
+// interval deadline); cache writes and the tick record must stay on ctx, or a late fetch drops its own writes.
+func (s *MarketDataService) warmQuotesOnce(ctx, fetchCtx context.Context, symbols []string) {
 	start := time.Now()
 	var insertFailed []string
 	since := s.quoteSince()
@@ -1233,7 +1243,7 @@ func (s *MarketDataService) warmQuotesOnce(ctx context.Context, symbols []string
 	}
 	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
 	if ms, ok := src.(source.MultiSymbolSource); ok {
-		if quotes, err := ms.GetLatestQuotesMulti(ctx, symbols); err == nil {
+		if quotes, err := ms.GetLatestQuotesMulti(fetchCtx, symbols); err == nil {
 			for _, q := range quotes {
 				if err := s.cacheQuote(ctx, q, since); err != nil {
 					slog.DebugContext(ctx, "warm poller: cache insert failed", "symbol", q.Symbol, "error", err)
@@ -1250,7 +1260,11 @@ func (s *MarketDataService) warmQuotesOnce(ctx context.Context, symbols []string
 	var fetched, failed int
 	var firstErr error
 	for _, sym := range symbols {
-		q, err := src.GetLatestQuote(ctx, sym)
+		err := fetchCtx.Err()
+		var q *marketdatav1.Quote
+		if err == nil {
+			q, err = src.GetLatestQuote(fetchCtx, sym)
+		}
 		if err != nil {
 			failed++
 			if firstErr == nil {
@@ -1310,7 +1324,9 @@ func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
 				interval = newInterval
 				ticker.Reset(interval)
 			}
-			s.ingestRecentBars(ctx)
+			fetchCtx, cancel := context.WithTimeout(ctx, interval)
+			s.ingestRecentBars(ctx, fetchCtx)
+			cancel()
 		}
 	}
 }
@@ -1363,7 +1379,7 @@ func minIngestLookback(canonicalTf string) time.Duration {
 
 // ingestRecentBars upserts the recent bar window for every warm symbol × configured timeframe.
 // Overlap is harmless (InsertBars upserts); each window is at least minIngestLookback(tf).
-func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
+func (s *MarketDataService) ingestRecentBars(ctx, fetchCtx context.Context) {
 	symbols := s.warmSnapshot()
 	if len(symbols) == 0 {
 		return
@@ -1384,21 +1400,29 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 		if floor := minIngestLookback(tf); floor > lookback {
 			lookback = floor
 		}
-		s.ingestRecentBarsForTimeframe(ctx, src, symbols, tf, end.Add(-lookback), end)
+		s.ingestRecentBarsForTimeframe(ctx, fetchCtx, src, symbols, tf, end.Add(-lookback), end)
 	}
 }
 
 // ingestRecentBarsForTimeframe is ingestRecentBars' per-timeframe body, split out so the
-// caller can size each timeframe's window independently (see minIngestLookback).
-func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, src source.DataSourceClient, symbols []string, tf string, start, end time.Time) {
+// caller can size each timeframe's window independently (see minIngestLookback). Only the vendor fetches use
+// fetchCtx; a symbol not fetched before it expired is an error for the cycle, never "no bars" (291 @AC-5).
+func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx, fetchCtx context.Context, src source.DataSourceClient, symbols []string, tf string, start, end time.Time) {
 	began := time.Now()
 	d := resolveBarIngestBackoff(s.budgetCfg)
 	plan := s.planBarRequest(symbols, tf, end, d)
 	out := barOutcome{got: map[string]bool{}, errored: map[string]bool{}}
 	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
 	fetched := len(plan.requested) == 0
+	if !fetched && fetchCtx.Err() != nil {
+		fetched = true
+		for _, sym := range plan.requested {
+			out.errored[sym] = true
+		}
+		slog.WarnContext(ctx, "bar ingest: cycle deadline passed, timeframe not fetched", "timeframe", tf, "symbols", len(plan.requested))
+	}
 	if ms, ok := src.(source.MultiSymbolSource); ok && !fetched {
-		if barsBySym, err := ms.GetBarsMulti(ctx, plan.requested, tf, start, end); err == nil {
+		if barsBySym, err := ms.GetBarsMulti(fetchCtx, plan.requested, tf, start, end); err == nil {
 			fetched = true
 			for sym, bars := range barsBySym {
 				if len(bars) == 0 {
@@ -1415,7 +1439,11 @@ func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, sr
 	}
 	if !fetched {
 		for _, sym := range plan.requested {
-			bars, err := src.GetBars(ctx, sym, tf, start, end)
+			err := fetchCtx.Err()
+			var bars []*marketdatav1.Bar
+			if err == nil {
+				bars, err = src.GetBars(fetchCtx, sym, tf, start, end)
+			}
 			if err != nil {
 				out.errored[sym] = true
 				slog.WarnContext(ctx, "bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)
@@ -1516,6 +1544,7 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 
 	var totalWritten int64
 	var failedSymbols []string
+	var results []*commonv1.BackfillSymbolResult
 
 	src, err := s.registry.Get("")
 	if err != nil {
@@ -1525,17 +1554,27 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	for _, sym := range req.Symbols {
 		bars, err := src.GetBars(ctx, sym, canonicalTf, start, end)
 		if err != nil {
-			slog.ErrorContext(ctx, "backfill failed", "symbol", sym, "error", err)
-			failedSymbols = append(failedSymbols, sym)
-			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillFailed)
+			result, failed := s.backfillErrorResult(sym, err, true)
+			results = append(results, result)
+			if failed {
+				slog.ErrorContext(ctx, "backfill failed", "symbol", sym, "error", err)
+				failedSymbols = append(failedSymbols, sym)
+				telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillFailed)
+			} else {
+				slog.InfoContext(ctx, backfillSkippedMsg, "symbol", sym, "error", err)
+				telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillSkipped)
+			}
 			continue
 		}
 		if len(bars) == 0 {
+			results = append(results, backfillEmptyResult(sym))
 			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillEmpty)
 			continue
 		}
 		if err := s.barInserter.InsertBars(ctx, bars); err != nil {
 			slog.ErrorContext(ctx, "insert bars failed", "symbol", sym, "error", err)
+			result, _ := s.backfillErrorResult(sym, err, false)
+			results = append(results, result)
 			failedSymbols = append(failedSymbols, sym)
 			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillFailed)
 			continue
@@ -1559,7 +1598,31 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 		BarsWritten:   totalWritten,
 		FailedSymbols: failedSymbols,
 		ExpectedBars:  estimateExpectedBars(req.Symbols, canonicalTf, start, end),
+		SymbolResults: results,
 	}, nil
+}
+
+const backfillSkippedMsg = "backfill: flagged-delisted symbol skipped"
+
+// sourceError marks an error returned by the data source itself, as opposed to our own database.
+type sourceError struct{ error }
+
+func (e sourceError) Unwrap() error { return e.error }
+
+// backfillErrorResult classifies a per-symbol backfill error: only a source error on a
+// flagged-delisted symbol is SKIPPED; everything else is FAILED and counts as failed.
+func (s *MarketDataService) backfillErrorResult(sym string, err error, fromSource bool) (*commonv1.BackfillSymbolResult, bool) {
+	result := &commonv1.BackfillSymbolResult{Symbol: sym, Reason: err.Error()}
+	if fromSource && s.isFlaggedDelisted(sym) {
+		result.Outcome = commonv1.BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_SKIPPED
+		return result, false
+	}
+	result.Outcome = commonv1.BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_FAILED
+	return result, true
+}
+
+func backfillEmptyResult(sym string) *commonv1.BackfillSymbolResult {
+	return &commonv1.BackfillSymbolResult{Symbol: sym, Outcome: commonv1.BackfillSymbolOutcome_BACKFILL_SYMBOL_OUTCOME_EMPTY}
 }
 
 // estimateExpectedBars approximates total bars across symbols/range (weekdays × per-day factor ×
@@ -2134,14 +2197,8 @@ func (s *MarketDataService) maybeAlertQuota(ctx context.Context, provider string
 // emitWarning emits an ALERT_SEVERITY_WARNING notify alert. Distinct from emitAlert,
 // which hardcodes ALERT_SEVERITY_ERROR — FR-7 needs a WARNING.
 func (s *MarketDataService) emitWarning(ctx context.Context, provider, msg string) {
-	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
-		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING,
-		Category:      "system",
-		Title:         fmt.Sprintf("marketdata %s quota warning", strings.ToUpper(provider)),
-		Body:          msg,
-		SourceService: "marketdata",
-	})
-	if err != nil {
+	title := fmt.Sprintf("marketdata %s quota warning", strings.ToUpper(provider))
+	if err := s.emitNotice(ctx, title, "system", msg); err != nil {
 		slog.WarnContext(ctx, "notify emit (warning) failed", "error", err)
 	}
 }
@@ -2296,34 +2353,54 @@ func (s *MarketDataService) BackfillFundamentals(ctx context.Context, req *marke
 	overwrite := req.GetOverwrite()
 	var written int64
 	var failed []string
+	var results []*commonv1.BackfillSymbolResult
 	for _, sym := range req.GetSymbols() {
 		n, err := s.backfillOneSymbol(ctx, sym, from, to, periodTypes, enrichEnabled, overwrite)
 		if err != nil {
-			slog.WarnContext(ctx, "fundamentals backfill: symbol failed (skipped)", "symbol", sym, "error", err)
-			failed = append(failed, sym)
-			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillFailed)
+			var srcErr sourceError
+			result, isFailed := s.backfillErrorResult(sym, err, errors.As(err, &srcErr))
+			results = append(results, result)
+			if isFailed {
+				slog.WarnContext(ctx, "fundamentals backfill: symbol failed (skipped)", "symbol", sym, "error", err)
+				failed = append(failed, sym)
+				telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillFailed)
+			} else {
+				slog.InfoContext(ctx, backfillSkippedMsg, "symbol", sym, "error", err)
+				telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillSkipped)
+			}
 			continue
 		}
 		if n > 0 {
 			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillWritten)
 		} else {
+			results = append(results, backfillEmptyResult(sym))
 			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillEmpty)
 		}
 		written += n
 	}
-	return &marketdatav1.BackfillFundamentalsResponse{PeriodsWritten: written, FailedSymbols: failed}, nil
+	return &marketdatav1.BackfillFundamentalsResponse{PeriodsWritten: written, FailedSymbols: failed, SymbolResults: results}, nil
 }
 
-// backfillOneSymbol fetches, price-joins, optionally enriches, and persists one symbol's periods.
-// overwrite=true forces re-derivation of the 5 price-join columns on existing rows (feature 216
-// C-16 CHANGE, user-signed-off); overwrite=false fills only nil columns (feature-198 @AC-2 preserving).
+// backfillOneSymbol derives one symbol's full period set, reconciles it with the stored rows and
+// persists the difference. overwrite=true forces re-derivation of the 5 price-join columns on existing
+// rows (feature 216 C-16 CHANGE, user-signed-off); overwrite=false fills only nil columns.
 func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string, from, to time.Time, periodTypes []string, enrichEnabled, overwrite bool) (int64, error) {
-	periods, err := s.histFundamentals.FetchHistorical(ctx, symbol, from, to, periodTypes)
+	// The full history is fetched whatever the request asks for: the plan can only tell a stored row
+	// from a replaced or a vanished one against every derived period.
+	periods, err := s.histFundamentals.FetchHistorical(ctx, symbol, time.Time{}, time.Time{}, nil)
 	if err != nil {
-		return 0, err
+		return 0, sourceError{err}
 	}
 	// Sort chronologically so the TTM-EPS rolling sum sees prior quarters first.
 	sort.Slice(periods, func(i, j int) bool { return periods[i].PeriodEnd.Before(periods[j].PeriodEnd) })
+	stored, err := s.histRepo.ListHistoricalRows(ctx, symbol)
+	if err != nil {
+		return 0, err
+	}
+	plan, err := reconcile.Build(stored, periods, reconcile.Request{PeriodTypes: periodTypes, From: from, To: to})
+	if err != nil {
+		return 0, err
+	}
 	// Fetch this symbol's cash dividends once (feature 211, FR-4). A nil/disabled source or an
 	// unavailable/unentitled feed leaves dividend_yield missing (never a fabricated 0) and is logged
 	// for audit — the per-period yield below runs only when this fetch succeeded.
@@ -2347,50 +2424,70 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 			}
 		}
 	}
+	type periodID struct{ label, periodType string }
+	ttmEPS := make(map[periodID]*float64, len(periods))
 	var quarterlyEPS []float64 // trailing quarterly EPS for the TTM rollup
+	for i := range periods {
+		ttmEPS[periodID{periods[i].FiscalPeriod, periods[i].PeriodType}] = s.accumulateTTM(&periods[i], &quarterlyEPS)
+	}
+
 	var written int64
 	rederived := 0
+	replaced := false
 	defer func() {
-		if rederived == 0 {
+		if rederived > 0 {
+			slog.InfoContext(ctx, "fundamentals backfill: re-derived stale stored periods", "symbol", symbol, "periods", rederived)
+		}
+		if rederived == 0 && !replaced {
 			return
 		}
-		slog.InfoContext(ctx, "fundamentals backfill: re-derived stale stored periods", "symbol", symbol, "periods", rederived)
 		if err := s.histRepo.DeleteEdgarSnapshot(ctx, symbol); err != nil {
 			slog.WarnContext(ctx, "fundamentals backfill: edgar snapshot invalidation failed (served until TTL)", "symbol", symbol, "error", err)
 		}
 	}()
-	for i := range periods {
-		p := &periods[i]
-		ttmEPS := s.accumulateTTM(p, &quarterlyEPS)
 
-		// Read the stored row (feature 216 recovery path).
-		state, serr := s.histRepo.GetHistoricalPriceState(ctx, symbol, p.FiscalPeriod, p.PeriodType)
-		if serr != nil {
-			slog.WarnContext(ctx, "fundamentals backfill: price-state read failed (skipped)", "symbol", symbol, "period", p.FiscalPeriod, "error", serr)
-			continue
+	// Every insert is priced before the replace transaction opens.
+	inserts := make([]source.HistoricalFundamentalsPeriod, len(plan.Inserts))
+	for i := range plan.Inserts {
+		p := plan.Inserts[i]
+		p.Price = s.closeAtFiling(ctx, &p)
+		s.deriveDividendYield(ctx, symbol, &p, dividendsFetched, divFetchStart)
+		// Price and yield depend only on the symbol and the filing date, so a stored row filed the
+		// same day may supply them; every ratio is recomputed from this row's own statement.
+		if carry := storedAtFiling(stored, &p); carry != nil {
+			merged := mergePrice(carry, &p, overwrite)
+			p.Price, p.DividendYield = merged.price, merged.dividendYield
 		}
-
-		if !state.Found {
-			// New row — forward path: derive then insert (DO NOTHING preserved for idempotency).
-			s.derivePriceMetrics(ctx, p, ttmEPS, p.Currency)
-			s.deriveDividendYield(ctx, symbol, p, dividendsFetched, divFetchStart)
-			if enrichEnabled && s.ratioEnricher != nil && s.enrichmentUnderCap() {
-				if err := s.ratioEnricher.Enrich(ctx, p); err != nil {
-					slog.WarnContext(ctx, "fundamentals ratio enrichment failed (edgar row kept)", "symbol", symbol, "period", p.FiscalPeriod, "error", err)
-				} else {
-					p.Source = "edgar+fmp"
-				}
-			}
-			if err := s.histRepo.InsertHistoricalFundamentals(ctx, *p); err != nil {
-				return written, err
-			}
-			written++
-			continue
+		if p.Price != nil {
+			applyPriceRatios(&p, *p.Price, ttmEPS[periodID{p.FiscalPeriod, p.PeriodType}], p.Currency)
 		}
+		if enrichEnabled && s.ratioEnricher != nil && s.enrichmentUnderCap() {
+			if err := s.ratioEnricher.Enrich(ctx, &p); err != nil {
+				slog.WarnContext(ctx, "fundamentals ratio enrichment failed (edgar row kept)", "symbol", symbol, "period", p.FiscalPeriod, "error", err)
+			} else {
+				p.Source = "edgar+fmp"
+			}
+		}
+		inserts[i] = p
+	}
+	if len(plan.Deletes) > 0 || len(inserts) > 0 {
+		// A failed replace leaves the symbol unwritten: no in-place update follows it.
+		if err := s.histRepo.ReplaceHistoricalFundamentals(ctx, symbol, plan.Deletes, inserts); err != nil {
+			return 0, err
+		}
+		replaced = true
+		written += int64(len(inserts))
+		for _, u := range plan.Unreplaced {
+			slog.InfoContext(ctx, "fundamentals backfill: stored period deleted without replacement", "symbol", symbol,
+				"fiscal_period", u.Row.FiscalPeriod, "period_type", u.Row.PeriodType, "period_end", u.Row.PeriodEnd.Format(time.DateOnly),
+				"filed_date", u.Row.FiledDate.Format(time.DateOnly), "category", u.Category)
+		}
+	}
 
-		// Existing row — recovery path keyed on the STORED earliest filed_date (feature 216 §4d).
-		// Setting p.FiledDate here before derivation keeps CloseAt and the T12M dividend window
-		// anchored to the original filing — the structural guard against look-ahead.
+	for i := range plan.Identical {
+		state, p := &plan.Identical[i].Stored, &plan.Identical[i].Fresh
+		// Recovery path keyed on the STORED filed_date (feature 216 §4d): CloseAt and the T12M
+		// dividend window stay anchored to the original filing — the structural guard against look-ahead.
 		p.FiledDate = state.FiledDate
 
 		// Derivation drift (feature 223): a row written by an older period builder is upgraded in
@@ -2412,7 +2509,7 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 			continue
 		}
 
-		s.derivePriceMetrics(ctx, p, ttmEPS, state.Currency)
+		s.derivePriceMetrics(ctx, p, ttmEPS[periodID{p.FiscalPeriod, p.PeriodType}], state.Currency)
 		s.deriveDividendYield(ctx, symbol, p, dividendsFetched, divFetchStart)
 
 		// Unified per-column merge (monotonic: nil→value or value→value′, NEVER value→nil).
@@ -2428,6 +2525,23 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 		}
 	}
 	return written, nil
+}
+
+// storedAtFiling returns the stored row of p's period type filed on p's filing date, the earliest
+// period_end first; nil when there is none.
+func storedAtFiling(stored []source.HistoricalPriceState, p *source.HistoricalFundamentalsPeriod) *source.HistoricalPriceState {
+	var found *source.HistoricalPriceState
+	filed := p.FiledDate.Format(time.DateOnly)
+	for i := range stored {
+		row := &stored[i]
+		if row.PeriodType != p.PeriodType || row.FiledDate.Format(time.DateOnly) != filed {
+			continue
+		}
+		if found == nil || row.PeriodEnd.Before(found.PeriodEnd) {
+			found = row
+		}
+	}
+	return found
 }
 
 // mergedPriceState holds the result of one per-column merge pass.
@@ -2531,19 +2645,29 @@ func (s *MarketDataService) accumulateTTM(p *source.HistoricalFundamentalsPeriod
 }
 
 // derivePriceMetrics sets p.Price, p.MarketCap, p.PERatio, and p.PBRatio from the adjusted close
-// at p.FiledDate. storedCurrency gates the native P/E and P/B derivation so a currency mismatch
-// between the stored row and the re-fetched period never produces a cross-currency ratio. No OHLCV bar
-// within recentBarsMinLookback before filed_date leaves all four metrics nil (fail-closed, never 0).
+// at p.FiledDate. No OHLCV bar within recentBarsMinLookback before filed_date leaves all four
+// metrics nil (fail-closed, never 0).
 func (s *MarketDataService) derivePriceMetrics(ctx context.Context, p *source.HistoricalFundamentalsPeriod, ttmEPS *float64, storedCurrency string) {
+	if close := s.closeAtFiling(ctx, p); close != nil {
+		applyPriceRatios(p, *close, ttmEPS, storedCurrency)
+	}
+}
+
+// closeAtFiling returns the adjusted close at p.FiledDate; nil when no OHLCV bar lies within
+// recentBarsMinLookback before it or the lookup fails.
+func (s *MarketDataService) closeAtFiling(ctx context.Context, p *source.HistoricalFundamentalsPeriod) *float64 {
 	close, err := s.histRepo.CloseAt(ctx, p.Symbol, p.FiledDate, p.FiledDate.Add(-recentBarsMinLookback))
 	if err != nil {
 		slog.WarnContext(ctx, "fundamentals price-join: close lookup failed", "symbol", p.Symbol, "period", p.FiscalPeriod, "error", err)
-		return
+		return nil
 	}
-	if close == nil {
-		return // no bar within recentBarsMinLookback of filed_date → leave metrics nil (fail-closed)
-	}
-	price := *close
+	return close
+}
+
+// applyPriceRatios sets p.Price, p.MarketCap, p.PERatio and p.PBRatio from price and p's own
+// statement. storedCurrency gates the native P/E and P/B so a currency mismatch between the stored
+// row and the re-fetched period never produces a cross-currency ratio.
+func applyPriceRatios(p *source.HistoricalFundamentalsPeriod, price float64, ttmEPS *float64, storedCurrency string) {
 	p.Price = &price
 	if p.SharesOutstanding != nil {
 		mc := price * (*p.SharesOutstanding)

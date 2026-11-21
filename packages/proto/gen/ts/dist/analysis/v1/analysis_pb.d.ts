@@ -1929,9 +1929,8 @@ export type GetIndicatorSeriesRequest = Message<"xstockstrat.analysis.v1.GetIndi
      */
     symbol: string;
     /**
-     * The caller's own already-fetched candlestick closes + their timestamps (the page passes the
-     * exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
-     * and times are index-aligned and equal length.
+     * The caller's drawn window plus a history prefix; closes and times are index-aligned and equal
+     * length. The server never re-fetches the evaluated symbol's bars.
      *
      * @generated from field: repeated double closes = 3;
      */
@@ -1990,6 +1989,13 @@ export type ComponentSeries = Message<"xstockstrat.analysis.v1.ComponentSeries">
      * @generated from field: string error = 4;
      */
     error: string;
+    /**
+     * Bars of history needed for this component's first value (multi-series: its earliest series).
+     * 0 = no warm-up or unknown; a client never reports insufficient history for 0.
+     *
+     * @generated from field: int32 first_value_bars = 5;
+     */
+    firstValueBars: number;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ComponentSeries.

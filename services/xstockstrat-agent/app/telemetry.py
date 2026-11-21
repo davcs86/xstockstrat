@@ -3,9 +3,9 @@
 Activated only when OTEL_ENABLED=true. All imports are deferred so the
 service starts cleanly if the OTel packages are absent.
 
-The agent is a gRPC *client* (it dials ingest/notify/analysis/indicators/
-identity/config over ``grpc.aio``) rather than a gRPC server, so it
-instruments the aio client channel instead of a server.
+The agent dials its backends over ``grpc.aio`` and serves one internal RPC
+(the tool catalog), so it instruments both the aio client channel and the
+aio server.
 """
 
 import logging
@@ -13,23 +13,142 @@ import os
 
 log = logging.getLogger(__name__)
 
+# Matches scripts/testdata/rpc-status-vectors.json bucket bounds (shared by all runtimes).
+RPC_DURATION_BUCKETS_MS = [0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000]
+
+
+def _host_provider() -> str:
+    # Exact lowercase deploy-target names only; anything else is "unknown", never an error.
+    p = os.getenv("HOST_PROVIDER", "")
+    return p if p in ("digitalocean", "homelab") else "unknown"
+
 
 def _build_resource():
     """Build the sole OTel Resource passed to init_telemetry (SDK import deferred; the omitted
     attributes are guarded by tests/test_telemetry.py)."""
     from opentelemetry.sdk.resources import Resource
 
+    service_name = os.getenv("SERVICE_NAME", "agent")
+    provider = _host_provider()
     return Resource.create(
         {
-            "service.name": os.getenv("SERVICE_NAME", "agent"),
+            "service.name": service_name,
             "deployment.environment": os.getenv("APPLICATION_ENV", "development"),
             "platform": "xstockstrat",
+            "host.provider": provider,
+            "service.instance.id": f"{provider}-{service_name}",
         }
     )
 
 
+def _with_host_provider(exporter, host_provider: str):
+    """Stamps host.provider on every datapoint; a labelling failure exports the batch unlabelled."""
+    import dataclasses
+
+    from opentelemetry.sdk.metrics.export import MetricExporter
+
+    class HostProviderExporter(MetricExporter):
+        def __init__(self) -> None:
+            super().__init__(
+                preferred_temporality=getattr(exporter, "_preferred_temporality", None),
+                preferred_aggregation=getattr(exporter, "_preferred_aggregation", None),
+            )
+            self._warned = False
+
+        def _labelled(self, metrics_data):
+            def point(p):
+                return dataclasses.replace(
+                    p, attributes={**p.attributes, "host.provider": host_provider}
+                )
+
+            def metric(m):
+                data = dataclasses.replace(
+                    m.data, data_points=[point(p) for p in m.data.data_points]
+                )
+                return dataclasses.replace(m, data=data)
+
+            def scope(sm):
+                return dataclasses.replace(sm, metrics=[metric(m) for m in sm.metrics])
+
+            def resource(rm):
+                return dataclasses.replace(rm, scope_metrics=[scope(sm) for sm in rm.scope_metrics])
+
+            return dataclasses.replace(
+                metrics_data,
+                resource_metrics=[resource(rm) for rm in metrics_data.resource_metrics],
+            )
+
+        def export(self, metrics_data, *args, **kwargs):
+            out = metrics_data
+            try:
+                out = self._labelled(metrics_data)
+            except Exception as exc:  # noqa: BLE001
+                if not self._warned:
+                    self._warned = True
+                    log.warning("host_provider labelling failed; exporting without it: %s", exc)
+            return exporter.export(out, *args, **kwargs)
+
+        def force_flush(self, *args, **kwargs):
+            return exporter.force_flush(*args, **kwargs)
+
+        def shutdown(self, *args, **kwargs):
+            return exporter.shutdown(*args, **kwargs)
+
+    return HostProviderExporter()
+
+
+def grpc_status_code(span) -> int:
+    """Integer gRPC status of a finished SERVER span; first match wins."""
+    from opentelemetry.trace import StatusCode
+
+    code = span.attributes.get("rpc.grpc.status_code")
+    if isinstance(code, int) and not isinstance(code, bool) and code != 0:
+        return code
+    if any(event.name == "exception" for event in span.events):
+        return 2
+    if span.status.status_code == StatusCode.ERROR:
+        return 2
+    return 0
+
+
+def _make_rpc_duration_processor():
+    from opentelemetry import metrics
+    from opentelemetry.sdk.trace import SpanProcessor
+    from opentelemetry.trace import SpanKind
+
+    class RpcDurationProcessor(SpanProcessor):
+        """Records `rpc.server.duration` (ms) from finished gRPC SERVER spans: instrumentation-grpc
+        emits no RPC metric, so the histogram is derived from the span it already creates."""
+
+        def __init__(self) -> None:
+            self._histogram = None
+
+        def on_end(self, span) -> None:
+            attrs = span.attributes or {}
+            if span.kind != SpanKind.SERVER or attrs.get("rpc.system") != "grpc":
+                return
+            if self._histogram is None:
+                # Created on first use, from the provider installed by then.
+                self._histogram = metrics.get_meter("xstockstrat.rpc").create_histogram(
+                    "rpc.server.duration",
+                    unit="ms",
+                    explicit_bucket_boundaries_advisory=RPC_DURATION_BUCKETS_MS,
+                )
+            self._histogram.record(
+                (span.end_time - span.start_time) / 1e6,
+                {
+                    "rpc.system": "grpc",
+                    "rpc.service": str(attrs.get("rpc.service", "")),
+                    "rpc.method": str(attrs.get("rpc.method", "")),
+                    "rpc.grpc.status_code": grpc_status_code(span),
+                },
+            )
+
+    return RpcDurationProcessor()
+
+
 def init_telemetry() -> None:
-    """Configure OTel trace, metric and log providers and instrument the gRPC aio client.
+    """Configure OTel trace, metric and log providers and instrument the gRPC aio client and server.
 
     No-op when disabled.
     """
@@ -42,7 +161,10 @@ def init_telemetry() -> None:
         from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
         from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorClient
+        from opentelemetry.instrumentation.grpc import (
+            GrpcAioInstrumentorClient,
+            GrpcAioInstrumentorServer,
+        )
         from opentelemetry.instrumentation.logging.handler import LoggingHandler
         from opentelemetry.sdk._logs import LoggerProvider
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
@@ -52,18 +174,26 @@ def init_telemetry() -> None:
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+        if endpoint is None:
+            endpoint = "SDK default"
         svc_name = os.getenv("SERVICE_NAME", "agent")
 
         resource = _build_resource()
+        host_provider = str(resource.attributes["host.provider"])
         # No endpoint/insecure args: they override OTEL_EXPORTER_OTLP_* (path, TLS, headers).
         provider = TracerProvider(resource=resource)
         provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+        provider.add_span_processor(_make_rpc_duration_processor())
         trace.set_tracer_provider(provider)
 
         metrics.set_meter_provider(
             MeterProvider(
                 resource=resource,
-                metric_readers=[PeriodicExportingMetricReader(OTLPMetricExporter())],
+                metric_readers=[
+                    PeriodicExportingMetricReader(
+                        _with_host_provider(OTLPMetricExporter(), host_provider)
+                    )
+                ],
             )
         )
 
@@ -78,6 +208,7 @@ def init_telemetry() -> None:
         logging.getLogger().addHandler(handler)
 
         GrpcAioInstrumentorClient().instrument()
+        GrpcAioInstrumentorServer().instrument()
 
         log.info("OTel tracing initialised", extra={"endpoint": endpoint, "service": svc_name})
 

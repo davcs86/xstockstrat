@@ -27,7 +27,7 @@ import (
 
 var allowedLabelKeys = map[string]bool{
 	telemetry.KeyVendor: true, telemetry.KeyOp: true, telemetry.KeyOutcome: true, telemetry.KeyResult: true,
-	telemetry.KeyKind: true,
+	telemetry.KeyKind: true, telemetry.KeyReason: true,
 }
 
 var forbiddenLabelKeys = []string{
@@ -38,6 +38,8 @@ var forbiddenLabelKeys = []string{
 var minInstruments = []string{
 	"marketdata.vendor.requests", "marketdata.vendor.request.duration", "marketdata.stream.reconnects",
 	"marketdata.backfill.symbols", "marketdata.stream.last_message_age",
+	"marketdata.ohlcv.out_of_memory_errors", "marketdata.backfill.periods_left_out",
+	"marketdata.delisting.hook_failures",
 }
 
 var rpcServerKeys = []string{"rpc.system", "rpc.service", "rpc.method", "rpc.grpc.status_code"}
@@ -48,6 +50,9 @@ func driveAllInstruments(ctx context.Context) {
 	telemetry.RecordVendorRequest(ctx, telemetry.VendorEdgar, "filings", telemetry.VendorCap, time.Time{})
 	telemetry.RecordStreamReconnect(ctx, telemetry.StreamReconnected)
 	telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillWritten)
+	telemetry.RecordOhlcvOutOfMemory(ctx, telemetry.OhlcvOpRecentBars)
+	telemetry.RecordPeriodLeftOut(ctx, telemetry.LeftOutLabelCollision)
+	telemetry.RecordDelistingHookFailure(ctx, telemetry.DelistingHookError)
 	telemetry.RegisterStreamLastMessageAge(func() (time.Time, bool) { return time.Now(), true }, nil)
 }
 

@@ -1,6 +1,6 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientReadableStream, type ClientUnaryCall, type handleServerStreamingCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { PageRequest, PageResponse, TimeRange, TradingMode, UnservableReason } from "../../common/v1/common";
+import { DelistedState, PageRequest, PageResponse, TimeRange, TradingMode, UnservableReason } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.portfolio.v1";
 /** A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04). */
 export declare enum PositionRiskFlag {
@@ -273,6 +273,8 @@ export interface WatchlistBinding {
      * Unspecified on read → treat as MANUAL.
      */
     source: WatchlistEntrySource;
+    /** Server-set, output only; presence means flagged delisted. */
+    delisted?: DelistedState | undefined;
 }
 /** A symbol refused by a watchlist write because marketdata reports it unservable (feature 282). */
 export interface RefusedSymbol {

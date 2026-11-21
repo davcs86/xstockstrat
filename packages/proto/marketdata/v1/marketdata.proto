@@ -74,6 +74,11 @@ service MarketDataService {
   // feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
   // >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
   rpc GetSymbolServability(GetSymbolServabilityRequest) returns (GetSymbolServabilityResponse);
+
+  // internal: xstockstrat-portfolio only
+  rpc SyncWatchlistDelistings(SyncWatchlistDelistingsRequest) returns (SyncWatchlistDelistingsResponse);
+  // internal: xstockstrat-portfolio only
+  rpc AckDelistingAlerts(AckDelistingAlertsRequest) returns (AckDelistingAlertsResponse);
 }
 
 message Bar {
@@ -162,6 +167,7 @@ message BackfillBarsResponse {
   int64 bars_written = 1;
   repeated string failed_symbols = 2;
   int64 expected_bars = 3; // estimated total bars across requested symbols/range (FR-6)
+  repeated xstockstrat.common.v1.BackfillSymbolResult symbol_results = 4;
 }
 
 message GetDataCoverageRequest {
@@ -230,7 +236,7 @@ message Fundamentals {
   double dividend_yield = 5;
   double eps = 6;
   double beta = 7;
-  double roe = 8;
+  double roe = 8;  // a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points
   double debt_to_equity = 9;
   double price = 10;
   double year_high = 11;
@@ -280,7 +286,7 @@ message HistoricalFundamentalsPeriod {
   double dividend_yield = 10;
   double eps = 11;
   double beta = 12;
-  double roe = 13;
+  double roe = 13;  // a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points; a quarterly period uses trailing-twelve-month net income
   double debt_to_equity = 14;
   double price = 15;
   double year_high = 16;
@@ -316,6 +322,7 @@ message BackfillFundamentalsRequest {
 message BackfillFundamentalsResponse {
   int64 periods_written = 1;
   repeated string failed_symbols = 2;
+  repeated xstockstrat.common.v1.BackfillSymbolResult symbol_results = 3;
 }
 
 message GetLatestQuotesRequest {
@@ -424,3 +431,32 @@ message GetSymbolServabilityResponse {
   repeated SymbolServability symbols = 1;
   bool asset_set_loaded = 2;
 }
+
+enum DelistingAlertState {
+  DELISTING_ALERT_STATE_UNSPECIFIED = 0;
+  DELISTING_ALERT_STATE_PENDING = 1;
+  DELISTING_ALERT_STATE_CLAIMED = 2;
+  DELISTING_ALERT_STATE_REDELIVERY = 3;
+  DELISTING_ALERT_STATE_REPORTED = 4;
+}
+
+message FlaggedSymbol {
+  string symbol = 1;
+  xstockstrat.common.v1.DelistedState state = 2;
+  DelistingAlertState alert_state = 3;
+  bool unservable_in_current_set = 4; // false means "do not remove"
+}
+
+message SyncWatchlistDelistingsRequest {
+  repeated string symbols = 1;
+}
+
+message SyncWatchlistDelistingsResponse {
+  repeated FlaggedSymbol flagged = 1;
+}
+
+message AckDelistingAlertsRequest {
+  repeated string symbols = 1;
+}
+
+message AckDelistingAlertsResponse {}
