@@ -1,6 +1,6 @@
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Asset, PageRequest, PageResponse, Sector, Timeframe, TimeRange, UnservableReason } from "../../common/v1/common_pb";
+import type { Asset, BackfillSymbolResult, DelistedState, PageRequest, PageResponse, Sector, Timeframe, TimeRange, UnservableReason } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file marketdata/v1/marketdata.proto.
@@ -334,6 +334,10 @@ export type BackfillBarsResponse = Message<"xstockstrat.marketdata.v1.BackfillBa
      * @generated from field: int64 expected_bars = 3;
      */
     expectedBars: bigint;
+    /**
+     * @generated from field: repeated xstockstrat.common.v1.BackfillSymbolResult symbol_results = 4;
+     */
+    symbolResults: BackfillSymbolResult[];
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.BackfillBarsResponse.
@@ -551,6 +555,8 @@ export type Fundamentals = Message<"xstockstrat.marketdata.v1.Fundamentals"> & {
      */
     beta: number;
     /**
+     * a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points
+     *
      * @generated from field: double roe = 8;
      */
     roe: number;
@@ -733,6 +739,8 @@ export type HistoricalFundamentalsPeriod = Message<"xstockstrat.marketdata.v1.Hi
      */
     beta: number;
     /**
+     * a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points; a quarterly period uses trailing-twelve-month net income
+     *
      * @generated from field: double roe = 13;
      */
     roe: number;
@@ -888,6 +896,10 @@ export type BackfillFundamentalsResponse = Message<"xstockstrat.marketdata.v1.Ba
      * @generated from field: repeated string failed_symbols = 2;
      */
     failedSymbols: string[];
+    /**
+     * @generated from field: repeated xstockstrat.common.v1.BackfillSymbolResult symbol_results = 3;
+     */
+    symbolResults: BackfillSymbolResult[];
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.BackfillFundamentalsResponse.
@@ -1277,6 +1289,114 @@ export type GetSymbolServabilityResponse = Message<"xstockstrat.marketdata.v1.Ge
  */
 export declare const GetSymbolServabilityResponseSchema: GenMessage<GetSymbolServabilityResponse>;
 /**
+ * @generated from message xstockstrat.marketdata.v1.FlaggedSymbol
+ */
+export type FlaggedSymbol = Message<"xstockstrat.marketdata.v1.FlaggedSymbol"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.DelistedState state = 2;
+     */
+    state?: DelistedState | undefined;
+    /**
+     * @generated from field: xstockstrat.marketdata.v1.DelistingAlertState alert_state = 3;
+     */
+    alertState: DelistingAlertState;
+    /**
+     * false means "do not remove"
+     *
+     * @generated from field: bool unservable_in_current_set = 4;
+     */
+    unservableInCurrentSet: boolean;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.FlaggedSymbol.
+ * Use `create(FlaggedSymbolSchema)` to create a new message.
+ */
+export declare const FlaggedSymbolSchema: GenMessage<FlaggedSymbol>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.SyncWatchlistDelistingsRequest
+ */
+export type SyncWatchlistDelistingsRequest = Message<"xstockstrat.marketdata.v1.SyncWatchlistDelistingsRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.SyncWatchlistDelistingsRequest.
+ * Use `create(SyncWatchlistDelistingsRequestSchema)` to create a new message.
+ */
+export declare const SyncWatchlistDelistingsRequestSchema: GenMessage<SyncWatchlistDelistingsRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.SyncWatchlistDelistingsResponse
+ */
+export type SyncWatchlistDelistingsResponse = Message<"xstockstrat.marketdata.v1.SyncWatchlistDelistingsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.marketdata.v1.FlaggedSymbol flagged = 1;
+     */
+    flagged: FlaggedSymbol[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.SyncWatchlistDelistingsResponse.
+ * Use `create(SyncWatchlistDelistingsResponseSchema)` to create a new message.
+ */
+export declare const SyncWatchlistDelistingsResponseSchema: GenMessage<SyncWatchlistDelistingsResponse>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.AckDelistingAlertsRequest
+ */
+export type AckDelistingAlertsRequest = Message<"xstockstrat.marketdata.v1.AckDelistingAlertsRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.AckDelistingAlertsRequest.
+ * Use `create(AckDelistingAlertsRequestSchema)` to create a new message.
+ */
+export declare const AckDelistingAlertsRequestSchema: GenMessage<AckDelistingAlertsRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.AckDelistingAlertsResponse
+ */
+export type AckDelistingAlertsResponse = Message<"xstockstrat.marketdata.v1.AckDelistingAlertsResponse"> & {};
+/**
+ * Describes the message xstockstrat.marketdata.v1.AckDelistingAlertsResponse.
+ * Use `create(AckDelistingAlertsResponseSchema)` to create a new message.
+ */
+export declare const AckDelistingAlertsResponseSchema: GenMessage<AckDelistingAlertsResponse>;
+/**
+ * @generated from enum xstockstrat.marketdata.v1.DelistingAlertState
+ */
+export declare enum DelistingAlertState {
+    /**
+     * @generated from enum value: DELISTING_ALERT_STATE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: DELISTING_ALERT_STATE_PENDING = 1;
+     */
+    PENDING = 1,
+    /**
+     * @generated from enum value: DELISTING_ALERT_STATE_CLAIMED = 2;
+     */
+    CLAIMED = 2,
+    /**
+     * @generated from enum value: DELISTING_ALERT_STATE_REDELIVERY = 3;
+     */
+    REDELIVERY = 3,
+    /**
+     * @generated from enum value: DELISTING_ALERT_STATE_REPORTED = 4;
+     */
+    REPORTED = 4
+}
+/**
+ * Describes the enum xstockstrat.marketdata.v1.DelistingAlertState.
+ */
+export declare const DelistingAlertStateSchema: GenEnum<DelistingAlertState>;
+/**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
  *
@@ -1494,5 +1614,25 @@ export declare const MarketDataService: GenService<{
         methodKind: "unary";
         input: typeof GetSymbolServabilityRequestSchema;
         output: typeof GetSymbolServabilityResponseSchema;
+    };
+    /**
+     * internal: xstockstrat-portfolio only
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.SyncWatchlistDelistings
+     */
+    syncWatchlistDelistings: {
+        methodKind: "unary";
+        input: typeof SyncWatchlistDelistingsRequestSchema;
+        output: typeof SyncWatchlistDelistingsResponseSchema;
+    };
+    /**
+     * internal: xstockstrat-portfolio only
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.AckDelistingAlerts
+     */
+    ackDelistingAlerts: {
+        methodKind: "unary";
+        input: typeof AckDelistingAlertsRequestSchema;
+        output: typeof AckDelistingAlertsResponseSchema;
     };
 }>;

@@ -11,7 +11,12 @@ type GetAttributionResult = Awaited<ReturnType<typeof analysisClient.getAttribut
 export function useSignalAttribution(params: { start?: Date; end?: Date; sourceId?: string }) {
   const { start, end, sourceId = '' } = params;
   return useQuery<GetAttributionResult, Error>({
-    queryKey: ['signal-attribution', start?.toISOString() ?? '', end?.toISOString() ?? '', sourceId],
+    queryKey: [
+      'signal-attribution',
+      start?.toISOString() ?? '',
+      end?.toISOString() ?? '',
+      sourceId,
+    ],
     queryFn: () =>
       analysisClient.getAttribution({
         start: start ? timestampFromDate(start) : undefined,

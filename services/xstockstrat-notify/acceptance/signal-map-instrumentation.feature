@@ -16,6 +16,7 @@ Feature: signal-map-instrumentation (notify)
     Then "notify.stream.evictions" with reason "write_error" increases by 1
     And gauge "notify.stream.subscribers" reads 2
 
+  # Feature 338: extended by 338 @AC-17 (commsgun listed as enabled or disabled in the same line).
   @AC-49 @FR-10 @feature-294
   Scenario: Notify logs its enabled delivery channels once at startup
     Given notify starts with SLACK_WEBHOOK_URL set, SENDGRID_API_KEY unset and VAPID configured

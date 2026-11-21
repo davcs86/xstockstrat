@@ -290,6 +290,22 @@ export type MarkAlertReadResponse = Message<"xstockstrat.notify.v1.MarkAlertRead
  */
 export declare const MarkAlertReadResponseSchema: GenMessage<MarkAlertReadResponse>;
 /**
+ * @generated from message xstockstrat.notify.v1.GetAlertRequest
+ */
+export type GetAlertRequest = Message<"xstockstrat.notify.v1.GetAlertRequest"> & {
+    /**
+     * Owner resolved from the propagated x-user-id header (C-03), never the body.
+     *
+     * @generated from field: string alert_id = 1;
+     */
+    alertId: string;
+};
+/**
+ * Describes the message xstockstrat.notify.v1.GetAlertRequest.
+ * Use `create(GetAlertRequestSchema)` to create a new message.
+ */
+export declare const GetAlertRequestSchema: GenMessage<GetAlertRequest>;
+/**
  * Web Push subscription registration (feature 165 — pwa-notifications).
  *
  * @generated from message xstockstrat.notify.v1.RegisterPushSubscriptionRequest
@@ -372,6 +388,45 @@ export type UnregisterPushSubscriptionResponse = Message<"xstockstrat.notify.v1.
  * Use `create(UnregisterPushSubscriptionResponseSchema)` to create a new message.
  */
 export declare const UnregisterPushSubscriptionResponseSchema: GenMessage<UnregisterPushSubscriptionResponse>;
+/**
+ * @generated from message xstockstrat.notify.v1.FanoutWebhookRequest
+ */
+export type FanoutWebhookRequest = Message<"xstockstrat.notify.v1.FanoutWebhookRequest"> & {
+    /**
+     * @generated from field: string callback_url = 1;
+     */
+    callbackUrl: string;
+    /**
+     * @generated from field: string event_name = 2;
+     */
+    eventName: string;
+    /**
+     * @generated from field: google.protobuf.Struct payload = 3;
+     */
+    payload?: JsonObject | undefined;
+    /**
+     * @generated from field: string idempotency_key = 4;
+     */
+    idempotencyKey: string;
+    /**
+     * @generated from field: bool validate_only = 5;
+     */
+    validateOnly: boolean;
+};
+/**
+ * Describes the message xstockstrat.notify.v1.FanoutWebhookRequest.
+ * Use `create(FanoutWebhookRequestSchema)` to create a new message.
+ */
+export declare const FanoutWebhookRequestSchema: GenMessage<FanoutWebhookRequest>;
+/**
+ * @generated from message xstockstrat.notify.v1.FanoutWebhookResponse
+ */
+export type FanoutWebhookResponse = Message<"xstockstrat.notify.v1.FanoutWebhookResponse"> & {};
+/**
+ * Describes the message xstockstrat.notify.v1.FanoutWebhookResponse.
+ * Use `create(FanoutWebhookResponseSchema)` to create a new message.
+ */
+export declare const FanoutWebhookResponseSchema: GenMessage<FanoutWebhookResponse>;
 /**
  * @generated from enum xstockstrat.notify.v1.AlertSeverity
  */
@@ -461,6 +516,17 @@ export declare const NotifyService: GenService<{
         output: typeof MarkAlertReadResponseSchema;
     };
     /**
+     * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+     * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+     *
+     * @generated from rpc xstockstrat.notify.v1.NotifyService.GetAlert
+     */
+    getAlert: {
+        methodKind: "unary";
+        input: typeof GetAlertRequestSchema;
+        output: typeof AlertSchema;
+    };
+    /**
      * Register (or upsert) a Web Push subscription for the calling user.
      * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      *
@@ -480,5 +546,16 @@ export declare const NotifyService: GenService<{
         methodKind: "unary";
         input: typeof UnregisterPushSubscriptionRequestSchema;
         output: typeof UnregisterPushSubscriptionResponseSchema;
+    };
+    /**
+     * Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+     * (mTLS peer SAN). validate_only checks the URL and stores nothing.
+     *
+     * @generated from rpc xstockstrat.notify.v1.NotifyService.FanoutWebhook
+     */
+    fanoutWebhook: {
+        methodKind: "unary";
+        input: typeof FanoutWebhookRequestSchema;
+        output: typeof FanoutWebhookResponseSchema;
     };
 }>;

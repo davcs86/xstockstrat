@@ -27,3 +27,91 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap findings: WARN: trading.go shared with 311/312/315; trading.broker.paper coordination with 322; config migration NNN with 322/330
 - Recommended design depth: full (trading + config; config seeds; 322 TRADING_MODE coupling)
 - Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)
+
+## Session 2026-11-13 — sdd-review A1b (demoted-duplicate, interactive)
+
+- sdd-batch preflight flagged a demoted-duplicate match against 277 `fix-ingest-seeded-config-keys` (demoted/canceled, archived 2026-11-04). Routed through /sdd-review A1b interactively.
+- Operator decision (2026-11-13): **321 is a re-attempt of 277.** Recorded as "Reactivated as duplicate of demoted feature `fix-ingest-seeded-config-keys`". Status stays `spec-ready` (the full review already passed 2026-11-10; A1b's skip-review path is moot).
+- Design must read 277's `## Archive Synthesis` (`docs/roadmap/features/277-fix-ingest-seeded-config-keys/context.md`) as prior art, in particular its demotion reason (scope grew from 5 keys to an 18-key cross-service re-key over four rounds of new blockers) and its config-migration scars: key-only UPDATEs write no audit row; a blind namespace re-key aborts on `config_values_scope_uniq` when twins exist; a PRE_DEPLOY `RAISE` leaves golang-migrate dirty and blocks every deploy; `migration-rerun.sh` runs `up` to head before assertions (needs a dedicated `goto` pass).
+- Development branch created: `feature/fix-trading-config-plumbing` (from origin/main-dev).
+
+## Session 2026-11-20 — sdd-design (in progress)
+
+- Phase 0 Recon: wrote recon.md (services: trading, config; consumer surfaces checked: ui, agent — no change). Two product-spec premises are stale at HEAD: the getters no longer return 0 on the other numeric branch (feature 295), and migration 041 already seeds `broker.timeout_ms`, `order.max_retries`, `order.retry_delay_ms` as int. Only `broker.paper` is unseeded.
+- Phase 1 Grilling: rounds 1-2 run (full mode); register in debate.md (D-1..D-15, R-1..R-8). No Floor breach.
+- **Operator rulings at the round-2 gate (2026-11-20):**
+  - **O-1 / D-13 — IBKR request bound: accepted, with a pre-deploy operator action.** Each signed IBKR request is bounded by the live `trading.broker.timeout_ms` instead of the hardcoded 10 s. Before 321 deploys, the operator sets `trading.broker.timeout_ms` to 10000 in both environments. Accepted consequences: slow IBKR calls become uncertain outcomes at the configured bound; an emergency flatten that times out halts the account with the position possibly open until reconciliation; at 10000 every Alpaca call's timeout also becomes 10 s and the Alpaca 429 retry budget is a single attempt.
+  - **O-8 / O-11 / D-14 — paper/live source: signed off.** `APPLICATION_ENV` alone decides trading's paper/live; `broker.paper` is seeded per environment (staging true, production false) and becomes a one-edit config-ui row. **C-16 CHANGE approved: 304 @AC-14 is superseded by 321 @AC-4** — `trading.broker.paper` is seeded per environment by the config migration, the `scripts/config-wiring.json` read-unseeded entry is removed, and `check-config-wiring.mjs --final` must report no read-unseeded or STALE line for it.
+  - **O-21 / D-15 — proto comment:** fix the stale `TRADING_MODE env` comment at `packages/proto/trading/v1/trading.proto:264` in 321 (comment-only proto step).
+  - **Gate decision: run another round** (round 3). The P-06 natural-RED waiver for AC-2 is NOT yet given — it is part of design approval.
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: trading, config; key reuse patterns: Alpaca's live `Timeout func()` closure; the 054 INSERT-if-absent seed migration).
+- Phase 1 Grilling: 3 rounds (full). Chosen approach: IBKR signed requests read `broker.timeout_ms` live with the 10 s stale floor kept; no getter change, an int-row flatten guard test; `requires_approval` bound from the insert-time status; `broker.paper` from `APPLICATION_ENV`, seeded per environment by config migration 056 (provisional); a comment-only proto fix. Rejected: `GetInt` switch, getter coercion, dropping the floor, keeping `broker.paper` unseeded, keeping the `TRADING_MODE` fallback (R-1..R-9 in debate.md).
+- **Operator rulings at the round-3 gate (2026-11-20):**
+  - **Design approved.**
+  - **P-06 waiver for AC-2 granted:** "AC-2 red N/A — no behavior change: since feature 295 `GetFloat` widens an int row, so an int `order.max_retries` row is already honoured at HEAD; characterization test `TestFlattenAndHalt_IntRetryRowsSetAttempts_F321_AC2` added. Discrimination is shown by mutation instead of a natural RED (hardwiring `maxRetries := 3` → 4 submissions vs want 2/6 FAIL; hardwiring `retryDelay` to 500 ms → elapsed FAIL; reverted → PASS)."
+  - **D-20 — the pre-deploy action is two edits per environment:** `trading.broker.timeout_ms` = 10000 AND `trading.order_intent.stale_multiplier` = 4.0 (keeps Alpaca 429 retry and pacing at T = 10 s; S = 40 s). Pass condition (stored state, checkable any time): timeout_ms is an int >= 10000 and stale_multiplier >= 4.0 in staging and production, each with a `config.config_audit` row; audit timestamps recorded here; the integration PR stays draft until then.
+- Constitution rules touched: C-01, C-05, C-07, C-08, C-09, C-10, C-13, C-14, C-15, C-16, C-18, F-01, F-04, F-07, P-03, P-04, P-06. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Pre-deploy operator action: staging deployments done and recorded 2026-11-20 (production is out, operator ruling). Re-check the stored values just before the integration PR leaves draft — implementation-spec Step 13.
+- [ ] Production first launch: bring `trading` `broker.timeout_ms` to >= 10000 and `order_intent.stale_multiplier` to >= 4.0 before trading goes live there (seeds are 5000 / 3.0) — production launch checklist.
+- [ ] Migration 056 is provisional (feature 317's spec also claims 056); regenerate `scripts/config-wiring-stored.json` after each main-dev merge — U4+U5 and integration PR.
+- [ ] IBKR call chain (40 s) equals S = 40 s with no margin; conid-lookup timeout leaves the order PENDING — known gap, not widened.
+- [ ] Credential poller hardcoded 5 s (`trading.go:2837`); stale stored descriptions (`stale_multiplier`, `broker.timeout_ms`); no DO env-pairing assertion — record as findings in the docs unit.
+- [ ] `&config.Config{}` harnesses move LIVE → PAPER under the new fallback — full-suite run in U4+U5.
+- [ ] 277 halt condition: stop for an operator re-scope if anything pushes toward rewriting stored descriptions or touching `watchcore.go`.
+- [ ] C-16 promotion: 321 `@AC-4` to platform.feature with a "Superseded by @feature-321" comment above 304 `@AC-14` — integration PR.
+- [x] /sdd-spec must amend product-spec.md and acceptance.feature per design.md § Spec amendments — done 2026-11-20 (/sdd-spec).
+- [ ] impl-spec review to confirm the five spec-time findings in implementation-spec.md § Execution Summary, first of all the deletion of the non-empty-baseline assertion at `scripts/config-wiring.test.mjs:618` — /sdd-review impl-spec.
+- [ ] Before Step 6: record which route regenerates `scripts/config-wiring-stored.json` (local scratch Postgres with `migrate` + `psql`, or the `config-wiring-stored` CI artifact); this host has no `migrate` on PATH — /sdd-execute, unit Steps 6–9.
+
+## Session 2026-11-20 — pre-deploy operator action (D-13 / D-16 / D-20), staging
+
+- Applied on the operator's instruction through the agent MCP `set_config` (global scope, attributed to the operator's user; audited in `config.config_audit`):
+  - **DO staging** (`xstockstrat_staging`, environment `staging`): `trading`/`broker.timeout_ms` 5000 → **10000** (int) at 2026-11-20T13:59:10Z; `trading`/`order_intent.stale_multiplier` 3.0 → **4.0** (float) at 2026-11-20T13:59:12Z. Read back via `get_config`: 10000 / 4.0.
+  - **Homelab staging** (`xstockstrat_homelab_staging`, environment `staging`, a separate config store): the same two edits at 2026-11-20T13:59:38Z and 13:59:39Z.
+- **Production: NOT done** — no production agent MCP is connected to this session. D-16's pass condition is therefore met for staging only; the integration PR stays draft until production reads `broker.timeout_ms` >= 10000 and `order_intent.stale_multiplier` >= 4.0 with audit timestamps recorded here.
+- Live effect from the edit (321 is not deployed yet): on both staging deployments every Alpaca call's timeout and the T-bounded reconciliation / position-sync polls (all brokers) are now 10 s; S = 40 s; Alpaca 429 budget B = 20 s. IBKR signed requests are unaffected until 321 deploys.
+
+## Session 2026-11-20 — operator ruling: production is out of the pre-deploy action
+
+- Operator (2026-11-20): **leave production out** — production has never been launched, so there is no production config to edit and no live IBKR/Alpaca traffic there. This amends D-13 / D-16 / D-20: the pre-deploy action and its stored-state pass condition apply to the **staging deployments only** (DO staging and homelab staging — both done 2026-11-20, see the previous entry). The integration PR's draft gate is satisfied by the staging record.
+- Carried forward as an Open Thread: when production is first launched, its `trading` config must be brought to `broker.timeout_ms` >= 10000 and `order_intent.stale_multiplier` >= 4.0 before trading goes live there (the seeds are 5000 / 3.0).
+
+## Session 2026-11-20 — sdd-spec
+
+- Tree: `feature/fix-trading-config-plumbing@b5756b2 ≡ origin/feature/fix-trading-config-plumbing` (origin/main-dev merged). Trading, proto and scripts are unchanged since recon's `3da4293d`; every cited line was re-read on this tree.
+- Generated implementation-spec.md with 13 steps. Status → implementation-ready.
+- Amended product-spec.md and acceptance.feature per design.md § Spec amendments (`@AC-1..4` IDs unchanged). product-spec.md gained `## Consumer Surface(s)` (none, internal), `## Config Key Changes` (`trading.broker.paper`, `trading.broker.timeout_ms` — the keys sdd-execute's step-time wiring gate reads), and the staging-only pre-deploy action.
+- Step map (D-18): 1+2 IBKR live timeout (one unit) · 3 AC-2 characterization test · 4, 5 `requires_approval` · 6+7+8+9 `broker.paper` fallback + config migration 056 + wiring gate (one unit) · 10+11 proto comment + stubs (one unit) · 12 docs · 13 operator-only stored-state re-check.
+- Key codebase findings:
+  - **Not in recon or design:** `scripts/config-wiring.test.mjs:618` asserts the committed baseline is non-empty. The `broker.paper` entry is the only finding, so removing it fails `baseline 2 @AC-8`; Step 9 deletes that one assertion. Needs confirming at impl-spec review.
+  - Wiring gate prototyped on a scratch copy of `b5756b2` (reader change + two stored rows + entry removed + line 618 deleted): `--final` exits 0 with no `broker.paper` line and the checker tests pass 75/75. With the entry kept: `STALE: config-wiring.json:broker.paper:read-unseeded`. With a new migration file and no regeneration: `STALE-STORED`.
+  - AC-2 test prototyped on the same copy: passes at HEAD; `maxRetries := 3` → `submissions = 4, want 2`; `retryDelay` 500 ms → `elapsed 502ms, want < 400ms`.
+  - Config migration tail is `055`; no ref carries `056`+; feature 317 also plans `056` (provisional, merge checklist in the spec). `config-heal-dryrun.py` (goto 40/41) and `migration-rerun.py` (computed top) are not affected by a new config migration.
+  - No existing test exercises `environmentIsPaper` / `GetTradingEnvironment`; eleven `&config.Config{}` test harnesses move LIVE → PAPER under the new fallback and none asserts LIVE.
+  - `buf` and `migrate` are not on this host's PATH; `psql`, `docker`, `go` and `golangci-lint` are.
+- Decisions taken at spec time (within the approved design): U1a + U1b are one atomic unit (a scaffold-only commit cannot pass F-05); `callTimeout` lives in `internal/broker/broker.go`; pin rows added for the D-20 stored state (`10000 × 4.0` → S 40 s, B 20 s); the AC-4 trading test is a new file `trading_paper_env_test.go`; migration name `056_trading_broker_paper_per_environment`.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Tree: feature/fix-trading-config-plumbing@5c416868 (≡ origin; main-dev fb52065c merged).
+- Result: 0 failures, 8 warnings (advisory — did not block). No Floor risk. `@AC-1..4` all covered; atomic units 1+2, 6+7+8+9, 10+11 are symmetric and can pass their own Verification.
+- Unresolved ⚠ carried into execution:
+  - Step 10: `buf breaking --against …branch=feature/fix-trading-config-plumbing` compares the branch with itself after the commit (vacuous) — run it against `main-dev`; CI's breaking check currently excludes `trading/v1/trading.proto` (`ci.yml:253`), so the local run is the only real check (C-09) — [ ] unaddressed
+  - Step 9: replace the deleted `scripts/config-wiring.test.mjs:618` assertion with `assert.ok(Array.isArray(findings), …)` rather than removing it outright; never assert an empty baseline (it is a ratchet later features may refill) — [ ] unaddressed
+  - Steps 4/5: add a PARTIALLY_FILLED row to the `requires_approval` table (expect false) — [ ] unaddressed
+  - Step 5: say how the "RED before Step 4" run is captured, since Step 4 precedes it (P-06) — [ ] unaddressed
+  - Step 3: state the coverage-threshold position in the Verification block (C-08) — [ ] unaddressed
+  - Step 8: confirm the stored-JSON regeneration route (scratch Postgres + migrate, or the CI artifact) and re-check `056` before starting (C-07) — [ ] unaddressed
+  - Step 13: the grep-only Verification proves a log entry exists, not the stored values; keep the operator read-back of the staging config — [ ] unaddressed
+  - Steps 1/2: the RED run uses an uncommitted scaffold; record it in context.md and the PR body (P-06) — [ ] unaddressed
+- Overlap findings:
+  - **Config migration `056` is claimed by three features** — 321 (`056_trading_broker_paper_per_environment`), 317 (`056_marketdata_bars_miss_backoff`), 314 (`056_mcp_deadline_budget`), each verified on its own branch. Free on main-dev today (tail 055). Whichever merges second and third renumbers to max(main-dev)+1 and regenerates `scripts/config-wiring-stored.json`. No merge-order.md row exists yet.
+  - Textual only: `trading.go` with 311/312/315; `trading.proto` with 322 (a different message, ~`:336`, vs 321's `:263-265`); `order_intent.go` with 347 (merged).
+  - Not a collision: 330's `055` is on main-dev via #1592 (330 is `in-progress` only for its post-deploy step).

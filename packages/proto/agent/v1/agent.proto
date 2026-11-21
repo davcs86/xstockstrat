@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package xstockstrat.agent.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/agent/v1;agentv1";
+
+import "google/protobuf/struct.proto";
+
+// AgentService — the MCP agent's internal tool catalog.
+// Internal only: served over mutual TLS, and only the xstockstrat-ui peer certificate may call it.
+service AgentService {
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+}
+
+message ListToolsRequest {}
+
+message ListToolsResponse {
+  repeated McpTool tools = 1;
+}
+
+message McpTool {
+  string name = 1;
+  string description = 2;
+  google.protobuf.Struct input_schema = 3; // the tool's JSON Schema
+}

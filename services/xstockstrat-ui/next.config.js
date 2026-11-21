@@ -1,5 +1,27 @@
+const {
+  resolveUiTheme,
+  themeCssPath,
+  themeBackgroundHex,
+} = require('./src/styles/themes/uiTheme.cjs');
+
+// Theme is fixed at build time from UI_THEME only; never read a runtime environment variable here (FR-10).
+const uiTheme = resolveUiTheme(process.env.UI_THEME);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  env: { UI_THEME_BACKGROUND_HEX: themeBackgroundHex(uiTheme) },
+  webpack(config) {
+    config.resolve.alias = { ...config.resolve.alias, '@theme-tokens$': themeCssPath(uiTheme) };
+    // The persistent cache ignores alias targets: without the theme in its version a rebuild with a
+    // different UI_THEME reuses the previous theme's CSS.
+    if (config.cache && typeof config.cache === 'object') {
+      config.cache = {
+        ...config.cache,
+        version: `${config.cache.version ?? ''}|ui-theme:${uiTheme}`,
+      };
+    }
+    return config;
+  },
   // Production/Docker builds emit a standalone server (see Dockerfile). The E2E
   // suite instead builds a regular bundle so it can serve via `next start`,
   // which is unsupported with output:'standalone'. Only the Playwright webServer

@@ -32,6 +32,7 @@ import {
   ALERT_STREAM_HOLD_TRACE_ID,
   ALERT_LIST_WITH_READ_STATE,
   MOCK_UNREAD_COUNT,
+  ALERT_DETAILS,
 } from './fixtures/alerts';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
@@ -51,6 +52,7 @@ import {
   STRATEGY_DEF_LIVE,
   STRATEGY_DEFINITIONS,
   insufficientDataResult,
+  prefixGapRange,
   PORTFOLIO_EQUITY_CURVE,
   SIZING_MODE_LEGACY,
   SIZING_MODE_PORTFOLIO,
@@ -96,7 +98,11 @@ import { LINEAGE_ORDERS, LINEAGE_LIST_PAGE_SIZE } from './fixtures/orders';
 import { copilotStreamKey } from '../src/lib/copilot';
 import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
-import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
+import {
+  INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP,
+  INDICATOR_COMPONENTS_PALETTE_13,
+  INDICATOR_SERIES_AAPL,
+} from './fixtures/indicatorSeries';
 import { PNL_PATTERNS_AAPL } from './fixtures/pnlPatterns';
 import { SOURCE_ATTRIBUTION } from './fixtures/attribution';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
@@ -682,7 +688,15 @@ export async function startMockBackend(): Promise<void> {
             ctx.signal.addEventListener('abort', () => r(), { once: true }),
           );
         },
-        async listAlerts() {
+        async listAlerts(req) {
+          // feature 339 — unreadOnly must include ALERT_STREAM_ALL, or the drawer prunes streamed rows.
+          if (req.unreadOnly) {
+            const unread = [
+              ...ALERT_LIST_WITH_READ_STATE.filter((a) => !a.read),
+              ...ALERT_STREAM_ALL,
+            ];
+            return { alerts: unread, unreadCount: unread.length };
+          }
           // feature 203 — per-user read state + server-side unread count.
           return { alerts: ALERT_LIST_WITH_READ_STATE, unreadCount: MOCK_UNREAD_COUNT };
         },
@@ -690,6 +704,14 @@ export async function startMockBackend(): Promise<void> {
         // page.route() for stateful assertions).
         async markAlertRead() {
           return {};
+        },
+        // feature 344 — the list fixtures resolve too, so inbox rows can link to their alert page.
+        async getAlert(req: { alertId?: string }) {
+          const found = [...ALERT_DETAILS, ...ALERT_LIST_WITH_READ_STATE].find(
+            (a) => a.alertId === req.alertId,
+          );
+          if (!found) throw new ConnectError('alert not found', Code.NotFound);
+          return found;
         },
         // Feature 165: echo the caller resolved from the propagated x-user-id header back as the
         // subscription id, so the e2e can assert the notify service derives the owner from the
@@ -1071,9 +1093,8 @@ export async function startMockBackend(): Promise<void> {
         // the backtest view renders the gap panel + "backfill this range" action (AC-4).
         async runBacktest(req) {
           if (req.strategyId === 'strat-insufficient-001') {
-            // A data-less symbol: RunBacktest returns a *successful* RPC with INSUFFICIENT_DATA and a
-            // per-symbol coverage gap (never an error). The symbol page surfaces this inline instead
-            // of discarding it (UI-operability pass).
+            // A short-history symbol: a *successful* INSUFFICIENT_DATA result whose gap is the
+            // pre-window prefix, distinct from the requested window (never an error).
             return {
               backtestId: 'bt-insufficient-1',
               strategyId: req.strategyId,
@@ -1084,12 +1105,11 @@ export async function startMockBackend(): Promise<void> {
               coverageGaps: [
                 {
                   symbol: req.symbols[0] ?? 'ZZZZ',
-                  barsHave: BigInt(0),
+                  timeframe: 4, // TIMEFRAME_1DAY
+                  requestedRange: req.range,
+                  barsHave: BigInt(53),
                   barsNeed: BigInt(200),
-                  gap: {
-                    start: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
-                    end: { seconds: BigInt(1735603200), nanos: 0 }, // 2024-12-31
-                  },
+                  gap: prefixGapRange(req.range),
                 },
               ],
               diagnostics: [],
@@ -1418,6 +1438,14 @@ export async function startMockBackend(): Promise<void> {
           if (req.symbol === 'AAPL') {
             return INDICATOR_SERIES_AAPL;
           }
+          // feature 342 — whole-chart series palette: 5 series (@AC-2/@AC-3) or 13 (@AC-6).
+          if (req.symbol === 'LYFT') {
+            const components =
+              req.strategyId === 'series_palette_13'
+                ? INDICATOR_COMPONENTS_PALETTE_13
+                : INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP;
+            return { times: req.times, components };
+          }
           return { times: req.times, components: [] };
         },
         // feature 042 — ranked P&L-attribution factors for the P&L Patterns view.
@@ -1580,6 +1608,15 @@ export async function startMockBackend(): Promise<void> {
         // job id so the confirmation can be asserted (AC-4).
         async triggerBackfill() {
           return { jobId: 'job-e2e-1', status: 1 /* BACKFILL_STATUS_QUEUED */ };
+        },
+        // The symbol-page Backtests card polls the job its trigger returned; a successful real job
+        // ends COMPLETED. Non-default states are page.route overrides in position-detail.spec.ts.
+        async getBackfillStatus(req) {
+          return {
+            ...backfillJob({ jobId: req.jobId, status: BackfillStatus.COMPLETED }),
+            barsProcessed: BigInt(200),
+            barsTotal: BigInt(200),
+          };
         },
         // feature 125: the Symbol-page Backfill coverage section lists jobs for one symbol. AAPL has
         // one COMPLETED job carrying a covered range (2024-01-01 → 2024-06-01); any other symbol has
