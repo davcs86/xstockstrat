@@ -215,7 +215,7 @@ ruff check . && ruff format --check .
 
 ### Step 3 — service: indicators deadline refusal reports `SANDBOX_EXIT_REASON_TIMEOUT`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
@@ -1073,3 +1073,15 @@ _Populated by /sdd-execute as implementation proceeds._
   Each hit carries `exit_reason`.
 - **Disposition**: checked by hand, as the comment on that Verification line prescribes. Lines 1 and 3
   (the single-line grep and the `ExecuteFormulaResponse(` grep) print nothing. No code change.
+
+### Step 3: RED captured with a temporary probe test (2026-11-21)
+
+- **Expected**: Step Dependencies has Step 4's new assertion capture RED for Step 3, run against the
+  pre-Step-3 `servicer.py`.
+- **Actual**: Step 3 was executed on its own, and its Verification (`tests/test_sandbox_deadline.py`)
+  does not assert `exit_reason` yet. To get a recorded red→green within Step 3, a temporary untracked
+  `tests/test_tmp_step3_probe.py` held Step 4's assertion. It reused the module's `_req`/`_ctx`/
+  `_watcher`/`_recording_sandbox` helpers. RED gave `assert 0 == 2` and GREEN gave `1 passed`. The
+  probe was deleted before the commit.
+- **Disposition**: no file outside Step 3's **Files** is committed. Step 4 still adds the permanent
+  assertion and re-captures its own RED as specced.

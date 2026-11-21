@@ -537,3 +537,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: shared red→green with Step 1 (above).
 - Files modified: the 12 test files in Step 2 **Files**
 - Deviations: the multi-line grep prints six wrapped doubles, all carrying `exit_reason` and checked by hand (Deviation Log).
+
+### Step 3 — service: indicators deadline refusal reports `SANDBOX_EXIT_REASON_TIMEOUT` [done]
+- The `if refused_remaining_ms:` response in indicators `servicer.py` now sets `exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT`, which is the in-scope D-9 cross-service touch. Metrics are unchanged because the early return still precedes `record_sandbox_execution`. Accepted side effect: agent `test_formula` now shows TIMEOUT instead of UNSPECIFIED for a deadline-refused run.
+- TDD red: `resp.exit_reason == SANDBOX_EXIT_REASON_TIMEOUT` failed with `assert 0 == 2` in a temporary probe test (Deviation Log). Green: probe `1 passed`. Verification: the grep prints `354-                exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT,`, `tests/test_sandbox_deadline.py` gives 5 passed, ruff reports "All checks passed!" and "65 files already formatted", exit=0.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Tooling: the indicators `.venv` was synced with `uv sync --extra dev`.
+- Files modified: `services/xstockstrat-indicators/app/handlers/servicer.py`
+- Deviations: RED captured with a temporary untracked probe test, deleted before the commit (Deviation Log).

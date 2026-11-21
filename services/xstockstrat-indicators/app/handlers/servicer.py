@@ -351,6 +351,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         if refused_remaining_ms:
             return indicators_pb2.ExecuteFormulaResponse(
                 success=False,
+                exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT,
                 error=(
                     f"request deadline leaves {refused_remaining_ms[0]}ms, below the "
                     f"{grace_ms}ms sandbox startup grace + {_DEADLINE_MARGIN_MS}ms margin + "
