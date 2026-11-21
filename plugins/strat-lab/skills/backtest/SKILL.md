@@ -210,6 +210,18 @@ only if the caller guarantees data is already present.
 
 - A `trigger_backfill` deadline error says "outcome unknown": the job may already be queued. Check
   `get_backfill_status` before re-triggering, so no duplicate job is queued.
+- `trigger_backfill` takes an optional `callback_url` (must be https and on the platform's
+  allowlist, which is empty by default) that receives the job's terminal event, so you can wait for
+  the webhook instead of polling. An `INVALID_ARGUMENT`, or an `UNAVAILABLE` stating "no job was
+  created", means nothing was queued — retry without `callback_url` and poll `get_backfill_status`.
+  `callback_url` is admin-only. See `reference/backfill.md`.
+- A non-admin caller triggers one symbol per call with `fill_mode="gaps_only"`, explicit `start`
+  and `end`, and no `callback_url`. `PERMISSION_DENIED: self-serve backfill denied:
+  range_too_long (max N days)` means shorten the range or ask an operator; `ALREADY_EXISTS` means a
+  backfill for the symbol is in flight — poll `get_backfill_status` and retry later.
+- `get_backfill_status` lists per-symbol `symbol_results`. A `skipped` symbol is delisted and has
+  no new data — do not re-trigger it and do not treat the job as failed; `failed_symbols` still
+  lists only real failures.
 
 ## Phase 2 — Run, and handle the oversized output
 

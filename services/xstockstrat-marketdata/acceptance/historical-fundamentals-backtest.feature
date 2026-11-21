@@ -16,13 +16,13 @@ Feature: xstockstrat-marketdata - filing-date-aware historical fundamentals stor
 
   @AC-3 @FR-5 @feature-198
   Scenario: As-of read hides a filing until the trading day after it was filed (T+1)
-    Given AAPL's Q4-2019 result has period_end "2019-12-28" and filed_date "2020-01-29"
+    Given AAPL's Q1-2020 result has period_end "2019-12-28" and filed_date "2020-01-29"
     When the point-in-time read is requested for AAPL as of "2020-01-15"
-    Then the Q4-2019 period is NOT returned
+    Then the Q1-2020 period is NOT returned
     When the point-in-time read is requested for AAPL as of "2020-01-29"
-    Then the Q4-2019 period is NOT returned
+    Then the Q1-2020 period is NOT returned
     When the point-in-time read is requested for AAPL as of "2020-01-30"
-    Then the Q4-2019 period IS returned with its filed_date "2020-01-29"
+    Then the Q1-2020 period IS returned with its filed_date "2020-01-29"
 
   # NOTE: the ratio source is a guarded seam. Per marketdata CLAUDE.md, v1 wires no PIT FMP
   # ratio source, and since 217 the FMP cap is one shared budget.

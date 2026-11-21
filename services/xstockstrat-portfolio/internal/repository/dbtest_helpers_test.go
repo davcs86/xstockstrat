@@ -19,7 +19,7 @@ const dbtestUserPrefix = "it-281-"
 
 // testPool connects to the migrated database at PORTFOLIO_DB_TEST_URL. lock_timeout makes any
 // lock wait fail fast, so a test that would block reports an error instead of hanging.
-func testPool(t *testing.T) *pgxpool.Pool {
+func testPool(t *testing.T, opts ...func(*pgxpool.Config)) *pgxpool.Pool {
 	t.Helper()
 	url := os.Getenv("PORTFOLIO_DB_TEST_URL")
 	if url == "" {
@@ -33,6 +33,9 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("pgxpool.ParseConfig: %v", err)
 	}
 	cfg.ConnConfig.RuntimeParams["lock_timeout"] = "500ms"
+	for _, opt := range opts {
+		opt(cfg)
+	}
 	ctx := context.Background()
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
@@ -45,6 +48,12 @@ func testPool(t *testing.T) *pgxpool.Pool {
 			t.Errorf("cleanup watchlists: %v", err)
 		}
 	})
+	t.Cleanup(func() {
+		if _, err := pool.Exec(context.Background(),
+			`DELETE FROM portfolio.positions WHERE user_id LIKE $1`, dbtestUserPrefix+"%"); err != nil {
+			t.Errorf("cleanup positions: %v", err)
+		}
+	})
 	return pool
 }
 
@@ -54,15 +63,29 @@ func testUserID(t *testing.T) string {
 	return fmt.Sprintf("%s%s-%d", dbtestUserPrefix, t.Name(), time.Now().UnixNano())
 }
 
+func seedPosition(t *testing.T, pool *pgxpool.Pool, userID, symbol, mode, accountID string, qty float64) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id)
+		 VALUES ($1, $2, $3, 1, $3, $4, $5)`, userID, symbol, qty, mode, accountID); err != nil {
+		t.Fatalf("seedPosition %s/%s/%s: %v", symbol, mode, accountID, err)
+	}
+}
+
 func seedWatchlist(t *testing.T, pool *pgxpool.Pool, userID string, systemManaged bool) string {
+	t.Helper()
+	return seedNamedWatchlist(t, pool, userID, "wl-"+userID, systemManaged)
+}
+
+func seedNamedWatchlist(t *testing.T, pool *pgxpool.Pool, userID, name string, systemManaged bool) string {
 	t.Helper()
 	var id string
 	err := pool.QueryRow(context.Background(),
 		`INSERT INTO portfolio.watchlists (user_id, name, system_managed)
 		 VALUES ($1, $2, $3) RETURNING watchlist_id::text`,
-		userID, "wl-"+userID, systemManaged).Scan(&id)
+		userID, name, systemManaged).Scan(&id)
 	if err != nil {
-		t.Fatalf("seedWatchlist: %v", err)
+		t.Fatalf("seedNamedWatchlist: %v", err)
 	}
 	return id
 }

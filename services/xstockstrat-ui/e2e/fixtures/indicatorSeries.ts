@@ -10,6 +10,8 @@
  *    the panel must render three lines and leave the leading gap unplotted.
  *  - `brokenformula` — a failed component (non-empty `error`, empty `series`): per-component fault
  *    isolation, rendered as a per-panel error state, never a chart.
+ * Feature 342 component sets (2 points per series): `INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP` (4
+ * components, 5 series — @AC-2) and `INDICATOR_COMPONENTS_PALETTE_13` (13 one-series components — @AC-6).
  *
  * Registered in e2e/fixtures/INVENTORY.md — update it when this file changes.
  */
@@ -40,3 +42,40 @@ export const INDICATOR_SERIES_AAPL = {
     },
   ],
 };
+
+export const INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP = [
+  {
+    refName: 'rsi',
+    kind: 1,
+    error: '',
+    series: [{ name: 'value', values: [V(41.5), V(38.2)] }],
+  },
+  {
+    refName: 'px',
+    kind: 1,
+    error: '',
+    series: [{ name: 'value', values: [V(189.8), V(191.5)] }],
+  },
+  {
+    refName: 'sma200',
+    kind: 1,
+    error: '',
+    series: [{ name: 'value', values: [V(176.4), V(176.6)] }],
+  },
+  {
+    refName: 'vts',
+    kind: 1,
+    error: '',
+    series: [
+      { name: 'stop_line', values: [V(182.1), V(183.4)] },
+      { name: 'value', values: [V(1.8), V(1.9)] },
+    ],
+  },
+];
+
+export const INDICATOR_COMPONENTS_PALETTE_13 = Array.from({ length: 13 }, (_, i) => ({
+  refName: `sma${i + 1}`,
+  kind: 1,
+  error: '',
+  series: [{ name: 'value', values: [V(100 + i), V(101 + i)] }],
+}));

@@ -61,6 +61,11 @@ class NotifyServiceStub(object):
                 request_serializer=notify_dot_v1_dot_notify__pb2.MarkAlertReadRequest.SerializeToString,
                 response_deserializer=notify_dot_v1_dot_notify__pb2.MarkAlertReadResponse.FromString,
                 _registered_method=True)
+        self.GetAlert = channel.unary_unary(
+                '/xstockstrat.notify.v1.NotifyService/GetAlert',
+                request_serializer=notify_dot_v1_dot_notify__pb2.GetAlertRequest.SerializeToString,
+                response_deserializer=notify_dot_v1_dot_notify__pb2.Alert.FromString,
+                _registered_method=True)
         self.RegisterPushSubscription = channel.unary_unary(
                 '/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription',
                 request_serializer=notify_dot_v1_dot_notify__pb2.RegisterPushSubscriptionRequest.SerializeToString,
@@ -70,6 +75,11 @@ class NotifyServiceStub(object):
                 '/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription',
                 request_serializer=notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionRequest.SerializeToString,
                 response_deserializer=notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionResponse.FromString,
+                _registered_method=True)
+        self.FanoutWebhook = channel.unary_unary(
+                '/xstockstrat.notify.v1.NotifyService/FanoutWebhook',
+                request_serializer=notify_dot_v1_dot_notify__pb2.FanoutWebhookRequest.SerializeToString,
+                response_deserializer=notify_dot_v1_dot_notify__pb2.FanoutWebhookResponse.FromString,
                 _registered_method=True)
 
 
@@ -115,6 +125,14 @@ class NotifyServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetAlert(self, request, context):
+        """Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+        the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def RegisterPushSubscription(self, request, context):
         """Register (or upsert) a Web Push subscription for the calling user.
         The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
@@ -125,6 +143,14 @@ class NotifyServiceServicer(object):
 
     def UnregisterPushSubscription(self, request, context):
         """Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def FanoutWebhook(self, request, context):
+        """Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+        (mTLS peer SAN). validate_only checks the URL and stores nothing.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -158,6 +184,11 @@ def add_NotifyServiceServicer_to_server(servicer, server):
                     request_deserializer=notify_dot_v1_dot_notify__pb2.MarkAlertReadRequest.FromString,
                     response_serializer=notify_dot_v1_dot_notify__pb2.MarkAlertReadResponse.SerializeToString,
             ),
+            'GetAlert': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAlert,
+                    request_deserializer=notify_dot_v1_dot_notify__pb2.GetAlertRequest.FromString,
+                    response_serializer=notify_dot_v1_dot_notify__pb2.Alert.SerializeToString,
+            ),
             'RegisterPushSubscription': grpc.unary_unary_rpc_method_handler(
                     servicer.RegisterPushSubscription,
                     request_deserializer=notify_dot_v1_dot_notify__pb2.RegisterPushSubscriptionRequest.FromString,
@@ -167,6 +198,11 @@ def add_NotifyServiceServicer_to_server(servicer, server):
                     servicer.UnregisterPushSubscription,
                     request_deserializer=notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionRequest.FromString,
                     response_serializer=notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionResponse.SerializeToString,
+            ),
+            'FanoutWebhook': grpc.unary_unary_rpc_method_handler(
+                    servicer.FanoutWebhook,
+                    request_deserializer=notify_dot_v1_dot_notify__pb2.FanoutWebhookRequest.FromString,
+                    response_serializer=notify_dot_v1_dot_notify__pb2.FanoutWebhookResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -317,6 +353,33 @@ class NotifyService(object):
             _registered_method=True)
 
     @staticmethod
+    def GetAlert(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.notify.v1.NotifyService/GetAlert',
+            notify_dot_v1_dot_notify__pb2.GetAlertRequest.SerializeToString,
+            notify_dot_v1_dot_notify__pb2.Alert.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def RegisterPushSubscription(request,
             target,
             options=(),
@@ -360,6 +423,33 @@ class NotifyService(object):
             '/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription',
             notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionRequest.SerializeToString,
             notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def FanoutWebhook(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.notify.v1.NotifyService/FanoutWebhook',
+            notify_dot_v1_dot_notify__pb2.FanoutWebhookRequest.SerializeToString,
+            notify_dot_v1_dot_notify__pb2.FanoutWebhookResponse.FromString,
             options,
             channel_credentials,
             insecure,

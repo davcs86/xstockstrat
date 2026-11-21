@@ -138,6 +138,18 @@ test.describe('Extended session — "Remember me" (feature 153)', () => {
     await expect(checkbox).not.toBeChecked();
   });
 
+  test('@AC-11 a checked Remember me checkbox is displayed with a different fill', async ({
+    page,
+  }) => {
+    await page.goto('/auth/login');
+    const checkbox = page.getByRole('checkbox', { name: /remember me/i });
+    await expect(checkbox).not.toBeChecked();
+    const uncheckedFill = await checkbox.evaluate((el) => getComputedStyle(el).backgroundColor);
+    await checkbox.check();
+    await expect(checkbox).toBeChecked();
+    await expect(checkbox).not.toHaveCSS('background-color', uncheckedFill);
+  });
+
   // The shared OAuth authorize page must NOT show the checkbox (opt-in prop only on operator login).
   test('OAuth login page does not show the Remember me checkbox', async ({ page }) => {
     await page.goto('/auth/oauth-login');

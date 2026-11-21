@@ -72,3 +72,26 @@ export const SIGNAL_SOURCE_SYSTEM = {
 };
 
 export const SIGNAL_SOURCES = [SIGNAL_SOURCE_WEIGHTED, SIGNAL_SOURCE_NEUTRAL, SIGNAL_SOURCE_SYSTEM];
+
+/**
+ * A mediated source registered before feature 355: it stores no `extractionInstructions`.
+ * Connect-JSON only (no BigInt) because specs serve it through a `page.route` stub; it is not in
+ * `SIGNAL_SOURCES`, so the shared mock and the list assertions never see it.
+ */
+export const SIGNAL_SOURCE_MEDIATED_LEGACY = {
+  slug: 'legacy_newsletter',
+  displayName: 'Legacy Newsletter',
+  sourceType: 'mediated_simple_email',
+  active: true,
+  hasCredentials: false,
+  configJson: {
+    sender_patterns: ['hello@newsletter.example'],
+    subject_patterns: ['*'],
+  },
+  extractorModule: 'app.extractors.noop',
+  health: 1,
+  signalsFed: '3',
+  lastError: '',
+  reliabilityWeight: 0.7, // distinct from the three shared sources
+  userId: TEST_USER_ID,
+};
