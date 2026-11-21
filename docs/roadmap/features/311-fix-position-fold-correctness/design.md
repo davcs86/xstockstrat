@@ -2,7 +2,7 @@
 
 **Created**: 2026-11-20
 **Rounds**: 11 (full; termination: approved)
-**Approved by**: operator's standing authorisation of 2026-11-20, applied by the orchestrator @ 2026-11-20 after round 11 (adversary verdict SOUND, no Floor breach, no blocking objection, every C-16 CHANGE covered). The authorisation is recorded verbatim at `context.md:309-311` ("Override round cap until design is sound"). The operator did not approve this round in person.
+**Approved by**: operator's standing authorisation of 2026-11-20, applied by the orchestrator @ 2026-11-20 after round 11 (adversary verdict SOUND, no Floor breach, no blocking objection, every C-16 CHANGE covered). The authorisation is recorded verbatim at `context.md:1522-1524` ("Override round cap until design is sound"). The operator did not approve this round in person.
 **Grounded in**: recon.md
 **Debate register**: debate.md (D-1..D-50, R-1..R-40, O-1..O-68, P-1..P-8)
 
@@ -28,7 +28,7 @@ The design is the round-11 synthesis as written, including its section 3 items a
 - **Sentinels in `observed()` (D-12, D-31).** `errFillAcked` counts `acked` and returns nil. `ErrFillUnattributable` writes an autocommit parked row (`outcome`, `parked_reason`) with `ON CONFLICT DO NOTHING RETURNING`; ERROR "event parked" and the `parked` count fire only when the insert returns a row. Later boots ack a parked fill at DEBUG. A runbook step deletes the parked row to redeliver. `boundedRetry` semantics are otherwise unchanged (`recon.md:33`, `recon.md:85`).
 - **Floor (D-34, D-35, D-45).** `portfolio.consumer_floors(consumer PK, floor_recorded_at)` holds one row for `order_fill`. The migration never writes it. Every boot runs `INSERT ('order_fill', date_trunc('milliseconds', clock_timestamp())) ON CONFLICT DO NOTHING`, then loads and caches the value before the fill consumer starts. A stamp or load error keeps the consumer from starting. There is no write fence, no trigger on `portfolio.positions` and no per-row floor. This answers the cutover hazard at `recon.md:152`.
 - **Kept as is (D-5, D-6).** `positionsMu` and `instance_count: 1` stay (`recon.md:32`, `recon.md:46`). Repair of already-inflated accumulators (OQ-2, `recon.md:151`) is out of scope.
-- **`GetPnL` (D-28).** The `filledOrderIDs`, `latest` and `partialOrder` maps key on `account_id` + `order_id`. This is an operator-approved scope extension (`context.md:297-301`).
+- **`GetPnL` (D-28).** The `filledOrderIDs`, `latest` and `partialOrder` maps key on `account_id` + `order_id`. This is an operator-approved scope extension (`context.md:1510-1514`).
 
 ### 2. Trading: bracket-leg fills reach the ledger
 
@@ -45,7 +45,7 @@ The design is the round-11 synthesis as written, including its section 3 items a
   - Listed open at fill > 0: inserted `BASELINE_RETIRED`, no emit, `observed_filled_qty = FilledQty`.
   - Listed terminal: a tombstone row with status `NOT_OPEN_AT_ADOPTION`, `filled_qty = 0`, `observed_filled_qty = 0`, `adopted = true`, no emit. One INFO log per tombstone.
   - `NOT_OPEN_AT_ADOPTION` is a retired status in every non-retired predicate, through one Go constant for the retired-status set.
-  - History is forward-only: legs not open on the adoption tick are an accepted gap (`context.md:333-335`).
+  - History is forward-only: legs not open on the adoption tick are an accepted gap (`context.md:1546-1548`).
 - **Complete-list gate (D-49).** A candidate absent from a successful list is tombstoned only when the list is non-empty, and for Alpaca also shorter than 500 rows. An empty IBKR 200, an Alpaca list of exactly 500 rows or a failed `ListOrders` inserts nothing; the candidate is re-evaluated on the account's next adoption list.
 - **Trigger and throttle (D-46 as amended by D-50).** Each tick runs the candidate query and builds the union of tracked accounts and accounts with candidates.
   - A tracked account (at least one non-retired `bracket_legs` row) gets one `ListOrders` per fill-poller tick. Adoption shares that list.
@@ -119,7 +119,7 @@ The fix reaches users through the surfaces that already read the folded rows: th
 - `R-22` Adding `Begin` to the `queryRower` interface — rejected because about 10 test sites break; a separate `txBeginner` is the smaller diff.
 - `R-23` Arming the cutover fence inside the PRE_DEPLOY migration — rejected because a failed or rolled-back deploy would leave the old binary unable to write positions.
 - `R-24` An equality match on `application_name` as the fence test — rejected because PgBouncer appends a host suffix.
-- `R-25` A single boot-time floor timestamp for all rows — this entry is **reopened** (round 7, operator ruling at `context.md:322-328`) and is now the chosen floor (D-35). It is listed to keep the ID.
+- `R-25` A single boot-time floor timestamp for all rows — this entry is **reopened** (round 7, operator ruling at `context.md:1535-1541`) and is now the chosen floor (D-35). It is listed to keep the ID.
 - `R-26` A two-release cutover — rejected because it adds a deploy-ordering dependency and doubles the deploy.
 - `R-27` Using `filled_qty`, the emit cursor, in the `NetFilledQtyBySymbol` UNION — rejected because a ledger outage would make reconciliation lag broker truth and could halt the account.
 - `R-28` Seeding an applied row for every historical `order.filled` in place of a floor — rejected because a crash mid-seed can mark fills applied that were never folded.
@@ -148,7 +148,7 @@ Each item is mirrored in `context.md` under the 2026-11-20 sdd-design session's 
 
 **Register and artifact housekeeping**
 
-- [ ] `acceptance.feature` `@AC-5` still reads "qty 6"; the signed-off wording (D-38, `context.md:317-321`) is not yet applied — to be applied at `/sdd-spec`, keeping the `@AC` ID (C-15).
+- [ ] `acceptance.feature` `@AC-5` still reads "qty 6"; the signed-off wording (D-38, `context.md:1530-1534`) is not yet applied — to be applied at `/sdd-spec`, keeping the `@AC` ID (C-15).
 - [ ] O-67 and O-68 stay "open" in `debate.md` because the proposer never confirmed them; the operator's approval ruling makes all four items binding — `/sdd-spec` treats them as settled.
 - [ ] O-56 stays "open" in `debate.md` although the petition verdicts it asks for were recorded at approval; P-4 is recorded "user declined", not "withdrawn", because the register has no such verdict — no further action.
 - [ ] O-30: the analysis AC ids in `order-snapshots-pnl-patterns.feature` and `fix-python-loop-supervision.feature` are not enumerated, and the D-10 flip-short window residual stays named — at `/sdd-spec`.
@@ -190,7 +190,7 @@ Each item is mirrored in `context.md` under the 2026-11-20 sdd-design session's 
 - [ ] A genuinely open leg absent from a complete list on its evaluation tick is tombstoned permanently; its exit fill never reaches the ledger, the fold or reconciliation — accepted.
 - [ ] A tombstone is undone only by a manual delete of its `bracket_legs` row — runbook step.
 - [ ] Existing trading tests that hold an ACTIVE bracket with leg ids panic on `fakeBroker.ListOrders` until the fakes are extended — first trading test step.
-- [ ] Reconciliation covers only tracked legs; the D-42 forward-only gap stays uncounted — accepted (operator ruling, `context.md:333-335`).
+- [ ] Reconciliation covers only tracked legs; the D-42 forward-only gap stays uncounted — accepted (operator ruling, `context.md:1546-1548`).
 - [ ] A `BASELINE_RETIRED` leg's post-cutover remainder is neither emitted nor observed — accepted.
 - [ ] Adopted IBKR legs that later vanish from the gateway are polled indefinitely (D-26) — accepted.
 - [ ] A leg id is lost from tracking if the `ActivateBracket` transaction fails; it is alerted, but its exit fill never folds — accepted.
@@ -224,12 +224,12 @@ Each item is mirrored in `context.md` under the 2026-11-20 sdd-design session's 
 - PRESERVE `@AC-2` "Two concurrently running portfolio processes apply one fill once" — not regressed by: the applied INSERT inside the fold transaction, proven by the real-Postgres dbtest.
 - PRESERVE `@AC-3` "A sell fill closes the position and seals realized P&L" — not regressed by: the signed fold through `pnl.FoldFrom`.
 - PRESERVE `@AC-4` "A bracket take-profit leg fill reaches the ledger and realized P&L" — not regressed by: the leg observer and keyed emit.
-- CHANGE `@AC-5` "A bracket leg that fills in two parts reaches the ledger as a partial then a full fill" — altered guarantee: the Then reads "an order.partially_filled event with qty 4 and an order.filled event with qty 10 at average fill price 110 for that leg". Signed off by the operator @ 2026-11-20 ("Sign off (Recommended)", `context.md:317-321`).
-- EXTEND `@AC-17 @feature-251` (`services/xstockstrat-portfolio/acceptance/fix-getpnl-source-service.feature`) — new case added: the `GetPnL` dedup maps key on `account_id` + `order_id`, with a two-account same-leg-id test. Operator ruling @ 2026-11-20 ("Approve both (Recommended)", `context.md:297-301`).
+- CHANGE `@AC-5` "A bracket leg that fills in two parts reaches the ledger as a partial then a full fill" — altered guarantee: the Then reads "an order.partially_filled event with qty 4 and an order.filled event with qty 10 at average fill price 110 for that leg". Signed off by the operator @ 2026-11-20 ("Sign off (Recommended)", `context.md:1530-1534`).
+- EXTEND `@AC-17 @feature-251` (`services/xstockstrat-portfolio/acceptance/fix-getpnl-source-service.feature`) — new case added: the `GetPnL` dedup maps key on `account_id` + `order_id`, with a two-account same-leg-id test. Operator ruling @ 2026-11-20 ("Approve both (Recommended)", `context.md:1510-1514`).
 - PRESERVE `@AC-14 @feature-251` (same file) — not regressed by: the mixed `account_id` group refusal is untouched.
-- EXTEND `@AC-1 @feature-206` (`services/xstockstrat-trading/acceptance/fix-reconciliation-false-halt.feature`) — new case added: bracket-leg fills count in `NetFilledQtyBySymbol` through `trading.bracket_legs`. Operator ruling @ 2026-11-20 ("Via bracket_legs (Recommended)", `context.md:329-332`).
+- EXTEND `@AC-1 @feature-206` (`services/xstockstrat-trading/acceptance/fix-reconciliation-false-halt.feature`) — new case added: bracket-leg fills count in `NetFilledQtyBySymbol` through `trading.bracket_legs`. Operator ruling @ 2026-11-20 ("Via bracket_legs (Recommended)", `context.md:1542-1545`).
 - PRESERVE `@AC-2 @feature-206` and `@AC-3 @feature-206` (same file) — not regressed by: no `reconcileTick` hunk; a tombstone adds 0 to the sum.
-- EXTEND `@AC-56 @feature-294` (`docs/sdd/business-rules/platform.feature`) — new case added: a parked fill is counted `parked` once and acked at DEBUG on later boots. Operator ruling @ 2026-11-20 ("None — fix in scope", `context.md:302-306`, restated at `context.md:336-337`).
+- EXTEND `@AC-56 @feature-294` (`docs/sdd/business-rules/platform.feature`) — new case added: a parked fill is counted `parked` once and acked at DEBUG on later boots. Operator ruling @ 2026-11-20 ("None — fix in scope", `context.md:1515-1518`, restated at `context.md:1549-1550`).
 - PRESERVE `@AC-6 @feature-294` (`services/xstockstrat-trading/acceptance/signal-map-instrumentation.feature`) — not regressed by: no diff hunk inside `StartFillPoller`; the leg poll runs after `logTick` and never feeds the parent counts.
 - PRESERVE `@AC-3 @feature-290` (`services/xstockstrat-portfolio/acceptance/fix-ctx-cancel-warn-flood.feature`) — not regressed by: persistence is scoped to the `order_fill` consumer; the other consumers keep boot replay from 0.
 - EXTEND `@AC-10 @feature-251` (`services/xstockstrat-trading/acceptance/fix-getpnl-source-service.feature`) — new case added: bracket-leg fill events carry the same side, source service and fee shape. Flagged EXTEND by recon (`recon.md:111`); it is covered by this feature's own `@AC-4` and `@AC-5` and needed no separate ruling.

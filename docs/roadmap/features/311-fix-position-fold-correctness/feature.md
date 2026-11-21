@@ -15,7 +15,7 @@
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 3 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
-| 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (11 rounds, full) and approved under the operator's standing authorisation (context.md:309-311); recon.md + debate.md + design.md written |
+| 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (11 rounds, full) and approved under the operator's standing authorisation (context.md:1522-1524); recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 27 steps |
 
 ---
