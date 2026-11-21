@@ -24,7 +24,7 @@ Step counts: 308 17 · 309 18 · 310 8 · 311 27 · 312 20 · 313 7 · 314 9 · 
 
 No `implementation-ready` feature has started `/sdd-execute`. `main-dev` is `8baf3976` (`fb52065c` plus the
 #1595 docs sync). Before the 2026-11-21 sync the branches were 124 behind (320: 81, 330: 4, 326/329: 3,
-321/327/331: 1); after it the 20 `implementation-ready` branches are 0 behind.
+321/327/331: 1); after it the 20 `implementation-ready` branches were 0 behind after the sync.
 
 ## 2. Standing operator rulings (apply to every feature)
 
@@ -75,11 +75,10 @@ No `implementation-ready` feature has started `/sdd-execute`. `main-dev` is `8ba
 
 - Run `/sdd-status`, then read the feature's `context.md` and the `still open` notes from its impl-spec
   review. Those notes were read by the orchestrator only for 311, 313, 316, 321, 324, 325 and 331.
-- **`context.md` over the 65,536-byte `/sdd-execute` limit** (measured 2026-11-21 before distill): 309, 311
-  (361 KB), 312, 313, 314, 316, 324, 325, 326, 327, 328, 329, 330. The 10 `implementation-ready` ones
-  (309, 311, 312, 313, 314, 316, 324, 325, 327, 328) were sent through `/sdd-distill` on 2026-11-21; re-check
-  sizes (`git show origin/feature/<slug>:<dir>/context.md | wc -c`) before executing. 326/329 are
-  `code-completed` and 330 is `in-progress`; they were not distilled.
+- **`context.md` over the 65,536-byte `/sdd-execute` limit** (measured 2026-11-21): 309, 311 (361 KB), 312, 313,
+  314, 316, 324, 325, 326, 327, 328, 329, 330. A first `/sdd-distill` pass on the 10 `implementation-ready`
+  ones (309, 311, 312, 313, 314, 316, 324, 325, 327, 328) was **reverted on 2026-11-21** (§ 8): independent verify
+  found it unsafe. Until they are re-distilled they cannot run `/sdd-execute`.
 - Every branch must merge `main-dev` first (each spec's BRANCH SYNC step) — done for the 20
   `implementation-ready` branches on 2026-11-21; repeat if `main-dev` moves again. `scripts/check-duplication.py`
   is present on `main-dev`, so the old missing-script warning no longer applies. Never use `--no-verify`.
@@ -143,30 +142,19 @@ took `055`); `/sdd-distill` list (13 oversize contexts, not 5); missing `check-d
 
 Actions taken: allocator reserved 361/362; `main-dev` merged into all 20 `implementation-ready` branches
 (17 clean; 314, 315 and 316 hit append-only ledger conflicts in `docs/roadmap/ledger/{insights,fails}.md`,
-resolved as a union of both sides); 10 oversized `context.md` files sent through `/sdd-distill`.
+resolved as a union of both sides); 10 oversized `context.md` files sent through `/sdd-distill` (then reverted, see below).
 
-Distill results (bytes before → after; limit 65,536): 309 72,335→48,792 · 311 361,096→62,591 · 312 66,392→45,274 ·
-313 98,195→40,486 · 314 75,253→53,257 · 316 118,771→58,998 · 324 79,963→38,967 · 325 112,121→44,962 ·
-327 73,936→50,614 · 328 74,753→52,484. Each file keeps exactly one `sdd-batch-design-state` fence (the last,
-byte-identical to the original; checked by script on `origin`).
-
-Caveats on the distills:
-- **Self-verified.** The distill agents had no subagent tool, so the `context-distiller` plan and the
-  adversarial verify were done by the same agent (script + manual read), not an independent pass. Rerun a
-  real verify if you want one.
-- **311 headroom is 2,945 bytes.** The next sessions pushed past 65,536 will need another `/sdd-distill`
-  (the round-2..10 fences are gone; the 26 KB round-11 fence, the 2 recent sessions and 4 verbatim operator
-  ruling sessions are the ~44 KB floor).
-- **Stale `context.md:N` cites.** 311's and 316's `design.md`, `debate.md` and `implementation-spec.md` cite
-  the old `context.md` line numbers. 316's spike session moved by a constant offset (new = old − 335; banner
-  at the top of its `context.md`); 311's cited passages are the kept verbatim ruling sessions (marker at the
-  top of its `context.md`). Those artifacts were not edited.
-- **325:** its distilled header says P-1 was "declined by the operator"; the session log says "treated as
-  declined" after "I accept the bound" (the `debate.md` row read "pending user"). Treat P-1 as unconfirmed
-  (§ 3.1).
-
-Verified unchanged: statuses, step counts, `MAX_ROUNDS = 5`, 326/329/330's merged PRs (#1592–#1594),
-326's follow-ups were not previously filed.
+Distill attempt, **reverted** (operator decision 2026-11-21): the first pass cut the 10 contexts to 38–63 KB
+(311: 361→62.6 KB) but the distill agents had no subagent tool and self-verified. Independent
+`context-distiller` verify runs then returned **unsafe** on all of 309, 312, 313, 314, 316, 324, 325, 327, 328
+(311's verdict was not retrieved). Common finding: every earlier-round `sdd-batch-design-state` fence was
+dropped, but the skill's rubric requires each fence to be kept byte-for-byte. Specific losses (e.g. 314's
+unregistered `SELECT … FOR UPDATE` rejection, 312's pre-merge `ListOrders` caller-grep risk, 309's OQ6
+disposition, 324's `scripts-python` contingency recipe) and misstatements (325's "declined by the operator",
+324/314/316's unsourced "branch synced" claims) were listed per feature. Both the distill commits and the two
+cite-repointing commits (311, 316) were reverted with `git revert` on each `feature/<slug>`; the contexts are
+back to their pre-distill bytes. Retry needs either a real `context-distiller` subagent pass that keeps all fences
+(which cannot reach the limit for 311 — its fences alone are ~250 KB) or a decision on how fences may be archived.
 
 ## 9. Operator questions (drafted from § 3; each needs the answer quoted verbatim into the feature's `context.md`)
 
