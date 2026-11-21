@@ -597,3 +597,19 @@ Carried into `/sdd-execute`; announce every unchecked item at each checkpoint an
 - [ ] The new Step 2 assertions on the unknown-order and position-side tests assume each finding records exactly one `halt` and one `reconciliation` alert. If RED fails for another reason, stop and report. Target: Step 2.
 - [ ] The feature branch is 168 commits behind main-dev (measured by the sdd-spec session). Target: `/sdd-execute` BRANCH SYNC; re-grep every anchor by symbol, and treat a tree that still holds the `.sh` guard as a Step 5 blocker.
 - [ ] Still open from earlier sessions and unchanged: the accepted double CRITICAL push (Step 2 pins it), the reachable `user_id=''` account (Step 2 empty-owner test; the guard is out of scope), and the undeduplicated risk events (Step 6 documents it).
+
+## Session 2026-11-21 — sdd-execute sequential (sdd-batch-execute)
+
+**Up-front confirmation (operator-approved record, binding).** The `mismatches` array is in full in the body of the respec commit `315905b4`. Summary:
+`{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","dev":"b6421cd8e986ab5128e1e989b2e0b0dedd296901","specHash":"37f3296b573e700eecd91e84d0b82dddf8dd7202","directive":"conditional","pending":[1,2,3,4,5,6]}` plus six mismatch entries. Step 2 is substantive (wrong C-13 evidence). Steps 1, 3, 4, 5 and 6 have line-anchor drift only.
+
+- Stale check passed: `origin/main-dev` = `8baf3976`, `origin/feature/fix-alert-event-targeting` = `b6421cd8`. The merge was skipped because `8baf3976` is already an ancestor.
+- Tooling detection (steps 1–6): go1.27 ✓ · golangci-lint ✗ v2.5.0 built with go1.25. The pinned v2.14.0 goes in per step via `GOTOOLCHAIN=go1.27.0 go install …@v2.14.0`. python3.13 ✓ · uv ✓. Hook check: hook=0.
+- Re-spec commits (`git log --first-parent origin/main-dev..HEAD`, `respec(fix-alert-event-targeting)`):
+  - `315905b4` respec(fix-alert-event-targeting): align steps 2,1,3,4,5,6 with current codebase
+- Re-spec decision, Step 2 instruction 7 (C-13 recheck). `internal/testdata` does hold `S1UserID = "user-1"`, but it is the feature-240 S1 offline-history constant (account `acc-1`). The new assertions compare against the owner literal that the same test's pool entry sets, so those ids stay inline as sentinel one-offs. Repointing them at `testdata.S1UserID` is forbidden. Verification now checks that `internal/testdata` is unchanged. A reviewer may overturn this.
+- Status: `implementation-ready` → `in-progress` (feature.md row + status.md).
+
+```sdd-batch-setup
+{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","date":"2026-11-21"}
+```
