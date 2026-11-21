@@ -77,7 +77,7 @@ Current sites (spot-checked at 0fecb24d): `resolveTradingMode` in `services/xsto
 - xstockstrat-analysis, xstockstrat-indicators, xstockstrat-ingest (Python watchers; analysis acceptance)
 - xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata (Go watchers; marketdata `Paper`)
 - xstockstrat-config, xstockstrat-identity, xstockstrat-ledger, xstockstrat-notify (Node watchers; config seeds)
-- xstockstrat-agent (sparkline projection; `SnapshotOfflinePositions` caller)
+- xstockstrat-agent (sparkline projection; `SnapshotOfflinePositions` caller); xstockstrat-ui (`src/hooks/useOhlcBars.ts` is a `BatchGetBars` producer — added by operator decision 2026-11-20, design D-14)
 
 ## Fix Scope
 
@@ -90,11 +90,11 @@ Current sites (spot-checked at 0fecb24d): `resolveTradingMode` in `services/xsto
   | `SnapshotOfflinePositionsRequest.user_id` `deprecated = true` + comment | deprecation-only | trading owner |
   | `common.v1.Decimal` / `common.v1.Error` `deprecated` + comment | deprecation-only | platform owner |
   | Removing `common.v1.Decimal` / `Error`; `side`/`rating`/`fn` string → enum | **breaking** | **out of scope** (2 owners + platform lead; separate feature) |
-- [x] Database migrations anticipated: **yes (config seeds)** — retiring/annotating `analysis.opportunity.sparkline_bars`,
-  `marketdata.alpaca.paper` need a new config migration (applied migrations are never edited): next free
-  config NNN at `/sdd-spec` (048 today; 321 and 330 also add config migrations — take numbers in merge
-  order), with `.up.sql` + `.down.sql`. The 028 TTL-key description is **owned by feature 330**, which
-  rewrites that row's value (overlap scan: one owner per seed row).
+- [ ] Database migrations anticipated: **no** (operator decision 2026-11-20; design D-4/R-3) — config
+  migration `046_config_dead_rows_prune` already prunes `analysis.opportunity.sparkline_bars` and
+  `marketdata.alpaca.paper`, so this feature adds no config migration and claims no NNN.
+  The 028 TTL-key description is **owned by feature 330**, which rewrites that row's value
+  (overlap scan: one owner per seed row).
 - [x] Config key changes anticipated: **yes** — the inert `analysis.opportunity.sparkline_bars` and unread
   `marketdata.alpaca.paper` keys are retired or annotated.
 

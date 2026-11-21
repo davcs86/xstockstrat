@@ -986,9 +986,8 @@ export interface GetIndicatorSeriesRequest {
     strategyId: string;
     symbol: string;
     /**
-     * The caller's own already-fetched candlestick closes + their timestamps (the page passes the
-     * exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
-     * and times are index-aligned and equal length.
+     * The caller's drawn window plus a history prefix; closes and times are index-aligned and equal
+     * length. The server never re-fetches the evaluated symbol's bars.
      */
     closes: number[];
     times: Date[];
@@ -1008,6 +1007,11 @@ export interface ComponentSeries {
      * isolation — one bad component never fails the whole RPC.
      */
     error: string;
+    /**
+     * Bars of history needed for this component's first value (multi-series: its earliest series).
+     * 0 = no warm-up or unknown; a client never reports insufficient history for 0.
+     */
+    firstValueBars: number;
 }
 export interface NamedSeries {
     /**

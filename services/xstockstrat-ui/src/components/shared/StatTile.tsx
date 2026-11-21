@@ -1,5 +1,21 @@
+import { Fragment } from 'react';
 import { cn } from '../ui/utils';
 import { Eyebrow } from './Eyebrow';
+
+function withCommaBreaks(value: string | number): React.ReactNode {
+  if (typeof value === 'number') return value;
+  const parts = value.split(',');
+  return parts.map((part, i) =>
+    i < parts.length - 1 ? (
+      <Fragment key={i}>
+        {`${part},`}
+        <wbr />
+      </Fragment>
+    ) : (
+      part
+    ),
+  );
+}
 
 // Single source of truth for the platform's kicker stat tiles (Opportunities / Exposure and others).
 export function StatTile({
@@ -20,7 +36,7 @@ export function StatTile({
       <Eyebrow>{label}</Eyebrow>
       <div
         className={cn(
-          'mt-1 font-mono font-semibold tabular-nums',
+          'mt-1 font-mono font-semibold tabular-nums wrap-anywhere',
           size === 'lg' ? 'text-2xl' : 'text-xl',
           tone === 'accent' && 'text-primary',
           tone === 'gain' && 'text-buy',
@@ -28,7 +44,7 @@ export function StatTile({
           tone === 'paper' && 'text-yellow-400',
         )}
       >
-        {value}
+        {withCommaBreaks(value)}
       </div>
       {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
     </div>

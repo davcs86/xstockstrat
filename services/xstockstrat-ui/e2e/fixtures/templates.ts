@@ -45,6 +45,22 @@ export const STRATEGY_TEMPLATE_MEANREV = {
   },
 };
 
+/** A platform-seeded template: read-only for every user. Served only through a per-spec route override. */
+export const STRATEGY_TEMPLATE_SYSTEM = {
+  meta: {
+    templateId: 'tpl-quality_dip_buyer',
+    kind: KIND_STRATEGY,
+    name: 'Quality Dip Buyer',
+    description: 'RSI pullback above the 200-day average.',
+    version: 1,
+    readOnly: true,
+  },
+  payload: {
+    strategyId: 'quality_dip_buyer',
+    displayName: 'Quality Dip Buyer',
+  },
+};
+
 export const SOURCE_TEMPLATE_NEWSLETTER = {
   meta: {
     templateId: 'tpl-source-newsletter',
@@ -68,6 +84,27 @@ export const TEMPLATES = [
   STRATEGY_TEMPLATE_MEANREV,
   SOURCE_TEMPLATE_NEWSLETTER,
 ];
+
+/**
+ * An admin-authored mediated source template with no `extractionInstructions` yet (feature 355).
+ * Outside `TEMPLATES` and the mock handlers: specs serve it through a stateful `page.route` stub.
+ */
+export const SOURCE_TEMPLATE_MEDIATED_WEBSITE = {
+  meta: {
+    templateId: 'tpl-source-filings',
+    kind: KIND_SIGNAL_SOURCE,
+    name: 'Filings Feed',
+    description: 'Reads a public filings feed.',
+    version: 1,
+  },
+  payload: {
+    slug: 'filings_feed',
+    displayName: 'Filings Feed',
+    sourceType: 'mediated_simple_website',
+    active: true,
+    configJson: { url: 'https://example.com/feed', scrape_selector: 'main' },
+  },
+};
 
 /**
  * The private formula `InstantiateTemplate(FORMULA_TEMPLATE_ZSCORE)` creates, owned by the test user.

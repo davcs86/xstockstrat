@@ -527,8 +527,8 @@ func TestGetPortfolio_AC39_BrokerOfflineAndAggregate(t *testing.T) {
 		return rows.AddRow("MSFT", 10.0, 100.0, 1000.0, time.Now(), "TRADING_MODE_PAPER", "alp-1", 150.0, 1500.0, 500.0, 0.5, 0.0, 0.0, "", "", 0, nil)
 	}
 	alp := balSpec{"alp-1", 10120, 10000}
-	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs("u1", "alp-1", "", 501).WillReturnRows(brokerRow(mock.NewRows(positionCols)))
-	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs("u1", offAcct, "", 501).WillReturnRows(sc.rows(mock, offAcct))
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs("u1", "alp-1", []string{}, 501).WillReturnRows(brokerRow(mock.NewRows(positionCols)))
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs("u1", offAcct, []string{}, 501).WillReturnRows(sc.rows(mock, offAcct))
 	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(3)...).WillReturnRows(brokerRow(sc.rows(mock, offAcct)))
 	for i := 0; i < 3; i++ {
 		expectBalanceList(mock, "u1", alp)
@@ -569,7 +569,7 @@ func TestGetPortfolio_AC52_NoRowsRevealsNothing(t *testing.T) {
 	for _, account := range []string{"acc-2", "acc-9"} {
 		t.Run(account, func(t *testing.T) {
 			svc, mock := acctSvc(t, &stubMarketData{}, 0)
-			mock.ExpectQuery(`FROM portfolio.positions`).WithArgs("u-1", account, "", 501).WillReturnRows(mock.NewRows(positionCols))
+			mock.ExpectQuery(`FROM portfolio.positions`).WithArgs("u-1", account, []string{}, 501).WillReturnRows(mock.NewRows(positionCols))
 			expectBalanceList(mock, "u-1")
 			mock.ExpectQuery(`FROM portfolio\.offline_account_realized WHERE user_id=\$1 AND account_id = ANY`).
 				WithArgs("u-1", []string{account}).WillReturnRows(mock.NewRows(stateCols))

@@ -145,6 +145,27 @@ export const CONFIG_KEY_FIXTURES = [
     environment: 1,
     tradingMode: 0,
   },
+  {
+    // feature 338: the seeded provider mode. Owned by e2e/config-ui/notify-commsgun-keys.spec.ts,
+    // which saves it — no other spec may write or assert this key's value.
+    key: 'fanout.email_provider',
+    description:
+      'Email provider for alert fanout: auto, commsgun or sendgrid; any other value reads as auto.',
+    defaultValue: 'auto',
+    isSecret: false,
+    consumingService: 'xstockstrat-notify',
+    environment: 1,
+    tradingMode: 0,
+  },
+  {
+    // feature 338: seeded without a value; set per environment through the secret edit path.
+    key: 'commsgun.app_key',
+    description: "Commsgun app key of this environment's subscriber app (encrypted at rest)",
+    defaultValue: '[secret]',
+    isSecret: true,
+    consumingService: 'xstockstrat-notify',
+    environment: 1,
+  },
 ];
 
 type ConfigKeyMetaInit = MessageInitShape<typeof ConfigKeyMetaSchema>;
@@ -233,4 +254,20 @@ export const PLATFORM_TRADING_STATE_VALUES = {
     trading_state: { value: { case: 'stringVal' as const, value: state } },
   }),
   wire: (state: PlatformTradingState) => ({ trading_state: { stringVal: state } }),
+};
+
+/**
+ * `ui` `GetConfig` values for the symbol page's indicator history depth (feature 341), keyed by the
+ * namespace-relative stored key `chart.indicator_history_bars`. `int_val` is `int64`: `init` carries
+ * a `bigint` (protobuf-es), `wire` a decimal string (Connect-JSON).
+ *
+ * Shape source: `xstockstrat.config.v1.GetConfigResponse`.
+ *
+ * Registered in e2e/fixtures/INVENTORY.md — update it when this file changes.
+ */
+export const UI_CHART_HISTORY_VALUES = {
+  init: (bars: number) => ({
+    'chart.indicator_history_bars': { value: { case: 'intVal' as const, value: BigInt(bars) } },
+  }),
+  wire: (bars: number) => ({ 'chart.indicator_history_bars': { intVal: String(bars) } }),
 };

@@ -49,6 +49,9 @@ type OrderIntentRepository interface {
 	// ResolveUnknownIntent CAS-transitions an UNKNOWN intent to COMPLETED/REJECTED, guarded on
 	// state=Unknown. resolved=false means it was no longer UNKNOWN — a safe no-op, not an error.
 	ResolveUnknownIntent(ctx context.Context, intentID string, newState int16, response []byte) (resolved bool, err error)
+	// ReleasePendingIntent deletes a dedup row only while PENDING and only after a definite broker
+	// non-processing (broker.ErrRateLimited). released=false means the row was already reclaimed.
+	ReleasePendingIntent(ctx context.Context, intentID string) (released bool, err error)
 }
 
 type pgOrderIntentRepo struct {
@@ -143,6 +146,22 @@ func (r *pgOrderIntentRepo) FinalizeIntent(ctx context.Context, intentID, orderI
 		return err
 	}
 	return nil
+}
+
+// releasePendingIntentSQL is the only DELETE on trading.order_intents; the state guard is the same CAS
+// the sweeper races on, so a finalized or reclaimed row can never be removed (TRADING-8).
+const releasePendingIntentSQL = `
+DELETE FROM trading.order_intents WHERE intent_id = $1 AND state = $2 RETURNING intent_id`
+
+func (r *pgOrderIntentRepo) ReleasePendingIntent(ctx context.Context, intentID string) (bool, error) {
+	var discard string
+	if err := r.pool.QueryRow(ctx, releasePendingIntentSQL, intentID, IntentStatePending).Scan(&discard); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 const sweepSelectSQL = `

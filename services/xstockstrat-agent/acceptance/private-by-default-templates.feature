@@ -6,7 +6,7 @@ Feature: private-by-default-templates (agent)
 
   @AC-25 @FR-12 @feature-224
   Scenario: Agent tools expose templates and drop public arguments
-    Given the agent MCP tool catalog at GET /api/tools
+    Given the agent MCP tool catalog served by the internal AgentService.ListTools RPC
     When the catalog is listed
     Then "list_templates" and "instantiate_template" are present
     And "manage_formula" has no "is_public" parameter and "list_formulas" has no "include_public" parameter

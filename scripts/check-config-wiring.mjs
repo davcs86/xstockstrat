@@ -217,14 +217,15 @@ export function loadState(root) {
 export const loadRegistry = (root) => loadState(root).registry
 
 const STORED_REL = 'scripts/config-wiring-stored.json'
-const GENERATOR_REL = 'scripts/config-wiring-stored.sh'
+const GENERATOR_REL = 'scripts/config-wiring-stored.py'
+const GENERATOR_FILES = [GENERATOR_REL, 'scripts/scratch_db.py']
 const ROW_FIELDS = ['namespace', 'key', 'environment', 'global', 'is_secret', 'value_type', 'description', 'consuming_service', 'default_value']
 const sha256 = (data) => createHash('sha256').update(data).digest('hex')
 
 // Must match the generator's manifest: `<sha256>  <path>` per input file, LC_ALL=C path order.
 export function storedInputsSha256(root) {
   const files = walk(root, SEED_DIR)
-  if (fs.existsSync(path.join(root, GENERATOR_REL))) files.push(GENERATOR_REL)
+  for (const f of GENERATOR_FILES) if (fs.existsSync(path.join(root, f))) files.push(f)
   files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
   return sha256(files.map((f) => `${sha256(fs.readFileSync(path.join(root, f)))}  ${f}\n`).join(''))
 }
@@ -712,7 +713,7 @@ export function ratchet(findings, state) {
 
 function freshness(root, storedData) {
   if (storedData.inputsSha256 === storedInputsSha256(root)) return []
-  return [{ line: `STALE-STORED: ${STORED_REL} inputs_sha256 does not match the config migrations; regenerate it with DATABASE_URL=<scratch postgres> bash ${GENERATOR_REL}`, fail: true }]
+  return [{ line: `STALE-STORED: ${STORED_REL} inputs_sha256 does not match the config migrations; regenerate it with DATABASE_URL=<scratch postgres> python3 ${GENERATOR_REL}`, fail: true }]
 }
 
 // Every feature-305/306-owned seeded-unread entry must be an `unread-no-partner` row of the committed fresh dry-run.

@@ -3,6 +3,7 @@ package repository
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -10,11 +11,17 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pashagolub/pgxmock/v4"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 	"github.com/xstockstrat/marketdata/internal/testdata"
 )
 
@@ -458,70 +465,7 @@ func TestParseHistCursor(t *testing.T) {
 	}
 }
 
-// --- feature 216: GetHistoricalPriceState + UpdateHistoricalPriceJoin pgxmock pins ---
-
-// TestGetHistoricalPriceState pins the triple-PK SELECT projection (filed_date + 5 price columns +
-// currency) and the no-rows fail-closed path. pgxmock does not run Postgres, so these are
-// SQL-text + arg + control-flow pins that guard against the two critical regressions: removing a
-// scanned column, and not treating ErrNoRows as Found=false.
-func TestGetHistoricalPriceState(t *testing.T) {
-	mock, err := pgxmock.NewPool()
-	if err != nil {
-		t.Fatalf("pgxmock.NewPool: %v", err)
-	}
-	defer mock.Close()
-	repo := &MarketDataRepo{db: mock}
-
-	filed := time.Date(2024, 6, 30, 0, 0, 0, 0, time.UTC)
-	price := 150.25
-	marketCap := 2_500_000.0
-	peRatio := 30.05
-	pbRatio := 5.12
-	divYield := 0.015
-
-	// Happy path: row present → Found=true, all fields scanned.
-	mock.ExpectQuery(`WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3`).
-		WithArgs("AAPL", "FY2023", "annual").
-		WillReturnRows(pgxmock.NewRows([]string{"filed_date", "price", "market_cap", "pe_ratio", "pb_ratio", "dividend_yield", "currency", "derivation_version"}).
-			AddRow(filed, &price, &marketCap, &peRatio, &pbRatio, &divYield, "USD", int16(1)))
-
-	state, err := repo.GetHistoricalPriceState(context.Background(), "AAPL", "FY2023", "annual")
-	if err != nil {
-		t.Fatalf("GetHistoricalPriceState: %v", err)
-	}
-	if !state.Found {
-		t.Fatal("Found=false, want true")
-	}
-	if state.Price == nil || *state.Price != price {
-		t.Errorf("Price=%v, want %v", state.Price, price)
-	}
-	if state.Currency != "USD" {
-		t.Errorf("Currency=%q, want USD", state.Currency)
-	}
-	if state.DerivationVersion != 1 {
-		t.Errorf("DerivationVersion=%d, want 1 (feature 223)", state.DerivationVersion)
-	}
-	if !state.FiledDate.Equal(filed) {
-		t.Errorf("FiledDate=%v, want %v", state.FiledDate, filed)
-	}
-
-	// No-rows path: ErrNoRows → Found=false, err=nil (fail-closed).
-	mock.ExpectQuery(`WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3`).
-		WithArgs("TSLA", "Q1-2023", "quarterly").
-		WillReturnError(pgx.ErrNoRows)
-
-	state2, err2 := repo.GetHistoricalPriceState(context.Background(), "TSLA", "Q1-2023", "quarterly")
-	if err2 != nil {
-		t.Fatalf("GetHistoricalPriceState no-rows: want nil err, got %v", err2)
-	}
-	if state2.Found {
-		t.Fatal("Found=true on no-rows, want false")
-	}
-
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("pgxmock expectations unmet: %v", err)
-	}
-}
+// --- feature 216: UpdateHistoricalPriceJoin pgxmock pin ---
 
 // TestUpdateHistoricalPriceJoin pins the UPDATE statement text and confirms the SET list covers
 // exactly the 5 price-join columns (price, market_cap, pe_ratio, pb_ratio, dividend_yield) and
@@ -570,10 +514,10 @@ func TestRederiveHistoricalFundamentals_GuardedUpgrade_feature223(t *testing.T) 
 		DebtToEquity: &de, ROE: &roe, DerivationVersion: 1,
 		ExtraMetrics: map[string]float64{"total_debt": 52458e6},
 	}
-	mock.ExpectExec(`SET eps=\$4, roe=\$5, debt_to_equity=\$6, extra_metrics = extra_metrics \|\| \$7::jsonb, derivation_version=\$8\s+WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3 AND derivation_version < \$8`).
-		WithArgs("AXP", "Q2-2026", "quarterly", (*float64)(nil), &roe, &de, `{"total_debt":52458000000}`, 1).
+	mock.ExpectExec(`SET eps=\$4, roe=\$5, debt_to_equity=\$6, extra_metrics = \(extra_metrics - \$9::text\[\]\) \|\| \$7::jsonb, derivation_version=\$8\s+WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3 AND derivation_version < \$8`).
+		WithArgs("AXP", "Q2-2026", "quarterly", (*float64)(nil), &roe, &de, `{"total_debt":52458000000}`, 1, source.DerivationOwnedExtraKeys).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	mock.ExpectExec(`AND derivation_version < \$8`).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+	mock.ExpectExec(`AND derivation_version < \$8`).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 	mock.ExpectExec(`DELETE FROM marketdata.fundamentals WHERE symbol=\$1 AND source='edgar'`).WithArgs("AXP").
 		WillReturnResult(pgxmock.NewResult("DELETE", 1))
@@ -589,6 +533,32 @@ func TestRederiveHistoricalFundamentals_GuardedUpgrade_feature223(t *testing.T) 
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// @AC-5: a stale stockholders_equity cannot survive a re-derive — the owned keys are stripped before
+// the merge even when the new derivation no longer produces them.
+func TestRederiveHistoricalFundamentals_StripsOwnedKeys_AC5_feature340(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	p := source.HistoricalFundamentalsPeriod{
+		Symbol: "LYFT", FiscalPeriod: "Q3-2026", PeriodType: "quarterly", DerivationVersion: 2,
+		ExtraMetrics: map[string]float64{"total_debt": 1e9},
+	}
+	owned := []string{"revenue", "net_income", "assets", "liabilities", "stockholders_equity", "stockholders_equity_usd", "total_debt"}
+	mock.ExpectExec(`extra_metrics = \(extra_metrics - \$9::text\[\]\) \|\| \$7::jsonb`).
+		WithArgs("LYFT", "Q3-2026", "quarterly", (*float64)(nil), (*float64)(nil), (*float64)(nil), `{"total_debt":1000000000}`, 2, owned).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+	if changed, err := repo.RederiveHistoricalFundamentals(context.Background(), p); err != nil || !changed {
+		t.Fatalf("re-derive changed=%v err=%v, want true", changed, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet (owned keys not stripped before the merge): %v", err)
 	}
 }
 
@@ -895,6 +865,107 @@ func TestQueryRecentBars_BoundedWindowShape(t *testing.T) {
 	}
 }
 
+// installMetricReader swaps in a manual-reader MeterProvider for the test's lifetime. No t.Parallel():
+// the MeterProvider is process-global.
+func installMetricReader(t *testing.T) *sdkmetric.ManualReader {
+	t.Helper()
+	prev := otel.GetMeterProvider()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(mp)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(prev)
+		_ = mp.Shutdown(context.Background())
+	})
+	return reader
+}
+
+// ohlcvOOMCount sums marketdata.ohlcv.out_of_memory_errors for one op label.
+func ohlcvOOMCount(t *testing.T, reader *sdkmetric.ManualReader, op string) int64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	var n int64
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != "marketdata.ohlcv.out_of_memory_errors" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			if !ok {
+				t.Fatalf("%s data is %T, want Sum[int64]", m.Name, m.Data)
+			}
+			for _, dp := range sum.DataPoints {
+				if v, ok := dp.Attributes.Value(attribute.Key(telemetry.KeyOp)); ok && v.AsString() == op {
+					n += dp.Value
+				}
+			}
+		}
+	}
+	return n
+}
+
+func TestObserveLockBreach(t *testing.T) {
+	lockOOM := fmt.Errorf("query recent bars: %w", &pgconn.PgError{Code: "53200"})
+	cancelled := &pgconn.PgError{Code: "57014"}
+	plain := errors.New("boom")
+	cases := []struct {
+		name      string
+		err       error
+		wantCount int64
+	}{
+		{"wrapped 53200 counts", lockOOM, 1},
+		{"other SQLSTATE does not count", cancelled, 0},
+		{"plain error does not count", plain, 0},
+		{"nil returns nil", nil, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := installMetricReader(t)
+			got := observeLockBreach(context.Background(), telemetry.OhlcvOpBars, tc.err)
+			if got != tc.err { //nolint:errorlint // identity: the error must be returned unchanged
+				t.Fatalf("returned %v, want the input %v unchanged", got, tc.err)
+			}
+			if n := ohlcvOOMCount(t, reader, telemetry.OhlcvOpBars); n != tc.wantCount {
+				t.Fatalf("out_of_memory_errors{op=bars} = %d, want %d", n, tc.wantCount)
+			}
+		})
+	}
+}
+
+// A 53200 surfacing from row iteration (rows.Err()) counts once under op=recent_bars.
+func TestQueryRecentBars_CountsLockBreachFromRows(t *testing.T) {
+	reader := installMetricReader(t)
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	end := time.Now()
+	start := end.Add(-30 * 24 * time.Hour)
+
+	mock.ExpectQuery(`(?s)FROM marketdata\.ohlcv.*ORDER BY time DESC`).
+		WithArgs(pgx.QueryExecModeExec, "AAPL", "1d", start, end, 2).
+		WillReturnRows(pgxmock.NewRows([]string{"time", "symbol", "timeframe", "open", "high", "low", "close", "volume", "vwap", "trade_count", "source"}).
+			AddRow(end.Add(-24*time.Hour), "AAPL", "1d", 1.0, 2.0, 0.5, 1.5, int64(10), 1.2, int32(3), "alpaca").
+			CloseError(&pgconn.PgError{Code: "53200"}))
+
+	_, err = repo.QueryRecentBars(context.Background(), "AAPL", "1d", start, end, 2)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "53200" {
+		t.Fatalf("QueryRecentBars err = %v, want a *pgconn.PgError 53200", err)
+	}
+	if n := ohlcvOOMCount(t, reader, telemetry.OhlcvOpRecentBars); n != 1 {
+		t.Fatalf("out_of_memory_errors{op=recent_bars} = %d, want 1", n)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
 // The previous-close batch (BatchGetLatestPrice) must be time-bounded and unnamed: unbounded, it
 // ranks every stored daily bar per symbol and was the query timing out under the staging bursts.
 func TestCloseAt_BoundedShape(t *testing.T) {
@@ -951,5 +1022,150 @@ func TestGetPreviousDailyCloseBatch_BoundedShape(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// --- feature 348: ListHistoricalRows + ReplaceHistoricalFundamentals pgxmock pins ---
+
+func TestListHistoricalRows_feature348(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	cols := []string{"fiscal_period", "period_type", "period_end", "filed_date", "price", "market_cap", "pe_ratio", "pb_ratio", "dividend_yield", "currency", "derivation_version", "extra_metrics"}
+	const sel = `SELECT fiscal_period, period_type, period_end, filed_date, price, market_cap, pe_ratio, pb_ratio, dividend_yield, currency, derivation_version, extra_metrics\s+FROM marketdata.fundamentals_history\s+WHERE symbol=\$1\s+ORDER BY fiscal_period, period_type`
+	price, marketCap, pe, pb, dy := 310.25, 8.7e11, 71.3, 13.1, 0.0065
+	mock.ExpectQuery(sel).WithArgs("ORCL").WillReturnRows(pgxmock.NewRows(cols).
+		AddRow("Q1-2026", "quarterly", hfDay(2026, 9, 7), hfDay(2025, 9, 10), &price, &marketCap, &pe, &pb, &dy, "USD", int16(2), []byte(`{"stockholders_equity":66772000000}`)))
+
+	rows, err := repo.ListHistoricalRows(context.Background(), "ORCL")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows=%d err=%v, want 1 row", len(rows), err)
+	}
+	r := rows[0]
+	if r.FiscalPeriod != "Q1-2026" || r.PeriodType != "quarterly" || !r.PeriodEnd.Equal(hfDay(2026, 9, 7)) || !r.FiledDate.Equal(hfDay(2025, 9, 10)) {
+		t.Errorf("identity = %s %s %v %v", r.FiscalPeriod, r.PeriodType, r.PeriodEnd, r.FiledDate)
+	}
+	if r.Price == nil || *r.Price != price || r.MarketCap == nil || *r.MarketCap != marketCap || r.PERatio == nil || *r.PERatio != pe ||
+		r.PBRatio == nil || *r.PBRatio != pb || r.DividendYield == nil || *r.DividendYield != dy {
+		t.Errorf("price columns = %v %v %v %v %v", r.Price, r.MarketCap, r.PERatio, r.PBRatio, r.DividendYield)
+	}
+	if r.Currency != "USD" || r.DerivationVersion != 2 {
+		t.Errorf("currency %q version %d, want USD 2", r.Currency, r.DerivationVersion)
+	}
+	if got := r.ExtraMetrics["stockholders_equity"]; got != 66772000000 {
+		t.Errorf("extra_metrics stockholders_equity = %v, want 66772000000", got)
+	}
+
+	mock.ExpectQuery(sel).WithArgs("NONE").WillReturnRows(pgxmock.NewRows(cols))
+	rows, err = repo.ListHistoricalRows(context.Background(), "NONE")
+	if err != nil || rows == nil || len(rows) != 0 {
+		t.Fatalf("no row: rows=%v err=%v, want an empty slice and nil", rows, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestReplaceHistoricalFundamentals_feature348(t *testing.T) {
+	const del = `DELETE FROM marketdata.fundamentals_history\s+WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3 AND period_end=\$4::date AND filed_date=\$5::date AND derivation_version=\$6`
+	const ins = `INSERT INTO marketdata.fundamentals_history`
+	row := func(label string, end, filed time.Time) source.HistoricalPriceState {
+		return source.HistoricalPriceState{FiscalPeriod: label, PeriodType: "quarterly", PeriodEnd: end, FiledDate: filed, DerivationVersion: 2}
+	}
+	period := func(label string, end, filed time.Time) source.HistoricalFundamentalsPeriod {
+		return source.HistoricalFundamentalsPeriod{Symbol: "ORCL", FiscalPeriod: label, PeriodType: "quarterly", PeriodEnd: end, FiledDate: filed, Source: "edgar", Currency: "USD", DerivationVersion: 3}
+	}
+	collided := row("Q1-2026", hfDay(2026, 9, 7), hfDay(2025, 9, 10))
+	q1fy26 := period("Q1-2026", hfDay(2025, 8, 31), hfDay(2025, 9, 10))
+	q1fy27 := period("Q1-2027", hfDay(2026, 8, 31), hfDay(2026, 9, 11))
+	insertOf := func(mock pgxmock.PgxPoolIface, label string) *pgxmock.ExpectedExec {
+		args := make([]any, 21)
+		for i := range args {
+			args[i] = pgxmock.AnyArg()
+		}
+		args[0], args[1] = "ORCL", label
+		return mock.ExpectExec(ins).WithArgs(args...)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		deletes []source.HistoricalPriceState
+		inserts []source.HistoricalFundamentalsPeriod
+		expect  func(mock pgxmock.PgxPoolIface)
+		wantErr string
+	}{
+		{
+			// @AC-5: the collided row goes and both periods are stored, in one transaction.
+			name: "AC-5 plan", deletes: []source.HistoricalPriceState{collided}, inserts: []source.HistoricalFundamentalsPeriod{q1fy26, q1fy27},
+			expect: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectBegin()
+				mock.ExpectExec(del).WithArgs("ORCL", "Q1-2026", "quarterly", "2026-09-07", "2025-09-10", 2).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+				insertOf(mock, "Q1-2026").WillReturnResult(pgxmock.NewResult("INSERT", 1))
+				insertOf(mock, "Q1-2027").WillReturnResult(pgxmock.NewResult("INSERT", 1))
+				mock.ExpectCommit()
+				mock.ExpectRollback()
+			},
+		},
+		{
+			name:    "deletes run in sorted key order",
+			deletes: []source.HistoricalPriceState{row("Q3-2025", hfDay(2025, 2, 28), hfDay(2025, 3, 11)), row("Q1-2026", hfDay(2026, 9, 7), hfDay(2025, 9, 10))},
+			expect: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectBegin()
+				mock.ExpectExec(del).WithArgs("ORCL", "Q1-2026", "quarterly", "2026-09-07", "2025-09-10", 2).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+				mock.ExpectExec(del).WithArgs("ORCL", "Q3-2025", "quarterly", "2025-02-28", "2025-03-11", 2).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+				mock.ExpectCommit()
+				mock.ExpectRollback()
+			},
+		},
+		{
+			name: "a delete matching no row rolls back before any insert", deletes: []source.HistoricalPriceState{collided}, inserts: []source.HistoricalFundamentalsPeriod{q1fy26}, wantErr: "removed 0 rows, want 1",
+			expect: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectBegin()
+				mock.ExpectExec(del).WithArgs("ORCL", "Q1-2026", "quarterly", "2026-09-07", "2025-09-10", 2).WillReturnResult(pgxmock.NewResult("DELETE", 0))
+				mock.ExpectRollback()
+			},
+		},
+		{
+			name: "a delete matching two rows rolls back before any insert", deletes: []source.HistoricalPriceState{collided}, inserts: []source.HistoricalFundamentalsPeriod{q1fy26}, wantErr: "removed 2 rows, want 1",
+			expect: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectBegin()
+				mock.ExpectExec(del).WithArgs("ORCL", "Q1-2026", "quarterly", "2026-09-07", "2025-09-10", 2).WillReturnResult(pgxmock.NewResult("DELETE", 2))
+				mock.ExpectRollback()
+			},
+		},
+		{
+			name: "an insert error rolls back", deletes: []source.HistoricalPriceState{collided}, inserts: []source.HistoricalFundamentalsPeriod{q1fy26, q1fy27}, wantErr: "duplicate key value",
+			expect: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectBegin()
+				mock.ExpectExec(del).WithArgs("ORCL", "Q1-2026", "quarterly", "2026-09-07", "2025-09-10", 2).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+				insertOf(mock, "Q1-2026").WillReturnError(errors.New("duplicate key value violates unique constraint"))
+				mock.ExpectRollback()
+			},
+		},
+		{name: "an empty plan opens no transaction", expect: func(pgxmock.PgxPoolIface) {}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("pgxmock.NewPool: %v", err)
+			}
+			defer mock.Close()
+			tc.expect(mock)
+			err = (&MarketDataRepo{db: mock}).ReplaceHistoricalFundamentals(context.Background(), "ORCL", tc.deletes, tc.inserts)
+			if (err != nil) != (tc.wantErr != "") || (err != nil && !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("err = %v, want it to contain %q", err, tc.wantErr)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("pgxmock expectations unmet: %v", err)
+			}
+		})
+	}
+
+	if strings.Contains(histInsertStatement, "ON CONFLICT") {
+		t.Error("the shared insert statement must carry no ON CONFLICT clause: the replace inserts plainly")
 	}
 }

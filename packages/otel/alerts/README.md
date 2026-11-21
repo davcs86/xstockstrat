@@ -26,7 +26,7 @@ even when no strategy is live). A missing log stream pages, hence `noDataState: 
 **Stream exclusion.** Server-streaming RPCs (`WatchConfig`, `Stream*`, `ExportEvents`) end on every deploy and
 would register as errors or slow calls, so every `rpc_server_duration_milliseconds_*` selector carries
 `rpc_method!~"<stream methods>"`. The method list is derived from `packages/proto` by
-`scripts/check-otel-produced-signals.sh`, which fails CI when a selector lacks it or a new stream RPC is added
+`scripts/check-otel-produced-signals.py`, which fails CI when a selector lacks it or a new stream RPC is added
 without updating the rules.
 
 ## Substitutions before provisioning

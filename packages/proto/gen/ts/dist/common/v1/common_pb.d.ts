@@ -181,6 +181,13 @@ export type TemplateMeta = Message<"xstockstrat.common.v1.TemplateMeta"> & {
      * @generated from field: google.protobuf.Timestamp updated_at = 8;
      */
     updatedAt?: Timestamp | undefined;
+    /**
+     * Server-set: true for a platform-seeded (created_by = 'system') template, which ManageTemplate
+     * refuses to UPDATE or RETIRE.
+     *
+     * @generated from field: bool read_only = 9;
+     */
+    readOnly: boolean;
 };
 /**
  * Describes the message xstockstrat.common.v1.TemplateMeta.
@@ -219,6 +226,50 @@ export type TemplateOrigin = Message<"xstockstrat.common.v1.TemplateOrigin"> & {
  * Use `create(TemplateOriginSchema)` to create a new message.
  */
 export declare const TemplateOriginSchema: GenMessage<TemplateOrigin>;
+/**
+ * Lists non-written symbols only; reason is the source's error text, empty for EMPTY.
+ *
+ * @generated from message xstockstrat.common.v1.BackfillSymbolResult
+ */
+export type BackfillSymbolResult = Message<"xstockstrat.common.v1.BackfillSymbolResult"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.BackfillSymbolOutcome outcome = 2;
+     */
+    outcome: BackfillSymbolOutcome;
+    /**
+     * @generated from field: string reason = 3;
+     */
+    reason: string;
+};
+/**
+ * Describes the message xstockstrat.common.v1.BackfillSymbolResult.
+ * Use `create(BackfillSymbolResultSchema)` to create a new message.
+ */
+export declare const BackfillSymbolResultSchema: GenMessage<BackfillSymbolResult>;
+/**
+ * first_unservable_date is YYYY-MM-DD (NYSE session date), never a timestamp.
+ *
+ * @generated from message xstockstrat.common.v1.DelistedState
+ */
+export type DelistedState = Message<"xstockstrat.common.v1.DelistedState"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.UnservableReason reason = 1;
+     */
+    reason: UnservableReason;
+    /**
+     * @generated from field: string first_unservable_date = 2;
+     */
+    firstUnservableDate: string;
+};
+/**
+ * Describes the message xstockstrat.common.v1.DelistedState.
+ * Use `create(DelistedStateSchema)` to create a new message.
+ */
+export declare const DelistedStateSchema: GenMessage<DelistedState>;
 /**
  * TradingMode distinguishes paper (simulated) from live (real-money) order routing.
  * Used by both xstockstrat-trading and xstockstrat-portfolio.
@@ -501,3 +552,28 @@ export declare enum UnservableReason {
  * Describes the enum xstockstrat.common.v1.UnservableReason.
  */
 export declare const UnservableReasonSchema: GenEnum<UnservableReason>;
+/**
+ * @generated from enum xstockstrat.common.v1.BackfillSymbolOutcome
+ */
+export declare enum BackfillSymbolOutcome {
+    /**
+     * @generated from enum value: BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: BACKFILL_SYMBOL_OUTCOME_EMPTY = 1;
+     */
+    EMPTY = 1,
+    /**
+     * @generated from enum value: BACKFILL_SYMBOL_OUTCOME_SKIPPED = 2;
+     */
+    SKIPPED = 2,
+    /**
+     * @generated from enum value: BACKFILL_SYMBOL_OUTCOME_FAILED = 3;
+     */
+    FAILED = 3
+}
+/**
+ * Describes the enum xstockstrat.common.v1.BackfillSymbolOutcome.
+ */
+export declare const BackfillSymbolOutcomeSchema: GenEnum<BackfillSymbolOutcome>;

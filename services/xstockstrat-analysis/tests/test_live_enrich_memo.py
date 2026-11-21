@@ -19,6 +19,8 @@ import pytest
 from gen.analysis.v1 import analysis_pb2
 from gen.marketdata.v1 import marketdata_pb2
 
+from tests.conftest import snapshot_watcher
+
 from .test_analysis_servicer import make_servicer
 
 pytestmark = pytest.mark.asyncio
@@ -104,3 +106,28 @@ async def test_failed_fetch_is_never_memoized_and_recovers(monkeypatch):
     await svc._enrich_opportunities_live([opp2], [])
     assert svc._marketdata.BatchGetLatestPrice.await_count == 1  # the fresh mock was re-fetched
     assert opp2.HasField("live_price") and abs(opp2.live_price - 20.0) < 1e-9
+
+
+@pytest.mark.parametrize(
+    ("stored_ttl", "expected_calls"),
+    [(20, 1), (10, 2)],
+)
+async def test_warm_15s_repoll_served_from_memo_at_migrated_ttl(
+    stored_ttl, expected_calls, monkeypatch
+):
+    """@AC-2 (feature 330): the UI's 15s re-poll hits the memo at the migrated TTL, not at 10."""
+    clock = [1000.0]
+    monkeypatch.setattr("app.handlers.servicer.time.monotonic", lambda: clock[0])
+    svc = _md_svc()
+    svc._cfg = snapshot_watcher(**{"opportunity.live_enrich_ttl_seconds": stored_ttl})
+
+    opp1 = analysis_pb2.Opportunity(symbol="CAPR")
+    await svc._enrich_opportunities_live([opp1], [])
+
+    clock[0] = 1015.0
+    opp2 = analysis_pb2.Opportunity(symbol="CAPR")
+    await svc._enrich_opportunities_live([opp2], [])
+
+    assert svc._marketdata.BatchGetLatestPrice.await_count == expected_calls
+    if expected_calls == 1:
+        assert opp2.live_price == opp1.live_price
