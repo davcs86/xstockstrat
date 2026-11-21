@@ -1,4 +1,4 @@
-# Handoff — SDD batch for bug features 308–331 (2026-11-20)
+# Handoff — SDD batch for bug features 308–331 (2026-11-20, preflight-refreshed 2026-11-21)
 
 Start-of-session reading for whoever continues this work. It records state, the operator's standing
 rulings, what is waiting on the operator, and the traps hit so far. Per-feature decisions live in each
@@ -7,7 +7,11 @@ feature's `context.md` on its `feature/<slug>` branch — read that before touch
 ## 1. State
 
 Authoritative source per feature: `origin/feature/<slug>` (slug = directory name without `NNN-`).
-This branch (`ccr-aa8f70c6-to2txh`, PR #1595) carries a docs-only copy of those artifacts as of this date.
+`main-dev` carries a docs-only copy of those artifacts (PR #1595, merged as `8baf3976`).
+
+> **2026-11-21 preflight.** This file was checked against `origin/main-dev` and every feature branch; the
+> corrections are folded in below and listed in § 8. All 20 `implementation-ready` branches were merged
+> with `main-dev` on 2026-11-21 (§ 8), so they are no longer ~168 commits behind.
 
 | State | Features |
 |---|---|
@@ -18,8 +22,9 @@ This branch (`ccr-aa8f70c6-to2txh`, PR #1595) carries a docs-only copy of those 
 Step counts: 308 17 · 309 18 · 310 8 · 311 27 · 312 20 · 313 7 · 314 9 · 315 6 · 316 8 · 318 13 ·
 319 8 · 321 13 · 322 34 · 323 9 · 324 9 · 325 5 · 327 15 · 328 9 · 331 3 (317: see its spec).
 
-No `implementation-ready` feature has started `/sdd-execute`. `main-dev` was at `fb52065c` all day; every
-feature branch is about 168 commits behind it.
+No `implementation-ready` feature has started `/sdd-execute`. `main-dev` is `8baf3976` (`fb52065c` plus the
+#1595 docs sync). Before the 2026-11-21 sync the branches were 124 behind (320: 81, 330: 4, 326/329: 3,
+321/327/331: 1); after it the 20 `implementation-ready` branches were 0 behind after the sync.
 
 ## 2. Standing operator rulings (apply to every feature)
 
@@ -53,27 +58,33 @@ feature branch is about 168 commits behind it.
    before 324 launches. Confirm or change.
 7. **331** — confirm rewording AC-1's Given to "the agent process starts".
 8. **320** — run the probe script in the `xstockstrat-config` console on staging and paste the output. The
-   script lived only in the session scratchpad and is gone with the container; regenerate it from 320's
-   `context.md` and implementation spec (Step 1).
+   script lived only in the session scratchpad and is gone with the container (re-verified: nothing on
+   `feature/fix-vendor-key-in-url`); regenerate it from 320's `context.md` and implementation spec (Step 1).
 9. **330** — step-5 read-back after deploy.
 10. **317** — four spec-time confirmations listed in its `context.md`.
 11. **321** — proceed with `/sdd-execute` despite the impl-review warnings on Steps 9 and 10 (recorded in
     its `context.md`, commit `6369dc10`)?
-12. **Housekeeping** — file 326's two follow-ups (`fix-trading-grpc-status-mapping`,
-    `fix-portfolio-grpc-ctx-mapping`) through the allocator; a `merge-order.md` entry for config migration
-    `056`, which 321, 317 and 314 all claim (first to merge keeps it); whether to watch and merge PR #1595.
+12. **Housekeeping** — 326's follow-ups now have reserved numbers: **361** `fix-trading-grpc-status-mapping`,
+    **362** `fix-portfolio-grpc-ctx-mapping` (allocator ran 2026-11-21; the feature directories are not yet
+    created, so create them with `/sdd-triage` Track C using these numbers). Still open: a `merge-order.md`
+    entry for config migration `056`, which 321 (`056_trading_broker_paper_per_environment`), 317
+    (`056_marketdata_bars_miss_backoff`) and 314 (`056_mcp_deadline_budget`) all claim (first to merge
+    keeps it; `055` is taken by 330 and merged). PR #1595 is merged — nothing to watch.
 
 ## 4. Before executing anything
 
 - Run `/sdd-status`, then read the feature's `context.md` and the `still open` notes from its impl-spec
   review. Those notes were read by the orchestrator only for 311, 313, 316, 321, 324, 325 and 331.
-- **311** needs `/sdd-distill fix-position-fold-correctness` first: its `context.md` is far over the
-  65,536-byte `/sdd-execute` limit. 316, 324, 325 and 326-style long contexts may need the same; check size.
-- Every branch must merge `main-dev` first (each spec's BRANCH SYNC step). Until then the pre-commit hook
-  prints a missing `scripts/check-duplication.py`; commits still pass. Never use `--no-verify`.
-- Re-check migration numbers after the sync: portfolio `019` and trading `012` (311), config `056`
-  (321/317/314), and whether 328 and 322's citation of `046_config_dead_rows_prune` is a reference or a new
-  migration (unverified).
+- **`context.md` over the 65,536-byte `/sdd-execute` limit** (measured 2026-11-21): 309, 311 (361 KB), 312, 313,
+  314, 316, 324, 325, 326, 327, 328, 329, 330. A first `/sdd-distill` pass on the 10 `implementation-ready`
+  ones (309, 311, 312, 313, 314, 316, 324, 325, 327, 328) was **reverted on 2026-11-21** (§ 8): independent verify
+  found it unsafe. Until they are re-distilled they cannot run `/sdd-execute`.
+- Every branch must merge `main-dev` first (each spec's BRANCH SYNC step) — done for the 20
+  `implementation-ready` branches on 2026-11-21; repeat if `main-dev` moves again. `scripts/check-duplication.py`
+  is present on `main-dev`, so the old missing-script warning no longer applies. Never use `--no-verify`.
+- Migration numbers verified on `main-dev` 2026-11-21: latest portfolio `018` → 311 uses `019`; latest trading
+  `011` → 311 uses `012`; latest config `055` (330) → `056` is claimed by 321, 317 and 314 (see § 3.12).
+  `046_config_dead_rows_prune` exists on `main-dev`, so 328/322 cite it as a reference, not a new migration.
 - Shared files: `portfolio_service.go` is touched by 311, 312, 315, 317 and 326-follow-ups; second to merge
   rebases. `mcp_client_loop.py` by 313 and 328; `pnl_pattern_consumer.py` by 308, 309, 313, 327; notify
   files by 312, 316, 323.
@@ -110,7 +121,7 @@ feature branch is about 168 commits behind it.
 - **Agents can touch live staging.** See §3 item 2. Tell design agents not to call the staging MCPs.
 - **Usage limit.** Earlier runs died on the session model's usage limit; a relaunch with the same args
   recovers, but un-persisted rounds re-run.
-- About 80 worktrees sit under `.claude/worktrees/`; prune when no run is active.
+- `.claude/worktrees/` is empty in a fresh container; the old ~80 worktrees went with the previous one.
 
 ## 7. 311 in one paragraph
 
@@ -121,3 +132,48 @@ key. Bracket legs tracked in a new `trading.bracket_legs` table, adopted forward
 open-order list, with a tombstone for candidates a complete list shows not open. Cutover is stop-then-start
 on staging as a recorded runbook step; no write fence. Amended `@AC-5` is signed off. Operator rulings are
 quoted verbatim in the sessions titled "recorded by the orchestrator (verbatim)" in its `context.md`.
+
+## 8. 2026-11-21 preflight log
+
+Stale in the 2026-11-20 text, corrected above: `main-dev` tip; "~168 behind" (was 124); PR #1595 "watch and
+merge" (already merged); `046_config_dead_rows_prune` "unverified" (it exists); config `056` context (330
+took `055`); `/sdd-distill` list (13 oversize contexts, not 5); missing `check-duplication.py` (present);
+~80 worktrees (none).
+
+Actions taken: allocator reserved 361/362; `main-dev` merged into all 20 `implementation-ready` branches
+(17 clean; 314, 315 and 316 hit append-only ledger conflicts in `docs/roadmap/ledger/{insights,fails}.md`,
+resolved as a union of both sides); 10 oversized `context.md` files sent through `/sdd-distill` (then reverted, see below).
+
+Distill attempt, **reverted** (operator decision 2026-11-21): the first pass cut the 10 contexts to 38–63 KB
+(311: 361→62.6 KB) but the distill agents had no subagent tool and self-verified. Independent
+`context-distiller` verify runs then returned **unsafe** on all of 309, 312, 313, 314, 316, 324, 325, 327, 328
+(311's verdict was not retrieved). Common finding: every earlier-round `sdd-batch-design-state` fence was
+dropped, but the skill's rubric requires each fence to be kept byte-for-byte. Specific losses (e.g. 314's
+unregistered `SELECT … FOR UPDATE` rejection, 312's pre-merge `ListOrders` caller-grep risk, 309's OQ6
+disposition, 324's `scripts-python` contingency recipe) and misstatements (325's "declined by the operator",
+324/314/316's unsourced "branch synced" claims) were listed per feature. Both the distill commits and the two
+cite-repointing commits (311, 316) were reverted with `git revert` on each `feature/<slug>`; the contexts are
+back to their pre-distill bytes. Retry needs either a real `context-distiller` subagent pass that keeps all fences
+(which cannot reach the limit for 311 — its fences alone are ~250 KB) or a decision on how fences may be archived.
+
+## 9. Operator questions (drafted from § 3; each needs the answer quoted verbatim into the feature's `context.md`)
+
+Drafted from this handoff's text, not from re-reading each `context.md`; read the feature's `context.md`
+before asking. Per § 6, record the operator's exact answer in `context.md` before any gate relaunch.
+
+| § 3 | Feature | Question | Needed before |
+|---|---|---|---|
+| 1 | 325 | Accept the write bound at staging scale (~188 newly warm symbols, ~595,584 headline writes/day; real statement volume 9–18% higher), or reopen petition P-1? | execute |
+| 2 | — | Was the staging marketdata warm set (up to 396 symbols after the unrequested `list_opportunities` with `page_size` 1000) checked, or is a staging marketdata restart wanted? | 325 execute / 317 probes |
+| 3a | 311 | Confirm or overturn D-50 (adoption-only accounts listed at the reconciler cadence, not every fill-poller tick). | Step 23 |
+| 3b | 311 | How is portfolio stopped on each staging target (DO: drop the component from the app spec; homelab: compose stop)? Neither is verified from the repo. | cutover |
+| 3c | 311 | Add a follow-up real-Postgres test job for trading? | execute |
+| 4a | 313 | Confirm the spec-authored AC-1 `Then` wording. | Step 1 |
+| 4b | 313 | Docs step or recorded deviation for the ingest docs that go stale after Steps 4 and 6? | execute |
+| 5 | 316 | With the branch now synced, Step 1's `main-dev` merge no longer carries ~168 outside commits — confirm the residual (re-measure) is acceptable. | Step 1 |
+| 6 | 324 | Step 9 marks the ruff defect report resolved with a commit ref; the archiver could prune it first. Keep, or reorder? | Step 9 |
+| 7 | 331 | Reword AC-1's Given to "the agent process starts"? | execute |
+| 8 | 320 | Run the regenerated probe script in the `xstockstrat-config` console on staging and paste the output. | Step 1 follow-on |
+| 9 | 330 | Step-5 post-deploy read-back on staging. | close-out |
+| 10 | 317 | Answer the four spec-time confirmations listed in its `context.md`. | execute |
+| 11 | 321 | Proceed with `/sdd-execute` despite the impl-review warnings on Steps 9 and 10 (`context.md`, commit `6369dc10`)? | execute |
