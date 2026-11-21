@@ -51,6 +51,8 @@ Spot-check at 0fecb24d:
 
 - xstockstrat-config, xstockstrat-ledger, xstockstrat-notify, xstockstrat-marketdata, xstockstrat-analysis,
   xstockstrat-ingest, xstockstrat-agent, xstockstrat-ui, xstockstrat-portfolio
+- xstockstrat-identity — added 2026-11-20 by operator decision at the design gate (O-1 option (b)): removal of the
+  dead `migrate` script and `node-pg-migrate` devDependency from `package.json` only; no `src/` change.
 
 ## Fix Scope
 

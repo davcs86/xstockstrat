@@ -55,7 +55,8 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, forceFlush
 		return nil, nil, err
 	}
 
-	res, err := newResource(ctx)
+	p := hostProvider()
+	res, err := newResource(ctx, p)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -69,7 +70,7 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, forceFlush
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(mexp)),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(newHostLabelExporter(mexp, p))),
 		sdkmetric.WithResource(res),
 		sdkmetric.WithView(serverMetricViews()...),
 	)
@@ -119,14 +120,26 @@ func serviceName() string {
 	return "portfolio"
 }
 
+// hostProvider accepts only the exact lowercase deploy-target names; anything else (unset, wrong
+// case, unrecognised) is "unknown", never an error.
+func hostProvider() string {
+	switch p := os.Getenv("HOST_PROVIDER"); p {
+	case "digitalocean", "homelab":
+		return p
+	}
+	return "unknown"
+}
+
 // newResource builds the sole OTel Resource input to Init (its omissions are guarded by
 // TestNewResourceOmitsTradingMode).
-func newResource(ctx context.Context) (*resource.Resource, error) {
+func newResource(ctx context.Context, p string) (*resource.Resource, error) {
 	return resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(serviceName()),
 			semconv.DeploymentEnvironment(os.Getenv("APPLICATION_ENV")),
+			semconv.ServiceInstanceID(p+"-"+serviceName()),
 			attribute.String("platform", "xstockstrat"),
+			attribute.String("host.provider", p),
 		),
 	)
 }

@@ -485,7 +485,7 @@ class TestSdkWiring:
         plain string and the transport guard would never see claims."""
         server = _make_server()
         assert server._tool_manager.get_tool("set_config").context_kwarg == "ctx"
-        # ...and that ctx is NOT exposed in the public inputSchema served by GET /api/tools
+        # ...and that ctx is NOT exposed in the inputSchema the tool catalog serves
         props = server._tool_manager.get_tool("set_config").parameters["properties"]
         assert "ctx" not in props
         assert props["value_type"]["enum"] == ["string", "int", "float", "bool"]

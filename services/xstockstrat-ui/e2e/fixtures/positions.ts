@@ -51,6 +51,20 @@ export const POSITION_MSFT = {
   tradingMode: 1,
 };
 
+/** Feature 339 (@AC-8) — a cost basis too wide for its tile at 384px. Not in `POSITIONS`. */
+export const POSITION_LYFT_WIDE = {
+  symbol: 'LYFT',
+  qty: 75187000,
+  avgEntryPrice: 16.42,
+  currentPrice: 16.42,
+  marketValue: 1234570540.0,
+  unrealizedPnl: 2649.88,
+  unrealizedPnlPct: 0.000002,
+  costBasis: 1234567890.12,
+  accountId: BROKER_ACCOUNT_ALPACA.id,
+  tradingMode: 1,
+};
+
 /**
  * Offline positions carrying feature-240 mark provenance (AC-16/AC-31/AC-32). `markSource` is the
  * numeric `MarkSource` enum (1 QUOTE, 2 LAST_CLOSE, 4 NONE); `markAsOf` is the Connect-JSON

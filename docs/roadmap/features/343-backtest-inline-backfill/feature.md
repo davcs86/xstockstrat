@@ -1,0 +1,59 @@
+# Feature: backtest-inline-backfill
+
+**Development Branch**: `feature/backtest-inline-backfill`
+**Created**: 2026-11-15
+**Last Updated**: 2026-11-16
+**Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
+**Launched date**: 2026-11-17
+**Archived**: 2026-11-18
+
+---
+
+## Status History
+
+| Date | Status | Updated by | Note |
+|---|---|---|---|
+| 2026-11-15 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings) |
+| 2026-11-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 16 steps |
+| 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
+| 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute | All 16 steps done (Step 16 last); `check-config-wiring.mjs --final` exit 0 |
+
+| 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 5 specs |
+---
+
+## Artifacts
+
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-ingest/acceptance/backtest-inline-backfill.feature, services/xstockstrat-ui/acceptance/backtest-inline-backfill.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Debate Register — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Summary
+
+Let a user fix an insufficient-data backtest in place: an inline action on the symbol page Backtests card backfills from the start of the missing range through the end of the backtest window (missing bars only), shows progress, then offers a re-run. Every signed-in user can use it, within a bounded self-serve envelope.
+
+## Reviewers
+
+_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
+change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
+re-run /sdd-spec if the registry changes.)_
+
+| Role | Review Focus |
+|---|---|
+| Service owner — `xstockstrat-ui` | Trading UI correctness, analytics display accuracy, Connect-RPC call safety |
+| Service owner — `xstockstrat-ingest` | Signal normalization correctness, idempotent ingestion (backfill trigger authorization and duplicate-job prevention) |
+| Service owner — `xstockstrat-agent` | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity; admin `x-access-scope` forwarded only by the management tools |
+| Service owner — `xstockstrat-config` | Config key naming, environment scoping, WatchConfig stream stability |
+| DBA | Migration NNN numbering, up+down pair present, run-order compliance with `scripts/db-migrate.sh` |
+
+## Next Action
+
+`/sdd-review backtest-inline-backfill impl-spec` — validate implementation spec, then `/sdd-execute backtest-inline-backfill`

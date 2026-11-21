@@ -805,4 +805,135 @@ test.describe('Watchlists (insights)', () => {
     await expect(page.getByTestId('readiness-row-MSFT')).toBeVisible();
     await expect(page.getByTestId('watchlist-refused-notice')).toHaveCount(0);
   });
+
+  // ── feature 352: a flagged (delisted) binding shows a marker instead of readiness ──
+
+  const DELISTED_NOT_TRADABLE = {
+    reason: 'UNSERVABLE_REASON_NOT_TRADABLE',
+    firstUnservableDate: '2026-11-09',
+  } as const;
+  const seedTech = (bindings: MockWatchlist['bindings']): MockWatchlist => ({
+    watchlistId: 'wl-tech',
+    userId: 'test-user-001',
+    name: 'Tech',
+    description: '',
+    symbols: bindings.map((b) => b.symbol),
+    bindings,
+  });
+  const countReadinessRequests = (page: Page) => {
+    const calls = { n: 0 };
+    page.on('request', (r) => {
+      if (r.url().endsWith('/GetWatchlistReadiness')) calls.n += 1;
+    });
+    return calls;
+  };
+
+  test('a delisted bound symbol shows the marker with reason and date, no readiness (feature 352, AC-15)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(
+      page,
+      [
+        seedTech([
+          { symbol: 'AAPL', strategyId: 'strat-live-001' },
+          { symbol: 'ROKU', strategyId: 'strat-live-001', delisted: DELISTED_NOT_TRADABLE },
+        ]),
+      ],
+      { ROKU: 'pending' },
+    );
+    await page.goto('/insights/watchlists');
+    await openList(page, 'Tech');
+
+    const roku = page.getByTestId('readiness-row-ROKU');
+    await expect(roku.getByTestId('delisted-badge-ROKU')).toBeVisible({ timeout: 5000 });
+    await expect(roku).toContainText('not an active, tradable US equity');
+    await expect(roku).toContainText('2026-11-09');
+    // The forced PENDING readiness row is never rendered for a flagged binding.
+    await expect(roku.getByTestId('readiness-loading-ROKU')).toHaveCount(0);
+    await expect(roku.getByTestId('jump-ROKU')).toHaveCount(0);
+
+    const aapl = page.getByTestId('readiness-row-AAPL');
+    await expect(aapl.getByTestId('readiness-cue-watching')).toBeVisible({ timeout: 5000 });
+    await expect(aapl.getByTestId('delisted-badge-AAPL')).toHaveCount(0);
+
+    // The roll-up counts AAPL only: ROKU is not a "no-data" symbol.
+    const rollup = page.getByTestId('readiness-rollup');
+    await expect(rollup).toContainText('1 watching');
+    await expect(rollup).not.toContainText('no-data');
+
+    await roku.getByLabel('Remove ROKU').click();
+    await expect(page.getByTestId('readiness-row-ROKU')).toHaveCount(0, { timeout: 5000 });
+    await expect(page.getByTestId('readiness-row-AAPL')).toBeVisible();
+  });
+
+  test('a delisted unbound symbol shows the marker in place of "not evaluated" (feature 352, AC-15)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [
+      seedTech([
+        { symbol: 'AAPL', strategyId: '' },
+        { symbol: 'ROKU', strategyId: '', delisted: DELISTED_NOT_TRADABLE },
+      ]),
+    ]);
+    await page.goto('/insights/watchlists');
+    await openList(page, 'Tech');
+
+    const roku = page.getByTestId('readiness-row-ROKU');
+    await expect(roku.getByTestId('delisted-badge-ROKU')).toBeVisible({ timeout: 5000 });
+    await expect(roku).toContainText('not an active, tradable US equity');
+    await expect(roku).toContainText('2026-11-09');
+    await expect(page.getByTestId('unbound-ROKU')).toHaveCount(0);
+    await expect(page.getByTestId('unbound-AAPL')).toBeVisible();
+    await expect(roku.getByLabel('Remove ROKU')).toBeEnabled();
+  });
+
+  test('a list whose only bound binding is delisted issues no readiness request (feature 352, AC-15)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [
+      seedTech([{ symbol: 'ROKU', strategyId: 'strat-live-001', delisted: DELISTED_NOT_TRADABLE }]),
+    ]);
+    const readinessCalls = countReadinessRequests(page);
+    await page.goto('/insights/watchlists');
+    await openList(page, 'Tech');
+
+    await expect(page.getByTestId('delisted-badge-ROKU')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('readiness-rollup')).toHaveCount(0);
+    await page.waitForTimeout(500); // give any (unwanted) readiness request time to fire
+    expect(readinessCalls.n).toBe(0);
+  });
+
+  test('a fully delisted first page still pages to the next bound rows (feature 352, AC-15)', async ({
+    page,
+  }) => {
+    const flagged = Array.from({ length: 25 }, (_, i) => ({
+      symbol: `DL${String(i + 1).padStart(2, '0')}`,
+      strategyId: 'strat-live-001',
+      delisted: DELISTED_NOT_TRADABLE,
+    }));
+    await addAuthCookie(page);
+    await mockWatchlists(page, [
+      seedTech([...flagged, { symbol: 'ZLAST', strategyId: 'strat-live-001' }]),
+    ]);
+    const readinessCalls = countReadinessRequests(page);
+    await page.goto('/insights/watchlists');
+    await openList(page, 'Tech');
+
+    await expect(page.locator('[data-testid^="delisted-badge-"]')).toHaveCount(25, {
+      timeout: 5000,
+    });
+    await expect(page.getByTestId('readiness-rollup')).toHaveCount(0);
+    const next = page.getByRole('button', { name: 'Next page of watchlist rows' });
+    await expect(next).toBeEnabled({ timeout: 5000 });
+    await page.waitForTimeout(500); // a poll for the flagged page would show up as a second request
+    expect(readinessCalls.n).toBe(1);
+
+    await next.click();
+    const last = page.getByTestId('readiness-row-ZLAST');
+    await expect(last.getByTestId('readiness-cue-watching')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid^="delisted-badge-"]')).toHaveCount(0);
+  });
 });

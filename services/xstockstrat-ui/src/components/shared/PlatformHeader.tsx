@@ -10,6 +10,7 @@ import { ChromeProvider, useChrome } from '@/context/ChromeContext';
 import { CopilotRail } from '../copilot/CopilotRail';
 import { BottomTabBar } from '../mobile/BottomTabBar';
 import { NAV_GROUPS, HOME_HREF, type SubNavItem, type NavItem, type NavGroup } from './navGroups';
+import { AlertStream } from './AlertStream';
 import {
   SidebarProvider,
   Sidebar,
@@ -91,7 +92,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
   ],
   accounts: [
     { label: 'Profile', href: '/accounts/profile', match: 'exact' },
-    { label: 'Notifications', href: '/accounts/notifications', match: 'exact' },
+    { label: 'Notifications', href: '/accounts/notifications', match: 'prefix' },
     { label: 'Authorized Apps', href: '/accounts/authorized-apps', match: 'exact' },
     { label: 'MCP Tools', href: '/accounts/mcp-tools', match: 'exact' },
   ],
@@ -234,7 +235,8 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
                   >
                     <Link href={group.items[0].href}>
                       {group.icon}
-                      {group.label}
+                      {/* Icon-only below md so the header row fits the alert bell from 640px. */}
+                      <span className="sr-only md:not-sr-only">{group.label}</span>
                     </Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
@@ -245,6 +247,7 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
 
         <div className="flex items-center gap-2 ml-auto">
           {actions}
+          <AlertStream />
           <CopilotToggle />
           {/* Override SidebarProvider's default `flex min-h-svh w-full` page-root sizing — here it's
               scoped to just the Row 1 trigger+panel, not the page. */}

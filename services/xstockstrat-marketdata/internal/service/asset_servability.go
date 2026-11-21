@@ -25,6 +25,10 @@ const (
 	defaultAssetRefreshHours = 6
 	maxAssetRefreshHours     = 24
 	assetRefreshHoursKey     = "assets.refresh_interval_hours"
+
+	delistingConfirmationDaysKey     = "assets.delisting_confirmation_trading_days"
+	defaultDelistingConfirmationDays = 5
+	maxDelistingConfirmationDays     = 30
 )
 
 // assetSet is immutable after construction: normalized symbol → exchange is OTC.
@@ -74,6 +78,14 @@ func liveFetchAllowed(snap *assetSet, sym string) bool {
 type assetServabilityState struct {
 	snap           atomic.Pointer[assetSet]
 	unloadedWarned bool
+	now            func() time.Time
+}
+
+func (a *assetServabilityState) clock() time.Time {
+	if a.now != nil {
+		return a.now()
+	}
+	return time.Now()
 }
 
 // markWarmIfServable warms symbols unless the loaded snapshot marks them unservable, and returns that snapshot.
@@ -133,19 +145,19 @@ func (s *MarketDataService) refreshAssets(ctx context.Context) error {
 		return fmt.Errorf("asset set refresh rejected: %d assets (previous %d)", len(next.otc), prevCount)
 	}
 	s.assets.snap.Store(next)
-	if prev != nil {
-		return nil
-	}
-	pruned := 0
-	s.warmMu.Lock()
-	for sym := range s.warmSymbols {
-		if !next.servable(sym) {
-			delete(s.warmSymbols, sym)
-			pruned++
+	if prev == nil {
+		pruned := 0
+		s.warmMu.Lock()
+		for sym := range s.warmSymbols {
+			if !next.servable(sym) {
+				delete(s.warmSymbols, sym)
+				pruned++
+			}
 		}
+		s.warmMu.Unlock()
+		slog.InfoContext(ctx, "asset set loaded", "count", len(next.otc), "pruned", pruned)
 	}
-	s.warmMu.Unlock()
-	slog.InfoContext(ctx, "asset set loaded", "count", len(next.otc), "pruned", pruned)
+	s.runDelistingHook(ctx, next)
 	return nil
 }
 
@@ -180,6 +192,21 @@ func resolveAssetRefreshInterval(cfg intGetter) time.Duration {
 	return time.Duration(v) * time.Hour
 }
 
+// resolveDelistingConfirmationDays reads the confirmation window: unset or <= 0 is 5, above 30 is 30.
+func resolveDelistingConfirmationDays(cfg intGetter) int {
+	if cfg == nil {
+		return defaultDelistingConfirmationDays
+	}
+	v := cfg.GetInt(delistingConfirmationDaysKey, defaultDelistingConfirmationDays)
+	switch {
+	case v <= 0:
+		return defaultDelistingConfirmationDays
+	case v > maxDelistingConfirmationDays:
+		return maxDelistingConfirmationDays
+	}
+	return int(v)
+}
+
 // StartAssetSetRefresher loads the asset set at boot, then re-checks the live interval every minute.
 // Runs on the long-lived main ctx: background work carries no propagation headers by design.
 func (s *MarketDataService) StartAssetSetRefresher(ctx context.Context) {
@@ -193,6 +220,13 @@ func (s *MarketDataService) StartAssetSetRefresher(ctx context.Context) {
 			return
 		}
 		lastSuccess, delay = time.Now(), 0
+	}
+	if s.delisting.store != nil {
+		bootCtx, cancel := context.WithTimeout(ctx, delistingHookTimeout)
+		if err := s.loadFlaggedSet(bootCtx); err != nil {
+			slog.WarnContext(ctx, "delisting: boot flagged-set load failed", "error", err)
+		}
+		cancel()
 	}
 	attempt()
 	ticker := time.NewTicker(time.Minute)

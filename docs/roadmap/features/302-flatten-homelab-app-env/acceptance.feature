@@ -66,7 +66,7 @@ Feature: flatten-homelab-app-env
 
   @AC-9 @FR-3
   Scenario: The release .env built from the flat keys still renders under compose
-    Given the resolver output from AC-2 and a CA bundle for staging
+    Given the resolver output from AC-2 with the lines OTEL_EXPORTER_OTLP_ENDPOINT='https://otlp.example.test/otlp' and OTEL_EXPORTER_OTLP_HEADERS='Authorization=Basic dGVzdA==' appended, and a CA bundle for staging
     When scripts/homelab-release-env.sh builds the release .env and "docker compose config" renders deploy/homelab/compose.yml with it
     Then compose exits 0 with no missing-variable error
     And db-migrator receives SEED_USER_ID="80880990-2b79-4d85-8761-d8d9102c2efb"

@@ -1,12 +1,12 @@
-"""Mutual-TLS secure-channel factory for the MCP agent's outbound gRPC dials (feature 210).
+"""Mutual-TLS credentials for the MCP agent's gRPC (feature 210; server side: feature 360).
 
-The agent is a gRPC CLIENT only (no backend server), so it needs just a channel factory. Cert
-material is read from boot-time env PEM strings (MTLS_CERT / MTLS_KEY / MTLS_CA_CERT); absent
-material raises (fail-closed — the agent must not dial a backend without presenting its leaf). The
-verified server authority is pinned to the TARGET SERVICE NAME (never the dialed host) via
-grpc.ssl_target_name_override, so verification is env-independent across docker-compose (bare
-service name) and DO App Platform (PRIVATE_DOMAIN FQDN). This is the single DRY unit replacing the
-agent's 69 inline insecure_channel sites. See docs/patterns/inter-service-mtls.md.
+The agent dials every backend as a gRPC client and serves one internal RPC (the tool catalog,
+app/catalog_service.py). Cert material is read from boot-time env PEM strings (MTLS_CERT /
+MTLS_KEY / MTLS_CA_CERT); absent material raises (fail-closed — the agent must neither dial a
+backend nor serve without presenting its leaf). On dials, the verified server authority is pinned
+to the TARGET SERVICE NAME (never the dialed host) via grpc.ssl_target_name_override, so
+verification is env-independent across docker-compose (bare service name) and DO App Platform
+(PRIVATE_DOMAIN FQDN). See docs/patterns/inter-service-mtls.md.
 """
 
 import os
@@ -26,6 +26,14 @@ def _load() -> tuple[bytes, bytes, bytes]:
             "mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set (fail-closed)"
         )
     return key.encode(), cert.encode(), ca.encode()
+
+
+def server_credentials() -> grpc.ServerCredentials:
+    """Require and verify the client cert chains to the platform CA (mutual TLS)."""
+    key, cert, ca = _load()
+    return grpc.ssl_server_credentials(
+        [(key, cert)], root_certificates=ca, require_client_auth=True
+    )
 
 
 def channel_credentials() -> grpc.ChannelCredentials:

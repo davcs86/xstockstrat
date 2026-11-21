@@ -160,12 +160,15 @@ export default defineConfig({
       INGEST_ENDPOINT: '127.0.0.1:9093',
       // Fixes this deployment's native Config UI scope to 'dev' for feature 115's BFF write
       // guard and UI gating (deploymentEnv.ts) — deterministic across CI/local runs.
-      APPLICATION_ENV: 'development',
+      APPLICATION_ENV: process.env.E2E_APPLICATION_ENV ?? 'development',
       JWT_SECRET: 'test-jwt-secret-for-e2e-tests-min32c',
       // Feature 051 — the /accounts layout reads AGENT_PUBLIC_URL server-side to render the
       // connector URL + drive the agent-health probe. Point at a dead port so the probe is
       // deterministically "unreachable" unless a test overrides /accounts/api/agent-health.
       AGENT_PUBLIC_URL: 'http://127.0.0.1:9099',
+      // Feature 360 — the tool-catalog BFF dials this endpoint. A dead port (no mock agent): the
+      // catalog is deterministically unreachable unless a test stubs /accounts/api/mcp-tools.
+      AGENT_ENDPOINT: '127.0.0.1:9094',
       // Feature 165 — the /accounts layout exposes VAPID_PUBLIC_KEY (public key only) to the push
       // toggle. A real, format-valid VAPID public key so the enable flow reaches the BFF register
       // call in e2e (the browser Push API itself is stubbed per spec). The private key stays

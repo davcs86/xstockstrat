@@ -1,5 +1,5 @@
--- Pre-feature-224 rows, loaded by migration-rerun.sh at indicators 006 / ingest 012 / analysis 025.
--- Not an assertion file: migration-rerun.sh skips fixtures-* in its assertion loop.
+-- Pre-feature-224 rows, loaded by migration-rerun.py at indicators 006 / ingest 012 / analysis 025.
+-- Not an assertion file: migration-rerun.py skips fixtures-* in its assertion loop.
 
 CREATE SCHEMA fixture_pre224;
 

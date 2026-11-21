@@ -19,8 +19,17 @@ import { symbolReadiness, READINESS_BUCKET_OVERRIDE } from '../fixtures/opportun
  * CreateWatchlist, the replace-all UpdateWatchlist and AddWatchlistSymbols drop those symbols and
  * return `refusedSymbols: [{ symbol, reason }]` beside `watchlist`; the masked UpdateWatchlist path
  * never classifies.
+ *
+ * feature 352: an optional `MockBinding.delisted` (protojson DelistedState) is returned unchanged on
+ * every watchlist response; the readiness route ignores it.
  */
-export type MockBinding = { symbol: string; strategyId: string; source?: number };
+type UnservableReasonName = 'UNSERVABLE_REASON_OTC' | 'UNSERVABLE_REASON_NOT_TRADABLE';
+export type MockBinding = {
+  symbol: string;
+  strategyId: string;
+  source?: number;
+  delisted?: { reason: UnservableReasonName; firstUnservableDate: string };
+};
 export type MockWatchlist = {
   watchlistId: string;
   userId: string;
@@ -36,7 +45,6 @@ export type MockWatchlist = {
 
 const SOURCE_SIGNAL = 2; // WATCHLIST_ENTRY_SOURCE_SIGNAL
 
-type UnservableReasonName = 'UNSERVABLE_REASON_OTC' | 'UNSERVABLE_REASON_NOT_TRADABLE';
 type MockRefusedSymbol = { symbol: string; reason: UnservableReasonName };
 
 /** feature 282 — symbols the servability filter refuses (protojson enum NAME strings). */
@@ -68,7 +76,12 @@ export async function mockWatchlists(
     for (const b of bindings) {
       const symbol = (b.symbol ?? '').trim().toUpperCase();
       if (symbol && !out.some((x) => x.symbol === symbol)) {
-        out.push({ symbol, strategyId: b.strategyId ?? '', source: b.source });
+        out.push({
+          symbol,
+          strategyId: b.strategyId ?? '',
+          source: b.source,
+          ...(b.delisted ? { delisted: b.delisted } : {}),
+        });
       }
     }
     return out;

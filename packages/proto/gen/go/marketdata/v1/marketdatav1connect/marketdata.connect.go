@@ -96,6 +96,12 @@ const (
 	// MarketDataServiceGetSymbolServabilityProcedure is the fully-qualified name of the
 	// MarketDataService's GetSymbolServability RPC.
 	MarketDataServiceGetSymbolServabilityProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetSymbolServability"
+	// MarketDataServiceSyncWatchlistDelistingsProcedure is the fully-qualified name of the
+	// MarketDataService's SyncWatchlistDelistings RPC.
+	MarketDataServiceSyncWatchlistDelistingsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/SyncWatchlistDelistings"
+	// MarketDataServiceAckDelistingAlertsProcedure is the fully-qualified name of the
+	// MarketDataService's AckDelistingAlerts RPC.
+	MarketDataServiceAckDelistingAlertsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/AckDelistingAlerts"
 )
 
 // MarketDataServiceClient is a client for the xstockstrat.marketdata.v1.MarketDataService service.
@@ -146,6 +152,10 @@ type MarketDataServiceClient interface {
 	// feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
 	// >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
 	GetSymbolServability(context.Context, *connect.Request[v1.GetSymbolServabilityRequest]) (*connect.Response[v1.GetSymbolServabilityResponse], error)
+	// internal: xstockstrat-portfolio only
+	SyncWatchlistDelistings(context.Context, *connect.Request[v1.SyncWatchlistDelistingsRequest]) (*connect.Response[v1.SyncWatchlistDelistingsResponse], error)
+	// internal: xstockstrat-portfolio only
+	AckDelistingAlerts(context.Context, *connect.Request[v1.AckDelistingAlertsRequest]) (*connect.Response[v1.AckDelistingAlertsResponse], error)
 }
 
 // NewMarketDataServiceClient constructs a client for the
@@ -286,6 +296,18 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(marketDataServiceMethods.ByName("GetSymbolServability")),
 			connect.WithClientOptions(opts...),
 		),
+		syncWatchlistDelistings: connect.NewClient[v1.SyncWatchlistDelistingsRequest, v1.SyncWatchlistDelistingsResponse](
+			httpClient,
+			baseURL+MarketDataServiceSyncWatchlistDelistingsProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("SyncWatchlistDelistings")),
+			connect.WithClientOptions(opts...),
+		),
+		ackDelistingAlerts: connect.NewClient[v1.AckDelistingAlertsRequest, v1.AckDelistingAlertsResponse](
+			httpClient,
+			baseURL+MarketDataServiceAckDelistingAlertsProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("AckDelistingAlerts")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -312,6 +334,8 @@ type marketDataServiceClient struct {
 	getSectorHistory          *connect.Client[v1.GetSectorHistoryRequest, v1.GetSectorHistoryResponse]
 	getEtfFlags               *connect.Client[v1.GetEtfFlagsRequest, v1.GetEtfFlagsResponse]
 	getSymbolServability      *connect.Client[v1.GetSymbolServabilityRequest, v1.GetSymbolServabilityResponse]
+	syncWatchlistDelistings   *connect.Client[v1.SyncWatchlistDelistingsRequest, v1.SyncWatchlistDelistingsResponse]
+	ackDelistingAlerts        *connect.Client[v1.AckDelistingAlertsRequest, v1.AckDelistingAlertsResponse]
 }
 
 // StreamBars calls xstockstrat.marketdata.v1.MarketDataService.StreamBars.
@@ -420,6 +444,17 @@ func (c *marketDataServiceClient) GetSymbolServability(ctx context.Context, req 
 	return c.getSymbolServability.CallUnary(ctx, req)
 }
 
+// SyncWatchlistDelistings calls
+// xstockstrat.marketdata.v1.MarketDataService.SyncWatchlistDelistings.
+func (c *marketDataServiceClient) SyncWatchlistDelistings(ctx context.Context, req *connect.Request[v1.SyncWatchlistDelistingsRequest]) (*connect.Response[v1.SyncWatchlistDelistingsResponse], error) {
+	return c.syncWatchlistDelistings.CallUnary(ctx, req)
+}
+
+// AckDelistingAlerts calls xstockstrat.marketdata.v1.MarketDataService.AckDelistingAlerts.
+func (c *marketDataServiceClient) AckDelistingAlerts(ctx context.Context, req *connect.Request[v1.AckDelistingAlertsRequest]) (*connect.Response[v1.AckDelistingAlertsResponse], error) {
+	return c.ackDelistingAlerts.CallUnary(ctx, req)
+}
+
 // MarketDataServiceHandler is an implementation of the xstockstrat.marketdata.v1.MarketDataService
 // service.
 type MarketDataServiceHandler interface {
@@ -469,6 +504,10 @@ type MarketDataServiceHandler interface {
 	// feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
 	// >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
 	GetSymbolServability(context.Context, *connect.Request[v1.GetSymbolServabilityRequest]) (*connect.Response[v1.GetSymbolServabilityResponse], error)
+	// internal: xstockstrat-portfolio only
+	SyncWatchlistDelistings(context.Context, *connect.Request[v1.SyncWatchlistDelistingsRequest]) (*connect.Response[v1.SyncWatchlistDelistingsResponse], error)
+	// internal: xstockstrat-portfolio only
+	AckDelistingAlerts(context.Context, *connect.Request[v1.AckDelistingAlertsRequest]) (*connect.Response[v1.AckDelistingAlertsResponse], error)
 }
 
 // NewMarketDataServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -604,6 +643,18 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		connect.WithSchema(marketDataServiceMethods.ByName("GetSymbolServability")),
 		connect.WithHandlerOptions(opts...),
 	)
+	marketDataServiceSyncWatchlistDelistingsHandler := connect.NewUnaryHandler(
+		MarketDataServiceSyncWatchlistDelistingsProcedure,
+		svc.SyncWatchlistDelistings,
+		connect.WithSchema(marketDataServiceMethods.ByName("SyncWatchlistDelistings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	marketDataServiceAckDelistingAlertsHandler := connect.NewUnaryHandler(
+		MarketDataServiceAckDelistingAlertsProcedure,
+		svc.AckDelistingAlerts,
+		connect.WithSchema(marketDataServiceMethods.ByName("AckDelistingAlerts")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.marketdata.v1.MarketDataService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MarketDataServiceStreamBarsProcedure:
@@ -648,6 +699,10 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 			marketDataServiceGetEtfFlagsHandler.ServeHTTP(w, r)
 		case MarketDataServiceGetSymbolServabilityProcedure:
 			marketDataServiceGetSymbolServabilityHandler.ServeHTTP(w, r)
+		case MarketDataServiceSyncWatchlistDelistingsProcedure:
+			marketDataServiceSyncWatchlistDelistingsHandler.ServeHTTP(w, r)
+		case MarketDataServiceAckDelistingAlertsProcedure:
+			marketDataServiceAckDelistingAlertsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -739,4 +794,12 @@ func (UnimplementedMarketDataServiceHandler) GetEtfFlags(context.Context, *conne
 
 func (UnimplementedMarketDataServiceHandler) GetSymbolServability(context.Context, *connect.Request[v1.GetSymbolServabilityRequest]) (*connect.Response[v1.GetSymbolServabilityResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetSymbolServability is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) SyncWatchlistDelistings(context.Context, *connect.Request[v1.SyncWatchlistDelistingsRequest]) (*connect.Response[v1.SyncWatchlistDelistingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.SyncWatchlistDelistings is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) AckDelistingAlerts(context.Context, *connect.Request[v1.AckDelistingAlertsRequest]) (*connect.Response[v1.AckDelistingAlertsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.AckDelistingAlerts is not implemented"))
 }

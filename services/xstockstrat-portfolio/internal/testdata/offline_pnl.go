@@ -6,7 +6,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
-	"github.com/xstockstrat/portfolio/internal/marketsession"
+	"github.com/xstockstrat/contracts/marketsession"
 )
 
 // Feature 240 acceptance givens (docs/roadmap/features/240-offline-account-full-pnl/acceptance.feature);
