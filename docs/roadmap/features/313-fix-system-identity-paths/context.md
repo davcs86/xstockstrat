@@ -1081,3 +1081,12 @@ Question (handoff § 3.4): after the operator asked to see the wording first, th
 Operator's answer (option selected): "Confirm as written (Recommended)".
 
 Effect: the spec-authored AC-1 `Then` wording is operator-confirmed; the Step 1 confirmation is cleared. The ingest-docs question (docs step vs recorded deviation, § 3.4) is still open.
+
+## Session 2026-11-21 — operator ruling on the stale ingest docs, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.4): "Feature 313: after its Steps 4 and 6, the ingest docs go stale (findings :38 and ingest CLAUDE.md :146 still describe the old system-owner behaviour). How should that be handled?"
+
+Operator's answer (option selected): "Add a docs step (Recommended)".
+Option text as offered: "Add a step to 313's spec that updates the ingest findings row and CLAUDE.md. Needs a small re-spec and impl-spec review before execute."
+
+Orchestrator note (not an operator quote): 313 needs `/sdd-spec` re-spec for the added docs step and `/sdd-review impl-spec` before `/sdd-execute`. Not yet done. The doc line numbers cited above predate the 2026-11-21 main-dev sync; re-grep them.
