@@ -311,7 +311,7 @@ git diff --quiet HEAD -- internal/testdata; echo "rc=$?"                  # C-13
 
 ### Step 3 — service: risk ledger events split by kind, owner-attributed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -371,7 +371,7 @@ grep -n 'emitEventAs(ctx, userID, eventType, "portfolio:risk"' internal/service/
 
 ### Step 4 — test: AC-2 and AC-3 regression — one event type per breach kind
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go` — modify
@@ -630,4 +630,17 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: the host's `golangci-lint` is v2.5.0 (built with go1.25). The pinned v2.14.0 was installed with
   `GOTOOLCHAIN=go1.27.0 go install …@v2.14.0` into `/root/go/bin`, and the block ran unchanged with that directory first
   on `PATH`.
+- **Disposition**: CI-equivalent fallback (same tool, CI-pinned version).
+
+### Step 4 — shared event assertion helper (2026-11-21)
+- **Spec said**: instructions 3–5 list the assertions for tests (a), (b) and the D-6 test; no helper is named.
+- **Actual**: one helper, `assertOneRiskEvent`, in `portfolio_quote_deadline_test.go` holds the common ledger checks
+  (exactly one event; type; `portfolio:risk`; `UserId`; payload equal to an exact key set). The three tests call it, so
+  the block is not repeated (DRY guard rail). The exact key-set match is how (b) proves "no `symbol` key".
+- **Disposition**: within step scope; test structure only, assertions unchanged from the instructions.
+
+### Steps 3+4 — pinned linter on PATH (2026-11-21)
+- **Spec said**: Step 4 Verification runs `golangci-lint run --modules-download-mode=mod`.
+- **Actual**: the host's default `golangci-lint` is still v2.5.0; the block ran unchanged with `/root/go/bin`
+  (v2.14.0 built with go1.27.0, installed for Steps 1+2) first on `PATH`.
 - **Disposition**: CI-equivalent fallback (same tool, CI-pinned version).
