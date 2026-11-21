@@ -630,3 +630,19 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - The four `[ ] unaddressed` items above must be announced at each `/sdd-execute` checkpoint (P-03).
 - Still open from the sdd-spec session: branch protection "up to date before merge" on `main-dev` and `main`
   (operator action).
+
+## Session 2026-11-21 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan with this binding record (verbatim):
+  `{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","dev":"3f556f04c293daf42eac87846234196991d6a0fc","specHash":"42f5c01acc11e02ac618d92d4ee905e9321504b6","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13],"mismatches":[{"n":5,"detail":"Minor, non-blocking. The spec says `grep -n \"prev\\|refusing\" scripts/migration-ahead-check.sh` returns :55, :58, :59, :60. It actually returns 17, 46, 55, 58, 59. Line :60 (the `(use '?x-migrations-table=' ...` note) contains neither word, and :17 and :46 also match. The text at :55/:58/:59/:60 is exactly what the spec quotes, so the instructions still apply unchanged."},{"n":11,"detail":"Codebase Evidence points to `docs/patterns/config-governance.md:513` for the precedent wording. Line 513 is a blank line next to the `### feature 184 — opportunity-config-operability` heading, and it is the same on the evidence tree fb52065c2. The renumber precedent (\"**Migration renumbered `024` → `026`:** `merge-order.md` pre-assigned `024`, but feature 166's `025_...` merged ... first\") is at line 634. All other Step 11 anchors match their quoted text: database.md:35, :41, :43, :60-63, :65-79, :81-107; script-tooling.md:54 and :62; config-rollout.md:248-250; context-constitution.md:82; insights.md:900."}]}`
+- Merge: origin/main-dev 8baf3976c is already an ancestor of the dev branch. Nothing to merge.
+- Re-spec commits (conditional directive; only the Codebase Evidence of steps 5 and 11 changed):
+  - `4269ae02` respec(fix-migration-tooling-safety): align steps 5,11 with current codebase
+- Tooling detection (steps 1–13): python3 3.13 ✓ · uv ✓ · go ✓ · shellcheck ✗ (documented fallback
+  `uv tool install shellcheck-py`, installed per step) · shfmt ✗ (documented fallback
+  `go install mvdan.cc/sh/v3/cmd/shfmt@v3.8.0`, installed per step).
+- Status: implementation-ready → in-progress.
+
+```sdd-batch-setup
+{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","date":"2026-11-21"}
+```
