@@ -522,3 +522,12 @@ design.md is not written and status.md is unchanged. Register: `debate.md` (D-1.
 ```sdd-batch-setup
 {"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","date":"2026-11-21"}
 ```
+
+### Step 1 — test: move the internal-caller wire suites onto an mTLS loopback (harness only) [done]
+- Added `startMtlsLoopback(server, clientNames)` to `mtlsTestPki.ts` (the `secretsAndScope.test.ts` CA → leaves → mTLS bind → per-leaf client credentials sequence). `internalCallerSetConfig.test.ts` now runs on the `xstockstrat-trading` leaf with a second `notifyClient` (`xstockstrat-notify` leaf, unused until Step 3), and `setConfig` takes an optional client. `setConfigSpelling.test.ts` runs on the `xstockstrat-trading` leaf. No assertion changed and no production file changed.
+- TDD: red N/A — no behaviour change (harness only, per the step's TDD line). Baseline before the edit: `ℹ tests 394` / `ℹ pass 394`. Green after: `ℹ tests 394` / `ℹ pass 394` / `ℹ fail 0`, `All files | 92.26` lines (c8 `--lines 40` and `check-coverage --lines 40` pass), exit=0; same test count as before. No `createInsecure` is left in the two files, and `git diff --stat -- src/grpc` is empty.
+- Verification ran with `/opt/node24/bin` leading PATH (tooling-setup note above). Lint: 0 errors; warnings 310 → 312, from the two new `any` annotations (`notifyClient`, the `setConfig` client parameter), which follow the file's existing `let client: any` pattern.
+- Config-key wiring gate: not applicable (test step; no config key).
+- Spec anchor drift, no effect: the poller-success cases are at `internalCallerSetConfig.test.ts:81` and `:114` (spec `:84`, `:115`).
+- Files modified: `services/xstockstrat-config/src/__tests__/mtlsTestPki.ts`, `services/xstockstrat-config/src/__tests__/internalCallerSetConfig.test.ts`, `services/xstockstrat-config/src/__tests__/setConfigSpelling.test.ts`
+- Deviations: none

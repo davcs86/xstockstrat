@@ -112,7 +112,7 @@ shift lines, so `/sdd-execute` re-greps each anchor in its discovery phase.
 
 ### Step 1 — test: move the internal-caller wire suites onto an mTLS loopback (harness only)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/mtlsTestPki.ts` — modify

@@ -14,6 +14,8 @@ import * as grpc from '@grpc/grpc-js';
 import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
 import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
+import * as mtls from '../mtls';
+import { startMtlsLoopback } from './mtlsTestPki';
 
 function md(pairs: Record<string, string>): grpc.Metadata {
   const m = new grpc.Metadata();
@@ -24,6 +26,7 @@ function md(pairs: Record<string, string>): grpc.Metadata {
 describe('internal-caller SetConfig over a real gRPC connection', () => {
   let server: grpc.Server;
   let client: any;
+  let notifyClient: any;
   let queries: { sql: string; params?: unknown[] }[] = [];
   let keyExists = true;
 
@@ -50,22 +53,20 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
       new ConfigServiceImpl(recordingPool) as unknown as grpc.UntypedServiceImplementation,
     );
 
-    const port: number = await new Promise((resolve, reject) => {
-      server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (err, p) =>
-        err ? reject(err) : resolve(p),
-      );
-    });
-
+    const { port, clients } = await startMtlsLoopback(server, ['xstockstrat-trading', 'xstockstrat-notify']);
     const { ConfigServiceClient } = await import('@xstockstrat/proto/config/v1/config');
-    client = new ConfigServiceClient(`127.0.0.1:${port}`, grpc.credentials.createInsecure());
+    const target = mtls.targetOverride('xstockstrat-config');
+    client = new ConfigServiceClient(`127.0.0.1:${port}`, clients['xstockstrat-trading'], target);
+    notifyClient = new ConfigServiceClient(`127.0.0.1:${port}`, clients['xstockstrat-notify'], target);
   });
 
   after(() => {
     client?.close();
+    notifyClient?.close();
     server?.forceShutdown();
   });
 
-  function setConfig(metadata: grpc.Metadata, overrides: Record<string, unknown> = {}) {
+  function setConfig(metadata: grpc.Metadata, overrides: Record<string, unknown> = {}, c: any = client) {
     const request = {
       namespace: 'platform',
       key: 'trading_state',
@@ -74,7 +75,7 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
       ...overrides,
     };
     return new Promise<{ err: any; res: any }>((resolve) => {
-      client.setConfig(request, metadata, (err: any, res: any) => resolve({ err, res }));
+      c.setConfig(request, metadata, (err: any, res: any) => resolve({ err, res }));
     });
   }
 
