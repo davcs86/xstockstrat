@@ -118,7 +118,7 @@ There is no proto step (D-8, R-8), no migration and no config key (F-01, F-07).
 
 ### Step 1 — service: nonce status line, classifier, missing-result failure and measured memory in the sandbox
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify
@@ -876,3 +876,20 @@ _Populated by /sdd-execute as implementation proceeds._
   three sidecars untouched and puts the wording in the findings row (Step 8), because the sidecar
   contract (`.claude/skills/sdd-qa/reference/defect-filing.md:26-48`) allows only a status token and
   a `ref:` line. design.md is not amended. Operator confirmation pending (context.md Open Threads).
+- **2026-11-21 (Step 1)** — Instruction 5's verbatim `__OUTPUT__` print line is 108 characters
+  and fails the step's own `ruff check .` (E501, limit 100; the line is template text inside
+  `_SANDBOX_WRAPPER`, so `# noqa` cannot apply). It is split into
+  `_output = _output if isinstance(_output, dict) else {{"value": _output}}` followed by
+  `print("\\n__OUTPUT__:" + json.dumps(_output))`. The child's behaviour and output are unchanged.
+  **Disposition**: in-scope lint fix on the step's own line (HARD CONSTRAINTS exception).
+- **2026-11-21 (Step 1)** — TDD red evidence. The step's `**Verification**` exits 0 on the
+  pre-change tree, because its trailing greps print expectations and do not fail. RED is therefore
+  cited from those greps, `4` against an expected 2 and a match at `:809` against an expected none.
+  A scratch behaviour probe outside the repo adds behaviour evidence: it failed before the change
+  (missing `result` succeeded, memory 0, the guard-message ValueError was classed `import_blocked`)
+  and passed after it. The probe was not committed. Step 2 owns the regression tests.
+  **Disposition**: evidence recorded in context.md; no spec text changed.
+- **2026-11-21 (Step 1)** — The suite count is `610 passed`, not the spec's measured `571`. Tests
+  were added on the base after the spec was measured, and the run is green with the change. The
+  service venv reports Python 3.12.3, while root CLAUDE.md pins 3.13. **Disposition**:
+  informational only; no action.
