@@ -676,3 +676,11 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - Config-key wiring gate: N/A.
 - Files modified: `scripts/tests/test_migration_dirty_guard.py`, `scripts/tests/test_db_migrate.py`, `scripts/migration-dirty-guard.test.sh` (deleted), `scripts/shell-allowlist.txt`, `.github/workflows/ci.yml`
 - Deviations: none
+
+### Step 5 — service: reword the ahead-check's dirty-ahead refusal [done]
+- `scripts/migration-ahead-check.sh:58` now says "refusing to migrate it" instead of "refusing \`force 0\`"; `:60` names `$prev` as the previous version present in the newer release and states it assumes no gap below `$n`. `:59`, `prev=$((n - 1))` and exit 4 are unchanged.
+- TDD (Red order): Step 6's test was authored in the working tree first. Red `.sdd-logs/v-1.log` `exit=1`: `E       assert "  (force the previous version present in the newer release: 9998 assumes it has no gap below 9999; ..." in [... "  (use '?x-migrations-table=' when DATABASE_URL has no query string), then fix forward and redeploy that release."]`, `1 failed, 2 passed in 1.22s` → green `.sdd-logs/v-3.log` `exit=0`: `3 passed in 1.12s`, ruff `All checks passed!`, `62 files already formatted`. The test file was removed before this commit; it is committed under Step 6. No coverage gate applies to `scripts/`.
+- Verification `.sdd-logs/v-2.log` `exit=0`: shellcheck + `shfmt -d -i 2` clean, `migration-ahead-check.test.sh: all assertions passed`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/migration-ahead-check.sh`
+- Deviations: none

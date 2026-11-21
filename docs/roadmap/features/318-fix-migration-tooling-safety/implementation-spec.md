@@ -428,7 +428,7 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
 
 ### Step 5 — service: reword the ahead-check's dirty-ahead refusal
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/migration-ahead-check.sh` — modify
