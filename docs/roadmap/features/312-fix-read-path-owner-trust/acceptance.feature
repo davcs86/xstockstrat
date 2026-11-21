@@ -28,3 +28,46 @@ Feature: fix-read-path-owner-trust (bug fix)
     Then the call is rejected with INVALID_ARGUMENT or UNAUTHENTICATED
     And when it is called with x-user-id "user-a" and body userId "user-b"
     Then no alert targeted to "user-b" is returned
+
+  # guards: docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md (design D-7, D-17)
+  @AC-4 @regression
+  Scenario Outline: Order reads are scoped to x-user-id for every scope and the body user_id is ignored
+    Given trading holds orders for users "user-a" and "user-b"
+    When an internal caller sends <rpc> with x-user-id "user-a", x-access-scope "<scope>" and body user_id "<body>"
+    Then only "user-a"'s orders are delivered
+
+    Examples:
+      | rpc                | scope | body   |
+      | ListOrders         | 3     | user-b |
+      | ListOrders         | 4     | user-b |
+      | ListOrders         | 4     |        |
+      | StreamOrderUpdates | 3     | user-b |
+      | StreamOrderUpdates | 4     | user-b |
+      | StreamOrderUpdates | 4     |        |
+
+  # guards: docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md (design D-7, D-15)
+  @AC-5 @regression
+  Scenario Outline: An order read with no x-user-id is refused
+    Given trading holds orders for users "user-a" and "user-b"
+    When an internal caller sends <rpc> with no x-user-id metadata
+    Then the call fails with PERMISSION_DENIED
+    And no order is delivered
+
+    Examples:
+      | rpc                |
+      | ListOrders         |
+      | StreamOrderUpdates |
+      | GetOrder           |
+
+  # guards: docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md (design D-15)
+  @AC-6 @regression
+  Scenario Outline: GetOrder for another user's order is indistinguishable from an absent order
+    Given trading holds an order owned by "user-b"
+    When an internal caller sends GetOrder for that order_id with x-user-id "user-a" and x-access-scope "<scope>"
+    Then the call fails with NOT_FOUND
+    And the status code and message match those returned for an order_id that does not exist
+
+    Examples:
+      | scope |
+      | 3     |
+      | 4     |
