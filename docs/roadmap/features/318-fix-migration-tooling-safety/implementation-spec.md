@@ -436,9 +436,11 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
 **Reviewers**: DBA — run-order compliance with `scripts/db-migrate.sh`; Platform Lead — cross-service architecture
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "prev\|refusing" scripts/migration-ahead-check.sh` → `:55` `prev=$((n - 1))`, `:58`
+- Confirmed via: `grep -n "prev\|refusing" scripts/migration-ahead-check.sh` → `:17` and `:46` (other refusals,
+  unchanged), `:55` `prev=$((n - 1))`, `:58`
   "...; refusing \`force 0\` (a newer release's migration failed part-way; this image cannot see its files).",
-  `:59` the `Recover with the newer release's files: migrate ... force $prev` line, `:60` the `?` note.
+  `:59` the `Recover with the newer release's files: migrate ... force $prev` line. `:60` (the
+  `(use '?x-migrations-table=' ...` note) matches neither word; confirm it with `sed -n 60p`.
 - Asserted strings that must survive: `force <n-1>` and `<schema> is dirty at version <n>`
   (`scripts/migration-ahead-check.test.sh:44-45`, `scripts/migration-rerun.py:1174-1175`), exit 4 (`:43`,
   `migration-rerun.py:1169-1170`), literal `$DATABASE_URL`, no `postgres://` (`:67-69`; durable `@AC-25`).
@@ -782,7 +784,8 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
   `force 0`: **dirty at a version ≥ 40 means `force <n-1>`, never `force 0`.**"
 - `docs/context-constitution.md:82` — pointer row "... CI `migration-rerun`, `migration-contract-gate`".
 - Ledger text to reconcile: `docs/roadmap/ledger/insights.md:900` (pre-assign ascending migration numbers in
-  merge-order.md); precedent wording `docs/patterns/config-governance.md:513`.
+  merge-order.md); precedent wording `docs/patterns/config-governance.md:634`
+  ("**Migration renumbered `024` → `026`:** `merge-order.md` pre-assigned `024`, but feature 166's ...").
 - The section heading "Contract migration recovery" is kept: the Step 3 guard text and three references
   (`database.md:63`, `:75`, `context-constitution.md:82`) name it.
 
