@@ -2989,3 +2989,13 @@ Written by the orchestrating session itself.
   - [ ] unaddressed — A-10 residual: a bracket-leg fill that reaches the analysis consumer when no P&L window is open would open one. Whether a leg fill can arrive after its position's close event was not checked. Target: check at Step 22, when the leg emit order is in code.
   - [ ] unaddressed — Overlap: 312 edits the same `alpaca-default` lines of `portfolio_service.go` that Step 9 builds on (`:434-437`); 315, 317, 321 and 326 edit other ranges of files this feature changes. All from product-spec evidence only. Target: whichever merges second rebases; re-run the overlap scan when a peer becomes implementation-ready.
 - **Carried forward unchanged.** The O-61 operator confirmations before the cutover step and every accepted residual in the "sdd-design (approved)" and "sdd-spec" Open Threads above still stand.
+
+## Session 2026-11-21 — operator ruling on D-50, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.3): "Feature 311 (fix-position-fold-correctness), design decision D-50: accounts with adoption-only bracket legs (no fills) are polled for open bracket orders at the reconciler cadence, not on every fill-poller tick. This is currently an orchestrator assumption. Confirm it, or overturn it?"
+
+Operator's answer (option selected): "Confirm D-50 (Recommended)".
+
+Option text as offered: "Adoption-only accounts are listed at the reconciler cadence. Recorded verbatim in 311's context.md; the Step 23 gate clears."
+
+Effect: D-50 is operator-confirmed; the Step 23 confirmation is cleared. Other § 3.3 items (how portfolio is stopped on each staging target; the real-Postgres trading test job follow-up) are still open.
