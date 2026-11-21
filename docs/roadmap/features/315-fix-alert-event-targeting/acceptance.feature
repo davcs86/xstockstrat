@@ -20,3 +20,12 @@ Feature: fix-alert-event-targeting (bug fix)
     When checkRiskLimits runs for "user-1"
     Then the appended ledger event type is not "portfolio.risk.drawdown_breach"
     And the event payload carries user_id "user-1" and symbol "AAPL"
+
+  # guards: docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md
+  @AC-3 @regression
+  Scenario: a drawdown breach still emits a drawdown event, attributed to the owner and account
+    Given portfolio.risk.max_drawdown_pct is 0.10
+    And user "user-1" has account "acct-1" with equity 8500.00 and peak equity 10000.00 and no concentration breach
+    When checkRiskLimits runs for "user-1"
+    Then the appended ledger event type is "portfolio.risk.drawdown_breach"
+    And the event is owned by "user-1" and its payload carries user_id "user-1" and account_id "acct-1"
