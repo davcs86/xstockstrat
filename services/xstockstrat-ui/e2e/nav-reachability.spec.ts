@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { addAdminCookie, addAuthCookie } from './helpers/auth';
+import { ALERT_DETAIL_ID } from './fixtures/alerts';
 
 /**
  * Nav-reachability (C-10(a), feature 083 Step 21). Closes the fails.md 2026-07-01 060 trap: a
@@ -118,6 +119,22 @@ test.describe('nav reachability', () => {
     await expect(
       page.getByTestId('mobile-tab-bar').getByRole('link', { name: 'Book' }),
     ).toHaveAttribute('aria-current', 'page', { timeout: 30000 });
+  });
+
+  test('the alert page resolves to Settings › Notifications (feature 344)', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications/' + ALERT_DETAIL_ID);
+    await expect(page.getByTestId('alert-detail')).toBeVisible({ timeout: 30000 });
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Primary' })
+        .getByRole('link', { name: 'Settings', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Section' })
+        .getByRole('link', { name: 'Notifications', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
   });
 
   // feature 110 removed the `/insights/market/[symbol]` redirect stub (the orphaned signal-order-ticket

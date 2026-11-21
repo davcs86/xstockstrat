@@ -591,3 +591,131 @@ def test_refused_symbol_projection_matches_proto_fields():
         portfolio_pb2.UpdateWatchlistResponse,
     ):
         assert "refused_symbols" in resp.DESCRIPTOR.fields_by_name, resp.DESCRIPTOR.name
+
+
+# ── feature 352: delisted state on every watchlist projection (AC-16) ────────
+
+
+def _roku_delisted_pb(date="2026-11-09"):
+    from gen.common.v1 import common_pb2  # type: ignore
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    return portfolio_pb2.WatchlistBinding(
+        symbol="ROKU",
+        delisted=common_pb2.DelistedState(
+            reason=common_pb2.UNSERVABLE_REASON_NOT_TRADABLE, first_unservable_date=date
+        ),
+    )
+
+
+def _delisted_watchlist_pb(*extra_symbols, date="2026-11-09"):
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    return portfolio_pb2.Watchlist(
+        watchlist_id="wl-core",
+        bindings=[
+            portfolio_pb2.WatchlistBinding(symbol="AAPL"),
+            _roku_delisted_pb(date),
+            *(portfolio_pb2.WatchlistBinding(symbol=s) for s in extra_symbols),
+        ],
+    )
+
+
+def _assert_delisted_state(watchlist: dict):
+    by_symbol = {b["symbol"]: b for b in watchlist["bindings"]}
+    assert by_symbol["ROKU"] == {
+        "symbol": "ROKU",
+        "delisted": True,
+        "delisted_reason": "UNSERVABLE_REASON_NOT_TRADABLE",
+        "first_unservable_date": "2026-11-09",
+    }
+    for symbol, binding in by_symbol.items():
+        if symbol != "ROKU":
+            assert binding == {"symbol": symbol, "delisted": False}
+
+
+@pytest.mark.asyncio
+async def test_get_watchlist_reports_delisted_state():
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.GetWatchlist = AsyncMock(
+        return_value=portfolio_pb2.GetWatchlistResponse(watchlist=_delisted_watchlist_pb())
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.get_watchlist("user-42", "wl-core")
+
+    _assert_delisted_state(out["watchlist"])
+
+
+@pytest.mark.asyncio
+async def test_list_watchlists_reports_delisted_state():
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.ListWatchlists = AsyncMock(
+        return_value=portfolio_pb2.ListWatchlistsResponse(watchlists=[_delisted_watchlist_pb()])
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.list_watchlists("user-42")
+
+    _assert_delisted_state(out["watchlists"][0])
+
+
+@pytest.mark.asyncio
+async def test_add_symbols_watchlist_reports_delisted_state():
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.AddWatchlistSymbols = AsyncMock(
+        return_value=portfolio_pb2.AddWatchlistSymbolsResponse(
+            watchlist=_delisted_watchlist_pb("MSFT")
+        )
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.add_watchlist_symbols("user-42", "wl-core", symbols=["MSFT"])
+
+    assert {b["symbol"] for b in out["watchlist"]["bindings"]} == {"AAPL", "ROKU", "MSFT"}
+    _assert_delisted_state(out["watchlist"])
+
+
+@pytest.mark.parametrize("bad_date", ["2026-11-9", "09/11/2026"])
+def test_delisted_malformed_date_is_omitted(bad_date):
+    out = client._watchlist_to_dict(_delisted_watchlist_pb(date=bad_date))
+
+    roku = next(b for b in out["bindings"] if b["symbol"] == "ROKU")
+    assert roku == {
+        "symbol": "ROKU",
+        "delisted": True,
+        "delisted_reason": "UNSERVABLE_REASON_NOT_TRADABLE",
+    }
+
+
+def test_delisted_watchlist_without_bindings_is_unchanged():
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    out = client._watchlist_to_dict(portfolio_pb2.Watchlist(watchlist_id="wl-empty", name="E"))
+
+    assert out == {"watchlist_id": "wl-empty", "name": "E"}
+
+
+def test_delisted_projection_matches_proto_fields():
+    """``_watchlist_to_dict`` projects DelistedState by hand: a field added to it must be projected
+    too (ledger fails.md agent-projection entry)."""
+    from gen.common.v1 import common_pb2  # type: ignore
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    fields = common_pb2.DelistedState.DESCRIPTOR.fields_by_name
+    assert set(fields) == {"reason", "first_unservable_date"}
+    assert fields["reason"].enum_type is common_pb2.UnservableReason.DESCRIPTOR
+    binding = portfolio_pb2.WatchlistBinding.DESCRIPTOR.fields_by_name
+    assert binding["delisted"].message_type is common_pb2.DelistedState.DESCRIPTOR

@@ -141,6 +141,16 @@ class MarketDataServiceStub(object):
                 request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityRequest.SerializeToString,
                 response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityResponse.FromString,
                 _registered_method=True)
+        self.SyncWatchlistDelistings = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/SyncWatchlistDelistings',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.SyncWatchlistDelistingsRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.SyncWatchlistDelistingsResponse.FromString,
+                _registered_method=True)
+        self.AckDelistingAlerts = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/AckDelistingAlerts',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.AckDelistingAlertsRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.AckDelistingAlertsResponse.FromString,
+                _registered_method=True)
 
 
 class MarketDataServiceServicer(object):
@@ -299,6 +309,20 @@ class MarketDataServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SyncWatchlistDelistings(self, request, context):
+        """internal: xstockstrat-portfolio only
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AckDelistingAlerts(self, request, context):
+        """internal: xstockstrat-portfolio only
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MarketDataServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -406,6 +430,16 @@ def add_MarketDataServiceServicer_to_server(servicer, server):
                     servicer.GetSymbolServability,
                     request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityRequest.FromString,
                     response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityResponse.SerializeToString,
+            ),
+            'SyncWatchlistDelistings': grpc.unary_unary_rpc_method_handler(
+                    servicer.SyncWatchlistDelistings,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.SyncWatchlistDelistingsRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.SyncWatchlistDelistingsResponse.SerializeToString,
+            ),
+            'AckDelistingAlerts': grpc.unary_unary_rpc_method_handler(
+                    servicer.AckDelistingAlerts,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.AckDelistingAlertsRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.AckDelistingAlertsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -977,6 +1011,60 @@ class MarketDataService(object):
             '/xstockstrat.marketdata.v1.MarketDataService/GetSymbolServability',
             marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityRequest.SerializeToString,
             marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SyncWatchlistDelistings(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/SyncWatchlistDelistings',
+            marketdata_dot_v1_dot_marketdata__pb2.SyncWatchlistDelistingsRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.SyncWatchlistDelistingsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AckDelistingAlerts(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/AckDelistingAlerts',
+            marketdata_dot_v1_dot_marketdata__pb2.AckDelistingAlertsRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.AckDelistingAlertsResponse.FromString,
             options,
             channel_credentials,
             insecure,

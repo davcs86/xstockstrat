@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillBarsRequest, BackfillBarsResponse, BackfillFundamentalsRequest, BackfillFundamentalsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetCurrentSectorRequest, GetCurrentSectorResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetEtfFlagsRequest, GetEtfFlagsResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, GetSectorAsOfRequest, GetSectorAsOfResponse, GetSectorHistoryRequest, GetSectorHistoryResponse, GetSymbolServabilityRequest, GetSymbolServabilityResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
+import { AckDelistingAlertsRequest, AckDelistingAlertsResponse, BackfillBarsRequest, BackfillBarsResponse, BackfillFundamentalsRequest, BackfillFundamentalsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetCurrentSectorRequest, GetCurrentSectorResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetEtfFlagsRequest, GetEtfFlagsResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, GetSectorAsOfRequest, GetSectorAsOfResponse, GetSectorHistoryRequest, GetSectorHistoryResponse, GetSymbolServabilityRequest, GetSymbolServabilityResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest, SyncWatchlistDelistingsRequest, SyncWatchlistDelistingsResponse } from "./marketdata_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -246,6 +246,28 @@ export const MarketDataService = {
       name: "GetSymbolServability",
       I: GetSymbolServabilityRequest,
       O: GetSymbolServabilityResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * internal: xstockstrat-portfolio only
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.SyncWatchlistDelistings
+     */
+    syncWatchlistDelistings: {
+      name: "SyncWatchlistDelistings",
+      I: SyncWatchlistDelistingsRequest,
+      O: SyncWatchlistDelistingsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * internal: xstockstrat-portfolio only
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.AckDelistingAlerts
+     */
+    ackDelistingAlerts: {
+      name: "AckDelistingAlerts",
+      I: AckDelistingAlertsRequest,
+      O: AckDelistingAlertsResponse,
       kind: MethodKind.Unary,
     },
   }

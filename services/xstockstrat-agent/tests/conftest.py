@@ -33,6 +33,39 @@ def _ctx(claims: dict | None, *, with_request: bool = True):
     return SimpleNamespace(request_context=SimpleNamespace(request=request))
 
 
+def catalog_tools() -> list[dict]:
+    """The internal tool catalog as ``{name, description, inputSchema}`` dicts, read as the UI peer.
+
+    Sync tests only: it runs its own event loop. Shared by every catalog-reading test (C-13).
+    """
+    import asyncio  # noqa: PLC0415
+
+    from gen.agent.v1 import agent_pb2  # noqa: PLC0415
+    from google.protobuf.json_format import MessageToDict  # noqa: PLC0415
+
+    from app.catalog_service import UI_PEER_SAN, CatalogServicer  # noqa: PLC0415
+    from app.main import create_server  # noqa: PLC0415
+
+    def _abort(code, details):
+        raise AssertionError(f"catalog RPC aborted: {code} {details}")
+
+    context = SimpleNamespace(
+        peer_identity_key=lambda: "x509_subject_alternative_name",
+        peer_identities=lambda: [UI_PEER_SAN.encode()],
+        abort=_abort,
+    )
+    servicer = CatalogServicer(create_server())
+    response = asyncio.run(servicer.ListTools(agent_pb2.ListToolsRequest(), context))
+    return [
+        {
+            "name": t.name,
+            "description": t.description,
+            "inputSchema": MessageToDict(t.input_schema),
+        }
+        for t in response.tools
+    ]
+
+
 def _rpc_error(code, details=""):
     """A grpc.aio.AioRpcError carrying ``code`` and ``details`` (shared test helper, C-13)."""
     from grpc.aio import AioRpcError, Metadata  # noqa: PLC0415
@@ -305,7 +338,10 @@ def otel_reset(monkeypatch):
 
     from opentelemetry import metrics, trace
     from opentelemetry._logs import _internal as logs_internal
-    from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorClient
+    from opentelemetry.instrumentation.grpc import (
+        GrpcAioInstrumentorClient,
+        GrpcAioInstrumentorServer,
+    )
     from opentelemetry.metrics import _internal as metrics_internal
     from opentelemetry.util._once import Once
 
@@ -318,6 +354,7 @@ def otel_reset(monkeypatch):
     monkeypatch.setenv("NO_PROXY", "127.0.0.1")
     monkeypatch.setenv("no_proxy", "127.0.0.1")
     monkeypatch.setattr(GrpcAioInstrumentorClient, "instrument", lambda self, **kw: None)
+    monkeypatch.setattr(GrpcAioInstrumentorServer, "instrument", lambda self, **kw: None)
     root = logging.getLogger()
     handlers_before = list(root.handlers)
     yield

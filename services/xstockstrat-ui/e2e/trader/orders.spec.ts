@@ -1,6 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
 import { BROKER_ACCOUNT_ALPACA } from '../fixtures';
+import {
+  expectFocusOnMarkedTrigger,
+  expectRowMenuSettled,
+  openMarkedRowMenu,
+} from '../helpers/rowMenu';
 
 /**
  * E2E tests for the /trader/orders management page (feature 055).
@@ -77,10 +82,12 @@ const ORDERS = [
 
 test.describe('Orders management page', () => {
   let listOrdersCount = 0;
+  let accountScopedLists = 0;
   let cancelRequested = false;
 
   test.beforeEach(async ({ page }) => {
     listOrdersCount = 0;
+    accountScopedLists = 0;
     cancelRequested = false;
 
     await addAuthCookie(page);
@@ -98,6 +105,9 @@ test.describe('Orders management page', () => {
 
     await page.route('**/xstockstrat.trading.v1.TradingService/ListOrders', async (route) => {
       listOrdersCount += 1;
+      if ((route.request().postData() ?? '').includes(BROKER_ACCOUNT_ALPACA.id)) {
+        accountScopedLists += 1;
+      }
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -170,18 +180,20 @@ test.describe('Orders management page', () => {
   test('Edit is enabled for NEW/PARTIALLY_FILLED and disabled for FILLED', async ({ page }) => {
     // Actions are consolidated behind a per-row kebab menu (FR-2) — open each row's menu before
     // checking its item state.
+    const edit = page.getByRole('menuitem', { name: 'Edit', exact: true });
+    const cancel = page.getByRole('menuitem', { name: 'Cancel', exact: true });
     await page.getByTestId('actions-ord-new').click();
-    await expect(page.getByTestId('edit-ord-new')).toBeEnabled({ timeout: 10000 });
-    await expect(page.getByTestId('cancel-ord-new')).toBeEnabled();
+    await expect(edit).toBeEnabled({ timeout: 10000 });
+    await expect(cancel).toBeEnabled();
     await page.keyboard.press('Escape');
 
     await page.getByTestId('actions-ord-partial').click();
-    await expect(page.getByTestId('edit-ord-partial')).toBeEnabled();
+    await expect(edit).toBeEnabled();
     await page.keyboard.press('Escape');
 
     await page.getByTestId('actions-ord-filled').click();
-    await expect(page.getByTestId('edit-ord-filled')).toBeDisabled();
-    await expect(page.getByTestId('cancel-ord-filled')).toBeDisabled();
+    await expect(edit).toBeDisabled();
+    await expect(cancel).toBeDisabled();
     await page.keyboard.press('Escape');
   });
 
@@ -190,12 +202,10 @@ test.describe('Orders management page', () => {
     // feature 120) — assert two distinct elements (trigger, then the dialog's confirm
     // action), not a single element's changing text. Actions are behind a kebab menu (FR-2).
     await page.getByTestId('actions-ord-new').click({ timeout: 10000 });
-    const cancelBtn = page.getByTestId('cancel-ord-new');
-    await expect(cancelBtn).toHaveText('Cancel');
-    await cancelBtn.click();
-    const confirmBtn = page.getByTestId('cancel-ord-new-confirm');
-    await expect(confirmBtn).toBeVisible();
-    await confirmBtn.click();
+    await page.getByRole('menuitem', { name: 'Cancel', exact: true }).click();
+    const dialog = page.getByRole('alertdialog', { name: 'Cancel order' });
+    await expect(dialog.getByText('Cancel this AAPL order?')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect.poll(() => cancelRequested).toBe(true);
   });
 
@@ -212,14 +222,15 @@ test.describe('Orders management page', () => {
       }),
     );
     await page.getByTestId('actions-ord-new').click({ timeout: 10000 });
-    await page.getByTestId('cancel-ord-new').click();
-    await page.getByTestId('cancel-ord-new-confirm').click();
+    await page.getByRole('menuitem', { name: 'Cancel', exact: true }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Confirm', exact: true })
+      .click();
 
     const alert = page.getByRole('alert').filter({ hasText: 'cancel unavailable' });
     await expect(alert).toBeVisible();
-    // The row's kebab menu stays open (modal) after the confirm; close it so the banner is clickable.
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('menu')).toHaveCount(0);
+    await expect(page.locator('[role="menu"]')).toHaveCount(0);
     await page.getByRole('button', { name: 'Dismiss error' }).click();
     await expect(alert).toHaveCount(0);
     expect(pageErrors).toEqual([]);
@@ -236,5 +247,83 @@ test.describe('Orders management page', () => {
     await page.getByLabel('Filter by status').click();
     await page.getByRole('option', { name: 'Filled', exact: true }).click();
     await expect.poll(() => listOrdersCount).toBeGreaterThan(before);
+  });
+
+  test.describe('Row menu confirm flow (feature 350)', () => {
+    const dialogButton = (page: Page, name: string) =>
+      page.getByRole('alertdialog').getByRole('button', { name, exact: true });
+
+    // The table remounts once when the selected account resolves and the list query is re-keyed;
+    // a row menu opened before that would be closed by the remount.
+    test.beforeEach(async () => {
+      await expect.poll(() => accountScopedLists).toBeGreaterThan(0);
+    });
+
+    async function chooseCancel(page: Page) {
+      const trigger = page.getByTestId('actions-ord-new');
+      await openMarkedRowMenu(trigger);
+      await page.getByRole('menuitem', { name: 'Cancel', exact: true }).click();
+    }
+
+    async function expectOtherRowMenuOpensOnOneClick(page: Page) {
+      await page.getByTestId('actions-ord-partial').click();
+      await expect(page.getByRole('menuitem', { name: 'Edit', exact: true })).toBeVisible();
+    }
+
+    test('@AC-1 choosing Cancel closes the row menu and shows the dialog', async ({ page }) => {
+      await chooseCancel(page);
+      await expect(page.getByRole('alertdialog', { name: 'Cancel order' })).toBeVisible();
+      await expect(page.locator('[role="menu"]')).toHaveCount(0);
+    });
+
+    test('@AC-2 @AC-3 dismissing Cancel leaves the page usable and focus on the trigger', async ({
+      page,
+    }) => {
+      await chooseCancel(page);
+      await dialogButton(page, 'Dismiss').click();
+
+      await expectRowMenuSettled(page);
+      await expectFocusOnMarkedTrigger(page);
+      await expectOtherRowMenuOpensOnOneClick(page);
+    });
+
+    test('@AC-2 @AC-3 @AC-8 confirming Cancel needs no further input before the page is usable', async ({
+      page,
+    }) => {
+      await chooseCancel(page);
+      const listsBefore = listOrdersCount;
+      await dialogButton(page, 'Confirm').click();
+      await expect.poll(() => cancelRequested).toBe(true);
+      await expect.poll(() => listOrdersCount).toBeGreaterThan(listsBefore);
+
+      await expect(page.locator('[role="menu"]')).toHaveCount(0);
+      await expectRowMenuSettled(page);
+      await expectFocusOnMarkedTrigger(page);
+      await expectOtherRowMenuOpensOnOneClick(page);
+    });
+
+    test('@AC-5 the confirmation flow works from the keyboard alone', async ({ page }) => {
+      const trigger = page.getByTestId('actions-ord-new');
+      await trigger.focus({ timeout: 10000 });
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('menuitem', { name: 'Edit', exact: true })).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(page.getByRole('menuitem', { name: 'Cancel', exact: true })).toBeFocused();
+      await page.keyboard.press('Enter');
+
+      await expect(page.getByRole('alertdialog', { name: 'Cancel order' })).toBeVisible();
+      await expect(dialogButton(page, 'Dismiss')).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expect(page.locator('[role="alertdialog"]')).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+    });
+
+    test('@AC-7 Edit still opens at once and closes the row menu', async ({ page }) => {
+      await page.getByTestId('actions-ord-new').click({ timeout: 10000 });
+      await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+
+      await expect(page.getByRole('dialog', { name: 'Edit order AAPL' })).toBeVisible();
+      await expect(page.locator('[role="menu"]')).toHaveCount(0);
+    });
   });
 });

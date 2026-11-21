@@ -91,11 +91,12 @@ Feature: homelab-compose-deploy
     When the homelab deploy runs
     Then the summary lists "MTLS_CA: MISSING" and the job fails with "MTLS_CA is in neither 1Password nor the GitHub secrets"
 
+  # Changed by @feature-332: homelab OTEL_ENABLED is now "true"; the no-otel-collector part stands.
   @AC-13 @FR-9
-  Scenario: OTel is off on the homelab
+  Scenario: OTel is on in the homelab and there is no collector service
     Given the rendered homelab compose file
-    When the environment of any service is read
-    Then OTEL_ENABLED is "false" and there is no otel-collector service
+    When the environment of any of the 12 runtime services (every service except db-migrator) is read
+    Then OTEL_ENABLED is "true" and there is no otel-collector service
 
   @AC-14 @FR-10
   Scenario: CI may reach staging over SSH only
@@ -158,7 +159,7 @@ Feature: homelab-compose-deploy
   Scenario: APP_ENV cannot change the mode, environment or database names
     Given APP_ENV contains "APPLICATION_ENV=evil", "export TRADING_MODE=paper", "DB_USER=evil" and "DB_HOST: evil.example.test"
     When the release .env is built for production and rendered
-    Then all 12 app services have APPLICATION_ENV "production" and TRADING_MODE "live", the .env contains no "evil", and the same build for staging renders "development" and "paper"
+    Then all 12 app services have APPLICATION_ENV "production" and TRADING_MODE "live", the .env contains no "evil", and the same build for staging renders "staging" and "paper"
 
   @AC-23 @FR-2
   Scenario: The UI listens on all interfaces inside its container

@@ -44,6 +44,7 @@ Feature: xstockstrat-config — encrypted secrets and environment/user scoping
     Then neither response contains "fmp-live-abc123"
     And the "marketdata.fmp.api_key" entry is marked is_secret=true with a redacted value
 
+  # Feature 338: extended by 338 @AC-14 (notify grant on commsgun.app_key, SAN-pinned).
   @AC-4 @FR-3 @feature-147 @feature-254
   Scenario: An allow-listed internal caller resolves a secret via GetSecret
     Given "marketdata.fmp.api_key" is stored as an encrypted secret with plaintext "fmp-live-abc123"

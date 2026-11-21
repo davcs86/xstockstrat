@@ -17,6 +17,10 @@ var ErrOutcomeUncertain = errors.New("broker outcome uncertain: request may have
 // already terminal there; the order's real outcome (possibly FILLED) must be re-read via GetOrder.
 var ErrOrderNotCancelable = errors.New("broker order not cancelable: already terminal")
 
+// ErrRateLimited is a definite outcome: the broker did not process the request. It is never wrapped
+// together with a context error and is never ErrInvalidCredentials.
+var ErrRateLimited = errors.New("broker rate limited: request was not processed")
+
 // BrokerOrder is the normalized order representation returned by any broker.
 type BrokerOrder struct {
 	BrokerOrderID  string

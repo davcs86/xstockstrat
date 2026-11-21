@@ -51,7 +51,7 @@ def owner_scope_predicate(scope: int, idx: int) -> tuple[str, bool]:
 _LIST_COLS = (
     "user_id, slug, display_name, source_type, extractor_module, credentials_ref,"
     " active, config_json, created_at, last_seen_at, last_error, signals_fed,"
-    " reliability_weight, origin_template_id, origin_template_version"
+    " reliability_weight, origin_template_id, origin_template_version, extraction_instructions"
 )
 
 
@@ -144,6 +144,7 @@ async def insert_source(
     active: bool = True,
     reliability_weight: float,
     user_id: str,
+    extraction_instructions: str,
 ) -> dict:
     """Strict create (feature 088). Raises asyncpg.UniqueViolationError on an existing
     (user_id, slug) — the servicer checks holders first under an advisory lock.
@@ -156,8 +157,8 @@ async def insert_source(
     row = await db_pool.fetchrow(
         "INSERT INTO ingest.signal_sources"
         " (slug, display_name, source_type, extractor_module, credentials_ref, config_json, active,"
-        " reliability_weight, user_id)"
-        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+        " reliability_weight, user_id, extraction_instructions)"
+        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
         " RETURNING *",
         slug,
         display_name,
@@ -168,6 +169,7 @@ async def insert_source(
         active,
         reliability_weight,
         user_id,
+        extraction_instructions,
     )
     return dict(row)
 
@@ -183,6 +185,7 @@ async def update_source(
     credentials_ref: str | None,
     config_json: dict | None,
     reliability_weight: float,
+    extraction_instructions: str,
 ) -> dict | None:
     """Write the already-merged columns for an owner's existing source (feature 088). Never
     touches `active` (lifecycle is reactivate/deactivate only). Returns None if the row is gone.
@@ -196,7 +199,8 @@ async def update_source(
         "   extractor_module = $4,"
         "   credentials_ref = $5,"
         "   config_json = $6,"
-        "   reliability_weight = $7"
+        "   reliability_weight = $7,"
+        "   extraction_instructions = $9"
         " WHERE slug = $1 AND user_id = $8"
         " RETURNING *",
         slug,
@@ -207,6 +211,7 @@ async def update_source(
         config_param,
         reliability_weight,
         user_id,
+        extraction_instructions,
     )
     return dict(row) if row is not None else None
 
@@ -282,4 +287,32 @@ def validate_config_json(source_type: str, config_json: dict | None) -> str | No
         # superset of the signal_sources source_type DB CHECK, so no valid type is rejected.
         return f"unsupported source_type {source_type!r}"
 
+    return None
+
+
+EXTRACTION_INSTRUCTIONS_MAX_CHARS = 16_000
+
+
+def is_mediated_source_type(source_type: str) -> bool:
+    # The only "mediated" test in ingest: a prefix, never a list of types.
+    return source_type.startswith("mediated_")
+
+
+def normalize_extraction_instructions(text: str) -> str:
+    """Whitespace-only reads as empty; any other text is kept verbatim."""
+    return text if text.strip() else ""
+
+
+def validate_extraction_instructions(source_type: str, text: str, *, require: bool) -> str | None:
+    """Error for already-normalized instructions on `source_type`, else None."""
+    if len(text) > EXTRACTION_INSTRUCTIONS_MAX_CHARS:
+        return (
+            f"extraction_instructions must be at most {EXTRACTION_INSTRUCTIONS_MAX_CHARS}"
+            " characters"
+        )
+    mediated = is_mediated_source_type(source_type)
+    if mediated and require and text == "":
+        return f"{source_type} source requires non-empty extraction_instructions"
+    if not mediated and text != "":
+        return f"extraction_instructions is only allowed on mediated_* sources, not {source_type}"
     return None

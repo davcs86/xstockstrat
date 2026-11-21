@@ -38,3 +38,12 @@ Feature: fix-fundsignal-scoring-correctness (bug fix)
     Then the row's valid_until is no later than the retraction time
     And QuerySignals with an active window no longer returns it
     And a real computed 0.5 signal for a symbol with fundamentals data stays active
+
+  # guards: docs/reports/2026-10-21-analysis-zero-conviction-read-as-neutral-defect.md
+  # extends: services/xstockstrat-ingest/acceptance/mcp-client-signal-source.feature @AC-4 @feature-166 (design.md § Business Rules Touched)
+  @AC-5 @regression
+  Scenario: An mcp_client item with an explicit conviction of 0.0 is ingested as 0.0
+    Given an active "mcp_client" source whose tool returns one item with symbol "AAPL", direction "buy" and conviction 0.0
+    When xstockstrat-ingest runs a query cycle for that source
+    Then IngestSignal is invoked with an ExternalSignal of conviction 0.0 and conviction_provided true
+    And the signal is stored with conviction 0, not NULL
