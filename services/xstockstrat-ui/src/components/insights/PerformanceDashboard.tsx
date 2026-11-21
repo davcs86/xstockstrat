@@ -97,7 +97,11 @@ function PerformanceDashboardInner() {
 
     // Rolling 30-day Sharpe: returns over the last-30-calendar-day slice of the selected window.
     const anchorMs = endMs ?? windowed[windowed.length - 1]?.occurredAtMs ?? Date.now();
-    const sharpeTrades = filterByWindow(windowed, anchorMs - SHARPE_LOOKBACK_DAYS * MS_PER_DAY, endMs);
+    const sharpeTrades = filterByWindow(
+      windowed,
+      anchorMs - SHARPE_LOOKBACK_DAYS * MS_PER_DAY,
+      endMs,
+    );
     const sharpe = rollingSharpe(dailyReturns(buildEquityCurve(sharpeTrades)), riskFreeAnnual);
 
     return { curve, drawdown: maxDrawdown(curve), sharpe, stats: summaryStats(windowed) };
@@ -180,13 +184,11 @@ function PerformanceDashboardInner() {
             />
             <StatTile
               label="Avg return / trade"
-              value={stats.avgReturnPct === null ? '—' : `${(stats.avgReturnPct * 100).toFixed(2)}%`}
+              value={
+                stats.avgReturnPct === null ? '—' : `${(stats.avgReturnPct * 100).toFixed(2)}%`
+              }
               tone={
-                stats.avgReturnPct === null
-                  ? undefined
-                  : stats.avgReturnPct >= 0
-                    ? 'gain'
-                    : 'loss'
+                stats.avgReturnPct === null ? undefined : stats.avgReturnPct >= 0 ? 'gain' : 'loss'
               }
             />
             <StatTile
@@ -266,7 +268,10 @@ function PerformanceDashboardInner() {
                     Not available — not enough return variance in this window.
                   </p>
                 ) : (
-                  <p data-testid="sharpe-value" className="font-mono text-3xl font-semibold tabular-nums">
+                  <p
+                    data-testid="sharpe-value"
+                    className="font-mono text-3xl font-semibold tabular-nums"
+                  >
                     {sharpe.toFixed(2)}
                   </p>
                 )}

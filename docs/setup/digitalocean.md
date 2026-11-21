@@ -428,7 +428,7 @@ Both apps reference the same cluster (`xstockstrat`) but with different `db_name
 | `xstockstrat-staging` | `xstockstrat` | `xstockstrat-staging` |
 | `xstockstrat-production` | `xstockstrat` | `xstockstrat-production` |
 
-The app specs already declare `cluster_name: xstockstrat` and `db_name` for each environment, plus a top-level `vpc: id: YOUR_VPC_ID` that the deploy workflows fill from the cluster's VPC (`scripts/do-db-cluster.sh lookup`). Removing `vpc:` from a spec detaches the app, so the spec always carries it. The cluster's trusted sources must also list each app: `prod-up` adds the new prod app and `prod-down` removes it; the staging app is added once (Step 5). Don't run `scripts/db-connect.sh` while `prod-up`/`prod-down` runs — every `doctl databases firewalls append`/`remove` rewrites the whole rule list.
+The app specs already declare `cluster_name: xstockstrat` and `db_name` for each environment, plus a top-level `vpc: id: YOUR_VPC_ID` that the deploy workflows fill from the cluster's VPC (`scripts/do-db-cluster.sh lookup`). Removing `vpc:` from a spec detaches the app, so the spec always carries it. The cluster's trusted sources must also list each app: `prod-up` adds the new prod app and `prod-down` removes it; the staging app is added once (Step 5). Don't run `scripts/db-connect.py` while `prod-up`/`prod-down` runs — every `doctl databases firewalls append`/`remove` rewrites the whole rule list.
 
 > **Connection pooling (both environments).** Because both environments share one small cluster (~22
 > usable connections), the six stateless-query Go/Python services connect through a **PgBouncer

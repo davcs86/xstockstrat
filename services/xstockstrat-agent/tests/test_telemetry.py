@@ -7,8 +7,28 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 
-def test_build_resource_omits_trading_mode(monkeypatch):
+@pytest.mark.parametrize(
+    ("host_provider", "want", "service_name"),
+    [
+        (None, "unknown", "agent"),
+        ("aws", "unknown", "agent"),
+        ("Homelab", "unknown", "agent"),
+        ("homelab", "homelab", "agent"),
+        ("digitalocean", "digitalocean", None),
+    ],
+    ids=["unset", "aws", "Homelab", "homelab", "digitalocean-default-name"],
+)
+def test_build_resource_omits_trading_mode(monkeypatch, host_provider, want, service_name):
+    # Feature 332: host.provider accepts only the exact lowercase target names.
     monkeypatch.setenv("TRADING_MODE", "paper")
+    if host_provider is None:
+        monkeypatch.delenv("HOST_PROVIDER", raising=False)
+    else:
+        monkeypatch.setenv("HOST_PROVIDER", host_provider)
+    if service_name is None:
+        monkeypatch.delenv("SERVICE_NAME", raising=False)
+    else:
+        monkeypatch.setenv("SERVICE_NAME", service_name)
     from app.telemetry import _build_resource
 
     attrs = _build_resource().attributes
@@ -16,6 +36,8 @@ def test_build_resource_omits_trading_mode(monkeypatch):
     assert "service.name" in attrs
     assert "deployment.environment" in attrs
     assert attrs["platform"] == "xstockstrat"
+    assert attrs["host.provider"] == want
+    assert attrs["service.instance.id"] == f"{want}-{attrs['service.name']}"
 
 
 def test_init_telemetry_non_blocking_on_error(monkeypatch):
@@ -95,6 +117,7 @@ def test_init_logs_export_failure(otel_reset, monkeypatch, caplog):
 
 # ---- Feature 274: metrics + logs export, rpc.server.duration, cancel status, flush ----
 
+import json  # noqa: E402
 import os  # noqa: E402
 import pathlib  # noqa: E402
 import signal  # noqa: E402
@@ -102,6 +125,9 @@ import subprocess  # noqa: E402
 import sys  # noqa: E402
 
 SERVICE_DIR = pathlib.Path(__file__).resolve().parent.parent
+VECTORS = json.loads(
+    (SERVICE_DIR.parent.parent / "scripts" / "testdata" / "rpc-status-vectors.json").read_text()
+)
 AUTH = "Basic dGVzdDprZXk="
 HEADER_FORMS = ["Authorization=Basic dGVzdDprZXk=", "Authorization=Basic%20dGVzdDprZXk%3D"]
 
@@ -142,19 +168,25 @@ def _flush_all():
 
 @pytest.mark.parametrize("headers", HEADER_FORMS)
 def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, headers):
-    # AC-19 (extends feature 226 AC-1) + AC-10 indicators row.
-    from opentelemetry import metrics
+    # AC-19 (extends 226 AC-1) + AC-10 row; 332 AC-1 (Python row) + 336 AC-1:
+    # host.provider and the provider-prefixed id on every signal.
+    from opentelemetry import metrics, trace
     from opentelemetry.proto.collector.logs.v1 import logs_service_pb2
     from opentelemetry.proto.collector.metrics.v1 import metrics_service_pb2
+    from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
 
     from app.telemetry import init_telemetry
 
+    monkeypatch.setenv("HOST_PROVIDER", "homelab")
+    monkeypatch.setenv("SERVICE_NAME", "agent")
     srv, seen = _start_body_receiver()
     try:
         _enable(monkeypatch, srv, headers)
         init_telemetry()
         metrics.get_meter("t").create_counter("t.count").add(1)
         logging.getLogger("t").warning("hello bridge")
+        with trace.get_tracer("t").start_as_current_span("s"):
+            pass
         _flush_all()
     finally:
         srv.shutdown()
@@ -166,11 +198,69 @@ def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, he
     metrics_req.ParseFromString(by_path["/otlp/v1/metrics"][1])
     logs_req = logs_service_pb2.ExportLogsServiceRequest()
     logs_req.ParseFromString(by_path["/otlp/v1/logs"][1])
-    for resource in (metrics_req.resource_metrics[0].resource, logs_req.resource_logs[0].resource):
+    trace_req = trace_service_pb2.ExportTraceServiceRequest()
+    trace_req.ParseFromString(by_path["/otlp/v1/traces"][1])
+    for resource in (
+        metrics_req.resource_metrics[0].resource,
+        logs_req.resource_logs[0].resource,
+        trace_req.resource_spans[0].resource,
+    ):
         res = {a.key: a.value.string_value for a in resource.attributes}
         assert res["platform"] == "xstockstrat"
         assert res["service.name"] and res["deployment.environment"]
         assert "trading_mode" not in res
+        assert res["host.provider"] == "homelab"
+        assert res["service.instance.id"] == "homelab-agent"
+
+    # @AC-2: every exported datapoint carries the provider, equal to the resource's (D-6).
+    metric_res = {
+        a.key: a.value.string_value for a in metrics_req.resource_metrics[0].resource.attributes
+    }
+    datapoints = [
+        dp
+        for rm in metrics_req.resource_metrics
+        for sm in rm.scope_metrics
+        for m in sm.metrics
+        for dp in (m.sum.data_points or m.gauge.data_points or m.histogram.data_points)
+    ]
+    assert datapoints
+    for dp in datapoints:
+        got = {a.key: a.value.string_value for a in dp.attributes}
+        assert got.get("host.provider") == metric_res["host.provider"], got
+
+
+def test_mcp_tool_duration_datapoint_keys_gain_only_host_provider(otel_reset, monkeypatch):
+    # @AC-18: over the real init pipeline the keys are the two existing plus host.provider.
+    import time
+
+    from opentelemetry.proto.collector.metrics.v1 import metrics_service_pb2
+
+    from app.telemetry import init_telemetry
+    from app.tool_metrics import ToolMetricsMiddleware
+
+    monkeypatch.setenv("HOST_PROVIDER", "homelab")
+    srv, seen = _start_body_receiver()
+    try:
+        _enable(monkeypatch, srv)
+        init_telemetry()
+        ToolMetricsMiddleware(server=None)._record("get_config", "ok", time.perf_counter())
+        _flush_all()
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    keys = set()
+    for path, _auth, body in seen:
+        if path != "/otlp/v1/metrics":
+            continue
+        req = metrics_service_pb2.ExportMetricsServiceRequest()
+        req.ParseFromString(body)
+        for rm in req.resource_metrics:
+            for sm in rm.scope_metrics:
+                for m in sm.metrics:
+                    if m.name == "mcp.tool.duration":
+                        for dp in m.histogram.data_points:
+                            keys.add(frozenset(a.key for a in dp.attributes))
+    assert keys == {frozenset({"gen_ai.tool.name", "outcome", "host.provider"})}
 
 
 def test_handler_is_instrumentation_logging_handler(otel_reset, monkeypatch):
@@ -187,6 +277,37 @@ def test_handler_is_instrumentation_logging_handler(otel_reset, monkeypatch):
         srv.shutdown()
         srv.server_close()
     assert [type(h).__module__ for h in added] == ["opentelemetry.instrumentation.logging.handler"]
+
+
+@pytest.mark.parametrize(
+    ("value", "want"),
+    [(None, "SDK default"), ("http://otel-collector:4318", "http://otel-collector:4318"), ("", "")],
+    ids=["unset", "set", "empty"],
+)
+def test_startup_log_names_effective_endpoint(otel_reset, monkeypatch, caplog, value, want):
+    # AC-1: an unset base endpoint is logged as "SDK default", never None.
+    from app.telemetry import init_telemetry
+
+    srv, _ = _start_body_receiver()
+    try:
+        monkeypatch.setenv("OTEL_ENABLED", "true")
+        for sig in ("traces", "metrics", "logs"):
+            monkeypatch.setenv(
+                f"OTEL_EXPORTER_OTLP_{sig.upper()}_ENDPOINT",
+                f"http://127.0.0.1:{srv.server_port}/otlp/v1/{sig}",
+            )
+        if value is None:
+            monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+        else:
+            monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", value)
+        with caplog.at_level(logging.INFO):
+            init_telemetry()
+        _flush_all()
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    [rec] = [r for r in caplog.records if r.getMessage() == "OTel tracing initialised"]
+    assert rec.endpoint == want
 
 
 def test_export_failure_visible_on_stdout_not_exported(otel_reset, monkeypatch, caplog):
@@ -334,3 +455,80 @@ def test_agent_resource_and_warn_log_correlated_to_span(otel_reset, monkeypatch)
     assert len(recs) == 1
     assert recs[0].severity_text == "WARN"
     assert int.from_bytes(recs[0].trace_id, "big") == trace_id
+
+
+# ---- Feature 360: the agent serves one gRPC RPC, so it records rpc.server.duration too ----
+
+
+def _duration_points(reader):
+    data = reader.get_metrics_data()
+    points = []
+    for rm in data.resource_metrics if data else []:
+        for sm in rm.scope_metrics:
+            for m in sm.metrics:
+                if m.name == "rpc.server.duration":
+                    assert m.unit == "ms"
+                    points.extend(m.data.data_points)
+    return points
+
+
+@pytest.mark.parametrize(
+    "vector",
+    [v for v in VECTORS["vectors"] if "python" in v["applies_to"]],
+    ids=lambda v: v["name"],
+)
+def test_rpc_duration_status_vectors(metric_reader, vector):
+    # Shared status-derivation vectors; buckets are the shared boundaries.
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.trace import SpanKind, Status, StatusCode
+
+    from app.telemetry import _make_rpc_duration_processor
+
+    tp = TracerProvider()
+    tp.add_span_processor(_make_rpc_duration_processor())
+    spec = vector["span"]
+    span = tp.get_tracer("t").start_span(
+        "s", kind=getattr(SpanKind, spec["kind"]), attributes=spec["attributes"]
+    )
+    for ev in spec["events"]:
+        span.add_event(ev["name"], ev["attributes"])
+    if spec["status"] == "ERROR":
+        span.set_status(Status(StatusCode.ERROR))
+    span.end()
+    points = _duration_points(metric_reader)
+    assert len(points) == 1
+    assert points[0].attributes["rpc.grpc.status_code"] == vector["expected_code"]
+    assert isinstance(points[0].attributes["rpc.grpc.status_code"], int)
+    assert points[0].attributes["rpc.system"] == "grpc"
+    assert list(points[0].explicit_bounds) == VECTORS["bucket_boundaries_ms"]
+
+
+def test_rpc_duration_ignores_non_server_or_non_grpc_spans(metric_reader):
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.trace import SpanKind
+
+    from app.telemetry import _make_rpc_duration_processor
+
+    tp = TracerProvider()
+    tp.add_span_processor(_make_rpc_duration_processor())
+    tr = tp.get_tracer("t")
+    tr.start_span("c", kind=SpanKind.CLIENT, attributes={"rpc.system": "grpc"}).end()
+    tr.start_span("h", kind=SpanKind.SERVER, attributes={"rpc.system": "http"}).end()
+    assert _duration_points(metric_reader) == []
+
+
+def test_init_instruments_the_grpc_server(otel_reset, monkeypatch):
+    from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorServer
+
+    from app.telemetry import init_telemetry
+
+    calls = []
+    monkeypatch.setattr(GrpcAioInstrumentorServer, "instrument", lambda self, **kw: calls.append(1))
+    srv, _ = _start_body_receiver()
+    _enable(monkeypatch, srv)
+    try:
+        init_telemetry()
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert calls == [1]

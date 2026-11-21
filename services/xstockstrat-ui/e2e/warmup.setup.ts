@@ -34,6 +34,7 @@ const ROUTES = [
   '/insights/watchlists',
   '/config-ui',
   '/config-ui/sources',
+  '/config-ui/templates',
   '/accounts/authorized-apps',
   '/accounts/mcp-tools',
 ];

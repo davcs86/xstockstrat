@@ -52,6 +52,30 @@ psql "<connection-uri>?sslmode=require" -v ON_ERROR_STOP=1 -c "SELECT count(*) F
 If direct network egress to the cluster is restricted, tunnel through a bastion / droplet on the
 VPC first (SSH local port-forward), then point `psql` at the forwarded local port.
 
+## Homelab database
+
+The homelab Postgres is not a DO cluster (no `doctl`); it is reachable only over the tailnet.
+
+| | staging | production |
+|---|---|---|
+| Host | `db.ts.natanddavehouse.com` | same |
+| Database | `xstockstrat-staging` | `xstockstrat-production` |
+| Role | `xstockstrat_staging` | `xstockstrat_production` |
+| Password | `homelab.DB_PASSWORD` in `secrets/staging.enc.yaml` | same key in `secrets/production.enc.yaml` |
+
+Ports: **`:5432`** direct (admin SQL, migrations) and **`:6432`** PgBouncer transaction pool (the six
+stateless services only). TLS is `sslmode=require`; the CA is `homelab.DB_CA_CERT` (one CA for both files).
+Operator age-key setup → `docs/runbooks/sops-secrets.md`.
+
+```bash
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/xstockstrat-operator.agekey
+PGPASSWORD="$(sops decrypt --extract '["homelab"]["DB_PASSWORD"]' secrets/staging.enc.yaml)" \
+  psql "host=db.ts.natanddavehouse.com port=5432 dbname=xstockstrat-staging user=xstockstrat_staging sslmode=require"
+```
+
+Pass the password via `PGPASSWORD`, not a URI, so special characters need no percent-encoding. For
+`verify-full`, write the CA to a file and add `sslrootcert=<file>`.
+
 ## Safety
 
 - Prefer read-only inspection; wrap any mutation in an explicit transaction and review before `COMMIT`.

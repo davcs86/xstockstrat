@@ -15,6 +15,11 @@ type WirePosition struct {
 	Qty, Avg, Current float64
 }
 
+// SetWatchlistCreateErr makes the service's fake watchlist store fail Create with err.
+func SetWatchlistCreateErr(svc *PortfolioService, err error) {
+	svc.watchlists.(*fakeWatchlistStore).createErr = err
+}
+
 // NewWireTestService builds a PortfolioService over pgxmock positions and the given ledger.
 func NewWireTestService(t *testing.T, ledger ledgerv1.LedgerServiceClient, positions ...WirePosition) *PortfolioService {
 	t.Helper()
@@ -33,6 +38,7 @@ func NewWireTestService(t *testing.T, ledger ledgerv1.LedgerServiceClient, posit
 }
 
 var (
-	CtxWithUser = ctxWithUser
-	Guard       = guard
+	CtxWithUser            = ctxWithUser
+	Guard                  = guard
+	WatchlistNameUniqueIdx = watchlistNameUniqueIdx
 )

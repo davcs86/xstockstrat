@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -177,6 +178,46 @@ func TestGetFundamentalsMulti_OneQuoteCall(t *testing.T) {
 	// Order preserved.
 	if out[0].Symbol != "AAPL" || out[1].Symbol != "MSFT" || out[2].Symbol != "GOOG" {
 		t.Fatalf("order not preserved: %v %v %v", out[0].Symbol, out[1].Symbol, out[2].Symbol)
+	}
+}
+
+// @AC-2 (feature 340): FMP's returnOnEquityTTM is already a fraction and is served unscaled on both paths.
+func TestFundamentals_ROEFractionUnscaled_AC2_feature340(t *testing.T) {
+	rt := &recordingRT{respond: func(path string) (int, string) {
+		switch path {
+		case "/stable/quote":
+			return 200, `[{"symbol":"LYFT","price":1}]`
+		case "/stable/ratios-ttm":
+			return 200, `[{"returnOnEquityTTM":0.0366}]`
+		case "/stable/profile":
+			return 200, `[{"currency":"USD"}]`
+		}
+		return 404, `[]`
+	}}
+	c := newTestClient([]string{"core", "extended"}, rt)
+	cases := []struct {
+		name  string
+		fetch func() (*source.Fundamentals, error)
+	}{
+		{"GetFundamentals", func() (*source.Fundamentals, error) { return c.GetFundamentals(context.Background(), "LYFT") }},
+		{"GetFundamentalsMulti", func() (*source.Fundamentals, error) {
+			out, err := c.GetFundamentalsMulti(context.Background(), []string{"LYFT"})
+			if err != nil || len(out) != 1 {
+				return nil, errors.Join(err, errors.New("want exactly one result"))
+			}
+			return out[0], nil
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f, err := tc.fetch()
+			if err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			if got := derefF(t, "ROE", f.ROE); got != 0.0366 {
+				t.Fatalf("roe = %v, want 0.0366 unscaled", got)
+			}
+		})
 	}
 }
 
@@ -683,4 +724,33 @@ func TestVendorMetrics_FMPCapAndThrottleRecordNoDuration_AC13(t *testing.T) {
 			t.Fatalf("throttle exit: duration samples = %d, profile calls = %d, want 0 and 0", n, rt.count("/stable/profile"))
 		}
 	})
+}
+
+type f347ThrottledRT struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (rt *f347ThrottledRT) RoundTrip(*http.Request) (*http.Response, error) {
+	rt.mu.Lock()
+	rt.calls++
+	rt.mu.Unlock()
+	h := http.Header{}
+	h.Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(2*time.Second).Unix(), 10))
+	return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader(``)), Header: h}, nil
+}
+
+// Feature 347 @AC-11 (guard): the Alpaca 429 retry never reaches FMP. Red if a retry is added to the FMP client.
+func TestFetchSector_429IsNotRetried_F347_AC11(t *testing.T) {
+	rt := &f347ThrottledRT{}
+	c := gatewayClient(rt, 0, 3, nil)
+	if _, err := c.FetchSector(context.Background(), "XYZ"); err == nil {
+		t.Fatal("expected an error on HTTP 429")
+	}
+	if rt.calls != 1 {
+		t.Fatalf("FMP attempts = %d, want exactly 1", rt.calls)
+	}
+	if used, _ := c.BudgetSnapshot(); used != 0 {
+		t.Fatalf("used = %d after a 429, want 0 (reservation refunded)", used)
+	}
 }

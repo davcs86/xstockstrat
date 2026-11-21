@@ -24,6 +24,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	collogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	colmetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	coltrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -41,25 +44,49 @@ const (
 
 // TestNewResourceOmitsTradingMode is the feature-171 regression: the built OTel Resource must not
 // carry the removed trading_mode attribute (redundant with deployment.environment) while keeping the
-// service.name / deployment.environment / platform trio.
+// service.name / deployment.environment / platform trio. Feature 332 adds the host.provider
+// normalisation table (exact lowercase match, anything else → unknown).
 func TestNewResourceOmitsTradingMode(t *testing.T) {
 	t.Setenv("APPLICATION_ENV", "staging")
 	t.Setenv("TRADING_MODE", "paper")
-	res, err := newResource(context.Background())
-	if err != nil {
-		t.Fatalf("newResource: %v", err)
-	}
-	got := map[string]bool{}
-	for _, kv := range res.Attributes() {
-		got[string(kv.Key)] = true
-	}
-	if got["trading_mode"] {
-		t.Error("trading_mode attribute must be removed")
-	}
-	for _, want := range []string{"service.name", "deployment.environment", "platform"} {
-		if !got[want] {
-			t.Errorf("missing attribute %q", want)
-		}
+	for _, tc := range []struct {
+		name, env, want string
+		unset           bool
+	}{
+		{"unset", "", "unknown", true},
+		{"empty", "", "unknown", false},
+		{"unrecognised", "aws", "unknown", false},
+		{"wrong case", "Homelab", "unknown", false},
+		{"homelab", "homelab", "homelab", false},
+		{"digitalocean", "digitalocean", "digitalocean", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("HOST_PROVIDER", tc.env)
+			if tc.unset {
+				if err := os.Unsetenv("HOST_PROVIDER"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			res, err := newResource(context.Background(), hostProvider())
+			if err != nil {
+				t.Fatalf("newResource: %v", err)
+			}
+			got := map[string]string{}
+			for _, kv := range res.Attributes() {
+				got[string(kv.Key)] = kv.Value.String()
+			}
+			if _, ok := got["trading_mode"]; ok {
+				t.Error("trading_mode attribute must be removed")
+			}
+			for _, want := range []string{"service.name", "deployment.environment", "platform"} {
+				if _, ok := got[want]; !ok {
+					t.Errorf("missing attribute %q", want)
+				}
+			}
+			if got["host.provider"] != tc.want {
+				t.Errorf("host.provider = %q, want %q", got["host.provider"], tc.want)
+			}
+		})
 	}
 }
 
@@ -230,6 +257,151 @@ func TestExportedMetricsCarryResource(t *testing.T) {
 	}
 	if _, ok := attrs["trading_mode"]; ok {
 		t.Error("trading_mode attribute must not be exported")
+	}
+}
+
+// exportedResource decodes the first request the receiver got on path and flattens its resource
+// attributes.
+func exportedResource(t *testing.T, rc *otlpReceiver, path string) map[string]string {
+	t.Helper()
+	reqs := rc.find(path)
+	if len(reqs) == 0 {
+		t.Fatalf("receiver got no POST %s", path)
+	}
+	var resources []*resourcepb.Resource
+	switch path {
+	case "/otlp/v1/traces":
+		var msg coltrace.ExportTraceServiceRequest
+		if err := proto.Unmarshal(reqs[0].body, &msg); err != nil {
+			t.Fatalf("decode %s body: %v", path, err)
+		}
+		for _, r := range msg.GetResourceSpans() {
+			resources = append(resources, r.GetResource())
+		}
+	case "/otlp/v1/metrics":
+		var msg colmetrics.ExportMetricsServiceRequest
+		if err := proto.Unmarshal(reqs[0].body, &msg); err != nil {
+			t.Fatalf("decode %s body: %v", path, err)
+		}
+		for _, r := range msg.GetResourceMetrics() {
+			resources = append(resources, r.GetResource())
+		}
+	case "/otlp/v1/logs":
+		var msg collogs.ExportLogsServiceRequest
+		if err := proto.Unmarshal(reqs[0].body, &msg); err != nil {
+			t.Fatalf("decode %s body: %v", path, err)
+		}
+		for _, r := range msg.GetResourceLogs() {
+			resources = append(resources, r.GetResource())
+		}
+	default:
+		t.Fatalf("unknown OTLP path %s", path)
+	}
+	attrs := map[string]string{}
+	for _, r := range resources {
+		for _, kv := range r.GetAttributes() {
+			attrs[kv.GetKey()] = kv.GetValue().GetStringValue()
+		}
+	}
+	return attrs
+}
+
+// exportedDatapoints decodes every /otlp/v1/metrics request the receiver got and returns, per metric
+// name, the attributes of each datapoint (empty when nothing was exported yet).
+func exportedDatapoints(t *testing.T, rc *otlpReceiver) map[string][]map[string]string {
+	t.Helper()
+	out := map[string][]map[string]string{}
+	flat := func(kvs []*commonpb.KeyValue) map[string]string {
+		m := map[string]string{}
+		for _, kv := range kvs {
+			m[kv.GetKey()] = kv.GetValue().GetStringValue()
+		}
+		return m
+	}
+	for _, req := range rc.find("/otlp/v1/metrics") {
+		var msg colmetrics.ExportMetricsServiceRequest
+		if err := proto.Unmarshal(req.body, &msg); err != nil {
+			t.Fatalf("decode metrics body: %v", err)
+		}
+		for _, rm := range msg.GetResourceMetrics() {
+			for _, sm := range rm.GetScopeMetrics() {
+				for _, m := range sm.GetMetrics() {
+					for _, p := range m.GetGauge().GetDataPoints() {
+						out[m.GetName()] = append(out[m.GetName()], flat(p.GetAttributes()))
+					}
+					for _, p := range m.GetSum().GetDataPoints() {
+						out[m.GetName()] = append(out[m.GetName()], flat(p.GetAttributes()))
+					}
+					for _, p := range m.GetHistogram().GetDataPoints() {
+						out[m.GetName()] = append(out[m.GetName()], flat(p.GetAttributes()))
+					}
+					for _, p := range m.GetExponentialHistogram().GetDataPoints() {
+						out[m.GetName()] = append(out[m.GetName()], flat(p.GetAttributes()))
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+// TestExportedSignalsCarryHostProvider is feature 332 AC-1 / AC-19 (Go rows): traces, metrics and logs
+// all export host.provider and the deterministic <provider>-<service> instance id.
+func TestExportedSignalsCarryHostProvider(t *testing.T) {
+	t.Setenv("HOST_PROVIDER", "homelab")
+	rc := newOTLPReceiver(t, http.StatusOK)
+	_, forceFlush := startTelemetry(t, rc.url(), rawHeaders)
+	_, span := otel.Tracer("t").Start(context.Background(), "s")
+	span.End()
+	counter, _ := otel.Meter("t").Int64Counter("c")
+	counter.Add(context.Background(), 1)
+	slog.New(WrapLogHandler(slog.DiscardHandler)).Info("hello")
+	flush(t, forceFlush)
+
+	want := map[string]string{
+		"host.provider":          "homelab",
+		"service.name":           "marketdata",
+		"deployment.environment": "staging",
+		"platform":               "xstockstrat",
+		"service.instance.id":    "homelab-marketdata",
+	}
+	for _, path := range []string{"/otlp/v1/traces", "/otlp/v1/metrics", "/otlp/v1/logs"} {
+		attrs := exportedResource(t, rc, path)
+		for k, v := range want {
+			if attrs[k] != v {
+				t.Errorf("%s: resource attribute %s = %q, want %q (all: %v)", path, k, attrs[k], v, attrs)
+			}
+		}
+		if _, ok := attrs["trading_mode"]; ok {
+			t.Errorf("%s: trading_mode attribute must not be exported", path)
+		}
+	}
+
+	// @AC-2: every exported datapoint carries the provider, equal to the resource's (D-6).
+	datapoints := exportedDatapoints(t, rc)
+	if len(datapoints["c"]) == 0 {
+		t.Fatalf("no datapoint exported for counter c: %v", datapoints)
+	}
+	for name, pts := range datapoints {
+		for _, p := range pts {
+			if p["host.provider"] != want["host.provider"] {
+				t.Errorf("metric %s datapoint host.provider = %q, want %q (all: %v)", name, p["host.provider"], want["host.provider"], p)
+			}
+		}
+	}
+}
+
+// TestExportedSpanCarriesDigitalOcean is feature 332 AC-2: a DO container exports
+// host.provider=digitalocean and the digitalocean-<service> instance id.
+func TestExportedSpanCarriesDigitalOcean(t *testing.T) {
+	t.Setenv("HOST_PROVIDER", "digitalocean")
+	rc := newOTLPReceiver(t, http.StatusOK)
+	exportOneSpan(t, rc.url(), rawHeaders)
+	attrs := exportedResource(t, rc, "/otlp/v1/traces")
+	for k, v := range map[string]string{"host.provider": "digitalocean", "service.instance.id": "digitalocean-marketdata"} {
+		if attrs[k] != v {
+			t.Errorf("resource attribute %s = %q, want %q (all: %v)", k, attrs[k], v, attrs)
+		}
 	}
 }
 

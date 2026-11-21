@@ -2402,7 +2402,12 @@ exports.ListPortfoliosResponse = {
     },
 };
 function createBaseWatchlistBinding() {
-    return { symbol: "", strategyId: "", source: WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED };
+    return {
+        symbol: "",
+        strategyId: "",
+        source: WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED,
+        delisted: undefined,
+    };
 }
 exports.WatchlistBinding = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -2414,6 +2419,9 @@ exports.WatchlistBinding = {
         }
         if (message.source !== WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED) {
             writer.uint32(24).int32(watchlistEntrySourceToNumber(message.source));
+        }
+        if (message.delisted !== undefined) {
+            common_1.DelistedState.encode(message.delisted, writer.uint32(34).fork()).join();
         }
         return writer;
     },
@@ -2445,6 +2453,13 @@ exports.WatchlistBinding = {
                     message.source = watchlistEntrySourceFromJSON(reader.int32());
                     continue;
                 }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.delisted = common_1.DelistedState.decode(reader, reader.uint32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2464,6 +2479,7 @@ exports.WatchlistBinding = {
             source: isSet(object.source)
                 ? watchlistEntrySourceFromJSON(object.source)
                 : WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED,
+            delisted: isSet(object.delisted) ? common_1.DelistedState.fromJSON(object.delisted) : undefined,
         };
     },
     toJSON(message) {
@@ -2477,6 +2493,9 @@ exports.WatchlistBinding = {
         if (message.source !== WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED) {
             obj.source = watchlistEntrySourceToJSON(message.source);
         }
+        if (message.delisted !== undefined) {
+            obj.delisted = common_1.DelistedState.toJSON(message.delisted);
+        }
         return obj;
     },
     create(base) {
@@ -2487,6 +2506,9 @@ exports.WatchlistBinding = {
         message.symbol = object.symbol ?? "";
         message.strategyId = object.strategyId ?? "";
         message.source = object.source ?? WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED;
+        message.delisted = (object.delisted !== undefined && object.delisted !== null)
+            ? common_1.DelistedState.fromPartial(object.delisted)
+            : undefined;
         return message;
     },
 };
