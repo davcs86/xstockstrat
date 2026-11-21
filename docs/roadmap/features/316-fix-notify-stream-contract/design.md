@@ -2,7 +2,7 @@
 
 **Created**: 2026-11-20
 **Rounds**: 5 (full; termination: approved)
-**Approved by**: operator @ 2026-11-20, under the standing authorisation recorded the same day (context.md, "Session 2026-11-20 — sdd-design"). The round-5 adversary verdict was SOUND, with no Floor breach and no blocking objection.
+**Approved by**: operator @ 2026-11-20, under the standing authorisation recorded the same day (context.md:32, § Decisions › Operator decisions, "Standing authorisation"; the former "Session 2026-11-20 — sdd-design" section was folded into Decisions by distill 4a4d9f13). The round-5 adversary verdict was SOUND, with no Floor breach and no blocking objection.
 **Grounded in**: recon.md
 **Debate register**: debate.md
 
@@ -16,7 +16,7 @@ Line numbers below are recon's (tree `c4fd48b0a`, recon.md:5). They have drifted
 
 ### Step 0: branch sync precondition (D-19)
 
-- `feature/fix-notify-stream-contract` still pins `@grpc/grpc-js` `^1.14.5` (lock 1.14.5). `origin/main-dev` has `^1.14.7` (lock 1.14.7). The spike ran on 1.14.7 only (context.md:588-590).
+- `feature/fix-notify-stream-contract` still pins `@grpc/grpc-js` `^1.14.5` (lock 1.14.5). `origin/main-dev` has `^1.14.7` (lock 1.14.7). The spike ran on 1.14.7 only (context.md:253-255).
 - Sync the branch with `main-dev` before the eviction step starts.
 - Pass condition: `services/xstockstrat-notify/package.json` reads `^1.14.7`, and the `services/xstockstrat-notify` importer block in the root `pnpm-lock.yaml` shows `@grpc/grpc-js` with `version: 1.14.7`.
 - If either check fails, `/sdd-execute` does not start the eviction step.
@@ -36,7 +36,7 @@ Line numbers below are recon's (tree `c4fd48b0a`, recon.md:5). They have drifted
 - Module constant `MAX_QUEUED_ALERTS = 1024`, in messages.
 - In the `emitAlert` loop, inside the `matchesSubscriber` branch and before the write (recon.md:24), check `sub.call.writableLength >= MAX_QUEUED_ALERTS`.
 - The evicting alert is neither written nor counted in `deliveredCount`.
-- The spike confirmed that `writableLength` is a number and a live depth in messages, 1024 at the eviction (context.md:621).
+- The spike confirmed that `writableLength` is a number and a live depth in messages, 1024 at the eviction (context.md:286).
 
 **Eviction (D-15).** All synchronous, reusing the eviction idiom at recon.md:25 and :57:
 
@@ -47,15 +47,15 @@ Line numbers below are recon's (tree `c4fd48b0a`, recon.md:5). They have drifted
 5. `continue`
 
 - The code is the bare numeric `8` with no grpc import (D-13, R-9).
-- The stream ends with `grpc-status: 8` after flushing at most the capped queue (context.md:612-613).
-- The map delete must come before the emit. The spike showed that one write after the emit raises `ERR_STREAM_WRITE_AFTER_END`, and then no status is ever sent (context.md:623).
+- The stream ends with `grpc-status: 8` after flushing at most the capped queue (context.md:277-278).
+- The map delete must come before the emit. The spike showed that one write after the emit raises `ERR_STREAM_WRITE_AFTER_END`, and then no status is ever sent (context.md:288).
 - The teardown is never `call.destroy()` and never a bare `call.end()` (R-10, R-11).
 - The existing write call and its `write_error` catch are unchanged.
 
 **Listeners (D-3, D-14, D-16).** Both listeners at recon.md:28-29 act only when `Map.delete` returns true.
 
 - `'error'`: `if (this.subscribers.delete(subId)) recordStreamEviction('stream_error')`. Our own emit therefore counts no `stream_error`.
-- `'cancelled'`: the disconnect log runs only when the delete removed an entry. On the status path the server emits `finish`, `cancelled`, `close` (context.md:624), so without the guard an evicted subscriber would be logged as a disconnect.
+- `'cancelled'`: the disconnect log runs only when the delete removed an entry. On the status path the server emits `finish`, `cancelled`, `close` (context.md:289), so without the guard an evicted subscriber would be logged as a disconnect.
 
 **Telemetry, docs and records.**
 
@@ -87,9 +87,9 @@ This is the automated check that catches a grpc-js upgrade breaking the status p
 
 ### Spike result the design rests on (D-17, D-18)
 
-- D-7's pass condition, as resettled, is (a) + (f) + (g) on grpc-js 1.14.7, with (e') recorded and (c) dropped. All three hold (context.md:630-642).
-- grpc-js 1.14.5 was not exercised (context.md:590). Step 0 is the mitigation.
-- Right after the teardown, `call.writableEnded === true` and `call.errored === null`. `writableErrored` does not exist in Node (context.md:625).
+- D-7's pass condition, as resettled, is (a) + (f) + (g) on grpc-js 1.14.7, with (e') recorded and (c) dropped. All three hold (context.md:295-307).
+- grpc-js 1.14.5 was not exercised (context.md:255). Step 0 is the mitigation.
+- Right after the teardown, `call.writableEnded === true` and `call.errored === null`. `writableErrored` does not exist in Node (context.md:290).
 
 ### Why the cap is a code constant (F-07, D-4)
 
@@ -97,7 +97,7 @@ The cap is a memory-safety bound with no operator tuning, so it is a code consta
 
 ### Accepted residuals (O-5, O-10)
 
-- **Held queue after eviction.** An evicted stream's queue is held until the peer reads or cancels: up to 1024 alerts plus the h2 window. The spike confirmed this for every teardown candidate (context.md:616-617).
+- **Held queue after eviction.** An evicted stream's queue is held until the peer reads or cancels: up to 1024 alerts plus the h2 window. The spike confirmed this for every teardown candidate (context.md:281-282).
 - **No visibility.** That held queue is invisible to the `notify.stream.subscribers` gauge, because the entry is already out of the map. With the guarded `'cancelled'` listener, nothing logs when the queue is finally freed. No instrument or log is added for it (C-18).
 - **No keepalive.** notify sets none (`src/index.ts:48`). Exposure is linear in stalled streams and limited by mTLS to authorised peers.
 - **Lost alerts.** Alerts emitted between eviction and reconnect are lost from the live view. Reconnect does not page history.
@@ -114,8 +114,8 @@ The cap is a memory-safety bound with no operator tuning, so it is a code consta
 - `R-7` Server heap growth as the spike's eviction pass criterion — rejected because it is GC-noisy; `writableLength` ≤ 1024 with no post-eviction write is the deterministic check.
 - `R-8` `emit('error')` teardown plus a hard-kill timer that drops the connection when no finish or cancel arrives — rejected because every hard-kill path goes through the private internals that R-4 locks.
 - `R-9` Importing grpc into `notifyServiceImpl.ts` to use `grpc.status.RESOURCE_EXHAUSTED` — rejected because it contradicts the recorded house style; bare `8` matches the file.
-- `R-10` `call.destroy(err)` as the eviction teardown — rejected because on grpc-js 1.14.7 it sends no trailers and no RST, strands the recovered client with no status, and drops the 1023 queued alerts (context.md:612-613, :634).
-- `R-11` Bare `call.end()`, with or without trailing metadata, as the eviction teardown — rejected because it reports `grpc-status: 0` OK, a false clean finish on an endless push stream (context.md:612-613). The internal `end()` reached through `emit('error')` is permitted.
+- `R-10` `call.destroy(err)` as the eviction teardown — rejected because on grpc-js 1.14.7 it sends no trailers and no RST, strands the recovered client with no status, and drops the 1023 queued alerts (context.md:277-278, :299).
+- `R-11` Bare `call.end()`, with or without trailing metadata, as the eviction teardown — rejected because it reports `grpc-status: 0` OK, a false clean finish on an endless push stream (context.md:277-278). The internal `end()` reached through `emit('error')` is permitted.
 - `R-12` An exact pin of `@grpc/grpc-js` 1.14.7 for notify — rejected because it diverges from the platform-wide `^1.14.7` and blocks security patches; the Step 0 lockfile check and the NOTIFY invariant cover the risk.
 
 `R-2` (`call.end()` as the eviction teardown) is not listed: the operator reopened it at round 5, and `R-11` is its amended form.
@@ -141,7 +141,7 @@ The cap is a memory-safety bound with no operator tuning, so it is a code consta
 - `C-15` — honored by: AC-1 and AC-2 each get a test; the AC-2 Given is amended in the same step as the trigger it describes; the real-grpc-js test covers spike conditions (f) and (g).
 - `C-16` — honored by: every affected `@AC-*` is listed below as PRESERVE or EXTEND. No guarantee is broken, so there is no CHANGE line.
 - `C-18` — honored by: one constant, one widened union and one guarded listener pair; no new instrument, no config key, no hard-kill timer, and the teardown catch logs a warning instead of swallowing.
-- `F-04` — honored: the teardown API and `writableLength` were verified by the spike on real grpc-js 1.14.7 before `/sdd-spec` (context.md:581-708); no private grpc-js internals are used (R-4, R-8).
+- `F-04` — honored: the teardown API and `writableLength` were verified by the spike on real grpc-js 1.14.7 before `/sdd-spec` (context.md:246-373); no private grpc-js internals are used (R-4, R-8).
 - `F-07` — honored: the cap is a memory-safety bound, not an operator-tunable config value, so no config value is hardcoded in place of a key (D-4).
 - `P-02` — honored by: proposer and adversary saw only the orchestrator's synthesized state in every round.
 - `P-03` — honored by: the failed D-7 pass condition went back to the operator through petitions P-1..P-4 instead of being worked around.
@@ -153,7 +153,7 @@ The cap is a memory-safety bound with no operator tuning, so it is a code consta
 There is no CHANGE line. The operator-decision reference for the one EXTEND that alters client-visible behaviour is given on its line.
 
 - PRESERVE `@AC-1` "a severity-filtered subscriber receives alerts matched by the string enum form" (`docs/roadmap/features/316-fix-notify-stream-contract/acceptance.feature`) — not regressed by: the string compare is unchanged and the positive test is added.
-- EXTEND `@AC-2` "a subscriber whose stream stops draining is evicted" (`docs/roadmap/features/316-fix-notify-stream-contract/acceptance.feature`) — new case added: the evicted client receives a terminal `RESOURCE_EXHAUSTED` status after the capped queue flushes, via `emit('error')`. Covered by the operator ruling of 2026-11-20 that granted petitions P-1..P-4 (context.md, "Session 2026-11-20 — sdd-design").
+- EXTEND `@AC-2` "a subscriber whose stream stops draining is evicted" (`docs/roadmap/features/316-fix-notify-stream-contract/acceptance.feature`) — new case added: the evicted client receives a terminal `RESOURCE_EXHAUSTED` status after the capped queue flushes, via `emit('error')`. Covered by the operator ruling of 2026-11-20 that granted petitions P-1..P-4 (context.md:27-30, § Decisions › Operator decisions, "Reopen ruling"; the former "Session 2026-11-20 — sdd-design" section was folded into Decisions by distill 4a4d9f13).
 - EXTEND `@AC-2` (same scenario) — new case added: the Given is amended to the queued-write-length trigger (D-8). No separate operator ruling; it narrows the scenario to the mechanism the ruling approved.
 - EXTEND `@AC-32` "A failed stream write evicts the subscriber visibly" (`services/xstockstrat-notify/acceptance/signal-map-instrumentation.feature`) — new case added: eviction reasons gain `backpressure`, and `stream_error` is counted only when the listener removes the entry. The `write_error` case and the gauge are unchanged. No separate operator ruling.
 - PRESERVE `@AC-4` "A Slack webhook timeout does not delay or drop the primary stream" (`services/xstockstrat-notify/acceptance/notify-external-fanout.feature`) — not regressed by: the order of the primary stream and the `queueMicrotask` side-channels is unchanged.
