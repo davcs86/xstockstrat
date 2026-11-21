@@ -145,6 +145,26 @@ Actions taken: allocator reserved 361/362; `main-dev` merged into all 20 `implem
 (17 clean; 314, 315 and 316 hit append-only ledger conflicts in `docs/roadmap/ledger/{insights,fails}.md`,
 resolved as a union of both sides); 10 oversized `context.md` files sent through `/sdd-distill`.
 
+Distill results (bytes before → after; limit 65,536): 309 72,335→48,792 · 311 361,096→62,591 · 312 66,392→45,274 ·
+313 98,195→40,486 · 314 75,253→53,257 · 316 118,771→58,998 · 324 79,963→38,967 · 325 112,121→44,962 ·
+327 73,936→50,614 · 328 74,753→52,484. Each file keeps exactly one `sdd-batch-design-state` fence (the last,
+byte-identical to the original; checked by script on `origin`).
+
+Caveats on the distills:
+- **Self-verified.** The distill agents had no subagent tool, so the `context-distiller` plan and the
+  adversarial verify were done by the same agent (script + manual read), not an independent pass. Rerun a
+  real verify if you want one.
+- **311 headroom is 2,945 bytes.** The next sessions pushed past 65,536 will need another `/sdd-distill`
+  (the round-2..10 fences are gone; the 26 KB round-11 fence, the 2 recent sessions and 4 verbatim operator
+  ruling sessions are the ~44 KB floor).
+- **Stale `context.md:N` cites.** 311's and 316's `design.md`, `debate.md` and `implementation-spec.md` cite
+  the old `context.md` line numbers. 316's spike session moved by a constant offset (new = old − 335; banner
+  at the top of its `context.md`); 311's cited passages are the kept verbatim ruling sessions (marker at the
+  top of its `context.md`). Those artifacts were not edited.
+- **325:** its distilled header says P-1 was "declined by the operator"; the session log says "treated as
+  declined" after "I accept the bound" (the `debate.md` row read "pending user"). Treat P-1 as unconfirmed
+  (§ 3.1).
+
 Verified unchanged: statuses, step counts, `MAX_ROUNDS = 5`, 326/329/330's merged PRs (#1592–#1594),
 326's follow-ups were not previously filed.
 
