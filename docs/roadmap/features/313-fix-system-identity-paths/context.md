@@ -1073,3 +1073,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] `**kw` spy rename risk (Step 7) and the residual two-header risk for a future caller (Step 6). Target: Steps 6-7.
 - [ ] DRY guard rail did not run on this branch's doc commits (missing `scripts/check-duplication.py` on the branch base). Target: first `/sdd-execute` step (merge `main-dev` first).
 - Next: `/sdd-execute fix-system-identity-paths`.
+
+## Session 2026-11-21 — operator ruling on AC-1 wording, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.4): after the operator asked to see the wording first, the orchestrator showed AC-1 exactly as in acceptance.feature (`@AC-1 @regression`): "Given an mcp_client signal source registered by owner "user-a" / When one ingest.mcp_client.poll_interval_seconds cycle ingests a signal from it / Then the ingest.signal.ingested ledger event has user_id "user-a" / And ExportEvents called as "user-a" returns that event". "Confirm it as written?"
+
+Operator's answer (option selected): "Confirm as written (Recommended)".
+
+Effect: the spec-authored AC-1 `Then` wording is operator-confirmed; the Step 1 confirmation is cleared. The ingest-docs question (docs step vs recorded deviation, § 3.4) is still open.
