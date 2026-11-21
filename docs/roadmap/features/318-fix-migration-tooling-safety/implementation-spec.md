@@ -508,7 +508,7 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
 
 ### Step 7 — service: add the ordering gate `scripts/check-migration-order.py`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/check-migration-order.py` — create

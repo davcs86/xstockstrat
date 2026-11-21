@@ -691,3 +691,11 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - Config-key wiring gate: N/A (no config key, no config migration).
 - Files modified: `scripts/tests/test_db_migrate.py`
 - Deviations: none
+
+### Step 7 — service: add the ordering gate `scripts/check-migration-order.py` [done]
+- Created `scripts/check-migration-order.py` (stdlib, executable, shaped like `check-migration-contract.py`): `<base_ref> [--forbid-new]`, one `git diff --name-status --no-renames --diff-filter=ADM base...HEAD -- 'services/*/migrations/*.up.sql'` call, per-service base maximum from `git ls-tree` compared with `int()`, and the five `order-gate: ` refusal lines from the spec (every violation reported, exit 1), success line on stdout, exit 2 for any other argument shape. A base ref beginning with `-` is also treated as usage (exit 2), so a lone unknown flag never reaches `git`.
+- TDD (Step 7 RED protocol): Step 8's module was authored in the working tree first and run against an argument-handling-only stub. AC-2 red `.sdd-logs/v-1.log` `exit=1`: `test_ac2_late_lower_number_is_refused` `E       AssertionError: assert 0 == 1`, `11 failed, 14 passed in 1.07s` (every refusal case fails on its exit code) → green `.sdd-logs/v-3.log` `exit=0`: `25 passed in 0.83s`, ruff `All checks passed!`, `64 files already formatted`. The test file was removed before this commit; it is committed under Step 8. No coverage gate applies to `scripts/`.
+- Verification `.sdd-logs/v-2.log` `exit=0`: `usage: check-migration-order.py <base_ref> [--forbid-new]` (no-arg run, exit 2), `order-gate: ok — 0 new migration(s), each above the base maximum` against `origin/main-dev`, ruff `All checks passed!`, `64 files already formatted`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/check-migration-order.py`
+- Deviations: none
