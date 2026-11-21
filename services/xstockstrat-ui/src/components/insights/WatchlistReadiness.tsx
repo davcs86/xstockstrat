@@ -17,8 +17,9 @@ import {
 } from '@/components/ui/select';
 import { ConditionState, ReadinessState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { WatchlistEntrySource } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import type { DelistedState } from '@xstockstrat/proto/common/v1/common_pb';
 import { isFiring, rollupReadiness, readinessState } from '@/lib/readinessRollup';
-import { EnumBadge } from '@/lib/opportunityShared';
+import { EnumBadge, delistedMarker } from '@/lib/opportunityShared';
 import { READINESS_CUE, IN_QUEUE_CUE } from '@/lib/readinessCue';
 import { UNBOUND, toApiStrategyId } from '@/hooks/useWatchlists';
 import {
@@ -31,7 +32,12 @@ import {
 } from '@/hooks/useWatchlistReadiness';
 
 type Readiness = NonNullable<WatchlistReadinessRow['readiness']>;
-type Binding = { symbol: string; strategyId: string; source?: number };
+export type Binding = {
+  symbol: string;
+  strategyId: string;
+  source?: number;
+  delisted?: DelistedState;
+};
 type StrategyDef = { strategyId: string; displayName?: string; liveEnabled: boolean };
 
 /**
@@ -44,6 +50,26 @@ function SignalSourceBadge({ source }: { source?: number }) {
     <Badge variant="info" data-testid="signal-source-badge">
       Signal
     </Badge>
+  );
+}
+
+function DelistedBadge({ symbol, delisted }: { symbol: string; delisted?: DelistedState }) {
+  const marker = delistedMarker(delisted);
+  if (!marker) return null;
+  const detail = marker.date ? `${marker.text} · since ${marker.date}` : marker.text;
+  return (
+    <span
+      className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground"
+      role="note"
+      aria-label={`${symbol} delisted: ${detail}`}
+    >
+      <Badge variant="warning" data-testid={`delisted-badge-${symbol}`}>
+        Delisted
+      </Badge>
+      <span className="truncate" data-testid={`delisted-detail-${symbol}`}>
+        {detail}
+      </span>
+    </span>
   );
 }
 
@@ -221,23 +247,27 @@ export function WatchlistReadiness({
     ? bound.filter((b) => comparePairs(b, { symbol: cursor[0], strategyId: cursor[1] }) > 0)
     : bound;
   const pageBound = afterCursor.slice(0, WATCHLIST_READINESS_PAGE_SIZE);
+  // Flagged rows stay in pageBound (the server's keyset cursor covers them) but are never polled
+  // or counted: analysis no longer scans them.
+  const readable = pageBound.filter((b) => !b.delisted);
 
   const { data, error } = useWatchlistReadiness(
     watchlistId,
     pageToken,
-    pageBound.map((b) => ({ symbol: b.symbol, strategyId: b.strategyId })),
+    readable.map((b) => ({ symbol: b.symbol, strategyId: b.strategyId })),
+    afterCursor.length > pageBound.length,
   );
   const byPair = readinessRowMap(data?.rows);
   const nextToken = data?.page?.nextPageToken ?? '';
 
-  const resolved = pageBound
+  const resolved = readable
     .map((b) => byPair.get(readinessRowKey(b.symbol, b.strategyId)))
     .filter((rr): rr is WatchlistReadinessRow => !!rr && rr.state === ReadinessState.RESOLVED)
     .map((rr) => rr.readiness)
     .filter((r): r is Readiness => !!r);
   const counts = rollupReadiness(
     resolved,
-    pageBound.map((b) => b.symbol.toUpperCase()),
+    readable.map((b) => b.symbol.toUpperCase()),
   );
 
   if (bindings.length === 0) return null;
@@ -277,7 +307,7 @@ export function WatchlistReadiness({
             />
           )}
           Readiness — each symbol against its bound strategy
-          {pageBound.length > 0 && (
+          {readable.length > 0 && (
             <span className="ml-1" data-testid="readiness-rollup">
               · <span className="text-buy">{counts.ready} ready</span> · {counts.watching} watching
               · {counts.quiet} quiet
@@ -298,7 +328,8 @@ export function WatchlistReadiness({
             const r = rr?.readiness;
             const queued = inQueue?.has(binding.symbol.toUpperCase()) ?? false;
             const cueState = r ? readinessState(r) : 'nodata';
-            const firing = state === ReadinessState.RESOLVED && r ? isFiring(r) : false;
+            const flagged = Boolean(binding.delisted);
+            const firing = !flagged && state === ReadinessState.RESOLVED && r ? isFiring(r) : false;
             return (
               <li
                 key={`${binding.symbol}|${binding.strategyId}`}
@@ -309,7 +340,9 @@ export function WatchlistReadiness({
                 <span className="w-14 shrink-0 font-mono font-semibold">{binding.symbol}</span>
                 <SignalSourceBadge source={binding.source} />
                 {/* Verdict cell — per-row state via the canonical C-17 primitives. */}
-                {state === ReadinessState.RESOLVED && r ? (
+                {flagged ? (
+                  <DelistedBadge symbol={binding.symbol} delisted={binding.delisted} />
+                ) : state === ReadinessState.RESOLVED && r ? (
                   <div className="flex shrink-0 items-center gap-2">
                     <Progress
                       value={Math.round(r.conviction * 100)}
@@ -343,9 +376,11 @@ export function WatchlistReadiness({
                 <span className="w-20 shrink-0">
                   {queued && <EnumBadge render={IN_QUEUE_CUE} testId="in-queue" />}
                 </span>
-                <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
-                  {state === ReadinessState.RESOLVED && r ? blockingCondition(r) : ''}
-                </span>
+                {!flagged && (
+                  <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
+                    {state === ReadinessState.RESOLVED && r ? blockingCondition(r) : ''}
+                  </span>
+                )}
                 {firing && r && (
                   <Link
                     href={`/trader/positions/${r.symbol}?strategy=${binding.strategyId}`}
@@ -378,12 +413,16 @@ export function WatchlistReadiness({
               {rowCheckbox(b.symbol)}
               <span className="w-14 shrink-0 font-mono font-semibold">{b.symbol}</span>
               <SignalSourceBadge source={b.source} />
-              <span
-                className="min-w-0 flex-1 truncate text-muted-foreground/60"
-                data-testid={`unbound-${b.symbol}`}
-              >
-                not evaluated — bind a strategy
-              </span>
+              {b.delisted ? (
+                <DelistedBadge symbol={b.symbol} delisted={b.delisted} />
+              ) : (
+                <span
+                  className="min-w-0 flex-1 truncate text-muted-foreground/60"
+                  data-testid={`unbound-${b.symbol}`}
+                >
+                  not evaluated — bind a strategy
+                </span>
+              )}
               <BindingRowControls
                 symbol={b.symbol}
                 strategyId={b.strategyId}

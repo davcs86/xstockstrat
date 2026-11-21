@@ -22,6 +22,7 @@ _UPDATABLE_COLUMNS = frozenset(
         "started_at",
         "completed_at",
         "data_kind",
+        "symbol_results",
     }
 )
 
@@ -36,6 +37,7 @@ async def insert_job(
     range_end,
     status: int,
     data_kind: str = "BARS",
+    callback_url: str | None = None,
 ) -> None:
     """Insert a freshly-created job row (status is a BackfillStatus enum int).
 
@@ -44,8 +46,8 @@ async def insert_job(
     """
     await db_pool.execute(
         "INSERT INTO ingest.backfill_jobs"
-        " (job_id, symbols, timeframe, range_start, range_end, status, data_kind)"
-        " VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)",
+        " (job_id, symbols, timeframe, range_start, range_end, status, data_kind, callback_url)"
+        " VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)",
         job_id,
         list(symbols),
         timeframe,
@@ -53,6 +55,7 @@ async def insert_job(
         range_end,
         status,
         data_kind,
+        callback_url,
     )
 
 
@@ -120,6 +123,20 @@ async def list_jobs(
     return [dict(row) for row in rows]
 
 
+async def has_active_job(db, symbol: str, active_statuses: list[int]) -> bool:
+    """Whether any job of any data kind lists ``symbol`` with a status in ``active_statuses``.
+
+    ``db`` may be the pool or a connection inside the caller's transaction.
+    """
+    row = await db.fetchrow(
+        "SELECT 1 FROM ingest.backfill_jobs"
+        " WHERE $1 = ANY(symbols) AND status = ANY($2::int[]) LIMIT 1",
+        symbol,
+        list(active_statuses),
+    )
+    return row is not None
+
+
 async def reconcile_interrupted(
     db_pool,
     *,
@@ -142,3 +159,40 @@ async def reconcile_interrupted(
         queued_status,
     )
     return len(rows)
+
+
+async def list_webhook_handoff_candidates(
+    db_pool, *, terminal_statuses: list[int], limit: int
+) -> list[dict]:
+    """Terminal jobs with a callback URL that were never handed off, oldest first."""
+    rows = await db_pool.fetch(
+        "SELECT * FROM ingest.backfill_jobs"
+        " WHERE callback_url IS NOT NULL AND status = ANY($1::smallint[])"
+        " AND webhook_enqueued_at IS NULL AND webhook_rejected_at IS NULL"
+        " ORDER BY completed_at, created_at LIMIT $2",
+        list(terminal_statuses),
+        limit,
+    )
+    return [dict(row) for row in rows]
+
+
+async def mark_webhook_enqueued(db_pool, job_id: str) -> bool:
+    """Record that notify accepted the job's webhook; False when a marker was already set."""
+    status = await db_pool.execute(
+        "UPDATE ingest.backfill_jobs SET webhook_enqueued_at = NOW()"
+        " WHERE job_id = $1::uuid"
+        " AND webhook_enqueued_at IS NULL AND webhook_rejected_at IS NULL",
+        job_id,
+    )
+    return status == "UPDATE 1"
+
+
+async def mark_webhook_rejected(db_pool, job_id: str) -> bool:
+    """Record that notify refused the job's callback URL; False when a marker was already set."""
+    status = await db_pool.execute(
+        "UPDATE ingest.backfill_jobs SET webhook_rejected_at = NOW()"
+        " WHERE job_id = $1::uuid"
+        " AND webhook_enqueued_at IS NULL AND webhook_rejected_at IS NULL",
+        job_id,
+    )
+    return status == "UPDATE 1"

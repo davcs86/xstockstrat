@@ -4,6 +4,7 @@ xstockstrat-agent — MCP server entry point.
 Transport is selected via MCP_TRANSPORT env var:
   stdio  (default) -- launched directly by a local MCP client
   http             -- Streamable HTTP for remote MCP connections on MCP_HTTP_PORT (default 9000)
+                      plus the internal tool-catalog gRPC server on GRPC_PORT (default 50061)
 
 `MCP_TRANSPORT=sse` is a deprecated alias for `http`: it starts the same server and logs a
 warning. The legacy HTTP+SSE transport it used to name (GET /sse + POST /messages) was removed
@@ -70,6 +71,11 @@ def resolve_http_port() -> int:
     return int(os.environ.get("MCP_HTTP_PORT") or deprecated or "9000")
 
 
+def resolve_grpc_port() -> int:
+    """Port for the internal tool-catalog gRPC server (HTTP transport only)."""
+    return int(os.environ.get("GRPC_PORT") or "50061")
+
+
 UI_BASE_URL = os.environ.get("UI_BASE_URL", "http://localhost:3000")
 # In DO this is ${APP_URL}/agent (stripped to / by ingress); docker-compose uses localhost:9000.
 AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
@@ -96,17 +102,18 @@ async def _run_stdio() -> None:
         await stop_watchers(started)
 
 
-def build_http_app():
+def build_http_app(server: MCPServer | None = None):
     """Construct the Starlette app for the Streamable HTTP transport + OAuth 2.1 HTTP facade.
 
     Extracted into a factory so tests can exercise the routes via Starlette's test client
-    without binding a real socket.
+    without binding a real socket. ``server`` lets _run_http share one MCPServer with the
+    internal catalog gRPC server.
     """
     from contextlib import asynccontextmanager
 
     from mcp.server.transport_security import TransportSecuritySettings
     from starlette.applications import Starlette
-    from starlette.responses import JSONResponse, Response
+    from starlette.responses import Response
     from starlette.routing import Mount, Route
 
     from app.auth import IDENTITY_UNAVAILABLE, validate_bearer_claims
@@ -119,28 +126,7 @@ def build_http_app():
     from app.oauth_server import register as oauth_register
     from app.oauth_server import token as oauth_token
 
-    server = create_server()
-
-    async def list_tools_metadata(_request):
-        """Tool catalog for the UI's "MCP Tools" page — name/description/inputSchema only.
-
-        Unauthenticated like the .well-known discovery routes: it describes capabilities (the
-        same data published in docs/runbooks/mcp-tools.md), never user data or credentials, and
-        the UI's BFF has no MCP-audience-bound token to present here anyway.
-        """
-        tools = await server.list_tools()
-        return JSONResponse(
-            {
-                "tools": [
-                    {
-                        "name": t.name,
-                        "description": t.description or "",
-                        "inputSchema": t.input_schema,
-                    }
-                    for t in tools
-                ]
-            }
-        )
+    server = server or create_server()
 
     # Prime the SDK session manager (its returned app is discarded; handle_mcp dispatches instead).
     # transport_security off: the default DNS-rebinding check 421s every non-localhost request; the
@@ -260,7 +246,6 @@ def build_http_app():
         Route("/oauth/authorize", endpoint=oauth_authorize, methods=["GET"]),
         Route("/oauth/callback", endpoint=oauth_callback, methods=["GET"]),
         Route("/oauth/token", endpoint=oauth_token, methods=["POST"]),
-        Route("/api/tools", endpoint=list_tools_metadata, methods=["GET"]),
         # The MCP transport at the agent root. MUST be last — the specific routes above win.
         Mount("/", app=handle_mcp),
     ]
@@ -270,12 +255,27 @@ def build_http_app():
 async def _run_http() -> None:
     import uvicorn
 
-    starlette_app = build_http_app()
+    from app.catalog_service import build_catalog_server
+
+    server = create_server()
+    # The catalog gRPC server must bind and start BEFORE uvicorn: missing MTLS_* then stops the
+    # process before port 9000 listens, and the TCP healthcheck on 9000 implies the gRPC port is up.
+    grpc_port = resolve_grpc_port()
+    catalog_server, _ = build_catalog_server(server, f"[::]:{grpc_port}")
+    await catalog_server.start()
+    starlette_app = build_http_app(server)
     port = resolve_http_port()
-    log.info("xstockstrat-agent starting (transport=http, port=%d)", port)
+    log.info(
+        "xstockstrat-agent starting (transport=http, port=%d, catalog grpc port=%d)",
+        port,
+        grpc_port,
+    )
     config = uvicorn.Config(starlette_app, host="0.0.0.0", port=port, loop="asyncio")
     srv = uvicorn.Server(config)
-    await srv.serve()
+    try:
+        await srv.serve()
+    finally:
+        await catalog_server.stop(grace=5)
 
 
 def main() -> None:

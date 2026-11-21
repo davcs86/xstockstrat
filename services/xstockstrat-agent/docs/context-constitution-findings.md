@@ -1,9 +1,7 @@
 # xstockstrat-agent — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`); refreshed 2026-09-03 (branch
-`claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327` — the double-`x-user-id` header bug was
-fixed, moved to Resolved; orphan-secret anchor re-grounded); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — +1 latent bug (undeadlined `_fetch_url` policy reads), +1 dead code (`Opportunity.sparkline`); line hints re-stamped; all other findings still open); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — tool error-mapping report resolved in code, +3 doc-lie rows, +3 dead-code rows, +3 open questions, two open 2026-10-29 reports added to the filed table); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `0a3d508` — +1 doc-lie (admin-gate sentence), 2 rows resolved); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — 4 rows resolved by the feature-295 snapshot reads and the CLAUDE.md/docstring rewrites, +1 dead code (`client.get_config_value`), resolved `get_config_value` latent-bug row marked superseded, `2026-10-29-agent-config-snapshot-read-defect` row annotated pruned; line hints re-stamped). For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-15 (`main-dev` @
+`d5de836`). For triage/fixing, not
 governance. The internal admin-scope self-grant (`x-access-scope=7`) is a cross-cutting ⚠ security
 question tracked in the root findings log.
 
@@ -17,6 +15,10 @@ _None currently open_ — ~~CLAUDE.md "Config Keys Consumed" lists only `agent.o
 
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
+| ⚠ CLAUDE.md § Management-tool authorization: "`manage_formula` is different — it forwards **no** admin scope (plain `_metadata()`)" (found 2026-11-13, `/context-scrubber`) | Since PR #994 a plain `_metadata()` call emits the bound caller's `x-access-scope` (with `x-user-id`/`x-trace-id`); `CallerPropagationMiddleware` binds the caller on every `tools/call` | `app/client.py#_metadata`; `app/tools.py#CallerPropagationMiddleware` | Human call: reword to "not admin-gated; indicators enforces author-ownership" (the scope still rides along) |
+| ⚠ CLAUDE.md § Management-tool authorization: the watchlist tools "forward **only** the caller's own `x-user-id` … and never an admin `x-access-scope`" (found 2026-11-13, `/context-scrubber`) | The watchlist RPCs also carry the caller's `x-access-scope` and `x-trace-id` — `_metadata` emits the whole trio and de-duplicates the explicit `x-user-id` extra | `app/client.py#_metadata` | Human call: drop "only … never an admin `x-access-scope`"; ownership (portfolio `loadOwned`) is the gate |
+| `app/config/watch_core.py` docstring: "Byte-identical in xstockstrat-{indicators,ingest,analysis}/app/config; edit all three together" (found 2026-11-13, refresh) | The agent's copy is a fourth byte-identical member of the guarded group | `scripts/check-watcher-copies.py` (lists `services/xstockstrat-agent/app/config/watch_core.py`) | Reword to `{indicators,ingest,analysis,agent}` — in all four copies in one PR (byte-identity gate) |
+| `app/telemetry.py` module docstring: the agent dials "ingest/notify/analysis/indicators/identity/config" (found 2026-11-13, refresh) | It also dials portfolio, trading and marketdata | `app/client.py#PORTFOLIO_ENDPOINT`/`#TRADING_ENDPOINT`/`#MARKETDATA_ENDPOINT`; `app/tool_metrics.py#_BACKENDS` | Reword to "every backend" |
 | `app/auth.py#validate_bearer_claims` docstring: "rather than the hardcoded admin tuple every other management tool forwards" (found 2026-11-04) | That tuple was removed by feature 092 (`app/scopes.py` and `app/client.py` say so) | `app/auth.py#validate_bearer_claims` | Reword |
 | `app/tools.py#_caller_user_id` docstring cites `notify.proto:34` for the broadcast sentinel (found 2026-11-04) | The proto lines are ~L45 and ~L71 | `packages/proto/notify/v1/notify.proto#target_user_id` | Cite by symbol |
 
@@ -43,7 +45,8 @@ _None currently open_ — ~~CLAUDE.md "Config Keys Consumed" lists only `agent.o
 - `snapshot_offline_positions` sets **both** a request-body `user_id` (`app/client.py#snapshot_offline_positions` ~L2523) **and** the `x-user-id` header (~L2535), while the CLAUDE.md caller-identity contract does not list snapshot among the body-`user_id` builders. Is the body `user_id` on `SnapshotOfflinePositionsRequest` a deliberate target selector, or leftover caller-identity duplication to drop (like the feature-164/133 builders)? — status: **open**
 - `manage_signal_source` bearer-token orchestration writes the encrypted secret **before** registering the source, with **no compensating cleanup** on a failed register (`app/tools.py#_write_source_bearer`, docstring "only orphans a redacted secret"). Confirm the orphan-secret-on-partial-failure is an accepted trade-off, not a reconciliation gap. — status: **open**
 - Is `app/auth.py#validate_bearer_jwt` kept only for tests, or can it be removed? `validate_bearer_claims` "deliberately duplicates the ValidateToken call" — status: **open** (found 2026-11-04)
-- `GET /api/tools` is unauthenticated (documented in `docs/oauth.md` and `app/main.py#list_tools_metadata`), exposing the full tool schema publicly — still wanted now that the UI has its own BFF? — status: **open** (found 2026-11-04)
+- `GET /api/tools` is unauthenticated, exposing the full tool schema publicly — still wanted now that the UI has its own BFF? — status: **closed 2026-11-19 by feature 360**: the route was removed; the catalog is served only by the internal `AgentService.ListTools` RPC (`app/catalog_service.py`, mutual TLS, `xstockstrat-ui` certificate only) (found 2026-11-04)
+- A cancelled or deadline-expired `ListTools` call records status 0 in `rpc.server.duration`: the agent did not copy the cancel-status interceptor the other Python gRPC servers carry (`services/xstockstrat-ingest/app/telemetry.py#_CancelStatusInterceptor`). Acceptable for one fast in-memory unary RPC; revisit if the agent gains a slow or streaming RPC — status: **open** (found 2026-11-19, feature 360)
 
 ## MCP tool ↔ backend alignment audit (2026-08-01) — 13/13 resolved
 

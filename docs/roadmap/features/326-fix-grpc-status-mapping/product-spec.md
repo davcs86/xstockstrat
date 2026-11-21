@@ -14,9 +14,12 @@
 - **Observed**: `toGRPCError` translates only InvalidArgument, NotFound, PermissionDenied,
   FailedPrecondition, ResourceExhausted and Unavailable; every other connect code
   (`DeadlineExceeded`, `Canceled`, `AlreadyExists`, `Unimplemented`, `Unauthenticated`, `Aborted`)
-  and any raw non-connect error become `codes.Internal`. The sector RPCs, `GetEtfFlags`,
-  `GetHistoricalFundamentals` and `BackfillFundamentals` return service errors raw, so a caller
-  deadline/cancellation reaches the caller as `INTERNAL`.
+  and any raw non-connect error become `codes.Internal`. `GetEtfFlags`,
+  `GetHistoricalFundamentals` and `BackfillFundamentals` return service errors raw. The sector
+  RPCs' handlers also return the service error raw, but the service wraps store failures as
+  `connect.CodeInternal` (`classification_service.go:120, :140, :171`). So a caller
+  deadline/cancellation reaches the caller as `INTERNAL` — for the sector RPCs through that wrap,
+  not as a raw error.
 - **Expected**: the full connect→gRPC code mapping is preserved, and raw context errors map via
   `status.FromContextError`.
 - Report: [docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.md](../../../reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.md)

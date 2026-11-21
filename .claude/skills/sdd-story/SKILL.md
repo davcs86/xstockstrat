@@ -2,7 +2,7 @@
 name: sdd-story
 description: Phase 1 of SDD — turn a user story into a feature's first artifacts. Usage — /sdd-story <feature-slug> [story text]. Allocates the next NNN, creates the feature directory with feature.md, product-spec.md, acceptance.feature (Gherkin @AC-* scenarios), and context.md, and fills governance fields (reviewers, proto/config/DB gates, known traps) from docs/runbooks/feature-workflow.md, docs/runbooks/reviewer-registry.md, and the ledger. Use this at the very start of ANY new capability — a new UI page or route, endpoint, RPC, service behavior, agent tool, or config surface — including when the request arrives as a bare "implement X, commit and push", as a GitHub issue, or as a session instruction, because the root CLAUDE.md makes this the mandatory entry point before any code is written. Also triggers on "new feature", "I want it to…", "add support for…", "can we make it also…", "write a spec for…". Confirmed bug fixes go to sdd-triage instead.
 argument-hint: <feature-slug> [story text]
-allowed-tools: Read Write Bash(ls *) Bash(mkdir *) Bash(find *) Bash(printf *) Bash(bash scripts/sdd-allocate-feature-number.sh *)
+allowed-tools: Read Write Bash(ls *) Bash(mkdir *) Bash(find *) Bash(printf *) Bash(python3 scripts/sdd-allocate-feature-number.py *)
 effort: medium
 ---
 
@@ -40,7 +40,7 @@ stderr — never fall back to a local `max+1`**. Never write to `sdd/feature-cur
 history (force-push, amend, reset, delete). See `docs/runbooks/feature-workflow.md` § Feature Numbering.
 
 ```bash
-NEXT_NNN=$(bash scripts/sdd-allocate-feature-number.sh "$ARGUMENTS[0]") || exit 1
+NEXT_NNN=$(python3 scripts/sdd-allocate-feature-number.py "$ARGUMENTS[0]") || exit 1
 FEATURE_DIRNAME="${NEXT_NNN}-$ARGUMENTS[0]"
 if find docs/roadmap/features -maxdepth 1 -type d -name "${NEXT_NNN}-*" | grep -q .; then
   echo "ERROR: ${NEXT_NNN} already taken (pre-cursor or hand-made directory)." >&2
