@@ -754,9 +754,11 @@ route). The `down` is not executed locally: Step 9 pins its SQL text, and the ro
      per-environment value pair.
    **RED before Step 8:** `findOne` finds no file.
 2. `scripts/config-wiring.json`: remove the `broker.paper` entry, leaving `"findings": []`.
-3. `scripts/config-wiring.test.mjs:618`: delete the `findings.length > 0` assertion (the baseline is now
-   empty by design; the loop below it still checks every entry a later feature adds). No other line of
-   that test changes.
+3. `scripts/config-wiring.test.mjs:618`: replace the `findings.length > 0` assertion with
+   `assert.ok(Array.isArray(findings), 'findings must be an array')`; do not delete it outright and never assert
+   an empty baseline (the baseline is a ratchet that later features may refill; the loop below it still checks
+   every entry a later feature adds). No other line of that test changes. (impl-spec review warning, resolved
+   2026-11-21.)
 4. C-13: the test's constants have one consumer; inline is compliant, as in the mirrored test.
 
 **Verification**:
@@ -803,7 +805,7 @@ grep -n "__tests__/fixtures" services/xstockstrat-config/src/__tests__/brokerPap
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against "../../.git#branch=feature/fix-trading-config-plumbing,subdir=packages/proto"
+cd packages/proto && buf lint && buf breaking --against "../../.git#branch=main-dev,subdir=packages/proto"   # against main-dev, never the feature branch (vacuous after the commit); CI's breaking check excludes trading/v1/trading.proto (ci.yml:253), so this local run is the only real check (C-09)
 cd ../.. && git diff -U0 -- packages/proto/trading/v1/trading.proto | grep '^[+-]' | grep -v '^+++\|^---' | grep -v '^[+-] *//' ; test $? -eq 1   # only comment lines changed
 grep -n "TRADING_MODE env" packages/proto/trading/v1/trading.proto ; test $? -eq 1
 ```

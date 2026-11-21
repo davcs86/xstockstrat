@@ -115,3 +115,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - **Config migration `056` is claimed by three features** — 321 (`056_trading_broker_paper_per_environment`), 317 (`056_marketdata_bars_miss_backoff`), 314 (`056_mcp_deadline_budget`), each verified on its own branch. Free on main-dev today (tail 055). Whichever merges second and third renumbers to max(main-dev)+1 and regenerates `scripts/config-wiring-stored.json`. No merge-order.md row exists yet.
   - Textual only: `trading.go` with 311/312/315; `trading.proto` with 322 (a different message, ~`:336`, vs 321's `:263-265`); `order_intent.go` with 347 (merged).
   - Not a collision: 330's `055` is on main-dev via #1592 (330 is `in-progress` only for its post-deploy step).
+
+## Session 2026-11-21 — operator ruling on the Step 9/10 review warnings, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.11): "Feature 321 (fix-trading-config-plumbing): its impl-spec review recorded warnings on Steps 9 and 10 (context.md, commit 6369dc10). Proceed with /sdd-execute for 321 despite those warnings?"
+
+Operator's answer (option selected): "Fix the spec first".
+Option text as offered: "Re-spec Steps 9 and 10 to address the warnings, then re-review before execution."
+
+Done by the orchestrator (not an operator quote): the two warnings listed `[ ] unaddressed` in the impl-spec review were addressed in `implementation-spec.md`: Step 9 Instruction 3 now replaces the `findings.length > 0` assertion with `assert.ok(Array.isArray(findings), …)` and forbids asserting an empty baseline; Step 10 Verification runs `buf breaking` against `main-dev` instead of the feature branch (with the ci.yml:253 note). Line anchors were not re-grepped; the BRANCH SYNC step still re-checks them. Remaining: a re-review (`/sdd-review fix-trading-config-plumbing impl-spec`) before `/sdd-execute`.
