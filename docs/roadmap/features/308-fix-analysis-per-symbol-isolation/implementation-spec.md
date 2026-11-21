@@ -287,7 +287,7 @@ ruff check . && ruff format --check .
 
 ### Step 5 — service: shared `app/services/isolation.py`, adopted by the screener
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/isolation.py` — create
@@ -1085,3 +1085,17 @@ _Populated by /sdd-execute as implementation proceeds._
   probe was deleted before the commit.
 - **Disposition**: no file outside Step 3's **Files** is committed. Step 4 still adds the permanent
   assertion and re-captures its own RED as specced.
+
+### Step 5: RED captured with a temporary probe test; unused `trace` import removed (2026-11-21)
+
+- **Expected**: Step Dependencies has Step 6's new tests capture RED for Step 5. Instruction 2 replaces
+  the screener tally block and names no import change.
+- **Actual**: Step 5 was executed on its own, and its Verification (`tests/test_screener.py`) is a
+  characterization guard that is green before and after. A temporary untracked
+  `tests/test_tmp_step5_probe.py` asserted `isolated` (value, exception, `CancelledError` pass-through)
+  and `log_isolation_tally` (no record on empty, WARNING and message for 1 of 3). RED gave
+  `ModuleNotFoundError: No module named 'app.services.isolation'` and GREEN gave `2 passed`. The probe
+  was deleted before the commit. Replacing the tally block left `from opentelemetry import trace`
+  unused in `screener.py` (ruff F401), so it was removed; `isolation.py` imports `trace` itself.
+- **Disposition**: no file outside Step 5's **Files** is committed. Step 6 still adds the permanent
+  tests and the cancellation mutation run as specced.

@@ -553,3 +553,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-indicators/tests/test_sandbox_deadline.py`
 - Deviations: none
+
+### Step 5 — service: shared `app/services/isolation.py`, adopted by the screener [done]
+- New `app/services/isolation.py` holds `isolated(coro)` (`except Exception` only, so `CancelledError` passes through) and `log_isolation_tally(logger, site, failures, total)`, which emits the summary line through the caller's logger and sets `<site>.degraded_count` on the current span. `ScreenerEngine._eval_symbol_isolated` now calls `isolated(...)`, and the screener tally block is one `log_isolation_tally(log, "screener", ...)` call. The rendered message and span attribute are unchanged.
+- TDD red: a temporary probe test failed with `ModuleNotFoundError: No module named 'app.services.isolation'` → green: probe `2 passed`, then deleted (Deviation Log). Verification: `tests/test_screener.py` `30 passed` (it includes the pinning tests at `:842`, `:889`, `:1018`), ruff "All checks passed!" and "142 files already formatted", exit=0. Step 5 has no coverage line; Step 6 carries it.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/app/services/isolation.py`, `services/xstockstrat-analysis/app/services/screener.py`
+- Deviations: RED came from a temporary untracked probe test, and the now-unused `from opentelemetry import trace` was removed from `screener.py` (Deviation Log).
