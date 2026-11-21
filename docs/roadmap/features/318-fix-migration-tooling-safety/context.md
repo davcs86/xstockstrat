@@ -661,3 +661,18 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - Config-key wiring gate: N/A (no config key, no config migration).
 - Files modified: `scripts/tests/test_db_migrate.py`
 - Deviations: none
+
+### Step 3 — service: the dirty guard refuses every dirty state and computes the recovery [done] (atomic unit Steps 3+4)
+- `scripts/migration-dirty-guard.sh` replaced with the spec body: the contract-floor scan and both exit-0 allow-paths are gone; it exits 3 with the state-keyed ratchet (`force <prev>`, or `TRUNCATE public.<schema>_schema_migrations` for the lowest up-file, then the `force <n>` / `force <next>` escalation lines), 2 when no recovery is computable, 1 on usage. Keeps the "is dirty at version N" prefix and the literal `$DATABASE_URL`; still executable and still `r0` in the allowlist.
+- TDD (unit): red = Step 4's modules against the pre-unit guard, `.sdd-logs/v-1.log` `exit=1`: `E       assert 0 == 3` (legacy-a: `returncode=0 ... stderr=''`), `16 failed, 3 passed in 2.36s` (legacy-e, usage and the Step 2 no-force test pass on the old guard) → green `.sdd-logs/v-2.log` `exit=0`: shellcheck + shfmt clean, no `floor`/`contract-of` in the guard, `19 passed in 1.96s`. No coverage gate applies to `scripts/`.
+- Verification: operator decision A (2026-11-21) — `envsubst` (gettext-base 0.21) now on the host; both Verification blocks re-run with fresh logs.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/migration-dirty-guard.sh`
+- Deviations: none
+
+### Step 4 — test: port the guard tests to pytest and delete the legacy shell test [done] (atomic unit Steps 3+4)
+- Created `scripts/tests/test_migration_dirty_guard.py` (one parametrized test over the 16-row case table, whole-line `Recover:` matching, no `postgres://`/`hunter2` anywhere, literal `$DATABASE_URL` on exit 3, no `  Recover:` line on exit 2, plus a usage test); added `test_ac1_output_names_the_recovery` to `scripts/tests/test_db_migrate.py`; deleted `scripts/migration-dirty-guard.test.sh`, its `scripts/shell-allowlist.txt` line and its `ci.yml:841` chain entry (the other five stay in order). Legacy (f), (h), (i) not ported (design §4).
+- TDD: AC-1/AC-3/AC-4/AC-5 red in `.sdd-logs/v-1.log` (AC-1 recovery line: `assert '  Recover: migrate -path services/xstockstrat-indicators/migrations ... force 4' in []`) → green `.sdd-logs/v-3.log` `exit=0`: `38 passed in 2.20s`, ruff `All checks passed!`, `62 files already formatted`, `check-shell-freeze: clean (23 allowlisted)`, `render-migrations.test.sh: all assertions passed`, `migration-ahead-check.test.sh: all assertions passed`.
+- Config-key wiring gate: N/A.
+- Files modified: `scripts/tests/test_migration_dirty_guard.py`, `scripts/tests/test_db_migrate.py`, `scripts/migration-dirty-guard.test.sh` (deleted), `scripts/shell-allowlist.txt`, `.github/workflows/ci.yml`
+- Deviations: none

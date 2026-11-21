@@ -44,3 +44,11 @@ def test_ac1_dirty_service_is_refused_and_never_forced(tmp_path):
     assert not [c for c in migrate_calls if "analysis_schema_migrations" in c]
     assert "hunter2" not in proc.stdout
     assert "hunter2" not in proc.stderr
+
+
+def test_ac1_output_names_the_recovery(tmp_path):
+    proc, _ = run_up(tmp_path, {"indicators": "5 (dirty)"})
+    assert (
+        '  Recover: migrate -path services/xstockstrat-indicators/migrations -database "$DATABASE_URL'
+        '&x-migrations-table=indicators_schema_migrations" force 4'
+    ) in proc.stderr.splitlines()

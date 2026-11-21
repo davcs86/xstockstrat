@@ -838,7 +838,7 @@ jobs:
         run: shfmt -d -i 2 scripts/*.sh .claude/hooks/*.sh
 
       - name: Migration tooling structural tests
-        run: bash scripts/render-migrations.test.sh && bash scripts/migration-dirty-guard.test.sh && bash scripts/migration-ahead-check.test.sh && bash scripts/ui-theme-label.test.sh && bash scripts/backmerge-no-ff.test.sh && bash scripts/gen-dev-certs.test.sh
+        run: bash scripts/render-migrations.test.sh && bash scripts/migration-ahead-check.test.sh && bash scripts/ui-theme-label.test.sh && bash scripts/backmerge-no-ff.test.sh && bash scripts/gen-dev-certs.test.sh
 
   # No path filter: a shell script can be added anywhere in the tree.
   shell-freeze:

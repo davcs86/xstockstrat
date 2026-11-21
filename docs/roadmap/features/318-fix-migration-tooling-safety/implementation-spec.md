@@ -216,7 +216,7 @@ Coverage threshold: none applies — `scripts/` has no coverage gate in CI (`ci.
 
 ### Step 3 — service: the dirty guard refuses every dirty state and computes the recovery
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/migration-dirty-guard.sh` — modify
@@ -332,7 +332,7 @@ cd scripts && uv run --extra dev pytest tests/test_migration_dirty_guard.py test
 
 ### Step 4 — test: port the guard tests to pytest and delete the legacy shell test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/tests/test_migration_dirty_guard.py` — create
