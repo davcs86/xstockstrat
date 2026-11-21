@@ -153,23 +153,21 @@ Line numbers on the two trees. Steps cite the symbol plus the feature-tree line;
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement
 
 **Codebase Evidence**:
-- `grep -n "haltAccount(\|emitReconciliationFinding(" services/xstockstrat-trading/internal/service/*.go` → definitions
-  `trading.go:2872` and `:2014`; callers `:2025`, `:2116`, `:2126`, `:2160`, `:2239`, `:3013`,
-  `trading_bracket_test.go:602`, `:628`. No other caller on either tree.
-- `git grep -n "haltAccount(" origin/main-dev -- services/xstockstrat-trading/internal` → the same set plus a **second**
-  `flattenAndHalt` call at `trading.go:3096` (`errors.Is(err, broker.ErrRateLimited)` branch).
-- Current halt alert, `trading.go:2892-2898`: `Category: "halt"`, `Title: fmt.Sprintf("Account halted: %s", accountID)`,
-  no `TargetUserId`. Current reconciliation alert, `trading.go:2026-2032`: `Category: "reconciliation"`, no `TargetUserId`.
+- `grep -n "haltAccount(\|emitReconciliationFinding(" services/xstockstrat-trading/internal/service/*.go` (merged tree,
+  re-spec 2026-11-21) → definitions `trading.go:2973` and `:2060`; callers `:2071`, `:2222`, `:2232`, `:2266`, `:2334`,
+  `:3096` (`errors.Is(err, broker.ErrRateLimited)` branch), `:3120`, `trading_bracket_test.go:606`, `:632`. No other
+  caller.
+- Current halt alert, `trading.go:2994-3000`: `Category: "halt"`, `Title: fmt.Sprintf("Account halted: %s", accountID)`,
+  no `TargetUserId`. Current reconciliation alert, `trading.go:2072-2078`: `Category: "reconciliation"`, no `TargetUserId`.
 - All four `emitReconciliationFinding` calls — the three order-level ones and the position-level one — sit inside the
-  single `for accountID, entry := range brokerMap` loop body (`main-dev` `trading.go:2173-2342`; calls at `:2222`,
-  `:2232`, `:2266`, `:2334`), so `entry.userID` is in scope at each; the position block already reads it at `:2291`.
-- Owner sources: `for accountID, entry := range brokerMap` (`trading.go:2067`; `entry.userID` already used at `:2188`);
-  `accountEntry, ok := s.brokers[bracket.AccountID]` (`trading.go:2910`).
-- Pattern to reuse: `TargetUserId:  order.UserId` (`trading.go:3509`).
-- Empty owner is reachable: `RegisterBrokerAccount(ctx, req, userID string)` (`trading.go:2595`) stores
-  `userID` into the pool at `:2614` / `:2652` without an empty check.
-- `noopAccountRepo` (`trading_reconciliation_test.go:250`) implements only `UpdateHaltStatus`; this step calls no other
-  repo method, so it needs no change (design.md, R-2).
+  single `for accountID, entry := range brokerMap` loop body (`trading.go:2173-2342`; calls at `:2222`, `:2232`, `:2266`,
+  `:2334`), so `entry.userID` is in scope at each; the position block already reads it at `:2291`.
+- Owner source in `flattenAndHalt`: `accountEntry, ok := s.brokers[bracket.AccountID]` (`trading.go:3011`).
+- Pattern to reuse: `TargetUserId:  order.UserId` (`trading.go:3618`).
+- Empty owner is reachable: `RegisterBrokerAccount(ctx, req, userID string)` (`trading.go:2696`) stores `userID` into the
+  pool without an empty check.
+- `noopAccountRepo` (`trading_reconciliation_test.go:258`/`:262`) implements only `UpdateHaltStatus`; this step calls no
+  other repo method, so it needs no change (design.md, R-2).
 - Trading-domain survey (`step-constraints.md` §A), all from the greps above: no `TRADING_MODE` read, no `BrokerType`
   dispatch, no `OrderType` or `OrderStatus` handling sits in the edited lines.
 
@@ -194,8 +192,8 @@ Line numbers on the two trees. Steps cite the symbol plus the feature-tree line;
    - Add `TargetUserId: ownerUserID` to its `EmitAlertRequest`.
    - Leave the `reconciliation.mismatch_found` `emitLedgerEvent` owner argument `""` (named deferral D-8).
 3. In `reconcileTick`, pass `entry.userID` as the new third argument at all four `emitReconciliationFinding` calls.
-4. In `flattenAndHalt`, pass `accountEntry.userID` as the new third argument at **every** `haltAccount` call (one on the
-   feature tree, two after the `main-dev` merge). Do not add an `order.UserId` fallback (R-5).
+4. In `flattenAndHalt`, pass `accountEntry.userID` as the new third argument at **both** `haltAccount` calls (`:3096`
+   and `:3120`). Do not add an `order.UserId` fallback (R-5).
 5. In `trading_bracket_test.go`:
    - `TestHaltAccount_SetsInMemoryBeforeReleasingMutexThenWritesDB`: add `"user-owner"` as the third argument.
    - `TestHaltAccount_DBWriteFailureDoesNotRollBack`: hoist the inline `&fakeNotifyClient{}` into a variable, call
@@ -234,24 +232,26 @@ grep -n "haltAccount(\|emitReconciliationFinding(" internal/service/*.go  # ever
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement
 
 **Codebase Evidence**:
-- Templates: `TestReconcileTick_QuantityDiscrepancy_PastGraceWindow_HaltsAndEmits` (`trading_reconciliation_test.go:539`)
-  and `TestReconcileTick_MissingBrokerOrder_HaltsAndEmits` (`:576`). Both build the pool entry with `userID: "u-1"` and
-  pass `&fakeNotifyClient{}` inline to `newTestReconciliationService` (`:168`).
-- Other finding sites: `TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState` (`:258`, sub-tests `filled`
+- Templates: `TestReconcileTick_QuantityDiscrepancy_PastGraceWindow_HaltsAndEmits` (`trading_reconciliation_test.go:547`)
+  and `TestReconcileTick_MissingBrokerOrder_HaltsAndEmits` (`:584`). Both build the pool entry with `userID: "u-1"` and
+  pass `&fakeNotifyClient{}` inline to `newTestReconciliationService` (`:176`).
+- Other finding sites: `TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState` (`:266`, sub-tests `filled`
   and `new`, class `unknown_broker_order`) and `TestReconcileTick_PositionQuantityDiscrepancy_CaughtViaPositionSide`
-  (`:608`, the position-level call). Both build the pool entry with `userID: "u-1"`, pass `&fakeNotifyClient{}` inline
+  (`:616`, the position-level call). Both build the pool entry with `userID: "u-1"`, pass `&fakeNotifyClient{}` inline
   and today assert only the `reconciliation.mismatch_found` event.
-- Systemic home: `TestReconcileTick_SystemicThresholdCrossed_EscalatesToReduceOnly` (`:762`); both accounts fail
+- Systemic home: `TestReconcileTick_SystemicThresholdCrossed_EscalatesToReduceOnly` (`:770`); both accounts fail
   `ListOrders`, so the systemic alert is the only alert that test emits.
-- `fakeNotifyClient` records `calls []*notifyv1.EmitAlertRequest` under `mu` (`trading_bracket_test.go:176-187`).
-- Two alerts per finding already asserted by count at `trading_reconciliation_test.go:405-413` ("Account halted" plus
+- `fakeNotifyClient` records `calls []*notifyv1.EmitAlertRequest` under `mu` (`trading_bracket_test.go:180-187`).
+- Two alerts per finding are already asserted by count near `trading_reconciliation_test.go:417` ("Account halted" plus
   "Broker state mismatch").
 - `captureLogs(t)` returns `func() []map[string]any` of JSON slog records (`trading_sync_test.go:16`).
 - Flatten harness: `newFlattenHarness` wires `notify: &fakeNotifyClient{}` and the pool entry `userID: "user-1"`
-  (`trading_flatten_rejection_test.go:88-112`); `TestFlattenAndHalt_AlwaysRejected_HaltsAccount` (`:124`) already asserts
-  the account is halted.
-- C-13: `grep -n 'userID: "u-1"' trading_reconciliation_test.go` → 10 existing inline sites; `ls internal/testdata` →
-  `caller_ids.go`, `ibkr.go`, `offline_history.go`, `order_rows.go`, none holding user ids.
+  (`trading_flatten_rejection_test.go:99-115`, literal at `:115`, also `:251`); `TestFlattenAndHalt_AlwaysRejected_HaltsAccount`
+  (`:135`) already asserts the account is halted.
+- C-13 (re-checked 2026-11-21 on the merged tree): `grep -c 'userID: "u-1"' trading_reconciliation_test.go` → 19 existing
+  inline sites. `ls internal/testdata` → `caller_ids.go`, `ibkr/` (pem/vector files), `ibkr.go`, `offline_history.go`,
+  `order_rows.go`. Two of these hold a user id: `offline_history.go:16` `S1UserID = "user-1"` (the feature-240 S1
+  offline-history Background, account `acc-1`) and an `order_rows.go:25` row value `"user-1"`.
 
 **Lands with**: `Step 1`
 
@@ -265,27 +265,31 @@ grep -n "haltAccount(\|emitReconciliationFinding(" internal/service/*.go  # ever
    `alert owner unresolved` record exists.
 2. Add one test helper in `trading_reconciliation_test.go` that returns the recorded alert for a `Category` (locking
    `notify.mu`) and fails the test when there is not exactly one.
-3. In both templates (`:539`, `:576`): hoist the notify fake into a variable and assert, after the existing checks:
+3. In both templates (`:547`, `:584`): hoist the notify fake into a variable and assert, after the existing checks:
    exactly two alerts; the `halt` alert and the `reconciliation` alert are both `ALERT_SEVERITY_CRITICAL` with
    `TargetUserId == "u-1"`. This pins the accepted double push: both are targeted and neither is suppressed.
-   Then, in the unknown-order test (`:258`, inside each sub-test) and the position-side test (`:608`): read
+   Then, in the unknown-order test (`:266`, inside each sub-test) and the position-side test (`:616`): read
    `svc.notify.(*fakeNotifyClient)` and assert with the helper that the `halt` alert and the `reconciliation` alert both
    have `TargetUserId == "u-1"`. With the two templates this covers all three mismatch classes and all four call
    sites. If the helper's exactly-one check fails at RED for a reason other than an empty `TargetUserId`, stop and
    report it; do not loosen the helper.
-4. In the systemic test (`:762`): hoist the notify fake and assert exactly one alert whose `Title` starts with
+4. In the systemic test (`:770`): hoist the notify fake and assert exactly one alert whose `Title` starts with
    `Systemic broker-reconciliation failure` and whose `TargetUserId == ""`. This is a guard: it is green before and after.
-5. Add `TestReconcileTick_EmptyOwner_WarnsAndAlertsUntargeted`, modelled on the `:576` template with `userID: ""`:
+5. Add `TestReconcileTick_EmptyOwner_WarnsAndAlertsUntargeted`, modelled on the `:584` template with `userID: ""`:
    call `logs := captureLogs(t)` first; after `reconcileTick(ctx, 0, 1.1)` assert the account is halted, one
    `reconciliation.mismatch_found` event exists, both alerts have `TargetUserId == ""`, and the log holds a WARN
    `alert owner unresolved` with `account_id == "acct-1"` for `alert_kind` `halt` and for `alert_kind` `reconciliation`
    (feature-206 `@AC-2`: an empty owner blocks nothing).
 6. In `TestFlattenAndHalt_AlwaysRejected_HaltsAccount`: read `h.svc.notify.(*fakeNotifyClient)` and assert the alert with
    `Category == "halt"` has `TargetUserId == "user-1"`. Filter by category; the flatten path may record other alerts.
-7. Test data (C-13): the owner and account ids are string sentinels already inline in these files; no domain object gets a
-   second consumer, so they stay inline and `internal/testdata` is not extended.
+7. Test data (C-13): `internal/testdata` exists and holds a user id (`S1UserID = "user-1"`), but that constant belongs to
+   the feature-240 S1 offline-history scenario (account `acc-1`), not to these reconciliation or flatten tests. Each new
+   assertion compares a `TargetUserId` against the owner literal that the same test's pool entry already sets (`"u-1"`,
+   `""`, or the flatten harness's `"user-1"`). These are reserved sentinel ids, and C-12/C-13 keep scenario one-offs
+   inline, so no domain object gains a new consumer. Keep them inline: do not repoint them at `testdata.S1UserID`, and
+   do not extend `internal/testdata`.
 8. Fill-state and broker constraints: fill handling and broker dispatch are unaffected; the templates cover the
-   partial-fill (`:539`) and missing-order (`:576`) findings, and instruction 3 adds the unknown-order and
+   partial-fill (`:547`) and missing-order (`:584`) findings, and instruction 3 adds the unknown-order and
    position-side findings.
 9. New logic is in the CI-excluded `service/` package — no coverage threshold applies to it; the run below still reports
    the service total.
@@ -299,7 +303,8 @@ COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service
   && go tool cover -func=coverage.out | grep "^total:"        # confirm >= 40%
 golangci-lint run --modules-download-mode=mod
 git diff --exit-code go.mod go.sum                             # the lint run must not rewrite them (fails.md 2026-11-10)
-grep -c 'userID: "u-1"' internal/service/trading_reconciliation_test.go   # C-13: inline ids, no new fixture home
+grep -c 'userID: "u-1"' internal/service/trading_reconciliation_test.go   # C-13: inline ids; 19 before, 19 after (the new empty-owner test uses userID: "")
+git diff --quiet HEAD -- internal/testdata; echo "rc=$?"                  # C-13: rc=0, internal/testdata unchanged
 ```
 
 ---
@@ -315,17 +320,18 @@ grep -c 'userID: "u-1"' internal/service/trading_reconciliation_test.go   # C-13
 
 **Codebase Evidence**:
 - `grep -rn "evaluateDrawdowns\|emitRiskAlert" services/xstockstrat-portfolio --include=*.go` → definitions
-  `portfolio_service.go:1263` and `:1320`; callers `:1307`, `:1314-1315`; test callers `portfolio_risk_test.go:33`, `:43`,
-  `:49`, `:55`. No other caller on either tree (`git grep` on `origin/main-dev` returns the same set).
-- Buggy site, `portfolio_service.go:1320-1323`:
+  `portfolio_service.go:1291` and `:1349` (merged tree, re-spec 2026-11-21); callers `:1336`, `:1343-1344`; test callers
+  `portfolio_risk_test.go:33`, `:43`, `:49`, `:55`. No other caller.
+- Buggy site, `portfolio_service.go:1350`:
   `s.emitEvent(ctx, "portfolio.risk.drawdown_breach", "portfolio:risk", map[string]interface{}{"message": msg})`.
-- `evaluateDrawdowns` returns `[]string`; `d.AccountID` appears only inside the message (`:1271-1273`).
-- Pattern to reuse: `emitEventAs(ctx, ownerUserID, eventType, streamKey, payload)` (`:1342`) sets
-  `AppendEventRequest.UserId`; `"user_id": userID` in a payload at `:2199`.
-- The notify alert in the same helper already carries `Category: "risk"`, WARNING and `TargetUserId: userID` (`:1324-1331`).
-- Event types are inline string literals at every emit site (`:466`, `:1244`, `:2198`); no constant block exists.
+- `evaluateDrawdowns` returns `[]string`; `d.AccountID` appears only inside the message.
+- Pattern to reuse: `emitEventAs(ctx, ownerUserID, eventType, streamKey, payload)` (`:1371`) sets
+  `AppendEventRequest.UserId`; other emit sites already put `"user_id": userID` in a payload.
+- The notify alert in the same helper already carries `Category: "risk"`, WARNING and `TargetUserId: userID`.
+- Event types are inline string literals at every emit site; no constant block exists.
 - Consumers: `grep -rn "drawdown_breach\|portfolio:risk"` outside this file finds only docs
-  (`services/xstockstrat-portfolio/CLAUDE.md:149`, `docs/context-constitution-findings.md:63`).
+  (`services/xstockstrat-portfolio/CLAUDE.md:117`, `docs/context-constitution-findings.md:63`) plus historical
+  feature-172 and defect-report docs.
 - Trading-domain survey: the edited lines hold no `TRADING_MODE` branch, broker dispatch, `OrderType` or `OrderStatus`.
 
 **Lands with**: `Step 4`
@@ -376,13 +382,13 @@ grep -n 'emitEventAs(ctx, userID, eventType, "portfolio:risk"' internal/service/
 **Codebase Evidence**:
 - `newQuoteSvc(t, stub, timeoutMs)` returns `(*PortfolioService, pgxmock.PgxPoolIface, *fakeLedger)` and wires the ledger
   fake (`portfolio_quote_deadline_test.go:96-104`); today's risk tests discard it (`svc, mock, _ :=`, `:446`, `:517`).
-- `fakeLedger.reqs []*ledgerv1.AppendEventRequest` (`watchlist_service_test.go:303-315`); `emitRiskAlert` calls the ledger
+- `fakeLedger.reqs []*ledgerv1.AppendEventRequest` (`watchlist_service_test.go:356-366`); `emitRiskAlert` calls the ledger
   synchronously, so `reqs` is complete when `checkRiskLimits` returns.
 - Templates: `TestCheckRiskLimits_AC3_SumsAcrossAccounts` (`:446`, broker-priced row via `posRow(..., current)`),
   `TestCheckRiskLimits_242_AC6_DrawdownTargetsOwner` (`:517`, inline `account_balances` rows for a named user),
   `TestCheckRiskLimits_304_AC2_DrawdownReadsRelativeKey` (`config.MustSnapshotWatcher("portfolio", …)`, `:501`).
 - `posRow(rows, sym, account, qty, avg, current)` sets market value `current*qty` (`:87-90`); a row with `current > 0`
-  needs no quote (`unvaluedSymbols`, `portfolio_service.go:602-608`; `latestQuotesFor` returns `ok` for no symbols, `:508`).
+  needs no quote (`unvaluedSymbols`, `portfolio_service.go:605`; `latestQuotesFor` returns `ok` for no symbols, `:509`).
 - `expectDrawdowns` hard-codes user `u1` (`:372-378`), so a `user-1` test writes its own `account_balances` expectation.
 - `TestEvaluateDrawdowns` (`portfolio_risk_test.go:27`) treats the result as `[]string` at `:33-58`.
 - Fixture home exists: `internal/testdata` — `Aapl` (`offline_pnl.go:15`), `Tsla` (`:23`), `Lyft` / `Msft` / `Elwt`
@@ -462,15 +468,15 @@ declares no config key, and this step adds no namespace, key, `value_type`, seed
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety (producer of the queried metric); Platform Lead — cross-service architecture (`packages/otel` has no row in the reviewer registry — **Not found**)
 
 **Codebase Evidence**:
-- The metric exists and is unwatched: `alertEmit = NewCounter("trading.alert_emit")` (`internal/telemetry/otel.go:323`),
-  recorded with `KeyAlertKind = "alert_kind"` and `KeyOutcome = "outcome"` (`:299-302`, `RecordAlertEmit` `:358`).
+- The metric exists and is unwatched: `alertEmit = NewCounter("trading.alert_emit")` (`internal/telemetry/otel.go:336`),
+  recorded with `KeyAlertKind = "alert_kind"` and `KeyOutcome = "outcome"` (`:312`/`:315`, `RecordAlertEmit` `:373`).
   `alert-rules.yaml` holds three rules: `xstk-error-rate-high`, `xstk-p99-latency-high`, `xstk-analysis-no-scoring`.
 - Exported series name, checked read-only against the live Mimir datasource on 2026-11-20:
   `trading_alert_emit_total`, labels `alert_kind`, `outcome`, `service_name="trading"`, `deployment_environment`.
   The in-repo precedent for the `_total` suffix is the `analysis_opportunity_recompute_total` row in
   `produced-signals.tsv` on `main-dev`.
 - The systemic alert records the same kind (`s.recordAlertEmit(ctx, alertKindReconciliation, alertErr)`,
-  `trading.go:2289`), so the rule also fires on a systemic escalation.
+  `trading.go:2384`), so the rule also fires on a systemic escalation.
 - Guard, `main-dev`: `scripts/check-otel-produced-signals.py` — every PromQL metric identifier in an `expr:` must be a
   `metric` row in `produced-signals.tsv` (Part 1); a doc count such as "Three alert rules" must equal the real rule count
   (Part 3, `check_count` `:315`); every rule declares `noDataState` (`check_rules` `:424-437`). `or`, `unless` and `offset`
@@ -479,7 +485,7 @@ declares no config key, and this step adds no namespace, key, `value_type`, seed
   `scripts/tests/test_check_otel_produced_signals.py:487-488` (`test_the_real_tree_declares_three_rules`, `== 3`) and
   `:647` (`"Delete the four alert rules below"` must be a **wrong** count). No other doc states a rule count
   (`git grep -n -i -E "(three|four|[0-9]+) (v1 )?alert rules?" origin/main-dev -- docs/setup docs/patterns docs/launch-pdfs packages/otel`).
-- CI job `otel-signals` runs the guard and its pytest module (`.github/workflows/ci.yml:1160-1168` on `main-dev`).
+- CI job `otel-signals` runs the guard and its pytest module (`.github/workflows/ci.yml:1150-1168` on `main-dev`).
 - The candidate expression below parses on the live datasource, returns no series now, and returned a `staging` series
   over the last 30 days.
 - Known limitation: the checked-in rules are not auto-provisioned and aggregate across environments
@@ -518,8 +524,8 @@ declares no config key, and this step adds no namespace, key, `value_type`, seed
    a wrong count.
 5. Do not edit `scripts/check-otel-produced-signals.py`: the new uid is in neither `RPC_RULES` nor `STALL_RULE`, so only
    the `noDataState` requirement applies to it.
-6. If BRANCH SYNC has not run and the tree still holds the pre-port guard, stop and report it as a blocker; do not edit
-   the `.sh` pair.
+6. The merged tree holds only the Python guard; there is no `.sh` pair (re-checked 2026-11-21). If a `.sh` guard
+   reappears, stop and report it as a blocker; do not edit it.
 
 **Verification**:
 ```bash
@@ -556,8 +562,8 @@ grep -n "Four alert rules" packages/otel/alerts/README.md
   `main-dev` `:97`); the `account:{account_id}` row shows a parenthesised ownership note.
 - Trading doc sentence: "A real finding emits `reconciliation.mismatch_found`, a CRITICAL alert, and routes to the
   **ordinary, per-account** halt" (`main-dev` `docs/reconciliation.md:31`).
-- `merge-order.md`: non-blocking prose sections end the file (`## Textual overlap: 300 ↔ 304 (2026-11-09, non-blocking)`,
-  feature tree `:355-364`); each closes with "Operator-approved as a prose note so it does not gate either integration PR."
+- `merge-order.md`: non-blocking prose sections end the file, from `## Textual overlap: 300 ↔ 304 (2026-11-09, non-blocking)`
+  through the 347 section ending at `:420` (merged tree, 2026-11-21); each closes with "Operator-approved as a prose note so it does not gate either integration PR."
 - `grep -n "315\|alert-event" docs/roadmap/features/merge-order.md` → no match; the file has no entry for this feature.
 - Peer 312: `docs/roadmap/features/312-fix-read-path-owner-trust/product-spec.md:94` (Open Question 2, untargeted
   `ListAlerts` visibility). Peer 333: `packages/otel/docs/context-constitution-findings.md:14` on `main-dev`.
