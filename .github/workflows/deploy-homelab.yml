@@ -85,6 +85,14 @@ jobs:
           fi
           { echo "IMAGE_TAG=$tag"; echo "SRC_SHA=$src"; } >>"$GITHUB_ENV"
 
+      - name: The UI image's theme label must match the target environment
+        id: ui-theme
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          bash scripts/ui-theme-label.sh require-match "$IMAGE_TAG" "$TARGET_ENV"
+
       - uses: ./.github/actions/setup-sops
 
       - name: Resolve secrets (SOPS first; DEV_/PROD_ and environment-secret fallback)
@@ -99,6 +107,8 @@ jobs:
           LEGACY_VAPID_PRIVATE_KEY: ${{ secrets[format('{0}_VAPID_PRIVATE_KEY', env.P)] }}
           LEGACY_VAPID_PUBLIC_KEY: ${{ secrets[format('{0}_VAPID_PUBLIC_KEY', env.P)] }}
           LEGACY_VAPID_SUBJECT: ${{ secrets[format('{0}_VAPID_SUBJECT', env.P)] }}
+          LEGACY_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets[format('{0}_OTEL_EXPORTER_OTLP_ENDPOINT', env.P)] }}
+          LEGACY_OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets[format('{0}_OTEL_EXPORTER_OTLP_HEADERS', env.P)] }}
           LEGACY_TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
           LEGACY_TS_AUTHKEY_EXPIRES: ${{ vars.TS_AUTHKEY_EXPIRES }}
           LEGACY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -106,6 +116,7 @@ jobs:
           LEGACY_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           LEGACY_APP_URL: ${{ secrets.APP_URL }}
           LEGACY_SEED_USER_ID: ${{ secrets.SEED_USER_ID }}
+          LEGACY_DB_CA_CERT: ${{ secrets.DB_CA_CERT }}
         run: python3 scripts/sops_secrets.py resolve --env "$TARGET_ENV" --target homelab --github-env "$GITHUB_ENV"
 
       - name: Check out the images' own commit

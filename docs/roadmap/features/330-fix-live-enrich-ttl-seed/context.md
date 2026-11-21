@@ -25,3 +25,565 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap findings: WARN: config migration NNN with 321/322
 - Recommended design depth: full (config migration; analysis + ui)
 - Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)
+
+## Session 2026-11-11 — sdd-batch design gate (round 2)
+
+- /sdd-design full debate halted at its approval gate after round 2 (gate policy: halt). design.md NOT written; status.md unchanged (spec-ready). Register: debate.md (D-1..D-12, R-1..R-9, O-1..O-3, P-1..P-2).
+
+### Open Threads
+
+- **Approach**: one new config data migration `services/xstockstrat-config/migrations/0NN_analysis_live_enrich_ttl_reseed.{up,down}.sql` (NN = 048 today; re-run `ls` at spec and execute, 321/322 also want 048). Each file is a single CTE statement: guarded UPDATE on `config.config_values` (namespace `analysis`, relative key `opportunity.live_enrich_ttl_seconds`, `user_id IS NULL`, staging + production) WHERE value is the seeded `'10'` OR the description is the verbatim 028 text; value CASE `'10'→'20'`; separate description CASE on the 028 text (D-3); actor columns (`updated_by`/`update_reason`/`caller_identity`) CASE-guarded on the value branch only (D-9); no `default_value` write (D-2); `pg_notify('config_changed')` CTE per (namespace, environment) forced by a final SELECT that references it (D-10). Down reverts value only where `'20'` AND the sentinel (D-5), description only where it still equals the 330 text byte for byte. Tests: RED static node:test `liveEnrichTtlReseedMigration.test.ts` (reads the 028 text via `findOne`, D-11) + analysis @AC-2 memo test (TTL=20, re-poll at t+15s issues no `BatchGetLatestPrice`). Dev-deploy check passes on global value > 15 and description fixed (D-12; staging holds 600). Per-user rows out of scope, listed at deploy (D-6). Docs: config-governance.md:422,473 + Per-Feature Registered Keys row; analysis CLAUDE.md:610; catalog.tsv untouched (D-8).
+- **Strongest open objection (O-3, non-blocking)**: operator ruling on REOPEN petitions P-1/P-2 — sentinel spelling slug form `system:config-migration-feature-fix-live-enrich-ttl-seed` (config-governance.md:142) vs settled D-4 `system:config-migration-feature-330`. If granted, only the literal changes and D-5's "record a C-10(c) sentinel row" task drops. Second non-blocking item: story owner adds FR-1/FR-2, tags `@AC-1 @FR-1` / `@AC-2 @FR-2`, amends the @AC-1 Given to "…and the row still holds the seeded '10'" before spec (O-1 closed as an artifact action).
+- **Floor status**: no Floor breaches.
+- **Uncovered @AC changes**: @AC-1 CHANGE (not covered by an operator decision); @AC-2, @AC-9, @AC-14, @AC-24, @AC-26, @AC-28 PRESERVE.
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "Add one new config data migration, services/xstockstrat-config/migrations/0NN_analysis_live_enrich_ttl_reseed.{up,down}.sql. NN is 048 today. Re-run `ls` at spec and again at execute, because features 321 and 322 also want 048. Each file is a single CTE statement: a guarded UPDATE on config.config_values, then a pg_notify tail, then a final SELECT that references the notify CTE. That last SELECT is required: without it PostgreSQL never evaluates the CTE and the notify does not fire (047_config_alias_removal_rows.up.sql:57-61).\n\nUP\n- Scope (from 043_analysis_live_loop_keys.up.sql:31-35): namespace 'analysis', the relative key 'opportunity.live_enrich_ttl_seconds', user_id IS NULL, environment IN ('staging','production').\n- WHERE: the scope AND (value_data = '10' OR description = <028 verbatim text, 028:112,115>). This is D-3.\n- Value CASE: '10' becomes '20'.\n- Description CASE: guarded on the 028 verbatim text. It is separate from the value guard and follows the 032 pattern (032:5-9).\n- Actor columns (new this round, closes the adversary's blocking item): updated_by, update_reason and caller_identity are each CASE-guarded on the value branch. Example: `updated_by = CASE WHEN v.value_data = '10' THEN <sentinel> ELSE v.updated_by END`, and the same shape for update_reason and caller_identity (NULL on the value branch, otherwise the existing value).\n  - A row that only gets the description rewrite keeps its real writer. That matters because the 017 trigger (017_config_secrets_and_scoping.up.sql:69) audits only when value_data changes, and config-governance.md:130-135 relies on caller_identity to tell automated writes apart.\n  - The sentinel therefore marks exactly the rows whose value 330 changed.\n- default_value is not written (D-2).\n- The 017/001 trigger writes the audit row for the value change.\n- Notify: `nt AS (SELECT pg_notify('config_changed', json_build_object('namespace', ..., 'environment', ...)::text) FROM (SELECT DISTINCT namespace, environment FROM u) t)`, ending with `SELECT (SELECT count(*) FROM u), (SELECT count(*) FROM nt)`.\n\nDOWN\n- Same scope.\n- The value goes back to '10' only WHERE value_data = '20' AND updated_by = <sentinel> (D-5, sentinel only, with no config_audit anchor).\n- The description goes back to the 028 text only where it still equals the 330 text, byte for byte.\n- The actor columns are guarded on the value branch in the same way.\n- Same notify tail and final SELECT that references nt.\n\nSENTINEL STRING\n- The settled D-4 value 'system:config-migration-feature-330' stands until the operator rules on the proposer's REOPEN petition (both sides on record).\n- The petition asks for the slug form 'system:config-migration-feature-fix-live-enrich-ttl-seed', per the existing convention at docs/patterns/config-governance.md:142.\n- If the operator grants it, only the literal changes, and the \"record a C-10(c) sentinel row\" doc task is dropped because that convention row already exists.\n\nOUT OF SCOPE\n- Per-user rows (D-6). The deploy-time listing of per-user values stays.\n\nTESTS\n1. Static node:test suite, services/xstockstrat-config/src/__tests__/liveEnrichTtlReseedMigration.test.ts. It follows the zeroTrapDescriptionMigration.test.ts structure, uses findOne and splitStatements from migrationSql.ts, and is RED until the migration exists (D-7). It asserts:\n   - the key is namespace-relative, with no 'analysis.' prefix;\n   - the user_id IS NULL and environment scope;\n   - the '10'→'20' value CASE;\n   - the description CASE, guarded on the old text, which the test reads from the 028 file via findOne('analysis_opportunity_keys','up') instead of a hand-copied literal;\n   - the down's description literal equals the up's new text byte for byte;\n   - the actor columns are stamped only on the value branch;\n   - no default_value assignment and no DELETE;\n   - the notify CTE is present and referenced by the final SELECT, in both up and down;\n   - the down's value revert is guarded on '20' AND the sentinel.\n   Spec should check whether globalIntSeedCases.ts can drive these cases (C-13).\n2. Analysis @AC-2 behaviour test next to tests/test_live_enrich_memo.py:44-64: with TTL=20, a re-poll at t+15s issues no BatchGetLatestPrice.\n\nVERIFICATION\n- The dev-deploy query passes per environment when the global stored value is > 15 and the description no longer equals the 028 text. Checking for exactly '20' would report a false failure on staging, which holds 600.\n- AC-1's \"is '20'\" Example is checked against a fresh database, through the static test.\n- The query also lists per-user rows.\n\nDOCS\n- config-governance.md:422,473 and a Per-Feature Registered Keys row (D-8).\n- services/xstockstrat-analysis/CLAUDE.md:610.\n- catalog.tsv is not edited.\n\nSTORY ARTIFACTS (owner action, not a design change)\n- Add FR-1 and FR-2 to product-spec, tag @AC-1 @FR-1 and @AC-2 @FR-2, and amend the @AC-1 Given to \"…and the row still holds the seeded '10'\".\n\nBUILD ORDER\n1. RED static test.\n2. Up and down migration.\n3. Analysis AC-2 test.\n4. Doc sync.\n5. Dev-deploy verification.",
+    "open_objections": [
+      {
+        "text": "Pending operator ruling on the REOPEN petition for D-4/D-5 sentinel spelling. The petition asks for the slug form 'system:config-migration-feature-fix-live-enrich-ttl-seed' (config-governance.md:142). The current settled value 'system:config-migration-feature-330' matches neither documented sentinel form exactly. Until the operator rules, the approach keeps D-4's string.",
+        "blocking": false
+      },
+      {
+        "text": "Story owner must add FR-1 and FR-2 plus the @FR tags, and amend the @AC-1 Given clause ('row still holds the seeded 10') before spec. This is C-15 hygiene and has no design impact.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-24",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-26",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-28",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Stamping the actor columns (updated_by, update_reason, caller_identity) on every row the WHERE matches. Description-only rows would carry the 330 sentinel, so the sentinel-only down would over-revert a '20' row to '10', which violates @AC-9. It would also erase the real writer on staging's 600 row, and the 017 trigger leaves no audit row for a description-only change.",
+      "Splitting the up into two UPDATE statements (value plus actor columns, then description only). That needs a second statement and a second notify source, with atomicity resting on golang-migrate's implicit transaction. Column-level CASE guards give the same isolation in one statement.",
+      "Sentinel plus a config_audit EXISTS anchor in the down (the O-2 runner-up). It adds a correlated subquery for a two-row revert (C-18). Once the actor columns are guarded, it identifies the same rows as the sentinel alone.",
+      "A notify CTE that no final SELECT references. PostgreSQL never evaluates it, so pg_notify silently does not fire and analysis keeps the stale 10 until its next reload.",
+      "A dev-deploy check requiring the stored value to equal exactly '20'. It reports a false failure on staging, where the operator value 600 is preserved by design (D-1)."
+    ],
+    "open_risks": [
+      "Live staging and production stored values may differ from the repo snapshots. A global row an operator set to a value other than 10 stays as the operator left it, even below 15. The post-deploy query is the mitigation.",
+      "The staging per-user row (inventory-staging.jsonl:16) holds an unknown value that overrides the global row. If it is below 15, the memo stays useless for that user until an operator acts.",
+      "A future writer that changes value_data without rewriting updated_by would leave a stale sentinel, and a rollback could wrongly reset that row to '10'. No such writer exists today (configServiceImpl.ts:829-835).",
+      "Migration number collision with features 321 and 322 at 048. Re-run ls at spec and at execute. The D-4 numbered sentinel would need renaming if the operator denies the slug petition and the file is renumbered.",
+      "The design assumes the single-CTE file is atomic and that pg_notify is delivered at commit under golang-migrate. Confirm at spec.",
+      "No test runs the migration against a real database, so the static test plus dev verification carry the @AC-1 claim. Reading the old text from the 028 file reduces the risk of a mismatched literal, but does not remove it."
+    ],
+    "constitution_rules_touched": [
+      "C-05",
+      "C-07",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-01",
+      "P-02",
+      "P-03",
+      "CONFIG-2"
+    ],
+    "rationale": "I checked the adversary's blocking objection against the code. The 017 trigger (017_config_secrets_and_scoping.up.sql:69) audits only when value_data changes. As proposed, the up would therefore put the 330 sentinel on rows whose value it never touched, and the sentinel-only down would push those rows back below the 15s poll. Guarding each actor column on the value branch fixes this inside one statement. It keeps D-3 (description decoupled from the value) and D-5 (sentinel-only down) and makes the two consistent, so O-2 closes as sentinel-only.\n\nI also confirmed that 047:61 forces evaluation of its notify CTE with a final SELECT, so D-4's notify needs that same line. The AC-1 versus staging gap is resolved by checking AC-1 against a fresh database and making the deploy check pass on \"value > 15 and description fixed\".\n\nThe sentinel-spelling petition rests on genuinely new evidence (config-governance.md:142, which round 1 never cited). Only the operator can reopen a settled D-n, so the synthesis keeps D-4's string, records the petition, and leaves it open as non-blocking. O-1 is concretely answered as a story-owner action and closes, with the pending artifact edit tracked as a non-blocking item.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "In both up and down, the actor columns (updated_by, update_reason, caller_identity) are CASE-guarded on the value branch. Only rows whose value_data 330 changes get the sentinel and the NULL caller_identity. Description-only rows keep their real writer.",
+          "evidence": "017_config_secrets_and_scoping.up.sql:69 (audit only on value change); docs/patterns/config-governance.md:130-135; adversary r2 blocking objection"
+        },
+        {
+          "text": "Up and down each end with a final SELECT that references the notify CTE (as in 047:61), so pg_notify is actually evaluated. The static test asserts this.",
+          "evidence": "047_config_alias_removal_rows.up.sql:57-61"
+        },
+        {
+          "text": "The static test reads the old 028 description from the 028 migration file via findOne, not from a copied literal. It asserts that the down's description literal equals the up's new text, and that the key is namespace-relative.",
+          "evidence": "services/xstockstrat-config/src/__tests__/migrationSql.ts; 028_analysis_opportunity_keys.up.sql:112,115; fix-config-keys-drift.feature:18"
+        },
+        {
+          "text": "AC-1's literal '20' is checked against a fresh database through the static test. The dev-deploy check passes per environment when the global value is > 15 and the description no longer equals the 028 text.",
+          "evidence": "report-staging-041.jsonl:9 (staging global row holds 600)"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Stamping actor columns on every WHERE-matched row, including description-only rows",
+          "why": "Makes the sentinel-only down over-revert to '10' (violates @AC-9) and erases the real writer on rows where the trigger leaves no audit row"
+        },
+        {
+          "text": "Splitting the up into two UPDATE statements to isolate the actor stamping",
+          "why": "A second statement and notify source for the same result that column-level CASE guards give in one atomic statement"
+        },
+        {
+          "text": "A config_audit EXISTS anchor in the down",
+          "why": "Correlated subquery cost (C-18); once the actor columns are guarded it reverts the same rows as the sentinel alone"
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Operator to rule on the REOPEN petition for the D-4/D-5 sentinel spelling: slug form per config-governance.md:142 versus the settled 'system:config-migration-feature-330'.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-2",
+          "how": "Sentinel only, made sound by guarding the actor columns on the value branch so the sentinel marks exactly the rows 330 changed. The config_audit EXISTS anchor is rejected as the runner-up."
+        },
+        {
+          "id": "O-1",
+          "how": "Resolved as a story-artifact action with no design impact: the story owner adds FR-1 and FR-2, tags @AC-1 @FR-1 and @AC-2 @FR-2, and amends the @AC-1 Given to 'row still holds the seeded 10'."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "D-4",
+          "evidence": "docs/patterns/config-governance.md:142 defines the number-free sentinel 'system:config-migration-feature-<slug>' (first used by feature 305); requested sentinel 'system:config-migration-feature-fix-live-enrich-ttl-seed'. Proposer filed it and the adversary recommends granting it.",
+          "is_new": true
+        },
+        {
+          "target": "D-5",
+          "evidence": "Same config-governance.md:142 convention row already exists, so D-5's task 'record the sentinel as a C-10(c) convention' would be dropped. Only the sentinel string changes.",
+          "is_new": true
+        }
+      ],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+- /sdd-design full debate halted at its approval gate after round 3 (gate policy: halt). design.md NOT written; status.md unchanged. Register: debate.md (D-1..D-15, R-1..R-12, O-1..O-4, P-1..P-4).
+
+### Open Threads
+
+- **Approach**: the round-2 design (D-1..D-12) stands, with three verified corrections and one CI touchpoint. (1) The migration is `services/xstockstrat-config/migrations/049_analysis_live_enrich_ttl_reseed.{up,down}.sql`, because feature 334 holds 048 on trunk (D-13). The spec's merge checklist re-checks the number with `git log --all` for 049*/050* plus a scan of origin/feature/* migration tails (321, 322). At merge the number must equal max(origin/main-dev)+1, because golang-migrate silently skips lower versions. File content stays number-free. (2) The `pg_notify('config_changed')` CTE uses the four-field CONFIG-4 payload `{namespace, key, environment, user_id: NULL}` from `SELECT DISTINCT namespace, key, environment FROM u`. A final SELECT forces its evaluation in both up and down (D-14, D-10). (3) The down's `'20' AND sentinel` value guard has trunk precedent in 048_webhook_fanout_callback_keys.down.sql:4-13 (D-5). (4) New CI touchpoint: the migration step's Files include `scripts/config-wiring-stored.json`, regenerated only with `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py` and regenerated again after any renumber. Without it, check-config-wiring `--final` fails STALE-STORED (D-15). Unchanged from round 2: single-CTE guarded UPDATE, value '10'→'20', description CASE decoupled from the value guard on the 028 text, actor columns guarded on the value branch only, no `default_value` write, per-user rows out of scope (listed at deploy), RED static test `liveEnrichTtlReseedMigration.test.ts`, analysis @AC-2 memo test at TTL=20, dev-deploy check "global > 15 and description fixed", and the doc sync (config-governance.md:422,473 + registered-keys row; analysis CLAUDE.md:610; catalog.tsv untouched). Build order: RED static test → 049 up/down + regenerated config-wiring-stored.json → analysis AC-2 test → doc sync → dev-deploy verification.
+- **Strongest open objection (O-4, non-blocking)**: the operator rules on REOPEN petitions P-3/P-4 against D-12/D-7. They ask to add a real-DB assertion file `scripts/migration-assertions/live-enrich-ttl-reseed.sql`, number-free and modelled on config-043.sql and webhook-fanout-callback.sql. `migration-rerun.py:562-576` picks it up automatically. It is the only check that would run the D-3/D-9 CASE-and-trigger interaction and the R-7 over-revert guard against Postgres. The proposer's "bespoke harness" rebuttal is factually wrong. D-7/D-12 stay as settled until the operator rules. Still open as well: O-3 (P-1/P-2 sentinel spelling, slug form vs settled `system:config-migration-feature-330`; only the literal changes) and the story-owner action from closed O-1 (FR-1/FR-2, @FR tags, amend the @AC-1 Given) before spec.
+- **Floor status**: no Floor breaches.
+- **Uncovered @AC changes**: @AC-1 CHANGE (not covered by an operator decision); @AC-2, @AC-3, @AC-9, @AC-14, @AC-24, @AC-26, @AC-28, @AC-34 PRESERVE.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "The round-2 design stands (D-1 to D-12) with three verified corrections and one CI touchpoint added. No new mechanism is introduced.\n\nMIGRATION FILE\n- Path: services/xstockstrat-config/migrations/049_analysis_live_enrich_ttl_reseed.{up,down}.sql.\n- 048 is taken on trunk by feature 334 (048_webhook_fanout_callback_keys.up.sql:9). `git log --all -- 'services/xstockstrat-config/migrations/049*'` is empty today.\n- Number re-check, written into the spec's merge checklist:\n  - Run `git log --all` for 049* and 050*.\n  - Scan the migration tails of the origin/feature/* branches, including in-flight 321 and 322.\n  - At merge, the number must be max(origin/main-dev) + 1. golang-migrate silently skips any version lower than the applied maximum (fails.md:3815-3817, 2909-2911; insights.md:4216).\n- File content is number-free. The sentinel carries the feature, not the migration number. A renumber is therefore a rename plus a regeneration of config-wiring-stored.json (see below).\n\nUP: one CTE statement\n1. `u AS (UPDATE config.config_values v SET ... WHERE ... RETURNING namespace, key, environment)`.\n   - Scope: namespace='analysis', key='opportunity.live_enrich_ttl_seconds' (relative), user_id IS NULL, environment IN ('staging','production'). Same as 043_analysis_live_loop_keys.up.sql:27-35.\n   - WHERE: the scope AND (value_data='10' OR description = <028 verbatim text, 028_analysis_opportunity_keys.up.sql:112,115>) (D-3).\n   - SET clause:\n     - value_data: CASE '10' → '20'.\n     - description: CASE guarded on the 028 verbatim text (032 pattern, 032:5-9).\n     - updated_by, update_reason, caller_identity: each CASE-guarded on the value branch (D-9).\n     - default_value: never written (D-2).\n2. `nt AS (SELECT pg_notify('config_changed', json_build_object('namespace',namespace,'key',key,'environment',environment,'user_id',NULL)::text) FROM (SELECT DISTINCT namespace,key,environment FROM u) t)`.\n   - This is the four-field CONFIG-4 payload (services/xstockstrat-config/docs/context-constitution.md:21).\n   - The handler defaults a missing environment, so environment is load-bearing (configServiceImpl.ts:417-424).\n3. Final `SELECT (SELECT count(*) FROM u), (SELECT count(*) FROM nt);` (D-10; 047_config_alias_removal_rows.up.sql:57-61).\n- The 017 trigger audits only value changes (017:69).\n\nDOWN: mirror of the up\n- Value reverts to '10' only WHERE value_data='20' AND updated_by=<sentinel> (D-5). This is the same \"sentinel AND seeded value\" shape as 048_webhook_fanout_callback_keys.down.sql:4-13.\n- Description reverts only where it equals the 330 text byte for byte.\n- Actor columns are value-branch guarded.\n- Same four-field notify tail and forced final SELECT.\n\nSENTINEL\n- 'system:config-migration-feature-330' (D-4) stays until the operator rules on P-1/P-2 (O-3).\n- Either spelling has trunk precedent: 305/306 used the number form (migration-rerun.py:70-71), 334 used the slug form (048…up.sql:9, config-governance.md:142). Only the literal changes.\n\nCI TOUCHPOINT (new this round)\n- scripts/config-wiring-stored.json goes in the migration step's Files and is regenerated with the generator only: `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py`. Never edit it by hand.\n- Why:\n  - check-config-wiring.mjs:226-231 hashes every config migration file.\n  - :715-716 fails STALE-STORED on a hash mismatch, under `--final` (ci.yml:1240).\n  - The config-wiring-stored job regenerates the file on a scratch DB and diff-compares it (ci.yml:1248-1249).\n  - The file's rows for this key (config-wiring-stored.json:939-960) also carry the 028 description, which 049 rewrites.\n- Regenerate again after any renumber.\n\nOUT OF SCOPE\n- Per-user rows (D-6). The deploy-time listing of per-user values stays.\n\nTESTS\n1. Static node:test suite services/xstockstrat-config/src/__tests__/liveEnrichTtlReseedMigration.test.ts (D-7, D-11). Uses findOne and splitStatements from migrationSql.ts. Reads the old description through findOne('analysis_opportunity_keys','up'). Asserts:\n   - the relative key;\n   - the user_id IS NULL and environment scope;\n   - the value CASE and the description CASE;\n   - the actor columns are value-branch only;\n   - no default_value assignment and no DELETE;\n   - the notify CTE is referenced by the final SELECT in up and down, and the payload includes environment;\n   - the down's description literal equals the up's new text;\n   - the down's value revert is guarded on '20' AND the sentinel.\n2. Analysis @AC-2 memo test at TTL=20, next to tests/test_live_enrich_memo.py:44-64.\n3. Pending the operator ruling on P-3/P-4, not adopted yet: a real-DB assertion file scripts/migration-assertions/live-enrich-ttl-reseed.sql.\n   - Number-free name, not config-NNN, so it runs after all migrations.\n   - The harness picks it up with no wiring: migration-rerun.py:562-576 globs every *.sql.\n   - Modelled on config-043.sql:102-378 and webhook-fanout-callback.sql.\n   - Checks: operator 600 kept, second apply makes no change and writes no audit row, the down reverts only sentinel rows, and another actor's '20' and the per-user row survive.\n\nVERIFICATION AND DOCS\n- As settled (D-8, D-12): the dev-deploy query passes when the global value is > 15 and the description no longer equals the 028 text, and it lists per-user rows.\n- Doc sync: config-governance.md:422,473, plus a Per-Feature Registered Keys row; services/xstockstrat-analysis/CLAUDE.md:610. catalog.tsv is not edited.\n\nBUILD ORDER\n1. RED static test.\n2. 049 up and down migration, plus the regenerated config-wiring-stored.json.\n3. Analysis AC-2 test.\n4. Doc sync.\n5. Dev-deploy verification.\n\nStory-artifact FR tagging (closed O-1) remains an owner action before spec.",
+    "open_objections": [
+      {
+        "text": "O-3 (carried): the operator rules on P-1/P-2, the sentinel spelling. The options are the slug form per config-governance.md:142 (334 precedent) or the settled 'system:config-migration-feature-330' (305/306 precedent). Only the literal changes.",
+        "blocking": false
+      },
+      {
+        "text": "The operator rules on P-3/P-4 (REOPEN D-12/D-7): whether to add the real-DB assertion file scripts/migration-assertions/live-enrich-ttl-reseed.sql. It is the only check that executes the D-3/D-9 CASE and trigger interaction and the R-7 over-revert guard against Postgres. The harness picks it up automatically (migration-rerun.py:562-576). The proposer's ground for rejecting it, a 'bespoke fixture replay', is factually wrong. The approach keeps D-7/D-12 as settled until the operator rules.",
+        "blocking": false
+      },
+      {
+        "text": "Story owner action before spec (from closed O-1): add FR-1 and FR-2 and the @FR tags, and amend the @AC-1 Given to 'row still holds the seeded 10'.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-24",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-26",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-28",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-34",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Numbering the migration 048. Feature 334's 048_webhook_fanout_callback_keys already holds that number on trunk.",
+      "Re-checking the migration number with `ls` on the working tree only. It misses numbers held on unmerged sibling feature branches, and it misses golang-migrate's silent skip of a version lower than the applied maximum (fails.md:3815-3817, 2909-2911).",
+      "Keeping 047's two-field notify payload {namespace, environment}. It works, but it drifts from the four-field CONFIG-4 contract (context-constitution.md:21). The four-field payload costs nothing extra.",
+      "Leaving scripts/config-wiring-stored.json untouched. Any new config migration file changes storedInputsSha256 and turns check-config-wiring --final red (STALE-STORED, check-config-wiring.mjs:715-716).",
+      "Hand-editing scripts/config-wiring-stored.json. CI regenerates it on a scratch DB and requires an exact match (ci.yml:1248-1249), so only generator output is valid.",
+      "(Carried from earlier rounds, locked) R-1 to R-9: writing default_value, value-gated description, unguarded overwrite, 047 latch machinery, editing catalog.tsv, runbook SetConfig seeding, stamping actor columns on all matched rows, a two-statement split, a config_audit EXISTS anchor."
+    ],
+    "open_risks": [
+      "Migration number race. 321 and 322 may land 049 or 050 first. A missed max(origin/main-dev)+1 check at merge would collide, or golang-migrate would silently skip the file. Mitigation: the merge-checklist procedure, plus regenerating config-wiring-stored.json after any renumber.",
+      "Without the P-3/P-4 assertion file, no test executes the migration against real Postgres. The D-9 CASE and 017 trigger interaction and the down's no-over-revert property then rest on static text and dev verification only. fails.md:3834-3843 records a config down-guard bug that surfaced only at merge.",
+      "Live staging and production values may differ from the repo snapshots. A global row an operator set to a non-10 value below 15 stays as it is. The post-deploy query is the mitigation.",
+      "The staging per-user row (inventory-staging.jsonl:16) may hold a value below 15 that overrides the global row. Operator follow-up is needed via the deploy-time listing.",
+      "A future writer that changes value_data without rewriting updated_by would leave a stale sentinel, and the down could then mis-revert that row. No such writer exists today (configServiceImpl.ts:829-835).",
+      "The key-string overlap scan on (namespace, key) must be re-run after each main-dev merge. Recon found only 322 touching this key, and 322 defers to 330.",
+      "The design assumes golang-migrate runs each file in one transaction, so pg_notify is delivered at commit. Confirm at spec. The single statement keeps the change atomic either way."
+    ],
+    "constitution_rules_touched": [
+      "C-05",
+      "C-07",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-01",
+      "F-08",
+      "P-02",
+      "P-03",
+      "CONFIG-2",
+      "CONFIG-4"
+    ],
+    "rationale": "I checked the round-3 claims against the repo.\n- 048_webhook_fanout_callback_keys exists on trunk, and `git log --all` shows no 049 file. 049 is correct for now, but the re-check must follow the ledger procedure, not working-tree `ls`.\n- The 048 down uses exactly the 'sentinel AND seeded value' guard, which confirms D-5 has precedent.\n- CONFIG-4 documents a four-field payload, and the handler defaults a missing environment. The proposer's payload correction is adopted.\n\nThe adversary's blocking CI finding is real.\n- check-config-wiring.mjs:226-231 hashes every config migration, and :715-716 fails on mismatch under --final (ci.yml:1240).\n- A separate job diff-compares a scratch-DB regeneration (ci.yml:1248-1249).\n- The synthesized approach therefore adds the generator-regenerated config-wiring-stored.json to the migration step. That answers the objection concretely, so it is recorded as a decision rather than left open.\n\nThe adversary is also right that migration-rerun.py:562-576 globs every assertion file with no enrolment. The proposer's reason for rejecting real-DB coverage is a false premise. Adding the file would make D-7's 'only RED test' claim false and would extend D-12's verification basis. Both are settled decisions, so per the register guardrails I do not adopt it unilaterally. It is filed as REOPEN petitions on D-12 and D-7 with evidence not previously on record, left as a non-blocking operator item, and described in the approach as pending.\n\nO-3 stays open. The proposer's sentinel context restates evidence already in P-1, so no new petition is filed for it. No settled D-n is contradicted, no locked R-n is reintroduced, and no closed O-n is re-raised.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The migration is 049_analysis_live_enrich_ttl_reseed.{up,down}.sql, not 048. The spec's merge checklist re-checks the number with `git log --all` for 049*/050* plus a scan of origin/feature/* migration tails. At merge the number must equal max(origin/main-dev)+1, because golang-migrate skips lower versions. File content stays number-free.",
+          "evidence": "services/xstockstrat-config/migrations/048_webhook_fanout_callback_keys.up.sql:9 (048 taken by feature 334); fails.md:3815-3817, 2909-2911; insights.md:4216"
+        },
+        {
+          "text": "The pg_notify payload in up and down is the four-field CONFIG-4 shape {namespace, key, environment, user_id: NULL}, built from SELECT DISTINCT namespace, key, environment FROM u.",
+          "evidence": "services/xstockstrat-config/docs/context-constitution.md:21 (CONFIG-4); services/xstockstrat-config/src/grpc/configServiceImpl.ts:417-424 (environment defaulted when missing), :841-842 (SetConfig sends four fields)"
+        },
+        {
+          "text": "The migration step's Files include scripts/config-wiring-stored.json, regenerated only via `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py` and never hand-edited. It is regenerated again after any renumber.",
+          "evidence": "scripts/check-config-wiring.mjs:226-231 (storedInputsSha256 over migrations), :715-716 (STALE-STORED fail); .github/workflows/ci.yml:1240 (--final), :1248-1249 (scratch-DB regeneration must match); scripts/config-wiring-stored.json:939-960 (028 description stored for this key)"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Re-checking the migration number with working-tree `ls` only",
+          "why": "Misses numbers held on unmerged sibling branches and golang-migrate's silent skip of a version below the applied maximum (fails.md:3815-3817, 2909-2911)"
+        },
+        {
+          "text": "Keeping 047's two-field notify payload {namespace, environment}",
+          "why": "Drifts from the documented four-field CONFIG-4 contract; the four-field payload costs nothing extra"
+        },
+        {
+          "text": "Leaving scripts/config-wiring-stored.json unchanged, or hand-editing it",
+          "why": "A new config migration changes the input hash and fails check-config-wiring --final; CI regenerates the file on a scratch DB and requires an exact match, so only generator output is valid"
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Operator to rule on P-3/P-4 (REOPEN D-12/D-7): add the real-DB assertion file scripts/migration-assertions/live-enrich-ttl-reseed.sql, number-free and modelled on config-043.sql. It would prove operator-value retention, idempotent replay with no audit rows, and sentinel-only down ownership against real Postgres.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [],
+      "reopen_petitions": [
+        {
+          "target": "D-12",
+          "evidence": "scripts/migration-rerun.py:562-576 globs and runs every scripts/migration-assertions/*.sql with no enrolment (non-config-NNN names run after all migrations). Trunk precedents for small seed migrations are scripts/migration-assertions/config-043.sql:102-378 and webhook-fanout-callback.sql (feature 334). Requested: supplement D-12's static-test and dev-deploy verification with a real-DB assertion file. Filed by the adversary; the proposer's 'bespoke harness' rebuttal is factually wrong.",
+          "is_new": true
+        },
+        {
+          "target": "D-7",
+          "evidence": "Same evidence (migration-rerun.py:562-576 auto-glob; config-043.sql and webhook-fanout-callback.sql precedents). Adding the assertion file would make it a second check that goes RED on the defect, contradicting D-7's 'only RED test' wording.",
+          "is_new": true
+        }
+      ],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
+
+## Session 2026-11-13 — sdd-design
+
+- Phase 0 Recon: recon.md (written 2026-11-11). Services: xstockstrat-config (the fix), xstockstrat-analysis (reader, no change), xstockstrat-ui (15s poller, no change). Key reuse patterns: the 043 global-row scoped UPDATE and the 032 verbatim-old-description guard.
+- Phase 1 Grilling: 3 rounds (full).
+  - Termination: approved by the operator at the sdd-batch design gate.
+  - Chosen approach: one guarded single-CTE config migration, `049_analysis_live_enrich_ttl_reseed.{up,down}.sql`:
+    - value `'10'`→`'20'` only on seeded global rows;
+    - a decoupled description CASE;
+    - actor columns stamped only on the value branch (sentinel `system:config-migration-feature-330`);
+    - no `default_value` write;
+    - a four-field CONFIG-4 `pg_notify`, forced by a final SELECT;
+    - a sentinel-guarded down;
+    - `scripts/config-wiring-stored.json` regenerated by the generator.
+  - Rejected: R-1..R-12 (default_value write, value-gated description, unguarded overwrite, 047 machinery, catalog.tsv edit, runbook SetConfig, unguarded actor stamping, a two-statement split, a config_audit anchor, `ls`-only renumber check, the two-field notify, a stale or hand-edited config-wiring-stored.json).
+- Operator decision (2026-11-13, sdd-batch design gate):
+  - C-16 sign-off for this feature's `@AC-1` CHANGE. The literal `"20"` now holds where the global row still holds the seeded `'10'`; operator values are kept and must be > 15.
+  - REOPEN petitions P-1..P-4 declined (approved at the gate instead). The sentinel stays `system:config-migration-feature-330` (D-4/D-5). No real-DB assertion file is added (D-7/D-12 stand).
+- Constitution rules touched: C-05, C-07, C-10, C-11, C-13, C-15, C-16, C-18, F-01, F-08, P-02, P-03, CONFIG-2, CONFIG-4. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Open Threads
+
+- **Before spec (story owner, from closed O-1):** add FR-1 and FR-2 and the `@AC-1 @FR-1` / `@AC-2 @FR-2` tags, and amend the `@AC-1` Given to "…and the row still holds the seeded '10'" (C-15).
+- **Migration number race (target: migration step + merge):** re-check with `git log --all` for 049*/050* and a scan of the origin/feature/* migration tails (321, 322). At merge, require max(origin/main-dev)+1. Regenerate `config-wiring-stored.json` after any renumber.
+- **No real-DB execution of the migration (target: static-test step + dev-deploy verification):** P-3/P-4 were declined, so the D-9 CASE/trigger interaction and the down's no-over-revert property rest on the static test and dev verification (cf. fails.md:3834-3843).
+- **Live values vs snapshots (target: dev-deploy verification):** the post-deploy query must show each environment's global value > 15 with the description fixed. A non-`10` operator value below 15 is left as it is and needs an operator call.
+- **Staging per-user override (target: dev-deploy verification):** the per-user row (`inventory-staging.jsonl:16`) may hold a value below 15. Follow up from the deploy-time listing.
+- **Stale-sentinel assumption (target: spec):** a future writer that changes `value_data` without rewriting `updated_by` could make the down mis-revert. No such writer exists today (`configServiceImpl.ts:829-835`).
+- **Key overlap re-scan (target: spec + each main-dev merge):** re-run the `(namespace, key)` overlap scan. Only 322 touches this key, and it defers to 330.
+- **Transaction/notify timing (target: spec):** confirm golang-migrate runs each file in one transaction, so `pg_notify` is delivered at commit.
+
+## Session 2026-11-13 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status: design-approved → implementation-ready.
+  - Step 1: RED static migration test.
+  - Step 2: the `050` up/down migration plus the regenerated `scripts/config-wiring-stored.json`. Steps 1+2 land together.
+  - Step 3: the analysis `@AC-2` memo test at TTL 20, with a negative control at 10.
+  - Step 4: doc sync.
+  - Step 5: operator-run post-deploy read-back.
+  - Coverage: `@AC-1` → Steps 1, 5; `@AC-2` → Step 3.
+- Operator decisions applied (binding, 2026-11-13): C-16 sign-off for the `@AC-1` change. REOPEN petitions P-1..P-4 declined. The sentinel stays `system:config-migration-feature-330`, and no real-DB assertion file is added (D-7/D-12 stand).
+- Evidence tree: `origin/main-dev` @ `52f6d5a6`. The feature branch was 41 commits behind it and lacked `048` and the current stored set.
+- Key codebase findings:
+  - **Migration renumbered `049` → `050` at spec, under D-13's own procedure.** `git log --all` finds `049_notify_commsgun_channel_keys` (feature 338, commit `a10a086d`, on `origin/ccr-2d98935d-na9x6j`). Trunk max is `048`, and no remote ref holds `050`–`059`. Re-check at merge: max(origin/main-dev)+1.
+  - Moved lines:
+    - reader `services/xstockstrat-analysis/app/handlers/servicer.py:4827` (was `:4819`);
+    - `services/xstockstrat-analysis/CLAUDE.md:625` (was `:610`);
+    - `docs/patterns/config-governance.md:329-330,439,490` (was `:422,473`).
+  - The current audit trigger is `017_config_secrets_and_scoping.up.sql:66-79`. It audits only on a `value_data` change.
+  - `SetConfig` rewrites `updated_by` on every upsert (`configServiceImpl.ts:828-839`), so the sentinel-only down is sound today.
+  - The transaction/notify open risk is closed. Each file is one statement, and `scripts/db-migrate.sh:104` uses plain `migrate up` with no multi-statement flag. NOTIFY is delivered at commit, and the migrator connects direct (`:25060`).
+  - `globalIntSeedCases.ts` fits only two-row INSERT seeds, so the new static test is self-contained (C-13). `retiredPortfolioSnapshotInterval.test.ts:32` splits migrations naively on `;`, so the new literals carry no `;`.
+  - Step 3 uses the canonical `snapshot_watcher` (`tests/conftest.py:62`).
+  - No `scripts/migration-assertions` file names the key. The `(namespace, key)` scan over all remote refs found no other migration touching it.
+- **Spec-time deviation from design's doc-sync wording.** `docs/patterns/config-governance.md:146` makes the Per-Feature Registered Keys log append-only ("Don't edit past entries… a new entry"). Step 4 therefore adds a feature-330 entry that supersedes the stale 184/177/227 lines instead of rewriting `:329-330,439,490`. Step 4 also adds:
+  - the D-5 sentinel convention row;
+  - the analysis `CLAUDE.md:625` fix;
+  - closing `docs/context-constitution-findings.md:42` as RESOLVED, a C-10 surface that names the stale seed and that design did not list.
+
+### Open Threads
+
+- **Story-owner action (C-15), still open.** `acceptance.feature` lacks `@FR-1`/`@FR-2` and the amended `@AC-1` Given ("…row still holds the seeded '10'"). `/sdd-spec` did not edit it. `/sdd-review impl-spec` should check it.
+- **Execute precondition.** Merge `origin/main-dev` into the feature branch before Step 1. Step 2 needs a reachable Postgres with `psql` and `migrate` to regenerate `scripts/config-wiring-stored.json`. Never hand-edit it.
+- **Merge checklist.** Re-check the `050` number and the key-overlap scan after every `origin/main-dev` merge, and again at the integration PR (338 holds `049`; 321 and 322 are in flight).
+- **Post-deploy (Step 5).** Read back each environment's global value (> 15, description fixed). List per-user rows for operator follow-up. Get operator confirmation before promotion.
+
+## Session 2026-11-13 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 8 warnings, no Floor breaches. Overlap: WARN (6 collisions/handoffs, none FAIL). Advisory; lifecycle unchanged (`implementation-ready`).
+- Evidence re-checked on `origin/main-dev` @ `5c4cc935` (#1539, docs-only context refresh), which landed after the spec's `52f6d5a6`. The branch is now 42 commits behind.
+- Addressed in `implementation-spec.md` (commit `1e5fd6fc`):
+  - [x] Evidence-tree drift. The reviewer said the line hints matched. Re-verified against trunk, they do not all match: `services/xstockstrat-analysis/CLAUDE.md` moved `:625` → `:281`, and `docs/context-constitution-findings.md` moved `:42` → `:49`. Step 4 now cites the new lines and says to re-grep after the precondition merge. `servicer.py:4827` and the `config-governance.md` lines are unchanged.
+  - [x] Step 4.4, found while verifying the drift. The Latent bugs table is `| Issue | Impact | Evidence |`, and its RESOLVED precedent (`:48`, feature 244) repoints Evidence at the fix rather than writing `n/a`. The instruction now follows that precedent.
+  - [x] Step 1 Verification now carries the config coverage gate (`c8 check-coverage --lines 40`).
+  - [x] Step 3 states the seed↔reader trade-off: the literals stay hard-coded, Steps 1 + 3 cover the two halves, and Step 5 is the end-to-end check. Reading from the config migration was rejected because of the cross-service coupling and the provisional number.
+  - [x] Step 5 is labelled advisory evidence; the automated `@AC-1` gate is Step 1.
+  - [x] Migration number re-verified. The trunk tail is `048` (`9d45f208`) and only `a10a086d` holds `049` (feature 338); `050` is free. The merge checklist gained item 6: regenerate `config-wiring-stored.json` after any trunk merge that brings a config migration (`inputs_sha256` hashes the whole set). It names 338, 321, 322 and 334.
+  - [x] Step 2's Postgres dependency now has a documented local Docker route (`scripts/Dockerfile.migrate`, as in CI job `config-wiring-stored`). The fallback is that job's always-uploaded `config-wiring-stored` artifact, which is generator output (R-12 holds).
+  - [x] Overlap with 318: the transaction/notify bullet gains a re-check trigger in case 318 changes the `db-migrate.sh` `up` path or adds an NNN-ordering gate first.
+  - [x] Step 4's append-only deviation needed no change; it is already recorded in the sdd-spec session above.
+
+### Open Threads
+
+- Unresolved ⚠ carried into execution (announce at every checkpoint, C-02/P-03):
+  - Integration PR: C-15. `acceptance.feature` still lacks `@AC-1 @FR-1` / `@AC-2 @FR-2` and the amended `@AC-1` Given ("…and the row still holds the seeded '10'"). This is a story-owner action, not a spec edit. It is gated before the integration PR by the three `grep` checks in the spec's § Step Dependencies; C-16 promotion must not use the unamended file. — [ ] unaddressed
+  - Step 2 / merge: migration `050` stays provisional until merge (338 holds `049` unmerged; 321/322 may claim the next free number). Run the merge checklist after every `origin/main-dev` merge; the final number is max(trunk)+1. — [ ] unaddressed
+  - Step 2: generating `scripts/config-wiring-stored.json` still needs Postgres, either local or through the CI artifact. If neither is available, the step blocks (P-03), and the file is never written by hand. — [ ] unaddressed
+  - Step 5: the post-deploy read-back is operator-run, advisory evidence. It needs operator confirmation before promotion. — [ ] unaddressed
+- Overlap findings:
+  - Migration-number race with 322, 321 and 338.
+  - `scripts/config-wiring-stored.json` regeneration race with 322, 321 and 334.
+  - `scripts/db-migrate.sh` up-path assumption versus 318.
+  - Config key: no clash; 322 defers the row to 330.
+
+## Session 2026-11-13 — sdd-execute sequential (sdd-batch-execute)
+
+**Up-front confirmation.** The operator approved the up-front plan with this record (binding, verbatim):
+
+```json
+{"mainDev":"d5de836b1a99591c992a17b46a688469f5b1ae98","dev":"5569fa9d8b1589bcafc4d3386fdc60ace9d34d6d","specHash":"687f18cc7f3a897df8b9c9c0d37153e59c7aea5f","directive":"conditional","pending":[1,2,3,4,5],"mismatches":[{"n":1,"detail":"Minor line drift only. Every Files path is valid: liveEnrichTtlReseedMigration.test.ts does not exist yet, as expected for a create. (a) migrationSql.ts splitStatements spans :19-53, not :19-52. (b) zeroTrapDescriptionMigration.test.ts has 75 lines, not :1-80. Its old-text verbatim check is at :57-65 (spec says :61-69) and reads both 027 and 028 through SOURCE_FILES :12-15, not 028 alone. Its down-inverts-up check is at :67-74 (spec says :71-78). Everything else re-verified: MIGRATIONS_DIR :6, findOne :8-16 (same 'expected exactly one *<suffix>.<ext>.sql, got [...]' message), 028 rows :111-116 seeding '10' with the cited description, exactly 1 *_analysis_opportunity_keys.up.sql, package.json :12/:13, tsconfig include src/**/*, globalIntSeedCases.ts :16-20 INSERT-only shape, retiredPortfolioSnapshotInterval.test.ts :32 bare split(';')."},{"n":2,"detail":"The migration-number evidence is stale but the number still holds. 049_notify_commsgun_channel_keys is now on origin/main-dev (d5de836b, #1537, feature 338 merged), so the trunk tail is 049, not 048. The 'held on unmerged branch origin/ccr-2d98935d-na9x6j' and 'origin/main-dev tops out at 048' statements in Execution Summary, Step Dependencies and Step 2 evidence are out of date. `git log --all -- 'services/xstockstrat-config/migrations/05*' '06*'` finds nothing, so 050 equals max(trunk)+1 and is still correct. The merged tree's scripts/config-wiring-stored.json already contains the 049 commsgun rows. The target rows are still at :939-962 with file 028 and the 028 description, and inputs_sha256 is at :5020, so the regenerated diff should still be only inputs_sha256 plus the two descriptions. The key-overlap re-scan (`git log --all -S live_enrich_ttl_seconds` over the migrations and migration-assertions dirs) touches only 028 and 041. No 050 files exist yet, as expected for a create. All other anchors re-verified: 044:216, 045:126-129, 041:79 and :505-516, 043 up :27-35 and down :7-13, 032:5-9, 047:57-61 (two-field payload), configServiceImpl.ts upsert :827-839, notify :840-842, LISTEN :417-424, 017:66-79 (the latest audit_config_change definition), 001:16-17, 014:9, 048 down :4-13, check-config-wiring.mjs :226-231 and :715-716, ci.yml :1275-1293, config-heal jsonl lines (fresh '10' value hash, staging 600, per-user row), no migration-assertions hit, db-migrate.sh :104 plain `migrate ... up`."},{"n":3,"detail":"No functional mismatch. Every anchor checks out: servicer.py :4729, :4810, :4827, :4847-4854, :4862-4868 and :4883-4889; tests/conftest.py:62 snapshot_watcher; test_live_loop.py:23 import; watcher.py:66 get_int_present = WatchCore.get_int; watch_core.py:217-218 int_val; test_opportunities_latency.py:237-243 @AC-9; useOpportunities.ts:49 refetchInterval: 15_000. Trivial drift in test_live_enrich_memo.py: _md_svc spans :27-41 (spec says :28-41) and the existing memo test spans :44-66 (spec says :44-64). pytestmark is at :24."},{"n":4,"detail":"One instruction is now wrong. In docs/patterns/config-governance.md the newest Per-Feature entry is `### feature 338 — notify-commsgun-channel` at :151; `### feature 334` has moved to :176. Instruction 2 says to insert the feature 330 entry 'directly above ### feature 334, so it is newest first'. Followed literally, that puts 330 below 338 and breaks newest-first. It must go directly above `### feature 338`, and the Verification comment 'above ### feature 334' needs the same change. Line drift in the same file: the sentinel rows `system:config-migration-<NNN>` and `-feature-<slug>` are now :142-143 (spec :141-142), so insert after :143. § Per-Feature Registered Keys is now :145-147 (spec :144-146). The stale past entries moved: :329-330 is now :355-356, :439 is now :465, :490 is now :516. services/xstockstrat-analysis/CLAUDE.md:281 and docs/context-constitution-findings.md :46, :48, :49 and :17-20 match the spec. check-config-wiring.mjs DOC_BANNED is at :862 and DOC_RULES at :856 with the loop at :869."},{"n":5,"detail":"No mismatch. docs/roadmap/features/330-fix-live-enrich-ttl-seed/context.md exists. docs/runbooks/config-rollout.md has § Step 6 Post-Deploy Read-Back at :217 and the config_audit changed_by SELECT at :197. docs/runbooks/operator-db-access.md exists. Note: the task prompt's spec path was doubled (docs/roadmap/features/docs/roadmap/features/330-...). I read docs/roadmap/features/330-fix-live-enrich-ttl-seed/implementation-spec.md, where all 5 steps are pending."}]}
+```
+
+**Setup actions (no step executed yet; all 5 steps remain `pending`).**
+- Merged `origin/main-dev` @ `d5de836b` into `feature/fix-live-enrich-ttl-seed` (merge commit `b910fcd7`;
+  merge-train resolver: nothing to resolve; `ledger-guard`: clean). The tree now holds `049_notify_commsgun_channel_keys`.
+- Re-spec (directive `conditional`, step bodies only): steps 1, 2, 3 and 4 had line drift; Step 4's insertion
+  point is now directly above `### feature 338` (the newest Per-Feature entry), not `### feature 334`. Step 5
+  had no mismatch and is unchanged. The Execution Summary / Step Dependencies statements that `049` is held on
+  an unmerged branch and that trunk tops out at `048` are stale (outside the step bodies, not edited); Step 2's
+  evidence carries the current facts: trunk tail `049`, `050` = max(trunk) + 1 and still free.
+- Respec commits (`git log --first-parent origin/main-dev..HEAD`):
+  - `62804397` respec(fix-live-enrich-ttl-seed): align steps 1,2,3,4,5 with current codebase
+- Status: `implementation-ready` → `in-progress`.
+- Tooling detection (steps 1-5): node v22.23.4 present (root CLAUDE.md pins 24) · pnpm ✓ 9.15.9 · uv ✓ 0.11.32 ·
+  ruff ✓ · python ✓ 3.13. Step 2's stored-set regeneration still needs a scratch Postgres + `psql`/`migrate` (or
+  the CI `config-wiring-stored` artifact fallback), per § Step Dependencies.
+
+```sdd-batch-setup
+{"mainDev":"d5de836b1a99591c992a17b46a688469f5b1ae98","date":"2026-11-13"}
+```
+
+## Session 2026-11-13 — sdd-execute sequential, steps 1+2 (atomic unit)
+
+- **Operator decision (binding, 2026-11-13)**: Option A on the step-1 blocker. This was an explicit operator override: for **artifact generation only, not verification**, start a throwaway local Postgres 16 cluster from `/usr/lib/postgresql/16/bin` on a temp data dir in the worktree's `.sdd-logs/`, `go install` golang-migrate, and run `DATABASE_URL=<that cluster> python3 scripts/config-wiring-stored.py`. Proceed only if the diff is `inputs_sha256` plus the two `analysis`/`opportunity.live_enrich_ttl_seconds` descriptions, then stop and delete the cluster and never hand-edit the JSON. Recorded in the Deviation Log as a CI-equivalent fallback.
+- Tooling setup (steps 1+2): node v22.23.4 present (root CLAUDE.md pins 24) · pnpm ✓ (linked main-checkout node_modules) · psql ✓ · postgres 16.15 ✓ · migrate ⬇ v4.17.1 (`go install -tags postgres`, the `scripts/Dockerfile.migrate` pin) · go1.27.0 ✓.
+- Trunk unchanged since setup: `origin/main-dev` = `d5de836b`, already merged. The config tail is `049`, and `git log --all -- 'services/xstockstrat-config/migrations/05*' '…/06*'` finds nothing, so `050` = max(trunk) + 1. Only `028` and `041` name `live_enrich_ttl_seconds` in the migrations dir; no `scripts/migration-assertions` file names it.
+
+### Step 1 — test: Static migration test for the guarded TTL reseed (RED) [done]
+- Added the `@AC-1` node:test suite (8 cases) that pins the 050 up/down text: shape, relative key and scope, the `'10'→'20'` value CASE above the 15s poll, the description CASE on the 028 text (read from 028), actor columns on the value branch only, the four-field notify forced by the final SELECT, the sentinel-guarded down, and no `;` in literals. Landed in unit steps 1+2.
+- TDD: AC-1 red: all 8 cases failed with `expected exactly one *_analysis_live_enrich_ttl_reseed.up.sql, got []` (`# tests 8 / # fail 8`, exit=1) → green: `# tests 8 / # pass 8 / # fail 0`. The full config suite is `# tests 373 / # pass 373 / # fail 0`, and c8 `All files` lines are 92.24 (≥ 40).
+- Files modified: `services/xstockstrat-config/src/__tests__/liveEnrichTtlReseedMigration.test.ts`
+- Deviations: data loads inside each `it`, because node 22 exits 0 on a `describe`-callback throw, so the first RED run showed `exit=0` with `# tests 0`. The 028 regex matches the `splitStatements`-collapsed text. Full detail in the Deviation Log.
+
+### Step 2 — migration: `050_analysis_live_enrich_ttl_reseed` up/down + regenerated stored set [done]
+- Created the 050 up/down exactly as the spec's Instructions (byte-compared after `<OLD>`/`<NEW>` substitution). Regenerated `scripts/config-wiring-stored.json` with the generator on the operator-approved throwaway PG16 cluster. The diff was only `inputs_sha256` plus the two descriptions; the cluster was then stopped and deleted. Landed in unit steps 1+2. TDD: N/A (migration); the unit's red→green is Step 1.
+- Offline check: 050 up and down both exist and 050 is the highest. By inspection, the down reverts exactly the up's value branch (`'20' AND sentinel`) and its description branch.
+- Verification (offline, run after the cluster was deleted):
+  - lint: `0 errors`;
+  - `check-config-wiring --keys analysis.opportunity.live_enrich_ttl_seconds`: silent;
+  - `--final`: exit=0, two baseline `REPORTED:` lines only, no STALE or STALE-STORED;
+  - `config-wiring.test.mjs`: `# tests 75 / # pass 75 / # fail 0`;
+  - C-16 step-time gate `--declared-from product-spec.md --declared-migration 050…up.sql`: silent, exit=0.
+- Files modified: `services/xstockstrat-config/migrations/050_analysis_live_enrich_ttl_reseed.up.sql`, `services/xstockstrat-config/migrations/050_analysis_live_enrich_ttl_reseed.down.sql`, `scripts/config-wiring-stored.json`
+- Deviations: CI-equivalent fallback for stored-set generation (operator override); full detail in the Deviation Log.
+
+### Open Threads
+- **Merge checklist (unchanged):** `050` and `scripts/config-wiring-stored.json` must be re-checked and regenerated after any `origin/main-dev` merge that brings a config migration.
+- **Out of scope; candidate for `/sdd-qa defect`:** the precedent static migration suites, such as `zeroTrapDescriptionMigration.test.ts`, load their migrations inside the `describe` callback. On node v22, a missing or renamed migration would report `# tests 0` and exit 0. This was not checked under CI's Node 24.
+
+## Session 2026-11-13 — sdd-execute sequential, step 3
+
+- Tooling setup (step 3): uv ✓ 0.11.32 · ruff ✓ · `uv sync --extra dev` ⬇ in `services/xstockstrat-analysis` (worktree `.venv`; `uv.lock` unchanged). The venv resolved Python 3.12.3, not the pinned 3.13; CI's 3.13 job re-runs the suite at the integration PR.
+- Trunk unchanged since setup (`origin/main-dev` = `d5de836b`); all Step 3 anchors re-verified (`servicer.py:4827`, `:4847-4854`, `:4862-4868`, `:4883-4889`; `tests/conftest.py:62`; `tests/test_live_enrich_memo.py:24`, `:27-41`, `:44-66`).
+
+### Step 3 — test: Analysis `@AC-2` warm 15s re-poll is served from the memo at the migrated TTL [done]
+- Appended `test_warm_15s_repoll_served_from_memo_at_migrated_ttl`, parametrized `(20, 1)` / `(10, 2)`: a `snapshot_watcher` TTL drives the real typed `get_int` read, and a 15s clock gap re-poll issues no `BatchGetLatestPrice` at `20` (same `live_price` served) but refetches at the old seed `10`.
+- TDD: red N/A — no behavior change; characterization test added (analysis code unchanged; the defect's RED is Step 1). The `(10, 2)` negative control shows the assertion discriminates. AC-2 green: `tests/test_live_enrich_memo.py` `5 passed`; full suite `1704 passed`, `Total coverage: 91.52%` (≥ 40); `ruff check` `All checks passed!`, `140 files already formatted`; C-13 grep hit `22:from tests.conftest import snapshot_watcher`; exit=0.
+- C-16 step-time wiring gate (`--declared-from product-spec.md`): silent, exit=0.
+- Files modified: `services/xstockstrat-analysis/tests/test_live_enrich_memo.py`
+- Deviations: none
+
+## Session 2026-11-13 — sdd-execute sequential, step 4
+
+- Tooling setup (step 4): node v22.23.4 ✓ (root CLAUDE.md pins 24); nothing installed (docs step).
+- Trunk unchanged since setup (`origin/main-dev` = `d5de836b`, already merged). Every Step 4 anchor re-grepped on the branch tip: `config-governance.md` sentinel rows `:142-143`, `### feature 338` at `:151`, stale past entries `:355-356`, `:465`, `:516`; analysis `CLAUDE.md:281`; findings `:49` (precedent `:48`); `check-config-wiring.mjs` `DOC_RULES` `:856`, `DOC_BANNED` `:862`.
+
+### Step 4 — docs: Sync every surface that names the stale `10` seed [done]
+- Added the `system:config-migration-feature-330` C-10(c) sentinel row and a newest-first feature-330 Per-Feature Registered Keys entry (above 338) that supersedes the 184/177/227 lines, which stay as written (append-only); synced the analysis `CLAUDE.md` defaults row; closed the findings Latent-bugs row as **RESOLVED (feature 330)** with Evidence repointed at the reseed migration and its test. The migration is named only by its number-free suffix.
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log`, exit=0: `--doc-check` silent (re-run alone: rc=0), sentinel row at `:144`, `### feature 330` at `:152` (338 now `:166`), `analysis CLAUDE.md synced`, findings `:49` RESOLVED, `no past log line removed (append-only)`. C-16 step-time wiring gate (`--declared-from product-spec.md`): silent, exit=0.
+- Files modified: `docs/patterns/config-governance.md`, `services/xstockstrat-analysis/CLAUDE.md`, `docs/context-constitution-findings.md`
+- Deviations: none
+
+### Open Threads
+- **Outside Step 4's Files, not edited:** `docs/context-constitution-findings.md:95` still lists the `2026-10-19-live-enrich-ttl-seed-below-poll-defect` report in the open defect-report index; it closes with the report's sidecar at launch (`/sdd-archiver`). `services/xstockstrat-ui/src/hooks/useOhlcBars.ts:9` comments "matches the server-side live_enrich_ttl_seconds bump" next to `120_000`; it names no seed value, so it is not a stale-`10` surface.
+
+## Session 2026-11-20 — integration-PR prep (branch sync, renumber, stored-set regen)
+
+- **BRANCH SYNC.** Merged `origin/main-dev` @ `831618f3` into `feature/fix-live-enrich-ttl-seed` (merge commit
+  `4b59d436`). Conflicts: `scripts/config-wiring-stored.json` took main-dev's side (regenerated below);
+  `docs/patterns/config-governance.md` § Per-Feature Registered Keys kept both sides, with the feature-330 entry
+  first (newest first) above main-dev's 352/347/343/341 entries. `ledger-guard --own-slug … --base origin/main-dev --fix`: clean.
+  The post-merge diff vs `origin/main-dev` touches only this feature's files.
+- **Merge checklist → renumber `050` → `055`** (commit `e9aff843`). Trunk now holds `050_ui_chart_history_bars`,
+  `051`, `052` and `054` (no `053`). No `origin/feature/*`, `origin/ccr-*` or `origin/claude/*` ref (164 scanned)
+  holds `053` or anything above `054`, and `git log --all` finds no `053*`/`055*`/`056*`/`06*`; so `055` =
+  max(trunk) + 1. The SQL, test and docs are number-free (grep: no hits); the spec's Step 2 Files/Evidence/Verification
+  text names `055`. Key-overlap re-scan (`git grep -l live_enrich_ttl_seconds` over 214 remote refs, migrations +
+  `scripts/migration-assertions`): only `028`, `041` and this feature's reseed.
+- **Stored-set regen (commit `59a72463`).** CI-equivalent fallback again (operator authorization 2026-11-13,
+  re-confirmed 2026-11-20): throwaway PostgreSQL 16 cluster from `/usr/lib/postgresql/16/bin`, run as the
+  `postgres` user on a `mktemp -d` dir under `/var/tmp` (`127.0.0.1:55433`), `migrate` from `~/go/bin`
+  (postgres driver). `DATABASE_URL=<that cluster> python3 scripts/config-wiring-stored.py` applied 001…055; the output
+  is committed unedited. Diff vs main-dev: `inputs_sha256` plus the staging/production `analysis` /
+  `opportunity.live_enrich_ttl_seconds` descriptions only. The cluster was stopped and its directory deleted.
+- **Re-verification (offline, after the cluster was deleted):** Step 1 suite `# tests 8 / # pass 8`; config
+  `test:coverage` `# tests 392 / # pass 392`, c8 lines 92.26 (≥ 40); `pnpm run lint` 0 errors;
+  `check-config-wiring --keys analysis.opportunity.live_enrich_ttl_seconds` silent; `--final` exit 0 (two baseline
+  `REPORTED:` lines); `config-wiring.test.mjs` `# tests 75 / # pass 75`; analysis `test_live_enrich_memo.py` 5 passed,
+  full suite 1757 passed at 91.63% (≥ 40); `ruff check` / `ruff format --check` clean; C-13 import grep hit `:22`.
+- **Re-check trigger (318).** `scripts/db-migrate.sh` is unchanged on trunk since #1327; its `up` path still runs
+  plain `migrate -path "$dir" -database "$url" up` (`:104`, after `render-migrations.sh`), no `x-multi-statement`.
+  Feature 318 is `spec-ready` and its branch adds only SDD docs. No migration-ordering CI gate was added since
+  `d5de836b`; `check-migration-contract.py` checks only `-- contract-of:` headers.
+
+## Session 2026-11-20 — integration-PR prep (operator decisions, C-16 promotion)
+
+- **Operator decisions (binding, 2026-11-20):**
+  1. Story owner authorized amending `acceptance.feature`: `@AC-1 @FR-1`, `@AC-2 @FR-2`, and the `@AC-1` Given gains
+     "…, and the row still holds the seeded '10'" (design.md § Business Rules Touched, signed C-16 CHANGE). The Then
+     is unchanged (`4029a6ff`). The spec's three C-15 gate greps each print a match.
+  2. `product-spec.md` § Functional Requirements: FR-1 and FR-2, one line each, restating the existing Expected
+     behaviour only (`126cb634`).
+  3. `implementation-spec.md`: Step 2's title and Instructions and the Execution Summary name `055` (wording
+     only, no status change; `fa2843e8`).
+  4. C-16 promotion as planned: `@AC-1` → new `services/xstockstrat-config/acceptance/fix-live-enrich-ttl-seed.feature`
+     (`a6074197`); `@AC-2` appended after `@AC-9` in `services/xstockstrat-analysis/acceptance/opportunities-latency-fix.feature`
+     as its EXTEND (`b16b2253`). Both carry `@feature-330`. Dedup: no config suite covers this key; `@AC-9` (code
+     default) is left unedited and differs from `@AC-2` (migrated stored value). That file's Feature-level
+     `@feature-191` tag is inherited by the appended scenario.
+- **ALL-DONE gates (integration-PR part):**
+  - 0, F-09: `node scripts/check-config-wiring.mjs --final` on the tip exits 0 (two baseline `REPORTED:` lines:
+    `fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree`, `trading.go:platform/trading_state:readers-disagree`).
+    `--doc-check` exits 0.
+  - 1, merge order: `merge-order.md` has no table row for 330, only non-blocking prose notes on config numbering, and the renumber already handles those.
+  - 2.6, defect reports: none to close. 330's only C-16 CHANGE is against its own `@AC-1`, so there are no
+    other-feature candidates. Its own report `2026-10-19-live-enrich-ttl-seed-below-poll-defect` stays `triaged` /
+    `ref: feature:330-fix-live-enrich-ttl-seed`. `defect-filing.md` § The status sidecar says a `triaged` report
+    counts as resolved once its feature is `launched`, that nothing re-stamps it, and that `/sdd-archiver` derives it.
+  - The PR is not opened (operator instruction). Status stays `in-progress`, not `code-completed`.
+- **Step 5 deferred to after deploy.** The post-deploy read-back stays `pending`. It is operator-run on the dev database after
+  the `main-dev` deploy, and again on production after promotion. Its pass verdicts are recorded here and confirmed by
+  the operator before the promotion PR.

@@ -100,6 +100,60 @@ class TestBuiltinLookback:
         assert warmup.builtin_lookback_bars("SMA", {"period": "abc"}) == 14
 
 
+class TestFirstValueBars:
+    """Bars a component needs before its first value (feature 341) — the P the chart compares
+    against the bars it got back."""
+
+    @pytest.mark.parametrize(
+        ("indicator", "params", "expected"),
+        [
+            ("SMA", {"period": 200}, 200),
+            ("SMA", {"period": 20}, 20),
+            ("SMA", {}, 14),
+            ("BB", {}, 20),
+            ("RSI", {"period": 14}, 15),
+            ("ATR", {"period": 14}, 15),
+            ("STOCH", {"period": 14}, 14),
+            ("EMA", {"period": 10}, 1),
+            ("MACD", {}, 1),
+            ("VWAP", {}, 0),
+            ("NOPE", {"period": 99}, 0),
+        ],
+    )
+    def test_builtin_table(self, indicator, params, expected):
+        assert warmup.first_value_bars(_comp("c", indicator, **params)) == expected
+
+    def test_source_symbol_component_is_zero(self):
+        comp = _comp("bench", "SMA", period=200)
+        comp.source_symbol = "SPY"
+        assert warmup.first_value_bars(comp) == 0
+
+    def test_fundamental_component_is_zero(self):
+        comp = analysis_pb2.StrategyComponent(
+            ref_name="pe", kind=analysis_pb2.COMPONENT_KIND_FUNDAMENTAL
+        )
+        assert warmup.first_value_bars(comp) == 0
+
+    def test_fundamentals_formula_is_zero(self):
+        comp = _formula_comp("f", "fid")
+        assert warmup.first_value_bars(comp, {"fid": 30}, {"fid": [1]}) == 0
+
+    def test_formula_without_declared_warmup_is_zero(self):
+        assert warmup.first_value_bars(_formula_comp("f", "fid"), {}, {}) == 0
+
+    def test_formula_declared_warmup_plus_one(self):
+        assert warmup.first_value_bars(_formula_comp("f", "fid"), {"fid": 30}) == 31
+
+    @pytest.mark.parametrize("indicator", ["SMA", "BB", "RSI", "ATR"])
+    @pytest.mark.parametrize("period", [2, 14, 50, 200])
+    def test_pinned_to_builtin_lookback(self, indicator, period):
+        """Drift pin: the first value plus the crossover's i-1 read is the first usable bar."""
+        comp = _comp("c", indicator, period=period)
+        first_value = warmup.first_value_bars(comp)
+        usable = warmup.builtin_lookback_bars(comp.indicator, comp.params)
+        assert (first_value - 1) + warmup._CROSSOVER_LOOKBACK == usable
+
+
 class TestRequiredPrefixBars:
     def test_no_rules_needs_no_prefix(self):
         defn = _defn([_comp("a", "SMA", period=50)])

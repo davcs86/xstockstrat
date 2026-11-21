@@ -943,7 +943,7 @@
             "is_secret": false,
             "namespace": "analysis",
             "value_type": "int",
-            "description": "Short TTL for the success-only per-symbol live-quote/sparkline memo (feature 177). Read via get_int_present (0 = memo disabled -> always fetch). Seeded unbounded.",
+            "description": "Short TTL (seconds) for the success-only per-symbol live-quote memo (feature 177). Keep it above the 15s ListOpportunities UI poll so a warm re-poll is served from the memo. Read via get_int_present (0 = memo disabled -> always fetch). Seeded unbounded.",
             "environment": "production",
             "default_value": "20",
             "consuming_service": "xstockstrat-analysis"
@@ -955,7 +955,7 @@
             "is_secret": false,
             "namespace": "analysis",
             "value_type": "int",
-            "description": "Short TTL for the success-only per-symbol live-quote/sparkline memo (feature 177). Read via get_int_present (0 = memo disabled -> always fetch). Seeded unbounded.",
+            "description": "Short TTL (seconds) for the success-only per-symbol live-quote memo (feature 177). Keep it above the 15s ListOpportunities UI poll so a warm re-poll is served from the memo. Read via get_int_present (0 = memo disabled -> always fetch). Seeded unbounded.",
             "environment": "staging",
             "default_value": "20",
             "consuming_service": "xstockstrat-analysis"
@@ -2281,6 +2281,54 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
+            "key": "backfill.self_serve_max_range_days",
+            "file": "051_ingest_backfill_self_serve_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ingest",
+            "value_type": "int",
+            "description": "The longest range in days a non-admin may request in one backfill. 730 covers a 200-bar warm-up plus a one-year backtest window, and a 1000-bar warm-up needs 1830. Raising it lets every signed-in user spend more vendor quota per request. A stored value of 0 or less reads as the default.",
+            "environment": "production",
+            "default_value": "730",
+            "consuming_service": "xstockstrat-ingest"
+        },
+        {
+            "key": "backfill.self_serve_max_range_days",
+            "file": "051_ingest_backfill_self_serve_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ingest",
+            "value_type": "int",
+            "description": "The longest range in days a non-admin may request in one backfill. 730 covers a 200-bar warm-up plus a one-year backtest window, and a 1000-bar warm-up needs 1830. Raising it lets every signed-in user spend more vendor quota per request. A stored value of 0 or less reads as the default.",
+            "environment": "staging",
+            "default_value": "730",
+            "consuming_service": "xstockstrat-ingest"
+        },
+        {
+            "key": "backfill.webhook_sweep_interval_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ingest",
+            "value_type": "int",
+            "description": "Seconds between sweeps that hand finished backfill jobs with a callback URL to notify. A finishing job also wakes the sweep, so this bounds how soon a failed hand-off is retried.",
+            "environment": "production",
+            "default_value": "60",
+            "consuming_service": "xstockstrat-ingest"
+        },
+        {
+            "key": "backfill.webhook_sweep_interval_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ingest",
+            "value_type": "int",
+            "description": "Seconds between sweeps that hand finished backfill jobs with a callback URL to notify. A finishing job also wakes the sweep, so this bounds how soon a failed hand-off is retried.",
+            "environment": "staging",
+            "default_value": "60",
+            "consuming_service": "xstockstrat-ingest"
+        },
+        {
             "key": "mcp_client.poll_interval_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -2425,6 +2473,30 @@
             "consuming_service": "xstockstrat-ledger"
         },
         {
+            "key": "alpaca.adaptive_rate_limit_enabled",
+            "file": "052_alpaca_adaptive_rate_limit_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "bool",
+            "description": "Kill switch for adaptive Alpaca REST pacing in marketdata. When true the client paces requests from the X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset response headers and retries an HTTP 429 inside the call. When false it behaves as before feature 347: only the static backfill.rate_limit_rps limiter applies and a 429 is returned to the caller. Read live on every Alpaca request.",
+            "environment": "production",
+            "default_value": "true",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "alpaca.adaptive_rate_limit_enabled",
+            "file": "052_alpaca_adaptive_rate_limit_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "bool",
+            "description": "Kill switch for adaptive Alpaca REST pacing in marketdata. When true the client paces requests from the X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset response headers and retries an HTTP 429 inside the call. When false it behaves as before feature 347: only the static backfill.rate_limit_rps limiter applies and a 429 is returned to the caller. Read live on every Alpaca request.",
+            "environment": "staging",
+            "default_value": "true",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
             "key": "alpaca.adjustment",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -2518,6 +2590,30 @@
             "description": "Alpaca market-data feed for bar/quote requests (`iex`/`sip`/`otc`). The free/basic (paper) data plan only permits `iex`; omitting the param defaults Alpaca to SIP, which those plans reject with HTTP 403. Read at startup.",
             "environment": "staging",
             "default_value": "iex",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "assets.delisting_confirmation_trading_days",
+            "file": "054_marketdata_delisting_confirmation_days.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata delisting detection: trading days a watchlist symbol must stay unservable in every successful asset-set load before it is flagged delisted. The first unservable day counts as day 1. Read at each asset-set load. A value above 30 reads as 30 and a value of 0 or less reads as 5.",
+            "environment": "production",
+            "default_value": "5",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "assets.delisting_confirmation_trading_days",
+            "file": "054_marketdata_delisting_confirmation_days.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata delisting detection: trading days a watchlist symbol must stay unservable in every successful asset-set load before it is flagged delisted. The first unservable day counts as day 1. Read at each asset-set load. A value above 30 reads as 30 and a value of 0 or less reads as 5.",
+            "environment": "staging",
+            "default_value": "5",
             "consuming_service": "xstockstrat-marketdata"
         },
         {
@@ -2599,7 +2695,7 @@
             "is_secret": false,
             "namespace": "marketdata",
             "value_type": "int",
-            "description": "Max outbound Alpaca REST calls per second. Read at startup into a token-bucket limiter the client waits on before every REST call; `0` disables rate limiting.",
+            "description": "Static ceiling on outbound Alpaca REST calls per second. The effective rate is the lower of this ceiling and what the X-RateLimit response headers allow (alpaca.adaptive_rate_limit_enabled). Read live per request into a token-bucket limiter the client waits on before every REST call; `0` disables only this ceiling.",
             "environment": "production",
             "default_value": "200",
             "consuming_service": "xstockstrat-marketdata"
@@ -2611,7 +2707,7 @@
             "is_secret": false,
             "namespace": "marketdata",
             "value_type": "int",
-            "description": "Max outbound Alpaca REST calls per second. Read at startup into a token-bucket limiter the client waits on before every REST call; `0` disables rate limiting.",
+            "description": "Static ceiling on outbound Alpaca REST calls per second. The effective rate is the lower of this ceiling and what the X-RateLimit response headers allow (alpaca.adaptive_rate_limit_enabled). Read live per request into a token-bucket limiter the client waits on before every REST call; `0` disables only this ceiling.",
             "environment": "staging",
             "default_value": "200",
             "consuming_service": "xstockstrat-marketdata"
@@ -3601,6 +3697,198 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
+            "key": "commsgun.app_id",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Commsgun subscriber app this environment sends as (the X-Commsgun-App header). Each environment has its own app and app key. Change it only while no email is queued.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.app_id",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Commsgun subscriber app this environment sends as (the X-Commsgun-App header). Each environment has its own app and app key. Change it only while no email is queued.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.app_key",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Commsgun app key of this environment's subscriber app (encrypted secret; set per environment after deploy). Unset means commsgun is not ready.",
+            "environment": "production",
+            "default_value": null,
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.app_key",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Commsgun app key of this environment's subscriber app (encrypted secret; set per environment after deploy). Unset means commsgun is not ready.",
+            "environment": "staging",
+            "default_value": null,
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.backoff_base_seconds",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds before the first commsgun retry; each later retry doubles the wait, up to commsgun.backoff_max_seconds. Raising it slows every retry.",
+            "environment": "production",
+            "default_value": "30",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.backoff_base_seconds",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds before the first commsgun retry; each later retry doubles the wait, up to commsgun.backoff_max_seconds. Raising it slows every retry.",
+            "environment": "staging",
+            "default_value": "30",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.backoff_max_seconds",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Longest wait in seconds between two commsgun attempts; it also caps a Retry-After answer. Lowering it retries a failing hub more often.",
+            "environment": "production",
+            "default_value": "3600",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.backoff_max_seconds",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Longest wait in seconds between two commsgun attempts; it also caps a Retry-After answer. Lowering it retries a failing hub more often.",
+            "environment": "staging",
+            "default_value": "3600",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.enqueue_url",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Full HTTPS URL of the commsgun enqueue endpoint. Empty means commsgun is not configured. Clearing it while emails are queued in auto mode sends them through SendGrid instead.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.enqueue_url",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Full HTTPS URL of the commsgun enqueue endpoint. Empty means commsgun is not configured. Clearing it while emails are queued in auto mode sends them through SendGrid instead.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.max_attempts",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Attempts a queued email gets at commsgun before it ends undelivered and an alert is raised. Raising it keeps retrying an unreachable hub for longer.",
+            "environment": "production",
+            "default_value": "8",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.max_attempts",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Attempts a queued email gets at commsgun before it ends undelivered and an alert is raised. Raising it keeps retrying an unreachable hub for longer.",
+            "environment": "staging",
+            "default_value": "8",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.request_timeout_seconds",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds one commsgun request may take before it counts as a timeout and is retried. Clamped to 1-60.",
+            "environment": "production",
+            "default_value": "10",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.request_timeout_seconds",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds one commsgun request may take before it counts as a timeout and is retried. Clamped to 1-60.",
+            "environment": "staging",
+            "default_value": "10",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.to_email",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Recipient address of alert email sent through commsgun. Empty means commsgun is not configured. Emails already queued keep the address they were queued with.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "commsgun.to_email",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Recipient address of alert email sent through commsgun. Empty means commsgun is not configured. Emails already queued keep the address they were queued with.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
             "key": "fanout.dedup_window_seconds",
             "file": "018_notify_fanout.up.sql",
             "global": true,
@@ -3622,6 +3910,30 @@
             "description": "Suppress re-delivery of a byte-identical alert within this many seconds.",
             "environment": "staging",
             "default_value": "300",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "fanout.email_provider",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Email provider for alert fanout: auto, commsgun or sendgrid; any other value reads as auto. auto sends through commsgun when its URL, app id, recipient and app key are all set, otherwise through SendGrid. commsgun never uses SendGrid; sendgrid never calls commsgun and reroutes queued emails to SendGrid.",
+            "environment": "production",
+            "default_value": "auto",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "fanout.email_provider",
+            "file": "049_notify_commsgun_channel_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Email provider for alert fanout: auto, commsgun or sendgrid; any other value reads as auto. auto sends through commsgun when its URL, app id, recipient and app key are all set, otherwise through SendGrid. commsgun never uses SendGrid; sendgrid never calls commsgun and reroutes queued emails to SendGrid.",
+            "environment": "staging",
+            "default_value": "auto",
             "consuming_service": "xstockstrat-notify"
         },
         {
@@ -3742,6 +4054,126 @@
             "description": "Web Push gate: minimum AlertSeverity ordinal to send a Web Push (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL). Clamped to [0,4] at read. Mirrors notify.fanout.min_severity; default 2 (WARNING) excludes INFO fill confirmations.",
             "environment": "staging",
             "default_value": "2",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.allowed_origins",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Origins that webhook callback URLs may target: comma-separated host[:port] entries, https only, a missing port means 443. A callback URL is accepted and delivered only when its host and port equal one entry exactly. Empty rejects every callback URL.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.allowed_origins",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Origins that webhook callback URLs may target: comma-separated host[:port] entries, https only, a missing port means 443. A callback URL is accepted and delivered only when its host and port equal one entry exactly. Empty rejects every callback URL.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.backoff_base_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds before the first webhook retry; each later retry doubles the wait, up to webhook.backoff_max_seconds. Raising it slows every retry.",
+            "environment": "production",
+            "default_value": "30",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.backoff_base_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds before the first webhook retry; each later retry doubles the wait, up to webhook.backoff_max_seconds. Raising it slows every retry.",
+            "environment": "staging",
+            "default_value": "30",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.backoff_max_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Longest wait in seconds between two webhook delivery attempts. Lowering it retries a failing receiver more often.",
+            "environment": "production",
+            "default_value": "3600",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.backoff_max_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Longest wait in seconds between two webhook delivery attempts. Lowering it retries a failing receiver more often.",
+            "environment": "staging",
+            "default_value": "3600",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.max_attempts",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Delivery attempts a webhook gets before it is marked dead and an alert is raised. Raising it keeps retrying an unreachable receiver for longer.",
+            "environment": "production",
+            "default_value": "8",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.max_attempts",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Delivery attempts a webhook gets before it is marked dead and an alert is raised. Raising it keeps retrying an unreachable receiver for longer.",
+            "environment": "staging",
+            "default_value": "8",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.request_timeout_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds a webhook delivery request may take before it counts as a failed attempt. Clamped to 1-60.",
+            "environment": "production",
+            "default_value": "10",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.request_timeout_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds a webhook delivery request may take before it counts as a failed attempt. Clamped to 1-60.",
+            "environment": "staging",
+            "default_value": "10",
             "consuming_service": "xstockstrat-notify"
         },
         {
@@ -4054,6 +4486,30 @@
             "description": "Order qty threshold for approval",
             "environment": "staging",
             "default_value": "500",
+            "consuming_service": "xstockstrat-trading"
+        },
+        {
+            "key": "broker.adaptive_rate_limit_enabled",
+            "file": "052_alpaca_adaptive_rate_limit_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "trading",
+            "value_type": "bool",
+            "description": "Kill switch for adaptive Alpaca broker pacing in trading. When true the Alpaca client paces requests from the X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset response headers and retries an HTTP 429 within a budget derived from broker.timeout_ms and order_intent.stale_multiplier. When false every broker call is one unpaced attempt, as before feature 347. Read live on every Alpaca request. IBKR is not affected.",
+            "environment": "production",
+            "default_value": "true",
+            "consuming_service": "xstockstrat-trading"
+        },
+        {
+            "key": "broker.adaptive_rate_limit_enabled",
+            "file": "052_alpaca_adaptive_rate_limit_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "trading",
+            "value_type": "bool",
+            "description": "Kill switch for adaptive Alpaca broker pacing in trading. When true the Alpaca client paces requests from the X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset response headers and retries an HTTP 429 within a budget derived from broker.timeout_ms and order_intent.stale_multiplier. When false every broker call is one unpaced attempt, as before feature 347. Read live on every Alpaca request. IBKR is not affected.",
+            "environment": "staging",
+            "default_value": "true",
             "consuming_service": "xstockstrat-trading"
         },
         {
@@ -4609,6 +5065,30 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
+            "key": "chart.indicator_history_bars",
+            "file": "050_ui_chart_history_bars.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "int",
+            "description": "The number of bars of history the trader symbol page fetches for its indicator panes (the chart still draws the latest 200). Raising it gives long-lookback indicators a full line and widens every marketdata bars read to three times this many intervals. Keep 200 on a database shared between environments (DigitalOcean). Raise it, to at most 1000, only after the lock-budget gate in docs/runbooks/ohlcv-lock-budget-tuning.md section \"Homelab deep indicator history\" passes.",
+            "environment": "production",
+            "default_value": "200",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
+            "key": "chart.indicator_history_bars",
+            "file": "050_ui_chart_history_bars.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ui",
+            "value_type": "int",
+            "description": "The number of bars of history the trader symbol page fetches for its indicator panes (the chart still draws the latest 200). Raising it gives long-lookback indicators a full line and widens every marketdata bars read to three times this many intervals. Keep 200 on a database shared between environments (DigitalOcean). Raise it, to at most 1000, only after the lock-budget gate in docs/runbooks/ohlcv-lock-budget-tuning.md section \"Homelab deep indicator history\" passes.",
+            "environment": "staging",
+            "default_value": "200",
+            "consuming_service": "xstockstrat-ui"
+        },
+        {
             "key": "performance.equity_curve_start_date",
             "file": "023_ui_performance_keys.up.sql",
             "global": true,
@@ -4657,5 +5137,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "637efed46b92b51162a3b00365e0548a93d0bcf90ee7684fce05b8ba6fd1ed06"
+    "inputs_sha256": "554ca640c743a1363eee57f7c7c72c581dda682372011fab029fab2e3d31be8f"
 }

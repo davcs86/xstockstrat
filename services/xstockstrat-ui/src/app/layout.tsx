@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Roboto } from 'next/font/google';
 import './globals.css';
+import '@theme-tokens';
 import { cn } from '@/components/ui/utils';
 import { ServiceWorkerRegistrar } from './ServiceWorkerRegistrar';
 
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0a0e14',
+  themeColor: process.env.UI_THEME_BACKGROUND_HEX,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

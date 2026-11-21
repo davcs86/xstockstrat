@@ -52,6 +52,10 @@ Same shape for the DO staging app (`xstockstrat-staging`, `.do/app.dev.yaml`, Gi
 (`staging-down.yml`, type `destroy-staging`). They do not replace "Deploy dev": its `deploy.yml` requires
 exactly one `xstockstrat-staging` app, so run bring-up before a `main-dev` push if staging is down.
 
+Both bring-up workflows refuse an `xstockstrat-ui` image whose `io.xstockstrat.ui-theme` label differs
+from the target environment (feature 307): pass a tag built by "Deploy prod" to prod-up and one built
+by "Deploy dev" to staging-up.
+
 **Data safety:** teardown deletes only the App Platform app and its own
 trusted-source rule. The managed Postgres cluster `xstockstrat` is a separate
 resource: cluster data untouched.

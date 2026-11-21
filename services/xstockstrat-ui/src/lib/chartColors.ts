@@ -3,7 +3,7 @@
 // space — so the only reliable conversion is to paint to a 1×1 canvas and read back the sRGB bytes.
 
 /** The dedicated, actually-visible gridline token — NOT `--border` (which is 10%-alpha white and
- * near-erases gridlines on the card background). Defined in `globals.css` `:root`. */
+ * near-erases gridlines on the card background). Defined per theme in `src/styles/themes/*.css`. */
 export const CHART_GRID_TOKEN = '--chart-grid';
 
 /** The custom properties the unified price + indicator chart surfaces consume. */

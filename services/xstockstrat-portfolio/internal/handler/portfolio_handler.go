@@ -112,7 +112,7 @@ func (h *PortfolioHandler) ListPositions(ctx context.Context, req *connect.Reque
 	}
 	resp, err := h.svc.ListPositions(ctx, req.Msg)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(classifyListPositionsError(err), err)
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -421,6 +421,14 @@ func classifyGetPositionError(err error) connect.Code {
 	return connect.CodeInternal
 }
 
+// classifyListPositionsError maps ListPositions errors: InvalidArgument for a malformed page token, else Internal.
+func classifyListPositionsError(err error) connect.Code {
+	if errors.Is(err, repository.ErrInvalidPageToken) {
+		return connect.CodeInvalidArgument
+	}
+	return connect.CodeInternal
+}
+
 // classifyGetPnLError maps GetPnL errors; the caller's ctx wins so its own deadline or cancel is not
 // misreported as a dependency gap. Then Unavailable for ErrQuotesUnavailable/ErrLedgerUnavailable
 // (retryable), FailedPrecondition for ErrFillUnattributable, else Internal.
@@ -442,23 +450,8 @@ func classifyGetPnLError(ctx context.Context, err error) connect.Code {
 
 func toGRPCError(err error) error {
 	var connectErr *connect.Error
-	if errors.As(err, &connectErr) {
-		switch connectErr.Code() {
-		case connect.CodeInvalidArgument:
-			return status.Error(codes.InvalidArgument, connectErr.Message())
-		case connect.CodeNotFound:
-			return status.Error(codes.NotFound, connectErr.Message())
-		case connect.CodePermissionDenied:
-			return status.Error(codes.PermissionDenied, connectErr.Message())
-		case connect.CodeUnavailable:
-			return status.Error(codes.Unavailable, connectErr.Message())
-		case connect.CodeFailedPrecondition:
-			return status.Error(codes.FailedPrecondition, connectErr.Message())
-		case connect.CodeDeadlineExceeded:
-			return status.Error(codes.DeadlineExceeded, connectErr.Message())
-		case connect.CodeCanceled:
-			return status.Error(codes.Canceled, connectErr.Message())
-		}
+	if errors.As(err, &connectErr) && connectErr.Code() != connect.CodeInternal && connectErr.Code() != connect.CodeUnknown {
+		return status.Error(codes.Code(connectErr.Code()), connectErr.Message())
 	}
 	return status.Error(codes.Internal, err.Error())
 }

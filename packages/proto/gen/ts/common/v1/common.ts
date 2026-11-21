@@ -624,6 +624,67 @@ export function unservableReasonToNumber(object: UnservableReason): number {
   }
 }
 
+export enum BackfillSymbolOutcome {
+  BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED = "BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED",
+  BACKFILL_SYMBOL_OUTCOME_EMPTY = "BACKFILL_SYMBOL_OUTCOME_EMPTY",
+  BACKFILL_SYMBOL_OUTCOME_SKIPPED = "BACKFILL_SYMBOL_OUTCOME_SKIPPED",
+  BACKFILL_SYMBOL_OUTCOME_FAILED = "BACKFILL_SYMBOL_OUTCOME_FAILED",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function backfillSymbolOutcomeFromJSON(object: any): BackfillSymbolOutcome {
+  switch (object) {
+    case 0:
+    case "BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED":
+      return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED;
+    case 1:
+    case "BACKFILL_SYMBOL_OUTCOME_EMPTY":
+      return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_EMPTY;
+    case 2:
+    case "BACKFILL_SYMBOL_OUTCOME_SKIPPED":
+      return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_SKIPPED;
+    case 3:
+    case "BACKFILL_SYMBOL_OUTCOME_FAILED":
+      return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return BackfillSymbolOutcome.UNRECOGNIZED;
+  }
+}
+
+export function backfillSymbolOutcomeToJSON(object: BackfillSymbolOutcome): string {
+  switch (object) {
+    case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED:
+      return "BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED";
+    case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_EMPTY:
+      return "BACKFILL_SYMBOL_OUTCOME_EMPTY";
+    case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_SKIPPED:
+      return "BACKFILL_SYMBOL_OUTCOME_SKIPPED";
+    case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED:
+      return "BACKFILL_SYMBOL_OUTCOME_FAILED";
+    case BackfillSymbolOutcome.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function backfillSymbolOutcomeToNumber(object: BackfillSymbolOutcome): number {
+  switch (object) {
+    case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED:
+      return 0;
+    case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_EMPTY:
+      return 1;
+    case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_SKIPPED:
+      return 2;
+    case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED:
+      return 3;
+    case BackfillSymbolOutcome.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /** Pagination */
 export interface PageRequest {
   pageSize: number;
@@ -679,7 +740,14 @@ export interface TemplateMeta {
   version: number;
   retired: boolean;
   createdAt?: Date | undefined;
-  updatedAt?: Date | undefined;
+  updatedAt?:
+    | Date
+    | undefined;
+  /**
+   * Server-set: true for a platform-seeded (created_by = 'system') template, which ManageTemplate
+   * refuses to UPDATE or RETIRE.
+   */
+  readOnly: boolean;
 }
 
 /** Provenance of an instance; empty template_id = not instantiated from a template. */
@@ -690,6 +758,19 @@ export interface TemplateOrigin {
   latestVersion: number;
   /** latest_version > template_version */
   updateAvailable: boolean;
+}
+
+/** Lists non-written symbols only; reason is the source's error text, empty for EMPTY. */
+export interface BackfillSymbolResult {
+  symbol: string;
+  outcome: BackfillSymbolOutcome;
+  reason: string;
+}
+
+/** first_unservable_date is YYYY-MM-DD (NYSE session date), never a timestamp. */
+export interface DelistedState {
+  reason: UnservableReason;
+  firstUnservableDate: string;
 }
 
 function createBasePageRequest(): PageRequest {
@@ -1327,6 +1408,7 @@ function createBaseTemplateMeta(): TemplateMeta {
     retired: false,
     createdAt: undefined,
     updatedAt: undefined,
+    readOnly: false,
   };
 }
 
@@ -1355,6 +1437,9 @@ export const TemplateMeta: MessageFns<TemplateMeta> = {
     }
     if (message.updatedAt !== undefined) {
       Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(66).fork()).join();
+    }
+    if (message.readOnly !== false) {
+      writer.uint32(72).bool(message.readOnly);
     }
     return writer;
   },
@@ -1430,6 +1515,14 @@ export const TemplateMeta: MessageFns<TemplateMeta> = {
           message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.readOnly = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1461,6 +1554,11 @@ export const TemplateMeta: MessageFns<TemplateMeta> = {
         : isSet(object.updated_at)
         ? fromJsonTimestamp(object.updated_at)
         : undefined,
+      readOnly: isSet(object.readOnly)
+        ? globalThis.Boolean(object.readOnly)
+        : isSet(object.read_only)
+        ? globalThis.Boolean(object.read_only)
+        : false,
     };
   },
 
@@ -1490,6 +1588,9 @@ export const TemplateMeta: MessageFns<TemplateMeta> = {
     if (message.updatedAt !== undefined) {
       obj.updatedAt = message.updatedAt.toISOString();
     }
+    if (message.readOnly !== false) {
+      obj.readOnly = message.readOnly;
+    }
     return obj;
   },
 
@@ -1506,6 +1607,7 @@ export const TemplateMeta: MessageFns<TemplateMeta> = {
     message.retired = object.retired ?? false;
     message.createdAt = object.createdAt ?? undefined;
     message.updatedAt = object.updatedAt ?? undefined;
+    message.readOnly = object.readOnly ?? false;
     return message;
   },
 };
@@ -1630,6 +1732,182 @@ export const TemplateOrigin: MessageFns<TemplateOrigin> = {
     message.templateVersion = object.templateVersion ?? 0;
     message.latestVersion = object.latestVersion ?? 0;
     message.updateAvailable = object.updateAvailable ?? false;
+    return message;
+  },
+};
+
+function createBaseBackfillSymbolResult(): BackfillSymbolResult {
+  return { symbol: "", outcome: BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED, reason: "" };
+}
+
+export const BackfillSymbolResult: MessageFns<BackfillSymbolResult> = {
+  encode(message: BackfillSymbolResult, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.outcome !== BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED) {
+      writer.uint32(16).int32(backfillSymbolOutcomeToNumber(message.outcome));
+    }
+    if (message.reason !== "") {
+      writer.uint32(26).string(message.reason);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BackfillSymbolResult {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBackfillSymbolResult();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.outcome = backfillSymbolOutcomeFromJSON(reader.int32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.reason = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BackfillSymbolResult {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      outcome: isSet(object.outcome)
+        ? backfillSymbolOutcomeFromJSON(object.outcome)
+        : BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED,
+      reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
+    };
+  },
+
+  toJSON(message: BackfillSymbolResult): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.outcome !== BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED) {
+      obj.outcome = backfillSymbolOutcomeToJSON(message.outcome);
+    }
+    if (message.reason !== "") {
+      obj.reason = message.reason;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BackfillSymbolResult>, I>>(base?: I): BackfillSymbolResult {
+    return BackfillSymbolResult.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BackfillSymbolResult>, I>>(object: I): BackfillSymbolResult {
+    const message = createBaseBackfillSymbolResult();
+    message.symbol = object.symbol ?? "";
+    message.outcome = object.outcome ?? BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED;
+    message.reason = object.reason ?? "";
+    return message;
+  },
+};
+
+function createBaseDelistedState(): DelistedState {
+  return { reason: UnservableReason.UNSERVABLE_REASON_UNSPECIFIED, firstUnservableDate: "" };
+}
+
+export const DelistedState: MessageFns<DelistedState> = {
+  encode(message: DelistedState, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.reason !== UnservableReason.UNSERVABLE_REASON_UNSPECIFIED) {
+      writer.uint32(8).int32(unservableReasonToNumber(message.reason));
+    }
+    if (message.firstUnservableDate !== "") {
+      writer.uint32(18).string(message.firstUnservableDate);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DelistedState {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDelistedState();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.reason = unservableReasonFromJSON(reader.int32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.firstUnservableDate = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DelistedState {
+    return {
+      reason: isSet(object.reason)
+        ? unservableReasonFromJSON(object.reason)
+        : UnservableReason.UNSERVABLE_REASON_UNSPECIFIED,
+      firstUnservableDate: isSet(object.firstUnservableDate)
+        ? globalThis.String(object.firstUnservableDate)
+        : isSet(object.first_unservable_date)
+        ? globalThis.String(object.first_unservable_date)
+        : "",
+    };
+  },
+
+  toJSON(message: DelistedState): unknown {
+    const obj: any = {};
+    if (message.reason !== UnservableReason.UNSERVABLE_REASON_UNSPECIFIED) {
+      obj.reason = unservableReasonToJSON(message.reason);
+    }
+    if (message.firstUnservableDate !== "") {
+      obj.firstUnservableDate = message.firstUnservableDate;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DelistedState>, I>>(base?: I): DelistedState {
+    return DelistedState.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DelistedState>, I>>(object: I): DelistedState {
+    const message = createBaseDelistedState();
+    message.reason = object.reason ?? UnservableReason.UNSERVABLE_REASON_UNSPECIFIED;
+    message.firstUnservableDate = object.firstUnservableDate ?? "";
     return message;
   },
 };
