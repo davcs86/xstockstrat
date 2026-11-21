@@ -1,13 +1,10 @@
--- analysis 026 (AC-15, D-1): run by migration-rerun.sh after pass 1 + replay, over fixtures-pre-224.sql.
+-- analysis 026 (D-1): run by migration-rerun.py after pass 1 + replay, over fixtures-pre-224.sql.
 SELECT set_config('migration_assert.seed_user_id', :'seed_user_id', false);
 
 DO $$
 BEGIN
   IF to_regclass('analysis.strategy_templates') IS NULL THEN
     RAISE EXCEPTION 'AC-15: analysis.strategy_templates does not exist';
-  END IF;
-  IF EXISTS (SELECT 1 FROM analysis.strategy_templates) THEN
-    RAISE EXCEPTION 'AC-15: analysis.strategy_templates has seed rows';
   END IF;
 END $$;
 

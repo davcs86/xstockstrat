@@ -558,7 +558,7 @@ test('gate 5 --final fails on a stale inputs_sha256 and names the regeneration c
   fs.appendFileSync(path.join(dir, MIG, '001_seed.up.sql'), 'SELECT 2;\n')
   r = cli(dir, '--final')
   assert.equal(r.status, 1)
-  assert.match(r.stdout, /^STALE-STORED: scripts\/config-wiring-stored\.json .*bash scripts\/config-wiring-stored\.sh$/m)
+  assert.match(r.stdout, /^STALE-STORED: scripts\/config-wiring-stored\.json .*python3 scripts\/config-wiring-stored\.py$/m)
   assert.equal(cli(dir).status, 0, 'step mode tolerates staleness')
 })
 

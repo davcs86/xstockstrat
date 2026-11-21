@@ -12,10 +12,18 @@ Feature: fix-sandbox-result-contract (bug fix)
 
   # guards: docs/reports/2026-10-19-sandbox-memory-used-bytes-always-zero-defect.md
   @AC-2 @regression
-  Scenario: memory_used_bytes is not a fabricated zero
-    Given an ExecuteFormula request whose formula allocates numpy.zeros(10_000_000)
-    When the sandbox runs the formula
-    Then the response's memory_used_bytes is greater than 0
+  Scenario: memory_used_bytes is a real per-run peak, not a fabricated or inherited figure
+    Given the runtime renders a VmHWM line in /proc/self/status
+    And run A is an ExecuteFormula request with formula_source "result = {}"
+    And run B is an ExecuteFormula request with formula_source:
+      """
+      import numpy
+      a = numpy.ones(10_000_000)
+      result = {"s": float(a[0])}
+      """
+    When the sandbox runs A and then B
+    Then A's memory_used_bytes is greater than 0
+    And B's memory_used_bytes exceeds A's by at least 41943040
 
   # guards: docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md
   @AC-3 @regression

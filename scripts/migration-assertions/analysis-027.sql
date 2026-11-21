@@ -1,4 +1,4 @@
--- analysis 027 (AC-3, AC-4): run by migration-rerun.sh after the contract replay and the refused-down
+-- analysis 027 (AC-3, AC-4): run by migration-rerun.py after the contract replay and the refused-down
 -- recovery, over fixtures-pre-224.sql + fixtures-post-224.sql.
 SELECT set_config('migration_assert.seed_user_id', :'seed_user_id', false);
 

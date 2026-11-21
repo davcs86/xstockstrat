@@ -621,6 +621,29 @@ class TestTriggerBackfillClient:
         assert both.range.end.seconds > both.range.start.seconds
 
     @pytest.mark.asyncio
+    async def test_trigger_callback_url_sets_field_only_when_given(self):
+        """feature 334 AC-2: callback_url reaches the request; without it the field is empty."""
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.TriggerBackfill = AsyncMock(
+            return_value=ingest_pb2.TriggerBackfillResponse(
+                job_id="j-cb", status=ingest_pb2.BACKFILL_STATUS_QUEUED
+            )
+        )
+        url = "https://webhooks.example.net/hooks/backfill-done"
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.trigger_backfill(symbols=["AAPL"], callback_url=url)
+                with_url = mock_stub.TriggerBackfill.call_args[0][0]
+                await client.trigger_backfill(symbols=["AAPL"])
+                without = mock_stub.TriggerBackfill.call_args[0][0]
+        assert with_url.callback_url == url
+        assert without.callback_url == ""
+        assert result == {"job_id": "j-cb", "status": "BACKFILL_STATUS_QUEUED"}
+
+    @pytest.mark.asyncio
     async def test_trigger_validation_valueerrors(self):
         with pytest.raises(ValueError, match="non-empty"):
             await client.trigger_backfill(symbols=[])
@@ -727,6 +750,87 @@ class TestGetBackfillStatusClient:
         assert mock_stub.ListBackfillJobs.call_args[0][0].status_filter == 0
         with pytest.raises(ValueError, match="queued/running/completed/failed/partial/canceled"):
             await client.get_backfill_status(status_filter="bogus")
+
+    @staticmethod
+    def _symbol_results_job(job_id="j-9"):
+        from gen.common.v1 import common_pb2  # type: ignore
+        from gen.ingest.v1 import ingest_pb2  # type: ignore
+
+        return ingest_pb2.BackfillJob(
+            job_id=job_id,
+            symbols=["AAPL", "PSKY", "AXIA", "NEWCO"],
+            status=ingest_pb2.BACKFILL_STATUS_PARTIAL,
+            failed_symbols=["AXIA"],
+            symbol_results=[
+                common_pb2.BackfillSymbolResult(
+                    symbol="PSKY",
+                    outcome=common_pb2.BACKFILL_SYMBOL_OUTCOME_SKIPPED,
+                    reason="asset not found",
+                ),
+                common_pb2.BackfillSymbolResult(
+                    symbol="AXIA",
+                    outcome=common_pb2.BACKFILL_SYMBOL_OUTCOME_FAILED,
+                    reason="upstream 500",
+                ),
+                common_pb2.BackfillSymbolResult(
+                    symbol="NEWCO", outcome=common_pb2.BACKFILL_SYMBOL_OUTCOME_EMPTY
+                ),
+            ],
+        )
+
+    _SYMBOL_RESULTS = [
+        {"symbol": "PSKY", "outcome": "skipped", "reason": "asset not found"},
+        {"symbol": "AXIA", "outcome": "failed", "reason": "upstream 500"},
+        {"symbol": "NEWCO", "outcome": "empty"},
+    ]
+
+    @pytest.mark.asyncio
+    async def test_single_job_symbol_results_outcomes_and_reasons(self):
+        from gen.ingest.v1 import ingest_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.GetBackfillStatus = AsyncMock(return_value=self._symbol_results_job())
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.get_backfill_status(job_id="j-9")
+        assert result["job"]["symbol_results"] == self._SYMBOL_RESULTS
+        assert result["job"]["failed_symbols"] == ["AXIA"]
+
+    @pytest.mark.asyncio
+    async def test_single_job_without_symbol_results_returns_empty_list(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.GetBackfillStatus = AsyncMock(return_value=ingest_pb2.BackfillJob(job_id="j-0"))
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.get_backfill_status(job_id="j-0")
+        assert result["job"]["symbol_results"] == []
+
+    @pytest.mark.asyncio
+    async def test_list_branch_symbol_results_post_processed(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        resp = ingest_pb2.ListBackfillJobsResponse(
+            jobs=[self._symbol_results_job(), ingest_pb2.BackfillJob(job_id="j-0")]
+        )
+        mock_stub = MagicMock()
+        mock_stub.ListBackfillJobs = AsyncMock(return_value=resp)
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.get_backfill_status()
+        assert result["jobs"][0]["symbol_results"] == self._SYMBOL_RESULTS
+        assert result["jobs"][1]["symbol_results"] == []
+
+    def test_symbol_results_projection_matches_proto_fields(self):
+        from gen.common.v1 import common_pb2  # type: ignore
+
+        fields = common_pb2.BackfillSymbolResult.DESCRIPTOR.fields_by_name
+        assert set(fields) == {"symbol", "outcome", "reason"}
+        assert fields["outcome"].enum_type is common_pb2.BackfillSymbolOutcome.DESCRIPTOR
 
 
 class TestManageStrategyUpdateMask:

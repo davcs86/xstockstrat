@@ -8,7 +8,7 @@ test mocks.
   Per-step work happens on `feature-steps/<slug>-step-<N>` sub-branches created by BRANCH SYNC. Boot
   Step B4 validates the current branch context.
 - **Proto edits**: after any `.proto` change, run `buf lint` + `buf breaking`. The Docker codegen
-  script (`./scripts/localenv-setup.sh`) runs both inside the container as part of stub generation
+  script (`python3 scripts/localenv-setup.py`) runs both inside the container as part of stub generation
   (`buf breaking` against `main-dev` by default; override with `AGAINST_BRANCH`), so prefer it — see
   the **After proto changes** bullet. Host-native, from `packages/proto/`:
   ```bash
@@ -24,7 +24,7 @@ test mocks.
   is CI's job at deploy. A step whose `**Verification**` names `docker run postgres` / `migrate` /
   `psql`-against-a-live-DB gets the offline check substituted (logged as a deviation) — do not hang
   waiting on a container (SKILL.md Phase 3 / HARD CONSTRAINTS).
-- **After proto changes**: regenerate stubs with **`./scripts/localenv-setup.sh`** (Docker codegen
+- **After proto changes**: regenerate stubs with **`python3 scripts/localenv-setup.py`** (Docker codegen
   image — builds once, installs nothing on the host); fall back to `./scripts/buf-gen.sh` (host-native)
   only when the Docker daemon is unavailable. Include the generated files in the commit.
 - **Config keys**: format is `<service-short-name>.<category>.<key>` — verify before writing. The

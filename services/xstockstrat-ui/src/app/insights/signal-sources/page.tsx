@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { DataTable } from '@/components/ui/data-table';
 import {
   Select,
@@ -67,6 +68,9 @@ interface FormState {
   mcpEndpoint: string;
   mcpTool: string;
   bearerToken: string;
+  extractionInstructions: string;
+  // The value the source was loaded with: an untouched empty legacy value is not sent on save.
+  loadedExtractionInstructions: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -86,7 +90,12 @@ const EMPTY_FORM: FormState = {
   mcpEndpoint: '',
   mcpTool: '',
   bearerToken: '',
+  extractionInstructions: '',
+  loadedExtractionInstructions: '',
 };
+
+const EXTRACTION_INSTRUCTIONS_MAX_CHARS = 16000;
+const EXTRACTION_INSTRUCTIONS_PATH = 'extraction_instructions';
 
 function isEmailType(t: SourceType) {
   return [
@@ -181,7 +190,35 @@ function formFromSource(src: SignalSource): FormState {
     mcpEndpoint: String(cfg.mcp_endpoint ?? ''),
     mcpTool: String(cfg.mcp_tool ?? ''),
     bearerToken: '', // write-only — never populated from a stored source
+    extractionInstructions: src.extractionInstructions,
+    loadedExtractionInstructions: src.extractionInstructions,
   };
+}
+
+/**
+ * What a save does with the instructions: the value to send, whether an update names the field
+ * in its mask, or the message that blocks the save.
+ */
+function resolveExtractionInstructions(
+  form: FormState,
+  isNew: boolean,
+): { value: string; masked: boolean; error?: string } {
+  if (!isMediatedType(form.sourceType)) return { value: '', masked: false };
+  const value = form.extractionInstructions;
+  const untouchedLegacy = !isNew && form.loadedExtractionInstructions === '' && value === '';
+  if (untouchedLegacy) return { value: '', masked: false };
+  if (value.trim() === '') {
+    return { value: '', masked: false, error: 'Extraction instructions are required' };
+  }
+  // Code points, as ingest counts them (String.length counts UTF-16 units).
+  if (Array.from(value).length > EXTRACTION_INSTRUCTIONS_MAX_CHARS) {
+    return {
+      value: '',
+      masked: false,
+      error: 'Extraction instructions must be at most 16,000 characters',
+    };
+  }
+  return { value, masked: true };
 }
 
 export default function SignalSourcesPage() {
@@ -276,6 +313,11 @@ export default function SignalSourcesPage() {
       return;
     }
     const isNew = editingSlug === '__new__';
+    const instructions = resolveExtractionInstructions(form, isNew);
+    if (instructions.error) {
+      setSaveError(instructions.error);
+      return;
+    }
     const configJson = buildConfigJson(form);
     // Registering an mcp_client source is a secret-first two-write: the bearer goes to an encrypted
     // config secret, then the source registers with credentials_ref (never the token in config_json).
@@ -295,6 +337,7 @@ export default function SignalSourcesPage() {
             active: form.active,
             configJson,
             reliabilityWeight: weight,
+            extractionInstructions: instructions.value,
           },
         },
         { onSuccess: () => closeForm(), onError: (e) => setSaveError(errMessage(e)) },
@@ -310,6 +353,7 @@ export default function SignalSourcesPage() {
         active: form.active,
         configJson,
         reliabilityWeight: weight,
+        extractionInstructions: instructions.value,
       },
       ...(form.credentialsRef ? { credentialsRef: form.credentialsRef } : {}),
     };
@@ -328,6 +372,7 @@ export default function SignalSourcesPage() {
               'config_json',
               'reliability_weight', // persist the weight edited on the form
               ...(form.credentialsRef ? ['credentials_ref'] : []),
+              ...(instructions.masked ? [EXTRACTION_INSTRUCTIONS_PATH] : []),
             ],
           },
         };
@@ -598,15 +643,28 @@ export default function SignalSourcesPage() {
                 </div>
               )}
 
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Extractor Module</label>
-                <Input
-                  placeholder="e.g. app.extractors.example_simple_email"
-                  value={form.extractorModule}
-                  disabled={editingSlug !== '__new__'}
-                  onChange={(e) => setField('extractorModule', e.target.value)}
-                />
-              </div>
+              {isMediatedType(form.sourceType) ? (
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Extraction instructions</label>
+                  <Textarea
+                    aria-label="Extraction instructions"
+                    placeholder="What an agent should extract from this source, and how to map it to a signal"
+                    rows={6}
+                    value={form.extractionInstructions}
+                    onChange={(e) => setField('extractionInstructions', e.target.value)}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Extractor Module</label>
+                  <Input
+                    placeholder="e.g. app.extractors.example_simple_email"
+                    value={form.extractorModule}
+                    disabled={editingSlug !== '__new__'}
+                    onChange={(e) => setField('extractorModule', e.target.value)}
+                  />
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Reliability Weight</label>
