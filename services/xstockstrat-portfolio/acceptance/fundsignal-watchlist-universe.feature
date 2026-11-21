@@ -8,12 +8,12 @@ Feature: xstockstrat-portfolio — cross-user watchlist-symbol enumeration
   What portfolio guarantees for the cross-user watchlist enumeration RPC that sources the fundamentals
   producer's universe: a distinct union across all users, gated to allow-listed internal callers.
 
-  @AC-1 @FR-1 @feature-154
+  @AC-1 @FR-1 @feature-154 @feature-352
   Scenario: Portfolio enumerates the distinct cross-user union of watchlist symbols
     Given user "alice" has a watchlist containing "AAPL, MSFT"
     And user "bob" has a watchlist containing "MSFT, NVDA"
     When an authorized internal caller invokes the cross-user watchlist-symbol enumeration RPC
-    Then the response contains exactly the distinct set {"AAPL", "MSFT", "NVDA"}
+    Then the response contains exactly the distinct set {"AAPL", "MSFT", "NVDA"} minus any symbol flagged delisted (feature 352)
     And "MSFT" appears once, not twice
 
   @AC-2 @FR-2 @feature-154

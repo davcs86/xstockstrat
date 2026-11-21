@@ -50,6 +50,7 @@ def _drive() -> None:
     telemetry.record_live_loop_cycle_duration(0.5)
     telemetry.record_fundsignal_signal("emitted")
     telemetry.record_opportunity_recompute("full", "ok")
+    telemetry.record_opportunity_recompute("full", "failed")
     telemetry.record_template_instantiate()
     telemetry.record_template_instantiate(grpc.StatusCode.NOT_FOUND)
     telemetry.log_tick_ok(logging.getLogger("allowlist"), telemetry.Loop.FUNDSIGNAL, 1.0)

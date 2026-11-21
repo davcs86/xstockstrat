@@ -214,6 +214,24 @@ async def _instantiate(svc, user="bob", template_id="tpl-zscore"):
     return resp.formula
 
 
+_SYSTEM_TPL = "tpl-kaufman_efficiency_ratio"
+
+
+def _put_system_row(svc):
+    now = datetime.datetime.now(datetime.UTC)
+    svc._templates_repo.rows[_SYSTEM_TPL] = {
+        "template_id": _SYSTEM_TPL,
+        "name": "Kaufman Efficiency Ratio",
+        "description": "",
+        "payload": MessageToDict(_payload()),
+        "version": 1,
+        "retired_at": None,
+        "created_by": "system",
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
 class TestAuthoring:
     async def test_ac13_non_admin_create_is_permission_denied(self):
         svc = _servicer()
@@ -293,10 +311,68 @@ class TestAuthoring:
         assert _code(ctx) == grpc.StatusCode.INVALID_ARGUMENT
         assert svc._templates_repo.rows == {}
 
-    async def test_ac15_empty_catalog_lists_zero_templates(self):
+    async def test_empty_repo_lists_zero_templates(self):
         svc = _servicer()
         listed = await svc.ListTemplates(indicators_pb2.ListTemplatesRequest(), _user("bob"))
         assert len(listed.templates) == 0
+
+    @pytest.mark.parametrize(
+        "op", [common_pb2.TEMPLATE_OPERATION_UPDATE, common_pb2.TEMPLATE_OPERATION_RETIRE]
+    )
+    async def test_ac26_system_template_update_and_retire_are_refused(self, op):
+        svc = _servicer()
+        _put_system_row(svc)
+        before = dict(svc._templates_repo.rows[_SYSTEM_TPL])
+        ctx = _admin()
+        with pytest.raises(grpc.RpcError):
+            await svc.ManageTemplate(
+                indicators_pb2.ManageTemplateRequest(operation=op, template=_template(_SYSTEM_TPL)),
+                ctx,
+            )
+        assert _code(ctx) == grpc.StatusCode.PERMISSION_DENIED
+        assert ctx.abort.call_args[0][1] == f"system template '{_SYSTEM_TPL}' is read-only"
+        row = svc._templates_repo.rows[_SYSTEM_TPL]
+        assert (row["version"], row["payload"], row["retired_at"]) == (
+            before["version"],
+            before["payload"],
+            None,
+        )
+
+    async def test_ac27_create_over_a_system_template_is_already_exists(self):
+        svc = _servicer()
+        _put_system_row(svc)
+        ctx = _admin()
+        with pytest.raises(grpc.RpcError):
+            await svc.ManageTemplate(
+                indicators_pb2.ManageTemplateRequest(
+                    operation=common_pb2.TEMPLATE_OPERATION_CREATE, template=_template(_SYSTEM_TPL)
+                ),
+                ctx,
+            )
+        assert _code(ctx) == grpc.StatusCode.ALREADY_EXISTS
+
+    async def test_ac28_admin_authored_template_stays_editable(self):
+        svc = _servicer()
+        await _manage(svc, common_pb2.TEMPLATE_OPERATION_CREATE, _template("tpl-admin-custom"))
+        updated = await _manage(
+            svc, common_pb2.TEMPLATE_OPERATION_UPDATE, _template("tpl-admin-custom")
+        )
+        assert updated.meta.version == 2
+        listed = await svc.ListTemplates(indicators_pb2.ListTemplatesRequest(), _user("bob"))
+        assert [t.meta.read_only for t in listed.templates] == [False]
+        retired = await _manage(
+            svc, common_pb2.TEMPLATE_OPERATION_RETIRE, _template("tpl-admin-custom")
+        )
+        assert retired.meta.retired is True
+        assert svc._templates_repo.rows["tpl-admin-custom"]["retired_at"] is not None
+
+    async def test_system_template_is_listed_read_only(self):
+        svc = _servicer()
+        _put_system_row(svc)
+        listed = await svc.ListTemplates(indicators_pb2.ListTemplatesRequest(), _user("bob"))
+        assert [(t.meta.template_id, t.meta.read_only) for t in listed.templates] == [
+            (_SYSTEM_TPL, True)
+        ]
 
     async def test_create_validates_payload_like_register(self):
         svc = _servicer()
