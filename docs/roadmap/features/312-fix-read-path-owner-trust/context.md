@@ -1,258 +1,47 @@
 # Context Log: fix-read-path-owner-trust
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+> Distilled 2026-11-21 by /sdd-distill. Full pre-distill session prose is in git history (before this commit).
 
----
+Append-only from here on. Each session appends a new ## Session entry.
 
-## Session 2026-11-10 (/sdd-triage)
+## Decisions
 
-- Bug reported via defect reports (Issues disabled; clustered triage):
-  - `docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md` — trading ListOrders/StreamOrderUpdates trust a body user_id filter where empty = all users (SEV-3)
-  - `docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md` — portfolio consumers substitute "default" / "alpaca-default" for missing user/account id (SEV-3)
-  - `docs/reports/2026-10-19-notify-listalerts-owner-fallback-unscoped-defect.md` — notify ListAlerts trusts the body userId and is unscoped with no identity (SEV-3)
-- Cluster rationale: all three violate PLAT-11 the same way — ownership taken from a body field, a null fallback, or a placeholder instead of the trusted x-user-id header — and share one security-posture decision.
-- Severity: SEV-3 (all three)
-- Routed to SDD path (Track C)
-- Created: status.md, feature.md, product-spec.md, acceptance.feature (3 regression scenarios), context.md; report sidecars stamped `triaged`
-- Affected services (from reports): xstockstrat-trading, xstockstrat-portfolio, xstockstrat-notify (consumer surfaces: xstockstrat-ui, xstockstrat-agent)
-- Root cause hypothesis: pre-PLAT-11 body filters and test-caller fallbacks left in place; missing empty-caller guard in RegisterBrokerAccount
-- Recommended design depth: full → `/sdd-design fix-read-path-owner-trust` (rationale: security/authz posture, ≥3 services, proto documentation change)
-- Development branch: feature/fix-read-path-owner-trust
+Design is approved and the spec is implementation-ready (`design.md`, `debate.md` D-1..D-18 / R-1..R-9 / O-1..O-11 hold the register). Why-level history that lives only in this log:
 
-## Session 2026-11-10 — sdd-review product-spec
+- **Triage**: three SEV-3 reports (trading ListOrders/StreamOrderUpdates body `user_id` filter where empty = all users; portfolio "default"/"alpaca-default" fallbacks; notify ListAlerts body `userId` unscoped with no identity) share one PLAT-11 violation — ownership from a body field, null fallback or placeholder instead of the trusted `x-user-id`. Root cause: pre-PLAT-11 body filters and test-caller fallbacks left in place, plus a missing empty-caller guard in `RegisterBrokerAccount`. Track C, design depth `full` (security posture, ≥3 services, proto doc change). Services: trading, portfolio, notify (surfaces ui, agent; analysis a preserved `ListOrders` caller).
+- **Order reads header-only (D-3/D-7/D-8; operator-signed, record below)**: one `(*TradingService).ResolveOrderOwner(ctx) (string, error)` returns `FromContext(ctx).UserID`, empty → `PermissionDenied` (stated explicitly so fix-grpc-status-mapping does not normalise it; notify keeps code 3, D-4). Body `user_id` is never read for any scope, at the six D-3 sites. The stream path takes identity from the D-1 stream interceptor with RED-first production-chain evidence (D-2). The `broadcastOrder` "empty = all users" arm (`sub.userID != "" &&`, `trading.go:439`) and its docs (`:389-399`) are deleted; `SubscribeOrderUpdates` keeps its signature. Naming (C-18): the spec either justifies the order-specific name or renames it `requireCaller`; the four existing inline checks (`:482,967,1317,1490`) are not refactored onto it.
+- **Broker-account fail-closed (D-6/D-13)**: `callerUserID == ""` → `PermissionDenied "caller identity (x-user-id) required"` as first statement in Register (before OFFLINE), UpdateCredentials, List, Deregister (inline house idiom, no helper); `ResumeAccountSvc` stays admin-gated. Motive: `UpdateBrokerAccountCredentials` checked only `rec.UserID != callerUserID`, so a headerless caller could rotate credentials on a `user_id=''` row and re-insert it into the pool (`:2706`). Every pool insert (`:306/:320/:2614/:2652/:2706`) is therefore owner-gated. Handler sites (`handler/trading.go:104,112,277,289,300,315`) map via `connect.NewError(connectCodeFromErr(err), err)` (D-14) because `toGRPCError` masks every service status as Internal; the spec lists each RPC's refusal-code set.
+- **`GetOrder` in scope (D-15)**: `ResolveOrderOwner` first (headerless → `PermissionDenied`), non-owner → `NotFound` identical to absent (no existence probing); a per-RPC audit of all 14 `grpcTradingAdapter` RPCs found it the only other unscoped read (reachable via `traderBff.ts:47` and agent `client.py:2545-2552`).
+- **Harness (D-2/D-16)**: `internal/service/export_test.go` (`package service`: test constructor + `broadcastOrder` shim, kept minimal) plus `trading_owner_scope_test.go` (`package service_test`) on a bufconn server with the production unary + stream interceptors and `GRPCHandler()`, pgxmock via `NewTradingRepoWithDB` + `testdata/order_rows.go`, RED on the pre-fix tree. Chain hand-mirrored from `main.go:155` can drift (accepted, C-18).
+- **Acceptance (D-17)**: `@AC-4` Outline (ListOrders/StreamOrderUpdates × scope 3/4 × body user-b/empty → only user-a), `@AC-5` headerless → `PERMISSION_DENIED`, `@AC-6` cross-user `GetOrder` → `NOT_FOUND`; promoted as durable trading @ACs; appended at spec time.
+- **Phantom owner-less broker accounts (D-9)**: `LoadBrokerPool` first loop statement skips `rec.UserID == ""` with `slog.WarnContext(account_id)`; cleanup is a filed follow-up defect report (trigger: the WARN; candidate trading `012` deactivation migration, DBA approval). Side effects recorded: the `resolveAccount` sole-account count flips (`:368-386`), hydration loses the account (`:321-329`), in-flight orders on it become unreconcilable by `pollFills`. Portfolio D-5 ack-and-skip of owner-less events stays as defence in depth.
+- **Runbook (D-18)**: under D-7 the mTLS rollout flat-book check (`inter-service-mtls-rollout.md:99-101`) becomes a read-only `operator-db-access.md` query copying the `ListSubmittedOrders` predicate verbatim (`status IN ('new','partially_filled') AND broker_order_id IS NOT NULL AND broker_order_id != ''`, lowercase, `trading_repo.go:307-313`); the "trader surface / ListOrders" option is removed (never cross-account; BFF pins the session).
+- **Proto (D-10)**: additive `[deprecated = true]` + "ignored; owner is x-user-id" on `trading.proto:169/:190` and `notify.proto:99`; buf-safe; `trading.proto:169/:190` join the proto constitution's deprecated request-body `user_id` gotcha set, not PROTO-10's admin-selector evidence.
+- **Out of scope (D-11)**: notify `StreamAlertsRequest.user_id` (`notify.proto:83`, empty = all) and `AcknowledgeAlert` body `user_id` (`:91`) — no peer owns them (316 covers severities/backpressure, 315 leaves delivery unchanged); 312 files a new defect report (NOTIFY-5 model). Notify `ListAlerts`/`MarkAlertRead` follow D-4.
+- **Merge order (D-12)**: 315 before 312 (312 rebases `notifyServiceImpl.ts` and tests); 322 either order with rebase + `buf-gen`; `handler/trading.go:112` stays in 312 unless 326 touches the trading handler (then 312 merges after it; the rule also covers the D-14 handler lines). Comment-only touchpoints: `traderBff.ts:35-36`, `entry_backfill.py:73`, agent `CLAUDE.md:29`. Known-dead header-less `ListOrders` caller `scripts/integration-test.sh:446-448` (Connect `:8051`, outside CI).
+- **Rejected alternatives (why)**: any admin body `user_id` selector on order reads, incl. "empty = own, body = other for ADMIN" (R-3/R-4; no named consumer, every live caller sends body = header: `traderBff.ts:35-46`, `client.py:2560-2562`, `entry_backfill.py:79-84`, `servicer.py:6478-6480`; ADMIN bit over mTLS becomes a cross-tenant read); a `SubscribeOrderUpdates` empty-selector reject beside the all-users branch (half-removed dead semantics); a per-sync-cycle throttled-WARN skip in `syncPositions` (the pool is the only feed; load-time skip plus owner-gated inserts suffices); a one-off cleanup migration inside 312 (needs DBA approval, product-spec says no migration, irreversible on prod); assigning the notify siblings to 315/316; harness in `package handler` with fake repo (unexported fields, mTLS `NewTradingService`, no fake-repo seam — F-04 near-miss) or a no-bufconn adapter harness (skips the D-1 interceptor; vacuous-GREEN, R-2); `GetOrder` gate folding headerless and non-owner into one `NotFound` (contradicts D-7); deferring `GetOrder` to a separate report (same bug class, larger exposure than `ListOrders`); a shared `requireCaller` helper for broker-account guards (they take an explicit `callerUserID`; inline is house style).
+- **Spec (2026-11-20)**: 20 steps; anchors verified at `origin/feature/fix-read-path-owner-trust@6474bdb6`; Steps 12+13 (proto + proto-gen) are the only atomic unit and the proto unit was deliberately moved AFTER the code steps (SA1019 on generated Go `UserId` at seven read sites would break the trading lint in a proto-first tree; `.golangci.yml:7`) — recorded in the spec Deviation Log, not design.md; the `export_test.go` constructor takes `accounts repository.AccountRepository` (agent `@AC-7` wire proof reaches `accountRepo`). Verbatim spec and review sessions below carry the rest.
 
-- Product spec approved. Status: draft → spec-ready.
-- Warnings: bug-template conventions (no FR-N/@FR tags); AC-3 allows two rejection codes pending OQ2; AC-2 compound; five open questions deferred; first review FAILed crit 5 + trading C-2 (fixed)
-- Overlap findings: WARN: trading.proto shared with 322 (different messages); notify ListAlerts coupling with 315
-- Recommended design depth: full (proto (additive); 5 services)
-- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)
+## Open Threads
 
-## Session 2026-11-11 — sdd-batch design gate (round 2)
+Authoritative list: the two `### Open Threads` sections inside the last two verbatim sessions below. Carried forward from the design-approved section and not repeated there:
 
-- `/sdd-design fix-read-path-owner-trust` (full) halted at the approval gate after round 2 (gate policy: halt). Per the grilling protocol, design.md is not written and status.md is unchanged. The register is `debate.md` (State in-debate, Rounds run 2).
+- [ ] `debate.md` still shows O-2, O-6, O-8 as `open` although the 2026-11-20 operator decisions resolve them — reconcile at the next register update.
+- [ ] Keep `export_test.go` to the constructor plus the broadcast shim so later tests cannot bypass the production chain (harness step); audit every trading stream RPC for behaviour change under the new `StreamServerInterceptor` (middleware step).
+- [ ] The handler status remap changes wire codes UI/agent mappers may assume; list each broker-account RPC's refusal codes and prove agent `@AC-7` on the wire (O-10); D-12 governs overlap with 326 — trading handler step.
+- [ ] Legacy pre-`user_id` events are dropped on replay incl. the `DeleteOfflineRealized` purge on deregister (accepted, D-5) — portfolio step. Notify test conversion to metadata callers may expose tests relying on the unscoped fallback; rebase on 315 first — notify step.
+- [ ] Two defect reports to file: notify `StreamAlerts`/`AcknowledgeAlert` body `user_id` (D-11) and trading `broker_accounts` `user_id=''` cleanup (D-9); record the pre-merge read-only count of active `user_id=''` rows per environment (O-11) — final docs step (spec Step 20 operator gate). Runbook DB-query substitute must land in the same PR as D-7 (O-9).
 
-### Open Threads
+## Files Modified
 
-- **Approach (round-2 synthesis):** D-1..D-6 stand; R-1..R-3 honoured.
-  - Trading order reads become header-only through one `ResolveOrderOwner(ctx)` (`FromContext(ctx).UserID`; empty → `PermissionDenied`, stated explicitly so fix-grpc-status-mapping does not normalise it). Body `user_id` is never read for any scope, at the six D-3 sites. The stream path takes identity from the D-1 interceptor with RED-first production-chain evidence (D-2).
-  - The `broadcastOrder` "empty = all users" arm (`trading.go:439`) and its docs (`:389-399`) are deleted (D-8).
-  - Proto changes are additive `[deprecated = true]` on `trading.proto:169/:190` and `notify.proto:99` (D-10).
-  - `LoadBrokerPool` skips owner-less rows with a startup WARN; cleanup is a filed follow-up (D-9).
-  - `UpdateBrokerAccountCredentials` (`trading.go:2672`) must fail closed on an empty caller (O-7).
-  - Notify StreamAlerts/AcknowledgeAlert body `user_id` are out of scope; a new defect report is a deliverable (D-11).
-  - Merge order: 315 before 312; 322 either way with rebase and buf-gen; `handler/trading.go:112` stays in 312 (D-12).
-  - `scripts/integration-test.sh:446-448` is a known-dead header-less `ListOrders` caller (Connect `:8051`, outside CI).
-  - Comment-only touchpoints: `traderBff.ts:35-36`, `entry_backfill.py:73`, agent `CLAUDE.md:29`. xstockstrat-analysis is added as a preserved caller.
-- **Strongest open objection:** O-2 (blocking). The C-16 CHANGE needs an operator-signed D-7: "trading ListOrders/StreamOrderUpdates always scope to x-user-id; body user_id is ignored for every scope including ADMIN; headerless → PermissionDenied; no cross-user order read over RPC". It overrides trading `CLAUDE.md:45-51` and the product-spec Expected "admin selector" line. Approval cannot proceed until that sign-off is recorded here.
-  - Also blocking: O-6 (no D-7 regression scenario yet) and O-7 (the `:2672` headerless credential rewrite re-enters the pool at `:2706`).
-  - Non-blocking but open: O-3 (follow-up filing and `LoadBrokerPool` side effects under Assumptions).
-- **Floor status:** no Floor breaches.
-- **Uncovered @AC changes (none covered by an operator decision yet):**
-  - CHANGE: trading `CLAUDE.md` "admin empty user_id = all users" (no durable @AC).
-  - CHANGE: 312 product-spec Expected "body user_id honoured only as an admin selector" (PROTO-10).
-  - EXTEND: @AC-1, @AC-2, @AC-3 (312), plus a new D-7 ADMIN header-only regression scenario, to be promoted as a durable trading @AC.
-  - PRESERVE: xstockstrat-ui @AC-2 @feature-270; xstockstrat-notify @AC-1..@AC-5 @feature-203.
-- **Next:** operator signs or declines D-7 (O-2). Then re-run `/sdd-batch` to resume at round 3 from the state below.
+None yet (no code written). Artifacts only: `implementation-spec.md` (20 steps), `acceptance.feature` (`@AC-4`..`@AC-6` appended at spec time), `design.md`, `recon.md`, `debate.md`, `product-spec.md`.
 
-```sdd-batch-design-state
-{
-  "round": 2,
-  "synth": {
-    "approach": "Round-2 synthesis. D-1..D-6 stand unchanged, and R-1..R-3 are honoured. The proposer's header-only choice is adopted. Two corrections from the adversary are folded in; I confirmed the first one in the code.\n\n1. **Trading order reads are header-only.**\n   - `(*TradingService).ResolveOrderOwner(ctx) (string, error)` in `internal/service/trading.go` returns `middleware.FromContext(ctx).UserID`. An empty value returns `codes.PermissionDenied`.\n   - It never reads body `user_id`, for admins or anyone else, and there is no `RequireAdminScope` branch.\n   - It is called at the six D-3 sites: `trading.go:1646`, `:1652`, `:1730`, and `handler/trading.go:117-119`, `:204-206`. The resolved value also feeds `subID`.\n   - The stream path is unchanged: identity comes from the D-1 interceptor, with RED-first evidence through the production chain (D-2).\n   - The missing-identity code is stated explicitly as `PermissionDenied` (trading convention), so that fix-grpc-status-mapping does not normalise it. Notify keeps code 3 (D-4).\n   - Naming (C-18): `ResolveOrderOwner` is the one resolver for order reads. The four existing inline fail-closed checks (`trading.go:482,967,1317,1490`) are not refactored onto it. The spec must either justify the order-specific name or rename it `requireCaller`; this is a non-blocking choice.\n\n2. **The \"empty = all users\" subscriber branch is removed entirely.**\n   - The upstream resolver guarantees a non-empty selector.\n   - Delete the `sub.userID != \"\" &&` arm in `broadcastOrder` (`trading.go:439`) so the filter becomes `order.UserId != sub.userID → continue`.\n   - Rewrite the \"empty = all users\" docs on `orderSubscriber` and `SubscribeOrderUpdates` (`trading.go:389-399`).\n   - `SubscribeOrderUpdates(id, userID)` keeps its signature (no error return). Do not keep both a reject path and a dead `\"\"` branch.\n\n3. **Proto changes are additive.**\n   - `ListOrdersRequest.user_id` (`trading.proto:169`) and the StreamOrderUpdates request `user_id` (`:190`) get `[deprecated = true]` and a comment: \"ignored; owner is x-user-id\".\n   - `ListAlertsRequest.user_id` (`notify.proto:99`) gets `[deprecated = true]`.\n   - Run `./scripts/buf-gen.sh`. The changes are buf-breaking-clean.\n   - In `packages/proto/docs/context-constitution.md`, add `trading.proto:169/:190` to the deprecated request-body `user_id` gotcha set, not to PROTO-10's admin-selector evidence.\n\n4. **C-16 CHANGE, blocking on the operator.**\n   - Proposed D-7 for operator sign-off: \"trading ListOrders/StreamOrderUpdates always scope to x-user-id; body user_id is ignored for every scope including ADMIN; headerless → PermissionDenied; no cross-user order read over RPC\".\n   - D-7 explicitly overrides both the trading `CLAUDE.md:45-51` \"empty = all users\" contract and the product-spec Expected line \"body user_id honoured only as an admin selector\" (PROTO-10 framing).\n   - Both texts are rewritten in the same PR.\n   - Add a D-7 regression scenario to `acceptance.feature`:\n     - `x-access-scope \"4\"` (ADMIN), `x-user-id user-a`, with body `user_id user-b` and also with an empty body. Both return only user-a's orders, on `ListOrders` and on `StreamOrderUpdates` via the production chain.\n     - A headerless call returns PermissionDenied.\n   - Promote that scenario as the durable trading @AC at launch.\n\n5. **Phantom owner-less broker accounts.**\n   - `LoadBrokerPool` (`trading.go:302-320`): the loop's first statement is `if rec.UserID == \"\" { slog.WarnContext(..., \"account_id\", ...); continue }`.\n   - `UpdateBrokerAccountCredentials` (`trading.go:2672`) changes from `rec.UserID != callerUserID` to `callerUserID == \"\" || rec.UserID != callerUserID → PermissionDenied`, the idiom at `:482`.\n     - Confirmed: today a headerless caller (`extractUserID` returns \"\") passes the check on a `user_id=''` row, rotates its credentials, and re-inserts it into the pool at `:2706`. That re-feeds `syncPositions` and is an unauthenticated credential write.\n     - With this guard, every pool-insert site (`:2614`, `:2652`, `:2706`) and `LoadBrokerPool` is owner-gated.\n   - Tests:\n     - headerless update on a `user_id=''` account → PermissionDenied, and the account is not in the pool\n     - `LoadBrokerPool` skips an empty-owner row\n   - Re-grep every `rec.UserID != caller*` comparison. `:1196` is safe only because of `:1178`.\n   - Portfolio D-5 skips remain as defence in depth for events already in the ledger.\n   - Row cleanup is out of scope. A follow-up is filed, triggered by the startup WARN appearing in dev or prod logs.\n   - Assumptions to record:\n     - A skipped account drops out of the `resolveAccount` sole-account count (`trading.go:368-386`). One real account plus one phantom flips from InvalidArgument to auto-selecting the real account.\n     - The skipped account leaves credential-health, reconciliation and halt hydration (`:321-329`).\n     - In-flight NEW/PARTIALLY_FILLED orders on a phantom account can no longer be reconciled by `pollFills`.\n\n6. **Notify siblings are explicitly out of scope for 312.**\n   - These are `StreamAlertsRequest.user_id` (\"empty = all\", `notify.proto:83`) and the `AcknowledgeAlert` body `user_id` (`notify.proto:91`).\n   - No peer owns them: 316 covers only severities and backpressure, and 315 leaves delivery unchanged.\n   - 312 files a new defect report under `docs/reports/` (NOTIFY-5 model) as a deliverable of this design.\n   - Notify `ListAlerts` and `MarkAlertRead` follow D-4.\n\n7. **Merge order.**\n   - 315 merges before 312; 312 rebases `notifyServiceImpl.ts` and its tests.\n   - 322 and 312 can merge in either order; the second rebases and re-runs `buf-gen`.\n   - 326 is marketdata-scoped (`marketdata_handler.go:513`), so `handler/trading.go:112` (`CodeInternal` → `connectCodeFromErr`) stays in 312. If 326's spec turns out to touch the trading handler, 312 merges after it.\n\n8. **Known header-less `ListOrders` caller.**\n   - `scripts/integration-test.sh:446-448` sends `ListOrders{trading_mode, limit}` with no `user_id`.\n   - It targets the removed Connect `:8051` and is outside CI, so it is dead. Record it as known-dead in `context.md`, or add an `x-user-id`. Either way the pre-merge caller grep, including `scripts/`, is not a no-op.\n\n9. **Comment-only touchpoints and order.**\n   - Comment-only changes: `traderBff.ts:35-36`, `entry_backfill.py:73`, agent `CLAUDE.md:29`. xstockstrat-analysis is added to Affected Services as a preserved caller.\n   - Build order: proto → trading (middleware → main.go:155 → service incl. LoadBrokerPool and the :2672 guard → handler) → portfolio → notify → docs, acceptance and the defect report.",
-    "open_objections": [
-      {
-        "text": "O-2 / proposed D-7 needs operator sign-off. Header-only removes cross-user order reads for ADMIN and ignores body user_id. This overrides both the trading CLAUDE.md:45-51 'empty = all users' contract and the product-spec Expected 'admin selector' line (PROTO-10 framing). Design approval is blocked until an operator signs D-7 and it is recorded in context.md.",
-        "blocking": true
-      },
-      {
-        "text": "D-7 has no regression scenario. @AC-1 tests only scope '3'. Add a scenario: ADMIN (scope '4') + x-user-id user-a + body user_id user-b (and empty body) returns only user-a on ListOrders and StreamOrderUpdates (through the production chain); headerless → PermissionDenied. Promote it as the durable trading @AC. Otherwise an admin body selector (R-4) could return with every AC still green.",
-        "blocking": true
-      },
-      {
-        "text": "UpdateBrokerAccountCredentials (trading.go:2672) compares rec.UserID != callerUserID with no empty-caller guard. A headerless caller can rewrite credentials on a user_id='' account and re-insert it into the broker pool at :2706, which re-feeds syncPositions with owner-less positions.synced/balance.synced and defeats the LoadBrokerPool guard. The proposal claimed all live-insert sites were behind D-6; that claim is false. The synthesis folds the fix into the approach; the proposer must adopt it with a headerless test on a user_id='' row and a re-grep of all rec.UserID != caller* sites.",
-        "blocking": true
-      },
-      {
-        "text": "O-3 remains open until the :2672 fail-closed guard is adopted. The LoadBrokerPool skip alone does not stop phantom re-entry mid-process. The cleanup follow-up must actually be filed with its startup-WARN trigger, and the LoadBrokerPool side effects must be recorded under Assumptions: resolveAccount sole-account flip, loss of credential-health/reconciliation/halt hydration, and pollFills unable to reconcile in-flight orders on phantom accounts.",
-        "blocking": false
-      }
-    ],
-    "floor_breaches": [],
-    "business_rule_changes": [
-      {
-        "ac_id": "@AC-1 (312)",
-        "kind": "EXTEND",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "@AC-2 (312)",
-        "kind": "EXTEND",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "@AC-3 (312)",
-        "kind": "EXTEND",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "new D-7 regression scenario (312, ADMIN header-only order scoping) — to be promoted as durable trading @AC",
-        "kind": "EXTEND",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "trading CLAUDE.md contract 'admin empty user_id = all users' (no durable @AC)",
-        "kind": "CHANGE",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "312 product-spec Expected 'body user_id honoured only as an admin selector' (PROTO-10)",
-        "kind": "CHANGE",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "xstockstrat-ui @AC-2 @feature-270 (dropped order stream reconnects)",
-        "kind": "PRESERVE",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "xstockstrat-notify @AC-1..@AC-5 @feature-203 (alert read/unread persistence, untargeted alerts visible)",
-        "kind": "PRESERVE",
-        "covered_by_operator_decision": false
-      }
-    ],
-    "rejected_alternatives": [
-      "Keep the admin body selector on ListOrders/StreamOrderUpdates, with an empty body meaning own orders (proposer's runner-up). Lost: no named consumer (C-18 YAGNI). Every live caller sends body = header (traderBff.ts:35-46, client.py:2560-2562, entry_backfill.py:79-84, servicer.py:6478-6480). The ADMIN bit over mTLS would become a cross-tenant order read, and it needs RequireAdminScope plumbed into the stream path.",
-      "Make SubscribeOrderUpdates reject an empty selector while keeping the `sub.userID != \"\"` all-users branch in broadcastOrder (trading.go:439). Lost: the function has no error return, so this leaves half-removed dead semantics (C-18). Rely on the upstream resolver and delete the branch.",
-      "Producer-side skip with a throttled WARN in syncPositions per sync cycle. Lost: the broker pool is the only feed into the poller, so a load-time skip (plus owner-gated pool inserts) logs once per boot and needs no throttle map.",
-      "One-off cleanup migration deactivating user_id='' broker accounts inside 312. Lost for now: it needs DBA approval, the product-spec says no migration, and it is irreversible on prod data. It is kept as a filed follow-up triggered by the startup WARN.",
-      "Assign the notify StreamAlerts/AcknowledgeAlert body user_id siblings to 315 or 316. Lost: neither peer's product-spec covers them (316 lines 12 and 22; 315 line 17). Treat them as out of scope and file a new defect report instead."
-    ],
-    "open_risks": [
-      "Header-only removes every RPC path for reading orders across users. An unseen internal job or ops script that relied on ListOrders{} returning all users would silently return one user's orders, or PermissionDenied when it sends no header. scripts/integration-test.sh:446-448 is one such caller (already dead: Connect :8051, outside CI). Run a pre-merge grep across services/ and scripts/.",
-      "The LoadBrokerPool skip changes resolveAccount's sole-account behaviour (trading.go:368-386) and drops phantom accounts from credential-health, reconciliation and halt hydration (:321-329). In-flight orders on those accounts become unreconcilable by pollFills.",
-      "The new StreamServerInterceptor (D-1) applies to every trading stream RPC. Audit the other stream handlers for behaviour change.",
-      "Legacy pre-user_id events are dropped on replay (D-5), including the DeleteOfflineRealized purge on deregister (portfolio_service.go:1569).",
-      "ListBrokerAccountsSvc (handler:286) still has no empty-caller guard and can list empty-owner rows until the cleanup lands.",
-      "Broker-account handlers mask PermissionDenied as Internal via toGRPCError (handler/trading.go:277,300). That depends on fix-grpc-status-mapping, and that peer must not normalise trading's missing-caller PermissionDenied.",
-      "Converting notify tests from body userId to metadata may expose other tests that depend on the unscoped fallback; 312 must rebase on 315."
-    ],
-    "constitution_rules_touched": [
-      "C-01",
-      "C-08",
-      "C-11",
-      "C-13",
-      "C-15",
-      "C-16",
-      "C-18",
-      "P-02",
-      "P-03",
-      "P-06",
-      "PROTO-10",
-      "NOTIFY-5",
-      "PLAT-4",
-      "PLAT-5",
-      "PLAT-13"
-    ],
-    "rationale": "Header-only answers O-1 concretely. No live caller sends a body that differs from the header, so the admin selector fails C-18 YAGNI, and dropping it also removes the cross-tenant ADMIN-over-mTLS read. The operator-choice part of O-1 moves into O-2's D-7 sign-off. O-2 therefore stays blocking, and it now also covers the product-spec Expected override, not only the trading CLAUDE.md text.\n\nI verified the adversary's main blocking finding in the code.\n- `trading.go:2672` checks only `rec.UserID != callerUserID`, and `:2706` re-inserts `rec` into `s.brokers`. A headerless caller can therefore rotate credentials on a phantom `user_id=''` row and re-feed `syncPositions`.\n- So the proposal's O-3 premise, that all pool inserts sit behind D-6, is false. O-3 stays open, and the fail-closed fix is carried as a new blocking objection, because the proposal did not answer it.\n- The fix is folded into the approach using the existing `:482` idiom.\n\nThe D-7 regression scenario is required under C-15/C-16. Without it, the R-4-locked admin selector could come back with every AC green.\n\nI also confirmed the `broadcastOrder` dead `\"\"` branch (`:439`) and the subscriber docs (`:389-399`). The approach deletes the branch rather than keeping a reject path beside it.\n\nO-4 is closed by an explicit out-of-scope statement plus a defect-report deliverable. O-5 is closed by the recorded merge order.\n\nNo settled D-n, locked R-n, or closed O-n was contradicted, and there are no reopen petitions.",
-    "register_delta": {
-      "new_decisions": [
-        {
-          "text": "Trading order reads take the owner from the header only. ResolveOrderOwner(ctx) returns FromContext(ctx).UserID, or PermissionDenied when it is empty; body user_id is never read for any scope. The missing-identity code for trading is PermissionDenied and is stated explicitly so peers do not normalise it. Final sanction of the contract change rests on the operator-signed D-7 (O-2).",
-          "evidence": "traderBff.ts:35-46; client.py:2560-2562; entry_backfill.py:79-84; servicer.py:6478-6480 (body = header at every live caller)"
-        },
-        {
-          "text": "The 'empty = all users' subscriber semantics are deleted. The `sub.userID != \"\"` arm in broadcastOrder (trading.go:439) and the docs at :389-399 are removed; the upstream resolver guarantees a non-empty selector, and the SubscribeOrderUpdates signature is unchanged.",
-          "evidence": "trading.go:389-400,436-442 (verified)"
-        },
-        {
-          "text": "LoadBrokerPool skips rec.UserID == \"\" rows with slog.WarnContext(account_id) and continue, as the loop's first statement. Row cleanup is a filed follow-up triggered by the startup WARN appearing in dev or prod logs.",
-          "evidence": "trading.go:302-320,2436-2446; trading.go:317-318 skip idiom"
-        },
-        {
-          "text": "Proto changes are additive only. trading.proto:169 and :190 and notify.proto:99 get [deprecated = true] with an 'ignored; owner is x-user-id' comment. trading.proto:169/:190 are added to the proto constitution's deprecated request-body user_id gotcha set, not to PROTO-10's admin-selector evidence.",
-          "evidence": "CLAUDE.md § Approval Flow; packages/proto/docs/context-constitution.md:28"
-        },
-        {
-          "text": "Notify StreamAlertsRequest.user_id (notify.proto:83) and AcknowledgeAlert body user_id (notify.proto:91) are out of scope for 312. 312 files a new defect report for them on the NOTIFY-5 model.",
-          "evidence": "316 product-spec lines 12 and 22; 315 product-spec line 17"
-        },
-        {
-          "text": "Merge order: 315 before 312 (312 rebases notifyServiceImpl.ts and its tests). 322 and 312 in either order; the second rebases and re-runs buf-gen. handler/trading.go:112 connectCodeFromErr stays in 312 unless 326 turns out to touch the trading handler, in which case 312 merges after 326.",
-          "evidence": "326 scope marketdata_handler.go:513; 322 edits trading.proto:336"
-        }
-      ],
-      "new_rejected": [
-        {
-          "text": "Admin body user_id selector on trading ListOrders/StreamOrderUpdates (any variant, including 'empty = own, body = other user for ADMIN')",
-          "why": "No named consumer (C-18 YAGNI); the ADMIN bit over mTLS becomes a cross-tenant order read; it needs RequireAdminScope in the stream path."
-        },
-        {
-          "text": "Keeping both a SubscribeOrderUpdates empty-selector reject and the broadcastOrder `sub.userID != \"\"` all-users branch",
-          "why": "Half-removed dead semantics with no error return (C-18); the branch is deleted instead."
-        },
-        {
-          "text": "Per-sync-cycle owner-less skip with a throttled WARN in syncPositions",
-          "why": "The pool is the only feed into the poller; a load-time skip plus owner-gated pool inserts suffices and needs no throttle map."
-        }
-      ],
-      "new_objections": [
-        {
-          "text": "D-7 has no regression scenario. Add ADMIN (scope '4') + x-user-id user-a + body user_id user-b (and empty body) → only user-a on ListOrders and StreamOrderUpdates through the production chain; headerless → PermissionDenied. Promote it as the durable trading @AC.",
-          "blocking": true
-        },
-        {
-          "text": "UpdateBrokerAccountCredentials (trading.go:2672) lets a headerless caller pass the ownership check on a user_id='' row, rewrite its credentials, and re-insert it into the broker pool at :2706. Make it fail closed (callerUserID == \"\" || rec.UserID != callerUserID → PermissionDenied), add it to the D-6 scope with a headerless test, and re-grep all rec.UserID != caller* sites.",
-          "blocking": true
-        }
-      ],
-      "closed_objections": [
-        {
-          "id": "O-1",
-          "how": "Header-only was chosen: body user_id is ignored for all scopes and the trading fields are deprecated. The operator-choice component is folded into O-2's D-7 sign-off."
-        },
-        {
-          "id": "O-4",
-          "how": "Explicitly out of scope for 312, since neither 315 nor 316 owns these RPCs. 312 files a new defect report for StreamAlerts and AcknowledgeAlert body user_id as a design deliverable."
-        },
-        {
-          "id": "O-5",
-          "how": "Merge order recorded: 315 before 312; 322 and 312 in either order with rebase and buf-gen; 326 is marketdata-scoped, so handler/trading.go:112 stays in 312."
-        }
-      ],
-      "reopen_petitions": [],
-      "reopened": []
-    }
-  },
-  "floor_breaches": []
-}
-```
+## Superseded Sessions
 
-## Session 2026-11-13 — sdd-batch design gate (round 3)
-
-- `/sdd-design fix-read-path-owner-trust` (full) halted at the approval gate after round 3 (gate policy: halt). Per the grilling protocol, design.md is not written and status.md is unchanged. The register is `debate.md` (State in-debate, Rounds run 3).
-
-### Open Threads
-
-- **Approach (round-3 synthesis):** D-1..D-12 stand; R-1..R-6 honoured. Round 3 adds D-13..D-18 and locks R-7..R-9.
-  - Broker-account methods Register (`trading.go:2595`, before OFFLINE), UpdateCredentials (`:2664`), List (`:3069`) and Deregister (`:3144`) reject `callerUserID == ""` with `PermissionDenied` as their first statement (inline idiom, no helper); `ResumeAccountSvc` stays admin-gated. Every pool insert (`:306/:320/:2614/:2652/:2706`) is therefore owner-gated (D-13; closes O-7).
-  - `GetOrder` (`trading.go:1626-1643`) is in scope: `ResolveOrderOwner(ctx)` first (headerless → `PermissionDenied`), non-owner → `NotFound` identical to absent. A per-RPC audit of all 14 `grpcTradingAdapter` RPCs found it the only other unscoped read (D-15).
-  - Handler sites `handler/trading.go:104,112,277,289,300,315` map via `connect.NewError(connectCodeFromErr(err), err)` so `PermissionDenied`/`NotFound`/`FailedPrecondition` reach the wire; the spec lists each broker-account RPC's refusal-code set (D-14).
-  - AC evidence harness: `internal/service/export_test.go` (`package service`: test constructor + `broadcastOrder` shim) plus `internal/service/trading_owner_scope_test.go` (`package service_test`) on a bufconn server with the production unary + stream interceptors and `GRPCHandler()`, pgxmock seeding via `NewTradingRepoWithDB` with `testdata/order_rows.go`, RED on the pre-fix tree (D-16).
-  - 312 `acceptance.feature` gains `@AC-4` (Outline: ListOrders/StreamOrderUpdates × scope 3/4 × body user-b/empty → only user-a), `@AC-5` (headerless → `PERMISSION_DENIED`), `@AC-6` (cross-user `GetOrder` → `NOT_FOUND`), promoted as durable trading @ACs (D-17).
-  - Phantom `user_id=''` broker accounts: `LoadBrokerPool` skip (D-9) plus a named follow-up defect report with a WARN trigger and a candidate trading `012` deactivation migration; side effects recorded under Assumptions (closes O-3).
-  - Under D-7 only, the mTLS rollout runbook flat-book check (`inter-service-mtls-rollout.md:99-101`) becomes a read-only `operator-db-access.md` query copying the `ListSubmittedOrders` predicate verbatim; the trader-surface/ListOrders option is removed (D-18).
-  - Portfolio D-5, notify D-4/D-11, proto D-10 and merge order D-12 unchanged; D-12's 326 rule now also covers the D-14 handler lines.
-- **Strongest open objection:** O-2 (blocking). The operator must sign D-7 verbatim (header-only trading order reads; no cross-user order RPC for any scope; headerless → `PermissionDenied`), overriding trading `CLAUDE.md:45-51` "empty = all users" and the product-spec "admin selector" line. New input for that decision: the runbook consumer at `inter-service-mtls-rollout.md:99-101` and its DB-query substitute (D-18).
-  - Also blocking: O-6 (proposer must adopt the D-16 harness layout and the `@AC-4/5` acceptance fixes) and O-8 (proposer must adopt the D-15 `GetOrder` gate and confirm the 14-RPC audit).
-  - Non-blocking, open: O-9 (runbook predicate verbatim), O-10 (agent `@AC-7` on the wire + refusal-code list), O-11 (pre-merge read-only count of active `user_id=''` broker_accounts per environment, recorded here).
-- **Floor status:** no Floor breaches.
-- **Uncovered @AC changes (none covered by an operator decision yet):**
-  - CHANGE: trading `CLAUDE.md` "admin empty user_id = all users" (no durable @AC).
-  - CHANGE: 312 product-spec Expected "body user_id honoured only as an admin selector" (PROTO-10).
-  - EXTEND: @AC-1, @AC-2, @AC-3 (312); new @AC-4, @AC-5, @AC-6 (312); xstockstrat-agent @AC-7 `agent-broker-account-tools.feature`.
-  - PRESERVE: xstockstrat-ui @AC-2 @feature-270; xstockstrat-notify @AC-1..@AC-5 @feature-203.
-- **Next:** operator signs or declines D-7 (O-2). Then re-run `/sdd-batch` to resume at round 4 from the state below.
-
+- 2026-11-10 — /sdd-triage: three SEV-3 reports clustered as PLAT-11 violations and routed to Track C, depth `full`; branch `feature/fix-read-path-owner-trust`; details in Decisions.
+- 2026-11-10 — sdd-review product-spec: approved, draft → spec-ready after a first review FAILed criterion 5 + trading C-2 (fixed). Warnings: bug-template conventions (no FR-N/@FR tags); AC-3 allows two rejection codes pending OQ2; AC-2 compound; five open questions deferred. Overlap WARN: `trading.proto` shared with 322 (different messages); notify ListAlerts coupling with 315.
+- 2026-11-11 — sdd-batch design gate (round 2): halted at the gate; design.md unwritten. Adopted header-only over the admin selector (the proposer's runner-up), folded in the `:2672` headerless-credential-rewrite finding (O-7, confirmed in code) and the `broadcastOrder` dead branch; closed O-1 (operator-choice part moved into the D-7 sign-off), O-4 (notify siblings out of scope), O-5 (merge order); O-2 (D-7 sign-off) and O-6 (no D-7 scenario) blocking. Its `sdd-batch-design-state` fence is superseded by the round-3 fence below.
+- 2026-11-13 — sdd-batch design gate (round 3): halted at the gate; closed O-7 and O-3; added D-13..D-18, R-7..R-9; O-2, O-6, O-8 blocking; opened O-9..O-11. Last design-state fence follows verbatim.
 ```sdd-batch-design-state
 {
   "round": 3,
@@ -456,33 +245,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 }
 ```
 
-## Session 2026-11-20 — sdd-design
+- 2026-11-20 — sdd-design: Recon (recon.md; services trading, portfolio, notify, ui, agent + analysis as preserved `ListOrders` caller; reuse: inline fail-closed caller check at `trading.go:482,967,1317,1490`, notify header-only code-3 rejection at `notifyServiceImpl.ts:240-243`). 3 rounds (full), approved at the gate; rejected any admin selector / "empty = all users" (R-3, R-4) and the unbuildable or vacuous harness layouts (R-2, R-7). Constitution rules touched C-01, C-08, C-10, C-11, C-13, C-15, C-16, C-18, F-04, P-02, P-03, P-06, PROTO-10, NOTIFY-5, PLAT-4, PLAT-5, PLAT-13; no Floor breaches; no reopen petitions on the register; no ledger line (per-RPC audit trap already in `fails.md`). Status spec-ready → design-approved; debate.md State → approved (Rounds run 3). Operator decisions follow verbatim.
 
-- Phase 0 Recon: wrote recon.md (services: xstockstrat-trading, xstockstrat-portfolio, xstockstrat-notify, xstockstrat-ui, xstockstrat-agent, plus xstockstrat-analysis as a preserved `ListOrders` caller; key reuse patterns: the inline fail-closed caller check at `trading.go:482,967,1317,1490`, and notify's header-only code-3 rejection at `notifyServiceImpl.ts:240-243`).
-- Phase 1 Grilling: 3 rounds (full). Chosen approach: every read and consume path takes the owner from `x-user-id` only — trading order reads (including `GetOrder`) through one `ResolveOrderOwner(ctx)` behind a new stream interceptor, fail-closed broker-account guards, portfolio ack-and-skip for owner-less events, notify `ListAlerts` header-only, additive proto deprecations. Rejected: any admin body `user_id` selector or "empty = all users" on order reads (R-3, R-4), and the unbuildable or vacuous test harness layouts (R-2, R-7).
-- Constitution rules touched: C-01, C-08, C-10, C-11, C-13, C-15, C-16, C-18, F-04, P-02, P-03, P-06, PROTO-10, NOTIFY-5, PLAT-4, PLAT-5, PLAT-13. Floor breaches: none.
-- Status: spec-ready → design-approved. Wrote design.md; debate.md State → approved (Rounds run 3). No reopen petitions were on the register, so none was marked declined. No ledger line: the per-RPC audit trap is already recorded in fails.md.
+## Session 2026-11-20 — sdd-design (operator decisions, verbatim)
 
 ### Operator decisions (2026-11-20, binding)
 
 - **D-7 signed (design gate, option A).** Order reads resolve the owner from the header only. ADMIN loses cross-user order RPCs, and the runbook consumer (`docs/runbooks/inter-service-mtls-rollout.md`) gets the DB-query substitute (D-18). This overrides the trading `CLAUDE.md` "admin empty user_id = all users" contract and the product-spec "admin selector" Expected line. It is the C-16 sign-off for both CHANGE lines in design.md. Resolves O-2.
 - **Round-3 synthesis items are binding.** `GetOrder` is in scope (`ResolveOrderOwner` first; headerless → `PermissionDenied`; non-owner → `NotFound` identical to absent). The test harness is `internal/service/export_test.go` plus `trading_owner_scope_test.go` on the bufconn chain with pgxmock. The acceptance edits (scope `3` + body user-b rows, headerless scenario tagged `@AC-5`, multi-line Examples) are adopted. Resolves O-6 and O-8.
-
-### Open Threads
-
-- `debate.md` still shows O-2, O-6 and O-8 as `open`; the decisions above resolve them, but no register status change was supplied with the approval. Reconcile at the next register update.
-- `acceptance.feature` does not yet contain `@AC-4`, `@AC-5`, `@AC-6` (D-17). Target: `/sdd-spec` acceptance step.
-- Flat-book check depends on the DB-query substitute landing in the same PR as D-7; the predicate is copied verbatim from `ListSubmittedOrders` and the "trader surface / ListOrders" option is removed (O-9). Target: runbook docs step.
-- The bufconn interceptor chain is hand-mirrored from `main.go:155` and can drift silently (accepted, C-18). Target: harness test step.
-- Keep `export_test.go` to the constructor plus the broadcast shim, so later tests cannot bypass the production chain. Target: harness step.
-- The handler status remap (`handler/trading.go:104,112,277,289,300,315`) changes wire codes UI and agent mappers may assume; list every refusal code per broker-account RPC and prove agent `@AC-7` on the wire (O-10); D-12 governs any overlap with 326. Target: trading handler step.
-- The `LoadBrokerPool` skip changes `resolveAccount` sole-account behaviour and drops phantom accounts from hydration; their in-flight orders cannot be reconciled by `pollFills`. Target: trading service step and the cleanup follow-up report.
-- Before merge, record here the read-only count of active `user_id=''` `trading.broker_accounts` rows per environment (O-11). Target: final docs step.
-- Audit every trading stream RPC for behaviour change under the new `StreamServerInterceptor`. Target: middleware step.
-- Legacy pre-`user_id` events are dropped on replay, including the `DeleteOfflineRealized` purge on deregister (accepted, D-5). Target: portfolio step.
-- Notify test conversion to metadata callers may expose tests relying on the unscoped fallback; rebase on 315 first. Target: notify step.
-- Two defect reports to file: notify `StreamAlerts`/`AcknowledgeAlert` body `user_id` (D-11), and trading `broker_accounts` `user_id=''` cleanup (D-9). Target: final docs step.
-- Every `path:line` that entered in rounds 2–3 (debate.md D-7..D-18 evidence) post-dates recon.md and must be re-grepped by `/sdd-spec`.
 
 ## Session 2026-11-20 — sdd-spec
 
@@ -533,3 +303,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] unaddressed — Overlap scan scope: the overlap pass read only a trunk checkout, so the impl-specs of peers that exist only on their feature branches (308–311, 313–316, 318–319, 322–325, 327–328, 331) were not scanned. Re-check them on `origin/feature/<slug>` before execute, in particular 315 and 316 (`notifyServiceImpl.ts`) and 322 (`trading.proto`, other messages per D-12).
 - [ ] unaddressed — `packages/proto/gen/**` conflicts with 321 and 322: the second merger re-runs `./scripts/buf-gen.sh` (Step 13).
 - [ ] unaddressed — Steps 14–17 doc and comment edits: 360 (`code-completed`) references `services/xstockstrat-ui/src/lib/connectClients.ts`, adjacent to Step 14's `traderBff.ts`; not verified to collide. Re-grep at Step 14.
+
+## Session 2026-11-21 — /sdd-distill
+- Distilled 7 sessions → header + Superseded Sessions; kept 2 verbatim (sdd-spec, sdd-review impl-spec) plus the sdd-design operator decisions (verbatim operator ruling).
+- Dropped the superseded round-2 `sdd-batch-design-state` fence (the round-3 fence is the last and only one; register in debate.md); its content is hoisted into Decisions.
+- context.md 535 → 310 lines / 66392 → 45274 bytes. Original prose preserved in git history.
