@@ -2999,3 +2999,15 @@ Operator's answer (option selected): "Confirm D-50 (Recommended)".
 Option text as offered: "Adoption-only accounts are listed at the reconciler cadence. Recorded verbatim in 311's context.md; the Step 23 gate clears."
 
 Effect: D-50 is operator-confirmed; the Step 23 confirmation is cleared. Other § 3.3 items (how portfolio is stopped on each staging target; the real-Postgres trading test job follow-up) are still open.
+
+## Session 2026-11-21 — operator rulings on cutover and CI scope, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.3, cutover): "Feature 311 cutover is stop-then-start on staging, with no write fence. The design proposes stopping portfolio by removing the portfolio component from the DigitalOcean staging app spec, and by a compose stop on the homelab staging VM, but neither is verified from the repo. How is portfolio actually stopped on each staging target?"
+Operator's answer (option selected): "As the design proposes".
+Option text as offered: "DO staging: remove the portfolio component from the app spec and redeploy. Homelab staging: `docker compose stop` for portfolio on the VM. Recorded verbatim; 311's runbook step uses exactly this."
+
+Question (handoff § 3.3, CI): "Feature 311 (position-fold correctness, portfolio + trading): should a follow-up real-Postgres test job for trading be added to CI, so trading's new fold/duplicate-guard SQL is tested against a real database rather than only fakes?"
+Operator's answer (option selected): "Add to 311's scope".
+Option text as offered: "Add a step for a real-Postgres trading job to 311's spec. Re-spec and a new impl-spec review are needed; 311 grows beyond 27 steps."
+
+Orchestrator note (not an operator quote): the second ruling changes scope. 311 needs `/sdd-spec` re-spec for the added real-Postgres trading test step (and a C-11 design-gate check that no Floor rule or C-16 rule changes), then `/sdd-review impl-spec`, before `/sdd-execute`. Not yet done. The cutover ruling is confirmed as designed.
