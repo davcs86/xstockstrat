@@ -159,7 +159,7 @@ bash scripts/migration-dirty-guard.test.sh && bash scripts/migration-ahead-check
 
 ### Step 2 — test: `db-migrate.sh up` never forces a dirty service
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/tests/test_db_migrate.py` — create

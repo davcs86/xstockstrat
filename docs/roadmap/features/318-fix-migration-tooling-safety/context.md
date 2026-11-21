@@ -654,3 +654,10 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - Config-key wiring gate: N/A (no config key, no config migration).
 - Files modified: `scripts/db-migrate.sh`
 - Deviations: none
+
+### Step 2 — test: `db-migrate.sh up` never forces a dirty service [done]
+- Created `scripts/tests/test_db_migrate.py`: `run_up` runs `bash scripts/db-migrate.sh up` with stub `psql`/`migrate` (reusing `Stubs` and `SCRIPTS_DIR`, real PATH appended); every schema answers `9999` (ahead skip) except indicators `5 (dirty)`. The test asserts exit 1, no `migrate ... force` call, no `analysis_schema_migrations` call and no `hunter2` in stdout/stderr.
+- TDD: AC-1 red, re-run in this session against the pre-Step-1 tree (`git archive HEAD^ scripts services` into a scratch dir, no stash): `E       assert 0 == 1` with `[dirty] force-resetting xstockstrat-indicators to version 0` in stdout, `1 failed in 0.68s`, `exit=1` → green on the dev branch: `1 passed in 0.50s`, ruff `All checks passed!`, `61 files already formatted`, `exit=0`. No coverage gate applies to `scripts/`. Between now and Steps 3+4 the refused indicators run prints no recovery text (expected per Step Dependencies).
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/tests/test_db_migrate.py`
+- Deviations: none
