@@ -684,3 +684,10 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - Config-key wiring gate: N/A (no config key, no config migration).
 - Files modified: `scripts/migration-ahead-check.sh`
 - Deviations: none
+
+### Step 6 — test: a dirty-ahead service is refused with the reworded recovery [done]
+- Added `test_dirty_ahead_service_is_refused_with_the_newer_release_recovery` to `scripts/tests/test_db_migrate.py`: `run_up` with marketdata `9999 (dirty)` asserts exit 1, no `migrate ... force` call, both exact recovery lines (`... force 9998` and the reworded "(force the previous version present in the newer release: 9998 assumes it has no gap below 9999; ...)" line) and no `hunter2`/`postgres://` in stdout or stderr. Regression guard for durable `@AC-25` (279).
+- TDD: red re-run in this session against the pre-Step-5 tree (`git archive HEAD^` (32ba2194) `scripts services` into a scratch dir with the new test copied in, no stash), log `scratchpad/red6/.sdd-logs/v-1.log` `exit=1`: `E       assert "  (force the previous version present in the newer release: 9998 assumes it has no gap below 9999; ..." in [... "  (use '?x-migrations-table=' when DATABASE_URL has no query string), then fix forward and redeploy that release."]`, `1 failed, 2 passed in 1.20s` → green on the dev branch `.sdd-logs/v-2.log` `exit=0`: `3 passed in 1.22s`, ruff `All checks passed!`, `62 files already formatted`. No coverage gate applies to `scripts/`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/tests/test_db_migrate.py`
+- Deviations: none

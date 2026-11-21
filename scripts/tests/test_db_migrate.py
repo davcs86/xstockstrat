@@ -52,3 +52,23 @@ def test_ac1_output_names_the_recovery(tmp_path):
         '  Recover: migrate -path services/xstockstrat-indicators/migrations -database "$DATABASE_URL'
         '&x-migrations-table=indicators_schema_migrations" force 4'
     ) in proc.stderr.splitlines()
+
+
+def test_dirty_ahead_service_is_refused_with_the_newer_release_recovery(tmp_path):
+    proc, calls = run_up(tmp_path, {"marketdata": "9999 (dirty)"})
+    migrate_calls = [c for c in calls if c.startswith("migrate ")]
+    lines = proc.stderr.splitlines()
+    assert proc.returncode == 1
+    assert not [c for c in migrate_calls if " force " in c]
+    assert (
+        "  Recover with the newer release's files: migrate -path services/xstockstrat-marketdata/migrations"
+        ' -database "$DATABASE_URL&x-migrations-table=marketdata_schema_migrations" force 9998'
+    ) in lines
+    assert (
+        "  (force the previous version present in the newer release: 9998 assumes it has no gap below 9999;"
+        " use '?x-migrations-table=' when DATABASE_URL has no query string), then fix forward and redeploy"
+        " that release."
+    ) in lines
+    for stream in (proc.stdout, proc.stderr):
+        assert "hunter2" not in stream
+        assert "postgres://" not in stream

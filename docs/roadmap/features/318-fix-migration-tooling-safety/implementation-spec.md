@@ -468,7 +468,7 @@ bash scripts/migration-ahead-check.test.sh
 
 ### Step 6 — test: a dirty-ahead service is refused with the reworded recovery
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/tests/test_db_migrate.py` — modify
