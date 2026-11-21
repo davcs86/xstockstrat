@@ -524,3 +524,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ```sdd-batch-setup
 {"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","date":"2026-11-21"}
 ```
+
+### Step 1 — service: typed `exit_reason` on `FormulaExecutionError` and the transient predicate [done]
+- Atomic unit Steps 1+2, one commit. `FormulaExecutionError` gains `exit_reason: int = 0`. The `not resp.success` raise in `_decode_formula_output` passes `resp.exit_reason` directly. The new `_is_transient_formula_error` returns True only for `grpc.RpcError` or `exit_reason == SANDBOX_EXIT_REASON_TIMEOUT`.
+- TDD (unit 1+2), red: the `_is_transient_formula_error` import failed (`ImportError: cannot import name '_is_transient_formula_error'`) → green: 105 passed (evaluator + unreadable-formula tests); full suite 1769 passed, coverage 91.64%.
+- Tooling: the analysis `.venv` was synced with `uv sync --extra dev`, and it resolved Python 3.12.3, not the pinned 3.13. The suite passed under it.
+- Files modified: `services/xstockstrat-analysis/app/services/evaluator.py`
+- Deviations: none
+
+### Step 2 — test: predicate tests and `exit_reason` on every ExecuteFormula response double [done]
+- Atomic unit Steps 1+2. Every `SimpleNamespace(success=` ExecuteFormula double in the 12 listed files gains `exit_reason=0` (31 doubles). The three `_TIMEOUT` doubles get `SANDBOX_EXIT_REASON_TIMEOUT`, and `_formula_stub` forwards a new `exit_reason=0` keyword. `TestTransientFormulaError` builds its errors through `_decode_formula_output`. It covers TIMEOUT and `aio_rpc_error(UNAVAILABLE)` as transient, and UNSPECIFIED, RUNTIME_ERROR, IMPORT_BLOCKED, MEMORY_EXCEEDED, a bare `FormulaExecutionError`, `ValueError` and `ZeroDivisionError` as terminal.
+- TDD: shared red→green with Step 1 (above).
+- Files modified: the 12 test files in Step 2 **Files**
+- Deviations: the multi-line grep prints six wrapped doubles, all carrying `exit_reason` and checked by hand (Deviation Log).

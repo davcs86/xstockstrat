@@ -1162,7 +1162,7 @@ class TestScreenSymbols:
 
         out = Struct()
         out.update({"value": value})
-        return SimpleNamespace(success=True, output=out, error="")
+        return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
     @pytest.mark.asyncio
     async def test_repoints_off_config_to_ingest_reliability_weights(self):
@@ -1698,7 +1698,7 @@ class TestBacktestDiagnostics:
         out = Struct()
         out.update({"value": [None] * len(bars)})
         svc._indicators.ExecuteFormula = AsyncMock(
-            return_value=SimpleNamespace(success=True, output=out, error="")
+            return_value=SimpleNamespace(success=True, output=out, error="", exit_reason=0)
         )
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=3)
@@ -1755,8 +1755,8 @@ class TestFormulaErrorSurfacing:
         ok_out.update({"value": [1.0] * len(bars)})  # sibling trades (ff > 0)
         # AAPL formula fails (success=False → FormulaExecutionError); MSFT succeeds.
         side_effect = [
-            SimpleNamespace(success=False, output=Struct(), error="boom"),
-            SimpleNamespace(success=True, output=ok_out, error=""),
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0),
+            SimpleNamespace(success=True, output=ok_out, error="", exit_reason=0),
         ]
         svc = make_servicer()
         self._wire(svc, bars, side_effect)
@@ -1786,8 +1786,8 @@ class TestFormulaErrorSurfacing:
 
         bars = [_bar(7100 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 15])]
         side_effect = [
-            SimpleNamespace(success=False, output=Struct(), error="boom"),
-            SimpleNamespace(success=False, output=Struct(), error="boom"),
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0),
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0),
         ]
         svc = make_servicer()
         self._wire(svc, bars, side_effect)
@@ -1836,7 +1836,7 @@ class TestEvaluationFailureSurfacing:
 
         out = Struct()
         out.update({"value": [1.0] * n})  # ff > 0 on every bar
-        return SimpleNamespace(success=True, output=out, error="")
+        return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
     def _svc(self, execute_outcome=None):
         svc = make_servicer()
@@ -2041,7 +2041,9 @@ class TestEvaluationFailureSurfacing:
     async def test_formula_contract_error_adds_no_eval_warning(self):
         from google.protobuf.struct_pb2 import Struct
 
-        svc = self._svc(SimpleNamespace(success=False, output=Struct(), error="boom"))
+        svc = self._svc(
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0)
+        )
         result = await self._run(svc)
 
         assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR
@@ -4204,7 +4206,7 @@ class TestPrefixFormulaCost:
             sizes.append(n)
             out = Struct()
             out.update({"value": [1.0] * n})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
         svc._indicators.GetFormula = AsyncMock(
@@ -4259,7 +4261,7 @@ class TestPrefixFormulaCost:
             sizes.append(n)
             out = Struct()
             out.update({"value": [1.0] * n})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
         svc._indicators.GetFormula = AsyncMock(
@@ -6813,7 +6815,7 @@ class TestBacktestDeletedFormulaWarning:
             n = len(req.input_data["close"])
             out = Struct()
             out.update({"value": [1.0] * n})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
         svc._indicators.GetFormula = AsyncMock(

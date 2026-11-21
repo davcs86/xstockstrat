@@ -90,7 +90,7 @@ documents it in `docs/runbooks/mcp-tools.md`.
 
 ### Step 1 — service: typed `exit_reason` on `FormulaExecutionError` and the transient predicate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -132,7 +132,7 @@ Runs as one unit with Step 2; use Step 2's commands.
 
 ### Step 2 — test: predicate tests and `exit_reason` on every ExecuteFormula response double
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_evaluator.py` — modify
@@ -1062,3 +1062,14 @@ grep -n "evaluation-failed-cue-parity" docs/patterns/ui-ux-governance.md
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Steps 1+2: the multi-line double grep returns hits (2026-11-21)
+
+- **Expected**: Step 2 Verification line 2 (`grep -rn -A4 "SimpleNamespace($" tests | grep "success="`)
+  prints nothing.
+- **Actual**: it prints six lines (`test_fundsignal_loop.py:689`, `test_owner_header_guard.py:230`,
+  `test_fundamentals_formula_operand.py:142`, `test_unreadable_formula.py:289,682,704`). Adding
+  `exit_reason` pushed these single-line doubles past the line length, so `ruff format` wrapped them.
+  Each hit carries `exit_reason`.
+- **Disposition**: checked by hand, as the comment on that Verification line prescribes. Lines 1 and 3
+  (the single-line grep and the `ExecuteFormulaResponse(` grep) print nothing. No code change.

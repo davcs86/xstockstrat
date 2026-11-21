@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import grpc
 import pytest
 from gen.analysis.v1 import analysis_pb2
+from gen.indicators.v1 import indicators_pb2
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Struct
 
@@ -284,7 +285,9 @@ async def test_traced_refusal_mixed_with_timeout_still_raises(sem):
     def _dispatch(req, **_kw):
         if req.formula_id == "f-zscore":
             raise _permission_denied()
-        return SimpleNamespace(success=False, error=_TIMEOUT)
+        return SimpleNamespace(
+            success=False, error=_TIMEOUT, exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+        )
 
     sem = asyncio.Semaphore(sem) if sem else None
     ev = _traced_evaluator(_dispatch, component_sem=sem)
@@ -413,7 +416,10 @@ async def test_backtest_unreadable_formula_is_formula_error_and_excluded_from_ev
     svc._indicators.GetFormula = AsyncMock(side_effect=_not_found())
     # AAPL's formula is unreadable; MSFT's sibling succeeds (keeps the exclusion non-vacuous).
     svc._indicators.ExecuteFormula = AsyncMock(
-        side_effect=[_not_found(), SimpleNamespace(success=True, output=ok, error="")]
+        side_effect=[
+            _not_found(),
+            SimpleNamespace(success=True, output=ok, error="", exit_reason=0),
+        ]
     )
     req = analysis_pb2.RunBacktestRequest(
         strategy_id="s-1", symbols=["AAPL", "MSFT"], initial_capital=100_000.0
@@ -502,7 +508,7 @@ _CLOSES = [120.0, 130.0, 150.0]
 def _ok_formula(req, **_kw):
     out = Struct()
     out.update({"value": [1.0] * len(_FIRING_BARS)})
-    return SimpleNamespace(success=True, output=out, error="")
+    return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
 
 def _held_definition():
@@ -672,7 +678,9 @@ async def test_opportunity_recompute_timeout_fails_and_keeps_stored_rows(caplog)
     svc = _mysz_svc()
     svc._indicators.GetFormula = AsyncMock(side_effect=_not_found())
     svc._indicators.ExecuteFormula = AsyncMock(
-        return_value=SimpleNamespace(success=False, error=_TIMEOUT)
+        return_value=SimpleNamespace(
+            success=False, error=_TIMEOUT, exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+        )
     )
     stored = _unavailable_served_row(
         "MYSZ", "s-1", provenance=["watchlist"], computed_at=datetime.now(UTC)
@@ -692,7 +700,9 @@ async def test_evaluate_readiness_timeout_raises_not_converted_to_marker():
     svc = _cache_svc({"MYSZ": _real_bars("MYSZ", _CLOSES)}, strategy_row=_row(_definition()))
     svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
     svc._indicators.ExecuteFormula = AsyncMock(
-        return_value=SimpleNamespace(success=False, error=_TIMEOUT)
+        return_value=SimpleNamespace(
+            success=False, error=_TIMEOUT, exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+        )
     )
     with pytest.raises(FormulaExecutionError):
         await svc.EvaluateReadiness(_READINESS_REQ, ctx_with(_BOB))

@@ -108,7 +108,7 @@ class TestLiveSnapshotNotPIT:
             fed.update(dict(req.input_data))
             out = Struct()
             out.update({"value": 0.6, "composite": 0.72})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         evaluator, _ind = _real_evaluator(_exec, [_PE, _ROE])
         loop = _make_live_loop(evaluator)
@@ -158,7 +158,7 @@ class TestFullRowParity:
             fed.update(dict(req.input_data))
             out = Struct()
             out.update({"value": 0.5, "composite": 0.8})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         # Declared inputs cover three metrics; the snapshot row supplies all three (full row).
         evaluator, _ind = _real_evaluator(_exec, [_PE, _ROE, _EPS])
