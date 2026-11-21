@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_UNARY_TIMEOUT_MS } from '@/lib/deadlines';
 
 type TransportCall = (...args: unknown[]) => Promise<unknown>;
@@ -62,5 +62,46 @@ describe('connectClients transport deadlines (feature 271)', () => {
     expect(alerts).toEqual([]);
     expect(fakeTransport.stream).toHaveBeenCalledTimes(1);
     expect(fakeTransport.stream.mock.calls[0][2]).toBeUndefined();
+  });
+});
+
+describe('agentClient (feature 360)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  async function load(endpoint: string | undefined) {
+    vi.resetModules();
+    vi.stubEnv('AGENT_ENDPOINT', endpoint);
+    createGrpcTransport.mockClear();
+    return import('@/lib/connectClients');
+  }
+
+  it('is null when AGENT_ENDPOINT is unset (no default host)', async () => {
+    const m = await load(undefined);
+    expect(m.agentClient).toBeNull();
+  });
+
+  it('dials AGENT_ENDPOINT lazily and pins the server name to xstockstrat-agent', async () => {
+    const m = await load('agent-test:50061');
+    expect(m.agentClient).toBeDefined();
+    expect(m.agentClient).not.toBeNull();
+    expect(createGrpcTransport).not.toHaveBeenCalled();
+
+    await m.agentClient!.listTools({});
+
+    expect(createGrpcTransport).toHaveBeenCalledTimes(1);
+    const [options] = createGrpcTransport.mock.calls[0] as unknown as [
+      {
+        baseUrl: string;
+        nodeOptions: { checkServerIdentity: (host: string, peer: unknown) => Error | undefined };
+      },
+    ];
+    expect(options.baseUrl).toBe('https://agent-test:50061');
+    const check = options.nodeOptions.checkServerIdentity;
+    expect(
+      check('agent-test', { subject: {}, subjectaltname: 'DNS:xstockstrat-agent' }),
+    ).toBeUndefined();
+    expect(
+      check('agent-test', { subject: {}, subjectaltname: 'DNS:xstockstrat-trading' }),
+    ).toBeInstanceOf(Error);
   });
 });

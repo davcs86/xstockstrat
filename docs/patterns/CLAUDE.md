@@ -16,4 +16,5 @@ Reusable implementation patterns for new services. Each file is a self-contained
 | `ci-overview.md` | Debugging CI failures, checking coverage thresholds, understanding deploys |
 | `docker-build.md` | Docker build patterns, service healthchecks, `WAIT_FOR` entrypoint, `depends_on` conditions |
 | `context-engineering.md` | Adding or refactoring a skill, subagent (`.claude/agents/`), saved workflow (`.claude/workflows/`), or `CLAUDE.md` — subagent delegation, progressive disclosure, the structured `context.md` memory schema, and the `/sdd-batch` / `/sdd-batch-execute` multi-feature contract |
+| `script-tooling.md` | Adding, porting (bash → Python) or testing a script under `scripts/` — the Python-first rule, the pytest/ruff harness, and the blast-radius tiers that decide what may be ported |
 | `test-data-inventory.md` | Adding or modifying **any** service's tests that use mocked/dummy domain data — canonical fixture homes, the `INVENTORY.md` catalog, the `/sdd-qa` skill, Constitution C-12 (frontend) and C-13 (all languages) |

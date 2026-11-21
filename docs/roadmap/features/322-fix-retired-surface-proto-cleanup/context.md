@@ -30,3 +30,481 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ## Session 2026-11-10 (operator decisions before /sdd-design)
 
 - C-16 sign-off: durable `@AC-8 @feature-191` loses its `BatchGetBars ... (sparkline)` clause (sparkline is client-side since feature 227); its other clauses stay.
+
+## Session 2026-11-11 — sdd-batch design gate (round 2)
+
+- `/sdd-design fix-retired-surface-proto-cleanup` (full) is halted at its approval gate after round 2 (gate policy: halt). design.md has not been written and status.md is unchanged. The register is in `debate.md` (D-1..D-10, R-1..R-6, O-1..O-3).
+
+### Open Threads
+
+- **Approach**:
+  - Round-1 steps 1–8 stand as D-1..D-8: the proto deprecations/additions, a BatchGetBars enum-first read with both fields sent, no migration 048 plus a launch-gate query, agent parity excluding deprecated fields, and config-governance.md-only docs.
+  - Round 2 settles the SnapshotOfflinePositions carrier (D-9). There is one hoisted `userID := req.UserId` under a scoped SA1019 nolint at trading.go:1174, and the handler :90 write keeps its own directive. The :1193-1194 ownership comment is rewritten, the signature is unchanged, and the ListOrders/GetOrder reads are untouched.
+  - Round 2 also records the Go P-06 waiver accurately (D-10). The test call sites are updated first, and the resulting compile failure is the RED. If the tdd-gate rejects a compile RED, this is logged as a P-06 deviation.
+- **Strongest open objection**: O-1 (non-blocking). `ComputeIndicatorRequest.timeframe_enum` has no reader or producer (C-18).
+  - D-2 still recommends keeping it to satisfy AC-3.
+  - It closes only on a recorded operator answer to "keep enum (recommended) / amend AC-3 to deprecation-only", given at the C-11 design-approval gate or in this file. Silence is not an answer (R-5).
+- **Floor status**: no breaches.
+- **Uncovered @AC changes**: `@AC-1..3 (322)` EXTEND, not covered by an operator decision. The `@AC-8 @feature-191` CHANGE is covered by the 2026-11-10 C-16 sign-off. PRESERVE: `@AC-2..5 @feature-305`, `@AC-5/@AC-9 @feature-196`, and the UI sparkline-ohlc-replacement OHLC strip.
+- **Open risks**:
+  - The tdd-gate may reject a compile-only RED.
+  - The hoisted-local refactor touches the ownership gate at trading.go:1196, so trading_ownership_test.go must stay green.
+  - Carried forward:
+    - buf breaking has not been run with message-level deprecation on common.v1.Error/Decimal.
+    - Field number 7 may collide with features 310 and 312.
+    - The TS generated names are unverified.
+    - Migration 046 may have left keep-and-report rows.
+    - Python deprecation warnings are unverified.
+    - The agent projection silently drops deprecated fields.
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "Round 2 keeps round-1 steps 1–8 unchanged, as settled by D-1 to D-8. It adds three refinements, with no new mechanism.\n\n1. PROTO, BATCHGETBARS, AGENT, ANALYSIS, CONFIG DOCS, FINDINGS\nUnchanged from the prior state:\n- Proto edits: analysis.proto:626, indicators.proto:60 plus timeframe_enum=7, marketdata.proto:333 plus timeframe_enum=7, trading.proto:336, and common.proto:21,28 at message level, with a comment-only fallback.\n- BatchGetBars: the server reads the enum first, and all three producers send both fields (D-1).\n- No migration 048, but a launch-gate query (D-4).\n- Agent parity guard excludes deprecated fields (D-7).\n- Docs scope is config-governance.md:153-154,311,416,549-550 only (D-8).\n\n2. TRADING SnapshotOfflinePositions CARRIER (O-2), settled now rather than deferred to /sdd-spec\n- The handler keeps `req.Msg.UserId = extractUserID(ctx)` at services/xstockstrat-trading/internal/handler/trading.go:90, with its own scoped `//nolint:staticcheck // SA1019`. The service signature does not change, and the handler call at :91 stays as is.\n- At the top of SnapshotOfflinePositions (services/xstockstrat-trading/internal/service/trading.go:1174), hoist exactly one `userID := req.UserId //nolint:staticcheck // SA1019: handler-injected from x-user-id; body value overwritten`.\n- The five reads at :1178, :1196, :1274, :1276 and :1284 then use `userID`. I re-verified those five lines with grep this round.\n- Rewrite the ownership-invariant comment at :1193-1194 so it names `userID` and keeps its ≤2-line constraint (CLAUDE.md behaviour 5).\n- Do NOT touch :1646, :1652 or :1730. They belong to ListOrders/GetOrder, which are not deprecated.\n- Test literals (trading_offline_test.go:677 snapshotReq helper, :1398 table case, trading_ownership_test.go:104) get directives only where golangci-lint flags them, per D-6. The helper-level directive in snapshotReq is preferred.\n- Fallback, used only if a reviewer rejects even the single hoisted directive: an explicit `userID string` parameter, which costs about 35 test edits.\n\n3. ComputeIndicatorRequest.timeframe_enum (O-1)\n- D-2 stands as the recommendation: keep field 7 with an \"ignored by server\" comment (indicators app/handlers/servicer.py:214-241).\n- Design.md lists one explicit operator question at the C-11 design-approval gate: \"keep enum (recommended, satisfies AC-3 at acceptance.feature:28) / amend AC-3 to deprecation-only\".\n- O-1 closes only on a recorded operator answer. That answer can be design approval with the question explicitly listed, or a context.md entry.\n- With no recorded answer, O-1 stays open. The orchestrator must not close it on silence.\n\n4. GO P-06 (O-3): record the waiver accurately\n- Go execution order: first update the test-file call sites to the new signatures. Those are config_test.go in trading, portfolio and marketdata, plus the marketdata NewLiveClient(settings) caller in its tests.\n- Capture the resulting compile failure of the test package against the old NewWatcher(endpoint, env, tradingMode, …) / NewLiveClient(settings, paper) as the RED evidence. Then change the implementation (GREEN).\n- context.md and design.md record: \"RED available only as a compile failure. No assertion-level RED exists, because the Go watch requests already omit trading_mode (trading internal/config/config.go:87-93, portfolio :74-80). The compile-time signature removal is the guard.\"\n- If the tdd-gate (.claude/skills/sdd-execute/reference/tdd-gate.md:35,56-59) does not accept a compile failure as RED, log it as a recorded P-06 deviation with that exact text, not as \"no RED possible\".\n- No grep guard is added.",
+    "open_objections": [
+      {
+        "text": "O-1 (refined): ComputeIndicatorRequest.timeframe_enum has no reader or producer (C-18). It stays open until the operator answers the 'keep enum / amend AC-3' question at the C-11 design-approval gate or in context.md. It cannot be closed on silence or on the orchestrator's own authority.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-8 @feature-191",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-1 (322)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 (322)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 (322)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3..5 @feature-305",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-305",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-196",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @feature-196",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "UI sparkline-ohlc-replacement.feature (opportunities OHLC strip)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Deciding at /sdd-spec between per-line nolint and a hoisted local, based on a directive count. Lost because the count is already known to be five service reads plus the handler write, which exceeds the proposal's own threshold. Leaving the choice open hands design's decision to the implementer.",
+      "An explicit userID string parameter on SnapshotOfflinePositions. Lost on cost: about 35 test edits in a deprecation-only SEV-3, while the field-removal follow-up has to move the carrier anyway. It is kept as the fallback if the single hoisted directive is rejected.",
+      "Treating the absence of an operator answer as acceptance of the O-1 default. Lost because that is a silent guess (CLAUDE.md behaviour 1, C-11).",
+      "Describing O-3 as 'no RED possible'. Lost because it is inaccurate: the compile failure after updating the test call sites first is a real failing-first state.",
+      "A Go unit test asserting TradingMode == UNSPECIFIED on the built watch request. Lost because it passes both before and after the fix (the field is already omitted), so it is not a RED."
+    ],
+    "open_risks": [
+      "The tdd-gate may not accept a compile failure as RED. If it does not, the Go steps carry a recorded P-06 deviation instead of red→green evidence.",
+      "The hoisted-local refactor touches the ownership gate at trading.go:1196. trading_ownership_test.go must stay green, and the rewritten :1193-1194 comment must keep the invariant that the header overwrites the body.",
+      "Carried forward: buf breaking has not been run with message-level deprecation on common.v1.Error and Decimal. Field number 7 may collide with in-flight features 310 and 312. The generated TS enum and field names (timeframeEnum / TIMEFRAME_1DAY) are unverified. Migration 046 may have left keep-and-report rows. Python protobuf deprecation warnings are unverified. The agent projection silently drops deprecated fields."
+    ],
+    "constitution_rules_touched": [
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-06",
+      "F-04",
+      "F-09",
+      "PLAT-4",
+      "PLAT-5"
+    ],
+    "rationale": "The adversary found the approach SOUND and raised only non-blocking refinements. I checked each one against the code.\n\n- O-2: grep shows `req.UserId` read at trading.go:1178, 1196, 1274, 1276 and 1284, with ListOrders/GetOrder reads at 1646, 1652 and 1730. The directive count is therefore already known, and committing to the hoisted local now prevents F-09 from freezing an implementer's ad-hoc choice. The comment at 1193-1194 names req.UserId and states a load-bearing ownership invariant, so it has to be updated to name the local. O-2 closes on this concrete answer.\n- O-1: the proposal's \"default stands on silence\" contradicts behaviour 1 and C-11. O-1 therefore stays open, non-blocking, until the operator answers. D-2 still stands as the recommendation, so this is not a new decision that contradicts it.\n- O-3: the excerpt of tdd-gate.md has a RED requirement (:35) and a deviation path (:59), and says nothing about compile failures. The waiver is reworded to be accurate, with the compile-RED captured as evidence. O-3 closes.\n\nNo settled D-n is contradicted, no R-n is reintroduced, and no closed O-n is re-raised. Neither side filed a REOPEN.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "SnapshotOfflinePositions keeps the deprecated user_id as the in-process carrier. The handler write at trading.go:90 keeps its own scoped nolint. The service hoists one `userID := req.UserId //nolint:staticcheck // SA1019…` at :1174, and the reads at :1178,1196,1274,1276,1284 use it. The :1193-1194 ownership comment is rewritten to name the local. The ListOrders/GetOrder reads at :1646,1652,1730 are untouched. The signature does not change.",
+          "evidence": "grep of services/xstockstrat-trading/internal/service/trading.go and internal/handler/trading.go:90-91 (round 2)"
+        },
+        {
+          "text": "Go P-06: update the test call sites first, then capture the test-package compile failure against the old NewWatcher/NewLiveClient signatures as RED. Record it as 'compile-only RED; no assertion-level RED because trading_mode is already omitted', or as a P-06 deviation if the tdd-gate rejects a compile RED. Never record it as 'no RED possible'.",
+          "evidence": "trading config.go:87-93; portfolio config.go:74-80; .claude/skills/sdd-execute/reference/tdd-gate.md:35,56-59"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Treating operator silence as acceptance of the O-1 keep-enum default.",
+          "why": "Silent guess. C-11 and CLAUDE.md behaviour 1 require a recorded operator answer."
+        },
+        {
+          "text": "Deferring the choice between per-line nolint and a hoisted local to /sdd-spec.",
+          "why": "The directive count (five service reads plus the handler write) is already known, so leaving it open hands design's decision to the implementer (F-09)."
+        }
+      ],
+      "new_objections": [],
+      "closed_objections": [
+        {
+          "id": "O-2",
+          "how": "Settled with one hoisted local under a scoped nolint at trading.go:1174, plus the handler :90 directive. The explicit userID parameter is the recorded fallback, deferred to the field-removal follow-up."
+        },
+        {
+          "id": "O-3",
+          "how": "Waived with an accurate record: compile-failure RED captured after updating the test call sites first, with the compile-time signature removal as the guard. A P-06 deviation is logged if the tdd-gate rejects a compile RED."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+- `/sdd-design fix-retired-surface-proto-cleanup` (full) is halted at its approval gate after round 3 (gate policy: halt). design.md has not been written and status.md is unchanged (`spec-ready`). The register is in `debate.md` (D-1..D-14, R-1..R-9, O-1..O-3).
+
+### Open Threads
+
+- **Approach**:
+  - D-1..D-10 stand unchanged: the proto deprecations/additions, the BatchGetBars enum-first read with both fields sent by all three producers, trading_mode option (a), no migration 048 plus a launch-gate query, the UNSPECIFIED watcher test, nolint only where golangci-lint flags, agent parity excluding deprecated fields, config-governance.md-only docs, the hoisted `userID` carrier at trading.go:1174, and the compile-only Go RED.
+  - Round 3 adds gate and scope mechanics only. No new code mechanism is added.
+    - D-11: a recorded operator answer to O-1 is a precondition for `spec-ready → design-approved`. design.md records exactly one answer, /sdd-spec writes one unconditional step 1, and there is no (A)/(B) branching at /sdd-execute.
+    - D-12: if the answer is (B), drop indicators field 7, reword acceptance.feature:28 keeping the @AC-3 ID, amend product-spec.md :45/:89/:114, and record the answer here. This is a 322-local AC, so there is no C-16 sign-off.
+    - D-13: indicators.proto:60 says "deprecated; ignored by the server" and must not copy the marketdata "once all callers migrate" wording. Under (A), field 7 says "accepted but ignored by the server; carried for contract parity with BatchGetBarsRequest".
+    - D-14: xstockstrat-ui is added to Affected Services and the feature.md reviewers, because D-1 edits useOhlcBars.ts:25. Any mock-backend.ts edit follows C-12.
+  - Assumptions pruned after verification: there is no TS deprecation lint rule in xstockstrat-ui, and no service pyproject.toml sets filterwarnings.
+- **Strongest open objection**: O-1 (non-blocking). `ComputeIndicatorRequest.timeframe_enum` has no reader or producer (C-18). The question for the design-approval prompt is:
+  - (A) keep field 7 (recommended; matches acceptance.feature:28 and product-spec :89 / Q5 :114), or
+  - (B) amend to deprecation-only.
+  - It closes only on a recorded operator answer. Silence and orchestrator authority do not count (R-5). Under D-11, an approval without an answer leaves status at `spec-ready`.
+- **Floor status**: no breaches.
+- **Uncovered @AC changes**: `@AC-1`, `@AC-2` and `@AC-3 (322)` are EXTEND, not covered by an operator decision. The `@AC-8 @feature-191` CHANGE is covered by the 2026-11-10 C-16 sign-off. PRESERVE: `@AC-2..5 @feature-305`, `@AC-5/@AC-9 @feature-196`, and the UI sparkline-ohlc-replacement OHLC strip.
+- **Open risks**:
+  - The gate may approve without answering O-1, which stalls 322 at `spec-ready`. This is intended, but it is a schedule risk.
+  - The tdd-gate may reject a compile-only RED (P-06 deviation, D-10).
+  - The hoisted local touches the ownership gate at trading.go:1196, so trading_ownership_test.go must stay green.
+  - The UI scope addition brings in UI-owner review routing and C-12 fixture homes.
+  - Carried forward:
+    - buf breaking is unverified for message-level deprecation on common.v1.Decimal/Error.
+    - Field 7 may collide with features 310 and 312.
+    - The TS name `timeframeEnum` is unverified.
+    - Migration 046 may have left keep-and-report rows (D-4 launch-gate query).
+    - The agent projection silently drops deprecated fields.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round 3 keeps D-1 to D-10 unchanged. It adopts the adversary's four refinements as gate and scope mechanics. No new code mechanism is added.\n\n1. STEPS 1–8 (unchanged; D-1 to D-10)\n- Proto PR-unit:\n  - analysis.proto:626, field 17 `[deprecated = true]`.\n  - indicators.proto:60, string deprecated (field 7 depends on O-1, see 2).\n  - marketdata.proto:333, string deprecated plus `timeframe_enum = 7`.\n  - trading.proto:336, user_id deprecated using the :144 wording.\n  - common.proto:21,28, message-level `option deprecated` plus a comment, with comment-only deprecation as the fallback if buf rejects it.\n  - Then buf lint, buf breaking and buf-gen.\n- BatchGetBars: the server reads the enum first, and all three producers (analysis servicer.py:5675, portfolio offline_valuation.go:170-176, UI useOhlcBars.ts:23-25) send both fields (D-1).\n- trading_mode: option (a) (D-3).\n- Config: no migration 048, plus a launch-gate query (D-4).\n- Tests and directives: Python watcher test asserts UNSPECIFIED (D-5); nolint only where golangci-lint flags (D-6); the agent parity guard excludes deprecated fields (D-7).\n- Docs: config-governance.md only (D-8).\n- Trading carrier: hoisted `userID` local at trading.go:1174, plus the handler :90 directive (D-9).\n- Go P-06: compile-only RED (D-10).\n\n2. O-1 GATE: one answer, recorded before approval (replaces round-3's dual-branch \"execution guard\")\n- A recorded operator answer to O-1 is a precondition for `spec-ready → design-approved`. The answer can be an explicit response to the question in the design-approval prompt, or a context.md session entry.\n- If the gate does not answer, status stays `spec-ready` and O-1 stays open.\n- design.md records exactly one answer. /sdd-spec writes one unconditional step 1 and refuses to draft it while O-1 is open.\n- There is no (A)/(B) branching in implementation-spec.md, and no verifier that reads context.md at /sdd-execute.\n- The question, verbatim in the approval prompt:\n  - (A) keep ComputeIndicatorRequest field 7 `timeframe_enum`. Recommended; matches acceptance.feature:28 as written and product-spec :89 / Q5 :114.\n  - (B) amend to deprecation-only: deprecate the string and add no enum field.\n\n3. DEPRECATION WORDING (applies under both answers)\n- indicators.proto:60 (field 6) gets a comment of the form \"deprecated; ignored by the server\" (indicators servicer.py:214-241 reads neither field).\n- Do NOT copy the marketdata.proto:89-92 \"use timeframe_enum … once all callers migrate\" text into indicators. D-2 switches no caller, so that promise would be false (fails.md:1334: deprecation comments are the only signal a caller gets).\n- Under (A), field 7 is commented \"accepted but ignored by the server; carried for contract parity with BatchGetBarsRequest\".\n- marketdata.proto:333 keeps the :89-92 migrate wording, because its producers really do switch (D-1).\n\n4. EDIT SET IF (B) IS CHOSEN\n- Drop `timeframe_enum = 7` from the indicators hunk, and drop the field-7 collision check against 310 for indicators.\n- Reword acceptance.feature:28 to \"BatchGetBarsRequest accepts the Timeframe enum with the string deprecated, and ComputeIndicatorRequest.timeframe is deprecated as ignored by the server\". The @AC-3 ID stays unchanged, since IDs are append-only under C-15.\n- Amend product-spec.md:\n  - :45 (Expected: \"migrate the two string timeframes\").\n  - :89 (Fix Scope row): split ComputeIndicatorRequest out as deprecation-only.\n  - :114 (Q5).\n- Append a context.md session entry recording the operator answer and the amendment.\n- This is a 322-local AC (not yet promoted), so C-16 durable sign-off is not triggered.\n- Under (A), none of these edits apply.\n\n5. UI SCOPE RECORD\n- D-1 already touches services/xstockstrat-ui/src/hooks/useOhlcBars.ts:25 (`timeframe: '1d'`), but product-spec.md:74-80 Affected Services, the context.md triage list and feature.md all omit xstockstrat-ui.\n- Add xstockstrat-ui to Affected Services and to the feature.md reviewers, and record the change in context.md, so reviewer routing reaches the UI owner.\n- Any e2e/mock-backend.ts:153-154,188-189 edit follows C-12 fixture-home rules.\n- D-1 itself is not contested.\n\n6. ASSUMPTIONS PRUNED (now verified)\n- No TS deprecation lint rule exists in services/xstockstrat-ui (grep for no-deprecated / deprecation/ is empty), so the UI producer setting a deprecated field causes no lint fallout.\n- No service pyproject.toml sets filterwarnings, so Python setting a deprecated field cannot fail test runs.\n- Both drop from Assumptions.",
+    "open_objections": [
+      {
+        "text": "O-1: ComputeIndicatorRequest.timeframe_enum has no reader or producer (C-18). It stays open until the operator records an answer, (A) keep field 7 or (B) amend to deprecation-only, in the design-approval prompt or in context.md. Under D-11 that recorded answer is now a precondition for spec-ready → design-approved, so O-1 cannot leak into /sdd-spec. It must not be closed on silence or on the orchestrator's own authority (R-5).",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-8 @feature-191",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-1 (322)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 (322)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 (322)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3..5 @feature-305",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-305",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-196",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @feature-196",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "UI sparkline-ohlc-replacement.feature (opportunities OHLC strip)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "A dual-branch step 1 in implementation-spec.md, with a verifier that reads the O-1 answer from context.md at /sdd-execute. Lost because it pushes a design choice into execution and forces step edits after spec (F-09). It is a near-variant of locked R-6.",
+      "(B′): option (B) plus deleting the six analysis writes of the ignored ComputeIndicatorRequest.timeframe (servicer.py:1623,1633, screener.py:323,389, evaluator.py:517, pnl_pattern_consumer.py:129). Lost as the design recommendation because no AC requires it (CLAUDE.md #3) and it cuts against D-2's 'no caller switch'. The operator may still ask for it explicitly at the gate.",
+      "Reusing the marketdata.proto:89-92 'use timeframe_enum … once all callers migrate' wording on indicators.proto:60. Lost because no indicators caller switches (D-2) and the server reads neither field, so the comment would be a false promise (fails.md:1334).",
+      "Defaulting O-1 to (A) at design approval on the strength of product-spec Q5 (:114). Lost because Q5 was struck through at triage, not by an operator decision (compare the explicit operator entry in context.md). This is already covered by R-5."
+    ],
+    "open_risks": [
+      "The design gate may approve without answering O-1. D-11 then holds status at spec-ready, which stalls 322 in the batch until the operator answers. That is intended, but it is a schedule risk.",
+      "The tdd-gate may reject a compile failure as RED. In that case the Go steps carry a recorded P-06 deviation (D-10).",
+      "The hoisted-local refactor touches the ownership gate at trading.go:1196. trading_ownership_test.go must stay green, and the rewritten :1193-1194 comment must keep the invariant that the header overwrites the body.",
+      "Adding xstockstrat-ui to scope pulls the UI owner into review routing. A mock-backend.ts edit must respect C-12 fixture homes.",
+      "Carried forward:\n- buf breaking has not been run with message-level deprecation on common.v1.Decimal/Error.\n- Field 7 may collide with in-flight features 310 (indicators.proto) and 312 (trading.proto).\n- The generated TS field name timeframeEnum is unverified.\n- Migration 046 may have left keep-and-report rows; the launch-gate query (D-4) covers this.\n- The agent projection silently drops deprecated fields (D-7 docstring)."
+    ],
+    "constitution_rules_touched": [
+      "C-11",
+      "C-12",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-04",
+      "P-06",
+      "F-04",
+      "F-09",
+      "PLAT-4",
+      "PLAT-5"
+    ],
+    "rationale": "The adversary judged round 3 SOUND with no Floor breach and raised four non-blocking refinements. I checked each one against the tree.\n\n1. The dual-branch \"execution guard\" is a real F-09/R-6 risk: step 1 would hold two conditional variants decided at execute time. Making a recorded O-1 answer a precondition for design-approved removes that risk structurally. It also closes the proposal's own \"strongest risk\" (approval without an answer) without relying on prompt wording. This honors R-5: no default is applied.\n\n2. The (B) edit list was incomplete. product-spec.md promises the enum in three places: :45 (Expected), :89 (Fix Scope row) and :114 (Q5). The adversary's \":40\" citation points to the Observed text; the actual row is :89. Under (B), all three are amended along with acceptance.feature:28, keeping the @AC-3 ID (C-15).\n\n3. Wording: indicators servicer.py:214-241 reads neither field and D-2 switches no caller. A \"once all callers migrate\" comment copied from marketdata.proto:89-92 would therefore be false. fails.md:1334 records that these comments are the only signal a caller gets.\n\n4. UI scope: useOhlcBars.ts:25 sends `timeframe: '1d'` and is a D-1 producer, but product-spec.md:74-80 Affected Services omits xstockstrat-ui. Reviewer routing (C-14) would miss the UI owner.\n\nVerified this round:\n- No `no-deprecated` / `deprecation/` rule exists in services/xstockstrat-ui.\n- No services/*/pyproject.toml sets filterwarnings.\nBoth assumptions are dropped.\n\nO-1 remains open: the 322 directory still has no recorded operator answer. The only operator entry in context.md covers the C-16 @AC-8 @feature-191 sign-off. No settled D-n is contradicted, no locked R-n is reintroduced, no closed O-n is re-raised, and neither side filed a REOPEN.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "A recorded operator answer to O-1, (A) keep ComputeIndicatorRequest field 7 or (B) deprecation-only, is a precondition for spec-ready → design-approved. Without one, status stays spec-ready. design.md records exactly one answer. /sdd-spec writes a single unconditional step 1 and refuses to draft it while O-1 is open. There is no (A)/(B) branching or context.md-reading verifier at /sdd-execute.",
+          "evidence": "Adversary r3 objection 1 (F-09/R-6 variant). grep of docs/roadmap/features/322-fix-retired-surface-proto-cleanup/ finds no O-1 answer; context.md has only the C-16 @AC-8 @feature-191 operator entry."
+        },
+        {
+          "text": "If O-1 is answered (B), the edit set is: drop indicators field 7 and its 310 collision check; reword acceptance.feature:28 keeping the @AC-3 ID; amend product-spec.md :45 (Expected), :89 (Fix Scope row, split ComputeIndicatorRequest out as deprecation-only) and :114 (Q5); append a context.md session entry recording the answer. This is a 322-local AC, so there is no C-16 durable sign-off.",
+          "evidence": "product-spec.md:45,89,114; acceptance.feature:24-28 (grep, round 3)"
+        },
+        {
+          "text": "Deprecation wording. indicators.proto:60 (field 6) says 'deprecated; ignored by the server' and must not copy the marketdata.proto:89-92 'once all callers migrate' text. Under (A), field 7 says 'accepted but ignored by the server; carried for contract parity with BatchGetBarsRequest'. marketdata.proto:333 keeps the migrate wording because its producers switch (D-1).",
+          "evidence": "indicators app/handlers/servicer.py:214-241; marketdata.proto:89-92; docs/roadmap/ledger/fails.md:1334"
+        },
+        {
+          "text": "xstockstrat-ui is added to product-spec.md Affected Services and to the feature.md reviewers, with a context.md entry recording the scope amendment, because D-1 edits the UI producer. Any e2e/mock-backend.ts edit follows C-12 fixture rules.",
+          "evidence": "services/xstockstrat-ui/src/hooks/useOhlcBars.ts:25 (timeframe: '1d'); product-spec.md:74-80 omits UI"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "A dual-branch (A)/(B) step 1 in implementation-spec.md, with an /sdd-execute verifier that reads the O-1 answer from context.md.",
+          "why": "It defers a design choice into execution and forces step edits after spec (F-09). It is a near-variant of R-6."
+        },
+        {
+          "text": "(B′): option (B) plus deleting the six analysis writes of the ignored ComputeIndicatorRequest.timeframe, as the design recommendation.",
+          "why": "No AC requires it (CLAUDE.md #3) and it cuts against D-2's 'no caller switch'. It stays available only if the operator explicitly asks for it at the gate."
+        },
+        {
+          "text": "Copying the marketdata 'use timeframe_enum … once all callers migrate' deprecation comment onto indicators.proto:60.",
+          "why": "It would be false: no indicators caller switches and the server reads neither field (fails.md:1334)."
+        }
+      ],
+      "new_objections": [],
+      "closed_objections": [],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
+
+## Session 2026-11-13 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: packages/proto, analysis, indicators, ingest, trading, portfolio, marketdata, config, identity, ledger, notify, agent, plus the UI producer `useOhlcBars.ts`). Key reuse patterns: the `marketdata.proto:89-92` timeframe-enum sibling, and the `trading.proto:144` deprecated body `user_id`.
+- Phase 1 Grilling: 3 rounds (full). The operator approved at the gate. The Floor is clear, and there are no REOPEN petitions (none pending). debate.md State is `approved`.
+  - Chosen approach: a non-breaking proto deprecation PR-unit. BatchGetBars reads the enum first, and all three producers send both fields. trading_mode watcher plumbing is removed in 10 services, keeping trading's `broker.paper` fallback. There is no migration 048 (046 already prunes), and a launch-gate query replaces it. The agent parity guard excludes deprecated fields. A hoisted `userID` carrier sits at trading.go:1174 (D-1..D-14).
+  - Rejected: R-1..R-9, including enum-only producers, a duplicate migration 048, and a dual-branch O-1 step.
+- Constitution rules touched: C-11, C-12, C-14, C-15, C-16, C-18, P-02, P-03, P-04, P-06, F-04, F-09, PLAT-4, PLAT-5. Floor breaches: none.
+- **Status: `spec-ready` (unchanged — held under D-11).** The approval recorded no answer to O-1. Settled D-11 makes a recorded O-1 answer a precondition for `spec-ready → design-approved`, so the flip is deferred until the operator answers. This is not a default (R-5).
+
+### Decisions
+
+- design.md is the approved design: D-1..D-14 settled, R-1..R-9 locked.
+- O-1 is the only open item. It is non-blocking for the design, but it gates the status flip (D-11).
+
+### Open Threads
+
+- [ ] **O-1 answer (gate precondition, D-11)**: the operator records (A) keep `ComputeIndicatorRequest.timeframe_enum = 7` (recommended) or (B) deprecation-only, by appending a session entry here. Under (B), apply the D-12 edit set (acceptance.feature:28 with the @AC-3 ID kept; product-spec.md :45/:89/:114). Then flip status.md to `design-approved` and add a feature.md history row. Target: before `/sdd-spec`.
+- [ ] **D-14 scope amendment**: add `xstockstrat-ui` to product-spec.md Affected Services and the feature.md reviewers. Target: before `/sdd-spec`.
+- [ ] tdd-gate may reject a compile-only Go RED, in which case record a P-06 deviation (D-10). Target: the Go watcher steps.
+- [ ] Hoisted `userID` touches the ownership gate at trading.go:1196. `trading_ownership_test.go` must stay green. Target: the trading carrier step.
+- [ ] UI-owner review routing and C-12 fixture homes for any `mock-backend.ts` edit. Target: the BatchGetBars producer step.
+- [ ] `buf breaking` is unverified for message-level deprecation on `common.v1.Decimal`/`Error`. The fallback is comment-only. Target: proto step 1.
+- [ ] Field 7 may collide with features 310 (indicators.proto) and 312 (trading.proto). Re-check merge order. Target: proto step 1.
+- [ ] The generated TS name `timeframeEnum` is unverified. Target: the UI producer step.
+- [ ] Migration 046 may have left keep-and-report rows. Run the D-4 launch-gate query on dev and prod. Target: launch.
+- [ ] The agent projection silently drops deprecated fields. State this in the D-7 docstring. Target: the agent step.
+
+## Session 2026-11-13 — sdd-review impl-spec (advisory)
+
+- Result: 4 failures, 4 warnings, overlap FAIL (advisory — lifecycle unchanged, status stays `spec-ready`).
+- No `implementation-spec.md` exists on `feature/fix-retired-surface-proto-cleanup`, so there was nothing to amend. None was drafted here: D-11 forbids writing step 1 while O-1 is open, and filling it in would be a guess (R-5, behaviour 1).
+- Re-verified this session:
+  - `origin/main-dev` already holds config `048_webhook_fanout_callback_keys` (feature 334), so the product-spec hint that 048 is next-free (product-spec.md:93-96) is stale. Design D-4/R-3 adds **no** config migration (046 already prunes both keys), so 322 claims no NNN. The overlap migration collisions only apply if a re-spec reintroduces a migration, and R-3 locks that out.
+  - `ComputeIndicatorRequest` on `origin/main-dev` uses fields 1-6 (`timeframe = 6`), so field 7 is free. Feature 310's product-spec touches indicators.proto:95 only, not this message.
+  - product-spec.md still omits `xstockstrat-ui` (D-14 not yet applied).
+
+### Addressed
+
+- None. The only Mode-B write is this note. Every finding needs either an operator answer or a missing spec.
+
+### Open Threads (carried into /sdd-spec and /sdd-execute)
+
+- [ ] **FAIL — no implementation spec.** Re-run `/sdd-spec fix-retired-surface-proto-cleanup` once the items below clear, then re-run `/sdd-review fix-retired-surface-proto-cleanup impl-spec`. (C-11)
+- [ ] **FAIL — O-1 unanswered (D-11 gate).** The operator records (A) keep `ComputeIndicatorRequest.timeframe_enum = 7` or (B) deprecation-only. Then `status.md` → `design-approved` plus a feature.md Status History row. Under (B), apply the D-12 edit set (acceptance.feature:28 keeping @AC-3; product-spec.md :45/:89/:114). (C-11, R-5)
+- [ ] **FAIL — D-14 not applied.** Add `xstockstrat-ui` to the product-spec.md Affected Services and the feature.md reviewers (`useOhlcBars.ts` is a BatchGetBars producer). (C-14)
+- [ ] **WARN — migration NNN.** The spec must state that there is no config migration (D-4/R-3) and drop the stale 048 hint. If any migration is later reintroduced, take the next free NNN above the trunk tip at spec time (048 is taken on main-dev; 321 and 330 also add config migrations).
+- [ ] **WARN — scope breadth.** Split steps by PR-unit (proto first), keep every change non-breaking, and gate on `buf breaking`.
+- [ ] **WARN — AC-3 wording.** Under (B), reword acceptance.feature:28 and keep the @AC-3 ID (D-12).
+- [ ] **WARN — durable @AC-8 @feature-191.** The spec must include the step that edits `services/xstockstrat-analysis/acceptance/opportunities-latency-fix.feature:19-24` to drop the BatchGetBars clause (C-16 sign-off already recorded).
+- Overlap findings: config 048 is taken on main-dev, and 330 and 321 hold unpinned config seeds. 322 needs no NNN under D-4, so it has no collision unless a migration is reintroduced. Field 7 is free; indicators.proto is shared with 310 but at a different message. marketdata.proto and trading.proto have no peers. 337 has a text-level dependency on the `trading_mode` removal.
+
+## Session 2026-11-20 (operator decisions at the design gate)
+
+- **O-1, option (A)**: keep `ComputeIndicatorRequest.timeframe_enum = 7`. No acceptance or product-spec amendment is needed for it. This record satisfies D-11, so status may advance `spec-ready` → `design-approved`. The D-12 (B) edit set does not apply.
+- **D-14**: add `xstockstrat-ui` to product-spec.md Affected Services and to the feature.md reviewers (`useOhlcBars.ts` is a BatchGetBars producer).
+- **No config migration** in this feature (D-4/R-3). The stale "048 next-free" hint is dropped.
+
+## Session 2026-11-20 — sdd-design
+
+- Phase 0 Recon: recon.md unchanged from 2026-11-13 (services: packages/proto, analysis, indicators, ingest, trading, portfolio, marketdata, config, identity, ledger, notify, agent, ui; key reuse patterns: the `marketdata.proto:89-92` timeframe-enum sibling and the `trading.proto:144` deprecated body `user_id`).
+- Phase 1 Grilling: 3 rounds (full), approved by the operator at the gate. No new register rows this session. No REOPEN petition was ever filed, so none was pending. O-1 is closed in debate.md on the operator's answer above.
+  - Chosen approach: a non-breaking proto deprecation PR-unit, with `timeframe_enum = 7` added to both BatchGetBarsRequest and ComputeIndicatorRequest. BatchGetBars reads the enum first and all three producers (analysis, portfolio, UI) send both fields. trading_mode watcher plumbing is removed in 10 services, keeping trading's `broker.paper` fallback. No config migration; a launch-gate query instead. The agent parity guard excludes deprecated fields. One hoisted `userID` carrier at trading.go:1174.
+  - Rejected: R-1..R-9 (enum-only producers, string-only producers, a duplicate migration, HasField, silence-as-answer, deferring the nolint shape, a dual-branch O-1 step, (B′), the false "once all callers migrate" comment).
+- Constitution rules touched: C-11, C-12, C-14, C-15, C-16, C-18, P-02, P-03, P-04, P-06, F-04, F-09, PLAT-4, PLAT-5. Floor breaches: none.
+- Artifacts edited: debate.md (O-1 status), design.md (O-1 answer, D-14, no-migration wording), product-spec.md (Affected Services gains `xstockstrat-ui`; Database migrations now "no"; the line numbers cited by D-12/design, :45/:89/:114, are unchanged), status.md, feature.md (history row, Reviewers, Next Action).
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- design.md is the approved design: D-1..D-14 settled, R-1..R-9 locked, O-1..O-3 closed.
+- `/sdd-spec` writes one unconditional proto step 1 that includes indicators field 7 (R-7).
+- The spec states that there is no config migration and claims no NNN.
+
+### Resolved threads (from the 2026-11-13 entries)
+
+- O-1 answer (D-11 gate): resolved, option (A).
+- D-14 scope amendment: applied to product-spec.md and feature.md.
+- Migration NNN warning: resolved, no migration and no 048 hint.
+- AC-3 wording warning: moot under (A); `acceptance.feature:28` stays as written.
+
+### Open Threads
+
+- [ ] `ComputeIndicatorRequest.timeframe_enum = 7` ships with no reader or producer (C-18). The D-13 "accepted but ignored by the server" comment must land. Target: proto step 1.
+- [ ] The tdd-gate may reject a compile-only Go RED, in which case record a P-06 deviation (D-10). Target: the Go watcher steps.
+- [ ] The hoisted `userID` touches the ownership gate at trading.go:1196. `trading_ownership_test.go` must stay green, and the rewritten :1193-1194 comment keeps the header-overwrites-body invariant. Target: the trading carrier step.
+- [ ] UI-owner review routing, and C-12 fixture homes for any `e2e/mock-backend.ts` edit. Target: the BatchGetBars producer step.
+- [ ] `buf breaking` is unverified for message-level deprecation on `common.v1.Decimal`/`Error`. The fallback is comment-only. Target: proto step 1.
+- [ ] Field 7 may collide with in-flight features 310 (indicators.proto) and 312 (trading.proto). Re-check merge order. Target: proto step 1.
+- [ ] The generated TS name `timeframeEnum` is unverified. Target: the UI producer step (after buf-gen).
+- [ ] Migration 046 may have left keep-and-report rows. Run the D-4 launch-gate query on dev and prod. Target: launch.
+- [ ] The agent projection silently drops deprecated fields. State this in the D-7 docstring. Target: the agent step.
+- [ ] No implementation spec exists yet. Run `/sdd-spec fix-retired-surface-proto-cleanup`, then `/sdd-review fix-retired-surface-proto-cleanup impl-spec`. The spec must split steps by PR-unit (proto first) and include the durable `@AC-8 @feature-191` edit at `opportunities-latency-fix.feature:19-24`.
+
+## Session 2026-11-20 — sdd-spec
+
+- Generated implementation-spec.md with 34 steps. Status → implementation-ready.
+- Tree: `feature/fix-retired-surface-proto-cleanup` @ `42300c5a`, which is 168 commits behind `origin/main-dev`. Every cite was re-grepped at that tip. `main-dev` has since changed several cited files (for example trading `internal/service/trading.go`), so line numbers are hints and symbol names are the anchor; `/sdd-execute` re-greps after it syncs the branch.
+- Operator decisions applied (recorded above, 2026-11-20): O-1 option (A), so Step 1 is one unconditional proto step that includes `ComputeIndicatorRequest.timeframe_enum = 7`; D-14, so `xstockstrat-ui` has Steps 10–11 and is in the reviewer snapshot; no config migration, so the spec has no `migration` or `config` step and claims no NNN.
+- Key codebase findings:
+  - Field 7 is free on `ComputeIndicatorRequest` and `BatchGetBarsRequest` at the feature tip and on `origin/main-dev`. Step 1 re-checks it against `origin/feature/fix-sandbox-result-contract` (310).
+  - `packages/proto` has no test harness and the repo has no descriptor-deprecation test. Step 3 creates `services/xstockstrat-indicators/tests/test_proto_deprecations.py` and lands in one unit with Steps 1–2, which gives `@AC-3` a real red→green.
+  - Staticcheck flags deprecated fields in composite literals too (precedent `marketdata_service_test.go:3324`), so the Go test files need directives as well as the readers (D-6).
+  - The portfolio producer test already asserts the request shape (`offline_valuation_test.go:358`), and the analysis test already captures the request (`test_analysis_servicer.py:5697`); both get one extra assertion.
+  - The UI field name `timeframeEnum` has a generated precedent on `Bar` (`e2e/mock-backend.ts:154`). `e2e/mock-backend.ts` is not edited; a vitest payload test on the `useFormulas.test.ts` pattern covers the producer.
+
+### Decisions
+
+- Atomic units (`**Lands with**`): Steps 1+2+3; 14+15; 17+18; 19+20; 21+22; 23+24; 25+26; 27+28. Each is on one surface and at most 3 steps.
+- Portfolio and marketdata lose `Config.TradingMode` and its `TRADING_MODE` env read in Steps 25 and 27, because removing the watcher parameter (and marketdata's `Paper`) leaves nothing reading them. Trading keeps `Config.TradingMode` (D-3).
+- The Node watchers build the request with `WatchConfigRequest.fromPartial({...})`. ts-proto is generated with `useOptionals=messages`, so the enum field is required in a bare literal and cannot simply be deleted. This was inferred from `buf.gen.yaml` and the existing literal (which spells out `version: ''` and `userId: ''`), not from a `tsc` run; Steps 29 and 31 verify it with `pnpm run build`.
+- The findings logs (`context-constitution-findings.md`) are not edited; `/context-constitution` refreshes them. The agent's body `user_id` write on `SnapshotOfflinePositionsRequest` is left as is (design § 5 scopes the carrier work to trading).
+
+### Open Threads
+
+- [ ] **Design premise corrected — Go RED (D-10).** No `config_test.go` calls `NewWatcher` in trading, portfolio or marketdata; the only test tie is `TestResolveTradingMode`. So "update the test call sites first" yields a compile RED only for marketdata's `NewLiveClient` caller (`client_test.go:759`, Step 28). For the watcher packages the spec captures the compile RED after the resolver is deleted and before the test is (Steps 24, 26). If the tdd-gate rejects that, record a P-06 deviation. Target: Steps 24, 26, 28.
+- [ ] **Design premise corrected — Node RED.** design.md lists Node as RED-first, but the Node watchers already send `TRADING_MODE_UNSPECIFIED` and the request is byte-identical after the change. Steps 30 and 32 are characterization tests recorded under the tdd-gate "no behavior change" escape. Target: Steps 30, 32.
+- [ ] **Trading `NewWatcher` is variadic.** A caller left as `NewWatcher(endpoint, env, cfg.TradingMode, "trading")` still compiles and would subscribe to a namespace named `paper`. Step 23's grep is the only guard. Target: Step 23.
+- [ ] **Lint-red window.** After the Steps 1–3 commit, golangci-lint is red for marketdata, portfolio and trading until Steps 5, 7 and 13 land. Run Steps 4–13 straight after the unit. Target: Steps 4–13.
+- [ ] `ComputeIndicatorRequest.timeframe_enum = 7` ships with no reader or producer (C-18); the D-13 comment must land verbatim in intent. Target: Step 1.
+- [ ] `buf breaking` is unverified for message-level `option deprecated` on `common.v1.Decimal`/`Error`. The fallback is comment-only, which also drops two assertions from Step 3. Target: Step 1.
+- [ ] The hoisted `userID` touches the ownership gate; `trading_ownership_test.go` must stay green. Target: Steps 12–13.
+- [ ] CI's `buf breaking` still excludes `trading/v1/trading.proto` (`.github/workflows/ci.yml:210-211`), so only the local Step 1 run checks the `user_id` deprecation. Target: Step 1.
+- [ ] D-4 launch-gate query on dev and prod for the two pruned keys. Target: launch.
+- [ ] Next: `/sdd-review fix-retired-surface-proto-cleanup impl-spec`, then `/sdd-execute fix-retired-surface-proto-cleanup`.
+
+## Session 2026-11-20 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 9 warnings, 0 Floor breaches (PASS WITH WARNINGS; advisory — did not block). Overlap: WARN, file-level only. Lifecycle unchanged (`implementation-ready`).
+- Run by the batch workflow, which directs this review to edit `implementation-spec.md` for clearly-correct warnings. Commit `1bfa5c21`.
+
+### Addressed (implementation-spec.md edited)
+
+- [x] Step 23 variadic trap (trading `NewWatcher`): Verification now has exit-code guards (no caller passes a trading mode; both `main.go` calls match the new shape; a service-wide caller listing), plus an explicit read of both `main.go` lines. Step 24 re-runs the guard. Re-verified: exactly two callers, `cmd/server/main.go:70,75`, also unchanged on `origin/main-dev`. No Go test was added — `cmd/server` has no test harness and the review did not find one to extend.
+- [x] Steps 24, 26, 28 compile-only RED (P-06): each TDD line now says where a deviation is recorded (`## Deviation Log` and `context.md`) and states plainly that Steps 24 and 26 capture the RED after the implementation edit; only Step 28 is test-first.
+- [x] Steps 29, 31 ts-proto assumption: marked as an unproven assumption (`buf.gen.yaml:30`, `useOptionals=messages`). Step 29 has a stop-and-record path if `fromPartial` does not compile. Step 31 now requires Step 29 green, and edits and builds one file before copying it to the other two.
+- [x] Stale base: a pre-flight bullet in `## Step Dependencies` requires the sync and the re-grep before Step 1. Spot check: `environmentIsPaper` moved to `trading.go:2830` on `origin/main-dev`; `SnapshotOfflinePositions` is still at `:1174`.
+- [x] Overlap findings: recorded in `## Step Dependencies` as rebase-only file overlaps with 321, 330, 347 and 323.
+- [x] Lint-red window, in part: the spec now names `sequential` mode as preferred (one integration PR, so the window never reaches PR CI) and records why the pairs are not units.
+
+### Still open (carried into execution)
+
+- Step 4–13: lint-red window (F-05 advisory) — [ ] unaddressed. After the Steps 1–3 unit, `golangci-lint` (SA1019) is red for marketdata, portfolio and trading until Steps 5, 7 and 13. Pairs 4+5, 6+7 and 12+13 were not folded into units: no step-constraints §C trigger applies, and pairing would not clear the other two services. Operator call at the `/sdd-execute` checkpoint: run `sequential`, or accept red Go lint jobs on the per-step PRs.
+- Step 6: adds a `nolint` directive and runs no lint itself; lint is in paired Step 7 — [ ] unaddressed (compliant under the paired-test rule; same window as above).
+- Steps 24, 26, 28: the tdd-gate may reject a compile-only RED (P-06) — [ ] unaddressed until execute records the outcome in the Deviation Log.
+- Steps 29, 31: the `fromPartial` shape is still uncompiled — [ ] unaddressed until Step 29's `pnpm run build` passes.
+- Step 3: the descriptor test lives in `xstockstrat-indicators` but also asserts trading, analysis and common descriptors (weak ownership fit) — [ ] unaddressed. Kept: `packages/proto` has no test harness, and the unit stays on the backend surface within the 4-step cap.
+- Step 1: `ComputeIndicatorRequest.timeframe_enum = 7` has no reader or producer (C-18) — [ ] unaddressed by design. Operator decision O-1 option (A); anchored by Step 3.
+- Step 10: no new Playwright step; existing `opportunities.spec.ts` coverage applies and Step 11 adds a vitest test — [ ] unaddressed (accepted by the review).
+- product-spec.md still carries the stale "next free 048" migration hint (`:93-96`). Not edited here (this review edits only the implementation spec); 322 claims no `NNN`, so it has no effect on execution.
+
+### Overlap findings
+
+- No FAIL-level collision (no migration `NNN`, proto field number or config key).
+- File-level, rebase-only: `321-fix-trading-config-plumbing` (`trading.go`, trading `CLAUDE.md`, `config-governance.md` registered-keys log, `trading.proto`); `330-fix-live-enrich-ttl-seed` (analysis `servicer.py`); `347-alpaca-adaptive-rate-limit` and `323-fix-orphaned-code` (marketdata `cmd/server/main.go`, `internal/alpaca/client.go`).
+
+### Open Threads
+
+- [ ] Lint-red window after Steps 1–3: choose `sequential` mode or accept red Go lint on per-step PRs. Target: `/sdd-execute` mode-entry checkpoint.
+- [ ] Compile-only Go RED may need a P-06 deviation record. Target: Steps 24, 26, 28.
+- [ ] `WatchConfigRequest.fromPartial` shape is unproven until Step 29 builds. Target: Steps 29, 31.
+- [ ] Rebase onto `origin/main-dev` (168 commits behind) and re-grep symbols before Step 1; expect doc merges with 321 in `config-governance.md`. Target: pre-flight.
+- [ ] Next: `/sdd-execute fix-retired-surface-proto-cleanup` (preferably `sequential`).

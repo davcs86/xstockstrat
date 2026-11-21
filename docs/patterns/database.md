@@ -18,6 +18,9 @@ tables (e.g. `marketdata.ohlcv_remediation_003`, a one-shot audit table added by
 `003_canonicalize_ohlcv_timeframe` migration — see `services/xstockstrat-marketdata/CLAUDE.md`).
 `portfolio.watchlist_signal_expiry` (portfolio migration `018`, feature 281) is likewise a plain table, and
 the portfolio `backfill-signal-expiry` subcommand reads `ingest.newsletter_signals` read-only (cross-schema).
+The only migration-time cross-schema read is analysis `029_seed_fundamentals_blend_strategy`, which reads
+`identity.users` once to find its owner (feature 335, operator-mandated) — it is why identity must migrate before analysis.
+`notify.webhook_deliveries` (notify migration `004`, feature 334) is a plain table: the outbound webhook delivery queue.
 
 The `marketdata.ohlcv` chunk interval was widened from 1 day to **30 days** by feature 153's
 `004_widen_ohlcv_chunk_interval` migration (`set_chunk_time_interval`, future-only — pre-existing
@@ -29,7 +32,7 @@ The `marketdata.ohlcv` chunk interval was widened from 1 day to **30 days** by f
 
 Orchestrated by `scripts/db-migrate.sh` using **golang-migrate**. State is tracked in a `schema_migrations` table inside each service's schema so re-runs only apply new files.
 
-**Run order** (dependency-respecting): `config → ledger → identity → marketdata → trading → portfolio → notify → ingest`
+**Run order** (dependency-respecting): `config → ledger → identity → marketdata → trading → portfolio → notify → ingest → indicators → analysis`
 
 On DigitalOcean, the `db-migrator` PRE_DEPLOY job runs automatically on every deploy.
 
@@ -51,7 +54,7 @@ Both are read from the **first 5 lines** of an `.up.sql`:
   should also guard unconditionally against an unrendered `${…}` (see ingest `013`, analysis `026`).
   Any job that runs migrations (the `db-migrator` PRE_DEPLOY job included) must carry those env vars.
 - **`-- contract-of: services/<svc>/migrations/<NNN_expand>.up.sql`** — marks a contract migration.
-  `scripts/check-migration-contract.sh` refuses it unless the named expand file is already on
+  `scripts/check-migration-contract.py` refuses it unless the named expand file is already on
   `origin/main` **and** is not added by the same change: ship the expand, deploy, then contract.
 
 **Expand and contract up-files must be idempotent** on both the expanded and the contracted schema
@@ -61,7 +64,7 @@ from version 0) is refused at or above a contract floor (§ Contract migration r
 
 **CI jobs** (`.github/workflows/ci.yml`, on `migrations`/`ci` path changes):
 
-- `migration-rerun` — runs `scripts/migration-rerun.sh` in the `scripts/Dockerfile.migrate` image
+- `migration-rerun` — runs `scripts/migration-rerun.py` in the `scripts/Dockerfile.migrate` image
   against a fresh TimescaleDB: migrates to the pre-224 versions, loads fixtures, applies the rest, then
   re-applies the feature-224 expand and feature-225 contract up-files (indicators `007`, ingest
   `013`/`014`, analysis `026`/`027`) a second time and asserts the N-1 trigger count is 0. It then
@@ -72,7 +75,7 @@ from version 0) is refused at or above a contract floor (§ Contract migration r
   the clean-ahead skip and the dirty-ahead refusal (§ Contract migration recovery, *Ahead rule*).
   Older up-files are not replayed — many are not idempotent (defect report
   `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md`).
-- `migration-contract-gate` — PR-only; runs `scripts/check-migration-contract.sh` against the base
+- `migration-contract-gate` — PR-only; runs `scripts/check-migration-contract.py` against the base
   branch.
 
 ### Contract migration recovery

@@ -4,9 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -678,5 +684,518 @@ func TestCancelOrder_422ReturnsNotCancelable(t *testing.T) {
 	err := c.CancelOrder(context.Background(), "alpaca-order-123")
 	if !errors.Is(err, broker.ErrOrderNotCancelable) {
 		t.Fatalf("err = %v, want ErrOrderNotCancelable", err)
+	}
+}
+
+// ── feature 347: adaptive rate limit at do() ────────────────────────────────
+
+const (
+	f347PaperHost = "paper-api.alpaca.markets"
+	f347LiveHost  = "api.alpaca.markets"
+	f347Account   = `{"cash":"1","buying_power":"1","portfolio_value":"1"}`
+)
+
+var f347Start = time.Unix(1_800_000_000, 0)
+
+type f347Clock struct {
+	mu      sync.Mutex
+	now     time.Time
+	sleeps  []time.Duration
+	onSleep func()
+}
+
+func (c *f347Clock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *f347Clock) Sleep(ctx context.Context, d time.Duration) error {
+	if c.onSleep != nil {
+		c.onSleep()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.sleeps = append(c.sleeps, d)
+	c.now = c.now.Add(d)
+	return nil
+}
+
+func (c *f347Clock) recorded() []time.Duration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]time.Duration(nil), c.sleeps...)
+}
+
+type f347Attempt struct {
+	method, host, path, body string
+	at                       time.Time
+}
+
+// f347RT answers from a script and keeps the request's real Alpaca host.
+type f347RT struct {
+	mu       sync.Mutex
+	now      func() time.Time
+	attempts []f347Attempt
+	respond  func(n int, req *http.Request) (*http.Response, error)
+}
+
+func (rt *f347RT) RoundTrip(req *http.Request) (*http.Response, error) {
+	var body []byte
+	if req.Body != nil {
+		body, _ = io.ReadAll(req.Body)
+	}
+	rt.mu.Lock()
+	n := len(rt.attempts)
+	rt.attempts = append(rt.attempts, f347Attempt{method: req.Method, host: req.URL.Host, path: req.URL.Path, body: string(body), at: rt.now()})
+	rt.mu.Unlock()
+	return rt.respond(n, req)
+}
+
+func (rt *f347RT) seen() []f347Attempt {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return append([]f347Attempt(nil), rt.attempts...)
+}
+
+func f347Resp(status int, body string, headers ...string) (*http.Response, error) {
+	h := http.Header{}
+	for i := 0; i+1 < len(headers); i += 2 {
+		h.Set(headers[i], headers[i+1])
+	}
+	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: h}, nil
+}
+
+func f347RateHeaders(limit, remaining int, reset time.Time) []string {
+	return []string{
+		"X-RateLimit-Limit", strconv.Itoa(limit),
+		"X-RateLimit-Remaining", strconv.Itoa(remaining),
+		"X-RateLimit-Reset", strconv.FormatInt(reset.Unix(), 10),
+	}
+}
+
+func f347ResetOnly(reset time.Time) []string {
+	return []string{"X-RateLimit-Reset", strconv.FormatInt(reset.Unix(), 10)}
+}
+
+type f347Opts struct {
+	key     string
+	live    bool
+	timeout time.Duration
+	budget  func() time.Duration
+}
+
+func f347Budget(d time.Duration) func() time.Duration { return func() time.Duration { return d } }
+
+// f347Client builds a client behind rt. A nil clock keeps the real clock and sleep; jitter is fixed at 0.
+func f347Client(rt *f347RT, clock *f347Clock, o f347Opts) *broker.Client {
+	if o.key == "" {
+		o.key = "KEY-A"
+	}
+	if o.timeout == 0 {
+		o.timeout = 5 * time.Second
+	}
+	c := broker.NewClient(broker.ClientConfig{
+		APIKey: o.key, APISecret: "s", Paper: !o.live,
+		Timeout:         func() time.Duration { return o.timeout },
+		RateLimitBudget: o.budget,
+	})
+	broker.SetTransport(c, rt)
+	broker.SetJitter(c, func() time.Duration { return 0 })
+	rt.now = time.Now
+	if clock != nil {
+		broker.SetNow(c, clock.Now)
+		broker.SetSleep(c, clock.Sleep)
+		rt.now = clock.Now
+	}
+	return c
+}
+
+func f347Market(clientOrderID string) broker.OrderRequest {
+	return broker.OrderRequest{Symbol: "AAPL", Qty: 10, Side: "buy", OrderType: "market", TimeInForce: "day", ClientOrderID: clientOrderID}
+}
+
+func f347WantRateLimited(t *testing.T, err error, host string) {
+	t.Helper()
+	if !errors.Is(err, broker.ErrRateLimited) {
+		t.Fatalf("error = %v, want broker.ErrRateLimited", err)
+	}
+	for _, want := range []string{"rate limited", host} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not contain %q", err, want)
+		}
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, broker.ErrInvalidCredentials) {
+		t.Fatalf("a rate-limit refusal must wrap only ErrRateLimited, got %v", err)
+	}
+}
+
+type f347WarnHandler struct {
+	mu    *sync.Mutex
+	warns *[]map[string]string
+}
+
+func (h f347WarnHandler) Enabled(_ context.Context, l slog.Level) bool { return l >= slog.LevelWarn }
+func (h f347WarnHandler) WithAttrs([]slog.Attr) slog.Handler           { return h }
+func (h f347WarnHandler) WithGroup(string) slog.Handler                { return h }
+func (h f347WarnHandler) Handle(_ context.Context, r slog.Record) error {
+	attrs := map[string]string{}
+	r.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.String()
+		return true
+	})
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	*h.warns = append(*h.warns, attrs)
+	return nil
+}
+
+func f347RecordWarns(t *testing.T) func() []map[string]string {
+	t.Helper()
+	var mu sync.Mutex
+	var warns []map[string]string
+	prev := slog.Default()
+	slog.SetDefault(slog.New(f347WarnHandler{mu: &mu, warns: &warns}))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return func() []map[string]string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]map[string]string(nil), warns...)
+	}
+}
+
+// @AC-10 (guard): the kill switch restores the single attempt. Red under an "ignore the budget" mutant.
+func TestDo_KillSwitchOffIsASingleAttempt_F347_AC10(t *testing.T) {
+	for name, budget := range map[string]func() time.Duration{"nil budget": nil, "zero budget": f347Budget(0)} {
+		rt := &f347RT{respond: func(int, *http.Request) (*http.Response, error) {
+			return f347Resp(429, `{}`, f347ResetOnly(time.Now().Add(2*time.Second))...)
+		}}
+		c := f347Client(rt, nil, f347Opts{budget: budget})
+		_, err := c.GetAccount(context.Background())
+		if err == nil || !strings.Contains(err.Error(), "status 429") {
+			t.Fatalf("%s: error = %v, want one containing \"status 429\"", name, err)
+		}
+		if n := len(rt.seen()); n != 1 {
+			t.Fatalf("%s: attempts = %d, want exactly 1", name, n)
+		}
+	}
+}
+
+// @AC-12 (client side): a rate-limited submit is resent with the same client_order_id and body.
+func TestSubmitOrder_RetriedWithIdenticalBody_F347_AC12(t *testing.T) {
+	for name, req := range map[string]broker.OrderRequest{
+		"market": f347Market("c-42"),
+		"limit":  {Symbol: "AAPL", Qty: 10, Side: "buy", OrderType: "limit", LimitPrice: 150.00, TimeInForce: "day", ClientOrderID: "c-42"},
+	} {
+		clock := &f347Clock{now: f347Start}
+		rt := &f347RT{respond: func(n int, _ *http.Request) (*http.Response, error) {
+			if n == 0 {
+				return f347Resp(429, `{}`, f347ResetOnly(f347Start.Add(time.Second))...)
+			}
+			return f347Resp(200, `{"id":"b-1","status":"new"}`)
+		}}
+		c := f347Client(rt, clock, f347Opts{budget: f347Budget(20 * time.Second)})
+		order, err := c.SubmitOrder(context.Background(), req)
+		if err != nil || order.BrokerOrderID != "b-1" {
+			t.Fatalf("%s: order = %+v, err = %v; want broker order id b-1", name, order, err)
+		}
+		got := rt.seen()
+		if len(got) != 2 || got[0].method != http.MethodPost {
+			t.Fatalf("%s: attempts = %+v, want 2 POSTs", name, got)
+		}
+		if got[0].body == "" || got[0].body != got[1].body || !strings.Contains(got[1].body, `"client_order_id":"c-42"`) {
+			t.Fatalf("%s: bodies differ or lack client_order_id c-42:\n%s\n%s", name, got[0].body, got[1].body)
+		}
+	}
+}
+
+// @AC-13: a broker call never outlives its retry budget. Row 1 pins the inclusive fit rule (7 + 8 + 5 = 20).
+func TestSubmitOrder_NeverOutlivesItsBudget_F347_AC13(t *testing.T) {
+	for _, row := range []struct {
+		name            string
+		timeout, budget time.Duration
+		attempts        int
+		lastStart       time.Duration
+	}{
+		{"5000ms x3.0", 5 * time.Second, 20 * time.Second, 5, 15 * time.Second},
+		{"5000ms x1.5", 5 * time.Second, 5 * time.Second, 1, 0},
+		{"10000ms x1.5", 10 * time.Second, 10 * time.Second, 1, 0},
+		{"1000ms x3.0", time.Second, 28 * time.Second, 6, 23 * time.Second},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			clock := &f347Clock{now: f347Start}
+			rt := &f347RT{respond: func(int, *http.Request) (*http.Response, error) { return f347Resp(429, `{}`) }}
+			c := f347Client(rt, clock, f347Opts{timeout: row.timeout, budget: f347Budget(row.budget)})
+			_, err := c.SubmitOrder(context.Background(), f347Market("c-13"))
+			f347WantRateLimited(t, err, f347PaperHost)
+			got := rt.seen()
+			if len(got) != row.attempts {
+				t.Fatalf("attempts = %d, want %d", len(got), row.attempts)
+			}
+			if d := got[len(got)-1].at.Sub(f347Start); d != row.lastStart {
+				t.Fatalf("last attempt started %v after the first, want %v", d, row.lastStart)
+			}
+			if d := clock.Now().Sub(f347Start); d != row.lastStart {
+				t.Fatalf("error returned %v after the call began on the client clock, want %v", d, row.lastStart)
+			}
+		})
+	}
+}
+
+// @AC-15: a rate-limited cancel takes effect exactly once.
+func TestCancelOrder_RetriedOnce_F347_AC15(t *testing.T) {
+	clock := &f347Clock{now: f347Start}
+	rt := &f347RT{respond: func(n int, _ *http.Request) (*http.Response, error) {
+		if n == 0 {
+			return f347Resp(429, `{}`, f347ResetOnly(f347Start.Add(time.Second))...)
+		}
+		return f347Resp(204, ``)
+	}}
+	c := f347Client(rt, clock, f347Opts{budget: f347Budget(20 * time.Second)})
+	if err := c.CancelOrder(context.Background(), "b-1"); err != nil {
+		t.Fatalf("CancelOrder: %v", err)
+	}
+	got := rt.seen()
+	if len(got) != 2 || got[0].method != http.MethodDelete || got[1].method != http.MethodDelete || got[1].path != "/v2/orders/b-1" {
+		t.Fatalf("attempts = %+v, want exactly 2 DELETEs for b-1", got)
+	}
+}
+
+// @AC-16: a rate-limited replace is retried with the same body.
+func TestReplaceOrder_RetriedWithIdenticalBody_F347_AC16(t *testing.T) {
+	clock := &f347Clock{now: f347Start}
+	rt := &f347RT{respond: func(n int, _ *http.Request) (*http.Response, error) {
+		if n == 0 {
+			return f347Resp(429, `{}`, f347ResetOnly(f347Start.Add(time.Second))...)
+		}
+		return f347Resp(200, `{"id":"b-2","status":"new"}`)
+	}}
+	c := f347Client(rt, clock, f347Opts{budget: f347Budget(20 * time.Second)})
+	order, err := c.ReplaceOrder(context.Background(), "b-1", broker.OrderRequest{Qty: 7})
+	if err != nil || order.BrokerOrderID != "b-2" {
+		t.Fatalf("order = %+v, err = %v; want broker order id b-2", order, err)
+	}
+	got := rt.seen()
+	if len(got) != 2 || got[0].method != http.MethodPatch || got[0].body != got[1].body || !strings.Contains(got[1].body, `"qty":"7"`) {
+		t.Fatalf("attempts = %+v, want 2 PATCHes with an identical body carrying qty \"7\"", got)
+	}
+}
+
+// @AC-17: paper and live hosts are handled the same and tracked separately.
+func TestGetAccount_PaperAndLiveTrackedSeparately_F347_AC17(t *testing.T) {
+	clock := &f347Clock{now: f347Start}
+	paperRT := &f347RT{respond: func(int, *http.Request) (*http.Response, error) {
+		return f347Resp(200, f347Account, f347RateHeaders(200, 0, f347Start.Add(5*time.Second))...)
+	}}
+	paper := f347Client(paperRT, clock, f347Opts{budget: f347Budget(20 * time.Second)})
+	if _, err := paper.GetAccount(context.Background()); err != nil {
+		t.Fatalf("paper priming request: %v", err)
+	}
+	liveRT := &f347RT{respond: func(n int, _ *http.Request) (*http.Response, error) {
+		if n == 0 {
+			return f347Resp(429, `{}`)
+		}
+		return f347Resp(200, f347Account)
+	}}
+	live := f347Client(liveRT, clock, f347Opts{live: true, budget: f347Budget(20 * time.Second)})
+	if _, err := live.GetAccount(context.Background()); err != nil {
+		t.Fatalf("live GetAccount: %v", err)
+	}
+	got := liveRT.seen()
+	if len(got) != 2 || got[0].host != f347LiveHost {
+		t.Fatalf("live attempts = %+v, want exactly 2 on %s", got, f347LiveHost)
+	}
+	if !got[0].at.Equal(f347Start) {
+		t.Fatalf("the live request waited %v for the paper host's reset", got[0].at.Sub(f347Start))
+	}
+}
+
+// @AC-18: trading logs a throttled window.
+func TestGetPositions_ThrottleIsLogged_F347_AC18(t *testing.T) {
+	warns := f347RecordWarns(t)
+	clock := &f347Clock{now: f347Start}
+	rt := &f347RT{respond: func(n int, _ *http.Request) (*http.Response, error) {
+		if n == 0 {
+			return f347Resp(429, `{}`, f347ResetOnly(f347Start.Add(2*time.Second))...)
+		}
+		return f347Resp(200, `[]`)
+	}}
+	c := f347Client(rt, clock, f347Opts{budget: f347Budget(20 * time.Second)})
+	if _, err := c.GetPositions(context.Background()); err != nil {
+		t.Fatalf("GetPositions: %v", err)
+	}
+	logged := warns()
+	if len(logged) != 1 || logged[0]["host"] != f347PaperHost || logged[0]["wait_ms"] != "2000" {
+		t.Fatalf("WARN logs = %v, want exactly one naming host %s and wait_ms 2000", logged, f347PaperHost)
+	}
+}
+
+// @AC-20 (guard): credentials are tracked independently on the same host. The keying itself is pinned in pace_test.go.
+func TestGetAccount_CredentialsTrackedSeparately_F347_AC20(t *testing.T) {
+	clock := &f347Clock{now: f347Start}
+	rtA := &f347RT{respond: func(int, *http.Request) (*http.Response, error) {
+		return f347Resp(200, f347Account, f347RateHeaders(200, 0, f347Start.Add(5*time.Second))...)
+	}}
+	a := f347Client(rtA, clock, f347Opts{key: "KEY-A", budget: f347Budget(20 * time.Second)})
+	if _, err := a.GetAccount(context.Background()); err != nil {
+		t.Fatalf("client A priming request: %v", err)
+	}
+	rtB := &f347RT{respond: func(int, *http.Request) (*http.Response, error) { return f347Resp(200, f347Account) }}
+	b := f347Client(rtB, clock, f347Opts{key: "KEY-B", budget: f347Budget(20 * time.Second)})
+	if _, err := b.GetAccount(context.Background()); err != nil {
+		t.Fatalf("client B GetAccount: %v", err)
+	}
+	if sleeps := clock.recorded(); len(sleeps) != 0 {
+		t.Fatalf("client B waited %v for client A's reset", sleeps)
+	}
+	if got := rtB.seen(); len(got) != 1 || got[0].host != f347PaperHost {
+		t.Fatalf("client B attempts = %+v, want one on %s", got, f347PaperHost)
+	}
+}
+
+// @AC-23: a read that cannot outwait a hold is refused without a request.
+func TestGetPositions_HoldThatCannotFitIsRefused_F347_AC23(t *testing.T) {
+	rt := &f347RT{respond: func(n int, _ *http.Request) (*http.Response, error) {
+		if n == 0 {
+			return f347Resp(200, f347Account, f347RateHeaders(200, 0, time.Now().Add(10*time.Second))...)
+		}
+		return f347Resp(200, `[]`)
+	}}
+	c := f347Client(rt, nil, f347Opts{timeout: 5000 * time.Millisecond, budget: f347Budget(20 * time.Second)})
+	if _, err := c.GetAccount(context.Background()); err != nil {
+		t.Fatalf("priming request: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	began := time.Now()
+	_, err := c.GetPositions(ctx)
+	if took := time.Since(began); took > 100*time.Millisecond {
+		t.Fatalf("refused after %v, want within 100 ms", took)
+	}
+	f347WantRateLimited(t, err, f347PaperHost)
+	if n := len(rt.seen()); n != 1 {
+		t.Fatalf("attempts = %d, want no positions request sent", n)
+	}
+}
+
+// @AC-27 (client side): an attempt that times out inside a retry is a timeout, never ErrRateLimited.
+func TestSubmitOrder_TimeoutInsideRetryStaysATimeout_F347_AC27(t *testing.T) {
+	rt := &f347RT{respond: func(n int, req *http.Request) (*http.Response, error) {
+		if n == 0 {
+			return f347Resp(429, `{}`)
+		}
+		select {
+		case <-req.Context().Done():
+			return nil, req.Context().Err()
+		case <-time.After(3 * time.Second):
+			return f347Resp(200, `{"id":"late"}`)
+		}
+	}}
+	c := f347Client(rt, nil, f347Opts{timeout: 1000 * time.Millisecond, budget: f347Budget(28 * time.Second)})
+	_, err := c.SubmitOrder(context.Background(), f347Market("c-27"))
+	if n := len(rt.seen()); n != 2 {
+		t.Fatalf("attempts = %d, want 2", n)
+	}
+	var netErr net.Error
+	if !errors.Is(err, context.DeadlineExceeded) && (!errors.As(err, &netErr) || !netErr.Timeout()) {
+		t.Fatalf("error = %v, want a timeout", err)
+	}
+	if errors.Is(err, broker.ErrRateLimited) {
+		t.Fatalf("a timed-out attempt was reported as rate limited: %v", err)
+	}
+}
+
+// A call bounded by one timeout (the pollers) sends its zero-wait attempt and never waits or retries.
+func TestGetOrder_OneTimeoutDeadlineSendsExactlyOnce_F347(t *testing.T) {
+	clock := &f347Clock{now: f347Start}
+	rt := &f347RT{respond: func(int, *http.Request) (*http.Response, error) {
+		return f347Resp(429, `{}`, f347ResetOnly(f347Start.Add(10*time.Second))...)
+	}}
+	c := f347Client(rt, clock, f347Opts{timeout: 5 * time.Second, budget: f347Budget(20 * time.Second)})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := c.GetOrder(ctx, "b-1")
+	f347WantRateLimited(t, err, f347PaperHost)
+	if n := len(rt.seen()); n != 1 {
+		t.Fatalf("attempts = %d, want exactly 1", n)
+	}
+	if sleeps := clock.recorded(); len(sleeps) != 0 {
+		t.Fatalf("a one-timeout call slept: %v", sleeps)
+	}
+}
+
+// FR-5: with no rate-limit headers nothing is paced, and a bare 429 still retries on backoff.
+func TestDoPaced_DegradesWithoutHeaders_F347(t *testing.T) {
+	clock := &f347Clock{now: f347Start}
+	rt := &f347RT{respond: func(n int, _ *http.Request) (*http.Response, error) {
+		if n == 3 {
+			return f347Resp(429, `{}`)
+		}
+		return f347Resp(200, f347Account)
+	}}
+	c := f347Client(rt, clock, f347Opts{budget: f347Budget(20 * time.Second)})
+	for i := 0; i < 3; i++ {
+		if _, err := c.GetAccount(context.Background()); err != nil {
+			t.Fatalf("request %d: %v", i+1, err)
+		}
+	}
+	if sleeps := clock.recorded(); len(sleeps) != 0 {
+		t.Fatalf("a header-less response caused a wait: %v", sleeps)
+	}
+	if _, err := c.GetAccount(context.Background()); err != nil {
+		t.Fatalf("request after a bare 429: %v", err)
+	}
+	if sleeps := clock.recorded(); len(sleeps) != 1 || sleeps[0] != time.Second {
+		t.Fatalf("waits = %v, want one 1 s backoff", sleeps)
+	}
+}
+
+// A mutation is detached from caller cancellation; a read cancelled during a wait is a rate-limit refusal.
+func TestDoPaced_CallerCancelDuringAWait_F347(t *testing.T) {
+	script := func(n int, _ *http.Request) (*http.Response, error) {
+		if n == 0 {
+			return f347Resp(429, `{}`)
+		}
+		return f347Resp(200, `{"id":"b-9","status":"new"}`)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	clock := &f347Clock{now: f347Start, onSleep: cancel}
+	rt := &f347RT{respond: script}
+	c := f347Client(rt, clock, f347Opts{budget: f347Budget(20 * time.Second)})
+	order, err := c.SubmitOrder(ctx, f347Market("c-9"))
+	if err != nil || order.BrokerOrderID != "b-9" {
+		t.Fatalf("mutation: order = %+v, err = %v; want the retry sent and b-9 returned", order, err)
+	}
+	if n := len(rt.seen()); n != 2 {
+		t.Fatalf("mutation attempts = %d, want 2", n)
+	}
+
+	ctx, cancel = context.WithCancel(context.Background())
+	clock = &f347Clock{now: f347Start, onSleep: cancel}
+	rt = &f347RT{respond: script}
+	c = f347Client(rt, clock, f347Opts{budget: f347Budget(20 * time.Second)})
+	_, err = c.GetAccount(ctx)
+	f347WantRateLimited(t, err, f347PaperHost)
+	if n := len(rt.seen()); n != 1 {
+		t.Fatalf("read attempts = %d, want no retry after the caller cancelled", n)
+	}
+}
+
+// TRADING-3: a 401 on a retry is still a credential rejection.
+func TestValidateCredentials_401OnRetryIsInvalidCredentials_F347(t *testing.T) {
+	clock := &f347Clock{now: f347Start}
+	rt := &f347RT{respond: func(n int, _ *http.Request) (*http.Response, error) {
+		if n == 0 {
+			return f347Resp(429, `{}`)
+		}
+		return f347Resp(401, `{}`)
+	}}
+	c := f347Client(rt, clock, f347Opts{budget: f347Budget(20 * time.Second)})
+	err := c.ValidateCredentials(context.Background())
+	if !errors.Is(err, broker.ErrInvalidCredentials) || errors.Is(err, broker.ErrRateLimited) {
+		t.Fatalf("error = %v, want ErrInvalidCredentials only", err)
 	}
 }

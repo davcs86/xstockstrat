@@ -103,6 +103,7 @@ class TestManageSignalSourceBuilderParity:
                 "extractor_module": "app.extractors.web",
                 "config_json": {"url": "https://x.com", "scrape_selector": ".a"},
                 "reliability_weight": 0.5,
+                "extraction_instructions": "Each entry is a signal.",
             },
             update_mask=["reliability_weight"],
         )
@@ -110,6 +111,15 @@ class TestManageSignalSourceBuilderParity:
         assert source_fields | _INTENTIONALLY_UNSET_SOURCE == set(
             ingest_pb2.SignalSource.DESCRIPTOR.fields_by_name
         )
+
+    @pytest.mark.asyncio
+    async def test_builder_carries_extraction_instructions(self):
+        req = await _capture_request(
+            operation="update",
+            source={"slug": "uw", "extraction_instructions": "X"},
+            update_mask=["extraction_instructions"],
+        )
+        assert req.source.extraction_instructions == "X"
 
 
 class TestManageSignalSourceVerbs:
