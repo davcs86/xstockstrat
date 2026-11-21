@@ -15,6 +15,8 @@ _MIGRATIONS = Path(__file__).resolve().parent.parent / "migrations"
 _DDL_FILE = "026_owner_dimension_templates.up.sql"
 # Ends at the first "\n);" — a lazy ")" would stop inside DEFAULT NOW().
 _DDL_RE = re.compile(r"CREATE TABLE IF NOT EXISTS analysis\.strategy_templates \(.*?\n\);", re.S)
+# Data-only migrations (seeds) may name the table; only a schema change may not go unnoticed here.
+_SCHEMA_CHANGE_RE = re.compile(r"(CREATE|ALTER)\s+TABLE[^;]*analysis\.strategy_templates")
 
 
 async def _pool(dsn, size, **kwargs):
@@ -25,7 +27,9 @@ async def _pool(dsn, size, **kwargs):
 
 def _strategy_templates_ddl():
     touching = [
-        p.name for p in _MIGRATIONS.glob("*.up.sql") if "strategy_templates" in p.read_text()
+        p.name
+        for p in sorted(_MIGRATIONS.glob("*.up.sql"))
+        if _SCHEMA_CHANGE_RE.search(p.read_text())
     ]
     assert touching == [_DDL_FILE]
     match = _DDL_RE.search((_MIGRATIONS / _DDL_FILE).read_text())

@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: common/v1/common.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TemplateOrigin = exports.TemplateMeta = exports.TimeRange = exports.Asset = exports.Decimal = exports.Error_DetailsEntry = exports.Error = exports.PageResponse = exports.PageRequest = exports.UnservableReason = exports.TemplateOperation = exports.TemplateKind = exports.Sector = exports.Timeframe = exports.BrokerType = exports.Environment = exports.TradingMode = exports.protobufPackage = void 0;
+exports.DelistedState = exports.BackfillSymbolResult = exports.TemplateOrigin = exports.TemplateMeta = exports.TimeRange = exports.Asset = exports.Decimal = exports.Error_DetailsEntry = exports.Error = exports.PageResponse = exports.PageRequest = exports.BackfillSymbolOutcome = exports.UnservableReason = exports.TemplateOperation = exports.TemplateKind = exports.Sector = exports.Timeframe = exports.BrokerType = exports.Environment = exports.TradingMode = exports.protobufPackage = void 0;
 exports.tradingModeFromJSON = tradingModeFromJSON;
 exports.tradingModeToJSON = tradingModeToJSON;
 exports.tradingModeToNumber = tradingModeToNumber;
@@ -30,6 +30,9 @@ exports.templateOperationToNumber = templateOperationToNumber;
 exports.unservableReasonFromJSON = unservableReasonFromJSON;
 exports.unservableReasonToJSON = unservableReasonToJSON;
 exports.unservableReasonToNumber = unservableReasonToNumber;
+exports.backfillSymbolOutcomeFromJSON = backfillSymbolOutcomeFromJSON;
+exports.backfillSymbolOutcomeToJSON = backfillSymbolOutcomeToJSON;
+exports.backfillSymbolOutcomeToNumber = backfillSymbolOutcomeToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const timestamp_1 = require("../../google/protobuf/timestamp");
@@ -624,6 +627,64 @@ function unservableReasonToNumber(object) {
             return -1;
     }
 }
+var BackfillSymbolOutcome;
+(function (BackfillSymbolOutcome) {
+    BackfillSymbolOutcome["BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED"] = "BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED";
+    BackfillSymbolOutcome["BACKFILL_SYMBOL_OUTCOME_EMPTY"] = "BACKFILL_SYMBOL_OUTCOME_EMPTY";
+    BackfillSymbolOutcome["BACKFILL_SYMBOL_OUTCOME_SKIPPED"] = "BACKFILL_SYMBOL_OUTCOME_SKIPPED";
+    BackfillSymbolOutcome["BACKFILL_SYMBOL_OUTCOME_FAILED"] = "BACKFILL_SYMBOL_OUTCOME_FAILED";
+    BackfillSymbolOutcome["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(BackfillSymbolOutcome || (exports.BackfillSymbolOutcome = BackfillSymbolOutcome = {}));
+function backfillSymbolOutcomeFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED":
+            return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED;
+        case 1:
+        case "BACKFILL_SYMBOL_OUTCOME_EMPTY":
+            return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_EMPTY;
+        case 2:
+        case "BACKFILL_SYMBOL_OUTCOME_SKIPPED":
+            return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_SKIPPED;
+        case 3:
+        case "BACKFILL_SYMBOL_OUTCOME_FAILED":
+            return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return BackfillSymbolOutcome.UNRECOGNIZED;
+    }
+}
+function backfillSymbolOutcomeToJSON(object) {
+    switch (object) {
+        case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED:
+            return "BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED";
+        case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_EMPTY:
+            return "BACKFILL_SYMBOL_OUTCOME_EMPTY";
+        case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_SKIPPED:
+            return "BACKFILL_SYMBOL_OUTCOME_SKIPPED";
+        case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED:
+            return "BACKFILL_SYMBOL_OUTCOME_FAILED";
+        case BackfillSymbolOutcome.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function backfillSymbolOutcomeToNumber(object) {
+    switch (object) {
+        case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED:
+            return 0;
+        case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_EMPTY:
+            return 1;
+        case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_SKIPPED:
+            return 2;
+        case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED:
+            return 3;
+        case BackfillSymbolOutcome.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
 function createBasePageRequest() {
     return { pageSize: 0, pageToken: "" };
 }
@@ -1194,6 +1255,7 @@ function createBaseTemplateMeta() {
         retired: false,
         createdAt: undefined,
         updatedAt: undefined,
+        readOnly: false,
     };
 }
 exports.TemplateMeta = {
@@ -1221,6 +1283,9 @@ exports.TemplateMeta = {
         }
         if (message.updatedAt !== undefined) {
             timestamp_1.Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(66).fork()).join();
+        }
+        if (message.readOnly !== false) {
+            writer.uint32(72).bool(message.readOnly);
         }
         return writer;
     },
@@ -1287,6 +1352,13 @@ exports.TemplateMeta = {
                     message.updatedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.readOnly = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1317,6 +1389,11 @@ exports.TemplateMeta = {
                 : isSet(object.updated_at)
                     ? fromJsonTimestamp(object.updated_at)
                     : undefined,
+            readOnly: isSet(object.readOnly)
+                ? globalThis.Boolean(object.readOnly)
+                : isSet(object.read_only)
+                    ? globalThis.Boolean(object.read_only)
+                    : false,
         };
     },
     toJSON(message) {
@@ -1345,6 +1422,9 @@ exports.TemplateMeta = {
         if (message.updatedAt !== undefined) {
             obj.updatedAt = message.updatedAt.toISOString();
         }
+        if (message.readOnly !== false) {
+            obj.readOnly = message.readOnly;
+        }
         return obj;
     },
     create(base) {
@@ -1360,6 +1440,7 @@ exports.TemplateMeta = {
         message.retired = object.retired ?? false;
         message.createdAt = object.createdAt ?? undefined;
         message.updatedAt = object.updatedAt ?? undefined;
+        message.readOnly = object.readOnly ?? false;
         return message;
     },
 };
@@ -1474,6 +1555,165 @@ exports.TemplateOrigin = {
         message.templateVersion = object.templateVersion ?? 0;
         message.latestVersion = object.latestVersion ?? 0;
         message.updateAvailable = object.updateAvailable ?? false;
+        return message;
+    },
+};
+function createBaseBackfillSymbolResult() {
+    return { symbol: "", outcome: BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED, reason: "" };
+}
+exports.BackfillSymbolResult = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.outcome !== BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED) {
+            writer.uint32(16).int32(backfillSymbolOutcomeToNumber(message.outcome));
+        }
+        if (message.reason !== "") {
+            writer.uint32(26).string(message.reason);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBackfillSymbolResult();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.outcome = backfillSymbolOutcomeFromJSON(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.reason = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            outcome: isSet(object.outcome)
+                ? backfillSymbolOutcomeFromJSON(object.outcome)
+                : BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED,
+            reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.outcome !== BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED) {
+            obj.outcome = backfillSymbolOutcomeToJSON(message.outcome);
+        }
+        if (message.reason !== "") {
+            obj.reason = message.reason;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BackfillSymbolResult.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBackfillSymbolResult();
+        message.symbol = object.symbol ?? "";
+        message.outcome = object.outcome ?? BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED;
+        message.reason = object.reason ?? "";
+        return message;
+    },
+};
+function createBaseDelistedState() {
+    return { reason: UnservableReason.UNSERVABLE_REASON_UNSPECIFIED, firstUnservableDate: "" };
+}
+exports.DelistedState = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.reason !== UnservableReason.UNSERVABLE_REASON_UNSPECIFIED) {
+            writer.uint32(8).int32(unservableReasonToNumber(message.reason));
+        }
+        if (message.firstUnservableDate !== "") {
+            writer.uint32(18).string(message.firstUnservableDate);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseDelistedState();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.reason = unservableReasonFromJSON(reader.int32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.firstUnservableDate = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            reason: isSet(object.reason)
+                ? unservableReasonFromJSON(object.reason)
+                : UnservableReason.UNSERVABLE_REASON_UNSPECIFIED,
+            firstUnservableDate: isSet(object.firstUnservableDate)
+                ? globalThis.String(object.firstUnservableDate)
+                : isSet(object.first_unservable_date)
+                    ? globalThis.String(object.first_unservable_date)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.reason !== UnservableReason.UNSERVABLE_REASON_UNSPECIFIED) {
+            obj.reason = unservableReasonToJSON(message.reason);
+        }
+        if (message.firstUnservableDate !== "") {
+            obj.firstUnservableDate = message.firstUnservableDate;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.DelistedState.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseDelistedState();
+        message.reason = object.reason ?? UnservableReason.UNSERVABLE_REASON_UNSPECIFIED;
+        message.firstUnservableDate = object.firstUnservableDate ?? "";
         return message;
     },
 };

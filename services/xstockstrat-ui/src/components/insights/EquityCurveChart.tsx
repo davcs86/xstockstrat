@@ -17,14 +17,9 @@ import {
 } from '@/lib/equityCurve';
 
 // One palette slot per symbol line; markers reuse the buy/sell semantics.
-const LINE_COLORS = [
-  'hsl(163 100% 44%)',
-  'hsl(210 100% 60%)',
-  'hsl(38 92% 55%)',
-  'hsl(280 70% 60%)',
-];
+const LINE_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)'];
 
-const AXIS_TICK = { fill: 'hsl(215 16% 47%)', fontSize: 11 };
+const AXIS_TICK = { fill: 'var(--muted-foreground)', fontSize: 11 };
 
 function fmtDay(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
@@ -152,7 +147,7 @@ export function EquityCurveChart({
                 xAxisId={0}
                 yAxisId={0}
                 strokeDasharray="3 3"
-                stroke="hsl(222 20% 14%)"
+                stroke="var(--chart-grid)"
               />
               <XAxis
                 dataKey="t"
@@ -198,8 +193,8 @@ export function EquityCurveChart({
                       cx={cx}
                       cy={cy}
                       r={5}
-                      fill={m.kind === 'entry' ? 'hsl(163 100% 44%)' : 'hsl(0 84% 60%)'}
-                      stroke="hsl(222 47% 7%)"
+                      fill={m.kind === 'entry' ? 'var(--color-buy)' : 'var(--color-sell)'}
+                      stroke="var(--card)"
                       strokeWidth={1}
                     />
                   );
@@ -260,7 +255,7 @@ export function PortfolioEquityCurveChart({ curve }: { curve: EquityPoint[] | un
                 xAxisId={0}
                 yAxisId={0}
                 strokeDasharray="3 3"
-                stroke="hsl(222 20% 14%)"
+                stroke="var(--chart-grid)"
               />
               <XAxis
                 dataKey="t"

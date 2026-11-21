@@ -5,14 +5,83 @@
 //   protoc               unknown
 // source: marketdata/v1/marketdata.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.GetSymbolServabilityRequest = exports.GetEtfFlagsResponse = exports.EtfFlag = exports.GetEtfFlagsRequest = exports.GetSectorHistoryResponse = exports.GetSectorHistoryRequest = exports.SectorHistoryRow = exports.GetSectorAsOfResponse = exports.GetSectorAsOfRequest = exports.GetCurrentSectorResponse = exports.GetCurrentSectorRequest = exports.SymbolSector = exports.BatchGetLatestPriceResponse = exports.BatchGetLatestPriceRequest = exports.BatchGetBarsResponse = exports.SymbolBars = exports.BatchGetBarsRequest = exports.GetLatestQuotesResponse = exports.GetLatestQuotesRequest = exports.BackfillFundamentalsResponse = exports.BackfillFundamentalsRequest = exports.GetHistoricalFundamentalsResponse = exports.GetHistoricalFundamentalsRequest = exports.HistoricalFundamentalsPeriod_ExtraMetricsEntry = exports.HistoricalFundamentalsPeriod = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.LatestPrice = exports.GetLatestPriceRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
-exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.GetSymbolServabilityResponse = exports.SymbolServability = void 0;
+exports.GetEtfFlagsResponse = exports.EtfFlag = exports.GetEtfFlagsRequest = exports.GetSectorHistoryResponse = exports.GetSectorHistoryRequest = exports.SectorHistoryRow = exports.GetSectorAsOfResponse = exports.GetSectorAsOfRequest = exports.GetCurrentSectorResponse = exports.GetCurrentSectorRequest = exports.SymbolSector = exports.BatchGetLatestPriceResponse = exports.BatchGetLatestPriceRequest = exports.BatchGetBarsResponse = exports.SymbolBars = exports.BatchGetBarsRequest = exports.GetLatestQuotesResponse = exports.GetLatestQuotesRequest = exports.BackfillFundamentalsResponse = exports.BackfillFundamentalsRequest = exports.GetHistoricalFundamentalsResponse = exports.GetHistoricalFundamentalsRequest = exports.HistoricalFundamentalsPeriod_ExtraMetricsEntry = exports.HistoricalFundamentalsPeriod = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.LatestPrice = exports.GetLatestPriceRequest = exports.Quote = exports.Bar = exports.DelistingAlertState = exports.protobufPackage = void 0;
+exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.AckDelistingAlertsResponse = exports.AckDelistingAlertsRequest = exports.SyncWatchlistDelistingsResponse = exports.SyncWatchlistDelistingsRequest = exports.FlaggedSymbol = exports.GetSymbolServabilityResponse = exports.SymbolServability = exports.GetSymbolServabilityRequest = void 0;
+exports.delistingAlertStateFromJSON = delistingAlertStateFromJSON;
+exports.delistingAlertStateToJSON = delistingAlertStateToJSON;
+exports.delistingAlertStateToNumber = delistingAlertStateToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
 const common_1 = require("../../common/v1/common");
 const timestamp_1 = require("../../google/protobuf/timestamp");
 exports.protobufPackage = "xstockstrat.marketdata.v1";
+var DelistingAlertState;
+(function (DelistingAlertState) {
+    DelistingAlertState["DELISTING_ALERT_STATE_UNSPECIFIED"] = "DELISTING_ALERT_STATE_UNSPECIFIED";
+    DelistingAlertState["DELISTING_ALERT_STATE_PENDING"] = "DELISTING_ALERT_STATE_PENDING";
+    DelistingAlertState["DELISTING_ALERT_STATE_CLAIMED"] = "DELISTING_ALERT_STATE_CLAIMED";
+    DelistingAlertState["DELISTING_ALERT_STATE_REDELIVERY"] = "DELISTING_ALERT_STATE_REDELIVERY";
+    DelistingAlertState["DELISTING_ALERT_STATE_REPORTED"] = "DELISTING_ALERT_STATE_REPORTED";
+    DelistingAlertState["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(DelistingAlertState || (exports.DelistingAlertState = DelistingAlertState = {}));
+function delistingAlertStateFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "DELISTING_ALERT_STATE_UNSPECIFIED":
+            return DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED;
+        case 1:
+        case "DELISTING_ALERT_STATE_PENDING":
+            return DelistingAlertState.DELISTING_ALERT_STATE_PENDING;
+        case 2:
+        case "DELISTING_ALERT_STATE_CLAIMED":
+            return DelistingAlertState.DELISTING_ALERT_STATE_CLAIMED;
+        case 3:
+        case "DELISTING_ALERT_STATE_REDELIVERY":
+            return DelistingAlertState.DELISTING_ALERT_STATE_REDELIVERY;
+        case 4:
+        case "DELISTING_ALERT_STATE_REPORTED":
+            return DelistingAlertState.DELISTING_ALERT_STATE_REPORTED;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return DelistingAlertState.UNRECOGNIZED;
+    }
+}
+function delistingAlertStateToJSON(object) {
+    switch (object) {
+        case DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED:
+            return "DELISTING_ALERT_STATE_UNSPECIFIED";
+        case DelistingAlertState.DELISTING_ALERT_STATE_PENDING:
+            return "DELISTING_ALERT_STATE_PENDING";
+        case DelistingAlertState.DELISTING_ALERT_STATE_CLAIMED:
+            return "DELISTING_ALERT_STATE_CLAIMED";
+        case DelistingAlertState.DELISTING_ALERT_STATE_REDELIVERY:
+            return "DELISTING_ALERT_STATE_REDELIVERY";
+        case DelistingAlertState.DELISTING_ALERT_STATE_REPORTED:
+            return "DELISTING_ALERT_STATE_REPORTED";
+        case DelistingAlertState.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function delistingAlertStateToNumber(object) {
+    switch (object) {
+        case DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED:
+            return 0;
+        case DelistingAlertState.DELISTING_ALERT_STATE_PENDING:
+            return 1;
+        case DelistingAlertState.DELISTING_ALERT_STATE_CLAIMED:
+            return 2;
+        case DelistingAlertState.DELISTING_ALERT_STATE_REDELIVERY:
+            return 3;
+        case DelistingAlertState.DELISTING_ALERT_STATE_REPORTED:
+            return 4;
+        case DelistingAlertState.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
 function createBaseBar() {
     return {
         symbol: "",
@@ -1177,7 +1246,7 @@ exports.BackfillBarsRequest = {
     },
 };
 function createBaseBackfillBarsResponse() {
-    return { barsWritten: 0, failedSymbols: [], expectedBars: 0 };
+    return { barsWritten: 0, failedSymbols: [], expectedBars: 0, symbolResults: [] };
 }
 exports.BackfillBarsResponse = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -1189,6 +1258,9 @@ exports.BackfillBarsResponse = {
         }
         if (message.expectedBars !== 0) {
             writer.uint32(24).int64(message.expectedBars);
+        }
+        for (const v of message.symbolResults) {
+            common_1.BackfillSymbolResult.encode(v, writer.uint32(34).fork()).join();
         }
         return writer;
     },
@@ -1220,6 +1292,13 @@ exports.BackfillBarsResponse = {
                     message.expectedBars = longToNumber(reader.int64());
                     continue;
                 }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.symbolResults.push(common_1.BackfillSymbolResult.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1245,6 +1324,11 @@ exports.BackfillBarsResponse = {
                 : isSet(object.expected_bars)
                     ? globalThis.Number(object.expected_bars)
                     : 0,
+            symbolResults: globalThis.Array.isArray(object?.symbolResults)
+                ? object.symbolResults.map((e) => common_1.BackfillSymbolResult.fromJSON(e))
+                : globalThis.Array.isArray(object?.symbol_results)
+                    ? object.symbol_results.map((e) => common_1.BackfillSymbolResult.fromJSON(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -1258,6 +1342,9 @@ exports.BackfillBarsResponse = {
         if (message.expectedBars !== 0) {
             obj.expectedBars = Math.round(message.expectedBars);
         }
+        if (message.symbolResults?.length) {
+            obj.symbolResults = message.symbolResults.map((e) => common_1.BackfillSymbolResult.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -1268,6 +1355,7 @@ exports.BackfillBarsResponse = {
         message.barsWritten = object.barsWritten ?? 0;
         message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
         message.expectedBars = object.expectedBars ?? 0;
+        message.symbolResults = object.symbolResults?.map((e) => common_1.BackfillSymbolResult.fromPartial(e)) || [];
         return message;
     },
 };
@@ -3388,7 +3476,7 @@ exports.BackfillFundamentalsRequest = {
     },
 };
 function createBaseBackfillFundamentalsResponse() {
-    return { periodsWritten: 0, failedSymbols: [] };
+    return { periodsWritten: 0, failedSymbols: [], symbolResults: [] };
 }
 exports.BackfillFundamentalsResponse = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -3397,6 +3485,9 @@ exports.BackfillFundamentalsResponse = {
         }
         for (const v of message.failedSymbols) {
             writer.uint32(18).string(v);
+        }
+        for (const v of message.symbolResults) {
+            common_1.BackfillSymbolResult.encode(v, writer.uint32(26).fork()).join();
         }
         return writer;
     },
@@ -3421,6 +3512,13 @@ exports.BackfillFundamentalsResponse = {
                     message.failedSymbols.push(reader.string());
                     continue;
                 }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.symbolResults.push(common_1.BackfillSymbolResult.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3441,6 +3539,11 @@ exports.BackfillFundamentalsResponse = {
                 : globalThis.Array.isArray(object?.failed_symbols)
                     ? object.failed_symbols.map((e) => globalThis.String(e))
                     : [],
+            symbolResults: globalThis.Array.isArray(object?.symbolResults)
+                ? object.symbolResults.map((e) => common_1.BackfillSymbolResult.fromJSON(e))
+                : globalThis.Array.isArray(object?.symbol_results)
+                    ? object.symbol_results.map((e) => common_1.BackfillSymbolResult.fromJSON(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -3451,6 +3554,9 @@ exports.BackfillFundamentalsResponse = {
         if (message.failedSymbols?.length) {
             obj.failedSymbols = message.failedSymbols;
         }
+        if (message.symbolResults?.length) {
+            obj.symbolResults = message.symbolResults.map((e) => common_1.BackfillSymbolResult.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -3460,6 +3566,7 @@ exports.BackfillFundamentalsResponse = {
         const message = createBaseBackfillFundamentalsResponse();
         message.periodsWritten = object.periodsWritten ?? 0;
         message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
+        message.symbolResults = object.symbolResults?.map((e) => common_1.BackfillSymbolResult.fromPartial(e)) || [];
         return message;
     },
 };
@@ -4874,6 +4981,317 @@ exports.GetSymbolServabilityResponse = {
         return message;
     },
 };
+function createBaseFlaggedSymbol() {
+    return {
+        symbol: "",
+        state: undefined,
+        alertState: DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED,
+        unservableInCurrentSet: false,
+    };
+}
+exports.FlaggedSymbol = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.state !== undefined) {
+            common_1.DelistedState.encode(message.state, writer.uint32(18).fork()).join();
+        }
+        if (message.alertState !== DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED) {
+            writer.uint32(24).int32(delistingAlertStateToNumber(message.alertState));
+        }
+        if (message.unservableInCurrentSet !== false) {
+            writer.uint32(32).bool(message.unservableInCurrentSet);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseFlaggedSymbol();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.state = common_1.DelistedState.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.alertState = delistingAlertStateFromJSON(reader.int32());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.unservableInCurrentSet = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            state: isSet(object.state) ? common_1.DelistedState.fromJSON(object.state) : undefined,
+            alertState: isSet(object.alertState)
+                ? delistingAlertStateFromJSON(object.alertState)
+                : isSet(object.alert_state)
+                    ? delistingAlertStateFromJSON(object.alert_state)
+                    : DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED,
+            unservableInCurrentSet: isSet(object.unservableInCurrentSet)
+                ? globalThis.Boolean(object.unservableInCurrentSet)
+                : isSet(object.unservable_in_current_set)
+                    ? globalThis.Boolean(object.unservable_in_current_set)
+                    : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.state !== undefined) {
+            obj.state = common_1.DelistedState.toJSON(message.state);
+        }
+        if (message.alertState !== DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED) {
+            obj.alertState = delistingAlertStateToJSON(message.alertState);
+        }
+        if (message.unservableInCurrentSet !== false) {
+            obj.unservableInCurrentSet = message.unservableInCurrentSet;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.FlaggedSymbol.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseFlaggedSymbol();
+        message.symbol = object.symbol ?? "";
+        message.state = (object.state !== undefined && object.state !== null)
+            ? common_1.DelistedState.fromPartial(object.state)
+            : undefined;
+        message.alertState = object.alertState ?? DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED;
+        message.unservableInCurrentSet = object.unservableInCurrentSet ?? false;
+        return message;
+    },
+};
+function createBaseSyncWatchlistDelistingsRequest() {
+    return { symbols: [] };
+}
+exports.SyncWatchlistDelistingsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSyncWatchlistDelistingsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SyncWatchlistDelistingsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSyncWatchlistDelistingsRequest();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseSyncWatchlistDelistingsResponse() {
+    return { flagged: [] };
+}
+exports.SyncWatchlistDelistingsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.flagged) {
+            exports.FlaggedSymbol.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSyncWatchlistDelistingsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.flagged.push(exports.FlaggedSymbol.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            flagged: globalThis.Array.isArray(object?.flagged)
+                ? object.flagged.map((e) => exports.FlaggedSymbol.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.flagged?.length) {
+            obj.flagged = message.flagged.map((e) => exports.FlaggedSymbol.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SyncWatchlistDelistingsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSyncWatchlistDelistingsResponse();
+        message.flagged = object.flagged?.map((e) => exports.FlaggedSymbol.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseAckDelistingAlertsRequest() {
+    return { symbols: [] };
+}
+exports.AckDelistingAlertsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseAckDelistingAlertsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.AckDelistingAlertsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseAckDelistingAlertsRequest();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseAckDelistingAlertsResponse() {
+    return {};
+}
+exports.AckDelistingAlertsResponse = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseAckDelistingAlertsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.AckDelistingAlertsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseAckDelistingAlertsResponse();
+        return message;
+    },
+};
 exports.MarketDataServiceService = {
     /** Stream live bar data for symbols */
     streamBars: {
@@ -5100,6 +5518,26 @@ exports.MarketDataServiceService = {
         requestDeserialize: (value) => exports.GetSymbolServabilityRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.GetSymbolServabilityResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.GetSymbolServabilityResponse.decode(value),
+    },
+    /** internal: xstockstrat-portfolio only */
+    syncWatchlistDelistings: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/SyncWatchlistDelistings",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.SyncWatchlistDelistingsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.SyncWatchlistDelistingsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.SyncWatchlistDelistingsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.SyncWatchlistDelistingsResponse.decode(value),
+    },
+    /** internal: xstockstrat-portfolio only */
+    ackDelistingAlerts: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/AckDelistingAlerts",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.AckDelistingAlertsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.AckDelistingAlertsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.AckDelistingAlertsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.AckDelistingAlertsResponse.decode(value),
     },
 };
 exports.MarketDataServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.MarketDataServiceService, "xstockstrat.marketdata.v1.MarketDataService");

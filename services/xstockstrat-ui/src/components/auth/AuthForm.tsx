@@ -6,13 +6,13 @@
 import { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldError } from '@/components/ui/field';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { credentialsSchema, type CredentialsValues } from '@/lib/loginSchema';
 
 /** Centered card shell used by both auth pages. */
 export function AuthCardShell({ title, children }: { title: string; children: React.ReactNode }) {
@@ -27,16 +27,6 @@ export function AuthCardShell({ title, children }: { title: string; children: Re
     </div>
   );
 }
-
-// Validation reproduces the native type=email/required checks with equivalent messages, not stricter copy.
-const credentialsSchema = z.object({
-  email: z.email('Enter a valid email address'),
-  password: z.string().min(1, 'Password is required'),
-  // Extended-session opt-in: sent in the login POST body; the login route persists cookies (Max-Age) only when true.
-  rememberMe: z.boolean(),
-});
-
-type CredentialsValues = z.infer<typeof credentialsSchema>;
 
 /** Email/password form that authenticates against /api/auth/login and calls onSuccess. */
 export function CredentialsForm({

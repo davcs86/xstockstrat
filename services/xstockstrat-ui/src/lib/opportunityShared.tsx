@@ -14,6 +14,7 @@ import { PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { SourceHealthStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { HaltSource } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { UnservableReason } from '@xstockstrat/proto/common/v1/common_pb';
+import type { DelistedState } from '@xstockstrat/proto/common/v1/common_pb';
 import { Badge } from '../components/ui/badge';
 
 /** Semantic color role, aligned to the Nocturne gain/loss/paper tokens + a neutral + info. */
@@ -51,6 +52,21 @@ export const UNSERVABLE_REASON: Record<UnservableReason, string> = {
   [UnservableReason.NOT_TRADABLE]: 'not an active, tradable US equity',
 };
 
+const SESSION_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// The date is a session date string: never route it through Date (a timezone would shift the day).
+export function delistedMarker(
+  delisted: Pick<DelistedState, 'reason' | 'firstUnservableDate'> | undefined,
+): { text: string; date: string | undefined } | null {
+  if (!delisted) return null;
+  return {
+    text: UNSERVABLE_REASON[delisted.reason],
+    date: SESSION_DATE.test(delisted.firstUnservableDate)
+      ? delisted.firstUnservableDate
+      : undefined,
+  };
+}
+
 // PASS = gain, SOFT = paper, FAIL = loss, UNSPECIFIED = neutral.
 export const CONDITION_STATE: Record<ConditionState, EnumRender> = {
   [ConditionState.UNSPECIFIED]: { label: '—', role: 'secondary' },
@@ -81,6 +97,16 @@ export const HALT_SOURCE: Record<HaltSource, EnumRender> = {
   [HaltSource.BRACKET_PROTECTION]: { label: 'Bracket protection', role: 'paper' },
   [HaltSource.RECONCILIATION]: { label: 'Reconciliation', role: 'sell' },
 };
+
+/** Chip label for an opportunity row: its strategy id, else its humanized source; never the symbol. */
+export function opportunityChipLabel(o: { strategyId: string; source: string }): string {
+  if (o.strategyId) return o.strategyId;
+  if (o.source) {
+    const words = o.source.replace(/[_-]/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+  return 'No strategy';
+}
 
 /**
  * Render an EnumRender as a Badge. Any icon is a leading direct-child svg (span-wrapping breaks the
