@@ -323,7 +323,7 @@ by Step 2.
 
 ### Step 2 — test: sandbox result-contract regression tests (@AC-1..4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox.py` — modify
@@ -893,3 +893,10 @@ _Populated by /sdd-execute as implementation proceeds._
   were added on the base after the spec was measured, and the run is green with the change. The
   service venv reports Python 3.12.3, while root CLAUDE.md pins 3.13. **Disposition**:
   informational only; no action.
+- **2026-11-21 (Step 2)** — RED ran against the pre-Step-1 `sandbox.py`, restored temporarily
+  from `4f57ba17~1` and put back before GREEN (Step 1 had already landed). The pre-existing
+  `SandboxResult(` fake is now at `tests/test_sandbox.py:399`, not `:311`, because the new class
+  sits above it. It is still the only match. The serialising-MemoryError source is split over two
+  string literals to pass E501. The isolation no-status marker test also passes on the pre-Step-1
+  tree, because the marker branch existed then; it is a characterization guard.
+  **Disposition**: in-scope; no spec text changed.

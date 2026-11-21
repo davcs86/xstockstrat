@@ -278,7 +278,7 @@ def test_ac4_legitimate_formulas_survive_with_the_watchdog_active(
 
 
 # ── AC-5: -9 is attributed by evidence ──────────────────────────────────────────────────────────
-def _killed_proc(events_file, bump):
+def _killed_proc(events_file, bump, stdout=""):
     """A fake child that exits with SIGKILL; `bump` is how far the cgroup oom_kill count rises."""
 
     class _Proc:
@@ -289,7 +289,7 @@ def _killed_proc(events_file, bump):
             if bump and events_file is not None:
                 events_file.write_text(f"oom 0\noom_kill {1 + bump}\n")
             self.returncode = -9
-            return ("", "")
+            return (stdout, "")
 
     return lambda *a, **k: _Proc()
 
@@ -316,6 +316,24 @@ def test_ac5_a_sigkilled_child_is_memory_exceeded_only_with_an_oom_kill_delta(
     )
     assert res.exit_reason == reason
     assert res.error == "formula exited with code -9 before producing output"
+
+
+def test_oom_counter_evidence_outranks_a_non_specific_status(monkeypatch, tmp_path):
+    """310 D-7 / 300@AC-5: an OOM kill after a `raised` status line is still memory_exceeded."""
+    monkeypatch.setattr(sandbox.secrets, "token_hex", lambda _n: "ab" * 16)
+    events = tmp_path / "memory.events"
+    events.write_text("oom 0\noom_kill 1\n")
+    monkeypatch.setattr(sandbox, "_OOM_EVENTS_PATH", str(events))
+    monkeypatch.setattr(
+        "app.services.sandbox.subprocess.Popen",
+        _killed_proc(events, 1, stdout="\n__STATUS__:" + "ab" * 16 + ":raised:1048576\n"),
+    )
+    res = sandbox.execute_formula(
+        "result = 1", {}, ["math"], timeout_ms=1000, memory_bytes=64 * _MIB
+    )
+    assert res.exit_reason == "memory_exceeded"
+    assert res.memory_used_bytes == 1048576
+    assert res.stdout == ""
 
 
 # ── AC-6 (observability half): an unreadable /proc says so once ─────────────────────────────────

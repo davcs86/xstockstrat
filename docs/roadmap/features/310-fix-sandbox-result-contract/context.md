@@ -574,3 +574,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-indicators/app/services/sandbox.py`
 - Deviations: E501 line split; RED evidence from greps plus a scratch probe; 610 vs 571 suite count (full detail in Deviation Log)
+
+### Step 2 — test: sandbox result-contract regression tests (@AC-1..4) [done]
+- Added `TestSandboxResultContract`, which runs 11 cases through a real subprocess. Also added a fake for the no-status stderr-marker case and a fake where OOM-counter evidence outranks the status line (`_killed_proc` gained `stdout=""`). Two servicer tests cover @AC-3 and @AC-2.
+- TDD RED: run with `sandbox.py` temporarily restored to `4f57ba17~1` (`.sdd-logs/v-1.log`, exit=0 because the trailing grep sets the status). It printed `10 failed, 615 passed`.
+  - AC-1 red: `assert 'import_blocked' == 'runtime_error'`.
+  - AC-2 red: `assert 0 > 0`.
+  - AC-3 red: `assert True is False`.
+  - Stdout red: `assert '\n__OUTPUT__:{}\n' == ''`.
+  - The OOM-outranks fake red: `AttributeError: module 'app.services.sandbox' has no attribute 'secrets'`.
+- TDD GREEN (`.sdd-logs/v-3.log`, exit=0) printed `625 passed in 73.47s`, `Total coverage: 87.11%`, `All checks passed!`, `65 files already formatted` and `11 passed, 20 deselected`. The grep matched one line only: `tests/test_sandbox.py:399:            return sandbox.SandboxResult(`.
+- The first GREEN run (`.sdd-logs/v-2.log`) had 625 passed, but ruff reported E501 on a new test line. `exit=0` did not show it, because the trailing grep sets the status. The line was split and the Verification re-ran green.
+- Flake (P-03): `test_ac8_fork_bomb_is_not_a_success_the_service_recovers_and_nothing_is_unobservable` failed in the RED run, on the pre-Step-1 tree, at the `CANNOT_OBSERVE_MSG` assertion (`tests/test_sandbox_watchdog.py:462`). It passed in both GREEN runs. This is the known pre-existing flake and was not caused by this step.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-indicators/tests/test_sandbox.py`, `services/xstockstrat-indicators/tests/test_sandbox_isolation.py`, `services/xstockstrat-indicators/tests/test_sandbox_watchdog.py`, `services/xstockstrat-indicators/tests/test_formulas.py`
+- Deviations: RED run against the restored pre-Step-1 file; the existing fake moved to `:399`; E501 split (full detail in Deviation Log)

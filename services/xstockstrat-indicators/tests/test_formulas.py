@@ -552,6 +552,29 @@ class TestExecuteFormulaInlineParameters:
         assert resp.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR
         assert "produced no output" in resp.error
 
+    async def test_missing_result_returns_runtime_error_naming_result(self):
+        """@AC-3 at the servicer: a formula that never assigns `result` is RUNTIME_ERROR."""
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        req = indicators_pb2.ExecuteFormulaRequest(formula_source="x = 1")
+
+        resp = await servicer.ExecuteFormula(req, _ctx([("x-user-id", "user-1")]))
+        assert resp.success is False
+        assert resp.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR
+        assert "result" in resp.error
+
+    async def test_memory_used_bytes_is_populated(self):
+        """@AC-2 at the servicer: the measured peak reaches the response."""
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        req = indicators_pb2.ExecuteFormulaRequest(formula_source="result = {}")
+
+        resp = await servicer.ExecuteFormula(req, _ctx([("x-user-id", "user-1")]))
+        assert resp.success is True, resp.error
+        assert resp.memory_used_bytes > 0
+
 
 class TestFormulaAdminOverride:
     async def test_owner_updates_without_admin_scope(self):

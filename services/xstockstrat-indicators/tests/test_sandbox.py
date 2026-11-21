@@ -286,6 +286,94 @@ class TestSandboxNoOutputFails:
         assert "exited with code 1" in res.error
 
 
+class TestSandboxResultContract:
+    """Feature 310: the nonce status line carries the class, the missing-result signal and VmHWM."""
+
+    def test_ac1_guard_message_in_a_formula_exception_is_runtime_error(self):
+        """@AC-1: the guard's message text in a formula's own exception is not an import block."""
+        res = execute_formula(
+            source='raise ValueError("is not allowed in sandbox")',
+            input_data={},
+            allowed_imports=[],
+        )
+        assert res.success is False
+        assert res.exit_reason == "runtime_error"
+
+    def test_memory_marker_text_in_a_formula_exception_is_runtime_error(self):
+        res = execute_formula(
+            source='raise ValueError("MemoryError")', input_data={}, allowed_imports=[]
+        )
+        assert res.exit_reason == "runtime_error"
+
+    def test_blocked_import_reports_a_measured_figure(self):
+        res = execute_formula(source="import socket\nresult = 1", input_data={}, allowed_imports=[])
+        assert res.exit_reason == "import_blocked"
+        assert res.memory_used_bytes > 0
+
+    def test_memory_error_while_serialising_the_output_is_memory_exceeded(self):
+        res = execute_formula(
+            source=(
+                "class D(dict):\n    def items(self):\n        raise MemoryError()\n"
+                "result = D(a=1)\n"
+            ),
+            input_data={},
+            allowed_imports=[],
+        )
+        assert res.exit_reason == "memory_exceeded"
+
+    def test_ac2_memory_is_a_real_per_run_peak(self):
+        """@AC-2: a touched 80 MB buffer raises the reported peak over a `result = {}` control."""
+        with open("/proc/self/status") as f:
+            if not any(line.startswith("VmHWM:") for line in f):
+                pytest.skip("the runtime renders no VmHWM line in /proc/self/status")
+        a = execute_formula(source="result = {}", input_data={}, allowed_imports=["numpy"])
+        b = execute_formula(
+            source='import numpy\na = numpy.ones(10_000_000)\nresult = {"s": float(a[0])}',
+            input_data={},
+            allowed_imports=["numpy"],
+        )
+        assert a.success is True, a.error
+        assert b.success is True, b.error
+        assert a.memory_used_bytes > 0
+        assert b.memory_used_bytes - a.memory_used_bytes >= 41943040
+
+    def test_ac3_missing_result_fails_naming_result(self):
+        """@AC-3: a formula that never assigns `result` fails and says so."""
+        res = execute_formula(source="x = 1", input_data={}, allowed_imports=[])
+        assert res.success is False
+        assert res.error == "formula did not assign result"
+        assert res.exit_reason == "runtime_error"
+        assert res.output == {}
+
+    def test_ac4_explicit_empty_result_succeeds(self):
+        """@AC-4: an explicit `result = {}` is still a success."""
+        res = execute_formula(source="result = {}", input_data={}, allowed_imports=[])
+        assert res.success is True
+        assert res.output == {}
+        assert res.error == ""
+
+    @pytest.mark.parametrize(
+        "source,expected",
+        [
+            ("print('abc', end='')\nraise RuntimeError('x')", "abc"),
+            ("print('abc')\nresult = {'a': 1}", 'abc\n\n__OUTPUT__:{"a": 1}\n'),
+            ("x = 1", ""),
+        ],
+    )
+    def test_the_status_line_never_reaches_stdout(self, source, expected):
+        res = execute_formula(source=source, input_data={}, allowed_imports=[])
+        assert res.stdout == expected
+        assert "__STATUS__" not in res.stdout
+
+    def test_a_status_line_with_another_nonce_is_ignored(self):
+        forged = "__STATUS__:" + "0" * 32 + ":import_blocked:5"
+        res = execute_formula(
+            source=f"print({forged!r})\nraise ValueError('x')", input_data={}, allowed_imports=[]
+        )
+        assert res.exit_reason == "runtime_error"
+        assert forged in res.stdout
+
+
 class TestStartupGraceConfigWiring:
     """Feature 295 B2: the real ConfigWatcher reader feeds ExecuteFormula's grace_ms."""
 
