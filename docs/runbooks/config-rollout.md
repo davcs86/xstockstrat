@@ -298,6 +298,69 @@ the homelab path is a fresh deploy; it is recorded as an assertion, not as verif
 deploy gate. Production holds no data in use (feature 295 decision 24): R reports exactly the signed-tuple
 count as `unmatched-signed-tuple` rows.
 
+### Homelab: self-serve backfill capacity (feature 343)
+
+Raises the homelab's backfill concurrency and self-serve span cap. **Staging environment only** — the homelab has
+no production instance. Nothing in the homelab-edge repo is edited and no Postgres parameter is changed. Config
+reads and writes go over the homelab staging MCP (§ Via the MCP agent above); the only database read is one
+read-only `SHOW`. Lock background: `docs/runbooks/ohlcv-lock-budget-tuning.md` § The countable lock-budget invariant.
+
+1. **Read the config inputs** with `get_config` over the homelab staging MCP and record the values:
+   - namespace `ingest`: `backfill.max_concurrent_jobs`, `backfill.max_concurrent_chunks`, `backfill.chunk_window_days`;
+   - namespace `analysis`: `readiness_materializer.max_concurrent_bars_fetches`, `opportunity.max_concurrent_bars_fetches`,
+     `opportunity.max_concurrent_candidates`, `backtest.portfolio_max_concurrent`,
+     `strategy.max_concurrent_entry_backfill`, `backtest.max_range_days`.
+2. **Take the Postgres parameters, read-only.** `max_locks_per_transaction` = 1024 and `max_connections` = 70 are
+   the values homelab-edge sets (`roles/db_host/defaults/main.yml`; its `verify` task asserts the lock setting) and
+   are not read live. Read the third on the homelab database host with `psql` over ssh, or, if ssh is not
+   available, with the DB-owner DSN per `docs/runbooks/operator-db-access.md`:
+
+   ```sql
+   SHOW max_prepared_transactions;
+   ```
+
+   Expected `0`; if it differs, use the value read. In the same pass confirm that marketdata runs one replica with
+   `DB_POOL_MAX` unset (its pool stays at 2 connections), and that the database is the fresh deploy asserted above
+   (no pre-`004` one-day ohlcv chunks).
+3. **Compute the lock inequality** from those values. This is the only stop:
+
+   ```text
+   marketdata connections (2) × replicas × L_stmt_max × databases (2)
+     ≤ max_locks_per_transaction × (max_connections + max_prepared_transactions)
+   L = (⌈span_days ÷ 30⌉ + 1) × 4
+   ```
+
+   `span_days` is the longest of: the analysis bar fetch (2,555 days, L = 348), the self-serve cap (1,830 days,
+   L = 248), and the longest admin gaps-only range you accept (admin ranges are not capped). Worked rows against
+   1024 × (70 + 0) = 71,680:
+
+   | Largest statement | L | Left side (2 × 1 × L × 2) |
+   |---|---|---|
+   | Analysis bar fetch, 2,555 days | 348 | 1,392 |
+   | Admin coverage scan | 1,000 | 4,000 |
+
+   If the inequality fails, stop and change nothing.
+4. **Write and read back** over the homelab staging MCP, then `get_config(namespace="ingest")` and confirm both:
+
+   ```text
+   set_config(namespace="ingest", key="backfill.max_concurrent_jobs", value_type="int", value="8",
+              reason="feature 343 homelab backfill capacity")
+   set_config(namespace="ingest", key="backfill.self_serve_max_range_days", value_type="int", value="1830",
+              reason="feature 343 homelab backfill capacity")
+   ```
+
+   DigitalOcean is not changed: its values stay 3 and 730.
+5. **Observe for one readiness cycle.** `marketdata.ohlcv.out_of_memory_errors` stays at 0, and
+   `marketdata.db.pool.empty_acquire_count` / `marketdata.db.pool.empty_acquire_wait` do not climb while eight jobs
+   run. If either moves, set `backfill.max_concurrent_jobs` back to 3.
+
+Checklist:
+
+- Re-run step 4 after a homelab database rebuild (the seed restores 3 and 730).
+- Apply the same two values per environment when a homelab production app is first deployed.
+- Reverted symptom: a 1000-bar backtest's inline backfill is refused with "more than the self-serve limit of 730
+  days", and at most 3 backfill jobs run at once.
+
 ### Recovery table (every row ends with `migrate force <n-1>` and `db-migrate.sh up`)
 
 The migration file is **never edited**. Repairs follow `docs/runbooks/operator-db-access.md` (DB-owner `psql`,

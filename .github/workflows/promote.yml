@@ -37,14 +37,9 @@ jobs:
             '+refs/heads/main:refs/remotes/origin/main' \
             '+refs/heads/main-dev:refs/remotes/origin/main-dev'
 
-      - name: Validate — main-dev is ahead of main
+      - name: Validate — main-dev has changes to promote
         run: |
-          AHEAD=$(git log origin/main..origin/main-dev --oneline | wc -l | tr -d ' ')
-          if [ "$AHEAD" -eq 0 ]; then
-            echo "::error::main-dev has no commits ahead of main. Nothing to promote."
-            exit 1
-          fi
-          echo "main-dev is $AHEAD commits ahead of main."
+          if git diff --quiet origin/main...origin/main-dev; then echo "::error::main-dev has no changes since its merge base with main. Nothing to promote."; exit 1; fi
 
       - name: Validate — no existing promotion PR
         env:
@@ -220,7 +215,7 @@ jobs:
             echo "- [ ] Proto breaking changes signed off (if any — see docs/runbooks/proto-versioning.md)"
             echo ""
             echo "> ⚠️ **Merge strategy: \"Create a merge commit\" — NEVER squash or rebase.**"
-            echo "> Squash-merging breaks git ancestry and causes \`main-dev\` to appear permanently ahead of \`main\`."
+            echo "> Squash-merging breaks git ancestry: the promoted main-dev commits never become ancestors of main, so the next promotion's diff re-shows changes that are already promoted."
             echo "> On GitHub: click the dropdown arrow next to the merge button → **\"Create a merge commit\"**."
             echo ""
             echo "## Changelog"

@@ -1,6 +1,6 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, TimeRange, TradingMode, UnservableReason } from "../../common/v1/common_pb";
+import type { DelistedState, PageRequest, PageResponse, TimeRange, TradingMode, UnservableReason } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file portfolio/v1/portfolio.proto.
@@ -572,6 +572,12 @@ export type WatchlistBinding = Message<"xstockstrat.portfolio.v1.WatchlistBindin
      * @generated from field: xstockstrat.portfolio.v1.WatchlistEntrySource source = 3;
      */
     source: WatchlistEntrySource;
+    /**
+     * Server-set, output only; presence means flagged delisted.
+     *
+     * @generated from field: xstockstrat.common.v1.DelistedState delisted = 4;
+     */
+    delisted?: DelistedState | undefined;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.WatchlistBinding.

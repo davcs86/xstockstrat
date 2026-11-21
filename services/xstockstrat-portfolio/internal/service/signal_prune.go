@@ -76,4 +76,5 @@ func (s *PortfolioService) pruneOnce(ctx context.Context) {
 	}
 	slog.InfoContext(tickCtx, "signal watchlist prune tick",
 		"lists", res.Lists, "skipped", res.SkippedLists, "removed", len(res.Removed))
+	s.syncDelistings(tickCtx)
 }

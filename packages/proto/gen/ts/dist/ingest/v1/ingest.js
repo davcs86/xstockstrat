@@ -429,6 +429,7 @@ function createBaseBackfillJob() {
         chunksTotal: 0,
         chunksCompleted: 0,
         dataKind: BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+        symbolResults: [],
     };
 }
 exports.BackfillJob = {
@@ -477,6 +478,9 @@ exports.BackfillJob = {
         }
         if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
             writer.uint32(120).int32(backfillDataKindToNumber(message.dataKind));
+        }
+        for (const v of message.symbolResults) {
+            common_1.BackfillSymbolResult.encode(v, writer.uint32(130).fork()).join();
         }
         return writer;
     },
@@ -592,6 +596,13 @@ exports.BackfillJob = {
                     message.dataKind = backfillDataKindFromJSON(reader.int32());
                     continue;
                 }
+                case 16: {
+                    if (tag !== 130) {
+                        break;
+                    }
+                    message.symbolResults.push(common_1.BackfillSymbolResult.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -657,6 +668,11 @@ exports.BackfillJob = {
                 : isSet(object.data_kind)
                     ? backfillDataKindFromJSON(object.data_kind)
                     : BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+            symbolResults: globalThis.Array.isArray(object?.symbolResults)
+                ? object.symbolResults.map((e) => common_1.BackfillSymbolResult.fromJSON(e))
+                : globalThis.Array.isArray(object?.symbol_results)
+                    ? object.symbol_results.map((e) => common_1.BackfillSymbolResult.fromJSON(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -706,6 +722,9 @@ exports.BackfillJob = {
         if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
             obj.dataKind = backfillDataKindToJSON(message.dataKind);
         }
+        if (message.symbolResults?.length) {
+            obj.symbolResults = message.symbolResults.map((e) => common_1.BackfillSymbolResult.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -730,6 +749,7 @@ exports.BackfillJob = {
         message.chunksTotal = object.chunksTotal ?? 0;
         message.chunksCompleted = object.chunksCompleted ?? 0;
         message.dataKind = object.dataKind ?? BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
+        message.symbolResults = object.symbolResults?.map((e) => common_1.BackfillSymbolResult.fromPartial(e)) || [];
         return message;
     },
 };
@@ -742,6 +762,7 @@ function createBaseTriggerBackfillRequest() {
         timeframeEnum: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
         fillMode: FillMode.FILL_MODE_UNSPECIFIED,
         dataKind: BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+        callbackUrl: "",
     };
 }
 exports.TriggerBackfillRequest = {
@@ -766,6 +787,9 @@ exports.TriggerBackfillRequest = {
         }
         if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
             writer.uint32(56).int32(backfillDataKindToNumber(message.dataKind));
+        }
+        if (message.callbackUrl !== "") {
+            writer.uint32(66).string(message.callbackUrl);
         }
         return writer;
     },
@@ -825,6 +849,13 @@ exports.TriggerBackfillRequest = {
                     message.dataKind = backfillDataKindFromJSON(reader.int32());
                     continue;
                 }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.callbackUrl = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -854,6 +885,11 @@ exports.TriggerBackfillRequest = {
                 : isSet(object.data_kind)
                     ? backfillDataKindFromJSON(object.data_kind)
                     : BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+            callbackUrl: isSet(object.callbackUrl)
+                ? globalThis.String(object.callbackUrl)
+                : isSet(object.callback_url)
+                    ? globalThis.String(object.callback_url)
+                    : "",
         };
     },
     toJSON(message) {
@@ -879,6 +915,9 @@ exports.TriggerBackfillRequest = {
         if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
             obj.dataKind = backfillDataKindToJSON(message.dataKind);
         }
+        if (message.callbackUrl !== "") {
+            obj.callbackUrl = message.callbackUrl;
+        }
         return obj;
     },
     create(base) {
@@ -895,6 +934,7 @@ exports.TriggerBackfillRequest = {
         message.timeframeEnum = object.timeframeEnum ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
         message.fillMode = object.fillMode ?? FillMode.FILL_MODE_UNSPECIFIED;
         message.dataKind = object.dataKind ?? BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
+        message.callbackUrl = object.callbackUrl ?? "";
         return message;
     },
 };
@@ -2013,6 +2053,7 @@ function createBaseSignalSource() {
         reliabilityWeight: undefined,
         userId: "",
         origin: undefined,
+        extractionInstructions: "",
     };
 }
 exports.SignalSource = {
@@ -2058,6 +2099,9 @@ exports.SignalSource = {
         }
         if (message.origin !== undefined) {
             common_1.TemplateOrigin.encode(message.origin, writer.uint32(114).fork()).join();
+        }
+        if (message.extractionInstructions !== "") {
+            writer.uint32(122).string(message.extractionInstructions);
         }
         return writer;
     },
@@ -2166,6 +2210,13 @@ exports.SignalSource = {
                     message.origin = common_1.TemplateOrigin.decode(reader, reader.uint32());
                     continue;
                 }
+                case 15: {
+                    if (tag !== 122) {
+                        break;
+                    }
+                    message.extractionInstructions = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2232,6 +2283,11 @@ exports.SignalSource = {
                     ? globalThis.String(object.user_id)
                     : "",
             origin: isSet(object.origin) ? common_1.TemplateOrigin.fromJSON(object.origin) : undefined,
+            extractionInstructions: isSet(object.extractionInstructions)
+                ? globalThis.String(object.extractionInstructions)
+                : isSet(object.extraction_instructions)
+                    ? globalThis.String(object.extraction_instructions)
+                    : "",
         };
     },
     toJSON(message) {
@@ -2278,6 +2334,9 @@ exports.SignalSource = {
         if (message.origin !== undefined) {
             obj.origin = common_1.TemplateOrigin.toJSON(message.origin);
         }
+        if (message.extractionInstructions !== "") {
+            obj.extractionInstructions = message.extractionInstructions;
+        }
         return obj;
     },
     create(base) {
@@ -2301,6 +2360,7 @@ exports.SignalSource = {
         message.origin = (object.origin !== undefined && object.origin !== null)
             ? common_1.TemplateOrigin.fromPartial(object.origin)
             : undefined;
+        message.extractionInstructions = object.extractionInstructions ?? "";
         return message;
     },
 };

@@ -8,8 +8,9 @@ viewers refuse to open.
 
 import sys
 from pathlib import Path
+
 import markdown
-from weasyprint import HTML, CSS
+from weasyprint import CSS, HTML
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "docs" / "launch-pdfs"
@@ -129,7 +130,9 @@ def build(slug: str, title: str) -> Path:
     src = SRC / f"{slug}.md"
     out = SRC / f"{slug}.pdf"
     md_text = src.read_text(encoding="utf-8")
-    body_html = markdown.markdown(md_text, extensions=MD_EXTENSIONS, output_format="html5")
+    body_html = markdown.markdown(
+        md_text, extensions=MD_EXTENSIONS, output_format="html5"
+    )
     full_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>

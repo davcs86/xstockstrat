@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
@@ -41,6 +44,20 @@ type fakeWatchlistStore struct {
 	addSymbolsCnt int
 	// feature 281: what PruneExpiredSignalEntries returns.
 	pruneResult repository.PruneResult
+	pruneErr    error
+	// feature 352: every symbol set RemoveDelistedFromSystemLists was given, and what it returns.
+	delistedCalls  [][]string
+	delistedResult []repository.DelistedRemoval
+	delistedErr    error
+	// feature 351: EnsureSystemManaged / ListByUser hooks. ensureID names a newly created system row
+	// (default wl-<seq>); listErrAt = n fails the n-th ListByUser call (1 first, 2 the re-list).
+	ensureErr   error
+	ensureID    string
+	ensureCalls int
+	listCalls   int
+	listErrAt   int
+	// feature 326: injected write errors for the name-write sites.
+	createErr, updateErr, updatePartialErr error
 }
 
 func newFakeStore() *fakeWatchlistStore {
@@ -54,7 +71,12 @@ func (f *fakeWatchlistStore) ListAllSymbols(_ context.Context) ([]string, error)
 
 // PruneExpiredSignalEntries returns the configured prune result (feature 281).
 func (f *fakeWatchlistStore) PruneExpiredSignalEntries(_ context.Context) (repository.PruneResult, error) {
-	return f.pruneResult, nil
+	return f.pruneResult, f.pruneErr
+}
+
+func (f *fakeWatchlistStore) RemoveDelistedFromSystemLists(_ context.Context, symbols []string) ([]repository.DelistedRemoval, error) {
+	f.delistedCalls = append(f.delistedCalls, symbols)
+	return f.delistedResult, f.delistedErr
 }
 
 func clone(wl *portfoliov1.Watchlist) *portfoliov1.Watchlist {
@@ -80,6 +102,9 @@ func setBindings(wl *portfoliov1.Watchlist, binds []*portfoliov1.WatchlistBindin
 }
 
 func (f *fakeWatchlistStore) Create(_ context.Context, userID, name, description, defaultStrategyID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
+	if f.createErr != nil {
+		return nil, f.createErr
+	}
 	f.seq++
 	id := fmt.Sprintf("wl-%d", f.seq)
 	wl := &portfoliov1.Watchlist{WatchlistId: id, UserId: userID, Name: name, Description: description, DefaultStrategyId: defaultStrategyID}
@@ -94,6 +119,9 @@ func (f *fakeWatchlistStore) UpdatePartial(_ context.Context, watchlistID string
 	wl, ok := f.byID[watchlistID]
 	if !ok {
 		return nil, repository.ErrWatchlistNotFound
+	}
+	if f.updatePartialErr != nil {
+		return nil, f.updatePartialErr
 	}
 	if patch.SetName {
 		wl.Name = patch.Name
@@ -143,20 +171,38 @@ func (f *fakeWatchlistStore) GetByID(_ context.Context, watchlistID string) (*po
 	return clone(wl), nil
 }
 
-func (f *fakeWatchlistStore) ListByUser(_ context.Context, userID string, _ int, _ string) ([]*portfoliov1.Watchlist, string, error) {
+// ListByUser models a keyset page over id order. Its token is the last returned row's id — the fixed
+// contract, not production's look-ahead token — so no test may assert or follow a returned token.
+func (f *fakeWatchlistStore) ListByUser(_ context.Context, userID string, pageSize int, pageToken string) ([]*portfoliov1.Watchlist, string, error) {
+	f.listCalls++
+	if f.listErrAt == f.listCalls {
+		return nil, "", errors.New("list boom")
+	}
 	var out []*portfoliov1.Watchlist
 	for _, wl := range f.byID {
-		if wl.UserId == userID {
+		if wl.UserId == userID && (pageToken == "" || wl.WatchlistId > pageToken) {
 			out = append(out, clone(wl))
 		}
 	}
-	return out, "", nil
+	sort.Slice(out, func(i, j int) bool { return out[i].WatchlistId < out[j].WatchlistId })
+	if pageSize <= 0 || pageSize > 500 {
+		pageSize = 100
+	}
+	next := ""
+	if len(out) > pageSize {
+		out = out[:pageSize]
+		next = out[pageSize-1].WatchlistId
+	}
+	return out, next, nil
 }
 
 func (f *fakeWatchlistStore) Update(_ context.Context, watchlistID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
 	wl, ok := f.byID[watchlistID]
 	if !ok {
 		return nil, repository.ErrWatchlistNotFound
+	}
+	if f.updateErr != nil {
+		return nil, f.updateErr
 	}
 	wl.Name, wl.Description = name, description
 	setBindings(wl, append([]*portfoliov1.WatchlistBinding{}, bindings...))
@@ -244,6 +290,10 @@ func (f *fakeWatchlistStore) CountByUser(_ context.Context, userID string) (int,
 // EnsureSystemManaged returns the user's single system-managed list, creating it on
 // first call. Mirrors the repo's one-system-list-per-user invariant (migration 011).
 func (f *fakeWatchlistStore) EnsureSystemManaged(_ context.Context, userID, defaultName string) (*portfoliov1.Watchlist, error) {
+	f.ensureCalls++
+	if f.ensureErr != nil {
+		return nil, f.ensureErr
+	}
 	for _, wl := range f.byID {
 		if wl.UserId == userID && wl.GetSystemManaged() {
 			return clone(wl), nil
@@ -251,6 +301,9 @@ func (f *fakeWatchlistStore) EnsureSystemManaged(_ context.Context, userID, defa
 	}
 	f.seq++
 	id := fmt.Sprintf("wl-%d", f.seq)
+	if f.ensureID != "" {
+		id = f.ensureID
+	}
 	wl := &portfoliov1.Watchlist{WatchlistId: id, UserId: userID, Name: defaultName, SystemManaged: true}
 	f.byID[id] = wl
 	return clone(wl), nil
@@ -736,6 +789,311 @@ func TestDeleteWatchlist_SystemManagedGuard(t *testing.T) {
 	}
 	if _, err := svc.DeleteWatchlist(ctx, &portfoliov1.DeleteWatchlistRequest{WatchlistId: manual.Watchlist.GetWatchlistId()}); err != nil {
 		t.Fatalf("manual delete should succeed: %v", err)
+	}
+}
+
+// ─── feature 351: ListWatchlists ensures the caller's system list on a first page ──────────
+
+// uuid-shaped ids so the fake's text order equals Postgres uuid order; no test below asserts or follows
+// a returned next_page_token (the fake's token is the fixed contract, not production's).
+const (
+	wl351A = "00000000-0000-4000-8000-000000000001"
+	wl351B = "00000000-0000-4000-8000-000000000002"
+)
+
+const (
+	ensureFailedMsg = "ListWatchlists: ensure system watchlist failed; returning existing lists"
+	relistFailedMsg = "ListWatchlists: re-list after ensure failed; returning first page"
+)
+
+func systemListCount(store *fakeWatchlistStore, userID string) int {
+	n := 0
+	for _, wl := range store.byID {
+		if wl.UserId == userID && wl.GetSystemManaged() {
+			n++
+		}
+	}
+	return n
+}
+
+func TestListWatchlists351_AC1_FirstListCreatesSystemList(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, wl351A, "user-42", false, nil)
+	store.byID[wl351A].Name = "DB workload test"
+	seedWatchlist(store, wl351B, "user-42", false, nil)
+	store.byID[wl351B].Name = "Test"
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	resp, err := svc.ListWatchlists(ctxWithUser(t, "user-42"), &portfoliov1.ListWatchlistsRequest{})
+	if err != nil {
+		t.Fatalf("ListWatchlists: %v", err)
+	}
+	if len(resp.Watchlists) != 3 {
+		t.Fatalf("got %d watchlists, want 3", len(resp.Watchlists))
+	}
+	var signals []*portfoliov1.Watchlist
+	for _, wl := range resp.Watchlists {
+		if wl.GetSystemManaged() {
+			signals = append(signals, wl)
+		}
+	}
+	if len(signals) != 1 || signals[0].GetName() != "Signals" || len(signals[0].GetBindings()) != 0 {
+		t.Fatalf("want exactly one empty system list named Signals, got %v", signals)
+	}
+}
+
+func TestListWatchlists351_AC2_RepeatedListsCreateOneSystemList(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, wl351A, "user-42", false, nil)
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+	ctx := ctxWithUser(t, "user-42")
+
+	var firstID string
+	for i := 0; i < 5; i++ {
+		resp, err := svc.ListWatchlists(ctx, &portfoliov1.ListWatchlistsRequest{})
+		if err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+		id := ""
+		for _, wl := range resp.Watchlists {
+			if wl.GetSystemManaged() {
+				id = wl.GetWatchlistId()
+			}
+		}
+		if id == "" {
+			t.Fatalf("call %d: response holds no system list", i)
+		}
+		if firstID == "" {
+			firstID = id
+		}
+		if id != firstID {
+			t.Fatalf("call %d: system id %q != first %q", i, id, firstID)
+		}
+	}
+	if n := systemListCount(store, "user-42"); n != 1 {
+		t.Fatalf("system rows = %d, want 1", n)
+	}
+	if store.ensureCalls != 1 {
+		t.Fatalf("ensureCalls = %d, want 1 (later calls find the row on the page)", store.ensureCalls)
+	}
+}
+
+func TestListWatchlists351_AC3_ContinuationPageNeverEnsures(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, wl351A, "user-42", false, nil)
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	resp, err := svc.ListWatchlists(ctxWithUser(t, "user-42"), &portfoliov1.ListWatchlistsRequest{
+		Page: &commonv1.PageRequest{PageToken: "00000000-0000-0000-0000-000000000000"},
+	})
+	if err != nil {
+		t.Fatalf("ListWatchlists: %v", err)
+	}
+	if store.ensureCalls != 0 || len(store.byID) != 1 {
+		t.Fatalf("ensureCalls=%d rows=%d, want 0 and 1 (no write on a continuation page)", store.ensureCalls, len(store.byID))
+	}
+	for _, wl := range resp.Watchlists {
+		if wl.GetSystemManaged() {
+			t.Fatalf("continuation page returned a system list: %v", wl)
+		}
+	}
+}
+
+func TestListWatchlists351_AC4_EnsureFailureIsFailOpen(t *testing.T) {
+	newFailing := func() (*PortfolioService, *fakeWatchlistStore) {
+		store := newFakeStore()
+		seedWatchlist(store, wl351A, "user-42", false, nil)
+		store.byID[wl351A].Name = "Test"
+		store.ensureErr = errors.New("connection reset")
+		return newSvc(store, wideCaps(), &fakeLedger{}), store
+	}
+
+	t.Run("warns with the original error and returns the existing lists", func(t *testing.T) {
+		warns := recordWarns(t)
+		svc, _ := newFailing()
+		resp, err := svc.ListWatchlists(ctxWithUser(t, "user-42"), &portfoliov1.ListWatchlistsRequest{})
+		if err != nil {
+			t.Fatalf("ListWatchlists must not fail on an ensure error: %v", err)
+		}
+		if len(resp.Watchlists) != 1 || resp.Watchlists[0].GetName() != "Test" {
+			t.Fatalf("want the single existing list Test, got %v", resp.Watchlists)
+		}
+		rec := warns.find(ensureFailedMsg)
+		if rec == nil || !strings.Contains(rec["error"], "connection reset") {
+			t.Fatalf("WARN %q with the original error missing: %v", ensureFailedMsg, rec)
+		}
+	})
+
+	t.Run("a cancelled request logs no WARN", func(t *testing.T) {
+		warns := recordWarns(t)
+		svc, _ := newFailing()
+		ctx, cancel := context.WithCancel(ctxWithUser(t, "user-42"))
+		cancel()
+		if _, err := svc.ListWatchlists(ctx, &portfoliov1.ListWatchlistsRequest{}); err != nil {
+			t.Fatalf("ListWatchlists: %v", err)
+		}
+		if rec := warns.find(ensureFailedMsg); rec != nil {
+			t.Fatalf("a cancelled request must not log the ensure WARN: %v", rec)
+		}
+	})
+
+	t.Run("a failed re-list returns the original page with a WARN", func(t *testing.T) {
+		warns := recordWarns(t)
+		svc, store := newFailing()
+		store.ensureErr = nil
+		store.listErrAt = 2
+		resp, err := svc.ListWatchlists(ctxWithUser(t, "user-42"), &portfoliov1.ListWatchlistsRequest{})
+		if err != nil {
+			t.Fatalf("ListWatchlists must not fail on a re-list error: %v", err)
+		}
+		if len(resp.Watchlists) != 1 || resp.Watchlists[0].GetName() != "Test" {
+			t.Fatalf("want the original page [Test], got %v", resp.Watchlists)
+		}
+		rec := warns.find(relistFailedMsg)
+		if rec == nil || !strings.Contains(rec["error"], "list boom") {
+			t.Fatalf("WARN %q with the original error missing: %v", relistFailedMsg, rec)
+		}
+	})
+}
+
+func TestListWatchlists351_AC5_ExistingSystemListIsNotReensured(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, wl351A, "user-42", true, []*portfoliov1.WatchlistBinding{
+		{Symbol: "AAPL", Source: portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL},
+	})
+	store.byID[wl351A].Name = "Signals"
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	resp, err := svc.ListWatchlists(ctxWithUser(t, "user-42"), &portfoliov1.ListWatchlistsRequest{})
+	if err != nil {
+		t.Fatalf("ListWatchlists: %v", err)
+	}
+	if len(resp.Watchlists) != 1 || len(resp.Watchlists[0].GetBindings()) != 1 || resp.Watchlists[0].GetBindings()[0].GetSymbol() != "AAPL" {
+		t.Fatalf("want the one system list holding AAPL, got %v", resp.Watchlists)
+	}
+	if systemListCount(store, "user-42") != 1 || store.ensureCalls != 0 {
+		t.Fatalf("system rows=%d ensureCalls=%d, want 1 and 0", systemListCount(store, "user-42"), store.ensureCalls)
+	}
+}
+
+func TestListWatchlists351_AC6_SameNamedManualListCoexistsAndDeleteStaysGuarded(t *testing.T) {
+	store := newFakeStore()
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+	ctx := ctxWithUser(t, "user-42")
+	if _, err := svc.CreateWatchlist(ctx, &portfoliov1.CreateWatchlistRequest{Name: signalWatchlistDefaultName}); err != nil {
+		t.Fatalf("seed manual Signals list: %v", err)
+	}
+
+	resp, err := svc.ListWatchlists(ctx, &portfoliov1.ListWatchlistsRequest{})
+	if err != nil {
+		t.Fatalf("ListWatchlists: %v", err)
+	}
+	var sysID string
+	named := 0
+	for _, wl := range resp.Watchlists {
+		if wl.GetName() == "Signals" {
+			named++
+		}
+		if wl.GetSystemManaged() {
+			sysID = wl.GetWatchlistId()
+		}
+	}
+	if named != 2 || sysID == "" {
+		t.Fatalf("want two lists named Signals, one system-managed; named=%d sys=%q", named, sysID)
+	}
+	if _, err := svc.DeleteWatchlist(ctx, &portfoliov1.DeleteWatchlistRequest{WatchlistId: sysID}); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("delete of the system list: got %v, want FailedPrecondition", err)
+	}
+}
+
+func TestListWatchlists351_AC7_SmallPageCreatesExactlyOneSystemList(t *testing.T) {
+	const (
+		sysAfter  = "00000000-0000-4000-8000-000000000003"
+		sysBefore = "00000000-0000-4000-8000-000000000000"
+	)
+	setup := func(ensureID string) (*PortfolioService, *fakeWatchlistStore) {
+		store := newFakeStore()
+		seedWatchlist(store, wl351A, "user-42", false, nil)
+		seedWatchlist(store, wl351B, "user-42", false, nil)
+		store.ensureID = ensureID
+		return newSvc(store, wideCaps(), &fakeLedger{}), store
+	}
+	page1 := &portfoliov1.ListWatchlistsRequest{Page: &commonv1.PageRequest{PageSize: 1}}
+
+	t.Run("system row sorts after the page: skip the re-list", func(t *testing.T) {
+		svc, store := setup(sysAfter)
+		resp, err := svc.ListWatchlists(ctxWithUser(t, "user-42"), page1)
+		if err != nil {
+			t.Fatalf("ListWatchlists: %v", err)
+		}
+		if len(resp.Watchlists) != 1 || resp.Page.GetNextPageToken() == "" {
+			t.Fatalf("want 1 list and a non-empty token, got %d / %q", len(resp.Watchlists), resp.Page.GetNextPageToken())
+		}
+		if store.listCalls != 1 || systemListCount(store, "user-42") != 1 {
+			t.Fatalf("listCalls=%d systemRows=%d, want 1 and 1", store.listCalls, systemListCount(store, "user-42"))
+		}
+		if _, err := svc.ListWatchlists(ctxWithUser(t, "user-42"), page1); err != nil {
+			t.Fatalf("repeat ListWatchlists: %v", err)
+		}
+		if n := systemListCount(store, "user-42"); n != 1 {
+			t.Fatalf("after a repeat call system rows = %d, want 1", n)
+		}
+	})
+
+	t.Run("system row sorts before the page: re-list returns it", func(t *testing.T) {
+		svc, store := setup(sysBefore)
+		resp, err := svc.ListWatchlists(ctxWithUser(t, "user-42"), page1)
+		if err != nil {
+			t.Fatalf("ListWatchlists: %v", err)
+		}
+		if store.listCalls != 2 || len(resp.Watchlists) != 1 || !resp.Watchlists[0].GetSystemManaged() || resp.Page.GetNextPageToken() == "" {
+			t.Fatalf("listCalls=%d lists=%v token=%q, want 2, the system list first, a non-empty token",
+				store.listCalls, resp.Watchlists, resp.Page.GetNextPageToken())
+		}
+	})
+}
+
+func TestListWatchlists351_AC8_NoIdentityIsRejectedBeforeAnyWrite(t *testing.T) {
+	store := newFakeStore()
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.ListWatchlists(context.Background(), &portfoliov1.ListWatchlistsRequest{})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "missing user identity") {
+		t.Fatalf("got %v, want InvalidArgument \"missing user identity\"", err)
+	}
+	if store.ensureCalls != 0 || store.listCalls != 0 || len(store.byID) != 0 {
+		t.Fatalf("ensureCalls=%d listCalls=%d rows=%d, want all 0", store.ensureCalls, store.listCalls, len(store.byID))
+	}
+}
+
+func TestListWatchlists351_AC10_SystemListOccupiesOneCapSlot(t *testing.T) {
+	store := newFakeStore()
+	for i := 1; i <= 49; i++ {
+		id := fmt.Sprintf("00000000-0000-4000-8000-%012d", i)
+		seedWatchlist(store, id, "user-42", false, nil)
+		store.byID[id].Name = fmt.Sprintf("list-%d", i)
+	}
+	seedWatchlist(store, "00000000-0000-4000-8000-000000000100", "user-42", true, nil)
+	cfg := &fakeConfig{vals: map[string]int64{"watchlist.max_per_user": 50, "watchlist.max_symbols_per_list": 1000}}
+	svc := newSvc(store, cfg, &fakeLedger{})
+
+	_, err := svc.CreateWatchlist(ctxWithUser(t, "user-42"), &portfoliov1.CreateWatchlistRequest{Name: "Breakouts"})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "watchlist limit reached: 50") {
+		t.Fatalf("got %v, want InvalidArgument \"watchlist limit reached: 50\"", err)
+	}
+	if n, _ := store.CountByUser(context.Background(), "user-42"); n != 50 {
+		t.Fatalf("CountByUser = %d, want 50", n)
+	}
+}
+
+func TestListWatchlists351_FirstListFailureIsInternalAndNeverEnsures(t *testing.T) {
+	store := newFakeStore()
+	store.listErrAt = 1
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.ListWatchlists(ctxWithUser(t, "user-42"), &portfoliov1.ListWatchlistsRequest{})
+	if connect.CodeOf(err) != connect.CodeInternal || store.ensureCalls != 0 {
+		t.Fatalf("got %v with ensureCalls=%d, want Internal and 0", err, store.ensureCalls)
 	}
 }
 
@@ -1912,4 +2270,86 @@ func TestAddWatchlistSymbols_RefusedSymbolGetsNoExpiry(t *testing.T) {
 			t.Errorf("AddSymbols called %d times, want 1", store.addSymbolsCnt)
 		}
 	})
+}
+
+// ─── feature 326: duplicate watchlist name → ALREADY_EXISTS ──────────────────
+
+func TestWatchlistNameCollision_AlreadyExists_AC3(t *testing.T) {
+	nameDup := fmt.Errorf("insert watchlist: %w", &pgconn.PgError{Code: "23505", ConstraintName: watchlistNameUniqueIdx})
+	cases := []struct {
+		name string
+		run  func(t *testing.T, store *fakeWatchlistStore, svc *PortfolioService) error
+	}{
+		{"create", func(t *testing.T, store *fakeWatchlistStore, svc *PortfolioService) error {
+			store.createErr = nameDup
+			_, err := svc.CreateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.CreateWatchlistRequest{Name: "A"})
+			return err
+		}},
+		{"masked rename", func(t *testing.T, store *fakeWatchlistStore, svc *PortfolioService) error {
+			seedWatchlist(store, "wl-1", "u-1", false, nil)
+			store.updatePartialErr = nameDup
+			_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{
+				WatchlistId: "wl-1", Name: "A", UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"name"}},
+			})
+			return err
+		}},
+		{"legacy rename", func(t *testing.T, store *fakeWatchlistStore, svc *PortfolioService) error {
+			seedWatchlist(store, "wl-1", "u-1", false, nil)
+			store.updateErr = nameDup
+			_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{WatchlistId: "wl-1", Name: "A"})
+			return err
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeStore()
+			err := tc.run(t, store, newSvc(store, wideCaps(), &fakeLedger{}))
+			if connect.CodeOf(err) != connect.CodeAlreadyExists {
+				t.Fatalf("code = %v (err=%v), want AlreadyExists", connect.CodeOf(err), err)
+			}
+			if strings.Contains(err.Error(), "duplicate key") {
+				t.Fatalf("message leaks pgx detail: %q", err.Error())
+			}
+		})
+	}
+}
+
+func createWithErr(t *testing.T, injected error) error {
+	t.Helper()
+	store := newFakeStore()
+	store.createErr = injected
+	_, err := newSvc(store, wideCaps(), &fakeLedger{}).CreateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.CreateWatchlistRequest{Name: "A"})
+	return err
+}
+
+// Synthetic: watchlist_symbols_pkey cannot raise 23505 on the create path; this guards against a generic 23505 mapping.
+func TestWatchlistWriteErr_OtherConstraintInternal(t *testing.T) {
+	err := createWithErr(t, &pgconn.PgError{Code: "23505", ConstraintName: "watchlist_symbols_pkey"})
+	if connect.CodeOf(err) != connect.CodeInternal {
+		t.Fatalf("code = %v (err=%v), want Internal", connect.CodeOf(err), err)
+	}
+}
+
+func TestWatchlistWriteErr_NonUniqueInternal_AC4(t *testing.T) {
+	for name, injected := range map[string]error{
+		"08006": &pgconn.PgError{Code: "08006"},
+		"plain": errors.New("boom"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := createWithErr(t, injected)
+			if connect.CodeOf(err) != connect.CodeInternal {
+				t.Fatalf("code = %v (err=%v), want Internal", connect.CodeOf(err), err)
+			}
+		})
+	}
+}
+
+func TestWatchlistNameUniqueIdx_MatchesMigration011(t *testing.T) {
+	sql, err := os.ReadFile("../../migrations/011_watchlist_system_managed_source.up.sql")
+	if err != nil {
+		t.Fatalf("read migration 011: %v", err)
+	}
+	if !strings.Contains(string(sql), watchlistNameUniqueIdx) {
+		t.Fatalf("migration 011 no longer defines index %q", watchlistNameUniqueIdx)
+	}
 }

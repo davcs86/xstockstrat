@@ -1,5 +1,5 @@
--- config 043 (AC-1, AC-3, AC-4, AC-7, AC-9, AC-10, AC-12, AC-13): run by migration-rerun.sh after passes 0-3.
--- Runs at cfg_pre (R-1) in migration-rerun.sh pass 2c, before the feature-296 rename; it describes the pre-R state.
+-- config 043 (AC-1, AC-3, AC-4, AC-7, AC-9, AC-10, AC-12, AC-13): run by migration-rerun.py after passes 0-3.
+-- Runs at cfg_pre (R-1) in migration-rerun.py pass 2c, before the feature-296 rename; it describes the pre-R state.
 -- Replays the 043 up/down files: a later migration touching these rows must update or retire this file.
 
 DO $$

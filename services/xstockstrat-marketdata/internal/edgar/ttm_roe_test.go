@@ -14,10 +14,10 @@ import (
 // listed first — the TTM must key on each fact's own period, not the filing's fy/fp.
 func axpFacts() map[string]any {
 	ni := func(fy int, fp, start, end, filed string, val float64) map[string]any {
-		return map[string]any{"start": start, "end": end, "val": val, "accn": "x", "fy": fy, "fp": fp, "form": "10-Q", "filed": filed}
+		return map[string]any{"start": start, "end": end, "val": val, "accn": axpAccn(filed), "fy": fy, "fp": fp, "form": axpForm(filed), "filed": filed}
 	}
 	eq := func(fy int, fp, end, filed string, val float64) map[string]any {
-		return map[string]any{"end": end, "val": val, "accn": "x", "fy": fy, "fp": fp, "form": "10-Q", "filed": filed}
+		return map[string]any{"end": end, "val": val, "accn": axpAccn(filed), "fy": fy, "fp": fp, "form": axpForm(filed), "filed": filed}
 	}
 	niUnits := []map[string]any{
 		ni(2025, "Q1", "2025-01-01", "2025-03-31", "2025-04-25", 1000e6),
@@ -36,6 +36,16 @@ func axpFacts() map[string]any {
 		"NetIncomeLoss":      map[string]any{"units": map[string]any{"USD": niUnits}},
 		"StockholdersEquity": map[string]any{"units": map[string]any{"USD": eqUnits}},
 	}}}
+}
+
+// One accession per filing date; the filing of 2026-02-10 is the 10-K.
+func axpAccn(filed string) string { return "axp-" + filed }
+
+func axpForm(filed string) string {
+	if filed == "2026-02-10" {
+		return "10-K"
+	}
+	return "10-Q"
 }
 
 func periodByFP(t *testing.T, periods []source.HistoricalFundamentalsPeriod, fp string) source.HistoricalFundamentalsPeriod {
