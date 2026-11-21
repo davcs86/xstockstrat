@@ -441,7 +441,7 @@ RED evidence on the pre-Step-1 tree: `test_ac1_…` reports `import_blocked`, `t
 
 ### Step 3 — service: boot self-test for `memory_used_bytes` in the startup probe
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox_probe.py` — modify
@@ -900,3 +900,9 @@ _Populated by /sdd-execute as implementation proceeds._
   string literals to pass E501. The isolation no-status marker test also passes on the pre-Step-1
   tree, because the marker branch existed then; it is a characterization guard.
   **Disposition**: in-scope; no spec text changed.
+- **2026-11-21 (Step 3)** — TDD red evidence. The step's `**Verification**` has no behaviour
+  assertion (Step 4 owns the tests), and it exits 0 on the pre-change tree. RED therefore comes from
+  a scratch behaviour probe outside the repo, which was not committed. Before the change it found no
+  self-test line and no unmeasurable ERROR. After the change it passed. In the run script the
+  Verification's closing `)` is on its own line, because the block's trailing `# expect …` comment
+  would otherwise swallow it. **Disposition**: evidence recorded in context.md; no spec text changed.

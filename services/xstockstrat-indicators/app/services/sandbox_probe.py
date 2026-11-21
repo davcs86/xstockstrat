@@ -20,6 +20,7 @@ import sys
 import time
 
 from app import telemetry
+from app.services import sandbox
 from app.services.sandbox import (
     _DROP_UID,
     _HANDOFF,
@@ -306,8 +307,7 @@ def _report(result: dict) -> None:
         _warn_unobservable_once()
 
 
-def run_startup_probe() -> None:
-    """Probe the runtime once; any failure is logged and both gauges read 0. Never raises."""
+def _run_memory_probe() -> None:
     try:
         try:
             result = _probe()
@@ -319,3 +319,26 @@ def run_startup_probe() -> None:
         _report(result)
     except Exception:  # noqa: BLE001
         log.exception("sandbox memory probe reporting failed")
+
+
+_UNMEASURABLE_MSG = "sandbox memory_used_bytes unmeasurable on this runtime"
+
+
+def _self_test() -> None:
+    res = sandbox.execute_formula("result = {}", {}, [])
+    log.info(
+        "sandbox memory self-test exit_reason=%s memory_measured=%d",
+        res.exit_reason,
+        res.memory_used_bytes,
+    )
+    if res.exit_reason != "success" or res.memory_used_bytes <= 0:
+        log.error(_UNMEASURABLE_MSG)
+
+
+def run_startup_probe() -> None:
+    """Probe the runtime once; any failure is logged and both gauges read 0. Never raises."""
+    _run_memory_probe()
+    try:
+        _self_test()
+    except Exception:  # noqa: BLE001 - the self-test must never stop startup
+        log.exception(_UNMEASURABLE_MSG)

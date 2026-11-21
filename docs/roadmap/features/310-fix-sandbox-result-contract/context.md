@@ -589,3 +589,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-indicators/tests/test_sandbox.py`, `services/xstockstrat-indicators/tests/test_sandbox_isolation.py`, `services/xstockstrat-indicators/tests/test_sandbox_watchdog.py`, `services/xstockstrat-indicators/tests/test_formulas.py`
 - Deviations: RED run against the restored pre-Step-1 file; the existing fake moved to `:399`; E501 split (full detail in Deviation Log)
+
+### Step 3 — service: boot self-test for `memory_used_bytes` in the startup probe [done]
+- Moved the existing `run_startup_probe` body, unchanged, into `_run_memory_probe()`, so its early `return` no longer skips anything. Added `from app.services import sandbox`, `_UNMEASURABLE_MSG` and `_self_test()`. `_self_test()` calls `sandbox.execute_formula("result = {}", {}, [])` and logs INFO `sandbox memory self-test exit_reason=%s memory_measured=%d`. It logs ERROR on a non-success result or on memory <= 0. The new `run_startup_probe` runs the probe and then the self-test in its own `try`, and it never raises. `app/main.py` is unchanged.
+- TDD (no `**Covers**`; Step 4 owns the tests):
+  - RED came from a scratch behaviour probe outside the repo (`.sdd-logs/v-2.log`, exit=1). It covered a real run, a fake that returns 0 memory, and a fake that raises. It printed `real selftest: [] unmeasurable_errors: 0` and `FAILURES: ['real', 'zero', 'raises']`.
+  - The pre-change Verification (`.sdd-logs/v-1.log`, exit=0) printed `625 passed`.
+  - GREEN probe (`.sdd-logs/v-3.log`, exit=0) printed:
+    - `real selftest: ['sandbox memory self-test exit_reason=success memory_measured=15691776'] unmeasurable_errors: 0`
+    - `zero … unmeasurable_errors: 1`
+    - `raises selftest: [] unmeasurable_errors: 1`
+    - `FAILURES: []`
+  - GREEN Verification (`.sdd-logs/v-4.log`, exit=0) printed `625 passed in 73.44s`, `Total coverage: 87.03%`, `All checks passed!`, `65 files already formatted`, `25:from app.services.sandbox_probe import run_startup_probe` and `46:    await asyncio.to_thread(run_startup_probe)`.
+- The `test_ac8_fork_bomb…` flake did not appear in either Verification run.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-indicators/app/services/sandbox_probe.py`
+- Deviations: RED evidence from a scratch probe; the run script puts the Verification's closing `)` on its own line (full detail in Deviation Log)
