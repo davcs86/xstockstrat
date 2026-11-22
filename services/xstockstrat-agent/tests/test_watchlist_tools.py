@@ -111,6 +111,23 @@ async def test_manage_watchlist_create_dispatches():
 
 
 @pytest.mark.asyncio
+async def test_manage_watchlist_create_duplicate_surfaces_already_exists():
+    err = grpc.aio.AioRpcError(
+        grpc.StatusCode.ALREADY_EXISTS,
+        None,
+        None,
+        details="a watchlist with this name already exists",
+    )
+    with patch.object(client, "create_watchlist", AsyncMock(side_effect=err)):
+        with pytest.raises(
+            ToolError, match=r"^ALREADY_EXISTS: a watchlist with this name already exists$"
+        ):
+            await _tool_fn(_make_server(), "manage_watchlist")(
+                ctx=_ctx(TRADER), operation="create", name="Breakouts"
+            )
+
+
+@pytest.mark.asyncio
 async def test_manage_watchlist_create_requires_name():
     server = _make_server()
     with pytest.raises(ToolError, match="requires a name"):

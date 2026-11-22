@@ -31,3 +31,12 @@ Feature: opportunities-latency-fix — analysis service guarantees
     When a second poll arrives 15 seconds after the first
     Then the live enrichment memo is still valid (TTL >= 15s)
     And no re-fetch to marketdata occurs for the same symbols
+
+  # Feature 330 (C-16 EXTEND of @AC-9 above, which is left unedited; 330 recon.md § Existing Business Rules) adds the
+  # case with the migrated stored TTL applied instead of the code default.
+  # guards: docs/reports/2026-10-19-live-enrich-ttl-seed-below-poll-defect.md
+  @AC-2 @FR-2 @regression @feature-330
+  Scenario: a warm 15s re-poll of ListOpportunities is served from the live-enrich memo
+    Given the migrated config is applied and a ListOpportunities call has just enriched its symbols live
+    When the UI re-polls ListOpportunities 15 seconds later
+    Then that re-poll issues no BatchGetLatestPrice for the memoized symbols

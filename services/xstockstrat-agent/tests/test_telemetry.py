@@ -279,6 +279,37 @@ def test_handler_is_instrumentation_logging_handler(otel_reset, monkeypatch):
     assert [type(h).__module__ for h in added] == ["opentelemetry.instrumentation.logging.handler"]
 
 
+@pytest.mark.parametrize(
+    ("value", "want"),
+    [(None, "SDK default"), ("http://otel-collector:4318", "http://otel-collector:4318"), ("", "")],
+    ids=["unset", "set", "empty"],
+)
+def test_startup_log_names_effective_endpoint(otel_reset, monkeypatch, caplog, value, want):
+    # AC-1: an unset base endpoint is logged as "SDK default", never None.
+    from app.telemetry import init_telemetry
+
+    srv, _ = _start_body_receiver()
+    try:
+        monkeypatch.setenv("OTEL_ENABLED", "true")
+        for sig in ("traces", "metrics", "logs"):
+            monkeypatch.setenv(
+                f"OTEL_EXPORTER_OTLP_{sig.upper()}_ENDPOINT",
+                f"http://127.0.0.1:{srv.server_port}/otlp/v1/{sig}",
+            )
+        if value is None:
+            monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+        else:
+            monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", value)
+        with caplog.at_level(logging.INFO):
+            init_telemetry()
+        _flush_all()
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    [rec] = [r for r in caplog.records if r.getMessage() == "OTel tracing initialised"]
+    assert rec.endpoint == want
+
+
 def test_export_failure_visible_on_stdout_not_exported(otel_reset, monkeypatch, caplog):
     # EXTEND feature 226 AC-3: failures stay on the stdout path (opentelemetry* filter).
     from opentelemetry import metrics

@@ -77,7 +77,7 @@ export function initTelemetry(): void {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
 
-    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'SDK default';
     const serviceName = process.env.SERVICE_NAME ?? 'ui';
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
