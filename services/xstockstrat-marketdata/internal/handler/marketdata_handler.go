@@ -331,7 +331,7 @@ type grpcMarketDataAdapter struct {
 func (a *grpcMarketDataAdapter) GetBars(ctx context.Context, req *marketdatav1.GetBarsRequest) (*marketdatav1.GetBarsResponse, error) {
 	resp, err := a.h.GetBars(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -339,7 +339,7 @@ func (a *grpcMarketDataAdapter) GetBars(ctx context.Context, req *marketdatav1.G
 func (a *grpcMarketDataAdapter) GetLatestQuote(ctx context.Context, req *marketdatav1.GetLatestQuoteRequest) (*marketdatav1.Quote, error) {
 	resp, err := a.h.GetLatestQuote(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -347,7 +347,7 @@ func (a *grpcMarketDataAdapter) GetLatestQuote(ctx context.Context, req *marketd
 func (a *grpcMarketDataAdapter) GetLatestPrice(ctx context.Context, req *marketdatav1.GetLatestPriceRequest) (*marketdatav1.LatestPrice, error) {
 	resp, err := a.h.GetLatestPrice(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -355,7 +355,7 @@ func (a *grpcMarketDataAdapter) GetLatestPrice(ctx context.Context, req *marketd
 func (a *grpcMarketDataAdapter) BackfillBars(ctx context.Context, req *marketdatav1.BackfillBarsRequest) (*marketdatav1.BackfillBarsResponse, error) {
 	resp, err := a.h.BackfillBars(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -363,7 +363,7 @@ func (a *grpcMarketDataAdapter) BackfillBars(ctx context.Context, req *marketdat
 func (a *grpcMarketDataAdapter) GetHistoricalFundamentals(ctx context.Context, req *marketdatav1.GetHistoricalFundamentalsRequest) (*marketdatav1.GetHistoricalFundamentalsResponse, error) {
 	resp, err := a.h.GetHistoricalFundamentals(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -371,7 +371,7 @@ func (a *grpcMarketDataAdapter) GetHistoricalFundamentals(ctx context.Context, r
 func (a *grpcMarketDataAdapter) BackfillFundamentals(ctx context.Context, req *marketdatav1.BackfillFundamentalsRequest) (*marketdatav1.BackfillFundamentalsResponse, error) {
 	resp, err := a.h.BackfillFundamentals(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -379,7 +379,7 @@ func (a *grpcMarketDataAdapter) BackfillFundamentals(ctx context.Context, req *m
 func (a *grpcMarketDataAdapter) GetCurrentSector(ctx context.Context, req *marketdatav1.GetCurrentSectorRequest) (*marketdatav1.GetCurrentSectorResponse, error) {
 	resp, err := a.h.GetCurrentSector(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -387,7 +387,7 @@ func (a *grpcMarketDataAdapter) GetCurrentSector(ctx context.Context, req *marke
 func (a *grpcMarketDataAdapter) GetEtfFlags(ctx context.Context, req *marketdatav1.GetEtfFlagsRequest) (*marketdatav1.GetEtfFlagsResponse, error) {
 	resp, err := a.h.GetEtfFlags(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -395,7 +395,7 @@ func (a *grpcMarketDataAdapter) GetEtfFlags(ctx context.Context, req *marketdata
 func (a *grpcMarketDataAdapter) GetSymbolServability(ctx context.Context, req *marketdatav1.GetSymbolServabilityRequest) (*marketdatav1.GetSymbolServabilityResponse, error) {
 	resp, err := a.h.GetSymbolServability(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -403,7 +403,7 @@ func (a *grpcMarketDataAdapter) GetSymbolServability(ctx context.Context, req *m
 func (a *grpcMarketDataAdapter) SyncWatchlistDelistings(ctx context.Context, req *marketdatav1.SyncWatchlistDelistingsRequest) (*marketdatav1.SyncWatchlistDelistingsResponse, error) {
 	resp, err := a.h.SyncWatchlistDelistings(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -411,7 +411,7 @@ func (a *grpcMarketDataAdapter) SyncWatchlistDelistings(ctx context.Context, req
 func (a *grpcMarketDataAdapter) AckDelistingAlerts(ctx context.Context, req *marketdatav1.AckDelistingAlertsRequest) (*marketdatav1.AckDelistingAlertsResponse, error) {
 	resp, err := a.h.AckDelistingAlerts(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -419,7 +419,7 @@ func (a *grpcMarketDataAdapter) AckDelistingAlerts(ctx context.Context, req *mar
 func (a *grpcMarketDataAdapter) GetSectorAsOf(ctx context.Context, req *marketdatav1.GetSectorAsOfRequest) (*marketdatav1.GetSectorAsOfResponse, error) {
 	resp, err := a.h.GetSectorAsOf(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -427,7 +427,7 @@ func (a *grpcMarketDataAdapter) GetSectorAsOf(ctx context.Context, req *marketda
 func (a *grpcMarketDataAdapter) GetSectorHistory(ctx context.Context, req *marketdatav1.GetSectorHistoryRequest) (*marketdatav1.GetSectorHistoryResponse, error) {
 	resp, err := a.h.GetSectorHistory(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -435,7 +435,7 @@ func (a *grpcMarketDataAdapter) GetSectorHistory(ctx context.Context, req *marke
 func (a *grpcMarketDataAdapter) ListAssets(ctx context.Context, req *marketdatav1.ListAssetsRequest) (*marketdatav1.ListAssetsResponse, error) {
 	resp, err := a.h.ListAssets(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -443,7 +443,7 @@ func (a *grpcMarketDataAdapter) ListAssets(ctx context.Context, req *marketdatav
 func (a *grpcMarketDataAdapter) GetDataCoverage(ctx context.Context, req *marketdatav1.GetDataCoverageRequest) (*marketdatav1.GetDataCoverageResponse, error) {
 	resp, err := a.h.GetDataCoverage(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -451,7 +451,7 @@ func (a *grpcMarketDataAdapter) GetDataCoverage(ctx context.Context, req *market
 func (a *grpcMarketDataAdapter) DeleteBackfilledData(ctx context.Context, req *marketdatav1.DeleteBackfilledDataRequest) (*marketdatav1.DeleteBackfilledDataResponse, error) {
 	resp, err := a.h.DeleteBackfilledData(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -499,7 +499,7 @@ func (a *grpcMarketDataAdapter) StreamQuotes(req *marketdatav1.StreamQuotesReque
 func (a *grpcMarketDataAdapter) GetFundamentals(ctx context.Context, req *marketdatav1.GetFundamentalsRequest) (*marketdatav1.GetFundamentalsResponse, error) {
 	resp, err := a.h.GetFundamentals(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -507,7 +507,7 @@ func (a *grpcMarketDataAdapter) GetFundamentals(ctx context.Context, req *market
 func (a *grpcMarketDataAdapter) GetFundamentalsMulti(ctx context.Context, req *marketdatav1.GetFundamentalsMultiRequest) (*marketdatav1.GetFundamentalsMultiResponse, error) {
 	resp, err := a.h.GetFundamentalsMulti(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -515,7 +515,7 @@ func (a *grpcMarketDataAdapter) GetFundamentalsMulti(ctx context.Context, req *m
 func (a *grpcMarketDataAdapter) GetLatestQuotes(ctx context.Context, req *marketdatav1.GetLatestQuotesRequest) (*marketdatav1.GetLatestQuotesResponse, error) {
 	resp, err := a.h.GetLatestQuotes(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -523,7 +523,7 @@ func (a *grpcMarketDataAdapter) GetLatestQuotes(ctx context.Context, req *market
 func (a *grpcMarketDataAdapter) BatchGetBars(ctx context.Context, req *marketdatav1.BatchGetBarsRequest) (*marketdatav1.BatchGetBarsResponse, error) {
 	resp, err := a.h.BatchGetBars(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -531,7 +531,7 @@ func (a *grpcMarketDataAdapter) BatchGetBars(ctx context.Context, req *marketdat
 func (a *grpcMarketDataAdapter) BatchGetLatestPrice(ctx context.Context, req *marketdatav1.BatchGetLatestPriceRequest) (*marketdatav1.BatchGetLatestPriceResponse, error) {
 	resp, err := a.h.BatchGetLatestPrice(ctx, connect.NewRequest(req))
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(ctx, err)
 	}
 	return resp.Msg, nil
 }
@@ -544,23 +544,18 @@ func errorf(msg string) error {
 	return fmt.Errorf("%s", msg)
 }
 
-func toGRPCError(err error) error {
+// toGRPCError must receive the INBOUND request ctx; once it has expired, a genuine Internal
+// failure deliberately reports the fixed context text instead (its err text may carry vendor keys).
+func toGRPCError(ctx context.Context, err error) error {
 	var connectErr *connect.Error
-	if errors.As(err, &connectErr) {
-		switch connectErr.Code() {
-		case connect.CodeInvalidArgument:
-			return status.Error(codes.InvalidArgument, connectErr.Message())
-		case connect.CodeNotFound:
-			return status.Error(codes.NotFound, connectErr.Message())
-		case connect.CodePermissionDenied:
-			return status.Error(codes.PermissionDenied, connectErr.Message())
-		case connect.CodeFailedPrecondition:
-			return status.Error(codes.FailedPrecondition, connectErr.Message())
-		case connect.CodeResourceExhausted:
-			return status.Error(codes.ResourceExhausted, connectErr.Message())
-		case connect.CodeUnavailable:
-			return status.Error(codes.Unavailable, connectErr.Message())
-		}
+	if errors.As(err, &connectErr) && connectErr.Code() != connect.CodeInternal && connectErr.Code() != connect.CodeUnknown {
+		return status.Error(codes.Code(connectErr.Code()), connectErr.Message())
+	}
+	switch ctx.Err() {
+	case context.DeadlineExceeded:
+		return status.Error(codes.DeadlineExceeded, "deadline exceeded")
+	case context.Canceled:
+		return status.Error(codes.Canceled, "request canceled")
 	}
 	return status.Error(codes.Internal, err.Error())
 }

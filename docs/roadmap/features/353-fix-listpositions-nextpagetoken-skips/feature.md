@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-listpositions-nextpagetoken-skips`
-**Defect Report**: `docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md`
+**Defect Report**: `docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md` (pruned 2026-11-18; `git show ce1853c3:docs/reports/2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-11-16
 **Last Updated**: 2026-11-17
 **Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
 **Launched date**: 2026-11-17
+**Archived**: 2026-11-18
 
 ---
 
@@ -22,16 +23,17 @@
 | 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | Steps 1-4 done; integration PR next |
 
 | 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 5 specs; pruned defect report 2026-11-16-portfolio-listpositions-page-token-skips-boundary-row-defect |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier
-- [Debate Register](debate.md) — decisions, rejected alternatives, objections
-- [Design](design.md) — approved architecture
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); promoted to services/xstockstrat-portfolio/acceptance/fix-listpositions-nextpagetoken-skips.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Debate Register — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -14,6 +14,9 @@ dispatcher (`app/main.py` `handle_mcp`): **Streamable HTTP** (MCP 2025-03-26) at
 (`AGENT_PUBLIC_URL`, `${APP_URL}/agent`, stripped to `/` by DO ingress). The legacy HTTP+SSE
 transport at `/sse` + `/messages` was **removed by feature 079**; those paths now return 404
 naming the replacement URL.
+In HTTP mode it also runs a second listener: the internal tool-catalog gRPC server
+(`AgentService.ListTools`, `GRPC_PORT` 50061, mutual TLS, `xstockstrat-ui` peer certificate only —
+`app/catalog_service.py`), started before the HTTP server. It is not started in stdio mode.
 The agent is a platform edge: `CallerPropagationMiddleware` forwards the `x-user-id` /
 `x-access-scope` / `x-trace-id` trio on every backend gRPC from verified claims (constitution
 **AGENT-4**). Identity travels only in `x-user-id`; set a body `user_id` only when it is a target/scope
@@ -129,15 +132,17 @@ deadline is derived per call by `client.formula_deadline_s()`: `sandbox.timeout_
 
 - No `loop tick ok`: the agent has no tick loops.
 - Instruments are declared in `app/telemetry.py`; their label values are closed sets.
+- The catalog RPC records `rpc.server.duration` (derived from its gRPC server span), beside `mcp.tool.duration` for tool calls.
 - Load-bearing logs: INFO `first successful tool call` once per user per process; ERROR `Unexpected error validating JWT claims: <ExceptionClass>: ...` names the exception class and never the token; the OAuth grant-failure WARN carries the gRPC code name.
 
 ## Environment Variables
 
-> mTLS: `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` required — fail-closed client dials via `app/mtls.py` `secure_channel` (root CLAUDE.md § Environment Variable Naming Convention).
+> mTLS: `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` required — fail-closed client dials via `app/mtls.py` `secure_channel`, and in HTTP mode the catalog gRPC server needs them at boot: without them the process stops before port 9000 listens (root CLAUDE.md § Environment Variable Naming Convention).
 
 ```text
 MCP_TRANSPORT=http   # `sse` still accepted as a deprecated alias
 MCP_HTTP_PORT=9000   # `MCP_SSE_PORT` still accepted as a deprecated fallback
+GRPC_PORT=50061      # internal tool-catalog gRPC server (HTTP mode only); never published
 JWT_SECRET=<shared secret>   # HMAC-signs the OAuth txn blob (feature 147, replacing the removed MCP_AGENT_SECRET) — not sent as an outbound header
 <SERVICE>_ENDPOINT=…   # one per backend (ingest … marketdata), values in docker-compose.yml
 UI_BASE_URL=http://localhost:3000

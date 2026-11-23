@@ -313,7 +313,7 @@ function runChild(
   code: string,
   headers: string,
   onLine?: (line: string) => void,
-  extraEnv: Record<string, string> = {},
+  extraEnv: Record<string, string | undefined> = {},
 ): Promise<ChildResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['-e', code], {
@@ -345,6 +345,29 @@ function runChild(
       clearTimeout(timer);
       resolve({ stdout, code: c });
     });
+  });
+}
+
+const INIT_ONLY_CHILD = `
+console.warn = (...a) => console.log(...a);
+require(process.env.TELEMETRY_JS).initTelemetry();
+process.stdout.write('', () => process.exit(0));
+`;
+
+// Feature 329 AC-1: an unset or empty endpoint must log `SDK default`, never `undefined`.
+for (const [label, value] of [
+  ['unset', undefined],
+  ['empty', ''],
+] as const) {
+  test(`AC-1: startup log names SDK default when OTEL_EXPORTER_OTLP_ENDPOINT is ${label}`, async () => {
+    const { stdout, code } = await runChild(INIT_ONLY_CHILD, '', undefined, {
+      OTEL_EXPORTER_OTLP_ENDPOINT: value,
+    });
+    assert.equal(code, 0, stdout);
+    const idx = stdout.indexOf('[otel] tracing enabled');
+    assert.ok(idx >= 0, stdout);
+    assert.ok(stdout.indexOf('→ SDK default', idx) > idx, stdout);
+    assert.ok(!stdout.includes('undefined'), stdout);
   });
 }
 

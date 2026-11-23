@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-16
 **Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
 **Launched date**: 2026-11-17
+**Archived**: 2026-11-18
 
 ---
 
@@ -20,16 +21,17 @@
 | 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute | All 16 steps done (Step 16 last); `check-config-wiring.mjs --final` exit 0 |
 
 | 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 5 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier
-- [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
-- [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 16 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-ingest/acceptance/backtest-inline-backfill.feature, services/xstockstrat-ui/acceptance/backtest-inline-backfill.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Debate Register — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

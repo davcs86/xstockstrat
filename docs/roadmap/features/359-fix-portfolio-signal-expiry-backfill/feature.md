@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-portfolio-signal-expiry-backfill`
-**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-11-17-portfolio-signal-expiry-backfill-mark-ingest-race-defect.md`
+**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-11-17-portfolio-signal-expiry-backfill-mark-ingest-race-defect.md` (pruned 2026-11-18; `git show 351e6fd0:docs/reports/2026-11-17-portfolio-signal-expiry-backfill-mark-ingest-race-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-11-17
 **Last Updated**: 2026-11-17
 **Committed to main**: 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f
 **Launched date**: 2026-11-17
+**Archived**: 2026-11-18
 
 ---
 
@@ -23,16 +24,17 @@
 | 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done (sequential); dbtest RED/GREEN deferred to CI per operator decision B |
 
 | 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1576; committed 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 5 specs; pruned defect report 2026-11-17-portfolio-signal-expiry-backfill-mark-ingest-race-defect |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Debate Register](debate.md) — D-1..D-14, R-1..R-9, O-1..O-11, P-1
-- [Design](design.md) — approved design (3 rounds, full)
-- [Implementation Spec](implementation-spec.md) — 7 steps (lock fix + forced-interleave tests, FR-3 mark grace unit, docs)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); promoted to services/xstockstrat-portfolio/acceptance/fix-portfolio-signal-expiry-backfill.feature, services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Debate Register — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -1,27 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest } from '@/lib/auth';
 import { withBffMetrics } from '@/lib/bffMetrics';
+import { agentClient } from '@/lib/connectClients';
+import { restBackendHeaders } from '@/lib/restBackendHeaders';
 
-interface AgentTool {
-  name: string;
-  description: string;
-  inputSchema: unknown;
-}
-
-// GET /accounts/api/mcp-tools — proxies the agent's public GET /api/tools catalog; any fetch failure
-// returns { tools: [], reachable: false } (HTTP 200). Requires a session like every /accounts page.
+// GET /accounts/api/mcp-tools — the catalog comes from the agent's internal RPC (AGENT_ENDPOINT);
+// unset or any failure answers { tools: [], reachable: false } (HTTP 200); never AGENT_PUBLIC_URL.
 async function getHandler(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const base = process.env.AGENT_PUBLIC_URL;
-  if (!base) return NextResponse.json({ tools: [], reachable: false });
+  if (!agentClient) return NextResponse.json({ tools: [], reachable: false });
 
   try {
-    const res = await fetch(`${base}/api/tools`, { cache: 'no-store' });
-    if (!res.ok) return NextResponse.json({ tools: [], reachable: false });
-    const data = (await res.json()) as { tools: AgentTool[] };
-    return NextResponse.json({ tools: data.tools ?? [], reachable: true });
+    const data = await agentClient.listTools(
+      {},
+      { headers: restBackendHeaders(req, claims.user_id, claims.roles) },
+    );
+    const tools = data.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema ?? {},
+    }));
+    return NextResponse.json({ tools, reachable: true });
   } catch {
     return NextResponse.json({ tools: [], reachable: false });
   }

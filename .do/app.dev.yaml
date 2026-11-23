@@ -342,6 +342,9 @@ services:
       repository: xstockstrat/xstockstrat-agent
       tag: "YOUR_IMAGE_TAG"
     http_port: 9000
+    # Internal tool-catalog gRPC (mTLS, xstockstrat-ui only); never routed by ingress.
+    internal_ports:
+      - 50061
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -384,6 +387,8 @@ services:
         value: http
       - key: MCP_HTTP_PORT
         value: "9000"
+      - key: GRPC_PORT
+        value: "50061"
       # Feature 147: the agent HMAC-signs its OAuth txn blob with JWT_SECRET; same shared platform
       # JWT secret as identity/ui.
       - key: JWT_SECRET
@@ -644,6 +649,9 @@ services:
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: INGEST_ENDPOINT
         value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
+      # Agent tool catalog (internal gRPC): host:port, no scheme.
+      - key: AGENT_ENDPOINT
+        value: ${xstockstrat-agent.PRIVATE_DOMAIN}:50061
       - key: APP_URL
         value: ${APP_URL}
       - key: AGENT_PUBLIC_URL
