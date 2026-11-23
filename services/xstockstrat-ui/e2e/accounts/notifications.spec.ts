@@ -1,6 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
 import { TEST_USER_ID } from '../fixtures/users';
+import { ALERT_LIST_WITH_READ_STATE, ALERT_UNREAD } from '../fixtures/alerts';
 
 /**
  * E2E for the /accounts "Notifications" push feature (feature 165).
@@ -87,6 +88,65 @@ test.describe('push notifications page', () => {
     // The control carries a unique accessible name (C-17).
     await expect(page.getByRole('switch', { name: 'Enable push notifications' })).toBeVisible();
   });
+
+  async function thumbAndTrackCentres(page: Page) {
+    const track = page.getByRole('switch', { name: 'Enable push notifications' });
+    const trackBox = await track.boundingBox();
+    const thumbBox = await track.locator('[data-slot="switch-thumb"]').boundingBox();
+    if (!trackBox || !thumbBox) throw new Error('switch track or thumb not rendered');
+    return {
+      thumb: thumbBox.x + thumbBox.width / 2,
+      track: trackBox.x + trackBox.width / 2,
+    };
+  }
+
+  test('@AC-6 a checked switch is displayed with its thumb at the trailing end', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Notification, 'permission', {
+        configurable: true,
+        get: () => 'granted',
+      });
+      // `ready` is a prototype accessor, so it is overridden on the prototype, not assigned.
+      Object.defineProperty(ServiceWorkerContainer.prototype, 'ready', {
+        configurable: true,
+        get: () =>
+          Promise.resolve({
+            pushManager: {
+              getSubscription: () => Promise.resolve({ endpoint: 'https://push.example/e2e' }),
+            },
+          }),
+      });
+    });
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications');
+    const toggle = page.getByRole('switch', { name: 'Enable push notifications' });
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expect
+      .poll(async () => {
+        const c = await thumbAndTrackCentres(page);
+        return c.thumb > c.track;
+      })
+      .toBe(true);
+  });
+
+  test('@AC-7 an unchecked switch is displayed with its thumb at the leading end', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Notification, 'permission', {
+        configurable: true,
+        get: () => 'granted',
+      });
+    });
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications');
+    const toggle = page.getByRole('switch', { name: 'Enable push notifications' });
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    const c = await thumbAndTrackCentres(page);
+    expect(c.thumb).toBeLessThan(c.track);
+  });
 });
 
 test.describe('alert inbox (feature 203)', () => {
@@ -129,5 +189,34 @@ test.describe('alert inbox (feature 203)', () => {
       .first()
       .click();
     await expect.poll(() => markReadIds?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  test('@AC-4 the inbox row title opens the alert page', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications');
+    const list = page.getByTestId('alert-inbox-list');
+    await expect(list).toBeVisible({ timeout: 10000 });
+    await list.getByRole('link', { name: ALERT_UNREAD.title }).click();
+    await expect(page).toHaveURL(new RegExp(`/accounts/notifications/${ALERT_UNREAD.alertId}$`));
+    await expect(page.getByTestId('alert-detail')).toContainText(ALERT_UNREAD.title);
+  });
+
+  test('@AC-6 @feature-203 the title link leaves every row intact and nests no button', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/accounts/notifications');
+    const list = page.getByTestId('alert-inbox-list');
+    await expect(list).toBeVisible({ timeout: 10000 });
+    await expect(list.getByTestId('alert-row')).toHaveCount(ALERT_LIST_WITH_READ_STATE.length);
+    for (const a of ALERT_LIST_WITH_READ_STATE) {
+      const row = list.getByTestId('alert-row').filter({ hasText: a.title });
+      await expect(row.getByTestId('alert-module')).toHaveText(a.category);
+      await expect(row.getByTestId('alert-body')).toHaveText(a.body);
+      await expect(
+        row.getByRole('button', { name: `Mark notification ${a.title} read` }),
+      ).toHaveCount(a.read ? 0 : 1);
+    }
+    await expect(page.locator('a button')).toHaveCount(0);
   });
 });

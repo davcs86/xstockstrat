@@ -98,3 +98,28 @@ test.describe('wide-content overflow at the lg grid-split breakpoint (FR-4)', ()
     ).toBeLessThanOrEqual(1);
   });
 });
+
+/**
+ * Feature 344 (D-19): the alert bell is in every segment's header, so check the header fits from
+ * the sm breakpoint up to lg on the non-trader segments. The 1024px trader edge above stays out of scope.
+ */
+for (const width of [640, 768, 1024]) {
+  test.describe(`header with the alert bell at ${width}px (feature 344)`, () => {
+    test.use({ viewport: { width, height: 900 } });
+
+    for (const path of ['/insights/opportunities', '/accounts/notifications']) {
+      test(`no horizontal overflow at ${width}px — ${path}`, async ({ page }) => {
+        await addAuthCookie(page);
+        await page.goto(path);
+        await page.waitForLoadState('networkidle', { timeout: NETWORK_IDLE_MS }).catch(() => {});
+        await page.waitForTimeout(800);
+
+        const overflow = await horizontalOverflow(page);
+        expect(
+          overflow,
+          `page body scrolls horizontally by ${overflow}px at ${width}px on ${path}`,
+        ).toBeLessThanOrEqual(1);
+      });
+    }
+  });
+}

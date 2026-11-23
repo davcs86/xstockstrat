@@ -19,12 +19,14 @@ export const WATCHLIST_READINESS_PAGE_SIZE = 25;
  * `['watchlists']` bindings (no data dependency); the poll stays alive while any of THOSE rendered
  * pairs is missing/PENDING/UNKNOWN — so a symbol just added to `['watchlists']` (no readiness row
  * yet) keeps polling instead of hanging on a Skeleton (design Round-3 Obj 6 / Round-4 recovery),
- * and stops once every rendered pair is RESOLVED.
+ * and stops once every rendered pair is RESOLVED. `morePages` enables the fetch for paging only
+ * (the server's nextPageToken); it never keeps the poll alive.
  */
 export function useWatchlistReadiness(
   watchlistId: string,
   pageToken: string,
   pagePairs: { symbol: string; strategyId: string }[],
+  morePages = false,
 ) {
   // The bound-pair signature is part of the key so re-binding a strategy (which mutates the
   // `['watchlists']` bindings, not `pageToken`) refetches immediately instead of waiting on the
@@ -37,7 +39,7 @@ export function useWatchlistReadiness(
         watchlistId,
         page: { pageSize: WATCHLIST_READINESS_PAGE_SIZE, pageToken },
       }),
-    enabled: Boolean(watchlistId) && pagePairs.length > 0,
+    enabled: Boolean(watchlistId) && (pagePairs.length > 0 || morePages),
     staleTime: WATCHLIST_READINESS_POLL_MS,
     refetchInterval: (query) => {
       const map = readinessRowMap(query.state.data?.rows);

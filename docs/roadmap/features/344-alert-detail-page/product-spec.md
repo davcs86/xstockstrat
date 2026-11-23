@@ -21,6 +21,7 @@ FR-4. Each row in the Notifications list and in the header Alerts drawer links t
 FR-5. Opening the page marks the alert read for that user.
 FR-6. Activating a push notification opens that alert's page.
 FR-7. A backfill-failure alert's body states the failure in plain language (status and message); the raw exception text is kept only in the alert's context.
+FR-8. The header Alerts bell with its unread badge is present on every page of every segment, including `/accounts/*` (operator decision 2026-11-15, design gate; D-17).
 
 ## Out of Scope
 
@@ -40,13 +41,13 @@ Exact service names from CLAUDE.md Service Registry:
 
 _Constitution **C-14**._
 
-- [x] **UI** — `xstockstrat-ui`: new page under `/accounts/notifications/<alert_id>` (child of the existing Notifications route, reached from list rows, drawer rows and push); links added to the Notifications list and the header Alerts drawer
+- [x] **UI** — `xstockstrat-ui`: new page under `/accounts/notifications/<alert_id>` (child of the existing Notifications route, reached from list rows, drawer rows and push); links added to the Notifications list and the header Alerts drawer. The header bell with its unread badge is in the shared header on every page of every segment, including `/accounts/*` (FR-8), and its badge drops on the alert page itself when an unread alert's page is opened (FR-5; amended 2026-11-15, design gate, D-17). No new shared-nav entry (C-10): the existing `Notifications` entry (`/accounts/notifications`) must be the highlighted one while an alert page is open — today that entry matches its path exactly (`PlatformHeader.tsx`, `navGroups.tsx`), so design changes it to also match child paths
 - [ ] **Agent**
 - [ ] **None**
 
 ## Proto Contract Changes
 
-- New RPC `notify.v1.NotifyService/GetAlert` (request: `alert_id`; response: `Alert`) — additive, non-breaking
+- New RPC `notify.v1.NotifyService/GetAlert` (request: `alert_id`; response: `Alert`) — additive, non-breaking (`buf breaking` passes; 1-owner gate below)
 - No change to `message Alert` expected (it already carries `source_service`, `context`, `correlation_id`, `read`, `read_at`); confirm in design
 
 ## Config Key Changes
@@ -73,8 +74,8 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 ## Open Questions
 
 - [x] FR-5 (auto mark-read on open) — confirmed by the operator 2026-11-15.
-- [ ] FR-6 depends on what the push payload carries today (alert ID / URL); design must check the service worker and notify's push fan-out.
-- [ ] Whether the page belongs under `/accounts/notifications/` or the trader segment, and whether a child route needs a `PLATFORM_SUBNAV` entry (C-10).
-- [ ] FR-7: which error fields are safe to show (gRPC status code + details) and whether the job row / ledger event keep the raw string.
-- [ ] Dependency: 339-fix-symbol-page-alerts-ui changes the same drawer (`AlertStream.tsx`); order 339 first or record it in merge-order.md.
-- Known trap (ledger, `strategy-creation-flow`): BFF dispatch can collapse backend errors to a generic "HTTP 400" — verify NOT_FOUND from `GetAlert` reaches the page as "Alert not found".
+- [x] FR-6 push payload — deferred to design: FR-6 and `@AC-7` are binding as written; design checks what the push payload carries today (alert ID / URL) in the service worker and notify's push fan-out and picks how the alert ID reaches the notification.
+- [x] Page location — decided 2026-11-15: a dedicated page per alert (operator decision; not an expandable row) at `/accounts/notifications/<alert_id>`, a child of the existing Notifications route. It gets no nav entry of its own; the parent `Notifications` entry must stay highlighted, which needs a nav match change (see Consumer Surface(s)).
+- [x] FR-7 error fields — decided by the operator 2026-11-15: the body is plain language (gRPC status code + details message, as in `@AC-8`); the raw exception text stays only in the alert context. The backfill job row and the ledger event are not changed by this feature. Design must confirm that no other reader depends on the old alert body.
+- [x] Dependency — decided by the operator 2026-11-15: 339-fix-symbol-page-alerts-ui changes the same drawer (`AlertStream.tsx`) and is treated as landing first; this feature's drawer links (FR-4) build on 339's drawer. The `merge-order.md` row is recorded by the review router, not by this spec.
+- Known trap (ledger, `strategy-creation-flow`): BFF dispatch can collapse backend errors to a generic "HTTP 400" — verify NOT_FOUND from `GetAlert` reaches the page as "Alert not found" (`@AC-2`).

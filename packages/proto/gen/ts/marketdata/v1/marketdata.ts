@@ -22,6 +22,8 @@ import {
 } from "@grpc/grpc-js";
 import {
   Asset,
+  BackfillSymbolResult,
+  DelistedState,
   PageRequest,
   PageResponse,
   Sector,
@@ -41,6 +43,75 @@ import {
 import { Timestamp } from "../../google/protobuf/timestamp";
 
 export const protobufPackage = "xstockstrat.marketdata.v1";
+
+export enum DelistingAlertState {
+  DELISTING_ALERT_STATE_UNSPECIFIED = "DELISTING_ALERT_STATE_UNSPECIFIED",
+  DELISTING_ALERT_STATE_PENDING = "DELISTING_ALERT_STATE_PENDING",
+  DELISTING_ALERT_STATE_CLAIMED = "DELISTING_ALERT_STATE_CLAIMED",
+  DELISTING_ALERT_STATE_REDELIVERY = "DELISTING_ALERT_STATE_REDELIVERY",
+  DELISTING_ALERT_STATE_REPORTED = "DELISTING_ALERT_STATE_REPORTED",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function delistingAlertStateFromJSON(object: any): DelistingAlertState {
+  switch (object) {
+    case 0:
+    case "DELISTING_ALERT_STATE_UNSPECIFIED":
+      return DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED;
+    case 1:
+    case "DELISTING_ALERT_STATE_PENDING":
+      return DelistingAlertState.DELISTING_ALERT_STATE_PENDING;
+    case 2:
+    case "DELISTING_ALERT_STATE_CLAIMED":
+      return DelistingAlertState.DELISTING_ALERT_STATE_CLAIMED;
+    case 3:
+    case "DELISTING_ALERT_STATE_REDELIVERY":
+      return DelistingAlertState.DELISTING_ALERT_STATE_REDELIVERY;
+    case 4:
+    case "DELISTING_ALERT_STATE_REPORTED":
+      return DelistingAlertState.DELISTING_ALERT_STATE_REPORTED;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return DelistingAlertState.UNRECOGNIZED;
+  }
+}
+
+export function delistingAlertStateToJSON(object: DelistingAlertState): string {
+  switch (object) {
+    case DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED:
+      return "DELISTING_ALERT_STATE_UNSPECIFIED";
+    case DelistingAlertState.DELISTING_ALERT_STATE_PENDING:
+      return "DELISTING_ALERT_STATE_PENDING";
+    case DelistingAlertState.DELISTING_ALERT_STATE_CLAIMED:
+      return "DELISTING_ALERT_STATE_CLAIMED";
+    case DelistingAlertState.DELISTING_ALERT_STATE_REDELIVERY:
+      return "DELISTING_ALERT_STATE_REDELIVERY";
+    case DelistingAlertState.DELISTING_ALERT_STATE_REPORTED:
+      return "DELISTING_ALERT_STATE_REPORTED";
+    case DelistingAlertState.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function delistingAlertStateToNumber(object: DelistingAlertState): number {
+  switch (object) {
+    case DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED:
+      return 0;
+    case DelistingAlertState.DELISTING_ALERT_STATE_PENDING:
+      return 1;
+    case DelistingAlertState.DELISTING_ALERT_STATE_CLAIMED:
+      return 2;
+    case DelistingAlertState.DELISTING_ALERT_STATE_REDELIVERY:
+      return 3;
+    case DelistingAlertState.DELISTING_ALERT_STATE_REPORTED:
+      return 4;
+    case DelistingAlertState.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
 
 export interface Bar {
   symbol: string;
@@ -158,6 +229,7 @@ export interface BackfillBarsResponse {
   failedSymbols: string[];
   /** estimated total bars across requested symbols/range (FR-6) */
   expectedBars: number;
+  symbolResults: BackfillSymbolResult[];
 }
 
 export interface GetDataCoverageRequest {
@@ -236,6 +308,7 @@ export interface Fundamentals {
   dividendYield: number;
   eps: number;
   beta: number;
+  /** a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points */
   roe: number;
   debtToEquity: number;
   price: number;
@@ -303,6 +376,7 @@ export interface HistoricalFundamentalsPeriod {
   dividendYield: number;
   eps: number;
   beta: number;
+  /** a fraction: net income / shareholders' equity (0.25 = 25%), not percentage points; a quarterly period uses trailing-twelve-month net income */
   roe: number;
   debtToEquity: number;
   price: number;
@@ -362,6 +436,7 @@ export interface BackfillFundamentalsRequest {
 export interface BackfillFundamentalsResponse {
   periodsWritten: number;
   failedSymbols: string[];
+  symbolResults: BackfillSymbolResult[];
 }
 
 export interface GetLatestQuotesRequest {
@@ -476,6 +551,29 @@ export interface SymbolServability {
 export interface GetSymbolServabilityResponse {
   symbols: SymbolServability[];
   assetSetLoaded: boolean;
+}
+
+export interface FlaggedSymbol {
+  symbol: string;
+  state?: DelistedState | undefined;
+  alertState: DelistingAlertState;
+  /** false means "do not remove" */
+  unservableInCurrentSet: boolean;
+}
+
+export interface SyncWatchlistDelistingsRequest {
+  symbols: string[];
+}
+
+export interface SyncWatchlistDelistingsResponse {
+  flagged: FlaggedSymbol[];
+}
+
+export interface AckDelistingAlertsRequest {
+  symbols: string[];
+}
+
+export interface AckDelistingAlertsResponse {
 }
 
 function createBaseBar(): Bar {
@@ -1747,7 +1845,7 @@ export const BackfillBarsRequest: MessageFns<BackfillBarsRequest> = {
 };
 
 function createBaseBackfillBarsResponse(): BackfillBarsResponse {
-  return { barsWritten: 0, failedSymbols: [], expectedBars: 0 };
+  return { barsWritten: 0, failedSymbols: [], expectedBars: 0, symbolResults: [] };
 }
 
 export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
@@ -1760,6 +1858,9 @@ export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
     }
     if (message.expectedBars !== 0) {
       writer.uint32(24).int64(message.expectedBars);
+    }
+    for (const v of message.symbolResults) {
+      BackfillSymbolResult.encode(v!, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -1795,6 +1896,14 @@ export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
           message.expectedBars = longToNumber(reader.int64());
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.symbolResults.push(BackfillSymbolResult.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1821,6 +1930,11 @@ export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
         : isSet(object.expected_bars)
         ? globalThis.Number(object.expected_bars)
         : 0,
+      symbolResults: globalThis.Array.isArray(object?.symbolResults)
+        ? object.symbolResults.map((e: any) => BackfillSymbolResult.fromJSON(e))
+        : globalThis.Array.isArray(object?.symbol_results)
+        ? object.symbol_results.map((e: any) => BackfillSymbolResult.fromJSON(e))
+        : [],
     };
   },
 
@@ -1835,6 +1949,9 @@ export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
     if (message.expectedBars !== 0) {
       obj.expectedBars = Math.round(message.expectedBars);
     }
+    if (message.symbolResults?.length) {
+      obj.symbolResults = message.symbolResults.map((e) => BackfillSymbolResult.toJSON(e));
+    }
     return obj;
   },
 
@@ -1846,6 +1963,7 @@ export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
     message.barsWritten = object.barsWritten ?? 0;
     message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
     message.expectedBars = object.expectedBars ?? 0;
+    message.symbolResults = object.symbolResults?.map((e) => BackfillSymbolResult.fromPartial(e)) || [];
     return message;
   },
 };
@@ -4191,7 +4309,7 @@ export const BackfillFundamentalsRequest: MessageFns<BackfillFundamentalsRequest
 };
 
 function createBaseBackfillFundamentalsResponse(): BackfillFundamentalsResponse {
-  return { periodsWritten: 0, failedSymbols: [] };
+  return { periodsWritten: 0, failedSymbols: [], symbolResults: [] };
 }
 
 export const BackfillFundamentalsResponse: MessageFns<BackfillFundamentalsResponse> = {
@@ -4201,6 +4319,9 @@ export const BackfillFundamentalsResponse: MessageFns<BackfillFundamentalsRespon
     }
     for (const v of message.failedSymbols) {
       writer.uint32(18).string(v!);
+    }
+    for (const v of message.symbolResults) {
+      BackfillSymbolResult.encode(v!, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -4228,6 +4349,14 @@ export const BackfillFundamentalsResponse: MessageFns<BackfillFundamentalsRespon
           message.failedSymbols.push(reader.string());
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.symbolResults.push(BackfillSymbolResult.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4249,6 +4378,11 @@ export const BackfillFundamentalsResponse: MessageFns<BackfillFundamentalsRespon
         : globalThis.Array.isArray(object?.failed_symbols)
         ? object.failed_symbols.map((e: any) => globalThis.String(e))
         : [],
+      symbolResults: globalThis.Array.isArray(object?.symbolResults)
+        ? object.symbolResults.map((e: any) => BackfillSymbolResult.fromJSON(e))
+        : globalThis.Array.isArray(object?.symbol_results)
+        ? object.symbol_results.map((e: any) => BackfillSymbolResult.fromJSON(e))
+        : [],
     };
   },
 
@@ -4260,6 +4394,9 @@ export const BackfillFundamentalsResponse: MessageFns<BackfillFundamentalsRespon
     if (message.failedSymbols?.length) {
       obj.failedSymbols = message.failedSymbols;
     }
+    if (message.symbolResults?.length) {
+      obj.symbolResults = message.symbolResults.map((e) => BackfillSymbolResult.toJSON(e));
+    }
     return obj;
   },
 
@@ -4270,6 +4407,7 @@ export const BackfillFundamentalsResponse: MessageFns<BackfillFundamentalsRespon
     const message = createBaseBackfillFundamentalsResponse();
     message.periodsWritten = object.periodsWritten ?? 0;
     message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
+    message.symbolResults = object.symbolResults?.map((e) => BackfillSymbolResult.fromPartial(e)) || [];
     return message;
   },
 };
@@ -5850,6 +5988,358 @@ export const GetSymbolServabilityResponse: MessageFns<GetSymbolServabilityRespon
   },
 };
 
+function createBaseFlaggedSymbol(): FlaggedSymbol {
+  return {
+    symbol: "",
+    state: undefined,
+    alertState: DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED,
+    unservableInCurrentSet: false,
+  };
+}
+
+export const FlaggedSymbol: MessageFns<FlaggedSymbol> = {
+  encode(message: FlaggedSymbol, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.state !== undefined) {
+      DelistedState.encode(message.state, writer.uint32(18).fork()).join();
+    }
+    if (message.alertState !== DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED) {
+      writer.uint32(24).int32(delistingAlertStateToNumber(message.alertState));
+    }
+    if (message.unservableInCurrentSet !== false) {
+      writer.uint32(32).bool(message.unservableInCurrentSet);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FlaggedSymbol {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFlaggedSymbol();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.state = DelistedState.decode(reader, reader.uint32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.alertState = delistingAlertStateFromJSON(reader.int32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.unservableInCurrentSet = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FlaggedSymbol {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      state: isSet(object.state) ? DelistedState.fromJSON(object.state) : undefined,
+      alertState: isSet(object.alertState)
+        ? delistingAlertStateFromJSON(object.alertState)
+        : isSet(object.alert_state)
+        ? delistingAlertStateFromJSON(object.alert_state)
+        : DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED,
+      unservableInCurrentSet: isSet(object.unservableInCurrentSet)
+        ? globalThis.Boolean(object.unservableInCurrentSet)
+        : isSet(object.unservable_in_current_set)
+        ? globalThis.Boolean(object.unservable_in_current_set)
+        : false,
+    };
+  },
+
+  toJSON(message: FlaggedSymbol): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.state !== undefined) {
+      obj.state = DelistedState.toJSON(message.state);
+    }
+    if (message.alertState !== DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED) {
+      obj.alertState = delistingAlertStateToJSON(message.alertState);
+    }
+    if (message.unservableInCurrentSet !== false) {
+      obj.unservableInCurrentSet = message.unservableInCurrentSet;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FlaggedSymbol>, I>>(base?: I): FlaggedSymbol {
+    return FlaggedSymbol.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FlaggedSymbol>, I>>(object: I): FlaggedSymbol {
+    const message = createBaseFlaggedSymbol();
+    message.symbol = object.symbol ?? "";
+    message.state = (object.state !== undefined && object.state !== null)
+      ? DelistedState.fromPartial(object.state)
+      : undefined;
+    message.alertState = object.alertState ?? DelistingAlertState.DELISTING_ALERT_STATE_UNSPECIFIED;
+    message.unservableInCurrentSet = object.unservableInCurrentSet ?? false;
+    return message;
+  },
+};
+
+function createBaseSyncWatchlistDelistingsRequest(): SyncWatchlistDelistingsRequest {
+  return { symbols: [] };
+}
+
+export const SyncWatchlistDelistingsRequest: MessageFns<SyncWatchlistDelistingsRequest> = {
+  encode(message: SyncWatchlistDelistingsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SyncWatchlistDelistingsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSyncWatchlistDelistingsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SyncWatchlistDelistingsRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: SyncWatchlistDelistingsRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SyncWatchlistDelistingsRequest>, I>>(base?: I): SyncWatchlistDelistingsRequest {
+    return SyncWatchlistDelistingsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SyncWatchlistDelistingsRequest>, I>>(
+    object: I,
+  ): SyncWatchlistDelistingsRequest {
+    const message = createBaseSyncWatchlistDelistingsRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseSyncWatchlistDelistingsResponse(): SyncWatchlistDelistingsResponse {
+  return { flagged: [] };
+}
+
+export const SyncWatchlistDelistingsResponse: MessageFns<SyncWatchlistDelistingsResponse> = {
+  encode(message: SyncWatchlistDelistingsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.flagged) {
+      FlaggedSymbol.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SyncWatchlistDelistingsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSyncWatchlistDelistingsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.flagged.push(FlaggedSymbol.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SyncWatchlistDelistingsResponse {
+    return {
+      flagged: globalThis.Array.isArray(object?.flagged)
+        ? object.flagged.map((e: any) => FlaggedSymbol.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: SyncWatchlistDelistingsResponse): unknown {
+    const obj: any = {};
+    if (message.flagged?.length) {
+      obj.flagged = message.flagged.map((e) => FlaggedSymbol.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SyncWatchlistDelistingsResponse>, I>>(base?: I): SyncWatchlistDelistingsResponse {
+    return SyncWatchlistDelistingsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SyncWatchlistDelistingsResponse>, I>>(
+    object: I,
+  ): SyncWatchlistDelistingsResponse {
+    const message = createBaseSyncWatchlistDelistingsResponse();
+    message.flagged = object.flagged?.map((e) => FlaggedSymbol.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseAckDelistingAlertsRequest(): AckDelistingAlertsRequest {
+  return { symbols: [] };
+}
+
+export const AckDelistingAlertsRequest: MessageFns<AckDelistingAlertsRequest> = {
+  encode(message: AckDelistingAlertsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AckDelistingAlertsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAckDelistingAlertsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AckDelistingAlertsRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: AckDelistingAlertsRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AckDelistingAlertsRequest>, I>>(base?: I): AckDelistingAlertsRequest {
+    return AckDelistingAlertsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AckDelistingAlertsRequest>, I>>(object: I): AckDelistingAlertsRequest {
+    const message = createBaseAckDelistingAlertsRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseAckDelistingAlertsResponse(): AckDelistingAlertsResponse {
+  return {};
+}
+
+export const AckDelistingAlertsResponse: MessageFns<AckDelistingAlertsResponse> = {
+  encode(_: AckDelistingAlertsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AckDelistingAlertsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAckDelistingAlertsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): AckDelistingAlertsResponse {
+    return {};
+  },
+
+  toJSON(_: AckDelistingAlertsResponse): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AckDelistingAlertsResponse>, I>>(base?: I): AckDelistingAlertsResponse {
+    return AckDelistingAlertsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AckDelistingAlertsResponse>, I>>(_: I): AckDelistingAlertsResponse {
+    const message = createBaseAckDelistingAlertsResponse();
+    return message;
+  },
+};
+
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -6111,6 +6601,31 @@ export const MarketDataServiceService = {
       Buffer.from(GetSymbolServabilityResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetSymbolServabilityResponse => GetSymbolServabilityResponse.decode(value),
   },
+  /** internal: xstockstrat-portfolio only */
+  syncWatchlistDelistings: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/SyncWatchlistDelistings" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SyncWatchlistDelistingsRequest): Buffer =>
+      Buffer.from(SyncWatchlistDelistingsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SyncWatchlistDelistingsRequest => SyncWatchlistDelistingsRequest.decode(value),
+    responseSerialize: (value: SyncWatchlistDelistingsResponse): Buffer =>
+      Buffer.from(SyncWatchlistDelistingsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SyncWatchlistDelistingsResponse =>
+      SyncWatchlistDelistingsResponse.decode(value),
+  },
+  /** internal: xstockstrat-portfolio only */
+  ackDelistingAlerts: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/AckDelistingAlerts" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AckDelistingAlertsRequest): Buffer =>
+      Buffer.from(AckDelistingAlertsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AckDelistingAlertsRequest => AckDelistingAlertsRequest.decode(value),
+    responseSerialize: (value: AckDelistingAlertsResponse): Buffer =>
+      Buffer.from(AckDelistingAlertsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): AckDelistingAlertsResponse => AckDelistingAlertsResponse.decode(value),
+  },
 } as const;
 
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
@@ -6172,6 +6687,10 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
    * >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
    */
   getSymbolServability: handleUnaryCall<GetSymbolServabilityRequest, GetSymbolServabilityResponse>;
+  /** internal: xstockstrat-portfolio only */
+  syncWatchlistDelistings: handleUnaryCall<SyncWatchlistDelistingsRequest, SyncWatchlistDelistingsResponse>;
+  /** internal: xstockstrat-portfolio only */
+  ackDelistingAlerts: handleUnaryCall<AckDelistingAlertsRequest, AckDelistingAlertsResponse>;
 }
 
 export interface MarketDataServiceClient extends Client {
@@ -6508,6 +7027,38 @@ export interface MarketDataServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetSymbolServabilityResponse) => void,
+  ): ClientUnaryCall;
+  /** internal: xstockstrat-portfolio only */
+  syncWatchlistDelistings(
+    request: SyncWatchlistDelistingsRequest,
+    callback: (error: ServiceError | null, response: SyncWatchlistDelistingsResponse) => void,
+  ): ClientUnaryCall;
+  syncWatchlistDelistings(
+    request: SyncWatchlistDelistingsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SyncWatchlistDelistingsResponse) => void,
+  ): ClientUnaryCall;
+  syncWatchlistDelistings(
+    request: SyncWatchlistDelistingsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SyncWatchlistDelistingsResponse) => void,
+  ): ClientUnaryCall;
+  /** internal: xstockstrat-portfolio only */
+  ackDelistingAlerts(
+    request: AckDelistingAlertsRequest,
+    callback: (error: ServiceError | null, response: AckDelistingAlertsResponse) => void,
+  ): ClientUnaryCall;
+  ackDelistingAlerts(
+    request: AckDelistingAlertsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AckDelistingAlertsResponse) => void,
+  ): ClientUnaryCall;
+  ackDelistingAlerts(
+    request: AckDelistingAlertsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AckDelistingAlertsResponse) => void,
   ): ClientUnaryCall;
 }
 

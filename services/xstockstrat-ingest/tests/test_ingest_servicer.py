@@ -8,8 +8,9 @@ a running gRPC server or database.
 
 import asyncio
 import json
+import re
 from contextlib import ExitStack, contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
@@ -41,6 +42,7 @@ def make_servicer(
     chunk_window_days: int = 400,
     chunk_max_bars: int = 10_000_000,
     dedup_window_hours: int = 24,
+    self_serve_max_range_days: int = 730,
 ) -> IngestServicer:
     """Return an IngestServicer with fully mocked dependencies.
 
@@ -57,6 +59,7 @@ def make_servicer(
     cfg.backfill_chunk_window_days = chunk_window_days
     cfg.backfill_chunk_max_bars = chunk_max_bars
     cfg.dedup_window_hours = dedup_window_hours
+    cfg.backfill_self_serve_max_range_days = self_serve_max_range_days
     marketdata_ch = MagicMock()
     ledger_ch = MagicMock()
     svc = IngestServicer(cfg, marketdata_ch, ledger_ch, db_pool=db)
@@ -359,16 +362,12 @@ class TestTriggerBackfill:
             await svc.TriggerBackfill(req, context)
 
     @pytest.mark.asyncio
-    async def test_permission_denied_without_admin_scope(self):
-        """Feature 092 (F-11): the quota-spending backfill is admin-gated, like CancelBackfill.
-
-        RED before the gate: a no-admin caller previously queued a paid job unconditionally.
-        """
+    async def test_permission_denied_without_admin_scope(self, self_serve_denial_contract):
+        """Feature 092 (F-11) as narrowed by feature 343: a non-admin request outside the
+        self-serve envelope (here FULL fill mode) queues no paid job."""
         svc = make_servicer(db=MagicMock())
-        req = MagicMock()
-        req.symbols = ["AAPL"]
-        req.timeframe = "1d"
-        req.range = common_pb2.TimeRange()
+        req = _self_serve_req()
+        req.fill_mode = ingest_pb2.FILL_MODE_FULL
         ctx = _ctx("0")  # no ADMIN bit
         with (
             patch("asyncio.create_task") as spawn,
@@ -376,7 +375,10 @@ class TestTriggerBackfill:
         ):
             with pytest.raises(Exception, match="aborted"):
                 await svc.TriggerBackfill(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+        assert ctx.abort.await_args.args == (
+            grpc.StatusCode.PERMISSION_DENIED,
+            _denial_detail(self_serve_denial_contract, _FILL_MODE),
+        )
         insert.assert_not_awaited()  # no paid job queued
         spawn.assert_not_called()  # no runner spawned
 
@@ -416,6 +418,268 @@ class TestTriggerBackfill:
                 await svc.TriggerBackfill(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
         insert.assert_not_awaited()
+        spawn.assert_not_called()
+
+
+# Positions in the shared contract's token list (tests/fixtures/self_serve_denial.json);
+# the contract row below pins the servicer tuple to that list.
+_MULTI_SYMBOL, _DATA_KIND, _FILL_MODE, _OVERWRITE = 0, 1, 2, 3
+_RANGE_UNSET, _RANGE_TOO_LONG, _CALLBACK, _NO_USER = 4, 5, 6, 7
+_RANGE_END = datetime(2026, 1, 1, tzinfo=UTC)
+_UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+_LOCK_SQL = "SELECT pg_advisory_xact_lock(hashtext($1))"
+
+
+def _set_range_days(req, days: int) -> None:
+    req.range.end.FromDatetime(_RANGE_END)
+    req.range.start.FromDatetime(_RANGE_END - timedelta(days=days))
+
+
+def _self_serve_req() -> ingest_pb2.TriggerBackfillRequest:
+    """The in-envelope base request: one symbol, 1DAY, GAPS_ONLY, no overwrite, 300 days."""
+    req = ingest_pb2.TriggerBackfillRequest(
+        symbols=["AAPL"],
+        timeframe_enum=common_pb2.TIMEFRAME_1DAY,
+        fill_mode=ingest_pb2.FILL_MODE_GAPS_ONLY,
+        overwrite=False,
+    )
+    _set_range_days(req, 300)
+    return req
+
+
+def _denial_detail(contract, token_index: int, max_days: int | None = None) -> str:
+    detail = contract["prefix"] + contract["tokens"][token_index]
+    if max_days is not None:
+        detail += contract["range_too_long_suffix"].format(max_days=max_days)
+    return detail
+
+
+def _start_equals_end(req):
+    req.range.start.CopyFrom(req.range.end)
+
+
+# (token index, mutation, x-user-id); one row per way out of the envelope.
+_DENIAL_ROWS = {
+    "two_symbols": (_MULTI_SYMBOL, lambda r: r.symbols.append("MSFT"), "u1"),
+    "fundamentals": (
+        _DATA_KIND,
+        lambda r: setattr(r, "data_kind", ingest_pb2.BACKFILL_DATA_KIND_FUNDAMENTALS),
+        "u1",
+    ),
+    "full_fill": (
+        _FILL_MODE,
+        lambda r: setattr(r, "fill_mode", ingest_pb2.FILL_MODE_FULL),
+        "u1",
+    ),
+    "overwrite": (_OVERWRITE, lambda r: setattr(r, "overwrite", True), "u1"),
+    "range_cleared": (_RANGE_UNSET, lambda r: r.ClearField("range"), "u1"),
+    "start_equals_end": (_RANGE_UNSET, _start_equals_end, "u1"),
+    "731_days": (_RANGE_TOO_LONG, lambda r: _set_range_days(r, 731), "u1"),
+    "with_callback": (
+        _CALLBACK,
+        lambda r: setattr(r, "callback_url", "https://webhooks.ts.example.net/h"),
+        "u1",
+    ),
+    "no_user_header": (_NO_USER, lambda r: None, ""),
+    "system_user": (_NO_USER, lambda r: None, "system"),
+}
+
+
+@contextmanager
+def _self_serve_patches(*, active=False, insert_side_effect=None):
+    with (
+        patch("asyncio.create_task") as spawn,
+        patch(f"{_REPO}.insert_job", AsyncMock(side_effect=insert_side_effect)) as insert,
+        patch(f"{_REPO}.has_active_job", AsyncMock(return_value=active)) as has_active,
+    ):
+        yield spawn, insert, has_active
+
+
+class TestTriggerBackfillSelfServe:
+    """Feature 343: a non-admin trigger is accepted inside the self-serve envelope, denied with
+    the first failed condition's token outside it, and de-duplicated per symbol."""
+
+    def test_contract_matches_the_shared_fixture(self, self_serve_denial_contract):
+        contract = self_serve_denial_contract
+        assert IngestServicer._SELF_SERVE_DENIAL_TOKENS == tuple(contract["tokens"])
+        assert IngestServicer._SELF_SERVE_DENIAL_PREFIX == contract["prefix"]
+        token = contract["tokens"][_RANGE_TOO_LONG]
+        assert IngestServicer._self_serve_denial_detail(token, 730) == _denial_detail(
+            contract, _RANGE_TOO_LONG, 730
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("row", list(_DENIAL_ROWS), ids=list(_DENIAL_ROWS))
+    async def test_out_of_envelope_is_denied(self, row, self_serve_denial_contract):
+        """@AC-15 (every row) and @AC-12 (the 731-day row carries the span suffix)."""
+        token_index, mutate, user_id = _DENIAL_ROWS[row]
+        svc = make_servicer(db=MagicMock())
+        svc._notify = _notify_stub()
+        req = _self_serve_req()
+        mutate(req)
+        ctx = _ctx("0", user_id=user_id)
+        with _self_serve_patches() as (spawn, insert, _):
+            with pytest.raises(Exception, match="aborted"):
+                await svc.TriggerBackfill(req, ctx)
+        max_days = 730 if token_index == _RANGE_TOO_LONG else None
+        expected = _denial_detail(self_serve_denial_contract, token_index, max_days)
+        assert ctx.abort.await_args.args == (grpc.StatusCode.PERMISSION_DENIED, expected)
+        if max_days is not None:
+            assert expected.endswith(" (max 730 days)")
+        insert.assert_not_awaited()
+        spawn.assert_not_called()
+        svc._notify.FanoutWebhook.assert_not_awaited()
+
+    def test_every_contract_token_has_a_denial_row(self, self_serve_denial_contract):
+        covered = {index for index, _, _ in _DENIAL_ROWS.values()}
+        assert covered == set(range(len(self_serve_denial_contract["tokens"])))
+
+    @pytest.mark.asyncio
+    async def test_first_failed_condition_wins(self, self_serve_denial_contract):
+        svc = make_servicer(db=MagicMock())
+        req = _self_serve_req()
+        req.symbols.append("MSFT")
+        req.overwrite = True
+        ctx = _ctx("0")
+        with _self_serve_patches():
+            with pytest.raises(Exception, match="aborted"):
+                await svc.TriggerBackfill(req, ctx)
+        assert ctx.abort.await_args.args == (
+            grpc.StatusCode.PERMISSION_DENIED,
+            _denial_detail(self_serve_denial_contract, _MULTI_SYMBOL),
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("days", [300, 730], ids=["base", "at_cap"])
+    async def test_non_admin_in_envelope_is_queued(self, days):
+        """@AC-7: the lock, the de-dup read and the insert share one transaction connection."""
+        db, conn = transaction_conn()
+        svc = make_servicer(db=db)
+        req = _self_serve_req()
+        _set_range_days(req, days)
+        ctx = _ctx("0")
+        with _self_serve_patches() as (spawn, insert, has_active):
+            resp = await svc.TriggerBackfill(req, ctx)
+        ctx.abort.assert_not_called()
+        assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        assert resp.job_id != ""
+        conn.execute.assert_awaited_once_with(_LOCK_SQL, "backfill:AAPL")
+        has_active.assert_awaited_once_with(
+            conn,
+            "AAPL",
+            [ingest_pb2.BACKFILL_STATUS_QUEUED, ingest_pb2.BACKFILL_STATUS_RUNNING],
+        )
+        assert insert.await_args.args[0] is conn
+        assert insert.await_args.kwargs["symbols"] == ["AAPL"]
+        assert insert.await_args.kwargs["status"] == ingest_pb2.BACKFILL_STATUS_QUEUED
+        spawn.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_queued_event_forwards_the_caller_not_a_payload_user(self):
+        """D-11 / PLAT-4: the owner rides x-user-id metadata; the payload names no user."""
+        db, _ = transaction_conn()
+        svc = make_servicer(db=db)
+        with _self_serve_patches():
+            await svc.TriggerBackfill(_self_serve_req(), _ctx("0"))
+        call = svc._ledger.AppendEvent.await_args
+        assert call.args[0].event_type == "ingest.backfill.queued"
+        assert ("x-user-id", "u1") in call.kwargs["metadata"]
+        assert "user_id" not in MessageToDict(call.args[0].payload)
+
+    @pytest.mark.asyncio
+    async def test_admin_keeps_multi_symbol_full_without_the_de_dup(self):
+        """D-27: the admin row asserts QUEUED only."""
+        db = MagicMock()
+        svc = make_servicer(db=db)
+        req = _self_serve_req()
+        req.symbols.append("MSFT")
+        req.fill_mode = ingest_pb2.FILL_MODE_FULL
+        with _self_serve_patches() as (_, insert, has_active):
+            resp = await svc.TriggerBackfill(req, _ctx("4"))
+        assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        assert insert.await_args.args[0] is db
+        db.acquire.assert_not_called()
+        has_active.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_duplicate_is_already_exists_without_a_job_id(self):
+        """@AC-11."""
+        db, _ = transaction_conn()
+        svc = make_servicer(db=db)
+        ctx = _ctx("0")
+        with _self_serve_patches(active=True) as (spawn, insert, _):
+            with pytest.raises(Exception, match="aborted"):
+                await svc.TriggerBackfill(_self_serve_req(), ctx)
+        code, detail = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.ALREADY_EXISTS
+        assert "AAPL" in detail
+        assert "already queued or running" in detail
+        assert _UUID_RE.search(detail) is None
+        insert.assert_not_awaited()
+        svc._ledger.AppendEvent.assert_not_awaited()
+        spawn.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_self_serve_requests_queue_one_job(self):
+        """The advisory lock serializes the read-then-insert; without it both would queue."""
+        lock = asyncio.Lock()
+        inserted: set[str] = set()
+
+        def acquire():
+            conn = MagicMock()
+
+            async def take_lock(sql, key):
+                await lock.acquire()
+
+            async def release_lock(*exc):
+                lock.release()
+                return False
+
+            conn.execute = AsyncMock(side_effect=take_lock)
+            tx = MagicMock()
+            tx.__aenter__ = AsyncMock(return_value=None)
+            tx.__aexit__ = AsyncMock(side_effect=release_lock)
+            conn.transaction = MagicMock(return_value=tx)
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=conn)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            return cm
+
+        async def fake_has_active(conn, symbol, statuses):
+            await asyncio.sleep(0)
+            return symbol in inserted
+
+        async def fake_insert(conn, **kwargs):
+            await asyncio.sleep(0)
+            inserted.update(kwargs["symbols"])
+
+        db = MagicMock()
+        db.acquire = MagicMock(side_effect=acquire)
+        svc = make_servicer(db=db)
+        ctxs = [_ctx("0"), _ctx("0")]
+        with (
+            patch("asyncio.create_task"),
+            patch(f"{_REPO}.insert_job", AsyncMock(side_effect=fake_insert)),
+            patch(f"{_REPO}.has_active_job", AsyncMock(side_effect=fake_has_active)),
+        ):
+            results = await asyncio.gather(
+                *(svc.TriggerBackfill(_self_serve_req(), c) for c in ctxs),
+                return_exceptions=True,
+            )
+        queued = [r for r in results if isinstance(r, ingest_pb2.TriggerBackfillResponse)]
+        assert len(queued) == 1
+        assert queued[0].status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        aborted = [c.abort.await_args.args[0] for c in ctxs if c.abort.await_args]
+        assert aborted == [grpc.StatusCode.ALREADY_EXISTS]
+
+    @pytest.mark.asyncio
+    async def test_insert_failure_emits_nothing_and_spawns_nothing(self):
+        db, _ = transaction_conn()
+        svc = make_servicer(db=db)
+        with _self_serve_patches(insert_side_effect=RuntimeError("db down")) as (spawn, _, _):
+            with pytest.raises(RuntimeError, match="db down"):
+                await svc.TriggerBackfill(_self_serve_req(), _ctx("0"))
+        svc._ledger.AppendEvent.assert_not_awaited()
         spawn.assert_not_called()
 
 
@@ -591,13 +855,19 @@ class TestTriggerBackfillCallbackUrl:
         assert "webhooks.ts.example.net" not in ctx.abort.await_args.args[1]
 
     @pytest.mark.asyncio
-    async def test_validation_runs_after_the_admin_gate(self):
+    async def test_validation_runs_after_the_admin_gate(self, self_serve_denial_contract):
+        """334@AC-26 kept: a non-admin callback_url is denied by the envelope before notify."""
         svc = make_servicer(db=MagicMock())
         svc._notify = _notify_stub()
+        req = _self_serve_req()
+        req.callback_url = _CALLBACK_URL
         ctx = _ctx("0")  # no ADMIN bit
-        resp, insert, _ = await _trigger(svc, _callback_req(), ctx)
+        resp, insert, _ = await _trigger(svc, req, ctx)
         assert resp is None
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+        assert ctx.abort.await_args.args == (
+            grpc.StatusCode.PERMISSION_DENIED,
+            _denial_detail(self_serve_denial_contract, _CALLBACK),
+        )
         svc._notify.FanoutWebhook.assert_not_awaited()
         insert.assert_not_awaited()
 
@@ -715,6 +985,10 @@ class TestRunBackfill:
         assert (
             svc._notify.EmitAlert.await_args.args[0].severity == notify_pb2.ALERT_SEVERITY_WARNING
         )
+        assert (
+            svc._notify.EmitAlert.await_args.args[0].body
+            == "Backfill job job-2 partial: some chunks/symbols failed to backfill"
+        )
 
     @pytest.mark.asyncio
     async def test_all_chunks_fail_emits_failed_and_error_alert(self):
@@ -735,6 +1009,10 @@ class TestRunBackfill:
         )
         m["mark_failed"].assert_awaited_once()
         assert svc._notify.EmitAlert.await_args.args[0].severity == notify_pb2.ALERT_SEVERITY_ERROR
+        assert (
+            svc._notify.EmitAlert.await_args.args[0].body
+            == "Backfill job job-3 failed: all backfill chunks failed"
+        )
 
     @pytest.mark.asyncio
     async def test_retry_on_failure_retries_failed_symbols(self):
@@ -1015,6 +1293,51 @@ class TestWebhookWakeUp:
             await svc._finalize_backfill("job-1", state, 1, ())
         assert seen == []
         assert not svc._webhook_wake.is_set()
+
+
+class TestBackfillFailureAlertBody:
+    async def _fail_job(self, err):
+        svc = _wake_servicer()
+        svc._marketdata.BackfillFundamentals = AsyncMock(side_effect=err)
+        update_job = AsyncMock()
+        with patch(f"{_REPO}.update_job", update_job):
+            await svc._run_backfill("67276d1f", _make_fund_req(["LYFT"]))
+        return svc, update_job, svc._notify.EmitAlert.await_args.args[0]
+
+    @pytest.mark.asyncio
+    async def test_ac8_rpc_error_body_is_plain_language(self):
+        err = rpc_error(
+            grpc.StatusCode.FAILED_PRECONDITION, "marketdata.fundamentals.history.enabled is false"
+        )
+        svc, update_job, alert = await self._fail_job(err)
+        assert alert.body == (
+            "Backfill job 67276d1f failed: FAILED_PRECONDITION — "
+            "marketdata.fundamentals.history.enabled is false"
+        )
+        assert "AioRpcError" not in alert.body
+        assert alert.context["error"] == str(err)
+        assert "AioRpcError" in alert.context["error"]
+        assert update_job.await_args_list[-1].kwargs["error"] == str(err)
+        failed = [
+            c.args[0]
+            for c in svc._ledger.AppendEvent.call_args_list
+            if c.args[0].event_type == "ingest.backfill.failed"
+        ]
+        assert [e.payload["error"] for e in failed] == [str(err)]
+
+    @pytest.mark.asyncio
+    async def test_rpc_error_without_details_uses_the_code(self):
+        _, _, alert = await self._fail_job(rpc_error(grpc.StatusCode.UNAVAILABLE))
+        assert alert.body == "Backfill job 67276d1f failed: UNAVAILABLE"
+
+    @pytest.mark.asyncio
+    async def test_non_rpc_error_uses_the_fallback(self):
+        _, _, alert = await self._fail_job(ValueError("boom at /srv/x.py:12"))
+        assert alert.body == (
+            "Backfill job 67276d1f failed: unexpected error — see the alert details"
+        )
+        assert "ValueError" not in alert.body
+        assert alert.context["error"] == "boom at /srv/x.py:12"
 
 
 # ---------------------------------------------------------------------------
@@ -2370,3 +2693,278 @@ class TestFundamentalsBackfill:
         final = uj.await_args_list[-1].kwargs
         assert final["status"] == ingest_pb2.BACKFILL_STATUS_PARTIAL
         assert final["failed_symbols"] == ["TSLA"]
+
+
+# ---------------------------------------------------------------------------
+# Feature 352 — per-symbol backfill results: stored keyed by chunk, merged at read
+# ---------------------------------------------------------------------------
+
+_EMPTY = common_pb2.BACKFILL_SYMBOL_OUTCOME_EMPTY
+_SKIPPED = common_pb2.BACKFILL_SYMBOL_OUTCOME_SKIPPED
+_SYM_FAILED = common_pb2.BACKFILL_SYMBOL_OUTCOME_FAILED
+_NO_CIK = 'edgar: no CIK for ticker "PSKY"'
+
+
+def _sr(symbol, outcome, reason=""):
+    return common_pb2.BackfillSymbolResult(symbol=symbol, outcome=outcome, reason=reason)
+
+
+def _bars_resp(bars_written, failed_symbols, results):
+    resp = _mk_backfill_resp(bars_written, failed_symbols)
+    resp.symbol_results = results
+    return resp
+
+
+def _fund_resp(periods_written, failed_symbols, results):
+    resp = _mk_fund_resp(periods_written, failed_symbols)
+    resp.symbol_results = results
+    return resp
+
+
+def _stored_results(update_job):
+    """The last per-symbol results written, parsed; fails when none was written."""
+    writes = [c.kwargs for c in update_job.await_args_list if "symbol_results" in c.kwargs]
+    assert writes, "no update_job call carried symbol_results"
+    return json.loads(writes[-1]["symbol_results"])
+
+
+def _assert_results_invariant(stored, failed_symbols):
+    """design §6: failed_symbols ⊆ FAILED results; no SKIPPED/EMPTY symbol is a failed symbol."""
+    merged = {}
+    for chunk in stored.values():
+        for sym, entry in chunk.items():
+            merged[sym] = max(merged.get(sym, 0), entry["outcome"])
+    for sym in failed_symbols:
+        assert merged.get(sym) == _SYM_FAILED, f"{sym} failed without a FAILED result"
+    for sym, outcome in merged.items():
+        if outcome in (_SKIPPED, _EMPTY):
+            assert sym not in failed_symbols, f"{sym} is {outcome} and in failed_symbols"
+
+
+def _results_servicer(**kw):
+    svc = make_servicer(db=MagicMock(), **kw)
+    svc._marketdata = MagicMock()
+    svc._notify = MagicMock()
+    svc._notify.EmitAlert = AsyncMock(return_value=MagicMock())
+    return svc
+
+
+async def _run_bars_job(svc, symbols):
+    with patch_chunk_repo([_chunk(symbols)]) as m, patch("asyncio.sleep", AsyncMock()):
+        await svc._run_backfill("job-352", _make_backfill_req(symbols))
+    return m["update_job"]
+
+
+async def _run_fund_job(svc, symbols):
+    with patch(f"{_REPO}.update_job", AsyncMock()) as update_job:
+        await svc._run_backfill("job-352", _make_fund_req(symbols))
+    return update_job
+
+
+def _read_results(row):
+    return [(r.symbol, r.outcome, r.reason) for r in job_row_to_proto(row).symbol_results]
+
+
+class TestBackfillSymbolResults:
+    @pytest.mark.asyncio
+    async def test_AC_11_fundamentals_skipped_symbol_completes_the_job(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillFundamentals = AsyncMock(
+            return_value=_fund_resp(5, [], [_sr("PSKY", _SKIPPED, _NO_CIK)])
+        )
+        uj = await _run_fund_job(svc, ["AAPL", "PSKY"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        assert final["failed_symbols"] == []
+        stored = _stored_results(uj)
+        assert stored == {"fundamentals": {"PSKY": {"outcome": _SKIPPED, "reason": _NO_CIK}}}
+        _assert_results_invariant(stored, final["failed_symbols"])
+
+    @pytest.mark.asyncio
+    async def test_AC_23_bars_skipped_symbol_completes_the_job(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillBars = AsyncMock(
+            return_value=_bars_resp(100, [], [_sr("PSKY", _SKIPPED, "flagged delisted")])
+        )
+        uj = await _run_bars_job(svc, ["AAPL", "PSKY"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        assert final["failed_symbols"] == []
+        stored = _stored_results(uj)
+        assert stored == {"chunk-1": {"PSKY": {"outcome": _SKIPPED, "reason": "flagged delisted"}}}
+        _assert_results_invariant(stored, final["failed_symbols"])
+        svc._notify.EmitAlert.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_AC_13_failed_symbol_keeps_the_job_partial_with_its_reason(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillFundamentals = AsyncMock(
+            return_value=_fund_resp(5, ["AXIA"], [_sr("AXIA", _SYM_FAILED, "edgar: 503")])
+        )
+        uj = await _run_fund_job(svc, ["AAPL", "AXIA"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        assert final["failed_symbols"] == ["AXIA"]
+        stored = _stored_results(uj)
+        assert stored["fundamentals"]["AXIA"] == {"outcome": _SYM_FAILED, "reason": "edgar: 503"}
+        _assert_results_invariant(stored, final["failed_symbols"])
+
+    def test_AC_14_job_read_lists_each_symbol_with_outcome_and_reason(self):
+        row = _job_row(
+            "job-352",
+            ingest_pb2.BACKFILL_STATUS_PARTIAL,
+            symbols=["AAPL", "AXIA", "PSKY"],
+            failed_symbols=["AXIA"],
+            symbol_results=json.dumps(
+                {
+                    "fundamentals": {
+                        "PSKY": {"outcome": _SKIPPED, "reason": _NO_CIK},
+                        "AXIA": {"outcome": _SYM_FAILED, "reason": "edgar: 503"},
+                    }
+                }
+            ),
+        )
+        assert _read_results(row) == [
+            ("AXIA", _SYM_FAILED, "edgar: 503"),
+            ("PSKY", _SKIPPED, _NO_CIK),
+        ]
+        assert 'no CIK for ticker "PSKY"' in _NO_CIK
+
+    def test_symbol_results_read_is_empty_for_a_row_storing_none(self):
+        assert _read_results(_job_row("job-352", ingest_pb2.BACKFILL_STATUS_COMPLETED)) == []
+
+    @pytest.mark.asyncio
+    async def test_AC_24_empty_symbol_completes_and_reads_with_an_empty_reason(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillBars = AsyncMock(
+            return_value=_bars_resp(0, [], [_sr("AAPL", _EMPTY)])
+        )
+        uj = await _run_bars_job(svc, ["AAPL"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        row = _job_row("job-352", final["status"], symbol_results=json.dumps(_stored_results(uj)))
+        assert _read_results(row) == [("AAPL", _EMPTY, "")]
+
+    @pytest.mark.asyncio
+    async def test_AC_26_skipped_with_a_429_reason_completes_the_job(self):
+        svc = _results_servicer()
+        reason = "edgar: 429 too many requests"
+        svc._marketdata.BackfillFundamentals = AsyncMock(
+            return_value=_fund_resp(0, [], [_sr("PSKY", _SKIPPED, reason)])
+        )
+        uj = await _run_fund_job(svc, ["PSKY"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        assert _stored_results(uj)["fundamentals"]["PSKY"]["reason"] == reason
+
+    @pytest.mark.asyncio
+    async def test_symbol_results_retry_drops_a_written_symbol_and_keeps_a_skipped_one(self):
+        svc = _results_servicer(retry=True, max_retry=2)
+        svc._marketdata.BackfillBars = AsyncMock(
+            side_effect=[
+                _bars_resp(
+                    10,
+                    ["TSLA"],
+                    [_sr("TSLA", _SYM_FAILED, "timeout"), _sr("PSKY", _SKIPPED, "flagged")],
+                ),
+                _bars_resp(10, [], []),
+            ]
+        )
+        uj = await _run_bars_job(svc, ["AAPL", "TSLA", "PSKY"])
+        assert svc._marketdata.BackfillBars.await_count == 2
+        assert list(svc._marketdata.BackfillBars.await_args.args[0].symbols) == ["TSLA"]
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        stored = _stored_results(uj)
+        assert stored == {"chunk-1": {"PSKY": {"outcome": _SKIPPED, "reason": "flagged"}}}
+        _assert_results_invariant(stored, final["failed_symbols"])
+
+    @pytest.mark.asyncio
+    async def test_symbol_results_whole_chunk_failure_marks_every_symbol_failed(self):
+        svc = _results_servicer(retry=True, max_retry=1)
+        svc._marketdata.BackfillBars = AsyncMock(
+            side_effect=[
+                _bars_resp(
+                    0,
+                    ["TSLA"],
+                    [_sr("TSLA", _SYM_FAILED, "timeout"), _sr("PSKY", _SKIPPED, "flagged")],
+                ),
+                Exception("network error"),
+            ]
+        )
+        uj = await _run_bars_job(svc, ["TSLA", "PSKY"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_FAILED
+        assert final["failed_symbols"] == ["PSKY", "TSLA"]
+        stored = _stored_results(uj)
+        failed = {"outcome": _SYM_FAILED, "reason": "network error"}
+        assert stored == {"chunk-1": {"TSLA": failed, "PSKY": failed}}
+        _assert_results_invariant(stored, final["failed_symbols"])
+
+    @pytest.mark.asyncio
+    async def test_symbol_results_resume_keeps_completed_chunks_and_replaces_its_own(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_bars_resp(7, [], []))
+        before = {
+            "chunk-0": {"OLDF": {"outcome": _SYM_FAILED, "reason": "timeout"}},
+            "chunk-1": {"AAPL": {"outcome": _SYM_FAILED, "reason": "network error"}},
+        }
+        row = _job_row(
+            "resume-1",
+            ingest_pb2.BACKFILL_STATUS_FAILED,
+            failed_symbols=["AAPL", "OLDF"],
+            symbol_results=json.dumps(before),
+        )
+        with (
+            patch(f"{_REPO}.get_job", AsyncMock(return_value=row)),
+            patch(f"{_CHUNKS}.get_incomplete_chunks", AsyncMock(return_value=[_chunk(["AAPL"])])),
+            patch(f"{_CHUNKS}.mark_chunk_running", AsyncMock()),
+            patch(f"{_CHUNKS}.mark_chunk_completed", AsyncMock()),
+            patch(f"{_REPO}.update_job", AsyncMock()) as uj,
+        ):
+            await svc._resume_job("resume-1")
+        stored = _stored_results(uj)
+        assert stored == {"chunk-0": before["chunk-0"], "chunk-1": {}}
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        # Documented residual: failed_symbols is not seeded on resume, the stored result stays.
+        assert final["failed_symbols"] == []
+        assert stored["chunk-0"]["OLDF"]["outcome"] == _SYM_FAILED
+
+    def test_symbol_results_merge_at_read_prefers_failed_then_skipped_then_empty(self):
+        def entry(outcome, reason=""):
+            return {"outcome": outcome, "reason": reason}
+
+        row = _job_row(
+            "job-352",
+            ingest_pb2.BACKFILL_STATUS_PARTIAL,
+            symbol_results=json.dumps(
+                {
+                    "c1": {"AAA": entry(_EMPTY), "BBB": entry(_SKIPPED, "flagged")},
+                    "c2": {"AAA": entry(_SKIPPED, "flagged"), "BBB": entry(_SYM_FAILED, "boom")},
+                    "c3": {"AAA": entry(_EMPTY), "BBB": entry(_EMPTY)},
+                }
+            ),
+        )
+        assert _read_results(row) == [("AAA", _SKIPPED, "flagged"), ("BBB", _SYM_FAILED, "boom")]
+
+    @pytest.mark.asyncio
+    async def test_symbol_results_not_written_on_a_job_level_failure(self):
+        svc = _results_servicer()
+        svc._marketdata.BackfillFundamentals = AsyncMock(side_effect=Exception("boom"))
+        uj = await _run_fund_job(svc, ["LYFT"])
+        statuses = [c.kwargs.get("status") for c in uj.await_args_list]
+        assert ingest_pb2.BACKFILL_STATUS_FAILED in statuses
+        assert all("symbol_results" not in c.kwargs for c in uj.await_args_list)
+
+    @pytest.mark.asyncio
+    async def test_symbol_results_failed_symbol_without_a_result_is_stored_failed(self):
+        """Assumption A-4: a marketdata deployed behind ingest reports no per-symbol results."""
+        svc = _results_servicer(retry=False)
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(50, ["TSLA"]))
+        uj = await _run_bars_job(svc, ["AAPL", "TSLA"])
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        stored = _stored_results(uj)
+        assert stored == {"chunk-1": {"TSLA": {"outcome": _SYM_FAILED, "reason": ""}}}
+        _assert_results_invariant(stored, final["failed_symbols"])

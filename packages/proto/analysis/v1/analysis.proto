@@ -803,9 +803,8 @@ message GetStrategyAnalyticsRequest {
 message GetIndicatorSeriesRequest {
   string strategy_id = 1;
   string symbol = 2;
-  // The caller's own already-fetched candlestick closes + their timestamps (the page passes the
-  // exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
-  // and times are index-aligned and equal length.
+  // The caller's drawn window plus a history prefix; closes and times are index-aligned and equal
+  // length. The server never re-fetches the evaluated symbol's bars.
   repeated double closes = 3;
   repeated google.protobuf.Timestamp times = 4;
 }
@@ -824,6 +823,9 @@ message ComponentSeries {
   // output); series is then empty and the UI renders a per-panel error state. Per-component fault
   // isolation — one bad component never fails the whole RPC.
   string error = 4;
+  // Bars of history needed for this component's first value (multi-series: its earliest series).
+  // 0 = no warm-up or unknown; a client never reports insufficient history for 0.
+  int32 first_value_bars = 5;
 }
 
 message NamedSeries {

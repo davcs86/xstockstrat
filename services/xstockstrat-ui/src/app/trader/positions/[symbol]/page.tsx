@@ -1,6 +1,6 @@
 'use client';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AppShell } from '@/components/trader/AppShell';
@@ -11,7 +11,10 @@ import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 import { type Timeframe, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
 import { resolveChartColor } from '@/lib/chartColors';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
-import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
+import { traderConfigClient } from '@/lib/browserClients/traderConfigClient';
+import { HISTORY_CONFIG_TIMEOUT_MS } from '@/lib/deadlines';
+import { CHART_WINDOW_BARS, readHistoryBars, windowIndicatorSeries } from '@/lib/indicatorChart';
+import { fmtUsd, fmtUsdCompact, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { PNL_UNAVAILABLE_LABEL } from '@/lib/portfolioTotals';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
 import {
@@ -19,6 +22,7 @@ import {
   OPPORTUNITY_ACTION,
   FUNDAMENTALS_GAP,
   EnumBadge,
+  opportunityChipLabel,
 } from '@/lib/opportunityShared';
 import { READINESS_CUE } from '@/lib/readinessCue';
 import { useWatchlists } from '@/hooks/useWatchlists';
@@ -28,17 +32,25 @@ import { useFundamentals } from '@/hooks/useFundamentals';
 import { MuteForStrategy } from '@/components/insights/MuteForStrategy';
 import { useBacktestHistory } from '@/hooks/useStrategies';
 import { useRunBacktest } from '@/hooks/useBacktest';
-import { useBackfillJobs, useTriggerBackfill } from '@/hooks/useBackfills';
+import { useBackfillJobs, useBackfillStatus, useTriggerBackfill } from '@/hooks/useBackfills';
+import {
+  gapToBackfillRequest,
+  backfillJobMessage,
+  triggerErrorMessage,
+  backfillSpanDays,
+  gapKey,
+  noVendorDataMessage,
+} from '@/lib/backtestBackfill';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import { useGetStrategy } from '@/hooks/useStrategyDefinitions';
 import { useIndicatorSeries, type IndicatorSeriesInput } from '@/hooks/useIndicatorSeries';
-import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+import { BackfillStatus, FillMode } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import {
   BacktestStatus,
   OpportunityActionTag,
   OpportunitySort,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { timestampToDate } from '@/lib/protoTime';
+import { fmtNyDate, timestampToDate } from '@/lib/protoTime';
 import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { riskReward, suggestedShares } from '@/lib/orderSizing';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
@@ -129,8 +141,8 @@ function PositionDetailInner() {
   const { containerRef, seriesRef, chartRef } = useCandlestickChart(260);
   const timeframe: Timeframe = '1Day';
   const [barsError, setBarsError] = useState<string | null>(null);
-  // Retain the drawn bars' closes+times so the indicator overlays reuse the exact series (parity
-  // x-axis, no second bars fetch).
+  // Every fetched bar's closes+times (D bars) feed the indicator overlays; the candlestick draws only
+  // their tail, so the drawn window must stay the tail of this series (no second bars fetch).
   const [barSeries, setBarSeries] = useState<{
     closes: number[];
     times: IndicatorSeriesInput['times'];
@@ -242,18 +254,34 @@ function PositionDetailInner() {
   const ohlcBars = useOhlcBars(ohlcSymbols);
   const headerOhlc = ohlcBars.get(symbol);
 
+  // History depth D: an error, timeout or absent key reads as the default, so it never blocks the chart.
+  const historyConfig = useQuery({
+    queryKey: ['ui-chart-history-config'],
+    queryFn: async () => {
+      const resp = await traderConfigClient.getConfig(
+        { namespace: 'ui' },
+        { timeoutMs: HISTORY_CONFIG_TIMEOUT_MS },
+      );
+      return resp.values;
+    },
+    staleTime: Infinity,
+    retry: false,
+  });
+  const historyConfigSettled = !historyConfig.isPending;
+  const historyBars = readHistoryBars(historyConfig.data ?? {});
+
   // loadBars is held in a ref so the poll interval runs the latest closure; latestReqRef discards
   // stale responses from a superseded load.
   const latestReqRef = useRef(0);
   const loadBars = () => {
-    if (!symbol) return;
+    if (!symbol || !historyConfigSettled) return;
     const reqId = ++latestReqRef.current;
     marketDataClient
       .getBars({
         symbol,
         timeframe,
         timeframeEnum: TIMEFRAME_ENUM[timeframe],
-        page: { pageSize: 200 },
+        page: { pageSize: historyBars },
       })
       .then((res) => {
         if (reqId !== latestReqRef.current) return; // superseded by a newer load
@@ -266,7 +294,7 @@ function PositionDetailInner() {
         setBarsError(null);
         const series = seriesRef.current;
         if (!series) return;
-        series.setData(mapBars(res.bars));
+        series.setData(mapBars(res.bars).slice(-CHART_WINDOW_BARS));
         chartRef.current?.timeScale().fitContent();
         for (const line of priceLinesRef.current) series.removePriceLine(line);
         priceLinesRef.current = [];
@@ -331,7 +359,7 @@ function PositionDetailInner() {
   useEffect(() => {
     loadBarsRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, timeframe, avg, stop, oppTarget, oppStop]);
+  }, [symbol, timeframe, avg, stop, oppTarget, oppStop, historyConfigSettled, historyBars]);
 
   // Poll keyed on [symbol] only, so the timer isn't reset on every avg/stop tick; cleared on symbol
   // change / unmount.
@@ -441,7 +469,7 @@ function PositionDetailInner() {
 
   const opportunityPanels: SymbolPanel[] = symbolOpportunities.map((o) => ({
     id: o.opportunityKey,
-    label: o.strategyId || o.symbol,
+    label: opportunityChipLabel(o),
     node: <OpportunitySection opportunity={o} symbol={symbol} />,
   }));
 
@@ -532,6 +560,7 @@ function PositionDetailInner() {
             onStrategyChange={handleStrategyChange}
             closes={barSeries.closes}
             times={barSeries.times}
+            requestedBars={historyBars}
             chartRef={chartRef}
             containerRef={containerRef}
           />
@@ -1084,18 +1113,29 @@ function OpportunitySection({
 function FundamentalsSection({ symbol }: { symbol: string }) {
   const { data, isLoading, error } = useFundamentals(symbol);
   const f = data?.fundamentals;
-  const rows: { label: string; value: string }[] = f
+  const groups: { name: string; rows: { label: string; value: string }[] }[] = f
     ? [
-        { label: 'Market cap', value: fmtUsd(f.marketCap) },
-        { label: 'P/E', value: f.peRatio ? f.peRatio.toFixed(2) : '—' },
-        { label: 'P/B', value: f.pbRatio ? f.pbRatio.toFixed(2) : '—' },
-        { label: 'Div yield', value: f.dividendYield ? fmtPct(f.dividendYield) : '—' },
-        { label: 'EPS', value: f.eps ? f.eps.toFixed(2) : '—' },
-        { label: 'Beta', value: f.beta ? f.beta.toFixed(2) : '—' },
-        { label: 'ROE', value: f.roe ? fmtPct(f.roe) : '—' },
-        { label: 'Debt/Equity', value: f.debtToEquity ? f.debtToEquity.toFixed(2) : '—' },
+        {
+          name: 'Valuation',
+          rows: [
+            { label: 'Market cap', value: fmtUsdCompact(f.marketCap) },
+            { label: 'P/E', value: f.peRatio ? f.peRatio.toFixed(2) : '—' },
+            { label: 'P/B', value: f.pbRatio ? f.pbRatio.toFixed(2) : '—' },
+            { label: 'EPS', value: f.eps ? f.eps.toFixed(2) : '—' },
+          ],
+        },
+        {
+          name: 'Quality & risk',
+          rows: [
+            { label: 'ROE', value: f.roe ? fmtPct(f.roe) : '—' },
+            { label: 'Debt/Equity', value: f.debtToEquity ? f.debtToEquity.toFixed(2) : '—' },
+            { label: 'Beta', value: f.beta ? f.beta.toFixed(2) : '—' },
+            { label: 'Div yield', value: f.dividendYield ? fmtPct(f.dividendYield) : '—' },
+          ],
+        },
       ]
     : [];
+  const footer = [f?.asOf && `as of ${fmtNyDate(f.asOf)}`, f?.source].filter(Boolean);
   return (
     <Card>
       <CardHeader>
@@ -1117,10 +1157,20 @@ function FundamentalsSection({ symbol }: { symbol: string }) {
             {error instanceof ConnectError ? ` — ${error.rawMessage}` : ''}.
           </p>
         ) : (
-          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-4">
-            {rows.map((r) => (
-              <StatTile key={r.label} size="md" label={r.label} value={r.value} />
+          <div className="space-y-3">
+            {groups.map((g) => (
+              <div key={g.name} className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">{g.name}</p>
+                <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-4">
+                  {g.rows.map((r) => (
+                    <StatTile key={r.label} size="md" label={r.label} value={r.value} />
+                  ))}
+                </div>
+              </div>
             ))}
+            {footer.length > 0 && (
+              <p className="text-xs text-muted-foreground">{footer.join(' · ')}</p>
+            )}
           </div>
         )}
       </CardContent>
@@ -1142,6 +1192,15 @@ function BacktestsSection({
   const queryClient = useQueryClient();
   const { data: history, isLoading } = useBacktestHistory(strategyId || undefined);
   const { mutate: runBacktest, isPending, data: runResult, error } = useRunBacktest();
+  // Local only (D-2): jobs have no owner, so the card follows just the id its own trigger returned.
+  const [backfillJobId, setBackfillJobId] = useState<string>();
+  const [filledGapKey, setFilledGapKey] = useState<string>();
+  const {
+    mutate: triggerBackfill,
+    isPending: triggerPending,
+    error: triggerError,
+  } = useTriggerBackfill();
+  const { data: backfillJob } = useBackfillStatus(backfillJobId);
 
   const runs = useMemo(
     () => (history?.runs ?? []).filter((r) => r.symbols.includes(symbol)),
@@ -1196,6 +1255,30 @@ function BacktestsSection({
     );
   }
 
+  const gap = runResult?.coverageGaps[0];
+  const gapFilled = gap !== undefined && filledGapKey === gapKey(gap);
+  const jobMessage =
+    backfillJobId && backfillJob ? backfillJobMessage(backfillJob, symbol) : undefined;
+  const backfillBusy =
+    triggerPending || (!!backfillJobId && (!jobMessage || jobMessage.state === 'running'));
+
+  function handleBackfill() {
+    if (!gap) return;
+    triggerBackfill(
+      gapToBackfillRequest(gap, {
+        fillMode: FillMode.GAPS_ONLY,
+        rangeEnd: gap.requestedRange?.end,
+      }),
+      { onSuccess: (res) => setBackfillJobId(res.jobId) },
+    );
+  }
+
+  function handleRerun() {
+    if (gap) setFilledGapKey(gapKey(gap));
+    setBackfillJobId(undefined);
+    handleRun();
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -1222,7 +1305,7 @@ function BacktestsSection({
         </div>
         {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
         {/* A data-less symbol returns a successful RPC with status INSUFFICIENT_DATA + coverage_gaps,
-            not an error — surface it inline and point at the Backfill panel to ingest the history. */}
+            not an error — surface it inline with a backfill of the reported gap. */}
         {runResult && runResult.status === BacktestStatus.INSUFFICIENT_DATA && (
           <div
             className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
@@ -1231,11 +1314,38 @@ function BacktestsSection({
             <Badge variant="warning">Insufficient data</Badge>
             <span>
               No ingested history for {symbol} in this window
-              {runResult.coverageGaps[0]
-                ? ` — has ${runResult.coverageGaps[0].barsHave}, needs ${runResult.coverageGaps[0].barsNeed} bars`
-                : ''}
-              . Ingest it from the Backfill coverage panel, then re-run.
+              {gap ? ` — has ${gap.barsHave}, needs ${gap.barsNeed} bars` : ''}.
             </span>
+            {gap && gapFilled && (
+              <span data-testid="backtest-no-vendor-data">{noVendorDataMessage(gap)}</span>
+            )}
+            {gap && !gapFilled && (
+              <Button
+                size="sm"
+                onClick={handleBackfill}
+                disabled={backfillBusy}
+                data-testid="backtest-backfill-action"
+              >
+                Backfill missing data
+              </Button>
+            )}
+            {jobMessage && <span data-testid="backtest-backfill-status">{jobMessage.text}</span>}
+            {jobMessage?.state === 'ready' && (
+              <Button size="sm" onClick={handleRerun} data-testid="backtest-rerun">
+                Re-run backtest
+              </Button>
+            )}
+            {triggerError && (
+              <span className="text-destructive" data-testid="backtest-backfill-error">
+                {triggerErrorMessage(triggerError, {
+                  symbol,
+                  spanDays: backfillSpanDays({
+                    start: gap?.gap?.start,
+                    end: gap?.requestedRange?.end,
+                  }),
+                })}
+              </span>
+            )}
           </div>
         )}
         {runResult && runResult.status === BacktestStatus.OK && (
@@ -1306,6 +1416,7 @@ function IndicatorSection({
   onStrategyChange,
   closes,
   times,
+  requestedBars,
   chartRef,
   containerRef,
 }: {
@@ -1314,6 +1425,7 @@ function IndicatorSection({
   onStrategyChange: (id: string) => void;
   closes: number[];
   times: IndicatorSeriesInput['times'];
+  requestedBars: number;
   chartRef: React.RefObject<IChartApi | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }) {
@@ -1327,6 +1439,10 @@ function IndicatorSection({
     closes,
     times,
   });
+  const windowed = useMemo(
+    () => (series ? windowIndicatorSeries(series, requestedBars) : undefined),
+    [series, requestedBars],
+  );
 
   // Stable Card shell: the "Indicators" title + strategy picker persist on every branch so the user
   // can select a strategy even from the empty / no-strategy state.
@@ -1346,10 +1462,11 @@ function IndicatorSection({
   } else {
     body = (
       <IndicatorPanels
-        components={series!.components}
-        times={times}
+        components={windowed!.components}
+        times={windowed!.times}
         chartRef={chartRef}
         containerRef={containerRef}
+        insufficient={windowed!.insufficient}
       />
     );
   }

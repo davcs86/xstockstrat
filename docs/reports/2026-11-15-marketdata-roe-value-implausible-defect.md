@@ -1,4 +1,4 @@
-# Defect: Fundamentals ROE value implausible against sibling metrics (suspected percent-vs-fraction unit error)
+# Defect: Fundamentals ROE value implausible against sibling metrics (EDGAR quarterly ROE uses a comparative-column equity)
 
 **Recorded**: 2026-11-15
 **Severity**: SEV-3
@@ -15,9 +15,10 @@ backend served `roe ≈ 3.6634`.
 
 ## Expected
 
-`roe` is a 0–1 fraction on every provider path, consistent with the sibling metrics. Market cap /
-P/B implies book equity of roughly $767M; an ROE of 3.66 would imply net income near $2.8B, while
-EPS 0.11 implies net income in the tens of millions — an ROE in the low single-digit percent.
+`roe` is a 0–1 fraction on every provider path and equals the symbol's own net income over its own
+shareholders' equity. For LYFT (SEC companyfacts, CIK0001759509) the trailing-twelve-month net
+income is 2,809,866,000 and the `Q3-2026` quarter-end equity is 2,980,873,000, so the expected
+`roe` is `0.942632` (FY2025: 2,844,008,000 / 3,273,523,000 = `0.868791`).
 
 ## Reproduction
 
@@ -38,10 +39,10 @@ EPS 0.11 implies net income in the tens of millions — an ROE in the low single
 
 ## Root cause hypothesis
 
-unknown — suspected: one provider/merge path stores ROE in percentage points without the
-`scale100` conversion (a value of 3.66 percent served as the fraction 3.66). Derived from
-arithmetic on the displayed values; the producing path is not traced.
+Not a unit error. The EDGAR quarterly TTM path divides a genuine TTM net income (2,809,866,000) by a
+first-seen comparative-column equity (767,016,000, dated 2024-12-31): 3.6634. Traced on the filing
+in `docs/roadmap/features/340-fix-fundamentals-roe-unit/recon.md` § Root-Cause Trace and debate.md D-11.
 
 ## Confidence
 
-low
+high

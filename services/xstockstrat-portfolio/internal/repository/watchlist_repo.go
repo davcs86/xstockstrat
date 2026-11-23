@@ -24,8 +24,7 @@ var ErrBindingNotFound = errors.New("watchlist binding not found")
 // (no second pool). Ownership is enforced in the service layer; the repo is ownership-agnostic.
 type WatchlistRepo struct {
 	pool *pgxpool.Pool
-	// db is the mockable query surface (pool in prod, pgxmock in tests), mirroring PortfolioRepo.
-	// bindingsByWatchlist reads through it so its single ANY-array query is unit-testable offline.
+	// db is the mockable query surface (pool in prod, pgxmock in tests); route every query through it.
 	db queryRower
 }
 
@@ -108,7 +107,7 @@ func (r *WatchlistRepo) ListByUser(ctx context.Context, userID string, pageSize 
 	if pageSize <= 0 || pageSize > 500 {
 		pageSize = 100
 	}
-	rows, err := r.pool.Query(ctx,
+	rows, err := r.db.Query(ctx,
 		`SELECT watchlist_id, user_id, name, description, created_at, updated_at, system_managed, default_strategy_id
 		 FROM portfolio.watchlists
 		 WHERE user_id = $1 AND ($2 = '' OR watchlist_id > $2::uuid)
@@ -132,11 +131,11 @@ func (r *WatchlistRepo) ListByUser(ctx context.Context, userID string, pageSize 
 	}
 	rows.Close()
 
-	// Truncate the +1 lookahead FIRST, then batch bindings over exactly the returned page's IDs
-	// (feature 178) — the lookahead row is not part of the response and must not be read.
+	// Token must be the last RETURNED id (the next page's WHERE is a strict >); truncate the +1
+	// lookahead before the bindings batch so the lookahead row is never read.
 	nextToken := ""
 	if len(wls) > pageSize {
-		nextToken = wls[pageSize].WatchlistId
+		nextToken = wls[pageSize-1].WatchlistId
 		wls = wls[:pageSize]
 	}
 

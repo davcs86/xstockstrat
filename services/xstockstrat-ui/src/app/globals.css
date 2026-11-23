@@ -1,5 +1,6 @@
 @import 'tailwindcss' source('..');
 @import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 /* Only src/ is scanned, minus tests and theme files: any scanned text that names a Tailwind
    palette utility or palette variable emits palette CSS, which the theme check rejects (feature 307). */
 @source not "../**/*.test.ts";

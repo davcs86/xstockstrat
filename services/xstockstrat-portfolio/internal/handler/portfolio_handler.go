@@ -112,7 +112,7 @@ func (h *PortfolioHandler) ListPositions(ctx context.Context, req *connect.Reque
 	}
 	resp, err := h.svc.ListPositions(ctx, req.Msg)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(classifyListPositionsError(err), err)
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -417,6 +417,14 @@ func errorf(msg string) error {
 func classifyGetPositionError(err error) connect.Code {
 	if errors.Is(err, repository.ErrPositionNotFound) {
 		return connect.CodeNotFound
+	}
+	return connect.CodeInternal
+}
+
+// classifyListPositionsError maps ListPositions errors: InvalidArgument for a malformed page token, else Internal.
+func classifyListPositionsError(err error) connect.Code {
+	if errors.Is(err, repository.ErrInvalidPageToken) {
+		return connect.CodeInvalidArgument
 	}
 	return connect.CodeInternal
 }

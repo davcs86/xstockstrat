@@ -290,6 +290,22 @@ export type MarkAlertReadResponse = Message<"xstockstrat.notify.v1.MarkAlertRead
  */
 export declare const MarkAlertReadResponseSchema: GenMessage<MarkAlertReadResponse>;
 /**
+ * @generated from message xstockstrat.notify.v1.GetAlertRequest
+ */
+export type GetAlertRequest = Message<"xstockstrat.notify.v1.GetAlertRequest"> & {
+    /**
+     * Owner resolved from the propagated x-user-id header (C-03), never the body.
+     *
+     * @generated from field: string alert_id = 1;
+     */
+    alertId: string;
+};
+/**
+ * Describes the message xstockstrat.notify.v1.GetAlertRequest.
+ * Use `create(GetAlertRequestSchema)` to create a new message.
+ */
+export declare const GetAlertRequestSchema: GenMessage<GetAlertRequest>;
+/**
  * Web Push subscription registration (feature 165 — pwa-notifications).
  *
  * @generated from message xstockstrat.notify.v1.RegisterPushSubscriptionRequest
@@ -498,6 +514,17 @@ export declare const NotifyService: GenService<{
         methodKind: "unary";
         input: typeof MarkAlertReadRequestSchema;
         output: typeof MarkAlertReadResponseSchema;
+    };
+    /**
+     * Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+     * the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+     *
+     * @generated from rpc xstockstrat.notify.v1.NotifyService.GetAlert
+     */
+    getAlert: {
+        methodKind: "unary";
+        input: typeof GetAlertRequestSchema;
+        output: typeof AlertSchema;
     };
     /**
      * Register (or upsert) a Web Push subscription for the calling user.

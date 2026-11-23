@@ -44,6 +44,11 @@ identical in both themes.
 - **Charts** consume `--chart-1`…`--chart-5` and the dedicated gridline token `--chart-grid`
   (deliberately *not* `--border`, whose 10%-alpha white near-erases gridlines) via
   `src/lib/chartColors.ts`. Do not hand-pick chart colors.
+- **Indicator series** on the symbol page (`/trader/positions/[symbol]`) take their colours from the 12
+  `--series-1`…`--series-12` tokens through `SERIES_PALETTE` (`src/lib/seriesPalette.ts`) and
+  `seriesSlots` (`src/lib/indicatorChart.ts`): one slot per series by position across the whole chart,
+  wrapping after 12, shared by each line and its legend swatch (feature 342). `--chart-1`…`--chart-5`
+  stay for the other charts.
 - **Typography:** `--font-sans` = Roboto (bound in the root layout via `next/font/google`);
   `--font-heading` aliases sans; `--font-mono` is the system monospace stack.
   **Numbers, tickers, IDs, thresholds, and timestamps render mono + `tabular-nums`** (FR-3) — never a
@@ -119,7 +124,7 @@ The platform has **no toast/notification library** — all feedback is inline an
 | Error notice | `src/components/shared/CardNotice.tsx` (`variant: 'error'`) or `ui/alert.tsx` | Error variant sets `role="alert"` + `text-destructive`. |
 | Mutation feedback | inline, via `src/hooks/useInvalidatingMutation.ts` | The canonical "call a BFF RPC then invalidate query keys" factory — build order/watchlist-style hooks on it, don't re-implement. |
 | Form / confirm modal | `src/components/shared/FormDialog.tsx` (built on `AlertDialog`) | Deliberately does **not** dismiss on outside-click/escape; the caller provides an in-body Cancel. Form fields use `ui/field.tsx` + `ui/label.tsx` + `ui/input-group.tsx`. |
-| Tabular data | `ui/data-table.tsx` `DataTable` (TanStack) | Built-in sortable headers, optional pagination, `emptyMessage`, and accessible `onRowClick` (`role="button"`, `tabIndex=0`, Enter/Space) guarded so nested links don't double-fire. Requires referentially-stable `data`. |
+| Tabular data | `ui/data-table.tsx` `DataTable` (TanStack) | Built-in sortable headers, optional pagination, `emptyMessage`, and accessible `onRowClick` (`role="button"`, `tabIndex=0`, Enter/Space) guarded so nested links don't double-fire. Requires referentially-stable `data`, and a `columns` array that does not rebuild while a cell holds state (an open menu or dialog) — a rebuilt array remounts every cell; keep the memo's deps stable or make the `cell` a module-level component. |
 
 Adoption is the governance point, not existence: the shared primitives exist but adoption is uneven
 (see the backlog, §9). New/changed UI **must** use them; hand-rolled `<p className="text-sm
@@ -159,8 +164,13 @@ evidence log, not as resolved history (most of it is still open; see the backlog
    series) ≥ 3:1: `foreground`/`background`; each `<x>-foreground` on its `<x>` surface (card, popover,
    primary, secondary, muted, accent, sidebar, sidebar-primary, sidebar-accent); `primary`,
    `muted-foreground` and `destructive` on `background` and `card`; `ring` on `background`; and
-   `chart-1`…`chart-5` on `card` and `background`. The production theme meets all of them
-   (`src/styles/themes/themes.test.ts`, AC-14).
+   `chart-1`…`chart-5` and `series-1`…`series-12` on `card` and `background`. The production theme
+   meets all of them (`src/styles/themes/themes.test.ts`, AC-14).
+   The `series-1`…`series-12` pairs meet 3:1 in **both** themes, and the two themes carry the same 12
+   values (feature 342). The series palette also has distinguishability floors, in CIEDE2000: under
+   simulated deuteranopia and protanopia, adjacent entries (including entry 12 with entry 1) differ by
+   ≥ 10 and every other pair by ≥ 5; under normal vision every pair differs by ≥ 10.
+   `themes.test.ts` enforces the contrast and the floors.
    Staging token values are frozen per feature 307 FR-3; these staging pairs fall below the baseline and are recorded as known deviations, not fixed.
    <!-- 307:staging-contrast-deviations:begin -->
 - primary/background: 2.6
