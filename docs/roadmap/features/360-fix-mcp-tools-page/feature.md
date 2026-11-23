@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-19
 **Last Updated**: 2026-11-19
+**Committed to main**: 21e0d004e2ef2d7b79d3606e4f05843cd95a9d2d
+**Launched date**: 2026-11-23
 
 ---
 
@@ -22,6 +24,7 @@
 | 2026-11-19 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (operator: no checkpoints); Steps 1+2 done |
 | 2026-11-19 | `in-progress` → `code-completed` | /sdd-execute | All 15 steps done on `feature/fix-mcp-tools-page`; integration PR opened |
 
+| 2026-11-23 | `code-completed` → `launched` | CI workflow | Promoted via PR #1598; committed 21e0d004e2ef2d7b79d3606e4f05843cd95a9d2d |
 ---
 
 ## Artifacts
