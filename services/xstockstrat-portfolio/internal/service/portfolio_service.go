@@ -1524,6 +1524,19 @@ func classifyConsumerErr(err error) retryClass {
 	return class
 }
 
+// watchlistNameUniqueIdx must match the index name in migration 011.
+const watchlistNameUniqueIdx = "watchlists_user_name_not_system_uidx"
+
+// classifyWatchlistWriteErr maps only a duplicate user list name to AlreadyExists; the message is fixed so no pgx
+// detail reaches the caller. Every other write error stays Internal.
+func classifyWatchlistWriteErr(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == watchlistNameUniqueIdx {
+		return connect.NewError(connect.CodeAlreadyExists, errors.New("a watchlist with this name already exists"))
+	}
+	return connect.NewError(connect.CodeInternal, err)
+}
+
 // boundedRetry withholds the cursor on a handler error until the event parks. Its state is unlocked:
 // each consumer runs on one goroutine.
 func (s *PortfolioService) boundedRetry(consumer string, h eventHandler) eventHandler {
@@ -2224,7 +2237,7 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 	}
 	wl, err := s.watchlists.Create(ctx, userID, req.GetName(), req.GetDescription(), strings.TrimSpace(req.GetDefaultStrategyId()), bindings)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, classifyWatchlistWriteErr(err)
 	}
 	s.emitEvent(ctx, "portfolio.watchlist.created", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId, "name": wl.Name,
@@ -2382,7 +2395,7 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 			if errors.Is(err, repository.ErrWatchlistNotFound) {
 				return nil, connect.NewError(connect.CodeNotFound, errors.New("watchlist not found"))
 			}
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, classifyWatchlistWriteErr(err)
 		}
 		s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 			"user_id": userID, "watchlist_id": wl.WatchlistId,
@@ -2408,7 +2421,7 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 	}
 	wl, err := s.watchlists.Update(ctx, req.GetWatchlistId(), req.GetName(), req.GetDescription(), bindings)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, classifyWatchlistWriteErr(err)
 	}
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId,

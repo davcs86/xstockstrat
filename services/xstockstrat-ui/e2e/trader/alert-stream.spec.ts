@@ -36,7 +36,7 @@ test.describe('AlertStream', () => {
   }) => {
     await addAuthCookie(page);
     await page.goto('/trader');
-    // 2 stored unread plus 3 streamed (feature 339 design.md § e2e plan).
+    // 2 stored unread plus 3 streamed (feature 339).
     await expect(badgeOf(page)).toHaveText('5', { timeout: 10000 });
     await bellOf(page).click();
     await expect(page.getByRole('dialog')).toBeVisible();

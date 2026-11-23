@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-replace-tif-before-intent`
-**GitHub Issue**: none (Issues disabled) — report: `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md`
+**GitHub Issue**: none (Issues disabled) — report: `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md` (pruned 2026-11-18; `git show ce1853c3:docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md`)
 **Severity**: SEV-3
 **Created**: 2026-11-16
 **Last Updated**: 2026-11-16
 **Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
 **Launched date**: 2026-11-17
+**Archived**: 2026-11-18
 
 ---
 
@@ -23,14 +24,15 @@
 | 2026-11-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps |
 
 | 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(0); pruned 5 specs; pruned defect report 2026-11-16-replace-order-tif-validation-after-intent-claim-defect |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) · [Debate Register](debate.md) · [Design](design.md)
-- [Implementation Spec](implementation-spec.md) — 3 numbered steps; Steps 1+2 are one atomic unit
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); promoted to services/xstockstrat-trading/acceptance/fix-replace-tif-before-intent.feature (C-16)
+- Recon, Debate Register, Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

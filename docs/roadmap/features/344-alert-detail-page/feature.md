@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-16
 **Committed to main**: dd41417dd5798a5133a4c963c60f556e79b499a5
 **Launched date**: 2026-11-17
+**Archived**: 2026-11-18
 
 ---
 
@@ -20,16 +21,17 @@
 | 2026-11-16 | `in-progress` → `code-completed` | /sdd-execute sequential | All 23 steps done (Step 23 docs last); `check-config-wiring.mjs --final` exit 0 |
 
 | 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1573; committed dd41417dd5798a5133a4c963c60f556e79b499a5 |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 5 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier
-- [Debate Register](debate.md) — settled decisions, rejected alternatives, objections, petitions
-- [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-ingest/acceptance/alert-detail-page.feature, services/xstockstrat-ui/acceptance/alert-detail-page.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Debate Register — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

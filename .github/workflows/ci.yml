@@ -56,7 +56,7 @@ jobs:
             xstockstrat-indicators: ['services/xstockstrat-indicators/**']
             xstockstrat-ingest:     ['services/xstockstrat-ingest/**']
             xstockstrat-analysis:   ['services/xstockstrat-analysis/**', 'services/xstockstrat-indicators/migrations/*_seed_formula_templates.up.sql']
-            xstockstrat-agent:      ['services/xstockstrat-agent/**', 'services/xstockstrat-analysis/app/handlers/servicer.py', 'services/xstockstrat-trading/internal/service/trading.go', 'services/xstockstrat-ingest/app/handlers/servicer.py', 'services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json', 'docs/runbooks/mcp-tools.md']
+            xstockstrat-agent:      ['services/xstockstrat-agent/**', 'services/xstockstrat-analysis/app/handlers/servicer.py', 'services/xstockstrat-trading/internal/service/trading.go', 'services/xstockstrat-ingest/app/handlers/servicer.py', 'services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json', 'docs/runbooks/mcp-tools.md', 'services/xstockstrat-ingest/app/peer_identity.py', 'services/xstockstrat-indicators/app/peer_identity.py']
             xstockstrat-config:     ['services/xstockstrat-config/**']
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
             xstockstrat-identity:   ['services/xstockstrat-identity/**']
@@ -1270,6 +1270,28 @@ jobs:
       - name: All test groups (resolve, build, render, static workflow rules, AC-24)
         run: bash scripts/sops-secrets.test.sh
 
+  do-spec-validate:
+    name: DO app spec schema check (offline)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'sops') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      # Pinned: without a token the action's "latest" lookup is rate-limited and falls back to an old doctl.
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f  # v2.5.2
+        with:
+          version: 1.146.0
+          no_auth: true
+
+      - name: Validate both app specs (schema only — no token, no secrets)
+        run: |
+          for spec in .do/app.yaml .do/app.dev.yaml; do
+            doctl apps spec validate --schema-only "$spec" > /dev/null
+          done
+
   config-wiring:
     name: Config key wiring (whole-tree)
     needs: changes
@@ -1375,6 +1397,7 @@ jobs:
       - marketdata-db-test
       - homelab-render
       - sops-secrets
+      - do-spec-validate
       - markdown-lint
       - context-map
       - otel-signals
@@ -1407,6 +1430,7 @@ jobs:
           echo "marketdata-db-test: ${{ needs.marketdata-db-test.result }}"
           echo "homelab-render:  ${{ needs.homelab-render.result }}"
           echo "sops-secrets:    ${{ needs.sops-secrets.result }}"
+          echo "do-spec-validate: ${{ needs.do-spec-validate.result }}"
           echo "markdown-lint:   ${{ needs.markdown-lint.result }}"
           echo "context-map:     ${{ needs.context-map.result }}"
           echo "otel-signals:    ${{ needs.otel-signals.result }}"

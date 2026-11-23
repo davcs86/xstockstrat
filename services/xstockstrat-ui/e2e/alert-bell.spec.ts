@@ -5,7 +5,7 @@ import { bellOf, badgeOf } from './helpers/alertReadState';
 import { ALERT_STREAM_001 } from './fixtures/alerts';
 
 /**
- * Feature 344 (@AC-10, D-14): the bell sits in the shared header, so every segment shows it with
+ * Feature 344 (@AC-10; 344 context.md): the bell sits in the shared header, so every segment shows it with
  * the same unread badge under the shared mock, and each page has exactly one stream consumer.
  */
 

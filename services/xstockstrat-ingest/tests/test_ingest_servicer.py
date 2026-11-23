@@ -576,7 +576,7 @@ class TestTriggerBackfillSelfServe:
 
     @pytest.mark.asyncio
     async def test_queued_event_forwards_the_caller_not_a_payload_user(self):
-        """D-11 / PLAT-4: the owner rides x-user-id metadata; the payload names no user."""
+        """343 D-11 / PLAT-4: the owner rides x-user-id metadata; the payload names no user."""
         db, _ = transaction_conn()
         svc = make_servicer(db=db)
         with _self_serve_patches():
@@ -588,7 +588,7 @@ class TestTriggerBackfillSelfServe:
 
     @pytest.mark.asyncio
     async def test_admin_keeps_multi_symbol_full_without_the_de_dup(self):
-        """D-27: the admin row asserts QUEUED only."""
+        """343 D-27: the admin row asserts QUEUED only."""
         db = MagicMock()
         svc = make_servicer(db=db)
         req = _self_serve_req()
