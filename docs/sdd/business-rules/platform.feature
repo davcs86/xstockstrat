@@ -794,7 +794,7 @@ Feature: Platform-wide guarantees
 
   @AC-6 @FR-4 @feature-283
   Scenario: The tool count is unchanged and its surfaces agree
-    When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the /api/tools catalog) are read
+    When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the AgentService.ListTools catalog) are read
     Then every statement states the count 45 (in words or digits) and the registered tool count is 45
 
   @AC-10 @FR-4 @feature-283
@@ -2717,3 +2717,21 @@ Feature: Platform-wide guarantees
     When "ROKU" becomes flagged delisted with first-unservable date 2026-11-09
     Then the "ROKU" entries on "Tech" and on "Media" both carry delisted true and first-unservable date 2026-11-09
     And after xstockstrat-marketdata restarts, the "ROKU" entries on "Tech" and "Media" still carry delisted true and first-unservable date 2026-11-09
+
+  # ─── telemetry startup log names the effective OTLP endpoint (feature 329) ──
+  # Cross-cutting: the Node and Python telemetry modules across services. Source defect:
+  # docs/reports/2026-10-19-telemetry-startup-log-raw-endpoint-defect.md
+
+  @AC-1 @regression @feature-329
+  Scenario Outline: the startup log names the effective export endpoint when the env var is unset
+    Given OTEL_ENABLED is "true" and OTEL_EXPORTER_OTLP_ENDPOINT is unset
+    When the <runtime> service <service> starts
+    Then its telemetry startup log names the SDK default endpoint (or "SDK default")
+    And the log contains neither "undefined" nor "None" as the endpoint
+
+    Examples:
+      | runtime | service                |
+      | Node    | xstockstrat-ui         |
+      | Node    | xstockstrat-config     |
+      | Python  | xstockstrat-analysis   |
+      | Python  | xstockstrat-agent      |

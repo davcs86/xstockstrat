@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-13
 **Committed to main**: 6936191e738e267c5507f042b22bc3e785fe9419
 **Launched date**: 2026-11-15
+**Archived**: 2026-11-18
 
 ---
 
@@ -20,16 +21,17 @@
 | 2026-11-13 | `in-progress` → `code-completed` | /sdd-execute | All 22 steps done (sequential mode); integration PR #1537 |
 
 | 2026-11-15 | `code-completed` → `launched` | CI workflow | Promoted via PR #1546; committed 6936191e738e267c5507f042b22bc3e785fe9419 |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(4)/fails(1); pruned 5 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier
-- [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
-- [Design](design.md) — approved architecture
-- [Implementation Spec](implementation-spec.md) — 22 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-config/acceptance/notify-commsgun-channel.feature, services/xstockstrat-notify/acceptance/notify-commsgun-channel.feature, services/xstockstrat-ui/acceptance/notify-commsgun-channel.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Debate Register — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-11
 **Committed to main**: 325f3bd9a83ada7ed60b1f18c81d848a57af3db9
 **Launched date**: 2026-11-11
+**Archived**: 2026-11-18
 
 ---
 
@@ -21,15 +22,16 @@
 | 2026-11-11 | `in-progress` → `code-completed` | /sdd-execute (sequential) | Steps 1–19 done |
 
 | 2026-11-11 | `code-completed` → `launched` | CI workflow | Promoted via PR #1512; committed 325f3bd9a83ada7ed60b1f18c81d848a57af3db9 |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(4)/fails(3); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — debated, approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-ui/acceptance/ui-env-themed-bundles.feature, docs/sdd/business-rules/platform.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

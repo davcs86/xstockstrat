@@ -1,531 +1,105 @@
-# Context: alpaca-adaptive-rate-limit
+# Context: alpaca-adaptive-rate-limit  (archived 2026-11-18)
 
-**Feature**: `docs/roadmap/features/347-alpaca-adaptive-rate-limit/feature.md`
-**Product Spec**: `docs/roadmap/features/347-alpaca-adaptive-rate-limit/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/347-alpaca-adaptive-rate-limit/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-18 — /sdd-archiver
 
-## Session 2026-11-16T00:55Z — sdd-story
+**What**: Both Alpaca REST clients (marketdata `internal/alpaca/client.go#do`, trading `internal/broker/alpaca.go#do`) now pace per host and per credential from `X-RateLimit-Limit/Remaining/Reset` and retry only an HTTP 429 inside the client. A pure core `internal/alpacapace` is copied byte-identical into both services (CI group `go-alpacapace` + `go-alpacapace-test` in `scripts/check-watcher-copies.py`). One seeded kill switch per service (`marketdata alpaca.adaptive_rate_limit_enabled`, `trading broker.adaptive_rate_limit_enabled`, both `true`, config migration `052_alpaca_adaptive_rate_limit_keys`). Trading also got the order-safety work the retry forced: `broker.ErrRateLimited`, a retry budget `B = max(T, S - 2T)`, mutations detached from caller cancellation, `ReleasePendingIntent` (first delete path on `trading.order_intents`, TRADING-8), cancel reorder, and Alpaca-only per-call timeouts; marketdata loops bound only their Alpaca calls by the loop interval. Integration PR #1555 landed as `f61f76c4` (verified with git); promoted to main by #1573 (`dd41417d`). Operator-requested scope: "Use adaptive rate limit for marketdata calls to Alpaca" (spec = Alpaca Broker API rate-limit page, "vendor-specific change"). The Broker API host itself is out of scope: the cited page is Broker-scoped, so its header/backoff contract was applied to the hosts we actually call (data + trading), and the operator widened scope to trading (decision 1).
 
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
-- Operator request: "Use adaptive rate limit for marketdata calls to Alpaca", spec =
-  <https://docs.alpaca.markets/us/docs/broker-api-rate-limits>, "vendor-specific change".
-- Operator decisions (asked and answered this session):
-  1. The cited page is Broker API-scoped; apply its header/backoff contract to the Alpaca hosts we call,
-     **and also cover `xstockstrat-trading`** (scope widened beyond marketdata by the operator).
-  2. `marketdata.backfill.rate_limit_rps` stays as a ceiling over the adaptive rate.
-  3. On 429: retry inside the client until the request context is done.
-  4. Tunables: one kill-switch key per service only; thresholds and backoff are fixed in code.
-- Assumptions recorded (not yet confirmed by the operator): REST only, no WebSocket; limiter state per
-  host and per process, in memory; no proto, DB or consumer-surface change; kill switches default `true`.
-- Data host verified (operator-supplied <https://docs.alpaca.markets/us/reference/stockbars>): all three
-  `X-RateLimit-*` headers on 200/400/429, per-minute window, `Reset` in Unix epoch seconds.
-- Operator decisions, second round: (5) both kill switches seed `true`; (6) order mutations retry on 429,
-  bounded by the order-intent staleness threshold (`order_intent.go`: `max(broker.timeout_ms, IBKRRequestTimeout)` × `stale_multiplier`, 30s at defaults); (7) no quota reservation for
-  interactive reads, they fail fast in an exhausted window.
-- Unverified: that the Trading API hosts return `X-RateLimit-*` headers. Recon item.
+**Why (irrecoverable rationale)**:
+- *Governance sign-offs (all by the single operator, davcs86; context.md records them as "asked and answered", question text not preserved — P-04 provenance gap for every numbered decision below).*
+  - Story session 2026-11-16: decisions 1-7 — (1) apply to the hosts we call and also cover trading; (2) `marketdata.backfill.rate_limit_rps` stays as a ceiling over the adaptive rate; (3) retry on 429 until the request context is done; (4) kill-switch key only, thresholds/backoff fixed in code; (5) both switches seed `true`; (6) order mutations retry on 429, bounded by the order-intent staleness threshold; (7) no quota reservation for interactive reads. Decision 7 was later superseded for marketdata by D-14/D-16 (see below). The story-session assumptions (REST only, state per host and per process in memory, no proto/DB/consumer-surface change) were recorded as "not yet confirmed"; no quoted answer confirms them. Inference: the round-5 design approval covers them.
+  - Round-1 design gate (2026-11-16, steers 8-11, no verbatim text recorded): trading fails fast on a wait that cannot fit; **marketdata keeps waiting to the request deadline** (fail-fast declined, R-4); a rate-limited `flattenAndHalt` submit halts the account first and keeps retrying (D-11, R-8); order mutations run detached from caller cancellation (D-12, R-7); trading budget `max(T, S-2T)` = 20 s at defaults (D-13; R-5/R-6 rejected).
+  - Round-2 gate: accepted the spread-skip rule (D-19), fix rate-limited cancel/replace in this feature (D-20), bound the loops (D-21), run round 3. Round-3 gate: **approved the new `ReleasePendingIntent`** guarded DELETE on an order-safety table (D-25); marketdata cycle deadline bounds only the Alpaca calls, DB writes keep the loop context (D-26 superseding D-21); leg cancels bounded by `broker.timeout_ms`, no retry (D-27).
+  - **C-11 round-cap override, round-4 gate 2026-11-16, quoted verbatim in context.md:** "keep rounds until adversary verdict is sound. I sign off to override the rounds cap." Recorded per P-04; Floor rule F-11 untouched. Five rounds ran, which equals the 5-round cap of `/sdd-design` full mode, so the override was in force but the cap was not exceeded; design.md calls it "waived" with stop condition "adversary verdict sound", met at round 5 (D-30, verdict SOUND, no Floor breach, no register violation, no C-16 regression). Blocking objections per round were 5, 3, 5, 2, 0 (debate.md Objections table, Blocking column): round 3 still raised a new-repository-method blocker (O-25) (inference, not a sourced claim: a lower cap would have shipped without the `ReleasePendingIntent` sign-off).
+  - Operator approved the design at the round-5 gate (2026-11-16); product spec and acceptance.feature amended as approved (FR-2/3/8/9 reworded, FR-11 added, AC-2/3/7/13/17/19/20/21 corrected, AC-23..AC-37 added = 37 scenarios).
+  - C-16: no existing business rule CHANGEd, so no CHANGE sign-off exists. Three rules EXTENDed per design (294 @AC-13, 295 @AC-14, 282 @AC-27); at promotion they were expressed by new `@feature-347` scenarios and no existing suite scenario was edited (operator decision 28).
+  - Execute (2026-11-16): decisions 20-23 — run sequential, all 12 steps; step commits go to `feature/alpaca-adaptive-rate-limit`, which the operator authorized this cloud session to create and push (the harness pins `ccr-f38bde65-c8sy8s`); **skill-rule override**: Step 11 may start a throwaway Postgres 16 only to generate `scripts/config-wiring-stored.json` and the fresh heal dry-run, although `/sdd-execute` forbids starting a database to verify a step (migration itself still verified offline); re-spec Steps 5, 6, 11 before executing. Step-4 checkpoint decisions 24-25 (proceed; throttle WARN on holds and 429 waits only). Step-8 checkpoint 26 (proceed). Steps 9+10 blocker decision 27, quoted in the Deviation Log: "Fix the two fixtures" (scope expansion to two test files). Feature-end checkpoint 28 (promote 32 scenarios into three new per-service suites, open the integration PR), 29 (write the fails.md entry about fixtures hiding a nil dependency behind `recover()`; recorded at fails.md:4011, DUP).
+  - Approvals on PR #1555, 2026-11-16T08:01Z, operator quoted verbatim: "Log my approval on the 3", then 08:02Z clarification "I meant all of 3". The three "needed from you before merge" items of the session summary (the summary text and its question are not preserved — P-04 gap) are: (1) service-owner and (2) config-team approval of the two new keys, (3) DBA review of migration `052`, **plus the paper-host check**: the operator approved merging WITHOUT a recorded real paper-host response (sandbox holds no Alpaca credentials). The first message was read as role approvals only; the second widened it. One person signed service owner, config team and DBA. Step 11's category was `migration` (spec-time decision 4; design table said `config`), which is what added the DBA to the reviewer snapshot.
+  - Tree-freshness deviation (recorded in the sdd-review product-spec 01:40Z, sdd-spec 05:58Z plus spec-time decision 1, and sdd-review impl-spec 08:10Z "harness-pinned branch, as before" sessions; the sdd-design sessions do not state it): the harness pins `ccr-*`, so the tree was never switched to `main-dev` and `origin/feature/alpaca-adaptive-rate-limit` did not exist until execute; recorded but no operator sign-off is on record for it.
+  - Operator also asked the product-spec review to loop "until every warning was addressed" (5 passes) and the impl-spec review likewise (3 passes); both ended at 0 warnings. Paraphrase only; no verbatim recorded.
+- *Why the budget is `max(T, S - 2T)`:* the sweeper's clock starts at `InsertIntent`, before an undeadlined `UpsertOrder`, not at `do` start, so `S - T` leaves only a 5 s margin (R-6, O-6). R-5 (anchor a deadline at the intent seam) would change the three call sites; the operator chose the smaller number. At the clamp the result is a single attempt (T 5 s ×1.5 → 5 s; T 10 s ×1.5 → 10 s).
+- *Why one byte-identical core instead of a shared module (R-1):* separate Go modules built with `GOWORK=off`; a shared module needs `replace` directives and Docker build-context changes in two services, while the repo already hash-checks copies. The trading copy carries host/credential keying it barely uses (O-13) — accepted C-18 trade-off for one core. No cross-client credential registry (R-2): global mutable state for the two-accounts-one-key edge case; each client adapts from the same account-wide headers. State is per `Client`, keyed by host and a process-seeded `maphash` fingerprint of the key so no key material is stored (295 @AC-16); a credential update replaces the `Client` and therefore loses its pacing state (accepted).
+- *Positive-sense kill switch (D-6):* a zero-value `Settings`/`ClientConfig` or test literal means pre-feature behavior; production reads `GetBool(key, true)` per request. Off restores a single attempt and the raw 429. The loop bounds, per-call timeouts and cancel reorder deliberately do NOT depend on the switch (D-28e; FR-11 "whether or not the kill switch is on").
+- *Fixed constants (not config keys; operator decision 4 and the § Fixed Invariants precedent):* window 60 s, `ResetSlack` 5 s (so a usable `Reset` is ≤ 65 s ahead; recorded `Reset` clamped to `now + Window`), low-water when `remaining*10 < limit`, backoff 1 s doubling to 8 s (vendor's published guidance), add-only jitter [0, 500 ms) only on a non-zero adaptive wait (Fixed-Invariants reasons: the adaptive rate itself comes from Alpaca's headers at run time, so there is no per-environment number to set; the trading budget is derived from two existing live keys; O-3: jitter on every wait would delay 0-wait requests and break AC-2/7/8). The 90 s no-deadline bound: recon.md Risks "Bar ingester cycle" warned that a 300 s no-deadline wait would delay a 5-minute ingest cycle (the product spec had first said "60 to 300 s"); 90 s was fixed in design round 2 (D-16), and O-12/O-22 made it a hard 90 s that includes the attempts themselves (attempts run under the bounded context with cancel-on-close; otherwise a no-deadline call could take W plus one uncapped 30 s attempt). Marketdata's 1 s `minAttempt` (D-22) has no further recorded reasoning.
+- *Why only a 429 is retried:* `ReplaceOrder` (PATCH) has no idempotency key (recon Risks), so an in-client retry is replay-safe only because a 429 means the broker did not process the request. A future change that also retries 5xx or timeouts would risk double-applying a replace; a timeout therefore returns unwrapped and stays "uncertain" (D-7).
+- *Why order mutations run detached from caller cancellation (D-12, O-2):* without the detach, a caller cancel during an in-flight retry returns `context.Canceled`, which `isUncertainBrokerOutcome` does not match, so the order is stored REJECTED although Alpaca may have accepted it; the proposed retry would have widened that window from T to the whole budget. An interrupted sleep returns `ErrRateLimited`, never a bare context error (R-7: reclassifying a post-send cancel as "uncertain", or leaving the gap, was rejected because D-12 "removes the case instead of reclassifying it and leaves today's single-attempt read path alone").
+- *Why a rate-limited flatten halts first (D-11, O-5):* with in-client retries an unprotected position could stay open about 100 s against `risk.max_unprotected_seconds` of 30 s before the halt; R-8 (halt and stop retrying) lost because a halt does not close the position.
+- *Why cancel/replace were fixed in this feature (D-20, O-17, O-19):* before 347 a rate-limited replace stored a Rejected intent, and an identical retry returned the unchanged order with a nil error (a "successful" replace that never happened); a rate-limited cancel wrote a terminal CANCELED with nothing processed. Hence `ReleasePendingIntent` (R-12/R-13/R-14 were the cheaper options and lost).
+- *Why `Reset` is filtered and the hold capped at one window (O-8, O-37; FR-2/FR-3):* a far-future or garbage `Reset` would otherwise block the host with no request able to correct it. Accepted consequence that looks like a bug: a request can be sent before a far-future `Reset` (e.g. 60 s after a 429 whose `Reset` is 3600 s ahead, AC-19).
+- *Why `Observe` keeps the lower count within one reset (O-7):* a late response could restore a higher `remaining`, forget reserved slots and burst into a 429. Step 1 scar: the window keeps the raw header `Reset` beside the clamped one (`headerReset` in `pace.go`) so a clamped 60-65 s reset is not replaced by every later response of the same window.
+- *Why the budget is a func on `ClientConfig` plus a pure service helper (D-28a, O-36, O-42):* `internal/broker` cannot import `internal/service`; round 5 found the earlier stated reason ("service tests cannot seed config") wrong.
+- *Why background loops are bounded (O-9, O-20, FR-11):* the fill poller's sequential `GetOrder` would stall a tick for N x budget; marketdata per-symbol fallbacks on an undeadlined context could take N x 90 s per cycle and stop the loop records. Declined option (O-11): a `reason: rate_limited` payload field on `order.broker_rejected` was considered and not adopted (the error text carries "rate limited").
+- *Constraint F-06 on the new in-client sleeps (design.md Constitution list: "no connection is held while sleeping"):* no pool change; a future change must not sleep or wait while holding a DB connection. Not stated in any code comment.
+- *Open question, not a decision (recon.md Risks):* `reconcileTick` errors count toward systemic `REDUCE_ONLY` escalation; no source records whether an `ErrRateLimited` refusal from `reconcileTick` under a hold now counts. Left unanswered at launch.
+- *Zero adaptive wait is always sent and never fit-tested (D-28b, O-39):* implied by D-3/D-15/D-22 but never stated; applied wrongly it refuses every call bounded by one timeout and stops fill detection. Only a hold or a 429 wait can fail to fit. The inclusive fit rule is `now + wait + T <= call end`.
+- *`Reserve` takes `latest` and the already-drawn jitter (D-15, O-14):* otherwise a committed spread slot can still fail the client's fit check afterwards and the slot is lost. A hold is `min(R-now, Window)` so the fit test and the sleep use the same time (O-29).
+- *`ErrRateLimited` is definite:* wraps only the sentinel, never a context error, never `ErrInvalidCredentials`; a real attempt that times out stays uncertain. A rate-limited submit stays REJECTED with `order.broker_rejected` (error text carries "rate limited"); reusing a `client_order_id` replays the stored REJECTED (documented, accepted).
+- *Telemetry:* "ctx wins" precedence of `RecordVendorRequest` kept (recon found FR-9/AC-21 contradicted it); no new instrument/label/outcome; refusals pass `throttle` on the caller's context and read `ctx` when that context has ended (D-8, D-16).
+- *Cancel reorder (D-23):* `CancelOrder` writes CANCELED and finalizes the cancel intent before the bracket-leg cancels so one intent covers one broker mutation; resize cancels are IBKR-only and untouched. Worst case at defaults `CancelOrder` ≤ 35 s (parent ≤ 20 s, re-read ≤ 5 s, two legs ≤ 10 s); the cancel intent lives ≤ 25 s, under the 30 s threshold.
+- *Alpaca-only per-call timeout tests `!= BROKER_TYPE_IBKR` (D-28d, R-17):* an UNSPECIFIED-type account that gets an Alpaca client must be bounded too; a type assertion would let a service-test fake silently skip the bound. R-11: an IBKR-inclusive `brokerCallFloor` rejected (changes IBKR behavior, FR-7).
 
-## Session 2026-11-16T01:40Z — sdd-review product-spec
+**Rejected alternatives** (all locked in the pruned debate.md; reasons from its R-table):
+- R-1 shared Go module; R-2 trading credential registry; R-3 trading retries 429s only with no header tracking (FR-1/FR-2 cover every Alpaca client; FR-5 degrades safely).
+- R-4 fail-fast in marketdata (operator declined); R-9 refuse a caller that cannot wait for its spread slot (interactive reads would fail when quota is merely low — instead D-19 skip-spreading).
+- R-5 anchor mutation deadline at the intent seam; R-6 budget `max(T, S - T)`; R-7 classify a post-send caller cancel as "uncertain"; R-8 `flattenAndHalt` halts and stops retrying / skips in-client retry / no change (a halt does not close the position; later retries can succeed after reset).
+- R-10 leave rate-limited cancel/replace unchanged and file a defect (operator chose to fix); R-12 store a marked Rejected intent that the classifier re-arms (larger than a guarded DELETE; a missed marker brings back the stale replay); R-13 attempt nonce in the cancel/replace intent id (breaks TRADING-6 content-identical collapse); R-14 keep the intent row after a rate-limit refusal (an identical retry would be refused "still pending" then blocked UNKNOWN).
+- R-15 apply the interval deadline to the whole marketdata cycle including DB writes (false `loop tick ok` or a rolled-back bar batch); R-16 bracket-leg cancels with the full retry budget (~60 s for a cancel that already succeeded).
+- R-17 `== BROKER_TYPE_ALPACA` / type-assertion client detection.
 
-- Tree: ccr-47ce6aaf-i0ffis ≡ origin/main-dev@9f88562 plus this feature's docs-only commits. Deviation
-  from `docs/sdd/tree-freshness.md`: the harness pins this session to the `ccr-*` branch, so the tree was
-  not switched to `main-dev`; `origin/main-dev` is an ancestor of HEAD.
-- First pass FAILED (config-key contract incomplete, three unchecked open questions, no paper-vs-live
-  statement). Spec fixed: FR-8 reworded to the real staleness threshold, FR-10 added, Config Key Changes
-  rewritten with readers / migration 050 / live mechanism, AC-15..AC-18 added. Second pass PASSED.
-- Product spec approved. Status: draft → spec-ready.
-- Warnings:
-  - AC-7's bound ("no more than 10 of 15 in the first second" at 5 rps) is loose; tighten at design.
-  - `services/xstockstrat-marketdata/CLAUDE.md` calls `backfill.rate_limit_rps` startup-read, but
-    `main.go` reads it per request; the doc is corrected in this feature.
-  - Config migration 050 is also named by features 341 and 343; the later merger renumbers and
-    regenerates `scripts/config-wiring-stored.json`.
-  - FR-2/FR-3 constants are fixed in code; design records why they are not config keys (F-07 adjacency).
-- Overlap findings (WARN only, no FAIL):
-  - `services/xstockstrat-marketdata/internal/alpaca/client.go` is also edited by 322
-    (`fix-retired-surface-proto-cleanup`, `Paper` plumbing) and 323 (`fix-orphaned-code`, `AlpacaAsset`
-    removal). Separate hunks; merge-conflict risk only.
-  - `trading.broker.*` namespace shared with 321 (`fix-trading-config-plumbing`); different keys.
-- Trading API hosts: rate-limit headers are not documented (`reference/postorder`); FR-5 covers it.
-- Recommended design depth: full (two services, order-mutation path, overlap findings).
+**Scars & gotchas**:
+- Step-count drift after a main-dev merge: recon `path:line` evidence predated the merge; `/sdd-spec` re-read every line, then a second merge (340, 343) moved more anchors and the spec's line anchors in `marketdata_service_test.go`, `fmp_client_test.go`, `marketdata_repo.go`, `config-wiring-stored.json`, `config-governance.md` were NOT re-verified. Execute's three `codebase-discovery` runs found Steps 5, 6, 11 drifted (+37 lines in `marketdata_service_test.go`; +24 in the stored set) and a miscount ("two production call sites" was three — `marketdata_service.go:1387`, the call inside `ingestRecentBars`). Re-spec was the "sole sanctioned step-body edit" (decision 23).
+- Config migration number moved twice before merge: `050` (design) → `051` (341 landed 050) → `052` (343 landed 051). After 347 landed 052, feature 345 made its own move 052 → 053 (345 D-100). Each move requires regenerating `scripts/config-wiring-stored.json`; the number was re-derived at Step 11 (`052` held) and at the integration PR.
+- A merge of `origin/main-dev` into the harness branch conflicted in `docs/roadmap/ledger/fails.md` (both sides append); resolved by the allowlisted union rule `scripts/merge-train-resolve.mjs`, base entry first.
+- CI runs `check-config-wiring.mjs --final` on every step PR and an unseeded read fails it, so Steps 3 and 7 each added a temporary `read-unseeded` entry to `scripts/config-wiring.json` and Step 11 removed both (precedent 341 Step 7/11). This is reader-first ordering and passed CI; insights.md:4681 (Pattern premise "reader-first fails `read-unseeded`") and :4683 (Rule, "never by reordering into `read-unseeded`") address a seed-before-reader constraint that 347 did not have; the ordering insight below qualifies that line.
+- Stored-set generation needs Postgres + `migrate`; the sandbox had `psql` but not `migrate`. Method that worked: with `052` held aside the generator reproduced the committed file with an empty diff (baseline proof), then with `052` the diff was exactly 4 new key rows and 2 reworded `backfill.rate_limit_rps` descriptions; `config-heal-dryrun.py --fresh` left `dryrun-fresh.tsv` unchanged; the scratch DB was deleted. CI job `config-wiring-stored` is the cross-check.
+- Guards vs RED: design listed AC-2, AC-7, AC-20, AC-24, AC-36 as passing on today's code; `/sdd-spec` found AC-8, AC-9, AC-10, AC-11 also describe behavior already present and labelled all nine as guards with a named mutant each. Mutants run: AC-2 (key by credential only), AC-8 (missing header read as Remaining 0), AC-24, AC-7, AC-9, AC-10 ("ignore the budget"). **AC-11's mutant (a retry in the FMP client) was not run** — it needs an edit to FMP production code outside the step. AC-20's keying is pinned in `pace_test.go`. AC-26/27 and AC-12/25 are client behavior, so their RED is captured at the Step 7+8 unit; AC-12 and AC-25 first failed only on a test-side assertion (the service sends `client_order_id` with its `xss-` prefix).
+- Step 10 RED values quoted in the log: AC-36 "CancelOrder took 9.35s, want within 1 s"; AC-34 tick 9.75 s; AC-35 19.55 s/20.17 s; AC-28 "halted at each submit = [false false false false]". Two pre-existing tests broke on nil fixture fields (`TestPollFills_TickRecordUsesInjectedClock` nil config watcher; `TestCancelOrder_CancelsActiveBracketLegs` nil order repo whose panic a `recover()` swallowed, silently pinning the old statement order) — ledger fails.md:4011 (DUP).
+- `sweepIntentRepo` (`trading_telemetry_test.go`) embeds `OrderIntentRepository`, is not in Step 9's implementer list and compiles unchanged; only `fakeReconciliationOrderIntentRepo` implements every method explicitly (panic-convention method added) and `memIntentRepo` gained a real map-backed `ReleasePendingIntent`. A future code path that calls the new method through `sweepIntentRepo` would nil-panic.
+- `ReleasePendingIntent` has no DB-level test: `NewOrderIntentRepo` takes a concrete pool and there is no repository test home; its single SQL statement (`DELETE ... WHERE intent_id = $1 AND state = PENDING RETURNING intent_id`) was checked by review. Rule is in TRADING-8.
+- The impl-spec review's third pass found its own pass-2 fix had never been applied (the edit aborted but was reported done); it was applied then. A reviewer-reported fix needs a re-read, not trust.
+- Step 5 added one WARN not named in the spec (`bar ingest: cycle deadline passed, timeframe not fetched`) so the later-timeframe skip is not silent.
+- The `backfill.rate_limit_rps` row in the marketdata `CLAUDE.md` said "read at startup" and the trading `broker.timeout_ms` row said "read at construction"; both keys are read live. Both docs corrected in this feature.
+- A platform-side shell outage delayed Step 12; no command was skipped. Pre-existing config-wiring `readers-disagree` findings (analysis `fundamentals.provider`, trading `platform/trading_state`) show in `--final` output and are not 347's.
+- Marketdata Step 3 initially logged the throttle WARN on every non-zero wait because `Reservation{Wait, Fits}` cannot tell a spread slot from a hold; see Permanent deviations.
 
-## Session 2026-11-16T02:30Z — sdd-review product-spec (warning loop, operator-requested)
+**Permanent deviations**:
+- *Design/spec said → shipped → because* (only where a source states the "said"):
+  - Core result `Reservation{Wait, Fits}` (spec Step 1; design § 1's Reserve table has no WARN, § 2 states the WARN only as a general bullet "once per throttled window per host", and § 4's table marks WARN on the two Hold rows only, not the 429 rows; the impl-spec Deviation Log's claim that "the design's situation tables mark WARN on the hold and 429 rows only" was inaccurate) → shipped `Reservation{Wait, Fits, Hold}` in BOTH byte-identical copies → the two-field result could not discriminate a hold from a spread slot, so the first marketdata implementation (Step 3, "every non-zero wait" interpretation, raised at the Step 4 checkpoint) would have logged several WARNs a minute while quota was merely low. Operator decision 25 at the Step 4 checkpoint: "Holds and 429 waits only". Trading Step 7 uses the same field.
+  - Design § 4 inline budget closure → shipped named method `(*TradingService).alpacaRateLimitBudget` (spec decision 7: D-30 requires service tests to use "the same closures as `instantiateBrokerLocked`"; precedent `Timing: s.ibkrTiming`).
+  - Design § 2 inline `GetBool` in the marketdata settings closure → named helper `alpacaAdaptiveRateLimit(cfgWatcher)` in `cmd/server/main.go` (spec decision 13, review F1/C-05) so a test can assert the real reader returns the seeded value.
+  - Design § 7 creates `trading_rate_limit_test.go` at S10 → created at Step 8 (budget table test moved; spec decision 8, P-06).
+  - Design § 7 said `export_test.go` exposes `now`/`sleep`/`jitter` → both `export_test.go` files also expose the HTTP transport (spec decision 6: AC-6/18/21/23 assert a real Alpaca host in an error or log while a test `RoundTripper` answers).
+  - Design § 7 table says S11 kind "config" → spec category `migration` (adds DBA reviewer).
+  - Design D-10 migration `050` → `052` (see Scars). D-21 (interval deadline on the whole cycle) → D-26 (Alpaca calls only).
+  - Spec Step 10 said the cancel reorder changes no existing expectation → two fixture lines edited in `trading_telemetry_test.go` and `trading_bracket_test.go` (operator "Fix the two fixtures"; production untouched; ledger fails.md:4011 DUP).
+  - Spec Step 11 said regenerate against a scratch DB in Docker → throwaway local Postgres 16 + `migrate` v4.17.1 (decision 22; CI job re-derives).
+- Operator decision 7 ("no quota reservation for interactive reads, they fail fast in an exhausted window", context.md) is superseded for marketdata by D-14 (mechanics D-16; context.md and O-21 attribute it to D-14 alone): a detached quote or price fetch now holds for its full 2.5 s budget (and `partialColdFetch` spends the caller's deadline minus 250 ms) before returning the warm subset, where a 429 used to fail in milliseconds. Time bounds are unchanged; recorded as accepted (O-21).
+- Scenario promotion (decision 28): 32 of 37 promoted verbatim plus `@feature-347` into three new files `services/xstockstrat-{marketdata,trading,config}/acceptance/alpaca-adaptive-rate-limit.feature` (marketdata AC-1,2,4,6,7,8,9,11,14,21,22,32,33; trading AC-10,12,15,16,17,18,20,23,25-31,34,35,36; config AC-37). **Not promoted, kept feature-local under D-24 because they hard-code jitter or core arithmetic:** AC-3, AC-5, AC-13, AC-19, AC-24 — their tests exist in `pace_test.go`/client tests. Consequences recorded at promotion: the `throttle` outcome has no durable scenario (AC-19 is local); AC-37's Then refers to "the new ceiling description text fixed in the implementation spec", which dangles now that the spec is pruned — the text lives in `services/xstockstrat-config/migrations/052_alpaca_adaptive_rate_limit_keys.up.sql` and `scripts/config-wiring-stored.json`, and the original spec is at `git show 4e4795b7:docs/roadmap/features/347-alpaca-adaptive-rate-limit/implementation-spec.md`.
+- Accepted risks that look like bugs (all recorded in design.md Open Risks, now pruned):
+  - Trading's fill poller, `reconcileTick`, `syncPositions` and the not-cancelable re-read run on a one-timeout deadline, so they always skip spreading and make exactly one attempt; the largest steady consumer of the trading quota is never spread (O-32, D-19/D-21).
+  - Clamp row: at `broker.timeout_ms` 10 s with the multiplier at its 1.5 floor, mutation budget plus the not-cancelable re-read is 20 s against a 15 s threshold (the re-read was unbounded before); at T 1 s ×3.0 the margin is only 1 s (O-34, D-23).
+  - The Trading API reference pages (`/v2/orders`, `/v2/account`, overview) are silent: they list no `X-RateLimit-*` headers and no 429, so the headers' presence is undocumented, not documented absent; if absent trading gets the 429 retry only and no pre-emptive pacing (FR-5 degradation, tested). No real paper-host response was ever recorded; the operator approved merging without it. The Data host (`data.alpaca.markets`) is documented to send all three headers on 200/400/429 (`reference/stockbars`, operator-supplied).
+  - Under a hold each watchdog tick still produces REJECTED flatten orders (as a raw 429 did); the account stays halted after a later successful flatten until `ResumeAccount` (D-18). A caller whose own deadline is shorter than a retry wait plus one attempt gets a permanent REJECTED submit (as before).
+  - A caller cancel can no longer abort a mutation that is mid-retry (D-12); a bracket cancel can take ~35 s to return a cancel that already succeeded, safe because an identical retry replays the stored result (O-30).
+  - `ReleasePendingIntent` is a delete on an order-safety table with no DB test; on a failed or lost release (DB error, or the sweeper already reclaimed the row) the in-memory intent state becomes UNKNOWN to match the DB and the reply does not promise a retry.
+  - Spread-skip: every caller whose deadline is shorter than the spread interval (2.5 s interactive marketdata reads; trading reads on a T deadline) is exempt from spreading and is held/refused only at `Remaining` 0 (D-19, O-15).
 
-- Operator asked to loop the review until every warning was addressed. Passes 3 to 5; pass 5 returned
-  PASS with no warnings and no blockers. Status unchanged (`spec-ready`).
-- Spec changes: FR-2 pins "Remaining 4 of 200 is low" and the cut-short-wait error; FR-3 adds
-  add-only jitter, "Reset is used whenever it parses", and a fixed total-wait bound for callers with no
-  deadline (60 to 300 s marketdata; below the FR-8 threshold in trading); FR-5 ignores a response when
-  any of the three headers is unusable; FR-9 adds no instrument and maps a cut-short wait to `throttle`;
-  new § Fixed Invariants records why the pacing constants are not config keys.
-- Scenarios: AC-7, AC-8, AC-9, AC-12, AC-13 tightened; AC-19 (no-deadline bound), AC-20 (per-credential
-  state), AC-21 (throttle outcome), AC-22 (rps 0) added. 22 scenarios.
-- Shared files touched: `docs/roadmap/features/merge-order.md` gained a non-blocking 347 section (config
-  seed 050 shared with 341/343/330; `alpaca/client.go` overlap with 322/323).
-  `services/xstockstrat-marketdata/CLAUDE.md` row for `backfill.rate_limit_rps` corrected from "read at
-  startup" to live per request (matches `cmd/server/main.go`).
-- Correction: the order-retry bound is 30 s at defaults, not the 15 s first quoted to the operator
-  (`IBKRRequestTimeout` is 10 s and enters the `max`).
+**Cross-feature signal**:
+- Feature 349 (fix-replace-tif-before-intent) resolved the defect filed here at operator confirmation 2026-11-16T07:00Z: `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md` (`ReplaceOrder` inserts its intent before `validateTIF`). The report and its `.status` (`resolved`, `ref: feature:349-fix-replace-tif-before-intent`) are still in the tree; commit `4e4795b7` pruned three other reports, so this one awaits its own report-synthesize pass together with feature 349. 349's design PRESERVEs `@AC-16`/`@AC-31 @feature-347` and says `prevIntent` and the `ErrRateLimited` branch are untouched.
+- Feature 345 (authelia-sso) renumbered its config seed 052 → 053 because 347 landed 052; 352 cites 347 Step 11 as the precedent for stored-set generation on a throwaway Postgres (345 cites a scratch Postgres and the 341 precedent, and mentions 347 only for the renumber); 349 rejected releasing the intent on the TIF-error path because TRADING-8 limits the delete to `ErrRateLimited` (349 debate.md R-1) — the first downstream feature bound by 347's rule; 358 touches `trading_reconciliation_test.go` (the adjacent fake) in its context.
+- Merge-order: `docs/roadmap/features/merge-order.md:420` still carries the non-blocking 347 section (overlaps with 341/343/330/322/323; `alpaca/client.go` shared with 322 `Paper` plumbing and 323 `AlpacaAsset` removal; `trading.broker.*` namespace shared with 321) after launch (inference: prose now historical).
+- Live pointers to the pruned files: only `docs/roadmap/ledger/insights.md:4612`, `docs/roadmap/ledger/fails.md:4005`, `docs/roadmap/ledger/fails.md:4011` (they cite `debate.md` and `implementation-spec.md`), and `docs/patterns/dry-guard-rail.md:103` ("347 `R-1`" = debate.md R-1). Retrieval: `git show 4e4795b7:docs/roadmap/features/347-alpaca-adaptive-rate-limit/<debate|design|recon|product-spec|implementation-spec>.md`. Code comments cite `@AC-*` of the retained `acceptance.feature` only.
 
-## Session 2026-11-16T03:40Z — sdd-design (gate log)
+**Deferred follow-ons**:
+- Record a real paper-host response (are `X-RateLimit-*` headers sent by the Trading API?) — never done; needs Alpaca credentials. If absent, trading has no pre-emptive pacing.
+- Add a DB-level test for `ReleasePendingIntent` if `NewOrderIntentRepo` ever takes an interface or a test pool.
+- Optional: a durable scenario for the `throttle` outcome (currently only AC-19's local test) and rewording promoted AC-37's dangling "implementation spec" reference.
+- AC-11 mutant (retry added to the FMP client) never run.
+- Operator-facing: `docs/roadmap/features/merge-order.md` 347 section is stale; Open Items boxes "re-derive the migration number" and "ReleasePendingIntent no DB test" were left unchecked at launch (the number held at 052; the DB test remains open).
+- Out-of-scope by design (non-goals): Alpaca WebSocket; FMP/Finnhub/EDGAR/IBKR limiters; cross-replica or cross-service limiter coordination; persisting limiter state across restarts; removing `backfill.rate_limit_rps`; the Broker API host; quota reservation for interactive reads; changing the outcome of a rate-limited submit; spreading short-deadline calls.
 
-- Phase 0 Recon: wrote recon.md (marketdata, trading, config; 40 existing business rules, none CHANGE).
-- Trading API reference pages (`/v2/orders`, `/v2/account`, overview) document no rate-limit headers
-  and no 429; only the Market Data reference does.
-- Phase 1 round 1 done; register in debate.md (D-1..D-10 settled, R-1..R-3 locked, O-2/O-4/O-5/O-6/
-  O-9/O-11 open). No Floor breach, no C-16 regression found.
-- Round 1 gate, operator steers (2026-11-16): (8) trading fails fast on a wait that cannot fit;
-  **marketdata keeps waiting to the request deadline** (fail-fast declined there); (9) a rate-limited
-  `flattenAndHalt` submit halts the account first, then keeps retrying the flatten; (10) order mutations
-  run detached from caller cancellation, still time-bounded; (11) trading retry budget is
-  `max(T, S − 2T)` (20 s at defaults). Recorded as D-11..D-14, R-4..R-8 in debate.md.
-- Round 2 done (D-15..D-18; O-14..O-24). Round 2 gate, operator steers: (12) accept the spread-skip
-  rule (FR-2 amended); (13) fix rate-limited cancel (return Unavailable, no local CANCELED) and replace
-  (no stored Rejected intent) in this feature; (14) bound the loops: per-cycle deadline in marketdata's
-  warm-quote and bar-ingest loops, Alpaca-only per-call timeout in the fill poller; (15) run round 3.
-  D-19..D-21, R-9..R-11.
-- D-14 supersedes operator decision 7 for marketdata: in an exhausted window a detached quote or price
-  fetch now holds for its full budget (2.5 s) before returning the warm subset, where a 429 used to fail
-  in milliseconds. Time bounds are unchanged.
-- Round 3 done (D-22..D-24; O-25..O-35). Round 3 gate, operator steers: (16) **approved** one new
-  repository method `ReleasePendingIntent` (guarded DELETE of a PENDING intent row after a rate-limit
-  refusal) — the first delete path on `trading.order_intents`; (17) the marketdata cycle deadline bounds
-  only the Alpaca calls, DB writes keep the loop context (D-26 supersedes D-21); (18) bracket-leg
-  cancels are bounded by `broker.timeout_ms`, no retry; (19) run round 4. D-25..D-27, R-14..R-16.
-- To file at spec/execute (pre-existing, not fixed here): `ReplaceOrder` inserts its intent before
-  `validateTIF`, so a TIF validation failure leaves the intent PENDING then UNKNOWN.
-- Round 4 done (D-28, D-29, R-17; O-36..O-41 closed). Round 4 gate, operator steer (2026-11-16):
-  "keep rounds until adversary verdict is sound. I sign off to override the rounds cap." The debate may
-  run past the 5-round cap of `/sdd-design` full mode; rounds continue until the adversary returns a
-  verdict with no blocking objection. Override recorded per P-04; the Floor rule (F-11) is untouched.
-- Round 5 done: adversary verdict SOUND (no Floor breach, no blocking objection, no register violation,
-  no C-16 regression). D-30, O-42. The operator's stop condition for the debate is met.
-
-## Session 2026-11-16T05:40Z — sdd-design
-
-- Phase 0 Recon: wrote recon.md (services: marketdata, trading, config; key reuse patterns: the single
-  `do` chokepoint in each Alpaca client; the byte-identical-copy governance of `check-watcher-copies`).
-- Phase 1 Grilling: 5 rounds (full; the operator waived the round cap and set "adversary verdict sound"
-  as the stop condition; met at round 5). Chosen approach: a pure pacing core copied into both services
-  behind each `do`; marketdata waits to the request deadline, trading fails fast inside a budget of
-  `max(T, S − 2T)`; order mutations detached from caller cancellation; rate-limited cancel/replace
-  release their intent; loops and per-call reads bounded. Rejected: a shared Go module, a cross-client
-  credential registry, anchoring the deadline at the intent seam (R-1..R-17 in debate.md).
-- Operator approved the design at the round 5 gate (2026-11-16).
-- Product spec and acceptance.feature amended as approved: FR-2, FR-3, FR-8, FR-9 reworded; FR-11 added;
-  fixed invariants listed; AC-2, 3, 7, 13, 17, 19, 20, 21 corrected; AC-23..AC-37 added (37 scenarios).
-- Business rules (C-16): no existing rule changed; three extended (294 @AC-13, 295 @AC-14, 282 @AC-27).
-- Constitution rules touched: C-01, C-05, C-07, C-08, C-10, C-13, C-14, C-15, C-16, C-18, P-03, P-04,
-  P-06, F-01, F-04, F-06, F-07. Floor breaches: none.
-- Status: spec-ready → design-approved.
-
-### Open Threads (from design.md Open Risks)
-
-- [ ] Trading pollers and reconciler always skip spreading — unit test at S8.
-- [ ] Clamp row (T 10 s, ×1.5): budget plus re-read 20 s > threshold 15 s; T 1 s, ×3.0 leaves 1 s —
-  budget table test at S10, documented at S9.
-- [ ] Trading API rate-limit headers undocumented — FR-5 test at S8; real paper-host response recorded
-  at the integration PR.
-- [ ] File the pre-existing `ReplaceOrder` defect (intent inserted before `validateTIF`) at `/sdd-spec`.
-- [ ] Config migration number re-derived at S11 and at the integration PR; regenerate
-  `scripts/config-wiring-stored.json`.
-- [ ] `ReleasePendingIntent` has no DB-level test — reviewed at S9; rule written into trading docs.
-- [ ] AC-37's new `backfill.rate_limit_rps` description text is fixed in the implementation spec.
-
-## Session 2026-11-16T06:10Z — branch sync before sdd-spec
-
-- `/sdd-spec` halted at its tree-freshness preflight: `origin/main-dev` had moved 57 commits
-  (9f88562 → 5730505) and merging it conflicted in `docs/roadmap/ledger/fails.md` (both sides appended).
-- Merged `origin/main-dev` into `ccr-47ce6aaf-i0ffis`; the ledger conflict was resolved by the repo's
-  allowlisted union rule (`scripts/merge-train-resolve.mjs`), base entry first. Merge commit c420b2a.
-- main-dev now carries `050_ui_chart_history_bars` (feature 341), so this feature's config migration is
-  **051**; product-spec.md, design.md and the merge-order note were updated.
-- recon.md `path:line` evidence predates the merge for files main-dev touched (marketdata
-  `internal/repository/marketdata_repo.go`, `internal/telemetry/otel.go`,
-  `internal/service/telemetry_allowlist_test.go`, the marketdata `CLAUDE.md`; config
-  `src/grpc/configServiceImpl.ts`; `scripts/config-wiring*.json`; `docs/patterns/config-governance.md`).
-  `/sdd-spec` re-discovers and cites current lines.
-
-## Session 2026-11-16T05:58Z — sdd-spec
-
-- Tree: `ccr-47ce6aaf-i0ffis@4e594d1 ≡ origin/ccr-47ce6aaf-i0ffis`, which contains
-  `origin/main-dev@5730505`. Same deviation from `docs/sdd/tree-freshness.md` as the earlier sessions:
-  `origin/feature/alpaca-adaptive-rate-limit` does not exist yet and the artifacts live only on the
-  harness branch, so the tree was not switched to `main-dev`.
-- Generated implementation-spec.md with 12 steps in six atomic units (1+2 core, 3+4 marketdata client,
-  5+6 marketdata loops, 7+8 trading client, 9+10 trading service, 11+12 config seed).
-  Status → implementation-ready. All 37 scenarios are covered (checked mechanically against
-  `acceptance.feature`).
-- Discovery was inline (no `codebase-discovery` subagent could be spawned from this session); recon
-  evidence was reused and every cited line re-read after the `main-dev` merge.
-- Key codebase findings:
-  - `trading.go` and both Alpaca clients were not moved by the `main-dev` merge; recon's line numbers
-    for them still hold. `marketdata/internal/telemetry/otel.go` moved (`RecordVendorRequest` is now
-    `:398-406`).
-  - Last config migration is `050_ui_chart_history_bars`; this feature uses `051`. The seed column list
-    now carries `updated_by` (050 pattern); a bool row stores `value_data` `'true'`.
-  - `scripts/check-config-wiring.mjs` reads seeds only from `scripts/config-wiring-stored.json`, which
-    needs Postgres, `psql` and `migrate` to regenerate. On this sandbox `psql` is present and `migrate`
-    is not, so Step 11 may need the `scripts/Dockerfile.migrate` image.
-  - `fakeReconciliationOrderIntentRepo` is the only intent-repo fake that implements every method
-    explicitly; the other four embed the interface.
-  - The marketdata Start loops read a concrete `*config.Watcher`; `config.MustSnapshotWatcher` exists in
-    the marketdata module too, so AC-32 and AC-33 can drive one loop cycle.
-- Spec-time decisions awaiting confirmation at `/sdd-review impl-spec` (full list in the spec's
-  § "Spec-time decisions"): every service/test pair is an atomic unit; Step 11 is category `migration`
-  (adds the DBA reviewer); `pace_test.go` is in-package so the copies stay byte-identical; both
-  `export_test.go` files also expose the HTTP transport; the trading budget closure is the named method
-  `alpacaRateLimitBudget`; the budget table test moved from Step 10 to Step 8; log messages, error
-  formats and the three config descriptions are fixed in the spec.
-- Finding against `design.md` § 7 test notes: it lists AC-2, AC-7, AC-20, AC-24 and AC-36 as the
-  guards. AC-8, AC-9, AC-10 and AC-11 also describe behavior today's code already has. The spec labels
-  all nine as guards and names a mutant for each.
-
-### Open Threads (after sdd-spec)
-
-- [x] AC-37's new `backfill.rate_limit_rps` description text is fixed in Step 11.
-- [ ] File the pre-existing `ReplaceOrder` defect (intent inserted before `validateTIF`,
-  `trading/internal/service/trading.go:1531` vs `:1575`). Not filed by `/sdd-spec`:
-  `.claude/skills/sdd-qa/reference/defect-filing.md` requires the user to confirm the report first.
-- [ ] Owner + config-team approval for the two new keys before the Step 11 unit merges.
-- [ ] Re-derive the config migration number at Step 11 and at the integration PR.
-- [ ] Record a real paper-host response (are `X-RateLimit-*` headers sent?) at the integration PR.
-- [ ] The remaining design open risks are mapped to steps in the spec's § Step Dependencies.
-
-## Session 2026-11-16T07:00Z — defect filed
-
-- Operator confirmed filing the pre-existing `ReplaceOrder` defect (intent claimed before `validateTIF`):
-  `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md` (status: open).
-  Not fixed by this feature. Next: `/sdd-triage --from-report` on that file. The matching Open Thread
-  above is done.
-
-## Session 2026-11-16T08:10Z — sdd-review impl-spec (advisory; warning loop, operator-requested)
-
-- Tree: ccr-47ce6aaf-i0ffis, contains origin/main-dev@5730505 (harness-pinned branch, as before).
-- Pass 1: 2 failures, 9 warning groups, no Floor risk. Fixed in the spec:
-  - F1 (C-05): marketdata kill-switch reader is now the named helper `alpacaAdaptiveRateLimit` with a
-    snapshot-based test in `cmd/server/main_test.go` (Steps 3, 4).
-  - F2: CI `check-config-wiring.mjs --final` runs on every step PR, so Steps 3 and 7 each add a
-    temporary `read-unseeded` entry to `scripts/config-wiring.json` and Step 11 removes both.
-  - W1–W9: atomic units reduced to 1+2, 5+6, 9+10; `ci.yml` cite; `GOWORK=off` coverage command;
-    trading key test asserts the seeded value; test names `Test<Subject>_F347_AC<N>` with exact PASS
-    counts; anchors and trading-domain notes; `grep` exit codes; Docker-based stored-set regeneration
-    plus the heal dry-run; Step 11 six-file justification.
-  - Moves: the `alpaca-integration.md` edit went from Step 3 to Step 5; the trading `CLAUDE.md` edits
-    from Step 7 to Step 9.
-- Pass 2: 0 failures, 1 warning (Step 11's stored-set key count matched 6 lines, not 4). Fixed.
-- Pass 3: swept every Verification command and recomputed every count; nothing else found. Its only
-  item was that the pass 2 fix had not been applied (the edit had aborted); it is applied now
-  (`implementation-spec.md:795`), which is the condition the reviewer gave for "No failures, no warnings".
-- Result: 0 failures, 0 warnings. Unresolved ✗ / ⚠ carried into execution: none.
-- Overlap findings: no FAIL-level collision (migration 051, both keys and `internal/alpacapace/` are
-  unclaimed). Seven same-file overlaps (322, 323, 311, 312, 321, 341) recorded in
-  `docs/roadmap/features/merge-order.md`.
-
-## Session 2026-11-16T08:40Z — branch sync before merging the docs PR
-
-- `origin/main-dev` moved again (340, 343 merged); merged into `ccr-47ce6aaf-i0ffis` with no conflict.
-- Feature 343 landed `051_ingest_backfill_self_serve_keys`, so this feature's config migration is now
-  **052** (`052_alpaca_adaptive_rate_limit_keys`). product-spec.md, design.md, implementation-spec.md
-  and the merge-order note were updated. The number is still re-derived at Step 11.
-- main-dev also changed files the implementation spec cites by line:
-  `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`,
-  `internal/fmp/fmp_client_test.go`, `internal/repository/marketdata_repo.go`,
-  `scripts/config-wiring-stored.json`, `docs/patterns/config-governance.md`. The spec's line anchors in
-  those files were NOT re-verified after this merge; `/sdd-execute` discovery must re-read them
-  (Step 4, Step 6, Step 11).
-
-## Session 2026-11-16T06:47Z — sdd-execute (sequential): boot, validation, re-spec
-
-- Operator decisions (asked and answered this session): (20) run `/sdd-execute` in **sequential** mode,
-  all 12 steps; (21) the step commits go to `feature/alpaca-adaptive-rate-limit`, which the operator
-  authorized this cloud session to create and push (the harness pins it to `ccr-f38bde65-c8sy8s`
-  otherwise); (22) Step 11 may start a throwaway Postgres 16 **only to generate**
-  `scripts/config-wiring-stored.json` and the fresh heal dry-run — the migration itself is still verified
-  offline; (23) re-spec Steps 5, 6 and 11 before executing.
-- Tree: `feature/alpaca-adaptive-rate-limit@b34dc48 ≡ origin/main-dev` at branch creation.
-- Validation (three `codebase-discovery` runs, all stamped with the tree above): every cited file and
-  symbol exists. Steps 1-4, 7-10 and 12: no drift. Steps 5, 6: `marketdata_service_test.go` anchors from
-  `fakeQuoteStore` down moved +37 lines. Step 11: stored-set lines +24; a feature 343 entry now tops the
-  registered-keys log. `052` is still the next free config migration number.
-- Re-spec (the sole sanctioned step-body edit, sequential-mode §5.3), no instruction changed:
-  - Step 5: seven test call-site lines updated; "two production call sites" corrected to three
-    (`marketdata_service.go:1387`, the call inside `ingestRecentBars`, was not counted).
-  - Step 6: lines of the Start-loop comment, five fakes and the registry pattern updated.
-  - Step 11: stored-set lines updated; the 347 registered-keys entry goes at the top of the log, above
-    the 343 entry, still modelled on the 341 entry.
-- Not re-spec'd, recorded here: `sweepIntentRepo` (`trading/internal/service/trading_telemetry_test.go:98`)
-  also embeds `OrderIntentRepository` and is not in Step 9's implementer list. It compiles unchanged.
-- Assumptions stated to the operator at the up-front confirm: checkpoints after Step 4 and Step 8 (no
-  atomic unit is split); plain Postgres 16 is enough for the stored set (config migrations use no
-  extension), CI's `config-wiring-stored` job is the cross-check; approvals (owner, config team, DBA)
-  are obtained by the operator on the integration PR; the paper-host header check needs Alpaca
-  credentials this sandbox does not hold and stays open.
-- Tooling setup (steps 1-12): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.27.0) · uv ✓ ·
-  ruff/pytest ✓ (uv) · pnpm ✓ 9.15.9 · Node 24 ✓ (`/opt/node24`, for Step 12) · `migrate` ⬇ v4.17.1 and
-  local Postgres 16 binaries ✓ (Step 11 stored-set generation only).
-
-### Step 1 — service: pacing core `internal/alpacapace` in both services, with copy governance [done]
-- Atomic unit with Step 2. `pace.go` written in marketdata and copied byte for byte to trading; groups
-  `go-alpacapace` and `go-alpacapace-test` added to `check-watcher-copies.py`; `.jscpd.json` ignore and
-  the `dry-guard-rail.md` exemption added.
-- Files modified: both `internal/alpacapace/pace.go`, `scripts/check-watcher-copies.py`, `.jscpd.json`,
-  `docs/patterns/dry-guard-rail.md`
-- Implementation note: the window keeps the header's raw `Reset` beside the clamped one, so "replace
-  only when Reset advances" compares header values and a clamped 60-65 s reset is not re-replaced by
-  every later response of the same window.
-- Deviations: none
-
-### Step 2 — test: core arithmetic and the copy gate [done]
-- Atomic unit with Step 1. 18 in-package tests; one new pytest for the two groups.
-- TDD (AC-1, 3, 5, 13, 19, 24 core arithmetic): red — with `pace.go` as zero-value stubs all 18 tests
-  failed on assertions (`FAIL github.com/xstockstrat/marketdata/internal/alpacapace`), and the new
-  pytest failed with `KeyError` (groups absent) → green — 18/18 pass with `-race` in both modules,
-  coverage 100.0% of statements; pytest 6 passed; `golangci-lint` 0 issues in both services; ruff clean;
-  `check-watcher-copies: all groups byte-identical`.
-- Files modified: both `internal/alpacapace/pace_test.go`, `scripts/tests/test_check_watcher_copies.py`
-- Deviations: none
-
-### Step 3 — service: marketdata Alpaca client paces from headers and retries a 429 [done]
-- `do` keeps today's body when `AdaptiveRateLimit` is false and otherwise calls `doPaced` (Reserve →
-  static limiter → attempt → Observe → 429 retry). Seams `now`/`sleep`/`jitter`, one `newClient`
-  helper for both constructors, the named reader `alpacaAdaptiveRateLimit`, docs, and one temporary
-  `read-unseeded` entry in `scripts/config-wiring.json` (Step 11 removes it).
-- Verification: build ok; existing `internal/alpaca` and `cmd/server` tests pass; `check-config-wiring
-  --final` exit 0, `--doc-check` exit 0, `--declared-from` prints `PENDING … read-unseeded` (non-blocking
-  at step time); `httpClient.Do` appears only in `do` and its attempt helper `sendAttempt`.
-- TDD: paired with Step 4 (red captured there with these fields and seams present and the loop off).
-- Files modified: `services/xstockstrat-marketdata/internal/alpaca/client.go`, `cmd/server/main.go`,
-  `CLAUDE.md`, `docs/context-constitution.md`; `scripts/config-wiring.json`
-- Interpretation recorded (spec was silent): the throttle WARN is emitted for every non-zero adaptive
-  wait — a spread slot as well as a hold or a 429 wait — gated by `WarnOnce` with the wait's end as
-  the window. `Reservation` does not say whether a wait is a slot or a hold, so the client cannot log
-  holds only without widening the core API. Raised at the Step 4 checkpoint.
-- Deviations: none
-
-### Step 4 — test: marketdata client pacing, retry, telemetry and the FMP guard [done]
-- 14 scenario tests plus the static-ceiling refusal case in `client_test.go` (fake clock, scripted
-  `RoundTripper` that keeps the Alpaca host, WARN recorder), the FMP guard, and the kill-switch reader
-  test in `main_test.go`. `export_test.go` exposes exactly four setters.
-- TDD red (Step 3 fields and seams present, `do` a single attempt): FAIL — AC-1, AC-3, AC-4, AC-5,
-  AC-6, AC-14, AC-19, AC-21, AC-22 and the static-ceiling refusal case, each on an assertion. Guards
-  passed as designed ("red N/A — pins unchanged behavior"): AC-2, AC-7, AC-8, AC-9, AC-24, AC-11.
-- Guard mutants run this session, each turning its test red: AC-2 key by credential only; AC-8 a
-  missing header read as `Remaining 0`; AC-24 refuse a caller that cannot wait for its slot; AC-7 skip
-  the static limiter when adaptive; AC-9 ignore the switch. AC-11's mutant (a retry in the FMP client)
-  was not run: it needs an edit to FMP production code outside this step.
-- TDD green: 15/15 scenario tests pass with `-race` (`F347_AC(1|…|24)` → 15 top-level PASS); the
-  reader test passes (1); whole service `go test ./... -race` exit 0; coverage total 85.1% (>= 40%);
-  `golangci-lint` 0 issues.
-- Files modified: `services/xstockstrat-marketdata/internal/alpaca/export_test.go` (new),
-  `internal/alpaca/client_test.go`, `internal/fmp/fmp_client_test.go`, `cmd/server/main_test.go`
-- Deviations: none
-
-### Checkpoint after Step 4 — operator decisions
-- (24) Proceed to Steps 5+6, 7, 8.
-- (25) Throttle WARN scope: **holds and 429 waits only**. Implemented as `Reservation.Hold` in the core
-  (both copies) and a `throttled` argument on the marketdata client's `pause`; supersedes the
-  "every non-zero wait" interpretation noted under Step 3. See the Deviation Log.
-- TDD: red — `pace_test.go` did not compile (`got.Hold undefined`) and `F347_AC3` failed on
-  "spreading logged a throttle WARN" → green — 19/19 core tests in both modules (coverage 100.0%),
-  16/16 `F347` tests in marketdata, whole service `go test ./... -race` exit 0, lint 0 issues, copy
-  gate clean.
-- Files modified: both `internal/alpacapace/pace.go` and `pace_test.go`,
-  `services/xstockstrat-marketdata/internal/alpaca/client.go`, `client_test.go`
-
-### Step 5 — service: marketdata loops bound their Alpaca calls by the loop interval [done]
-- Atomic unit with Step 6. Both Start loops create `fetchCtx` from the live interval; only the four
-  vendor calls use it; a per-symbol guard and a later-timeframe guard start no fetch once it expired and
-  count the symbols as errors. `alpaca-integration.md` gained the adaptive bullet and the two loop notes.
-- Verification: build and vet ok; 17 `fetchCtx` lines; 17 write/tick sites still on `ctx`.
-- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`,
-  `docs/alpaca-integration.md`
-- Addition not named by the spec: one WARN `bar ingest: cycle deadline passed, timeframe not fetched`
-  when the later-timeframe guard fires (otherwise that skip is silent apart from the heartbeat).
-- Deviations: none
-
-### Step 6 — test: loop bounds [done]
-- Atomic unit with Step 5. 11 existing call sites pass `context.Background()` twice; three new tests.
-- TDD red (new signatures, bodies still on `ctx`): AC-33 "per-symbol bars requests in the cycle = 6,
-  want exactly 1"; AC-32 "per-symbol quote requests in the cycle = 3, want 0"; the expired-fetch case
-  "vendor calls after the cycle deadline: multi = 1" → green: `F347_AC3[23]` → 2 PASS, the direct case
-  passes, whole service `go test ./... -race` exit 0, coverage total 85.1%, `golangci-lint` 0 issues.
-- Files modified: `internal/service/marketdata_service_test.go`, `internal/service/bar_hold_test.go`
-- Deviations: none
-
-### Step 7 — service: trading Alpaca client paces, retries within the budget and refuses with `ErrRateLimited` [done]
-- `broker.ErrRateLimited`; `ClientConfig.RateLimitBudget`; `do` keeps today's body when the budget is
-  nil or non-positive and otherwise runs `doPaced` (fail fast, inclusive fit rule, mutations on
-  `context.WithoutCancel`, per-attempt timeout `min(T, end − now)`, `GetBody` replay). Pure
-  `rateLimitBudget` beside `computeStaleThreshold`; the method `alpacaRateLimitBudget` wired in
-  `instantiateBrokerLocked`; one temporary `read-unseeded` entry in `scripts/config-wiring.json`.
-- The WARN follows operator decision 25 (holds and 429 waits only), using `Reservation.Hold`.
-- Verification: build ok; existing `internal/broker` tests pass with `-race`; `baseURL()` paper/live
-  gate present; no diff in `ibkr.go` / `ibkr_session.go`; `golang.org/x/time` absent from `go.mod`;
-  `check-config-wiring --final` exit 0 and `--doc-check` exit 0.
-- TDD: paired with Step 8 (red captured there with these symbols present, the loop off and
-  `rateLimitBudget` returning 0).
-- Files modified: `services/xstockstrat-trading/internal/broker/broker.go`, `internal/broker/alpaca.go`,
-  `internal/service/order_intent.go`, `internal/service/trading.go`; `scripts/config-wiring.json`
-- Deviations: none
-
-### Step 8 — test: trading client retry, budget, refusal and the budget table [done]
-- 10 scenario tests in `alpaca_test.go` (fake clock, scripted `RoundTripper` recording method, host,
-  path, body and clock time, WARN recorder), four extra client cases (one-timeout read sends exactly
-  once; FR-5 degradation; caller cancel during a wait for a mutation and for a read; a 401 on a retry),
-  `export_test.go` with exactly four setters, and `trading_rate_limit_test.go` with the two budget tests.
-- TDD red (Step 7 symbols present, `do` a single attempt, `rateLimitBudget` returning 0): FAIL — AC-12,
-  AC-13, AC-15, AC-16, AC-17, AC-18, AC-23, AC-27, the four extra cases, `TestRateLimitBudget` and
-  `TestAlpacaRateLimitBudget_FollowsConfig`. Guards passed as designed: AC-10, AC-20. AC-10's mutant
-  ("ignore the budget") was run and turned it red; AC-20's keying is pinned in `pace_test.go`.
-- TDD green: `F347_AC(10|…|27)` → 10 top-level PASS; `RateLimitBudget` → 2 PASS; whole service
-  `go test ./... -race` exit 0; coverage total 84.7% (>= 40%); `golangci-lint` 0 issues.
-- Open risks closed by this step: pollers skip spreading (one-attempt test); FR-5 degradation on hosts
-  that send no headers; the clamp and 1 s margin rows of the budget table.
-- Files modified: `services/xstockstrat-trading/internal/broker/export_test.go` (new),
-  `internal/broker/alpaca_test.go`, `internal/service/trading_rate_limit_test.go` (new)
-- Deviations: none
-
-### Checkpoint after Step 8 — operator decision
-- (26) Proceed with Steps 9+10, then 11 and 12.
-
-### Step 9 — service: trading handles the rate-limit outcome and bounds its Alpaca-only calls [done]
-- Atomic unit with Step 10. `ReleasePendingIntent` (interface + guarded DELETE); `alpacaCallContext`
-  at exactly three kinds of site (fill poller `GetOrder`, the not-cancelable re-read, both leg cancels;
-  5 occurrences with the definition); `refuseRateLimitedMutation`; `CancelOrder` captures `prevIntent`,
-  refuses on `ErrRateLimited` before any local write, and writes CANCELED + finalizes the intent before
-  the leg block; `ReplaceOrder` refuses the same way; `flattenAndHalt` halts on the first rate-limited
-  submit and keeps retrying. `isUncertainBrokerOutcome` is unchanged. Docs: the key row and the
-  corrected `broker.timeout_ms` row, § Adaptive rate limit (budget table and outcomes a–g), `TRADING-8`,
-  the TRADING-3 addition, and the reconciliation paragraph.
-- Files modified: `services/xstockstrat-trading/internal/repository/order_intent_repo.go`,
-  `internal/service/trading.go`, `CLAUDE.md`, `docs/context-constitution.md`, `docs/reconciliation.md`
-- Open risk carried, unchanged: `ReleasePendingIntent`'s SQL has no DB-level test; it is one statement,
-  `DELETE … WHERE intent_id = $1 AND state = $2 RETURNING intent_id`, for review.
-- Deviations: none
-
-### Step 10 — test: trading service rate-limit outcomes and bounds [done]
-- Atomic unit with Step 9. Real-client harness (`newRateLimitHarness`: snapshot watcher, a real
-  `broker.NewClient` against an `httptest` server built from `brokerCallTimeout` and
-  `svc.alpacaRateLimitBudget`, `memIntentRepo`, `ctxCapturingDB`), a fake-broker harness, 11 scenario
-  tests, `memIntentRepo.ReleasePendingIntent`, and the panic-convention method on
-  `fakeReconciliationOrderIntentRepo`.
-- TDD red, on the tree holding Steps 7-8: AC-36 "CancelOrder took 9.35s, want within 1 s"; AC-34 "tick
-  took 9.75s, want within 100 ms"; AC-35 "CancelOrder took 19.55s / 20.17s" (both parents); AC-28 "halted
-  at each submit = [false false false false]"; AC-29 and AC-30 "error = <nil>, want Unavailable …";
-  AC-31 "code = Internal desc = broker replace failed". AC-26 and AC-27 already passed: **red captured
-  at the Step 7+8 unit** (they are client behavior). AC-12 and AC-25 first failed on a test-side
-  assertion only (the service sends `client_order_id` with its `xss-` prefix); with the assertion
-  corrected they pass on the Step 7-8 tree for the same reason as AC-26/27.
-- TDD green: `F347_AC(12|…|36)` → 11 top-level PASS with `-race`; whole service `go test ./... -race`
-  exit 0; coverage total 84.8%; `golangci-lint` 0 issues; `check-config-wiring --final` and
-  `--doc-check` exit 0.
-- Blocker raised and resolved (operator decision 27, "Fix the two fixtures"): two pre-existing tests
-  broke on nil fixture fields; one line added to each. See the Deviation Log.
-- Files modified: `internal/service/trading_rate_limit_test.go`, `trading_flatten_rejection_test.go`,
-  `trading_cancel_not_cancelable_test.go`, `trading_reconciliation_test.go`; by deviation
-  `trading_telemetry_test.go`, `trading_bracket_test.go`
-- Deviations: fixture edits in two files outside `**Files**` (Deviation Log)
-
-### Step 11 — migration: seed the two kill switches, update the ceiling description, regenerate the stored set [done]
-- Number re-derived: last on the branch and on `origin/main-dev@1148c53` is `051`, so `052` holds; no
-  `merge-order.md` edit. Pair written: one INSERT of four global rows (two keys × staging, production,
-  `bool`, `'true'`, sentinel actor, insert-if-absent) and one description UPDATE guarded on the exact
-  old text; the down deletes only untouched sentinel rows (parenthesized OR) and swaps the description
-  back under the mirror guard.
-- TDD: N/A (migration). Offline check: both files exist with the highest prefix, no duplicate; the old
-  description occurs verbatim in `041_heal_config_keys_to_reader_catalog.up.sql`.
-- Stored set generated on a throwaway Postgres 16 (Deviation Log). Baseline proof first: without `052`
-  the generator reproduced the committed file with an empty diff. With `052`: 4 new key rows and the two
-  reworded `backfill.rate_limit_rps` descriptions. `config-heal-dryrun.py --fresh` left
-  `scripts/config-heal/dryrun-fresh.tsv` unchanged. The database was stopped and its directory removed.
-- Verification: `check-config-wiring --keys …` silent, exit 0; `--final` exit 0 (two pre-existing
-  REPORTED lines, no finding for either key); `--doc-check` exit 0; `--declared-from … --declared-migration`
-  exit 0; `node --test scripts/config-wiring.test.mjs` 75 pass, 0 fail; both temporary baseline entries
-  removed from `scripts/config-wiring.json`; registered-keys entry added at the top of the log.
-- Files modified: `services/xstockstrat-config/migrations/052_alpaca_adaptive_rate_limit_keys.{up,down}.sql`,
-  `scripts/config-wiring-stored.json`, `scripts/config-wiring.json`, `docs/patterns/config-governance.md`
-- Deviations: scratch Postgres for generation (Deviation Log)
-
-### Step 12 — test: seed migration shape [done]
-- `alpacaAdaptiveRateLimitSeedMigration.test.ts`: six cases over the pair through the shared
-  `migrationSql` helper (two statements up and down, four rows, relative keys, the exact guarded UPDATE,
-  the old text present in 041, the guarded down).
-- TDD (AC-37): red — with the two `052` files held outside the tree, 5 of 6 cases failed with
-  `expected exactly one *_alpaca_adaptive_rate_limit_keys.up.sql, got []` (the sixth reads only 041) →
-  green — 6 pass, 0 fail; whole service `pnpm run test:coverage` 377 pass, 0 fail, lines 92.25%;
-  `c8 check-coverage --lines 40` exit 0; `pnpm run lint` exit 0 (0 errors); prettier clean.
-- Run on Node v24.22.1. A platform-side shell outage delayed this step; no command was skipped.
-- Files modified: `services/xstockstrat-config/src/__tests__/alpacaAdaptiveRateLimitSeedMigration.test.ts`
-- Deviations: none
-
-### All steps done
-- `node scripts/check-config-wiring.mjs --final` → exit 0; output: two pre-existing `REPORTED …
-  readers-disagree` lines (analysis `fundamentals.provider`, trading `platform/trading_state`), no
-  finding for either 347 key, no `STALE` and no `STALE-STORED`.
-- Status: in-progress → code-completed.
-- Ledger: no `insights.md` entry written yet; one candidate for `fails.md` is raised at the feature-end
-  checkpoint (a spec claim "the reorder changes no existing expectation" that two `recover()`/nil
-  fixtures disproved).
-
-### Feature-end checkpoint — operator decisions
-- (28) Promote 32 scenarios into three new per-service suites and open the integration PR. Kept
-  feature-local under D-24 (hard-coded jitter or core arithmetic): AC-3, AC-5, AC-13, AC-19, AC-24.
-  Promotion is verbatim plus `@feature-347`; no existing suite scenario was edited (the three
-  "EXTEND" rules of design.md are expressed by the new scenarios). Known consequences: the `throttle`
-  outcome has no durable scenario (AC-19 is local; its test exists); AC-37's Then refers to "the
-  implementation spec", which dangles once the spec is archived.
-- (29) Add the `fails.md` entry about fixtures that hide a nil dependency behind `recover()`.
-- `origin/main-dev@1148c53` (docs only) merged into the feature branch; `ledger-guard` clean; config
-  migration number unchanged at `052`.
-- Defect reports resolved by this feature: none. The `ReplaceOrder` TIF report stays open.
-
-## Session 2026-11-16T07:58Z — sdd-execute (sequential)
-**Steps this session**: 1-12 (units 1+2, 5+6, 9+10)
-**Progress**: 12 done / 12 total
-**Stopped at**: all complete; integration PR https://github.com/davcs86/xstockstrat/pull/1555 opened, CI watch subscribed
-**Next**: review and merge PR #1555 (squash into main-dev)
-
-### Open Items (carried to the PR)
-- [x] Owner + config-team approval for the two keys; DBA review of migration 052 — approved by the operator (see below).
-- [x] Record a real paper-host response (are X-RateLimit-* headers sent by the Trading API?) — not recorded; the operator approved merging without it (see below).
-- [ ] Re-derive the migration number if another config migration lands on main-dev before merge;
-  a renumber means regenerating scripts/config-wiring-stored.json.
-- [ ] ReleasePendingIntent has no DB-level test (accepted design risk).
-
-## Session 2026-11-16T08:01Z — approvals logged (PR #1555)
-
-Operator instruction, verbatim: "Log my approval on the 3". Read as the three approvals the integration
-PR still needed (`docs/runbooks/approval-flow.md`); the operator (davcs86) gives all three:
-
-| # | Approval | Covers | Given by | When |
-|---|---|---|---|---|
-| 1 | Service owner | new keys `marketdata` / `alpaca.adaptive_rate_limit_enabled` and `trading` / `broker.adaptive_rate_limit_enabled` | operator (davcs86) | 2026-11-16T08:01Z |
-| 2 | Config team | the same two keys (naming, scoping, seed) | operator (davcs86) | 2026-11-16T08:01Z |
-| 3 | DBA | config migration `052_alpaca_adaptive_rate_limit_keys` (number, up/down pair, run order) | operator (davcs86) | 2026-11-16T08:01Z |
-
-Not covered by this instruction and still open: recording a real paper-host response for the Trading
-API's rate-limit headers; the `ReleasePendingIntent` SQL has no DB-level test (accepted design risk).
-
-## Session 2026-11-16T08:02Z — approvals clarified (PR #1555)
-
-Operator clarification, verbatim: "I meant all of 3". The approval covers all three "needed from you
-before merge" items of the session summary, not only the role approvals logged above:
-
-1. Service-owner and config-team approval for the two new keys — approved (as logged above).
-2. DBA review of config migration `052_alpaca_adaptive_rate_limit_keys` — approved (as logged above).
-3. The recorded paper-host response for the Trading API's rate-limit headers — **the operator approves
-   merging without it**. No response was captured (the sandbox holds no Alpaca credentials). Accepted
-   consequence, unchanged from design.md § Open Risks: if those hosts send no `X-RateLimit-*` headers,
-   trading gets the 429 retry only and no pre-emptive pacing (FR-5 degradation, tested at Step 8).
-
-Still open and not an approval item: `ReleasePendingIntent`'s SQL has no DB-level test (accepted design
-risk, flagged for review on the PR).
-
-## Session 2026-11-17 (CI: feature status automation)
-
-- Promotion PR #1573 merged to main
-- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-11-17
+**Ledger entries written**: insights.md (3), fails.md (1) — see the 2026-11-18 entries. DUP (already written 2026-11-16 and not repeated): insights.md:4612 (per-call-site table, definite typed refusal, zero-wait rule, PENDING-only dedup-row delete); fails.md:4005 (scenarios that pass on today's code, untestable Givens, bound quoted without reading its function); fails.md:4011 (nil-fixture `recover()` hid a pre-existing dependency under a reorder).
+**Runtime-invariant recommendations (→ /context-constitution)**: TRADING-8 (single delete path, PENDING-only, after `ErrRateLimited`) and the rule that `ErrRateLimited` never wraps a context error (TRADING-3 text, `services/xstockstrat-trading/docs/context-constitution.md:17`) already exist; none to add there. PLAT/MARKETDATA candidate: a zero adaptive wait is always sent and only a hold or 429 wait is fit-tested (stated in the core's contract and `pace_test.go`, not in a constitution); a future change that retries anything but a 429 (5xx, timeouts) breaks replay-safety of `ReplaceOrder` (see Why); the two `alpacapace` copies must stay byte-identical (CI-enforced).
+**Pruned artifacts**: product-spec.md, recon.md, debate.md, design.md, implementation-spec.md — last present at 4e4795b7.

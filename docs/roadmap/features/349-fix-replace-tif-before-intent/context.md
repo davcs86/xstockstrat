@@ -1,107 +1,66 @@
-# Context Log: fix-replace-tif-before-intent
+# Context: fix-replace-tif-before-intent  (archived 2026-11-18)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-18 — /sdd-archiver
 
-## Session 2026-11-16 (/sdd-triage)
+**What**: `ReplaceOrder` (`services/xstockstrat-trading/internal/service/trading.go`) now validates a supplied time-in-force right after `resolveAccount` and before `deriveReplaceCancelIntentID`/`InsertIntent`, as `PlaceOrder` always did. A TIF the order's broker refuses (OPG or CLS on IBKR; explicit UNSPECIFIED on either broker) returns `InvalidArgument` with no intent row, no PENDING mark, no broker call and no reclaim event, so the caller can correct and resend. The code change is one pure move (the `brokerReq` literal and the TIF block; numstat 15 added / 13 deleted, which already includes one constraint comment and one blank line); the rest of the function, including 347's `prevIntent` capture and `ErrRateLimited` branch, is untouched. TRADING-7 now says "before any order-intent claim" with the `ReplaceOrder` position and the precedence rule, and `services/xstockstrat-trading/CLAUDE.md` § Order Replace has one caller-facing sentence pointing at TRADING-7. Shipped as integration PR #1556 (`f3f02c70`, "fix(fix-replace-tif-before-intent): ReplaceOrder validates time-in-force before claiming its intent (349) (#1556)"); promotion PR #1573 flipped it to launched on 2026-11-17 (feature.md status history). No deviations in any step.
 
-- Bug reported via defect report `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md` (Issues disabled; `--from-report`). Sidecar stamped `triaged` / `ref: feature:349-fix-replace-tif-before-intent`.
-- Severity: SEV-3, environment dev, not config-fixable → Track C.
-- Created: status.md, feature.md, product-spec.md, acceptance.feature (AC-1..AC-3), context.md.
-- Affected services: xstockstrat-trading.
-- Root cause: confirmed by reading `ReplaceOrder` on `main-dev@f61f76c` (`InsertIntent` ≈ `trading.go:1569`, PENDING mark ≈ 1604, `validateTIF` ≈ 1614). The report's line numbers predate feature 347 and are stale.
-- Design depth: the rubric (`docs/sdd/design-depth-rubric.md`) gives `skip` for this bug; the operator chose `quick` in the task handover → `/sdd-design fix-replace-tif-before-intent quick`.
-- Operator decisions carried in the task handover (2026-11-16): design `quick`; execute `sequential` (mode entry confirmed); single integration PR `feature/fix-replace-tif-before-intent` → `main-dev`; C-16 promotion approved in advance for durable-guarantee scenarios; do not merge; do not use `ReleasePendingIntent` for this fix (TRADING-8).
-- Assumptions made by this session:
-  - Slug `fix-replace-tif-before-intent` instead of the literal first-three-title-words form (`fix-replaceorder-validates-timeinforce`); basis: prior bug features use descriptive slugs (328–346).
-  - Already-stranded rows in a deployed database are out of scope; basis: the task forbids changes to intent-table semantics and the report asks only for the ordering fix.
-- Development branch: feature/fix-replace-tif-before-intent
+**Why (irrecoverable rationale)**:
+- Governance: no live operator gate was held at any point. The 2026-11-16 task handover (relayed text, not recorded as a question/answer pair) carried these operator decisions: design depth `quick` (the design-depth rubric gave `skip` for a bug; the operator overrode it to `quick`), execute `sequential` with the handover itself as the mode-entry confirmation, a single integration PR `feature/fix-replace-tif-before-intent` -> `main-dev`, C-16 promotion of the durable-guarantee scenarios approved in advance, "do not merge", and "do not use `ReleasePendingIntent` for this fix (TRADING-8)". Design approval (P-04 gate) was taken as delegated by that handover: the handover asked for minimal intervention and named the approach, and the round produced no Floor breach, no blocking objection and no behavioral fork. The design-gate deviation is the agent's own reading of the handover, recorded in context.md; nobody was asked. The feature-end checkpoint of sequential mode was likewise delegated, not prompted.
+- D-3 (precedence) is the one decision the handover did not spell out: a disallowed TIF returns `InvalidArgument` whatever intent row already exists for that content (PENDING, UNKNOWN, REJECTED, COMPLETED), exactly as `PlaceOrder` does. It follows from the ordering, but it is new observable behavior, so `@AC-4` was appended in round 1 to pin it (O-6), and context.md asked for it to be flagged to the operator in PR #1556. No record exists that the operator replied; treat D-3 as agent-decided and unrefuted.
+- The slug is descriptive (`fix-replace-tif-before-intent`) rather than the literal first-three-title-words form (`fix-replaceorder-validates-timeinforce`); basis was prior bug features (328-346) using descriptive slugs. Agent's own assumption.
+- Mode-entry confirmation, the only verbatim operator text for a delegated gate (context.md, sdd-execute sequential): "Execute mode: `sequential` … Treat this message as the mode-entry confirmation".
+- The pure move (D-1/D-2) was preferred over a local variable or a second `req.TimeInForce != nil` branch because it is the smaller diff and a single branch. An absent TIF still sends an empty `TimeInForce` to the broker, which both adapters read as "leave unchanged" (`internal/broker/alpaca.go:389-391`, `ibkr.go:383-385`); `@AC-3` pins that.
+- The `validateTIF` placement relies on `resolveAccount` being the only place the broker type is available (it takes only a read lock; `validateTIF` is pure), so the move adds no lookup and no side effect.
+- A new `replaceOrderFn` hook on the shared `fakeBroker` (default stays the panic) was chosen over a fourth single-use `ReplaceOrder` double (DRY / C-18; O-5). Three existing doubles (`replaceOKBroker`, `replaceFailBroker`, `rlReplaceBroker`) each have fixed behavior and none records the request; the count of test types with a `ReplaceOrder` method stays five (Step 1 verification greps for it); default `fakeBroker` panics on any broker replace, which is how `@AC-1`/`@AC-4` prove "no broker call".
+- `@AC-1`'s clause "no intent-reclaim event ... however long the caller waits" is not tested by waiting. Both reclaim paths (the sweeper and the reactive reclaim in the dedup switch) act only on an existing PENDING row, so the zero-intent-row assertion covers it (O-2). A future reader should not add a sleep-based test for it.
+- `@AC-1`'s table has an Alpaca + explicit-UNSPECIFIED row beside the three IBKR rows (spec-time agent assumption, basis: step-constraints.md broker coverage; UNSPECIFIED is the only TIF Alpaca refuses).
+- TRADING-7's Why cell gained a clause naming the failure mode (spec-time agent assumption: every rule row states its failure mode). The `CLAUDE.md` sentence deliberately points at TRADING-7 and does not restate the ordering (O-7), so the invariant has one home.
+- No ledger entry was written at design or execute time: the trap was already `fails.md` 2026-10-07 (`order-time-in-force-enum` — assumption, the `ReplaceOrder` validates-after-claim entry, `fails.md:2758-2761`). That entry is the root cause of this feature; its rule ("a validation added to a handler with an idempotency claim goes before the claim, with at least one handler-level test per RPC gate") was honored here.
 
-## Session 2026-11-16 — sdd-review product-spec
+**Rejected alternatives**:
+- R-1 Release the intent (`ReleasePendingIntent`) on the TIF error path — TRADING-8 limits the delete to `broker.ErrRateLimited` after a broker call; also an operator constraint in the handover. This makes 349 the first downstream feature bound by 347's rule (see Cross-feature signal).
+- R-2 Finalize the intent REJECTED on the TIF error path — still writes a row and a PENDING mark for a request that never reached the broker (violates FR-1), and an identical retry would replay the stored row.
+- R-3 Validate from `order.BrokerType` at the top of the gate chain — a second source of truth for the broker type, reorders errors against the halt / trading-state gates, and diverges from `PlaceOrder`.
+- R-4 Move `resolveAccount` above the earlier gates — reorders unrelated NotFound / FailedPrecondition errors for no gain.
+- R-5 A `tifWire` local computed at the validate site, or validating early while leaving the wire assignment in place — works, but adds a local or a second `req.TimeInForce != nil` branch; the pure move is the smaller diff.
+- Not chosen, no register id: repairing rows already stranded in a deployed database (see Accepted risks below).
 
-- Product spec approved. Status: draft → spec-ready. Tree: `feature/fix-replace-tif-before-intent` == origin, `main-dev@f61f76c` merged.
-- A1b: not a re-attempt of any demoted feature (session's own judgement — none of the 22 concerns replace or time-in-force).
-- Warnings (all addressed in the spec in this session): no `## Consumer Surface(s)` section (C-14) → added; broker / trading-mode / fill-status scope not stated → `## Scope Notes` added; "no reclaim event" not asserted → added to @AC-1. The rate-limited replace path (FR-2) stays covered by the existing 347 test, not a new scenario.
-- Overlap findings: WARN only — same function as 347 (`prevIntent` capture and the `ErrRateLimited` branch in `ReplaceOrder`), already on `main-dev`; keep both intact. No config/proto/migration overlap; no merge-order entry needed.
-- Recommended design depth: quick (single service, no proto, no migration, no FAIL/warning-level blocking overlap).
+**Accepted risks that look like bugs / deliberate non-goals**:
+- Intent rows already stranded PENDING/UNKNOWN by the old behavior in a deployed database are not repaired (product-spec Out of Scope; design Open Risk, no step). After the fix an identical retry of a stranded request no longer reclaims it reactively, because the TIF check now fires first (D-3); the sweeper still reclaims it once per row, and a stranded UNKNOWN row stays permanently UNKNOWN (the UNKNOWN resolver matches by a derived client order id which a replace never carries). Reported at the integration PR; no record of an operator reply or a clean-up task.
+- No `PARTIALLY_FILLED` test case (spec-time agent assumption): the status gate sits above the moved block and is unchanged, and the scenarios name a NEW order; this is not a coverage gap.
+- `CancelOrder` is out of scope (carries no time-in-force; every return after its `InsertIntent` finalizes or releases). Any change to intent-id derivation (TRADING-6), intent-table semantics or `ReleasePendingIntent` (TRADING-8) is out of scope. The trading `findings` open question "why `ReplaceOrder` validates TIF only when supplied, and bracket/flatten hard-code DAY" (`services/xstockstrat-trading/docs/context-constitution-findings.md`) is a different topic and stays open.
+- The rate-limited replace path (FR-2 / 347) has no new 349 scenario; it stays covered by the existing 347 test (`F347_AC31`).
 
-## Session 2026-11-16 — sdd-design
+**Scars & gotchas**:
+- Tests that read an order's intent state through a pointer captured before the call pass falsely: `updateOrder` stores a clone (`trading.go:422-433` at spec time), so assertions must re-read `h.svc.orders["ord-1"]` after the call (O-1).
+- Success-path tests must wait for the `order.replaced` ledger event (`waitForLedgerEvents`) or they leak the emitting goroutine (O-4); `@AC-2` also ends with exactly one intent row.
+- `@AC-3` passes on today's (pre-fix) code by design: it is labelled a guard ("red N/A — guard: the allowed path is unchanged by the fix") rather than silently green. `@AC-4` needs an UNKNOWN row seeded directly into `memIntentRepo.recs` with the matching request hash, because `classifyIntentLookup` rejects as unknown only when the hash matches.
+- Tooling: the session image's `golangci-lint` v2.5.0 refuses the go1.27 module ("Go language version (go1.25) ... lower than the targeted Go version (1.27.0)"); the CI-pinned v2.14.0 had to be built with go1.27 (347's execute sessions did the same). `golangci-lint run --modules-download-mode=mod` is the invocation used.
+- The spec-time prototype (scratch worktree of the spec commit, discarded) was run before the spec was written, per the 2026-11-16 `alpaca-adaptive-rate-limit` fails entry (`fails.md:4009-4012`): tests alone are RED for `@AC-1` (4 rows), `@AC-2` and `@AC-4`; with the move, the whole-service `go test ./... -race -count=1` was green with no existing test edited. The step-1+2 atomic-unit rule applies: the tests are RED until the move lands, so Step 1 cannot pass its own Verification alone.
+- Ordering trap avoided: the test step is numbered before the service step so the executor captures RED before touching `trading.go` (`fails.md` 2026-11-04, 2026-11-10: an order fixed only in prose does not take effect).
+- CI side effect, no action: `trading.go` is in the agent job's paths-filter (`.github/workflows/ci.yml:59` at spec time), so the agent job runs on any change here; the only thing it reads from the file is the offline `Unavailable` string, which the move does not touch.
+- Report line numbers in the defect report predate 347 and are stale; triage re-read `main-dev@f61f76c` to confirm the root cause.
+- `node scripts/check-config-wiring.mjs --final` reports two pre-existing `readers-disagree` lines outside this feature (`fundsignal_loop.py:marketdata/fundamentals.provider`, `trading.go:platform/trading_state`); same two as 336 saw.
 
-- Phase 0 Recon: wrote recon.md (services: xstockstrat-trading; key reuse patterns: `PlaceOrder`'s validate-before-claim order, `newRLFakeHarness` + `memIntentRepo`). No escalation signal; no CHANGE verdict; stayed `quick`.
-- Phase 1 Grilling: 1 round (quick). Chosen approach: move the `brokerReq` literal + TIF block in `ReplaceOrder` to right after `resolveAccount`, before `deriveReplaceCancelIntentID` (D-1, D-2). Rejected: releasing or REJECTED-finalizing the intent on the TIF path; validating from `order.BrokerType`; moving `resolveAccount`; a `tifWire` local.
-- Adversary verdict SOUND; 7 non-blocking objections, all closed in the round (debate.md O-1..O-7). `@AC-4` appended for the precedence rule (D-3).
-- Constitution rules touched: C-08, C-13, C-14, C-15, C-16, C-18, P-06, F-04; TRADING-6/7/8. Floor breaches: none.
-- Gate (P-04) deviation, recorded: no live `AskUserQuestion` approval was held. The operator's handover asked for minimal intervention, fixed the depth (`quick`) and named this fix approach; the round produced no Floor breach, no blocking objection and no behavioral fork beyond what "validate before any intent is claimed, as `PlaceOrder` does" implies. Approval is therefore taken as delegated by the handover. D-3 (a disallowed TIF beats an existing intent row) is the one decision the handover did not spell out; it follows from the ordering and matches `PlaceOrder` — flagged in the PR for the operator.
-- Assumption (session's own): the `replaceOrderFn` hook on the shared `fakeBroker` helper is preferred over a fourth single-use broker double (DRY guard rail, O-5).
-- Ledger: read (fails 2026-10-07 ×2, 2026-11-16 ×2; insights 2026-10-07, 2026-11-16). No design-phase write — the trap is already recorded (fails 2026-10-07).
-- Open thread: pre-fix stranded intent rows are not repaired (design.md § Open Risks) — report at the integration PR.
-- Status: spec-ready → design-approved.
+**Permanent deviations**: none (no step deviation, no branch deviation: the feature branch accepted pushes). Process deviations only: no live design gate, no live sequential mode-entry prompt and no live feature-end checkpoint (all delegated by the handover, see Why).
 
-## Session 2026-11-16T08:40Z — sdd-spec
+**Cross-feature signal**:
+- 347 (alpaca-adaptive-rate-limit): the defect report was filed during 347 (its context.md cross-feature note says it was filed there and resolved by 349 at operator confirmation 2026-11-16T07:00Z). 349's `ReplaceOrder` edit sits in the same function as 347's `prevIntent` capture and `ErrRateLimited` branch and keeps both intact; 349 R-1 is the first downstream feature bound by 347's TRADING-8 (the intent-release path exists only after a definite `ErrRateLimited`, so a pre-broker validation error cannot use it). 349 PRESERVEs `@AC-16`/`@AC-31 @feature-347`. 347's context.md says this report "awaits its own report-synthesize pass together with feature 349" — this archive is that pass.
+- 202 (order-time-in-force-enum): 349 EXTENDS its `@AC-3` rejection guarantee to `ReplaceOrder` with the new side-effect-free guarantee; its `@AC-1`, `@AC-2`, `@AC-3` are PRESERVED (`validateTIF`, `tifToWireString`, `PlaceOrder` not touched). 202 introduced the validate-after-claim ordering (feature 202 added the check to `ReplaceOrder` after the dedup claim). Design PRESERVEs also `@AC-6`, `@AC-7`, `@AC-9 @feature-267` (`fix-trading-order-state-audit.feature`: failed final write, failed reactive reclaim, reactive reclaim audited) because the dedup/reclaim block is not moved.
+- Overlap scan at the impl-spec review: features 311, 312 and 321 (then spec-ready) touch other functions of `trading.go` — CLEAN; no `merge-order.md` entry was needed.
+- 358 (fix-trading-reconcile-reads) later edited `trading.go` and touches `trading_reconciliation_test.go`, the adjacent fake; no conflict recorded.
+- Promoted `@AC` scenarios: `@AC-1`..`@AC-4` all promoted verbatim plus `@feature-349` to `services/xstockstrat-trading/acceptance/fix-replace-tif-before-intent.feature` (`grep @feature-349` gives 5 hits: 4 scenario tags plus the file header's provenance comment). None kept feature-local; no dedup hit at promotion (no durable scenario covered the replace TIF check). Written directly, without the `scenario-promoter` subagent. No business rule changed (C-16: no CHANGE verdicts; PRESERVE/EXTEND only), so no C-16 CHANGE sign-off exists; the advance promotion approval is the handover's. `docs/sdd/business-rules/platform.feature` holds no rule on ReplaceOrder / TIF / order intents.
 
-- Tree: `feature/fix-replace-tif-before-intent@747bcdb ≡ origin/feature/fix-replace-tif-before-intent (merged origin/main-dev@7eeab3d)`. The preflight found `origin/main-dev` ahead (`f61f76c..7eeab3d`: feature 345 docs, one fails.md entry and `.gitleaks.toml`; no service code); it was merged and the merge pushed, as `docs/sdd/tree-freshness.md` prescribes. No `trading.go` anchor moved.
-- Generated implementation-spec.md with 3 steps. Status → implementation-ready.
-- Steps 1+2 (test, then service) are one atomic unit: the tests are RED until the move lands, so Step 1 cannot pass its own Verification alone (step-constraints.md §C, F-05). The test step is numbered first (fails.md 2026-11-04, 2026-11-10). Step 3 is docs.
-- Key codebase findings:
-  - The block to move is `trading.go:1606-1618` (comment, `brokerReq` literal, TIF block); it reads only `req` and `entry`, both available after `resolveAccount` (`:1558-1561`). Target: above the `// Dedup insert:` comment (`:1563`).
-  - `fakeBroker` has no replace hook (`trading_bracket_test.go:26-34`, panic at `:53-55`); five `ReplaceOrder` methods exist on test doubles and the count stays five.
-  - `trading.go` is in the agent job's paths-filter (`.github/workflows/ci.yml:59`); the agent test reads only the offline `Unavailable` string at `trading.go:1008`, which the move does not touch.
-- Prototype (fails.md 2026-11-16 rule; scratch worktree of `747bcdb`, discarded, nothing committed): tests alone are RED for `@AC-1` (4 rows, `replace intent rows = 1`), `@AC-2` ("still pending") and `@AC-4` ("outcome is unknown"), and `@AC-3` passes; with the move, `go test ./... -race -count=1` is green service-wide with no existing test edited, coverage total 84.8%, `golangci-lint` v2.14.0 0 issues; the Step 3 edits pass `check-context-map.py` and markdownlint.
-- Governance read: constitution, reviewer registry, phase4-deviations, ledger (fails 2026-10-07 `order-time-in-force-enum` ×3, 2026-11-04 `enforce-config-key-wiring`, 2026-11-10 `fix-marketdata-dead-symbol-ingest`, 2026-11-16 ×2; insights 2026-10-07, 2026-11-16). No approval-flow, config-rollout or proto-versioning read: no proto, migration or config change.
-- Discovery was done inline (single service, recon.md present); no `codebase-discovery` subagent was spawned.
-- Assumptions made by this session:
-  - `@AC-1`'s table adds an Alpaca + explicit-UNSPECIFIED row to the three IBKR rows of D-5; basis: step-constraints.md §A broker coverage, and UNSPECIFIED is the only TIF Alpaca refuses.
-  - TRADING-7's Why cell gains one clause on the failure mode; basis: D-6 amends the row and every rule row states its failure mode.
-  - The executor needs `golangci-lint` v2.14.0 built with go1.27; the v2.5.0 binary on the session image refuses the module. Basis: observed in this session; 347's execute sessions did the same install.
-  - No PARTIALLY_FILLED test case; basis: the status gate is above the moved block and unchanged, and the scenarios name a NEW order.
-- Open threads (unchanged from design): stranded pre-fix intent rows are not repaired; D-3 is to be flagged to the operator in the integration PR.
+**Deferred follow-ons**:
+- Operator-facing: repair or one-off cleanup of intent rows already stranded PENDING/UNKNOWN in any deployed database (none known; not checked). The handover and PR #1556 were to carry this and D-3.
+- Live pointers to the pruned feature docs: none found in repo code, CLAUDE.md files, docs/patterns or acceptance suites (the promoted `.feature` cites only its source `acceptance.feature`, which is retained). Pointers to the pruned defect report: `services/xstockstrat-trading/internal/service/trading_replace_tif_test.go:3` (header comment names the report basename) and `docs/roadmap/features/347-alpaca-adaptive-rate-limit/context.md:90` (names the report and `.status`; will dangle after prune); retrieve with `git show ce1853c3:docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md`. Also doomed: `docs/roadmap/features/347-alpaca-adaptive-rate-limit/context.md:91` cites "349 debate.md R-1" and `:90` cites "349's design PRESERVEs"; retained `feature.md:30-33` links the five pruned files (expected after archiving). No ledger entries cite 349 or the report (dedup greps returned zero hits in `insights.md` and `fails.md`). Feature artifacts: `git show ce1853c3:docs/roadmap/features/349-fix-replace-tif-before-intent/<product-spec|recon|debate|design|implementation-spec>.md`.
+- Optional for 347's archived context: its stale "awaits its own report-synthesize pass" wording is now historical; 349's Pruned defect report line below closes it.
+- CHANGELOG entry already exists (`CHANGELOG.md:45`).
 
-## Session 2026-11-16 — sdd-review impl-spec (advisory)
-
-- Result: 0 failures, 1 warning, 1 note (advisory — did not block). No Floor risk.
-- Unresolved ✗ / ⚠ carried into execution:
-  - Step 2: the `git diff --numstat` expectation (15 added, 13 deleted) is sensitive to blank-line handling of the move (C-01) — [x] cleared at Steps 1+2: the move measured 15 added / 13 deleted
-- Note: Step 3 edits the long TRADING-7 row in place; keep its numstat at 1/1.
-- Overlap findings: none (CLEAN). 311/312/321 (spec-ready) touch other functions of `trading.go`.
-
-## Session 2026-11-16 — sdd-execute (sequential)
-
-- Mode entry (§5.1b) and the per-feature up-front plan (§5.4): confirmed by the operator's handover ("Execute mode: `sequential` … Treat this message as the mode-entry confirmation"); no live prompt was shown. Re-spec gate: every step's evidence re-verified on `feature/fix-replace-tif-before-intent@e998c6a` (`main-dev@7eeab3d` merged); no mismatch, no re-spec.
-- Tooling: Go 1.27.0; `golangci-lint` v2.14.0 built with go1.27.0 (installed into the session scratchpad); Node 22 for markdownlint. No database started.
-
-### Steps 1+2 — handler-level regression tests + validate the replace time-in-force before the intent claim [done]
-- Atomic unit, one commit. Tests written first; RED captured with only Step 1's files; then the 13-line block in `ReplaceOrder` moved above the intent claim plus one constraint comment.
-- RED (unfixed `trading.go`, `go test ./internal/service/ -race -count=1 -run 'F349_AC[1-4]$' -v`): `@AC-1` all four subtests `replace intent rows = 1, want none`; `@AC-2` `FailedPrecondition desc = replace on order ord-1 is still pending`; `@AC-4` `FailedPrecondition desc = replace intent for order ord-1 outcome is unknown; verify with the broker before retrying`; `@AC-3` passes — red N/A, guard: the allowed path is unchanged by the fix.
-- GREEN: `golangci-lint run --modules-download-mode=mod` → `0 issues.`; `go test ./... -race -count=1` exit 0 (all 8 packages `ok`, no existing test edited); coverage `total: 84.8%`; 4 top-level F349 tests PASS; `validateTIF(` sites 2; numstat `15 13`; `ReplaceOrder` test doubles still 5.
-- Files modified: `services/xstockstrat-trading/internal/service/trading.go`, `internal/service/trading_replace_tif_test.go` (new), `internal/service/trading_bracket_test.go`
-- Deviations: none
-
-### Step 3 — TRADING-7 and the Order Replace section [done]
-- TRADING-7 now says the check runs before any order-intent claim, names the `ReplaceOrder` position and the precedence, and its Why cell names the failure mode; `CLAUDE.md` § Order Replace gained one caller-facing sentence. TDD: N/A (docs).
-- Verification: both greps `1`; `CLAUDE.md:160` match; numstat `1 1`; `check-context-map.py` → `OK - all context-map and doc references resolve.`; `markdownlint-cli2` → `0 issues`.
-- Files modified: `services/xstockstrat-trading/docs/context-constitution.md`, `services/xstockstrat-trading/CLAUDE.md`
-- Deviations: none
-- `node scripts/check-config-wiring.mjs --final` → exit 0 (two `REPORTED:` baseline lines, neither from this feature: `fundsignal_loop.py:marketdata/fundamentals.provider`, `trading.go:platform/trading_state`).
-- Status: in-progress → code-completed. No insights.md entry: the lesson (validate before an idempotency claim, test at the handler) is already fails.md 2026-10-07.
-
-### Integration (sequential §5.6)
-- Feature-end checkpoint: steps 1–3 done (surface: backend), 0 pending. Out-of-scope changes: none. Deviations: none. Unaddressed review warnings: none (the Step 2 numstat warning is cleared). No live checkpoint prompt — delegated by the operator's handover.
-- Merge-order gate: no entry for this feature in `merge-order.md`.
-- C-16 promotion (approved in advance in the handover): `@AC-1`..`@AC-4` → `services/xstockstrat-trading/acceptance/fix-replace-tif-before-intent.feature`, each tagged `@feature-349`. All four state a caller-observable guarantee; none is kept feature-local. No dedup hit (recon: no durable scenario covered the replace TIF check). Written directly, without the `scenario-promoter` subagent — one new single-service suite file.
-- Defect report closed: `docs/reports/2026-11-16-replace-order-tif-validation-after-intent-claim-defect.status` → `resolved` / `ref: feature:349-fix-replace-tif-before-intent` (the failure mode is gone: `@AC-1`, `@AC-2`, `@AC-4` green).
-- Branch: `feature/fix-replace-tif-before-intent` accepted pushes; no harness-branch deviation.
-- Open threads for the operator: (1) intent rows already stranded by this defect in a deployed database are not repaired; (2) D-3 — a disallowed TIF is `InvalidArgument` even when an intent row for the same content exists — was decided in design without a live gate.
-
-## Session 2026-11-16 — sdd-execute (session end)
-**Steps this session**: 1, 2, 3
-**Progress**: 3 done / 3 total
-**Stopped at**: all complete — integration PR #1556 (`feature/fix-replace-tif-before-intent` → `main-dev`) open, CI watched; not merged (merge is the operator's call)
-**Next**: operator review and merge of #1556
-
-## Session 2026-11-17 (CI: feature status automation)
-
-- Promotion PR #1573 merged to main
-- Feature promoted and committed: dd41417dd5798a5133a4c963c60f556e79b499a5
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-11-17
+**Ledger entries written**: insights.md (0), fails.md (0) — none; the lesson is already at fails.md:2758-2761. Considered and skipped: the validate-before-the-idempotency-claim rule with a handler-level test is already `fails.md:2758-2761` (order-time-in-force-enum); the "label guard scenarios and run whole package on a prototype" practice is already `fails.md:4009-4012`. A "recorded fails.md entry sat unfixed from 2026-10-07 until a defect report on 2026-11-16" lesson would rest on an inference no source states, so it was not written.
+**Runtime-invariant recommendations (→ /context-constitution)**: none to add; TRADING-7 (amended by this feature) and TRADING-8 already carry the invariants. Candidate wording only if a future handler is added that claims an order intent: TRADING-6 could name "validate the request before `InsertIntent`" as a general rule for every mutating RPC wired into `order_intents` (today it is stated only for TIF in TRADING-7).
+**Pruned artifacts**: product-spec.md, recon.md, debate.md, design.md, implementation-spec.md — last present at ce1853c3.
+**Pruned defect report**: 2026-11-16-replace-order-tif-validation-after-intent-claim-defect.md (sidecar `resolved`, ref `feature:349-fix-replace-tif-before-intent`) — said `ReplaceOrder` inserts its dedup intent and marks the order PENDING before `validateTIF`, stranding a PENDING then permanently UNKNOWN intent for a request that never reached the broker (SEV-3, dev, not config-fixable); root cause and fix as above; no lesson beyond the feature's — last present at ce1853c3.

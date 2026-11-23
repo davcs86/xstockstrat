@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-17
 **Committed to main**: 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f
 **Launched date**: 2026-11-17
+**Archived**: 2026-11-18
 
 ---
 
@@ -21,14 +22,15 @@
 | 2026-11-17 | `in-progress` → `code-completed` | /sdd-execute | All 32 steps done (sequential mode); scenarios promoted; integration PR opened |
 
 | 2026-11-17 | `code-completed` → `launched` | CI workflow | Promoted via PR #1576; committed 37d41f42aaa3c2b7f27a1a06a4630c7d4d72c35f |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 5 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) · [Debate Register](debate.md) · [Design](design.md)
-- [Implementation Spec](implementation-spec.md) — 32 numbered steps with per-step reviewers
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to docs/sdd/business-rules/platform.feature, services/xstockstrat-agent/acceptance/delisted-symbol-handling.feature, services/xstockstrat-marketdata/acceptance/delisted-symbol-handling.feature, services/xstockstrat-marketdata/acceptance/filter-otc-symbols.feature, services/xstockstrat-portfolio/acceptance/delisted-symbol-handling.feature, services/xstockstrat-portfolio/acceptance/fundsignal-watchlist-universe.feature, services/xstockstrat-ui/acceptance/delisted-symbol-handling.feature (C-16)
+- Recon, Debate Register, Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

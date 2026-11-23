@@ -8,6 +8,7 @@
 **Last Updated**: 2026-11-15
 **Committed to main**: 6936191e738e267c5507f042b22bc3e785fe9419
 **Launched date**: 2026-11-15
+**Archived**: 2026-11-18
 
 ---
 
@@ -19,12 +20,13 @@
 | 2026-11-15 | `draft` → `code-completed` | fix session | TDD fix on `feature/fix-commsgun-email-channel`, single integration PR to `main-dev` (no impl-spec; see context.md) |
 
 | 2026-11-15 | `code-completed` → `launched` | CI workflow | Promoted via PR #1546; committed 6936191e738e267c5507f042b22bc3e785fe9419 |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); pruned 1 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); no scenarios promoted to a durable suite
 - Implementation Spec — _not generated: design depth `skip`, fixed directly under the task's single-PR instruction (context.md)_
 - [Context Log](context.md) — session history, decisions, deviations
 

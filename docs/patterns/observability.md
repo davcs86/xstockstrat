@@ -16,8 +16,8 @@ metrics to `/v1/metrics`, logs to `/v1/logs`. Each runtime's `OTEL_ENABLED` gate
 
 | Signal | Series / stream (as proven on the dev deploy, feature 274 G1) | Producers |
 |---|---|---|
-| Metric | `rpc_server_duration_milliseconds_{count,bucket,sum}` with `service_name`, `rpc_service`, `rpc_method`, `rpc_grpc_status_code` | 10 gRPC services (Go: otelgrpc server stats; Python and Node: derived from the gRPC server span) |
-| Metric | `mcp_tool_duration_milliseconds_{count,bucket,sum}` with `gen_ai_tool_name`, `outcome` | `xstockstrat-agent` (it is a gRPC client, so it records MCP tool calls instead) |
+| Metric | `rpc_server_duration_milliseconds_{count,bucket,sum}` with `service_name`, `rpc_service`, `rpc_method`, `rpc_grpc_status_code` | 10 gRPC services and `xstockstrat-agent`'s one unary RPC, the internal tool catalog (Go: otelgrpc server stats; Python and Node: derived from the gRPC server span) |
+| Metric | `mcp_tool_duration_milliseconds_{count,bucket,sum}` with `gen_ai_tool_name`, `outcome` | `xstockstrat-agent` (its MCP tool calls are not gRPC, so they are recorded here) |
 | Metric | `http_server_duration_milliseconds_{count,bucket,sum}` with `xstk_segment`, `http_response_status_code`, and `rpc_service` (Connect) or `http_route` (REST) | `xstockstrat-ui` BFF (unary Connect calls and the wrapped REST routes) |
 | Logs | Loki stream `{service_name="<short name>"}`, e.g. `{service_name="analysis"}`; `platform`, `trace_id`, `span_id`, `severity_text`, `detected_level` are structured metadata, not stream labels | all 12 runtimes (Go `slog`, Python `logging`, Node `winston`, UI `serverLog`) |
 

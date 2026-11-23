@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-11
 **Committed to main**: 92b4774f816485d54422c3413e033c06f01606dc
 **Launched date**: 2026-11-13
+**Archived**: 2026-11-18
 
 ---
 
@@ -20,16 +21,17 @@
 | 2026-11-11 | `in-progress` → `code-completed` | /sdd-execute | All 22 steps done |
 
 | 2026-11-13 | `code-completed` → `launched` | CI workflow | Promoted via PR #1525; committed 92b4774f816485d54422c3413e033c06f01606dc |
+| 2026-11-18 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(3); pruned 5 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier
-- [Debate Register](debate.md) — decisions, rejected alternatives, objections
-- [Design](design.md) — approved architecture
-- [Implementation Spec](implementation-spec.md) — 22 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); promoted to services/xstockstrat-notify/acceptance/webhook-fanout-callback.feature, services/xstockstrat-ingest/acceptance/webhook-fanout-callback.feature, services/xstockstrat-agent/acceptance/webhook-fanout-callback.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Debate Register — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
