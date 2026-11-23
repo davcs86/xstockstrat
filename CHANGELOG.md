@@ -5,6 +5,13 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ## 2026-11-23
 
+### Summary
+4 commits, 2 feature merges since last promotion.
+
+---
+
+## 2026-11-23
+
 ### Features
 - fix-grpc-status-mapping: Two Go services collapse distinct error classes into gRPC `INTERNAL`: marketdata's `toGRPCError` maps only six connect codes (and several RPCs return raw errors), and portfolio's `CreateWatchlist` reports a duplicate-name unique violation as `INTERNAL` instead of `ALREADY_EXISTS`.
 - fix-telemetry-startup-log: The Node and Python telemetry startup log prints the raw `OTEL_EXPORTER_OTLP_ENDPOINT` env var (`→ undefined` / `endpoint: None` when unset) while the SDK actually exports to its default; the UI env docs also omit that the var is required when `OTEL_ENABLED=true`.
