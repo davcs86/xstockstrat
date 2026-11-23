@@ -46,7 +46,7 @@
     "jose": "^5.0.0",
     "lightweight-charts": "5.2.1",
     "lucide-react": "^0.460.0",
-    "next": "^15.5.28",
+    "next": "^15.5.29",
     "pg": "^8.11.5",
     "radix-ui": "^1.6.7",
     "react": "^18.3.1",
