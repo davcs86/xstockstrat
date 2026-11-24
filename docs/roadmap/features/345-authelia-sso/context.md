@@ -431,3 +431,13 @@
 - Spec amended (no re-review yet; per the 2026-11-16 precedent `/sdd-review product-spec` re-runs after design approval,
   O-94 open until then): `GetExternalIdentityLinks` (FR-4, Proto, Affected Services, AC-73), Link start from
   `/accounts/api/sso`, the `auth_time` requirement (AC-74), the edge rate-limit zone as a cutover gate.
+
+## Session 2026-11-24 — round-11 gate
+
+- Round 11: consolidated design + seam check; adversary "approvable with listed fixes", Floor clear. Folded as D-113..D-127
+  (link error destinations, header forwarding, identity mode parse on update, `@feature-350` verbatim move, nav, honest
+  AC-6/AC-25 coverage, cutover gates incl. `max_age=0`, serial e2e file, parse clarification, pure `sessionResponse`,
+  closed refusal details, no password replay, validity definition, identity refuses Link outside `both`, A1 verified
+  against openid-client 6.8.9 / oauth4webapi 3.8.9). R-28..R-30 locked; O-96..O-110 and O-43 closed.
+- Owner: C-16 sign-off extended to ui `@feature-350` `@AC-4/6/9` (vacuous in `oidc`; PRESERVE in `local`/`both`).
+- Owner: run another round (round 12) before approving.
