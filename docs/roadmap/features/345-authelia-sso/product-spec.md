@@ -445,7 +445,8 @@ on refresh, and `error=access_denied` for a person outside the group. Its email 
 confirmation's label (FR-16.2). Still to be proven by homelab-edge, before this feature's cutover: Claude.ai and Claude
 Code against the deployed portal (SSO spec S1, S5, S9), `prompt=login` with `max_age=0` returning a fresh `auth_time` in
 the ID token (S17), the web client registered with scopes `openid profile email` (SSO spec § 4.6 as amended 2026-11-24;
-the UI requests all three) and its ID-token claims `email`, `preferred_username` and `auth_time`, and refresh after
+the UI requests all three) and its ID-token claims `email`, `preferred_username` and `auth_time` (by default or via the claims policy, per S17),
+and refresh after
 leaving the group (S24).
 
 ## Acceptance Criteria

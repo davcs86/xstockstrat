@@ -350,8 +350,8 @@ Every refusal records `sso_link_failed{reason}`. A refusal is never 401, because
    (homelab-edge is extending SSO spec S17 to this, owner 2026-11-24).
 3. Authelia's web client `xstockstrat[-staging]-web` is registered with scopes `openid profile email` (SSO spec § 4.6 as
    amended 2026-11-24, owner; `OIDC_SCOPE` requests all three, and Authelia refuses a scope the client is not registered
-   for with `invalid_scope`, spike item (c)), and its `claims_policy.id_token` includes `email`, `preferred_username`
-   and `auth_time`.
+   for with `invalid_scope`, spike item (c)), and its `claims_policy.id_token` includes `email` and `preferred_username`;
+   the ID token carries `auth_time`, by default or through the policy, as S17 shows.
 4. `manage-users.py reset-password` of the seed row (D-49 N-9).
 
 homelab-edge `docs/runbooks/sso.md` § 6 is to list gates 1–4 (owner, 2026-11-24). Gate 3's scope clause was added
@@ -484,7 +484,7 @@ All locked alternatives in debate.md, both runs (R-2, R-13 and R-14 are moot und
   `max_age=0` + `auth_time`), before `both`.
 - [ ] **Edge cutover gates** (D-119): rate-limit zone over `POST /accounts/api/sso/confirm`; Authelia web client
   registered with `openid profile email` (else every SSO login and Link fails with `invalid_scope`) and
-  `claims_policy.id_token` with `email`, `preferred_username`, `auth_time`; seed-row `reset-password`. — homelab-edge
+  `claims_policy.id_token` with `email`, `preferred_username` (`auth_time` by default or via the policy, per S17); seed-row `reset-password`. — homelab-edge
   (SSO spec § 4.3, § 4.6 and `sso.md` § 6 being amended, owner 2026-11-24), before `set-auth-mode both`.
 - [ ] **Stale signing keys** (D-31/D-37): while the JWKS cannot be fetched, the agent keeps verifying with a key it
   already holds for up to `_JWKS_STALE_MAX_S` (24 h) after its last successful fetch, so a key the issuer retired or
