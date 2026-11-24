@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/authelia-sso`
 **Created**: 2026-11-15
-**Last Updated**: 2026-11-16
+**Last Updated**: 2026-11-24
 
 ---
 
@@ -17,6 +17,7 @@
 | 2026-11-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (9 rounds, full) and approved; recon.md + debate.md + design.md written. Spec amended during design; `/sdd-review product-spec` re-run required |
 | 2026-11-16 | `design-approved` (unchanged) | /sdd-review | Product spec re-approved after design-round amendments (0 warnings, after 3 passes); config seed renumbered 050 → 051 |
 | 2026-11-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 40 steps |
+| 2026-11-24 | `implementation-ready` → `draft` | owner | Re-spec against homelab-edge `2026-11-23-authelia-sso-respec.md`: `auth.mode` (local/both/oidc), explicit Link SSO, no email linking or SSO-created users; full SDD re-run (review → design → spec) required |
 
 ---
 
@@ -36,7 +37,8 @@
 
 xstockstrat (prod and staging, web UI and MCP agent) authenticates through the homelab's Authelia (OIDC, the only
 token issuer) instead of its own password login and OAuth server, while `identity.users` and per-environment roles stay
-authoritative. MCP tokens can be narrowed by OAuth scope; password login survives only behind a rollback flag.
+authoritative. MCP tokens can be narrowed by OAuth scope. Amended 2026-11-24: one key `identity/auth.mode` (`local` |
+`both` | `oidc`) per deployment, explicit "Link SSO", every user keeps a local password, DigitalOcean stays `local`.
 
 ## Reviewers
 
@@ -57,4 +59,4 @@ implementation-spec.md, per docs/runbooks/reviewer-registry.md. Stable unless `/
 
 ## Next Action
 
-`/sdd-review authelia-sso impl-spec` — validate implementation spec, then `/sdd-execute authelia-sso`
+`/sdd-review authelia-sso product-spec` (re-spec 2026-11-24), then `/sdd-design authelia-sso` (full re-run), `/sdd-spec`, `/sdd-review impl-spec`

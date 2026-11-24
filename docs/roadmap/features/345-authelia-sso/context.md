@@ -348,3 +348,27 @@
 
 - Merging the latest `main-dev` brought in feature 347's `052_alpaca_adaptive_rate_limit_keys`. The config seed is now `053_authelia_sso_keys` (D-100). This was applied in implementation-spec.md, design.md, product-spec.md and feature.md. Step 4 now takes the next free number at execute time, because trunk keeps consuming config numbers.
 - The `fails.md` merge conflict came from two end-of-file appends (347's two entries and ours). It was resolved by keeping both in date order, the same resolution the owner approved earlier.
+
+## Session 2026-11-24 — owner re-spec against the homelab-edge SSO design (amendment before re-review)
+
+- Source of truth: davcs86/homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md` (merged in PR #114),
+  owner-approved 2026-11-23 after two adversarial reviews; its § 1 decisions are final (owner confirmed 2026-11-24).
+  Branch `ccr-589817f0-cyg7gy` ⊇ `origin/main-dev@0dbc26b`.
+- Superseded by the respec (decisions 5–10, § 3, § 5): email linking and SSO-created users (D-6, FR-3 steps 2–3, outcomes
+  `LINKED_BY_EMAIL`/`CREATED`), the issuer-presence mode switch and `identity/auth.password_login_enabled` (FR-9, FR-14), the
+  access-token `email` claim (D-96), the issuer `auth.<domain>` (now `https://auth.public.<domain>`), D-74's rate-limit
+  exemption (now path-scoped Caddy zones, respec § 4.3).
+- Owner decisions 2026-11-24 (this session):
+  - Process: full SDD re-run — amend product-spec/acceptance → `/sdd-review product-spec` → `/sdd-design` full re-run with
+    respec § 1 locked → `/sdd-spec` → `/sdd-review impl-spec`.
+  - Mode is one config key `auth.mode` (`local` default | `oidc` | `both`). Web: `local` password only, `both` SSO and
+    password, `oidc` SSO only. **MCP: built-in OAuth server in `local` and `both`; Authelia tokens only in `oidc`.**
+  - Linking is explicit ("Link SSO"); **no auto-provisioning at all** (decision 8: no passwordless xstockstrat accounts).
+  - **Drop FR-5 (email sync) and `manage-users.py update-email`**; `unlink-sso` stays. The IdP email is displayed on the link
+    confirmation only, never stored. Link uniqueness is xstockstrat's: PK `(issuer, subject)` + `UNIQUE (issuer, user_id)`.
+  - No-login mode switch: a tested `scripts/` command sets `auth.mode` in the config store from the tailnet (respec § 3);
+    design picks the write path.
+- Derived (no new decision): bootstrap/break-glass is the existing `manage-users.py create-user`/`reset-password` (identity's
+  admin is a migration seed, not env); config seed renumbered to the next free `056` (055 is on trunk); identity `007`
+  still free; Claude Code clients `xstockstrat[-staging]-mcp-claude-code[-ro]` (loopback redirect, spike S9); both Claude.ai
+  callback hosts.
