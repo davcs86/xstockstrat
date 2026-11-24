@@ -14,14 +14,14 @@
 The steps follow design.md § 0 "Build order": proto, the two migrations and the shared vector file, then identity,
 the config grant, the operator script, the agent, the UI and the docs. Every intermediate state behaves as `local`
 (D-109): the mode key is seeded `local`, every reader defaults to `local`, and the new RPCs are unused until the UI
-and agent steps land. The only behaviour change before cutover is FR-15's both-mode logout (Origin 403, JSON on an
+and agent steps land. The only behaviour change before cutover is FR-15's every-mode logout (Origin 403, JSON on an
 expired session, the header Sign-out button), which ships with the UI steps. Within each surface the order is leaf
 modules, then the code that composes them, then routes and pages, so each `service` step passes its own
 Verification before the next starts. Every step touches at most five hand-written files.
 
 The step bodies cite the debate register (`D-n`); design.md's four approval amendments (D-134..D-137) win over its
 body text. The config seed is **`056_authelia_sso_keys`** on trunk today (`055` is the highest file; `053` is a gap
-that must never be filled, `merge-order.md` row for 352). Features 314, 317 and 321 also plan `056`: whoever merges
+that must never be filled, `merge-order.md` row 345 vs 314/317/321). Features 314, 317 and 321 also plan `056`: whoever merges
 first keeps it, and Step 4 takes the next free number above trunk's highest at execute time.
 
 **Consumer surfaces (C-14):**
@@ -56,7 +56,7 @@ Guards are labelled `(guard)` in the covering step's `**Covers**` and Verificati
 | AC-15 | 24 | AC-35 | 14, 31 | AC-56 | 37, 53 | AC-74 | 41, 53 |
 | AC-16 | 10, 39, 53 | AC-36 | 58 | AC-57 | 27, 37, 53 | AC-75 | 12 |
 | AC-17 | 10, 53 | AC-38 | 12 | AC-58 | 27, 37, 41 | AC-76 | 35, 41, 53 |
-| AC-20 | 58 | AC-41 | 5, 53 | AC-59 | 27, 41, 53 | AC-77 | 43 |
+| AC-20 | 58 | AC-41 | 5, 53 | AC-59 | 27, 41, 53 | AC-77 | 41, 43 |
 | AC-21 | 24 | AC-42 | 24 (guard), 53 | AC-60 | 31, 41, 53 | AC-78 | 49 |
 | AC-22 | 22, 24 | AC-43 | 24 | AC-61 | 20, 24 | | |
 | | | AC-44 | 8, 16, 24, 53 | AC-62 | 37, 53 | | |
@@ -66,20 +66,26 @@ Retired IDs (never reused): AC-5, AC-8, AC-9, AC-18, AC-19, AC-26, AC-37, AC-39,
 ### Spec-level choices the design did not settle (flag at `/sdd-review impl-spec` and at each step gate)
 
 1. **`OIDC_SCOPE = 'openid email profile'`** (Step 32). FR-16.2's label falls back to `preferred_username`, a
-   `profile`-scope claim (OIDC Core § 5.4); design.md names `OIDC_SCOPE` without a value.
+   `profile`-scope claim (OIDC Core § 5.4); design.md names `OIDC_SCOPE` without a value. The owner kept this scope on
+   2026-11-24, and homelab-edge's SSO spec § 4.6 is amended to register `xstockstrat[-staging]-web` with
+   `openid profile email` (it listed `openid email`, which Authelia would refuse with `invalid_scope`); that
+   registration is design § 6 cutover gate 3.
 2. **`_JWKS_FRESH_S = 300`** and the asymmetric allow-list `{RS,PS,ES}{256,384,512}` with EdDSA excluded (Step 19;
-   carried from the 2026-11-16 spec, which `/sdd-review impl-spec` accepted; D-2/D-13 name no values).
+   carried from the 2026-11-16 spec, which `/sdd-review impl-spec` accepted; D-2/D-13 name no values). With them,
+   D-37's **`_JWKS_STALE_MAX_S = 86400`**: while the JWKS cannot be fetched, a known `kid` keeps verifying for up to
+   24 h after the last successful fetch, so a retired or revoked key stays accepted that long (product-spec Risks,
+   design Open Risks; owner sign-off due before Step 19; stated in the cutover runbook, Step 54).
 3. **One serial SSO spec file inside a `chromium-sso` Playwright project** (`dependencies: ['chromium']`,
    `workers: 1`, Step 52). D-120 fixes the serial file; the separate project keeps the parallel `chromium` files
    from reading the mock's global mode while the serial file changes it.
 4. **config-wiring receivers the design did not list** (Step 6): identity `src/authMode.ts:config` → `identity`
    (a new file, so the existing `identityServiceImpl.ts:this.config` receiver does not cover it) and agent
    `app/sso_mode.py:agent_config` → `agent` (the `agent/oidc.issuer` read sits beside the mode read).
-5. **AC-77 row 1** ("no session cookie → 401") is asserted at the handler (Step 43). Over HTTP a request with no
-   session cookie at all is redirected by the middleware before the handler (`middleware.ts:80-83`), exactly as for
-   today's `/accounts/api/authorized-apps` (`route.ts:15-16`). The handler's 401 is what `apiFetch` sees after an
-   idle gap (R-4, D-107). Raise at `/sdd-review impl-spec`: AC-77 row 1's HTTP observable for a cookie-less client
-   is a 307.
+5. **AC-77 row 1** (no session cookie → the middleware's redirect to `/auth/login`) is asserted in
+   `middleware.test.ts` (Step 41): a request with no session cookie at all never reaches the handler
+   (`middleware.ts:80-83`), exactly as for today's `/accounts/api/authorized-apps` (`route.ts:15-16`). The handler's
+   own 401 is the stale-token case, what `apiFetch` sees after an idle gap (R-4, D-107), asserted at the handler in
+   Step 43 (FR-16.6).
 6. **`ssoErrorRedirect` events** (Step 36): login destination records `sso_login_error` when `fault`, else
    `sso_login_failed{reason}`; link destination always records `sso_link_failed{reason}` (D-72 remainder, D-113).
 7. **`prm.expected` includes `scopes_supported`** with the four `xstockstrat.*` scopes (D-10, carried by D-110).
@@ -257,7 +263,7 @@ grep -c "CONSTRAINT external_identities_pkey\|CONSTRAINT external_identities_iss
 **§C acknowledgement (seed before readers)**: readers land in Steps 7, 17 and 30 on three surfaces; `check-config-wiring.mjs` reports the missing legs as `PENDING` at step time and `--final` gates the integration PR.
 
 **Codebase Evidence**:
-- `ls services/xstockstrat-config/migrations | tail -6` → `052_*`, `054_*`, `055_*` (no `053`); next free above the highest is `056`. `merge-order.md` row for 352: a number below trunk's highest is never used.
+- `ls services/xstockstrat-config/migrations | tail -6` → `052_*`, `054_*`, `055_*` (no `053`); next free above the highest is `056`. `merge-order.md` row 345 vs 314/317/321: a number below trunk's highest is never used.
 - Plain seed shape: `054_marketdata_delisting_confirmation_days.up.sql:4-13` (`(namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by, environment, user_id)` + `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`).
 - Secret seed shape: `049_notify_commsgun_channel_keys.up.sql:57-67` (`is_secret` column, `'[redacted]'`, comment "Ciphertext stays NULL: a migration has no master key").
 - Down guard shape: `049_*.down.sql:5-18` (sentinel `updated_by` + seed value; secret row `is_secret AND value_encrypted IS NULL`, so `value_encrypted` is the ciphertext column) and `054_*.down.sql:4-10`.
@@ -1298,7 +1304,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Instructions**:
 1. `"openid-client": "6.8.9"` (exact, D-34); `pnpm install` at the root; commit `pnpm-lock.yaml`.
 2. **`oidcClient.ts`** (D-34, D-65, D-70, D-87, D-89):
-   - `OIDC_SCOPE = 'openid email profile'` (spec-level choice 1).
+   - `OIDC_SCOPE = 'openid email profile'` (spec-level choice 1; the web client's registration per homelab-edge SSO spec § 4.6 as amended 2026-11-24).
    - `getOidcConfiguration(issuer, clientId, secret)`: one slot keyed `${issuer}\n${clientId}\n${sha256(secret)}`, TTL `OIDC_DISCOVERY_FRESH_S`; `discovery(new URL(issuer), clientId, { id_token_signed_response_alg: OIDC_ID_TOKEN_ALG }, ClientSecretBasic(secret), { timeout: OIDC_TIMEOUT_S, execute: [enableNonRepudiationChecks, ...(issuer.startsWith('http://') ? [allowInsecureRequests] : [])] })` with the imported function references, then `.then(cfg => assertDiscoveredMetadata(cfg, issuer))` (byte-exact `serverMetadata().issuer`, then a same-origin `jwks_uri`); a rejection clears the slot only if it still holds that promise; `__resetOidcConfigurationCache()`.
    - `buildSsoAuthorizationUrl(cfg, {redirectUri, state, nonce, codeChallenge, link?: boolean})`: `scope: OIDC_SCOPE`, `response_mode: 'query'`, `code_challenge_method: 'S256'`; when `link`, also `prompt: 'login'` and `max_age: '0'` (D-119; `checks.maxAge` is never passed).
    - `exchangeCode(cfg, currentUrl, {pkceCodeVerifier, expectedState, expectedNonce})` wrapping `authorizationCodeGrant(…, { …, idTokenExpected: true })`; returns `{ iss, sub, email?, preferred_username?, auth_time? }` from `tokens.claims()` only.
@@ -1610,7 +1616,7 @@ grep -n "HEADER_TRACE_ID" src/app/api/auth/sso/callback/route.ts
 
 **TDD**: red-green required
 
-**Covers**: AC-1, AC-2, AC-3, AC-6 (UI leg), AC-7, AC-24, AC-29, AC-47, AC-51, AC-54, AC-58, AC-59, AC-60, AC-65 (callback link leg), AC-74, AC-76
+**Covers**: AC-1, AC-2, AC-3, AC-6 (UI leg), AC-7, AC-24, AC-29, AC-47, AC-51, AC-54, AC-58, AC-59, AC-60, AC-65 (callback link leg), AC-74, AC-76, AC-77 (row 1)
 
 **Instructions**:
 1. **`start/route.test.ts`** (`fetch` mocked to prove no IdP request): **@AC-47** `local` → 404; **@AC-60** mode `'error'` → `?error=failed`; **@AC-54** `valid:false` → `not_configured` before the Origin check, `fetch` never called; **@AC-58** invalid `APP_URL` → relative `Location: /auth/login?error=not_configured` whatever the Origin; **@AC-59** sibling or missing Origin → `failed`, GET → 405; secret unset → `not_configured`; happy path → 303 to the authorize URL (`scope`, `response_mode=query`, S256, `redirect_uri=http://localhost:3000/api/auth/sso/callback`, no `prompt`) + a login txn with `remember=true` for `remember=1`.
@@ -1626,7 +1632,7 @@ grep -n "HEADER_TRACE_ID" src/app/api/auth/sso/callback/route.ts
    - **@AC-65** link txn + fresh `auth_time` → `sso_link` sealed with `label` = email, then `preferred_username`, then the default, 303 `/accounts/sso`, no identity call; mode `oidc` on a link txn → link `failed`;
    - **@AC-74** link txn with `auth_time` absent, or `created_at − 31 s` → `/accounts/sso?error=failed`, WARN `sso_link_refused`, no `sso_link`; `created_at − 30 s` accepted;
    - sentinels (`CODE-SENTINEL`, `IDTOKEN-SENTINEL`, `sentinel@example.test`) never appear in any log argument (D-75).
-3. **`middleware.test.ts`** (D-40, D-59, D-62): every path in `SSO_PUBLIC_PATHS ∪ COOKIE_GATED_PATHS ∪ PUBLIC_HEALTH_PATHS` has a `route.ts` (`fs.existsSync`); `/api/auth/sso/startx` and `/api/auth/logoutx` redirect; a near-expiry token with a failing refresh on the callback passes through; logout without a cookie → today's redirect, with a cookie → passes; `/accounts/api/sso` is not exempt.
+3. **`middleware.test.ts`** (D-40, D-59, D-62): every path in `SSO_PUBLIC_PATHS ∪ COOKIE_GATED_PATHS ∪ PUBLIC_HEALTH_PATHS` has a `route.ts` (`fs.existsSync`); `/api/auth/sso/startx` and `/api/auth/logoutx` redirect; a near-expiry token with a failing refresh on the callback passes through; logout without a cookie → today's redirect, with a cookie → passes; `/accounts/api/sso` is not exempt: **@AC-77** row 1, `GET /accounts/api/sso` with no session cookie → redirect to `/auth/login` (with `redirect=/accounts/api/sso`), the handler never runs.
 
 **Verification**:
 ```bash
@@ -1687,10 +1693,10 @@ grep -n "restBackendHeaders" src/app/accounts/api/sso/route.ts src/app/accounts/
 
 **TDD**: red-green required
 
-**Covers**: AC-4, AC-65 (routes), AC-66, AC-67, AC-68, AC-69, AC-77
+**Covers**: AC-4, AC-65 (routes), AC-66, AC-67, AC-68, AC-69, AC-77 (rows 2–8)
 
 **Instructions**:
-1. **@AC-77**, one case per row, at the handler (spec-level choice 5): no session → 401; GetLinks fails → 503 `failed`; config unreadable → 200 `mode:'error'`, `canLink:false`; `/link` with a sibling Origin → 403 `failed`; `client_id ""` → 400 `not_configured`; secret unset + sibling Origin → 403 (Origin before secret); secret unset same-origin → 400 `not_configured`; `/confirm` with config unreadable → 503 `failed`.
+1. **@AC-77** rows 2–8, one case per row, at the handler (row 1 is Step 41's middleware case, spec-level choice 5); plus the FR-16.6 handler-level case: a stale session token (`getSessionFromRequest` → null) → 401 on each of the three routes; GetLinks fails → 503 `failed`; config unreadable → 200 `mode:'error'`, `canLink:false`; `/link` with a sibling Origin → 403 `failed`; `client_id ""` → 400 `not_configured`; secret unset + sibling Origin → 403 (Origin before secret); secret unset same-origin → 400 `not_configured`; `/confirm` with config unreadable → 503 `failed`.
 2. GET: `linked` per D-134 (valid issuer in `issuers`; invalid issuer → any link; ui fault → any link); `canLink` true in `both` even when linked (AC-67); `pending` only for a matching `user_id`; **@AC-69** `local`/`oidc` → `canLink:false`, and `/link` → 404.
 3. `/link` happy path: 200 `{url}` with `prompt=login&max_age=0`, the link txn's `user_id` is the session's, never a body value; identity calls carry the session `x-user-id` (D-114).
 4. `/confirm`: **@AC-65** OK → 200 and the cookie cleared; **@AC-66** `invalid credentials` → 400 `invalid_credentials`, cookie kept; **@AC-4** `account already linked` → 400 `already_linked_other`; **@AC-67** `already linked to this issuer` → 400 `already_linked_self`; `link disabled` → 400 `failed`; **@AC-68** a `sso_link` for another `user_id`, or expired → 400 `failed`, identity not called; empty password → 400, identity not called; `Unavailable` → 503, cookie kept; no response is ever 401 after the session check.
@@ -2057,12 +2063,13 @@ pnpm exec playwright test --list --shard=1/2 | grep -c 'chromium-sso' ; pnpm exe
 **Instructions**:
 1. **RED capture first**: run Step 58's Verification against the unedited tree and record the non-zero exit in Step 58's evidence.
 2. **`mcp-tools.md`** (FR-13, AC-20): connector setup in `oidc` with client IDs `xstockstrat-mcp-claude`, `xstockstrat-mcp-claude-ro`, `xstockstrat-mcp-claude-code`, `xstockstrat-mcp-claude-code-ro` and the `xstockstrat-staging-` set; redirect URIs `https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback` and the Claude Code loopback redirect; the four scopes and the narrowing rule; `local`/`both` keep today's DCR flow; a link to the cutover runbook.
-3. **`authelia-sso-cutover.md`** (design § 6; D-42, D-49 N-9, D-73, D-91, D-97, D-98, D-108, D-119): the mode table; pre-checks (config listener up; issuer and `APP_URL` grammar incl. trailing slash, IP literal, IDN; `ui/oidc.client_secret` set; app VM reaches the issuer); the four cutover gates before `both`; the lifecycle `local` → `both` → each person links (Link SSO) → every admin linked → `oidc`, each switch by `uv run scripts/manage-users.py set-auth-mode <mode> --environment <env> --reason <text>`; verification signals (`wrong_audience`, `jwks_unavailable`, `account_refused`, `ui.auth.events{sso_login_failed|sso_login_error|sso_link_failed|logout reason=cross_origin}`, `identity.link.failures`, WARN `sso_link_refused`, ERRORs `sso_issuer_invalid`/`app_url_invalid`/`auth_mode_invalid`); rollback and break-glass = `set-auth-mode local`; unlinking with `unlink-sso`; signing algorithms (RS/PS/ES only, EdDSA excluded); offboarding (`SetUserActive false` + `unlink-sso`; group removal blocks new logins only, D-98); local docker-compose SSO unsupported.
+3. **`authelia-sso-cutover.md`** (design § 6; D-42, D-49 N-9, D-73, D-91, D-97, D-98, D-108, D-119): the mode table; pre-checks (config listener up; issuer and `APP_URL` grammar incl. trailing slash, IP literal, IDN; `ui/oidc.client_secret` set; app VM reaches the issuer); the four cutover gates before `both`, written out as the Authelia prerequisites (the `POST /accounts/api/sso/confirm` rate-limit zone; S17: `prompt=login` + `max_age=0` returns a fresh `auth_time`; the web client registered with scopes `openid profile email` and `claims_policy.id_token` with `email`, `preferred_username`, `auth_time`; the seed-row `reset-password`); the lifecycle `local` → `both` → each person links (Link SSO) → every admin linked → `oidc`, each switch by `uv run scripts/manage-users.py set-auth-mode <mode> --environment <env> --reason <text>`, after which the operator checks that the changed row's environment is the deployment's `APPLICATION_ENV` (every database holds both environments' rows and the services read only their own, so a wrong `--environment` changes nothing that runs); the stale-key trade-off (`_JWKS_STALE_MAX_S`: during a JWKS outage a retired or revoked signing key stays accepted for up to 24 h after the agent's last successful fetch); verification signals (`wrong_audience`, `jwks_unavailable`, `account_refused`, `ui.auth.events{sso_login_failed|sso_login_error|sso_link_failed|logout reason=cross_origin}`, `identity.link.failures`, WARN `sso_link_refused`, ERRORs `sso_issuer_invalid`/`app_url_invalid`/`auth_mode_invalid`); rollback and break-glass = `set-auth-mode local`; unlinking with `unlink-sso`; signing algorithms (RS/PS/ES only, EdDSA excluded); offboarding (`SetUserActive false` + `unlink-sso`; group removal blocks new logins only, D-98); local docker-compose SSO unsupported.
 
 **Verification**:
 ```bash
 grep -c "xstockstrat-staging-mcp-claude-code-ro" docs/runbooks/mcp-tools.md
 grep -n "set-auth-mode\|unlink-sso\|EdDSA" docs/runbooks/authelia-sso-cutover.md
+for s in "openid profile email" "preferred_username" "auth_time" "max_age=0" "/accounts/api/sso/confirm" "APPLICATION_ENV" "_JWKS_STALE_MAX_S"; do grep -qF "$s" docs/runbooks/authelia-sso-cutover.md || { echo "missing: $s"; exit 1; }; done
 ```
 
 ---

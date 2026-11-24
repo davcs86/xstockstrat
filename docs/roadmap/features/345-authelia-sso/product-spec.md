@@ -122,8 +122,9 @@ login).
 
 FR-10. **Session lifetime and offboarding.** A web session ends when its refresh token expires (`identity` /
 `jwt.refresh_ttl_seconds`) or at the first refresh after the user is deactivated (`SetUserActive false`;
-`rotateRefreshToken` already refuses inactive users). The access JWT stays usable until it expires
-(`jwt.access_ttl_seconds`). Removing a person from the issuer's group blocks new logins only. Offboarding a person
+`rotateRefreshToken` already refuses inactive users). The access JWT, and the roles in it, stay usable until it expires
+(`jwt.access_ttl_seconds`, default 900 s); a role change reaches the web session at the next refresh. This is a bounded
+deviation from SSO spec § 3 "Sessions" (disabling a user or removing a role ends their sessions), recorded 2026-11-24. Removing a person from the issuer's group blocks new logins only. Offboarding a person
 (homelab-edge `sso.md`) is `SetUserActive false` (ends sessions at the next refresh and refuses MCP within FR-8's TTL)
 plus `manage-users.py unlink-sso` (FR-12).
 
@@ -172,7 +173,7 @@ runs in exactly one mode, `identity` / `auth.mode` (FR-9), with no image or env 
 | Link SSO (FR-16) | absent | available | absent |
 | MCP (agent) | built-in OAuth server (DCR, identity-minted, `aud`-bound tokens via `ValidateToken`) | built-in OAuth server | issuer tokens only (FR-2); legacy `/oauth/*` routes 404 |
 | `/accounts/authorized-apps` | lists and revokes legacy grants | lists and revokes legacy grants | pointer to the issuer (FR-11) |
-| Logout | as today plus the both-mode changes of FR-15 | FR-15 SSO logout | FR-15 SSO logout |
+| Logout | as today plus the every-mode changes of FR-15 (Origin 403, JSON on an expired session, the Sign-out button) | FR-15 SSO logout | FR-15 SSO logout |
 
 - A deployment never accepts both MCP token kinds at once.
 - **Invalid configuration**: the web SSO surfaces (in `both`/`oidc`) need a valid `ui` / `oidc.issuer`, a non-empty `ui` / `oidc.client_id` and a valid `APP_URL`; the
@@ -260,8 +261,11 @@ routes `GET /accounts/api/sso` (status), `POST /accounts/api/sso/link` (start) a
    `user_id`, `issuer` and `outcome: linked` only (no email, no token, no `sub`). A ledger outage never fails the link.
 5. The confirmation lasts at most the transaction cookie's lifetime (10 minutes); after it, or if the signed-in user
    changed (another `user_id`), the link is refused with "Sign-in failed. Try again." and nothing is written.
-6. Route statuses (owner-approved design, 2026-11-24). A refusal is never 401.
-   - `GET /accounts/api/sso`: 401 without a session; 503 when the link lookup fails; otherwise 200 (`mode: "error"` when
+6. Route statuses (owner-approved design, 2026-11-24). A refusal is never 401. A request with no session cookie at all
+   never reaches these handlers: the middleware redirects it to `/auth/login`, as for every session-gated route
+   (`middleware.ts:80-83`). The 401 below is the handler's answer to a stale access token it cannot verify (the
+   middleware's refresh sets the new cookies on the response only).
+   - `GET /accounts/api/sso`: 401 on a stale token; 503 when the link lookup fails; otherwise 200 (`mode: "error"` when
      the config is unreadable).
    - `POST /accounts/api/sso/link`: 401; 404 outside `both`; 503 when the config is unreadable; 400 `not_configured`;
      403 on a foreign or missing `Origin`; 503 on an issuer or secret fault; 200 `{url}`.
@@ -313,7 +317,7 @@ The runbook (FR-13) and homelab-edge `sso.md` name the command for break-glass (
 
 ## Consumer Surface(s)
 
-- [x] **UI** (`xstockstrat-ui`): per FR-14's table. In `local` the UI is unchanged except for the both-mode changes of
+- [x] **UI** (`xstockstrat-ui`): per FR-14's table. In `local` the UI is unchanged except for the every-mode changes of
   FR-15 (owner sign-off 2026-11-16): a "Sign out" button in the shared header, logout with an expired session answering
   JSON instead of a redirect, and a cookie-bearing logout from a foreign `Origin` answering 403.
   - The login page (`src/app/auth/login`, shared by `/trader`, `/insights` and `/config-ui`) gets a "Sign in with SSO"
@@ -357,7 +361,7 @@ Additive only (non-breaking), in `packages/proto/identity/v1/identity.proto`:
 One seed migration: `services/xstockstrat-config/migrations/<NNN>_authelia_sso_keys` (up + down, C-07). `NNN` is the next
 free config number when the step executes: `056` on trunk on 2026-11-24, which features 314, 317 and 321 also plan, so
 whichever merges first keeps it and the others renumber. A number below trunk's highest is never used, because
-golang-migrate skips a lower version that lands after a higher one (`merge-order.md` row for 352). It seeds every key below for both
+golang-migrate skips a lower version that lands after a higher one (`merge-order.md` row 345 vs 314/317/321). It seeds every key below for both
 `production` and `staging`. Operators then set the real values per environment.
 
 - `identity.auth.mode`
@@ -429,10 +433,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] DBA review + service owner (schema migration)
 - [x] Config team + owner (new config keys, `GetSecret` allow-list grant)
 
-Soft merge order (rebase only): `319-fix-auth-trust-hardening` (same `identityServiceImpl.ts`; owns the old
-`oauth_server.py` fail-closed behaviour) and `324-fix-ci-enforcement-gaps` (CI gate over `manage-users.py`) before this
-feature. `331-fix-agent-mcp-transport-fallthrough` and `323-fix-orphaned-code` also edit `app/main.py`, so expect a
-rebase. Config migration number: taken at execute time (Config Key Changes).
+Hard merge order: `319-fix-auth-trust-hardening` merges first or alongside this feature, never after it (D-52: the
+logout route calls `RevokeToken`, which decodes the token unverified until 319 lands; `merge-order.md` row 345 vs 319).
+Rebase only: `324-fix-ci-enforcement-gaps` (CI gate over `manage-users.py`), and
+`331-fix-agent-mcp-transport-fallthrough` and `323-fix-orphaned-code` (both also edit `app/main.py`). Config migration number: taken at execute time (Config Key Changes).
 
 **Spike evidence.** The 2026-11-16 local spike (Authelia v4.39.28, details in `context.md`) proved pre-registered public
 clients with RFC 8707 `resource`, the `scp` array, custom `xstockstrat.*` scopes, a stable per-user `sub`, `typ=at+jwt`,
@@ -440,7 +444,8 @@ clients with RFC 8707 `resource`, the `scp` array, custom `xstockstrat.*` scopes
 on refresh, and `error=access_denied` for a person outside the group. Its email findings now matter only for the link
 confirmation's label (FR-16.2). Still to be proven by homelab-edge, before this feature's cutover: Claude.ai and Claude
 Code against the deployed portal (SSO spec S1, S5, S9), `prompt=login` with `max_age=0` returning a fresh `auth_time` in
-the ID token (S17), the web client's ID-token claims `email`, `preferred_username` and `auth_time`, and refresh after
+the ID token (S17), the web client registered with scopes `openid profile email` (SSO spec § 4.6 as amended 2026-11-24;
+the UI requests all three) and its ID-token claims `email`, `preferred_username` and `auth_time`, and refresh after
 leaving the group (S24).
 
 ## Acceptance Criteria
@@ -464,7 +469,14 @@ above is covered by ≥1 tagged scenario there; FR-5 is removed and has none.
 - **Linking window.** A person can link only while the deployment is in `both`; `both` keeps public password login
   behind the edge's rate limits (SSO spec decision 18). The Link confirmation accepts a password, so a homelab-edge
   path-scoped rate-limit zone covering `POST /accounts/api/sso/confirm` is a **required cutover gate** before `both` is set on a homelab deployment
-  (owner, 2026-11-24; tracked in homelab-edge).
+  (owner, 2026-11-24). homelab-edge is adding it to the SSO spec's § 4.3 zones and the gate to `sso.md` § 6 (owner,
+  2026-11-24); until that change lands there, this gate is tracked only here and in design.md § 6.
+- **Stale signing keys (design D-31/D-37), pending owner sign-off before Step 19.** In `oidc` the agent verifies a token
+  whose key it already holds for up to `_JWKS_STALE_MAX_S` (24 h) after its last successful JWKS fetch while the JWKS
+  cannot be fetched again; with the JWKS reachable, a retired key stays usable only until the next refresh after the
+  300 s fresh window. So during a JWKS outage a key the issuer has retired or revoked is accepted for up to 24 h, longer
+  than the SSO spec § 4.7 rotation runbook's "retire the old" after one access-token lifetime. The cutover runbook
+  states it.
 - **Identity runs in every mode** (owner, 2026-11-24): it holds users, roles, links and sessions. An identity-less `oidc`
   deployment is out of scope (an idea for the owner's xstockstrat-only Authentik exploration).
 

@@ -39,9 +39,9 @@
 
 ## Summary
 
-xstockstrat (prod and staging, web UI and MCP agent) authenticates through the homelab's Authelia (OIDC, the only
-token issuer) instead of its own password login and OAuth server, while `identity.users` and per-environment roles stay
-authoritative. MCP tokens can be narrowed by OAuth scope. Amended 2026-11-24: one key `identity/auth.mode` (`local` |
+xstockstrat (prod and staging, web UI and MCP agent) can authenticate through the homelab's Authelia (OIDC) per
+deployment, while keeping its own password login for every user and its built-in OAuth server in `local`/`both`;
+`identity.users` and per-environment roles stay authoritative. MCP tokens can be narrowed by OAuth scope. Amended 2026-11-24: one key `identity/auth.mode` (`local` |
 `both` | `oidc`) per deployment, explicit "Link SSO", every user keeps a local password, DigitalOcean stays `local`.
 
 ## Reviewers
@@ -63,4 +63,6 @@ implementation-spec.md, per docs/runbooks/reviewer-registry.md. Stable unless `/
 
 ## Next Action
 
-`/sdd-review authelia-sso impl-spec` — validate implementation spec, then `/sdd-execute authelia-sso`
+`/sdd-execute authelia-sso` — the advisory `/sdd-review impl-spec` ran 2026-11-24 (`3392050`); first clear the ⚠ items
+still open in `context.md` (Session 2026-11-24 — sdd-review impl-spec) and the owner sign-off on the 24 h stale-key
+window (before Step 19).

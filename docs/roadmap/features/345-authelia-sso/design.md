@@ -55,7 +55,7 @@ Sign-out, the UI discovery documents (all `xstockstrat-ui`), and every MCP tool'
 
 **Operator.** `manage-users.py set-auth-mode` sets the mode without a login (D-108), and `unlink-sso` removes links (FR-12).
 
-**Build order.** proto → identity `007` + config seed → identity → config grant → agent → UI → scripts and docs. Every intermediate state behaves as `local` (D-109), except FR-15's both-mode logout changes, which ship with the UI.
+**Build order.** proto → identity `007` + config seed → identity → config grant → agent → UI → scripts and docs. Every intermediate state behaves as `local` (D-109), except FR-15's every-mode logout changes (Origin 403, JSON on an expired session, the Sign-out button), which ship with the UI.
 
 ### 1. Identity (`services/xstockstrat-identity`)
 
@@ -344,10 +344,18 @@ Every refusal records `sso_link_failed{reason}`. A refusal is never 401, because
 
 ### 6. Cutover gates (homelab, before `set-auth-mode both`; D-119, P-5)
 
-1. A homelab-edge path-scoped rate-limit zone over `POST /accounts/api/sso/confirm`.
-2. S17 proven: Authelia re-authenticates on `prompt=login` + `max_age=0` and returns a fresh `auth_time` in the ID token.
-3. Authelia's web client `claims_policy.id_token` includes `email`, `preferred_username` and `auth_time`.
+1. A homelab-edge path-scoped rate-limit zone over `POST /accounts/api/sso/confirm` (homelab-edge is adding it to the
+   SSO spec's § 4.3 zones, owner 2026-11-24).
+2. S17 proven: Authelia re-authenticates on `prompt=login` + `max_age=0` and returns a fresh `auth_time` in the ID token
+   (homelab-edge is extending SSO spec S17 to this, owner 2026-11-24).
+3. Authelia's web client `xstockstrat[-staging]-web` is registered with scopes `openid profile email` (SSO spec § 4.6 as
+   amended 2026-11-24, owner; `OIDC_SCOPE` requests all three, and Authelia refuses a scope the client is not registered
+   for with `invalid_scope`, spike item (c)), and its `claims_policy.id_token` includes `email`, `preferred_username`
+   and `auth_time`.
 4. `manage-users.py reset-password` of the seed row (D-49 N-9).
+
+homelab-edge `docs/runbooks/sso.md` § 6 is to list gates 1–4 (owner, 2026-11-24). Gate 3's scope clause was added
+2026-11-24 after the final pre-merge review (D-119 gate 3; context.md).
 
 Runbook pre-checks (`docs/runbooks/authelia-sso-cutover.md`), not gates:
 - the config listener is up;
@@ -427,8 +435,11 @@ Seam labels:
 | 74 | D-111 check; no `sso_link` sealed | UV (absent; −31 s refused; −30 s accepted); E2E (`authTime:'absent'`, `'stale'`) |
 | 75 | Mode gate before DB and bcrypt | IU (Outline local/oidc: 9 `link disabled`; pool and bcrypt spies untouched; `identity.link.failures{link_disabled}`) |
 | 76 (proposed) | D-132 advisory `openSsoTxn` at step 3 | UV (link txn + `error=access_denied` → 303 `/accounts/sso?error=no_access`, `sso_link_failed{no_access}`, `sso_login_failed` not recorded, txn cleared; `server_error` → `failed`; expired link txn → login page); E2E (`page.route` intercept) |
+| 77 (added post-design) | D-107/D-124 link-route statuses; row 1 is the middleware redirect, the handler's 401 is the stale-token case | UV (`middleware.test.ts`: no cookie → `/auth/login`; the three route tests, one case per remaining row) |
+| 78 (added post-design) | D-136 UI PRM 503 `no-store` when `agent` / `oidc.issuer` is unreadable in `oidc` | UV (`protected-resource/route.test.ts`) |
 
-No live AC is uncovered. The guard rows are labelled as guards (D-118).
+No live AC is uncovered. The guard rows are labelled as guards (D-118). Rows 77 and 78 were added on 2026-11-24 after
+the post-design `/sdd-review product-spec` added those scenarios.
 
 
 ## Rejected Alternatives
@@ -469,20 +480,27 @@ All locked alternatives in debate.md, both runs (R-2, R-13 and R-14 are moot und
 ## Open Risks
 
 - [ ] **S17 unproven**: if Authelia ignores `prompt=login`/`max_age=0` or omits `auth_time`, D-111 refuses every link
-  (fail closed). Cutover gate 2; signal WARN `sso_link_refused`. — homelab-edge P0/P1 (S17), before `both`.
+  (fail closed). Cutover gate 2; signal WARN `sso_link_refused`. — homelab-edge P0/P1 (S17, being extended to
+  `max_age=0` + `auth_time`), before `both`.
 - [ ] **Edge cutover gates** (D-119): rate-limit zone over `POST /accounts/api/sso/confirm`; Authelia web client
-  `claims_policy.id_token` with `email`, `preferred_username`, `auth_time`; seed-row `reset-password`. — homelab-edge,
-  before `set-auth-mode both`.
+  registered with `openid profile email` (else every SSO login and Link fails with `invalid_scope`) and
+  `claims_policy.id_token` with `email`, `preferred_username`, `auth_time`; seed-row `reset-password`. — homelab-edge
+  (SSO spec § 4.3, § 4.6 and `sso.md` § 6 being amended, owner 2026-11-24), before `set-auth-mode both`.
+- [ ] **Stale signing keys** (D-31/D-37): while the JWKS cannot be fetched, the agent keeps verifying with a key it
+  already holds for up to `_JWKS_STALE_MAX_S` (24 h) after its last successful fetch, so a key the issuer retired or
+  revoked stays accepted that long, beyond SSO spec § 4.7's rotation window. — owner sign-off before Step 19; the
+  cutover runbook states it (Step 54).
 - [ ] **No identity DB-test job** (recon R-8): AC-25's row count and AC-50 rest on labelled Postgres guards and
   `migration-rerun` (D-118). — accepted residual.
 - [ ] **Config migration number contested**: `056` is also planned by 314, 317 and 321; take the next free number at
   execute. — config seed step.
 - [ ] **New shared vector file** `scripts/testdata/oidc-issuer-vectors.json` (issuer, app_url, mode, refusals {resolve,
   link, session}, expected PRM) gates identity, UI and agent CI filters. — first step that creates it.
-- [ ] **Draft feature 280-third-party-sso-oidc** overlaps the problem (no key collision). — owner decision.
+- [x] **Draft feature 280-third-party-sso-oidc** overlaps the problem (no key collision). — owner decision 2026-11-24:
+  280 is `demoted/canceled`, superseded by 345.
 - [ ] **Authentik exploration** (owner, xstockstrat-only) may later propose an identity-less `oidc`; out of scope here
   (D-112). — owner.
-- [ ] **`/sdd-review product-spec`** re-run after the O-94 edits. — immediately after this design.
+- [x] **`/sdd-review product-spec`** re-run after the O-94 edits. — done 2026-11-24 (O-94 closed).
 
 ## Constitution Rules Touched
 
