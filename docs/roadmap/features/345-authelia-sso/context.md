@@ -372,3 +372,21 @@
   admin is a migration seed, not env); config seed renumbered to the next free `056` (055 is on trunk); identity `007`
   still free; Claude Code clients `xstockstrat[-staging]-mcp-claude-code[-ro]` (loopback redirect, spike S9); both Claude.ai
   callback hosts.
+
+## Session 2026-11-24 — sdd-review product-spec (re-spec)
+
+- Tree: `ccr-589817f0-cyg7gy@a2e3350 ≡ origin/ccr-589817f0-cyg7gy` (⊇ `origin/main-dev@0dbc26b`). Same recorded deviation as
+  2026-11-16: `feature/authelia-sso` does not exist, so TARGET would be `main-dev`, which lacks this re-spec; not switched.
+- Product spec approved. Status: draft → spec-ready (pass 3: PASS; pass 1 and 2 PASS WITH WARNINGS, all fixed).
+- Fixes from the passes: AC-54/AC-55 split by which issuer drives each 503 (FR-14); FR-1/FR-16 define every UI message and
+  `error` query value; FR-17 bound to 60 s; FR-15 states the expired-session JSON logout; AC-49 concrete (verified against
+  `app/oauth_metadata.py:24,33`); AC-20/AC-36 cover FR-13's docs; `/accounts/sso` page and nav (`navGroups.tsx:104`,
+  `PlatformHeader.tsx:96`, C-10a); FR-4 states the `GetSecret` grant (AC-35 → @FR-4); config migration number taken at
+  execute time.
+- Warnings: one accepted — AC-28 asserts a log line (same observable as the approved 2026-11-16 AC-28).
+- Overlap: no FAIL. WARN (soft rebase only): 319 (`identityServiceImpl.ts`, `telemetry.ts`, agent `watcher.py`), 331 (agent
+  `main.py`), 324 (`manage-users.py`, unverified from 324's side). Config `056` is free on trunk and also planned by 314, 317
+  and 321 (all implementation-ready): first to merge keeps it. Identity `007`, proto, keys: clean. Note: draft feature
+  `280-third-party-sso-oidc` proposes `identity.sso.*` for the same problem (no key collision; needs an owner decision).
+  Feature 314's `context.md:759` still says 345 claims `053` (stale; outside this feature).
+- Recommended design depth: full (owner-chosen 2026-11-24).

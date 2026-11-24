@@ -18,6 +18,7 @@
 | 2026-11-16 | `design-approved` (unchanged) | /sdd-review | Product spec re-approved after design-round amendments (0 warnings, after 3 passes); config seed renumbered 050 → 051 |
 | 2026-11-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 40 steps |
 | 2026-11-24 | `implementation-ready` → `draft` | owner | Re-spec against homelab-edge `2026-11-23-authelia-sso-respec.md`: `auth.mode` (local/both/oidc), explicit Link SSO, no email linking or SSO-created users; full SDD re-run (review → design → spec) required |
+| 2026-11-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved after the 2026-11-24 re-spec (1 accepted warning, AC-28; 3 passes) |
 
 ---
 
@@ -59,4 +60,4 @@ implementation-spec.md, per docs/runbooks/reviewer-registry.md. Stable unless `/
 
 ## Next Action
 
-`/sdd-review authelia-sso product-spec` (re-spec 2026-11-24), then `/sdd-design authelia-sso` (full re-run), `/sdd-spec`, `/sdd-review impl-spec`
+`/sdd-design authelia-sso` — full design recommended (owner-chosen 2026-11-24; 4 services, additive proto, two migrations, a three-mode security-critical auth path)

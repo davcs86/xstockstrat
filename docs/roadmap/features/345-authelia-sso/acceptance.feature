@@ -122,6 +122,7 @@ Feature: authelia-sso
     When an operator reads docs/runbooks/mcp-tools.md
     Then it lists client IDs "xstockstrat-mcp-claude", "xstockstrat-mcp-claude-ro", "xstockstrat-mcp-claude-code" and "xstockstrat-mcp-claude-code-ro", and the same four with the "xstockstrat-staging-" prefix
     And it gives the redirect URIs "https://claude.ai/api/mcp/auth_callback" and "https://claude.com/api/mcp/auth_callback" and the Claude Code loopback redirect
+    And the runbook it links describes cutover (local, both, link, oidc), rollback and break-glass with the FR-17 command, Link SSO and unlink-sso
 
   @AC-21 @FR-3 @FR-8
   Scenario: A deactivated linked user is refused on MCP
@@ -227,7 +228,7 @@ Feature: authelia-sso
     Then the page shows a link to "https://auth.example.test" for managing connected apps
     And it lists no xstockstrat OAuth grants and offers no revoke button
 
-  @AC-35 @FR-1 @FR-14
+  @AC-35 @FR-4 @FR-14
   Scenario: Only the UI can read the OIDC client secret
     Given staging ui/oidc.client_secret is an encrypted is_secret row
     When GetSecret for namespace "ui" key "oidc.client_secret" is called by peer SAN "xstockstrat-ui" and by peer SAN "xstockstrat-agent"
@@ -239,6 +240,7 @@ Feature: authelia-sso
     When an engineer reads IDENTITY-15 in services/xstockstrat-identity/docs/context-constitution.md
     Then it states that new migrations resolve the seed owner by SEED_USER_ID, never by admin@localhost
     And AGENT-9 in services/xstockstrat-agent/docs/context-constitution.md lists "agent", "identity" and "indicators" as the watched namespaces
+    And the identity, ui and agent CLAUDE.md files and docs/patterns/frontend-auth.md name identity/auth.mode, the ui/oidc.* and agent/oidc.issuer keys, and the Link SSO flow
 
   @AC-38 @FR-4
   Scenario: Only the UI may mint sessions with IssueSessionForUser
@@ -307,9 +309,9 @@ Feature: authelia-sso
     And the second returns <second>
 
     Examples:
-      | mode | servers                         | second                        |
-      | oidc | ["https://auth.example.test"]   | HTTP 404                      |
-      | both | the built-in server, as today   | the built-in server's document |
+      | mode | servers                                             | second                                                                  |
+      | oidc | ["https://auth.example.test"]                       | HTTP 404                                                                |
+      | both | ["https://xstockstrat-staging.example.test/agent"]  | HTTP 200 with issuer "https://xstockstrat-staging.example.test/agent"   |
 
   @AC-50 @FR-12 @FR-16
   Scenario: unlink-sso refuses the old subject and lets the user link again
@@ -344,7 +346,6 @@ Feature: authelia-sso
     Given staging ui/oidc.issuer is "http://auth.example.test"
     When a user clicks "Sign in with SSO" on the staging login page
     Then the browser returns to the login page with error "not_configured" and no session cookie is set
-    And fetching "/.well-known/oauth-protected-resource/agent" from the staging UI returns HTTP 503
     And the UI logs "sso_issuer_invalid"
 
   @AC-55 @FR-2 @FR-14
@@ -353,6 +354,7 @@ Feature: authelia-sso
     When an MCP client calls the staging agent with any bearer token
     Then the agent returns HTTP 503 with no WWW-Authenticate header
     And the agent's protected-resource metadata returns HTTP 503
+    And fetching "/.well-known/oauth-protected-resource/agent" from the staging UI returns HTTP 503
     And the agent logs "sso_issuer_invalid"
 
   @AC-56 @FR-14 @FR-15
@@ -474,8 +476,8 @@ Feature: authelia-sso
   @AC-69 @FR-16 @FR-14
   Scenario Outline: Link SSO exists only in both mode
     Given staging identity/auth.mode is "<mode>" and a user is signed in
-    When the user opens the account page and a client POSTs a link start from the same origin
-    Then the page shows no "Link SSO" action and the link start returns <result>
+    When the user opens "/accounts/sso" and a client POSTs a link start from the same origin
+    Then the page shows whether the account is linked, no "Link SSO" action, and the link start returns <result>
 
     Examples:
       | mode  | result   |
@@ -494,9 +496,10 @@ Feature: authelia-sso
     When they run the FR-17 command with "<value>" for staging
     Then <outcome>
 
+    # "oidcc" is a deliberate misspelling: an invalid value.
     Examples:
       | value | outcome                                                                                           |
-      | both  | identity/auth.mode is "both" and the running UI, identity and agent use it without a restart       |
+      | both  | identity/auth.mode is "both" and the running UI, identity and agent use it within 60 seconds, without a restart |
       | oidcc | the command exits non-zero, names the allowed values and changes nothing                           |
 
   @AC-72 @FR-9

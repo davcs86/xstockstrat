@@ -37,8 +37,10 @@ with SSO". Its value, and the post-login redirect, travel bound to the OIDC `sta
 httpOnly SSO-transaction cookie keyed by the random `state` value (owner decision 2026-11-16). The callback passes it to
 `setSessionCookies` exactly as the password path does today (UI-8). A `not linked` refusal shows "Your single sign-on
 account isn't linked to an xstockstrat account. Sign in with your password and choose Link SSO, or ask an admin." in
-`both`, and "…isn't linked to an xstockstrat account. Ask an admin." in `oidc`. With an invalid configuration (FR-14),
-sign-in fails with "SSO not configured" and no request reaches the issuer. FR-1 applies in `both` and `oidc`.
+`both`, and "…isn't linked to an xstockstrat account. Ask an admin." in `oidc`; an `account inactive` refusal shows
+"This account is disabled. Ask an admin." Each refusal returns to the login page with an `error` query value
+(`not_linked`, `inactive`) and sets no session cookie. With an invalid configuration (FR-14), sign-in fails with "SSO
+not configured" (`?error=not_configured`) and no request reaches the issuer. FR-1 applies in `both` and `oidc`.
 
 FR-2. **MCP as a resource server (`oidc` only).** With `auth.mode = oidc` (FR-14), `xstockstrat-agent` accepts **only**
 JWT access tokens from the configured issuer on its MCP endpoint. A token passes only if all of these hold, against the
@@ -76,6 +78,8 @@ access, ignoring every caller-supplied header (`x-user-id`, `x-access-scope`, `x
 - `IssueSessionForUser` (see Proto Contract Changes): `xstockstrat-ui` only; it refuses an inactive user with
   `FAILED_PRECONDITION` `account inactive`.
 - `LinkExternalIdentity` (FR-16): `xstockstrat-ui` only.
+- `GetSecret` for `ui` / `oidc.client_secret`: `xstockstrat-ui` only, through a `SECRET_CALLER_ALLOWLIST` grant
+  (PLAT-9); every other caller gets `PERMISSION_DENIED`, and `GetConfig`/`WatchConfig` return the row redacted.
 
 FR-5. *(Removed 2026-11-24, owner: no email sync. xstockstrat owns its users' emails, SSO spec decision 6; the IdP email
 is shown on the link confirmation only, FR-16, and never stored.)*
@@ -171,9 +175,11 @@ runs in exactly one mode, `identity` / `auth.mode` (FR-9), with no image or env 
   `127.0.0.1` or `[::1]`. Its host is a canonical lowercase name: no IP address except loopback, no IDN or `xn--`
   labels, no default port. It has no userinfo, query, fragment or `%`, and no trailing slash or empty path segment.
   `APP_URL` must be exactly a `scheme://host[:port]` origin. With an invalid or empty value:
-  - the login page still shows "Sign in with SSO", and SSO sign-in returns "SSO not configured" without contacting the
-    issuer (in `both` the password form still works);
-  - the UI's protected-resource document answers 503 in `oidc`;
+  - with `ui` / `oidc.issuer`, the client settings or `APP_URL` invalid or empty, the login page still shows "Sign in with
+    SSO", and SSO sign-in returns "SSO not configured" (`?error=not_configured`) without contacting the issuer (in `both`
+    the password form still works);
+  - in `oidc`, the UI's protected-resource document answers 503 when `agent` / `oidc.issuer` (its only issuer input) is
+    invalid or empty;
   - in `oidc`, an invalid agent issuer makes every MCP call, and the agent's protected-resource document, answer 503
     without `WWW-Authenticate`;
   - the UI logs `sso_issuer_invalid` (issuer) or `app_url_invalid` (`APP_URL`); the agent logs `sso_issuer_invalid`. Each
@@ -199,14 +205,19 @@ gains a "Sign out" button in the shared header, in every mode; before this featu
 the UI cannot read its config at logout time, logout ends only the xstockstrat session and logs a warning
 `sso_logout_mode_unknown`; the issuer session survives (owner decision 2026-11-16). In **every mode**, a logout request
 whose `Origin` header is present and is not the app's own origin (`APP_URL`) is refused with 403 and changes nothing: no
-revoke, no cookie change (owner decision 2026-11-16, P-2). A request with no `Origin` header is unaffected, and a
+revoke, no cookie change (owner decision 2026-11-16, P-2). A same-origin logout whose access token has expired (only a
+refresh token cookie is left) answers HTTP 200 JSON `{"ok": true}` and clears the cookies instead of redirecting (owner
+sign-off 2026-11-16). A request with no `Origin` header is unaffected, and a
 cookie-less cross-origin POST is redirected to the login page as today (middleware). The Origin check is skipped, with the
 `app_url_invalid` error logged, when `APP_URL` itself is invalid, because there is then no app origin to compare against.
 With an invalid configuration (FR-14), logout ends only the xstockstrat session: no redirect to the issuer, so the browser
 returns to the login page.
 
 FR-16. **Link SSO (explicit linking, `both` only).** A user signed in with their password links their issuer identity
-from an account page (SSO spec decision 7, § 3):
+from a new account page `/accounts/sso` ("Single sign-on"), registered next to "Authorized apps" in the shared nav
+(`src/components/shared/navGroups.tsx`) and the accounts subnav (`src/components/shared/PlatformHeader.tsx`). The page
+shows in every mode whether the account is linked; the "Link SSO" action exists only in `both` (SSO spec decision 7,
+§ 3):
 1. "Link SSO" posts to the SSO start route with purpose `link`. The transaction cookie binds the purpose and the current
    session (its refresh token's identity, not a value the browser supplies), and the authorization request carries
    `prompt=login`, so the issuer re-authenticates even while another issuer session is live (SSO spec S17).
@@ -215,9 +226,11 @@ from an account page (SSO spec decision 7, § 3):
    email>." The person re-enters their **xstockstrat password** and confirms (local re-authentication).
 3. `LinkExternalIdentity(user_id, issuer, subject, password)` (FR-4: UI only) verifies the password exactly as
    `AuthenticateUser` does, then inserts the link in one atomic write keyed on `(issuer, subject)` (IDENTITY-13). It
-   refuses with `FAILED_PRECONDITION`: `invalid credentials` (wrong password), `account inactive`, `account already
-   linked` (the pair belongs to another user), or `already linked to this issuer` (this user has a link for that issuer;
-   unlink first, FR-12). A raw unique-constraint race (`23505`) is re-classified once into one of these, *before*
+   refuses with `FAILED_PRECONDITION`: `invalid credentials` (wrong password; the page shows "Incorrect password."),
+   `account inactive` ("This account is disabled. Ask an admin."), `account already linked` (the pair belongs to another
+   user; "This sign-in is already linked to another account. Ask an admin."), or `already linked to this issuer` (this
+   user has a link for that issuer; "This account is already linked to a single sign-on account. Ask an admin to unlink
+   it first.", FR-12). A raw unique-constraint race (`23505`) is re-classified once into one of these, *before*
    `mapDbError` (IDENTITY-11).
 4. A best-effort, post-commit, allow-listed ledger audit records each link through `auditSafe` (IDENTITY-7), payload
    `user_id`, `issuer` and `outcome: linked` only (no email, no token, no `sub`). A ledger outage never fails the link.
@@ -227,7 +240,8 @@ from an account page (SSO spec decision 7, § 3):
 FR-17. **Switching mode without a login.** An operator on a tailnet host with access to the deployment's config database
 sets `identity` / `auth.mode` for one environment with a tested Python command in `scripts/`
 (`docs/patterns/script-tooling.md`), without signing in to xstockstrat (SSO spec § 3). It refuses any value but `local`,
-`both` and `oidc`, and the running services pick the new value up through the config service's watch, without a restart.
+`both` and `oidc`, and the running services apply the new value within 60 seconds through the config service's watch
+(the UI on its next request), without a restart.
 The runbook (FR-13) and homelab-edge `sso.md` name the command for break-glass (`local`) and rollback.
 
 ## Out of Scope
@@ -252,12 +266,12 @@ The runbook (FR-13) and homelab-edge `sso.md` name the command for break-glass (
 - `xstockstrat-identity`: `ResolveExternalIdentity`, `LinkExternalIdentity` and `IssueSessionForUser` (all SAN-gated),
   `external_identities`, the `auth.mode` gate on `AuthenticateUser`; the table `manage-users.py unlink-sso` deletes from.
 - `xstockstrat-ui`: OIDC login, callback and the SSO "keep me signed in" checkbox; the login page per the mode; the Link
-  SSO account page and confirmation (FR-16); the `/accounts/authorized-apps` page; the SSO logout redirect (FR-15) and
+  SSO account page and confirmation (FR-16); the `/accounts/authorized-apps` page; the `/accounts/sso` page and its nav entries; the SSO logout redirect (FR-15) and
   the shared-header "Sign out" button; the `/api/oauth/{protected-resource,authorization-server}` discovery routes; the
   middleware public/cookie-gated path sets.
 - `xstockstrat-agent`: the per-mode token path (FR-14), JWKS validation, protected-resource metadata, resolved-identity
   stamping, scope narrowing, the role cache.
-- `xstockstrat-config`: seed migration `056` (the next free number on 2026-11-24; re-check at merge), and a
+- `xstockstrat-config`: the seed migration (next free number at execute time, Config Key Changes), and a
   `SECRET_CALLER_ALLOWLIST` grant (`src/grpc/authz.ts`, PLAT-9):
   `{callerID: 'ui', namespace: 'ui', keys: ['oidc.client_secret'], peerSan: 'xstockstrat-ui'}`.
 - `packages/proto`: an additive `identity.proto` change.
@@ -273,7 +287,7 @@ The runbook (FR-13) and homelab-edge `sso.md` name the command for break-glass (
     `local`/`both`.
   - The page reads the mode server-side (today it is a `'use client'` page rendering `CredentialsForm`). An unreadable
     config renders the `local` login.
-  - A Link SSO account page and its confirmation (FR-16), in `both` only.
+  - The `/accounts/sso` page (link status in every mode) and its "Link SSO" action and confirmation in `both` only (FR-16).
   - `src/app/auth/oauth-login` (the login step of the agent's legacy OAuth flow) is unchanged and used in `local` and
     `both`; in `oidc` its flow is unreachable, because the agent's `/oauth/*` routes answer 404.
   - `/accounts/authorized-apps` becomes a pointer to the issuer in `oidc` (FR-11).
@@ -302,8 +316,10 @@ Additive only (non-breaking), in `packages/proto/identity/v1/identity.proto`:
 
 ## Config Key Changes
 
-One seed migration: `services/xstockstrat-config/migrations/056_authelia_sso_keys` (up + down; last applied on trunk is
-`055`; re-check the next free number at merge, `merge-order.md` row for 352, C-07). It seeds every key below for both
+One seed migration: `services/xstockstrat-config/migrations/<NNN>_authelia_sso_keys` (up + down, C-07). `NNN` is the next
+free config number when the step executes: `056` on trunk on 2026-11-24, which features 314, 317 and 321 also plan, so
+whichever merges first keeps it and the others renumber. A number below trunk's highest is never used, because
+golang-migrate skips a lower version that lands after a higher one (`merge-order.md` row for 352). It seeds every key below for both
 `production` and `staging`. Operators then set the real values per environment.
 
 - `identity.auth.mode`
@@ -361,7 +377,7 @@ per namespace. Never add a `findings` baseline entry for these keys (`docs/patte
   TEXT NOT NULL, user_id UUID NOT NULL REFERENCES identity.users(user_id) ON DELETE CASCADE, linked_at TIMESTAMPTZ NOT
   NULL DEFAULT NOW(), PRIMARY KEY (issuer, subject), UNIQUE (issuer, user_id))`. No email index: nothing matches by
   email.
-- config migration `056_authelia_sso_keys` (above).
+- config migration `<NNN>_authelia_sso_keys` (above).
 - No applied migration is edited (F-01).
 
 ## Feature Workflow Notes
@@ -376,7 +392,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 Soft merge order (rebase only): `319-fix-auth-trust-hardening` (same `identityServiceImpl.ts`; owns the old
 `oauth_server.py` fail-closed behaviour) and `324-fix-ci-enforcement-gaps` (CI gate over `manage-users.py`) before this
 feature. `331-fix-agent-mcp-transport-fallthrough` and `323-fix-orphaned-code` also edit `app/main.py`, so expect a
-rebase. Config migration number: `merge-order.md` row for 352.
+rebase. Config migration number: taken at execute time (Config Key Changes).
 
 **Spike evidence.** The 2026-11-16 local spike (Authelia v4.39.28, details in `context.md`) proved pre-registered public
 clients with RFC 8707 `resource`, the `scp` array, custom `xstockstrat.*` scopes, a stable per-user `sub`, `typ=at+jwt`,
