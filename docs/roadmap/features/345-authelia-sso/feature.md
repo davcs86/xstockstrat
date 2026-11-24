@@ -19,6 +19,7 @@
 | 2026-11-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 40 steps |
 | 2026-11-24 | `implementation-ready` → `draft` | owner | Re-spec against homelab-edge `2026-11-23-authelia-sso-respec.md`: `auth.mode` (local/both/oidc), explicit Link SSO, no email linking or SSO-created users; full SDD re-run (review → design → spec) required |
 | 2026-11-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved after the 2026-11-24 re-spec (1 accepted warning, AC-28; 3 passes) |
+| 2026-11-24 | `spec-ready` → `design-approved` | /sdd-design | Design re-debated (rounds 10–13, full) and approved; recon.md + debate.md + design.md rewritten |
 
 ---
 
@@ -27,7 +28,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon](recon.md) — grounded codebase dossier
-- [Debate Register](debate.md) — D-1..D-93, R-1..R-22, O-1..O-84
+- [Debate Register](debate.md) — D-1..D-137, R-1..R-30, O-1..O-127, P-1..P-5 (35 decisions superseded 2026-11-24)
 - [Design](design.md) — approved architecture
 - [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
@@ -60,4 +61,4 @@ implementation-spec.md, per docs/runbooks/reviewer-registry.md. Stable unless `/
 
 ## Next Action
 
-`/sdd-design authelia-sso` — full design recommended (owner-chosen 2026-11-24; 4 services, additive proto, two migrations, a three-mode security-critical auth path)
+`/sdd-review authelia-sso product-spec` (re-review of the design-round amendments, O-94), then `/sdd-spec authelia-sso` — generate the implementation spec from the approved design

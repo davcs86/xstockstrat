@@ -6,7 +6,8 @@ Feature: authelia-sso
   # Amended 2026-11-24 (owner re-spec, context.md). Retired IDs, never reused: AC-5, AC-8, AC-9, AC-18, AC-19,
   # AC-26, AC-37, AC-39, AC-40 (email linking, user creation, email sync and update-email are out of scope).
   # Changed meaning, same ID: AC-1, AC-2, AC-3, AC-4, AC-6, AC-16, AC-17, AC-25, AC-28, AC-30, AC-31, AC-32, AC-36,
-  # AC-41, AC-44, AC-45, AC-47, AC-50 (no RED test cites them yet).
+  # AC-41, AC-44, AC-45, AC-47, AC-50, AC-21, AC-35, AC-46, AC-65, AC-69 (no RED test cites them yet).
+  # Added 2026-11-24: AC-73..AC-76.
 
   Background:
     Given the issuer is "https://auth.example.test"
@@ -129,7 +130,7 @@ Feature: authelia-sso
     Given staging user "11111111-1111-4111-8111-111111111111" linked to subject "a1b2" has is_active false
     And the agent holds no cached entry for subject "a1b2"
     When subject "a1b2" calls the staging MCP endpoint with a valid token
-    Then the agent returns HTTP 403 with detail "account inactive" and no backend RPC is sent
+    Then the agent returns HTTP 403 with the text/plain body "account inactive" and no backend RPC is sent
 
   @AC-22 @FR-2 @FR-7
   Scenario: A valid token runs the tool as the resolved xstockstrat user
@@ -186,7 +187,7 @@ Feature: authelia-sso
     And "gina@example.test" is signed in with a password
     When gina links SSO for subject "p5p6" and confirms with her correct password
     Then subject "p5p6" is linked to gina's user
-    And identity logs a failed-audit warning for "identity.external.linked"
+    And identity logs the error "ledger audit append failed (best-effort)" and counts identity.audit.failures with event_type "identity.external.linked"
 
   @AC-29 @FR-1
   Scenario: Remember me survives the SSO round trip
@@ -199,7 +200,7 @@ Feature: authelia-sso
   Scenario: An unlinked MCP token is refused
     Given subject "q7q8" is not linked in staging
     When subject "q7q8" calls a tool with a valid token whose scope is "xstockstrat.read"
-    Then the agent returns HTTP 403 with detail "not linked" and no backend RPC is sent
+    Then the agent returns HTTP 403 with the text/plain body "not linked" and no backend RPC is sent
     And no row in identity.users or identity.external_identities is written
 
   @AC-31 @FR-9
@@ -231,7 +232,7 @@ Feature: authelia-sso
   @AC-35 @FR-4 @FR-14
   Scenario: Only the UI can read the OIDC client secret
     Given staging ui/oidc.client_secret is an encrypted is_secret row
-    When GetSecret for namespace "ui" key "oidc.client_secret" is called by peer SAN "xstockstrat-ui" and by peer SAN "xstockstrat-agent"
+    When GetSecret for namespace "ui" key "oidc.client_secret" is called with header x-internal-caller "ui" by peer SAN "xstockstrat-ui" and by peer SAN "xstockstrat-agent"
     Then the UI receives the decrypted value and the agent receives PERMISSION_DENIED
     And GetConfig and WatchConfig return the row redacted
 
@@ -281,11 +282,13 @@ Feature: authelia-sso
     When a user signs in with email "admin@localhost" and the correct password on the login page
     Then the browser lands on "/trader" with a session for that user
 
-  @AC-46 @FR-9 @FR-14
+  @AC-46 @FR-9 @FR-11 @FR-14
   Scenario: An unreadable config renders the local login
     Given xstockstrat-config is unreachable from the UI
     When a user opens the login page
     Then the page shows the password form and no "Sign in with SSO" button
+    And fetching "/.well-known/oauth-authorization-server/agent" from the staging UI returns HTTP 200 with issuer "https://xstockstrat-staging.example.test/agent"
+    And "/.well-known/oauth-protected-resource/agent" lists "authorization_servers" ["https://xstockstrat-staging.example.test/agent"]
 
   @AC-47 @FR-14
   Scenario: The SSO routes are inert in local mode
@@ -443,7 +446,7 @@ Feature: authelia-sso
   Scenario: A password user links SSO and then signs in by SSO
     Given staging identity/auth.mode is "both"
     And "alice@example.test" (user_id "11111111-1111-4111-8111-111111111111") is signed in with a password and has no link
-    When she chooses "Link SSO" and the issuer authenticates subject "a1b2" with prompt=login
+    When she chooses "Link SSO" and the issuer re-authenticates subject "a1b2" for a request with prompt=login and max_age=0, returning a fresh auth_time
     Then the confirmation reads "You are linking alice.sso@example.test to alice@example.test." and asks for her xstockstrat password
     And after she confirms with her correct password, identity.external_identities holds ("https://auth.example.test", "a1b2") -> "11111111-1111-4111-8111-111111111111"
     And the ledger holds one "identity.external.linked" event for that user_id with outcome "linked" and no email or subject field
@@ -476,7 +479,7 @@ Feature: authelia-sso
   @AC-69 @FR-16 @FR-14
   Scenario Outline: Link SSO exists only in both mode
     Given staging identity/auth.mode is "<mode>" and a user is signed in
-    When the user opens "/accounts/sso" and a client POSTs a link start from the same origin
+    When the user opens "/accounts/sso" and a client POSTs "/accounts/api/sso/link" from the same origin
     Then the page shows whether the account is linked, no "Link SSO" action, and the link start returns <result>
 
     Examples:
@@ -527,3 +530,26 @@ Feature: authelia-sso
       | absent                    |
       | 11:50:00 (before the start) |
 
+  @AC-75 @FR-4 @FR-16
+  Scenario Outline: Identity refuses a link outside both mode
+    Given staging identity/auth.mode is "<mode>"
+    When a client presenting mTLS peer SAN "xstockstrat-ui" calls LinkExternalIdentity for user_id "11111111-1111-4111-8111-111111111111", subject "a1b2" and that user's correct password
+    Then it receives FAILED_PRECONDITION "link disabled"
+    And no row in identity.users or identity.external_identities is read or written
+
+    Examples:
+      | mode  |
+      | local |
+      | oidc  |
+
+  @AC-76 @FR-15 @FR-16
+  Scenario Outline: An issuer error during Link SSO returns to the account page
+    Given staging identity/auth.mode is "both" and "alice@example.test" is signed in with a password and started Link SSO
+    When the issuer answers the link authorization request with error "<error>"
+    Then the browser lands on "/accounts/sso", which shows "<message>"
+    And no session cookie changes and identity.external_identities is unchanged
+
+    Examples:
+      | error          | message                                                                        |
+      | access_denied  | Your single sign-on account doesn't have access to xstockstrat. Ask an admin. |
+      | server_error   | Sign-in failed. Try again.                                                     |

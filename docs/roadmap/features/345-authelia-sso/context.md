@@ -448,3 +448,30 @@
   `watchAuthMode`, spec-edit wording, `HEADER_INTERNAL_CALLER`, vector-file partitions, AC-75 adopted, register hygiene).
 - Owner: Link IdP errors return to `/accounts/sso` via a local advisory txn decrypt (D-132, amends D-58's order); UI
   discovery documents fall back to today's documents on unreadable config (D-133). Owner asked for another round (13).
+
+## Session 2026-11-24 — sdd-design (completion, re-run)
+
+- Phase 0 Recon: recon.md rewritten (services identity, agent, ui, config/proto/scripts/deploy + scenario-recon; reuse:
+  the `authenticateUser` password sequence → `verifyPassword`, `adminDirectory.ts` SAN helpers, the 055 CTE + notify,
+  `apiFetch` refresh-and-retry, `manage-users.py`).
+- Phase 1 Grilling: rounds 10–13 (full; 4 rounds this run). Chosen approach: one global mode key `identity/auth.mode`;
+  identity always on with four SAN-gated RPCs and `007_external_identities`; agent per-request branch (issuer JWTs only in
+  `oidc`); UI RP with login via `/api/auth/sso/*` and Link via session-gated `/accounts/api/sso*` + `auth_time` check;
+  `manage-users.py set-auth-mode`. Rejected (this run): R-23..R-30 (stale-cookie binding, in-handler refresh,
+  metadata-field links, per-issuer bool, SetConfig per-user refusal, two-fake-pool test, flag-arg builder, verbatim detail
+  echo).
+- Owner at the final gate: D-136 (UI PRM 503 when the agent issuer is unreadable in `oidc`), D-137 (link `no_access` copy),
+  approve. O-94 spec edits applied to product-spec.md and acceptance.feature (AC-75, AC-76 added; 67 scenarios).
+- Constitution rules touched: C-01, C-03..C-05, C-07..C-10, C-12..C-18, P-01..P-05, F-01, F-04, F-06, F-07. Floor
+  breaches: none.
+- Status: spec-ready → design-approved. Next: `/sdd-review product-spec` (O-94), then `/sdd-spec`.
+
+## Open Threads (2026-11-24 re-run)
+
+- [ ] `/sdd-review authelia-sso product-spec` on the design-round amendments (O-94). Due now.
+- [ ] Cutover gates (homelab-edge): rate-limit zone over `POST /accounts/api/sso/confirm`; S17 fresh `auth_time` with
+      `prompt=login` + `max_age=0`; Authelia web client ID-token claims `email`, `preferred_username`, `auth_time`; seed-row
+      `reset-password`. Due before `set-auth-mode both` on a homelab deployment.
+- [ ] Config migration number: next free at execute (`056` contested by 314/317/321). Due at the seed step.
+- [ ] Draft feature 280-third-party-sso-oidc overlaps (owner decision). Due before /sdd-execute.
+- [ ] Identity-less `oidc`: idea for the owner's xstockstrat-only Authentik exploration (out of scope, D-112).

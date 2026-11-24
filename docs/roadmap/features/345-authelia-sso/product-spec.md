@@ -77,10 +77,10 @@ access, ignoring every caller-supplied header (`x-user-id`, `x-access-scope`, `x
 - `ResolveExternalIdentity`: `xstockstrat-ui` or `xstockstrat-agent`.
 - `IssueSessionForUser` (see Proto Contract Changes): `xstockstrat-ui` only; it refuses an inactive user with
   `FAILED_PRECONDITION` `account inactive`.
-- `LinkExternalIdentity` (FR-16): `xstockstrat-ui` only.
+- `LinkExternalIdentity` (FR-16): `xstockstrat-ui` only; outside `both` it refuses with `FAILED_PRECONDITION` `link disabled` before any database access.
 - `GetExternalIdentityLinks` (FR-16): `xstockstrat-ui` only; returns the issuers the given user is linked to.
 - `GetSecret` for `ui` / `oidc.client_secret`: `xstockstrat-ui` only, through a `SECRET_CALLER_ALLOWLIST` grant
-  (PLAT-9); every other caller gets `PERMISSION_DENIED`, and `GetConfig`/`WatchConfig` return the row redacted.
+  (PLAT-9); the UI sends header `x-internal-caller: ui` and presents peer SAN `xstockstrat-ui`, and both are required; every other caller gets `PERMISSION_DENIED`, and `GetConfig`/`WatchConfig` return the row redacted.
 
 FR-5. *(Removed 2026-11-24, owner: no email sync. xstockstrat owns its users' emails, SSO spec decision 6; the IdP email
 is shown on the link confirmation only, FR-16, and never stored.)*
@@ -108,12 +108,15 @@ identity is unreachable and the entry has expired, the request returns HTTP 503 
 `_send_identity_unavailable` contract, `app/main.py`) and no backend RPC is sent. This failure is an explicit refusal,
 not a truthy sentinel (the `IDENTITY_UNAVAILABLE` pattern in `app/auth.py` is not reused). A deactivated user, a removed
 link or a changed role takes effect on MCP within that TTL. An MCP request whose resolution is refused (`not linked` or
-`account inactive`) returns HTTP 403 with the detail `not linked` or `account inactive`, and sends no backend RPC.
+`account inactive`) returns HTTP 403 with a `text/plain` body `not linked` or `account inactive`, and sends no backend RPC. Any other refusal
+detail returns 503 without `WWW-Authenticate`.
 
 FR-9. **One mode key: `identity` / `auth.mode`.** It replaces both the issuer-presence switch and
 `auth.password_login_enabled` of the 2026-11-16 design (SSO spec § 3). Values `local` | `both` | `oidc`; code default
-and seed `local` on every database, DigitalOcean and homelab alike. A missing value reads as `local`; any other value
-reads as `local` and logs `auth_mode_invalid` once per distinct value on each reading surface.
+and seed `local` on every database, DigitalOcean and homelab alike. A missing row reads as `local` without logging
+`auth_mode_invalid`; any other value, including an empty string, reads as `local` and logs `auth_mode_invalid` once per
+distinct value on each reading surface (identity parses the value at startup and on every config update, not only at
+login).
 - `AuthenticateUser` refuses with `PERMISSION_DENIED` "password login disabled" in `oidc` only.
 - The login page renders per FR-14's table. Recovery from any mode is FR-17, which needs no login.
 
@@ -133,7 +136,8 @@ paste them into the connector's OAuth settings (owner decision 2026-11-16, exten
 page lists and revokes the built-in server's grants as today. The UI's own copies of the agent's discovery documents
 (`/.well-known/oauth-protected-resource/agent` and `/.well-known/oauth-authorization-server/agent`,
 `src/app/api/oauth/*`) follow the MCP mode: in `oidc` the protected-resource document names the issuer exactly like the
-agent's, and the authorization-server document answers 404; in `local` and `both` both are as today.
+agent's, and the authorization-server document answers 404; in `local` and `both`, and whenever the UI cannot read the mode, both are as today (owner, 2026-11-24); in `oidc` the
+protected-resource document answers 503 `no-store` when `agent` / `oidc.issuer` is invalid, empty or unreadable (FR-14).
 
 FR-12. **Admin link tooling.** `scripts/manage-users.py` gains `unlink-sso <email> [--issuer <url>]` (tested Python,
 `docs/patterns/script-tooling.md`, inside feature 324's CI/ruff scope). It deletes that user's rows in
@@ -171,14 +175,15 @@ runs in exactly one mode, `identity` / `auth.mode` (FR-9), with no image or env 
 | Logout | as today plus the both-mode changes of FR-15 | FR-15 SSO logout | FR-15 SSO logout |
 
 - A deployment never accepts both MCP token kinds at once.
-- **Invalid configuration**: the web SSO surfaces (in `both`/`oidc`) need a valid `ui` / `oidc.issuer` and `APP_URL`; the
+- **Invalid configuration**: the web SSO surfaces (in `both`/`oidc`) need a valid `ui` / `oidc.issuer`, a non-empty `ui` / `oidc.client_id` and a valid `APP_URL`; the
   agent (in `oidc`) needs a valid `agent` / `oidc.issuer`. A valid issuer is https, or http only on `localhost`,
   `127.0.0.1` or `[::1]`. Its host is a canonical lowercase name: no IP address except loopback, no IDN or `xn--`
   labels, no default port. It has no userinfo, query, fragment or `%`, and no trailing slash or empty path segment.
   `APP_URL` must be exactly a `scheme://host[:port]` origin. With an invalid or empty value:
-  - with `ui` / `oidc.issuer`, the client settings or `APP_URL` invalid or empty, the login page still shows "Sign in with
+  - with `ui` / `oidc.issuer`, `ui` / `oidc.client_id` or `APP_URL` invalid or empty, the login page still shows "Sign in with
     SSO", and SSO sign-in returns "SSO not configured" (`?error=not_configured`) without contacting the issuer (in `both`
-    the password form still works);
+    the password form still works), whatever the request's `Origin`. An unset `ui` / `oidc.client_secret` also returns "SSO
+    not configured", but only after the `Origin` check;
   - in `oidc`, the UI's protected-resource document answers 503 when `agent` / `oidc.issuer` (its only issuer input) is
     invalid or empty;
   - in `oidc`, an invalid agent issuer makes every MCP call, and the agent's protected-resource document, answer 503
@@ -186,8 +191,10 @@ runs in exactly one mode, `identity` / `auth.mode` (FR-9), with no image or env 
   - the UI logs `sso_issuer_invalid` (issuer) or `app_url_invalid` (`APP_URL`); the agent logs `sso_issuer_invalid`. Each
     is logged once per distinct value.
 - **Unreadable configuration** (the config service is unreachable or times out): the login page renders the `local`
-  login (AC-46). `POST /api/auth/sso/start` and the callback return "Sign-in failed. Try again." (`?error=failed`) and
-  start no flow.
+  login and the UI's two discovery documents (FR-11) are today's (AC-46). `POST /api/auth/sso/start` and the callback
+  return "Sign-in failed. Try again." (`?error=failed`) and start no flow. `POST /accounts/api/sso/link` and
+  `POST /accounts/api/sso/confirm` answer 503 `{"error":"failed"}`, and `GET /accounts/api/sso` answers 200 with
+  `mode: "error"` and no Link action. Logout follows FR-15.
 - `/api/auth/sso/start` is POST-only (a GET returns 405 in every mode). In `both`/`oidc`, a POST whose `Origin` header is
   missing or is not the app's origin returns "Sign-in failed. Try again." and starts no flow. The configuration check
   comes first: with an invalid configuration, every POST returns "SSO not configured" whatever its `Origin`.
@@ -201,7 +208,8 @@ The target is the standard `end_session_endpoint` (RP-Initiated Logout, `post_lo
 ${APP_URL}/auth/login`) when the issuer's discovery document advertises one. Otherwise it is the portal logout, with a
 redirect back to `${APP_URL}/auth/login` (owner decision 2026-11-16). When the issuer answers the authorization request
 with `error=access_denied` (the person is not in the app's group), the login page shows "You don't have access to
-xstockstrat. Ask an admin." (owner decision 2026-11-16). Every other IdP error shows "Sign-in failed. Try again." The UI
+xstockstrat. Ask an admin." (owner decision 2026-11-16). Every other IdP error shows "Sign-in failed. Try again." An IdP error answering a Link SSO request returns to
+`/accounts/sso` instead when the browser still holds that request's unexpired link transaction (FR-16.2). The UI
 gains a "Sign out" button in the shared header, in every mode; before this feature nothing in the UI called logout. If
 the UI cannot read its config at logout time, logout ends only the xstockstrat session and logs a warning
 `sso_logout_mode_unknown`; the issuer session survives (owner decision 2026-11-16). In **every mode**, a logout request
@@ -219,29 +227,44 @@ from a new account page `/accounts/sso` ("Single sign-on"), registered next to "
 (`src/components/shared/navGroups.tsx`) and the accounts subnav (`src/components/shared/PlatformHeader.tsx`). The page
 shows in every mode whether the account is linked (from `GetExternalIdentityLinks`: linked when the valid `ui` /
 `oidc.issuer` is among the returned issuers, or, when that issuer is empty or invalid, when any link exists); the
-"Link SSO" action exists only in `both` (SSO spec decision 7, § 3). The page's data and actions go through session-gated
-`/accounts/api/sso` routes (amended 2026-11-24); the anonymous `/api/auth/sso/start` stays login-only.
-1. "Link SSO" posts to the `/accounts/api/sso` link-start route. The transaction cookie binds the purpose `link`, the
+"Link SSO" action exists only in `both` (SSO spec decision 7, § 3). The page's data and actions go through the session-gated
+routes `GET /accounts/api/sso` (status), `POST /accounts/api/sso/link` (start) and `POST /accounts/api/sso/confirm`
+(confirm) (amended 2026-11-24); the anonymous `/api/auth/sso/start` stays login-only.
+1. "Link SSO" posts to `/accounts/api/sso/link`. The transaction cookie binds the purpose `link`, the
    signed-in user (from the verified session, not a value the browser supplies) and the start time, and the
-   authorization request carries `prompt=login`, so the issuer re-authenticates even while another issuer session is live
+   authorization request carries `prompt=login` and `max_age=0`, so the issuer re-authenticates even while another issuer session is live
    (SSO spec S17). Because the issuer may ignore `prompt=login`, the callback also requires the ID token's `auth_time`
    to be no earlier than the link start (minus clock skew); a missing or older `auth_time` is refused with "Sign-in
    failed. Try again." and nothing is written (owner, 2026-11-24).
 2. The callback validates the ID token as FR-1 does, calls neither `ResolveExternalIdentity` nor `IssueSessionForUser`,
-   and shows a confirmation: "You are linking <the ID token's email or preferred_username> to <the signed-in account's
-   email>." The person re-enters their **xstockstrat password** and confirms (local re-authentication).
-3. `LinkExternalIdentity(user_id, issuer, subject, password)` (FR-4: UI only) verifies the password exactly as
-   `AuthenticateUser` does, then inserts the link in one atomic write keyed on `(issuer, subject)` (IDENTITY-13). It
+   and returns the browser to `/accounts/sso`, which shows a confirmation: "You are linking <the ID token's email, else
+   its preferred_username, else 'your single sign-on account'> to <the signed-in account's email>." Once the callback
+   has opened the link transaction (after the mode and configuration checks), every failure returns to `/accounts/sso`
+   with an `error` value; a failure before that, or with a missing or expired transaction, returns to the login page. An
+   issuer error on the Link request shows "Your single sign-on account doesn't have access to xstockstrat. Ask an
+   admin." for `access_denied` (`?error=no_access`) and "Sign-in failed. Try again." otherwise (`?error=failed`)
+   (owner, 2026-11-24). The person re-enters their **xstockstrat password** and confirms (local re-authentication).
+3. `LinkExternalIdentity(user_id, issuer, subject, password)` (FR-4: UI only) selects the user by `user_id` and
+   verifies the password as `AuthenticateUser` does (bcrypt; the production seed-admin refusal counts as `invalid
+   credentials`), then inserts the link in one atomic write keyed on `(issuer, subject)` (IDENTITY-13). It
    refuses with `FAILED_PRECONDITION`: `invalid credentials` (wrong password; the page shows "Incorrect password."),
    `account inactive` ("This account is disabled. Ask an admin."), `account already linked` (the pair belongs to another
    user; "This sign-in is already linked to another account. Ask an admin."), or `already linked to this issuer` (this
    user has a link for that issuer; "This account is already linked to a single sign-on account. Ask an admin to unlink
-   it first.", FR-12). A raw unique-constraint race (`23505`) is re-classified once into one of these, *before*
+   it first.", FR-12), or `link disabled` (the mode is no longer `both`; "Sign-in failed. Try again."). A raw unique-constraint race (`23505`) is re-classified once into one of these, *before*
    `mapDbError` (IDENTITY-11).
 4. A best-effort, post-commit, allow-listed ledger audit records each link through `auditSafe` (IDENTITY-7), payload
    `user_id`, `issuer` and `outcome: linked` only (no email, no token, no `sub`). A ledger outage never fails the link.
-5. The confirmation lasts at most the transaction cookie's lifetime (10 minutes); after it, or if the signed-in session
-   changed, the link is refused with "Sign-in failed. Try again." and nothing is written.
+5. The confirmation lasts at most the transaction cookie's lifetime (10 minutes); after it, or if the signed-in user
+   changed (another `user_id`), the link is refused with "Sign-in failed. Try again." and nothing is written.
+6. Route statuses (owner-approved design, 2026-11-24). A refusal is never 401.
+   - `GET /accounts/api/sso`: 401 without a session; 503 when the link lookup fails; otherwise 200 (`mode: "error"` when
+     the config is unreadable).
+   - `POST /accounts/api/sso/link`: 401; 404 outside `both`; 503 when the config is unreadable; 400 `not_configured`;
+     403 on a foreign or missing `Origin`; 503 on an issuer or secret fault; 200 `{url}`.
+   - `POST /accounts/api/sso/confirm`: 401; 404 outside `both`; 503 when the config is unreadable; 403 `Origin`; 400
+     `failed` on a stale or foreign confirmation; 400 `invalid_credentials`, `inactive`, `already_linked_other`,
+     `already_linked_self` or `failed`; 503 `failed` when identity is unavailable; 200.
 
 FR-17. **Switching mode without a login.** An operator on a tailnet host with access to the deployment's config database
 sets `identity` / `auth.mode` for one environment with a tested Python command in `scripts/`
@@ -273,7 +296,8 @@ The runbook (FR-13) and homelab-edge `sso.md` name the command for break-glass (
   `IssueSessionForUser` (all SAN-gated),
   `external_identities`, the `auth.mode` gate on `AuthenticateUser`; the table `manage-users.py unlink-sso` deletes from.
 - `xstockstrat-ui`: OIDC login, callback and the SSO "keep me signed in" checkbox; the login page per the mode; the Link
-  SSO account page and confirmation (FR-16); the `/accounts/authorized-apps` page; the `/accounts/sso` page and its nav entries; the SSO logout redirect (FR-15) and
+  SSO account page and confirmation (FR-16); the `/accounts/authorized-apps` page; the `/accounts/sso` page and its nav entries and its routes `/accounts/api/sso`,
+  `/accounts/api/sso/link`, `/accounts/api/sso/confirm`; the SSO logout redirect (FR-15) and
   the shared-header "Sign out" button; the `/api/oauth/{protected-resource,authorization-server}` discovery routes; the
   middleware public/cookie-gated path sets.
 - `xstockstrat-agent`: the per-mode token path (FR-14), JWKS validation, protected-resource metadata, resolved-identity
@@ -317,7 +341,9 @@ Additive only (non-breaking), in `packages/proto/identity/v1/identity.proto`:
 - `rpc IssueSessionForUser(IssueSessionForUserRequest{ string user_id; }) returns (AuthTokenResponse)`, SAN-gated to
   `xstockstrat-ui`; it refuses an inactive user and reuses the `AuthenticateUser` mint path (env `JWT_SECRET`,
   `identity.refresh_tokens`).
-- Refusals are gRPC statuses: `FAILED_PRECONDITION` with the FR-3 and FR-16 details, `PERMISSION_DENIED` for a peer not
+- Refusals are gRPC statuses: `FAILED_PRECONDITION` with exactly one of `not linked`, `account inactive`, `invalid credentials`,
+  `account already linked`, `already linked to this issuer`, `link disabled` (a closed set shared by identity, the UI and
+  the agent), `PERMISSION_DENIED` for a peer not
   in the FR-4 SAN list. The `ExternalIdentityOutcome` enum of the 2026-11-16 design is dropped: resolution has one
   success outcome.
 - The messages are new, so their fields are numbered from 1. `buf breaking` against `main-dev` stays green because the
@@ -335,10 +361,11 @@ golang-migrate skips a lower version that lands after a higher one (`merge-order
   - namespace `identity`, stored key `auth.mode`, `string`, one of `local` | `both` | `oidc`;
   - code default `local`; seeded `local`;
   - readers:
-    - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:authenticateUser`, through the WatchConfig watcher,
-      live;
+    - `services/xstockstrat-identity/src/authMode.ts:readAuthMode` (new), called by `authenticateUser` and
+      `linkExternalIdentity`, and `watchAuthMode`, called once from `src/index.ts` (parses at startup and on each watcher
+      update), live;
     - `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadAuthMode` (new), called by the login page, the SSO start and
-      callback routes, the link page, the logout route, `/accounts/authorized-apps` and the two `src/app/api/oauth/*`
+      callback routes, the `/accounts/api/sso` routes, the logout route, `/accounts/authorized-apps` and the two `src/app/api/oauth/*`
       discovery routes; one-shot `GetConfig(namespace: 'identity')` per request, live on the next request;
     - `services/xstockstrat-agent/app/sso_mode.py:current_auth_mode` (new), through `read_config_value('identity',
       'auth.mode')`. This requires adding `identity` to `WATCHED_NAMESPACES` (`app/config/watcher.py`, AGENT-9: an
@@ -353,10 +380,11 @@ golang-migrate skips a lower version that lands after a higher one (`merge-order
 - `ui.oidc.client_secret`
   - namespace `ui`, stored key `oidc.client_secret`, `string`, encrypted `is_secret` row, seeded with the `[redacted]`
     sentinel and a NULL ciphertext, which `GetSecret` reports as `found=false` (unset);
-  - code default `""`: empty in `both`/`oidc` means `/start` and the callback fail with "SSO not configured" (fail
-    closed), and logout falls back to the portal URL;
+  - code default `""`: empty in `both`/`oidc` means `/start`, the callback and `POST /accounts/api/sso/link` fail with
+    "SSO not configured" (fail closed), and logout falls back to the portal URL;
   - reader `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcClientSecret` (new), called by the SSO start and
-    callback routes and the logout route, through `GetSecret` via the allow-list grant above. A rotated value applies on
+    callback routes, `POST /accounts/api/sso/link` and the logout route, through `GetSecret` (header
+    `x-internal-caller: ui`) via the allow-list grant above. A rotated value applies on
     the next request (the cached OIDC Configuration is keyed on the secret's hash). It is redacted at every other edge.
 - `ui.oidc.mcp_client_id`, `ui.oidc.mcp_client_id_readonly`, `ui.oidc.mcp_client_id_claude_code`,
   `ui.oidc.mcp_client_id_claude_code_readonly`
@@ -368,7 +396,7 @@ golang-migrate skips a lower version that lands after a higher one (`merge-order
     invalid configuration);
   - readers: `services/xstockstrat-agent/app/sso_mode.py`, the token validator (new) and the protected-resource metadata
     builder, all through `read_config_value('agent', 'oidc.issuer')` (AGENT-9; `agent` is in `WATCHED_NAMESPACES`),
-    live through the snapshot; and `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadOidcConfig` for the UI's
+    live through the snapshot; and `services/xstockstrat-ui/src/lib/oidcConfig.ts:loadAgentIssuer` for the UI's
     protected-resource document (`src/app/api/oauth/protected-resource/route.ts`), one-shot
     `GetConfig(namespace: 'agent')` per request.
 
@@ -406,9 +434,11 @@ rebase. Config migration number: taken at execute time (Config Key Changes).
 **Spike evidence.** The 2026-11-16 local spike (Authelia v4.39.28, details in `context.md`) proved pre-registered public
 clients with RFC 8707 `resource`, the `scp` array, custom `xstockstrat.*` scopes, a stable per-user `sub`, `typ=at+jwt`,
 `requested_audience_mode: implicit` for `aud`, no `end_session_endpoint` (portal logout), group membership not re-checked
-on refresh, and `error=access_denied` for a person outside the group. Its email findings are moot now (no email claim is
-needed). Still to be proven by homelab-edge, before this feature's cutover: Claude.ai and Claude Code against the
-deployed portal (SSO spec S1, S5, S9), `prompt=login` (S17) and refresh after leaving the group (S24).
+on refresh, and `error=access_denied` for a person outside the group. Its email findings now matter only for the link
+confirmation's label (FR-16.2). Still to be proven by homelab-edge, before this feature's cutover: Claude.ai and Claude
+Code against the deployed portal (SSO spec S1, S5, S9), `prompt=login` with `max_age=0` returning a fresh `auth_time` in
+the ID token (S17), the web client's ID-token claims `email`, `preferred_username` and `auth_time`, and refresh after
+leaving the group (S24).
 
 ## Acceptance Criteria
 
@@ -430,7 +460,7 @@ above is covered by ≥1 tagged scenario there; FR-5 is removed and has none.
   deployment to `local` without a login. In `both`, the password form and MCP keep working while the issuer is down.
 - **Linking window.** A person can link only while the deployment is in `both`; `both` keeps public password login
   behind the edge's rate limits (SSO spec decision 18). The Link confirmation accepts a password, so a homelab-edge
-  path-scoped rate-limit zone covering it is a **required cutover gate** before `both` is set on a homelab deployment
+  path-scoped rate-limit zone covering `POST /accounts/api/sso/confirm` is a **required cutover gate** before `both` is set on a homelab deployment
   (owner, 2026-11-24; tracked in homelab-edge).
 - **Identity runs in every mode** (owner, 2026-11-24): it holds users, roles, links and sessions. An identity-less `oidc`
   deployment is out of scope (an idea for the owner's xstockstrat-only Authentik exploration).
