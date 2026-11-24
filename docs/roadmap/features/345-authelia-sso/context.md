@@ -526,3 +526,28 @@
 - Post-spec fix (orchestrator, 2026-11-24): AC-77 row 1 now expects the middleware redirect to `/auth/login` for a request
   with no session cookie (`middleware.ts:80-83`); the route's own 401 (stale token seen by the handler) stays a handler-level
   test in Step 43, as /sdd-spec flagged.
+
+## Session 2026-11-24 — sdd-review impl-spec (advisory)
+
+- Tree: `ccr-589817f0-cyg7gy@82ff78a ≡ origin/ccr-589817f0-cyg7gy` (⊇ `origin/main-dev@0dbc26b`).
+- Result: 0 blocking failures, 7 warnings (advisory — did not block). Spec-level choices: OIDC scope, JWKS 300 s fresh +
+  RS/PS/ES allow-list, extra config-wiring receivers, `sso_login_error`/`sso_link_failed`, `scopes_supported`, no seed
+  assertion file — accepted; the `chromium-sso` project and the AC-77 handler-level 401 — accepted with fixes below.
+- Unresolved ⚠ carried into execution:
+  - Step 41 / Step 43: AC-77 row 1 now expects the middleware redirect (`acceptance.feature`); add a no-cookie
+    `/accounts/api/sso` → `/auth/login` case to Step 41's `middleware.test.ts`, add AC-77 to its Covers and the coverage
+    table, keep Step 43's 401 as a handler-level (stale-token) case, and update spec-level choice 5 (C-15) — [ ] unaddressed
+  - Step 52: add `testIgnore: /e2e\/sso\//` to the conditional `firefox` project (`playwright.config.ts:113-126`) or state
+    firefox is excluded — [ ] unaddressed
+  - Step 54 / Step 58: the cutover runbook and its grep must list the Authelia client prerequisites (ID-token `email`,
+    `preferred_username`, `auth_time` via claims policy; fresh `auth_time` with `prompt=login` + `max_age=0`) and note the
+    24 h stale-JWKS availability vs key-revocation trade-off — [ ] unaddressed
+  - Step 37: drive `sso_login_error` and `login_disabled` in the `bffAllowlist` closed-set test — [ ] unaddressed
+  - Step 1 / Step 2: `buf breaking --against …#branch=feature/authelia-sso` needs that branch; fall back to `main-dev` if it
+    is absent — [ ] unaddressed
+  - Step 4 / Step 3 / merge: re-check config `056` (314, 317, 321) and identity `007` at execute and merge — [ ] unaddressed
+  - Step 6: the Node regex-mismatch check prints without asserting (Step 27 asserts) — [ ] unaddressed
+- Overlap: config `056` and the 319 file overlap already recorded in `merge-order.md` (2026-11-24). New rebase-only overlaps,
+  not yet in merge-order: `services/xstockstrat-config/src/grpc/authz.ts` (319), the `telemetry.ts` `:380/:381` seam (319),
+  `telemetry.ts` (337), agent `main.py` (331), agent `tools.py`/`client.py` (309, 310, 314, 322, 327, 328), config-wiring
+  files (314, 317, 321). Feature 317's spec still cites 345 as `053` (stale, 317's doc).
