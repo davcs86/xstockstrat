@@ -475,3 +475,15 @@
 - [ ] Config migration number: next free at execute (`056` contested by 314/317/321). Due at the seed step.
 - [ ] Draft feature 280-third-party-sso-oidc overlaps (owner decision). Due before /sdd-execute.
 - [ ] Identity-less `oidc`: idea for the owner's xstockstrat-only Authentik exploration (out of scope, D-112).
+
+## Session 2026-11-24 — sdd-review product-spec (post-design re-review)
+
+- Product spec re-approved after the design-round amendments: pass 1 PASS WITH WARNINGS (5), pass 2 PASS WITH WARNINGS (1,
+  AC-77 preconditions; fixed). Status stays `design-approved`. O-94 closed.
+- Fixes: FR-15 exceptions consolidated (incl. unset/unreadable secret → portal logout, D-134); FR-14 UI PRM 503 when the agent
+  namespace is unreadable (D-136); FR-16 `linked` fallback; FR-1 full `oidc` message; new AC-77 (link-route statuses) and
+  AC-78 (unreadable agent issuer → PRM 503). 69 scenarios.
+- Overlap: FAIL on config `056` (also planned by 314, 317, 321). Owner chose a conditional renumber row in
+  `merge-order.md` (whoever merges first keeps `056`; others renumber at their own merge), replacing the stale 345 vs 352
+  row; plus a rebase-only row vs 319. Identity `007`, keys, proto: clean.
+- Next: `/sdd-spec authelia-sso` (the existing implementation-spec.md predates the re-spec).

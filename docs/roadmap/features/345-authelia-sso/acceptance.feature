@@ -7,7 +7,7 @@ Feature: authelia-sso
   # AC-26, AC-37, AC-39, AC-40 (email linking, user creation, email sync and update-email are out of scope).
   # Changed meaning, same ID: AC-1, AC-2, AC-3, AC-4, AC-6, AC-16, AC-17, AC-25, AC-28, AC-30, AC-31, AC-32, AC-36,
   # AC-41, AC-44, AC-45, AC-47, AC-50, AC-21, AC-35, AC-46, AC-65, AC-69 (no RED test cites them yet).
-  # Added 2026-11-24: AC-73..AC-76.
+  # Added 2026-11-24: AC-73..AC-78.
 
   Background:
     Given the issuer is "https://auth.example.test"
@@ -553,3 +553,27 @@ Feature: authelia-sso
       | error          | message                                                                        |
       | access_denied  | Your single sign-on account doesn't have access to xstockstrat. Ask an admin. |
       | server_error   | Sign-in failed. Try again.                                                     |
+
+  @AC-77 @FR-14 @FR-16
+  Scenario Outline: The link routes answer fixed statuses
+    Given <precondition>
+    When a client sends <request>
+    Then the response is <result>
+
+    Examples:
+      | precondition                                                               | request                                                                    | result                                     |
+      | staging mode is "both" and no session cookie                              | GET "/accounts/api/sso"                                                    | HTTP 401                                   |
+      | staging mode is "both", a signed-in user, GetExternalIdentityLinks fails   | GET "/accounts/api/sso"                                                    | HTTP 503 with error "failed"               |
+      | xstockstrat-config is unreachable from the UI and a user is signed in      | GET "/accounts/api/sso"                                                    | HTTP 200 with mode "error" and no Link action |
+      | staging mode is "both" and a signed-in user                               | POST "/accounts/api/sso/link" with Origin "https://dashboard.example.test" | HTTP 403 with error "failed"               |
+      | staging mode is "both", a signed-in user, ui/oidc.client_id is ""         | POST "/accounts/api/sso/link" from the same origin                         | HTTP 400 with error "not_configured"       |
+      | staging mode is "both", a signed-in user, ui/oidc.client_secret unset     | POST "/accounts/api/sso/link" with Origin "https://dashboard.example.test" | HTTP 403 with error "failed"               |
+      | staging mode is "both", a signed-in user, ui/oidc.client_secret unset     | POST "/accounts/api/sso/link" from the same origin                         | HTTP 400 with error "not_configured"       |
+      | xstockstrat-config is unreachable from the UI and a user is signed in      | POST "/accounts/api/sso/confirm" from the same origin                      | HTTP 503 with error "failed"               |
+
+  @AC-78 @FR-11 @FR-14
+  Scenario: An unreadable agent issuer in oidc makes the UI's protected-resource document retryable
+    Given staging identity/auth.mode is "oidc" and the UI cannot read the agent config namespace
+    When a client fetches "/.well-known/oauth-protected-resource/agent" from the staging UI
+    Then the response is HTTP 503 with "Cache-Control: no-store"
+

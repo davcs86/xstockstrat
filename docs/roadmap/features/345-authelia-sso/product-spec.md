@@ -37,7 +37,7 @@ with SSO". Its value, and the post-login redirect, travel bound to the OIDC `sta
 httpOnly SSO-transaction cookie keyed by the random `state` value (owner decision 2026-11-16). The callback passes it to
 `setSessionCookies` exactly as the password path does today (UI-8). A `not linked` refusal shows "Your single sign-on
 account isn't linked to an xstockstrat account. Sign in with your password and choose Link SSO, or ask an admin." in
-`both`, and "…isn't linked to an xstockstrat account. Ask an admin." in `oidc`; an `account inactive` refusal shows
+`both`, and "Your single sign-on account isn't linked to an xstockstrat account. Ask an admin." in `oidc`; an `account inactive` refusal shows
 "This account is disabled. Ask an admin." Each refusal returns to the login page with an `error` query value
 (`not_linked`, `inactive`) and sets no session cookie. With an invalid configuration (FR-14), sign-in fails with "SSO
 not configured" (`?error=not_configured`) and no request reaches the issuer. FR-1 applies in `both` and `oidc`.
@@ -184,8 +184,8 @@ runs in exactly one mode, `identity` / `auth.mode` (FR-9), with no image or env 
     SSO", and SSO sign-in returns "SSO not configured" (`?error=not_configured`) without contacting the issuer (in `both`
     the password form still works), whatever the request's `Origin`. An unset `ui` / `oidc.client_secret` also returns "SSO
     not configured", but only after the `Origin` check;
-  - in `oidc`, the UI's protected-resource document answers 503 when `agent` / `oidc.issuer` (its only issuer input) is
-    invalid or empty;
+  - in `oidc`, the UI's protected-resource document answers 503 `no-store` when `agent` / `oidc.issuer` (its only issuer
+    input) is invalid, empty, or unreadable while the mode itself is readable (FR-11);
   - in `oidc`, an invalid agent issuer makes every MCP call, and the agent's protected-resource document, answer 503
     without `WWW-Authenticate`;
   - the UI logs `sso_issuer_invalid` (issuer) or `app_url_invalid` (`APP_URL`); the agent logs `sso_issuer_invalid`. Each
@@ -202,8 +202,8 @@ runs in exactly one mode, `identity` / `auth.mode` (FR-9), with no image or env 
   `both`, let each person sign in with their password and link (FR-16), then set `auth.mode` to `oidc`. Setting
   `auth.mode` back to `local` (FR-17) is the rollback; redeploying the previous release remains possible.
 
-FR-15. **SSO logout and refusals.** In `both` and `oidc`, `/api/auth/logout` revokes the session exactly as today. Then it
-always redirects the browser to the issuer's logout, which also ends the person's issuer session for every other app.
+FR-15. **SSO logout and refusals.** In `both` and `oidc`, `/api/auth/logout` revokes the session exactly as today. Then, unless
+one of the exceptions at the end of this requirement applies, it redirects the browser to the issuer's logout, which also ends the person's issuer session for every other app.
 The target is the standard `end_session_endpoint` (RP-Initiated Logout, `post_logout_redirect_uri =
 ${APP_URL}/auth/login`) when the issuer's discovery document advertises one. Otherwise it is the portal logout, with a
 redirect back to `${APP_URL}/auth/login` (owner decision 2026-11-16). When the issuer answers the authorization request
@@ -219,14 +219,17 @@ refresh token cookie is left) answers HTTP 200 JSON `{"ok": true}` and clears th
 sign-off 2026-11-16). A request with no `Origin` header is unaffected, and a
 cookie-less cross-origin POST is redirected to the login page as today (middleware). The Origin check is skipped, with the
 `app_url_invalid` error logged, when `APP_URL` itself is invalid, because there is then no app origin to compare against.
-With an invalid configuration (FR-14), logout ends only the xstockstrat session: no redirect to the issuer, so the browser
-returns to the login page.
+Exceptions: with an invalid configuration (FR-14), logout ends only the xstockstrat session: no redirect to the issuer,
+so the browser returns to the login page; with unreadable configuration it does the same and logs
+`sso_logout_mode_unknown` (above); a logout whose access token has expired answers JSON (above); and when
+`ui` / `oidc.client_secret` is unset or cannot be read, the target is the portal logout (owner-approved design D-134).
 
 FR-16. **Link SSO (explicit linking, `both` only).** A user signed in with their password links their issuer identity
 from a new account page `/accounts/sso` ("Single sign-on"), registered next to "Authorized apps" in the shared nav
 (`src/components/shared/navGroups.tsx`) and the accounts subnav (`src/components/shared/PlatformHeader.tsx`). The page
 shows in every mode whether the account is linked (from `GetExternalIdentityLinks`: linked when the valid `ui` /
-`oidc.issuer` is among the returned issuers, or, when that issuer is empty or invalid, when any link exists); the
+`oidc.issuer` is among the returned issuers, or, when that issuer is empty, invalid or unreadable, when any link
+exists); the
 "Link SSO" action exists only in `both` (SSO spec decision 7, § 3). The page's data and actions go through the session-gated
 routes `GET /accounts/api/sso` (status), `POST /accounts/api/sso/link` (start) and `POST /accounts/api/sso/confirm`
 (confirm) (amended 2026-11-24); the anonymous `/api/auth/sso/start` stays login-only.

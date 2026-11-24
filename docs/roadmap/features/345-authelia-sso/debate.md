@@ -299,7 +299,7 @@
 | O-91 | 10 | Three `auth.mode` parsers in three services can disagree (C-18, AC-72) | no | closed @ round 10 (D-101 vector rows) |
 | O-92 | 10 | `/start` and callback order changes not recorded as D-76 amendments | no | closed @ round 10 (D-107 keeps `/start` login-only) |
 | O-93 | 10 | Link 23505 PK re-read can find no row after a concurrent `unlink-sso` | no | closed @ round 10 (D-104 retry once) |
-| O-94 | 10 | `GetExternalIdentityLinks` spec amendment incomplete (FR-4 SAN line, Affected Services, a SAN-refusal `@AC`, the page's "linked" rule) and FR-16.1 wording (P-03, C-15) | no | open (spec amendment + `/sdd-review product-spec`) |
+| O-94 | 10 | `GetExternalIdentityLinks` spec amendment incomplete (FR-4 SAN line, Affected Services, a SAN-refusal `@AC`, the page's "linked" rule) and FR-16.1 wording (P-03, C-15) | no | closed @ post-design review (`/sdd-review product-spec` pass 2, 2026-11-24) |
 | O-95 | 10 | `manage-users.py` help text claims "identity users" only (C-18) | no | closed @ round 10 (D-108) |
 | O-96 | 11 | Callback link-purpose errors land on `/auth/login` and count as login failures (P-03, D-82) | yes | closed @ round 11 (D-113) |
 | O-97 | 11 | UI → identity calls carry no platform headers; the link audit event loses owner and trace (C-03, AC-65) | yes | closed @ round 11 (D-114) |
