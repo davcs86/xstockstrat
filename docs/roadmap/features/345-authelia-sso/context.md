@@ -487,3 +487,42 @@
   `merge-order.md` (whoever merges first keeps `056`; others renumber at their own merge), replacing the stale 345 vs 352
   row; plus a rebase-only row vs 319. Identity `007`, keys, proto: clean.
 - Next: `/sdd-spec authelia-sso` (the existing implementation-spec.md predates the re-spec).
+
+## Session 2026-11-24 — sdd-spec (re-spec)
+
+- Generated implementation-spec.md with 58 steps (supersedes the 2026-11-16 52-step spec, kept in git at `f0ed7dc`).
+  Status: design-approved → implementation-ready.
+- Tree: `ccr-589817f0-cyg7gy@f0ed7dc ≡ origin/ccr-589817f0-cyg7gy` (⊇ `origin/main-dev@0dbc26b`). Same recorded deviation:
+  `feature/authelia-sso` does not exist, so TARGET resolves to `main-dev`, which lacks this re-spec; not switched. The 14
+  commits over `main-dev` are docs-only, so every code citation is `main-dev@0dbc26b`. Discovery was inline (recon.md
+  plus targeted greps); recon and design line numbers re-verified for identity, agent, config, UI and scripts.
+- Key codebase findings:
+  - Next free migrations: identity `007`; config `056` (highest on trunk is `055`; `053` is a gap never to fill).
+  - Seed has 18 rows in two statements (plain `054` shape + secret `049:57-67` shape) and no notify (D-109).
+  - The approved issuer/app_url grammar and its 66/16 vector rows are verbatim in `git show 7eeab3d:…/design.md`
+    lines 769–870; Step 6 copies them and replaces the `mode` rows with the D-121 `auth.mode` parse rows.
+  - The agent's `read_config_value` forwarder is matched by name, so `sso_mode.py` reads through two module aliases
+    (`identity_config`, `agent_config`) and `watcher.py` gains `read_config_value = read_value`.
+  - Only `logout/route.ts:11` breaks under the typed `recordAuthEvent` map, and it is rewritten in the same step (36).
+  - The e2e mock answers unknown config namespaces with `platform` (`mock-backend.ts:1560-1586`); Step 51 adds `identity`
+    and `agent`, with the mode row absent by default.
+- Spec-level choices not settled by the design (flag at `/sdd-review impl-spec`): `OIDC_SCOPE = 'openid email profile'`
+  (FR-16.2's `preferred_username` fallback is a `profile` claim); `_JWKS_FRESH_S = 300` and the RS/PS/ES allow-list
+  (carried); the `chromium-sso` project around D-120's one serial file; the identity `src/authMode.ts:config` and agent
+  `sso_mode.py:agent_config` wiring receivers; `ssoErrorRedirect` event per destination (`sso_login_error` on a login
+  fault, `sso_link_failed` always for link); `prm.expected` includes `scopes_supported` (D-10); no migration-assertion
+  file for the notify-less seed.
+- Product-spec finding to raise at `/sdd-review impl-spec`: AC-77 row 1 ("no session cookie → GET /accounts/api/sso →
+  401") holds at the handler only. Over HTTP the middleware redirects a request with no session cookie before the
+  handler runs (`middleware.ts:80-83`), as for today's `/accounts/api/authorized-apps`; Step 43 asserts it at the handler.
+
+## Open Threads (2026-11-24 sdd-spec)
+
+- [ ] `/sdd-review authelia-sso impl-spec`: rule on the spec-level choices above and AC-77 row 1. Due before /sdd-execute.
+- [ ] Step 4 needs a scratch Postgres 16 to regenerate `scripts/config-wiring-stored.json`, or the CI artifact. Due at Step 4.
+- [ ] Step 25: paste the first `pnpm run typecheck` output. Due at Step 25.
+- [ ] Config migration number re-checked at Step 4 and at merge (`056` vs 314/317/321). Due at Step 4 and merge.
+- [ ] Cutover gates (homelab-edge), draft feature 280 overlap, feature 319 merge order: unchanged from the design run.
+- Post-spec fix (orchestrator, 2026-11-24): AC-77 row 1 now expects the middleware redirect to `/auth/login` for a request
+  with no session cookie (`middleware.ts:80-83`); the route's own 401 (stale token seen by the handler) stays a handler-level
+  test in Step 43, as /sdd-spec flagged.

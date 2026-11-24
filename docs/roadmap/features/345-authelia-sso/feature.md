@@ -21,6 +21,7 @@
 | 2026-11-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved after the 2026-11-24 re-spec (1 accepted warning, AC-28; 3 passes) |
 | 2026-11-24 | `spec-ready` → `design-approved` | /sdd-design | Design re-debated (rounds 10–13, full) and approved; recon.md + debate.md + design.md rewritten |
 | 2026-11-24 | `design-approved` (unchanged) | /sdd-review | Product spec re-approved after the design-round amendments (pass 2; 1 cosmetic warning fixed); merge-order row for config `056` vs 314/317/321 |
+| 2026-11-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec regenerated after the re-spec with 58 steps (supersedes the 2026-11-16 52-step spec) |
 
 ---
 
@@ -45,21 +46,21 @@ authoritative. MCP tokens can be narrowed by OAuth scope. Amended 2026-11-24: on
 
 ## Reviewers
 
-_Canonical snapshot from `/sdd-spec` (2026-11-16): the distinct `**Reviewers**` across all 40 steps of
+_Canonical snapshot from `/sdd-spec` (2026-11-24): the distinct `**Reviewers**` across all 58 steps of
 implementation-spec.md, per docs/runbooks/reviewer-registry.md. Stable unless `/sdd-spec` re-runs._
 
 | Role | Review Focus |
 |---|---|
-| Proto Reviewer | Field number uniqueness per message, additive-only `identity.proto` change, `buf lint` + `buf breaking` against the dev trunk |
+| Proto Reviewer | Field number uniqueness per message, additive-only `identity.proto` change (four RPCs), `buf lint` + `buf breaking` against the dev trunk |
 | `packages/proto` owner | Backward compatibility (no field removal or type change), naming conventions |
-| DBA | Migration NNN numbering, up+down pair, index correctness, run order per `scripts/db-migrate.sh` (identity `007`, config `053`; renumbered 050→051→052→053, D-94/D-99/D-100) |
+| DBA | Migration NNN numbering, up+down pair, index correctness, run order per `scripts/db-migrate.sh` (identity `007`, config `056` taken at execute) |
 | `xstockstrat-identity` owner | JWT expiry and rotation, secret store integration (never plaintext secrets in config) |
 | `xstockstrat-config` owner | Key naming, environment (`production`/`staging`) scoping, secret encryption + redaction |
 | `xstockstrat-agent` owner | OAuth 2.1 edge-auth correctness and statelessness (`instance_count > 1` safe), MCP tool contract stability, admin `x-access-scope` forwarded only by management tools |
 | `xstockstrat-ui` owner | Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, trading UI correctness |
 | Security | JWT claims minimal, auth scope correctness, secrets decryptable only via `GetSecret` behind the `x-internal-caller` + SAN allow-list |
-| Platform Lead | Inter-service dependency graph (agent → config `ui` stream), CI gate parity (`identity-db-test`), deploy config parity (`APP_URL`) |
+| Platform Lead | Inter-service dependency graph (agent → config `identity` stream), CI gate parity (UI `typecheck`, vector-file filters), deploy config parity (`APP_URL`) |
 
 ## Next Action
 
-`/sdd-spec authelia-sso` — regenerate the implementation spec from the approved design (the current one predates the re-spec)
+`/sdd-review authelia-sso impl-spec` — validate implementation spec, then `/sdd-execute authelia-sso`

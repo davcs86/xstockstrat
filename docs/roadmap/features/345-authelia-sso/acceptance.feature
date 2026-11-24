@@ -562,7 +562,7 @@ Feature: authelia-sso
 
     Examples:
       | precondition                                                               | request                                                                    | result                                     |
-      | staging mode is "both" and no session cookie                              | GET "/accounts/api/sso"                                                    | HTTP 401                                   |
+      | staging mode is "both" and no session cookie                              | GET "/accounts/api/sso"                                                    | a redirect to "/auth/login" (middleware)   |
       | staging mode is "both", a signed-in user, GetExternalIdentityLinks fails   | GET "/accounts/api/sso"                                                    | HTTP 503 with error "failed"               |
       | xstockstrat-config is unreachable from the UI and a user is signed in      | GET "/accounts/api/sso"                                                    | HTTP 200 with mode "error" and no Link action |
       | staging mode is "both" and a signed-in user                               | POST "/accounts/api/sso/link" with Origin "https://dashboard.example.test" | HTTP 403 with error "failed"               |
