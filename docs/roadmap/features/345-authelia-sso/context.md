@@ -390,3 +390,14 @@
   `280-third-party-sso-oidc` proposes `identity.sso.*` for the same problem (no key collision; needs an owner decision).
   Feature 314's `context.md:759` still says 345 claims `053` (stale; outside this feature).
 - Recommended design depth: full (owner-chosen 2026-11-24).
+
+## Session 2026-11-24 — sdd-design re-run (full), Phase 0
+
+- Tree: `ccr-589817f0-cyg7gy@b3055c0 ≡ origin/ccr-589817f0-cyg7gy` (⊇ `origin/main-dev@0dbc26b`); same branch deviation.
+- Recon rewritten (`recon.md`, five scouts: identity, agent, ui, config/proto/scripts/deploy, scenario-recon). Main new
+  risks: R-1 per-user `auth.mode` overlay; R-2 no operator config write path (plain UPDATE not notified; 055 CTE shape);
+  R-3 `oidc` recovery via FR-17; R-4 middleware refresh hides new cookies from the handler; R-5 legacy `/oauth/*` needs an
+  explicit 404; R-6 identity test mocks lack `getString`; R-7 two agent scope sites.
+- C-16: identity 043 `@AC-2/3/6`, ui 153 `@AC-1/2/3`, ui 294 `@AC-33`, agent 294 `@AC-20/47`, agent 147 `@AC-9` are
+  CHANGE-by-config in `oidc` only (PRESERVE in `local`/`both`); sign-off to be re-recorded at the design gate.
+- Phase 1 starts at round 10 (register continues; superseded 2026-11-16 decisions to be petitioned and confirmed).
