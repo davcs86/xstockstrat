@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (the owner authorized more than 5 rounds if necessary — context.md 2026-11-15)
-**Rounds run**: 12 (run 2 started 2026-11-24 at round 10, full mode, after the owner re-spec)
+**Rounds run**: 13 (run 2 started 2026-11-24 at round 10, full mode, after the owner re-spec)
 
 ## Rounds
 
@@ -20,6 +20,7 @@
 | 10 | 2026-11-24 | /sdd-design (re-run after the owner re-spec) | 10 | 5 | 9 | 11 | 2 | yes |
 | 11 | 2026-11-24 | /sdd-design | 15 | 3 | 16 | 15 | 0 | yes |
 | 12 | 2026-11-24 | /sdd-design | 4 | 0 | 9 | 11 | 0 | yes |
+| 13 | 2026-11-24 | /sdd-design | 2 | 0 | 5 | 6 | 0 | yes |
 
 ## Settled Decisions
 
@@ -159,6 +160,8 @@
 | D-131 | 12 | **Register hygiene**: D-110's carry list is corrected — D-55 is superseded except its `ConnectorUrlField` and the whole-PRM contract test, which now rest on D-106/AC-49; D-72's live remainder (per-event type map, `sso_login_*` members, IssueSession → NOT_FOUND) is carried; the relative `Location` with a null `appOrigin` cites D-82, not superseded D-78. | round-12 adversary 10 | settled |
 | D-132 | 12 | **Link IdP errors return to `/accounts/sso`** (owner; amends D-58's order, closes O-111): at callback step 3, when `state` is present and its `sso_txn_<hash(state)>` decrypts locally (no network call), its `purpose` only picks the destination; `purpose:'link'` → `/accounts/sso?error=no_access` (`access_denied`) or `error=failed`, recording `sso_link_failed{reason}`; otherwise D-58 unchanged. A link `no_access` code and message join `LINK_ERROR_CODES`. D-113's "never `sso_login_failed` for a link" holds. | owner 2026-11-24 | settled |
 | D-133 | 12 | **UI discovery documents fall back to `local` on unreadable config** (owner, closes O-112): when `loadAuthMode` returns `error`, `/.well-known/oauth-{protected-resource,authorization-server}/agent` serve today's documents (consistent with AC-46), never 503; in `oidc` the 503 applies only to an invalid `agent/oidc.issuer`. | owner 2026-11-24; `next.config.js:48-53` (feature 049) | settled |
+| D-134 | 13 | **Loader-fault scope** (closes O-122, O-125): only the mode-branch reads (`loadAuthMode`, `loadOidcConfig`, `loadAgentIssuer`) follow a surface's config-`error` row. Secret faults follow each surface's own row: start → login `failed`; link start → 503 `failed`; callback step 5 → `failed` at the purpose destination (D-113); logout → portal URL per D-52, and `found=false` → portal URL. `linked = issuerValid(ui.oidc.issuer) ? issuers.includes(issuer) : issuers.length > 0`, and on a `ui` read fault `issuers.length > 0` (D-103, FR-16; not D-125's triple). | D-52, D-103, D-113 | settled |
+| D-135 | 13 | **Final precision** (closes O-123, O-124, O-126, O-127): FR-16.2 edit reads "…whose link transaction the callback has opened (after the mode and configuration checks)…; a failure before that, or with a missing or expired transaction, returns to the login page"; D-132's "decrypts locally" means `openSsoTxn` (decrypt + `exp`); AC-46's D-133 extension also asserts the PRM `authorization_servers` and its seam is labelled a guard; AC-76 adopted; `adminDirectory.test.ts` imports the new `fixtures/sanCall.ts`; AC-28 waits with `await new Promise(setImmediate)`; cites corrected: D-128's harness `identityTelemetry.test.ts:76-92`, D-133's rewrites `next.config.js:57-62`. | round-13 adversary 3, 5, 6, 7 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -322,6 +325,12 @@
 | O-119 | 12 | Refusal-section shape, PRM object home, AC-31 e2e default unspecified (C-01) | no | closed @ round 12 (D-130e) |
 | O-120 | 12 | D-110 range errors (D-55, D-72 remainder, D-78 cite) | no | closed @ round 12 (D-131) |
 | O-121 | 12 | Identity CLAUDE.md observability touchpoint missing | no | closed @ round 12 (D-130f) |
+| O-122 | 13 | A3's blanket loader-error rule overrides D-52 (logout) and D-113 (callback step 5) (P-03) | no | closed @ round 13 (D-134) |
+| O-123 | 13 | FR-16.2 edit promises `/accounts/sso` for failures before the txn is opened (P-03, C-15) | no | closed @ round 13 (D-135) |
+| O-124 | 13 | Known `oidc` + `agent` namespace read fault: UI PRM would advertise a 404ing AS (D-133 scope) | no | open (owner decision at the round-13 gate) |
+| O-125 | 13 | "linked" rule uses D-125's triple instead of issuer validity (D-103, FR-16) | no | closed @ round 13 (D-134) |
+| O-126 | 13 | AC-46 extension passes on today's code and misses the PRM (C-15, ledger 347) | no | closed @ round 13 (D-135) |
+| O-127 | 13 | `sanCall.ts` duplicates `adminDirectory.test.ts:29`; D-132 refinement; cite nits (C-18, C-13) | no | closed @ round 13 (D-135) |
 
 ## Reopen Petitions
 
