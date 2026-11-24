@@ -616,3 +616,11 @@
 - [ ] Owner sign-off on the 24 h stale-key window (`_JWKS_STALE_MAX_S`). Due before Step 19.
 - [ ] Remaining impl-review ⚠ items (Step 52 firefox `testIgnore`, Step 37 `bffAllowlist`, Step 1/2 `buf breaking`
       fallback, Step 4/3 migration re-check, Step 6 Node assert). Due at those steps.
+
+## Session 2026-11-24 — second pre-merge review fixes
+
+- Step 27: `serverLog.test.ts` already exists on `main-dev`; the step now modifies it and appends the `logOnce` cases after
+  the existing tests (the OTel logger provider can be set only once).
+- Gate 3 (D-119, design § 6): `auth_time` must be present in the ID token by default or via the claims policy, as spike S17
+  shows; the claims policy lists `email` and `preferred_username`. This matches homelab-edge SSO spec § 4.6 at `3b4e7a5`.
+- Step 23's cited range `test_auth_deadline.py:51-99` (the file has 99 lines).
