@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (the owner authorized more than 5 rounds if necessary — context.md 2026-11-15)
-**Rounds run**: 10 (run 2 started 2026-11-24 at round 10, full mode, after the owner re-spec)
+**Rounds run**: 11 (run 2 started 2026-11-24 at round 10, full mode, after the owner re-spec)
 
 ## Rounds
 
@@ -18,6 +18,7 @@
 | 8 | 2026-11-16 | /sdd-design | 10 | 0 | 9 | 9 | 0 | yes |
 | 9 | 2026-11-16 | /sdd-design | 6 | 0 | 6 | 6 | 1 | yes |
 | 10 | 2026-11-24 | /sdd-design (re-run after the owner re-spec) | 10 | 5 | 9 | 11 | 2 | yes |
+| 11 | 2026-11-24 | /sdd-design | 15 | 3 | 16 | 15 | 0 | yes |
 
 ## Settled Decisions
 
@@ -136,6 +137,21 @@
 | D-110 | 10 | **Carried forward unchanged in substance** ("SSO mode" now reads `both\|oidc` for web surfaces and `oidc` for MCP; "legacy" reads `local`, and `both` for MCP): D-2, D-3, D-4 (extended), D-8, D-9, D-10, D-13..D-18, D-21, D-23..D-27, D-29..D-31, D-34, D-35 (JWKS bullets), D-37, D-39, D-40, D-42, D-46, D-49 (incl. N-9 seed-row reset-password as a cutover step and N-10a docs; N-3/N-4 superseded), D-50..D-55, D-58..D-65, D-67..D-70, D-73, D-75..D-77, D-79..D-87, D-89, D-91, D-93, D-95, D-97, D-98. | round-10 proposal + adversary register check | settled |
 | D-111 | 10 | **Link requires RP-side proof of re-authentication** (owner, closes O-86): for `purpose=link` the ID token must carry `auth_time` ≥ the txn's `created_at` minus the clock-skew constant; a missing or older `auth_time` is refused (fail closed), independent of whether the issuer honours `prompt=login`. One unit case per branch. | ledger fails 2026-11-16; FR-16.1 | settled |
 | D-112 | 10 | **Identity runs in every mode** (owner): it holds users, roles, links and sessions, serves notify's `ListAdminUserIds` and `manage_user`, and FR-17's no-login rollback needs it. "Identity-less `oidc`" is out of scope, recorded as an idea for the owner's xstockstrat-only Authentik exploration. C-16 CHANGE-by-config in `oidc` only is signed off (owner 2026-11-24): identity 043 `@AC-2/3/6`, ui 153 `@AC-1/2/3`, agent 294 `@AC-20/47`, 147 `@AC-9`; ui 294 `@AC-33` unchanged (separate 403). | context.md 2026-11-24 | settled |
+| D-113 | 11 | **Callback error destinations by purpose** (refines D-82, closes O-96): `ssoErrorRedirect` gains a destination; before the txn decrypts → `/auth/login?error=…`; after it decrypts, `purpose:'link'` → `/accounts/sso?error=<LINK code>`. Link failures record their own closed event `sso_link_failed{reason}`, never `sso_login_failed`; pinned in `bffAllowlist.test.ts`. | D-58, D-72, D-82; round-11 adversary A | settled |
+| D-114 | 11 | **UI forwards platform headers to identity** (C-03, closes O-97): `/accounts/api/sso*` call identity with `restBackendHeaders(req, claims.user_id, claims.roles)` (`accounts/api/authorized-apps/route.ts:18` pattern); the callback forwards `x-trace-id` to Resolve/IssueSession. Identity still ignores headers for authorization (FR-4). A Link unit test asserts the audit metadata carries `x-user-id`. | `ledgerAudit.ts:15,40-45,54`; `ledgerServiceImpl.ts:76-78` | settled |
+| D-115 | 11 | **Identity parses the mode on every config update** (closes O-98): `readAuthMode` runs (with its log-once) after the startup snapshot and on the watcher's `'update'` event, so AC-72's identity log happens without a password POST. | `configWatcher.ts:107` | settled |
+| D-116 | 11 | **Authorized-apps list moves verbatim** (C-16, closes O-99): `@feature-350` `@AC-4/6/9` (`fix-row-menu-stays-open.feature:50-60,69-82,97-109`) are PRESERVE in `local`/`both` and vacuous in `oidc` (no list; added to the `oidc`-only change list for the owner's sign-off at approval). The list, its `columns` memo and focus target move unchanged into `AuthorizedAppsList`; the e2e mock's mode defaults to `local`. | `fails.md:4028-4031` | settled |
+| D-117 | 11 | **`/accounts/sso` registration and UI states** (C-10a, C-17, closes O-100): entries in `navGroups.tsx` (next to `:104`) and the `PlatformHeader.tsx` accounts subnav with a nav-reachability test; loading/error/confirmation states use the canonical primitives (`QueryStateMessages`, `CardNotice`, `FormDialog`). | FR-16; `docs/patterns/ui-ux-governance.md` | settled |
+| D-118 | 11 | **Honest coverage for AC-6 and AC-25** (C-15, closes O-101): AC-6 = AC-3's read-only Resolve unit test run with `environment=production` + a labelled guard (separate databases per deployment, FR-14); no two-fake-pool test. AC-25: the classifier's RED is proven on the constraint-name branch; constraint names have one source (code constants asserted equal to `007`'s SQL); "exactly one row" is a labelled Postgres-PK guard (`migration-rerun` applies `007` for real). The design's seam table names the test package per AC and marks guards (AC-6, AC-25 row count, AC-33, AC-41/42). | `fails.md:115-136`, `fails.md:4003-4007` | settled |
+| D-119 | 11 | **Cutover gates before `both` on a homelab deployment** (P-03, closes O-102): (1) the homelab-edge path-scoped rate-limit zone over `POST /accounts/api/sso/confirm` (P-5); (2) S17 proves a fresh `auth_time` on `prompt=login`; (3) Authelia's web client `claims_policy.id_token` includes `email`, `preferred_username` and `auth_time`; (4) `reset-password` of the seed row (D-49 N-9). Link authorization requests also send `max_age=0` (OIDC Core §3.1.2.1 makes `auth_time` mandatory then) without passing `checks.maxAge`, so D-111's own comparison stays the enforcement line. | D-96 spike fact; S17 | settled |
+| D-120 | 11 | **E2E mode isolation primitive** (closes O-103): every spec that mutates the mock's mode lives in one file with `test.describe.configure({ mode: 'serial' })`; the mock's default mode is `local`. | recon R-9; `fails.md:4014-4021` | settled |
+| D-121 | 11 | **D-101 parse clarification** (closes O-104): an absent row → `local`, silent; any present value outside {local, both, oidc}, including `""`, → `local` + `auth_mode_invalid` once per distinct value; the vector rows encode this. | FR-9 | settled |
+| D-122 | 11 | **`sessionResponse` is a pure builder** (C-18, closes O-105): `sessionResponse({accessToken, issuedAt, expiresAt}, refreshToken, claims)` with every argument required; callers mint and issue. O-17's frozen-clock claims deep-equal test extends to the refresh path (refresh unchanged, FR-1). | `identityServiceImpl.ts:189-200,252-269` | settled |
+| D-123 | 11 | **Closed refusal-detail contract** (D-24 extended, closes O-106): identity exports all six FAILED_PRECONDITION details (`not linked`, `account inactive`, `invalid credentials`, `account already linked`, `already linked to this issuer`, and D-126's `link disabled`) as one constant with a UI mirror and contract tests; the agent maps an unknown detail to 503 `internal_error` and answers known ones with a `text/plain` 403 body. | `main.py:178-182` | settled |
+| D-124 | 11 | **Confirm never replays the password** (closes O-107): the confirm POST uses `apiFetch(…, { redirect: 'manual' })` and treats `opaqueredirect` as "go to login". | `middleware.ts:72-83`; D-63 | settled |
+| D-125 | 11 | **Callback and config validity details** (closes O-108, O-109): the link branch reuses step 1's mode value and requires `both` (no second read). Web config is valid iff `ui/oidc.issuer` passes the D-79 grammar ∧ `ui/oidc.client_id` is non-empty ∧ `appOrigin()` is non-null; the secret is checked at step 5. | FR-14 | settled |
+| D-126 | 11 | **Identity refuses Link outside `both`** (defence in depth, closes O-110): `LinkExternalIdentity` reads `readAuthMode` and answers 9 `link disabled` unless the mode is `both`; the UI maps it to `failed`. | FR-9 intent; D-101 | settled |
+| D-127 | 11 | **A1 verified by the orchestrator**: `tokens.claims()` returns `oauth.getValidatedIdTokenClaims(response)` (`openid-client@6.8.9 build/index.js:550-554`); oauth4webapi 3.8.9 asserts `auth_time` is a number when present (`build/index.js:1415-1418`) and makes it required only with `maxAge`/`require_auth_time` (`:1983-1984`). A missing `auth_time` passes the library, so D-111's comparison is the enforcement line; oauth4webapi is pinned through the lockfile. | registry tarballs fetched 2026-11-24 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -169,6 +185,9 @@
 | R-25 | 10 | A `linked_issuers` field on `GetUserMetadataResponse` | Breaks `rowToUserMetadata` exact-key parity (`identityServiceImpl.ts:81-92`) and mixes concerns | locked |
 | R-26 | 10 | `GetExternalIdentityLink(user_id, issuer) → bool` | Cannot answer FR-16's "linked in every mode" in `local` with an empty issuer | locked |
 | R-27 | 10 | SetConfig refusing a per-user write of `identity/auth.mode` | All three readers are global by construction (`configWatcher.ts:90`, `watcher.py:49-53`, UI empty body id); tests pin it (C-18 YAGNI) | locked |
+| R-28 | 11 | A two-fake-pool unit test for AC-6 | Passes on any code (independent fakes); repeats R-17's fake-coverage rationale (`fails.md:115-136`) | locked |
+| R-29 | 11 | `sessionResponse(…, refreshToken?)` where an absent token means "issue one" | A flag argument hiding a DB write; drags the refresh path into the refactor (C-18) | locked |
+| R-30 | 11 | The agent echoing any Resolve FAILED_PRECONDITION detail verbatim | An unknown detail would reach the client; D-24's closed set is cheaper | locked |
 
 ## Objections
 
@@ -217,7 +236,7 @@
 | O-40 | 4 | A crafted GET `/start?remember=1` can force a 14-day session on a shared device. | no | closed @ round 4 (D-46) |
 | O-41 | 4 | Login-page config reads must run concurrently under one budget. | no | closed @ round 4 (D-47) |
 | O-42 | 4 | N-11 rewords settled D-20; the rollout order should be stated as an invariant. | no | closed @ round 4 (D-48) |
-| O-43 | 4 | The callback must reject a missing txn before any expensive call; edge rate limits. | no | reopened @ round 10 (user, P-5, context.md 2026-11-24) |
+| O-43 | 4 | The callback must reject a missing txn before any expensive call; edge rate limits. | no | closed @ round 11 (D-107 confirm path, D-119 gate list; callback rejects a missing txn first) |
 | O-44 | 5 | The logout exemption removes the UI-side mitigation for the RevokeToken unverified-decode defect (anyone could revoke any user's sessions) and adds a local-logout CSRF. (C-16, P-03; defect 2026-10-19) | yes | closed @ round 5 (D-52) |
 | O-45 | 5 | Legacy is no longer byte-identical: an expired-token logout becomes 200 JSON instead of 307, and the Sign-out button appears in legacy mode too. Needs owner sign-off. Spec line 216/FR-15 must be amended and re-reviewed. (C-16/FR-14, P-03) | yes | closed @ round 5 (owner: D-60) |
 | O-46 | 5 | Duplicate "Remember me" controls (id/name collision; `@AC-1 @feature-153` locator). (C-17) | no | closed @ round 5 (D-54) |
@@ -270,6 +289,21 @@
 | O-93 | 10 | Link 23505 PK re-read can find no row after a concurrent `unlink-sso` | no | closed @ round 10 (D-104 retry once) |
 | O-94 | 10 | `GetExternalIdentityLinks` spec amendment incomplete (FR-4 SAN line, Affected Services, a SAN-refusal `@AC`, the page's "linked" rule) and FR-16.1 wording (P-03, C-15) | no | open (spec amendment + `/sdd-review product-spec`) |
 | O-95 | 10 | `manage-users.py` help text claims "identity users" only (C-18) | no | closed @ round 10 (D-108) |
+| O-96 | 11 | Callback link-purpose errors land on `/auth/login` and count as login failures (P-03, D-82) | yes | closed @ round 11 (D-113) |
+| O-97 | 11 | UI → identity calls carry no platform headers; the link audit event loses owner and trace (C-03, AC-65) | yes | closed @ round 11 (D-114) |
+| O-98 | 11 | AC-72's identity log is unobservable (mode read only inside AuthenticateUser) (C-15) | yes | closed @ round 11 (D-115) |
+| O-99 | 11 | Recon missed `@feature-350` `@AC-4/6/9` on the authorized-apps list (C-16) | yes | closed @ round 11 (D-116) |
+| O-100 | 11 | Nav registration and UI-state primitives for `/accounts/sso` missing (C-10a, C-17) | no | closed @ round 11 (D-117) |
+| O-101 | 11 | AC-6/AC-25 tests cannot fail; seam table lacks test seams (C-15, ledger) | no | closed @ round 11 (D-118) |
+| O-102 | 11 | ID-token `email`/`auth_time` from Authelia is a cutover gate, not a TODO (P-03) | no | closed @ round 11 (D-119) |
+| O-103 | 11 | "Serial Playwright project" names no enforcing primitive (ledger) | no | closed @ round 11 (D-120) |
+| O-104 | 11 | Mode parse: absent vs `""` disagrees with FR-9/D-101 | no | closed @ round 11 (D-121) |
+| O-105 | 11 | `sessionResponse` optional-argument switch (C-18) | no | closed @ round 11 (D-122) |
+| O-106 | 11 | Link refusal details outside D-24's contract; agent reflects unknown details | no | closed @ round 11 (D-123) |
+| O-107 | 11 | Confirm POST can be re-POSTed to `/auth/login` on a 307 | no | closed @ round 11 (D-124) |
+| O-108 | 11 | Callback "re-read the mode" is redundant or unclear (C-18) | no | closed @ round 11 (D-125) |
+| O-109 | 11 | "Web config valid" undefined after D-66/D-78 were superseded (P-03) | no | closed @ round 11 (D-125) |
+| O-110 | 11 | Identity verifies passwords via Link even in `oidc` (defence in depth) | no | closed @ round 11 (D-126) |
 
 ## Reopen Petitions
 
