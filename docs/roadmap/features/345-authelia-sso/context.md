@@ -416,3 +416,18 @@
     service Authentik-based."
 - Design paused before round 11 pending clarification of that steer (scope of "preserve", and whether the Authentik
   exploration changes the issuer or the identity architecture). debate.md State stays `in-debate`.
+
+## Session 2026-11-24 — round-10 gate resolved
+
+- Owner clarifications after the pause:
+  - `oidc` stays as designed; `local` (default, DigitalOcean, any self-hosted/VPS deployment) keeps password login and the
+    built-in OAuth server unchanged. **C-16 sign-off given** for the CHANGE-by-config items, `oidc` only: identity 043
+    `@AC-2/3/6`, ui 153 `@AC-1/2/3`, agent 294 `@AC-20/47`, agent 147 `@AC-9`; ui 294 `@AC-33` unchanged (`oidc` adds a
+    separate 403).
+  - "Don't start identity in `oidc`" is not possible within 345 (identity holds users, roles, links, sessions; serves
+    notify and `manage_user`; FR-17 rollback needs it). Owner chose: identity always on (D-112). Identity-less `oidc` is an
+    idea for the owner's **xstockstrat-only** Authentik exploration; homelab-edge (Authelia + lldap) is unaffected.
+- Register: P-4 applied (35 decisions marked superseded), P-5 reopened O-43, D-111 (`auth_time` check) and D-112 added.
+- Spec amended (no re-review yet; per the 2026-11-16 precedent `/sdd-review product-spec` re-runs after design approval,
+  O-94 open until then): `GetExternalIdentityLinks` (FR-4, Proto, Affected Services, AC-73), Link start from
+  `/accounts/api/sso`, the `auth_time` requirement (AC-74), the edge rate-limit zone as a cutover gate.
