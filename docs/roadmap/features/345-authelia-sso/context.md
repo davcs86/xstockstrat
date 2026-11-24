@@ -441,3 +441,10 @@
   against openid-client 6.8.9 / oauth4webapi 3.8.9). R-28..R-30 locked; O-96..O-110 and O-43 closed.
 - Owner: C-16 sign-off extended to ui `@feature-350` `@AC-4/6/9` (vacuous in `oidc`; PRESERVE in `local`/`both`).
 - Owner: run another round (round 12) before approving.
+
+## Session 2026-11-24 — round-12 gate
+
+- Round 12 (confirmation): adversary SOUND, Floor clear; D-128..D-131 fold its precision fixes (AC-28/AC-72 seams,
+  `watchAuthMode`, spec-edit wording, `HEADER_INTERNAL_CALLER`, vector-file partitions, AC-75 adopted, register hygiene).
+- Owner: Link IdP errors return to `/accounts/sso` via a local advisory txn decrypt (D-132, amends D-58's order); UI
+  discovery documents fall back to today's documents on unreadable config (D-133). Owner asked for another round (13).
