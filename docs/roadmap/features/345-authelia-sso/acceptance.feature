@@ -508,3 +508,22 @@ Feature: authelia-sso
     When a user opens the login page and the agent receives an MCP call
     Then both behave as in "local"
     And the UI, identity and the agent each log "auth_mode_invalid" once
+
+  @AC-73 @FR-4 @FR-16
+  Scenario: Only the UI may call GetExternalIdentityLinks
+    Given a gRPC client presenting mTLS peer SAN "xstockstrat-agent"
+    When it calls GetExternalIdentityLinks for user_id "11111111-1111-4111-8111-111111111111"
+    Then it receives PERMISSION_DENIED and no row in identity.external_identities is read
+
+  @AC-74 @FR-16
+  Scenario Outline: A link is refused without proof of re-authentication
+    Given staging identity/auth.mode is "both" and "alice@example.test" started Link SSO at 12:00:00
+    When the issuer returns subject "a1b2" with an ID token whose auth_time is <auth_time>
+    Then the page shows "Sign-in failed. Try again." and no confirmation is offered
+    And identity.external_identities is unchanged
+
+    Examples:
+      | auth_time                 |
+      | absent                    |
+      | 11:50:00 (before the start) |
+

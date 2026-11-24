@@ -78,6 +78,7 @@ access, ignoring every caller-supplied header (`x-user-id`, `x-access-scope`, `x
 - `IssueSessionForUser` (see Proto Contract Changes): `xstockstrat-ui` only; it refuses an inactive user with
   `FAILED_PRECONDITION` `account inactive`.
 - `LinkExternalIdentity` (FR-16): `xstockstrat-ui` only.
+- `GetExternalIdentityLinks` (FR-16): `xstockstrat-ui` only; returns the issuers the given user is linked to.
 - `GetSecret` for `ui` / `oidc.client_secret`: `xstockstrat-ui` only, through a `SECRET_CALLER_ALLOWLIST` grant
   (PLAT-9); every other caller gets `PERMISSION_DENIED`, and `GetConfig`/`WatchConfig` return the row redacted.
 
@@ -216,11 +217,16 @@ returns to the login page.
 FR-16. **Link SSO (explicit linking, `both` only).** A user signed in with their password links their issuer identity
 from a new account page `/accounts/sso` ("Single sign-on"), registered next to "Authorized apps" in the shared nav
 (`src/components/shared/navGroups.tsx`) and the accounts subnav (`src/components/shared/PlatformHeader.tsx`). The page
-shows in every mode whether the account is linked; the "Link SSO" action exists only in `both` (SSO spec decision 7,
-§ 3):
-1. "Link SSO" posts to the SSO start route with purpose `link`. The transaction cookie binds the purpose and the current
-   session (its refresh token's identity, not a value the browser supplies), and the authorization request carries
-   `prompt=login`, so the issuer re-authenticates even while another issuer session is live (SSO spec S17).
+shows in every mode whether the account is linked (from `GetExternalIdentityLinks`: linked when the valid `ui` /
+`oidc.issuer` is among the returned issuers, or, when that issuer is empty or invalid, when any link exists); the
+"Link SSO" action exists only in `both` (SSO spec decision 7, § 3). The page's data and actions go through session-gated
+`/accounts/api/sso` routes (amended 2026-11-24); the anonymous `/api/auth/sso/start` stays login-only.
+1. "Link SSO" posts to the `/accounts/api/sso` link-start route. The transaction cookie binds the purpose `link`, the
+   signed-in user (from the verified session, not a value the browser supplies) and the start time, and the
+   authorization request carries `prompt=login`, so the issuer re-authenticates even while another issuer session is live
+   (SSO spec S17). Because the issuer may ignore `prompt=login`, the callback also requires the ID token's `auth_time`
+   to be no earlier than the link start (minus clock skew); a missing or older `auth_time` is refused with "Sign-in
+   failed. Try again." and nothing is written (owner, 2026-11-24).
 2. The callback validates the ID token as FR-1 does, calls neither `ResolveExternalIdentity` nor `IssueSessionForUser`,
    and shows a confirmation: "You are linking <the ID token's email or preferred_username> to <the signed-in account's
    email>." The person re-enters their **xstockstrat password** and confirms (local re-authentication).
@@ -263,7 +269,8 @@ The runbook (FR-13) and homelab-edge `sso.md` name the command for break-glass (
 
 ## Affected Services
 
-- `xstockstrat-identity`: `ResolveExternalIdentity`, `LinkExternalIdentity` and `IssueSessionForUser` (all SAN-gated),
+- `xstockstrat-identity`: `ResolveExternalIdentity`, `LinkExternalIdentity`, `GetExternalIdentityLinks` and
+  `IssueSessionForUser` (all SAN-gated),
   `external_identities`, the `auth.mode` gate on `AuthenticateUser`; the table `manage-users.py unlink-sso` deletes from.
 - `xstockstrat-ui`: OIDC login, callback and the SSO "keep me signed in" checkbox; the login page per the mode; the Link
   SSO account page and confirmation (FR-16); the `/accounts/authorized-apps` page; the `/accounts/sso` page and its nav entries; the SSO logout redirect (FR-15) and
@@ -305,6 +312,8 @@ Additive only (non-breaking), in `packages/proto/identity/v1/identity.proto`:
 - `rpc LinkExternalIdentity(LinkExternalIdentityRequest) returns (LinkExternalIdentityResponse)`;
   `LinkExternalIdentityRequest { string user_id; string issuer; string subject; string password; }`;
   `LinkExternalIdentityResponse {}`.
+- `rpc GetExternalIdentityLinks(GetExternalIdentityLinksRequest{ string user_id; }) returns
+  (GetExternalIdentityLinksResponse{ repeated string issuers; })`, SAN-gated to `xstockstrat-ui`.
 - `rpc IssueSessionForUser(IssueSessionForUserRequest{ string user_id; }) returns (AuthTokenResponse)`, SAN-gated to
   `xstockstrat-ui`; it refuses an inactive user and reuses the `AuthenticateUser` mint path (env `JWT_SECRET`,
   `identity.refresh_tokens`).
@@ -420,7 +429,11 @@ above is covered by ≥1 tagged scenario there; FR-5 is removed and has none.
   refresh goes through identity only); issued tokens and sessions keep working until they expire. FR-17 switches the
   deployment to `local` without a login. In `both`, the password form and MCP keep working while the issuer is down.
 - **Linking window.** A person can link only while the deployment is in `both`; `both` keeps public password login
-  behind the edge's rate limits (SSO spec decision 18).
+  behind the edge's rate limits (SSO spec decision 18). The Link confirmation accepts a password, so a homelab-edge
+  path-scoped rate-limit zone covering it is a **required cutover gate** before `both` is set on a homelab deployment
+  (owner, 2026-11-24; tracked in homelab-edge).
+- **Identity runs in every mode** (owner, 2026-11-24): it holds users, roles, links and sessions. An identity-less `oidc`
+  deployment is out of scope (an idea for the owner's xstockstrat-only Authentik exploration).
 
 ## Open Questions
 
