@@ -401,3 +401,18 @@
 - C-16: identity 043 `@AC-2/3/6`, ui 153 `@AC-1/2/3`, ui 294 `@AC-33`, agent 294 `@AC-20/47`, agent 147 `@AC-9` are
   CHANGE-by-config in `oidc` only (PRESERVE in `local`/`both`); sign-off to be re-recorded at the design gate.
 - Phase 1 starts at round 10 (register continues; superseded 2026-11-16 decisions to be petitioned and confirmed).
+
+## Session 2026-11-24 — sdd-design round 10 gate (paused)
+
+- Round 10 ran (proposer + adversary; register D-101..D-110, R-23..R-27, O-85..O-95, P-4..P-5). Verdict NEEDS WORK; the one
+  blocker (O-85, stale cookie in the Link flow) is closed by D-107. No Floor breach.
+- Owner at the gate:
+  - P-4 approved: the ~34 listed 2026-11-16 decisions are superseded by D-101..D-109 (register Status edits pending).
+  - O-86: enforce `auth_time` for Link on the RP side (fail closed), not only `prompt=login`.
+  - Spec amendments approved for round 11: `GetExternalIdentityLinks` RPC; Link starts from `/accounts/api/sso`; P-5 (edge
+    rate-limit zone over the Link confirm POST is a required cutover gate).
+  - C-16 sign-off **not given**. Owner, verbatim: "Preserve the password and built-in OAuth routes for self-hosted or VPS
+    deployments. External OIDC support is just a different authentication method. I'll explore making the identity
+    service Authentik-based."
+- Design paused before round 11 pending clarification of that steer (scope of "preserve", and whether the Authentik
+  exploration changes the issuer or the identity architecture). debate.md State stays `in-debate`.
