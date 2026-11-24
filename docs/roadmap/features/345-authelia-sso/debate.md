@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (the owner authorized more than 5 rounds if necessary — context.md 2026-11-15)
-**Rounds run**: 11 (run 2 started 2026-11-24 at round 10, full mode, after the owner re-spec)
+**Rounds run**: 12 (run 2 started 2026-11-24 at round 10, full mode, after the owner re-spec)
 
 ## Rounds
 
@@ -19,6 +19,7 @@
 | 9 | 2026-11-16 | /sdd-design | 6 | 0 | 6 | 6 | 1 | yes |
 | 10 | 2026-11-24 | /sdd-design (re-run after the owner re-spec) | 10 | 5 | 9 | 11 | 2 | yes |
 | 11 | 2026-11-24 | /sdd-design | 15 | 3 | 16 | 15 | 0 | yes |
+| 12 | 2026-11-24 | /sdd-design | 4 | 0 | 9 | 11 | 0 | yes |
 
 ## Settled Decisions
 
@@ -78,7 +79,7 @@
 | D-52 | 5 | **Logout route** (round-5 delta; O-44 fix; O-47).<br>• Order: verify the `access_token` cookie with jose against `JWT_SECRET`, accepting an expired-but-signed token via `JWTExpired.payload`. Call `revokeToken` **only** for a signature-valid token (`REFRESH_TIMEOUT_MS`). Then `clearSessionCookies`.<br>• Response by mode: legacy and `'error'` return `{ok:true}`, byte-identical. SSO with a verified token returns `{ok:true, redirect}` (D-51; `buildEndSessionUrl(...).href` when `end_session_endpoint` is same-origin and advertised, otherwise `autheliaPortalLogoutUrl(ui/oidc.issuer, APP_URL)`). The mode read plus discovery share one overall `AUTH_CONFIG_TIMEOUT_MS` deadline, falling back to the portal URL.<br>• The middleware exempts `/api/auth/logout` (exact Set, D-40) **only when an `access_token` or `refresh_token` cookie is present**; otherwise today's path runs, so cross-site Lax POSTs behave as now.<br>• No `isSameOrigin` check here, because `auth.spec.ts:307` sends no Origin.<br>• Merge order: feature 319 lands first or alongside (defect `2026-10-19-identity-revoketoken-unverified-decode-defect`). | `identityServiceImpl.ts:279-296`, defect report `:14-16`, `middleware.ts:72-83,91-96`, `oc689 index.js:508-512,1129-1141` | settled |
 | D-53 | 5 | **SignOutButton** (round 5; O-52).<br>• Client component in `PlatformHeader` row 1 (`:202`), so it shows on both breakpoints.<br>• Accessible name "Sign out", tap target ≥44px, guarded against double clicks.<br>• POSTs `/api/auth/logout`, then `location.assign(body.redirect ?? '/auth/login')`. Any non-JSON or error response also goes to `/auth/login`.<br>• e2e at a mobile viewport. | `PlatformHeader.tsx:202,251-253,325` | settled |
 | D-54 | 5 | **SSO sign-in form** (round 5 §3; O-46, O-54).<br>• `SsoSignInForm` is a native `<form method=post action=/api/auth/sso/start>` with a hidden `redirect` and its own checkbox from the `ui/checkbox` primitive (`name/value` set), labelled **"Keep me signed in for 14 days (SSO)"** with a distinct id.<br>• `CredentialsForm` is untouched. An SSO-mode e2e asserts both accessible names resolve uniquely.<br>• `/start`: POST only (GET 405), an `isSameOrigin` check where a missing or `null` Origin fails (asserted), then 303 to Authelia.<br>• `Location`s are built as `new URL(redirect, APP_URL)`. `safeRedirect` gets a unit case for `/trader/../..//evil.com`. | `AuthForm.tsx:32-127` | settled |
-| D-55 | 5 | **Discovery documents and connector card** (round 5 §4–§5; O-54).<br>• UI `.well-known` routes per the mode table. In SSO mode the PRM object is pinned **whole** by a two-sided contract test against the agent's `oauth_metadata.py`.<br>• `ConnectorUrlField` is extracted and shared by `AuthorizedAppsList` and `SsoAppsCard`. `SsoAppsCard` shows the client-ID rows, each hidden when empty. | `next.config.js:54-64`, `authorized-apps/page.tsx:194-214` | superseded by D-101..D-109 (P-4, owner 2026-11-24) |
+| D-55 | 5 | **Discovery documents and connector card** (round 5 §4–§5; O-54).<br>• UI `.well-known` routes per the mode table. In SSO mode the PRM object is pinned **whole** by a two-sided contract test against the agent's `oauth_metadata.py`.<br>• `ConnectorUrlField` is extracted and shared by `AuthorizedAppsList` and `SsoAppsCard`. `SsoAppsCard` shows the client-ID rows, each hidden when empty. | `next.config.js:54-64`, `authorized-apps/page.tsx:194-214` | superseded by D-101..D-109 (P-4) except `ConnectorUrlField` and the whole-PRM contract test, carried via D-106/AC-49 (D-131) |
 | D-56 | 5 | **`unlink-sso`** (round 5 §7; O-50).<br>• `lower(email)` lookup: 0 matches → not found; more than one → "ambiguous email — fix with update-email".<br>• `DELETE … [AND issuer] RETURNING issuer, subject`; 0 rows deleted → exit 1.<br>• **Asks for confirmation; `--force/-f` skips it** (mirrors `delete-user`, `manage-users.py:418-423`). Prints the email the person must have in Authelia to relink.<br>• Tests cover the declined confirmation, and the AC-50 relink in identity-db-test. | `manage-users.py:418-443`, `tests/test_manage_users.py:47,446` | superseded by D-101..D-109 (P-4, owner 2026-11-24) |
 | D-57 | 5 | **Migration 050 precision** (O-51).<br>• 14 rows. The secret row seeds `value_data='[redacted]'`, `is_secret TRUE`, ciphertext NULL (the 049 sentinel), and the D-36 down guard keys on that sentinel.<br>• Notifies: 6 on a fresh DB (identity/ui/agent × 2 environments), 0 on re-apply. The migration test asserts both counts. | `049_*.up.sql:61-66`, `047_*.up.sql:57-60`, `secretsAndScope.test.ts:240` | superseded by D-101..D-109 (P-4, owner 2026-11-24) |
 | D-58 | 5 | **Callback `error` handling** (round 5 §8). The IdP `error` parameter is handled after the mode read and before txn decryption. Its own `sso_txn_<hash(state)>` is cleared when `state` is present. `access_denied` → `no_access`, any other error → `failed`. No session cookies are set. | — | settled |
@@ -152,6 +153,10 @@
 | D-125 | 11 | **Callback and config validity details** (closes O-108, O-109): the link branch reuses step 1's mode value and requires `both` (no second read). Web config is valid iff `ui/oidc.issuer` passes the D-79 grammar ∧ `ui/oidc.client_id` is non-empty ∧ `appOrigin()` is non-null; the secret is checked at step 5. | FR-14 | settled |
 | D-126 | 11 | **Identity refuses Link outside `both`** (defence in depth, closes O-110): `LinkExternalIdentity` reads `readAuthMode` and answers 9 `link disabled` unless the mode is `both`; the UI maps it to `failed`. | FR-9 intent; D-101 | settled |
 | D-127 | 11 | **A1 verified by the orchestrator**: `tokens.claims()` returns `oauth.getValidatedIdTokenClaims(response)` (`openid-client@6.8.9 build/index.js:550-554`); oauth4webapi 3.8.9 asserts `auth_time` is a number when present (`build/index.js:1415-1418`) and makes it required only with `maxAge`/`require_auth_time` (`:1983-1984`). A missing `auth_time` passes the library, so D-111's comparison is the enforcement line; oauth4webapi is pinned through the lockfile. | registry tarballs fetched 2026-11-24 | settled |
+| D-128 | 12 | **AC-28 seam uses the real ledger audit** (closes O-113): the Link test drives `createLedgerAudit('localhost:1')` with a patched failing `appendEvent` (precedent `identityTelemetry.test.ts:85-98`) and awaits a tick before asserting `identity.audit.failures{event_type=identity.external.linked}` and the ERROR `ledger audit append failed` (`ledgerAudit.ts:66-71`); a stub rejecting inside `auditSafe` (`identityServiceImpl.ts:783-786`) never reaches that label. | ledger 347 | settled |
+| D-129 | 12 | **`watchAuthMode(watcher)`** (refines D-115, closes O-114): exported from `src/authMode.ts` (snapshot parse + `.on('update')`), unit-tested with an `EventEmitter` fake; `src/index.ts` makes the one-line call (a labelled grep guard, since `index.ts` runs `main()` at import, `:71`); `configWatcher.ts` untouched. | `configWatcher.ts:107`; ledger 347 | settled |
+| D-130 | 12 | **Precision fixes** (close O-115..O-121): (a) spec edit 4 reads "a missing row reads as `local` without logging `auth_mode_invalid`" (the watchers still WARN an absent key, `configWatcher.ts:184,193`, `watch_core.py:199`); (b) `unlink-sso` tells the operator the person can link again via Link SSO while the deployment is in `both` (no email hint); (c) AC-35 sends `x-internal-caller "ui"` for the UI call and adds an agent-SAN case with that header; FR-14's unreadable-config bullet names the link-route 503s and the GET status `mode:'error'`; (d) `HEADER_INTERNAL_CALLER` joins `src/lib/headers.ts`; (e) the vector file's `refusals` section is partitioned `{resolve, link, session}`, the whole expected PRM object lives in the same vector file (AC-49), and the e2e default mode means the row is absent (AC-31); (f) identity `CLAUDE.md` § Observability gains `identity.external.linked` and `identity.link.failures`; (g) adopt AC-75 (identity refuses Link outside `both`). | round-12 adversary 3–11 | settled |
+| D-131 | 12 | **Register hygiene**: D-110's carry list is corrected — D-55 is superseded except its `ConnectorUrlField` and the whole-PRM contract test, which now rest on D-106/AC-49; D-72's live remainder (per-event type map, `sso_login_*` members, IssueSession → NOT_FOUND) is carried; the relative `Location` with a null `appOrigin` cites D-82, not superseded D-78. | round-12 adversary 10 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -304,6 +309,17 @@
 | O-108 | 11 | Callback "re-read the mode" is redundant or unclear (C-18) | no | closed @ round 11 (D-125) |
 | O-109 | 11 | "Web config valid" undefined after D-66/D-78 were superseded (P-03) | no | closed @ round 11 (D-125) |
 | O-110 | 11 | Identity verifies passwords via Link even in `oidc` (defence in depth) | no | closed @ round 11 (D-126) |
+| O-111 | 12 | A3 (IdP error during a link → login page + `sso_login_failed`) contradicts D-113's "never" (P-03) | no | open (owner decision at the round-12 gate) |
+| O-112 | 12 | UI discovery routes answer 503 on unreadable config even in `local`; the basis D-38 is superseded (FR-11, FR-14) | no | open (owner decision at the round-12 gate) |
+| O-113 | 12 | AC-28 seam cannot pass with a rejecting stub (C-15, ledger 347) | no | closed @ round 12 (D-128) |
+| O-114 | 12 | AC-72/AC-44 identity seam cannot fail on missing wiring (C-15) | no | closed @ round 12 (D-129) |
+| O-115 | 12 | Spec edit 4 "silently" is false for two readers (P-03) | no | closed @ round 12 (D-130a) |
+| O-116 | 12 | `unlink-sso` email hint carried from superseded D-56 (C-18) | no | closed @ round 12 (D-130b) |
+| O-117 | 12 | O-94 edits miss AC-35's header and FR-14's unreadable-config link routes (C-15) | no | closed @ round 12 (D-130c) |
+| O-118 | 12 | `x-internal-caller` raw literal in the UI (C-18 DRY) | no | closed @ round 12 (D-130d) |
+| O-119 | 12 | Refusal-section shape, PRM object home, AC-31 e2e default unspecified (C-01) | no | closed @ round 12 (D-130e) |
+| O-120 | 12 | D-110 range errors (D-55, D-72 remainder, D-78 cite) | no | closed @ round 12 (D-131) |
+| O-121 | 12 | Identity CLAUDE.md observability touchpoint missing | no | closed @ round 12 (D-130f) |
 
 ## Reopen Petitions
 
