@@ -46,12 +46,14 @@ services:
   xstockstrat-config:
     <<: *svc
     image: ${IMAGE_CONFIG:?IMAGE_CONFIG is required}
+    mem_limit: 160m
     environment:
       <<: [*common-env, *db-direct, *db-ca]
       MTLS_CERT: ${CONFIG_MTLS_CERT:?CONFIG_MTLS_CERT is required}
       MTLS_KEY: ${CONFIG_MTLS_KEY:?CONFIG_MTLS_KEY is required}
       GRPC_PORT: "50060"
       SERVICE_NAME: config
+      NODE_OPTIONS: --max-old-space-size=96
       DB_POOL_MAX: "2"
       CONFIG_SECRETS_ENCRYPTION_KEY: ${CONFIG_SECRETS_ENCRYPTION_KEY:?CONFIG_SECRETS_ENCRYPTION_KEY is required}
     healthcheck:
@@ -64,6 +66,7 @@ services:
   xstockstrat-ledger:
     <<: *svc
     image: ${IMAGE_LEDGER:?IMAGE_LEDGER is required}
+    mem_limit: 160m
     environment:
       <<: [*common-env, *db-direct, *db-ca]
       MTLS_CERT: ${LEDGER_MTLS_CERT:?LEDGER_MTLS_CERT is required}
@@ -72,6 +75,7 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       WAIT_FOR: "xstockstrat-config:50060"
       SERVICE_NAME: ledger
+      NODE_OPTIONS: --max-old-space-size=96
       DB_POOL_MAX: "1"
     healthcheck:
       <<: *hc
@@ -83,6 +87,7 @@ services:
   xstockstrat-identity:
     <<: *svc
     image: ${IMAGE_IDENTITY:?IMAGE_IDENTITY is required}
+    mem_limit: 160m
     environment:
       <<: [*common-env, *db-direct, *db-ca]
       MTLS_CERT: ${IDENTITY_MTLS_CERT:?IDENTITY_MTLS_CERT is required}
@@ -93,6 +98,7 @@ services:
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: identity
+      NODE_OPTIONS: --max-old-space-size=96
       DB_POOL_MAX: "2"
     healthcheck:
       <<: *hc
@@ -104,6 +110,7 @@ services:
   xstockstrat-notify:
     <<: *svc
     image: ${IMAGE_NOTIFY:?IMAGE_NOTIFY is required}
+    mem_limit: 160m
     environment:
       <<: [*common-env, *db-direct, *db-ca]
       MTLS_CERT: ${NOTIFY_MTLS_CERT:?NOTIFY_MTLS_CERT is required}
@@ -112,6 +119,7 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: notify
+      NODE_OPTIONS: --max-old-space-size=96
       DB_POOL_MAX: "1"
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
@@ -128,6 +136,7 @@ services:
   xstockstrat-marketdata:
     <<: *svc
     image: ${IMAGE_MARKETDATA:?IMAGE_MARKETDATA is required}
+    mem_limit: 192m
     environment:
       <<: [*common-env, *db-pooled]
       MTLS_CERT: ${MARKETDATA_MTLS_CERT:?MARKETDATA_MTLS_CERT is required}
@@ -137,6 +146,7 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       SERVICE_NAME: marketdata
+      GOMEMLIMIT: 144MiB
     healthcheck:
       <<: *hc
       test: ["CMD", "/app/service", "healthcheck"]
@@ -147,6 +157,7 @@ services:
   xstockstrat-portfolio:
     <<: *svc
     image: ${IMAGE_PORTFOLIO:?IMAGE_PORTFOLIO is required}
+    mem_limit: 96m
     environment:
       <<: [*common-env, *db-pooled]
       MTLS_CERT: ${PORTFOLIO_MTLS_CERT:?PORTFOLIO_MTLS_CERT is required}
@@ -156,6 +167,7 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       SERVICE_NAME: portfolio
+      GOMEMLIMIT: 72MiB
     healthcheck:
       <<: *hc
       test: ["CMD", "/app/service", "healthcheck"]
@@ -188,6 +200,7 @@ services:
   xstockstrat-ingest:
     <<: *svc
     image: ${IMAGE_INGEST:?IMAGE_INGEST is required}
+    mem_limit: 192m
     environment:
       <<: [*common-env, *db-pooled]
       MTLS_CERT: ${INGEST_MTLS_CERT:?INGEST_MTLS_CERT is required}
@@ -199,6 +212,7 @@ services:
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-identity:50058"
       SERVICE_NAME: ingest
+      MALLOC_ARENA_MAX: "2"
     healthcheck:
       <<: *hc
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/50055"]
@@ -211,6 +225,7 @@ services:
   xstockstrat-trading:
     <<: *svc
     image: ${IMAGE_TRADING:?IMAGE_TRADING is required}
+    mem_limit: 96m
     environment:
       <<: [*common-env, *db-pooled]
       MTLS_CERT: ${TRADING_MTLS_CERT:?TRADING_MTLS_CERT is required}
@@ -224,6 +239,7 @@ services:
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       BROKER_ACCOUNTS_ENCRYPTION_KEY: ${BROKER_ACCOUNTS_ENCRYPTION_KEY:?BROKER_ACCOUNTS_ENCRYPTION_KEY is required}
       SERVICE_NAME: trading
+      GOMEMLIMIT: 72MiB
     healthcheck:
       <<: *hc
       test: ["CMD", "/app/service", "healthcheck"]
@@ -238,6 +254,7 @@ services:
   xstockstrat-analysis:
     <<: *svc
     image: ${IMAGE_ANALYSIS:?IMAGE_ANALYSIS is required}
+    mem_limit: 512m
     environment:
       <<: [*common-env, *db-pooled]
       MTLS_CERT: ${ANALYSIS_MTLS_CERT:?ANALYSIS_MTLS_CERT is required}
@@ -253,6 +270,7 @@ services:
       TRADING_ENDPOINT: xstockstrat-trading:50051
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054 xstockstrat-trading:50051"
       SERVICE_NAME: analysis
+      MALLOC_ARENA_MAX: "2"
     healthcheck:
       <<: *hc
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/50056"]
@@ -266,6 +284,7 @@ services:
   xstockstrat-ui:
     <<: *svc
     image: ${IMAGE_UI:?IMAGE_UI is required}
+    mem_limit: 320m
     environment:
       <<: [*common-env, *db-direct, *db-ca]
       MTLS_CERT: ${UI_MTLS_CERT:?UI_MTLS_CERT is required}
@@ -287,6 +306,7 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: ui
+      NODE_OPTIONS: --max-old-space-size=192
       DB_POOL_MAX: "1"
       # Next binds $HOSTNAME, which Docker sets to the container id; the 127.0.0.1 healthcheck needs 0.0.0.0.
       HOSTNAME: "0.0.0.0"
@@ -302,6 +322,9 @@ services:
   xstockstrat-agent:
     <<: *svc
     image: ${IMAGE_AGENT:?IMAGE_AGENT is required}
+    mem_limit: 256m
+    # Overrides the image CMD (supervisord, one program): restart: unless-stopped is the supervisor.
+    command: ["python", "-m", "app.main"]
     environment:
       <<: *common-env
       MTLS_CERT: ${AGENT_MTLS_CERT:?AGENT_MTLS_CERT is required}
@@ -317,6 +340,7 @@ services:
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"
       SERVICE_NAME: agent
+      MALLOC_ARENA_MAX: "2"
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "9000"
       GRPC_PORT: "50061"
