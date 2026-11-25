@@ -35,6 +35,8 @@ x-hc: &hc
   retries: 6
   start_period: 120s
 
+# mem_limit totals 3 GiB: a 4 GiB VM minus ~0.9 GiB of host daemons, with no swap.
+# Raise one cap only by lowering another; render-assert.jq enforces the total.
 services:
   db-migrator:
     image: ${IMAGE_DB_MIGRATOR:?IMAGE_DB_MIGRATOR is required}
@@ -178,9 +180,9 @@ services:
   xstockstrat-indicators:
     <<: *svc
     image: ${IMAGE_INDICATORS:?IMAGE_INDICATORS is required}
-    # Backstop for the sandbox memory watchdog; matches the 2 GB DigitalOcean basic-s instance.
-    mem_limit: 2g
-    memswap_limit: 2g
+    # Backstop for the sandbox watchdog. Below the sized worst case at max_concurrent 24 (operator-accepted).
+    mem_limit: 768m
+    memswap_limit: 768m
     environment:
       <<: [*common-env, *db-pooled]
       MTLS_CERT: ${INDICATORS_MTLS_CERT:?INDICATORS_MTLS_CERT is required}
@@ -190,6 +192,7 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: indicators
+      MALLOC_ARENA_MAX: "2"
     healthcheck:
       <<: *hc
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/50054"]
