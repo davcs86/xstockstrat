@@ -3,6 +3,13 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-25
+
+### Summary
+3 commits, 1 feature merges since last promotion.
+
+---
+
 ## 2026-11-23
 
 ### Summary
