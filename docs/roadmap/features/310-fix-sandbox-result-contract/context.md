@@ -650,3 +650,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 7
 
 - Operator decision for the Step 7 blocker (binding; option A, operator-approved 2026-11-26): **O-5 / C-14 answer — "surface unchanged, justified".** The new failure classes and the missing-`result` error already show through `FormulaRunResult.tsx:64` (exit-reason map), `:73` (exit label) and `:77` (`result.error`), and the UI never displayed memory, so no follow-up feature is filed. Step 7 runs as written (the `310 AC-3` characterisation test in `e2e/insights/formulas.spec.ts`). This closes the O-5 Open Thread and confirms Step 7 (impl-review warnings "Step 7: C-14" and "Step 7: test-only `**TDD**: N/A`").
+
+### Step 7 — test: `/insights` formula run shows the missing-result failure [done]
+- Added `310 AC-3: a run that never assigns result shows the failure and its error` to the `Formula fundamental inputs (feature 205)` describe, after AC-5. It reuses `addAuthCookie`, `stubCatalog` and `stubGetFundamentalsFormula`, and fulfils `ExecuteFormula` with `{success:false, error:"formula did not assign result", exitReason:"SANDBOX_EXIT_REASON_RUNTIME_ERROR", parameterErrors:[]}`. It clicks `Run` and asserts that `Failed`, `Runtime error` and `formula did not assign result` are visible (exact match). It adds no memory display, and no fixture or `INVENTORY.md` row (C-12 one-off error payload).
+- Discovery re-verified at `origin/feature/fix-sandbox-result-contract@778ee6b1`:
+  - `FormulaRunResult.tsx:64`, `:70-72`, `:73`, `:77`;
+  - `FormulaWorkspace.tsx:545` (`Run`) and `:564`;
+  - `formulaReference.ts:193`;
+  - `indicators.proto:106` `SANDBOX_EXIT_REASON_RUNTIME_ERROR = 4`;
+  - spec anchors `:1-3`, `:152`, `:165`, `:223-246`;
+  - no `memoryUsedBytes`/`memory_used_bytes` under `src` or `e2e`.
+- TDD (AC-3): red N/A, no behaviour change; a characterisation test was added (the step's `**TDD**: N/A`). AC-3 green: the new test passed.
+- GREEN (`.sdd-logs/v-3.log`, exit=0, run with `CI=true`):
+  - `✓  12 [chromium] › e2e/insights/formulas.spec.ts:248:7 › Formula fundamental inputs (feature 205) › 310 AC-3: a run that never assigns result shows the failure and its error (975ms)`;
+  - `13 passed (1.7m)`;
+  - `next lint` reported only pre-existing warnings in other files;
+  - the grep matched `2:import { addAuthCookie } from '../helpers/auth';` and `3:import { FORMULAS, FORMULA_FUNDAMENTALS, FUNDAMENTALS_AAPL } from '../fixtures';`.
+  - No coverage threshold applies.
+- The two host `pnpm dev` runs (`v-1.log`, `v-2.log`) failed on the warmup setup timeout (`12 did not run`). `exit=0` hid this, because the trailing grep sets the status.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/e2e/insights/formulas.spec.ts`
+- Deviations: a CI-equivalent `CI=true` fallback for the host dev-server warmup timeout; the run script's closing `)` on its own line (full detail in Deviation Log)

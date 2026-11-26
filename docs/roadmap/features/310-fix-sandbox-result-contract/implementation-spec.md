@@ -705,7 +705,7 @@ RED evidence on the pre-Step-5 tree: the description does not contain `memory_us
 
 ### Step 7 — test: `/insights` formula run shows the missing-result failure
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/formulas.spec.ts` — modify
@@ -940,3 +940,15 @@ _Populated by /sdd-execute as implementation proceeds._
   temporarily from `7efe5d7a~1` (the pre-Step-5 docstring) and put back before GREEN. In the run
   script the Verification's closing `)` is on its own line, because the block's trailing
   `# 1 passed` comment would otherwise swallow it. **Disposition**: in-scope; no spec text changed.
+- **2026-11-26 (Step 7)** — The host `pnpm dev` harness could not run the spec. In two verbatim runs
+  (`.sdd-logs/v-1.log`, `v-2.log`) the `[setup] pre-warm SSR routes` project hit `Test timeout of
+  10000ms exceeded` on the cold dev compile, and `12 did not run`. Both still printed `exit=0`,
+  because the block's trailing grep sets the status. The Docker runner (`scripts/run-e2e.py`) was
+  not used: the repo has no `.dockerignore`, so `COPY services/xstockstrat-ui/` would copy this
+  worktree's linked `node_modules` symlink over the image's installed tree. GREEN instead ran the
+  same block verbatim with `CI=true` (`.sdd-logs/v-3.log`). That is the mode CI's `frontend-e2e`
+  image sets (`Dockerfile.e2e` `ENV CI=true`): `pnpm build && pnpm start` with CI timeouts. In the
+  run script the Verification's closing `)` is on its own line, because the block's trailing
+  `# expect …` comment would otherwise swallow it. The assertions use `{ exact: true }` so `Failed`
+  cannot match `Failed to load fundamentals`. TDD: red N/A, a characterisation test of an unchanged
+  surface (the step's own `**TDD**` line). **Disposition**: CI-equivalent fallback.
