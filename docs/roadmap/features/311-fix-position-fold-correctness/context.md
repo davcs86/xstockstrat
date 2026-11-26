@@ -3036,3 +3036,20 @@ Orchestrator note (not an operator quote): the second ruling changes scope. 311 
 - **Still open, needs an operator decision:** none. One reading to confirm if wanted: A-15 takes "trading's new fold / duplicate-guard SQL" to mean the `trading.bracket_legs` family (trading has no fold; the fold, pre-check and applied-row insert are portfolio SQL already on a real database in Step 11). If the operator meant more, say what.
 - **Before `/sdd-execute`:** `/sdd-review fix-position-fold-correctness impl-spec` (independent, with subagents) on the 29-step spec; then `/sdd-distill fix-position-fold-correctness` (context.md is far over 65536 bytes).
 - **Carried unchanged:** migration numbers re-check after BRANCH SYNC; Step 23 (was 21) IBKR status lower-casing only in the leg observer; A-10 analysis residual; peer overlaps 312, 315, 317, 321, 326 and now 318, 324 on `ci.yml`; the O-61 cutover confirmations (the stop methods were ruled "as designed" on 2026-11-21 and Step 28's runbook uses them).
+
+## Session 2026-11-26 — independent impl-spec review + operator ruling on A-15, recorded by the orchestrator (verbatim)
+
+Question (operator): "Your ruling was 'add a real-Postgres trading job so trading's new fold / duplicate-guard SQL is tested against a real database'. Trading has no position fold... The spec reads your ruling as: test trading's new trading.bracket_legs SQL (ON CONFLICT duplicate guards, the leg-adoption inserts, and the net-filled-quantity unions) at the repository level. Is that what you meant?"
+
+Operator's answer (option selected): "Yes, repository-level bracket_legs SQL (Recommended)".
+
+Effect: A-15 is operator-confirmed and is no longer an open assumption.
+
+Independent `/sdd-review impl-spec` of the 29-step spec: PASS WITH WARNINGS, no blockers. Changes made to `implementation-spec.md` (nothing else changed):
+- Step 21 atomicity case: the failure is now injected through `BracketLegParent.Symbol` containing a NUL byte, a field only the INSERT sees. A NUL in a stop or take-profit id would fail at the preceding UPDATE (`bracket_repo.go:94-95`) and never exercise the rollback. The case asserts a server `PgError` (22021), the bracket row's pre-call status and leg ids, and no `bracket_legs` rows; a fallback keeps the same assertions.
+- Step 21 names its test functions (`TestBracketLegsDB_*`, `TestTradingRepoLegsDB_*`) so the `-run 'BracketLegsDB|TradingRepoLegsDB'` filter in Steps 21 and 22 matches. Step 18 now names the exported status identifiers (`LegStatusOpen`, `LegStatusFilled`, `LegStatusCanceled`, `LegStatusExpired`, `LegStatusRejected`, `LegStatusUnknown`, `LegStatusBaselineRetired`, `LegStatusNotOpenAtAdoption`); Step 21 refers to them.
+- Step 21 skip check: an unpiped `go test` run (exit code) plus an unanchored `grep -c -- '--- SKIP'` on its output, so indented subtest skips count.
+- `bracket_repo.go` cites aligned to the file: Step 18 `:41-43`, `:46`, `:91-100`; Step 21 `:91-100`.
+- Low-severity notes: Step 29 -> Steps 21 and 22 dependency line; the take-profit NULL assertion uses a raw SELECT (`GetBracketByOrderID` COALESCEs to `''`) and the evidence and seed (d) note that `CreateBracket` stores `''` for an empty id; `seedParentOrder` takes a `brokerOrderID` argument; the cleanup remark now states `t.Cleanup` runs last-registered first and gives the registration order; Step 21 item 4 deletes the false parenthetical outright with no replacement comment.
+- A-15 text now records the operator confirmation and drops "if the operator meant more, it is an open item".
+- Open Threads: the A-15 item in the 2026-11-26 re-spec entry is closed by this ruling. Nothing else changed in status.
