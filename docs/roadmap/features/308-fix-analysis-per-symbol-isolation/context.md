@@ -574,3 +574,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-analysis/app/repositories/opportunities.py`
 - Deviations: RED came from a temporary untracked probe test (Deviation Log).
+
+### Step 8 — test: marker is structural, floor-exempt, and the fake repo mirrors it [done]
+- `tests/test_opportunities_repo.py` gains `test_read_floor_exempts_evaluation_failed`, whose needle `f"o.provenance ? '{EVALUATION_FAILED_PROVENANCE}'"` pins the SQL literal to the constant, and `test_evaluation_failed_is_a_structural_marker`, which checks list membership and both `_primary_source` cases. `_FakeOppRepo.read`'s floor mirror (`tests/test_analysis_servicer.py`) adds `and EVALUATION_FAILED_PROVENANCE not in _prov`, imported from `app.repositories.opportunities`. No domain literal was added (C-13).
+- TDD red, with `opportunities.py` checked out at the pre-Step-7 commit `c508326e` and restored before GREEN: `ImportError: cannot import name 'EVALUATION_FAILED_PROVENANCE' from 'app.repositories.opportunities'` in both files (`36 errors during collection` in the full run). Green: `452 passed` for the two files, full suite `1778 passed`, `Required test coverage of 40% reached. Total coverage: 91.65%`, ruff "All checks passed!" and "143 files already formatted", exit=0. In both runs `exit=` reflects only the last line of the block (ruff), so the pytest results were read from the log.
+- Not changed: `_FakeOppRepo.available_sources` has its own hard-coded skip list (`("watchlist", "position", "denied", "formula_unreadable")`). The step does not name it, and the list already lacks `fundamentals_unavailable`. Raise it at the checkpoint if Steps 12/14 need the facet fake to skip the marker (ledger `fails.md`, 2026-11-10 fake-enumeration rule).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/tests/test_opportunities_repo.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
+- Deviations: none

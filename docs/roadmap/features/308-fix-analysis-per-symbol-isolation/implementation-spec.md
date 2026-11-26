@@ -427,7 +427,7 @@ ruff check . && ruff format --check .
 
 ### Step 8 — test: marker is structural, floor-exempt, and the fake repo mirrors it
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_opportunities_repo.py` — modify

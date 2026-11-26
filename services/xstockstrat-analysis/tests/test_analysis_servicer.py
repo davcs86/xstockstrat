@@ -36,6 +36,7 @@ from app.handlers.servicer import (
     _InsufficientData,
     _row_to_opportunity,
 )
+from app.repositories.opportunities import EVALUATION_FAILED_PROVENANCE
 from app.services import warmup as warmup_sizing
 from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
 from tests.conftest import OWNER_HEADERS, aio_rpc_error, ctx_with, snapshot_watcher
@@ -4548,6 +4549,7 @@ class _FakeOppRepo:
                 and "denied" not in _prov
                 and "unavailable" not in _prov
                 and "formula_unreadable" not in _prov
+                and EVALUATION_FAILED_PROVENANCE not in _prov
             ):
                 continue
             act = self.actions.get((user_id, r["opportunity_key"]))

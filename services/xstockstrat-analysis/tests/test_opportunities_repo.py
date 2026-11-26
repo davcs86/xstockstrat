@@ -16,6 +16,7 @@ from app.handlers.servicer import _OpportunityQueueRead, _primary_source, _row_t
 from app.repositories.opportunities import (
     _PROVENANCE_STRUCTURAL_MARKERS,
     _SORT_ORDER_BY,
+    EVALUATION_FAILED_PROVENANCE,
     OpportunitiesRepository,
 )
 from tests.conftest import snapshot_watcher
@@ -575,6 +576,26 @@ def test_formula_unreadable_is_a_structural_marker():
     assert "formula_unreadable" in _PROVENANCE_STRUCTURAL_MARKERS
     assert _primary_source(["formula_unreadable", "uw"]) == "uw"
     assert _primary_source(["watchlist", "formula_unreadable"]) == ""
+
+
+# ── feature 308 — evaluation-failed marker: floor exemption, structural ──────────────────────────
+
+
+async def test_read_floor_exempts_evaluation_failed():
+    """The evaluation-failed row (conviction 0) survives a high conviction floor."""
+    pool = _fetch_pool()
+    await OpportunitiesRepository(pool).read("u1", 0.9, 0.3, include_expired=False)
+    sql, binds = pool.fetch.await_args.args[0], pool.fetch.await_args.args[1:]
+    assert binds[1] == 0.9
+    # The needle is built from the constant, so the SQL literal is pinned to it.
+    assert f"o.provenance ? '{EVALUATION_FAILED_PROVENANCE}'" in sql
+
+
+def test_evaluation_failed_is_a_structural_marker():
+    """The marker is never the row's source, facet value or ``available_sources`` chip."""
+    assert EVALUATION_FAILED_PROVENANCE in _PROVENANCE_STRUCTURAL_MARKERS
+    assert _primary_source([EVALUATION_FAILED_PROVENANCE, "uw"]) == "uw"
+    assert _primary_source(["watchlist", EVALUATION_FAILED_PROVENANCE]) == ""
 
 
 def _heal_row(**extra):
