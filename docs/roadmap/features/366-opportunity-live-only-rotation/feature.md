@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-11-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings), round 2 after round-1 FAIL |
+| 2026-11-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -19,6 +20,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections
+- [Design](design.md) — approved architecture, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec opportunity-live-only-rotation`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -44,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design opportunity-live-only-rotation` — full design recommended (operator choice; schema migration + new config key + overlap with in-flight 308/330)
+`/sdd-spec opportunity-live-only-rotation` — generate implementation spec from the approved design
