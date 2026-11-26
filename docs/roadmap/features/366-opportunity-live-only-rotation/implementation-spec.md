@@ -149,7 +149,7 @@ The design made O-7 the `/sdd-spec` gate. It was checked on tree `origin/feature
 
 ### Step 1 — migration: `live_only_cursor` column on `analysis.opportunity_compute_state`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/030_opportunity_compute_state_live_only_cursor.up.sql` — create

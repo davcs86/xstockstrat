@@ -1098,3 +1098,9 @@
 ```sdd-batch-setup
 {"mainDev":"6dead3812b5c0d7e471413e050013edd8779b576","date":"2026-11-26"}
 ```
+
+### Step 1 — migration: `live_only_cursor` column on `analysis.opportunity_compute_state` [done]
+- Added analysis `030`: up `ALTER TABLE analysis.opportunity_compute_state ADD COLUMN IF NOT EXISTS live_only_cursor TEXT NULL;` (nullable, no default/backfill/index), down `DROP COLUMN IF EXISTS live_only_cursor;`. Discovery 2026-11-26: last migration `029_seed_fundamentals_blend_strategy`, no `03x` on any remote ref, base DDL at `023_opportunity_compute_state.up.sql:8-13`, no prior `live_only_cursor` symbol.
+- TDD: N/A (migration). Verified offline (no DB started): both `030_*` files listed, exit=0 (`.sdd-logs/v-1.log`); the `.up` ADD COLUMN is reversed by the `.down` DROP COLUMN (by inspection). Config-key wiring gate not applicable (no `config.config_values` insert, no key touched).
+- Files modified: `services/xstockstrat-analysis/migrations/030_opportunity_compute_state_live_only_cursor.up.sql`, `services/xstockstrat-analysis/migrations/030_opportunity_compute_state_live_only_cursor.down.sql`
+- Deviations: none
