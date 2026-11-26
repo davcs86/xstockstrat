@@ -542,3 +542,113 @@ Each thread names its target step.
 - Files modified: `services/xstockstrat-agent/tests/test_client.py`, `services/xstockstrat-agent/tests/test_tools_endpoint.py`, `plugins/strat-lab/.claude-plugin/plugin.json`, `plugins/strat-lab/.cursor-plugin/plugin.json`
 - Deviations: RED against the pre-Step-17/18 surfaces with a backticked SKILL.md token; plugin version bump (operator-sanctioned) — both in the Deviation Log.
 - Status → `code-completed` (all 19 steps done). No insights.md entry: nothing generalizes beyond the existing doc-parity pattern.
+
+## Session 2026-11-26 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-gapsonly-backfill-is (feature 364)
+
+Source: docs/roadmap/features/364-fix-gapsonly-backfill-is/acceptance.feature (6 scenarios, AC-1..AC-6). I read the working-tree copy, not origin/feature/fix-gapsonly-backfill-is. The AC-4..AC-6 additions from /sdd-spec are present in it. The caller should confirm the branch copy is identical.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-ingest/acceptance/fix-gapsonly-backfill-is.feature | CREATE | NEW | GAPS_ONLY logic lives in ingest (servicer.py, backfill_chunks.py). |
+| AC-2 | services/xstockstrat-ingest/acceptance/fix-gapsonly-backfill-is.feature | CREATE | NEW | Job status and result are ingest-owned. |
+| AC-3 | services/xstockstrat-ingest/acceptance/fix-gapsonly-backfill-is.feature | CREATE | NEW | The Then asserts job bars_processed, which ingest owns. |
+| AC-4 | services/xstockstrat-ingest/acceptance/fix-gapsonly-backfill-is.feature | CREATE | NEW | Head-gap carve-out (K=730d). |
+| AC-5 | services/xstockstrat-ui/acceptance/fix-gapsonly-backfill-is.feature | CREATE | NEW | The Then asserts Backtests card text. Its last clause partly overlaps feature 343 AC-13 (see Notes). |
+| AC-6 | services/xstockstrat-agent/acceptance/fix-gapsonly-backfill-is.feature | CREATE | NEW | The Then asserts the get_backfill_status tool result, which the agent owns. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-gapsonly-backfill-is.feature (CREATE) ---
+# Promoted from docs/roadmap/features/364-fix-gapsonly-backfill-is/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-364` tag.
+# Durable business rules xstockstrat-ingest already guarantees — a rule enters only by promotion from
+# a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: fix-gapsonly-backfill-is (ingest)
+  GAPS_ONLY backfill detects interior holes and never reports COMPLETED while sessions remain missing.
+  "Trading session" = a US-equity regular trading day (weekday, not a US exchange holiday).
+
+  @AC-1 @FR-1 @regression @feature-364
+  Scenario: A GAPS_ONLY backfill fills an interior hole in daily bars
+    Given SCHW has daily bars from 2025-11-20 to 2026-03-31 and from 2026-09-28 to 2026-11-25
+    And SCHW has no daily bars from 2026-04-01 to 2026-09-25
+    When a GAPS_ONLY daily-bar backfill runs for SCHW from 2025-11-20 to 2026-11-25
+    Then the job ends COMPLETED
+    And SCHW has a daily bar for every trading session from 2025-11-20 to 2026-11-25
+
+  @AC-2 @FR-2 @regression @feature-364
+  Scenario: A GAPS_ONLY backfill that cannot fill an interior hole does not report COMPLETED
+    Given IDXX has daily bars from 2025-11-20 to 2026-03-31 and from 2026-09-28 to 2026-11-25
+    And IDXX has no daily bars from 2026-04-01 to 2026-09-25
+    And the vendor returns no bars for IDXX from 2026-04-01 to 2026-09-25
+    When a GAPS_ONLY daily-bar backfill runs for IDXX from 2025-11-20 to 2026-11-25
+    Then get_backfill_status does not report the job as COMPLETED with no missing sessions
+    And the job's result identifies 2026-04-01 to 2026-09-25 as still missing for IDXX
+
+  @AC-3 @FR-3 @feature-364
+  Scenario: A GAPS_ONLY backfill over a fully covered range fetches nothing
+    Given RLI has a daily bar for every trading session from 2025-11-20 to 2026-11-25
+    When a GAPS_ONLY daily-bar backfill runs for RLI from 2025-11-20 to 2026-11-25
+    Then the job ends COMPLETED
+    And get_backfill_status reports bars_processed 0 for the job
+
+  @AC-4 @FR-2 @feature-364
+  Scenario: A GAPS_ONLY backfill whose only unfilled range is a head gap with no earlier bars completes
+    Given NEWCO has daily bars from 2026-06-01 to 2026-11-25 and no daily bar in the 730 days before 2026-06-01
+    And the vendor returns no bars for NEWCO before 2026-06-01
+    When a GAPS_ONLY daily-bar backfill runs for NEWCO from 2025-11-20 to 2026-11-25
+    Then the job ends COMPLETED
+    And get_backfill_status lists no "incomplete" outcome for NEWCO
+
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-gapsonly-backfill-is.feature (CREATE) ---
+# Promoted from docs/roadmap/features/364-fix-gapsonly-backfill-is/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-364` tag.
+# Durable business rules xstockstrat-ui already guarantees — a rule enters only by promotion from
+# a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: fix-gapsonly-backfill-is (ui)
+  How the Backtests card presents a GAPS_ONLY backfill that finished with an unfillable interior hole.
+
+  @AC-5 @FR-2 @feature-364
+  Scenario: The Backtests card reports an unfillable interior hole as vendor data missing, not as a retryable partial
+    Given the backfill for "LYFT" triggered from the Backtests card ended PARTIAL with every chunk completed
+    And its only per-symbol result is "LYFT" with outcome "incomplete"
+    When the Backtests card is shown
+    Then it shows "Backfill finished: vendor has no bars for some sessions of LYFT"
+    And it offers "Re-run backtest"
+    And when "Re-run backtest" returns insufficient data with the same gap, the card shows "No vendor data for" that gap and no "Backfill missing data" action
+
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-gapsonly-backfill-is.feature (CREATE) ---
+# Promoted from docs/roadmap/features/364-fix-gapsonly-backfill-is/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-364` tag.
+# Durable business rules xstockstrat-agent already guarantees — a rule enters only by promotion from
+# a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: fix-gapsonly-backfill-is (agent)
+  What the get_backfill_status MCP tool reports for a GAPS_ONLY backfill with still-missing sessions.
+
+  @AC-6 @FR-2 @feature-364
+  Scenario: get_backfill_status reports the still-missing sessions as an incomplete outcome
+    Given a GAPS_ONLY daily-bar backfill for IDXX ended PARTIAL because 2026-04-01 to 2026-09-25 is still missing
+    When get_backfill_status is called for the job
+    Then the result lists "IDXX" with outcome "incomplete" and a reason containing "2026-04-01..2026-09-25"
+    And "IDXX" is not in failed_symbols
+
+### Notes / ambiguities / conflicts
+- Dedup: grep of every services/*/acceptance/*.feature for `feature-364` and `GAPS_ONLY` found no existing matches, so there are no DUP or CONFLICT cases. All three target files are new. Ingest, ui and agent already have an `acceptance/` directory, so none needs to be created.
+- Attribution:
+  - AC-1 to AC-4 go to ingest, where the GAPS_ONLY job logic lives: services/xstockstrat-ingest/app/handlers/servicer.py and app/repositories/backfill_chunks.py.
+  - AC-3 and AC-4 mention get_backfill_status in the Then, but the asserted subject is the ingest job outcome and bars_processed. I kept both in ingest and did not duplicate them in agent.
+  - AC-5 goes to ui because the Then asserts card text.
+  - AC-6 goes to agent because the Then asserts the MCP tool's result shape (outcome "incomplete", failed_symbols). This extends the symbol_results contract from feature 352 (services/xstockstrat-agent/CLAUDE.md).
+  - Marketdata is named in the feature's Reviewers table but owns no scenario's observable subject.
+- Possible OVERLAP, flagged for human consolidation: the last clause of AC-5 ("No vendor data for <gap>", no "Backfill missing data" action) restates part of feature 343 AC-13 (services/xstockstrat-ui/acceptance/backtest-inline-backfill.feature, lines 90-95). AC-5's first two clauses ("Backfill finished: vendor has no bars...", "Re-run backtest") are not covered there. I judged the scenario NEW and promoted it whole, since splitting would break the verbatim rule. I did not touch 343 AC-13.
+- AC-4 and AC-5 are tagged @FR-2 only, as in the source. No @regression tag is added where the source lacks one.
+- Tag order: I kept the source tags and appended @feature-364, per the provenance rule. AC numbers are unchanged.
+
+### Coverage check
+- Source scenarios: 6. Planned (NEW+DUP+OVERLAP): 6 (NEW 6, DUP 0, OVERLAP 0, CONFLICT 0). Ingest gets 4 (AC-1..4), ui gets 1 (AC-5) and agent gets 1 (AC-6), which totals 6. No scenario was skipped.
+```
