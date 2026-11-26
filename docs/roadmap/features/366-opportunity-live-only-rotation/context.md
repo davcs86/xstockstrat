@@ -996,3 +996,33 @@
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-26 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-analysis, plus the xstockstrat-config seed and bounds; key reuse patterns: the live_loop identity-resume bisect cursor, `live_loop.py:459-510`, and the single `_replace_and_stamp_compute_state` write helper, `servicer.py:4922`).
+- Phase 1 Grilling: 5 rounds (full). The adversary returned SOUND in round 5 with no Floor breaches. The operator approved the round-5 synthesis at the gate ('Approve', 2026-11-26). Termination: approved. debate.md State is now approved. No reopen petitions were filed, so none needed a 'user declined' verdict.
+- Chosen approach: each compute evaluates the next chunk of `opportunity.max_live_only_symbols_per_compute` symbols from `sorted(competitive_pool)`, starting at a persisted `live_only_cursor` (bisect_right, wrap). Rows from earlier chunks are carried forward under predicates (a)(b)(c)(e)(f). The cursor commits in the same transaction as `replace_for_user`. Fresh live-only rows are stamped `now + cycle_days × 24h`. The read side uses one `include_expired=True` read split into branches (i)-(v).
+- Rejected: R-1..R-16, all locked and listed in design.md § Rejected Alternatives. The headline rejections are R-2 (union-based carry eligibility), R-4 and R-8 (has_expired variants), R-14 (kicking on partial expiry) and R-15 (a second resolve_universe pass).
+- Constitution rules touched: C-16, C-05, C-08, C-11, C-18, P-02, P-03, P-06, F-01, F-04, F-06, F-07, ANALYSIS-14. Floor breaches: none.
+- Business rules: CHANGE 131@AC-8 (operator-signed, 'Rotate across passes'). EXTEND 366@AC-12 (the `>=` boundary), the live-only `valid_until` override (O-5), and the 244 stored-zero row for the new key. All other affected @AC are PRESERVE (design.md § Business Rules Touched).
+- Ledger: no line added. The reusable traps found here (for example R-14) are feature-specific until a second occurrence.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- Round-5 synthesis, D-1..D-16 (debate.md), is the approved design. The binding operator rulings are 'Rotate across passes', 'Live-only cap only', 'use postgres', 'Bound the cycle', 'Keep own age, max age', O-5 'Accept both', O-6 'Accept both', O-8/O-9 (round 3), O-12 'Every recompute', round 4 'Another round', and round 5 'Accept ~24h gap', 'Keep best-effort' and 'Approve'.
+- Rebase order: 365, then 308 and 330, then 366.
+
+### Open Threads
+
+- [ ] O-7: verify the carried-row re-INSERT against the 308 diff (R-4: never drop held, watchlist or muted rows on a failure path), the 330 diff and the merged 365 diff. Target: the `/sdd-spec` gate, before any step is written.
+- [ ] O-24: list `analysis.opportunity.read_reissue` and the exact D-5 shortfall log text in `services/xstockstrat-analysis/CLAUDE.md` § Observability. Target: the `/sdd-spec` docs step.
+- [ ] O-25: record as accepted the residual where a failed empty-universe stamp makes each poll recompute and advance the cursor (operator default 'Keep best-effort'). Target: `/sdd-spec` persist step.
+- [ ] Branch (iv) runs two reads on most polls. `read_reissue` measures this but does not bound it. Target: the read-side step.
+- [ ] Expired live-only rows are invisible for about 24 h until their next chunk compute (accepted residual). Target: the docs step (`opportunities.md`).
+- [ ] Predicate (c)'s deny equivalence depends on (a) and (b) keeping carried symbols non-held. Target: the compute step, with the held+denied RED test.
+- [ ] Freshness uses the app clock, not DB `now()` (the same trade-off as `servicer.py:4799`). Target: the compute step, documented only.
+- [ ] D-3 fails closed: a carry-read error also blocks that compute's held and watchlist refresh. Target: the compute step (356 @AC-5/@AC-10 tests).
+- [ ] `best_direction_by_symbol` is coupled to step 3's iteration order and strict `>`. Target: the compute step (parity test).
+- [ ] After `cycle_max_days` is lowered, rows stamped under the old cycle stay visible on fresh reads until the next compute. Target: the docs step plus the lowered-cycle RED test.
+- [ ] Re-derive the migration numbers (analysis `030`, config `056`) from the merged tree. Target: `/sdd-spec`.
