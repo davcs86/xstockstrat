@@ -25,6 +25,7 @@ from tests.conftest import FakeConn, FakePool, bc_routed
 from tests.test_analysis_servicer import (
     _HEADERS,
     _ctx,
+    _drain_opportunity_recompute,
     _FakeOppRepo,
     _StubWatcher,
     make_servicer,
@@ -198,6 +199,107 @@ async def test_g3_fresh_queue_with_stale_unavailable_row_kicks_retry(read_path):
     resp, _ = await _list(svc)
     assert sorted(o.symbol for o in resp.opportunities) == ["AAPL", "MSFT"]
     assert kicks["full"] == [] and kicks["retry"] == [({"AAPL"}, True)]
+
+
+# ---------------------------------------------------------------- feature 365 (filtered-empty)
+
+
+async def test_ac1_filtered_empty_over_fresh_queue_does_not_kick(read_path):
+    svc = _svc(rows=[_row("AAPL"), _row("MSFT")])
+    kicks = _record_kicks(svc)
+    resp, _ = await _list(svc, min_conviction=1.01)
+    assert list(resp.opportunities) == []
+    assert resp.computing is False and resp.compute_failed is False
+    assert kicks["full"] == [] and kicks["retry"] == []
+
+
+async def test_ac2_symbol_filter_absent_symbol_over_fresh_queue_does_not_kick(read_path):
+    svc = _svc(rows=[_row("AAPL")])
+    kicks = _record_kicks(svc)
+    before = svc._opportunities_repo.rows["u1"][0]["valid_until"]
+    orig = svc._opportunities_repo.read
+
+    async def _symbol_scoped(*a, **kw):
+        return [r for r in await orig(*a, **kw) if r["symbol"] == kw["symbol"]]
+
+    svc._opportunities_repo.read = AsyncMock(side_effect=_symbol_scoped)
+    resp, _ = await _list(svc, symbol="SCKT")
+    assert list(resp.opportunities) == []
+    assert resp.computing is False
+    assert kicks["full"] == []
+    assert svc._opportunities_repo.read.await_args_list[0].kwargs["symbol"] == "SCKT"
+    assert svc._opportunities_repo.rows["u1"][0]["valid_until"] == before
+
+
+async def test_ac3_cold_filtered_read_still_kicks_and_reports_computing(read_path):
+    svc = _svc()
+    kicks = _record_kicks(svc)
+    svc._opportunity_compute_failures["u1"] = _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS - 1
+    resp, _ = await _list(svc, symbol="SCKT")
+    assert resp.computing is True and resp.compute_failed is False
+    assert kicks["full"] == [True]
+
+
+async def test_ac4_filtered_read_over_all_stale_queue_still_kicks(read_path):
+    svc = _svc(rows=[_row("AAPL", fresh=False)])
+    kicks = _record_kicks(svc)
+    resp, _ = await _list(svc, min_conviction=1.01)
+    assert kicks["full"] == [True]
+    assert resp.computing is False
+
+
+async def test_fresh_rows_all_dismissed_or_snoozed_do_not_kick(read_path):
+    svc = _svc(rows=[_row("AAPL"), _row("MSFT")])
+    kicks = _record_kicks(svc)
+    svc._opportunities_repo.actions[("u1", "AAPL:sx")] = {"action": 2}
+    svc._opportunities_repo.actions[("u1", "MSFT:sx")] = {
+        "action": 1,
+        "snooze_until": datetime.now(UTC) + timedelta(hours=1),
+    }
+    resp, _ = await _list(svc)
+    assert list(resp.opportunities) == []
+    assert resp.computing is False
+    assert kicks["full"] == []
+
+
+async def test_has_fresh_timeout_is_unavailable_without_kick():
+    svc = _svc(state=_State())
+    kicks = _record_kicks(svc)
+    _pooled(svc, FakeConn(raise_on={"fetchval": TimeoutError()}))
+    resp, ctx = await _list(svc)
+    assert resp is None and _abort_code(ctx) == grpc.StatusCode.UNAVAILABLE
+    assert kicks["full"] == []
+
+
+async def test_ac1_filtered_empty_over_fresh_queue_leaves_valid_until_unchanged():
+    svc = _svc(rows=[_row("AAPL")])
+    before = svc._opportunities_repo.rows["u1"][0]["valid_until"]
+    svc._compute_opportunities = AsyncMock(return_value=([_row("AAPL")], None))
+    await _list(svc, min_conviction=1.01)
+    await _drain_opportunity_recompute(svc, "u1")
+    assert svc._compute_opportunities.await_count == 0
+    assert svc._opportunities_repo.rows["u1"][0]["valid_until"] == before
+
+
+async def test_ac3_cold_read_recompute_then_follow_up_read_not_computing():
+    svc = _svc()
+    svc._compute_opportunities = AsyncMock(return_value=([_row("AAPL")], None))
+    first, _ = await _list(svc, symbol="SCKT")
+    assert first.computing is True
+    await _drain_opportunity_recompute(svc, "u1")
+    follow_up, _ = await _list(svc, symbol="SCKT")
+    assert follow_up.computing is False
+    assert svc._compute_opportunities.await_count == 1
+
+
+async def test_ac4_all_stale_filtered_read_restamps_valid_until():
+    start = datetime.now(UTC)
+    svc = _svc(rows=[_row("AAPL", fresh=False)])
+    svc._compute_opportunities = AsyncMock(return_value=([_row("AAPL")], None))
+    await _list(svc, min_conviction=1.01)
+    await _drain_opportunity_recompute(svc, "u1")
+    assert svc._compute_opportunities.await_count == 1
+    assert all(r["valid_until"] > start for r in svc._opportunities_repo.rows["u1"])
 
 
 # ---------------------------------------------------------------- G5 (handler)

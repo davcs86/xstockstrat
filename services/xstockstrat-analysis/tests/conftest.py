@@ -295,7 +295,7 @@ class FakePool:
         con.log.append("release")
 
 
-_BC_METHOD_FOR = {"count_for_user": "fetchval", "get": "fetchrow"}
+_BC_METHOD_FOR = {"count_for_user": "fetchval", "get": "fetchrow", "has_fresh": "fetchval"}
 
 
 class _BcRoutedRepo:

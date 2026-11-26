@@ -2057,7 +2057,7 @@ func (s *TradingService) clearReconciliationCandidate(key string) {
 // emitReconciliationFinding records a real (past-grace-window) mismatch: a ledger event, a
 // CRITICAL alert, and the ordinary per-account halt. No-ops once the account is already halted
 // (any source), so re-observing the same mismatch can't re-fire the event/alert/log.
-func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountID, mismatchClass, orderID string, expected, brokerReported float64) {
+func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountID, ownerUserID, mismatchClass, orderID string, expected, brokerReported float64) {
 	if s.isAccountHalted(accountID) {
 		return
 	}
@@ -2068,13 +2068,17 @@ func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountI
 		"broker_reported": brokerReported,
 		"tick_at":         time.Now().UnixMilli(),
 	})
-	s.haltAccount(ctx, accountID, fmt.Sprintf("%s: %s", mismatchClass, orderID), int32(tradingv1.HaltSource_HALT_SOURCE_RECONCILIATION))
+	s.haltAccount(ctx, accountID, ownerUserID, fmt.Sprintf("%s: %s", mismatchClass, orderID), int32(tradingv1.HaltSource_HALT_SOURCE_RECONCILIATION))
+	if ownerUserID == "" {
+		slog.WarnContext(ctx, "alert owner unresolved", "account_id", accountID, "alert_kind", string(alertKindReconciliation))
+	}
 	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
 		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL,
 		Category:      "reconciliation",
 		Title:         fmt.Sprintf("Broker state mismatch: %s", mismatchClass),
 		Body:          fmt.Sprintf("Account %s: %s (%s) — expected %.4f, broker reported %.4f", accountID, mismatchClass, orderID, expected, brokerReported),
 		SourceService: "xstockstrat-trading",
+		TargetUserId:  ownerUserID,
 	})
 	s.recordAlertEmit(ctx, alertKindReconciliation, err)
 	if err != nil {
@@ -2219,7 +2223,7 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 				}
 				key := accountID + ":order:" + o.OrderId
 				if s.recordReconciliationCandidate(key, graceTicks) {
-					s.emitReconciliationFinding(ctx, accountID, mismatchClassMissingBrokerOrder, o.OrderId, o.Qty-o.FilledQty, 0)
+					s.emitReconciliationFinding(ctx, accountID, entry.userID, mismatchClassMissingBrokerOrder, o.OrderId, o.Qty-o.FilledQty, 0)
 				}
 				continue
 			}
@@ -2229,7 +2233,7 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 			key := accountID + ":order:" + o.OrderId
 			if bo.FilledQty != o.FilledQty {
 				if s.recordReconciliationCandidate(key, graceTicks) {
-					s.emitReconciliationFinding(ctx, accountID, mismatchClassQuantityDiscrepancy, o.OrderId, o.FilledQty, bo.FilledQty)
+					s.emitReconciliationFinding(ctx, accountID, entry.userID, mismatchClassQuantityDiscrepancy, o.OrderId, o.FilledQty, bo.FilledQty)
 				}
 			} else {
 				s.clearReconciliationCandidate(key)
@@ -2263,7 +2267,7 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 					// An order the broker knows about that the platform has no record of at all —
 					// detected regardless of fill state (AC-1), the primary reason ListOrders exists.
 					if s.recordReconciliationCandidate(key, graceTicks) {
-						s.emitReconciliationFinding(ctx, accountID, mismatchClassUnknownBrokerOrder, boID, 0, brokerByID[boID].FilledQty)
+						s.emitReconciliationFinding(ctx, accountID, entry.userID, mismatchClassUnknownBrokerOrder, boID, 0, brokerByID[boID].FilledQty)
 					}
 				}
 			}
@@ -2331,7 +2335,7 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 					continue
 				}
 				if s.recordReconciliationCandidate(key, graceTicks) {
-					s.emitReconciliationFinding(ctx, accountID, mismatchClassQuantityDiscrepancy, bp.Symbol, platformQty, bp.Quantity)
+					s.emitReconciliationFinding(ctx, accountID, entry.userID, mismatchClassQuantityDiscrepancy, bp.Symbol, platformQty, bp.Quantity)
 				}
 			}
 		}
@@ -2970,7 +2974,7 @@ func (s *TradingService) haltReason(accountID string) string {
 // the bounded DB write — the flag is never rolled back on a write failure (fail-safe: a halt must
 // never be undone by a persistence hiccup). An already-halted account short-circuits before the
 // write/alert/log so a repeated finding can't re-fire them.
-func (s *TradingService) haltAccount(ctx context.Context, accountID, reason string, haltSource int32) {
+func (s *TradingService) haltAccount(ctx context.Context, accountID, ownerUserID, reason string, haltSource int32) {
 	now := time.Now().UTC()
 	s.haltedMu.Lock()
 	if s.halted[accountID] {
@@ -2990,12 +2994,16 @@ func (s *TradingService) haltAccount(ctx context.Context, accountID, reason stri
 		slog.WarnContext(ctx, "haltAccount: persist halt failed", "account_id", accountID, "error", err)
 	}
 
+	if ownerUserID == "" {
+		slog.WarnContext(ctx, "alert owner unresolved", "account_id", accountID, "alert_kind", string(alertKindHalt))
+	}
 	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
 		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL,
 		Category:      "halt",
 		Title:         fmt.Sprintf("Account halted: %s", accountID),
 		Body:          fmt.Sprintf("Account %s was automatically halted: %s", accountID, reason),
 		SourceService: "xstockstrat-trading",
+		TargetUserId:  ownerUserID,
 	})
 	s.recordAlertEmit(ctx, alertKindHalt, err)
 	if err != nil {
@@ -3093,7 +3101,7 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 		lastErr = err
 		if errors.Is(err, broker.ErrRateLimited) {
 			// Halt first, keep retrying: a halt does not close the position, a later attempt may.
-			s.haltAccount(context.Background(), bracket.AccountID,
+			s.haltAccount(context.Background(), bracket.AccountID, accountEntry.userID,
 				fmt.Sprintf("flatten rate limited by the broker after protection window expiry: order %s: %v", bracket.OrderID, err),
 				int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
 		}
@@ -3117,7 +3125,7 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	}
 
 	telemetry.RecordFlattenOutcome(ctx, "halted")
-	s.haltAccount(context.Background(), bracket.AccountID,
+	s.haltAccount(context.Background(), bracket.AccountID, accountEntry.userID,
 		fmt.Sprintf("flatten failed after protection window expiry: order %s: %v", bracket.OrderID, lastErr),
 		int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
 }

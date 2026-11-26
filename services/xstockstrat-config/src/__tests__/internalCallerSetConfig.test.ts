@@ -7,13 +7,16 @@
  * negative case (`design.md` Open Risk #4: "a negative test asserting an internal-caller write
  * of ACTIVE is rejected must exist before this ships").
  */
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
+import { transports } from 'winston';
 
-import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
+import { HEADER_ACCESS_SCOPE, HEADER_INTERNAL_CALLER, HEADER_USER_ID } from '../grpc/authz';
 import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
+import * as mtls from '../mtls';
+import { startMtlsLoopback } from './mtlsTestPki';
 
 function md(pairs: Record<string, string>): grpc.Metadata {
   const m = new grpc.Metadata();
@@ -24,6 +27,7 @@ function md(pairs: Record<string, string>): grpc.Metadata {
 describe('internal-caller SetConfig over a real gRPC connection', () => {
   let server: grpc.Server;
   let client: any;
+  let notifyClient: any;
   let queries: { sql: string; params?: unknown[] }[] = [];
   let keyExists = true;
 
@@ -50,22 +54,20 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
       new ConfigServiceImpl(recordingPool) as unknown as grpc.UntypedServiceImplementation,
     );
 
-    const port: number = await new Promise((resolve, reject) => {
-      server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (err, p) =>
-        err ? reject(err) : resolve(p),
-      );
-    });
-
+    const { port, clients } = await startMtlsLoopback(server, ['xstockstrat-trading', 'xstockstrat-notify']);
     const { ConfigServiceClient } = await import('@xstockstrat/proto/config/v1/config');
-    client = new ConfigServiceClient(`127.0.0.1:${port}`, grpc.credentials.createInsecure());
+    const target = mtls.targetOverride('xstockstrat-config');
+    client = new ConfigServiceClient(`127.0.0.1:${port}`, clients['xstockstrat-trading'], target);
+    notifyClient = new ConfigServiceClient(`127.0.0.1:${port}`, clients['xstockstrat-notify'], target);
   });
 
   after(() => {
     client?.close();
+    notifyClient?.close();
     server?.forceShutdown();
   });
 
-  function setConfig(metadata: grpc.Metadata, overrides: Record<string, unknown> = {}) {
+  function setConfig(metadata: grpc.Metadata, overrides: Record<string, unknown> = {}, c: any = client) {
     const request = {
       namespace: 'platform',
       key: 'trading_state',
@@ -74,7 +76,7 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
       ...overrides,
     };
     return new Promise<{ err: any; res: any }>((resolve) => {
-      client.setConfig(request, metadata, (err: any, res: any) => resolve({ err, res }));
+      c.setConfig(request, metadata, (err: any, res: any) => resolve({ err, res }));
     });
   }
 
@@ -161,5 +163,69 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
     const insert = insertQuery();
     assert.ok(insert);
     assert.equal(insert!.params?.[10], null, 'a normal human write must not populate caller_identity');
+  });
+
+  function captureLogs(t: TestContext): Array<Record<string | symbol, unknown>> {
+    const records: Array<Record<string | symbol, unknown>> = [];
+    t.mock.method(transports.Console.prototype, 'log', (info: any, cb?: () => void) => {
+      records.push(info);
+      cb?.();
+    });
+    return records;
+  }
+
+  it('@AC-1 (319) denies the poller header from a peer without the trading SAN, and writes nothing', async (t) => {
+    const logs = captureLogs(t);
+    const poller = md({ [HEADER_INTERNAL_CALLER]: 'trading-reconciliation-poller' });
+    queries = [];
+    keyExists = true;
+    const denied = await setConfig(poller, { value: { stringVal: 'HALTED' } }, notifyClient);
+    assert.equal(denied.err?.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(queries.length, 0, 'no INSERT (and so no audit row) for a denied call');
+
+    const denials = logs.filter((r) => String(r.message).startsWith('SetConfig denied'));
+    assert.equal(denials.length, 1, JSON.stringify(logs));
+    const [d] = denials;
+    assert.equal(d[Symbol.for('level')], 'error');
+    assert.equal(d.hadPeerSan, true);
+    assert.equal(d.peerSan, 'xstockstrat-notify');
+    assert.equal(d.targetState, 'HALTED');
+    const fields = Object.keys(d).filter((k) => !['level', 'message', 'service'].includes(k));
+    assert.deepEqual(fields.sort(), [
+      'hadPeerSan',
+      'internalCaller',
+      'key',
+      'namespace',
+      'peerSan',
+      'reason',
+      'targetState',
+    ]);
+
+    queries = [];
+    const allowed = await setConfig(poller, { value: { stringVal: 'HALTED' } }, client);
+    assert.equal(allowed.err, null, 'the same request from the trading leaf succeeds');
+    const insert = insertQuery();
+    assert.ok(insert);
+    assert.equal(insert!.params?.[6], 'trading-reconciliation-poller');
+    assert.equal(insert!.params?.[10], 'trading-reconciliation-poller');
+  });
+
+  it('an admin write carrying a forged x-internal-caller is attributed to the admin, caller_identity unset', async () => {
+    queries = [];
+    keyExists = true;
+    const { err } = await setConfig(
+      md({
+        [HEADER_ACCESS_SCOPE]: '7',
+        [HEADER_USER_ID]: 'admin-7',
+        [HEADER_INTERNAL_CALLER]: 'trading-reconciliation-poller',
+      }),
+      { namespace: 'platform', key: 'log_level', value: { stringVal: 'debug' } },
+      notifyClient,
+    );
+    assert.equal(err, null, 'admin write must succeed');
+    const insert = insertQuery();
+    assert.ok(insert);
+    assert.equal(insert!.params?.[6], 'admin-7');
+    assert.equal(insert!.params?.[10], null, 'an unauthorized x-internal-caller is never persisted');
   });
 });

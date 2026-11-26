@@ -15,10 +15,11 @@ class OpportunityComputeStateRepository:
         self._db = db_pool
 
     async def get(self, user_id: str) -> dict | None:
-        """Return ``{computed_at, valid_until}`` for the user, or None when never stamped."""
+        """Return ``{computed_at, valid_until, live_only_cursor}`` for the user, or None when never
+        stamped."""
         row = await self._db.fetchrow(
             """
-            SELECT computed_at, valid_until
+            SELECT computed_at, valid_until, live_only_cursor
               FROM analysis.opportunity_compute_state
              WHERE user_id = $1
             """,
@@ -39,4 +40,21 @@ class OpportunityComputeStateRepository:
             """,
             user_id,
             valid_until,
+        )
+
+    async def write_cursor(self, user_id: str, cursor: str, *, conn=None) -> None:
+        """Persist the live-only rotation cursor (feature 366), on ``conn`` when given so it
+        commits with the queue replace. The on-conflict branch touches only the cursor, so the
+        empty-universe ``valid_until`` is never clobbered; the first-insert epoch reads expired.
+        """
+        db = conn if conn is not None else self._db
+        await db.execute(
+            """
+            INSERT INTO analysis.opportunity_compute_state
+                (user_id, computed_at, valid_until, live_only_cursor)
+            VALUES ($1, now(), to_timestamp(0), $2)
+            ON CONFLICT (user_id) DO UPDATE SET live_only_cursor = EXCLUDED.live_only_cursor
+            """,
+            user_id,
+            cursor,
         )

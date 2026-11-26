@@ -399,6 +399,10 @@ const exchangeFailures = new BoundCounter('identity.oauth.exchange_failures', {
 const refreshRejections = new BoundCounter('identity.refresh.rejections', {
   description: 'Refresh-token rejections by kind',
 });
+const revokeUnverifiable = new BoundCounter('identity.revoke.unverifiable', {
+  description:
+    'RevokeToken calls ignored because the token failed signature verification (forged, malformed, or pre-rotation)',
+});
 const auditFailures = new BoundCounter('identity.audit.failures', {
   description: 'Best-effort ledger audit append failures by event type',
 });
@@ -421,6 +425,10 @@ export function recordExchangeFailure(reason: ExchangeFailureReason): void {
 
 export function recordRefreshRejection(kind: RefreshRejectionKind): void {
   refreshRejections.add(1, { [KEY_KIND]: kind });
+}
+
+export function recordRevokeUnverifiable(): void {
+  revokeUnverifiable.add(1);
 }
 
 export function recordAuditFailure(eventType: string): void {

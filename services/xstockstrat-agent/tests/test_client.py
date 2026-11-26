@@ -798,6 +798,36 @@ class TestGetBackfillStatusClient:
         assert result["job"]["failed_symbols"] == ["AXIA"]
 
     @pytest.mark.asyncio
+    async def test_incomplete_outcome_projects_with_its_ranges(self):
+        from gen.common.v1 import common_pb2  # type: ignore
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        reason = "missing sessions 2026-04-01..2026-09-25"
+        job = ingest_pb2.BackfillJob(
+            job_id="j-10",
+            symbols=["IDXX"],
+            status=ingest_pb2.BACKFILL_STATUS_PARTIAL,
+            failed_symbols=[],
+            symbol_results=[
+                common_pb2.BackfillSymbolResult(
+                    symbol="IDXX",
+                    outcome=common_pb2.BACKFILL_SYMBOL_OUTCOME_INCOMPLETE,
+                    reason=reason,
+                ),
+            ],
+        )
+        mock_stub = MagicMock()
+        mock_stub.GetBackfillStatus = AsyncMock(return_value=job)
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.get_backfill_status(job_id="j-10")
+        assert result["job"]["symbol_results"] == [
+            {"symbol": "IDXX", "outcome": "incomplete", "reason": reason}
+        ]
+        assert "IDXX" not in result["job"]["failed_symbols"]
+
+    @pytest.mark.asyncio
     async def test_single_job_without_symbol_results_returns_empty_list(self):
         from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
 
