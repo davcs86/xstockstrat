@@ -299,3 +299,55 @@ Full debate (/sdd-design via /sdd-batch) halted at the approval gate after round
 - Config wiring `--final` (`.sdd-logs/v-2.log`): `exit=0`; only baseline `REPORTED:` lines for unrelated keys (`marketdata/fundamentals.provider`, `platform/trading_state`). Status → `code-completed`.
 - Files modified: `services/xstockstrat-analysis/docs/opportunities.md`
 - Deviations: none.
+
+## Session 2026-11-26 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-a-filtered-listopportunities (feature 365)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-analysis/acceptance/fix-a-filtered-listopportunities.feature | CREATE | NEW | Observable subject is the analysis ListOpportunities read and its recompute kick. No existing scenario asserts that a filtered empty read leaves a fresh queue untouched. |
+| AC-2 | services/xstockstrat-analysis/acceptance/fix-a-filtered-listopportunities.feature | CREATE | NEW | Same subject. A symbol-filtered read for a symbol absent from a fresh queue must not recompute. |
+
+### Ready-to-write blocks
+--- services/xstockstrat-analysis/acceptance/fix-a-filtered-listopportunities.feature (CREATE) ---
+# Promoted from docs/roadmap/features/365-fix-a-filtered-listopportunities/acceptance.feature at
+# archive time (Constitution C-16). Source-feature provenance is carried on every scenario's
+# `@feature-365` tag. Durable business rule xstockstrat-analysis guarantees for ListOpportunities:
+# a filtered read that matches no rows, on a user whose queue holds unexpired rows, is a plain empty
+# page and never kicks a background recompute. A rule enters only by promotion from a reviewed
+# feature acceptance.feature, never by hand-authoring.
+
+Feature: fix-a-filtered-listopportunities (analysis-service guarantees)
+  Regression guard for defect report docs/reports/2026-11-25-analysis-filtered-empty-opportunity-read-kicks-full-recompute-defect.md:
+  a filtered ListOpportunities read with no matches kicks a full recompute.
+
+  @AC-1 @regression @feature-365
+  Scenario: A filtered read with no matches leaves a fresh queue untouched
+    Given a user's opportunity queue holds 424 rows valid until 2026-11-28T05:00Z
+    And no row is muted, data-unavailable, fundamentals-unavailable or formula-unreadable
+    When the user lists opportunities with min_conviction 1.01
+    Then the response is an empty page with computing false
+    And no background recompute starts for that user
+    And the queue rows keep valid_until 2026-11-28T05:00Z
+
+  @AC-2 @regression @feature-365
+  Scenario: A symbol-filtered read for a symbol absent from a fresh queue does not recompute
+    Given a user's opportunity queue holds unexpired rows and none for SCKT
+    When the user lists opportunities with symbol SCKT
+    Then the response is an empty page
+    And no background recompute starts for that user
+
+### Notes / ambiguities / conflicts
+- Service attribution: both scenarios assert on the analysis ListOpportunities read path (opportunities.md). They are not cross-cutting, so platform.feature is not touched. The agent and ui suites are not targeted. The agent suites hold copies of other opportunity features, but this fix is analysis-internal.
+- Tags: the source scenarios carry `@regression` and no `@FR-*` tags (bug-fix feature). They are kept verbatim and only `@feature-365` is added. No `@FR` tag is invented.
+- No CONFLICT. opportunity-compute-robustness.feature @AC-6 (@feature-185) says a cold user (never materialized) returns computing=true and kicks a recompute. @AC-1 and @AC-2 are about a fresh, populated queue, so the cases are disjoint. Their wording ("empty page with computing false") is consistent with @AC-6's legitimately-empty-universe clause.
+- No OVERLAP. Checked opportunities-server-side-filters.feature (@feature-190), readiness-caching-poll-discipline.feature (empty-universe recompute suppression, @feature-177), opportunities-latency-fix.feature and fix-opportunities-read-hangs.feature. None assert recompute suppression for a filtered-empty read of a populated queue. The reader can see readiness-caching-poll-discipline.feature "An empty-universe user does not recompute on every poll" as a loosely related neighbor, which is a possible later consolidation reference only.
+- Idempotency: grep for `@feature-365` across all *.feature files found only the source acceptance.feature, so there is no prior promotion.
+- The acceptance/ directory already exists for analysis, so only the file is created.
+
+### Coverage check
+- Source scenarios: 2. Planned (NEW+DUP+OVERLAP): 2 (2 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Every @AC-* is accounted for and none were skipped.
+```
