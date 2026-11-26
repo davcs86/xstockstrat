@@ -1,6 +1,6 @@
 # Implementation Spec: fix-alert-event-targeting
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/315-fix-alert-event-targeting/feature.md`
 **Total Steps**: 6
@@ -541,7 +541,7 @@ grep -n "Four alert rules" packages/otel/alerts/README.md
 
 ### Step 6 — docs: event catalogue, stream key, alert audience, merge-order note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`, `xstockstrat-ledger`, `xstockstrat-trading`, `docs/roadmap/features/`
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify

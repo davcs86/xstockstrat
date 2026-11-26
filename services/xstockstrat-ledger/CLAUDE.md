@@ -95,6 +95,7 @@ dedup).
 |---|---|
 | `{order_id}` (bare; `order.*`) / `order:{order_id}` (`order_intent.*`) | xstockstrat-trading |
 | `portfolio:{user_id}` | xstockstrat-portfolio |
+| `portfolio:risk` | xstockstrat-portfolio `portfolio.risk.*` events (a fixed global key, not a user id; the owner is in `AppendEventRequest.user_id` and in the payload) |
 | `backfill:{job_id}` | xstockstrat-ingest |
 | `formula:{formula_id}` | xstockstrat-indicators |
 | `alert:{alert_id}` | xstockstrat-notify |

@@ -667,3 +667,42 @@ Carried into `/sdd-execute`; announce every unchecked item at each checkpoint an
   `packages/otel/alerts/README.md`, `scripts/tests/test_check_otel_produced_signals.py`,
   `scripts/check-otel-produced-signals.py` (operator-approved addition)
 - Deviations: the guard now strips `offset <duration>` (operator Option A; 337 overlap is rebase-only). See the Deviation Log.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 6
+
+- Tooling (step 6): python3 ✓ · node ✓ (the config-wiring gate). Nothing installed. Hook check: hook=0.
+- Peer statuses, re-read on `origin/main-dev` and each peer's own branch: 312 `implementation-ready`, 333 `spec-ready`,
+  357 `in-progress`, 321 `implementation-ready`, 337 `in-progress`, 311 `implementation-ready`. None has merged, so none
+  was dropped. 312's implementation spec (Step 10) keeps `target_user_id IS NULL` rows visible and plans to rebase on
+  315. 311's spec edits `processOrderFill` and `emitEvent`, not 315's risk functions.
+
+### Step 6 — docs: event catalogue, stream key, alert audience, merge-order note [done]
+- Portfolio `CLAUDE.md` rewrites the drawdown row as `{user_id, account_id, message}`, adds the concentration row
+  `{user_id, symbol, message}`, and adds one note for both rows: the global `portfolio:risk` key, the owner in
+  `AppendEventRequest.user_id`, no dedup, `owner_only` visibility, and the pre-315 behaviour. The note names the old
+  behaviour without the literal event type, so the Verification grep still finds exactly 2 rows.
+  - The portfolio findings row `:63` is marked resolved by feature 315.
+  - Ledger stream keys gain the `portfolio:risk` row.
+  - The trading `docs/reconciliation.md` gains the owner-targeting / admin-signal paragraph.
+  - `merge-order.md` gains one non-blocking prose section, with no table row.
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0`. It shows rows `117`/`118`, `portfolio:risk` in both
+  CLAUDE.md files (`:123`, ledger `:98`), the findings `:63` "resolved by feature 315", and reconciliation.md `:36-38`.
+  It also shows `## Alert targeting overlap: 315 ↔ …` at merge-order `:436`. The guard is the last command and printed
+  no hits. The final config-wiring gate (`.sdd-logs/v-2.log`, `--final`) gave `exit=0` with two baseline `REPORTED:`
+  lines (analysis `fundamentals.provider`, trading `platform/trading_state`); neither is a key from this feature.
+- Files modified: `services/xstockstrat-portfolio/CLAUDE.md`,
+  `services/xstockstrat-portfolio/docs/context-constitution-findings.md`, `services/xstockstrat-ledger/CLAUDE.md`,
+  `services/xstockstrat-trading/docs/reconciliation.md`, `docs/roadmap/features/merge-order.md`
+- Deviations: none.
+- Status: `in-progress` → `code-completed` (all 6 steps done); the spec header is `complete`.
+
+## Open Threads
+
+- [ ] The defect sidecar `docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.status` still reads
+  `triaged`. It is not in Step 6's Files. Target: launch / `/sdd-archiver`.
+- [ ] Integration PR checklist (C-10): import `xstk-trading-account-halt` into Grafana Cloud and confirm its routing;
+  check the prod Slack/SendGrid fanout; state that concentration breaches no longer arrive as the drawdown type.
+  Target: operator, integration PR.
+- [ ] Open `/sdd-story admin-halted-accounts-read` (no number yet). Target: operator, no later than the integration PR.
+- [ ] Step 5 reviewer (Platform Lead; `packages/otel` has no registry row). Target: operator, integration PR.
+- [ ] `feature.md` § Next Action still names `/sdd-review … impl-spec`. Target: the integration-PR session.

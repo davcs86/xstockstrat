@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md, docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-21
+**Last Updated**: 2026-11-26
 
 ---
 
@@ -18,6 +18,7 @@
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-11-21 | `implementation-ready` → `in-progress` | /sdd-execute sequential | → in-progress (sdd-batch-execute setup); steps 1–6 re-specced (respec 315905b4) |
+| 2026-11-26 | `in-progress` → `code-completed` | /sdd-execute sequential | All 6 steps done (Step 6 docs last); `check-config-wiring.mjs --final` exit=0 |
 
 ---
 
