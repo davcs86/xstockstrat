@@ -626,7 +626,7 @@ Coverage threshold: none applies (`scripts/` has no coverage gate — `ci.yml:89
 
 ### Step 9 — service: CI job `migration-order-gate`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`.github/workflows/`)
 **Files**:
 - `.github/workflows/ci.yml` — modify
@@ -971,3 +971,16 @@ test "$(grep -c "@AC-19 @FR-8 @feature-225" docs/sdd/business-rules/platform.fea
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 9 / Step 10 — `FORBID_NEW` and run-line indentation (2026-11-26)
+- **Spec said**: Step 9 instruction 3's YAML puts the `FORBID_NEW:` env line and the
+  `python3 scripts/check-migration-order.py "origin/$BASE_REF" $FORBID_NEW` run line at 10 spaces (the
+  step's `env:`/`run:` keys sit at 8, as in every other job in `ci.yml`). Step 10's Instructions expect
+  both lines at 12 spaces, so its whole-line assertions could never pass against the Step 9 file.
+- **Actually done**: Step 9 kept its own convention (both lines at 10 spaces). Step 10's two expected
+  strings are corrected to 10 spaces:
+  `          FORBID_NEW: ${{ ... }}` and
+  `          python3 scripts/check-migration-order.py "origin/$BASE_REF" $FORBID_NEW`.
+  The Step 10 body is not edited (F-09); Step 10 executes against this entry.
+- **Disposition**: operator decision (2026-11-26, "10 spaces"), raised as a Step 9 blocker. The Step 9
+  red run already used the corrected 10-space strings.

@@ -92,6 +92,7 @@ jobs:
               - 'scripts/migration-dirty-guard.sh'
               - 'scripts/migration-ahead-check.sh'
               - 'scripts/migration-rerun.py'
+              - 'scripts/check-migration-order.py'
               - 'scripts/migration-assertions/**'
               - 'scripts/Dockerfile.migrate'
               - 'services/xstockstrat-indicators/app/services/formulas_repository.py'
@@ -893,8 +894,8 @@ jobs:
       - name: pytest
         run: uv run --no-sync pytest
 
-  # Applies every migration, then replays the chain from version 0 (the db-migrate.sh dirty-state
-  # recovery path) and runs scripts/migration-assertions/*.sql — every up-file must be idempotent.
+  # Applies every migration, replays the feature-224/225 expand and contract up-files, proves the dirty guard
+  # refuses, and runs scripts/migration-assertions/*.sql. Older up-files are not replayed.
   migration-rerun:
     name: Migration rerun (idempotent replay)
     needs: changes
@@ -952,6 +953,30 @@ jobs:
         run: |
           git fetch --no-tags origin main "${{ github.base_ref }}"
           python3 scripts/check-migration-contract.py "origin/${{ github.base_ref }}"
+
+  # A new migration is numbered above the base branch's maximum; a PR into main adds none unless it is the promotion.
+  # PR-only: github.base_ref is empty on push events.
+  migration-order-gate:
+    name: Migration order gate
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && (
+      contains(fromJson(needs.changes.outputs.matched), 'migrations') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check new migrations are numbered above the base branch maximum
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          FORBID_NEW: ${{ (github.base_ref == 'main' && !(github.head_ref == 'main-dev' && github.event.pull_request.head.repo.full_name == github.repository)) && '--forbid-new' || '' }}
+        run: |
+          git fetch --no-tags origin "$BASE_REF"
+          # shellcheck disable=SC2086 # FORBID_NEW is empty or exactly one flag
+          python3 scripts/check-migration-order.py "origin/$BASE_REF" $FORBID_NEW
 
   # Needs a migrated TimescaleDB; test:db stays outside the node-test c8 coverage gate.
   ledger-db-test:
@@ -1392,6 +1417,7 @@ jobs:
       - scripts-python
       - migration-rerun
       - migration-contract-gate
+      - migration-order-gate
       - ledger-db-test
       - portfolio-db-test
       - marketdata-db-test
@@ -1425,6 +1451,7 @@ jobs:
           echo "scripts-python:  ${{ needs.scripts-python.result }}"
           echo "migration-rerun: ${{ needs.migration-rerun.result }}"
           echo "migration-contract-gate: ${{ needs.migration-contract-gate.result }}"
+          echo "migration-order-gate: ${{ needs.migration-order-gate.result }}"
           echo "ledger-db-test:  ${{ needs.ledger-db-test.result }}"
           echo "portfolio-db-test: ${{ needs.portfolio-db-test.result }}"
           echo "marketdata-db-test: ${{ needs.marketdata-db-test.result }}"

@@ -706,3 +706,16 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - Config-key wiring gate: N/A (no config key, no config migration).
 - Files modified: `scripts/tests/test_check_migration_order.py`
 - Deviations: none
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+- Operator decision (binding, 2026-11-26) on the Step 9 blocker: "10 spaces". Step 9 keeps its `ci.yml` convention (the `FORBID_NEW` env line and the `check-migration-order.py` run line at 10 spaces); Step 10's two expected strings become 10 spaces. Logged in the `## Deviation Log`.
+
+### Step 9 — service: CI job `migration-order-gate` [done]
+- `.github/workflows/ci.yml`: `scripts/check-migration-order.py` added to the `migrations` path filter; the stale `migration-rerun` comment rewritten (no more "replays the chain from version 0"); new PR-only job `migration-order-gate` after `migration-contract-gate` (checkout `fetch-depth: 0`, `BASE_REF`/`FORBID_NEW` env, positive-form D-11 expression, `head_ref` only inside the expression); registered in `ci-gate` `needs:` and its result echo.
+- TDD (Red order): Step 10's wiring test was authored in the working tree first with the operator-corrected 10-space strings. AC-2 red `.sdd-logs/v-1.log` `exit=1`: `E           AssertionError:   migration-order-gate:`, `1 failed, 18 passed in 0.67s` → green `.sdd-logs/v-3.log` `exit=0`: `19 passed in 0.60s`, ruff `All checks passed!`, `64 files already formatted`. The test edit was reverted before this commit; it is committed under Step 10. No coverage gate applies to `scripts/`.
+- Verification `.sdd-logs/v-2.log` `exit=0`: `959:  migration-order-gate:`; `migration-order-gate` on 3 lines, `scripts/check-migration-order.py` on 2, no "replays the chain from version 0", PyYAML 6.0.3 `safe_load` parsed the file.
+- The `FORBID_NEW` expression still cannot run locally; its first real runs are the integration PR (base `main-dev` → empty) and the next promotion PR (base `main`, head `main-dev` → empty) — note both in the integration PR.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `.github/workflows/ci.yml`
+- Deviations: Step 10's expected indentation for two lines corrected to 10 spaces (operator decision; Deviation Log)
