@@ -84,10 +84,12 @@ from app.services.fundamentals_guard import (
     assess,
     epoch_eval_dates,
 )
+from app.services.isolation import isolated, log_isolation_tally
 from app.services.readiness import (
     compute_readiness_row,
     is_readiness_row_fresh,
     readiness_valid_until,
+    unavailable_readiness_row,
 )
 from app.services.screener import ScreenerEngine
 from app.supervision import retry_until_ok, run_supervised
@@ -327,8 +329,9 @@ _READINESS_LOOKBACK_DAYS = 400
 # always contain the most recent daily bar across weekends/holidays, small enough to bound the
 # server-side MIN/MAX/COUNT scan (we consume only `.latest`).
 _READINESS_COVERAGE_PROBE_DAYS = 10
-# Feature 181: cooldown before an UNKNOWN (bar_epoch < 0 sentinel) watchlist-readiness row is
-# re-kicked, so a persistently data-unavailable pair retries at most once per this window rather
+# Feature 181: cooldown before an UNKNOWN (bar_epoch < 0 sentinel — a raised bars fetch, or a
+# per-symbol failure the kick/materializer isolated, feature 308) watchlist-readiness row is
+# re-kicked, so a persistently failing pair retries at most once per this window rather
 # than on every poll. A module constant (not a config key) — an internal recovery heuristic.
 _READINESS_UNKNOWN_RETRY_SECONDS = 300
 # feature 185 FR-4: bounded cold-recompute attempts before ListOpportunities reports a terminal
@@ -4120,7 +4123,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 log.warning("EvaluateReadiness: GetDataCoverage failed for %s: %s", symbol, e)
                 latest_bar_epoch[symbol] = 0
 
-        results = await asyncio.gather(*[_readiness_for(s) for s in request.symbols])
+        pairs = await asyncio.gather(*[isolated(_readiness_for(s)) for s in request.symbols])
+        results = []
+        failures: list[tuple[str, Exception]] = []
+        for symbol, (result, exc) in zip(request.symbols, pairs, strict=True):
+            if exc is not None:
+                # Feature 308 @AC-2: the failing symbol is returned empty and never staged.
+                failures.append((symbol, exc))
+                result = (_symbol_readiness_from_json({}, symbol), None, now)
+            results.append(result)
+        log_isolation_tally(log, "evaluate_readiness", failures, len(request.symbols))
         protos = [r[0] for r in results]
         staged_rows = [r[1] for r in results if r[1] is not None]
         # Persist the SLOW rows once, out of the per-symbol hot path (best-effort — a write failure
@@ -4306,6 +4318,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 for sid, sym in triples:
                     grouped.setdefault(sid, []).append(sym)
                 staged_all = []
+                failures: list[tuple[str, Exception]] = []
                 for sid, syms in grouped.items():
                     srow = await self._strategies_repo.get_by_owner_and_id(user_id, sid)
                     if srow is None:
@@ -4329,7 +4342,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         definition, propagation_meta
                     )
                     fund_snap_cache: dict[str, list] = {}
-                    for sym in syms:
+                    valid_until = readiness_valid_until(now, valid_window_hours=valid_window)
+
+                    async def _kick_row(sym):
                         fundamentals = await self._load_fundamentals(
                             sym,
                             definition,
@@ -4345,32 +4360,44 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                             sem=self._readiness_materializer_bars_sem,
                             cache=fund_snap_cache,
                         )
-                        staged_all.append(
-                            await compute_readiness_row(
+                        return await compute_readiness_row(
+                            sym,
+                            fetch_bars=self._fetch_bars_paged,
+                            bars_sem=self._readiness_materializer_bars_sem,
+                            evaluator=evaluator,
+                            definition=await self._sector_definition(
+                                definition, sym, propagation_meta
+                            ),
+                            range_msg=range_msg,
+                            propagation_meta=propagation_meta,
+                            benchmark_bars=benchmark_bars,
+                            rule="entry",
+                            fingerprint=fingerprint,
+                            strategy_id=sid,
+                            user_id=user_id,
+                            now=now,
+                            valid_until=valid_until,
+                            benchmark_epoch=bench_epoch,
+                            fundamentals=fundamentals,
+                            formula_fundamentals=formula_fund_map,
+                            formula_fundamentals_data=fund_snap,
+                        )
+
+                    for sym in syms:
+                        staged, exc = await isolated(_kick_row(sym))
+                        if exc is not None:
+                            failures.append((sym, exc))
+                            staged = unavailable_readiness_row(
                                 sym,
-                                fetch_bars=self._fetch_bars_paged,
-                                bars_sem=self._readiness_materializer_bars_sem,
-                                evaluator=evaluator,
-                                definition=await self._sector_definition(
-                                    definition, sym, propagation_meta
-                                ),
-                                range_msg=range_msg,
-                                propagation_meta=propagation_meta,
-                                benchmark_bars=benchmark_bars,
                                 rule="entry",
                                 fingerprint=fingerprint,
                                 strategy_id=sid,
                                 user_id=user_id,
                                 now=now,
-                                valid_until=readiness_valid_until(
-                                    now, valid_window_hours=valid_window
-                                ),
-                                benchmark_epoch=bench_epoch,
-                                fundamentals=fundamentals,
-                                formula_fundamentals=formula_fund_map,
-                                formula_fundamentals_data=fund_snap,
+                                valid_until=valid_until,
                             )
-                        )
+                        staged_all.append(staged)
+                log_isolation_tally(log, "readiness_kick", failures, len(triples))
                 if staged_all and self._readiness_cache_repo is not None:
                     await self._readiness_cache_repo.upsert_many(staged_all)
             except Exception as e:  # a refresh failure never fails the read
@@ -6134,6 +6161,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
         coverage_range = _recent_range(_READINESS_COVERAGE_PROBE_DAYS)
         staged_rows: list[dict] = []
+        failures: list[tuple[str, Exception]] = []
+        computed = 0
+        valid_until = readiness_valid_until(now, valid_window_hours=valid_window)
         for strategy_id, symbols in by_strategy.items():
             row = live_by_id[strategy_id]
             definition = _row_to_strategy_definition(row)
@@ -6181,23 +6211,24 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     latest_bar_epoch=latest_bar_epoch.get(symbol, 0),
                 ):
                     continue  # skip-fresh (fails.md:118 steady state)
-                fundamentals = await self._load_fundamentals(
-                    symbol,
-                    definition,
-                    meta,
-                    sem=self._readiness_materializer_bars_sem,
-                    cache=fundamentals_cache,
-                )
-                fund_snap = await self._load_fundamentals_snapshot(
-                    definition,
-                    symbol,
-                    meta,
-                    formula_fund_map,
-                    sem=self._readiness_materializer_bars_sem,
-                    cache=fund_snap_cache,
-                )
-                staged_rows.append(
-                    await compute_readiness_row(
+
+                async def _materialized_row(symbol):
+                    fundamentals = await self._load_fundamentals(
+                        symbol,
+                        definition,
+                        meta,
+                        sem=self._readiness_materializer_bars_sem,
+                        cache=fundamentals_cache,
+                    )
+                    fund_snap = await self._load_fundamentals_snapshot(
+                        definition,
+                        symbol,
+                        meta,
+                        formula_fund_map,
+                        sem=self._readiness_materializer_bars_sem,
+                        cache=fund_snap_cache,
+                    )
+                    return await compute_readiness_row(
                         symbol,
                         fetch_bars=self._fetch_bars_paged,
                         bars_sem=self._readiness_materializer_bars_sem,
@@ -6211,13 +6242,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         strategy_id=strategy_id,
                         user_id=owner,
                         now=now,
-                        valid_until=readiness_valid_until(now, valid_window_hours=valid_window),
+                        valid_until=valid_until,
                         benchmark_epoch=benchmark_epoch,
                         fundamentals=fundamentals,
                         formula_fundamentals=formula_fund_map,
                         formula_fundamentals_data=fund_snap,
                     )
-                )
+
+                computed += 1
+                staged, exc = await isolated(_materialized_row(symbol))
+                if exc is not None:
+                    failures.append((symbol, exc))
+                    staged = unavailable_readiness_row(
+                        symbol,
+                        rule="entry",
+                        fingerprint=fingerprint,
+                        strategy_id=strategy_id,
+                        user_id=owner,
+                        now=now,
+                        valid_until=valid_until,
+                    )
+                staged_rows.append(staged)
+        log_isolation_tally(log, "readiness_materializer", failures, computed)
         if staged_rows and self._readiness_cache_repo is not None:
             try:
                 await self._readiness_cache_repo.upsert_many(staged_rows)

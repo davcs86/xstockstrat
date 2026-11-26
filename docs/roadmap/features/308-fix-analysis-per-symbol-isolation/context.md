@@ -582,3 +582,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-analysis/tests/test_opportunities_repo.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
 - Deviations: none
+
+### Step 9 — service: isolate the three readiness callers [done]
+- Atomic unit Steps 9+10, one commit. `readiness.py` gains `unavailable_readiness_row`, which returns `bar_epoch=-1` and `readiness_json={}`. It and `compute_readiness_row` both build their row through one private `_staged_row`, and the `-1` comment now names both producers.
+  - `EvaluateReadiness` gathers `isolated(_readiness_for(s))`. A failing symbol becomes `(_symbol_readiness_from_json({}, symbol), None, now)`, so it is returned empty and not staged, with a tally under site `evaluate_readiness`.
+  - The kick and the materializer await their per-symbol body (the loaders plus `compute_readiness_row`) through `isolated`. On an exception they stage `unavailable_readiness_row` with the healthy branch's `rule`, fingerprint, strategy, owner, `now` and `valid_until`, then log a tally under sites `readiness_kick` (total `len(triples)`) and `readiness_materializer` (total = symbols computed after skip-fresh).
+  - `valid_until` is now computed once per pass instead of once per symbol. It is the same value, because `now` is fixed per pass. The outer catch, the `finally`, the per-strategy setup and header propagation are unchanged.
+  - The `_READINESS_UNKNOWN_RETRY_SECONDS` comment names both sentinel producers.
+- TDD (unit 9+10): see Step 10.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/app/services/readiness.py`, `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: see Step 10 (Deviation Log "Steps 9+10").
+
+### Step 10 — test: readiness isolation regressions (`@AC-2`, `@AC-3` kick and materializer) [done]
+- Atomic unit Steps 9+10. New `tests/test_per_symbol_isolation.py` has 7 tests:
+  - `@AC-2`, parametrized over a raising `compute_readiness_row` and a raising `_load_fundamentals_snapshot`. Results stay in request order, `AAPL`/`MSFT` have `total_conditions > 0`, `NVDA` is `(0, 0)`, the one upsert holds exactly `[AAPL, MSFT]`, and the tally line is logged.
+  - `@AC-3` kick and `@AC-3` materializer. `ExecuteFormula` returns `UNAVAILABLE` for `NVDA` only. The failing pair's row has `-1` and `{}`, the healthy rows have `bar_epoch >= 0`, and neither outer-catch WARN appears. On the kick, a second read classifies `NVDA` as `READINESS_STATE_UNKNOWN`.
+  - Three cancellation tests (EvaluateReadiness, kick task, materializer tick).
+- `test_unreadable_formula.py`: the pinning test is rewritten as `test_evaluate_readiness_timeout_degrades_the_symbol`. The symbol is `(0, 0)`, `formula_unreadable` is False and nothing is staged. This is the feature-289 `@AC-13` CHANGE the operator signed off on 2026-11-20.
+- `test_readiness.py`: a unit test for `unavailable_readiness_row`. Its keys equal a `compute_readiness_row` row's keys, `bar_epoch == -1`, and `is_readiness_row_fresh` is False at `latest_bar_epoch=0`.
+- C-13: every harness, bar set and strategy fixture is imported from sibling test modules (`conftest`, `test_analysis_servicer`, `test_owner_header_guard`, `test_readiness_cache`, `test_readiness_materializer`, `test_readiness_opportunities_source_symbol`, `test_unreadable_formula`).
+- TDD:
+  - RED run 1 (Verification block) stopped at collection: `ImportError: cannot import name 'unavailable_readiness_row' from 'app.services.readiness'`.
+  - RED run 2: `5 failed, 53 passed`. `@AC-2` raised `ZeroDivisionError: boom`, the kick logged `readiness refresh kick failed for user=bob`, the materializer logged `readiness materializer failed for owner=bob`, and the timeout test raised `FormulaExecutionError`.
+  - GREEN: `92 passed` for the six listed files. Full suite `1786 passed`, `Required test coverage of 40% reached. Total coverage: 91.71%` (`readiness.py` 100%). ruff `All checks passed!` and `144 files already formatted`. The C-13 grep printed the 7 `from tests.` import lines. exit=0, which reflects only the final grep, so the pytest results were read from the log.
+  - Mutation run (`except BaseException` in `isolation.py`, reverted without committing): all three cancellation tests failed with `DID NOT RAISE <class 'asyncio.exceptions.CancelledError'>` (`3 failed, 4 passed`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/tests/test_per_symbol_isolation.py`, `services/xstockstrat-analysis/tests/test_unreadable_formula.py`, `services/xstockstrat-analysis/tests/test_readiness.py`
+- Deviations: RED took a second run because of the collection error. The failing symbol is picked out by its closes. The cancellation tests are credited by the mutation run (Deviation Log "Steps 9+10").

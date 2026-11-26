@@ -696,7 +696,7 @@ async def test_opportunity_recompute_timeout_fails_and_keeps_stored_rows(caplog)
     assert svc._opportunities_repo.rows["u1"] == [before]
 
 
-async def test_evaluate_readiness_timeout_raises_not_converted_to_marker():
+async def test_evaluate_readiness_timeout_degrades_the_symbol():
     svc = _cache_svc({"MYSZ": _real_bars("MYSZ", _CLOSES)}, strategy_row=_row(_definition()))
     svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
     svc._indicators.ExecuteFormula = AsyncMock(
@@ -704,8 +704,11 @@ async def test_evaluate_readiness_timeout_raises_not_converted_to_marker():
             success=False, error=_TIMEOUT, exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
         )
     )
-    with pytest.raises(FormulaExecutionError):
-        await svc.EvaluateReadiness(_READINESS_REQ, ctx_with(_BOB))
+    (readiness,) = (await svc.EvaluateReadiness(_READINESS_REQ, ctx_with(_BOB))).readiness
+
+    assert (readiness.passing_conditions, readiness.total_conditions) == (0, 0)
+    assert readiness.formula_unreadable is False
+    svc._readiness_cache_repo.upsert_many.assert_not_awaited()
 
 
 async def test_live_loop_permission_denied_pair_is_isolated_and_cycle_continues(caplog):

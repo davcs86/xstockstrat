@@ -472,7 +472,7 @@ ruff check . && ruff format --check .
 
 ### Step 9 — service: isolate the three readiness callers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/readiness.py` — modify
@@ -536,7 +536,7 @@ Runs as one unit with Step 10; use Step 10's commands.
 
 ### Step 10 — test: readiness isolation regressions (`@AC-2`, `@AC-3` kick and materializer)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_per_symbol_isolation.py` — create
@@ -1125,3 +1125,25 @@ _Populated by /sdd-execute as implementation proceeds._
   the commit.
 - **Disposition**: no file outside Step 7's **Files** is committed. Step 8 still adds the permanent
   tests and the `_FakeOppRepo.read` mirror as specced.
+
+### Steps 9+10: RED took a second run; the failing symbol is picked out by its closes (2026-11-26)
+
+- **Expected**: one RED run of Step 10's Verification shows `@AC-2` failing on the propagated
+  `ZeroDivisionError` and `@AC-3` failing on the missing batch.
+- **Actual**: that run stopped at collection. The new `tests/test_readiness.py` import failed
+  (`cannot import name 'unavailable_readiness_row'`), which hid every other test. A second RED run
+  covered only `tests/test_per_symbol_isolation.py` and `tests/test_unreadable_formula.py`:
+  `5 failed, 53 passed`.
+  - Both `@AC-2` variants failed with `ZeroDivisionError: boom`.
+  - The kick logged "readiness refresh kick failed".
+  - The materializer logged "readiness materializer failed for owner".
+  - The rewritten timeout test raised `FormulaExecutionError`.
+- **Test design**: `ExecuteFormula` requests carry no symbol. The `@AC-3` tests therefore give `NVDA`
+  the reversed `_CLOSES` (`_OUTAGE_CLOSES`), and the double raises `UNAVAILABLE` for those closes only.
+- **Run script**: the Verification block's trailing `# C-13` comment would have commented out the
+  wrapper's closing parenthesis, so the parenthesis went on its own line.
+- **Cancellation tests**: they pass both before and after the change. The `except BaseException`
+  mutation run gives them their RED: all three failed with
+  `DID NOT RAISE <class 'asyncio.exceptions.CancelledError'>`. The mutation was reverted without
+  being committed.
+- **Disposition**: nothing outside the unit's **Files** changed.
