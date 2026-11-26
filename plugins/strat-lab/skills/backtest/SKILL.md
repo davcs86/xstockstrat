@@ -221,7 +221,9 @@ only if the caller guarantees data is already present.
   backfill for the symbol is in flight — poll `get_backfill_status` and retry later.
 - `get_backfill_status` lists per-symbol `symbol_results`. A `skipped` symbol is delisted and has
   no new data — do not re-trigger it and do not treat the job as failed; `failed_symbols` still
-  lists only real failures.
+  lists only real failures. An `incomplete` symbol (`gaps_only` jobs) means the vendor has no bars
+  for the sessions its `reason` names — do not re-trigger the same range. A `PARTIAL` job whose only
+  problem symbols are `incomplete` is data-final: backtest, and expect insufficient data there.
 
 ## Phase 2 — Run, and handle the oversized output
 
