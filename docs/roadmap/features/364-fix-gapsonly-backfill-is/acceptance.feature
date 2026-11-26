@@ -25,4 +25,4 @@ Feature: fix-gapsonly-backfill-is (bug fix)
     Given RLI has a daily bar for every trading session from 2025-11-20 to 2026-11-25
     When a GAPS_ONLY daily-bar backfill runs for RLI from 2025-11-20 to 2026-11-25
     Then the job ends COMPLETED
-    And the job requested 0 bars from the vendor for RLI
+    And get_backfill_status reports bars_processed 0 for the job
