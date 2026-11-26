@@ -663,7 +663,7 @@ grep -n "memory_used_bytes" app/tools.py ../../docs/runbooks/mcp-tools.md   # ex
 
 ### Step 6 — test: `test_formula` description names `memory_used_bytes` and its zero meaning
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -936,3 +936,7 @@ _Populated by /sdd-execute as implementation proceeds._
   before the change and passed after it. In the run script the Verification's closing `)` is on its
   own line, because the block's trailing `# expect …` comment would otherwise swallow it.
   **Disposition**: evidence recorded in context.md; no spec text changed.
+- **2026-11-26 (Step 6)** — Step 5 had already landed, so RED ran with `app/tools.py` restored
+  temporarily from `7efe5d7a~1` (the pre-Step-5 docstring) and put back before GREEN. In the run
+  script the Verification's closing `)` is on its own line, because the block's trailing
+  `# 1 passed` comment would otherwise swallow it. **Disposition**: in-scope; no spec text changed.

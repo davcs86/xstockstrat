@@ -635,3 +635,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`
 - Deviations: E501 rewrap of the docstring's last two lines; RED evidence from the grep plus a scratch probe (full detail in Deviation Log)
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 6
+
+### Step 6 — test: `test_formula` description names `memory_used_bytes` and its zero meaning [done]
+- Added `TestAdditiveTools.test_test_formula_description_defines_memory_used_bytes` after `test_test_formula_dispatches_inline_source`. It reads the `test_formula` tool description, normalizes whitespace and asserts `memory_used_bytes`, `not measured` and `not usage of the memory cap`.
+- Discovery re-verified at `origin/feature/fix-sandbox-result-contract@7efe5d7a`: `_make_server()` `tests/test_tools.py:33`, `_tool_fn` `:39`, the description pattern `:1094-1095`, `class TestAdditiveTools` `:1944`, `test_test_formula_dispatches_inline_source` `:1946-1955`.
+- TDD red: run with `app/tools.py` restored temporarily from `7efe5d7a~1` (`.sdd-logs/v-1.log`, exit=1): `1 failed, 825 passed` and `1 failed, 137 deselected`; `assert 'memory_used_bytes' in "Dry-run inline formula source … execution_ms (int64 as a JSON string)."` at `tests/test_tools.py:1960`. tools.py was put back before GREEN.
+- TDD green (`.sdd-logs/v-2.log`, exit=0): `826 passed in 102.30s`, `Total coverage: 88.47%`, `All checks passed!`, `79 files already formatted`, `1 passed, 137 deselected in 0.61s`.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-agent/tests/test_tools.py`
+- Deviations: RED against the restored pre-Step-5 `tools.py`; the run script's closing `)` on its own line (full detail in Deviation Log)
