@@ -328,3 +328,20 @@ Each thread names its target step.
 
 - **O-8, recorded as accepted at spec, not measured.** The 1d query keeps the identical predicate, so it locks the same chunks. The payload is ≤ ~6.8k timestamps for an unset start. Verify doubles the scan and adds one 730-day probe. That probe can exceed the 400-day `@AC-1 @feature-153` envelope only over legacy pre-`004` 1-day chunks. Measurement is a post-deploy dev smoke (Step 6 note). → `/sdd-review impl-spec`: confirm operator acceptance.
 - **Session completing mid-job.** When `range.end` is unset, verify may report a session that completed after planning as missing. This is folded into the accepted "late last session" risk, with no mechanism added. → `/sdd-review impl-spec`.
+
+## Session 2026-11-26 — sdd-review impl-spec
+
+- Result: 0 failures, 9 warnings, 0 floor breaches (advisory; lifecycle unchanged, still `implementation-ready`). Overlap: WARN (file-level collisions only, no FAIL-class collision).
+- Addressed (edited `implementation-spec.md`, each claim re-verified):
+  - [x] Step 16: named the coverage threshold. `vitest.config.ts` enforces lines/functions/statements ≥ 40% scoped to `src/lib/**`. Playwright has no threshold.
+  - [x] Steps 1–2: stated that CI has no golangci-lint job for `packages/proto` (`ci.yml:352-358`, service matrix only). `gofmt` + `go vet` are the lint gate.
+  - [x] Step 11: defined `head_start = _ts_to_dt(cov.gaps[0].start)`. Stated that probing an interior `gaps[0]` is intended, because the stored bars before it make the probe hit.
+  - [x] Steps 4, 6: `export GOWORK=off` so it reaches every `go` command in the chain.
+- Still open (announce at each `/sdd-execute` checkpoint, P-03):
+  - [ ] O-8 query load: the extra verify scan and the 730-day probe may exceed the 400-day `@AC-1 @feature-153` lock budget on legacy pre-`004` 1-day chunks. This is accepted, not measured. **Operator must confirm the acceptance.** Reviewer suggestion, not adopted without the operator: make the Step 6 dev smoke check an explicit gate before `/promote`.
+  - [ ] Mid-job session close: a job with no range end that runs past 16:00 New York can have verify report that day's session as missing. The job then ends with a spurious PARTIAL/`incomplete`, and the strat-lab text tells agents not to re-trigger it. This is filed under the accepted late-published-session risk. **Operator must confirm.**
+  - [ ] Step 17 RED: Step 17 is red-green, but its RED evidence is Step 19's doc-parity assertion, which runs later. Record that RED output at Step 19 (P-06/C-08).
+  - [ ] Step 9 / O-9 (C-18, observe only): coalescing re-fetches stored sessions between gaps, which adds vendor bandwidth on symbols with dense holes. This is noted for reviewers; no change.
+  - [ ] Step 1: widening the shared `marketsession` calendar changes portfolio offline valuation and trading behavior on historical dates. Pre-2022 June 19 becomes a trading day, and the one-off closures become non-trading days. This is intentional; portfolio and trading reviewers should be aware.
+  - [ ] Merge order: `docs/roadmap/features/merge-order.md` has no 364 entry. Add a non-blocking entry covering `marketdata_service.go` (317, 322), `common.proto` (322, different messages), `INVENTORY.md` (308, 325, 345), ingest `servicer.py`/tests (309, 313, 322), agent `tools.py`/`client.py` (309, 310, 314, 322, 327, 328, 345) and `docs/runbooks/mcp-tools.md` (docs-only). This is outside this review's write scope. → before the integration PR.
+- Overlap findings: no migration, config-key or proto-field-number collision. The additive `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4` is touched by no in-flight feature. The file-level collisions are listed above.
