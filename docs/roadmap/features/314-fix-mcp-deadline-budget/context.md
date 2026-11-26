@@ -889,3 +889,35 @@ the first body line of the re-spec commit below.
 ```sdd-batch-setup
 {"mainDev":"2b2dec92afa14123ac1d796846632db713bbd9dc","date":"2026-11-26"}
 ```
+
+### Step 1 — service: SetConfig ceiling, extract-budget bound and cross-key ordering gate [done]
+- Atomic unit steps 1+2. The `agent.opportunities.read_timeout_seconds` ceiling goes from 55 to 44, and the
+  new `agent.extract.call_budget_seconds` key is bounded to [5,35].
+- Added a two-row `CROSS_KEY_ORDERING` table and a precomputed `CROSS_KEY_RULES_BY_KEY` map. `setConfig`
+  gates global writes only, between the per-key gate and the existence gate:
+  - one sibling `SELECT namespace, key, value_data` read;
+  - strict `>` comparison, code 3 on violation, remedy leads with "raise";
+  - an absent or non-numeric sibling skips the comparison with a key-only WARN;
+  - a read error returns code 13.
+- TDD (unit): RED `.sdd-logs/v-1.log`, `ℹ fail 11`. The @AC-2 case failed with "45 must be rejected, so 44
+  is the largest accepted", and @AC-3 with "marketdata.quotes.batch_timeout_ms = 5000 must be rejected".
+  GREEN `.sdd-logs/v-2.log`, `ℹ pass 419` / `ℹ fail 0`, `exit=0`.
+- Config-wiring step-time check: `exit=0` with no findings.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: none.
+
+### Step 2 — test: scalar bounds, `@AC-2` ceiling arithmetic and `@AC-3` cross-key ordering [done]
+- Atomic unit steps 1+2. Bounds table changes: the agent row goes to `max: 44` and an
+  `extract.call_budget_seconds` [5,35] row is added. The intVal ceiling case now uses 45 and `[30, 44]`.
+- New `@AC-2` test: it parses `_RPC_TIMEOUT_S` and `_POLICY_READ_TIMEOUT_S` from the agent sources, then
+  checks that 44 is accepted, 45 is rejected, and 10 + 3 + 44 <= 57.
+- New sibling-returning mock (empty by default, reset in `beforeEach`), plus cross-key cases: `@AC-3`,
+  reverse direction, max(batch, mark), the enrich pair both ways, the strict `>` 2500 narrowing, a
+  no-lower-remedy case, accepted writes, per-user skip, absent and unparseable siblings, a read failure
+  (code 13), and zero queries for out-of-bounds and non-admin writes.
+- AC-2 red: the 45 write was accepted → green: passed. AC-3 red: the batch 5000 write was accepted → green:
+  passed.
+- GREEN `.sdd-logs/v-3.log`: `ℹ pass 419` / `ℹ fail 0`, coverage `All files | 92.63` lines. The block
+  shows `exit=1` only because the trailing no-fixtures `grep` matched nothing (Deviation Log).
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: Step 2 Verification exit semantics (Deviation Log, no spec edit).

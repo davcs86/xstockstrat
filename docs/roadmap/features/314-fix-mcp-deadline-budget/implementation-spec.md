@@ -191,7 +191,7 @@ These are recorded in context.md (Session 2026-11-20 — sdd-spec) as well.
 
 ### Step 1 — service: SetConfig ceiling, extract-budget bound and cross-key ordering gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -279,7 +279,7 @@ grep -n "CROSS_KEY_ORDERING\|CROSS_KEY_RULES_BY_KEY\|'agent.extract.call_budget_
 
 ### Step 2 — test: scalar bounds, `@AC-2` ceiling arithmetic and `@AC-3` cross-key ordering
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -990,3 +990,12 @@ Pass criteria are the operator's readings in instructions 1, 3 and 4.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Steps 1+2 — Step 2 Verification block exits 1 on success (2026-11-26)
+- **Spec said**: Step 2's Verification ends with `grep -n "__tests__/fixtures" … # expect no new import`.
+- **Actual**: on a passing tree that grep matches nothing and exits 1, so the block's exit is 1 and it hides
+  the exit of the `lint && test:coverage && c8 check-coverage` line. The block also cannot run as written
+  inside one `( … )` subshell, because the inline `#` comment swallows a closing paren on the same line. The
+  executor put the paren on its own line.
+- **Disposition**: the block was run verbatim and judged from its log: lint 0 errors, `ℹ pass 419` /
+  `ℹ fail 0`, coverage lines 92.63 % with no c8 `ERROR` line, and the grep printed nothing. No spec edit.
