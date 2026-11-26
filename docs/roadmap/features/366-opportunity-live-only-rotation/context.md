@@ -1159,3 +1159,7 @@
 - TDD (185 @AC-8 regression guard, D-7): RED ran the Verification block with `servicer.py` temporarily restored from `92769965` (pre-Step-7). `.sdd-logs/v-1.log` exit=1: `1 failed, 25 passed`, with `assert (… 20:54:44.309737 + timedelta(days=3)) <= datetime(2026, 11, 27, 20, 54, 44 …)`: the live-only row got session_end + 24h. The same run also had one ruff E501 on my own new line, which I fixed. GREEN `.sdd-logs/v-2.log` exit=0: `26 passed`, `1814 passed`, `Required test coverage of 40% reached. Total coverage: 91.88%`, `All checks passed!`, `143 files already formatted`. Config-key wiring gate not applicable (the step touches no key or migration).
 - Files modified: `services/xstockstrat-analysis/tests/test_opportunity_rotation.py`
 - Deviations: none
+
+## Session 2026-11-26 — operator standing rule: checkpoint auto-resume (main session)
+
+- STANDING RULE (operator, verbatim: "Resume right after the checkpoints. Condition: no deviations"), anchor `auth-366-checkpoint-autoresume-2026-11-26`: for the rest of this feature's /sdd-batch-execute run, the main session answers a checkpoint halt with `proceed` without asking when that checkpoint reports `deviations: []`. A checkpoint reporting any deviation, every blocker, the promotion plan and the integration-PR merge still go to the operator. Applied first at checkpoint:8 (Steps 4–8 committed; deviations []).
