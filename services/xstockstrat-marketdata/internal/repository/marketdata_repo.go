@@ -259,6 +259,27 @@ func (r *MarketDataRepo) GetCoverage(ctx context.Context, symbol, timeframe stri
 	return earliest, latest, barCount, nil
 }
 
+// GetDailyCoverage is GetCoverage for timeframe 1d plus every stored bar time, in one query over the
+// same predicate (so it locks the same chunks).
+func (r *MarketDataRepo) GetDailyCoverage(ctx context.Context, symbol string, start, end time.Time) (earliest, latest time.Time, barCount int64, times []time.Time, err error) {
+	const sql = `
+		SELECT MIN(time), MAX(time), COUNT(*), COALESCE(array_agg(time ORDER BY time), '{}')
+		FROM marketdata.ohlcv
+		WHERE symbol=$1 AND timeframe='1d' AND time >= $2 AND time <= $3`
+	var minT, maxT *time.Time
+	row := r.pool.QueryRow(ctx, sql, symbol, start, end)
+	if err = row.Scan(&minT, &maxT, &barCount, &times); err != nil {
+		return time.Time{}, time.Time{}, 0, nil, err
+	}
+	if minT != nil {
+		earliest = *minT
+	}
+	if maxT != nil {
+		latest = *maxT
+	}
+	return earliest, latest, barCount, times, nil
+}
+
 // buildDeleteBarsQuery assembles the scoped DELETE. Pure/unit-testable, and the symbol
 // predicate is ALWAYS present as $1 so it can never become a full-table delete (FR-5).
 func buildDeleteBarsQuery(symbol, timeframe string, start, end time.Time) (string, []any) {

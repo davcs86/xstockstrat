@@ -34,8 +34,11 @@ func TestEvaluateDrawdowns(t *testing.T) {
 		if len(msgs) != 1 {
 			t.Fatalf("len(msgs) = %d, want 1", len(msgs))
 		}
-		if !strings.Contains(msgs[0], "acc-1") {
-			t.Fatalf("msg %q does not name acc-1", msgs[0])
+		if !strings.Contains(msgs[0].Message, "acc-1") {
+			t.Fatalf("msg %q does not name acc-1", msgs[0].Message)
+		}
+		if msgs[0].AccountID != "acc-1" {
+			t.Fatalf("AccountID = %q, want acc-1", msgs[0].AccountID)
 		}
 	})
 
@@ -53,7 +56,7 @@ func TestEvaluateDrawdowns(t *testing.T) {
 
 	t.Run("mixed slice names only the breaching account (per-account grain)", func(t *testing.T) {
 		msgs := evaluateDrawdowns([]repository.AccountDrawdown{breach, subLimit, noHistory}, 0.02)
-		if len(msgs) != 1 || !strings.Contains(msgs[0], "acc-1") {
+		if len(msgs) != 1 || !strings.Contains(msgs[0].Message, "acc-1") || msgs[0].AccountID != "acc-1" {
 			t.Fatalf("msgs = %v, want exactly one naming acc-1", msgs)
 		}
 	})
