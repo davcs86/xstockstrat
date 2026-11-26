@@ -23,7 +23,7 @@ Feature: fix-a-filtered-listopportunities (bug fix)
     Given a user has no opportunity rows and no still-fresh empty stamp
     When the user lists opportunities with symbol SCKT
     Then the response is an empty page with computing true
-    And a background full recompute starts for that user
+    And once the background full recompute finishes, a follow-up read returns computing false
 
   @AC-4 @FR-2
   Scenario: A filtered read over an all-stale queue still revalidates in the background
