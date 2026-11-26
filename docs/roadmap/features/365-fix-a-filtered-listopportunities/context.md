@@ -232,3 +232,22 @@ Full debate (/sdd-design via /sdd-batch) halted at the approval gate after round
 - [ ] **Merge coupling with 366.** Target: merge time, with 365 first and 366 keeping the elif fall-through and D-4.
 - [ ] **A has_fresh timeout on a cold read drops the kick,** and no test pins it. Target: step 1, item (d), optional test.
 - [ ] **Open non-blocking objections O-6..O-8** (kick-spy proxy or a real-kick test; fetchval routing; (e)'s target file and D-3 pin label). Target: /sdd-spec step 1, Files and Verification.
+
+## Session 2026-11-26 — sdd-spec
+
+- Generated implementation-spec.md with 3 steps. Status → implementation-ready.
+  - Steps 1+2 are one atomic unit (`**Lands with**`):
+    - Step 1 (service): the servicer `elif not await opps.has_fresh(user_id):` gate.
+    - Step 2 (test): RED regression tests plus the harness stubs (b)/(c)/(d) and the real_pg `has_fresh` test (e).
+  - Step 3 (docs) updates the `docs/opportunities.md` symbol-filter sentence (f).
+  - Item (g) was already recorded in the sdd-design session above (D-2, D-4), so no further entry is needed.
+- Key codebase findings (re-verified at origin/feature/fix-a-filtered-listopportunities@2f120ed3; the analysis tree is unchanged against main-dev@34f68c57):
+  - Bug site: bare `else:` at servicer.py:4790, `q.kick_full = True` at 4792, `state_repo.get` at 4798. `has_fresh` is at opportunities.py:340-348 (fetchval; no production caller today).
+  - Atomic-unit trigger: three test harnesses break on the new await until Step 2's stubs land.
+    - `tests/test_opportunities_repo.py:657` plain `MagicMock`: the await raises TypeError.
+    - `tests/test_opportunity_compute_state.py:45` `_opp_svc` `AsyncMock()`: returns a truthy MagicMock, so the cold kick disappears.
+    - `tests/conftest.py:298` `_BC_METHOD_FOR`: has no `has_fresh` entry.
+  - No other harness is affected. The other `AsyncMock()` opportunity repos (loop_supervision, tick_telemetry, owner_scoped_completeness, owner_header_guard, opportunity_refresh) never call ListOpportunities (grep).
+  - Line correction: design item (f) cites `docs/opportunities.md:7`, but the sentence to change ("filters both the fresh and the stale read") is at L9 (L8-10). Recorded in Step 3's evidence.
+  - O-6 resolution: real-kick tests (stub `_compute_opportunities`, drain `_opportunity_recomputing`) cover the `valid_until` and follow-up Then clauses of AC-1, AC-3 and AC-4. AC-2's `valid_until` clause uses the kick-spy proxy, stated in Step 2's Verification.
+  - Not run in this session: the analysis venv lacks dev deps here (`asyncpg` missing), so the test baseline was not executed. Execute must run `uv sync --extra dev` first.
