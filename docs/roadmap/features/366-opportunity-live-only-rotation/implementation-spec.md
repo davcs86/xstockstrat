@@ -750,7 +750,7 @@ grep -n "record_opportunity_read_reissue" app/handlers/servicer.py app/telemetry
 
 ### Step 11 — docs: C-05 key docs, C-16 CHANGE rule text, observability, read branches and residuals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-analysis/`, `docs/patterns/`)
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -852,3 +852,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### 2026-11-26 — Steps 9+10 (atomic unit)
 
 - **Spec miss — feature 365's filtered-empty test stub not listed in Step 10's Files.** `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py::test_ac2_symbol_filter_absent_symbol_over_fresh_queue_does_not_kick` stubbed `read` with `_fresh_empty`, which returned `[]` only for `include_expired=False`. After Step 9 the first read is `include_expired=True`, so the stub served the unfiltered AAPL row and the test no longer exercised "symbol absent from a fresh queue". **Disposition**: operator decision A (2026-11-26). The unit's scope is expanded by this one file, the same precedent as the Steps 4+5+6 decision on this file. The stub is now `_symbol_scoped`, `[r for r in await orig(*a, **kw) if r["symbol"] == kw["symbol"]]`, which applies the symbol WHERE the way the real repository does.
+
+### 2026-11-26 — Step 11
+
+- **Node 24 via PATH** (operator-authorized 2026-11-26 for Steps 4–6 and 11): the Verification block and the wiring gates ran under `PATH=/opt/node24/bin:$PATH` (Node 24.22.3); the block text itself ran verbatim. **Disposition**: CI-equivalent fallback.
+- **Stale feature-365 sentence rewritten in `opportunities.md`.** The 215 sub-bullet said the `include_expired=True` read "runs only when the user has no fresh row". After Step 9 that read always runs first, so the sentence now points at read branch (v) and keeps 365's empty-page/no-kick guarantee. Same file as item 7, no new scope. **Disposition**: in-scope C-05 correction.
+- **Verification exit=1 is the trailing `grep -c`.** The block's last command counts `get_int` lines among the `max_live_only_symbols_per_compute` hits and expects 0, and `grep -c` exits 1 when it counts 0. The `--doc-check` run on its own exited 0. **Disposition**: expected outcome; no change.

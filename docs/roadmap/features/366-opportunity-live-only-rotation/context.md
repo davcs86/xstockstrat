@@ -1196,3 +1196,12 @@
 - C-13: the rows are built through `_unavailable_served_row` over `_materialized_svc`/`_FakeOppRepo`, and the metric helpers are imported. There is no new literal home.
 - Files modified: `services/xstockstrat-analysis/tests/test_opportunity_rotation.py`, `tests/test_analysis_servicer.py`, `tests/test_list_opportunities_deadlines.py` (operator-added)
 - Deviations: the deadlines-file spec miss (operator A); see the Deviation Log.
+
+## Session 2026-11-26 — sdd-execute sequential, step 11
+
+### Step 11 — docs: C-05 key docs, C-16 CHANGE rule text, observability, read branches and residuals [done]
+- Analysis `CLAUDE.md`: `max_live_only_symbols_per_compute` is now the rotation's per-compute chunk limit (`int_positive`, operator-signed C-16 CHANGE of 131 @AC-8). New `live_only_cycle_max_days` row (`3`, config `056`, `[1,30]`). The `valid_window_hours` row now notes the live-only stamp (O-5). The feature-131 worst-case note gives the carried-row bound (O-14). § Observability lists `read_reissue` and the exact shortfall INFO text (O-24 closed). `config-governance.md`: the `:538` row now says `int_positive`, there is a new `live_only_cycle_max_days` row, and a newest-first feature-366 entry. Past entries (`:856`, `:954` region) are untouched, per the log's append-only rule. `opportunities.md`: a feature-366 sub-bullet covers the chunk and cursor transaction, read branches (i)-(v) with (iv) as the steady state, and the residuals (~24h gap, lowered cycle, O-25, FR-2a shortfall). The stale 365 sentence was also corrected. `database.md` needs no change (O-22).
+- TDD: N/A (docs). Baseline `.sdd-logs/v-1.log` exit=0: no grep hits, `get_int` count `1`. GREEN `.sdd-logs/v-2.log` `exit=1`, which is the trailing `grep -c` counting `0` as expected. It shows hits in all three files: CLAUDE.md:274/275/334, config-governance.md:171/564, opportunities.md:16/27. Doc-check printed nothing. Wiring gates (Node 24 PATH): step-time `--declared-from product-spec.md` exit=0 with no output (`v-3`). `--final` exit=0 (`v-4`), with only the two baseline `REPORTED:` lines (`marketdata/fundamentals.provider`, `platform/trading_state`). `--doc-check` exit=0 (`v-5`).
+- All 11 steps done: status.md → code-completed.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`, `services/xstockstrat-analysis/docs/opportunities.md`
+- Deviations: Node 24 PATH (CI-equivalent fallback), the stale 365 sentence correction, and the grep -c exit status. See the Deviation Log.
