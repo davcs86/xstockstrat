@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-11-25-analysis-filtered-empty-opportunity-read-kicks-full-recompute-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-11-25
-**Last Updated**: 2026-11-25
+**Last Updated**: 2026-11-26
 
 ---
 
@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-25 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-11-25-analysis-filtered-empty-opportunity-read-kicks-full-recompute-defect.md` |
+| 2026-11-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 
 ---
 
@@ -33,4 +34,4 @@ background recompute even though the user's queue holds unexpired rows.
 
 ## Next Action
 
-`/sdd-spec fix-a-filtered-listopportunities` — recommended design depth (skip) from triage; see context.md
+`/sdd-design fix-a-filtered-listopportunities` — full design recommended (rubric escalates on the WARN-level servicer.py overlap findings with 330/366/308/327; operator chose the /sdd-batch full debate — keep it proportionate: single service, clear root cause)
