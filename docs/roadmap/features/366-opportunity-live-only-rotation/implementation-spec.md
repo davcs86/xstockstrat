@@ -239,7 +239,7 @@ grep -n "COALESCE(\$14::timestamptz, now())\|to_timestamp(0)\|live_only_cursor" 
 
 ### Step 3 — test: repository SQL, binds, decode, no-clobber and atomicity (unit + `real_pg`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_opportunities_repo.py` — modify
