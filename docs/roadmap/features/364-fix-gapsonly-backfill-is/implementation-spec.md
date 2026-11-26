@@ -190,7 +190,7 @@ Before Step 1 it fails on 2025-01-09 and 2021-06-18; after Step 1 it passes. Lin
 
 ### Step 3 — service: `timeframe.ComputeSessionGaps` (head, interior and tail 1d gaps)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/timeframe/timeframe.go` — modify
@@ -234,7 +234,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/timeframe/ -
 
 ### Step 4 — test: `TestComputeSessionGaps` (separation invariant, interior hole, full coverage, calendar)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/timeframe/timeframe_test.go` — modify

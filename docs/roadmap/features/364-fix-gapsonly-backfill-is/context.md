@@ -380,3 +380,19 @@ Each thread names its target step.
 - Files modified: `packages/proto/marketsession/marketsession_test.go`
 - Deviations: folded into Step 1 (Deviation Log).
 - Note: per `packages/proto/CLAUDE.md`, no CI job runs `go test` inside `packages/proto/`, so this test runs locally only; CI coverage of the closure dates comes via Step 4's `TestComputeSessionGaps` closure row (as the spec states).
+
+## Session 2026-11-26 — sdd-execute sequential, steps 3+4
+
+- Tooling: golangci-lint ⬇ v2.14.0 (built with go1.27.0, `GOTOOLCHAIN=go1.27.0 go install` into `$HOME/go/bin`); the Verification blocks ran unchanged with `$HOME/go/bin` first on `PATH`, because `/usr/local/bin/golangci-lint` is the stale v2.5.0/go1.25.
+
+### Step 3 — service: `timeframe.ComputeSessionGaps` (head, interior and tail 1d gaps) [done]
+- Added `ComputeSessionGaps(reqStart, reqEnd, stored, now)`: walks NY days from the first day-start ≥ `reqStart` up to `reqEnd` and the last countable session (`Reference(now)`, or the previous trading day while live), treats unstored `IsTradingDay` days as missing, and merges runs that only a stored session ends into `Gap{DayStart(first), DayStart(last)+12h}`. `ComputeGaps` is unchanged; its doc now names it the 15m/1h path. Part of the unit `steps 3+4`.
+- TDD (unit 3+4, AC-1/AC-3): red: `undefined: ComputeSessionGaps` (build failed, `exit=1`) → green: Step 3 Verification `ok …/internal/timeframe`, `0 issues.`, `exit=0`; Step 4 Verification all packages `ok`, `total: (statements) 87.5%` (≥ 40%), `0 issues.`, `exit=0`; `-v` run shows all 8 `TestComputeSessionGaps` subtests PASS.
+- Files modified: `services/xstockstrat-marketdata/internal/timeframe/timeframe.go`
+- Deviations: none
+
+### Step 4 — test: `TestComputeSessionGaps` (separation invariant, interior hole, full coverage, calendar) [done]
+- Added `TestComputeSessionGaps` with `now` = 2026-11-26 18:00Z and subtests AC-1 interior hole, AC-3 fully covered, head and tail, separation invariant (weekend/Juneteenth/observed-July-4 merges plus a stored-session-between check), calendar (2025-01-09, 2025-12-25), live bound, reversed range, no bars. Part of the unit `steps 3+4`.
+- The inline `stored` helper `weekdayStamps` lists every weekday (a superset of trading days) minus the excluded dates, so the calendar subtest fails if a closure or holiday were treated as a trading day; single consumer, stays inline (C-13).
+- Files modified: `services/xstockstrat-marketdata/internal/timeframe/timeframe_test.go`
+- Deviations: none
