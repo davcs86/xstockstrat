@@ -297,3 +297,34 @@ Each thread names its target step.
 - An EMPTY symbol with stored bars in the 730 days before its first gap now becomes INCOMPLETE. Re-check that no `@AC-24 @feature-352` scenario uses GAPS_ONLY with prior history. → `/sdd-spec`
 - The `/insights/strategies/[id]` GAPS_ONLY action (`page.tsx:547`) does not use `backfillJobMessage`, so it shows an INCOMPLETE-only PARTIAL as a plain PARTIAL. Decide whether it is in scope. → `/sdd-spec`
 - The analysis readiness hot path calls `GetDataCoverage` over a 10-day window. Check the `array_agg` latency. → marketdata repo/service step
+
+## Session 2026-11-26 — sdd-spec
+
+- Generated `implementation-spec.md` with 19 steps. Status: design-approved → implementation-ready. Spec tree: `feature/fix-gapsonly-backfill-is@3c9982d0`.
+- Updated `product-spec.md` Fix Scope and added a Proto Contract section, as the operator decision required. Added `@AC-4` (head carve-out, K=730), `@AC-5` (UI INCOMPLETE-only PARTIAL) and `@AC-6` (agent `incomplete` outcome) to `acceptance.feature`. Every `@AC-1..6` maps to a step's **Covers** line.
+- Atomic units (`**Lands with**`):
+  - 3+4 and 5+6 (the test references a new symbol);
+  - 7+8 (proto + proto-gen);
+  - 11+12: verify breaks the existing `test_gaps_only_plans_from_coverage_gaps` (`tests/test_ingest_servicer.py:1100-1127`, `assert_awaited_once` at `:1126`);
+  - 13+14 (the test patches the new `list_job_symbols`).
+- Key codebase findings:
+  - `plan_chunks` drops `range_end <= range_start` (`backfill_chunks.py:52`). Session gaps therefore use `End = DayStart(last missing) + 12h` (noon New York). This keeps a one-session gap non-empty, and the UTC date of each bound equals the session date, so ingest formats `reason` dates without a tz database.
+  - `chunk_max_bars` only batches symbols (`backfill_chunks.py:58-61`). A single-symbol merged unit of at most one window is one chunk. This closes O-9.
+  - `job_row_to_proto` already rebuilds the range NULL-safely (`servicer.py:368-374`). Resume verify reuses `job_row_to_proto(row).range` instead of a new converter (D-7/R-8).
+  - `/insights/strategies/[id]` renders only "Backfill started — job <id>" and no job status (`page.tsx:539-557`), so it is out of scope.
+  - `@AC-24 @feature-352` is a fundamentals backfill (agent `delisted-symbol-handling.feature:24-29`), so it has no GAPS_ONLY conflict.
+  - No exhaustive `Record`/switch over `BackfillSymbolOutcome` exists in any consumer, so the proto unit needs no extra parity edit.
+  - `marketsession` is also consumed by portfolio and trading. Step 1 verifies both builds.
+  - The ui `package.json` has no `typecheck` script, so UI steps use `pnpm exec tsc --noEmit`.
+
+### Decisions
+
+- Juneteenth before 2022 is **fixed** (rule gated on `y >= 2022`), not accepted. The calendar is now the gap oracle back to 2000.
+- One-off NYSE closures since 2000 are added to `marketsession`. The maintenance rule is a constraint comment on the table, plus the marketdata `CLAUDE.md`.
+- 1d coverage uses a new repo method `GetDailyCoverage` behind a `dailyCoverageReader` service seam. `GetCoverage` and `ComputeGaps` stay for 15m/1h.
+- On resume, verify reads the planned symbols through a new repo function `list_job_symbols` (`SELECT DISTINCT unnest(symbols)` over the job's chunks). This keeps the design's "symbols that had planned units" rule.
+
+### Open Threads
+
+- **O-8, recorded as accepted at spec, not measured.** The 1d query keeps the identical predicate, so it locks the same chunks. The payload is ≤ ~6.8k timestamps for an unset start. Verify doubles the scan and adds one 730-day probe. That probe can exceed the 400-day `@AC-1 @feature-153` envelope only over legacy pre-`004` 1-day chunks. Measurement is a post-deploy dev smoke (Step 6 note). → `/sdd-review impl-spec`: confirm operator acceptance.
+- **Session completing mid-job.** When `range.end` is unset, verify may report a session that completed after planning as missing. This is folded into the accepted "late last session" risk, with no mechanism added. → `/sdd-review impl-spec`.
