@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-11-25-gaps-only-backfill-blind-to-interior-holes-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-25
-**Last Updated**: 2026-11-25
+**Last Updated**: 2026-11-26
 
 ---
 
@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-25 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-11-25-gaps-only-backfill-blind-to-interior-holes-defect.md` |
+| 2026-11-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 
 ---
 
@@ -33,4 +34,4 @@ GAPS_ONLY backfill derives gaps only from a symbol's earliest/latest bar, so an 
 
 ## Next Action
 
-`/sdd-design fix-gapsonly-backfill-is` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-gapsonly-backfill-is` — full design recommended (2 code-changing services, marketdata + ingest, plus GAPS_ONLY consumer surfaces in ui/agent; possible additive proto change to `GetDataCoverage`)
