@@ -3978,6 +3978,11 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/316-fix-notify-stream-contract/context.md:602-644` (spike table and verdict); `docs/roadmap/features/316-fix-notify-stream-contract/debate.md` (D-2, D-6 reopened; D-15, R-10, R-11).
 - **Rule it implies**: Before a design names a grpc-js teardown call for a server stream, spike it on the installed version against a flow-controlled (zero-window) client and record what reaches the wire; a library call's name is not evidence of its wire behaviour (F-04).
 
+### 2026-11-20 — fix-alert-event-targeting — assumption
+- **Mistake**: A design packet framed owner-targeting a per-account halt alert as "admins lose only Web Push". It took two rounds to notice that admins are the only role that can resume a halt and that the untargeted alert's title was their only in-product source of another user's halted account_id, so narrowing the audience removed the remediator's sole signal.
+- **Evidence**: `docs/roadmap/features/315-fix-alert-event-targeting/debate.md` R-7, O-5 (round 3); `services/xstockstrat-trading/internal/service/trading.go:3181` (`RequireAdminScope`), `internal/repository/account_repo.go:90`.
+- **Rule it implies**: Before narrowing an alert's audience, list who can act on it and how each of them learns the affected id today; if the alert is their only source, pair the change with a replacement signal and state the loss in the C-16 CHANGE row.
+
 ### 2026-11-10 — ui-env-themed-bundles — assumption
 - **Mistake**: Recon stated "dev and prod build distinct SHAs because `main` gets merge commits", and three design rounds were built on that claim. It was false for `main-dev`: the post-promotion sync (`sync-main-to-maindev.yml:52`) ran `git merge origin/main` without `--no-ff`, fast-forwarding main-dev onto main's merge commit. Both deploys would then build the same `<sha>` image tag with different contents (here, opposite UI themes). Turning on `--no-ff` then broke two more assumptions:
   - the commit-count "nothing to promote" gate (`promote.yml:42`);
@@ -4247,3 +4252,13 @@ ambiguity is logged here).
 - **Evidence**: `services/xstockstrat-ui/src/middleware.ts:56-69` (refresh branch), `:86-111`; `docs/roadmap/features/345-authelia-sso/debate.md` O-85, R-23, D-107.
 - **Rule it implies**: A UI step that needs the signed-in user after any idle gap reads it through a session-gated JSON route
   called with `apiFetch` (401 → refresh → retry once), never from a server component or a middleware-exempt route's cookies.
+
+### 2026-11-13 — fix-vendor-key-in-url — assumption
+- **Mistake**: The round-1 design said `CheckRedirect` would close the redirect `Location`-parse leak of a query-string key. It cannot: Go's `net/http` `Client.do` parses `Location` before it calls `checkRedirect`, so the parse error, which quotes the key-bearing `Location`, is returned anyway. The same design also missed that a custom auth header (such as `apikey` or `X-Finnhub-Token`) is forwarded on a cross-host redirect, because Go strips only `Authorization`, `WWW-Authenticate`, `Cookie` and `Cookie2`.
+- **Evidence**: `docs/roadmap/features/320-fix-vendor-key-in-url/debate.md` O-7 (round 2, blocking), D-4, D-5 and R-5; `services/xstockstrat-marketdata/internal/fmp/fmp_client.go:289-295`.
+- **Rule it implies**: Take the key out of the URL; never rely on `CheckRedirect` to protect it. When a secret moves to a custom header, land `CheckRedirect` (`http.ErrUseLastResponse`) in the same step, with a cross-host redirect test written RED first.
+
+### 2026-11-20 — fix-agent-mcp-transport-fallthrough — assumption
+- **Mistake**: A design round accepted a subprocess regression test whose stderr assertion matched a token the buggy code already prints: the old fall-back warning and the new fail-closed error both render `MCP_TRANSPORT='htp'`, and `logging.basicConfig` sends the warning to stderr. The claimed RED then rested only on the old path not exiting within the timeout. Caught by the adversary in round 2, before any code.
+- **Evidence**: `docs/roadmap/features/331-fix-agent-mcp-transport-fallthrough/debate.md` O-4/R-6; `services/xstockstrat-agent/app/main.py:44,64`.
+- **Rule it implies**: When a fix replaces a warning with an error about the same input, the RED assertion must match text only the fixed code emits and assert the old message is absent; an echoed input value is never the discriminator (same family as the 2026-11-19 guard-tests-that-cannot-fail entry; no new ID).

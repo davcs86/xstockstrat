@@ -433,3 +433,27 @@ Further same-file overlaps for 347, all textual and non-blocking (whichever merg
 `docs/patterns/config-governance.md` (registered-keys log, both prepend at the same anchor),
 `services/xstockstrat-marketdata/CLAUDE.md` and `scripts/config-wiring-stored.json` with 341 (already on trunk; 347
 regenerates the stored set after any renumber).
+
+## Alert targeting overlap: 315 ↔ 312, 333, 357, 321, 337, 311 (2026-11-26, non-blocking)
+
+`fix-alert-event-targeting` (315) has no migration, proto or config-key collision with any peer, so this is a prose
+note, not a table row (statuses read 2026-11-26; none has merged):
+
+- `fix-read-path-owner-trust` (312, `implementation-ready`): no file overlap; either merge order is code-safe. 312's
+  product-spec Open Question 2 decides untargeted `ListAlerts` visibility, which changes who sees 315's empty-owner
+  fallback and the systemic alert. 312's implementation spec keeps `target_user_id IS NULL` rows visible and plans to
+  rebase on 315 (its Step 10).
+- `otel-env-provider-scoped-alerts` (333, `spec-ready`): both edit `packages/otel/alerts/alert-rules.yaml`, its README
+  and the guard's rule-count test. Whichever merges second re-greps and re-pins the count, and 333 scopes 315's new
+  rule `xstk-trading-account-halt` by environment along with the others.
+- `fix-portfolio-internal-position` (357, `in-progress`): same-function overlap in `checkRiskLimits`
+  (`services/xstockstrat-portfolio/internal/service/portfolio_service.go`). Whichever merges second resolves it by hand
+  and re-runs both features' `TestCheckRiskLimits*` tests.
+- `fix-trading-config-plumbing` (321, `implementation-ready`): `maxRetries` in the `flattenAndHalt` retry loop, next to
+  315's `haltAccount` calls in `trading.go`; rebase-only.
+- `metrics-host-provider-label` (337, `in-progress`): `scripts/tests/test_check_otel_produced_signals.py`, other tests
+  than 315's; rebase-only.
+- `fix-position-fold-correctness` (311, `implementation-ready`): `portfolio_service.go` (`processOrderFill`, and
+  `emitEvent` next to 315's `emitRiskAlert`), different functions; rebase-only.
+
+Recorded as a prose note (315 debate.md D-11) so it does not gate either integration PR.
