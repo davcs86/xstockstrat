@@ -443,6 +443,8 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 - `services/xstockstrat-ingest/docs/context-constitution-findings.md` — modify
 - `services/xstockstrat-ingest/docs/context-constitution.md` — modify
 
+This step lists six files (above the five-file advisory) on purpose: deleting the five dataclasses breaks `tests/test_extractor.py` (it imports them) and the example extractor, so the trim, both deletions and the replacement noop test must land in one green commit, and the two findings and constitution edits are the same-step doc teardown.
+
 **Reviewers**: Service owner `xstockstrat-ingest` — signal normalization correctness, idempotent ingestion, newsletter source schema stability
 
 **Codebase Evidence**:
@@ -457,7 +459,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 - No packaging or lint reference to the deleted files: `git grep -n "extractors" -- services/xstockstrat-ingest/pyproject.toml services/xstockstrat-ingest/Dockerfile` → no hit.
 - CI gate: `.github/workflows/ci.yml:470-472` (ingest `coverage_threshold: 40`, `cov_source: app`), run as `uv run --no-sync pytest --cov=app … --cov-fail-under=40` (`:516-519`).
 
-**TDD**: `red-green required` — the RED is the presence check below; the paired `test` step is Step 7. The new noop test characterises kept code, so it has no RED: write it first, capture it GREEN on the pre-edit tree, and it must stay GREEN after the trim (it guards `noop.py`'s imports of `BaseExtractor` and `RawInput` from the trimmed `base.py`). State this in `context.md`.
+**TDD**: `red N/A — no behavior change; characterization test added` (the tdd-gate escape, `.claude/skills/sdd-execute/reference/tdd-gate.md:55-58`). The deletions' RED is the construct-scoped presence check below, and the paired `test` step is Step 7. The new noop test characterises kept code: capture it GREEN on the pre-edit tree, it must stay GREEN after the trim (it guards `noop.py`'s imports of `BaseExtractor` and `RawInput` from the trimmed `base.py`), and state the escape in `context.md`.
 
 **Covers**: —
 
@@ -483,6 +485,8 @@ git grep -n "SimpleEmailInput\|EmailAttachmentInput\|LinkedEmailInput\|SimpleWeb
 grep -n "^RawInput = McpClientInput" services/xstockstrat-ingest/app/extractors/base.py   # expect: one line
 cd services/xstockstrat-ingest
 uv run pytest tests/test_noop_extractor.py -q                  # 3 passed (also run GREEN pre-edit, Instruction 1)
+# optional mutation proof (restore afterwards): delete the `RawInput = McpClientInput` line in app/extractors/base.py
+# and re-run the line above → expect RED (ImportError: noop.py imports RawInput); then re-insert the line
 grep -c "^async def test_\|^def test_" tests/test_noop_extractor.py   # expect: 3
 uv run pytest --cov=app --cov-fail-under=40
 ruff check . && ruff format --check .
@@ -509,10 +513,10 @@ ruff check . && ruff format --check .
 
 **TDD**: `red-green required` — RED is the per-item pre-edit capture recorded by Steps 3–6; this step captures the consolidated GREEN.
 
-**Covers**: `AC-2` (backend part; the agent part is Step 8)
+**Covers**: `AC-2`
 
 **Instructions**:
-Run the Verification block from the repo root on the tree that holds Steps 1–6, and record in `context.md`: the two `pnpm why` outputs, the item-5 grep (empty), and one line per service gate (pass, with the coverage figure). Nothing else is edited. If any check is not as expected, the failing step is reopened through the deviation protocol; this step does not patch around it.
+This step covers the backend part of `@AC-2`; the agent part (`signal_extraction.md` remains) is Step 8. Run the Verification block from the repo root on the tree that holds Steps 1–6, and record in `context.md`: the two `pnpm why` outputs, the item-5 grep (empty), and one line per service gate (pass, with the coverage figure). Nothing else is edited. If any check is not as expected, the failing step is reopened through the deviation protocol; this step does not patch around it.
 
 **Verification**:
 ```bash
@@ -567,12 +571,12 @@ node scripts/check-config-wiring.mjs --final
 - Coverage threshold (CI): agent `--cov-fail-under=40` (`.github/workflows/ci.yml:476-478`, run `:516-519`).
 - No deletion happens here, so there is no pre-edit RED; the check is green on the unchanged agent tree and stays green after Steps 1–7.
 
-**TDD**: `red-green required` — the allowed escape applies: "red N/A — no behavior change" (no agent file is changed by this feature). State it in `context.md` and still capture the green run.
+**TDD**: `N/A (verification-only: no agent file or test changes; commands are green before and after)`
 
-**Covers**: `AC-2, AC-3` (AC-2: the agent part only; the backend part is Step 7)
+**Covers**: `AC-2, AC-3`
 
 **Instructions**:
-Run the Verification block from the repo root and record in `context.md` the `git ls-files` outputs, the `tests/test_config_watcher.py` result, and the agent gate line (pass, with the coverage figure). Nothing else is edited. If any check is not as expected, reopen it through the deviation protocol.
+For `@AC-2` this step covers the agent part only (`signal_extraction.md` remains); the backend part is Step 7. Run the Verification block from the repo root and record in `context.md` the `git ls-files` outputs, the `tests/test_config_watcher.py` result, and the agent gate line (pass, with the coverage figure). Nothing else is edited. If any check is not as expected, reopen it through the deviation protocol.
 
 **Verification**:
 ```bash

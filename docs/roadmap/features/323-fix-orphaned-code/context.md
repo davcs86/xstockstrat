@@ -487,3 +487,14 @@ Two rulings on the open items the previous re-spec raised, relayed by the orches
 - [ ] Run `/sdd-review fix-orphaned-code impl-spec` again on the amended spec (operator ruling asks for a re-review) — all steps.
 - [ ] Stale text above (`product-spec.md`, `design.md`, defect report, `merge-order.md:129`, agent findings `:36`) needs a decision on who edits it — Step 6, Step 8.
 - [ ] `tests/test_noop_extractor.py` was not run end to end in the spec session; confirm GREEN pre-edit and post-trim at execute — Step 6.
+
+## Session 2026-11-26 — independent impl-spec review (spec-reviewer), recorded by the orchestrator
+
+- Verdict: **PASS WITH WARNINGS**, no blockers (independent spec-review of the 9-step spec at `f3ac2b05`).
+- Changes in `implementation-spec.md`:
+  - Step 8 `**TDD**` now reads `N/A (verification-only: no agent file or test changes; commands are green before and after)`; the "characterization test added" escape never applied to it.
+  - Step 6 `**TDD**` now uses the tdd-gate escape wording `red N/A — no behavior change; characterization test added` (`.claude/skills/sdd-execute/reference/tdd-gate.md:55-58`); the deletions' RED stays the presence check. Its Verification gained an optional mutation proof (drop the `RawInput = McpClientInput` line, expect `tests/test_noop_extractor.py` RED, re-insert it).
+  - Steps 7 and 8 `**Covers**` are bare ID lists (`AC-2`; `AC-2, AC-3`); the "backend part / agent part" split moved into their Instructions.
+  - Step 6 now states why it lists six files (the dataclass trim breaks `tests/test_extractor.py` and the example extractor, so trim, both deletions and the replacement test land in one green commit; the findings and constitution edits are same-step teardown).
+- Stale siblings were not rewritten. Supersession notes (`Superseded 2026-11-26 by operator rulings O-1/O-2: signal_extraction.md and noop.py are kept; see context.md`) were added as HTML comments at `product-spec.md:22`, `:24` and `:45`, above the two affected step paragraphs in `design.md` (D-3's ingest step and the agent step), and as an appended ruling note after the Settled Decisions table in `debate.md` (the settled D-3 row is untouched). `feature.md`'s Summary was already corrected in the previous session and is not stale.
+- Still open: the other warnings from the review beyond these five items were not relayed to this session; `merge-order.md:129`, defect report items 6 and 8, and agent findings `:36` remain as listed in the previous section.

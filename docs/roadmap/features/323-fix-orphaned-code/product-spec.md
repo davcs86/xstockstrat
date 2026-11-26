@@ -19,9 +19,9 @@ Report: [docs/reports/2026-10-19-orphaned-code-defect.md](../../../reports/2026-
   3. notify `jsonwebtoken` / `bcrypt` (+ `@types`) — no import in `src/`.
   4. marketdata `alpaca.AlpacaAsset` — zero references.
   5. analysis + ingest `ConfigWatcher.sandbox_*` accessors reading `indicators.sandbox.*` keys never subscribed to.
-  6. ingest `app/extractors/example_simple_email.py`, `noop.py` and the non-MCP input dataclasses.
+  6. ingest `app/extractors/example_simple_email.py`, `noop.py` and the non-MCP input dataclasses. <!-- Superseded 2026-11-26 by operator rulings O-1/O-2: signal_extraction.md and noop.py are kept; see context.md (noop.py half of item 6) -->
   7. agent `app/config/` package (`__init__.py` 0 bytes, nothing imports it).
-  8. agent `app/prompts/signal_extraction.md` — no `.py` reference.
+  8. agent `app/prompts/signal_extraction.md` — no `.py` reference. <!-- Superseded 2026-11-26 by operator rulings O-1/O-2: signal_extraction.md and noop.py are kept; see context.md -->
   9. ui `PortfolioPanel` combined (no-account) branch — effectively unreachable (`AccountContext` auto-selects).
   10. portfolio repo `r.pool` stragglers — methods use `r.pool` while `NewPortfolioRepoWithDB` sets only `db`; nil-panic under pgxmock.
 - **Expected:** delete items 1–4, 6 and 8 with their tests; item 5 appears already resolved (confirm at
@@ -42,7 +42,7 @@ Service-template copy-paste (items 1, 3, 5, 7), planned-but-unwired features (6,
 Spot-check at 0fecb24d:
 - Still present: `services/xstockstrat-config/src/services/configWatcher.ts:96`; `services/xstockstrat-ledger/package.json:11`;
   `services/xstockstrat-notify/package.json:35-36,51`; `services/xstockstrat-marketdata/internal/alpaca/client.go:654`;
-  `services/xstockstrat-ingest/app/extractors/{example_simple_email,noop}.py`; `services/xstockstrat-agent/app/prompts/signal_extraction.md`;
+  `services/xstockstrat-ingest/app/extractors/{example_simple_email,noop}.py`; `services/xstockstrat-agent/app/prompts/signal_extraction.md`; <!-- Superseded 2026-11-26 by operator rulings O-1/O-2: signal_extraction.md and noop.py are kept; see context.md -->
   `services/xstockstrat-ui/src/components/trader/PortfolioPanel.tsx:85`; `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go:217,241,341` (`r.pool`).
 - **Changed:** item 5 — no `sandbox_timeout_ms` / `sandbox_memory_bytes` in `services/xstockstrat-{analysis,ingest}/app` (appears already removed).
   Item 7 — `services/xstockstrat-agent/app/config/` now holds `watch_core.py` and `watcher.py` besides `__init__.py`; re-verify orphan status before deleting.
