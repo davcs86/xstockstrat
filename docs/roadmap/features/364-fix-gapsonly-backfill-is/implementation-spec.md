@@ -361,7 +361,7 @@ Coverage total must be ≥ 40%. The new logic is in the excluded `service`/`repo
 
 ### Step 7 — proto: `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify
@@ -393,7 +393,7 @@ cd packages/proto && buf lint && buf breaking --against '<repo-root>/.git#branch
 
 ### Step 8 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/common/v1/` — modify (generated)
@@ -920,3 +920,15 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: Steps 1+2 executed as one unplanned atomic unit (one RED→GREEN, one commit). Each Step 1 Verification line ran from the repo root in its own subshell: `(cd packages/proto && …); (cd services/xstockstrat-portfolio && …); (cd services/xstockstrat-trading && …)`; commands unchanged otherwise.
 **Reason**: Step 1's `go test ./marketsession/` has no test file without Step 2, so Step 1 cannot show its own RED→GREEN alone; and the second and third `cd` lines resolve relative to `packages/proto` when run in sequence, so they cannot run as written.
 **Disposition**: folded Step 2 into Step 1 — test step pairs the service step's red-green (operator choice A, 2026-11-26); verification lines run in per-line subshells from the repo root.
+
+### Deviation: Step 8 — proto-gen: regenerate stubs (ingest import assertion)
+**Spec said**: Step 8 **Verification** ends `cd ../xstockstrat-ingest && uv run python -c "from gen.common.v1 import common_pb2; assert common_pb2.BACKFILL_SYMBOL_OUTCOME_INCOMPLETE == 4"`.
+**Actual**: Ran `uv run python -c "import sys; sys.path.insert(0, 'tests'); import conftest; from gen.common.v1 import common_pb2; assert common_pb2.BACKFILL_SYMBOL_OUTCOME_INCOMPLETE == 4"`, after `uv sync --extra dev` (`conftest` imports pytest).
+**Reason**: `gen.common.v1` is importable in ingest only through the path setup in `tests/conftest.py`; the bare import cannot resolve.
+**Disposition**: operator choice A, 2026-11-26 — keep the assertion and give it the conftest's import path.
+
+### Deviation: Steps 7+8 — `buf` and `buf-gen.sh` ran in the codegen container
+**Spec said**: Step 7 runs `buf lint && buf breaking …` and Step 8 runs `./scripts/buf-gen.sh` on the host.
+**Actual**: The host has no `buf` or `grpc_tools`, so those commands ran unchanged inside the pinned `Dockerfile.codegen` image (`xstockstrat-codegen`), with the worktree mounted at its host path and the main checkout's `.git` and `node_modules` mounted read-only. The rest of Step 8's chain (`git status`, `go build`, `uv run`) ran on the host. A second `buf-gen.sh` left the `packages/proto/gen/` diff byte-identical (sha256 compare).
+**Reason**: buf 1.72.0 and the codegen plugins are pinned in that image; tooling-setup names Docker as the preferred codegen route.
+**Disposition**: CI-equivalent fallback.

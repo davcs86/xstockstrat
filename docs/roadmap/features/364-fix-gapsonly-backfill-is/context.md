@@ -412,3 +412,20 @@ Each thread names its target step.
 - Files modified: `services/xstockstrat-marketdata/internal/service/coverage_test.go`
 - Deviations: none
 - Note: the repo SQL (`array_agg` scan into `[]time.Time`) has no offline test (needs a DB); the Step 6 dev smoke remains the required pre-promotion gate (operator decision (a)).
+
+## Session 2026-11-26 — sdd-execute sequential, steps 7+8
+
+- OPERATOR DECISION (binding, 2026-11-26): blocker on Step 7 resolved with **A**. Keep Step 8's ingest import assertion and give it the conftest's import path (`sys.path.insert(0, 'tests'); import conftest`). Recorded in the Deviation Log.
+- Tooling: buf ✗ on host → the pinned `xstockstrat-codegen` image (`dockerd` started, image rebuilt from cache) · go1.27 ✓ · uv ✓ (`uv sync --extra dev` in ingest) · config-key wiring gate N/A (no config key touched).
+
+### Step 7 — proto: `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4` [done]
+- Appended `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4` after FAILED. The `BackfillSymbolResult` comment now also says that for INCOMPLETE, `reason` holds the still-missing session ranges (2 lines). Part of the unit `steps 7+8`.
+- TDD: N/A (proto). Verification `buf lint && buf breaking` against the main checkout's `feature/fix-gapsonly-backfill-is`: `exit=0`, no findings.
+- Files modified: `packages/proto/common/v1/common.proto`
+- Deviations: ran in the codegen container (CI-equivalent fallback, Deviation Log).
+
+### Step 8 — proto-gen: regenerate stubs [done]
+- `buf-gen.sh` changed only the `common/v1` stubs: Go `common.pb.go`, Python `common_pb2.py`, TS `common.ts`/`common_pb.ts` and their four `dist/` files. marketdata `go build ./...` passes and ingest asserts `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE == 4`. A second `buf-gen.sh` left the gen diff byte-identical. Part of the unit `steps 7+8`.
+- TDD: N/A (proto-gen). Verification `exit=0`.
+- Files modified: `packages/proto/gen/go/common/v1/common.pb.go`, `packages/proto/gen/python/common/v1/common_pb2.py`, `packages/proto/gen/ts/common/v1/common.ts`, `packages/proto/gen/ts/common/v1/common_pb.ts`, `packages/proto/gen/ts/dist/common/v1/common.{d.ts,js}`, `packages/proto/gen/ts/dist/common/v1/common_pb.{d.ts,js}`
+- Deviations: ingest assertion gets the conftest import path (operator A); codegen ran in the container (Deviation Log).
