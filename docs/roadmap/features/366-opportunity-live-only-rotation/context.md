@@ -497,3 +497,276 @@
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-26 — sdd-batch design gate (round 4)
+
+- /sdd-design full debate halted at its approval gate after round 4 (gate policy: halt). design.md not written; status.md unchanged (spec-ready). Register: `debate.md` (D-1..D-14, R-1..R-14, O-1..O-23; O-5, O-6, O-8, O-9, O-12..O-17 closed @ round 4).
+
+## Open Threads
+
+- **Approach (round-4 synthesis).** Proposal r4 with D-1..D-13 kept, none of R-1..R-10 reintroduced, and the operator decisions on O-5 ('Accept both': live-only `valid_until = now + cycle_days × 24h`, no 168h cap, documented next to `valid_window_hours`), O-6 (the FR-2a shortfall is the expected default, logged at INFO) and O-12 ('Every recompute': the cursor advances on every compute, logs labelled in computes and fired only on a change of (pool bucket, N, cycle_days)). Chunk = the next `min(N, P)` symbols of `sorted(competitive_pool)` after `bisect_right(pool, cursor)`, wrapping; empty pool writes no cursor. Before step 3, a new fail-closed `read_live_attributed(user_id)` (plain SELECT, no actions join, no conviction floor) loads stored rows; a row is carried only when (a) live-only by provenance, (b) in `competitive_pool` and not in the chunk, (c) `strat in _capped_live(sym)` AND `(sym, strat) not in set(denied_covered)` (FR-7 cap plus the deny half that restores D-6's universe test), (e) `valid_until > now AND now - computed_at < cycle`, and (f) D-10's three-way action rule. Carried rows are appended after step 5/cut/stamp with fresh-wins dedup. Read side (D-11 + new D-14): one `include_expired=True` read; stale_curated → today's stale branch + kick; fresh with `n_expired == 0` → serve as read; fresh with `n_expired > 0` → re-issue today's unchanged `include_expired=False` read (no Python filtering, because every `_SORT_ORDER_BY` ranks by a symbol-partition window aggregate), no `kick_full` (R-14); else → 365's no-rows branch. Both fresh branches run the 185 @AC-8 heal. Persist: `_compute_opportunities` returns `(rows, new_cursor)`; `replace_for_user` (with `COALESCE($14::timestamptz, now())`) and `write_cursor` share one transaction; the empty-rows `upsert` stays outside and after it. Touchpoints: analysis migration 030, config 056 (`opportunity.live_only_cycle_max_days` = 3, [1,30]), analysis CLAUDE.md, config-governance.md:538, services/xstockstrat-analysis/docs/opportunities.md:7, database.md if it lists `opportunity_compute_state` columns; no proto change.
+- **Strongest open objection.** O-18 (blocking): predicate (c) as `_capped_live(sym)` alone reads the pre-deny `resolved.union` (live_loop.py:128-130, 155-156; servicer.py:5451-5455), so it is the locked R-2 and drops D-6's universe test; FR-4's "deny-listed → removed" would rest on a dedup side effect. The synthesis carries the fix (`and (sym, strat) not in set(denied_covered)`) plus a RED test in which a carried (AAPL, squeeze) row is denied and only the muted placeholder remains; it stays open until the proposer adopts it. Non-blocking: O-19 (branch (iv) is the routine steady state — state it and measure the second read; any predicate-(e) lookahead needs the operator), O-20 (all-sell pool gives `rows == []` with a non-null cursor — test it), O-21 (`$14::timestamptz` anchor + real_pg mixed-None test), O-22 (missing C-05 doc touchpoints), O-23 (document that (e)'s age clause matters only after `cycle_max_days` is lowered, and the residual), O-7 (verify against 308/330/365 diffs at /sdd-spec; rebase order 365 → 308, 330 → 366).
+- **Floor status.** No Floor breaches.
+- **Uncovered @AC changes.** Not covered by an operator decision (all PRESERVE): 185@AC-8 (surgical read-time heal), 185@AC-6, 185@AC-7, 190@AC-8 (symbol-group ordering), 190@AC-9 (symbol-group ordering / paging tiebreak), 132 deny list (deny-listed pair removed; FR-4), 289@AC-21 (formula_unreadable marker round-trips storage), 215 fundamentals_unavailable skip row (UNSPECIFIED override), 365@AC-1, 365@AC-2, 131 FR-7 per-symbol live-strategy cap, 193@AC-1 (blend evaluates only on fundamentals universe), 356@AC-5, 356@AC-10, 200@AC-10. Covered by operator decisions: 131@AC-8 CHANGE (live-only truncation per compute), 366@AC-12 EXTEND (carried row older than one cycle dropped; `>=` boundary), 366 EXTEND (live-only `valid_until = computed_at + cycle_max_days`, overriding `valid_window_hours` for live-only rows).
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "Round-4 synthesis. The base is proposal r4. I kept D-1..D-13, brought none of R-1..R-10 back, and applied the operator decisions on O-5, O-6 and O-12. I checked the adversary's blocking claim in the code and it holds: `resolve_universe` builds `union` before the deny list is applied (app/engine/live_loop.py:128-130, 155). Deny is applied only in `universe = (union - denied) | deny_entry` (:156). `live_by_symbol` is filled from `resolved.union` (servicer.py:5451-5452), and `denied_covered` collects `denied & union` (:5454-5455). The fix for this is folded into item 2(c). All paths are under services/xstockstrat-analysis/.\n\n1. **Chunk and cursor (D-1, D-5, O-16, O-12, O-6).**\n   - At step 2b (servicer.py:5541-5547), `pool = sorted(competitive_pool)`.\n   - `start = bisect_right(pool, cursor)`, wrapping to 0. `chunk` is the next `min(N, P)` symbols, wrapping modulo P. `new_cursor = chunk[-1]`.\n   - An empty pool returns `new_cursor = None`, so the cursor is not written.\n   - The cursor advances on every compute: the stale and cold kicks (:4942) and the daily refresh (:6045). This is the operator's 'Every recompute'.\n   - The shortfall is computed from the full pool. It is logged at INFO, and only when (pool bucket, N, cycle_days) changes. Fields: user, pool_size, carried_rows, projected_computes = ceil(P/N). It is labelled in computes, not days. Per the operator's O-6 decision it is the expected default outcome, not an error.\n\n2. **Carry read and predicates, all before step 3 (D-3, D-6, D-10, D-12).**\n   - A new `OpportunitiesRepository.read_live_attributed(user_id)` is a plain SELECT of all columns plus `computed_at`, `valid_until` and `composite_score`, with `WHERE user_id = $1 AND strategy_id <> ''`.\n   - It has no actions join and no conviction floor. `read()` filters DISMISS and applies the floor (opportunities.py:204-253), so it cannot serve this read.\n   - If this read fails, the compute fails (D-3).\n   - A stored row qualifies only if all of these hold:\n     - (a) `_is_live_only_row(row)`: `strategy_id != ''`, `'live_strategy'` is in provenance, and none of `('watchlist', 'position', 'denied')` is present.\n     - (b) its symbol is in `competitive_pool` and not in `chunk`.\n     - (c) **(corrected this round)** `strat in _capped_live(sym)` (:5461-5465) AND `(sym, strat) not in denied_covered_set`, where `denied_covered_set = set(denied_covered)` from :5455.\n       - The `_capped_live` half is the FR-7 cap (closes O-15).\n       - The deny half restores D-6's `resolved.universe` test. For a non-held symbol, `(sym, strat) ∉ denied_covered` is the same as `sym ∈ resolved.universe` for that strategy. Held symbols are already excluded by (a).\n       - Without the deny half, (c) is the locked R-2.\n     - (e) `valid_until > now AND now - computed_at < cycle` (D-7). A row aged exactly one cycle is dropped (the `>=` boundary). @AC-12's 4-day-old row under a 3-day cycle drops.\n       - The age clause is redundant for rows stamped under the current cycle. It does real work only after an operator lowers `cycle_max_days`. The spec must say so, so that no one deletes it as dead code.\n     - (f) D-10 verbatim. `expected = _resolve_action_tag({is_held: False, is_watchlist: False, best_direction: d}, False)`:\n       - drop when `expected` is None (verified: a non-held sell returns None at servicer.py:6602-6604);\n       - keep without comparing when provenance holds `fundamentals_unavailable` or `formula_unreadable`;\n       - otherwise require `expected == stored action`.\n   - `carried_symbols` is the set of symbols of the surviving rows. Step 3 (:5557-5560) becomes `if not targets and sym not in carried_symbols`.\n   - Carried rows are appended after step 5, the cut and the stamp loop (:5961-5963), and before the `symbol_score` fold (:5975-5983).\n   - On an `opportunity_key` collision the fresh row wins.\n   - Carried rows are not traced and do not count against `max_universe_size`.\n\n3. **Stamp (D-7, O-5 operator decision).**\n   - A fresh live-only row gets `valid_until = now + cycle_days × 24h`. Every other row keeps `session_end + window_hours` (:5961).\n   - The heal (`replace_symbols`) applies the same live-only stamp, which resets the row's age.\n   - There is no 168h cap. This is documented next to `opportunity.valid_window_hours` in CLAUDE.md (C-05).\n\n4. **Read-side staleness (D-11 decision rule, served per the new D-14).**\n   - (i) Run one `opps.read(include_expired=True, same filters)` and compute `stale_curated`, `fresh` and `n_expired`.\n   - (ii) If `stale_curated`: take today's stale branch exactly, serve these rows, set `kick_full` and `served_include_expired = True`.\n   - (iii) Else, if `fresh` is non-empty and `n_expired == 0`: serve the rows as read. They are identical to today's fresh read.\n   - (iv) Else, if `fresh` is non-empty and `n_expired > 0`: re-issue today's unchanged `include_expired=False` read (servicer.py:4765-4774) and serve that.\n     - The reason: every `_SORT_ORDER_BY` branch ranks a symbol by a window aggregate over its whole partition (opportunities.py:42-60, verified), so filtering in Python would reorder symbol groups (190 @AC-8/@AC-9).\n     - Branch (iv) sets no `kick_full` (R-14).\n   - (v) Else: 365's no-rows branch, unchanged.\n   - Branches (iii) and (iv) run the 185 @AC-8 `retry_symbols` heal (:4776-4789).\n   - The second statement runs sequentially on the same budgeted connection (ANALYSIS-14).\n   - **Branch (iv) is the routine steady state, not an edge case.** Under the default 3-day cycle and a daily refresh, some chunk sits expired-but-uncomputed for about 24 h. The design states this, and the second read is counted in a metric or log so its cost is measured.\n\n5. **Atomic persist (D-2, D-13, O-17).**\n   - `_compute_opportunities` returns `(rows, new_cursor)`. Its callers are :4952-4953 and :6070-6071.\n   - `_replace_and_stamp_compute_state(user_id, rows, propagation_meta=None, cursor=None)` (:4922) works like this:\n     - With a pool, it runs one `async with pool.acquire() as conn, conn.transaction()`.\n     - Inside it: `replace_for_user(user_id, rows, conn=conn)`. Its INSERT binds `computed_at` as `COALESCE($14::timestamptz, now())`, with an explicit type anchor (fails.md:2352-2355).\n     - Then, if `cursor` is not None: `write_cursor(conn, user_id, cursor)`, which runs `INSERT … VALUES ($1, now(), to_timestamp(0), $2) ON CONFLICT (user_id) DO UPDATE SET live_only_cursor = EXCLUDED.live_only_cursor`.\n     - The existing best-effort empty-rows `upsert` (:4933-4940) stays outside and after the transaction, and touches only `computed_at` and `valid_until`.\n   - An empty-rows compute with a non-null cursor **can** occur. An all-sell pool yields `rows == []` (servicer.py:5884, 6602-6604). The ordering above handles it, but the spec must not assume it cannot happen.\n   - On the injected no-pool path (:4710), both calls take `conn=None`. The fakes at tests/test_analysis_servicer.py:4501 and :5778 gain a `conn=None` kwarg.\n   - `OpportunityComputeStateRepository.get` (opportunity_compute_state.py:17-27) adds `live_only_cursor` to its SELECT.\n   - A failure raises before the transaction, so the queue, carried rows and cursor are all left unchanged (356 @AC-5/@AC-10, 308 R-4).\n\n6. **Recorded non-blocking items.**\n   - O-13: rely on the surgical heal.\n   - O-14: no cap. The bound `≤ min(P−N, N × computes_per_cycle) × max_live_strategies_per_symbol` goes in the CLAUDE.md:295 note, and `carried_rows` is logged.\n   - O-7: a gate at /sdd-spec. Rebase order: 365, then 308 and 330, then 366.\n\n**RED tests (P-06):**\n- Carried from r3/r4:\n  - predicate (f): keep with each of the two markers; drop on a buy→sell flip;\n  - parity of `best_direction_by_symbol` with step 3;\n  - the zero-row invariant;\n  - the cap holds on carried rows after `max_live_strategies_per_symbol` is lowered;\n  - read branches (ii), (iii), (iv) and (v), the 365 composition, symbol scope and DISMISS;\n  - sort parity for sorts 0-3 with expired live-only rows present (real_pg);\n  - an expired `(sym, '')` row selects the stale branch;\n  - restart: the cursor and the carried `valid_until` survive a new servicer instance (real_pg, AC-5);\n  - the epoch-sentinel decode and no-clobber test.\n- New this round:\n  - **Deny**: a carried (AAPL, squeeze) row, then squeeze denies AAPL. The result is exactly one row for that key, the muted placeholder, and the carried row is rejected by (c) before the dedup.\n  - **All-sell pool**: the cursor advances, the empty stamp is applied, and `upsert` does not clobber `live_only_cursor`.\n  - **`$14` binding**: a real_pg `executemany` with mixed None and datetime `computed_at`, plus the INSERT added to the bound-param-referenced guard.\n\n**Touchpoints:**\n- Migrations:\n  - analysis 030 (re-derive at /sdd-spec): `ADD COLUMN live_only_cursor TEXT NULL`, with a down migration.\n  - config 056: seeds `opportunity.live_only_cycle_max_days = 3`, bounds [1,30]. Add it at configServiceImpl.ts:137, test_config_zero_clamps.py:61 and test_config_read_classification.py:56.\n- Docs:\n  - services/xstockstrat-analysis/CLAUDE.md:274 and :295, and the `valid_window_hours` row;\n  - docs/patterns/config-governance.md:538 (`get_int` → `int_positive`, plus the new row);\n  - **services/xstockstrat-analysis/docs/opportunities.md:7** (read branches and the cursor transaction in the helper);\n  - the `opportunity_compute_state` columns in docs/patterns/database.md, if it lists them.\n- No proto change and no new inter-service edge.",
+    "open_objections": [
+      {
+        "text": "Predicate (c) as worded in proposal r4 is not deny-safe. `_capped_live` reads `live_by_symbol`, which is built from `resolved.union`. That set is pre-deny coverage (live_loop.py:128-130, 155-156; servicer.py:5451-5455, where `denied_covered = denied & union` proves that union contains denied symbols). (c) alone is therefore the locked R-2, and it drops D-6's `resolved.universe` test, so FR-4's 'deny-listed → removed' rests on a dedup side effect. Fix: (c) = `strat in _capped_live(sym) and (sym, strat) not in set(denied_covered)`, plus the RED test in which a carried (AAPL, squeeze) row is denied and the result is exactly the muted placeholder.",
+        "blocking": true
+      },
+      {
+        "text": "Read branch (iv) (fresh rows plus expired live-only rows, re-read with include_expired=False) is the routine steady state under the default 3-day cycle and daily refresh, so most polls run two reads. The design must state this as steady state and measure the re-read (a log or counter). (iv) must never set kick_full (R-14). An optional predicate-(e) lookahead (treating valid_until <= now + one refresh interval as expired) would shorten visible lifetime below the cycle, so it needs the operator's sign-off before adoption.",
+        "blocking": false
+      },
+      {
+        "text": "The claim that 'an empty-rows compute with a non-empty pool cannot occur' is false. An all-sell pool yields rows == [] (servicer.py:5884, 6602-6604) with a non-null cursor. The spec must not rely on that claim. Add a test: an all-sell pool means the cursor advances, the empty stamp is applied, and upsert does not clobber live_only_cursor.",
+        "blocking": false
+      },
+      {
+        "text": "Type-anchor the new computed_at bind as COALESCE($14::timestamptz, now()) (fails.md:2352-2355). Add a real_pg executemany test with mixed None and datetime values, and extend the bound-param-referenced guard to the new INSERT.",
+        "blocking": false
+      },
+      {
+        "text": "C-05 doc touchpoints are missing services/xstockstrat-analysis/docs/opportunities.md:7 (the stale-while-revalidate branches, and the _replace_and_stamp_compute_state sites that now carry the cursor transaction). They also miss the opportunity_compute_state columns in docs/patterns/database.md, if that file lists them.",
+        "blocking": false
+      },
+      {
+        "text": "The age clause in predicate (e) is load-bearing only after cycle_max_days is lowered; the spec must say so. Residual: rows stamped under the old, longer cycle stay visible on fresh reads past the new cycle until the next compute, because the read filters on valid_until only (opportunities.py:233).",
+        "blocking": false
+      },
+      {
+        "text": "O-7: verify the carried-row re-INSERT against the 308 (R-4 failure path) and 330 (live-enrich TTL) diffs, and against 365 after it merges, at /sdd-spec. Rebase order: 365, then 308 and 330, then 366.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "131@AC-8 (live-only truncation per compute)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "366@AC-12 (carried row older than one cycle dropped; >= boundary)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "366 live-only valid_until = computed_at + cycle_max_days (overrides valid_window_hours for live-only rows)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "185@AC-8 (surgical read-time heal)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "185@AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "185@AC-7",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "190@AC-8 (symbol-group ordering)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "190@AC-9 (symbol-group ordering / paging tiebreak)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "132 deny list (deny-listed pair removed; FR-4)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "289@AC-21 (formula_unreadable marker round-trips storage)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "215 fundamentals_unavailable skip row (UNSPECIFIED override)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "365@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "365@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "131 FR-7 per-symbol live-strategy cap",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "193@AC-1 (blend evaluates only on fundamentals universe)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "356@AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "356@AC-10",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "200@AC-10",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "A Python re-sort of the fresh rows that mirrors _SORT_ORDER_BY (the proposer's runner-up). It lost because it duplicates four SQL orderings, including NULLS LAST and the $3 blend, and those copies would drift (DRY). The second read is cheap at queue sizes of a few hundred rows.",
+      "`MAX(...) FILTER (WHERE valid_until > now()) OVER (...)` inside read(). It lost because it changes the stale branch's ordering semantics and edits the placeholder-anchored read() SQL that R-8 guards.",
+      "A read-path DELETE of expired live-only rows. It lost because it puts writes on the budgeted read-only DB phase (ANALYSIS-14) and races _opportunity_lock.",
+      "Setting kick_full in read branch (iv). It lost because each compute stamps one shared expiry, so every expiry-kick schedules another kick one cycle later. Kick chains never merge, so the compute rate grows without bound, and each kick advances the cursor (O-12).",
+      "Predicate (c) as `_capped_live(sym)` alone. It lost because it reads the pre-deny resolved.union (the locked R-2) and drops D-6's universe test."
+    ],
+    "open_risks": [
+      "Read branch (iv) is the common steady state, so most polls run two full reads on the budgeted connection. The cost is not yet measured.",
+      "366 edits the head of _read_opportunity_queue, which 365 has just rewritten. The 308, 330 and 365 diffs have not been read (O-7).",
+      "Freshness is judged by the app clock, not DB now(); app/DB skew shifts the boundary. The same trade-off is already accepted at servicer.py:4799.",
+      "D-3 fails closed: a transient error on the carry read also blocks that compute's held and watchlist refresh.",
+      "best_direction_by_symbol stays correct only while step 3 keeps its iteration order and its strict >. A parity test pins this coupling.",
+      "At homelab scale (P about 350, N=20), the shortfall is the accepted default (O-6), and rotation cadence follows compute traffic (O-12).",
+      "After cycle_max_days is lowered, rows stamped under the old, longer cycle stay visible on fresh reads until the next compute.",
+      "Expired live-only rows sit invisible for about 24 h after a d+3 refresh keeps a chunk that then expires minutes later. An optional lookahead fix needs the operator."
+    ],
+    "constitution_rules_touched": [
+      "C-16",
+      "C-05",
+      "C-11",
+      "C-08",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-06",
+      "F-01",
+      "F-04",
+      "F-06",
+      "F-07",
+      "ANALYSIS-14"
+    ],
+    "rationale": "I checked the adversary's claims against the code.\n\n**Deny (blocking).** live_loop.py:128-130 and 155-156 show that `union` is pre-deny coverage, and that deny is applied only to `universe`. servicer.py:5451-5455 fills `live_by_symbol` from `union` and collects `denied & union` into `denied_covered`. Predicate (c) as `_capped_live` alone is therefore the locked R-2 and drops D-6's universe test. I honored the register rather than recording a new decision: the approach carries the corrected (c), and the objection stays open and blocking until the proposer adopts it.\n\n**Sort parity.** opportunities.py:42-60 confirms that all four sorts rank by symbol-partition window aggregates. Python-filtering an include_expired read reorders symbol groups. This is new evidence, not on record in D-11 or R-8. The fix keeps D-11's decision rule and changes only which rows are served, so it is recorded as an amending decision (D-14), not a supersession. No reopen petition is needed.\n\n**Sell row.** servicer.py:6602-6604 confirms that a non-held sell returns None. This validates predicate (f)'s flip-drop and also falsifies the stated empty-rows invariant.\n\n**Closures.**\n- O-8 closes: D-11 plus D-14 is adopted, and the adversary verified branches (ii)-(iv).\n- O-9 closes: D-10 is adopted with RED tests, and the sell-is-None assumption is now verified.\n- O-5, O-6 and O-12 close by explicit operator decisions.\n- O-15 closes: the `_capped_live` cap is included. The separate deny gap is a new objection.\n- O-16 closes: the pool is `competitive_pool`.\n- O-17 closes: the plumbing is named in item 5, and the adversary did not object.\n- O-13 and O-14 close as recorded dispositions (rely on the heal; no cap, with a documented bound and a logged count). The adversary raised no objection.\n- O-7 stays open as a /sdd-spec gate.\n\n**Register.** No D-n is contradicted and no R-n is reintroduced. The proposer filed no unconditional REOPEN, and the operator steer reopens nothing.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Under D-11, a read branch's rows are served only from a read whose WHERE matches that branch, never Python-filtered. Branch (iii) (fresh, n_expired == 0) serves the include_expired=True rows as read. Branch (iv) (fresh, n_expired > 0, which can only mean expired live-only rows) re-issues today's unchanged include_expired=False read, sequentially on the same budgeted connection, and sets no kick_full. Both branches run the 185 @AC-8 heal.",
+          "evidence": "opportunities.py:42-60 (every _SORT_ORDER_BY branch ranks by a symbol-partition window aggregate; verified r4); servicer.py:4765-4774, 4776-4789; adversary r4 verified the branch identities"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "A Python re-sort of the fresh rows that mirrors _SORT_ORDER_BY",
+          "why": "It duplicates four SQL orderings (NULLS LAST, the $3 blend) that would drift (DRY), and the second read is cheap at queue sizes of a few hundred rows."
+        },
+        {
+          "text": "`MAX(...) FILTER (WHERE valid_until > now()) OVER (...)` inside read()",
+          "why": "It changes the stale branch's ordering semantics and edits the placeholder-anchored read() SQL that R-8 guards (opportunities.py:253)."
+        },
+        {
+          "text": "A read-path DELETE of expired live-only rows",
+          "why": "It puts writes on the budgeted read-only DB phase (ANALYSIS-14) and races _opportunity_lock (servicer.py:4951, 4987, 6069)."
+        },
+        {
+          "text": "Setting kick_full in read branch (iv), the partial live-only expiry state",
+          "why": "Each compute stamps one shared expiry, so every expiry-kick schedules another one cycle later. Chains never merge, so the compute rate grows without bound, and each kick advances the cursor (O-12)."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Predicate (c) must be `strat in _capped_live(sym) and (sym, strat) not in set(denied_covered)`. _capped_live reads the pre-deny resolved.union (live_loop.py:128-130, 155-156; servicer.py:5451-5455), so on its own it is R-2 and drops D-6's universe test. Add a RED test: a carried row whose strategy then denies the symbol leaves only the muted placeholder.",
+          "blocking": true
+        },
+        {
+          "text": "Read branch (iv) is the routine steady state (3-day cycle, daily refresh). State it as such and measure the second read (a log or counter). Any predicate-(e) lookahead that shortens visible lifetime below the cycle needs the operator.",
+          "blocking": false
+        },
+        {
+          "text": "An empty-rows compute with a non-null cursor occurs for an all-sell pool (servicer.py:5884, 6602-6604). Do not rely on the opposite claim. Test that the cursor advances, the empty stamp is applied, and live_only_cursor is not clobbered.",
+          "blocking": false
+        },
+        {
+          "text": "Type-anchor COALESCE($14::timestamptz, now()) (fails.md:2352-2355). Add a real_pg executemany test with mixed None and datetime values, and extend the bound-param-referenced guard to the new INSERT.",
+          "blocking": false
+        },
+        {
+          "text": "Add services/xstockstrat-analysis/docs/opportunities.md:7 and, if it lists the columns, the opportunity_compute_state entry in docs/patterns/database.md to the C-05 doc touchpoints.",
+          "blocking": false
+        },
+        {
+          "text": "Document that predicate (e)'s age clause is load-bearing only after cycle_max_days is lowered, and record the residual: old rows stay visible on fresh reads until the next compute (opportunities.py:233).",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-5",
+          "how": "Operator decision 2026-11-26 ('Accept both'): live-only rows are stamped computed_at + cycle_max_days with no extra 168h cap, documented next to valid_window_hours (C-05)."
+        },
+        {
+          "id": "O-6",
+          "how": "Operator decision 2026-11-26 ('Accept both'): the FR-2a shortfall is the expected default at homelab scale, logged at INFO, not an error."
+        },
+        {
+          "id": "O-8",
+          "how": "Proposal r4 adopts D-11's one include_expired read, with branches stale_curated -> stale, fresh -> fresh plus heal, else -> 365's no-rows branch. The new D-14 serving rule fixes symbol-group ordering. The adversary verified branches (ii)-(iv) against servicer.py:4765-4819."
+        },
+        {
+          "id": "O-9",
+          "how": "Proposal r4 adopts D-10's three-way predicate (f) with RED tests for keep and drop. The adversary confirmed that a non-held sell resolves to None (servicer.py:6602-6604), so a buy->sell flip drops."
+        },
+        {
+          "id": "O-12",
+          "how": "Operator decision 2026-11-26 ('Every recompute'): the cursor advances on every compute. Logs are labelled in computes and fire only on a change of (pool bucket, N, cycle_days)."
+        },
+        {
+          "id": "O-13",
+          "how": "Recorded disposition: recovery of an unavailable fresh chunk row relies on the surgical heal. Keeping the prior row contradicts fresh-wins (D-6). The adversary raised no objection in r4."
+        },
+        {
+          "id": "O-14",
+          "how": "Recorded disposition: no cap on carried rows. The bound min(P-N, N x computes_per_cycle) x max_live_strategies_per_symbol goes in the CLAUDE.md:295 note, and carried_rows is logged. The adversary raised no objection in r4."
+        },
+        {
+          "id": "O-15",
+          "how": "Predicate (c) now requires strat in _capped_live(sym) (servicer.py:5461-5465), so the FR-7 per-symbol cap holds on carried rows. The deny gap is tracked as a separate new objection."
+        },
+        {
+          "id": "O-16",
+          "how": "Predicate (b) and the chunk both use competitive_pool, so 'pool' is one set across the chunk, FR-4 and the shortfall."
+        },
+        {
+          "id": "O-17",
+          "how": "Proposal r4 item 5 names the plumbing: the (rows, new_cursor) return, the callers at :4952-4953 and :6070-6071, live_only_cursor in compute_state.get, conn=None on the :4710 no-pool path, and the conn kwarg on the fakes at test_analysis_servicer.py:4501 and :5778. The adversary did not object."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
