@@ -560,3 +560,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-analysis/app/services/isolation.py`, `services/xstockstrat-analysis/app/services/screener.py`
 - Deviations: RED came from a temporary untracked probe test, and the now-unused `from opentelemetry import trace` was removed from `screener.py` (Deviation Log).
+
+### Step 6 — test: isolation helper unit tests with a cancellation mutation run [done]
+- New `tests/test_isolation.py` (7 tests): `isolated` returns `(value, None)`, captures `ZeroDivisionError` as `(None, exc)` and lets `CancelledError` raise out; `log_isolation_tally` writes nothing on empty failures, WARNING for 1/3, ERROR for 2/2, the message carries the site, counts and `NVDA:ZeroDivisionError`, and `<site>.degraded_count` lands on the current span. Imports only `app.services.isolation`, stdlib, pytest and the OTel SDK test exporter (as `test_screener.py` does). Symbols are scenario one-offs (C-13).
+- TDD red (mutation `except Exception` → `except BaseException`, reverted uncommitted): `FAILED tests/test_isolation.py::test_isolated_lets_cancelled_error_propagate` `Failed: DID NOT RAISE <class 'asyncio.exceptions.CancelledError'>`, `2 failed, 35 passed` → green: `37 passed`; full suite `1776 passed`, `Required test coverage of 40% reached. Total coverage: 91.65%` (`isolation.py` 100%); ruff "All checks passed!", "143 files already formatted", exit=0.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/tests/test_isolation.py`
+- Deviations: RED from the step's specced mutation run rather than the Step Dependencies prior-step checkout (Deviation Log).

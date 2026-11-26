@@ -342,7 +342,7 @@ ruff check . && ruff format --check .
 
 ### Step 6 — test: isolation helper unit tests with a cancellation mutation run
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_isolation.py` — create
@@ -1099,3 +1099,16 @@ _Populated by /sdd-execute as implementation proceeds._
   unused in `screener.py` (ruff F401), so it was removed; `isolation.py` imports `trace` itself.
 - **Disposition**: no file outside Step 5's **Files** is committed. Step 6 still adds the permanent
   tests and the cancellation mutation run as specced.
+
+### Step 6: RED from the specced mutation run, not a prior-step checkout (2026-11-26)
+
+- **Expected**: Step Dependencies has Step 6's RED run the new test against the pre-Step-5 app
+  files; Step 6's Instructions specify RED as a mutation run (`except Exception` →
+  `except BaseException` in `isolation.py`).
+- **Actual**: RED followed the step's Instructions. Under the mutation,
+  `test_isolated_lets_cancelled_error_propagate` (and the screener's
+  `test_cancelled_error_in_symbol_eval_propagates`) failed with `DID NOT RAISE <class
+  'asyncio.exceptions.CancelledError'>`; the mutation was reverted uncommitted. The pre-Step-5 RED
+  (`ModuleNotFoundError`) is already on record from Step 5's probe.
+- **Disposition**: no code change. The Verification block's `exit=` reflects only its last line
+  (ruff); the pytest results were read from the log.
