@@ -130,19 +130,19 @@ restated in product-spec.md § Consumer Surface(s). No UI or agent step exists b
   `const defaultTimeoutMs = 5000`; `:56` `httpClient: &http.Client{}`; `:75-81` `timeout()`; `:91`
   `context.WithTimeout(req.Context(), c.timeout())`.
 - `internal/broker/broker.go:3-6` imports `context`, `errors` only (the package's shared file).
-- `internal/service/trading.go:2633-2640` `brokerCallTimeout` — `cfgW.GetFloat("broker.timeout_ms", 5000)`,
-  `<= 0` → 5000; sole reader. `:3348-3381` `instantiateBrokerLocked`: IBKR config literal `:3355-3365`
+- `internal/service/trading.go:2637-2644` `brokerCallTimeout` — `cfgW.GetFloat("broker.timeout_ms", 5000)`,
+  `<= 0` → 5000; sole reader. `:3356-3389` `instantiateBrokerLocked`: IBKR config literal `:3363-3373`
   (`Timing: s.ibkrTiming`), Alpaca `Timeout: func() time.Duration { return brokerCallTimeout(s.cfgW) }` at
-  `:3377`, `RateLimitBudget: s.alpacaRateLimitBudget` (method value) at `:3379`. `:90-98` `type ibkrCreds`.
-  `:2659` `ms("ibkr.handshake_timeout_ms", 10000)`.
+  `:3385`, `RateLimitBudget: s.alpacaRateLimitBudget` (method value) at `:3387`. `:90-98` `type ibkrCreds`.
+  `:2663` `ms("ibkr.handshake_timeout_ms", 10000)` (lines re-grounded after the `f802b184` main-dev merge).
 - `internal/service/order_intent.go:107-117` `staleThreshold`: floor =
   `max(brokerCallTimeout, broker.IBKRRequestTimeout)` (`:112`), then `computeStaleThreshold`.
 - All Go references to `IBKRRequestTimeout`: `ibkr.go:66,68,83`, `order_intent.go:108,112`,
   `order_intent_test.go:175-176` (grep at `b5756b2`).
-- `internal/service/trading.go:1476-1481` `alpacaCallContext` skips IBKR accounts; `:2169` and `:2572`
+- `internal/service/trading.go:1476-1481` `alpacaCallContext` skips IBKR accounts; `:2173` and `:2576`
   bound reconciliation and position sync by `brokerCallTimeout` for every broker. None changes.
-- Timeouts stay uncertain outcomes: `trading.go:2666-2670` `isUncertainBrokerOutcome` accepts
-  `context.DeadlineExceeded` and `net.Error.Timeout()`; `:3214-3223` `credentialStatusFromError` maps any
+- Timeouts stay uncertain outcomes: `trading.go:2670-2674` `isUncertainBrokerOutcome` accepts
+  `context.DeadlineExceeded` and `net.Error.Timeout()`; `:3222-3231` `credentialStatusFromError` maps any
   non-credential error to `UNKNOWN`.
 
 **Lands with**: `Step 2`
@@ -162,7 +162,7 @@ Part A — scaffold (compiles, behaviour identical to HEAD; never committed):
 4. `trading.go`: add `func (s *TradingService) brokerTimeout() time.Duration` returning `0`, next to
    `brokerCallTimeout`; add
    `func (s *TradingService) ibkrClientConfig(rec *repository.BrokerAccountRecord, creds ibkrCreds) broker.IBKRConfig`
-   returning exactly the literal at `:3355-3365`; the IBKR branch of `instantiateBrokerLocked` calls
+   returning exactly the literal at `:3363-3373`; the IBKR branch of `instantiateBrokerLocked` calls
    `broker.NewIBKRClient(s.ibkrClientConfig(rec, creds))`.
 
 Part B — write Step 2's tests and record the RED run.
@@ -180,7 +180,7 @@ Part C — wiring:
    not changed (R-7).
 8. `trading.go`: `brokerTimeout()` returns `brokerCallTimeout(s.cfgW)`; `ibkrClientConfig` adds
    `Timeout: s.brokerTimeout`; the Alpaca branch uses `Timeout: s.brokerTimeout` in place of the inline
-   closure (`:3377`). Leave the literal `10000` at `:2659`: the wiring gate compares a reader's literal
+   closure (`:3385`). Leave the literal `10000` at `:2663`: the wiring gate compares a reader's literal
    default with the seeded `default_value`.
 9. `order_intent.go:107-117`: the floor reads `broker.IBKRDefaultHandshakeTimeout`; update the two-line
    comment to name it. The formula is unchanged: S = max(T, 10 s) × multiplier (D-2).
@@ -326,17 +326,19 @@ Record the RED run (items 1, 2, 4, 5, 6) and the green run in the PR body and `c
 **Reviewers**: xstockstrat-trading service owner — order execution correctness
 
 **Codebase Evidence**:
-- `internal/service/trading.go:3083-3084`
+- `internal/service/trading.go:3091-3092`
   `maxRetries := int(s.cfgW.GetFloat("order.max_retries", 3))`,
   `retryDelay := time.Duration(s.cfgW.GetFloat("order.retry_delay_ms", 500)) * time.Millisecond`; loop
-  `for attempt := 0; attempt <= maxRetries; attempt++` at `:3087`; a definitive rejection re-mints the
-  order ids (`:3100-3107`), so every attempt reaches the broker.
+  `for attempt := 0; attempt <= maxRetries; attempt++` at `:3095`; a definitive rejection re-mints the
+  order ids (`:3108-3115`), so every attempt reaches the broker (lines re-grounded after the `f802b184`
+  main-dev merge).
 - `internal/config/watchcore.go:406` `GetFloat` widens an int row (feature 295).
 - Harness reaches the real callee: `trading_flatten_rejection_test.go:99-123` `newFlattenHarness` builds a
   real `TradingService` with a real `TradingRepo` over `execOnlyDB`, `memIntentRepo` and a `fakeBroker`
   whose `submitOrderFn` records each submission (`:101-107`); `cfgW: &config.Watcher{}` at `:111`;
-  `:125-131` `run` calls `h.svc.flattenAndHalt`; `:133` `errBuyingPower` is a definitive rejection; `:145`
-  the default-config case expects 4 submissions.
+  `:125-131` `run` calls `h.svc.flattenAndHalt`; `:133` `errBuyingPower` is a definitive rejection; `:148`
+  the default-config case expects 4 submissions (the merge added a halt-alert `TargetUserId` assertion at
+  `:142-144` of `TestFlattenAndHalt_AlwaysRejected_HaltsAccount`; the harness is unchanged).
 - `internal/service/trading_ibkr_auth_test.go:121-126` `snapshotInts` builds a populated int snapshot with
   `config.MustSnapshotWatcher`.
 - Spec-time prototype on a scratch copy of `b5756b2`: the test below passes at HEAD; mutation results are
@@ -349,14 +351,14 @@ the operator on 2026-11-20 (context.md, design D-11). Discrimination is shown by
 
 **Instructions**:
 1. Add `TestFlattenAndHalt_IntRetryRowsSetAttempts_F321_AC2` after
-   `TestFlattenAndHalt_UncertainTimeout_KeepsClientOrderID` (`:187-197`). For each of
+   `TestFlattenAndHalt_UncertainTimeout_KeepsClientOrderID` (`:190-200`). For each of
    `{max_retries int 1 → 2 submissions; int 5 → 6}`: build `newFlattenHarness` with every submission
    returning `errBuyingPower`, set
    `h.svc.cfgW = snapshotInts(map[string]int64{"order.max_retries": n, "order.retry_delay_ms": 10})`, run,
    and assert `len(h.ids) == 1 + n`, elapsed `< 400 ms`, and that the account is halted.
 2. Mutation evidence (record both failures and the reverted pass in the PR body and `context.md`, in the
-   waiver's wording): hardwire `maxRetries := 3` at `trading.go:3083` → 4 submissions, the test fails;
-   hardwire `retryDelay` to 500 ms at `:3084` → the elapsed assertion fails. Revert both; no production
+   waiver's wording): hardwire `maxRetries := 3` at `trading.go:3091` → 4 submissions, the test fails;
+   hardwire `retryDelay` to 500 ms at `:3092` → the elapsed assertion fails. Revert both; no production
    file is staged.
 3. C-13: `snapshotInts` and `errBuyingPower` are reused; no new domain literal.
 
@@ -493,19 +495,19 @@ xstockstrat-config service owner — config key naming, environment (`production
 migration numbering, up+down pair (unit reviewers, D-18)
 
 **Codebase Evidence**:
-- `internal/service/trading.go:2828-2832` `environmentIsPaper` —
-  `s.cfgW.GetBool("broker.paper", s.cfg.TradingMode == "paper")`; callers `:1080`, `:2705`, `:2739`,
-  `:2819` (`GetTradingEnvironment`, `:2817-2826`).
-- `:3846-3857` `resolveTradingMode` repeats the same `GetBool` at `:3852`; callers `:505`, `:817`, `:3071`.
-- `:2362` already derives from the environment: `if s.cfg.ApplicationEnv == "production"`.
+- `internal/service/trading.go:2832-2836` `environmentIsPaper` (comment `:2832-2833`, func `:2834`) —
+  `s.cfgW.GetBool("broker.paper", s.cfg.TradingMode == "paper")`; callers `:1080`, `:2709`, `:2743`,
+  `:2823` (`GetTradingEnvironment`, `:2821-2830`). Lines re-grounded after the `f802b184` main-dev merge.
+- `:3854-3865` `resolveTradingMode` repeats the same `GetBool` at `:3860`; callers `:505`, `:817`, `:3079`.
+- `:2366` already derives from the environment: `if s.cfg.ApplicationEnv == "production"`.
 - `internal/config/config.go:30-31` `TradingMode`, `ApplicationEnv`; `:46-47`
   `getEnv("TRADING_MODE", "paper")`, `getEnv("APPLICATION_ENV", "development")`; `:98-105`
   `resolveEnvironment` (anything but `production` → staging), the axis that scopes the watcher's rows.
 - Deployment values: `docker-compose.yml:16-17` (`APPLICATION_ENV: development`, `TRADING_MODE: paper`);
   `.do/app.dev.yaml:28,30`; `.do/app.yaml:28,30`; `deploy/homelab/compose.yml:5-6` (both required) with the
   pairing asserted at `deploy/homelab/render-assert.jq:39-40`.
-- Routing of an existing account is by its persisted `is_paper` (`trading.go:3360` `IsPaper: rec.IsPaper`,
-  `:3376` `Paper: rec.IsPaper`), not by this key.
+- Routing of an existing account is by its persisted `is_paper` (`trading.go:3368` `IsPaper: rec.IsPaper`,
+  `:3384` `Paper: rec.IsPaper`), not by this key.
 - Spec-time prototype (scratch copy of `b5756b2`): with this change the wiring checker still attributes
   one reader with no literal default, and produces no `default-mismatch`, `type-mismatch` or
   `readers-disagree` finding once the key is seeded.
@@ -517,10 +519,10 @@ migration numbering, up+down pair (unit reviewers, D-18)
 **Covers**: —
 
 **Instructions**:
-1. `environmentIsPaper` (`:2828-2832`): fallback `s.cfg.ApplicationEnv != "production"`. Replace the
+1. `environmentIsPaper` (`:2832-2836`): fallback `s.cfg.ApplicationEnv != "production"`. Replace the
    two-line comment: it is the sole reader of `trading.broker.paper`; with no stored row only
    `APPLICATION_ENV=production` resolves live.
-2. `resolveTradingMode` (`:3846-3857`): call `s.environmentIsPaper()` instead of its own `GetBool`; update
+2. `resolveTradingMode` (`:3854-3865`): call `s.environmentIsPaper()` instead of its own `GetBool`; update
    the priority comment (explicit request field > `trading.broker.paper` > `APPLICATION_ENV`).
 3. Do not touch `Config.TradingMode`, `NewWatcher`'s `tradingMode` parameter or
    `cmd/server/main.go:70,75` (dead plumbing left to feature 322, D-19). No env var is added, removed or
@@ -627,9 +629,12 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/056_trading_broker_paper_per_environment.up.sql` — create
-- `services/xstockstrat-config/migrations/056_trading_broker_paper_per_environment.down.sql` — create
+- `services/xstockstrat-config/migrations/057_trading_broker_paper_per_environment.up.sql` — create
+- `services/xstockstrat-config/migrations/057_trading_broker_paper_per_environment.down.sql` — create
 - `scripts/config-wiring-stored.json` — modify (regenerated, never hand-edited)
+
+Re-spec 2026-11-26: `056` is taken on `origin/main-dev` by feature 366
+(`056_analysis_live_only_cycle_max_days`), so this pair is `057` (the heading's `056` is superseded).
 
 **Reviewers**: DBA — migration NNN numbering (no gaps, no conflicts), up+down pair present, run-order
 compliance with `scripts/db-migrate.sh`; xstockstrat-config service owner — config key naming, environment
@@ -638,8 +643,9 @@ invariant (unit reviewers, D-18)
 
 **Codebase Evidence**:
 - Tail of `services/xstockstrat-config/migrations/`: `054_marketdata_delisting_confirmation_days`,
-  `055_analysis_live_enrich_ttl_reseed`; `053` absent; no ref carries `056`+ (§ Step Dependencies, merge
-  checklist).
+  `055_analysis_live_enrich_ttl_reseed`, `056_analysis_live_only_cycle_max_days` (feature 366, on
+  `origin/main-dev` `f802b184`); `053` absent; no `origin` ref carries `057`+ (checked 2026-11-26;
+  § Step Dependencies, merge checklist).
 - Row shape: `054_marketdata_delisting_confirmation_days.up.sql:4-13` — ten columns
   `(namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by,
   environment, user_id)`, one tuple per environment, `user_id` `NULL`,
@@ -651,9 +657,9 @@ invariant (unit reviewers, D-18)
 - The key is unseeded today: `041_heal_config_keys_to_reader_catalog.up.sql:349` skips it; no
   `broker.paper` row in `scripts/config-wiring-stored.json`; `scripts/config-heal/catalog.tsv:171` is not
   edited (D-6).
-- `scripts/config-wiring-stored.json` records each seeded row with its file name (for example `:2596-2597`
-  for `054`) and an `inputs_sha256`; a mismatch fails `--final` as `STALE-STORED`
-  (`scripts/check-config-wiring.mjs:714`).
+- `scripts/config-wiring-stored.json` records each seeded row with its file name (for example `:2620-2621`
+  for `054`; `056` at `:965` and `:977`) and an `inputs_sha256`; a mismatch fails `--final` as
+  `STALE-STORED` (`scripts/check-config-wiring.mjs:716`).
 - Not affected by a new config migration: `scripts/config-heal-dryrun.py:181,188` runs `goto 40` / `goto
   41`; `scripts/migration-rerun.py:554` computes the config end state as the highest version found; no
   file under `scripts/migration-assertions/` names `broker.paper`.
@@ -666,7 +672,8 @@ invariant (unit reviewers, D-18)
 **Covers**: —
 
 **Instructions**:
-1. Run the merge checklist and take the number as max(`origin/main-dev`) + 1 (`056` at spec time). Only
+1. Run the merge checklist and take the number as max(`origin/main-dev`) + 1 (`057` at the 2026-11-26 re-spec;
+   `056` at spec time). Only
    the header comment line carries the file name.
 2. Up — one `INSERT` in 054's shape with two tuples:
    `('trading', 'broker.paper', 'bool', 'true', <description>, 'true', 'xstockstrat-trading',
@@ -687,14 +694,14 @@ invariant (unit reviewers, D-18)
 
 **Verification** (offline, no database):
 ```bash
-ls services/xstockstrat-config/migrations/056_trading_broker_paper_per_environment.up.sql \
-   services/xstockstrat-config/migrations/056_trading_broker_paper_per_environment.down.sql
+ls services/xstockstrat-config/migrations/057_trading_broker_paper_per_environment.up.sql \
+   services/xstockstrat-config/migrations/057_trading_broker_paper_per_environment.down.sql
 ls services/xstockstrat-config/migrations | sort | tail -2     # this pair is the highest number
 # read both: the up's two-row INSERT is reversed by the down's sentinel- and value-filtered DELETE
-grep -c "056_trading_broker_paper_per_environment.up.sql" scripts/config-wiring-stored.json   # 2
+grep -c "057_trading_broker_paper_per_environment.up.sql" scripts/config-wiring-stored.json   # 2
 node scripts/check-config-wiring.mjs \
   --declared-from docs/roadmap/features/321-fix-trading-config-plumbing/product-spec.md \
-  --declared-migration services/xstockstrat-config/migrations/056_trading_broker_paper_per_environment.up.sql   # exit 0
+  --declared-migration services/xstockstrat-config/migrations/057_trading_broker_paper_per_environment.up.sql   # exit 0
 git diff --stat origin/main-dev -- scripts/config-heal/catalog.tsv services/xstockstrat-trading/internal/config   # empty
 ```
 The generator applies every config migration's `up` on the scratch database (or CI does, on the artifact
@@ -878,17 +885,19 @@ cd services/xstockstrat-trading && GOWORK=off go build ./...
   "`broker.timeout_ms` also bounds …"; `:115-117` Approval Flow; `:181-186` Adaptive rate limit table;
   `:231` `TRADING_MODE=paper` in the env block.
 - `services/xstockstrat-trading/docs/context-constitution-findings.md`: `:24` the IBKR hardcoded-10 s row;
-  `:25` the `requires_approval` row; `:42` the `NewWatcher` `tradingMode` open question; `:44` Resolved
-  section; `:58-70` the filed-reports table.
+  `:25` the `requires_approval` row; `:43` the `NewWatcher` `tradingMode` open question; `:45` Resolved
+  section; `:59-71` the filed-reports table (the merge added one latent-bug row at `:30`).
 - `docs/patterns/config-governance.md`: `:146-150` the append-only Per-Feature Registered Keys log (newest
-  first; first entry `:152` feature 330); older entries name `IBKRRequestTimeout` at `:357` (feature 249)
-  and `:933` (feature 101) and are not edited.
+  first; first entry `:152` feature 366, then `:173` feature 330); older entries name `IBKRRequestTimeout`
+  at `:378` (feature 249) and `:955` (feature 101) and are not edited. Lines re-grounded after the
+  `f802b184` main-dev merge.
 - `docs/context-constitution-findings.md:23`: "trading still uses it as the fallback for
   `trading.broker.paper` (`trading.go#environmentIsPaper`)".
 - Stored descriptions that go stale and are recorded, not rewritten (D-19):
-  `scripts/config-wiring-stored.json:4522` (`broker.timeout_ms`: "Alpaca broker HTTP call timeout. Read at
-  account-client construction…") and the `order_intent.stale_multiplier` rows naming `IBKRRequestTimeout`.
-- `internal/service/trading.go:2837` — the credential poller's hardcoded `5*time.Second`
+  `scripts/config-wiring-stored.json:4546` and `:4558` (`broker.timeout_ms`: "Alpaca broker HTTP call
+  timeout. Read at account-client construction…") and the `order_intent.stale_multiplier` rows naming
+  `IBKRRequestTimeout`.
+- `internal/service/trading.go:2841` — the credential poller's hardcoded `5*time.Second`
   (`validateAndRecordCredential`), which ignores `broker.timeout_ms`.
 - `scripts/check-config-wiring.mjs:862` `DOC_BANNED` phrases checked by `--doc-check`.
 
@@ -914,10 +923,11 @@ cd services/xstockstrat-trading && GOWORK=off go build ./...
    `approved_at` remain unwritten). Add open rows: the credential poller's hardcoded 5 s; the two stale
    stored descriptions above; the IBKR call chain (handshake + T + re-init + T) equal to S with no margin
    and a conid-lookup timeout leaving the order PENDING; no check asserts the `APPLICATION_ENV` pairing for
-   the DigitalOcean app specs. Extend `:42` with `Config.TradingMode` (no reader in the service after 321;
+   the DigitalOcean app specs. Extend `:43` with `Config.TradingMode` (no reader in the service after 321;
    left to feature 322). Leave the filed-reports table as is until the reports are resolved.
 3. `docs/patterns/config-governance.md`: add `### feature 321 — fix-trading-config-plumbing
-   (`xstockstrat-trading` / `xstockstrat-config`)` above the feature-330 entry. Content: `broker.timeout_ms`
+   (`xstockstrat-trading` / `xstockstrat-config`)` as the newest entry: directly below the log's
+   introductory paragraphs and above the feature-366 entry (`:152`), keeping newest-first order. Content: `broker.timeout_ms`
    also bounds every signed IBKR request; the stale-threshold floor is the 10 s
    `IBKRDefaultHandshakeTimeout` (supersedes the feature-249 and feature-101 wording, which stays
    unedited); `broker.paper` is seeded per environment by migration `trading_broker_paper_per_environment`
@@ -954,9 +964,10 @@ python3 scripts/check-context-map.py                # exit 0
   `2026-11-20T13:59:10Z` and `order_intent.stale_multiplier` 3.0 → 4.0 at `13:59:12Z`; homelab staging the
   same two edits at `13:59:38Z` and `13:59:39Z`.
 - Both keys are seeded by `041` (int `5000`, float `3`); `SetConfig` never changes a row's `value_type`
-  (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:831-845`).
+  (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:838-850`: the upsert's `DO UPDATE SET` omits
+  `value_type`; re-grounded after the `f802b184` main-dev merge).
 - The stored description of `broker.timeout_ms` is Alpaca-only
-  (`scripts/config-wiring-stored.json:4522`); after Steps 1–2 the key also bounds IBKR signed requests.
+  (`scripts/config-wiring-stored.json:4546`, `:4558`); after Steps 1–2 the key also bounds IBKR signed requests.
 
 **TDD**: `N/A (config, operator-only)`
 
