@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-26 | /sdd-batch | 5 | 3 | 0 | 7 | 0 | yes |
 | 2 | 2026-11-26 | /sdd-batch | 4 | 4 | 4 | 7 | 0 | yes |
+| 3 | 2026-11-26 | /sdd-batch | 4 | 3 | 2 | 3 | 0 | yes |
 
 ## Settled Decisions
 
@@ -25,6 +26,10 @@
 | D-7 | 2 | One clock: a fresh live-only row is stamped valid_until = now + cycle_days x 24h, and other rows keep session_end + window_hours. A carried row is dropped when valid_until <= now OR age >= cycle. The heal applies the live-only stamp to live-only rows and resets their age. | servicer.py:5955-5963, 5317-5320; opportunities.py:233; operator 'Keep own age, max age'; adversary r2 raised no objection | settled |
 | D-8 | 2 | Carried rows count in GetStrategyAnalytics queue_share with no code change. This is not a C-16 CHANGE, because the share is defined over valid attributed rows. | opportunities.py:363-383; adversary r2 had no objection to O-4 | settled |
 | D-9 | 2 | Dispositions survive a carry with no extra work, because they are joined at read time from opportunity_actions by opportunity_key. | opportunities.py:241-242, 274-279; adversary r2 verification | settled |
+| D-10 | 3 | The live-only chunk's carry predicate (f) is three-way: drop when _resolve_action_tag on the current best_direction returns None; keep without comparing actions when the provenance holds fundamentals_unavailable or formula_unreadable (the stored UNSPECIFIED override); otherwise require equality with the stored action. best_direction_by_symbol is built before step 3 with step 3's tie rule. | servicer.py:5877-5892 (UNSPECIFIED override verified), 5601-5603, 6810-6832; adversary r3 | settled |
+| D-11 | 3 | The read-side staleness decision is one opps.read(include_expired=True, same filters) split in Python. Any in-scope expired non-live-only row selects today's stale branch. Otherwise, fresh rows take the fresh branch, including the 185 @AC-8 heal. Otherwise, the read falls through to 365's no-rows branch. No has_expired SQL and no WHERE extraction. | servicer.py:4770-4819; opportunities.py:250-253, 340-348; adversary r3 alternative and the 365 composition defect | settled |
+| D-12 | 3 | carried_symbols is built from the pre-step-3 predicates only, and step 3 suppresses (sym,'') only for those symbols. The post-step-5 dedup removes a carried row only when a fresh row has the same opportunity_key. | servicer.py:5557-5560, 5617-5639; adversary r3 verified the invariant | settled |
+| D-13 | 3 | write_cursor's first-insert valid_until is to_timestamp(0), and the on-conflict update touches only live_only_cursor. A real_pg test pins the aware decode and the no-clobber behaviour. | servicer.py:4798-4799; 023_opportunity_compute_state.up.sql:8-13; adversary r3 verified | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -38,6 +43,9 @@
 | R-5 | 2 | Carry eligibility on signal presence alone, with no action-consistency check | Action is recomputed each pass from the current direction (servicer.py:5877, 6810), so a carried row could keep an action the current signal contradicts. | locked |
 | R-6 | 2 | A '-infinity' valid_until sentinel on the first cursor insert | The asyncpg decode is unverified at the servicer.py:4799 comparison and risks a TypeError on the cold/empty path; the epoch, to_timestamp(0), is aware and skew-safe. | locked |
 | R-7 | 2 | A 'last successful compute' stamp on compute_state as the read-side staleness trigger | It costs the same query and contradicts D-2's cursor-only on-conflict upsert. | locked |
+| R-8 | 3 | A has_expired EXISTS sharing an extracted read() WHERE builder, called only in the rows branch | It misses the no-rows branch, where 365's unscoped has_fresh turns true under the D-7 cycle stamp, and it refactors the placeholder-anchored read() SQL (opportunities.py:253) that every ListOpportunities read uses. | locked |
+| R-9 | 3 | Strict stored-action equality as carry predicate (f) | It drops carried 215 fundamentals_unavailable and 289 formula_unreadable rows, whose stored action is the UNSPECIFIED override (servicer.py:5885-5892). | locked |
+| R-10 | 3 | Scoping 365's has_fresh instead of testing for in-scope expired rows | It rewrites 365's predicate after 365 lands, and it cannot tell an expired in-scope row from an absent one. | locked |
 
 ## Objections
 
@@ -53,11 +61,14 @@
 | O-7 | 1 | Verify carried-row action re-INSERT against the 308 and 330 diffs before spec. | no | open |
 | O-8 | 2 | has_expired must exclude live-only rows and apply the read's filters (symbol, dispositions), so the partial-expiry state keeps the fresh branch and the 185 @AC-8 surgical heal; otherwise an operator-signed C-16 CHANGE is required. | yes | open |
 | O-9 | 2 | Add carry predicate (f): the current best_direction must resolve to the stored action via _resolve_action_tag, otherwise drop the row; add a RED signal-flip test. | yes | open |
-| O-10 | 2 | Build carried_symbols, which suppresses the step-3 (sym,'') row, from the pre-step-3 predicates (a)(b)(c)(e)(f) only; dedup removes a carried row only when a fresh row with the same key exists; add an invariant test that every pool symbol has at least one row. | yes | open |
-| O-11 | 2 | The write_cursor first-insert valid_until sentinel must decode safely at servicer.py:4799; use to_timestamp(0) and pin it with a real_pg test. | yes | open |
+| O-10 | 2 | Build carried_symbols, which suppresses the step-3 (sym,'') row, from the pre-step-3 predicates (a)(b)(c)(e)(f) only; dedup removes a carried row only when a fresh row with the same key exists; add an invariant test that every pool symbol has at least one row. | yes | closed @ round 3 (Proposal r3 builds carried_symbols from the pre-step-3 predicates, removes a carried row in the dedup only on a fresh opportunity_key collision, and adds the invariant test; the adversary verified it.) |
+| O-11 | 2 | The write_cursor first-insert valid_until sentinel must decode safely at servicer.py:4799; use to_timestamp(0) and pin it with a real_pg test. | yes | closed @ round 3 (Proposal r3 uses the to_timestamp(0) first-insert sentinel and a real_pg decode and no-clobber test; the adversary verified the comparison at servicer.py:4798-4799.) |
 | O-12 | 2 | Read-driven kicks advance the cursor: log only on a change of (pool bucket, N, cycle_days), label the projection in computes, and offer the operator 'advance only on the daily refresh'. | no | open |
 | O-13 | 2 | An unavailable fresh chunk evaluation replaces a good live-only row; either rely on the surgical heal (recorded) or keep the prior eligible row when the fresh row is sym_unavailable. | no | open |
 | O-14 | 2 | C-18: bound and measure the queue row count, since carried rows enlarge the per-poll full-queue Python pagination (servicer.py:4743-4746); decide whether to cap carried rows. | no | open |
+| O-15 | 3 | FR-7: carry predicate (c) must also require strat in _capped_live(sym) (servicer.py:5461-5465), so carried rows never exceed max_live_strategies_per_symbol. | no | open |
+| O-16 | 3 | Carry predicate (b) must use competitive_pool, not live_signal_symbols, so that 'pool' is one set across the chunk, FR-4 and the shortfall. | no | open |
+| O-17 | 3 | Name the cursor plumbing for /sdd-spec: the _compute_opportunities return shape (rows, new_cursor), live_only_cursor in compute_state.get, conn=None on the injected no-pool path (servicer.py:4710), and the conn kwarg on the test fakes. | no | open |
 
 ## Reopen Petitions
 
