@@ -10,10 +10,17 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from gen.analysis.v1 import analysis_pb2
+from gen.common.v1 import common_pb2
+
 from app.handlers import servicer
+from tests import test_telemetry
 from tests.test_analysis_servicer import (
     _FIRING_BARS,
     _GT_100,
+    _HEADERS,
+    _ctx,
     _materialized_svc,
     _sig,
     _StampedComputeState,
@@ -21,6 +28,7 @@ from tests.test_analysis_servicer import (
     _unavailable_served_row,
     _wl,
 )
+from tests.test_live_loop_telemetry import metric_sum
 
 _UID = "u1"
 _META = [("x-user-id", _UID)]
@@ -32,6 +40,9 @@ _LT_100 = {"fn": "<", "lhs": "sma", "rhs": 100.0}  # never fires on _FIRING_BARS
 # Sorted: AAPL, MSFT, NVDA, T00..T41 — chunks of 20 end at pool[19], pool[39], then wrap.
 POOL = sorted(["AAPL", "MSFT", "NVDA"] + [f"T{i:02d}" for i in range(42)])
 _SHORTFALL = "opportunity live-only rotation shortfall"
+_REISSUE = "analysis.opportunity.read_reissue"
+
+metric_reader = test_telemetry.metric_reader
 
 
 def _live_strats(symbols, ids=_LIVE, denied=None):
@@ -504,3 +515,145 @@ async def test_heal_stamps_live_only_row_with_cycle_and_others_with_session_wind
     session_floor = before.replace(microsecond=0)  # session_end = the newest bar's whole second
     window = timedelta(hours=24)
     assert session_floor + window <= watch["valid_until"] <= after + window
+
+
+# ── read side: one include_expired read split into branches (i)-(v) ──────────────
+
+_HEAL_AGE_S = servicer._OPPORTUNITY_UNAVAILABLE_RETRY_SECONDS + 60
+
+
+def _served(symbol, provenance, *, expired=False, age_s=0, strategy=_SQUEEZE, conviction=0.0):
+    now = datetime.now(UTC)
+    row = _unavailable_served_row(
+        symbol,
+        strategy,
+        provenance=provenance,
+        computed_at=now - timedelta(seconds=age_s),
+        valid_until=now + (timedelta(hours=-1) if expired else timedelta(hours=1)),
+    )
+    return {**row, "conviction": conviction}
+
+
+def _read_svc(rows, *, symbol_scoped=False):
+    svc = _materialized_svc()
+    repo = svc._opportunities_repo
+    repo.rows[_UID] = rows
+    orig = repo.read
+
+    async def _read(*a, **kw):
+        out = await orig(*a, **kw)
+        return [r for r in out if r["symbol"] == kw["symbol"]] if symbol_scoped else out
+
+    repo.read = AsyncMock(side_effect=_read)
+    repo.available_sources = AsyncMock(wraps=repo.available_sources)
+    svc._kick_opportunity_recompute = MagicMock()
+    svc._kick_opportunity_retry = MagicMock()
+    return svc
+
+
+async def _list_opps(svc, **req):
+    return await svc.ListOpportunities(
+        analysis_pb2.ListOpportunitiesRequest(page=common_pb2.PageRequest(page_size=50), **req),
+        _ctx(_HEADERS),
+    )
+
+
+def _read_flags(svc):
+    return [c.kwargs["include_expired"] for c in svc._opportunities_repo.read.await_args_list]
+
+
+def _facet_flag(svc):
+    return svc._opportunities_repo.available_sources.await_args.kwargs["include_expired"]
+
+
+@pytest.mark.usefixtures("read_path")
+async def test_read_branch_i_expired_curated_row_serves_stale_and_kicks(metric_reader):
+    svc = _read_svc([_served("AAPL", ["watchlist"], expired=True), _served("MSFT", ["watchlist"])])
+    resp = await _list_opps(svc)
+    assert sorted(o.symbol for o in resp.opportunities) == ["AAPL", "MSFT"]
+    assert _read_flags(svc) == [True]
+    svc._kick_opportunity_recompute.assert_called_once()
+    svc._kick_opportunity_retry.assert_not_called()
+    assert _facet_flag(svc) is True
+    assert metric_sum(metric_reader, _REISSUE) == 0
+
+
+@pytest.mark.usefixtures("read_path")
+async def test_read_branch_iii_all_fresh_heals_and_keeps_repository_order(metric_reader):
+    """185 @AC-8 heal on the fresh branch; 190 @AC-8/@AC-9 rows served in the repo's order."""
+    svc = _read_svc(
+        [
+            _served("MSFT", ["watchlist"], conviction=0.5),
+            _served("AAPL", ["live_strategy"], conviction=0.9),
+            _served("AAPL", ["watchlist"], strategy=_DIP, conviction=0.1),
+            _served("NVDA", ["live_strategy", "unavailable"], age_s=_HEAL_AGE_S),
+        ]
+    )
+    resp = await _list_opps(svc)
+    assert [o.opportunity_key for o in resp.opportunities] == [
+        f"u1|AAPL|{_SQUEEZE}",
+        f"u1|AAPL|{_DIP}",
+        f"u1|MSFT|{_SQUEEZE}",
+        f"u1|NVDA|{_SQUEEZE}",
+    ]
+    assert _read_flags(svc) == [True]
+    svc._kick_opportunity_recompute.assert_not_called()
+    assert svc._kick_opportunity_retry.call_args.args[1] == {"NVDA"}
+    assert _facet_flag(svc) is False
+    assert metric_sum(metric_reader, _REISSUE) == 0
+
+
+@pytest.mark.usefixtures("read_path")
+async def test_read_branch_iv_expired_live_only_row_reissues_fresh_read(metric_reader):
+    """@AC-3 steady state: an expired carried live-only row is hidden by the re-issued fresh read,
+    never kicks, the heal still fires, and read_reissue counts the second read."""
+    svc = _read_svc(
+        [
+            _served("AAPL", ["watchlist"]),
+            _served("MSFT", ["live_strategy"], expired=True),
+            _served("NVDA", ["live_strategy", "unavailable"], age_s=_HEAL_AGE_S),
+        ]
+    )
+    resp = await _list_opps(svc)
+    assert sorted(o.symbol for o in resp.opportunities) == ["AAPL", "NVDA"]
+    assert _read_flags(svc) == [True, False]
+    svc._kick_opportunity_recompute.assert_not_called()
+    assert svc._kick_opportunity_retry.call_args.args[1] == {"NVDA"}
+    assert _facet_flag(svc) is False
+    assert metric_sum(metric_reader, _REISSUE) == 1
+
+
+@pytest.mark.usefixtures("read_path")
+async def test_read_branch_v_only_expired_live_only_rows_take_the_all_stale_body(metric_reader):
+    svc = _read_svc([_served("AAPL", ["live_strategy"], expired=True)])
+    resp = await _list_opps(svc)
+    assert [o.symbol for o in resp.opportunities] == ["AAPL"]
+    assert _read_flags(svc) == [True, True]
+    svc._kick_opportunity_recompute.assert_called_once()
+    assert _facet_flag(svc) is True
+    assert metric_sum(metric_reader, _REISSUE) == 0
+
+
+@pytest.mark.usefixtures("read_path")
+async def test_read_branch_v_fresh_elsewhere_serves_filtered_empty_without_kick(metric_reader):
+    svc = _read_svc(
+        [_served("AAPL", ["live_strategy"], expired=True), _served("MSFT", ["watchlist"])],
+        symbol_scoped=True,
+    )
+    resp = await _list_opps(svc, symbol="AAPL")
+    assert list(resp.opportunities) == []
+    assert resp.computing is False and resp.compute_failed is False
+    assert _read_flags(svc) == [True]
+    svc._kick_opportunity_recompute.assert_not_called()
+    assert metric_sum(metric_reader, _REISSUE) == 0
+
+
+@pytest.mark.usefixtures("read_path")
+async def test_list_opportunities_serves_each_rows_own_valid_until():
+    """C-14 consumer surface: a fresh row and a carried live-only row keep distinct valid_until."""
+    fresh, carried = _served("AAPL", ["watchlist"]), _served("MSFT", ["live_strategy"])
+    carried["valid_until"] = datetime.now(UTC) + timedelta(days=2)
+    svc = _read_svc([fresh, carried])
+    resp = await _list_opps(svc)
+    got = {o.symbol: o.valid_until.ToDatetime(tzinfo=UTC) for o in resp.opportunities}
+    assert got == {"AAPL": fresh["valid_until"], "MSFT": carried["valid_until"]}

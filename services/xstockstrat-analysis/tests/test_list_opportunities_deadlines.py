@@ -219,10 +219,10 @@ async def test_ac2_symbol_filter_absent_symbol_over_fresh_queue_does_not_kick(re
     before = svc._opportunities_repo.rows["u1"][0]["valid_until"]
     orig = svc._opportunities_repo.read
 
-    async def _fresh_empty(*a, **kw):
-        return [] if not kw["include_expired"] else await orig(*a, **kw)
+    async def _symbol_scoped(*a, **kw):
+        return [r for r in await orig(*a, **kw) if r["symbol"] == kw["symbol"]]
 
-    svc._opportunities_repo.read = AsyncMock(side_effect=_fresh_empty)
+    svc._opportunities_repo.read = AsyncMock(side_effect=_symbol_scoped)
     resp, _ = await _list(svc, symbol="SCKT")
     assert list(resp.opportunities) == []
     assert resp.computing is False

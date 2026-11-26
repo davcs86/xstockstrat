@@ -4770,19 +4770,37 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             user_id,
             request.min_conviction,
             w,
-            include_expired=False,
+            include_expired=True,
             sources=req_sources,
             action_filter=request.action_filter,
             sort=request.sort,
             symbol=req_symbol,
         )
-        if rows:
+        now = datetime.now(UTC)
+        expired = [r for r in rows if r["valid_until"] <= now]
+        if any(not _is_live_only_row(r.get("provenance")) for r in expired):
+            # (i)/(ii) an expired curated row: serve stale, revalidate in the background.
+            q.kick_full = True
+            q.served_include_expired = True  # feature 190 O7 — facet matches served freshness
+        elif len(expired) < len(rows):
+            if expired:
+                # (iv) never kicks: every expiry kick would schedule another one a cycle later.
+                rows = await opps.read(
+                    user_id,
+                    request.min_conviction,
+                    w,
+                    include_expired=False,
+                    sources=req_sources,
+                    action_filter=request.action_filter,
+                    sort=request.sort,
+                    symbol=req_symbol,
+                )
+                telemetry.record_opportunity_read_reissue()
             # feature 185 FR-5 — surgical read-time recovery. On a FRESH read, a served row that
             # is data-unavailable and older than the retry cooldown gets a per-symbol recovery
             # (not the full universe). Not on the cold/empty or stale branches (the stale branch
             # already fires a full recompute). Deduped by the _opportunity_retrying guard.
             if user_id not in self._opportunity_retrying:
-                now = datetime.now(UTC)
                 q.retry_symbols = {
                     r["symbol"]
                     for r in rows
@@ -4822,6 +4840,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     sort=request.sort,
                     symbol=req_symbol,
                 )
+        else:
+            rows = []  # (v) only expired live-only rows here, fresh rows elsewhere: an empty page
         q.rows = rows
         # feature 190 — the source-facet, computed only on page 0 (offset==0; the client reads it),
         # scoped to the SAME freshness that produced the served rows (O1/O7) and independent of the

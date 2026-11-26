@@ -1163,3 +1163,36 @@
 ## Session 2026-11-26 — operator standing rule: checkpoint auto-resume (main session)
 
 - STANDING RULE (operator, verbatim: "Resume right after the checkpoints. Condition: no deviations"), anchor `auth-366-checkpoint-autoresume-2026-11-26`: for the rest of this feature's /sdd-batch-execute run, the main session answers a checkpoint halt with `proceed` without asking when that checkpoint reports `deviations: []`. A checkpoint reporting any deviation, every blocker, the promotion plan and the integration-PR merge still go to the operator. Applied first at checkpoint:8 (Steps 4–8 committed; deviations []).
+
+## Session 2026-11-26 — sdd-execute sequential, steps 9+10 (atomic unit)
+
+- OPERATOR DECISION (blocker on step 9, choice A, 2026-11-26): expand the unit's scope by one file, `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py`. In 365's `test_ac2_symbol_filter_absent_symbol_over_fresh_queue_does_not_kick`, the `_fresh_empty` read stub becomes `_symbol_scoped`, which applies the symbol WHERE like the real repository. Logged in the Deviation Log as a spec miss.
+- Tooling: `uv sync --extra dev` (analysis) ✓ · uv 0.11.32 ✓ · python 3.13 ✓. No Node command in this unit.
+- Discovery (tree `origin/feature/opportunity-live-only-rotation@cd83eeba`): `_read_opportunity_queue` is at `servicer.py:4762`, the first read at `:4765-4774`, the heal at `:4775-4789`, 365's `elif not await opps.has_fresh(user_id):` at `:4794` (1 hit), `_is_live_only_row` at `:6921`. `_OPPORTUNITY_RECOMPUTE` is at `telemetry.py:444` and `record_opportunity_recompute` at `:486`. The `[False, True]` assertion sits at `tests/test_analysis_servicer.py:7951` (spec `:7930`); the spec says to re-locate by symbol, so this line drift does not block.
+- TDD (unit, AC-3 plus the read branches): RED `.sdd-logs/v-1.log` exit=1: `12 failed, 1814 passed`. Every failure is the missing split: `assert [False] == [True]`, `assert [False] == [True, False]`, `assert [False, True] == [True, True]` (the `:7951` repair), and branch (i) `assert ['MSFT'] == ['AAPL', 'MSFT']`. The C-14 per-row `valid_until` test and the repaired deadlines test already passed before the change; both are characterization tests. GREEN `.sdd-logs/v-2.log` exit=0: `555 passed`; `1826 passed`, `Required test coverage of 40% reached. Total coverage: 91.90%`; `All checks passed!`; `143 files already formatted`; the grep hit `servicer.py:4798` and `telemetry.py:495`.
+- Config-key wiring gate: not applicable, because the unit touches no key or migration.
+
+### Step 9 — service: read-side split (branches (i)-(v)) and the `read_reissue` counter [done]
+- Part of the Steps 9+10 unit.
+- `_read_opportunity_queue` now makes one `include_expired=True` read and splits it in Python:
+  - (i)/(ii): any expired row that is not live-only sets kick + stale facet and serves the rows as read.
+  - (iii)/(iv): some fresh row runs the one heal block. In (iv), where expired live-only rows are present, the heal runs only after today's unchanged `include_expired=False` re-read and `telemetry.record_opportunity_read_reissue()`. (iv) never kicks.
+  - (v): no fresh row reaches 365's unchanged `elif not await opps.has_fresh(user_id):` body. Its new trailing `else: rows = []` keeps the "fresh elsewhere" case an empty page. The read now returns expired live-only rows, so leaving that case to fall through would serve them.
+- Added the label-free `analysis.opportunity.read_reissue` Counter with its helper beside `_OPPORTUNITY_RECOMPUTE`.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/app/telemetry.py`
+- Deviations: none (the unit's deviation is recorded under Step 10)
+
+### Step 10 — test: read branches, heal preservation, facet freshness, counter, and the `:7930` repair [done]
+- Part of the Steps 9+10 unit.
+- Six new `read_path` tests (both paths) in `tests/test_opportunity_rotation.py`:
+  - (i): stale serve, kick, expired facet, one read.
+  - (iii): one read, no kick, NVDA heal, and repository order kept.
+  - (iv): `[True, False]`, the expired row hidden, no kick, the heal fires, and `read_reissue == 1`.
+  - (v) all-stale: kick, stale serve, `[True, True]`.
+  - (v) fresh elsewhere: no kick, empty page, one read.
+  - The C-14 per-row `valid_until` test.
+- `read_reissue` is asserted 0 on every other branch.
+- `:7951` was repaired to `[True, True]` and its docstring updated.
+- C-13: the rows are built through `_unavailable_served_row` over `_materialized_svc`/`_FakeOppRepo`, and the metric helpers are imported. There is no new literal home.
+- Files modified: `services/xstockstrat-analysis/tests/test_opportunity_rotation.py`, `tests/test_analysis_servicer.py`, `tests/test_list_opportunities_deadlines.py` (operator-added)
+- Deviations: the deadlines-file spec miss (operator A); see the Deviation Log.

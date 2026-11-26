@@ -643,7 +643,7 @@ uv run ruff check . && uv run ruff format --check .
 
 ### Step 9 — service: read-side split (branches (i)-(v)) and the `read_reissue` counter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -697,7 +697,7 @@ uv run ruff check . && uv run ruff format --check .
 
 ### Step 10 — test: read branches, heal preservation, facet freshness, counter, and the `:7930` repair
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_opportunity_rotation.py` — modify
@@ -848,3 +848,7 @@ _Populated by /sdd-execute as implementation proceeds._
 - **CI-equivalent fallback — `scripts/config-wiring-stored.json` regenerated on a throwaway local PostgreSQL 16** (artifact generation only, not verification; operator ruling `auth-366-throwaway-pg16-2026-11-26`). Cluster from `/usr/lib/postgresql/16/bin`, data dir under the worktree's `.sdd-logs/`, `listen_addresses=127.0.0.1`; `migrate` built with `go install -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.17.1`; `DATABASE_URL=<that cluster> python3 scripts/config-wiring-stored.py`. The diff is exactly `inputs_sha256` plus the two `analysis` / `opportunity.live_only_cycle_max_days` rows (staging, production). The cluster was stopped and deleted, and the JSON was never hand-edited. **Disposition**: CI-equivalent fallback.
 - **Node 24 via PATH** (operator-authorized 2026-11-26): the Verification block and the wiring gate ran under `PATH=/opt/node24/bin:$PATH` (Node 24.22.3); the block text itself ran verbatim. **Disposition**: CI-equivalent fallback.
 - **Test-fake fidelity beyond Step 5 item 2's wording.** `_FakeOppRepo.transaction()` snapshots the stored rows and restores them before re-raising, so the atomic-persist test observes a rollback (a bare `yield None` cannot). `_StampedComputeState.upsert` now updates only `computed_at`/`valid_until` on its existing row (the real `ON CONFLICT` shape), so the all-sell test sees `live_only_cursor` survive the empty stamp. **Disposition**: in-scope fake changes needed by Step 5's own tests.
+
+### 2026-11-26 — Steps 9+10 (atomic unit)
+
+- **Spec miss — feature 365's filtered-empty test stub not listed in Step 10's Files.** `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py::test_ac2_symbol_filter_absent_symbol_over_fresh_queue_does_not_kick` stubbed `read` with `_fresh_empty`, which returned `[]` only for `include_expired=False`. After Step 9 the first read is `include_expired=True`, so the stub served the unfiltered AAPL row and the test no longer exercised "symbol absent from a fresh queue". **Disposition**: operator decision A (2026-11-26). The unit's scope is expanded by this one file, the same precedent as the Steps 4+5+6 decision on this file. The stub is now `_symbol_scoped`, `[r for r in await orig(*a, **kw) if r["symbol"] == kw["symbol"]]`, which applies the symbol WHERE the way the real repository does.

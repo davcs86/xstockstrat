@@ -7936,8 +7936,8 @@ class TestListOpportunitiesServerFilters190:
 
     @pytest.mark.asyncio
     async def test_symbol_filter_normalized_into_both_reads(self):
-        """feature 215 @AC-15 — request.symbol is normalized once and forwarded to the fresh AND
-        the stale read (expired rows force the stale branch, so both calls are exercised)."""
+        """feature 215 @AC-15 — request.symbol is normalized once and forwarded to both reads. The
+        only row is expired live-only (366 branch (v)), so 365's all-stale body re-reads it."""
         expired = datetime.now(UTC) - timedelta(hours=1)
         svc = self._svc_with_row([["live_strategy"]], [0.9], expired)
         svc._opportunities_repo.read = AsyncMock(wraps=svc._opportunities_repo.read)
@@ -7948,7 +7948,7 @@ class TestListOpportunitiesServerFilters190:
             _ctx(_HEADERS),
         )
         calls = svc._opportunities_repo.read.await_args_list
-        assert [c.kwargs["include_expired"] for c in calls] == [False, True]
+        assert [c.kwargs["include_expired"] for c in calls] == [True, True]
         assert all(c.kwargs["symbol"] == "SCHD" for c in calls)
 
     @pytest.mark.asyncio
