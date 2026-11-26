@@ -700,3 +700,76 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Changed**: the three `docs/reports/*.status` sidecars (`2026-10-19-sandbox-exit-reason-stderr-substring-defect`, `2026-10-19-sandbox-memory-used-bytes-always-zero-defect`, `2026-10-22-indicators-missing-result-silent-success-defect`) go `triaged` to `resolved`, keeping `ref: feature:310-fix-sandbox-result-contract`. Indicators findings `:23` moves from the conditional wording to "resolved (feature 310, D-14)" and keeps the DO boot-log confirmation as a recorded-at-promotion item; the two report link rows read "resolved by feature 310".
 - **Ref**: the ref is the feature, not a commit sha. The sidecar contract (`.claude/skills/sdd-qa/reference/defect-filing.md` § The status sidecar) defines `commit:<sha>` as "fixed directly, outside any track", and `sdd-execute` ALL-DONE 2.6 stamps `resolved` / `ref: feature:<NNN-slug>` for a fix feature. A branch sha would not survive the squash into `main-dev`, so none was used.
 - **Still open**: the DO boot-log line (D-14) and the integration PR itself; the sidecars read `resolved` before the fix is merged, so if the integration PR is abandoned they must be reverted to `triaged`.
+
+## Session 2026-11-26 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-sandbox-result-contract (feature 310)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-indicators/acceptance/fix-sandbox-result-contract.feature | CREATE | NEW | Subject is the sandbox exit_reason classification, which the indicators service owns. No existing scenario asserts that a formula exception carrying a guard message is classified runtime_error rather than import_blocked. Related but different outcomes: 300 AC-5 (SIGKILL attribution) and 228 AC-4 (OpenBLAS abort to memory_exceeded). |
+| AC-2 | same | CREATE | NEW | memory_used_bytes as a real per-run peak. Grep of every indicators suite and platform.feature for memory_used_bytes and VmHWM found nothing. The 300 and 228 suites assert memory_exceeded kills and headroom, not the reported figure. |
+| AC-3 | same | CREATE | NEW | A formula that never assigns result fails with an error containing "result". 268 AC-1 (services/xstockstrat-indicators/acceptance/fix-indicators-formula-correctness.feature:10) covers SystemExit(0) with no marker ("produced no output"). That is a different trigger and a different error text, so it is not an OVERLAP. No contradiction. |
+| AC-4 | same | CREATE | NEW | An explicit `result = {}` still succeeds with output {}. 268 AC-3 (same file, line 27) covers `result = {'x': 1}`. The empty-dict boundary is a different observable. No contradiction. |
+
+All four scenarios are in the indicators service (the observable subject is ExecuteFormula and the sandbox result). The feature.md Reviewers table also lists agent and ui, but only for the MCP tool and UI display steps, not for these guarantees. Nothing is cross-service, so platform.feature gets no write. The acceptance/ directory already exists in indicators, so only the file is new.
+
+### Ready-to-write blocks
+--- services/xstockstrat-indicators/acceptance/fix-sandbox-result-contract.feature (CREATE) ---
+# Promoted from docs/roadmap/features/310-fix-sandbox-result-contract/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-310` tag.
+# Durable business rules xstockstrat-indicators already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-indicators — the sandbox reports its failure class, memory use, and missing-result outcome truthfully
+  Regression guard for clustered defect reports: docs/reports/2026-10-19-sandbox-exit-reason-stderr-substring-defect.md,
+  docs/reports/2026-10-19-sandbox-memory-used-bytes-always-zero-defect.md and
+  docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md.
+
+  @AC-1 @regression @feature-310
+  Scenario: A formula exception carrying a guard message is classified as a runtime error
+    Given an ExecuteFormula request with formula_source 'raise ValueError("is not allowed in sandbox")'
+    When the sandbox runs the formula
+    Then the result has success false
+    And exit_reason is "runtime_error", not "import_blocked"
+
+  @AC-2 @regression @feature-310
+  Scenario: memory_used_bytes is a real per-run peak, not a fabricated or inherited figure
+    Given the runtime renders a VmHWM line in /proc/self/status
+    And run A is an ExecuteFormula request with formula_source "result = {}"
+    And run B is an ExecuteFormula request with formula_source:
+      """
+      import numpy
+      a = numpy.ones(10_000_000)
+      result = {"s": float(a[0])}
+      """
+    When the sandbox runs A and then B
+    Then A's memory_used_bytes is greater than 0
+    And B's memory_used_bytes exceeds A's by at least 41943040
+
+  @AC-3 @regression @feature-310
+  Scenario: A formula that never assigns result fails with an explicit error
+    Given an ExecuteFormula request with inline formula_source "x = 1" and empty input_data
+    When the sandbox runs the formula
+    Then the result has success false
+    And the error message contains "result"
+
+  @AC-4 @regression @feature-310
+  Scenario: A formula that explicitly assigns an empty result still succeeds
+    Given an ExecuteFormula request with inline formula_source "result = {}" and empty input_data
+    When the sandbox runs the formula
+    Then the result has success true
+    And the output is {}
+
+### Notes / ambiguities / conflicts
+- No CONFLICT and no OVERLAP. Suites checked: all 19 files under services/xstockstrat-indicators/acceptance/ and docs/sdd/business-rules/platform.feature. Grep terms were exit_reason, memory_used_bytes, VmHWM, never assigns, result = {}, import_blocked and @feature-310. There is no existing @feature-310 scenario, so a re-run is idempotent (this is the first promotion).
+- The source acceptance.feature carries no @FR-* tags (only @AC-n @regression). I kept the tags exactly as in the source and added only @feature-310. I did not invent FR tags. If the caller wants @FR-* tags for provenance, they must come from product-spec.md, not from this plan.
+- The per-scenario `# guards:` comments from the source are folded into the Feature description (the three report paths), matching the style of the 228, 268 and 300 promoted files. Scenario step text is verbatim, including the AC-2 docstring.
+- Optional, not planned: the 228 and 300 files carry a "Backed by tests/..." header. The test file names for 310 are not known at plan time, so the orchestrator may add that line from implementation-spec.md if wanted. I did not guess it.
+- Related guarantees to cross-check at consolidation: 268 AC-1 and AC-3 (fix-indicators-formula-correctness.feature) share the "no output / result assigned" area with 310 AC-3 and AC-4. They assert different outcomes, so no merge is suggested.
+
+### Coverage check
+- Source scenarios: 4 (@AC-1 to @AC-4). Planned: 4 (NEW 4, DUP 0, OVERLAP 0, CONFLICT 0). Every @AC-* is accounted for and none were skipped.
+```
