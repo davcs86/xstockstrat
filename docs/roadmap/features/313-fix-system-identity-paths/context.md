@@ -1107,3 +1107,20 @@ Orchestrator note (not an operator quote): 313 needs `/sdd-spec` re-spec for the
   - [ ] Step 8 wording of the per-cycle id depends on FR-3 holding; if FR-3 is ruled out, record it in the Deviation Log (F-09).
   - [ ] Still open from earlier sessions: `**kw` spy rename risk (Step 7), the two-header residual (Step 6), merge-order row for 313/309, the missing `scripts/check-duplication.py` on the branch base.
 - Next: `/sdd-review fix-system-identity-paths impl-spec`, then `/sdd-execute fix-system-identity-paths`.
+
+## Session 2026-11-26 — operator ruling on AC-1 text, recorded by the orchestrator (verbatim)
+
+Question: "Which text should land? (confirmed text vs AppendEvent-request wording)"
+
+Operator's answer (option selected): "Keep the confirmed text (Recommended)" — option text as offered: "AC-1 stays exactly as you confirmed (ledger event user_id + ExportEvents). I amend Step 1 so it does not rewrite the Thens; the AppendEvent-request assertion moves into the test, not the scenario."
+
+What changed in `implementation-spec.md` (sdd-spec amendment, same date):
+- Step 1: `@AC-1` keeps its Given/When/Then/And byte-for-byte ("the ingest.signal.ingested ledger event has user_id "user-a"" / "ExportEvents called as "user-a" returns that event"); only the `@FR-1` tag is added (tag, not wording; needed for C-15 FR traceability). The `PRESERVE @AC-11 @feature-021` comment that existed only for the rewording is dropped. The `@AC-2` rewording and `@AC-3` are unchanged. The context.md fold-in, the Verification greps (the `ExportEvents called as` negative check becomes a positive check, plus a negative check for the AppendEvent wording and the dropped comment) and the Execution Summary were updated to match.
+- Step 1 also marks `debate.md` D-8 (`superseded by operator ruling 2026-11-26`) and O-1 (`reopened and closed @ 2026-11-26`), the two register rows that recorded the AC-1 rewording as settled.
+- Step 5: the `AppendEventRequest.user_id` and no-`x-user-id`-metadata assertions stay in the test and are now described as plain test assertions, not scenario Thens. Evidence added: AC-1's ExportEvents Then rests on the unchanged ledger code and tests (`@AC-11 @feature-021`, `ledgerServiceImpl.test.ts:675,691,709`).
+- Step Dependencies: Step 5 no longer depends on Step 1's wording.
+- Open items:
+  - [ ] `design.md` "Business Rules Touched" (CHANGE `@AC-1`, and C-16 line) still records the AC-1 rewording; design.md was not edited. Superseded by this ruling.
+  - [ ] AC-1's ExportEvents Then is not executed by any ingest test; it is carried by existing ledger tests. Accepted by the ruling; flagged for `/sdd-review impl-spec`.
+  - [ ] The `@FR-1` tag on `@AC-1` is the only edit to the confirmed scenario; confirm it is acceptable.
+  - The open item "AC-1 wording vs Step 1" of the 2026-11-26 sdd-spec re-spec entry above is resolved by this entry.

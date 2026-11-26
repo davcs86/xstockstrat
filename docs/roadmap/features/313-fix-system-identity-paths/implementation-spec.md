@@ -11,8 +11,9 @@
 ## Execution Summary
 
 The order is the design's build order (D-16): docs first, then analysis, then the ingest owner fix, then
-the ingest per-cycle id as a separate final unit. Step 1 lands the signed-off `@AC-1`/`@AC-2` rewordings and
-the new `@AC-3` in `acceptance.feature` before any test cites them. Steps 2-3 make a `system` order owner
+the ingest per-cycle id as a separate final unit. Step 1 lands the signed-off `@AC-2` rewording and
+the new `@AC-3` in `acceptance.feature` before any test cites them; `@AC-1`'s text is kept exactly as the
+operator confirmed it (rulings of 2026-11-21 and 2026-11-26). Steps 2-3 make a `system` order owner
 degrade in the P&L consumer. Steps 4-5 stamp the ledger owner on `ingest.signal.ingested`. Steps 6-7 add the
 per-cycle `trace_id` and land as one commit, because the loop change breaks an existing test spy. Step 8 (docs
 only, added after the operator ruling of 2026-11-21) updates the two ingest docs that Steps 4 and 6 make stale.
@@ -59,7 +60,8 @@ omission. The analysis change is internal-only.
 
 ## Step Dependencies
 
-- Step 1 comes first: Steps 3, 5 and 7 cite scenario wording that Step 1 writes.
+- Step 1 comes first: Steps 3 and 7 cite scenario wording that Step 1 writes; Step 5 cites `@AC-1`, whose
+  text Step 1 leaves unchanged (it adds only the `@FR-1` tag).
 - Step 3 [test] covers Step 2 [service]. Step 2 stands alone: no existing analysis test changes outcome.
 - Step 5 [test] covers Step 4 [service]. Step 4 stands alone: no existing ingest test asserts the absence of
   `AppendEventRequest.user_id`.
@@ -107,8 +109,9 @@ omission. The analysis change is internal-only.
 
 **Codebase Evidence**:
 - `acceptance.feature` currently holds only `@AC-1 @regression` and `@AC-2 @regression`, with no `@FR-N`
-  tag and the pre-design Thens ("ExportEvents called as "user-a" returns that event", "_compose does not
-  raise", "marked degraded").
+  tag. `@AC-1`'s Thens ("the ingest.signal.ingested ledger event has user_id "user-a"" / "ExportEvents called
+  as "user-a" returns that event") are operator-confirmed as written and stay; `@AC-2`'s pre-design Thens
+  ("_compose does not raise", "marked degraded") are replaced.
 - `grep -n "^## " product-spec.md` shows no `## Functional Requirements` and no `## Consumer Surface(s)`.
   The section name `## Functional Requirements` with `FR-N.` items is the form in
   `docs/roadmap/features/307-ui-env-themed-bundles/product-spec.md:17`.
@@ -121,8 +124,10 @@ omission. The analysis change is internal-only.
 - `debate.md`: O-17, O-18 and O-19 read `open`; D-2 reads `reopened @ round 5 (operator steer)`; D-9 reads
   `reopened @ round 4 (operator steer)`. The register's own legend allows `settled → superseded by D-m`.
 - Operator rulings of 2026-11-20 are recorded in `context.md` ("Session 2026-11-20 — sdd-design
-  (approved)"): C-16 sign-off for `@AC-1` and `@AC-2`, the AC-2 Then wording, and AC-3's Thens limited to
-  the persisted `correlation_id`.
+  (approved)"): C-16 sign-off for the `@AC-2` rewording, the AC-2 Then wording, and AC-3's Thens limited to
+  the persisted `correlation_id`. The `@AC-1` rewording of that sign-off is superseded: the operator
+  confirmed the existing `@AC-1` text "as written" (context.md, "Session 2026-11-21 — operator ruling on
+  AC-1 wording") and, on 2026-11-26, ruled to keep it ("Session 2026-11-26 — operator ruling on AC-1 text").
 - The export's `correlation_id` column: `services/xstockstrat-ledger/acceptance/ledger-event-export.feature:40`.
 
 **TDD**: `N/A (docs)`
@@ -132,18 +137,17 @@ omission. The analysis change is internal-only.
 **Instructions**:
 
 1. Replace the scenarios in `acceptance.feature` with the text below. Keep the `Feature:` header and its
-   two description lines. `@AC-*` ids are unchanged (append-only); `@AC-3` is new.
+   two description lines. `@AC-*` ids are unchanged (append-only); `@AC-3` is new. `@AC-1` keeps its
+   Given/When/Then/And byte-for-byte (operator ruling 2026-11-26); only the `@FR-1` tag is added to it.
 
    ```gherkin
      # guards: docs/reports/2026-10-19-ingest-mcp-loop-ledger-events-ownerless-defect.md
-     # PRESERVE @AC-11 @feature-021 (services/xstockstrat-ledger/acceptance/ledger-event-export.feature):
-     # the export is scoped to user_id = caller, so an owner-stamped event is returned to its owner.
      @AC-1 @FR-1 @regression
      Scenario: mcp_client loop signal events are owner-stamped in the ledger
        Given an mcp_client signal source registered by owner "user-a"
        When one ingest.mcp_client.poll_interval_seconds cycle ingests a signal from it
-       Then the ingest.signal.ingested AppendEvent request carries user_id "user-a"
-       And no x-user-id call metadata is sent with it
+       Then the ingest.signal.ingested ledger event has user_id "user-a"
+       And ExportEvents called as "user-a" returns that event
 
      # guards: docs/reports/2026-10-19-analysis-pnl-compose-system-owner-raises-defect.md
      @AC-2 @FR-2 @regression
@@ -169,9 +173,10 @@ omission. The analysis change is internal-only.
        And no x-user-id is sent
    ```
 
-   The AC-2 first Then is the operator's wording, verbatim. The AC-1 Thens are this spec's wording of the
-   signed-off shape (design "Business Rules Touched", CHANGE `@AC-1`); the register holds no verbatim text
-   for them.
+   The AC-2 first Then is the operator's wording, verbatim. The AC-1 text is the file's existing text,
+   operator-confirmed. The `AppendEventRequest.user_id` and no-`x-user-id`-metadata assertions are not
+   scenario Thens: they live in Step 5's test (design.md "Business Rules Touched" still lists an `@AC-1`
+   rewording; this ruling supersedes it).
 
 2. In `product-spec.md`:
    - In the first Problem Statement bullet, replace "forwards `metadata=None`" with "forwards an empty
@@ -199,12 +204,15 @@ omission. The analysis change is internal-only.
    - O-18 → `closed @ round 5 (operator ruling 2026-11-20: append, with a docstring constraint)`.
    - O-19 → `closed @ round 5 (rulings recorded in context.md, session 2026-11-20 sdd-design)`.
    - D-2 → `superseded by D-17`. D-9 → `superseded by D-14`.
+   - D-8 → `superseded by operator ruling 2026-11-26 (AC-1 text kept as confirmed; the AC-2 rewording stands)`.
+   - O-1 → `reopened and closed @ 2026-11-26 (operator ruling: AC-1 text kept; the AppendEventRequest.user_id assertion lives in the Step 5 test)`.
 
 4. Append to `context.md`, in the step's session entry:
    - The consumer-surface note from the `## Consumer Surface(s)` text above.
    - "A later `portfolio.position.closed` for a `system` owner is a no-op: no window was opened, so
      `seal` finds no row (D-4)."
-   - The AC-1 and AC-2 rewordings, citing the operator's C-16 sign-off of 2026-11-20.
+   - The AC-2 rewording, citing the operator's C-16 sign-off of 2026-11-20; and that `@AC-1`'s text was kept
+     as confirmed (rulings of 2026-11-21 and 2026-11-26).
 
 **Verification**:
 
@@ -212,10 +220,13 @@ omission. The analysis change is internal-only.
 cd docs/roadmap/features/313-fix-system-identity-paths
 test "$(grep -c '^  @AC-[0-9]* @FR-[0-9]*' acceptance.feature)" = 3
 grep -n 'processed on its first attempt with no retry backoff' acceptance.feature
-! grep -n '_compose does not raise\|marked degraded\|ExportEvents called as' acceptance.feature
+! grep -n '_compose does not raise\|marked degraded' acceptance.feature
+test "$(grep -c 'the ingest.signal.ingested ledger event has user_id "user-a"\|ExportEvents called as "user-a" returns that event' acceptance.feature)" = 2
+! grep -n 'AppendEvent request carries\|no x-user-id call metadata\|PRESERVE @AC-11' acceptance.feature
 grep -n '^FR-1\.\|^FR-2\.\|^FR-3\.\|^## Consumer Surface(s)' product-spec.md   # 4 lines
 ! grep -n 'metadata=None' product-spec.md
 grep -c 'superseded by D-17\|superseded by D-14' debate.md                      # 2
+grep -c '2026-11-26' debate.md                                                   # 2 (D-8, O-1)
 ! grep -n '^| O-1[789] .*| open |$' debate.md
 ```
 
@@ -448,6 +459,11 @@ grep -n -A6 'event_type="ingest.signal.ingested"' services/xstockstrat-ingest/ap
   `svc, db, conn = _fresh_ingest_svc(sid)`; `await svc.IngestSignal(_signal_req("motley-fool"),
   _ctx("0", user_id=owner))`; `svc._ledger.AppendEvent.call_args.args[0].payload`. Helpers:
   `_signal_req` `:20`, `_fresh_ingest_svc` `:28`; `_ctx` in `tests/conftest.py:17`.
+- `@AC-1`'s scenario text is unchanged (ruling 2026-11-26): its first Then is covered by the request-field
+  assertion below, its second Then ("ExportEvents called as "user-a" returns that event") by the unchanged
+  ledger code and tests, not by an ingest test: export scoping is `@AC-11 @feature-021`
+  (`services/xstockstrat-ledger/acceptance/ledger-event-export.feature`) and owner precedence is tested at
+  `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts:675,691,709`.
 - Cross-test-module helper imports are existing practice in this file (`:20-22`).
 - `grep -rn "\.user_id ==" services/xstockstrat-ingest/tests/test_mcp_client_loop.py` → **Not found**: no
   ingest test asserts `AppendEventRequest.user_id`.
@@ -467,7 +483,8 @@ grep -n -A6 'event_type="ingest.signal.ingested"' services/xstockstrat-ingest/ap
 2. Loop half (the AC-1 scenario). One source `_mcp_source(user_id="user-a")`; a dedup-miss fake DB with one
    `db.fetchrow` row and two `conn.fetchrow` rows; `_FakeMcpClient(result=_FakeResult([_item()]))`;
    `_FakeCfgWatcher()`. Do not replace `svc._ingest_external_signal`: the real core must run (R-8). After
-   `await loop.run_one_cycle(...)`, read `svc._ledger.AppendEvent.call_args` and assert:
+   `await loop.run_one_cycle(...)`, read `svc._ledger.AppendEvent.call_args` and assert (plain test
+   assertions that carry the ledger-owner claim; they are not scenario Thens):
    - `args[0].event_type == "ingest.signal.ingested"`;
    - `args[0].user_id == "user-a"`;
    - `"x-user-id" not in dict(kwargs["metadata"])`.
