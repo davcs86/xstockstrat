@@ -699,3 +699,10 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - Config-key wiring gate: N/A (no config key, no config migration).
 - Files modified: `scripts/check-migration-order.py`
 - Deviations: none
+
+### Step 8 — test: the ordering gate against a throwaway repository [done]
+- Created `scripts/tests/test_check_migration_order.py` with its own `git`/`add`/`commit` helpers and `repo` fixture (base `main`: config `023_a`/`025_b` up+down with a gap at 024, plus a second service with `008_a`/`009_b`; then `checkout -q -b work`). 18 cases cover every row of the Step 8 list: usage (3), AC-2 `024`, `025_dup`, `026_next`, stale branch (`026_x` on `main` after branching), renumber as delete, delete, modify, shared `026`, down-files only, new service `000`, decimal `010_c`/`009_c`, `abc.up.sql`, and `--forbid-new` with and without an added file.
+- TDD: AC-2 red, re-run in this session in a scratch copy (`git archive HEAD scripts`, `check-migration-order.py` cut to argument handling only, no stash), log `scratchpad/red8/.sdd-logs/v-1.log` `exit=1`: `test_ac2_late_lower_number_is_refused` `E       AssertionError: assert 0 == 1`, `14 failed, 11 passed in 0.79s` (every refusal and ok-line case fails) → green on the dev branch `.sdd-logs/v-2.log` `exit=0`: `25 passed in 0.72s`, ruff `All checks passed!`, `64 files already formatted`. No coverage gate applies to `scripts/`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/tests/test_check_migration_order.py`
+- Deviations: none

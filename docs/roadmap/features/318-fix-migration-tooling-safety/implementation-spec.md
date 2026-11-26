@@ -570,7 +570,7 @@ cd scripts && uv run --extra dev ruff check . && uv run --extra dev ruff format 
 
 ### Step 8 — test: the ordering gate against a throwaway repository
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/tests/test_check_migration_order.py` — create
