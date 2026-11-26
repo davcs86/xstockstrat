@@ -4787,9 +4787,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     and (now - r["computed_at"]).total_seconds()
                     > _OPPORTUNITY_UNAVAILABLE_RETRY_SECONDS
                 }
-        else:
+        elif not await opps.has_fresh(user_id):
+            # fresh-but-filtered-empty falls through: no kick, empty page (365 FR-1)
             n = await opps.count_for_user(user_id)
-            q.kick_full = True  # every no-rows branch revalidates in the background
+            q.kick_full = True  # cold or all-stale: revalidate in the background
             if n == 0:
                 # Cold read (never materialized) OR a legitimately-empty universe. Feature 177
                 # FR-3: a still-fresh empty stamp serves empty WITHOUT a pending flag (@AC-6

@@ -47,6 +47,7 @@ def _opp_svc():
     svc._opportunities_repo = AsyncMock()
     svc._opportunities_repo.read = AsyncMock(return_value=[])
     svc._opportunities_repo.count_for_user = AsyncMock(return_value=0)
+    svc._opportunities_repo.has_fresh = AsyncMock(return_value=False)
     svc._opportunities_repo.replace_for_user = AsyncMock()
     svc._opportunity_compute_state_repo = _FakeComputeState()
     svc._compute_opportunities = AsyncMock(return_value=[])
