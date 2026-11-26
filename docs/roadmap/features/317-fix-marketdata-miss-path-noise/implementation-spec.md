@@ -86,22 +86,35 @@ land as tests in Step 9, not as scenario edits.
 ## Spec-time decisions to confirm at `/sdd-review impl-spec`
 
 These are places where discovery forced a choice design.md did not spell out. None reopens a settled decision
-or a rejected alternative.
+or a rejected alternative. Operator rulings of 2026-11-21 (context.md, "operator rulings on the four spec-time
+choices"): decisions 1, 3 and 4 are **confirmed as specced**; decision 2 is **overridden** (see it below).
+Decisions 5 and 6 were not put to the operator and stay open for `/sdd-review impl-spec`.
 
-1. **(B) is two commits, not one.** design.md asks for seed, bounds, reader and tests in one commit. That is
+1. **(B) is two commits, not one.** *(Confirmed by the operator, 2026-11-21.)* design.md asks for seed, bounds, reader and tests in one commit. That is
    five steps, above the four-step cap of `step-constraints.md` §C. The seam is the bounds registry entry
    (unit B1, Steps 5 + 6): it passes its own Verification alone and lands first, so no commit ever holds the
    seeded key without its write bounds. The design's gate, `check-config-wiring.mjs … --final`, stays on unit B2.
-2. **The `resolveOffMs` wrapper needs three `scripts/config-wiring.json` registry entries** (one forwarder, two
-   receivers). Prototyped at spec time on a scratch copy of `36aed60b`: without them the checker reports
-   `bar_hold.go:resolveOffMs:dynamic-read` and turns `stream.bar_ingest_backoff_ms` into `seeded-unread`; with
-   them `stream.bar_ingest_backoff_ms` is clean again and the new key resolves (Step 10). These are registry
-   entries, not `findings` baseline entries (fails.md 2026-11-10 fix-marketdata-dead-symbol-ingest — config).
-3. **The miss line goes through `warnUnlessDone`.** design.md lists the (A) sites and does not list the miss
+2. **`resolveBarsMissBackoff` is a parallel reader; there is no `resolveOffMs` wrapper and no
+   `scripts/config-wiring.json` change.** *(Overridden by the operator, 2026-11-21: "Use the parallel reader
+   fallback", option text "Skip the registry entries and add a parallel reader per O-15".)* The spec had added a
+   `resolveOffMs` wrapper plus one forwarder and two receiver registry entries. That is dropped; design.md O-15's
+   "otherwise a parallel reader" branch is taken instead, and `resolveBarIngestBackoff` is not touched.
+   Prototyped on a scratch copy of `origin/main-dev` @ `2b2dec92` (the gate files are byte-identical to
+   `36aed60b`): a `cfg.GetInt(barsMissBackoffKey, …)` read in a **new** file is `unattributed`, because the gate
+   attributes a read through `registry.receivers["<file>:<receiver>"]` (`scripts/check-config-wiring.mjs:547-552`)
+   and `bars_miss.go:cfg` has no entry. The same reader placed in `bar_hold.go`, where
+   `"…/bar_hold.go:cfg": "marketdata"` is already registered (`scripts/config-wiring.json:115`), is attributed:
+   `check-config-wiring.mjs --final` exit 0 and `node --test scripts/config-wiring.test.mjs` 75/75 pass, with the
+   new key's two seed rows present in the scratch stored set. So the reader lives in `bar_hold.go` as an
+   **additive** change, which keeps registry entries at zero. If the operator prefers the reader in
+   `bars_miss.go`, the cost is exactly one receiver entry `"…/bars_miss.go:cfg": "marketdata"` (prototyped green
+   too); that is the only variant the executor may not choose alone (P-03). Accepted cost: about eight duplicated
+   lines (below jscpd's 100-token floor, `.jscpd.json:4`), recorded as the O-15 exception to design.md's C-18 line.
+3. **The miss line goes through `warnUnlessDone`.** *(Confirmed by the operator, 2026-11-21.)* design.md lists the (A) sites and does not list the miss
    WARN (`:360`). After (B) it sits in `liveRefetch`. Left as a plain WARN, a client cancel on an implicit miss
    would still log one WARN per cancelled call, which is the noise `@AC-1` removes. Step 10 logs it with
    `warnUnlessDone`, so a done ctx gets Debug and a live ctx keeps the WARN.
-4. **`UpdatePositionBracket` moves from `r.pool.Exec` to `r.db.Exec`** (`portfolio_repo.go:379`). design (C)
+4. **`UpdatePositionBracket` moves from `r.pool.Exec` to `r.db.Exec`** *(Confirmed by the operator, 2026-11-21.)* (`portfolio_repo.go:379`). design (C)
    asks for the bracket test to reuse `cancelingDB`. That fake reaches the repo only through `r.db`
    (`NewPortfolioRepoWithDB`, `portfolio_repo.go:50-52`), and `r.pool` is nil there, so the handler panics before
    it can log. In production `db` is the pool (`:46`), so behaviour is identical.
@@ -183,9 +196,11 @@ or a rejected alternative.
     `330-fix-live-enrich-ttl-seed` (`implementation-spec.md:270`, already on trunk as `055`) regenerate
     `scripts/config-wiring-stored.json`. Whichever feature merges last regenerates it again (item 6).
 - **Shared files with peers (file-level only, no key or number clash; impl-spec review 2026-11-20).**
-  - `scripts/config-wiring.json`: `345-authelia-sso` also adds registry entries
-    (`docs/roadmap/features/345-authelia-sso/implementation-spec.md:751`). The keys are disjoint; on a merge
-    conflict keep both sets and re-run Step 10's two config-wiring commands.
+  - `scripts/config-wiring.json`: this feature no longer edits it (spec-time decision 2), so the registry
+    entries `345-authelia-sso` adds (`docs/roadmap/features/345-authelia-sso/implementation-spec.md:751`)
+    cannot conflict with it.
+  - `services/xstockstrat-marketdata/internal/service/bar_hold.go`: Step 10 only appends to it. Any peer edit
+    to `resolveBarIngestBackoff` or `barIngestBackoffKey` must leave them byte-identical (O-15).
   - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`: `323-fix-orphaned-code`
     (`product-spec.md:46`, `r.pool` at `:217,241,341`) and `311-fix-position-fold-correctness`
     (`product-spec.md:67`, `:66`) name other lines of this file. Step 4 changes line `:379` only.
@@ -671,7 +686,7 @@ All pass with Step 8 applied.
 4. Regenerate the stored set: `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py`
    (routes and the blocked case are in § Step Dependencies). Commit the generator's output unedited.
 5. Config-key contract (C-05): namespace `marketdata`; key `bars.miss_backoff_ms`; `value_type` `int`; code
-   default `1800000`; reader `services/xstockstrat-marketdata/internal/service/bars_miss.go:resolveBarsMissBackoff`
+   default `1800000`; reader `services/xstockstrat-marketdata/internal/service/bar_hold.go:resolveBarsMissBackoff`
    (Step 10); seed: this migration; live mechanism: read on each implicit first-page miss through
    `s.budgetCfg` (the `WatchConfig`-backed watcher), no restart.
 6. No `scripts/config-wiring.json` `findings` entry: a key seeded and read under the same relative string
@@ -806,8 +821,9 @@ coverage threshold applies to it.
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/bars_miss.go` — create
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
-- `services/xstockstrat-marketdata/internal/service/bar_hold.go` — modify (`resolveBarIngestBackoff` body; add `resolveOffMs`)
-- `scripts/config-wiring.json` — modify (`registry.forwarders` + `registry.receivers`; no `findings` entry)
+- `services/xstockstrat-marketdata/internal/service/bar_hold.go` — modify (append only: `barsMissBackoffKey`, `defaultBarsMissBackoffMs`, `resolveBarsMissBackoff`; `resolveBarIngestBackoff` untouched)
+
+`scripts/config-wiring.json` is **not** modified (spec-time decision 2).
 
 **Reviewers**: xstockstrat-marketdata owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
@@ -833,15 +849,23 @@ coverage threshold applies to it.
   → `0`, else milliseconds. Constants `barIngestBackoffKey` / `defaultBarIngestBackoffMs` `:9-10`. Its one
   caller: `marketdata_service.go:1412`. `<= 0` clears state: `planBarRequest` `bar_hold.go:50-53`.
 - `intGetter` `marketdata_service.go:138`.
-- `scripts/config-wiring.json` registry: forwarder precedent
-  `"services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt": {"keyArg": 1}`;
-  receiver precedents `"…/bar_hold.go:cfg": "marketdata"` and `"…/marketdata_service.go:resolvePositiveInt":
-  "marketdata"`. The checker resolves a forwarder call's key argument through same-package constants
-  (`scripts/check-config-wiring.mjs` `resolveIdent` `:375`, `extractRegexReads` `:457`) and skips the forwarder's own
-  `cfg.GetInt(key, def)` (`:486`).
-- Spec-time prototype on a scratch copy of `36aed60b` (wrapper + new reader + the three registry entries):
-  `stream.bar_ingest_backoff_ms` has no finding and the new key reports only `read-unseeded`, which Step 8's
-  seed removes. Without the receiver entries both reads report `unattributed`.
+- Wiring gate (`scripts/check-config-wiring.mjs` and `scripts/config-wiring.json` are unchanged between `36aed60b`
+  and `2b2dec92`): `GETTER_RE` `:266` matches a `.GetInt(` call; `extractRegexReads` `:457` records `{file,
+  receiver}` and resolves a constant key argument through same-package constants (`resolveIdent` `:375`);
+  `attribute` `:547-552` looks up `registry.receivers["<file>:<receiver>"]`; `join` `:580` reports a read with no
+  entry as `unattributed` (`:588`), which is gated unless baselined (`GATED_UNLESS_BASELINED` `:691`).
+  `"…/marketdata/internal/service/bar_hold.go:cfg": "marketdata"` already exists at `scripts/config-wiring.json:115`
+  (sibling precedent `asset_servability.go:cfg` `:114`).
+- Spec-time prototype on a scratch copy of `origin/main-dev` @ `2b2dec92` (this spec's re-spec run; the key's two
+  seed rows added to the scratch `scripts/config-wiring-stored.json`, `config-wiring.json` untouched):
+  - reader in a new `bars_miss.go`: `seeded-unread` plus `bars_miss.go:cfg:bars.miss_backoff_ms:unattributed`;
+  - the same reader appended to `bar_hold.go` (constants in their own `const (…)` block, since `gofmt` re-aligns
+    the existing block): `node scripts/check-config-wiring.mjs --final` exit 0, `--keys
+    marketdata.bars.miss_backoff_ms` exit 0, no new finding;
+  - one receiver entry `bars_miss.go:cfg` with the reader in `bars_miss.go`: exit 0 and `node --test
+    scripts/config-wiring.test.mjs` 75/75 (the rejected-by-ruling variant, kept as the one-entry option);
+  - not exercised: the real generated stored set (no `migrate` binary here, so the stored rows were hand-added to
+    the scratch copy only) and `go build` (modules not downloadable offline).
 
 **Lands with**: `Step 7, Step 8, Step 9`
 
@@ -852,27 +876,25 @@ coverage threshold applies to it.
 **Instructions**:
 1. **State.** Add `missMu sync.Mutex` and `lastEmptyFetch map[string]time.Time` to `MarketDataService` beside
    `staleMu` / `lastStaleCheck` (`:59-60`), and initialise the map in the constructor literal beside `:246`.
-2. **`bar_hold.go`.** Add `resolveOffMs(cfg intGetter, key string, def int64) time.Duration` with the current
-   body of `resolveBarIngestBackoff` (nil cfg → `def`; `<= 0` → `0`; else milliseconds), and make
-   `resolveBarIngestBackoff` return `resolveOffMs(cfg, barIngestBackoffKey, defaultBarIngestBackoffMs)`. Its
-   signature, the `:1412` caller and `bar_hold_test.go` stay byte-identical (O-15).
-3. **`scripts/config-wiring.json`.** Add to `registry.forwarders`:
-   `"services/xstockstrat-marketdata/internal/service/bar_hold.go:resolveOffMs": {"keyArg": 1}`. Add to
-   `registry.receivers`: `"services/xstockstrat-marketdata/internal/service/bar_hold.go:resolveOffMs":
-   "marketdata"` and `"services/xstockstrat-marketdata/internal/service/bars_miss.go:resolveOffMs":
-   "marketdata"`. Keep the file's existing formatting and ordering.
-   - **Check first.** Run `node scripts/check-config-wiring.mjs --final` and `node --test
-     scripts/config-wiring.test.mjs` right after instructions 2 and 3, before writing `bars_miss.go`. The only
-     finding allowed at that point is the new key's `seeded-unread` (its reader arrives in instruction 4);
-     `stream.bar_ingest_backoff_ms` must be clean. Anything else red means the fallback.
-   - **Fallback (O-15 "otherwise").** If `check-config-wiring.mjs --final` or `node --test
-     scripts/config-wiring.test.mjs` cannot be made green with the wrapper, revert instructions 2 and 3, give
-     `resolveBarsMissBackoff` its own body in `bars_miss.go` reading `cfg.GetInt(barsMissBackoffKey, …)`, add
-     only the receiver `"…/bars_miss.go:cfg": "marketdata"`, and record the deviation.
+2. **`bar_hold.go`** (append only; `resolveBarIngestBackoff`, `barIngestBackoffKey`,
+   `defaultBarIngestBackoffMs` and `bar_hold_test.go` stay byte-identical, O-15). Below `resolveBarIngestBackoff`
+   add a separate `const (` block with `barsMissBackoffKey = "bars.miss_backoff_ms"` and
+   `defaultBarsMissBackoffMs int64 = 1800000`, then
+   `func resolveBarsMissBackoff(cfg intGetter) time.Duration` with the same body shape as
+   `resolveBarIngestBackoff` (`:35-44`) but its own key and default: `cfg == nil` → the default;
+   `cfg.GetInt(barsMissBackoffKey, defaultBarsMissBackoffMs)` otherwise; `<= 0` → `0`; else milliseconds. The
+   parameter must be named `cfg` and the read written as `cfg.GetInt(` so the gate attributes it through
+   `bar_hold.go:cfg` (`scripts/config-wiring.json:115`). Doc comment at most two lines: `<= 0` disables the
+   back-off (off, not default), unlike `resolvePositiveInt`. Do not add a `resolveOffMs` helper, a forwarder or a
+   receiver entry, and do not edit `scripts/config-wiring.json` (spec-time decision 2).
+3. **Gate check, right after instruction 2** (Steps 5, 6 and 8 applied, the stored set regenerated): run
+   `node scripts/check-config-wiring.mjs --final` and `node --test scripts/config-wiring.test.mjs`. Both must be
+   green and `git diff --stat origin/main-dev -- scripts/config-wiring.json` empty; the new key has a seed and a
+   read, so there is no `seeded-unread` and no `unattributed`. If `--final` reports `unattributed` or
+   `seeded-unread` for the key, stop and report (P-03): the one-entry option in spec-time decision 2 is the
+   operator's call, not a fallback the executor takes.
 4. **`bars_miss.go`** (new, package `service`):
-   - constants `barsMissBackoffKey = "bars.miss_backoff_ms"` and `defaultBarsMissBackoffMs int64 = 1800000`;
-   - `resolveBarsMissBackoff(cfg intGetter) time.Duration` returning `resolveOffMs(cfg, barsMissBackoffKey,
-     defaultBarsMissBackoffMs)`;
+   - (the key constants and `resolveBarsMissBackoff` live in `bar_hold.go`, instruction 2);
    - `type barsFetch struct { bars []*marketdatav1.Bar; token string; confirmedEmpty bool }`;
    - `func (s *MarketDataService) missFetchDue(key string, window time.Duration, now time.Time) bool` — takes
      `missMu`; when `window <= 0` it clears `lastEmptyFetch` and returns true (D-4, mirroring
@@ -888,7 +910,7 @@ coverage threshold applies to it.
      time.Time) ([]*marketdatav1.Bar, string)`:
      1. `miss := len(stored) == 0`; the cache applies only when `miss && implicitFirstPage`; the key is
         `symbol + "|" + tf` (raw symbol, O-3);
-     2. when the cache applies, read `window := resolveBarsMissBackoff(s.budgetCfg)` and return `stored,
+     2. when the cache applies, read `window := resolveBarsMissBackoff(s.budgetCfg)` (`bar_hold.go`) and return `stored,
         storedToken` without fetching or logging if `!s.missFetchDue(key, window, now)`;
      3. `f := s.fetchAndCacheBars(ctx, symbol, tf, readStart, end, pageSize, implicitFirstPage)`;
      4. when the cache applies and `window > 0`, `firstEmpty := s.noteMissResult(key, window, now, f)`;
@@ -916,9 +938,12 @@ coverage threshold applies to it.
 cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go vet ./internal/service/
 node scripts/check-config-wiring.mjs --keys marketdata.bars.miss_backoff_ms --final   # exit 0, no output for marketdata
 node --test scripts/config-wiring.test.mjs
+git diff --stat origin/main-dev -- scripts/config-wiring.json   # empty: no registry entry (spec-time decision 2)
+grep -c 'resolveOffMs' services/xstockstrat-marketdata/internal/service/*.go | grep -v ':0$'   # no output: no wrapper
 grep -n 'refetch && liveFetchAllowed(snap, req.Symbol)' services/xstockstrat-marketdata/internal/service/marketdata_service.go   # one line
 grep -n 'missMu' services/xstockstrat-marketdata/internal/service/*.go | grep -v _test.go   # struct field + missFetchDue + noteMissResult only
-git diff origin/main-dev -- services/xstockstrat-marketdata/internal/service/bar_hold.go | grep '^[-+]func'   # only "+func resolveOffMs"
+git diff origin/main-dev -- services/xstockstrat-marketdata/internal/service/bar_hold.go | grep '^-[^-]'   # empty: additive only (O-15)
+git diff origin/main-dev -- services/xstockstrat-marketdata/internal/service/bar_hold.go | grep '^+func'   # only "+func resolveBarsMissBackoff"
 ```
 Plus the Verification of Steps 7, 8 and 9, which together are the unit's green run.
 
@@ -993,9 +1018,9 @@ Plus the Verification of Steps 7, 8 and 9, which together are the unit's green r
    and production, global, `int`, insert-if-absent, by config migration `marketdata_bars_miss_backoff` with the
    actor sentinel `system:config-migration-feature-fix-marketdata-miss-path-noise`; the down deletes only a
    global row that still carries the sentinel and still holds `1800000`; no `scripts/config-wiring.json`
-   baseline entry, three registry entries for the `resolveOffMs` forwarder; approval: owner + config team) and
+   baseline entry and no registry entry — the reader sits under the existing receiver `bar_hold.go:cfg`; approval: owner + config team) and
    one table row: `marketdata.bars.miss_backoff_ms` | int | `1800000` | `[0,21600000]`; never clamped on read |
-   reader `resolveBarsMissBackoff` (`bars_miss.go`), read live on each implicit first-page miss; `<= 0`
+   reader `resolveBarsMissBackoff` (`bar_hold.go`), read live on each implicit first-page miss; `<= 0`
    disables the back-off and clears its state.
 6. `product-spec.md:17-19`: correct the order-fill claim (O-9) — the `ackAlways` consumers are balance sync and
    bracket update only; `processOrderFill` returns its error and is not `ackAlways`-wrapped, so it has no
