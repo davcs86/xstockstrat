@@ -671,3 +671,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-ui/e2e/insights/formulas.spec.ts`
 - Deviations: a CI-equivalent `CI=true` fallback for the host dev-server warmup timeout; the run script's closing `)` on its own line (full detail in Deviation Log)
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 8
+
+### Step 8 — docs: result contract, memory definition and resolved findings rows [done]
+- Service `CLAUDE.md` gained the "Result contract (feature 310)" and "`memory_used_bytes` (feature 310)" bullets after the feature-268 bullet (verbatim spec text), the "did not assign result" sentence on "Execution enforcement", and the boot self-test INFO/ERROR text on the feature-300 observability bullet. The constitution candidate row is replaced in place with the nonce-status-line invariant (O-3), re-anchored to `#_split_status` (~L692) and `#_MEMORY_EXHAUSTED_MARKERS` (~L545). In the findings file, `:22` is resolved (feature 310, O-4), `:23` carries the D-14 conditional wording verbatim, both report link rows read "fixed by feature 310" with the links kept, and `:3` gains the 2026-11-20 refresh clause. Report sidecars untouched (spec Step Dependencies).
+- Discovery re-verified at `origin/feature/fix-sandbox-result-contract@4c9de26c` by text anchor (lines match the re-spec): `CLAUDE.md:104`, `:159-162`, `:163-168`, `:174-181`; constitution `:37`; findings `:3`, `:22`, `:23`, `:62-63`; no `2026-10-22-indicators` row. Step 1/3 symbols present: `sandbox.py:692` `_split_status`, `:877` "formula did not assign result", `sandbox_probe.py:324,330`.
+- TDD: N/A (docs). Baseline Verification on the pre-change tree (`.sdd-logs/v-1.log`, exit=0): no "feature 310" hit, `37:| Sandbox failure classification by stderr substring-match is a fixed contract …`, no D-14 match, and both open rows `:22`/`:23` matched. GREEN (`.sdd-logs/v-2.log`, exit=1 from the expected empty last grep): `171:- **Result contract (feature 310)**`, `181:- **`memory_used_bytes` (feature 310)**`, `202:  Boot self-test (feature 310)`, no "fixed contract" match, one D-14 match at findings `:23`, no open row matching `memory_used_bytes`/`is not allowed in sandbox`.
+- Config-key wiring gate: step-time not applicable (no config key, no migration). Final gate `node scripts/check-config-wiring.mjs --final` (`.sdd-logs/v-3.log`, exit=0): two `REPORTED:` lines in other services (`services/xstockstrat-analysis/app/engine/fundsignal_loop.py`, `services/xstockstrat-trading/internal/service/trading.go`, `readers-disagree`), not this feature's.
+- All 8 steps done. Status: `in-progress` → `code-completed`. No insights ledger line: nothing new generalizes.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`, `services/xstockstrat-indicators/docs/context-constitution.md`, `services/xstockstrat-indicators/docs/context-constitution-findings.md`
+- Deviations: the run script's closing `)` on its own line; constitution row kept under Candidate rules (full detail in Deviation Log)
+
+## Open Threads
+
+- [ ] OQ1: operator check of dev and prod `indicators.formulas` for saved formulas that never assign `result` — target: before the integration PR; record the result here.
+- [ ] Sidecar reading of design.md § 7 (sidecars untouched, D-14 wording in findings `:23`) is still not operator-confirmed — target: integration-PR checkpoint.
+- [ ] DO App Platform may render no VmHWM under seccomp; record the first post-deploy `sandbox memory self-test` log line (or the ERROR) here — target: integration PR (D-14).
+- [ ] Promote `@AC-1..4` into `services/xstockstrat-indicators/acceptance/` with `@feature-310` — target: integration.
+- [ ] The pre-existing `test_ac8_fork_bomb…` isolation flake needs a defect report via `/sdd-qa defect` — target: next session with write access outside this feature directory.
+- [ ] debate.md still shows O-1, O-3, O-4 and O-5 as `open`; all four are now answered — target: next register write (`/sdd-design` owns the register).

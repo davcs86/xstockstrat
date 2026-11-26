@@ -775,7 +775,7 @@ No coverage threshold applies to `xstockstrat-ui` e2e.
 
 ### Step 8 — docs: result contract, memory definition and resolved findings rows
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-indicators/` docs
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
@@ -952,3 +952,9 @@ _Populated by /sdd-execute as implementation proceeds._
   `# expect …` comment would otherwise swallow it. The assertions use `{ exact: true }` so `Failed`
   cannot match `Failed to load fundamentals`. TDD: red N/A, a characterisation test of an unchanged
   surface (the step's own `**TDD**` line). **Disposition**: CI-equivalent fallback.
+- **2026-11-26 (Step 8)** — In the run script the Verification's closing `)` is on its own line,
+  because the block's trailing `# expect no match` comment would otherwise swallow it. The block's
+  last grep expects no match, so the GREEN run's `exit=1` is the expected result. The constitution
+  row stays in `## Candidate rules (unverified)`, replaced in place as instructed, with its third
+  column recording the O-3 ruling; it is not promoted to an `INDICATORS-*` rule. **Disposition**:
+  in-scope; no spec text changed.

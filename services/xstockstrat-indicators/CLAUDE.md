@@ -159,13 +159,33 @@ reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce
 - **Execution enforcement** (`ExecuteFormula`): when a stored formula declares outputs, the
   sandbox result dict must contain every declared series, else the run fails with
   `SANDBOX_EXIT_REASON_RUNTIME_ERROR` and an error naming the missing series. Inline
-  `formula_source` runs have no stored definition, so no output enforcement applies.
+  `formula_source` runs have no stored definition, so no output enforcement applies. A stored
+  formula that declares outputs and never assigns `result` now fails earlier with "formula did not
+  assign result" (still `SANDBOX_EXIT_REASON_RUNTIME_ERROR`).
 - **No-output failure (feature 268)**: success requires the child's last `__OUTPUT__:` marker line to
   parse. Exit 0 with no marker fails `SANDBOX_EXIT_REASON_RUNTIME_ERROR` ("formula produced no output");
   an unparseable last marker fails the same way ("formula output could not be parsed: …"); a non-zero exit
   with empty stderr reports "formula exited with code N before producing output". The wrapper prints the
   marker on its own line, so a formula printing a valid marker then `SystemExit(0)` is an accepted
   author-controlled forgery of its own result, not an isolation breach.
+- **Result contract (feature 310)**: the child reports its outcome on one status line on stdout,
+  tagged with a per-run nonce (`secrets.token_hex(16)`) that the parent generates; the parent
+  strips the line, so the nonce never reaches `stdout`. The failure class comes from that line
+  (`import_blocked`, `memory_exceeded`, otherwise `runtime_error`), then from the cgroup
+  `oom_kill` counter for a SIGKILL; the stderr markers (`MemoryError`, the OpenBLAS abort text)
+  classify **only** a run that produced no status line. A formula that never assigns `result`
+  fails `SANDBOX_EXIT_REASON_RUNTIME_ERROR` with "formula did not assign result"; `result = {}`
+  succeeds. A formula can still mis-tag its **own** run (frame traversal to the nonce or the
+  guard exception, `raise MemoryError()`, writing `MemoryError` to stderr then `os._exit(1)`);
+  that is an accepted author-controlled forgery, not an isolation breach.
+- **`memory_used_bytes` (feature 310)**: the sandbox child's **total peak resident set size**,
+  the leader's `VmHWM` from `/proc/self/status`, read through a descriptor opened before the
+  seccomp load. It **includes the interpreter and the eagerly imported modules** (tens of MB for
+  a trivial formula), so it is **not** usage of `sandbox.memory_bytes`, which is headroom above
+  the measured baseline. **`0` means "not measured"**: the figure travels on the status line, so
+  a timeout, a watchdog kill, a signal death, a C-level abort and `os._exit` report 0, and most
+  `memory_exceeded` outcomes therefore report 0. Processes the formula forks are not counted. A
+  formula that closes the descriptor zeroes its own figure only.
 
 ## Observability (feature 294-signal-map-instrumentation)
 
@@ -179,6 +199,9 @@ reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce
   cannot observe child` (once per process) and `sandbox memory probe failed`; a DEBUG `sandbox watchdog
   peak` record per armed run with the peaks and both limits. The probe runs right after
   `init_telemetry()`, before the config wait, and never stops startup.
+  Boot self-test (feature 310): one INFO `sandbox memory self-test exit_reason=… memory_measured=…`
+  line at boot, and ERROR `sandbox memory_used_bytes unmeasurable on this runtime` when that run is
+  not a success, measures 0 or raises.
 - Load-bearing logs: INFO `config stream ended cleanly`; watcher reconnect WARNs at the 1st and every 10th consecutive failure (`_RECONNECT_LOG_EVERY`, N=10); a non-success sandbox run WARNs with `exit_reason`. `executing formula` is DEBUG.
 
 ## Environment Variables
