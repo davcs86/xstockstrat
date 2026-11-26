@@ -23,10 +23,14 @@ There is no proto, migration, config, env-var, port or ledger-code step (recon.m
 
 **Evidence tree.** Every `path:line` below was read on the feature branch tree
 (`origin/feature/fix-system-identity-paths@8c12eacf`, code base `c4fd48b0a`), which is the tree the steps
-land on. Against `origin/main-dev@fb52065c` only `services/xstockstrat-ingest/app/handlers/servicer.py`
-has moved; its main-dev lines are given in brackets as "main-dev `:N`". The other cited source and test
-files are byte-identical on both trees (`git diff --stat` empty). Steps anchor on symbols, so a merge of
-`main-dev` into the feature branch changes line numbers only.
+land on. The bracketed "main-dev `:N`" hints come from two main-dev tips: Steps 1, 4, 6 and 7 from
+`origin/main-dev@fb52065c` (only `services/xstockstrat-ingest/app/handlers/servicer.py` differed from the
+branch there), Step 8 from `origin/main-dev@2b2dec92` (21 commits later: `_ingest_external_signal` is
+`servicer.py:1346`, the ingest `CLAUDE.md` event row `:197`). At `2b2dec92` ingest `servicer.py`,
+`tests/test_ingest_servicer.py` and `CLAUDE.md` differ from the branch; the other ingest and analysis files
+this spec cites (`mcp_client_loop.py`, `tests/test_mcp_client_loop.py`, `identity.py`,
+`pnl_pattern_consumer.py` and their tests) do not. Treat every "main-dev `:N`" hint as advisory: edit by
+symbol and re-grep at BRANCH SYNC (after merging `main-dev` into the branch), which changes line numbers only.
 
 **Peers.** `origin/feature/fix-analysis-per-symbol-isolation` (308), `fix-fundsignal-scoring-correctness`
 (309), `fix-analysis-evidence-dry` (327) and `fix-agent-bearer-secret-orphan` (328) carry no diff against
@@ -44,7 +48,7 @@ Whichever feature merges second re-greps its anchors; Steps 4, 6 and 7 carry tha
 **Consumer surface (C-14).** The product spec has no `## Consumer Surface(s)` section yet; Step 1 adds it.
 The surface is the `/trader` ledger export (design D-7). It needs no UI or ledger code step: the route
 forwards caller-scoped `ExportEvents` with no event-type allowlist, and the export is scoped to
-`user_id = caller` (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:373`), so owner-stamped
+`user_id = caller` (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:404`, the `WHERE user_id = $1` predicate), so owner-stamped
 `mcp_client` events become visible to their owner once Step 4 lands. This is a design decision, not an
 omission. The analysis change is internal-only.
 
@@ -86,6 +90,8 @@ omission. The analysis change is internal-only.
   assertion covers today's loop caller only, not a future caller that passes both.
 - Open risk, marketdata headerless read: for a `system` owner the bars call runs with empty metadata, the
   same as the empty-owner path. It sits inside `_compose`'s `try`, so the event degrades either way; no step.
+- No UI/ledger step by design (D-7): the `/trader` ledger export route has no event-type allowlist and the
+  ledger scopes the export to the caller; the `correlation_id` meaning change is recorded in context.md.
 - Operator ruling of 2026-11-21 (context.md, "operator ruling on the stale ingest docs"): add a docs step for
   the ingest findings row and `services/xstockstrat-ingest/CLAUDE.md`. This is Step 8.
 - Proposed, not specced: the analysis findings go stale the same way once Steps 2 and 3 land
@@ -212,7 +218,9 @@ omission. The analysis change is internal-only.
    - "A later `portfolio.position.closed` for a `system` owner is a no-op: no window was opened, so
      `seal` finds no row (D-4)."
    - The AC-2 rewording, citing the operator's C-16 sign-off of 2026-11-20; and that `@AC-1`'s text was kept
-     as confirmed (rulings of 2026-11-21 and 2026-11-26).
+     as confirmed (rulings of 2026-11-21 and 2026-11-26), and that its second Then (ExportEvents) is run by no
+     ingest test: it is delegated to ledger `@AC-11 @feature-021`, `ledgerServiceImpl.test.ts:675-709` and the
+     `WHERE user_id = $1` predicate at `ledgerServiceImpl.ts:404` (Step 5 carries the matching test comment).
 
 **Verification**:
 
@@ -223,6 +231,9 @@ grep -n 'processed on its first attempt with no retry backoff' acceptance.featur
 ! grep -n '_compose does not raise\|marked degraded' acceptance.feature
 test "$(grep -c 'the ingest.signal.ingested ledger event has user_id "user-a"\|ExportEvents called as "user-a" returns that event' acceptance.feature)" = 2
 ! grep -n 'AppendEvent request carries\|no x-user-id call metadata\|PRESERVE @AC-11' acceptance.feature
+# the only AC-1 delta vs the base file is the added @FR-1 tag (run before committing; BASE is the pre-step file)
+diff <(git show HEAD:docs/roadmap/features/313-fix-system-identity-paths/acceptance.feature | sed -n '/@AC-1 /,/^$/p') \
+     <(sed -n '/@AC-1 /,/^$/p' acceptance.feature)                  # one changed line: "@AC-1 @regression" -> "@AC-1 @FR-1 @regression"
 grep -n '^FR-1\.\|^FR-2\.\|^FR-3\.\|^## Consumer Surface(s)' product-spec.md   # 4 lines
 ! grep -n 'metadata=None' product-spec.md
 grep -c 'superseded by D-17\|superseded by D-14' debate.md                      # 2
@@ -463,7 +474,8 @@ grep -n -A6 'event_type="ingest.signal.ingested"' services/xstockstrat-ingest/ap
   assertion below, its second Then ("ExportEvents called as "user-a" returns that event") by the unchanged
   ledger code and tests, not by an ingest test: export scoping is `@AC-11 @feature-021`
   (`services/xstockstrat-ledger/acceptance/ledger-event-export.feature`) and owner precedence is tested at
-  `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts:675,691,709`.
+  `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts:675,691,709`, plus the export
+  predicate `WHERE user_id = $1` at `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:404`.
 - Cross-test-module helper imports are existing practice in this file (`:20-22`).
 - `grep -rn "\.user_id ==" services/xstockstrat-ingest/tests/test_mcp_client_loop.py` → **Not found**: no
   ingest test asserts `AppendEventRequest.user_id`.
@@ -488,6 +500,11 @@ grep -n -A6 'event_type="ingest.signal.ingested"' services/xstockstrat-ingest/ap
    - `args[0].event_type == "ingest.signal.ingested"`;
    - `args[0].user_id == "user-a"`;
    - `"x-user-id" not in dict(kwargs["metadata"])`.
+
+   Add one comment above these assertions: `# AC-1 Then 2 is covered by ledger @AC-11 @feature-021 plus
+   ledgerServiceImpl.test.ts:675-709 (owner precedence) and the WHERE user_id = $1 predicate at
+   ledgerServiceImpl.ts:404, not here`. For `/sdd-execute`: the promoted `@AC-1` scenario must not be
+   claimed as fully ingest-tested; its ExportEvents Then is delegated to those ledger tests.
 3. RPC half, in the same test function, as an untraced incidental-hardening assertion (D-14): drive
    `IngestSignal` with `_fresh_ingest_svc`, `_signal_req` and `_ctx("0", user_id="alice")` exactly as
    `test_signal_ownership.py:124-125` does, then assert
