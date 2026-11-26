@@ -148,7 +148,7 @@ cd packages/proto && gofmt -l marketsession/ && GOWORK=off go vet ./marketsessio
 cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go test ./internal/service/... -count=1
 cd services/xstockstrat-trading && GOWORK=off go build ./...
 ```
-`gofmt -l` must print nothing.
+`gofmt -l` must print nothing. No golangci-lint runs here: CI has no lint job for `packages/proto` (the `golangci-lint-action` step runs only in the trading/marketdata/portfolio matrix, `working-directory: services/${{ matrix.service }}`, `.github/workflows/ci.yml:352-358`), so `gofmt` + `go vet` are this package's lint gate.
 
 ---
 
@@ -184,7 +184,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./...
 ```
 cd packages/proto && GOWORK=off go test ./marketsession/ -run . -count=1 -v
 ```
-Before Step 1 it fails on 2025-01-09 and 2021-06-18; after Step 1 it passes. This package is not in a CI coverage job, so no threshold applies. The Go CI coverage for this behavior is Step 4's `TestComputeSessionGaps` closure row.
+Before Step 1 it fails on 2025-01-09 and 2021-06-18; after Step 1 it passes. Lint gate is `gofmt -l marketsession/` (empty) + `GOWORK=off go vet ./marketsession/`, as in Step 1; CI has no golangci-lint job for `packages/proto`. This package is not in a CI coverage job, so no threshold applies. The Go CI coverage for this behavior is Step 4's `TestComputeSessionGaps` closure row.
 
 ---
 
@@ -265,7 +265,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/timeframe/ -
 
 **Verification**:
 ```
-cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:" && GOWORK=off golangci-lint run --modules-download-mode=mod
+cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:" && golangci-lint run --modules-download-mode=mod
 ```
 Coverage total must be ≥ 40%. Before Step 3 this fails to compile (unit RED); after Step 3 it passes.
 
@@ -351,7 +351,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 
 **Verification**:
 ```
-cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:" && GOWORK=off golangci-lint run --modules-download-mode=mod
+cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:" && golangci-lint run --modules-download-mode=mod
 ```
 Coverage total must be ≥ 40%. The new logic is in the excluded `service`/`repository` packages, so no threshold applies to it; this unit test is the verification. The repo SQL has no offline test, because it needs a DB.
 
@@ -550,7 +550,8 @@ cd services/xstockstrat-ingest && uv run ruff check . && uv run ruff format --ch
      - re-check the cancel set and return if canceled;
      - `cov = await GetDataCoverage(symbol=sym, timeframe=tf_enum, range=time_range)`;
      - `missing = list(cov.gaps[1:])`;
-     - if `cov.gaps` is non-empty, probe `GetDataCoverage(range=TimeRange(start=_dt_to_ts(head_start - timedelta(days=_HEAD_PROBE_DAYS)), end=cov.gaps[0].start))`. When `probe.bars_total > 0`, put `gaps[0]` first in `missing`; otherwise it is the head carve-out (O-1, accepted verbatim);
+     - if `cov.gaps` is non-empty, let `head_start = _ts_to_dt(cov.gaps[0].start)` and probe `GetDataCoverage(range=TimeRange(start=_dt_to_ts(head_start - timedelta(days=_HEAD_PROBE_DAYS)), end=cov.gaps[0].start))`. When `probe.bars_total > 0`, put `gaps[0]` first in `missing`; otherwise it is the head carve-out (O-1, accepted verbatim);
+     - `gaps[0]` is probed even when it is an interior hole (stored bars inside the range precede it). That is intended: those bars lie in the probe window, so the probe hits and `gaps[0]` stays in `missing`. No separate head/interior classification is needed;
      - on any exception from either call, record `{"outcome": _SYMBOL_FAILED, "reason": f"coverage verify failed: {e}"}` and add the symbol to `state["failed_symbols"]` (PLAT-N1, a retryable PARTIAL);
      - if `missing` is non-empty, record `{"outcome": _SYMBOL_INCOMPLETE, "reason": "missing sessions " + "; ".join(f"{start.date()}..{end.date()}")}`. The dates come from `_ts_to_dt` (UTC), whose UTC date equals the New York session date (see the gap convention), so the result reads like `missing sessions 2026-04-01..2026-09-25`. Add the symbol to `state["incomplete_symbols"]` (a set; create it with `setdefault`).
    - Write `state["symbol_results"][_GAPS_ONLY_VERIFY_KEY] = results`. This overwrites the key wholesale (idempotent).
@@ -788,6 +789,7 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint
 cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && pnpm run test:coverage && pnpm exec playwright test e2e/trader/position-detail.spec.ts --project=chromium --grep "@AC-5|@AC-13|@AC-4"
 grep -n "from '../fixtures'\|from '../../e2e/fixtures/backfillJobs'\|helpers/auth" services/xstockstrat-ui/e2e/trader/position-detail.spec.ts services/xstockstrat-ui/src/lib/backtestBackfill.test.ts
 ```
+`test:coverage` (`vitest run --coverage`) must pass the thresholds `services/xstockstrat-ui/vitest.config.ts` enforces: lines/functions/statements ≥ 40%, scoped to `src/lib/**` (which contains `backtestBackfill.ts`). Playwright has no coverage threshold.
 (If the sandbox times out on Playwright's `webServer`, pre-build and pre-start the server per the ledger insight `fix-custom-formula-allnone — reuse`.)
 
 ---
