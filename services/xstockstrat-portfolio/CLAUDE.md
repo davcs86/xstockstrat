@@ -114,10 +114,16 @@ may print the FQN `portfolio.<key>`.
 |---|---|
 | `portfolio.position.opened` | New position created |
 | `portfolio.position.closed` | Position fully closed |
-| `portfolio.risk.drawdown_breach` | Max drawdown exceeded |
+| `portfolio.risk.drawdown_breach` | Per-account max drawdown exceeded — payload `{user_id, account_id, message}` |
+| `portfolio.risk.concentration_breach` | A symbol exceeds `risk.concentration_limit_pct` of the portfolio — payload `{user_id, symbol, message}` |
 | `portfolio.snapshot` | Snapshot written after each processed fill |
 | `portfolio.watchlist.signal_entry_expired` | Prune removed a tracked SIGNAL entry whose `valid_until` passed — payload `{user_id, watchlist_id, symbol, strategy_id, signal_id, valid_until}` (RFC3339), stream key `watchlist:<watchlist_id>`; the owner also rides in `AppendEventRequest.user_id` (feature 281) |
 | `portfolio.watchlist.signal_entry_removed_untracked` | Prune removed a backfill-marked (`signal_id NULL`) SIGNAL entry — payload `{user_id, watchlist_id, symbol, strategy_id}`, same stream key and `AppendEventRequest.user_id` owner (feature 281) |
+
+**Risk events (feature 315)** — both `portfolio.risk.*` rows use the fixed, global stream key `portfolio:risk` (not a
+user id); the owner also rides in `AppendEventRequest.user_id`. `checkRiskLimits` re-emits a persisting breach on every
+run (no dedup), and the events are visible in the owner's `owner_only` `QueryEvents` / `ExportEvents`. Before feature
+315 a concentration breach was recorded under the drawdown event type, which an external ledger reader may still assume.
 
 **Signal-entry expiry prune (feature 281)** — see PORTFOLIO-18; legacy entries are classified by `portfolio backfill-signal-expiry` (procedure → [`docs/runbooks/signal-watchlist-expiry-backfill.md`](../../docs/runbooks/signal-watchlist-expiry-backfill.md)).
 

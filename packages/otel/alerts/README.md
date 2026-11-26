@@ -6,7 +6,7 @@ runtimes exported metrics and logs again.
 
 | File | Contents |
 |---|---|
-| `alert-rules.yaml` | Three alert rules in the `xstockstrat` folder |
+| `alert-rules.yaml` | Four alert rules in the `xstockstrat` folder |
 | `mute-timings.yaml` | `outside-us-market-hours` mute timing used by the stall alert |
 | `../produced-signals.tsv` | Registry of every series and log literal an alert or dashboard may query |
 
@@ -17,6 +17,13 @@ runtimes exported metrics and logs again.
 | `xstk-error-rate-high` | Service error rate > 1% | non-OK gRPC calls / total > 1% per `service_name` | 5m | OK | critical |
 | `xstk-p99-latency-high` | Service P99 latency > 2s | `histogram_quantile(0.99, …) > 2000 ms` per `service_name` | 3m | OK | warning |
 | `xstk-analysis-no-scoring` | Analysis live loop heartbeat absent for 30m | fewer than 1 `live_loop: cycle complete` log line in 30m | 0m | Alerting | critical |
+| `xstk-trading-account-halt` | Trading account halt or reconciliation alert emitted | `trading_alert_emit_total{alert_kind=~"halt\|reconciliation"}` increased (or first appeared) in 15m, per `deployment_environment` | 0m | OK | critical |
+
+**Admin signal for `xstk-trading-account-halt`.** Halt and reconciliation alerts are targeted at the account
+owner (feature 315), so admins, the only people who can resume a halted account, get no in-product alert. This
+rule is their signal. It also fires on the systemic reconciliation escalation, which records the same
+`alert_kind=reconciliation`. The metric carries no account id: read it from the trading ERROR log line
+`account halted` in Loki. Routing is per environment, like the other rules.
 
 **Meaning change of `xstk-analysis-no-scoring`.** The uid is kept, but it no longer means "no
 `RunBacktest`/`ScoreStrategy` events": those RPCs are client-invoked, so silence there is normal. It now

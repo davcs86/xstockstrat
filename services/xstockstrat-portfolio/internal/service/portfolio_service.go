@@ -1286,22 +1286,24 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 	s.mu.RUnlock()
 }
 
-// evaluateDrawdowns returns a per-account breach message for each account whose peak-to-current
+type drawdownBreach struct{ AccountID, Message string }
+
+// evaluateDrawdowns returns a per-account breach for each account whose peak-to-current
 // drawdown exceeds limit. peak_equity == 0 (no history) is skipped — no divide-by-zero.
-func evaluateDrawdowns(rows []repository.AccountDrawdown, limit float64) []string {
-	var msgs []string
+func evaluateDrawdowns(rows []repository.AccountDrawdown, limit float64) []drawdownBreach {
+	var breaches []drawdownBreach
 	for _, d := range rows {
 		if d.PeakEquity <= 0 {
 			continue
 		}
 		dd := (d.PeakEquity - d.Equity) / d.PeakEquity
 		if dd > limit {
-			msgs = append(msgs, fmt.Sprintf(
+			breaches = append(breaches, drawdownBreach{AccountID: d.AccountID, Message: fmt.Sprintf(
 				"drawdown limit breach: account %s at %.1f%% (peak %.2f, current %.2f)",
-				d.AccountID, dd*100, d.PeakEquity, d.Equity))
+				d.AccountID, dd*100, d.PeakEquity, d.Equity)})
 		}
 	}
-	return msgs
+	return breaches
 }
 
 func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, mode commonv1.TradingMode) {
@@ -1333,23 +1335,29 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 		for sym, val := range posValues {
 			pct := val / totalValue
 			if pct > concentrationLimitPct {
-				s.emitRiskAlert(ctx, userID, fmt.Sprintf("concentration limit breach: %s at %.1f%%", sym, pct*100))
+				s.emitRiskAlert(ctx, userID, "portfolio.risk.concentration_breach", map[string]interface{}{"symbol": sym},
+					fmt.Sprintf("concentration limit breach: %s at %.1f%%", sym, pct*100))
 			}
 		}
 	}
 	// Per-account drawdown: broker-authoritative equity vs persisted peak_equity HWM (feature 172).
 	drawdowns, err := s.repo.GetAccountDrawdowns(ctx, userID, mode.String())
 	if err == nil {
-		for _, msg := range evaluateDrawdowns(drawdowns, maxDrawdownPct) {
-			s.emitRiskAlert(ctx, userID, msg)
+		for _, b := range evaluateDrawdowns(drawdowns, maxDrawdownPct) {
+			s.emitRiskAlert(ctx, userID, "portfolio.risk.drawdown_breach", map[string]interface{}{"account_id": b.AccountID}, b.Message)
 		}
 	}
 }
 
-func (s *PortfolioService) emitRiskAlert(ctx context.Context, userID, msg string) {
-	s.emitEvent(ctx, "portfolio.risk.drawdown_breach", "portfolio:risk", map[string]interface{}{
-		"message": msg,
-	})
+// emitRiskAlert's user_id and message override any colliding key in extra.
+func (s *PortfolioService) emitRiskAlert(ctx context.Context, userID, eventType string, extra map[string]interface{}, msg string) {
+	payload := make(map[string]interface{}, len(extra)+2)
+	for k, v := range extra {
+		payload[k] = v
+	}
+	payload["user_id"] = userID
+	payload["message"] = msg
+	s.emitEventAs(ctx, userID, eventType, "portfolio:risk", payload)
 	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
 		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING,
 		Category:      "risk",

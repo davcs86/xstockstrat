@@ -32,6 +32,12 @@ resolves on its own with no ledger event and no halt (self-heal). A real finding
 halt (`HaltSource_HALT_SOURCE_RECONCILIATION`, reusing feature 030's `broker_accounts.halted`
 mechanism).
 
+The `halt` and `reconciliation` CRITICAL alerts are targeted at the account owner (`TargetUserId` = the pool entry's
+owner); an empty owner logs WARN `alert owner unresolved` and sends the alert untargeted (feature 315). The owner
+cannot resume, and admins get no in-product signal or account id: they use the Grafana rule `xstk-trading-account-halt`
+and the Loki ERROR line `account halted` until the follow-on `admin-halted-accounts-read` ships. The systemic alert
+stays untargeted, and the `reconciliation.mismatch_found` ledger owner stays NULL.
+
 The `unknown_broker_order` classification is **DB-grounded, not memory-only**. A broker order the
 in-memory map (`s.orders`) doesn't recognize is not immediately foreign: `s.orders` holds only this
 process's own orders plus `LoadInflightOrders`' NEW/PARTIALLY_FILLED hydrate, so a legitimate order
