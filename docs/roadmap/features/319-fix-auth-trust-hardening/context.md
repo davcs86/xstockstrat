@@ -500,3 +500,212 @@ design.md is not written and status.md is unchanged. Register: `debate.md` (D-1.
 - [ ] unaddressed — F-A / D-5: Step 7 edits `watch_core.py` in indicators, ingest and analysis for a single consumer (the agent). Accepted by design; moving `has_snapshot` to the agent's `ConfigWatcher` subclass needs an operator reopen of D-5. Target: the `/sdd-execute` Phase-2 confirmation of the Steps 7+8 unit.
 - [ ] unaddressed — Step 5 scope: the `validateToken` HS256 pin is on a hot path and is not named in product-spec.md. Confirm with the Steps 5+6 unit.
 - [ ] Carried unchanged from the sdd-spec session: grant ↔ generator SAN drift has no CI guard (R-11); the post-deploy smoke needs positive evidence; the accepted risks (counter spike after a `JWT_SECRET` rotation, `ignoreExpiration`, stale agent snapshot under D-6, the unreachable 503 guard under D-7).
+
+## Session 2026-11-21 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan with this record (binding, verbatim):
+  ```json
+  {"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","dev":"9f7093a46fbe76d007a514ef4f4cabc186336bcb","specHash":"91e2e4a4e824be4c08ee9120d0aa9eb92bd66642","directive":"conditional","pending":[1,2,3,4,5,6,7,8],"mismatches":[{"n":1,"detail":"No mismatch. All 3 Files paths exist. Every evidence anchor matched on HEAD 9f7093a4 (8baf3976 is already an ancestor, so the merge was 'Already up to date'): mtlsTestPki.ts:5,9,17 exports and the DNS:${name} SAN at :11; secretsAndScope.test.ts:76-96; mtls.ts:22,28,35; createInsecure at internalCallerSetConfig.test.ts:54,60 and setConfigSpelling.test.ts:120,125; poller cases at :81/:114 and :222/:256; startMtlsLoopback not found (to be created); .jscpd.json ignores __tests__. Note: the first-found `node` on PATH is v22.23.5 (/opt/node22) and the repo .nvmrc says 22. The pinned Node 24 (v24.22.3) is at /opt/node24/bin and must be put on PATH for the pnpm verifications."},{"n":2,"detail":"Line drift in authz.ts. SecretCallerCall is at :158 (spec :152). module-private peerDnsSans is at :164 (spec :158; F-B also cites :158). The SAN predicate is at :191 (spec :185). hasPeerDnsSan is at :234 (spec :228). Matches: InternalCallerGrant :76, ALLOWLIST :84, grant :86, hasInternalCallerAuthority :104-119, peerSan doc :132-133. Line drift in configServiceImpl.ts. hasInternalCallerAuthority( is at :686 with call.metadata at :687 (spec :681/:682). The statement is :684-691 (spec :679-686). The deny path is ~:692-716 with fields at :695-699 and the internal-caller ERROR branch ~:703-711 (spec :690-694, :697-706). callback(ADMIN_SCOPE_ERROR) is at :714 (spec :709). LOG_ID_MAX/truncateForLog are at :222-224 (spec :217-220). callerIdentity is at :729 (spec :724). author is at :734 (spec :729). The INSERT params array is at :844 (spec :839). Imports :14-15 match, and so does the single non-test caller. In services/xstockstrat-config/CLAUDE.md, invariant 7 starts at :41 (spec :44) and the GetSecret denial-log Observability line is at :105 (spec :122). setConfigDenialReason has no match (as expected). gen-dev-certs.sh :28/:50 and trading config.go:70 match."},{"n":3,"detail":"No mismatch. All 3 Files paths exist. Matches: the mdWith fake at internalCallerAuthz.test.ts:16-20 with calls at :25,37,49,61,68,79,84,96; secretCallerAuthz.test.ts:21-28 callWith, with the DNS: SAN consts at :30-31; configServiceImpl.test.ts ~:676-681 SAN fake; internalCallerSetConfig.test.ts:97-100 params and :152 admin case; setConfigAuthz.test.ts @AC-54 at :174 with the field set at :193-199, WARN test :202-212 and insecure loopback :126,132; fixtures/ holds only collectingReader.ts."},{"n":4,"detail":"Line drift. In docs/context-constitution.md the PLAT-9 row is at :33 (spec :47); its 'has **no** `peerSan`' text is present there. The watcher copy-group Pointers row is at :88 (spec/F-A :99). In services/xstockstrat-trading/docs/context-constitution-findings.md, '## Latent bugs' is at :19 with its header row at :21 (spec :16-18). In trading.go, configSetter.SetConfig(ctx, \"trading-reconciliation-poller\" is at :2365 (spec :2270), the WARN-on-error is at :2373-2375 (spec :2278-2280) and the CRITICAL alert title is at :2380 (spec :2285); escalateSystemic is at :2359. Matches: the three .feature anchors (audit-author-spoof :25-27, keys-contract :36-38 with retirement header :5-8, keys-drift :88-90), with no @feature-319 present yet. The dedup grep still returns only docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md. context.md has the 2026-11-20 option-A C-16 sign-off (:427-429). All 5 Files paths exist."},{"n":5,"detail":"Line drift in telemetry.ts. The BoundCounter declarations are at ~:390-405 (spec :340-354): refreshRejections is at :399 (spec :349). The record* exports start at :410 (spec :360-380): recordRefreshRejection is at :422 (spec :372). In services/xstockstrat-identity/CLAUDE.md, the Instruments line is at :71 (spec :92) and 'No token, email or hash is ever logged' is at :72 (spec :93); :4 still has 'defects (⚠ unsigned-token revoke)'. Matches: identityServiceImpl.ts validateFailureReason :24-29, import block :11-17, jwtSecret getter :130, verify :218, revokeToken :279-298 with decode at :284, comment :283, sign :320; jsonwebtoken ^9.0.2 at package.json:34; findings rows :58/:60. All 4 Files paths exist."},{"n":6,"detail":"No mismatch. revokeToken.test.ts is absent, as expected for a create; telemetryAllowlist.test.ts exists, with MIN_INSTRUMENTS at :31 and drive() at :41-49. Patterns match: identityServiceImpl.test.ts revokeToken describe ~:263 and makePool :47; identityTelemetry.test.ts install/getInt stub :10-13, captureStdout ~:22, expired token :42-45; collectingReader.ts exports install :14, points :28, values :36, counterValue :43; package.json:12 runs node --test per file. Same Node-on-PATH note as Step 1: use /opt/node24."},{"n":7,"detail":"BLOCKING verification mismatch: scripts/check-watcher-copies.sh does NOT exist. It was ported to scripts/check-watcher-copies.py, which CI runs as `python3 scripts/check-watcher-copies.py` (ci.yml:1319) and which lists the four watch_core.py copies at :20-23 (spec cites the .sh at :17-20). The Verification line `bash scripts/check-watcher-copies.sh`, the F-A finding and the Dependencies note all cite the dead path; use the .py. The watch_core.py md5 is now 13dc1f2497c20f17b34b349d9c8ee4cb for all four copies (spec says 17d555e01c1cdbfeb4aa57fb2590033e). They are still byte-identical, but the content changed since spec time, so re-read before editing. In docs/context-constitution.md the copy-group rule is at :88 (spec :99). In services/xstockstrat-agent/CLAUDE.md the oauth.registration_enabled row '(disabled ⇒ 403)' is at :122 (spec :208). In agent docs/context-constitution-findings.md the dcr-fail-closed row is at :94 (spec :91). Matches: WatchCore :55, _snapshot set :99, wait_for_snapshot :153, _lookup :189/:194, no has_snapshot yet; watcher.py :13,16,19,64,68,93-97; oauth_server.py :28,76,79-83,85,87-93,96-101,105-107,138; feature @AC-4 :37-43; oauth.md :21 with no fail-open text. All 9 Files paths exist."},{"n":8,"detail":"Line drift in tests/conftest.py. The autouse config_snapshots fixture is at :145-163 (spec :112-130): ConfigWatcher.__new__ is at :158 and setitem(_WATCHERS) at :163. hung_config_server is at :167 (spec :134). In app/main.py, start_watchers runs at :228 inside lifespan (:224), and also at :98 on the stdio path (spec :92). In tests/test_tools.py, the install_watcher import is at :30 (spec :24) and the read_config_value patch is at :451 (spec :445). Matches: test_oauth.py :139/:150 (201), :154, :160-165 with the _snapshot line :162, :168 test_register_survives_config_read_failure with 201 at :181; test_config_watcher.py install_watcher :46. The file path tests/test_oauth.py exists."}]}
+  ```
+- Stale check passed (`origin/main-dev` = `8baf3976`, dev = `9f7093a4`); `8baf3976` is already an ancestor, so no merge.
+- Tooling setup (steps 1-8): node ✓ v24.22.3 (`/opt/node24/bin`, must lead PATH; first-found `node` is v22) · pnpm ✓ 9.15.9 · uv ✓ · ruff ✓ · python ✓ 3.13 · hook check hook=0.
+- Re-spec (directive conditional): steps 2, 4, 5, 7 and 8 had their step-body line anchors refreshed; Step 7 Verification
+  now runs `python3 scripts/check-watcher-copies.py` (the `.sh` was ported) and records md5 `13dc1f2497c20f17b34b349d9c8ee4cb`.
+  Steps 1, 3 and 6 reported no mismatch and are unchanged. Outside step bodies (not edited): finding F-A and the Step
+  Dependencies merge-order note still cite `scripts/check-watcher-copies.sh`; read them as the `.py`.
+- respec(fix-auth-trust-hardening) commits on the branch (`git log --first-parent origin/main-dev..HEAD`):
+  - `1605aede` respec(fix-auth-trust-hardening): align steps 1,2,3,4,5,6,7,8 with current codebase
+  - `5cc9269e` respec(fix-auth-trust-hardening): align steps 1,2,3,4,5,6,7,8 with current codebase — feature.md
+  - `941f1671` respec(fix-auth-trust-hardening): align steps 1,2,3,4,5,6,7,8 with current codebase — status.md
+- Status: `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","date":"2026-11-21"}
+```
+
+### Step 1 — test: move the internal-caller wire suites onto an mTLS loopback (harness only) [done]
+- Added `startMtlsLoopback(server, clientNames)` to `mtlsTestPki.ts` (the `secretsAndScope.test.ts` CA → leaves → mTLS bind → per-leaf client credentials sequence). `internalCallerSetConfig.test.ts` now runs on the `xstockstrat-trading` leaf with a second `notifyClient` (`xstockstrat-notify` leaf, unused until Step 3), and `setConfig` takes an optional client. `setConfigSpelling.test.ts` runs on the `xstockstrat-trading` leaf. No assertion changed and no production file changed.
+- TDD: red N/A — no behaviour change (harness only, per the step's TDD line). Baseline before the edit: `ℹ tests 394` / `ℹ pass 394`. Green after: `ℹ tests 394` / `ℹ pass 394` / `ℹ fail 0`, `All files | 92.26` lines (c8 `--lines 40` and `check-coverage --lines 40` pass), exit=0; same test count as before. No `createInsecure` is left in the two files, and `git diff --stat -- src/grpc` is empty.
+- Verification ran with `/opt/node24/bin` leading PATH (tooling-setup note above). Lint: 0 errors; warnings 310 → 312, from the two new `any` annotations (`notifyClient`, the `setConfig` client parameter), which follow the file's existing `let client: any` pattern.
+- Config-key wiring gate: not applicable (test step; no config key).
+- Spec anchor drift, no effect: the poller-success cases are at `internalCallerSetConfig.test.ts:81` and `:114` (spec `:84`, `:115`).
+- Files modified: `services/xstockstrat-config/src/__tests__/mtlsTestPki.ts`, `services/xstockstrat-config/src/__tests__/internalCallerSetConfig.test.ts`, `services/xstockstrat-config/src/__tests__/setConfigSpelling.test.ts`
+- Deviations: none
+
+### Step 2 — service: bind the poller grant to the mTLS peer SAN; attribute only authorized callers [done]
+- Atomic unit Steps 2+3+4 (one commit). `InternalCallerGrant` gains `peerSan`; the `trading-reconciliation-poller` grant sets `peerSan: 'xstockstrat-trading'` (constraint comment ties it to `gen-dev-certs.sh` `DNS:${svc}`). `hasInternalCallerAuthority(call: PeerCall, …)` reuses the `GetSecret` SAN predicate; `peerDnsSans` is exported (no second parser, no `setConfigDenialReason`). `setConfig` passes `call`, persists `caller_identity` only when `internalCallerAuthorized`, and the internal-caller ERROR deny log adds `hadPeerSan` and a truncated `peerSan`. Config `CLAUDE.md` invariant 7 and Observability updated.
+- TDD: red/green captured with Step 3 (below). Green (Step 2 Verification, `.sdd-logs/v-3.log`): `ℹ tests 400` / `ℹ pass 400` / `ℹ fail 0`, `All files | 92.31` lines, lint `0 errors, 313 warnings` (+1: the inline `captureLogs` `info: any`, same as `setConfigAuthz.test.ts`); greps found `peerSan: 'xstockstrat-trading'` (authz.ts:95), `hasInternalCallerAuthority(` → `call,` (configServiceImpl.ts:687-688), the gated `callerIdentity` (:735); `setConfigDenialReason` no match. The block's `exit=1` comes from that final expect-no-match grep.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-config/src/grpc/authz.ts`, `services/xstockstrat-config/src/grpc/configServiceImpl.ts`, `services/xstockstrat-config/CLAUDE.md`
+- Deviations: none
+
+### Step 3 — test: 319 @AC-1, the forged-attribution case and the unit flip [done]
+- Atomic unit Steps 2+3+4. `internalCallerAuthz.test.ts` uses a `callWith(callerID, subjectaltname?)` fake with `TRADING_SAN`, plus four new cases (notify SAN denied, no `getAuthContext`, no SAN, SAN inside a comma list). `internalCallerSetConfig.test.ts` adds `@AC-1 (319)` (notify leaf denied, `queries.length === 0`, ERROR log with `hadPeerSan: true`/`peerSan: 'xstockstrat-notify'` and a pinned field set; the trading leaf then succeeds with params `[6]`/`[10]` = poller) and the forged-attribution case (admin + forged header via the notify leaf → `[6] === 'admin-7'`, `[10] === null`). `setConfigAuthz.test.ts` `@AC-54` field set gains `hadPeerSan`/`peerSan` (`false`/`''` on the insecure loopback); the WARN test asserts both `undefined`. Log capture is an inline copy of `setConfigAuthz.test.ts`'s `captureLogs` (single consumer, C-13; no fixture module).
+- AC-1 red (Step 1 tree + wire/authz test edits, `.sdd-logs/v-1.log`): `ℹ tests 396` / `ℹ fail 3` — `@AC-1 (319)` `undefined !== 7` (notify-leaf poller call authorized), forged attribution `+ 'trading-reconciliation-poller' - null`, `@AC-54` `+ undefined - false`. Second red after the unit-file edit (`.sdd-logs/v-2.log`): `internalCallerAuthz.test.ts(31,9): error TS2345 … not assignable to parameter of type 'Metadata'`. → green (`.sdd-logs/v-4.log`, Step 3 Verification): `ℹ tests 400` / `ℹ pass 400` / `ℹ fail 0`, `All files | 92.31`, no ELIFECYCLE (so `c8 check-coverage --lines 40` passed); the `AC-1 (319)`/`xstockstrat-notify` grep matched both files; the `__tests__/fixtures` grep found nothing (its `exit=1`).
+- Files modified: `services/xstockstrat-config/src/__tests__/internalCallerAuthz.test.ts`, `services/xstockstrat-config/src/__tests__/internalCallerSetConfig.test.ts`, `services/xstockstrat-config/src/__tests__/setConfigAuthz.test.ts`
+- Deviations: none
+
+### Step 4 — docs: C-16 durable-scenario amendments, PLAT-9 contract, trading finding [done]
+- Atomic unit Steps 2+3+4. TDD: N/A (docs and Gherkin). The three config scenarios (`@AC-2`/241, `@AC-5`/296, `@AC-25`/295) gained `@feature-319` and the operator-signed Given suffix `from an mTLS peer with DNS SAN "xstockstrat-trading"`; no When/Then changed; the 306 retirement header untouched. PLAT-9 (`docs/context-constitution.md:33`) write direction now lists `peerSan`, records the grant ↔ `gen-dev-certs.sh` `DNS:${svc}` contract (no CI guard), and its `authz.ts` anchors were re-grepped (`InternalCallerGrant ~L76-84`, `INTERNAL_CALLER_ALLOWLIST ~L86`, `.some( ~L118`, `hasInternalCallerAuthority ~L110-126`). Trading findings `## Latent bugs` gained the `escalateSystemic` row (dedup grep re-run: only the unrelated 2026-10-21 alert-targeting report).
+- Verification (`.sdd-logs/v-5.log`, `exit=0`): `@feature-319` count 1 per file; the SAN Given matched at `:27`, `:38`, `:90`; `has **no** peerSan` no match; the PLAT-9 line carries `gen-dev-certs.sh`; `escalateSystemic` at findings `:30`; `git diff --stat -- services/xstockstrat-trading/internal` empty.
+- Steps 2-3 Verification ran with `/opt/node24/bin` leading PATH, as in Step 1. The unit's union of Verifications ran as three runs, one per member block, each unchanged.
+- Files modified: `services/xstockstrat-config/acceptance/fix-config-audit-author-spoof.feature`, `services/xstockstrat-config/acceptance/fix-config-keys-contract.feature`, `services/xstockstrat-config/acceptance/fix-config-keys-drift.feature`, `docs/context-constitution.md`, `services/xstockstrat-trading/docs/context-constitution-findings.md`
+- Deviations: none
+- Open items (outside this unit's Files): `docs/patterns/inter-service-mtls.md` "SAN-gated grants" list does not name config `SetConfig` ← `xstockstrat-trading`; the defect sidecar `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.status` (`triaged`) is for integration/launch.
+
+### Step 5 — service: RevokeToken verifies the signature; HS256 pinned; unverifiable counter [done]
+- Atomic unit Steps 5+6 (one commit). `revokeToken` reads `this.jwtSecret` first (unset → outer catch, `code: 13`, no count), then `jwt.verify(token, secret, { ignoreExpiration: true, algorithms: ['HS256'] })` in an inner `try`; a verify failure calls `recordRevokeUnverifiable()`, logs the fixed WARN `RevokeToken: unverifiable token ignored` with only `errorName` (the verify error class), and returns `{ success: true }` with no UPDATE (D-4, D-10). `validateToken` passes `{ algorithms: ['HS256'] }`. `telemetry.ts` adds the label-free `identity.revoke.unverifiable` counter and `recordRevokeUnverifiable()`. Identity `CLAUDE.md` Instruments line names the counter with the rotation caveat; the `:4` pointer drops `(⚠ unsigned-token revoke)`; the findings row for `2026-10-19-identity-revoketoken-unverified-decode-defect` is marked resolved.
+- O-3 / the `validateToken` HS256 pin: implemented as specced under the 2026-11-21 operator up-front confirmation of the plan (pending steps 1-8); no separate operator answer was given for O-3.
+- TDD: red/green captured with Step 6 (below). Green (Step 5 Verification, `.sdd-logs/v-3.log`): `ℹ tests 169` / `ℹ pass 169` / `ℹ fail 0`, `All files | 85.5` lines, no ELIFECYCLE (so `c8 check-coverage --lines 40` passed), lint `0 errors, 271 warnings` (+1 vs the pre-impl 270: the `any` on the inner `verifyErr`/`decoded`, the file's existing untyped style); `decode(token)` no match; `algorithms: ['HS256']` at `identityServiceImpl.ts:219` and `:288`; the counter at `telemetry.ts:402`/`:430` and the impl at `:15`/`:290`. The block's `exit=1` comes from the final expect-no-match `unsigned-token revoke` grep.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`, `services/xstockstrat-identity/src/telemetry.ts`, `services/xstockstrat-identity/CLAUDE.md`, `services/xstockstrat-identity/docs/context-constitution-findings.md`
+- Deviations: none
+
+### Step 6 — test: 319 @AC-2 and the counter allowlist [done]
+- Atomic unit Steps 5+6. New `revokeToken.test.ts` (recording pool + `collectingReader` `values` delta on the label-free counter): `@AC-2 (319)` unsigned `alg:none` token for `victim-1` → `{ success: true }`, zero queries, counter +1; `@AC-2 (319)` expired HS256-signed → exactly the `UPDATE identity.refresh_tokens …` with `['victim-1']`, counter +0; other-secret, HS384 (also `validateToken` → code 16) and garbage → ignored, zero queries, +1; `JWT_SECRET` unset → `code: 13`, zero queries, +0 (env restored in `finally`); the WARN contains the fixed message and neither the token nor `victim-1`; empty token → success, zero queries, +0. `telemetryAllowlist.test.ts` adds `identity.revoke.unverifiable` to `MIN_INSTRUMENTS` and `recordRevokeUnverifiable()` to `drive()`. Literals inline (C-13, single consumer); only `collectingReader` imported.
+- AC-2 red (pre-Step-5 tree + `revokeToken.test.ts`, `.sdd-logs/v-1.log`): `ℹ tests 169` / `ℹ fail 6` — unsigned, other-secret and HS384 `an unverifiable token must not revoke anything` (`actual: 1, expected: 0`), garbage counter `actual: 0, expected: 1`, missing secret `actual: undefined, expected: 13`, WARN absent (stdout had only `Tokens revoked … victim-1`). Second red after the allowlist edit (`.sdd-logs/v-2.log`): `telemetryAllowlist.test.ts(47,13): error TS2339: Property 'recordRevokeUnverifiable' does not exist`. → green (`.sdd-logs/v-4.log`, Step 6 Verification, `exit=0`): `ℹ tests 169` / `ℹ pass 169` / `ℹ fail 0`, `All files | 85.5`, no ELIFECYCLE; all eight new cases and both `AC-41` allowlist tests passed; preserved 265 `@AC-2`/`@AC-4` and the `validateToken` suites passed; `AC-2 (319)` grep at `:78`/`:82`; allowlist grep at `:36`/`:47`; the fixtures grep shows only `./fixtures/collectingReader`.
+- Steps 5-6 Verification ran with `/opt/node24/bin` leading PATH, as in Step 1. The unit's union of Verifications ran as two runs, one per member block, each unchanged.
+- Files modified: `services/xstockstrat-identity/src/__tests__/revokeToken.test.ts`, `services/xstockstrat-identity/src/__tests__/telemetryAllowlist.test.ts`
+- Deviations: none
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Steps 7+8
+
+- Tooling setup (steps 7-8): python ✓ 3.13.18 · uv ✓ 0.11.32 (`uv sync --extra dev` in agent, indicators, ingest, analysis) · ruff ✓ 0.16.9 · node ✓ (only for `check-config-wiring.mjs`) · hook check hook=0.
+- Discovery re-verified at `origin/feature/fix-auth-trust-hardening@f82506d5`: the four `watch_core.py` copies had md5 `13dc1f2497c20f17b34b349d9c8ee4cb` before the edit and `88c92764df6cd31c51214f18ef8247f8` after it. The other Step 7 and Step 8 anchors match the re-spec'd lines.
+
+### Step 7 — service: agent DCR fails closed when no policy snapshot is readable [done]
+- Atomic unit Steps 7+8 (one commit). `WatchCore.has_snapshot()` was added after `wait_for_snapshot`, identically in all four copies. `watcher.has_snapshot(namespace)` returns False when no watcher is registered. `register` returns 503 `{"error": "server_error"}` with one WARN when `has_config_snapshot("agent")` is false; the check runs after the JSON parse and before the `registration_enabled` read. Both read `except` branches also return 503 now; neither defaults any more. The 2-line D-7 constraint comment replaces the "Best-effort" comment. A readable unset key still uses the defaults, a readable `false` still returns 403, and the identity-failure 500 is unchanged. No metric label was added.
+- Docs: in agent `CLAUDE.md:122`, the row now reads "(disabled ⇒ 403; policy snapshot absent ⇒ 503)". The findings row `2026-10-29-agent-dcr-fail-closed-defect` is marked resolved (feature 319). 247 `@AC-4` was amended in place: it gains `@feature-319`, its Given is now no readable `agent` snapshot, its Then is HTTP 503 (the no-hang bound is kept), and its last line is now "no client_id is issued". The title and lines `:40-41` are unchanged.
+- TDD: red/green captured with Step 8 (below). Green, Step 7 Verification (`.sdd-logs/v-2.log`, `exit=0`):
+  - `check-watcher-copies: all groups byte-identical`
+  - agent: `All checks passed!` / `79 files already formatted` / `829 passed`, with `Total coverage: 88.47%`
+  - indicators, ingest and analysis `test_config_watcher.py`: `30 passed` / `33 passed` / `14 passed`
+  - `def has_snapshot` at `watch_core.py:162` and `watcher.py:68`
+  - `defaulting to`: no match
+  - The R-3 `_snapshot` grep matches `:28` and `:88`. Both lines are the mandated `has_config_snapshot` name, not attribute access. See the Deviation Log.
+- Config-key wiring gate: step-time is not applicable (no key declared). Feature-final `node scripts/check-config-wiring.mjs --final` (`.sdd-logs/v-4.log`) gave `exit=0`. It REPORTED two unrelated findings, both `readers-disagree`: `fundsignal_loop.py:marketdata/fundamentals.provider` and `trading.go:platform/trading_state`. Neither is a blocking finding.
+- Files modified: `services/xstockstrat-{agent,indicators,ingest,analysis}/app/config/watch_core.py`, `services/xstockstrat-agent/app/config/watcher.py`, `services/xstockstrat-agent/app/oauth_server.py`, `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-agent/docs/context-constitution-findings.md`, `services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature`
+- Deviations: the R-3 grep expectation cannot be met with the mandated import name (Deviation Log).
+
+### Step 8 — test: 319 @AC-3, the inverted fail-open test and the readable-false 403 [done]
+- Atomic unit Steps 7+8. `test_register_survives_config_read_failure` became `test_register_fails_closed_on_config_read_failure`, which expects 503, `server_error`, no `client_id` and `register_oauth_client` not awaited. New tests:
+  - `@AC-3 (319)` `test_register_refused_without_policy_snapshot`: the `agent` watcher is deleted inside the `TestClient` block, then a POST with `attacker.example`.
+  - `test_register_refused_when_watcher_has_no_snapshot`: a bare `__new__` watcher.
+  - `test_register_readable_false_returns_403`.
+  - `test_register_snapshot_check_precedes_redirect_validation`: an empty `redirect_uris` gets 503, and invalid JSON gets 400 `invalid_request`.
+  - The shared assertions use an inline `_assert_refused_503` helper. There is no fixture, and the literals are inline (C-13). `test_register_returns_client_id` and `test_register_disabled_returns_403` are unchanged.
+- AC-3 red (pre-Step-7 tree with the new tests, `.sdd-logs/v-1.log`): `4 failed, 825 passed`.
+  - The two no-snapshot tests and the inverted test failed with `assert 201 == 503`.
+  - The ordering test failed with `assert 400 == 503`.
+  - The readable-false 403 test passed, as expected. Red was correct.
+- Green (Step 8 Verification, `.sdd-logs/v-3.log`, `exit=0`):
+  - `All checks passed!` / `79 files already formatted` / `829 passed`, with `Total coverage: 88.47%`.
+  - `-k register`: `8 passed, 18 deselected`.
+  - The `survives` grep: no match. `AC-3 (319)` is at `:190` and `attacker.example` at `:197`.
+  - The `_snapshot\b` grep matches the existing `:164` attribute line, the `:163` comment and two mandated test names (Deviation Log).
+  - The fixture/conftest grep matches only the existing `:163` comment.
+  - Preserved in the same run: 247 `@AC-1/@AC-5` and the agent `@AC-47` suites (all in the 829).
+- Files modified: `services/xstockstrat-agent/tests/test_oauth.py`
+- Deviations: `install_watcher` is called inside the `TestClient` block, because its watcher has no `_snapshot_event` and the lifespan would wait on it (Deviation Log).
+
+## Open Threads
+
+- [ ] unaddressed — `/oauth/register` vs 345-authelia-sso (carried from the impl-spec review): the status under SSO (404 per 345 `@AC-43`) and which feature merges first still need an operator decision. The legacy route now returns 503 with no snapshot. Target: the integration PR / merge-order.
+- [ ] unaddressed — merge-order row for 319 (outside this feature's Files); re-run `python3 scripts/check-watcher-copies.py` after merging `origin/main-dev` at the integration PR.
+- [ ] C-16 launch promotion: 319 `@AC-3` → agent suite; defect sidecar `docs/reports/2026-10-29-agent-dcr-fail-closed-defect.status` is for integration/launch.
+
+## Session 2026-11-26 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-auth-trust-hardening (feature 319)
+
+Source: docs/roadmap/features/319-fix-auth-trust-hardening/acceptance.feature. I read the working-tree copy, not `git show origin/feature/fix-auth-trust-hardening:...`, because this session has no Bash tool. It has 3 scenarios, @AC-1..@AC-3. Before writing, the orchestrator should confirm that the origin copy has no extra scenarios and that the three below match it verbatim. Affected services come from the Reviewers table and implementation-spec.md line 102: config, identity, agent.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-auth-trust-hardening.feature | CREATE | NEW | The observable subject is config SetConfig authz, so it goes to config. Closest existing scenarios are config 241 @AC-2 (positive poller write) and 254 @AC-3 (GetSecret SAN denial). Neither asserts the SetConfig denial from a non-trading SAN. |
+| @AC-2 | /home/user/xstockstrat/services/xstockstrat-identity/acceptance/fix-auth-trust-hardening.feature | CREATE | NEW | The observable subject is identity RevokeToken and refresh_tokens. No existing identity scenario covers RevokeToken or `identity.revoke.unverifiable`. |
+| @AC-3 | /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-auth-trust-hardening.feature | CREATE | NEW (gated, see Notes 1) | The observable subject is the agent POST /oauth/register. It supersedes agent 247 @AC-4, which still reads "201" in the working tree. |
+
+No `fix-auth-trust-hardening.feature` exists in any of the three services, and `@feature-319` appears only in the feature's own docs. No platform.feature scenario is planned, because each guarantee has a single service owner.
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-auth-trust-hardening.feature (CREATE) ---
+# Promoted from docs/roadmap/features/319-fix-auth-trust-hardening/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-319` tag.
+# Durable business rules xstockstrat-config already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-config - an internal-caller SetConfig grant is bound to the mTLS peer SAN
+  Internal-caller config writes are authorized only from the mTLS peer the grant names, not from the x-internal-caller header alone.
+
+  # guards: docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md
+  @AC-1 @regression @feature-319
+  Scenario: an internal-caller SetConfig from a peer without the trading SAN is denied
+    Given an mTLS client whose platform-CA leaf DNS SAN is "xstockstrat-notify"
+    When it calls SetConfig namespace "platform" key "trading_state" value "HALTED" with metadata x-internal-caller "trading-reconciliation-poller" and no admin x-access-scope
+    Then the call fails with PERMISSION_DENIED
+    And no config.config_audit row is written with changed_by "trading-reconciliation-poller"
+    And the same call from a peer with DNS SAN "xstockstrat-trading" is authorized
+
+--- /home/user/xstockstrat/services/xstockstrat-identity/acceptance/fix-auth-trust-hardening.feature (CREATE) ---
+# Promoted from docs/roadmap/features/319-fix-auth-trust-hardening/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-319` tag.
+# Durable business rules xstockstrat-identity already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-identity - RevokeToken acts only on a genuinely signed token
+  Token revocation verifies the JWT signature; an unsigned token revokes nothing.
+
+  # guards: docs/reports/2026-10-19-identity-revoketoken-unverified-decode-defect.md
+  @AC-2 @regression @feature-319
+  Scenario: RevokeToken with an unsigned token revokes nothing
+    Given user "victim-1" has two active identity.refresh_tokens rows
+    When IdentityService.RevokeToken is called with an unsigned JWT whose payload is {"user_id":"victim-1"}
+    Then both refresh_tokens rows for "victim-1" still have revoked_at NULL
+    And RevokeToken with an expired but correctly signed token for "victim-1" sets revoked_at on both rows
+    And the "identity.revoke.unverifiable" counter increases by 1 for the unsigned call and by 0 for the expired-signed call
+
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-auth-trust-hardening.feature (CREATE) ---
+# Promoted from docs/roadmap/features/319-fix-auth-trust-hardening/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-319` tag.
+# Durable business rules xstockstrat-agent already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-agent - OAuth dynamic client registration fails closed
+  /oauth/register does not widen registration while the registration policy cannot be read.
+  Operator-signed (context.md, 2026-11-10): supersedes 247 @AC-4 (201 on a config stall).
+
+  # guards: docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md
+  @AC-3 @regression @feature-319
+  Scenario: DCR is refused while the registration policy cannot be read
+    Given agent.oauth.registration_enabled is "false"
+    And the agent's read of the registration policy fails (no config snapshot for namespace "agent")
+    When POST /oauth/register is sent with {"redirect_uris": ["https://attacker.example/cb"]}
+    Then the response status is 503
+    And no client_id is issued
+
+### Notes / ambiguities / conflicts
+1. **Agent @AC-3 conflicts with an unamended promoted scenario (hard precondition).**
+   - /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature:37-43 (@AC-4 @feature-247) says that when config never answers, POST /oauth/register returns 201 with a client_id. That contradicts 319 @AC-3 (503, no client_id).
+   - It is a known supersession, not a surprise. The operator signed off fail-closed DCR (context.md line 37, "Session 2026-11-10"). Design decision D-8 and implementation-spec Step 8 amend 247 @AC-4 in place to 503 and add `@feature-319` to its tag line.
+   - The working tree here still shows 201, so that amendment is not on this tree.
+   - Before writing the agent block, the orchestrator must confirm that amendment is on the launching branch: `grep -n "@feature-319\|HTTP 503" services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature`.
+   - If it is absent, treat @AC-3 as CONFLICT, do not write the agent block, and escalate. Do not edit 247 @AC-4 from this promotion.
+   - Once amended, 247 @AC-4 and 319 @AC-3 assert the same 503 outcome. Record that as an OVERLAP consolidation candidate for a human. Nothing is deleted.
+2. **Config amendments are not part of this plan.** Step 4 amends three existing config scenarios in place: 241 @AC-2, 296 @AC-5 and 295 @AC-25. Each gains `@feature-319` and `from an mTLS peer with DNS SAN "xstockstrat-trading"` in its Given. That is operator-signed (option A) and sits outside promotion.
+   - 319 @AC-1's last `And` (authorized from the trading SAN) overlaps the amended 241 @AC-2 on the positive path only. The denial that makes @AC-1 new is not covered elsewhere, so the verdict stays NEW.
+   - 241 @AC-2 and 296 @AC-5 are plain scenarios, not retired. 296 @AC-5 carries a retirement header at lines 5-8 of fix-config-keys-contract.feature, which this plan does not touch.
+3. **Target file choice for identity @AC-2.** implementation-spec.md line 102 suggests extending the sibling instruments of identity @AC-52 in `signal-map-instrumentation.feature`. That file's header says "Verbatim; do not edit by hand". This plan therefore creates a slug-named file, `fix-auth-trust-hardening.feature`, per policy and additive-only. The orchestrator may append there instead only if the human owner prefers.
+4. **Tags.** The source scenarios carry only `@AC-n @regression` and no `@FR-*`. Context.md notes the bug template omits FR tags. I did not invent FR tags, so promoted tag lines are `@AC-n @regression @feature-319`. @AC numbers are unchanged.
+5. **Dropped lines.** I dropped the source comment "Pending Open Question 1 (operator security-posture decision); written for fail-closed." because the operator resolved it (context.md line 37). I replaced it with the sign-off line in the agent Feature description. The `# guards:` comments are kept. The step text is verbatim.
+6. **Cross-cutting.** I checked /home/user/xstockstrat/docs/sdd/business-rules/platform.feature for x-internal-caller, RevokeToken, registration_enabled and oauth/register. It has no matching scenario, so there is no overlap and no cross-cutting target is needed.
+7. **Lazy directories.** `acceptance/` already exists in config, identity and agent, so no directory creation is needed.
+
+### Coverage check
+- Source scenarios: 3 (@AC-1, @AC-2, @AC-3).
+- Planned: 3 NEW (@AC-3 gated on the 247 @AC-4 amendment), 0 DUP, 0 OVERLAP, 0 CONFLICT.
+- Every @AC is accounted for and none was skipped. Counts match.
+```

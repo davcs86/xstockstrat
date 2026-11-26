@@ -1,7 +1,7 @@
 # xstockstrat-identity — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (JWT secret env-only not config, SHA-256-hex token storage vs base64url PKCE, untyped-handler house style, `aud`-bound OAuth tokens) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ unsigned-token revoke) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (JWT secret env-only not config, SHA-256-hex token storage vs base64url PKCE, untyped-handler house style, `aud`-bound OAuth tokens) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -68,7 +68,7 @@ Namespace: `identity`
 ## Observability (feature 294-signal-map-instrumentation)
 
 - No `loop tick ok` (no tick loops).
-- Instruments: `identity.login.failures{reason}`, `identity.token.validate_failures{reason missing_token|secret_missing|expired|invalid|other}`, `identity.oauth.exchange_failures{reason}`, `identity.refresh.rejections{kind first_party|oauth}`, `identity.audit.failures{event_type}` and `identity.audit.append.duration` (the six `user.*` audit types, else `other`).
+- Instruments: `identity.login.failures{reason}`, `identity.token.validate_failures{reason missing_token|secret_missing|expired|invalid|other}`, `identity.oauth.exchange_failures{reason}`, `identity.refresh.rejections{kind first_party|oauth}`, `identity.revoke.unverifiable` (label-free; not a forgery signal on its own — a `JWT_SECRET` rotation makes legitimate logouts of pre-rotation tokens increment it), `identity.audit.failures{event_type}` and `identity.audit.append.duration` (the six `user.*` audit types, else `other`).
 - Load-bearing log: ERROR `ValidateToken: JWT secret missing`, once per process. No token, email or hash is ever logged or labelled.
 
 ## Environment Variables
