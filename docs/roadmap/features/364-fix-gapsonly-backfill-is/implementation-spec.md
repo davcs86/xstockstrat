@@ -114,7 +114,7 @@ which was based on grep only.
 
 **Codebase Evidence**:
 - Header `marketsession.go:1-2`: "Early closes and one-off closures are not modelled."
-- `isHoliday` `marketsession.go:74-92` is rule-based. Juneteenth `observed(date(y, time.June, 19))` at `:81` applies every year.
+- `isHoliday` `marketsession.go:74-94` is rule-based. Juneteenth `observed(date(y, time.June, 19))` at `:82` applies every year.
 - Consumers:
   - `services/xstockstrat-marketdata/internal/service/delisting.go:12,128,162-163`;
   - `services/xstockstrat-portfolio/internal/service/offline_valuation.go:133-212`;
@@ -198,10 +198,10 @@ Before Step 1 it fails on 2025-01-09 and 2021-06-18; after Step 1 it passes. Lin
 **Reviewers**: xstockstrat-marketdata owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning
 
 **Codebase Evidence**:
-- `type Gap` `timeframe.go:77-80`; `ComputeGaps` `:82-99` (doc: "interior holes out of scope").
+- `type Gap` `timeframe.go:76-79`; `ComputeGaps` doc `:82-83` ("interior holes out of scope" at `:83`), func `:84-101`.
 - Imports `:6-11`: `fmt`, `time`, `commonv1`.
 - Calendar import path `"github.com/xstockstrat/contracts/marketsession"` (`internal/service/delisting.go:12`).
-- `SessionDate` `marketsession.go:22`, `DayStart` `:33`, `IsTradingDay` `:47`, `PrevTradingDay` `:56`, `Reference` `:64-71`.
+- `SessionDate` `marketsession.go:22`, `DayStart` `:33`, `IsTradingDay` `:47`, `PrevTradingDay` `:56`, `Reference` doc `:64-65`, func `:66-72`.
 
 **Lands with**: `Step 4`
 
@@ -242,8 +242,8 @@ cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/timeframe/ -
 **Reviewers**: xstockstrat-marketdata owner — OHLCV ingestion integrity
 
 **Codebase Evidence**:
-- `TestComputeGaps` `timeframe_test.go:97-137` (subtests via `t.Run`).
-- Imports `:3-5` (`testing`, `time`).
+- `TestComputeGaps` `timeframe_test.go:97-135` (subtests via `t.Run`).
+- Imports `:3-8` already include `commonv1` alongside `testing` and `time`; add only the `marketsession` import.
 
 **Lands with**: `Step 3`
 
@@ -435,7 +435,7 @@ A second `./scripts/buf-gen.sh` must leave `git diff packages/proto/gen/` empty.
 
 **Codebase Evidence**:
 - `_plan_work_ranges` `servicer.py:787-812`. It calls `GetDataCoverage(symbol, timeframe=tf_enum, range=request.range)` at `:801-806` and makes one unit per gap at `:807-810`.
-- `self._cfg.backfill_chunk_window_days` is read at `:823`, `app/config/watcher.py:129-130` (default 90).
+- `self._cfg.backfill_chunk_window_days` is read at `:824`, `app/config/watcher.py:129-130` (default 90).
 - `plan_chunks` `app/repositories/backfill_chunks.py:35-71` (window split `:56-58`; symbol batching only `:58-61`).
 - R-7: one unit per gap is rejected.
 
@@ -842,7 +842,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 **Codebase Evidence**:
 - `mcp-tools.md`:
   - the `get_backfill_status` section `:1095`;
-  - the outcome table `:1120-1126` (`empty`, `skipped`, …);
+  - the outcome table, header near `:1123`, rows `empty`/`skipped`/`failed` at `:1125-1127`;
   - the `trigger_backfill` delisted note `:1028-1030`.
 - `historical-backfill.md:357-359` "Gaps-only … fetch only the ranges `marketdata.GetDataCoverage` reports missing".
 - strat-lab:
