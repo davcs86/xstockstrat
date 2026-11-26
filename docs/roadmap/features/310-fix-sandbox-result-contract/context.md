@@ -646,3 +646,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-agent/tests/test_tools.py`
 - Deviations: RED against the restored pre-Step-5 `tools.py`; the run script's closing `)` on its own line (full detail in Deviation Log)
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 7
+
+- Operator decision for the Step 7 blocker (binding; option A, operator-approved 2026-11-26): **O-5 / C-14 answer — "surface unchanged, justified".** The new failure classes and the missing-`result` error already show through `FormulaRunResult.tsx:64` (exit-reason map), `:73` (exit label) and `:77` (`result.error`), and the UI never displayed memory, so no follow-up feature is filed. Step 7 runs as written (the `310 AC-3` characterisation test in `e2e/insights/formulas.spec.ts`). This closes the O-5 Open Thread and confirms Step 7 (impl-review warnings "Step 7: C-14" and "Step 7: test-only `**TDD**: N/A`").
