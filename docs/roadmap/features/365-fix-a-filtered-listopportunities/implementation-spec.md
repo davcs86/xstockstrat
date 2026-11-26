@@ -69,7 +69,7 @@ ran (O-6). Step 2's Verification states this.
 
 ### Step 1 — service: gate the full kick on "no fresh row" in `_read_opportunity_queue`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -138,7 +138,7 @@ Behavioural verification comes from Step 2 (same atomic unit): run Step 2's full
 
 ### Step 2 — test: regression tests for the filtered-empty no-kick and the preserved cold/stale kicks; `has_fresh` harness stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py` — modify (design item (a))
@@ -366,3 +366,8 @@ grep -n "filters both the fresh and the stale" services/xstockstrat-analysis/doc
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — constraint-comment placement (2026-11-26)
+- **Spec said**: put the at-most-2-line constraint comment on the `elif` line.
+- **Actual**: the comment is the first line inside the `elif` block (`servicer.py:4791`), because the inline form would exceed ruff's 100-column `line-length`. The wording follows Instruction 2's example.
+- **Disposition**: cosmetic placement only; the elif condition, body and behaviour match the spec.

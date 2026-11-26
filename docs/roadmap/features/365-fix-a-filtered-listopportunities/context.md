@@ -278,3 +278,17 @@ Full debate (/sdd-design via /sdd-batch) halted at the approval gate after round
 ```sdd-batch-setup
 {"mainDev":"34f68c57f6cf34a265f17ee6ac0d625ccb9146a7","date":"2026-11-26"}
 ```
+
+- Tooling setup (steps 1+2): python3.13 ✓ · uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (analysis venv; `uv.lock` unchanged) · ruff ✓ (uv) · pytest ✓ (uv) · PostgreSQL 16 binaries ✓ (`local_pg` real_pg tests ran, not skipped)
+
+### Step 1 — service: gate the full kick on "no fresh row" in `_read_opportunity_queue` [done]
+- Atomic unit steps 1+2 (one commit). The bare `else:` of the no-rows branch is now `elif not await opps.has_fresh(user_id):` with no re-indent; the trailing comment now reads "cold or all-stale: revalidate in the background". A fresh-but-filtered-empty read returns an empty page with no kick and `served_include_expired=False`.
+- TDD: red/green recorded under Step 2 (same unit). Step 1 Verification: one `elif` grep hit at `servicer.py:4790`, no "every no-rows branch revalidates" hit, ruff check and format clean (exit=0).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: the constraint comment sits on the line after the `elif`, because inline it would exceed 100 columns (Deviation Log).
+
+### Step 2 — test: regression tests for the filtered-empty no-kick and the preserved cold/stale kicks; `has_fresh` harness stubs [done]
+- Atomic unit steps 1+2. Harness stubs: `"has_fresh": "fetchval"` in `_BC_METHOD_FOR`, plus `has_fresh=AsyncMock(return_value=False)` in `_opp_svc` and in `test_stored_zero_signal_rank_weight_reaches_the_read`. Added 9 tests in `test_list_opportunities_deadlines.py` (items 4-10; the shared `_drain_opportunity_recompute` is imported, with no local copy) and the real_pg `test_has_fresh_against_real_postgres` with its D-3 pin.
+- TDD (AC-1, AC-2): red came first: `7 failed, 90 passed`. The failures were `test_ac1_filtered_empty_over_fresh_queue_does_not_kick[direct|pool]` (`assert ([True] == []`, the kick fired), `test_ac2_..._does_not_kick[direct|pool]` (stale AAPL row served), `test_fresh_rows_all_dismissed_or_snoozed_do_not_kick[direct|pool]` and `test_ac1_..._leaves_valid_until_unchanged` (`assert 1 == 0` on `_compute_opportunities.await_count`). Then green: `97 passed`; `124 passed, 286 deselected`; full suite `1775 passed`, `Total coverage: 91.65%`; ruff `All checks passed!`, `141 files already formatted`. AC-3/AC-4 PRESERVE tests and `test_has_fresh_timeout_is_unavailable_without_kick` passed both before and after the fix, as specced.
+- Files modified: `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py`, `services/xstockstrat-analysis/tests/test_opportunity_compute_state.py`, `services/xstockstrat-analysis/tests/test_opportunities_repo.py`, `services/xstockstrat-analysis/tests/conftest.py`
+- Deviations: none.

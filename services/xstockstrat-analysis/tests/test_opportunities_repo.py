@@ -660,6 +660,7 @@ async def test_stored_zero_signal_rank_weight_reaches_the_read():
     opps = MagicMock()
     opps.read = AsyncMock(return_value=[])
     opps.count_for_user = AsyncMock(return_value=0)
+    opps.has_fresh = AsyncMock(return_value=False)
     opps.available_sources = AsyncMock(return_value=[])
     await svc._read_opportunity_queue(
         opps, None, "u1", analysis_pb2.ListOpportunitiesRequest(), 0, _OpportunityQueueRead()
@@ -688,3 +689,41 @@ async def test_sort0_order_by_ranks_by_conviction_at_weight_zero(local_pg, weigh
     finally:
         await con.close()
     assert [r["symbol"] for r in rows] == expected
+
+
+@pytest.mark.real_pg
+async def test_has_fresh_against_real_postgres(local_pg):
+    import pathlib
+    import uuid
+    from datetime import timedelta
+
+    import asyncpg
+
+    migrations = pathlib.Path(__file__).resolve().parents[1] / "migrations"
+    pool = await asyncpg.create_pool(local_pg, min_size=1, max_size=1, statement_cache_size=0)
+    try:
+        await pool.execute("CREATE SCHEMA IF NOT EXISTS analysis")
+        for name in ("010_opportunity_actions.up.sql", "011_opportunities.up.sql"):
+            await pool.execute((migrations / name).read_text())
+        fresh, stale, empty, dismissed = (uuid.uuid4().hex for _ in range(4))
+        insert = (
+            "INSERT INTO analysis.opportunities (user_id, opportunity_key, symbol, action, "
+            "valid_until) VALUES ($1, 'AAPL:sx', 'AAPL', 1, now() + $2::interval)"
+        )
+        hour = timedelta(hours=1)
+        await pool.execute(insert, fresh, hour)
+        await pool.execute(insert, stale, -hour)
+        await pool.execute(insert, dismissed, hour)
+        await pool.execute(
+            "INSERT INTO analysis.opportunity_actions (user_id, opportunity_key, action) "
+            "VALUES ($1, 'AAPL:sx', 2)",
+            dismissed,
+        )
+        repo = OpportunitiesRepository(pool)
+        assert await repo.has_fresh(fresh) is True
+        assert await repo.has_fresh(stale) is False
+        assert await repo.has_fresh(empty) is False
+        # D-3 pin, not a behaviour test: the SQL never reads dispositions.
+        assert await repo.has_fresh(dismissed) is True
+    finally:
+        await pool.close()
