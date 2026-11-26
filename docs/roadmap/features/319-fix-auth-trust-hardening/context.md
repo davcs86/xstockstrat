@@ -613,3 +613,99 @@ design.md is not written and status.md is unchanged. Register: `debate.md` (D-1.
 - [ ] unaddressed — `/oauth/register` vs 345-authelia-sso (carried from the impl-spec review): the status under SSO (404 per 345 `@AC-43`) and which feature merges first still need an operator decision. The legacy route now returns 503 with no snapshot. Target: the integration PR / merge-order.
 - [ ] unaddressed — merge-order row for 319 (outside this feature's Files); re-run `python3 scripts/check-watcher-copies.py` after merging `origin/main-dev` at the integration PR.
 - [ ] C-16 launch promotion: 319 `@AC-3` → agent suite; defect sidecar `docs/reports/2026-10-29-agent-dcr-fail-closed-defect.status` is for integration/launch.
+
+## Session 2026-11-26 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-auth-trust-hardening (feature 319)
+
+Source: docs/roadmap/features/319-fix-auth-trust-hardening/acceptance.feature. I read the working-tree copy, not `git show origin/feature/fix-auth-trust-hardening:...`, because this session has no Bash tool. It has 3 scenarios, @AC-1..@AC-3. Before writing, the orchestrator should confirm that the origin copy has no extra scenarios and that the three below match it verbatim. Affected services come from the Reviewers table and implementation-spec.md line 102: config, identity, agent.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-auth-trust-hardening.feature | CREATE | NEW | The observable subject is config SetConfig authz, so it goes to config. Closest existing scenarios are config 241 @AC-2 (positive poller write) and 254 @AC-3 (GetSecret SAN denial). Neither asserts the SetConfig denial from a non-trading SAN. |
+| @AC-2 | /home/user/xstockstrat/services/xstockstrat-identity/acceptance/fix-auth-trust-hardening.feature | CREATE | NEW | The observable subject is identity RevokeToken and refresh_tokens. No existing identity scenario covers RevokeToken or `identity.revoke.unverifiable`. |
+| @AC-3 | /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-auth-trust-hardening.feature | CREATE | NEW (gated, see Notes 1) | The observable subject is the agent POST /oauth/register. It supersedes agent 247 @AC-4, which still reads "201" in the working tree. |
+
+No `fix-auth-trust-hardening.feature` exists in any of the three services, and `@feature-319` appears only in the feature's own docs. No platform.feature scenario is planned, because each guarantee has a single service owner.
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-auth-trust-hardening.feature (CREATE) ---
+# Promoted from docs/roadmap/features/319-fix-auth-trust-hardening/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-319` tag.
+# Durable business rules xstockstrat-config already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-config - an internal-caller SetConfig grant is bound to the mTLS peer SAN
+  Internal-caller config writes are authorized only from the mTLS peer the grant names, not from the x-internal-caller header alone.
+
+  # guards: docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md
+  @AC-1 @regression @feature-319
+  Scenario: an internal-caller SetConfig from a peer without the trading SAN is denied
+    Given an mTLS client whose platform-CA leaf DNS SAN is "xstockstrat-notify"
+    When it calls SetConfig namespace "platform" key "trading_state" value "HALTED" with metadata x-internal-caller "trading-reconciliation-poller" and no admin x-access-scope
+    Then the call fails with PERMISSION_DENIED
+    And no config.config_audit row is written with changed_by "trading-reconciliation-poller"
+    And the same call from a peer with DNS SAN "xstockstrat-trading" is authorized
+
+--- /home/user/xstockstrat/services/xstockstrat-identity/acceptance/fix-auth-trust-hardening.feature (CREATE) ---
+# Promoted from docs/roadmap/features/319-fix-auth-trust-hardening/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-319` tag.
+# Durable business rules xstockstrat-identity already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-identity - RevokeToken acts only on a genuinely signed token
+  Token revocation verifies the JWT signature; an unsigned token revokes nothing.
+
+  # guards: docs/reports/2026-10-19-identity-revoketoken-unverified-decode-defect.md
+  @AC-2 @regression @feature-319
+  Scenario: RevokeToken with an unsigned token revokes nothing
+    Given user "victim-1" has two active identity.refresh_tokens rows
+    When IdentityService.RevokeToken is called with an unsigned JWT whose payload is {"user_id":"victim-1"}
+    Then both refresh_tokens rows for "victim-1" still have revoked_at NULL
+    And RevokeToken with an expired but correctly signed token for "victim-1" sets revoked_at on both rows
+    And the "identity.revoke.unverifiable" counter increases by 1 for the unsigned call and by 0 for the expired-signed call
+
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-auth-trust-hardening.feature (CREATE) ---
+# Promoted from docs/roadmap/features/319-fix-auth-trust-hardening/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-319` tag.
+# Durable business rules xstockstrat-agent already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-agent - OAuth dynamic client registration fails closed
+  /oauth/register does not widen registration while the registration policy cannot be read.
+  Operator-signed (context.md, 2026-11-10): supersedes 247 @AC-4 (201 on a config stall).
+
+  # guards: docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md
+  @AC-3 @regression @feature-319
+  Scenario: DCR is refused while the registration policy cannot be read
+    Given agent.oauth.registration_enabled is "false"
+    And the agent's read of the registration policy fails (no config snapshot for namespace "agent")
+    When POST /oauth/register is sent with {"redirect_uris": ["https://attacker.example/cb"]}
+    Then the response status is 503
+    And no client_id is issued
+
+### Notes / ambiguities / conflicts
+1. **Agent @AC-3 conflicts with an unamended promoted scenario (hard precondition).**
+   - /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature:37-43 (@AC-4 @feature-247) says that when config never answers, POST /oauth/register returns 201 with a client_id. That contradicts 319 @AC-3 (503, no client_id).
+   - It is a known supersession, not a surprise. The operator signed off fail-closed DCR (context.md line 37, "Session 2026-11-10"). Design decision D-8 and implementation-spec Step 8 amend 247 @AC-4 in place to 503 and add `@feature-319` to its tag line.
+   - The working tree here still shows 201, so that amendment is not on this tree.
+   - Before writing the agent block, the orchestrator must confirm that amendment is on the launching branch: `grep -n "@feature-319\|HTTP 503" services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature`.
+   - If it is absent, treat @AC-3 as CONFLICT, do not write the agent block, and escalate. Do not edit 247 @AC-4 from this promotion.
+   - Once amended, 247 @AC-4 and 319 @AC-3 assert the same 503 outcome. Record that as an OVERLAP consolidation candidate for a human. Nothing is deleted.
+2. **Config amendments are not part of this plan.** Step 4 amends three existing config scenarios in place: 241 @AC-2, 296 @AC-5 and 295 @AC-25. Each gains `@feature-319` and `from an mTLS peer with DNS SAN "xstockstrat-trading"` in its Given. That is operator-signed (option A) and sits outside promotion.
+   - 319 @AC-1's last `And` (authorized from the trading SAN) overlaps the amended 241 @AC-2 on the positive path only. The denial that makes @AC-1 new is not covered elsewhere, so the verdict stays NEW.
+   - 241 @AC-2 and 296 @AC-5 are plain scenarios, not retired. 296 @AC-5 carries a retirement header at lines 5-8 of fix-config-keys-contract.feature, which this plan does not touch.
+3. **Target file choice for identity @AC-2.** implementation-spec.md line 102 suggests extending the sibling instruments of identity @AC-52 in `signal-map-instrumentation.feature`. That file's header says "Verbatim; do not edit by hand". This plan therefore creates a slug-named file, `fix-auth-trust-hardening.feature`, per policy and additive-only. The orchestrator may append there instead only if the human owner prefers.
+4. **Tags.** The source scenarios carry only `@AC-n @regression` and no `@FR-*`. Context.md notes the bug template omits FR tags. I did not invent FR tags, so promoted tag lines are `@AC-n @regression @feature-319`. @AC numbers are unchanged.
+5. **Dropped lines.** I dropped the source comment "Pending Open Question 1 (operator security-posture decision); written for fail-closed." because the operator resolved it (context.md line 37). I replaced it with the sign-off line in the agent Feature description. The `# guards:` comments are kept. The step text is verbatim.
+6. **Cross-cutting.** I checked /home/user/xstockstrat/docs/sdd/business-rules/platform.feature for x-internal-caller, RevokeToken, registration_enabled and oauth/register. It has no matching scenario, so there is no overlap and no cross-cutting target is needed.
+7. **Lazy directories.** `acceptance/` already exists in config, identity and agent, so no directory creation is needed.
+
+### Coverage check
+- Source scenarios: 3 (@AC-1, @AC-2, @AC-3).
+- Planned: 3 NEW (@AC-3 gated on the 247 @AC-4 amendment), 0 DUP, 0 OVERLAP, 0 CONFLICT.
+- Every @AC is accounted for and none was skipped. Counts match.
+```
