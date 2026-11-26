@@ -255,3 +255,45 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-26 — sdd-design
+
+- **Phase 0 Recon.** Wrote `recon.md`.
+  - Services: marketdata and ingest change code; ui and agent are consumer surfaces.
+  - Key reuse patterns: the `marketsession` calendar, and the existing `GetDataCoverageResponse.gaps = 7`.
+- **Phase 1 Grilling.** 2 rounds (full).
+  - Chosen approach: session-aware 1d gaps in marketdata, plus per-symbol gap coalescing in the ingest planner. After `_run_chunks`, a GAPS_ONLY verify pass marks still-missing symbols with the new outcome `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4`, and the job ends PARTIAL. The verify pass also runs on resume.
+  - The UI maps an INCOMPLETE-only PARTIAL to the no-vendor-data state. The agent and strat-lab docs are synced in the same PR.
+  - Rejected: R-1..R-9 (see `design.md`).
+- **Constitution rules touched:** C-04, C-11, C-12, C-14, C-15, C-16, C-18, P-02, P-03, F-01, F-06, F-07, PLAT-N1, and the strat-lab same-PR sync.
+  - Floor breaches: none.
+  - Business-rule CHANGEs: none (EXTEND/PRESERVE only).
+- **Status:** spec-ready → design-approved. The operator approved at the design gate after round 2.
+
+### OPERATOR DECISIONS (binding, recorded 2026-11-26, design gate)
+
+- **O-1 / K.** The operator's verbatim answer was "Expand it to 730 days". The head-gap carve-out lookback K is **730 days**, not 365. This aligns with `ingest.backfill.self_serve_max_range_days = 730` and supersedes the 365d in D-10.
+  - K=730 is a fixed invariant (F-07 convention, as in marketdata `CLAUDE.md` "Adaptive rate limit — fixed invariants"), not a config key. Record it in the ingest `CLAUDE.md` in the implementing PR.
+- **Accepted residual (verbatim):** "An unfilled head gap (gaps[0]) is treated as the pre-listing carve-out, and the job ends COMPLETED, whenever the store has no bar in the 730 days before it. This covers three cases: the symbol was not yet listed; it was never fetched before (e.g. a first GAPS_ONLY run where only recent bars are stored and the vendor returns EMPTY or a short head); or the request starts inside a hole longer than 730 days."
+- **One-time residual accepted (O-7):** GAPS_ONLY jobs created before deploy carry no verify marker and resume unverified.
+- **Scope widening accepted.** The operator accepted:
+  - the non-breaking proto enum value `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4` in `common.proto`, with 1 service-owner approval;
+  - the ingest verify pass, the INCOMPLETE outcome and the coalescing planner;
+  - the UI `backtestBackfill.ts` INCOMPLETE-only PARTIAL discriminator;
+  - the agent and strat-lab doc sync.
+
+  Update `product-spec.md` Fix Scope and Proto Contract to match at `/sdd-spec`.
+
+### Open Threads
+
+Each thread names its target step.
+
+- O-8: on unset-start ranges, the planner, verify and resume scan the symbol's full history (2000 floor), and verify doubles it. Restate the bound and measure it against, or accept it within, the `@AC-1 @feature-153` budget. Do the same for pre-004 1-day chunk locks. → `/sdd-spec`
+- O-9: confirm the exact coalescing boundary (merged span ≤ `chunk_window_days`, measured from the first gap start to the last gap end, read from config), and that `chunk_max_bars` still splits inside merged units. → `/sdd-spec`, ingest planner step
+- Record K=730 as a fixed invariant in the ingest `CLAUDE.md`. → ingest verify step
+- Coalescing re-fetches the stored sessions between gaps (extra vendor bandwidth and rate-limit pressure on symbols with dense holes). → ingest planner step (observe)
+- IEX holes the vendor cannot fill stay INCOMPLETE/PARTIAL on every GAPS_ONLY run, and the vendor may publish the last session late. → runbook / strat-lab sync step (document)
+- The `marketsession` closure table is maintained by hand and has no CI check. Pre-2022 Juneteenth is over-applied (`marketsession.go:82`). → closure-table step (decide fix or accept)
+- An EMPTY symbol with stored bars in the 730 days before its first gap now becomes INCOMPLETE. Re-check that no `@AC-24 @feature-352` scenario uses GAPS_ONLY with prior history. → `/sdd-spec`
+- The `/insights/strategies/[id]` GAPS_ONLY action (`page.tsx:547`) does not use `backfillJobMessage`, so it shows an INCOMPLETE-only PARTIAL as a plain PARTIAL. Decide whether it is in scope. → `/sdd-spec`
+- The analysis readiness hot path calls `GetDataCoverage` over a 10-day window. Check the `array_agg` latency. → marketdata repo/service step
