@@ -1,6 +1,6 @@
 # Debate Register: fix-a-filtered-listopportunities
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
