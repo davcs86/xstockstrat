@@ -184,7 +184,7 @@ ls services/xstockstrat-analysis/migrations/030_*.up.sql services/xstockstrat-an
 
 ### Step 2 — service: repositories — cursor read/write, explicit `computed_at`, attributed-row read, transaction handle
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/opportunity_compute_state.py` — modify
