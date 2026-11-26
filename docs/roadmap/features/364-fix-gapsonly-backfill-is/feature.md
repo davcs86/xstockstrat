@@ -16,6 +16,7 @@
 | 2026-11-25 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-11-25-gaps-only-backfill-blind-to-interior-holes-defect.md` |
 | 2026-11-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 | 2026-11-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 19 steps |
 
 ---
 
@@ -26,8 +27,23 @@
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
 - [Design](design.md) — approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-gapsonly-backfill-is`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+Snapshot from `docs/runbooks/reviewer-registry.md` at `/sdd-spec` (2026-11-26).
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| packages/proto owner | Field number uniqueness, backward compatibility, naming conventions | 1, 2, 7, 8 |
+| Proto Reviewer | Field number uniqueness per message, no breaking changes, `buf lint` / `buf breaking` pass | 7, 8 |
+| xstockstrat-marketdata owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency | 3, 4, 5, 6 |
+| xstockstrat-ingest owner | Signal normalization correctness, idempotent ingestion, newsletter source schema stability | 7, 8, 9, 10, 11, 12, 13, 14 |
+| xstockstrat-ui owner | Trading UI correctness, Connect-RPC call safety | 15, 16 |
+| xstockstrat-agent owner | MCP tool contract stability (return shape) and `docs/runbooks/mcp-tools.md` parity | 17, 19 |
 
 ---
 
@@ -38,4 +54,4 @@ GAPS_ONLY backfill derives gaps only from a symbol's earliest/latest bar, so an 
 
 ## Next Action
 
-`/sdd-spec fix-gapsonly-backfill-is` — generate implementation spec from the approved design
+`/sdd-review fix-gapsonly-backfill-is impl-spec` — validate implementation spec, then `/sdd-execute fix-gapsonly-backfill-is`
