@@ -27,7 +27,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
 - [Design](design.md) — approved approach, open risks, rules touched
-- [Implementation Spec](implementation-spec.md) — 10 numbered steps with codebase evidence (re-spec 2026-11-26: former Step 9 split by consumer surface)
+- [Implementation Spec](implementation-spec.md) — 9 numbered steps with codebase evidence (re-spec 2026-11-26: former Step 9 split by consumer surface; `signal_extraction.md` and `noop.py` kept per operator rulings O-1, O-2)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -50,8 +50,8 @@ _Snapshot finalized by /sdd-spec on 2026-11-20 from the per-step **Reviewers**; 
 | Service owner `xstockstrat-notify` | Stream delivery guarantees, backpressure handling, alert deduplication (steps 4, 7) |
 | Service owner `xstockstrat-marketdata` | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency (steps 5, 7) |
 | Service owner `xstockstrat-ingest` | Signal normalization correctness, idempotent ingestion, newsletter source schema stability (steps 6, 7) |
-| Service owner `xstockstrat-agent` | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity (steps 8, 9) |
-| Service owner `xstockstrat-ui` | Trading UI correctness, analytics display accuracy (step 10) |
+| Service owner `xstockstrat-agent` | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity (step 8) |
+| Service owner `xstockstrat-ui` | Trading UI correctness, analytics display accuracy (step 9) |
 
 No Proto Reviewer or DBA applies: the feature has no proto and no migration step.
 

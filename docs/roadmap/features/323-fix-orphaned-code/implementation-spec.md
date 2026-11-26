@@ -3,10 +3,10 @@
 **Status**: `pending`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/323-fix-orphaned-code/feature.md`
-**Total Steps**: 10
+**Total Steps**: 9
 **Feature Branch**: `feature/fix-orphaned-code`
 **Tree**: `origin/feature/fix-orphaned-code` @ `42776a1f` (detached; every anchor below was re-grepped at this stamp, re-spec 2026-11-26)
-**Re-spec**: 2026-11-26, operator ruling: Step 9 listed backend services and `xstockstrat-agent` in one `**Service**` field; it is split by consumer surface (see Execution Summary)
+**Re-spec**: 2026-11-26, two operator rulings: (1) the former Step 9 is split by consumer surface; (2) `signal_extraction.md` and `noop.py` are kept, so their deletions are out of scope (O-1, O-2; see Execution Summary)
 
 ---
 
@@ -15,27 +15,39 @@
 The steps follow design.md's Chosen Approach in its own order: the one live hazard first (portfolio
 `r.pool` → `r.db`, Steps 1+2, one atomic unit), then the pure deletions service by service (config,
 the four Node leaves with one root-lock regeneration, marketdata, ingest), a scoped re-runnable backend
-verification (Step 7), the agent deletion and its verification (Steps 8–9), and last the ui comment
-(Step 10). A pure deletion has no build-RED, so each deletion step captures a construct-scoped presence
-check before the edit (RED) and after it (GREEN), and the verification steps re-run every check as the
-named `**Covers**` step (feature-175 pattern, recon.md:113-116).
+verification (Step 7), the agent regression check (Step 8), and last the ui comment (Step 9). A pure
+deletion has no build-RED, so each deletion step captures a construct-scoped presence check before the
+edit (RED) and after it (GREEN), and Step 7 re-runs every check as the named `**Covers**` step
+(feature-175 pattern, recon.md:113-116).
 
 **Surface map (re-spec 2026-11-26).** `sequential-mode.md` §5.5b derives a step's consumer surface from its
 `**Service**` (`xstockstrat-ui` → `ui`, `xstockstrat-agent` → `agent`, everything else → `backend`). The
-former Step 9 named the six backend services and `xstockstrat-agent` in one field, which maps to no single
-surface. It is split: Step 7 (backend, six services plus the item-5 evidence in analysis) and Step 9 (agent).
-The agent deletion (former Step 7) and the ui comment (former Step 8) move to Steps 8 and 10 so each surface
-is contiguous: `backend` Steps 1–7, `agent` Steps 8–9, `ui` Step 10. Step 4 lists four Node leaves, all
-`backend`, and stays one step. Only Steps 1+2 form an atomic unit, so no unit nears the 4-step cap
-(`step-constraints.md` §C).
+former Step 9 named backend services and `xstockstrat-agent` in one field, which maps to no single surface;
+it is split into Step 7 (backend) and Step 8 (agent). Surfaces are contiguous: `backend` Steps 1–7, `agent`
+Step 8, `ui` Step 9. Step 4 lists four Node leaves, all `backend`, and stays one step. Only Steps 1+2 form
+an atomic unit, so no unit nears the 4-step cap (`step-constraints.md` §C).
 
-**Consumer surface (C-14):** none. The product spec marks this internal/platform-only. Step 8 deletes
-an agent prompt file that no runtime code loads (see O-1 for the one test that reads it) and Step 10 adds
-a comment in ui; neither changes an MCP tool or a rendered page. This is a decision, not an omission.
+**Operator rulings (2026-11-26) that shrink the scope:**
+
+- **O-1: keep `services/xstockstrat-agent/app/prompts/signal_extraction.md`.** Feature 355 (`launched`) made
+  `services/xstockstrat-agent/tests/test_extraction_instructions.py:25` (`_PROMPT`, read at `:298`, `:305`,
+  `:319`) and durable `@AC-15 @FR-10 @feature-355`
+  (`services/xstockstrat-agent/acceptance/mediated-source-extraction-instructions.feature:54-59`) depend on
+  its content, so it is no longer an orphan. No step deletes it and no durable suite changes. The former
+  agent deletion step is gone.
+- **O-2: keep `services/xstockstrat-ingest/app/extractors/noop.py`.** It is the module name every mediated
+  source stores since 355 (`services/xstockstrat-ingest/app/handlers/servicer.py:78`
+  `_MEDIATED_EXTRACTOR_MODULE = "app.extractors.noop"`, stored at `:1698` and `:1794`); deleting the file
+  would leave a dangling module path. Step 6 no longer deletes it.
+
+**Consumer surface (C-14):** none. The product spec marks this internal/platform-only. After O-1 no step
+changes the agent (Step 8 only re-runs its tests) and Step 9 adds a comment in ui; neither changes an MCP tool
+or a rendered page. This is a decision, not an omission.
 
 **Items with no code change:** item 5 (analysis/ingest `sandbox_*` accessors) is already resolved and
-item 7 (agent `app/config/`) is live; Step 7 records the grep evidence for item 5 and Step 9 for item 7.
-Item 9 (ui combined branch) is reachable and is kept (design D-2, R-1).
+item 7 (agent `app/config/`) is live; Step 7 records the grep evidence for item 5 and Step 8 for item 7.
+Item 9 (ui combined branch) is reachable and is kept (design D-2, R-1). Report item 8 (agent
+`signal_extraction.md`) is kept under O-1, and the `noop.py` half of report item 6 under O-2.
 
 **Operator decision carried in (2026-11-20):** identity scope is option (b), four Node leaves. The
 identity edit is `services/xstockstrat-identity/package.json` only (D-13, F-08).
@@ -44,7 +56,7 @@ identity edit is `services/xstockstrat-identity/package.json` only (D-13, F-08).
 
 - Three open findings rows name subjects this feature resolves or disproves, and recon did not list
   them: `services/xstockstrat-portfolio/docs/context-constitution-findings.md:37,38` (Step 1) and
-  `services/xstockstrat-ui/docs/context-constitution-findings.md:34` (Step 10). They are included
+  `services/xstockstrat-ui/docs/context-constitution-findings.md:34` (Step 9). They are included
   under recon's own rule that a findings row goes in the step that changes its subject
   (recon.md:154). Row numbers and contents were re-read at the 2026-11-26 re-spec: portfolio `:37` is
   the `r.pool` → `r.db` half-migration row, `:38` the `CountPositions` row, ui `:34` the
@@ -59,33 +71,27 @@ identity edit is `services/xstockstrat-identity/package.json` only (D-13, F-08).
   unchanged either way (R-3).
 
 **Re-spec findings (2026-11-26): feature 355 is `launched`** and landed after the original stamp
-(`merge-order.md:129` made 323 wait for it). Two premises of this spec are now false; neither is resolved by
-this re-spec, both need the operator:
+(`merge-order.md:129` made 323 wait for it). It falsified two premises; both were ruled on by the operator
+(O-1, O-2 above) and the spec follows the rulings. What the rulings leave open:
 
-- **O-1 (blocks Step 8).** `services/xstockstrat-agent/app/prompts/signal_extraction.md` is still loaded by no
-  runtime code, but 355 made two checks depend on its content:
-  `services/xstockstrat-agent/tests/test_extraction_instructions.py:25` (`_PROMPT`) is read at `:298`, `:305`
-  and `:319`, and durable scenario `@AC-15 @FR-10 @feature-355` at
-  `services/xstockstrat-agent/acceptance/mediated-source-extraction-instructions.feature:54-59` asserts it.
-  355's recorded operator decision (2026-11-17, its `context.md:23`) and `merge-order.md:129` both say the
-  edit-vs-delete conflict "resolves as a delete", but neither addresses those three assertions or the
-  scenario, so deleting the file as Step 8 is written turns three agent tests red. Needed: delete the file
-  and retarget or remove those assertions and @AC-15 (a durable per-service suite, C-15/C-16, so explicit
-  sign-off), or keep the file and drop Step 8 and its findings edit.
-- **O-2 (Step 6).** `merge-order.md:129` says 323 "re-decides `noop.py` against what 355 shipped". 355
-  shipped `_MEDIATED_EXTRACTOR_MODULE = "app.extractors.noop"` (`services/xstockstrat-ingest/app/handlers/servicer.py:78`,
-  comment `:77` "nothing imports it"), stored for every mediated source at `:1698` and `:1794`, so the
-  label is now written on every mediated row and not only on seed rows. It is still never imported (no
-  `importlib` in `services/xstockstrat-ingest/app`), so Step 6 keeps the delete as designed (D-3, R-3). The
-  re-decision is not recorded anywhere; operator to confirm.
+- `acceptance.feature` `@AC-2` still names `noop.py` and `signal_extraction.md` in its Given and says "none of
+  them exists" in its Then. Both files are now kept, so that scenario cannot pass as worded. This spec does
+  not edit scenarios; Step 7 covers `@AC-2` for every other listed item and the gap is an open item for the
+  operator (context.md `## Open Threads`).
+- `product-spec.md` and `design.md` still list the two deletions in scope (design D-3 for `noop.py`); they are
+  not edited here.
+- `merge-order.md:129` (the 323 ↔ 355 row) describes a delete-vs-edit conflict that no longer exists; the
+  row is not edited by this feature.
+- `services/xstockstrat-agent/docs/context-constitution-findings.md:36` still calls the prompt "unreferenced";
+  355's tests now read it. No step edits agent docs.
 
 ## Scenario Coverage (C-15)
 
 | Scenario | Covered by |
 |---|---|
 | `@AC-1` portfolio repo on a mock DB serves `GetSnapshot` without panicking | Step 2 |
-| `@AC-2` orphaned modules, scripts and dependencies are gone | Step 7 (config, ledger, identity, notify, marketdata, ingest items) and Step 9 (agent item); RED captured per item in Steps 3–6 and 8 |
-| `@AC-3` the live agent config package survives the cleanup | Step 9 (gate also runs in Step 8) |
+| `@AC-2` orphaned modules, scripts and dependencies are gone | Step 7, for every listed item except `noop.py` and `signal_extraction.md` (kept, O-2 and O-1; the scenario text still names them, open item); RED captured per item in Steps 3–6 |
+| `@AC-3` the live agent config package survives the cleanup | Step 8 |
 
 ## Step Dependencies
 
@@ -97,16 +103,15 @@ this re-spec, both need the operator:
   check is captured RED→GREEN inside the step and re-run in Step 7. Each also passes its own
   `**Verification**` alone (the service's real build, coverage and lint gate), so none needs
   `**Lands with**`.
-- Step 9 [test] covers Step 8 [service] on the same terms.
-- Step 10 (ui) has no paired `test` step: it is a comment-only frontend edit, and the existing
+- Step 8 [test] is a regression check for `@AC-3`: no step changes the agent, so it has no `service` step to
+  cover and needs none.
+- Step 9 (ui) has no paired `test` step: it is a comment-only frontend edit, and the existing
   `e2e/trader/offline-pnl.spec.ts` coverage applies (it exercises the branch the comment describes).
 - Step 4 requires Step 3 only by design order. They touch disjoint files in config
   (`src/`, docs and `scripts/config-wiring.json` vs `package.json`).
-- Step 7 requires Steps 3–6; Step 9 requires Step 8. Neither requires the other, Steps 1–2, or Step 10:
-  Step 7 touches no agent, portfolio or ui file and Step 9 touches no backend-leaf file. The order is by
-  consumer surface (`backend` 1–7, `agent` 8–9, `ui` 10) so `/sdd-execute sequential` checkpoints land on
-  surface boundaries (§5.5b); the step cap also fires after Step 5.
-- Step 8 is gated by O-1 (Execution Summary). Step 6 carries O-2.
+- Step 7 requires Steps 3–6. Step 8 requires nothing from this feature and runs on any tree; it sits after
+  Step 7 so the surfaces stay contiguous (`backend` 1–7, `agent` 8, `ui` 9) and `/sdd-execute sequential`
+  checkpoints land on surface boundaries (§5.5b); the step cap also fires after Step 5.
 - Step 4 must regenerate the root `pnpm-lock.yaml`, never hand-edit it. If peer 324
   (`fix-ci-enforcement-gaps`) merges to `main-dev` first, this feature rebases and re-runs Step 4's
   regeneration protocol; if 323 merges first, 324 does the same (D-9, R-5).
@@ -126,7 +131,8 @@ this re-spec, both need the operator:
 - Open risks carried from design.md, with their step: stale per-service locks (Step 4 findings row);
   CI's `--no-frozen-lockfile` for Node leaves (Step 4 recorded evidence); identity scope
   (Step 4 Files); lock drift (Step 4 expected-diff check); config c8 shift (Step 3); pgxmock proves
-  handle and SQL shape only (Step 2, accepted); dangling `extractor_module` labels (Step 6 annotation).
+  handle and SQL shape only (Step 2, accepted); dangling `extractor_module` label for the deleted example
+  extractor (Step 6 annotation).
 - After merge, the product spec's remaining acceptance line applies: the affected services are
   smoke-tested on dev. That is a post-integration check, not a step.
 
@@ -426,13 +432,12 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ---
 
-### Step 6 — service: ingest — delete the orphan extractors and trim the non-MCP input dataclasses
+### Step 6 — service: ingest — delete the orphan example extractor and trim the non-MCP input dataclasses
 
 **Status**: `pending`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/extractors/example_simple_email.py` — delete
-- `services/xstockstrat-ingest/app/extractors/noop.py` — delete
 - `services/xstockstrat-ingest/tests/test_extractor.py` — delete
 - `services/xstockstrat-ingest/app/extractors/base.py` — modify
 - `services/xstockstrat-ingest/docs/context-constitution-findings.md` — modify
@@ -443,10 +448,10 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 **Codebase Evidence**:
 - `services/xstockstrat-ingest/app/extractors/` holds `__init__.py`, `base.py`, `example_simple_email.py`, `mcp_client.py`, `noop.py`.
 - `base.py`: `SimpleEmailInput` `:10`, `EmailAttachmentInput` `:16`, `LinkedEmailInput` `:23`, `SimpleWebsiteInput` `:30`, `AuthenticatedWebsiteInput` `:36`, `McpClientInput` `:43`, the `RawInput` union `:51-58`, `BaseExtractor` `:61` (`async def extract(self, raw: RawInput) -> list[dict]` at `:63`).
-- Runtime importers, confirmed via `git grep -n "from app.extractors" -- services/xstockstrat-ingest`: `app/engine/mcp_client_loop.py:24-25` (`McpClientInput`, `McpClientExtractor`), `app/extractors/mcp_client.py:13` (`BaseExtractor, McpClientInput, RawInput`; `extract` at `:24` guards with `isinstance(raw, McpClientInput)` at `:25`), `tests/test_mcp_client_extractor.py:10-11`, and the two orphans themselves (`example_simple_email.py:7`, `noop.py:5`).
-- `tests/test_extractor.py` (150 lines) imports only the five dataclasses (`:5-12`), `ExampleSimpleEmailExtractor` (`:13`) and `NoopExtractor` (`:14`); its tests are `TestExampleSimpleEmailExtractor` (`:21`), `TestNoopExtractor` (`:82`) and three module-level tests (`:124`, `:132`, `:146`). Nothing in it tests a live symbol, so the whole file goes (recon.md:77-82,163).
-- The string `"app.extractors.noop"` is opaque `extractor_module` data, not an import: `services/xstockstrat-ingest/tests/test_ingest_servicer.py:2216` (seven hits, `:2216-2567`), `tests/test_signal_ownership.py:61,84`, `tests/test_signal_sources.py:204` (five hits, `:204-378`), `tests/test_source_health.py:80,111`, `tests/test_source_templates.py:43,72`, `tests/test_extraction_instructions.py:21` (`_NOOP`), `tests/test_seed_source_templates.py:139,159`, `services/xstockstrat-agent/tests/test_extraction_instructions.py:87`, `migrations/016_seed_source_templates.up.sql:34`, `scripts/migration-assertions/fixtures-pre-224.sql:20-22`, `scripts/migration-assertions/ingest-016.sql:30,42,58`, `scripts/tests/test_check_seed_template_parity.py:126,182`, `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:623`, and the ui `example_simple_email` fixtures (`e2e/fixtures/signalSources.ts:18,27`, `e2e/fixtures/templates.ts:78`, `e2e/config-ui/sources.spec.ts:102,105,122`, `src/app/insights/signal-sources/page.tsx:661`). All stay unchanged (D-3, R-3).
-- Feature 355 (`launched`) made the label a constant: `services/xstockstrat-ingest/app/handlers/servicer.py:78` `_MEDIATED_EXTRACTOR_MODULE = "app.extractors.noop"` (comment `:77`: "Stored for every mediated source whatever the caller sends; nothing imports it."), used at `:1698` and `:1794`. No `import_module` or `importlib` use in `services/xstockstrat-ingest/app` (`git grep -n "importlib" -- services/xstockstrat-ingest/app` → no hit); `servicer.py:221` echoes `extractor_module` and `:1701-1703`, `:1753`, `:1793-1796` store it. See O-2 (Execution Summary).
+- Runtime importers, confirmed via `git grep -n "from app.extractors" -- services/xstockstrat-ingest`: `app/engine/mcp_client_loop.py:24-25` (`McpClientInput`, `McpClientExtractor`), `app/extractors/mcp_client.py:13` (`BaseExtractor, McpClientInput, RawInput`; `extract` at `:24` guards with `isinstance(raw, McpClientInput)` at `:25`), `tests/test_mcp_client_extractor.py:10-11`, the orphan `example_simple_email.py:7` (deleted here), and `noop.py:5` (`from app.extractors.base import BaseExtractor, RawInput`; kept, O-2). The kept `noop.py` still imports only `BaseExtractor` and the `RawInput` name, both of which this step leaves in `base.py`.
+- `tests/test_extractor.py` (150 lines) imports only the five dataclasses (`:5-12`), `ExampleSimpleEmailExtractor` (`:13`) and `NoopExtractor` (`:14`); its tests are `TestExampleSimpleEmailExtractor` (`:21`), `TestNoopExtractor` (`:82`) and three module-level tests (`:124`, `:132`, `:146`). Its example-extractor tests and the five dataclasses it builds go with this step; `TestNoopExtractor` (`:82-122`) and `test_noop_returns_empty_for_all_input_types` (`:132`) construct those same five dataclasses, so they cannot survive the trim and the whole file goes (recon.md:77-82,163). The kept `noop.py` is therefore left without a dedicated test (open item in context.md).
+- The string `"app.extractors.noop"` is opaque `extractor_module` data, not an import: `services/xstockstrat-ingest/tests/test_ingest_servicer.py:2216` (seven hits, `:2216-2567`), `tests/test_signal_ownership.py:61,84`, `tests/test_signal_sources.py:204` (five hits, `:204-378`), `tests/test_source_health.py:80,111`, `tests/test_source_templates.py:43,72`, `tests/test_extraction_instructions.py:21` (`_NOOP`), `tests/test_seed_source_templates.py:139,159`, `services/xstockstrat-agent/tests/test_extraction_instructions.py:87`, `migrations/016_seed_source_templates.up.sql:34`, `scripts/migration-assertions/fixtures-pre-224.sql:20-22`, `scripts/migration-assertions/ingest-016.sql:30,42,58`, `scripts/tests/test_check_seed_template_parity.py:126,182`, `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:623`, and the ui `example_simple_email` fixtures (`e2e/fixtures/signalSources.ts:18,27`, `e2e/fixtures/templates.ts:78`, `e2e/config-ui/sources.spec.ts:102,105,122`, `src/app/insights/signal-sources/page.tsx:661`). All stay unchanged (D-3, R-3); with `noop.py` kept (O-2), `app.extractors.noop` still names a real module, and only `app.extractors.example_simple_email` becomes dangling.
+- Feature 355 (`launched`) made the label a constant: `services/xstockstrat-ingest/app/handlers/servicer.py:78` `_MEDIATED_EXTRACTOR_MODULE = "app.extractors.noop"` (comment `:77`: "Stored for every mediated source whatever the caller sends; nothing imports it."), used at `:1698` and `:1794`. No `import_module` or `importlib` use in `services/xstockstrat-ingest/app` (`git grep -n "importlib" -- services/xstockstrat-ingest/app` → no hit); `servicer.py:221` echoes `extractor_module` and `:1701-1703`, `:1753`, `:1793-1796` store it. O-2 (Execution Summary) rules that `noop.py` stays, as the module name this constant stores.
 - Docs: ingest findings `:22` (`app/extractors/*` — PARTIALLY RESOLVED row), `:23` (`signal_sources.extractor_module` never resolved; already notes "Since feature 355 ingest writes `app.extractors.noop` for every `mediated_*` source"); `## Resolved` at `:41`, bullet form. `docs/context-constitution.md:20` (INGEST-6) cites `app/extractors/base.py#McpClientInput (~L43-48)` and `#BaseExtractor (~L61-65)`.
 - No packaging or lint reference to the deleted files: `git grep -n "extractors" -- services/xstockstrat-ingest/pyproject.toml services/xstockstrat-ingest/Dockerfile` → no hit.
 - CI gate: `.github/workflows/ci.yml:470-472` (ingest `coverage_threshold: 40`, `cov_source: app`), run as `uv run --no-sync pytest --cov=app … --cov-fail-under=40` (`:516-519`).
@@ -456,19 +461,19 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 **Covers**: —
 
 **Instructions**:
-1. RED capture (pre-edit): `git ls-files` on the three paths prints all three, and the `git grep` in Verification prints the dataclass and extractor hits.
-2. `git rm` `app/extractors/example_simple_email.py`, `app/extractors/noop.py` and `tests/test_extractor.py`.
+1. RED capture (pre-edit): `git ls-files` on the two paths prints both, and the `git grep` in Verification prints the dataclass and example-extractor hits.
+2. `git rm` `app/extractors/example_simple_email.py` and `tests/test_extractor.py`. Do not touch `app/extractors/noop.py` (O-2).
 3. In `base.py`, delete the five dataclasses at `:9-39` and replace the union at `:51-58` with `RawInput = McpClientInput`. Keep the `RawInput` name (it is imported by `mcp_client.py:13`), `McpClientInput` and `BaseExtractor` exactly as they are.
-4. Findings `:22`: remove the row from `## Dead / orphaned code` and add a `**RESOLVED (feature 323)**` bullet under `## Resolved`. Findings `:23`: keep the row open and annotate it — the stored labels `app.extractors.noop` (written for every mediated source since 355) and `app.extractors.example_simple_email` now name modules that no longer exist, which is harmless because the label is never resolved (accepted risk; a separate defect owns the fix).
+4. Findings `:22`: add a `**RESOLVED (feature 323)**` bullet under `## Resolved` for `example_simple_email.py` and the non-MCP dataclasses, and narrow the row in `## Dead / orphaned code` to `noop.py` alone, re-worded as kept by operator ruling O-2 (the module name every mediated source stores since 355; its only importer is gone, so it has no caller beyond the stored string). Findings `:23`: keep the row open and annotate it — the stored label `app.extractors.example_simple_email` now names a module that no longer exists, which is harmless because the label is never resolved (accepted risk; a separate defect owns the fix); `app.extractors.noop` still resolves.
 5. `docs/context-constitution.md:20` (INGEST-6): refresh the two `base.py` line anchors to the post-trim lines found by `grep -n "class McpClientInput\|class BaseExtractor" app/extractors/base.py`.
 6. Do not edit `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`, any ui file or any fixture string.
 
 **Verification**:
 ```bash
 git ls-files services/xstockstrat-ingest/app/extractors/example_simple_email.py \
-             services/xstockstrat-ingest/app/extractors/noop.py \
              services/xstockstrat-ingest/tests/test_extractor.py                       # expect: empty
-git grep -n "SimpleEmailInput\|EmailAttachmentInput\|LinkedEmailInput\|SimpleWebsiteInput\|AuthenticatedWebsiteInput\|NoopExtractor\|ExampleSimpleEmailExtractor" \
+git ls-files services/xstockstrat-ingest/app/extractors/noop.py                        # expect: the path (kept, O-2)
+git grep -n "SimpleEmailInput\|EmailAttachmentInput\|LinkedEmailInput\|SimpleWebsiteInput\|AuthenticatedWebsiteInput\|ExampleSimpleEmailExtractor" \
   -- services/xstockstrat-ingest/app services/xstockstrat-ingest/tests                 # expect: no output
 grep -n "^RawInput = McpClientInput" services/xstockstrat-ingest/app/extractors/base.py   # expect: one line
 cd services/xstockstrat-ingest
@@ -488,7 +493,7 @@ ruff check . && ruff format --check .
 **Reviewers**: Service owner `xstockstrat-config` — WatchConfig stream stability; Service owner `xstockstrat-ledger` — append-only invariant; Service owner `xstockstrat-identity` — JWT expiry and rotation, API key scoping; Service owner `xstockstrat-notify` — stream delivery guarantees; Service owner `xstockstrat-marketdata` — OHLCV ingestion integrity; Service owner `xstockstrat-ingest` — signal normalization correctness
 
 **Codebase Evidence**:
-- @AC-2 (`acceptance.feature`) reads: When "each touched leaf's package.json and the root pnpm-lock.yaml importers are inspected, and git ls-files is searched for the deleted paths"; Then "none of them exists and every affected service still builds and passes its tests". The checks below are exactly that scope for the backend items (D-10); the agent item of the same scenario is Step 9.
+- @AC-2 (`acceptance.feature`) reads: When "each touched leaf's package.json and the root pnpm-lock.yaml importers are inspected, and git ls-files is searched for the deleted paths"; Then "none of them exists and every affected service still builds and passes its tests". The checks below are that scope for the backend items (D-10), minus `noop.py`, which O-2 keeps. The scenario's `signal_extraction.md` item is kept by O-1 and is outside every step; the scenario text itself is an open operator item (Execution Summary).
 - A repo-wide `grep node-pg-migrate` is never used (R-7): the four per-service `pnpm-lock.yaml` files still name it and are not build input.
 - `AlpacaAsset` is checked in source extensions only, because Step 5's resolved findings bullet and this feature's own docs still contain the name.
 - Item 5 no-op evidence at the tree stamp: `git grep -n "sandbox_timeout\|sandbox_memory\|sandbox_max\|indicators\.sandbox" -- services/xstockstrat-analysis/app services/xstockstrat-ingest/app` → no hit; the rows are already resolved at `services/xstockstrat-analysis/docs/context-constitution-findings.md:23` and `services/xstockstrat-ingest/docs/context-constitution-findings.md:29` (`**RESOLVED (feature 244)**`).
@@ -497,7 +502,7 @@ ruff check . && ruff format --check .
 
 **TDD**: `red-green required` — RED is the per-item pre-edit capture recorded by Steps 3–6; this step captures the consolidated GREEN.
 
-**Covers**: `AC-2`
+**Covers**: `AC-2` (every listed item except `noop.py` and `signal_extraction.md`, kept under O-2 and O-1)
 
 **Instructions**:
 Run the Verification block from the repo root on the tree that holds Steps 1–6, and record in `context.md`: the two `pnpm why` outputs, the item-5 grep (empty), and one line per service gate (pass, with the coverage figure). Nothing else is edited. If any check is not as expected, the failing step is reopened through the deviation protocol; this step does not patch around it.
@@ -508,8 +513,8 @@ Run the Verification block from the repo root on the tree that holds Steps 1–6
 git ls-files services/xstockstrat-config/src/services/configWatcher.ts \
              services/xstockstrat-config/src/__tests__/configWatcher.test.ts \
              services/xstockstrat-ingest/app/extractors/example_simple_email.py \
-             services/xstockstrat-ingest/app/extractors/noop.py \
              services/xstockstrat-ingest/tests/test_extractor.py                       # expect: empty
+git ls-files services/xstockstrat-ingest/app/extractors/noop.py                        # expect: the path (kept, O-2)
 # --- AC-2: manifests
 grep -n '"migrate"\|node-pg-migrate' services/xstockstrat-ledger/package.json services/xstockstrat-config/package.json \
   services/xstockstrat-identity/package.json services/xstockstrat-notify/package.json  # expect: no output
@@ -538,48 +543,7 @@ node scripts/check-config-wiring.mjs --final
 
 ---
 
-### Step 8 — service: agent — delete the `signal_extraction.md` prompt (gated by O-1)
-
-**Status**: `pending`
-**Service**: `xstockstrat-agent`
-**Files**:
-- `services/xstockstrat-agent/app/prompts/signal_extraction.md` — delete
-- `services/xstockstrat-agent/docs/context-constitution-findings.md` — modify
-
-**Reviewers**: Service owner `xstockstrat-agent` — MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity; tool-count statements kept in sync; no secret values in tool output
-
-**Codebase Evidence**:
-- `services/xstockstrat-agent/app/prompts/` holds `__init__.py`, `list_correlation.md`, `signal_extraction.md`.
-- Runtime references: `git grep -n "signal_extraction" -- services/xstockstrat-agent` → `docs/context-constitution-findings.md:36`, **and, since feature 355**, `tests/test_extraction_instructions.py:25` (`_PROMPT = _REPO / "services/xstockstrat-agent/app/prompts/signal_extraction.md"`, read at `:298`, `:305`, `:319`) and `acceptance/mediated-source-extraction-instructions.feature:56` (`@AC-15 @FR-10 @feature-355`, `:54-59`). No `.py` under `app/`, no `.toml` and no `Dockerfile` reference it. The last commit touching the file is `4330f0ef` (355, #1567).
-- The live prompt is `list_correlation.md`: `app/tools.py:89` (`_LIST_CORRELATION_PROMPT_PATH = Path(__file__).parent / "prompts" / "list_correlation.md"`), `register_prompts` at `app/tools.py:2749`, imported at `app/main.py:28` and called at `app/main.py:87`. It stays.
-- Item 7 is live and stays: `app/config/` holds `__init__.py`, `watch_core.py`, `watcher.py`; importers `app/main.py:94,226`, `app/client.py:1145`, `app/tools.py:79`, `app/oauth_server.py:28`; `watcher.py:13` imports `watch_core`. `tests/test_config_watcher.py` exists.
-- The findings file has a `## Resolved` section at `:59`, bullet form; the row to resolve is `:36` (`app/prompts/signal_extraction.md`, "still unreferenced").
-- No MCP tool is added, removed or reshaped, so `docs/runbooks/mcp-tools.md` and the tool-count surfaces are unaffected.
-- CI gate: `.github/workflows/ci.yml:476-478` (agent `coverage_threshold: 40`, `cov_source: app`).
-
-**TDD**: `red-green required` — the RED is the presence check below; the paired `test` step is Step 9.
-
-**Covers**: — (the @AC-3 gate runs here and is re-run as a `**Covers**` step in Step 9)
-
-**Instructions**:
-0. **Precondition (O-1, Execution Summary): do not execute step 2 until the operator has ruled.** On this tree the deletion turns `tests/test_extraction_instructions.py` red (three assertions read the file) and contradicts durable `@AC-15`. The `**Files**` above are the deletion and findings edit only; if the ruling is "delete", the ruling must also name the test and acceptance edits, and this step is re-specced to list them (and to run that suite in its own Verification). If the ruling is "keep", this step is dropped and the findings row `:36` is re-worded instead.
-1. RED capture (pre-edit): `git ls-files services/xstockstrat-agent/app/prompts/signal_extraction.md` prints the path.
-2. `git rm services/xstockstrat-agent/app/prompts/signal_extraction.md`. Touch nothing else under `app/prompts/` or `app/config/`.
-3. Findings: remove row `:36` from `## Dead / orphaned code` and add a `**RESOLVED (feature 323)**` bullet under `## Resolved`.
-
-**Verification**:
-```bash
-git ls-files services/xstockstrat-agent/app/prompts/signal_extraction.md               # expect: empty
-git ls-files services/xstockstrat-agent/app/prompts/list_correlation.md \
-             services/xstockstrat-agent/app/config/watcher.py                          # expect: both paths
-cd services/xstockstrat-agent
-uv run pytest --cov=app --cov-fail-under=40          # includes tests/test_config_watcher.py and tests/test_extraction_instructions.py (red until O-1 is ruled)
-ruff check . && ruff format --check .
-```
-
----
-
-### Step 9 — test: agent — scoped presence verification for the deleted prompt and the surviving config package
+### Step 8 — test: agent — regression check that the live config package survives
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -589,32 +553,31 @@ ruff check . && ruff format --check .
 **Reviewers**: Service owner `xstockstrat-agent` — MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity
 
 **Codebase Evidence**:
-- @AC-2's Given names "agent signal_extraction.md"; its Then ("none of them exists and every affected service still builds and passes its tests") is checked here for the agent. The backend items of @AC-2 are Step 7.
-- @AC-3 (`acceptance.feature`): Given "the agent imports app.config.watcher at startup (app/main.py) and for formula deadlines (app/client.py)"; Then `services/xstockstrat-agent/app/config/watcher.py` still exists and `tests/test_config_watcher.py` passes. Both files exist at the tree stamp; importers `app/main.py:94,226`, `app/client.py:1145`, `app/tools.py:79`, `app/oauth_server.py:28`.
+- @AC-3 (`acceptance.feature`): Given "the agent imports app.config.watcher at startup (app/main.py) and for formula deadlines (app/client.py)"; Then `services/xstockstrat-agent/app/config/watcher.py` still exists and `tests/test_config_watcher.py` passes. Both files exist at the tree stamp; `app/config/` holds `__init__.py`, `watch_core.py`, `watcher.py`; importers `app/main.py:94,226`, `app/client.py:1145`, `app/tools.py:79`, `app/oauth_server.py:28`; `watcher.py:13` imports `watch_core`.
+- No step of this feature edits the agent: report item 8 (`app/prompts/signal_extraction.md`) is kept under O-1 because `tests/test_extraction_instructions.py:25` and durable `@AC-15` depend on it. This step is the "when the cleanup lands" regression guard for item 7, nothing more.
+- The live prompt is `list_correlation.md`: `app/tools.py:89` (`_LIST_CORRELATION_PROMPT_PATH`), `register_prompts` at `app/tools.py:2749`, called at `app/main.py:87`. `app/prompts/` holds `__init__.py`, `list_correlation.md`, `signal_extraction.md`.
 - Coverage threshold (CI): agent `--cov-fail-under=40` (`.github/workflows/ci.yml:476-478`, run `:516-519`).
-- RED for the deletion was captured in Step 8 ("RED capture (pre-edit)"). This step adds no source file. Its full-suite run includes `tests/test_extraction_instructions.py`, which stays red until O-1 is ruled (Step 8 precondition); this step does not patch around it.
+- No deletion happens here, so there is no pre-edit RED; the check is green on the unchanged agent tree and stays green after Steps 1–7.
 
-**TDD**: `red-green required` — RED is the pre-edit capture recorded by Step 8; this step captures the consolidated GREEN.
+**TDD**: `red-green required` — the allowed escape applies: "red N/A — no behavior change" (no agent file is changed by this feature). State it in `context.md` and still capture the green run.
 
-**Covers**: `AC-2, AC-3`
+**Covers**: `AC-3`
 
 **Instructions**:
-Run the Verification block from the repo root on the tree that holds Step 8, and record in `context.md` the empty `git ls-files` output, the `tests/test_config_watcher.py` result, and the agent gate line (pass, with the coverage figure). Nothing else is edited. If any check is not as expected, the failing step is reopened through the deviation protocol.
+Run the Verification block from the repo root and record in `context.md` the `git ls-files` output, the `tests/test_config_watcher.py` result, and the agent gate line (pass, with the coverage figure). Nothing else is edited. If any check is not as expected, reopen it through the deviation protocol.
 
 **Verification**:
 ```bash
-# --- AC-2: deleted path absent
-git ls-files services/xstockstrat-agent/app/prompts/signal_extraction.md               # expect: empty
 # --- AC-3: the live agent config package survives
 git ls-files services/xstockstrat-agent/app/config/watcher.py                          # expect: the path
 ( cd services/xstockstrat-agent && uv run pytest tests/test_config_watcher.py -q )
-# --- AC-2 Then: the agent still builds and passes its tests (threshold explicit)
+# --- the agent still passes its tests (threshold explicit)
 ( cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check . )
 ```
 
 ---
 
-### Step 10 — service: ui — state when the `PortfolioPanel` combined view renders
+### Step 9 — service: ui — state when the `PortfolioPanel` combined view renders
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`

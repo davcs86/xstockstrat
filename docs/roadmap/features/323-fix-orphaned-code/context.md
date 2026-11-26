@@ -430,3 +430,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] O-2: operator to confirm that `noop.py` is still deleted now that 355 stores its dotted name on every mediated source — Step 6.
 - [ ] Peer 322's impl spec (`origin/feature/fix-retired-surface-proto-cleanup` @ `e1c1f040`) was not re-read at this re-spec; its Step 27 (`alpaca/client.go`) still needs a re-grep against Step 5's `:817-825` at execute time — Step 5.
 - [ ] Step 4 still needs Docker for `docker compose build` and still lists 11 files (accepted earlier) — Step 4.
+
+## Session 2026-11-26 — operator rulings O-1 and O-2, recorded by the orchestrator (verbatim)
+
+Two rulings on the open items the previous re-spec raised, relayed by the orchestrator.
+
+**O-1.**
+
+- Question (verbatim): "323 (fix-orphaned-code), Step 8 blocker (found by the re-spec): the step deletes services/xstockstrat-agent/app/prompts/signal_extraction.md as an orphan, but feature 355 (now launched) made agent tests read that file (tests/test_extraction_instructions.py :298, :305, :319) and the durable scenario @AC-15 @feature-355 asserts its content. Deleting it as specced turns three agent tests red. What should 323 do?"
+- Answer (verbatim): "Keep the file, drop that step (Recommended)" — option text: "The file is no longer orphaned (355 tests and @AC-15 depend on it): remove the deletion from 323's scope, record why, no durable-suite change."
+
+**O-2.**
+
+- Question (verbatim): "323, Step 6 (ingest orphan extractors): merge-order.md:129 says 323 must re-decide noop.py against what 355 shipped. 355 added _MEDIATED_EXTRACTOR_MODULE = "app.extractors.noop" at services/xstockstrat-ingest/app/handlers/servicer.py:78, stored on every mediated source but never imported. Step 6 currently deletes noop.py with the other orphan extractors. What should 323 do with noop.py?"
+- Answer (verbatim): "Keep noop.py (Recommended)" — option text: "It is the module name every mediated source stores (the string is a data reference even though it's never imported); deleting the file leaves a dangling module path. Drop it from Step 6's deletions and record why."
+
+### Changes applied to `implementation-spec.md` and `feature.md` (now 9 steps)
+
+- The agent deletion step (the previous Step 8) is removed. The agent surface keeps one step: the former agent verification, now **Step 8**, a regression check with `**Covers**: AC-3` (`green` run of `tests/test_config_watcher.py` and the agent gate; the `red N/A — no behavior change` escape is stated, since no agent file changes). The ui comment step is now **Step 9**. New map: 1+2 portfolio (backend, one unit), 3 config, 4 Node leaves, 5 marketdata, 6 ingest, 7 backend verification (all backend), 8 agent regression check (agent), 9 ui comment (ui). One surface per step; the only unit is still 1+2, under the 4-step cap. `/sdd-execute sequential` checkpoints: step cap after Step 5, surface boundaries after 7 and 8, feature end after 9.
+- Step 6 no longer deletes or lists `noop.py`; it still deletes `example_simple_email.py` and `tests/test_extractor.py` and trims the five non-MCP dataclasses (`RawInput = McpClientInput`; `noop.py` keeps importing `BaseExtractor` and the `RawInput` name, both left in place). Its Verification now asserts `noop.py` is still tracked, drops `NoopExtractor` from the "no output" grep, and its findings instruction resolves `:22` for the example extractor and dataclasses while narrowing the row to `noop.py` as kept (O-2). `tests/test_extractor.py` still goes whole: its noop tests (`:82`, `:132`) build the five dataclasses the step removes, so they cannot be kept without rewriting them, which the ruling did not ask for.
+- Step 7's file-presence check drops `noop.py` (and asserts it is kept); its `**Covers**` line records the exclusion.
+- Execution Summary, Scenario Coverage, Step Dependencies and the C-14 text were rewritten for the new numbering; the findings-row references to the ui step now say Step 9. All affected greps were re-run on the 2026-11-26 tree; no anchor changed (this re-spec only removes scope).
+- Self-review (no subagent tool in this session, so a hand review against `impl-spec-criteria.md` §B2, §B3, §B3b, not a `spec-reviewer` run): evidence present and re-grepped for the changed steps; every `**Verification**` is a runnable command with its threshold stated; non-frontend `service` steps 1, 3–6 each have a paired `test` step (2, 7); Step 8 is a test step with no service step by design (stated in Step Dependencies); `**Lands with**` is symmetric, adjacent, one surface, two members. The earlier B3b FAIL on the agent deletion is gone with the step. No FAIL remains; the earlier advisory warnings stand (Step 4 lists 11 files; Steps 3 and 6 list 6).
+
+### Still open (not edited by this session)
+
+- `acceptance.feature` `@AC-2` still names `noop.py` and `signal_extraction.md` in its Given and says "none of them exists", which can no longer be true. Step 7 covers `@AC-2` for every other listed item. Scenarios were not edited; the operator needs to approve an amendment (drop those two names from the Given), or accept the scenario as partially covered. `@AC-3` is covered by Step 8 and `@AC-1` by Step 2 as before.
+- `merge-order.md:129` (the 323 ↔ 355 row) describes a delete-vs-edit conflict that the rulings dissolved, and 355 is `launched`; the row likely needs updating or removal by whoever owns that file. Not edited here.
+- `product-spec.md`, `design.md` (D-3) and `feature.md`'s Summary ("Ten orphaned modules…") still count the two kept files among the deletions; `docs/reports/2026-10-19-orphaned-code-defect.md` items 6 (the `noop.py` half) and 8 therefore stay unresolved when 323 merges.
+- `services/xstockstrat-agent/docs/context-constitution-findings.md:36` still says `signal_extraction.md` is "still unreferenced"; 355's tests now read it. No step edits agent docs.
+- `noop.py` is left without a dedicated test once `tests/test_extractor.py` is deleted; the operator may want a minimal replacement test or accept that.
+- Peer 322's impl spec was not re-read; its Step 27 (`alpaca/client.go`) needs a re-grep against Step 5's `:817-825` at execute time. Step 4 still needs Docker for `docker compose build`.
