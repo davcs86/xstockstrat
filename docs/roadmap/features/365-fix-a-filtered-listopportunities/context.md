@@ -268,3 +268,13 @@ Full debate (/sdd-design via /sdd-batch) halted at the approval gate after round
 ## Session 2026-11-26 — operator pre-execute decisions (main session)
 
 - Execution mode: /sdd-batch-execute SEQUENTIAL (mode-entry confirmation 'Agree: all three', 2026-11-26). 365 lands first (merge order 365 → 308/330 → 366); 366's Step 9 waits on this feature's merge.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front plan confirmed by the operator (binding record, verbatim): `{"mainDev":"34f68c57f6cf34a265f17ee6ac0d625ccb9146a7","dev":"d6963ce778f33cf9017d1dcd1679950a9a5ba83c","specHash":"1818fcd4774785d0cefa41fe7069b700b38caf5c","directive":"conditional","pending":[1,2,3],"mismatches":[]}`
+- Setup: merged main-dev `34f68c57` into the feature branch (own-feature artifact conflicts resolved to the branch side by merge-train-resolve; ledger-guard clean). Status moved `implementation-ready` → `in-progress`.
+- Re-spec commits (`respec(fix-a-filtered-listopportunities)`): none — the mismatches list was empty.
+
+```sdd-batch-setup
+{"mainDev":"34f68c57f6cf34a265f17ee6ac0d625ccb9146a7","date":"2026-11-26"}
+```
