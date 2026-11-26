@@ -686,3 +686,7 @@ Amendment summary (implementation-spec.md; step count, numbering and unit order 
 - Step 8 and Step 11: the reader's file is `bars_miss.go` again; the registered-keys text names the one receiver entry.
 - Step Dependencies: the `345-authelia-sso` overlap note on `scripts/config-wiring.json` is restored (disjoint keys; on a conflict keep both sets); the `bar_hold.go` append-only note is removed.
 - Still open: the real regenerated `scripts/config-wiring-stored.json`, `go build` and the jscpd run were not exercised (see the earlier 2026-11-26 entry); re-run `/sdd-review fix-marketdata-miss-path-noise impl-spec`.
+
+## Session 2026-11-26 — independent impl-spec review (spec-reviewer), recorded by the orchestrator
+
+Verdict: PASS WITH WARNINGS, no blockers (independent `spec-reviewer` subagent, older main-dev checkout). The reader-placement amendment (parallel reader `resolveBarsMissBackoff` in `bars_miss.go` + one `bars_miss.go:cfg` receiver entry) is applied consistently; the config-wiring gate logic (`check-config-wiring.mjs:547-552`) attributes it. Warning fixed: `design.md` Build order step 3 (:150) and the C-18 line (:197) carry a supersession note pointing to impl-spec decision 2 / the O-15 parallel-reader branch. Still open at execute time: config migration `056` is now taken on `main-dev` by feature 366 (next free `057`); 314, 317 and 321 all need the renumber checklist and a merge order; re-grep 36aed60b-only anchors after BRANCH SYNC.
