@@ -607,7 +607,7 @@ RED evidence on the pre-Step-3 tree: no record contains `SELF_TEST_MSG`.
 
 ### Step 5 — service: agent `test_formula` documents `memory_used_bytes`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -924,3 +924,15 @@ _Populated by /sdd-execute as implementation proceeds._
   `5755e29d~1` and put back before GREEN. The Verification's trailing C-13 grep finds no match, so
   it sets `exit=1`, which is the expected "no match". **Disposition**: fold approved by the
   operator; in scope.
+- **2026-11-26 (Step 5)** — The verbatim docstring's last line, `not measured (…runs report "0").`
+  plus the closing `"""`, is 101 characters and fails the step's own `ruff check .` (E501, limit
+  100). The last two lines are rewrapped: `"0"` ends the cap line, and `means not measured (…; most
+  memory_exceeded runs` / `report "0")."""` follow it. The words are unchanged, so the
+  whitespace-normalized tool description matches the spec text exactly. **Disposition**: in-scope
+  lint fix on the step's own lines (HARD CONSTRAINTS exception).
+- **2026-11-26 (Step 5)** — TDD red evidence. Step 6 owns the description test, so RED comes from
+  the Verification's trailing grep on the pre-change tree (no match, `exit=1`; expected both files)
+  and from a scratch description probe outside the repo, which was not committed. The probe failed
+  before the change and passed after it. In the run script the Verification's closing `)` is on its
+  own line, because the block's trailing `# expect …` comment would otherwise swallow it.
+  **Disposition**: evidence recorded in context.md; no spec text changed.

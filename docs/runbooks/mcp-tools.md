@@ -1171,7 +1171,10 @@ Use before `manage_formula(operation="register", …)` to validate behavior.
 
 **Return** — the full sandbox result: `success`, `output` (the result dict; **non-finite values such
 as `NaN`/`Infinity` are returned as `null`** so the projection never fails), `stdout`, `stderr`,
-`error`, `exit_reason`, `parameter_errors`, `execution_ms` (int64 as a JSON string).
+`error`, `exit_reason`, `parameter_errors`, `execution_ms` and `memory_used_bytes` (int64 as JSON
+strings). `memory_used_bytes` is the peak resident memory of the sandbox process in bytes, including
+the interpreter and the imported modules, so it is not usage of the memory cap; `"0"` means not
+measured (timeout, kill, abort or `os._exit`; most `memory_exceeded` runs report `"0"`).
 
 ---
 

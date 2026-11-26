@@ -621,3 +621,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-indicators/tests/test_sandbox_probe.py`, `services/xstockstrat-indicators/app/services/sandbox_probe.py` (fold)
 - Deviations: operator-approved fold of `sandbox_probe.py`; `-k boot_self_test` reports 6 passed, not 5; RED for the spec tests ran against the restored pre-Step-3 file (full detail in Deviation Log)
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 5
+
+### Step 5 — service: agent `test_formula` documents `memory_used_bytes` [done]
+- The `test_formula` docstring return sentence now ends `execution_ms and memory_used_bytes (int64 as JSON strings).` and is followed by the O-1 definition: baseline included, so not usage of the memory cap; `"0"` means not measured. The `docs/runbooks/mcp-tools.md` **Return** paragraph mirrors it in one sentence. The tool body, name, parameters and return shape are unchanged, and the probe still counts 45 tools.
+- Discovery re-verified at `origin/feature/fix-sandbox-result-contract@b1c30ecb`: `tools.py:1817` `async def test_formula(`, the return sentence at `:1835-1837`, `client.py:1199-1201` `MessageToDict(…always_print_fields_with_no_presence=True)`, `indicators.proto:95` `int64 memory_used_bytes = 6;`, `mcp-tools.md:1172-1174`. Before the change neither file mentioned `memory_used_bytes`.
+- TDD (no `**Covers**`; Step 6 owns the test):
+  - RED Verification (`.sdd-logs/v-1.log`, exit=1): `825 passed in 109.66s`, `Total coverage: 88.47%`, `All checks passed!`, `79 files already formatted`, then the grep found no match in either file.
+  - RED from a scratch description probe outside the repo (`.sdd-logs/v-2.log`, exit=1): `FAILURES: ['memory_used_bytes', 'not measured', 'not usage of the memory cap']`.
+  - GREEN Verification (`.sdd-logs/v-3.log`, exit=0): `825 passed in 106.85s`, `Total coverage: 88.47%`, `All checks passed!`, `79 files already formatted`, and grep matches at `app/tools.py:1837`, `:1838` and `../../docs/runbooks/mcp-tools.md:1174`, `:1175`.
+  - GREEN probe (`.sdd-logs/v-4.log`, exit=0): `tool_count: 45`, `FAILURES: []`.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`
+- Deviations: E501 rewrap of the docstring's last two lines; RED evidence from the grep plus a scratch probe (full detail in Deviation Log)
