@@ -686,8 +686,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ## Open Threads
 
 - [ ] OQ1: operator check of dev and prod `indicators.formulas` for saved formulas that never assign `result` — target: before the integration PR; record the result here.
-- [ ] Sidecar reading of design.md § 7 (sidecars untouched, D-14 wording in findings `:23`) is still not operator-confirmed — target: integration-PR checkpoint.
+- [x] Sidecar reading of design.md § 7 — ruled 2026-11-26: mark the reports resolved (see the session block at the end); done in the follow-up commit.
 - [ ] DO App Platform may render no VmHWM under seccomp; record the first post-deploy `sandbox memory self-test` log line (or the ERROR) here — target: integration PR (D-14).
 - [ ] Promote `@AC-1..4` into `services/xstockstrat-indicators/acceptance/` with `@feature-310` — target: integration.
 - [ ] The pre-existing `test_ac8_fork_bomb…` isolation flake needs a defect report via `/sdd-qa defect` — target: next session with write access outside this feature directory.
 - [ ] debate.md still shows O-1, O-3, O-4 and O-5 as `open`; all four are now answered — target: next register write (`/sdd-design` owns the register).
+
+## Session 2026-11-26 — operator ruling on the sidecar reading, recorded by the orchestrator (verbatim)
+
+- **Question**: "310, before Step 8: confirm the design.md §7 sidecar reading — the defect-report status sidecars are left untouched by this feature, and the findings row in context-constitution-findings.md uses conditional wording (it does not mark the reports resolved)?"
+- **Answer**: "Mark the reports resolved" (option text: "Step 8 also flips the relevant docs/reports sidecars to resolved with the commit ref (needs a spec change; 310 stops at Step 8 until amended)").
+- **Timing**: Step 8 had already run without the sidecar flip, as specced (Deviation Log, 2026-11-20 entry), before this ruling arrived; the flip is a follow-up commit, logged in the Deviation Log (2026-11-26, post-Step 8).
+- **Changed**: the three `docs/reports/*.status` sidecars (`2026-10-19-sandbox-exit-reason-stderr-substring-defect`, `2026-10-19-sandbox-memory-used-bytes-always-zero-defect`, `2026-10-22-indicators-missing-result-silent-success-defect`) go `triaged` to `resolved`, keeping `ref: feature:310-fix-sandbox-result-contract`. Indicators findings `:23` moves from the conditional wording to "resolved (feature 310, D-14)" and keeps the DO boot-log confirmation as a recorded-at-promotion item; the two report link rows read "resolved by feature 310".
+- **Ref**: the ref is the feature, not a commit sha. The sidecar contract (`.claude/skills/sdd-qa/reference/defect-filing.md` § The status sidecar) defines `commit:<sha>` as "fixed directly, outside any track", and `sdd-execute` ALL-DONE 2.6 stamps `resolved` / `ref: feature:<NNN-slug>` for a fix feature. A branch sha would not survive the squash into `main-dev`, so none was used.
+- **Still open**: the DO boot-log line (D-14) and the integration PR itself; the sidecars read `resolved` before the fix is merged, so if the integration PR is abandoned they must be reverted to `triaged`.

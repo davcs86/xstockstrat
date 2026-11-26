@@ -958,3 +958,9 @@ _Populated by /sdd-execute as implementation proceeds._
   row stays in `## Candidate rules (unverified)`, replaced in place as instructed, with its third
   column recording the O-3 ruling; it is not promoted to an `INDICATORS-*` rule. **Disposition**:
   in-scope; no spec text changed.
+- **2026-11-26 (post-Step 8, operator ruling)** — The operator ruled "Mark the reports resolved" on the
+  2026-11-20 entry's open question, after Step 8 had run without the sidecar flip (as specced). A
+  follow-up commit sets the three report sidecars to `resolved` / `ref: feature:310-fix-sandbox-result-contract`
+  and moves findings `:23` from the conditional wording to resolved. The "Report sidecars are not
+  edited" note under Step Dependencies is superseded by this entry. **Disposition**: operator ruling
+  (verbatim in context.md).
