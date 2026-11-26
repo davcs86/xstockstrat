@@ -529,3 +529,16 @@ Each thread names its target step.
 - Files modified: `docs/runbooks/mcp-tools.md`, `docs/runbooks/historical-backfill.md`, `plugins/strat-lab/skills/backtest/SKILL.md`, `plugins/strat-lab/skills/backtest/reference/backfill.md`
 - Deviations: none
 - Note: the strat-lab `plugin.json` version (`.claude-plugin/` and `.cursor-plugin/`) was not bumped; it is outside this step's **Files**.
+
+## Session 2026-11-26 — sdd-execute sequential, step 19
+
+- OPERATOR DECISION (binding, 2026-11-26, verbatim choice 'Bump to 0.5.1'): Step 19's commit also bumps the strat-lab plugin version 0.5.0 → 0.5.1 in both `plugin.json` files (byte-identical) and runs `python3 plugins/strat-lab/scripts/validate.py` in Verification. Logged as an out-of-scope, operator-sanctioned change in the Deviation Log.
+- Tooling: uv ✓ (`uv sync --extra dev` in agent) · ruff ✓ 0.16.9 · pytest ✓ · python3 (validator) ✓. Config-key wiring gate: step-time N/A (no config key touched); `--final` (last step) `exit=0`, only two unrelated baseline `REPORTED:` lines (analysis `fundsignal_loop.py`, trading `trading.go`, `readers-disagree`).
+- Discovery: `_symbol_results_job` `test_client.py:755`, `_SYMBOL_RESULTS` `:781`, `test_single_job_symbol_results_outcomes_and_reasons` `:788`, descriptor guard `:828`; `_REPO` `test_tools_endpoint.py:15`, `_catalog()` `:78`, `test_docs_and_skill_parity_with_self_serve_backfill` `:112-135` — all confirmed on the dev branch.
+
+### Step 19 — test: agent projects `incomplete` and docs stay in parity [done]
+- Added `test_incomplete_outcome_projects_with_its_ranges` (inline PARTIAL `BackfillJob` with an IDXX INCOMPLETE result → `{"symbol": "IDXX", "outcome": "incomplete", "reason": "missing sessions 2026-04-01..2026-09-25"}`, IDXX not in `failed_symbols`; characterization, passes since Step 8) and `test_docs_and_skill_parity_with_incomplete_outcome` (`incomplete` in the `get_backfill_status` description, the runbook `### get_backfill_status` section and `reference/backfill.md`; `` `incomplete` `` in `SKILL.md`). Inline protos, single consumer (C-13).
+- TDD (AC-6; also the durable RED for Step 17): red: Verification on the pre-Step-17 `tools.py`/`mcp-tools.md`/`SKILL.md`/`backfill.md` (checked out from `c7f53489`, then restored) → `AssertionError: get_backfill_status description`, `1 failed, 826 passed`, `exit=1`; projection test red N/A — no behavior change; characterization test added → green on HEAD: `All checks passed!`, `79 files already formatted`, `827 passed`, `Required test coverage of 40% reached. Total coverage: 88.47%`, `exit=0`; validator `passed all checks`, `exit=0`.
+- Files modified: `services/xstockstrat-agent/tests/test_client.py`, `services/xstockstrat-agent/tests/test_tools_endpoint.py`, `plugins/strat-lab/.claude-plugin/plugin.json`, `plugins/strat-lab/.cursor-plugin/plugin.json`
+- Deviations: RED against the pre-Step-17/18 surfaces with a backticked SKILL.md token; plugin version bump (operator-sanctioned) — both in the Deviation Log.
+- Status → `code-completed` (all 19 steps done). No insights.md entry: nothing generalizes beyond the existing doc-parity pattern.

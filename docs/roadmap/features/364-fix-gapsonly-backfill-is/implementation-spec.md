@@ -875,7 +875,7 @@ grep -n "incomplete" docs/runbooks/mcp-tools.md docs/runbooks/historical-backfil
 
 ### Step 19 — test: agent projects `incomplete` and docs stay in parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify
@@ -956,3 +956,15 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: Before editing, an uncommitted probe (`.sdd-logs/probe_incomplete.py`, asserting `'"incomplete"' in` the `get_backfill_status` catalog description via `tests.conftest.catalog_tools`) failed (`AssertionError`, `1 failed`); after the edits it passed (`1 passed`). Step 17's Verification ran unchanged. Nothing outside the step's **Files** was committed.
 **Reason**: Step 17 can pass its own Verification alone, so the adjacent-fold rule does not apply. Step 19 needs Step 18 first, so it cannot be folded in either. The probe is the same check as the first assertion of Step 19's `test_docs_and_skill_parity_with_incomplete_outcome`.
 **Disposition**: interim red→green recorded in context.md; the durable RED/GREEN stays at Step 19 (impl-spec review open item).
+
+### Deviation: Step 19 — RED against the pre-Step-17/18 surfaces; backticked SKILL.md token
+**Spec said**: Step 19's doc-parity test "is the RED before Steps 17–18" and asserts `"incomplete"` appears in `plugins/strat-lab/skills/backtest/SKILL.md`.
+**Actual**: Steps 17–18 had already landed, so RED ran Step 19's Verification unchanged with `tools.py`, `mcp-tools.md`, `SKILL.md` and `reference/backfill.md` temporarily checked out from `c7f53489` (the pre-Step-17 tree), then restored to HEAD (`git status` showed only the two test files afterwards). The SKILL.md assertion checks `` `incomplete` `` (backticked); the other three assert `incomplete` as specced.
+**Reason**: the RED tree no longer existed at HEAD; and SKILL.md already contains `backtest bar series incomplete`, so a bare `incomplete` check on it can never fail.
+**Disposition**: RED on the pre-Step-17 surfaces (`AssertionError: get_backfill_status description`, `1 failed, 826 passed`); GREEN on HEAD.
+
+### Deviation: Step 19 — strat-lab plugin version 0.5.0 → 0.5.1 (out of scope, operator-sanctioned)
+**Spec said**: Step 19's **Files** are the two agent test files only.
+**Actual**: The same commit bumps `"version"` 0.5.0 → 0.5.1 in `plugins/strat-lab/.claude-plugin/plugin.json` and `plugins/strat-lab/.cursor-plugin/plugin.json` (byte-identical, `cmp` clean); `python3 plugins/strat-lab/scripts/validate.py` was added to Verification (`passed all checks`, exit 0).
+**Reason**: Step 18 changed the `backtest` skill text (`docs/patterns/strat-lab-plugin.md`).
+**Disposition**: out-of-scope change, operator-sanctioned (operator decision 2026-11-26, verbatim choice 'Bump to 0.5.1').
