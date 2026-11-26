@@ -264,3 +264,7 @@ Full debate (/sdd-design via /sdd-batch) halted at the approval gate after round
   - [ ] Step 3 (docs) is verified by grep only, with no ruff or pytest run. This is adequate for a docs edit.
   - [ ] Overlap: 366-opportunity-live-only-rotation edits `_compute_opportunities` in the same servicer.py and has no impl-spec yet. Merge 365 first (D-4); 366's rebase keeps the elif fall-through.
   - [ ] Overlap: re-verify 330-fix-live-enrich-ttl-seed's reader-line citation at merge time (carried from the product-spec review).
+
+## Session 2026-11-26 — operator pre-execute decisions (main session)
+
+- Execution mode: /sdd-batch-execute SEQUENTIAL (mode-entry confirmation 'Agree: all three', 2026-11-26). 365 lands first (merge order 365 → 308/330 → 366); 366's Step 9 waits on this feature's merge.
