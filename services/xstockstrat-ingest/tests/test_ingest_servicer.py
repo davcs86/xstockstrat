@@ -3211,3 +3211,60 @@ class TestGapsOnlyVerify:
         }
         merged = _merged_symbol_results(json.dumps(stored))
         assert [(r.symbol, r.outcome) for r in merged] == [("X", want)]
+
+
+class TestGapsOnlyResumeVerify:
+    @staticmethod
+    async def _resume(svc, coverage, **row):
+        svc._marketdata.GetDataCoverage = coverage
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_bars_resp(5, [], []))
+        job = _job_row("job-364r", ingest_pb2.BACKFILL_STATUS_RUNNING, symbols=["IDXX"], **row)
+        with (
+            patch_chunk_repo([_chunk(["IDXX"], "g1")]) as m,
+            patch(f"{_REPO}.get_job", AsyncMock(return_value=job)),
+            patch(f"{_CHUNKS}.list_job_symbols", AsyncMock(return_value=["IDXX"])),
+            patch("asyncio.sleep", AsyncMock()),
+        ):
+            await svc._resume_job("job-364r")
+        return m["update_job"]
+
+    @pytest.mark.asyncio
+    async def test_null_start_resume_verifies_and_names_the_hole(self):
+        svc = _results_servicer()
+        cov, calls = TestGapsOnlyVerify._coverage({"IDXX": [_cov(_HOLE), _cov(bars_total=120)]})
+        uj = await self._resume(
+            svc,
+            cov,
+            range_start=None,
+            range_end=datetime(2026, 11, 25, tzinfo=UTC),
+            symbol_results=json.dumps({"gaps_only": {}}),
+        )
+        assert calls[0].range.HasField("start") is False
+        assert calls[0].range.end == _ts_of(datetime(2026, 11, 25, tzinfo=UTC))
+        assert _status_writes(uj, "job-364r")[-1] == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        assert _stored_results(uj)["gaps_only"]["IDXX"] == {
+            "outcome": _INCOMPLETE,
+            "reason": "missing sessions 2026-04-01..2026-09-25",
+        }
+
+    @pytest.mark.asyncio
+    async def test_null_end_resume_verifies_and_finalizes(self):
+        svc = _results_servicer()
+        cov, calls = TestGapsOnlyVerify._coverage({"IDXX": [_cov()]})
+        uj = await self._resume(
+            svc,
+            cov,
+            range_start=datetime(2025, 11, 20, tzinfo=UTC),
+            range_end=None,
+            symbol_results=json.dumps({"gaps_only": {}}),
+        )
+        assert calls[0].range.HasField("end") is False
+        assert _status_writes(uj, "job-364r")[-1] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_resume_without_marker_skips_verify(self):
+        svc = _results_servicer()
+        cov = AsyncMock()
+        uj = await self._resume(svc, cov, symbol_results=None)
+        cov.assert_not_awaited()
+        assert _status_writes(uj, "job-364r")[-1] == ingest_pb2.BACKFILL_STATUS_COMPLETED

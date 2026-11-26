@@ -468,3 +468,19 @@ Each thread names its target step.
 - Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
 - Deviations: none
 - Note: `_assert_results_invariant` (feature 352 helper) merges by `max(outcome)`, which would rank INCOMPLETE (4) above FAILED (3); none of its callers store INCOMPLETE, so it is untouched (out of scope).
+
+## Session 2026-11-26 — sdd-execute sequential, steps 13+14
+
+- Planned atomic unit `steps 13+14` (`**Lands with**`). Tooling: uv ✓ (`uv sync --extra dev` in ingest) · ruff ✓ · pytest ✓. Config-key wiring gate: N/A (no config key touched).
+- Discovery: every Codebase Evidence symbol found; `_resume_job` at `servicer.py:1043-1076` before this unit (drift after Steps 9–12), `job_row_to_proto` NULL-safe range rebuild at `:374-380`; substance unchanged.
+
+### Step 13 — service: resume path runs verify, with a NULL-safe range rebuild [done]
+- Added repo `list_job_symbols` (`SELECT DISTINCT unnest(symbols) AS symbol … WHERE job_id = $1::uuid ORDER BY symbol`). `_resume_job` calls `_verify_gaps_only(job_id, list_job_symbols(...), job_row_to_proto(row).range, tf_enum, state, meta)` after `_run_chunks` when the `gaps_only` marker is in `state["symbol_results"]`; unmarked jobs resume as before (O-7). Part of the unit `steps 13+14`.
+- TDD (unit 13+14, AC-2): red (pre-unit tree): 4 failed, `AttributeError: … backfill_chunks … has no attribute 'list_job_symbols'`; red (repo fn only, resume unchanged): `IndexError: list index out of range` at `calls[0]` in the NULL-start/NULL-end tests — resume issued no verify `GetDataCoverage` (so (a) would end COMPLETED), `2 failed, 620 passed`, `exit=1` → green: `All checks passed!`, `58 files already formatted`, `622 passed`, `Required test coverage of 40% reached. Total coverage: 87.72%`, `exit=0`.
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/app/repositories/backfill_chunks.py`
+- Deviations: none
+
+### Step 14 — test: resume verify with NULL bounds; `list_job_symbols` [done]
+- Added `TestChunkRepo.test_list_job_symbols` (SQL has `DISTINCT unnest(symbols)`, passes `job_id`) and `TestGapsOnlyResumeVerify`: (a) NULL start → verify request has no `start`, `end` = 2026-11-25, probe hit → PARTIAL + stored INCOMPLETE `missing sessions 2026-04-01..2026-09-25`; (b) NULL end → no `end`, COMPLETED; (c) no marker → `GetDataCoverage` never awaited. Reuses `_job_row` and Step 12's `TestGapsOnlyVerify._coverage`/`_cov`/`_HOLE` (C-13). Part of the unit `steps 13+14`.
+- Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`, `services/xstockstrat-ingest/tests/test_backfill_chunks.py`
+- Deviations: none

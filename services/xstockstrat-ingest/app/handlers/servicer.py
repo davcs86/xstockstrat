@@ -1069,6 +1069,15 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 meta,
                 symbol_results=json.loads(row.get("symbol_results") or "{}"),
             )
+            if _GAPS_ONLY_VERIFY_KEY in state["symbol_results"]:
+                await self._verify_gaps_only(
+                    job_id,
+                    await backfill_chunks.list_job_symbols(self._db, job_id),
+                    job_row_to_proto(row).range,
+                    _STR_TO_ENUM.get(timeframe, 0),
+                    state,
+                    meta,
+                )
             await self._finalize_backfill(job_id, state, len(chunks), meta)
         except Exception:
             log.error("_resume_job failed job=%s", job_id, exc_info=True)
