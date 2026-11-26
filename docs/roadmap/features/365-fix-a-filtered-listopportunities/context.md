@@ -292,3 +292,10 @@ Full debate (/sdd-design via /sdd-batch) halted at the approval gate after round
 - TDD (AC-1, AC-2): red came first: `7 failed, 90 passed`. The failures were `test_ac1_filtered_empty_over_fresh_queue_does_not_kick[direct|pool]` (`assert ([True] == []`, the kick fired), `test_ac2_..._does_not_kick[direct|pool]` (stale AAPL row served), `test_fresh_rows_all_dismissed_or_snoozed_do_not_kick[direct|pool]` and `test_ac1_..._leaves_valid_until_unchanged` (`assert 1 == 0` on `_compute_opportunities.await_count`). Then green: `97 passed`; `124 passed, 286 deselected`; full suite `1775 passed`, `Total coverage: 91.65%`; ruff `All checks passed!`, `141 files already formatted`. AC-3/AC-4 PRESERVE tests and `test_has_fresh_timeout_is_unavailable_without_kick` passed both before and after the fix, as specced.
 - Files modified: `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py`, `services/xstockstrat-analysis/tests/test_opportunity_compute_state.py`, `services/xstockstrat-analysis/tests/test_opportunities_repo.py`, `services/xstockstrat-analysis/tests/conftest.py`
 - Deviations: none.
+
+### Step 3 — docs: correct the feature-215 symbol-filter sentence in `docs/opportunities.md` [done]
+- Reworded the feature-215 symbol-filter sentence in `services/xstockstrat-analysis/docs/opportunities.md` (L8-11): `symbol`, like every request filter, goes to the fresh read; the stale (`include_expired=True`) read runs only when the user has no fresh row, so a filtered-empty read over a fresh queue returns an empty page and kicks no recompute. The L7 stale-while-revalidate paragraph is untouched.
+- TDD: N/A (docs). Verification (`.sdd-logs/v-1.log`, `exit=1`, the exit status of the specced no-hit grep): `11:    stale (\`include_expired=True\`) read runs only when the user has no fresh row, ...`; no "filters both the fresh and the stale" hit.
+- Config wiring `--final` (`.sdd-logs/v-2.log`): `exit=0`; only baseline `REPORTED:` lines for unrelated keys (`marketdata/fundamentals.provider`, `platform/trading_state`). Status → `code-completed`.
+- Files modified: `services/xstockstrat-analysis/docs/opportunities.md`
+- Deviations: none.

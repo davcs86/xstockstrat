@@ -327,7 +327,7 @@ skips locally when no PostgreSQL binary is present and runs under `CI=true`.
 
 ### Step 3 — docs: correct the feature-215 symbol-filter sentence in `docs/opportunities.md`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (docs)
 **Files**:
 - `services/xstockstrat-analysis/docs/opportunities.md` — modify (design item (f))

@@ -18,6 +18,7 @@
 | 2026-11-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps |
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
+| 2026-11-26 | `in-progress` → `code-completed` | /sdd-execute | All 3 steps done (steps 1+2 atomic unit; step 3 docs) |
 
 ---
 
