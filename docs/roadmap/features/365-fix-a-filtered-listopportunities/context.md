@@ -206,3 +206,29 @@ Full debate (/sdd-design via /sdd-batch) halted at the approval gate after round
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-26 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-analysis). Key reuse patterns: the existing `OpportunitiesRepository.has_fresh` (opportunities.py:340-348) and the `tests/test_list_opportunities_deadlines.py` kick-spy and `read_path` fixtures.
+- Phase 1 Grilling: 2 rounds (full). The operator approved at the gate on 2026-11-26, and no reopen petitions were filed.
+  - Chosen approach: the bare `else:` at servicer.py:4790 becomes `elif not await opps.has_fresh(user_id):`, with no re-indent and a constraint comment of at most 2 lines on the elif line. A fresh-but-filtered-empty read falls through: no kick, empty page.
+  - Rejected: R-1..R-6, in short a fused method, filter-presence gating, a filtered stale fallback, a production `is True` guard, the `if ...: pass` re-indent, and blanket test patching.
+- Constitution rules touched: C-01, C-08, C-11, C-13, C-15, C-16, C-18, P-05, P-06, F-04, F-06, F-08, ANALYSIS-14. Floor breaches: none.
+- Business rules: AC-1/AC-2 are CHANGEs, covered by the operator decisions above. AC-3/AC-4 and feature 185 @AC-6/@AC-7 are PRESERVE.
+- **Decision D-2 (recorded per design item (g)):** a deliberate manual recompute or invalidate path is OUT of scope. Removing the `list_opportunities(min_conviction=1.01)` lever is intended; any replacement is a separate /sdd-story.
+- **Constraint D-4 (recorded per design item (g); input for 366's design):**
+  - Merge 365 before 366.
+  - One compute stamps a single `valid_until` on every row it writes.
+  - If 366 breaks this, D-3 (mixed freshness) must be re-evaluated.
+  - 366's rebase must keep the elif fall-through.
+- Correction to recon.md:43: `_FakeOppRepo` is not filter-blind. It applies include_expired, min_conviction and DISMISS/SNOOZE, and ignores only sources, action_filter and symbol (D-6).
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks)
+
+- [ ] **Mixed freshness (D-3):** a symbol whose only row is a stale leftover from a heal shows "no opportunity" until the heal or the daily refresh. Target: the step-1 Verification, pinned by (e); re-evaluate in 366's design if D-4 breaks.
+- [ ] **All-dismissed or all-snoozed fresh rows no longer kick** (accepted). Target: step 1, test (a), the dismissed/snoozed no-kick case.
+- [ ] **No no-DB way to force a recompute** (D-2). Target: out of scope; a separate /sdd-story if wanted.
+- [ ] **Merge coupling with 366.** Target: merge time, with 365 first and 366 keeping the elif fall-through and D-4.
+- [ ] **A has_fresh timeout on a cold read drops the kick,** and no test pins it. Target: step 1, item (d), optional test.
+- [ ] **Open non-blocking objections O-6..O-8** (kick-spy proxy or a real-kick test; fetchval routing; (e)'s target file and D-3 pin label). Target: /sdd-spec step 1, Files and Verification.
