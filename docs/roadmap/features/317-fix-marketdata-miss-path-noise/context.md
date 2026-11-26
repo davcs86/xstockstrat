@@ -643,3 +643,15 @@ Unresolved ⚠ carried into execution (`/sdd-execute` announces each at every ch
   impl-spec. Re-run the `fetchAndCacheBars` peer grep before unit B2. `configServiceImpl.ts` peer 294 is
   historical, low risk.
 - Overlap scan limit: the scan read a local checkout and could not read branch refs.
+
+## Session 2026-11-21 — operator rulings on the four spec-time choices, recorded by the orchestrator (verbatim)
+
+Question 1 (handoff § 3.10): "317 (fix-marketdata-miss-path-noise), spec-time choice 1 of 4: part (B) lands as two commits (bounds unit Steps 5+6 first, then Steps 7–10), because one commit would be five steps, above the four-step unit cap. Bounds land first so the seeded key never exists without write bounds. Confirm?" — Operator's answer: "Confirm two commits (Recommended)".
+
+Question 2: "317, spec-time choice 2 of 4: the `resolveOffMs` wrapper needs one forwarder entry and two receiver entries in scripts/config-wiring.json (registry entries, not baseline findings); without them `stream.bar_ingest_backoff_ms` turns `seeded-unread` (prototyped on a scratch copy of 36aed60b). Fallback per O-15 is a parallel reader. Confirm the registry entries?" — Operator's answer: "Use the parallel reader fallback". Option text as offered: "Skip the registry entries and add a parallel reader per O-15 (more code in marketdata)."
+
+Question 3: "317, spec-time choice 3 of 4: the miss line (`GetBars: no bars stored and live fetch returned none`) is logged through `warnUnlessDone` in `liveRefetch`, so a client cancel on an implicit miss logs at Debug instead of WARN. design.md did not list this site. Confirm?" — Operator's answer: "Confirm warnUnlessDone (Recommended)".
+
+Question 4: "317, spec-time choice 4 of 4: `UpdatePositionBracket` moves from `r.pool.Exec` to `r.db.Exec` (one line, the only non-logging production change in portfolio unit C) so the bracket test can reuse the `cancelingDB` seam. Confirm the repo-seam change?" — Operator's answer: "Confirm r.db.Exec (Recommended)".
+
+Orchestrator note (not an operator quote): choices 1, 3 and 4 match the spec. Choice 2 overrides the spec: the spec adds the three `config-wiring.json` registry entries; the ruling is the O-15 parallel-reader fallback instead. 317's implementation spec (the step that adds `resolveOffMs` and the config-wiring registry entries) must be amended to the parallel reader, and its Verification re-run against the config-wiring gate, before `/sdd-execute`. Not yet done; re-review after the amendment (`/sdd-review fix-marketdata-miss-path-noise impl-spec`).
