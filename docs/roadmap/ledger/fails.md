@@ -4247,3 +4247,8 @@ ambiguity is logged here).
 - **Evidence**: `services/xstockstrat-ui/src/middleware.ts:56-69` (refresh branch), `:86-111`; `docs/roadmap/features/345-authelia-sso/debate.md` O-85, R-23, D-107.
 - **Rule it implies**: A UI step that needs the signed-in user after any idle gap reads it through a session-gated JSON route
   called with `apiFetch` (401 → refresh → retry once), never from a server component or a middleware-exempt route's cookies.
+
+### 2026-11-13 — fix-vendor-key-in-url — assumption
+- **Mistake**: The round-1 design said `CheckRedirect` would close the redirect `Location`-parse leak of a query-string key. It cannot: Go's `net/http` `Client.do` parses `Location` before it calls `checkRedirect`, so the parse error, which quotes the key-bearing `Location`, is returned anyway. The same design also missed that a custom auth header (such as `apikey` or `X-Finnhub-Token`) is forwarded on a cross-host redirect, because Go strips only `Authorization`, `WWW-Authenticate`, `Cookie` and `Cookie2`.
+- **Evidence**: `docs/roadmap/features/320-fix-vendor-key-in-url/debate.md` O-7 (round 2, blocking), D-4, D-5 and R-5; `services/xstockstrat-marketdata/internal/fmp/fmp_client.go:289-295`.
+- **Rule it implies**: Take the key out of the URL; never rely on `CheckRedirect` to protect it. When a secret moves to a custom header, land `CheckRedirect` (`http.ErrUseLastResponse`) in the same step, with a cross-host redirect test written RED first.
