@@ -123,7 +123,8 @@ omission. The analysis change is internal-only.
   `docs/roadmap/features/307-ui-env-themed-bundles/product-spec.md:17`.
 - `product-spec.md` Problem Statement says the loop "forwards `metadata=None`". The code defaults it to an
   empty list: `propagation_meta = propagation_meta or []` at
-  `services/xstockstrat-ingest/app/handlers/servicer.py:1024` [main-dev `:1246`] (D-12).
+  `services/xstockstrat-ingest/app/handlers/servicer.py:1355` (re-grepped after the main-dev `f802b184`
+  merge, 2026-11-26) (D-12).
 - `order_snapshots` has no degraded column: `grep -rn degraded services/xstockstrat-analysis/migrations/`
   returns nothing. "Degraded" is the ledger event name chosen at
   `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:407`.
@@ -270,8 +271,8 @@ grep -c '2026-11-26' debate.md                                                  
 - `_emit` builds the request at `:608-615` with no `user_id`, so a degraded snapshot writes no
   `system`-owned ledger row (D-13).
 - `owner_metadata` has 9 other call sites (`grep -rn "owner_metadata(" services/xstockstrat-analysis/app`:
-  `services/evaluator.py:256`, `handlers/servicer.py:2908,3708,6038,6089`, `engine/entry_backfill.py:79`,
-  `engine/live_loop.py:523,568,598`). Its signature, return value, raise and message do not change, so none
+  `services/evaluator.py:256`, `handlers/servicer.py:2920,3728,6199,6253`, `engine/entry_backfill.py:79`,
+  `engine/live_loop.py:537,583,597`; re-grepped after the main-dev `f802b184` merge, 2026-11-26). Its signature, return value, raise and message do not change, so none
   is edited.
 - Regression proof kept unedited: `services/xstockstrat-analysis/tests/test_identity.py:13-36`
   (`test_owner_metadata_rejects_empty_and_system_and_builds_owner`, `test_single_owner_header_builder`) and
@@ -296,7 +297,7 @@ grep -c '2026-11-26' debate.md                                                  
    - `:546` → `if not is_real_owner(owner):`. Body unchanged.
    - `:388` → `... and is_real_owner(user_id):`.
 3. Do not edit `_POISON`, `_process_with_retry`, `_handle_close_event`, `_synth_position_id`, or any other
-   `SYSTEM_IDENTITY` user (`handlers/servicer.py:687`, `engine/live_loop.py:76`,
+   `SYSTEM_IDENTITY` user (`handlers/servicer.py:696`, `engine/live_loop.py:78`,
    `engine/fundsignal_loop.py:211`).
 4. No new outbound gRPC call is added; for a `system` owner the indicators and signals calls are removed,
    matching the empty-owner branch (header-propagation constraint not triggered).
@@ -331,19 +332,21 @@ grep -n "is_real_owner" services/xstockstrat-analysis/app/identity.py \
   `parked_calls(ledger)` `:515`.
 - Degraded-event assertion pattern: `test_ac6_indicator_timeout_degrades` at `:328-336`
   (`"analysis.snapshot.degraded" in ledger.appended`).
-- Empty-owner sibling: `services/xstockstrat-analysis/tests/test_owner_header_guard.py:435`
-  `test_ac17_ownerless_order_event_issues_no_owner_scoped_call`, payload `{**ORDER_PAYLOAD, "user_id": ""}`.
-- `asyncio.sleep` is awaited only in `_process_with_retry`
-  (`services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:228-232`), so the test must drive
-  `_process_with_retry`, not `process_event` (R-10).
+- Empty-owner sibling: `services/xstockstrat-analysis/tests/test_owner_header_guard.py:438`
+  `test_ac17_ownerless_order_event_issues_no_owner_scoped_call`, payload `{**ORDER_PAYLOAD, "user_id": ""}`
+  (`:445`).
+- The retry backoff `asyncio.sleep` is awaited in `_process_with_retry`
+  (`services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:228-232`); the module's other
+  `asyncio.sleep(2)` (`:212`) is the stream-error retry, which this test does not drive. So the test must
+  drive `_process_with_retry`, not `process_event` (R-10).
 - The name `test_ac2_close_seals_and_writes_samples` is taken (`:273`); the feature-prefixed form follows
   `test_feature294_ac7_cycle_writes_mcp_client_tick`
   (`services/xstockstrat-ingest/tests/test_mcp_client_loop.py:465`).
 - `grep -n '"system"' services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py` → **Not found**: no
   existing test feeds a `system` owner to the consumer.
 - `pyproject.toml:33` `asyncio_mode = "auto"`: no `@pytest.mark.asyncio` needed.
-- Coverage floor 40 is the CI value: `.github/workflows/ci.yml:431-432` (`xstockstrat-analysis`,
-  `coverage_threshold: 40`), applied at `:477` as `--cov-fail-under=${{ matrix.coverage_threshold }}`.
+- Coverage floor 40 is the CI value: `.github/workflows/ci.yml:473-474` (`xstockstrat-analysis`,
+  `coverage_threshold: 40`), applied at `:519` as `--cov-fail-under=${{ matrix.coverage_threshold }}`.
 
 **TDD**: `red-green required`
 
@@ -371,7 +374,7 @@ grep -n "is_real_owner" services/xstockstrat-analysis/app/identity.py \
 5. C-13: the `system` payload has one consumer and is an `{**ORDER_PAYLOAD, ...}` spread, so it stays
    inline. No `tests/conftest.py` entry is added.
 6. The three predicate branches are covered without a new unit test: empty owner by
-   `test_owner_header_guard.py:435`, `system` by this test, a real owner by `:461`; `owner_metadata`'s raise
+   `test_owner_header_guard.py:438`, `system` by this test, a real owner by `:461`; `owner_metadata`'s raise
    by `tests/test_identity.py:13`.
 
 **Verification**:
@@ -397,12 +400,13 @@ grep -n "def .*fixture\|from .conftest\|conftest" services/xstockstrat-analysis/
 
 **Codebase Evidence**:
 - `async def _ingest_external_signal(self, signal, propagation_meta=None, *, owner: str)` at
-  `services/xstockstrat-ingest/app/handlers/servicer.py:1015-1017` [main-dev `:1237-1239`].
-- Bug site, `:1174-1182` [main-dev `:1396-1404`]:
+  `services/xstockstrat-ingest/app/handlers/servicer.py:1346-1348` (all `servicer.py` lines in this step
+  re-grepped after the main-dev `f802b184` merge, 2026-11-26; content unchanged, edit by symbol).
+- Bug site, `:1505-1513` (`AppendEventRequest(` at `:1506`):
   `ledger_pb2.AppendEventRequest(event_type="ingest.signal.ingested", source_service="xstockstrat-ingest",
   stream_key=f"signal:{signal.source}:{signal.symbol}", payload=payload)` with `metadata=propagation_meta`.
   No `user_id=`.
-- The payload already carries `"user_id": owner` at `:1167` [main-dev `:1389`]; the ledger owner column does
+- The payload already carries `"user_id": owner` at `:1498`; the ledger owner column does
   not read the payload.
 - `packages/proto/ledger/v1/ledger.proto:51` `string user_id = 9; // owning user; falls back to the
   x-user-id metadata when empty` (message `AppendEventRequest`, `:38`).
@@ -410,7 +414,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" services/xstockstrat-analysis/
   `x-user-id` metadata, then `null`. Already tested at
   `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts:675,691,709`; no ledger step.
 - Callers (`git grep -n "_ingest_external_signal(" -- services/xstockstrat-ingest/app`): `IngestSignal` at
-  `:994-996` [main-dev `:1216-1218`] and `poll_one_source` at
+  `:1325-1327` and `poll_one_source` at
   `services/xstockstrat-ingest/app/engine/mcp_client_loop.py:158-160`. Neither is edited in this step.
 - No existing test asserts an empty `user_id` on this request:
   `grep -rn "AppendEvent.call_args" services/xstockstrat-ingest/tests` reads only `event_type` and `payload`.
@@ -427,10 +431,10 @@ grep -n "def .*fixture\|from .conftest\|conftest" services/xstockstrat-analysis/
 1. In `_ingest_external_signal`, add `user_id=owner,` to the `AppendEventRequest(...)` whose `event_type` is
    `"ingest.signal.ingested"`. Change nothing else: `metadata=propagation_meta` stays, no `x-user-id` entry
    is built (R-3), no helper is added, and the owner is never routed through `system`.
-2. Leave the other `AppendEventRequest` sites (`:467` and `app/admin_audit.py:29`) untouched.
+2. Leave the other `AppendEventRequest` sites (`:648` and `app/admin_audit.py:29`) untouched.
 3. Header propagation: this is not a new outbound call. The existing call keeps forwarding
-   `propagation_meta` (the `x-user-id`/`x-access-scope`/`x-trace-id` filter at `:983-987`
-   [main-dev `:1206-1210`]) on the RPC path. On the loop path there is no inbound request to propagate.
+   `propagation_meta` (the `x-user-id`/`x-access-scope`/`x-trace-id` filter at `:1315-1319`) on the
+   RPC path. On the loop path there is no inbound request to propagate.
 
 **Verification**:
 
@@ -457,7 +461,8 @@ grep -n -A6 'event_type="ingest.signal.ingested"' services/xstockstrat-ingest/ap
   (`test_second_identical_cycle_deduplicates`): `monkeypatch.setattr(loop, "list_all_sources", ...)`,
   `transaction_conn(db_fetchrow_side_effect=..., conn_fetchrow_side_effect=...)`,
   `svc = make_servicer(db=db)`, `svc._db = db`, `loop.run_one_cycle(svc, cfg, mcp)`.
-- One fresh ingest consumes one `db.fetchrow` (the source lookup at `servicer.py:1041-1046`) and two
+- One fresh ingest consumes one `db.fetchrow` (the source lookup at `servicer.py:1372-1377`, re-grepped
+  after the main-dev `f802b184` merge, 2026-11-26) and two
   `conn.fetchrow` results (insert, then claim): see the cycle-1 rows at `:179,183-184`.
 - `run_one_cycle` calls `poll_one_source`
   (`services/xstockstrat-ingest/app/engine/mcp_client_loop.py:184,203`).
@@ -465,11 +470,11 @@ grep -n -A6 'event_type="ingest.signal.ingested"' services/xstockstrat-ingest/ap
   `_mcp_source(slug=..., endpoint=..., **over)` `:80` (default owner `seed-user`), `_item(symbol, **over)`
   `:338`.
 - `make_servicer` sets `svc._ledger.AppendEvent = AsyncMock(...)`
-  (`services/xstockstrat-ingest/tests/test_ingest_servicer.py:64-65`).
+  (`services/xstockstrat-ingest/tests/test_ingest_servicer.py:70`; `make_servicer` at `:37`).
 - RPC-path pattern, `services/xstockstrat-ingest/tests/test_signal_ownership.py:123-139`:
   `svc, db, conn = _fresh_ingest_svc(sid)`; `await svc.IngestSignal(_signal_req("motley-fool"),
   _ctx("0", user_id=owner))`; `svc._ledger.AppendEvent.call_args.args[0].payload`. Helpers:
-  `_signal_req` `:20`, `_fresh_ingest_svc` `:28`; `_ctx` in `tests/conftest.py:17`.
+  `_signal_req` `:20`, `_fresh_ingest_svc` `:28`; `_ctx` in `tests/conftest.py:18`.
 - `@AC-1`'s scenario text is unchanged (ruling 2026-11-26): its first Then is covered by the request-field
   assertion below, its second Then ("ExportEvents called as "user-a" returns that event") by the unchanged
   ledger code and tests, not by an ingest test: export scoping is `@AC-11 @feature-021`
@@ -481,8 +486,8 @@ grep -n -A6 'event_type="ingest.signal.ingested"' services/xstockstrat-ingest/ap
   ingest test asserts `AppendEventRequest.user_id`.
 - The name `test_ac1_one_failing_item_does_not_drop_batch` is taken (`:426`); use the `test_feature313_`
   prefix (precedent `:465`).
-- Coverage floor 40 is the CI value: `.github/workflows/ci.yml:428-429` (`xstockstrat-ingest`,
-  `coverage_threshold: 40`), applied at `:477`.
+- Coverage floor 40 is the CI value: `.github/workflows/ci.yml:470-471` (`xstockstrat-ingest`,
+  `coverage_threshold: 40`), applied at `:519`.
 
 **TDD**: `red-green required`
 
@@ -540,26 +545,26 @@ grep -n "from tests.test_signal_ownership import\|from tests.conftest import" \
 **Reviewers**: Service owner `xstockstrat-ingest` — Signal normalization correctness, idempotent ingestion, newsletter source schema stability
 
 **Codebase Evidence**:
-- Signature at `services/xstockstrat-ingest/app/handlers/servicer.py:1015-1017` [main-dev `:1237-1239`]:
-  `(self, signal, propagation_meta=None, *, owner: str) -> tuple[int, bool]`; docstring `:1018-1023`;
-  `propagation_meta = propagation_meta or []` at `:1024` [main-dev `:1246`].
-- The `ingest.signal.ingested` emit at `:1174-1182` [main-dev `:1396-1404`], carrying `user_id=owner` after
-  Step 4.
+- Signature at `services/xstockstrat-ingest/app/handlers/servicer.py:1346-1348` (all `servicer.py` lines
+  in this step re-grepped after the main-dev `f802b184` merge, 2026-11-26; content unchanged):
+  `(self, signal, propagation_meta=None, *, owner: str) -> tuple[int, bool]`; docstring `:1349-1354`;
+  `propagation_meta = propagation_meta or []` at `:1355`.
+- The `ingest.signal.ingested` emit at `:1505-1513`, carrying `user_id=owner` after Step 4.
 - `packages/proto/ledger/v1/ledger.proto:41` `string correlation_id = 3;` on `AppendEventRequest`.
 - Ledger persists `req.correlationId` (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:89`) and
   reads only `x-user-id` from call metadata (`:78`).
 - Idiom to reuse, `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:613,618`:
   `correlation_id=correlation_id` on the request and
   `metadata=(("x-trace-id", correlation_id),) if correlation_id else ()`.
-- Mint precedent, `servicer.py:762`: `meta = (("x-trace-id", str(uuid.uuid4())),)`.
+- Mint precedent, `servicer.py:1051`: `meta = (("x-trace-id", str(uuid.uuid4())),)`.
 - `poll_one_source` at `services/xstockstrat-ingest/app/engine/mcp_client_loop.py:116`; owner at `:123`;
   item loop `for item in parsed:` at `:156`; the per-item call at `:158-160`
   (`servicer._ingest_external_signal(_build_external_signal(slug, item), owner=owner)`); the per-item
   `except Exception` at `:163`.
 - `grep -n "^import" services/xstockstrat-ingest/app/engine/mcp_client_loop.py` → `asyncio`, `json`,
   `logging`, `time` (`:13-16`). `import uuid` is **Not found** and must be added.
-- The RPC caller passes `propagation_meta` positionally and no `trace_id` (`servicer.py:994-996`
-  [main-dev `:1216-1218`]); it is not edited.
+- The RPC caller passes `propagation_meta` positionally and no `trace_id` (`servicer.py:1325-1327`);
+  it is not edited.
 - Break radius: the only site that mirrors the signature is the test spy at
   `services/xstockstrat-ingest/tests/test_mcp_client_loop.py:196-197`
   (`async def spy(signal, propagation_meta=None, owner=None)`), repaired by Step 7. The other loop tests
@@ -634,11 +639,11 @@ grep -n "x-user-id" services/xstockstrat-ingest/app/engine/mcp_client_loop.py   
   `_FakeMcpClient` `:32` (one `result` returned for every `fetch`), `_FakeCfgWatcher` `:62`,
   `transaction_conn`, `make_servicer`.
 - `_build_external_signal` sets `source=slug` (`mcp_client_loop.py:88-91`), and the ledger payload carries
-  `"source": signal.source` (`services/xstockstrat-ingest/app/handlers/servicer.py:1168`
-  [main-dev `:1390`]), so events group by source through `req.payload["source"]`.
+  `"source": signal.source` (`services/xstockstrat-ingest/app/handlers/servicer.py:1499`, re-grepped after
+  the main-dev `f802b184` merge, 2026-11-26), so events group by source through `req.payload["source"]`.
 - Dedup keys on `(user_id, source, symbol, direction)` (`tests/test_signal_ownership.py:135`), so the same
   two symbols under two slugs are four distinct signals.
-- `_ctx` always sends `("x-trace-id", "t1")` (`tests/conftest.py:17-33`), which makes the RPC path a usable
+- `_ctx` always sends `("x-trace-id", "t1")` (`tests/conftest.py:18-36`, the append at `:36`), which makes the RPC path a usable
   check that an inbound trace id is not stored as `correlation_id` (R-9).
 - `grep -n "correlation_id" services/xstockstrat-ingest/tests/*.py` → **Not found**: no ingest test reads it.
 
@@ -711,15 +716,15 @@ grep -n "async def spy" -A2 services/xstockstrat-ingest/tests/test_mcp_client_lo
   until its report is resolved"; the ownerless-report row is at `:65`. That report's sidecar flips through
   `/sdd-triage backmerge`, not this step.
 - CLAUDE.md event row: `| ingest.signal.ingested | Newsletter signal persisted |` at
-  `services/xstockstrat-ingest/CLAUDE.md:185` on the feature branch and `:197` on main-dev (heading
-  `## Ledger Events Emitted` at `:177` and `:189`; main-dev's 12 extra lines are the feature-364 verify-pass
-  text near `:144-155`). Edit by the row text, not the number.
+  `services/xstockstrat-ingest/CLAUDE.md:197` (heading `## Ledger Events Emitted` at `:189`) on the feature
+  branch after the main-dev `f802b184` merge (re-grepped 2026-11-26; it was `:185`/`:177` before the merge
+  brought in main-dev's 12 feature-364 lines). Edit by the row text, not the number.
 - Checked and not stale: `CLAUDE.md` § Ownership (`### Ownership (feature 224)` `:52`, the reserved `system`
   owner at `:57-62`): the owner stamped on the request is the `_resolve_owner` value that `IngestSignal`
   already forwarded as `x-user-id`, so the `system` rules are unchanged. `docs/context-constitution.md`
   INGEST-12 (`:25`) concerns the backfill hand-off loop, not `ingest.signal.ingested`.
 - Symbols named in the new text exist today: `app/handlers/servicer.py#_ingest_external_signal`
-  (`:1015` branch, `:1346` main-dev), `app/engine/mcp_client_loop.py#poll_one_source` (`:116` on both).
+  (`:1346` after the merge), `app/engine/mcp_client_loop.py#poll_one_source` (`:116`).
 
 **TDD**: `N/A (docs)`
 
