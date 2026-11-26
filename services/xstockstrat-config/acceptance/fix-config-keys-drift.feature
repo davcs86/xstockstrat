@@ -85,9 +85,9 @@ Feature: xstockstrat-config - config key canonicalisation, heal and seed parity
     Then that row's value_type and value_data are unchanged
     And the sign-off report lists "trading trading.order.max_retries: stored string 7, reader int default 3"
 
-  @AC-25 @FR-1 @regression @feature-295
+  @AC-25 @FR-1 @regression @feature-295 @feature-319
   Scenario: Internal-caller grants and write bounds match on the canonical key
-    Given the grant for "trading-reconciliation-poller" on "platform" / "platform.trading_state"
+    Given the grant for "trading-reconciliation-poller" on "platform" / "platform.trading_state" from an mTLS peer with DNS SAN "xstockstrat-trading"
     When that caller sends SetConfig "platform" / "trading_state" = "REDUCE_ONLY"
     Then the stored "platform.trading_state" row holds "REDUCE_ONLY"
     And SetConfig "analysis" / "opportunity.max_universe_size" = 0 by an admin returns INVALID_ARGUMENT from the [1,1000] bound

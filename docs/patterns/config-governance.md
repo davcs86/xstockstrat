@@ -149,6 +149,27 @@ Append-only log — one entry per feature that registered new keys. Newest first
 
 Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
 
+### feature 366 — opportunity-live-only-rotation (`xstockstrat-config` / `xstockstrat-analysis`)
+
+The cycle bound of the live-only opportunity rotation: each compute evaluates the next
+`opportunity.max_live_only_symbols_per_compute` symbols of the non-held live-only pool after a persisted
+cursor, and a full rotation should finish within this many days. When it cannot at the configured chunk
+limit, the chunk limit wins and the shortfall is logged. Fresh live-only rows are stamped
+`valid_until = computed_at + this many days` (no 168h cap), and a carried live-only row aged `>=` this many
+days is dropped. The key has a full-dotted `SCALAR_BOUNDS_REGISTRY` entry in `xstockstrat-config`
+(`configServiceImpl.ts`) and is **seeded** `3` (staging + production, global, stored as `int`,
+insert-if-absent) by config migration `analysis_live_only_cycle_max_days`, with the number-free actor
+sentinel `system:config-migration-feature-opportunity-live-only-rotation`; the down deletes only a global
+row that still carries that sentinel and still holds `3`, so a value an operator has changed survives a
+rollback. This entry also supersedes the meaning of `opportunity.max_live_only_symbols_per_compute` in the
+feature-131 and feature-184 entries: it is now the per-compute chunk limit of the rotation, not a
+conviction-ranked truncation (C-16 CHANGE of 131 @AC-8, operator-signed 2026-11-26). Approval: owner +
+config team.
+
+| Namespace | Key | Type | Default | Reader | Bounds | Notes |
+|---|---|---|---|---|---|---|
+| `analysis` | `opportunity.live_only_cycle_max_days` | int | `3` | `app/handlers/servicer.py:_live_only_cycle_days` | `[1,30]` | Seeded `056`. Read via `int_positive`, so a stored `≤ 0` reads as `3`. Re-read at each compute and heal, so a change applies on the next compute without a restart. |
+
 ### feature 330 — fix-live-enrich-ttl-seed (`xstockstrat-config` / `xstockstrat-analysis`)
 
 No key is added. Config migration `*_analysis_live_enrich_ttl_reseed` moves the stored value of the global
@@ -535,11 +556,12 @@ seed `description`).
 | `analysis.opportunity.signal_rank_weight` | float | `0.3` | `[0,1]` | Signal-axis weight in the queue ORDER BY. `0` is honoured (feature 244). |
 | `analysis.opportunity.max_universe_size` | int | `100` | `[1,1000]` | Max candidates traced per compute. `get_int`. |
 | `analysis.opportunity.max_live_strategies_per_symbol` | int | `5` | `[1,50]` | Per-symbol live-attribution cap. `get_int`. |
-| `analysis.opportunity.max_live_only_symbols_per_compute` | int | `20` | `[1,500]` | Non-held live-covered symbol cap per compute. `get_int`. |
+| `analysis.opportunity.max_live_only_symbols_per_compute` | int | `20` | `[1,500]` | Per-compute chunk limit of the live-only rotation (feature 366). `int_positive`. |
 | `analysis.opportunity.max_live_held_symbols_per_compute` | int | `20` | `[1,500]` | Held-symbol live-attribution cap per compute. `get_int`. |
 | `analysis.opportunity.max_concurrent_candidates` | int | `4` | `[1,50]` | Per-candidate evaluate fan-out (priority-inversion guard). `get_int`, `__init__` — restart to apply. |
 | `analysis.opportunity.sparkline_bars` | int | `20` | `[1,500]` | Daily bar closes fetched per opportunity for the sparkline. `get_int`. |
 | `analysis.opportunity.valid_window_hours` | int | `24` | `[1,168]` | `valid_until` window from the compute session date. `get_int`. |
+| `analysis.opportunity.live_only_cycle_max_days` | int | `3` | `[1,30]` | Live-only rotation cycle bound in days; live-only rows are stamped `computed_at` + this many days (feature 366, seeded by config `056`, not `028`). `int_positive`. |
 | `analysis.opportunity.snooze_default_hours` | int | `24` | — | Default snooze when a SNOOZE carries no timestamp. `get_int`. |
 | `analysis.opportunity.startup_jitter_seconds` | int | `30` | — | One-shot loop-entry jitter; `get_int_present` (`0` disables). |
 | `analysis.opportunity.retry_seconds` | int | `300` | — | Retry cadence on enumeration error; `get_int_present`. Shared with the feature-180 materializer loop. |

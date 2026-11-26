@@ -144,6 +144,18 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   (`chunk_window_days` × `chunk_max_bars`); chunks run in parallel (`max_concurrent_chunks`) and on
   restart any PENDING/FAILED chunks are re-driven (idempotent marketdata upsert makes re-fetch safe).
   `fill_mode=GAPS_ONLY` plans only the ranges marketdata's `GetDataCoverage` reports missing.
+  After the chunks, a verify pass (feature 364) re-reads coverage: a symbol whose sessions are still
+  missing gets the outcome `incomplete` (reason `missing sessions <from>..<to>[; …]`, stored under the
+  reserved `symbol_results` key `gaps_only`) and the job ends `PARTIAL`, with no notify alert (the
+  `ingest.backfill.completed` payload lists `incomplete_symbols`). A verify RPC error marks the symbol
+  `failed`; `skipped` symbols are not verified.
+  - **Fixed invariant (feature 364): head-gap lookback K = 730 days**, not a config key (aligned with
+    `backfill.self_serve_max_range_days`). The first gap counts as missing only if the store holds a
+    bar in the 730 days before it. Accepted residual (operator, O-1): an unfilled first gap ends
+    `COMPLETED` whenever the store has no bar in those 730 days — the symbol was not yet listed, was
+    never fetched before, or the request starts inside a hole longer than 730 days.
+  - One-time residual (O-7): GAPS_ONLY jobs created before the feature-364 deploy carry no `gaps_only`
+    marker and resume unverified.
 
 ## Config Keys Consumed
 
