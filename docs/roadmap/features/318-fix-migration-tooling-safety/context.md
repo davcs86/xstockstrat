@@ -719,3 +719,10 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - Config-key wiring gate: N/A (no config key, no config migration).
 - Files modified: `.github/workflows/ci.yml`
 - Deviations: Step 10's expected indentation for two lines corrected to 10 spaces (operator decision; Deviation Log)
+
+### Step 10 — test: the CI wiring of the ordering gate [done]
+- Added `test_ci_runs_the_order_gate_and_the_ci_gate_requires_it` to `scripts/tests/test_check_migration_order.py`: it reads `SCRIPTS_DIR.parent / ".github/workflows/ci.yml"` as text and asserts six whole lines (job key, `ci-gate` needs entry, result echo, path filter, `FORBID_NEW` expression, run line), the last two at 10 spaces per the 2026-11-26 operator decision (Deviation Log).
+- TDD: AC-2 red against the pre-Step-9 tree (`git archive HEAD^` (8e88fddb) `scripts .github` into a scratch dir with the final test copied in, no stash), log `scratchpad/red10/.sdd-logs/v-4.log` `exit=1`: `E           AssertionError:   migration-order-gate:`, `1 failed, 18 passed in 0.67s` → green on the dev branch `.sdd-logs/v-3.log` `exit=0`: `19 passed in 0.65s`, ruff `All checks passed!`, `64 files already formatted`. A first green run (`v-2.log`) failed ruff `ISC004` on the test's own implicit concatenation; parenthesised, then re-run. No coverage gate applies to `scripts/`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/tests/test_check_migration_order.py`
+- Deviations: none beyond the Step 9/10 indentation entry already logged

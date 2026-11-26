@@ -718,7 +718,7 @@ python3 -c "import yaml" 2>/dev/null && python3 -c "import yaml; yaml.safe_load(
 
 ### Step 10 — test: the CI wiring of the ordering gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: platform tooling (`scripts/`)
 **Files**:
 - `scripts/tests/test_check_migration_order.py` — modify

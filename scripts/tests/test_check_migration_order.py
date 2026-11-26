@@ -3,9 +3,11 @@
 import subprocess
 
 import pytest
-from conftest import load_script
+from conftest import SCRIPTS_DIR, load_script
 
 mo = load_script("check-migration-order.py")
+
+CI_WORKFLOW = SCRIPTS_DIR.parent / ".github/workflows/ci.yml"
 
 CFG = "services/xstockstrat-config/migrations"
 OTHER = "services/xstockstrat-other/migrations"
@@ -154,3 +156,20 @@ def test_forbid_new_passes_with_no_added_migration(repo, capsys):
     commit(repo, "docs")
     assert mo.main(["main", "--forbid-new"]) == 0
     assert "order-gate: ok" in capsys.readouterr().out
+
+
+def test_ci_runs_the_order_gate_and_the_ci_gate_requires_it():
+    lines = CI_WORKFLOW.read_text().splitlines()
+    for line in (
+        "  migration-order-gate:",
+        "      - migration-order-gate",
+        '          echo "migration-order-gate: ${{ needs.migration-order-gate.result }}"',
+        "              - 'scripts/check-migration-order.py'",
+        (
+            "          FORBID_NEW: ${{ (github.base_ref == 'main' && !(github.head_ref == 'main-dev'"
+            " && github.event.pull_request.head.repo.full_name == github.repository))"
+            " && '--forbid-new' || '' }}"
+        ),
+        '          python3 scripts/check-migration-order.py "origin/$BASE_REF" $FORBID_NEW',
+    ):
+        assert line in lines, line
