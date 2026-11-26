@@ -727,3 +727,76 @@ async def test_has_fresh_against_real_postgres(local_pg):
         assert await repo.has_fresh(dismissed) is True
     finally:
         await pool.close()
+
+
+# ── feature 366 — carried computed_at bind, caller transaction, attributed-row read ─────────────
+
+
+def _carry_row(key, **extra):
+    return {
+        "opportunity_key": key,
+        "symbol": "AAPL",
+        "strategy_id": "sx",
+        "action": 1,
+        "conviction": 0.5,
+        "readiness_json": {},
+        "signal_axis": 0.0,
+        "provenance": ["live_strategy"],
+        "thesis": "",
+        "valid_until": datetime(2999, 1, 1, tzinfo=UTC),
+        **extra,
+    }
+
+
+async def test_replace_for_user_binds_computed_at_with_now_fallback():
+    """FR-8/D-4 — the INSERT names computed_at as COALESCE($14::timestamptz, now()): a fresh row
+    binds None (gets now()), a carried row binds its stored value."""
+    pool, conn = _mock_pool()
+    stored = datetime(2026, 11, 20, 14, 30, tzinfo=UTC)
+    await OpportunitiesRepository(pool).replace_for_user(
+        "u1", [_carry_row("u1|A|sx"), _carry_row("u1|B|sx", computed_at=stored)]
+    )
+    sql, params = conn.executemany.await_args.args
+    assert "symbol_score, computed_at)" in sql
+    assert "COALESCE($14::timestamptz, now())" in sql
+    assert params[0][13] is None
+    assert params[1][13] == stored
+
+
+async def test_replace_for_user_every_bound_param_is_referenced():
+    """fails.md:190 guard extended to the replace INSERT — every bind $1..$14 appears in the SQL."""
+    import re
+
+    pool, conn = _mock_pool()
+    await OpportunitiesRepository(pool).replace_for_user("u1", [_carry_row("u1|A|sx")])
+    sql, params = conn.executemany.await_args.args
+    assert len(params[0]) == 14
+    for i in range(1, len(params[0]) + 1):
+        assert re.search(rf"\${i}(?![0-9])", sql), f"param ${i} unreferenced"
+
+
+async def test_replace_for_user_on_caller_conn_never_acquires():
+    """D-2 — with conn= the DELETE and INSERT run on the caller's connection (its transaction);
+    the repository's pool is never acquired."""
+    pool, _own = _mock_pool()
+    caller = AsyncMock()
+    await OpportunitiesRepository(pool).replace_for_user("u1", [_carry_row("u1|A|sx")], conn=caller)
+    pool.acquire.assert_not_called()
+    assert "DELETE FROM analysis.opportunities" in caller.execute.await_args.args[0]
+    assert caller.executemany.await_count == 1
+
+
+async def test_read_attributed_rows_filters_attributed_and_projects_computed_at():
+    """The carry-candidate read keeps only strategy-attributed rows, projects computed_at, and
+    decodes the JSONB columns through _to_dict."""
+    pool = _fetch_pool()
+    pool.fetch = AsyncMock(
+        return_value=[{"opportunity_key": "u1|A|sx", "provenance": '["live_strategy"]'}]
+    )
+    got = await OpportunitiesRepository(pool).read_attributed_rows("u1")
+    sql, binds = pool.fetch.await_args.args[0], pool.fetch.await_args.args[1:]
+    assert "strategy_id <> ''" in sql
+    assert "computed_at" in sql
+    assert binds == ("u1",)
+    assert got[0]["provenance"] == ["live_strategy"]
+    assert got[0]["readiness_json"] == {}
