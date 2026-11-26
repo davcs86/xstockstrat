@@ -32,3 +32,14 @@
   - Carried-row freshness: "Keep own age, max age" → FR-8 (row keeps its own computed_at/valid_until; dropped after one full cycle). Existing per-row `valid_until` ("expires" label) carries it — no proto change; an explicit per-row "as of" cue is a design decision.
   - Remaining open questions: "Yes, defer to design" — rotation order, persistence shape vs replace_for_user, C-16 CHANGE restatement, live_loop scheduler reuse, test gap, 308/330 overlap. /sdd-design must resolve each.
 - Revisions: product-spec FR-2/FR-2a/FR-3/FR-8, Config Key Changes (new key contract + meaning change of max_live_only_symbols_per_compute), Database Changes (additive ALTER, NNN ≥ 030 re-derived at /sdd-spec, up/down, db-migrate), Consumer Surface UI note; acceptance.feature AC-2/AC-3/AC-5/AC-6 reworded to observable row outcomes, AC-8..AC-12 appended (IDs append-only; AC-1..AC-7 keep their original subjects).
+
+## Session 2026-11-26 — sdd-review product-spec (round 2)
+
+- Product spec approved. Status: draft → spec-ready. Tree: 96a77f2.
+- Warnings (carry into /sdd-design):
+  - Pin the FR-8 age boundary (`>` vs `>=` at exactly one cycle) so a carried row cannot vanish just before its re-evaluation lands; add a scenario. Cover FR-2a × FR-8 (oversized pool: carried rows aging out when the cycle cannot complete).
+  - Update `docs/patterns/config-governance.md:538` and `services/xstockstrat-analysis/CLAUDE.md:274` (cap → chunk-limit meaning); line 538 also says `get_int` but the reader uses `int_positive` — correct it.
+  - Confirm AC-9's held-attribution semantics against `servicer.py` at /sdd-spec.
+  - Resolve every DEFERRED item; treat 308 debate.md R-4 ("never drop held/watchlist/muted rows on a failure path") as a hard constraint on the carried-row merge.
+- Overlap findings: WARN only — 308 (same function + opportunities.py), 330 (same function). No FAIL-level overlap; no merge-order write required.
+- Recommended design depth: full (operator choice; also escalated by the schema migration).

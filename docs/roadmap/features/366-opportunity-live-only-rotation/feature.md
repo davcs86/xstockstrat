@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings), round 2 after round-1 FAIL |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review opportunity-live-only-rotation product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design opportunity-live-only-rotation` — full design recommended (operator choice; schema migration + new config key + overlap with in-flight 308/330)
