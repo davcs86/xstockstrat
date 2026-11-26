@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: `docs/reports/2026-10-21-analysis-opportunities-row-gather-no-per-symbol-isolation-defect.md`, `docs/reports/2026-10-21-analysis-readiness-gather-no-per-symbol-isolation-defect.md`, `docs/reports/2026-11-05-analysis-readiness-batch-loss-on-indicator-outage-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-21
+**Last Updated**: 2026-11-26
 
 ---
 
@@ -28,21 +28,21 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
 - [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 17 steps (analysis, indicators, UI)
+- [Implementation Spec](implementation-spec.md) — 21 steps (analysis, indicators, UI); re-specced 2026-11-26 (+4 UI steps, O-9 operator ruling)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
 
 ## Reviewers
 
-_Snapshot finalized by /sdd-spec on 2026-11-20 from the per-step **Reviewers**. Re-run /sdd-spec if the registry changes._
+_Snapshot finalized by /sdd-spec on 2026-11-20 from the per-step **Reviewers**; steps 17-20 added at the 2026-11-26 re-spec with the same ui-owner reviewers. Re-run /sdd-spec if the registry changes._
 
 | Role | Review Focus |
 |---|---|
 | Service owner `xstockstrat-analysis` | Backtest reproducibility, strategy scoring determinism, no look-ahead bias (steps 1-2, 5-14) |
 | Service owner `xstockstrat-indicators` | Formula sandboxing, numeric precision, timeout enforcement (`indicators.sandbox.timeout_ms`), no side-effects from formula execution (steps 3-4) |
-| Service owner `xstockstrat-ui` | Trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access except audit log (steps 15-16) |
-| none | Step 17 (docs) |
+| Service owner `xstockstrat-ui` | Trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access except audit log (steps 15-20) |
+| none | Step 21 (docs) |
 
 ---
 

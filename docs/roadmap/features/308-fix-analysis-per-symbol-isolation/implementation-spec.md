@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/308-fix-analysis-per-symbol-isolation/feature.md`
-**Total Steps**: 17
+**Total Steps**: 21
 **Feature Branch**: `feature/fix-analysis-per-symbol-isolation`
 **Tree**: docs read at `origin/feature/fix-analysis-per-symbol-isolation@2b660ff1`; that branch holds
 docs commits only and is 168 commits behind `origin/main-dev`. Every code `path:line` below was
@@ -14,6 +14,10 @@ file moved. Re-grep each anchor at execute time. Peers that edit a file this spe
 (analysis `servicer.py:7282`) and 310 (indicators `servicer.py:397,413`, see Step Dependencies).
 Peers 309 and 313 cite the ingest servicer, not this one.
 
+**Re-spec 2026-11-26 (operator ruling on O-9)**: Steps 17-20 are new (the cue on the mobile
+`SignalRow` and the Signal-detail header); the former Step 17 (docs) is now Step 21. The UI
+anchors in Steps 17-20 were grepped on the merged branch head `4054a35c`; Steps 1-16 are unchanged.
+
 ---
 
 ## Execution Summary
@@ -22,29 +26,33 @@ The fix follows design.md's build order in one PR. Steps 1-4 add the typed class
 (`FormulaExecutionError.exit_reason`, `_is_transient_formula_error`, the indicators deadline-refusal
 field). Steps 5-8 add the shared isolation helper and the `evaluation_failed` marker plumbing, both
 additive. Steps 9-14 isolate the five fan-out sites (readiness callers, `_compute_opportunities`,
-heal), each paired with its regression tests. Steps 15-16 land the insights opportunities cue, and
-Step 17 lands the signed-off durable-suite amendments and the documentation.
+heal), each paired with its regression tests. Steps 15-16 land the insights opportunities cue,
+Steps 17-18 land it on the mobile `SignalRow`, Steps 19-20 land it on the Signal-detail header, and
+Step 21 lands the signed-off durable-suite amendments and the documentation.
 
 **Scenario coverage (C-15):** `@AC-1` → Step 12. `@AC-2` → Step 10. `@AC-3` → Step 10 (kick and
 materializer) and Step 14 (surgical retry).
 
 **Consumer surfaces (C-14):** the product spec is a bug template with no `## Consumer Surface(s)`
-section; design.md § 5 names the surface. UI `/insights` opportunities page → Steps 15-16. Agent
+section; design.md § 5 names the surface. UI `/insights` opportunities page → Steps 15-16; the mobile `SignalRow` on that page → Steps 17-18;
+the `/trader` Signal-detail header → Steps 19-20. Agent
 `list_opportunities` → no code step: the tool already returns `provenance` verbatim
-(`services/xstockstrat-agent/app/client.py:902`), so the new token reaches it unchanged; Step 17
+(`services/xstockstrat-agent/app/client.py:902`), so the new token reaches it unchanged; Step 21
 documents it in `docs/runbooks/mcp-tools.md`.
 
 **Decisions recorded at /sdd-spec:**
 
-- **O-9 (cue parity on mobile `SignalRow` and the Signal-detail header)** is deferred to a named
-  follow-up feature, slug `evaluation-failed-cue-parity` (number not yet allocated). Reason: it
-  needs a new `SignalItem` field plumbed through `sections.ts`, the surfaces have no act controls,
-  and the misread is display-only (`—` or the action badge). Step 17 records it in
-  `docs/patterns/ui-ux-governance.md` § 9.
+- **O-9 (cue parity on mobile `SignalRow` and the Signal-detail header)** is built in 308, not
+  deferred (operator ruling 2026-11-26, "Build the cue parity in 308"; it overturns the
+  `/sdd-spec` deferral to `evaluation-failed-cue-parity`, which is no longer a follow-up). This is
+  the first of the two options design.md O-9 names: render `EVALUATION_FAILED_CUE` through a
+  `SignalItem` field plumbed via `sections.ts` with the shared constant. Mobile: Steps 17-18. Detail
+  header: Steps 19-20. The Signal-detail "Why this fired" card (`SignalReadiness.tsx`) is outside the
+  ruling ("mobile SignalRow and Signal-detail header") and is unchanged; see context.md Open Threads.
 - **Degraded-rate alerting** is deferred to a named follow-up feature, slug
   `analysis-isolation-degraded-counter` (a counter `analysis.isolation.degraded{site}` plus an alert
   rule). Until it lands a sustained degraded rate shows only in WARN/ERROR logs and span attributes.
-  Step 17 records it in the analysis findings log.
+  Step 21 records it in the analysis findings log.
 - **`evaluation_failed` token** gets one Python constant `EVALUATION_FAILED_PROVENANCE` in
   `app/repositories/opportunities.py`, beside `_PROVENANCE_STRUCTURAL_MARKERS`. The SQL floor clause
   keeps a literal, like its three sibling clauses; Step 8 pins the two against each other.
@@ -52,7 +60,7 @@ documents it in `docs/runbooks/mcp-tools.md`.
   (`get_by_owner_and_id`, `_load_benchmark_bars_windowed`, `_formula_fundamentals`,
   `servicer.py:4310-4331`) and in the materializer still fails the whole kick or owner pass. Defect
   report 3 ("a transient outage does not discard the batch") is therefore only partly met for a
-  failure in that setup path; Step 17 records it in the analysis findings log.
+  failure in that setup path; Step 21 records it in the analysis findings log.
 
 ## Step Dependencies
 
@@ -61,6 +69,7 @@ documents it in `docs/runbooks/mcp-tools.md`.
   argument change with test call sites).
 - Step 4 [test] covers Step 3 [service]. Step 6 [test] covers Step 5 [service]. Step 8 [test]
   covers Step 7 [service]. Step 14 [test] covers Step 13 [service]. Step 16 [test] covers Step 15.
+  Step 18 [test] covers Step 17 [service]. Step 20 [test] covers Step 19 [service].
   These service steps are additive and pass alone, so no unit is declared. For each, RED is captured
   by running the new test against the prior step's app files (`git checkout <prior-step-sha> --
   <the service step's Files>`, restored before GREEN), per `docs/roadmap/ledger/insights.md`
@@ -77,10 +86,17 @@ documents it in `docs/runbooks/mcp-tools.md`.
 - Step 3 must be in the same PR as Step 11: without it a load-driven deadline refusal is classified
   terminal (design D-9).
 - Step 15 requires Step 7 only by contract (the wire token); it has no build dependency.
-- Step 17 requires Steps 9-14: the durable scenarios it amends describe the post-fix behavior.
-- Deferred surfaces: `evaluation-failed-cue-parity` (O-9) and `analysis-isolation-degraded-counter`.
-  Neither has a feature number yet; `scripts/sdd-allocate-feature-number.py` allocates one when each
-  is storied. The O-9 deferral was decided without an operator and is an Open Thread in context.md.
+- Steps 17 and 19 require Step 15 (the exports `EVALUATION_FAILED_PROVENANCE` and
+  `EVALUATION_FAILED_CUE` in `src/lib/readinessCue.ts`). Steps 18 and 20 require Step 16 (the
+  fixture `MYSZ_EVALUATION_FAILED_OPPORTUNITY` and its `INVENTORY.md` row). Steps 17-20 stay on
+  the one UI consumer surface and each service step passes its own Verification alone (the one
+  construction site of the new required `SignalItem` field is edited in Step 17), so no unit is
+  declared. RED for Steps 18 and 20 is captured as for Step 16: check out the prior step's app
+  files, run the new test, restore.
+- Step 21 requires Steps 9-14: the durable scenarios it amends describe the post-fix behavior.
+- Deferred surfaces: `analysis-isolation-degraded-counter` only. It has no feature number yet;
+  `scripts/sdd-allocate-feature-number.py` allocates one when it is storied. The O-9 cue parity is
+  built (Steps 17-20), not deferred.
 - Peer `fix-sandbox-result-contract` (310) edits the same indicators `servicer.py` and changes how
   `exit_reason` is derived (its product-spec.md:40,55). Step 3 has no build dependency on it: the
   field and the `"timeout"` map entry (`servicer.py:364`) exist today. Whichever feature lands
@@ -897,8 +913,7 @@ ruff check . && ruff format --check .
      `data-testid={`opportunity-evaluation-failed-${o.symbol}`}` and
      `aria-label={`Evaluation failed for ${o.symbol}`}`;
    - act gate: `fundUnavailable || ((unreadable || evalFailed) && !held) ? null : (`.
-3. Mobile `SignalRow` and the Signal-detail header are not changed here (O-9, deferred to
-   `evaluation-failed-cue-parity`).
+3. Mobile `SignalRow` and the Signal-detail header are not changed here; Steps 17-20 do that (O-9).
 
 **Verification**:
 ```bash
@@ -979,17 +994,232 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md
 
 ---
 
-### Step 17 — docs: amended durable scenarios, contract sentences, sentinel text, follow-ups
+### Step 17 — service: `evaluation_failed` cue on the mobile `SignalRow`
 
 **Status**: `pending`
-**Service**: `services/xstockstrat-analysis/acceptance/`, `services/xstockstrat-analysis/docs/`, `docs/runbooks/`, `docs/patterns/`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/mobile/sections.ts` — modify
+- `services/xstockstrat-ui/src/components/mobile/SectionRenderer.tsx` — modify
+- `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
+
+**Reviewers**: xstockstrat-ui owner — trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log)
+
+**Codebase Evidence**:
+- `src/components/mobile/sections.ts`: `export interface SignalItem` (line 13) carries
+  `formulaUnreadable: boolean;` (line 24) with the comment "required (unlike its optional siblings)
+  so tsc flags every construction site"; `dataUnavailable?: boolean;` at line 22.
+- `src/components/mobile/SectionRenderer.tsx`: `import { READINESS_CUE } from '@/lib/readinessCue';`
+  (line 7); `function SignalRow` (line 155); the readiness slot arms are `s.dataUnavailable` (line 237),
+  `s.formulaUnreadable` (lines 248-257: a `role="status"` span with
+  `data-testid={`opportunity-formula-unreadable-mobile-${s.symbol}`}`, an `aria-label`, and
+  `<EnumBadge render={READINESS_CUE.unreadable} />`), then `hasReadiness` and the `—` fallback.
+- The one `SignalItem` construction site: `grep -rn "kind: 'signal" src e2e` hits only
+  `src/app/insights/opportunities/page.tsx:193-194` (`mobileSections`, `signalGroup`), whose
+  `signals: g.opps.map((o) => ({...}))` sets `formulaUnreadable: o.formulaUnreadable,` at line 204.
+- Verified at re-spec: adding `evaluationFailed: boolean;` to `SignalItem` alone makes `pnpm exec tsc
+  --noEmit` (its `tsconfig.json` `include` covers `**/*.ts`, so `e2e/` compiles too) report exactly one
+  new error, at `src/app/insights/opportunities/page.tsx:193`. No test or fixture builds a `SignalItem`,
+  so no §C unit applies. Two other errors (`BackfillSymbolOutcome.INCOMPLETE`) pre-exist from stale
+  generated stubs in that checkout and are unrelated.
+- Mobile has no act controls and, for feature 289, only the readiness slot carries the unreadable cue
+  (the header keeps `s.badge`); design.md O-9 names the `SignalItem`-field route.
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+1. `sections.ts`: add `evaluationFailed: boolean;` after `formulaUnreadable: boolean;`, required for the
+   same reason as its sibling (a comment of at most 2 lines saying so, no history).
+2. `page.tsx`: in the `mobileSections` map add
+   `evaluationFailed: o.provenance.includes(EVALUATION_FAILED_PROVENANCE),` after line 204. The
+   constant comes from the `@/lib/readinessCue` import at line 41; Step 15 needs the same name there
+   for `evalFailed`, so add it once (no second import line) and write no literal `'evaluation_failed'`.
+3. `SectionRenderer.tsx`: import `EVALUATION_FAILED_CUE` beside `READINESS_CUE` (line 7). Add an arm
+   after the `s.formulaUnreadable` arm and before `hasReadiness`: a `role="status"` span with
+   `className="flex flex-1 items-center"`, `data-testid={`opportunity-evaluation-failed-mobile-${s.symbol}`}`,
+   `aria-label={`Evaluation failed for ${s.symbol}`}`, wrapping
+   `<EnumBadge render={EVALUATION_FAILED_CUE} />`. Design-role tokens only (C-17).
+4. The mobile header (`s.badge`, `s.muted`, `s.fundamentalsUnavailable` chain) is unchanged, as for
+   feature 289: mobile has no act controls and no held/non-held split.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm exec playwright test e2e/insights/opportunities.spec.ts e2e/mobile.spec.ts
+grep -n "evaluationFailed" src/components/mobile/sections.ts src/components/mobile/SectionRenderer.tsx src/app/insights/opportunities/page.tsx
+grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expect no output
+```
+
+---
+
+### Step 18 — test: Playwright assertion for the mobile `evaluation_failed` row
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify
+- `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
+
+**Reviewers**: xstockstrat-ui owner — trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log)
+
+**Codebase Evidence**:
+- Mobile precedent: `test.describe('Opportunities — formula not readable, mobile (feature 289)')` at
+  `e2e/insights/opportunities.spec.ts:786`, with `test.use({ viewport: { width: 375, height: 800 } })`,
+  `addAuthCookie(page)` and `routeWithUnreadableRow(page, row)`; it asserts
+  `opportunity-formula-unreadable-mobile-MYSZ` and count 0 for `opportunity-unavailable-mobile-MYSZ`.
+- `routeWithUnreadableRow` takes `row: typeof MYSZ_FORMULA_UNREADABLE_OPPORTUNITY` (lines 716-719) and
+  converts `validUntil` to an ISO string. Step 16's `MYSZ_EVALUATION_FAILED_OPPORTUNITY` is a spread
+  of that fixture, so it satisfies the parameter type (`tsc` checks it).
+- Fixture and catalog row come from Step 16 (`e2e/fixtures/opportunities.ts`,
+  `e2e/fixtures/INVENTORY.md`). C-12: no new domain object, so no new fixture; the helper and the
+  fixture are reused.
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+1. `opportunities.spec.ts`: add `test.describe('Opportunities — evaluation failed, mobile (feature 308)')`
+   after Step 16's describe, with the same 375x800 viewport. One test: `addAuthCookie(page)`,
+   `routeWithUnreadableRow(page, MYSZ_EVALUATION_FAILED_OPPORTUNITY)`, `page.goto('/insights/opportunities')`,
+   then assert `opportunity-evaluation-failed-mobile-MYSZ` is visible (timeout 15000) with text
+   `evaluation failed` and `aria-label` `Evaluation failed for MYSZ`, and that
+   `opportunity-formula-unreadable-mobile-MYSZ` and `opportunity-unavailable-mobile-MYSZ` have count 0.
+2. `INVENTORY.md`: append this spec (mobile cue) to the consumer column of the Step 16 row.
+3. RED: with `SectionRenderer.tsx`, `sections.ts` and `page.tsx` checked out at the pre-Step-17
+   commit, the test id is absent.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm exec playwright test e2e/insights/opportunities.spec.ts
+grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/insights/opportunities.spec.ts
+grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md
+```
+
+---
+
+### Step 19 — service: `evaluation_failed` cue on the Signal-detail header
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
+
+**Reviewers**: xstockstrat-ui owner — trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log)
+
+**Codebase Evidence**:
+- `src/app/trader/positions/[symbol]/page.tsx`: `import { READINESS_CUE } from '@/lib/readinessCue';`
+  (line 27); `symbolOpportunities.map` builds the panels with
+  `node: <OpportunitySection opportunity={o} symbol={symbol} />` (lines 470-473);
+  `function OpportunitySection` (line 1009).
+- Its header chain (lines 1038-1052): `opportunity.fundamentalsUnavailable` → `EnumBadge` with
+  `testId="detail-fundamentals-unavailable"`; then
+  `opportunity.formulaUnreadable && !opportunity.provenance.includes('position')` → `EnumBadge
+  render={READINESS_CUE.unreadable} testId="detail-formula-unreadable"`; else the action badge plus,
+  when `opportunity.formulaUnreadable`, the same cue beside it. design.md cited lines 1014-1020 for
+  this block; it has since moved.
+- The detail page has no act controls on this card, so only the header cue applies.
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+1. Extend the line-27 import with `EVALUATION_FAILED_CUE` and `EVALUATION_FAILED_PROVENANCE` (both exported by Step 15).
+2. In `OpportunitySection`, after the `if (!opportunity)` guard, derive
+   `const evalFailed = opportunity.provenance.includes(EVALUATION_FAILED_PROVENANCE);`.
+3. Header chain: add an arm after the `formulaUnreadable && !held` arm,
+   `evalFailed && !opportunity.provenance.includes('position')`, rendering
+   `<EnumBadge render={EVALUATION_FAILED_CUE} testId="detail-evaluation-failed" />`. In the final
+   branch, beside the action badge, render the same badge when `evalFailed` (the held case), as the
+   `formulaUnreadable` line does. No literal `'evaluation_failed'`, no color literal (C-17).
+4. Not changed: the `SignalReadiness` "Why this fired" card (`src/components/insights/SignalReadiness.tsx`),
+   which is outside the ruling; see context.md Open Threads.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm exec playwright test e2e/trader/position-detail.spec.ts
+grep -n "detail-evaluation-failed\|EVALUATION_FAILED_CUE" "src/app/trader/positions/[symbol]/page.tsx"
+grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expect no output
+```
+
+---
+
+### Step 20 — test: Playwright assertion for the Signal-detail `evaluation_failed` header
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
+- `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
+
+**Reviewers**: xstockstrat-ui owner — trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log)
+
+**Codebase Evidence**:
+- Precedent: `test.describe('Signal-detail formula not readable (feature 289)')` at
+  `e2e/trader/position-detail.spec.ts:1178`: `addAuthCookie(page)`, `watchlist(page, 'MYSZ',
+  'strat-live-001')` (helper at line 1248), a `page.waitForRequest` on the symbol-filtered
+  `AnalysisService/ListOpportunities`, `page.goto('/trader/positions/MYSZ?strategy=strat-live-001')`,
+  then `detail-formula-unreadable` visible.
+- `const fulfillJson = (route: Route, body: unknown) => ...` (line 13) and `route.fallback()` for
+  non-matching requests (line 1219, inside `routeIndicatorHistory`) are the in-file stub idioms. The spec imports from `'../fixtures'`
+  (line 4), whose `index.ts:22` re-exports `./opportunities`.
+- `e2e/mock-backend.ts` serves only the unreadable row for `symbol: 'MYSZ'`
+  (`listOpportunities`, lines 979-985), so this test serves the evaluation-failed row through
+  `page.route` and leaves the mock unchanged. Connect-JSON needs `validUntil` as an ISO string
+  (`e2e/insights/opportunities.spec.ts:22-26`).
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+1. C-12: reuse `MYSZ_EVALUATION_FAILED_OPPORTUNITY` (Step 16); add it to the existing `'../fixtures'`
+   import. No new fixture.
+2. Add `test.describe('Signal-detail evaluation failed (feature 308)')` after the feature-289 describe.
+   One test: `addAuthCookie(page)`, `watchlist(page, 'MYSZ', 'strat-live-001')`, then
+   `page.route('**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities', ...)` that returns
+   `route.fallback()` unless `postDataJSON().symbol === 'MYSZ'` and otherwise
+   `fulfillJson(route, { opportunities: [{ ...MYSZ_EVALUATION_FAILED_OPPORTUNITY, validUntil: <ISO
+   string of its validUntil.seconds> }], availableSources: [] })`. `goto` the MYSZ detail URL, then
+   assert `detail-evaluation-failed` is visible (timeout 30000) with text `evaluation failed`, and
+   `detail-formula-unreadable` has count 0.
+3. `INVENTORY.md`: append this spec (Signal-detail header cue) to the consumer column of the Step 16 row.
+4. RED: with `trader/positions/[symbol]/page.tsx` checked out at the pre-Step-19 commit, the test id
+   is absent.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm exec playwright test e2e/trader/position-detail.spec.ts
+grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/trader/position-detail.spec.ts
+grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md e2e/trader/position-detail.spec.ts
+```
+
+---
+
+### Step 21 — docs: amended durable scenarios, contract sentences, sentinel text, follow-ups
+
+**Status**: `pending`
+**Service**: `services/xstockstrat-analysis/acceptance/`, `services/xstockstrat-analysis/docs/`, `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-analysis/acceptance/opportunity-compute-robustness.feature` — modify
 - `services/xstockstrat-analysis/acceptance/readiness-caching-poll-discipline.feature` — modify
 - `services/xstockstrat-analysis/docs/opportunities.md` — modify
 - `services/xstockstrat-analysis/docs/context-constitution-findings.md` — modify
 - `docs/runbooks/mcp-tools.md` — modify
-- `docs/patterns/ui-ux-governance.md` — modify
 
 **Reviewers**: none
 
@@ -1005,7 +1235,6 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md
   main-dev; the text moved to `docs/opportunities.md`).
 - `docs/runbooks/mcp-tools.md:1225-1230` documents `formula_unreadable` and its provenance marker
   for `list_opportunities`.
-- `docs/patterns/ui-ux-governance.md:259` — "## 9. Known deviations / convergence backlog".
 - `services/xstockstrat-analysis/docs/context-constitution-findings.md` — the service findings log;
   `## Latent bugs (looks broken, not merely non-obvious)` at line 17.
 - C-16 sign-off: context.md `## Session 2026-11-20 — sdd-design`, Operator decisions. Confirmed on
@@ -1037,10 +1266,7 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md
    (`recompute{outcome=failed}`, `EvaluateReadiness` UNKNOWN and the kick/materializer WARNs were
    not alerted before either); the signal is the isolation tally log line and the
    `<site>.degraded_count` span attribute; follow-up feature `analysis-isolation-degraded-counter`.
-6. `ui-ux-governance.md` § 9: one backlog row — `evaluation_failed` shows no dedicated cue on the
-   mobile `SignalRow` or the Signal-detail header; follow-up feature
-   `evaluation-failed-cue-parity`.
-7. Findings log, `## Latent bugs`: one row recording that the per-strategy setup in the readiness
+6. Findings log, `## Latent bugs`: one row recording that the per-strategy setup in the readiness
    kick (`_kick_readiness_refresh`: `get_by_owner_and_id`, `_load_benchmark_bars_windowed`,
    `_formula_fundamentals`) and in `_materialize_readiness_for_owner` is not isolated, so a failure
    there still discards the whole kick or owner pass (feature 308 isolates the per-symbol body
@@ -1054,7 +1280,6 @@ grep -n "FormulaExecutionError. still propagates" services/xstockstrat-analysis/
 grep -n "evaluation_failed" services/xstockstrat-analysis/docs/opportunities.md docs/runbooks/mcp-tools.md
 grep -n "analysis-isolation-degraded-counter" services/xstockstrat-analysis/docs/context-constitution-findings.md
 grep -n "_kick_readiness_refresh" services/xstockstrat-analysis/docs/context-constitution-findings.md   # the per-strategy setup row
-grep -n "evaluation-failed-cue-parity" docs/patterns/ui-ux-governance.md
 ```
 
 ---
