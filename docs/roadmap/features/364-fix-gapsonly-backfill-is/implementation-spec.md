@@ -105,7 +105,7 @@ which was based on grep only.
 
 ### Step 1 — service: one-off NYSE closures and the post-2021 Juneteenth rule in `marketsession`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto` (Go package `marketsession`; consumed by marketdata, portfolio, trading)
 **Files**:
 - `packages/proto/marketsession/marketsession.go` — modify
@@ -154,7 +154,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./...
 
 ### Step 2 — test: `marketsession` closure and Juneteenth cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/marketsession/marketsession_test.go` — create
@@ -914,3 +914,9 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 1 — service: one-off NYSE closures and the post-2021 Juneteenth rule in `marketsession`
+**Spec said**: Step 1 **Verification** runs three sequential lines, each starting `cd <dir> && …` from the previous line's directory (`cd packages/proto && …`, then `cd services/xstockstrat-portfolio && …`, then `cd services/xstockstrat-trading && …`); Step 2 is a separate `test` step with no `**Lands with**`.
+**Actual**: Steps 1+2 executed as one unplanned atomic unit (one RED→GREEN, one commit). Each Step 1 Verification line ran from the repo root in its own subshell: `(cd packages/proto && …); (cd services/xstockstrat-portfolio && …); (cd services/xstockstrat-trading && …)`; commands unchanged otherwise.
+**Reason**: Step 1's `go test ./marketsession/` has no test file without Step 2, so Step 1 cannot show its own RED→GREEN alone; and the second and third `cd` lines resolve relative to `packages/proto` when run in sequence, so they cannot run as written.
+**Disposition**: folded Step 2 into Step 1 — test step pairs the service step's red-green (operator choice A, 2026-11-26); verification lines run in per-line subshells from the repo root.

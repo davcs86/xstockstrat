@@ -364,3 +364,19 @@ Each thread names its target step.
 ```sdd-batch-setup
 {"mainDev":"34f68c57f6cf34a265f17ee6ac0d625ccb9146a7","date":"2026-11-26"}
 ```
+
+## Session 2026-11-26 — sdd-execute sequential, steps 1+2
+
+- OPERATOR DECISION (binding, 2026-11-26): blocker on Step 1 resolved with **A** — fold Step 2 into Step 1 as the atomic unit `steps 1+2`; run each Step 1 Verification line from the repo root in its own subshell. Recorded in the Deviation Log.
+
+### Step 1 — service: one-off NYSE closures and the post-2021 Juneteenth rule in `marketsession` [done]
+- Added the unexported `closures` table (10 NYSE one-off closure dates since 2000, with the maintenance constraint comment), checked first in `isHoliday`; the Juneteenth rule now applies only for `y >= 2022`; header no longer claims one-off closures are unmodelled. No exported signature changed. Part of the unit `steps 1+2`.
+- TDD (unit 1+2): red: `IsTradingDay(2025-01-09) = true, want false` and `IsTradingDay(2021-06-18) = false, want true` (plus the other closure rows and `PrevTradingDay(2025-01-10) = 2025-01-09, want 2025-01-08`), `exit=1` → green: 2 tests PASS, `ok github.com/xstockstrat/contracts/marketsession`; portfolio `ok github.com/xstockstrat/portfolio/internal/service`; trading builds; `gofmt -l` empty. No coverage threshold applies (package not in a CI coverage job).
+- Files modified: `packages/proto/marketsession/marketsession.go`
+- Deviations: folded with Step 2; Verification lines run in per-line subshells from the repo root (Deviation Log).
+
+### Step 2 — test: `marketsession` closure and Juneteenth cases [done]
+- Created the table test of `IsTradingDay` over the closure dates, 2022-06-20, 2021-06-18, 2025-01-10 and 2025-12-25, plus `PrevTradingDay(2025-01-10) == 2025-01-08`. Part of the unit `steps 1+2`.
+- Files modified: `packages/proto/marketsession/marketsession_test.go`
+- Deviations: folded into Step 1 (Deviation Log).
+- Note: per `packages/proto/CLAUDE.md`, no CI job runs `go test` inside `packages/proto/`, so this test runs locally only; CI coverage of the closure dates comes via Step 4's `TestComputeSessionGaps` closure row (as the spec states).
