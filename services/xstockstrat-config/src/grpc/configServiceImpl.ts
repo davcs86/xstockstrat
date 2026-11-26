@@ -136,6 +136,7 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'analysis.opportunity.max_universe_size': { minValue: 1, maxValue: 1000 },
   'analysis.opportunity.max_live_strategies_per_symbol': { minValue: 1, maxValue: 50 },
   'analysis.opportunity.max_live_only_symbols_per_compute': { minValue: 1, maxValue: 500 },
+  'analysis.opportunity.live_only_cycle_max_days': { minValue: 1, maxValue: 30 },
   'analysis.opportunity.max_live_held_symbols_per_compute': { minValue: 1, maxValue: 500 },
   'analysis.opportunity.max_concurrent_candidates': { minValue: 1, maxValue: 50 },
   'analysis.opportunity.valid_window_hours': { minValue: 1, maxValue: 168 },

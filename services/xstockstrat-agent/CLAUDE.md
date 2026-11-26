@@ -32,7 +32,7 @@ The agent registers forty-five tools plus one MCP prompt (`list_correlation_guid
 server `instructions` string (`create_server`, `app/main.py`); the full per-tool parameter/return/error
 reference is `docs/runbooks/mcp-tools.md`.
 
-- `get_backfill_status` returns per-symbol `symbol_results` (`{symbol, outcome, reason}`, always present) for symbols that wrote nothing: `empty`, `skipped` (flagged delisted and unservable — not a failure, not in `failed_symbols`) or `failed` (feature 352).
+- `get_backfill_status` returns per-symbol `symbol_results` (`{symbol, outcome, reason}`, always present) for symbols that wrote nothing: `empty`, `skipped` (flagged delisted and unservable — not a failure, not in `failed_symbols`) or `failed` (feature 352), or `incomplete` (feature 364: a GAPS_ONLY bars job verified that sessions in the range are still missing — `reason` lists `missing sessions YYYY-MM-DD..YYYY-MM-DD[; …]`, the symbol is not in `failed_symbols`, and the job ends PARTIAL).
 
 ### Management-tool authorization
 

@@ -2,7 +2,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { addAuthCookie, addAdminCookie } from '../helpers/auth';
 import { FUNDAMENTALS_STALL_SYMBOL, STRATEGY_DEF_LIVE, UI_CHART_HISTORY_VALUES } from '../fixtures';
-import { backfillJob } from '../fixtures/backfillJobs';
+import { backfillJob, incompleteSymbolResult } from '../fixtures/backfillJobs';
 import { historyBarsWire, indicatorSeriesWire } from '../fixtures/indicatorHistory';
 import { noCriteriaDataRow } from '../fixtures/screenResults';
 import {
@@ -1091,6 +1091,25 @@ test.describe('inline backfill from the Backtests card', () => {
     page,
   }) => {
     await (await runInsufficient(page)).click();
+    await page.getByTestId('backtest-rerun').click();
+    await expect(page.getByTestId('backtest-no-vendor-data')).toContainText('No vendor data for');
+    await expect(page.getByTestId('backtest-backfill-action')).toHaveCount(0);
+  });
+
+  test('@AC-5 an INCOMPLETE-only partial reports missing vendor sessions and offers the re-run', async ({
+    page,
+  }) => {
+    await routeJob(page, {
+      status: BackfillStatus.PARTIAL,
+      chunksCompleted: 5,
+      chunksTotal: 5,
+      symbolResults: [incompleteSymbolResult('ZZZZ')],
+    });
+    await (await runInsufficient(page)).click();
+    await expect(page.getByTestId('backtest-backfill-status')).toHaveText(
+      'Backfill finished: vendor has no bars for some sessions of ZZZZ',
+    );
+    await expect(page.getByTestId('backtest-rerun')).toBeVisible();
     await page.getByTestId('backtest-rerun').click();
     await expect(page.getByTestId('backtest-no-vendor-data')).toContainText('No vendor data for');
     await expect(page.getByTestId('backtest-backfill-action')).toHaveCount(0);
