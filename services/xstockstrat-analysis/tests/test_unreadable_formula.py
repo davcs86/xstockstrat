@@ -21,7 +21,13 @@ from google.protobuf.struct_pb2 import Struct
 
 from app.engine.durable_schedule import DurableSchedule
 from app.handlers.servicer import _definition_fingerprint
-from app.services.evaluator import FormulaExecutionError, StrategyEvaluator, _empty_readiness
+from app.repositories.opportunities import EVALUATION_FAILED_PROVENANCE
+from app.services.evaluator import (
+    FormulaExecutionError,
+    StrategyEvaluator,
+    _empty_readiness,
+    _is_transient_formula_error,
+)
 from tests.conftest import RecordingStub, aio_rpc_error, ctx_with
 from tests.test_analysis_servicer import (
     _EOF_PAGE,
@@ -548,6 +554,15 @@ async def _drain(predicate):
         await asyncio.sleep(0)
 
 
+def _classifier_spy():
+    # O-10: assert what the classifier received, so a double's own error cannot pass as a fault.
+    return patch(
+        "app.handlers.servicer._is_transient_formula_error",
+        wraps=_is_transient_formula_error,
+        create=True,
+    )
+
+
 @_REFUSALS
 async def test_opportunities_refused_formula_marks_row_unreferenced_sibling_evaluated(
     refusal, caplog
@@ -674,7 +689,7 @@ async def test_opportunities_execute_outage_stays_data_unavailable_without_marke
     assert "formula_unreadable" not in row["provenance"]
 
 
-async def test_opportunity_recompute_timeout_fails_and_keeps_stored_rows(caplog):
+async def test_opportunity_recompute_timeout_marks_the_row_unavailable(caplog):
     svc = _mysz_svc()
     svc._indicators.GetFormula = AsyncMock(side_effect=_not_found())
     svc._indicators.ExecuteFormula = AsyncMock(
@@ -686,14 +701,18 @@ async def test_opportunity_recompute_timeout_fails_and_keeps_stored_rows(caplog)
         "MYSZ", "s-1", provenance=["watchlist"], computed_at=datetime.now(UTC)
     )
     svc._opportunities_repo.rows["u1"] = [stored]
-    before = dict(stored)
 
-    with caplog.at_level(logging.WARNING):
+    with _classifier_spy() as spy, caplog.at_level(logging.WARNING):
         svc._kick_opportunity_recompute("u1", _META)
         await _drain(lambda: "u1" in svc._opportunity_recomputing)
 
-    assert "opportunity recompute failed" in caplog.text
-    assert svc._opportunities_repo.rows["u1"] == [before]
+    (received,) = [call.args[0] for call in spy.call_args_list]
+    assert isinstance(received, FormulaExecutionError)
+    assert received.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+    assert "opportunity recompute failed" not in caplog.text
+    provenance = _find(svc._opportunities_repo.rows["u1"], "s-1")["provenance"]
+    assert "unavailable" in provenance
+    assert EVALUATION_FAILED_PROVENANCE not in provenance
 
 
 async def test_evaluate_readiness_timeout_degrades_the_symbol():

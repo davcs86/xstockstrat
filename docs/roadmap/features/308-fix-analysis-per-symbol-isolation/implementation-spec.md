@@ -614,7 +614,7 @@ grep -n "conftest\|^from tests\." tests/test_per_symbol_isolation.py   # C-13: h
 
 ### Step 11 — service: isolate `_row_for` and classify the fault on the row
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -673,7 +673,7 @@ Runs as one unit with Step 12; use Step 12's commands.
 
 ### Step 12 — test: opportunities compute isolation regressions (`@AC-1`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_per_symbol_isolation.py` — modify
@@ -1147,3 +1147,31 @@ _Populated by /sdd-execute as implementation proceeds._
   `DID NOT RAISE <class 'asyncio.exceptions.CancelledError'>`. The mutation was reverted without
   being committed.
 - **Disposition**: nothing outside the unit's **Files** changed.
+
+### Steps 11+12: a missed pinning test in `test_analysis_servicer.py` (2026-11-26)
+
+- **Expected**: Step Dependencies names one test pinning the old contract,
+  `test_opportunity_recompute_timeout_fails_and_keeps_stored_rows` (`tests/test_unreadable_formula.py:671`),
+  which Step 12 rewrites. The unit's **Files** are `servicer.py`, `test_per_symbol_isolation.py`
+  and `test_unreadable_formula.py`.
+- **Actual**: a second pinning test exists:
+  `TestOpportunityDataUnavailable::test_formula_execution_error_still_propagates`
+  (`tests/test_analysis_servicer.py:5637` at `4b52469c`). It asserts that a `FormulaExecutionError`
+  propagates out of `_compute_opportunities`, which Step 11 reverses. The spec did not list it.
+- **Decision**: operator option A (2026-11-26) expanded the unit's scope to
+  `tests/test_analysis_servicer.py`. The test is rewritten as a CHANGE characterization,
+  `test_formula_execution_error_degrades_only_its_row`. The compute returns, the `AAPL` row carries
+  `EVALUATION_FAILED_PROVENANCE` and no `unavailable`, and `opportunity_compute: 1/1` is logged.
+  The recurring gap is logged in `docs/roadmap/ledger/fails.md`.
+- **Test harness notes**:
+  - The `_is_transient_formula_error` spy patches the servicer name with `create=True`. Without it,
+    RED would stop at the missing attribute and hide the behavior failure. Every test asserts that
+    the spy was called, so a production path that skips the classifier still fails.
+  - Instruction 11 says to patch `_composite_score` to raise "for one symbol", but its arguments carry
+    no symbol. The double raises on its first call, and the test works out the dropped symbol from
+    the returned rows.
+- **Cancellation**: `test_opportunities_compute_propagates_cancellation` passes before and after the
+  change, as specced. The `except BaseException` mutation in `_row_for` gives its RED, and the
+  mutation was reverted without being committed.
+- **Disposition**: scope expanded by the operator. No other file outside the unit's **Files**
+  changed.

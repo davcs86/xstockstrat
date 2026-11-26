@@ -610,3 +610,47 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-analysis/tests/test_per_symbol_isolation.py`, `services/xstockstrat-analysis/tests/test_unreadable_formula.py`, `services/xstockstrat-analysis/tests/test_readiness.py`
 - Deviations: RED took a second run because of the collection error. The failing symbol is picked out by its closes. The cancellation tests are credited by the mutation run (Deviation Log "Steps 9+10").
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), steps 11+12
+
+### Operator decision
+
+- Operator (2026-11-26, option A, on the step 11 blocker): expand the unit's scope to `services/xstockstrat-analysis/tests/test_analysis_servicer.py`. Rewrite `test_formula_execution_error_still_propagates` as a CHANGE characterization: the compute returns, the `AAPL` row carries `EVALUATION_FAILED_PROVENANCE` and no `unavailable`, and the `opportunity_compute` tally is logged. Record it in the Deviation Log as a missed pinning test, and log the recurring gap in `fails.md`.
+- Tooling: the analysis `.venv` was synced with `uv sync --extra dev` (pytest reports Python 3.12.3, as in Step 1); ruff 0.16.9 on PATH; hook check hook=0.
+
+### Step 11 — service: isolate `_row_for` and classify the fault on the row [done]
+- Atomic unit Steps 11+12, one commit. In `_row_for` one `try` now covers the loaders, `assess` and the traced eval. Its `except Exception` sets a row-local flag: `eval_outage` when `_is_transient_formula_error(e)`, otherwise `eval_failed`. It also resets `readiness` to `_empty_readiness(sym)` and appends `(sym, e)` to a per-compute `failures` list.
+- The eval-side `fetch_failed.add(sym)` is removed, so `fetch_failed` is bars-only again (the grep prints `:5752`, `:5761` and `:5794` only).
+- Markers: `sym_unavailable` gains `or eval_outage`. When `eval_failed and not sym_unavailable`, the row gets `EVALUATION_FAILED_PROVENANCE`, a non-held row's action becomes UNSPECIFIED, and `zeroed` covers a non-held marked row. A held row keeps its action.
+- The gather awaits `isolated(_row_for(c))`. A candidate that raises outside the inner `try` is dropped and appended to `failures`. `log_isolation_tally(log, "opportunity_compute", failures, len(selected))` runs after the gather.
+- The two comments now state the new constraint. The per-candidate `indicator RPC failed for <sym>` WARNING is gone, and the tally line (WARNING, or ERROR when every candidate failed) replaces it. No new outbound RPC.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: see Step 12 (Deviation Log "Steps 11+12").
+
+### Step 12 — test: opportunities compute isolation regressions (`@AC-1`) [done]
+- Atomic unit Steps 11+12. `tests/test_per_symbol_isolation.py` gains 15 test cases (22 in the file):
+  - `@AC-1` over AAPL/MSFT/NVDA, run with an eval `FormulaExecutionError`, an eval `ZeroDivisionError` and a raising `_load_fundamentals_snapshot`. The other two rows are evaluated. `NVDA` carries the marker, no `unavailable`, conviction 0.0 and action UNSPECIFIED, and the tally is logged.
+  - Terminal exit reasons, through `_decode_formula_output`: RUNTIME_ERROR, IMPORT_BLOCKED, MEMORY_EXCEEDED and UNSPECIFIED.
+  - A held row keeps ADD and carries the marker.
+  - A row-local `UNAVAILABLE` outage in both completion orders.
+  - Precedence: a bars outage plus a terminal fault gives `unavailable` only.
+  - The marker clears on a healthy recompute.
+  - `ListOpportunities` serves the marked row past a 0.9 floor with `data_unavailable` False and the token in `provenance`.
+  - The gather backstop drops one candidate when `_composite_score` raises, with a WARNING tally that names it.
+  - Cancellation propagates.
+  - Every regression checks the `_is_transient_formula_error` spy's input (O-10).
+- `test_unreadable_formula.py`: the pinning test is rewritten as `test_opportunity_recompute_timeout_marks_the_row_unavailable`. The spy receives a `FormulaExecutionError` with `exit_reason == TIMEOUT`, the row has `unavailable` and no marker, and "opportunity recompute failed" is absent. This is the feature-289 `@AC-10` CHANGE the operator signed off on 2026-11-20. The file also gains the shared `_classifier_spy`.
+- `test_analysis_servicer.py` (operator scope expansion): `test_formula_execution_error_still_propagates` → `test_formula_execution_error_degrades_only_its_row`.
+- C-13: the harnesses come from `test_analysis_servicer`, `test_unreadable_formula` and `conftest`. `"boom"`, `"sx"`, `"sy"` and `"f-1"` are one-off scenario values.
+- TDD:
+  - RED (`.sdd-logs/v-1.log`): `16 failed, 1785 passed`. Each failure is the missing behavior: the fault propagates (`FormulaExecutionError: formula f-1 failed: boom`, `ZeroDivisionError: boom`), or the spy was never called (`Expected '_is_transient_formula_error' to be called once. Called 0 times.`).
+  - GREEN (`.sdd-logs/v-2.log`): `509 passed in 6.44s` for the six listed files, full suite `1801 passed`, `Required test coverage of 40% reached. Total coverage: 91.73%`, ruff `All checks passed!` and `144 files already formatted`. exit=0, which reflects only the final grep.
+  - Mutation (`except BaseException` in `_row_for`, reverted without committing; `.sdd-logs/v-3.log`): `Failed: DID NOT RAISE <class 'asyncio.exceptions.CancelledError'>`, `1 failed, 3 passed, 18 deselected`. Re-run after the revert: `22 passed`.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/tests/test_per_symbol_isolation.py`, `services/xstockstrat-analysis/tests/test_unreadable_formula.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py` (operator scope expansion)
+- Deviations: a missed pinning test, the spy built with `create=True`, and a first-call `_composite_score` double (Deviation Log "Steps 11+12").
+
+### Open Threads
+- [ ] The comment above `sym_unavailable` in `_row_for` still says a sibling candidate may add this symbol to `fetch_failed` concurrently. That can no longer happen, because `fetch_failed` is now filled before Phase 2. Step 11 rewrote only the two comments it names, so the stale sentence remains for Step 17 or the integration PR.
+- [ ] `_FakeOppRepo.available_sources` (`tests/test_analysis_servicer.py`) still lacks `evaluation_failed` in its skip list (noted at Step 8). No Step 12 test reads the facet, so it is unchanged.

@@ -5634,9 +5634,9 @@ class TestOpportunityDataUnavailable:
         assert msft.passing_conditions == 1
 
     @pytest.mark.asyncio
-    async def test_formula_execution_error_still_propagates(self):
-        """A ``FormulaExecutionError`` is a formula BUG, not a data outage — it must NOT be
-        swallowed as unavailable; it propagates out of the compute (design Rejected Alt 8)."""
+    async def test_formula_execution_error_degrades_only_its_row(self, caplog):
+        """A ``FormulaExecutionError`` is a formula fault, not a data outage: the compute returns
+        and the row carries ``evaluation_failed``, never ``unavailable`` (feature 308 CHANGE)."""
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[("AAPL", "sx")])],
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
@@ -5657,9 +5657,15 @@ class TestOpportunityDataUnavailable:
         ):
             raise FormulaExecutionError("f-bad", "boom")
 
-        with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _boom):
-            with pytest.raises(FormulaExecutionError):
-                await svc._compute_opportunities("u1", self._META)
+        with (
+            patch.object(StrategyEvaluator, "evaluate_conditions_traced", _boom),
+            caplog.at_level(logging.WARNING),
+        ):
+            rows = await svc._compute_opportunities("u1", self._META)
+        provenance = {r["symbol"]: r for r in rows}["AAPL"]["provenance"]
+        assert EVALUATION_FAILED_PROVENANCE in provenance
+        assert "unavailable" not in provenance
+        assert "opportunity_compute: 1/1" in caplog.text
 
 
 class _CountingSem:
