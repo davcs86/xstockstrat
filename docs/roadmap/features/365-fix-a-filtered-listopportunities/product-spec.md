@@ -9,6 +9,9 @@
 
 ## Problem Statement
 
+Persona: a trader viewing a symbol's position page (`/trader/positions/[symbol]`), or an operator /
+agent calling the MCP `list_opportunities` tool with filters.
+
 Observed: a ListOpportunities call whose filters (min_conviction, sources, action_filter, symbol)
 match no rows triggers a full background universe recompute even when the user's queue holds
 unexpired rows. On homelab staging `list_opportunities(min_conviction=1.01)` returned an empty page
@@ -29,10 +32,32 @@ paths.
 
 ## Root Cause Hypothesis
 
-`services/xstockstrat-analysis/app/handlers/servicer.py:4765-4788` tests emptiness on the
-**filtered** fresh read and sets `q.kick_full = True` on every no-rows branch; the branch predates the
-feature 190/215 server-side filters and never checks for unfiltered fresh rows (the repo already has
-`has_fresh`, `app/repositories/opportunities.py:340`).
+`services/xstockstrat-analysis/app/handlers/servicer.py` `_read_opportunity_queue` tests emptiness
+on the **filtered** fresh read (`opps.read(..., include_expired=False, ...)`, ~4765-4774); its `else`
+branch (from ~4790) calls `count_for_user` (~4791) and sets `q.kick_full = True` (~4792) on every
+no-rows path. The branch predates the feature 190/215 server-side filters and never checks for
+unfiltered fresh rows (the repo already has `has_fresh`, `app/repositories/opportunities.py:340`).
+
+## Functional Requirements
+
+- **FR-1**: When the user has at least one unexpired (`valid_until > now()`) queue row, a
+  ListOpportunities read whose filters (`min_conviction`, `sources`, `action_filter`, `symbol`)
+  match no fresh row returns an empty page with `computing` false and does **not** start a
+  background full recompute; the queue rows' `valid_until` is unchanged.
+- **FR-2**: The existing revalidation paths are preserved: a cold read (no rows ever materialized
+  and no still-fresh empty stamp — features 177/185) and an all-stale read (rows exist, none
+  unexpired) still kick a background full recompute, with their current `computing` /
+  `compute_failed` / serve-stale semantics. The fix gates the kick on "no fresh rows for the user"
+  (e.g. `has_fresh`); it must not remove the kick from those paths.
+
+## Consumer Surface(s)
+
+- **xstockstrat-ui** `/trader/positions/[symbol]` — reads ListOpportunities with a `symbol` filter
+  via `useOpportunities` (15s `refetchInterval`); also `/insights/opportunities` when filtered.
+- **xstockstrat-agent** MCP `list_opportunities` tool — forwards the same filters.
+
+No UI or tool code change: the response shape is unchanged; only the server-side recompute side
+effect is removed.
 
 ## Affected Services
 
@@ -40,11 +65,9 @@ feature 190/215 server-side filters and never checks for unfiltered fresh rows (
 
 ## Fix Scope
 
-- [ ] No proto changes anticipated
-- [ ] No database migrations anticipated
-- [ ] No config key changes anticipated
-
-(Update after investigation — remove or replace each item as needed)
+- [x] No proto changes (servicer-only fix)
+- [x] No database migrations (`has_fresh` already exists)
+- [x] No config key changes
 
 ## Acceptance Criteria
 
@@ -56,4 +79,6 @@ dev.
 
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix
+- A deliberate manual-recompute / invalidate RPC (the fix removes the `min_conviction=1.01`
+  side-effect lever; any replacement is a separate capability — decision recorded at design)
 - Event-driven queue invalidation on watchlist/position/signal change (separate capability, /sdd-story)
