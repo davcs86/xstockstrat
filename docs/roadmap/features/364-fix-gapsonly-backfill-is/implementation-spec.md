@@ -426,7 +426,7 @@ A second `./scripts/buf-gen.sh` must leave `git diff packages/proto/gen/` empty.
 
 ### Step 9 — service: GAPS_ONLY planner coalesces each symbol's gaps within `chunk_window_days`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -462,7 +462,7 @@ cd services/xstockstrat-ingest && uv run ruff check . && uv run ruff format --ch
 
 ### Step 10 — test: coalescing bound and one chunk per merged unit (O-9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -932,3 +932,9 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: The host has no `buf` or `grpc_tools`, so those commands ran unchanged inside the pinned `Dockerfile.codegen` image (`xstockstrat-codegen`), with the worktree mounted at its host path and the main checkout's `.git` and `node_modules` mounted read-only. The rest of Step 8's chain (`git status`, `go build`, `uv run`) ran on the host. A second `buf-gen.sh` left the `packages/proto/gen/` diff byte-identical (sha256 compare).
 **Reason**: buf 1.72.0 and the codegen plugins are pinned in that image; tooling-setup names Docker as the preferred codegen route.
 **Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 9 — service: GAPS_ONLY planner coalesces each symbol's gaps within `chunk_window_days`
+**Spec said**: Step Dependencies states "Step 10 [test] covers Step 9 [service] … not a unit"; Step 9 is red-green but specs no test of its own, and its `-k "gaps_only or coalesc"` Verification selects only the pre-existing single-gap test, which passes on the pre-Step-9 tree.
+**Actual**: Steps 9+10 executed as one unplanned atomic unit: Step 10's two tests were written first (RED `assert 40 <= 5`), then the coalescing in `_plan_work_ranges`; GREEN ran Step 9's Verification and then Step 10's, each unchanged. `test_gaps_only_long_gap_stays_its_own_unit` also passes on the pre-Step-9 tree (characterization of the long-gap rule).
+**Reason**: Step 9 cannot show its own RED→GREEN without Step 10's test.
+**Disposition**: folded Step 10 into Step 9 — test step pairs the service step's red-green (operator choice A, 2026-11-26).

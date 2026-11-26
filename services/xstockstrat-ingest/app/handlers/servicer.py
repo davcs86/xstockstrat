@@ -788,8 +788,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         """Return a list of plan_chunks() inputs as (symbols, start, end) work units.
 
         FULL mode → one unit over the whole requested range. GAPS_ONLY (FR-4) → per-symbol
-        units, one per gap reported by marketdata's GetDataCoverage; symbols already fully
-        covered contribute nothing.
+        units from marketdata's GetDataCoverage gaps, merged while a unit spans at most
+        chunk_window_days (a longer single gap stays one unit); fully covered symbols add none.
         """
         range_end = _ts_to_dt(request.range.end) or datetime.now(UTC)
         range_start = _ts_to_dt(request.range.start) or (range_end - timedelta(days=365))
@@ -797,6 +797,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
         if getattr(request, "fill_mode", 0) == ingest_pb2.FILL_MODE_GAPS_ONLY:
             units = []
+            window = timedelta(days=self._cfg.backfill_chunk_window_days)
             for sym in symbols:
                 cov = await self._marketdata.GetDataCoverage(
                     marketdata_pb2.GetDataCoverageRequest(
@@ -804,10 +805,18 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     ),
                     metadata=propagation_meta,
                 )
+                unit = None
                 for gap in cov.gaps:
                     gs = _ts_to_dt(gap.start) or range_start
                     ge = _ts_to_dt(gap.end) or range_end
-                    units.append(([sym], gs, ge))
+                    if unit is not None and ge - unit[1] <= window:
+                        unit[2] = ge
+                        continue
+                    if unit is not None:
+                        units.append(tuple(unit))
+                    unit = [[sym], gs, ge]
+                if unit is not None:
+                    units.append(tuple(unit))
             return units
         return [(list(symbols), range_start, range_end)]
 

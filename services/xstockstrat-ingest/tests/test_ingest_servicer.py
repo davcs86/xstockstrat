@@ -18,12 +18,14 @@ import pytest
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: F401 (imported via conftest path)
+from gen.marketdata.v1 import marketdata_pb2
 from gen.notify.v1 import notify_pb2
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IngestServicer, job_row_to_proto
+from app.repositories import backfill_chunks
 from tests._helpers import job_row as _job_row
 from tests._helpers import rpc_error, transaction_conn
 from tests.conftest import (  # feature 092 (C-13): centralized admin/no-admin context builder
@@ -1125,6 +1127,62 @@ class TestRunBackfill:
 
         svc._marketdata.GetDataCoverage.assert_awaited_once()
         svc._marketdata.BackfillBars.assert_awaited()
+
+    @staticmethod
+    def _gaps_only_req(gaps, start, end):
+        def ts(dt):
+            return Timestamp(seconds=int(dt.timestamp()))
+
+        cov = marketdata_pb2.GetDataCoverageResponse(
+            gaps=[common_pb2.TimeRange(start=ts(gs), end=ts(ge)) for gs, ge in gaps]
+        )
+        req = _make_backfill_req(["AAPL"])
+        req.fill_mode = ingest_pb2.FILL_MODE_GAPS_ONLY
+        req.range = common_pb2.TimeRange(start=ts(start), end=ts(end))
+        return req, AsyncMock(return_value=cov)
+
+    @pytest.mark.asyncio
+    async def test_gaps_only_coalesces_scattered_gaps_within_window(self):
+        # O-9: 40 one-session gaps over a year merge into <= ceil(365/90) units of one chunk each.
+        svc = make_servicer(chunk_window_days=90)
+        first = datetime(2025, 11, 20, tzinfo=UTC)
+        gaps = [
+            (first + timedelta(days=9 * i), first + timedelta(days=9 * i, hours=12))
+            for i in range(40)
+        ]
+        req, cov = self._gaps_only_req(gaps, first, datetime(2026, 11, 20, tzinfo=UTC))
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetDataCoverage = cov
+
+        units = await svc._plan_work_ranges(req, ["AAPL"], "1d", ())
+
+        assert len(units) <= 5
+        assert all(syms == ["AAPL"] and ue - us <= timedelta(days=90) for syms, us, ue in units)
+        assert all(any(us <= gs and ge <= ue for _, us, ue in units) for gs, ge in gaps)
+        for syms, us, ue in units:
+            assert len(backfill_chunks.plan_chunks(syms, "1d", us, ue, 90, 10_000_000)) == 1
+
+    @pytest.mark.asyncio
+    async def test_gaps_only_long_gap_stays_its_own_unit(self):
+        # AC-1: a 178-day hole is one unit (split by window in plan_chunks); a later gap is another.
+        svc = make_servicer(chunk_window_days=90)
+        long_gap = (datetime(2026, 4, 1, tzinfo=UTC), datetime(2026, 9, 25, 12, tzinfo=UTC))
+        short_gap = (datetime(2026, 10, 15, tzinfo=UTC), datetime(2026, 10, 15, 12, tzinfo=UTC))
+        req, cov = self._gaps_only_req(
+            [long_gap, short_gap],
+            datetime(2025, 11, 20, tzinfo=UTC),
+            datetime(2026, 11, 20, tzinfo=UTC),
+        )
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetDataCoverage = cov
+
+        units = await svc._plan_work_ranges(req, ["AAPL"], "1d", ())
+
+        assert units == [(["AAPL"], *long_gap), (["AAPL"], *short_gap)]
+        long_chunks = backfill_chunks.plan_chunks(["AAPL"], "1d", *long_gap, 90, 10_000_000)
+        assert len(long_chunks) == 2
+        assert long_chunks[0]["range_start"] == long_gap[0]
+        assert long_chunks[-1]["range_end"] == long_gap[1]
 
     @pytest.mark.asyncio
     async def test_resume_incomplete_jobs_returns_count(self):

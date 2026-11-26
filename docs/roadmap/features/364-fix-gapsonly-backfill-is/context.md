@@ -434,3 +434,20 @@ Each thread names its target step.
 
 - OPERATOR DECISION (blocker:9, verbatim choice 'A: fold Steps 9+10'): fold Step 10 into Step 9 as the atomic unit 'steps 9+10' — write Step 10's tests first and capture RED (40 units > 5), implement the per-symbol coalescing in _plan_work_ranges, GREEN with both Verification blocks, one commit, fold logged in the Deviation Log.
 - STANDING AUTHORIZATION (verbatim choice 'Yes, auto-fold adjacent'), anchor `auth-364-adjacent-folds-2026-11-26`: for the rest of this feature's /sdd-batch-execute run, foldPolicy 'adjacent' is authorized — a step that cannot pass its own Verification because the immediately following step(s) repair it (adjacent, one consumer surface, unit ≤ 4) is folded per sdd-execute/reference/atomic-units.md without halting, with a Deviation Log entry; any other gap still halts for the operator. Scope: 364 only.
+
+## Session 2026-11-26 — sdd-execute sequential, steps 9+10
+
+- Operator decision A (recorded above): Step 10 folded into Step 9 as the unit `steps 9+10`; logged in the Deviation Log.
+- Tooling: uv ✓ (`uv sync --extra dev` in ingest; the venv resolves python 3.12, allowed by `requires-python >=3.12`) · ruff ✓ · pytest ✓. Config-key wiring gate: N/A (the product spec declares no config key; `backfill.chunk_window_days` is only read).
+
+### Step 9 — service: GAPS_ONLY planner coalesces each symbol's gaps within `chunk_window_days` [done]
+- The `_plan_work_ranges` GAPS_ONLY branch merges a symbol's sorted gaps into one unit while `gap_end - unit_start <= timedelta(days=self._cfg.backfill_chunk_window_days)`; a longer single gap stays its own unit. `GetDataCoverage` call shape unchanged; docstring states the bound. Part of the unit `steps 9+10`.
+- TDD (unit 9+10, AC-1/O-9): red: `AssertionError: assert 40 <= 5` in `test_gaps_only_coalesces_scattered_gaps_within_window` (`1 failed, 2 passed`, `exit=1`) → green: Step 9 Verification `3 passed, 171 deselected`, `exit=0`; Step 10 Verification `607 passed`, `Required test coverage of 40% reached. Total coverage: 87.22%`, `exit=0`.
+- Observe-only (C-18): coalescing re-fetches stored sessions between gaps (extra vendor bandwidth on dense-hole symbols); no mechanism added.
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`
+- Deviations: folded with Step 10 (Deviation Log).
+
+### Step 10 — test: coalescing bound and one chunk per merged unit (O-9) [done]
+- Added `test_gaps_only_coalesces_scattered_gaps_within_window` (40 one-session gaps every 9 days from 2025-11-20 → ≤ 5 units, each ≤ 90 days, covering every gap, one `plan_chunks` chunk per unit) and `test_gaps_only_long_gap_stays_its_own_unit` (2026-04-01..2026-09-25 plus 2026-10-15 → 2 units; `plan_chunks` splits the long one into 2). A real `GetDataCoverageResponse` is built by the inline `_gaps_only_req` helper (single consumer, C-13). Part of the unit `steps 9+10`.
+- Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
+- Deviations: folded into Step 9 (Deviation Log).
