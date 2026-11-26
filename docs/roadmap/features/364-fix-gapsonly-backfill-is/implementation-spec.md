@@ -796,7 +796,7 @@ grep -n "from '../fixtures'\|from '../../e2e/fixtures/backfillJobs'\|helpers/aut
 
 ### Step 17 — service: agent `get_backfill_status` docstrings and `CLAUDE.md` name the `incomplete` outcome
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -950,3 +950,9 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: Each line ran from the repo root in its own subshell, and the Playwright command ran with `CI=1` (the `playwright.config.ts` CI branch: `pnpm build && pnpm start`, 30 s test timeout, 1 retry); commands unchanged otherwise. Two verbatim runs failed only at `[setup] › e2e/warmup.setup.ts › pre-warm SSR routes — Test timeout of 10000ms exceeded` (local `pnpm dev` cold compile) and at the grep line (`No such file or directory`, resolved from `services/xstockstrat-ui`). The Docker runner `scripts/run-e2e.py` was not used: the repo has no `.dockerignore`, so `Dockerfile.e2e`'s `COPY services/xstockstrat-ui/` would copy this worktree's `node_modules` symlink and `.next` output into the image.
 **Reason**: the grep line's paths are repo-root relative, so it cannot run after the first line's `cd` (same cause as the Step 1 entry); the host dev server cannot warm 25 SSR routes inside the local 10 s timeout.
 **Disposition**: CI-equivalent fallback — `CI=1` is the configuration the `frontend-e2e` job uses; grep line in a per-line subshell from the repo root, as for Step 1.
+
+### Deviation: Step 17 — RED captured now with an uncommitted probe
+**Spec said**: Step 17 **TDD** is red-green, and its RED is Step 19's doc-parity assertion on the tool description, which runs later.
+**Actual**: Before editing, an uncommitted probe (`.sdd-logs/probe_incomplete.py`, asserting `'"incomplete"' in` the `get_backfill_status` catalog description via `tests.conftest.catalog_tools`) failed (`AssertionError`, `1 failed`); after the edits it passed (`1 passed`). Step 17's Verification ran unchanged. Nothing outside the step's **Files** was committed.
+**Reason**: Step 17 can pass its own Verification alone, so the adjacent-fold rule does not apply. Step 19 needs Step 18 first, so it cannot be folded in either. The probe is the same check as the first assertion of Step 19's `test_docs_and_skill_parity_with_incomplete_outcome`.
+**Disposition**: interim red→green recorded in context.md; the durable RED/GREEN stays at Step 19 (impl-spec review open item).

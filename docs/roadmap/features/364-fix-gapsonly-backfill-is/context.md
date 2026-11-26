@@ -506,3 +506,14 @@ Each thread names its target step.
 - Files modified: `services/xstockstrat-ui/src/lib/backtestBackfill.test.ts`, `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/backfillJobs.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
 - Deviations: folded into Step 15; Verification grep line run from the repo root and Playwright under `CI=1` (Deviation Log).
 - Note: the new Playwright title reuses the `@AC-5` tag that feature 343's re-run test already carries in this describe; the grep `@AC-5|@AC-13|@AC-4` selects both.
+
+## Session 2026-11-26 — sdd-execute sequential, step 17
+
+- Tooling: uv ✓ (`uv sync --extra dev` in agent) · ruff ✓ · pytest ✓. Config-key wiring gate: N/A (no config key touched).
+- Discovery: `get_backfill_status` docstring `tools.py:1775-1778`, `_backfill_job_to_dict` docstring `client.py:2175`, agent `CLAUDE.md:35` and `common.proto:161` `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4` all confirmed on the dev branch.
+
+### Step 17 — service: agent `get_backfill_status` docstrings and `CLAUDE.md` name the `incomplete` outcome [done]
+- The `get_backfill_status` docstring (the MCP tool description) lists `"incomplete"`: a GAPS_ONLY bars job verified that sessions in the range are still missing; `reason` lists `missing sessions YYYY-MM-DD..YYYY-MM-DD[; …]`; the symbol is not in `failed_symbols`; the job ends PARTIAL. The `_backfill_job_to_dict` docstring reads `empty|skipped|failed|incomplete` (wrapped to two lines for E501). Agent `CLAUDE.md` names `incomplete` (feature 364) with the same meaning. No behavior change; the projection already derives `incomplete` from the enum name.
+- TDD (interim; durable RED/GREEN at Step 19): red: uncommitted probe `'"incomplete"' in` the `get_backfill_status` catalog description → `AssertionError`, `1 failed`, `exit=1` → green: probe `1 passed`, `exit=0`; Step 17 Verification `All checks passed!`, `79 files already formatted`, `87 passed`, `exit=0` (this command has no coverage threshold; Step 19 runs `--cov-fail-under=40`).
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/CLAUDE.md`
+- Deviations: RED captured now with an uncommitted probe (Deviation Log).
