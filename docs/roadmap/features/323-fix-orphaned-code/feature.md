@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-10-19-orphaned-code-defect.md
 **Severity**: SEV-3
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-20
+**Last Updated**: 2026-11-26
 
 ---
 
@@ -27,7 +27,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
 - [Design](design.md) — approved approach, open risks, rules touched
-- [Implementation Spec](implementation-spec.md) — 9 numbered steps with codebase evidence
+- [Implementation Spec](implementation-spec.md) — 10 numbered steps with codebase evidence (re-spec 2026-11-26: former Step 9 split by consumer surface)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -39,19 +39,19 @@ one (portfolio `r.pool` stragglers) nil-panics under pgxmock and blocks unit tes
 
 ## Reviewers
 
-_Snapshot finalized by /sdd-spec on 2026-11-20 from the per-step **Reviewers**. Re-run /sdd-spec if the registry changes._
+_Snapshot finalized by /sdd-spec on 2026-11-20 from the per-step **Reviewers**; step numbers refreshed at the 2026-11-26 re-spec. Re-run /sdd-spec if the registry changes._
 
 | Role | Review Focus |
 |---|---|
 | Service owner `xstockstrat-portfolio` | P&L calculation accuracy, position snapshot consistency, concurrent write safety (steps 1-2) |
-| Service owner `xstockstrat-config` | Config key naming, environment / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability (steps 3, 4, 9) |
-| Service owner `xstockstrat-ledger` | Append-only invariant, event ordering (steps 4, 9) |
-| Service owner `xstockstrat-identity` | JWT expiry and rotation, API key scoping, secret store integration (steps 4, 9; `package.json` only) |
-| Service owner `xstockstrat-notify` | Stream delivery guarantees, backpressure handling, alert deduplication (steps 4, 9) |
-| Service owner `xstockstrat-marketdata` | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency (steps 5, 9) |
-| Service owner `xstockstrat-ingest` | Signal normalization correctness, idempotent ingestion, newsletter source schema stability (steps 6, 9) |
-| Service owner `xstockstrat-agent` | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity (steps 7, 9) |
-| Service owner `xstockstrat-ui` | Trading UI correctness, analytics display accuracy (step 8) |
+| Service owner `xstockstrat-config` | Config key naming, environment / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability (steps 3, 4, 7) |
+| Service owner `xstockstrat-ledger` | Append-only invariant, event ordering (steps 4, 7) |
+| Service owner `xstockstrat-identity` | JWT expiry and rotation, API key scoping, secret store integration (steps 4, 7; `package.json` only) |
+| Service owner `xstockstrat-notify` | Stream delivery guarantees, backpressure handling, alert deduplication (steps 4, 7) |
+| Service owner `xstockstrat-marketdata` | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency (steps 5, 7) |
+| Service owner `xstockstrat-ingest` | Signal normalization correctness, idempotent ingestion, newsletter source schema stability (steps 6, 7) |
+| Service owner `xstockstrat-agent` | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity (steps 8, 9) |
+| Service owner `xstockstrat-ui` | Trading UI correctness, analytics display accuracy (step 10) |
 
 No Proto Reviewer or DBA applies: the feature has no proto and no migration step.
 
