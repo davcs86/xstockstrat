@@ -62,16 +62,17 @@ Existing durable rules the tests also pin (C-16, design.md § Business Rules Tou
 **Status**: `pending`
 **Service**: `xstockstrat-notify` (branch-level precondition)
 **Files**:
-- `services/xstockstrat-notify/package.json` — modify (arrives through the merge of `origin/main-dev`; no hand edit)
-- `pnpm-lock.yaml` — modify (arrives through the merge; no hand edit, no `pnpm install` that rewrites it)
+- `services/xstockstrat-notify/package.json` — verify only (already at the target; no edit)
+- `pnpm-lock.yaml` — verify only (already at the target; no hand edit, no `pnpm install` that rewrites it)
 
 **Reviewers**: none
 
-**Codebase Evidence**:
-- Feature branch: `git grep -n "grpc-js" HEAD -- services/xstockstrat-notify/package.json` → `:21` `"@grpc/grpc-js": "^1.14.5"`.
-- Feature branch: `git grep -n -A8 "^  services/xstockstrat-notify:" HEAD -- pnpm-lock.yaml` → `:373` importer block, `:378-380` `'@grpc/grpc-js'` / `specifier: ^1.14.5` / `version: 1.14.5`.
-- `origin/main-dev` `fb52065c`: the same two greps give `package.json:21` `"^1.14.7"` and `pnpm-lock.yaml:378-380` `specifier: ^1.14.7` / `version: 1.14.7`.
-- `git rev-list --count HEAD..origin/main-dev` → 168. `git diff --stat origin/main-dev...HEAD` shows the branch changed only this feature's directory and `docs/roadmap/ledger/fails.md` (+5 lines).
+**Codebase Evidence** (re-spec 2026-11-26, after the merge of `origin/main-dev` `2b2dec92` as `6bc876bb`):
+- The target state already holds. The earlier merge `c0f0757b` ("merge main-dev into feature branch (pre-execute sync)") brought the grpc-js bump in; the feature tip `7540f38f` already pinned it.
+- `git grep -n "grpc-js" HEAD -- services/xstockstrat-notify/package.json` → `:21` `"@grpc/grpc-js": "^1.14.7"`.
+- `git grep -n -A8 "^  services/xstockstrat-notify:" HEAD -- pnpm-lock.yaml` → `:373` importer block, `:378-380` `'@grpc/grpc-js'` / `specifier: ^1.14.7` / `version: 1.14.7`.
+- Before the sync the branch was 21 commits behind `2b2dec92`; `git diff --stat 2b2dec92...7540f38f` showed only `docs/roadmap/ledger/fails.md` (+5). After `6bc876bb` (two parents: `7540f38f`, `2b2dec92`), `git rev-list --count HEAD..origin/main-dev` → 0 and `git diff --stat origin/main-dev HEAD` shows only `docs/roadmap/ledger/fails.md`.
+- The linked `services/xstockstrat-notify/node_modules/@grpc/grpc-js/package.json` reports `"version": "1.14.7"`.
 - The spike ran on 1.14.7 only; 1.14.5 is not installed on the host (context.md:588-590).
 
 **Lands with**: —
@@ -81,11 +82,11 @@ Existing durable rules the tests also pin (C-16, design.md § Business Rules Tou
 **Covers**: —
 
 **Instructions**:
-1. This step is a gate, not a hand-authored diff. Merge `origin/main-dev` into `feature/fix-notify-stream-contract` (a merge commit; never a rebase or force-push). The merge commit carries main-dev's files, so F-08's per-step file list does not bound it; nothing outside this feature's directory is edited by hand.
-2. Expected conflict: `docs/roadmap/ledger/fails.md` is append-only on both sides. Keep both sides' entries. Any other conflict is unexpected: stop and report it (P-03).
-3. After the merge, refresh `node_modules` with `pnpm install --frozen-lockfile` from the repo root so the installed grpc-js matches the lockfile.
-4. The category is `docs` only because no step category fits a branch sync; it authors no documentation.
-5. **Explicit exception for `/sdd-execute` (F-08).** This step's diff is the merge commit: about 168 commits of `main-dev` files, almost all outside the two-file list above. That is expected, and this is the one step where the file list does not bound the diff. `/sdd-execute` states this exception at its Phase-2 confirmation, and proceeds only when (a) the commit is a true merge of `origin/main-dev` with two parents, and (b) `git diff origin/main-dev HEAD --stat` after the merge shows only this feature's directory and `docs/roadmap/ledger/fails.md`. Any other path in that diff is a hand edit that does not belong in this step: stop and report (P-03).
+1. This step is a verify-only gate: the branch already carries grpc-js 1.14.7 and already contains `origin/main-dev` (merge `6bc876bb`). It authors no diff and edits no file; nothing outside this feature's directory is edited by hand.
+2. If `origin/main-dev` has moved past `2b2dec92` and the branch no longer contains it, do not merge inside this step: stop and report (P-03), so the sync runs as its own BRANCH SYNC.
+3. Do not run `pnpm install`. The installed grpc-js already matches the lockfile (1.14.7). If `pnpm ls` shows any other version, stop and report it (P-03).
+4. The category is `docs` only because no step category fits a branch-sync gate; it authors no documentation.
+5. Proceed only when (a) `origin/main-dev` is an ancestor of `HEAD`, and (b) `git diff origin/main-dev HEAD --stat` shows only this feature's directory and `docs/roadmap/ledger/fails.md`. Any other path in that diff is a hand edit that does not belong on this branch: stop and report (P-03).
 
 **Verification**:
 ```bash
@@ -97,8 +98,8 @@ cd services/xstockstrat-notify && pnpm ls @grpc/grpc-js --depth 0
 # expect: @grpc/grpc-js 1.14.7
 cd services/xstockstrat-notify && pnpm run test
 # expect: exit 0 (the synced tree is green before any step edits it)
-git rev-list --parents -n 1 HEAD | wc -w
-# expect: 3 (the merge commit and its two parents)
+git merge-base --is-ancestor origin/main-dev HEAD; echo "rc=$?"
+# expect: rc=0 (the branch contains origin/main-dev)
 git diff origin/main-dev HEAD --stat
 # expect: only docs/roadmap/features/316-fix-notify-stream-contract/ and docs/roadmap/ledger/fails.md
 git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c '^-[^-]'
@@ -122,7 +123,7 @@ If either of the first two checks fails, the eviction unit (Steps 5–7) does no
 - The numeric-only test: `it('filters by severity when severities array is set', …)` at `:696-701`, with `severities: [1, 2]` at `:699`. It is a negative case only.
 - Helpers to reuse (C-13): `makeImpl` `:55`, `registerSubscriber` `:324` (mock shape `{ request, on() {}, write(alert) {…} }`), `emitAndFlush` `:335`, `REQ` `:353` (defaults `severity: 'ALERT_SEVERITY_WARNING'`).
 - The filter under test: `src/grpc/notifyServiceImpl.ts:392` `if (sub.severities.length > 0 && !sub.severities.includes(alert.severity))`; registration `:162` `severities: req.severities ?? []`; the fan-out alert keeps the string at `:108` `severity: req.severity`.
-- Enum names: `packages/proto/notify/v1/notify.proto:57-63` (`ALERT_SEVERITY_INFO` = 1 … `ALERT_SEVERITY_CRITICAL` = 4).
+- Enum names: `packages/proto/notify/v1/notify.proto:65-70` (`enum AlertSeverity` at `:65`, `ALERT_SEVERITY_UNSPECIFIED` = 0 at `:66`, `ALERT_SEVERITY_INFO` = 1 at `:67` … `ALERT_SEVERITY_CRITICAL` = 4 at `:70`).
 - `fanout.test.ts:49-62` has its own `makeAlert`, already string-form (`severity: 'ALERT_SEVERITY_WARNING'`); it is not touched.
 - Break radius: `tsconfig.json` `include: ["src/**/*"]` compiles tests, `strict: false`. `makeAlert` returns an untyped literal and is used only at `:663-712` of this file, so changing its default breaks no compile.
 
