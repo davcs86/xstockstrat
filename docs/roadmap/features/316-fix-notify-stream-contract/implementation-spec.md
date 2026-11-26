@@ -94,16 +94,16 @@ grep -n '"@grpc/grpc-js"' services/xstockstrat-notify/package.json
 # expect: "@grpc/grpc-js": "^1.14.7"
 grep -n -A8 "^  services/xstockstrat-notify:" pnpm-lock.yaml
 # expect, inside that importer block: '@grpc/grpc-js' / specifier: ^1.14.7 / version: 1.14.7
-cd services/xstockstrat-notify && pnpm ls @grpc/grpc-js --depth 0
+(cd services/xstockstrat-notify && pnpm ls @grpc/grpc-js --depth 0)
 # expect: @grpc/grpc-js 1.14.7
-cd services/xstockstrat-notify && pnpm run test
+(cd services/xstockstrat-notify && pnpm run test)
 # expect: exit 0 (the synced tree is green before any step edits it)
 git merge-base --is-ancestor origin/main-dev HEAD; echo "rc=$?"
 # expect: rc=0 (the branch contains origin/main-dev)
 git diff origin/main-dev HEAD --stat
 # expect: only docs/roadmap/features/316-fix-notify-stream-contract/ and docs/roadmap/ledger/fails.md
-git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c '^-[^-]'
-# expect: 0 (the fails.md resolution kept every main-dev line; this branch only adds)
+test "$(git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c '^-[^-]')" = 0
+# expect: exit 0 (zero removed lines: the fails.md resolution kept every main-dev line; this branch only adds)
 ```
 If either of the first two checks fails, the eviction unit (Steps 5–7) does not start.
 
@@ -147,13 +147,13 @@ If either of the first two checks fails, the eviction unit (Steps 5–7) does no
 
 **Verification**:
 ```bash
-cd services/xstockstrat-notify && pnpm run lint
-cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
+(cd services/xstockstrat-notify && pnpm run lint)
+(cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40)
 # expect: exit 0 from all three
 grep -n "severity: [0-9]\|severities: \[[0-9]" services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts
 # expect: only rowToAlert DB rows remain; no makeAlert(...) or severities: [...] line is numeric
-grep -n "__tests__/fixtures" services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts
-# C-13: imports unchanged by this step (single-consumer inline literal)
+test "$(grep -c "__tests__/fixtures" services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts)" = 0
+# expect: exit 0 (C-13: no fixtures import added by this step; single-consumer inline literal)
 ```
 
 ---
@@ -186,8 +186,8 @@ grep -n "__tests__/fixtures" services/xstockstrat-notify/src/__tests__/notifySer
 
 **Verification**:
 ```bash
-cd services/xstockstrat-notify && pnpm run lint
-cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
+(cd services/xstockstrat-notify && pnpm run lint)
+(cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40)
 grep -n "severities: AlertSeverity\[\]" services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts
 # expect: one hit, in interface StreamSubscriber
 grep -n "sub.severities.includes(alert.severity)" services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts
@@ -288,14 +288,14 @@ head -2 docs/reports/2026-10-19-notify-severities-type-runtime-mismatch-defect.s
 
 **Verification**:
 ```bash
-cd services/xstockstrat-notify && pnpm run lint
-cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
+(cd services/xstockstrat-notify && pnpm run lint)
+(cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40)
 # expect: exit 0 (green only together with Steps 6 and 7 — one unit)
 grep -n "function withLogs\|Console.prototype.log" services/xstockstrat-notify/src/__tests__/fanout.test.ts
 # expect: no output (the helper lives only in fixtures/withLogs.ts)
 grep -n "__tests__/fixtures\|fixtures/withLogs" services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts services/xstockstrat-notify/src/__tests__/fanout.test.ts
 # expect: both files import ./fixtures/withLogs.js
-cd services/xstockstrat-notify && pnpm exec tsc && node --test --test-name-pattern="AC-32" dist/__tests__/notifyServiceImpl.test.js
+(cd services/xstockstrat-notify && pnpm exec tsc && node --test --test-name-pattern="AC-32" dist/__tests__/notifyServiceImpl.test.js)
 # expect: the unedited @AC-32 test ran and passed (1 test executed, 0 failed)
 ```
 
@@ -352,12 +352,12 @@ cd services/xstockstrat-notify && pnpm exec tsc && node --test --test-name-patte
 
 **Verification**:
 ```bash
-cd services/xstockstrat-notify && pnpm run lint
-cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
+(cd services/xstockstrat-notify && pnpm run lint)
+(cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40)
 # expect: exit 0 (green only together with Steps 5 and 7 — one unit)
-cd services/xstockstrat-notify && pnpm exec tsc && node --test --test-name-pattern="real grpc-js" dist/__tests__/notifyServiceImpl.test.js
+(cd services/xstockstrat-notify && pnpm exec tsc && node --test --test-name-pattern="real grpc-js" dist/__tests__/notifyServiceImpl.test.js)
 # expect: the one real-grpc-js test ran (1 test executed, 0 failed) — not 0 tests matched
-cd services/xstockstrat-notify && for i in 1 2 3 4 5 6 7 8 9 10; do node --test --test-name-pattern="real grpc-js" dist/__tests__/notifyServiceImpl.test.js > /dev/null 2>&1 || echo "run $i failed"; done
+(cd services/xstockstrat-notify && for i in 1 2 3 4 5 6 7 8 9 10; do node --test --test-name-pattern="real grpc-js" dist/__tests__/notifyServiceImpl.test.js > /dev/null 2>&1 || echo "run $i failed"; done)
 # expect: no output (10 consecutive passes; run once Step 7 is in, as part of the unit's union Verification)
 grep -n "node:http2\|createInsecure" services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts
 # expect: the raw http2 client and the insecure in-process server are present
@@ -453,8 +453,8 @@ grep -n "node:http2\|createInsecure" services/xstockstrat-notify/src/__tests__/n
 
 **Verification**:
 ```bash
-cd services/xstockstrat-notify && pnpm run lint
-cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
+(cd services/xstockstrat-notify && pnpm run lint)
+(cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40)
 # expect: exit 0, with the Step 5 and Step 6 tests executed and passing
 grep -n "MAX_QUEUED_ALERTS" services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts
 # expect: the constant (= 1024) and one use, `sub.call.writableLength >= MAX_QUEUED_ALERTS`

@@ -1041,3 +1041,44 @@ ENV node=v24.22.1 grpc-js=1.14.7 dir=/home/user/xstockstrat/node_modules/.pnpm/@
 ```sdd-batch-setup
 {"mainDev":"2b2dec92afa14123ac1d796846632db713bbd9dc","date":"2026-11-26"}
 ```
+
+## Session 2026-11-26 — operator ruling on Step 1 Verification, recorded by the orchestrator (verbatim)
+
+**Question** (verbatim): "316 (notify-stream-contract) Step 1 blocker: the spec's Verification block is defective — its first `cd` persists in the same subshell so the second `cd ... && pnpm run test` fails and silently skips the suite, and its last `grep -c` check exits 1 exactly when it prints the expected 0. Every substantive expectation holds (grpc-js ^1.14.7, main-dev is an ancestor of the branch, only the feature dir changed, and a separate run of the notify suite passed 416/416). How should Step 1 be closed?"
+
+**Answer** (verbatim, option selected): "Re-spec the Verification first" — option text: "A separate respec commit rewrites the block with one subshell per cd and a non-failing count check, then Step 1 re-runs verbatim. Slightly slower, spec stays clean."
+
+**Old Step 1 Verification block** (defective lines only; the other lines are unchanged):
+
+```bash
+cd services/xstockstrat-notify && pnpm ls @grpc/grpc-js --depth 0
+cd services/xstockstrat-notify && pnpm run test
+git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c '^-[^-]'
+# expect: 0 (the fails.md resolution kept every main-dev line; this branch only adds)
+```
+
+**New Step 1 Verification block** (full):
+
+```bash
+grep -n '"@grpc/grpc-js"' services/xstockstrat-notify/package.json
+# expect: "@grpc/grpc-js": "^1.14.7"
+grep -n -A8 "^  services/xstockstrat-notify:" pnpm-lock.yaml
+# expect, inside that importer block: '@grpc/grpc-js' / specifier: ^1.14.7 / version: 1.14.7
+(cd services/xstockstrat-notify && pnpm ls @grpc/grpc-js --depth 0)
+# expect: @grpc/grpc-js 1.14.7
+(cd services/xstockstrat-notify && pnpm run test)
+# expect: exit 0 (the synced tree is green before any step edits it)
+git merge-base --is-ancestor origin/main-dev HEAD; echo "rc=$?"
+# expect: rc=0 (the branch contains origin/main-dev)
+git diff origin/main-dev HEAD --stat
+# expect: only docs/roadmap/features/316-fix-notify-stream-contract/ and docs/roadmap/ledger/fails.md
+test "$(git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c '^-[^-]')" = 0
+# expect: exit 0 (zero removed lines: the fails.md resolution kept every main-dev line; this branch only adds)
+```
+
+**Same defects fixed in other steps** (no substantive expectation changed):
+
+- Steps 2, 3, 5, 7: each `cd services/xstockstrat-notify && …` line is now its own `( … )` subshell (`pnpm run lint` and `pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40`; Step 5 also the `tsc && node --test … "AC-32"` line). Step 4 and Step 8 have no `cd`.
+- Step 6: the `tsc && node --test … "real grpc-js"` line and the 10-run `for` loop line are each wrapped in `( … )`, as are its `lint` and `test:coverage` lines.
+- Step 2: the trailing `grep -n "__tests__/fixtures" …` (exit 1 on its expected no-match, since the file imports `./fixtures/…`) became `test "$(grep -c "__tests__/fixtures" …)" = 0`, expect exit 0.
+- Not changed: mid-block `grep` lines whose expectation is "no output" (Steps 4, 5, 7, 8) exit 1 by design; none is the last command of its block, and each is judged on its printed output, as in Step 1's `git diff --stat`.
