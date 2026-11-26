@@ -36,8 +36,8 @@ restated in product-spec.md § Consumer Surface(s). No UI or agent step exists b
 
 1. `scripts/config-wiring.test.mjs:618` asserts `findings.length > 0` on the committed baseline. The
    `broker.paper` entry is the only finding (`scripts/config-wiring.json:5-12`), so removing it (D-6, D-14)
-   fails test `baseline 2 @AC-8`. Step 9 deletes that one assertion. Prototyped on a scratch copy of
-   `b5756b2`: with the reader change, two stored rows, the entry removed and line 618 deleted,
+   fails test `baseline 2 @AC-8`. Step 9 replaces that one assertion with `assert.ok(Array.isArray(findings), …)` (never delete it, never assert an empty baseline). Prototyped on a scratch copy of
+   `b5756b2`: with the reader change, two stored rows, the entry removed and line 618 deleted (the prototype used the deletion variant; the `Array.isArray` replacement is equivalent for that test but was not re-run),
    `node --test scripts/config-wiring.test.mjs` passes 75/75 and `--final` exits 0 with no `broker.paper`
    line. With the entry kept, `--final` prints `STALE: config-wiring.json:broker.paper:read-unseeded`.
 2. D-18's U1a (RED scaffold) and U1b (wiring) are one atomic unit here (Steps 1–2). A scaffold-only commit
@@ -805,8 +805,8 @@ grep -n "__tests__/fixtures" services/xstockstrat-config/src/__tests__/brokerPap
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against "../../.git#branch=main-dev,subdir=packages/proto"   # against main-dev, never the feature branch (vacuous after the commit); CI's breaking check excludes trading/v1/trading.proto (ci.yml:253), so this local run is the only real check (C-09)
-cd ../.. && git diff -U0 -- packages/proto/trading/v1/trading.proto | grep '^[+-]' | grep -v '^+++\|^---' | grep -v '^[+-] *//' ; test $? -eq 1   # only comment lines changed
+cd packages/proto && buf lint && buf breaking --against "../../.git#branch=origin/main-dev,subdir=packages/proto"   # against main-dev, never the feature branch (vacuous after the commit); CI's breaking check excludes trading/v1/trading.proto (ci.yml:253), so this local run is the only real check (C-09)
+cd ../.. && git diff -U0 origin/main-dev -- packages/proto/trading/v1/trading.proto | grep '^[+-]' | grep -v '^+++\|^---' | grep -v '^[+-] *//' ; test $? -eq 1   # only comment lines changed
 grep -n "TRADING_MODE env" packages/proto/trading/v1/trading.proto ; test $? -eq 1
 ```
 `buf` is not on this host's `PATH` at spec time; provision it per
