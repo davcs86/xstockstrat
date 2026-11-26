@@ -14,6 +14,9 @@ dispatcher (`app/main.py` `handle_mcp`): **Streamable HTTP** (MCP 2025-03-26) at
 (`AGENT_PUBLIC_URL`, `${APP_URL}/agent`, stripped to `/` by DO ingress). The legacy HTTP+SSE
 transport at `/sse` + `/messages` was **removed by feature 079**; those paths now return 404
 naming the replacement URL.
+In HTTP mode it also runs a second listener: the internal tool-catalog gRPC server
+(`AgentService.ListTools`, `GRPC_PORT` 50061, mutual TLS, `xstockstrat-ui` peer certificate only —
+`app/catalog_service.py`), started before the HTTP server. It is not started in stdio mode.
 The agent is a platform edge: `CallerPropagationMiddleware` forwards the `x-user-id` /
 `x-access-scope` / `x-trace-id` trio on every backend gRPC from verified claims (constitution
 **AGENT-4**). Identity travels only in `x-user-id`; set a body `user_id` only when it is a target/scope
@@ -29,18 +32,24 @@ The agent registers forty-five tools plus one MCP prompt (`list_correlation_guid
 server `instructions` string (`create_server`, `app/main.py`); the full per-tool parameter/return/error
 reference is `docs/runbooks/mcp-tools.md`.
 
+- `get_backfill_status` returns per-symbol `symbol_results` (`{symbol, outcome, reason}`, always present) for symbols that wrote nothing: `empty`, `skipped` (flagged delisted and unservable — not a failure, not in `failed_symbols`) or `failed` (feature 352), or `incomplete` (feature 364: a GAPS_ONLY bars job verified that sessions in the range are still missing — `reason` lists `missing sessions YYYY-MM-DD..YYYY-MM-DD[; …]`, the symbol is not in `failed_symbols`, and the job ends PARTIAL).
+
 ### Management-tool authorization
 
 Tool refusals are raised as `ToolError` with a `CODE: body` message so the MCP caller sees why a call was refused (constitution **AGENT-5**).
 
-The management tools that hit a backend **admin** gate — `trigger_backfill`, `cancel_backfill`,
+The management tools that hit a backend **admin** gate — `cancel_backfill`,
 `run_fundamentals_scan`, and a **global** (`user_id` omitted) `set_config` write — forward the **real
 calling user's** derived `x-access-scope` on their backend gRPC calls (feature 092;
 `set_config` has done this since feature 073). The scope is derived from the caller's identity roles
 by `app/scopes.py` `roles_to_access_scope` (a port of the UI's `rolesToAccessScope`) via the shared
 `app/tools.py` `_caller_access_scope(ctx, tool)` helper, so a **non-admin operator is rejected
-`PERMISSION_DENIED`** by the backend gate (ingest `TriggerBackfill` checks the ADMIN bit `0x04`)
-rather than silently succeeding under a hardcoded admin override. `manage_signal_source` is
+`PERMISSION_DENIED`** by the backend gate rather than silently succeeding under a hardcoded admin
+override. `trigger_backfill` still forwards the caller's real scope the same way, but since feature
+343 ingest `TriggerBackfill` admits an admin (ADMIN bit `0x04`) **or** a non-admin request inside
+its self-serve envelope; a request outside it is refused `PERMISSION_DENIED`
+("self-serve backfill denied: <token>"), and a duplicate for a symbol already in flight
+`ALREADY_EXISTS`. `manage_signal_source` is
 **owner-gated** since feature 224: any caller manages their own sources (ingest resolves the owner
 from `x-user-id`), and platform `system` sources are read-only to everyone. The claims come from `app/main.py` `_authorized`, which
 publishes them on the request's ASGI scope under `MCP_CLAIMS_SCOPE_KEY`; each tool reads them via its
@@ -81,6 +90,10 @@ and a name-only `update` drops and reports a stored symbol that is now unservabl
 `default_strategy_id` field-mask update never classifies. `ingest_signal`'s watchlist auto-add
 reports a refusal as `watchlist_refused` (present only when non-empty) and still succeeds. A mistyped
 or newly listed ticker is refused until the next asset-set refresh (default 6h, max 24h).
+Every watchlist the four tools return marks each binding with `delisted` (bool) and, when true,
+`delisted_reason` (the `UnservableReason` name) and `first_unservable_date` (`YYYY-MM-DD`, omitted
+when malformed) — one projection, `_watchlist_to_dict` (feature 352). A replace-all `update` still
+drops a flagged symbol and reports it in `refused`.
 
 **`manage_formula` is different** — it forwards **no** admin scope (plain `_metadata()`); the
 indicators backend enforces an **author-ownership** check instead (no admin override since feature 224;
@@ -106,7 +119,7 @@ deadline is derived per call by `client.formula_deadline_s()`: `sandbox.timeout_
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403) |
+| `oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403; policy snapshot absent ⇒ 503) |
 | `oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only |
 | `signal.alert_threshold` | float | `0.6` | Conviction threshold above which `ingest_signal` auto-emits an alert (feature 093 — was env-blind, so effectively always the default; now env-scoped, best-effort) |
 | `extract.max_redirects` | int | `5` | Max redirect hops the `extract_*` fetch path follows; each hop's scheme + resolved address is re-validated (SSRF hardening, feature 207) |
@@ -119,15 +132,17 @@ deadline is derived per call by `client.formula_deadline_s()`: `sandbox.timeout_
 
 - No `loop tick ok`: the agent has no tick loops.
 - Instruments are declared in `app/telemetry.py`; their label values are closed sets.
+- The catalog RPC records `rpc.server.duration` (derived from its gRPC server span), beside `mcp.tool.duration` for tool calls.
 - Load-bearing logs: INFO `first successful tool call` once per user per process; ERROR `Unexpected error validating JWT claims: <ExceptionClass>: ...` names the exception class and never the token; the OAuth grant-failure WARN carries the gRPC code name.
 
 ## Environment Variables
 
-> mTLS: `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` required — fail-closed client dials via `app/mtls.py` `secure_channel` (root CLAUDE.md § Environment Variable Naming Convention).
+> mTLS: `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` required — fail-closed client dials via `app/mtls.py` `secure_channel`, and in HTTP mode the catalog gRPC server needs them at boot: without them the process stops before port 9000 listens (root CLAUDE.md § Environment Variable Naming Convention).
 
 ```text
 MCP_TRANSPORT=http   # `sse` still accepted as a deprecated alias
 MCP_HTTP_PORT=9000   # `MCP_SSE_PORT` still accepted as a deprecated fallback
+GRPC_PORT=50061      # internal tool-catalog gRPC server (HTTP mode only); never published
 JWT_SECRET=<shared secret>   # HMAC-signs the OAuth txn blob (feature 147, replacing the removed MCP_AGENT_SECRET) — not sent as an outbound header
 <SERVICE>_ENDPOINT=…   # one per backend (ingest … marketdata), values in docker-compose.yml
 UI_BASE_URL=http://localhost:3000

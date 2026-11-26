@@ -12,6 +12,7 @@ ScoreStrategy grades backtests using Sharpe ratio, max drawdown, and win rate.
 
 import asyncio
 import base64
+import bisect
 import functools
 import hashlib
 import json
@@ -390,6 +391,11 @@ class _FundamentalsPageError(Exception):
     """Raised when PIT fundamentals pagination cannot complete safely (stalled cursor, page cap)."""
 
 
+class _PositionsPageError(Exception):
+    """Raised when positions pagination cannot complete safely (page error, repeated token,
+    page cap)."""
+
+
 def bucket_pnl_factors(samples, *, min_sample, bucket_count):
     """Query-time bucketing for QueryPnLPatterns (feature 042, design § 3). Pure — no I/O.
 
@@ -633,6 +639,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # once it reaches _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS. In-memory (process-local, reset on
         # restart) — the _opportunity_recomputing guard precedent.
         self._opportunity_compute_failures: dict[str, int] = {}
+        # feature 366 FR-2a: per-user last (projected_computes, per_compute, cycle_days) key, so
+        # the shortfall line is logged only when it changes. In-memory, process-local.
+        self._live_only_shortfall_key: dict[str, tuple[int, int, int]] = {}
         # feature 185 FR-5: in-flight guard for the surgical read-time recovery, keyed by user_id,
         # so concurrent fresh reads don't stack duplicate per-symbol retries. Cleared in a finally.
         self._opportunity_retrying: set[str] = set()
@@ -1912,14 +1921,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return out
 
     async def _formula_fundamentals(
-        self, definition, propagation_meta, *, cache=None, failures=None
+        self, definition, propagation_meta, *, cache=None, failures=None, warmups=None
     ):
         """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for the definition's
         custom-formula components that declare fundamentals inputs, via one ``GetFormula`` per
         distinct formula id (``cache`` dedups across a pass — mirrors ``_load_fundamentals``'s
         cache). An empty result means the definition has no fundamentals-formula operand. A
         refused ``GetFormula`` (NOT_FOUND/PERMISSION_DENIED) is "not a fundamentals formula" and
-        records no failure; an outage records UNKNOWN. Either caches ``[]``."""
+        records no failure; an outage records UNKNOWN. Either caches ``[]``. When ``warmups`` is
+        given, each fetched formula's declared ``warmup_period`` is recorded in it (feature 341)."""
         out: dict[str, list] = {}
         for comp in definition.components:
             if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA or not comp.formula_id:
@@ -1936,6 +1946,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         metadata=propagation_meta,
                     )
                     metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
+                    if warmups is not None:
+                        warmups[fid] = int(getattr(formula, "warmup_period", 0) or 0)
                 except grpc.RpcError as e:
                     metrics = []
                     if failures is not None and _rpc_code(e) not in UNREADABLE_FORMULA_CODES:
@@ -3929,7 +3941,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return
         # Mark rows the caller already holds (best-effort cross-ref).
         user_id = self._caller_user_id(context)
-        held = await self._drain_held_symbols(user_id, propagation_meta)
+        try:
+            held = await self._drain_held_symbols(user_id, propagation_meta)
+        except _PositionsPageError as e:
+            log.warning("ScreenSymbols: held cross-reference skipped for user=%s: %s", user_id, e)
+            held = {}
         for r in resp.results:
             # _drain_held_symbols keys by normalized symbol, so normalize the membership test
             # (no-op for uppercase broker tickers; correct for mixed case).
@@ -4545,7 +4561,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         closes = list(request.closes)
         component_series = []
         # feature 200 — fundamentals-only formula routing map (one GetFormula pass per RPC).
-        formula_fund_map = await self._formula_fundamentals(definition, propagation_meta)
+        formula_warmups: dict[str, int] = {}
+        formula_fund_map = await self._formula_fundamentals(
+            definition, propagation_meta, warmups=formula_warmups
+        )
         # Sequential loop (no gather) so the singleton semaphore bounds cross-request compute.
         # Benchmark components compute on the benchmark's own bars, aligned onto request.times.
         # Fundamental operands (feature 198) and fundamentals-only formulas (feature 200) also need
@@ -4620,7 +4639,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 ]
                 component_series.append(
                     analysis_pb2.ComponentSeries(
-                        ref_name=comp.ref_name, kind=comp.kind, series=named
+                        ref_name=comp.ref_name,
+                        kind=comp.kind,
+                        series=named,
+                        first_value_bars=warmup.first_value_bars(
+                            comp, formula_warmups, formula_fund_map
+                        ),
                     )
                 )
             # Per-component fault isolation: catches FormulaExecutionError + any sandbox/RPC error
@@ -4746,19 +4770,37 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             user_id,
             request.min_conviction,
             w,
-            include_expired=False,
+            include_expired=True,
             sources=req_sources,
             action_filter=request.action_filter,
             sort=request.sort,
             symbol=req_symbol,
         )
-        if rows:
+        now = datetime.now(UTC)
+        expired = [r for r in rows if r["valid_until"] <= now]
+        if any(not _is_live_only_row(r.get("provenance")) for r in expired):
+            # (i)/(ii) an expired curated row: serve stale, revalidate in the background.
+            q.kick_full = True
+            q.served_include_expired = True  # feature 190 O7 — facet matches served freshness
+        elif len(expired) < len(rows):
+            if expired:
+                # (iv) never kicks: every expiry kick would schedule another one a cycle later.
+                rows = await opps.read(
+                    user_id,
+                    request.min_conviction,
+                    w,
+                    include_expired=False,
+                    sources=req_sources,
+                    action_filter=request.action_filter,
+                    sort=request.sort,
+                    symbol=req_symbol,
+                )
+                telemetry.record_opportunity_read_reissue()
             # feature 185 FR-5 — surgical read-time recovery. On a FRESH read, a served row that
             # is data-unavailable and older than the retry cooldown gets a per-symbol recovery
             # (not the full universe). Not on the cold/empty or stale branches (the stale branch
             # already fires a full recompute). Deduped by the _opportunity_retrying guard.
             if user_id not in self._opportunity_retrying:
-                now = datetime.now(UTC)
                 q.retry_symbols = {
                     r["symbol"]
                     for r in rows
@@ -4767,9 +4809,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     and (now - r["computed_at"]).total_seconds()
                     > _OPPORTUNITY_UNAVAILABLE_RETRY_SECONDS
                 }
-        else:
+        elif not await opps.has_fresh(user_id):
+            # fresh-but-filtered-empty falls through: no kick, empty page (365 FR-1)
             n = await opps.count_for_user(user_id)
-            q.kick_full = True  # every no-rows branch revalidates in the background
+            q.kick_full = True  # cold or all-stale: revalidate in the background
             if n == 0:
                 # Cold read (never materialized) OR a legitimately-empty universe. Feature 177
                 # FR-3: a still-fresh empty stamp serves empty WITHOUT a pending flag (@AC-6
@@ -4797,6 +4840,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     sort=request.sort,
                     symbol=req_symbol,
                 )
+        else:
+            rows = []  # (v) only expired live-only rows here, fresh rows elsewhere: an empty page
         q.rows = rows
         # feature 190 — the source-facet, computed only on page 0 (offset==0; the client reads it),
         # scoped to the SAME freshness that produced the served rows (O1/O7) and independent of the
@@ -4899,8 +4944,33 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             self._opportunity_locks[user_id] = lock
         return lock
 
+    def _live_only_cycle_days(self) -> int:
+        """feature 366 — the single read of the live-only rotation cycle bound (days)."""
+        return int_positive(self._cfg, "opportunity.live_only_cycle_max_days", 3)
+
+    def _log_live_only_shortfall(
+        self, user_id: str, pool_size: int, n: int, cycle_days: int
+    ) -> None:
+        """feature 366 FR-2a — operators alert on this exact INFO text; it fires only when the
+        (projected_computes, per_compute, cycle_days) key changes, and is labelled in computes."""
+        projected = -(-pool_size // n)
+        key = (projected, n, cycle_days)
+        if self._live_only_shortfall_key.get(user_id) == key:
+            return
+        self._live_only_shortfall_key[user_id] = key
+        if projected > cycle_days:
+            log.info(
+                "opportunity live-only rotation shortfall: user=%s pool=%d per_compute=%d "
+                "projected_computes=%d cycle_max_days=%d",
+                user_id,
+                pool_size,
+                n,
+                projected,
+                cycle_days,
+            )
+
     async def _replace_and_stamp_compute_state(
-        self, user_id: str, rows, propagation_meta=None
+        self, user_id: str, rows, propagation_meta=None, cursor=None
     ) -> None:
         """Replace the user's materialized rows, then (feature 177 FR-3) stamp the empty-universe
         compute-state when the compute yielded nothing. An empty ``replace_for_user`` DELETEs
@@ -4908,8 +4978,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         records a short ``valid_until`` window so the empty result is served without a synchronous
         recompute until it elapses. Stamping is best-effort (mirrors the recompute try/except) — it
         never fails the write path. ``propagation_meta`` is accepted for call-site symmetry (the
-        DB-only stamp needs no header trio)."""
-        await self._opportunities_repo.replace_for_user(user_id, rows)
+        DB-only stamp needs no header trio). A non-None live-only ``cursor`` (feature 366) commits
+        in the same transaction as the queue replace; the empty stamp stays outside, after it."""
+        if cursor is not None and self._opportunity_compute_state_repo is not None:
+            async with self._opportunities_repo.transaction() as conn:
+                await self._opportunities_repo.replace_for_user(user_id, rows, conn=conn)
+                await self._opportunity_compute_state_repo.write_cursor(user_id, cursor, conn=conn)
+        else:
+            await self._opportunities_repo.replace_for_user(user_id, rows)
         if not rows and self._opportunity_compute_state_repo is not None:
             ttl = max(1, self._cfg.get_int_present("opportunity.empty_recompute_ttl_seconds", 30))
             try:
@@ -4929,8 +5005,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         async def _run():
             try:
                 async with self._opportunity_lock(user_id):
-                    rows = await self._compute_opportunities(user_id, propagation_meta)
-                    await self._replace_and_stamp_compute_state(user_id, rows, propagation_meta)
+                    rows, cursor = await self._compute_opportunities(user_id, propagation_meta)
+                    await self._replace_and_stamp_compute_state(
+                        user_id, rows, propagation_meta, cursor=cursor
+                    )
                 # feature 185 FR-4 — a successful recompute clears the terminal-failed counter.
                 self._opportunity_compute_failures.pop(user_id, None)
                 telemetry.record_opportunity_recompute("full", "ok")
@@ -5295,9 +5373,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             else datetime.now(UTC)
         )
         healed_valid_until = session_end + timedelta(hours=window_hours)
+        cycle_days = self._live_only_cycle_days()
         for hr in heal_rows:
             if hr.pop("_healed", False):
-                hr["valid_until"] = healed_valid_until
+                hr["valid_until"] = (
+                    datetime.now(UTC) + timedelta(days=cycle_days)
+                    if _is_live_only_row(hr["provenance"])
+                    else healed_valid_until
+                )
         await self._label_fundamentals_skip_rows(skip_labels, propagation_meta)
 
         await self._opportunities_repo.replace_symbols(user_id, heal_rows)
@@ -5336,7 +5419,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         return _lookup
 
-    async def _compute_opportunities(self, user_id: str, propagation_meta) -> list[dict]:
+    async def _compute_opportunities(
+        self, user_id: str, propagation_meta
+    ) -> tuple[list[dict], str | None]:
         """Build the user's opportunity Universe and return persistable row dicts (feature 097).
 
         Universe = active signals (QuerySignals) ∪ held positions (ListPositions) ∪ watchlist
@@ -5520,22 +5605,81 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # entry-traced duplicate (held symbols already got their exit-traced rows above).
         live_signal_symbols = (signals_by_symbol.keys() & live_by_symbol.keys()) - held_norm
         competitive_pool = [sym for sym in live_signal_symbols if _new_live_strats(sym)]
+        # feature 366: the per-compute chunk limit of the live-only rotation (feature 131's cap).
         max_live_only = int_positive(self._cfg, "opportunity.max_live_only_symbols_per_compute", 20)
-        ranked_live_only = sorted(
-            competitive_pool,
-            key=lambda sym: (-max(sig.conviction for sig in signals_by_symbol[sym]), sym),
-        )[:max_live_only]
-        for sym in ranked_live_only:
+        cycle_days = self._live_only_cycle_days()
+        pool = sorted(competitive_pool)
+        if pool:
+            state = (
+                await self._opportunity_compute_state_repo.get(user_id)
+                if self._opportunity_compute_state_repo is not None
+                else None
+            )
+            chunk, new_cursor = _rotation_chunk(
+                pool, (state or {}).get("live_only_cursor"), max_live_only
+            )
+            self._log_live_only_shortfall(user_id, len(pool), max_live_only, cycle_days)
+            stored = (
+                await self._opportunities_repo.read_attributed_rows(user_id)
+                if self._opportunities_repo is not None
+                else []
+            )
+        else:
+            chunk, new_cursor, stored = [], None, []
+        for sym in chunk:
             for strat in _new_live_strats(sym):
                 c = _candidate(sym, strat)
                 c["is_live"] = True
                 _add_provenance(c, "live_strategy")
+
+        # Carry selection (feature 366 D-12), from data known before step 3. (a)+(b) make every
+        # carried symbol non-held, which (c)'s denied_covered test relies on (D-15).
+        denied_covered_set = set(denied_covered)
+        chunk_set = set(chunk)
+        pool_set = set(pool)
+        best_direction_by_symbol: dict[str, str] = {}
+        for sym in pool_set - chunk_set:
+            best_conv, best_dir = -1.0, ""
+            for sig in signals_by_symbol[sym]:
+                if sig.conviction > best_conv:  # step 3's tie rule: first seen, strict >
+                    best_conv, best_dir = sig.conviction, sig.direction
+            best_direction_by_symbol[sym] = best_dir
+        carried: list[dict] = []
+        for r in stored:
+            sym, strat = r["symbol"], r["strategy_id"]
+            if not _is_live_only_row(r["provenance"]) or sym not in best_direction_by_symbol:
+                continue  # (a), (b)
+            if strat not in _capped_live(sym) or (sym, strat) in denied_covered_set:
+                continue  # (c)
+            if not _carry_within_cycle(r["valid_until"], r["computed_at"], now_utc, cycle_days):
+                continue  # (e)
+            expected = _resolve_action_tag(
+                {
+                    "is_held": False,
+                    "is_watchlist": False,
+                    "best_direction": best_direction_by_symbol[sym],
+                },
+                False,
+            )
+            if expected is None:
+                continue  # (f)
+            prov = r["provenance"]
+            if not (
+                "fundamentals_unavailable" in prov
+                or "formula_unreadable" in prov
+                or int(expected) == r["action"]
+            ):
+                continue  # (f)
+            carried.append(r)
+        carried_symbols = {r["symbol"] for r in carried}
 
         # 3. Signals — merge into every existing candidate for the symbol (collapse); if none
         #    exists, stand alone as an unattributed (symbol, "") candidate.
         for sym, sigs in signals_by_symbol.items():
             targets = [k for k in candidates if k[0] == sym]
             if not targets:
+                if sym in carried_symbols:
+                    continue  # its carried rows stand in for the (sym, "") row (D-4)
                 _candidate(sym, "")
                 targets = [(sym, "")]
 
@@ -5939,8 +6083,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         else:
             session_end = datetime.now(UTC)
         valid_until = session_end + timedelta(hours=window_hours)
+        # feature 366 D-7: a live-only row lives one rotation cycle from now (no 168h cap, O-5).
+        live_only_valid_until = now_utc + timedelta(days=cycle_days)
         for r in rows:
-            r["valid_until"] = valid_until
+            r["valid_until"] = (
+                live_only_valid_until if _is_live_only_row(r["provenance"]) else valid_until
+            )
+        # Carried rows keep their stored computed_at/valid_until/composite_score; fresh wins (D-6).
+        fresh_keys = {r["opportunity_key"] for r in rows}
+        rows.extend(r for r in carried if r["opportunity_key"] not in fresh_keys)
         # feature 200 — roll each symbol's opportunities into one bounded symbol_score and stamp it
         # (symbol-uniform) on EVERY row of the symbol (incl. NULL-composite / muted /
         # data-unavailable rows). owned_ids = the strategies the user owns (watchlist ∪ live
@@ -5961,7 +6112,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             for r in sym_rows:
                 r["symbol_score"] = score
-        return rows
+        return rows, new_cursor
 
     async def _load_strategy_definition(self, user_id: str, strategy_id: str, cache: dict):
         """Load + cache a StrategyDefinition for the compute (one DB read per distinct strategy).
@@ -6007,7 +6158,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 return out
             for wl in resp.watchlists:
                 if wl.bindings:
-                    out.extend((b.symbol, b.strategy_id) for b in wl.bindings)
+                    out.extend(
+                        (b.symbol, b.strategy_id) for b in wl.bindings if not b.HasField("delisted")
+                    )
                 else:  # legacy row: flat deprecated symbols mirror, unbound
                     out.extend((s, "") for s in wl.symbols)
             page_token = resp.page.next_page_token
@@ -6045,11 +6198,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             try:
                 meta = owner_metadata(uid)
                 async with self._opportunity_lock(uid):
-                    rows = await self._compute_opportunities(uid, meta)
-                    await self._replace_and_stamp_compute_state(uid, rows, meta)
+                    rows, cursor = await self._compute_opportunities(uid, meta)
+                    await self._replace_and_stamp_compute_state(uid, rows, meta, cursor=cursor)
             except Exception as e:  # one bad user never kills the pass
                 failed += 1
-                log.warning("opportunity daily refresh failed for user=%s: %s", uid, e)
+                telemetry.record_opportunity_recompute("full", "failed")
+                log.warning(
+                    "opportunity daily refresh failed for user=%s: %s", uid, e, exc_info=True
+                )
             await asyncio.sleep(0)  # cooperative pacing point
         # A completed pass advances to the next wall-clock hour.
         await schedule.advance(seconds_until_hour_utc(self._opportunity_refresh_hour()))
@@ -6401,28 +6557,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ``held_norm``, so a raw key would silently rank a real held symbol at 0.0."""
         if self._portfolio is None:
             return {}
+        rows = await _drain_positions_paged(self._portfolio, user_id, propagation_meta)
         held: dict[str, float] = {}
-        page_token = ""
-        for _ in range(_MAX_DRAIN_PAGES):
-            try:
-                resp = await self._portfolio.ListPositions(
-                    portfolio_pb2.ListPositionsRequest(
-                        user_id=user_id,
-                        page=common_pb2.PageRequest(
-                            page_size=_BAR_PAGE_SIZE, page_token=page_token
-                        ),
-                    ),
-                    metadata=propagation_meta,
-                )
-            except grpc.RpcError as e:
-                log.warning("ListOpportunities: ListPositions failed: %s", e)
-                return held
-            for p in resp.positions:
-                norm = _normalize_symbol(p.symbol)
-                held[norm] = held.get(norm, 0.0) + abs(p.market_value)
-            page_token = resp.page.next_page_token
-            if not page_token:
-                break
+        for p in rows:
+            norm = _normalize_symbol(p.symbol)
+            held[norm] = held.get(norm, 0.0) + abs(p.market_value)
         return held
 
     @owner_scoped
@@ -6692,6 +6831,38 @@ async def _fetch_historical_fundamentals_paged(stub, symbol, metadata) -> list[F
     )
 
 
+async def _drain_positions_paged(stub, user_id, metadata) -> list:
+    """Drain every ``ListPositions`` page for ``user_id``; raises ``_PositionsPageError`` on a
+    page error, a repeated page token or the page cap, never returning partial rows."""
+    rows: list = []
+    token = ""
+    for _ in range(_MAX_DRAIN_PAGES):
+        try:
+            resp = await stub.ListPositions(
+                portfolio_pb2.ListPositionsRequest(
+                    user_id=user_id,
+                    page=common_pb2.PageRequest(page_size=_BAR_PAGE_SIZE, page_token=token),
+                ),
+                metadata=metadata,
+            )
+            page = list(resp.positions)
+            nxt = resp.page.next_page_token
+        except Exception as e:
+            raise _PositionsPageError(f"{user_id}: ListPositions failed: {e}") from e
+        rows.extend(page)
+        if not nxt:
+            return rows
+        if nxt == token:
+            raise _PositionsPageError(f"{user_id}: ListPositions repeated page token")
+        token = nxt
+    log.warning(
+        "ListPositions(%s) exceeded %d pages with a token pending", user_id, _MAX_DRAIN_PAGES
+    )
+    raise _PositionsPageError(
+        f"{user_id}: ListPositions pagination exceeded {_MAX_DRAIN_PAGES} pages"
+    )
+
+
 def _period_sort_key(p):
     return (p.period_end.seconds, p.period_end.nanos, p.fiscal_period)
 
@@ -6765,6 +6936,30 @@ def _opportunity_key(user_id: str, symbol: str, strategy_id: str) -> str:
     is a stored annotation, NOT part of the key, so a snooze survives an ENTER→ADD flip. The
     client echoes this verbatim to SetOpportunityAction and never derives it."""
     return f"{user_id}|{_normalize_symbol(symbol)}|{strategy_id}"
+
+
+def _is_live_only_row(provenance) -> bool:
+    """A row attributed only through live coverage (feature 366): never watchlist, held or muted."""
+    p = provenance or []
+    return "live_strategy" in p and not any(m in p for m in ("watchlist", "position", "denied"))
+
+
+def _rotation_chunk(pool: list[str], cursor: str | None, n: int) -> tuple[list[str], str | None]:
+    """The next ``min(n, len(pool))`` symbols of the sorted ``pool`` after ``cursor``, wrapping
+    (the live_loop identity-resume algorithm); an empty pool leaves the cursor unchanged."""
+    if not pool:
+        return [], cursor
+    start = bisect.bisect_right(pool, cursor) if cursor is not None else 0
+    if start >= len(pool):
+        start = 0
+    chunk = [pool[(start + i) % len(pool)] for i in range(min(n, len(pool)))]
+    return chunk, chunk[-1]
+
+
+def _carry_within_cycle(valid_until, computed_at, now, cycle_days: int) -> bool:
+    """A row aged exactly one cycle is dropped (FR-8 ``>=``). The age clause only bites after
+    ``live_only_cycle_max_days`` is lowered — do not delete it as redundant."""
+    return valid_until > now and now - computed_at < timedelta(days=cycle_days)
 
 
 def _resolve_action_tag(candidate: dict, exit_fires: bool):

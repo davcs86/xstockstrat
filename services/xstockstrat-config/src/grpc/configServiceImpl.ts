@@ -14,6 +14,7 @@ import {
   hasInternalCallerAuthority,
   hasPeerDnsSan,
   hasSecretCallerAuthority,
+  peerDnsSans,
   secretDenialReason,
   userIdFrom,
 } from './authz';
@@ -135,6 +136,7 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'analysis.opportunity.max_universe_size': { minValue: 1, maxValue: 1000 },
   'analysis.opportunity.max_live_strategies_per_symbol': { minValue: 1, maxValue: 50 },
   'analysis.opportunity.max_live_only_symbols_per_compute': { minValue: 1, maxValue: 500 },
+  'analysis.opportunity.live_only_cycle_max_days': { minValue: 1, maxValue: 30 },
   'analysis.opportunity.max_live_held_symbols_per_compute': { minValue: 1, maxValue: 500 },
   'analysis.opportunity.max_concurrent_candidates': { minValue: 1, maxValue: 50 },
   'analysis.opportunity.valid_window_hours': { minValue: 1, maxValue: 168 },
@@ -168,6 +170,8 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   // feature 282: 24h ceiling stays below marketdata's 48h minIngestLookback; the servability timeout
   // floor/ceiling keeps the check cheap relative to the 4000ms portfolio quote deadline.
   'marketdata.assets.refresh_interval_hours': { minValue: 1, maxValue: 24 },
+  // feature 352: mirrors the marketdata reader clamp, so no writable value is silently re-clamped.
+  'marketdata.assets.delisting_confirmation_trading_days': { minValue: 1, maxValue: 30 },
   'portfolio.marketdata.servability_timeout_ms': { minValue: 500, maxValue: 4000 },
   // feature 282: ceiling = marketdata GetSymbolServability's 1000-symbol request bound, so a within-cap
   // watchlist request can never exceed it and silently fail open.
@@ -176,6 +180,9 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'indicators.sandbox.timeout_ms': { minValue: 100, maxValue: 33000 },
   'indicators.sandbox.startup_grace_ms': { minValue: 1000, maxValue: 10000 },
   'analysis.compute.max_worker_threads': { minValue: 1, maxValue: 16 },
+  // feature 341: floor = the 200-bar drawn window; ceiling = the operator-signed ohlcv lock budget —
+  // raising it needs a new design pass (docs/runbooks/ohlcv-lock-budget-tuning.md).
+  'ui.chart.indicator_history_bars': { minValue: 200, maxValue: 1000 },
 };
 
 function lookupScalarBounds(namespace: string, key: string) {
@@ -679,7 +686,7 @@ export class ConfigServiceImpl {
     const internalCallerAuthorized =
       userIdParam === null &&
       hasInternalCallerAuthority(
-        call.metadata,
+        call,
         call.request?.namespace,
         call.request?.key,
         rawValue,
@@ -702,7 +709,12 @@ export class ConfigServiceImpl {
           ) {
             fields.targetState = truncateForLog(rawValue);
           }
-          log.error(msg, { ...fields, internalCaller: truncateForLog(internalCaller) });
+          log.error(msg, {
+            ...fields,
+            internalCaller: truncateForLog(internalCaller),
+            hadPeerSan: hasPeerDnsSan(call),
+            peerSan: truncateForLog(peerDnsSans(call)[0] ?? ''),
+          });
         } else {
           log.warn(msg, fields);
         }
@@ -721,7 +733,7 @@ export class ConfigServiceImpl {
       callback(PER_USER_SCOPE_ERROR);
       return;
     }
-    const callerIdentity = first(call.metadata, HEADER_INTERNAL_CALLER) || null;
+    const callerIdentity = internalCallerAuthorized ? first(call.metadata, HEADER_INTERNAL_CALLER) || null : null;
 
     const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);

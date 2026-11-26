@@ -90,6 +90,7 @@ for svc in xstockstrat-config xstockstrat-ledger xstockstrat-identity xstockstra
 done
 [ "$(envv "$work/staging.json" xstockstrat-trading DATABASE_CA_CERT)" = "MISSING" ] || fail "1: pooled trading has DATABASE_CA_CERT"
 [ "$(envv "$work/staging.json" xstockstrat-ui HOSTNAME)" = "0.0.0.0" ] || fail "1: ui HOSTNAME"
+[ "$(envv "$work/staging.json" xstockstrat-ui AGENT_ENDPOINT)" = "xstockstrat-agent:$(envv "$work/staging.json" xstockstrat-agent GRPC_PORT)" ] || fail "1: ui AGENT_ENDPOINT"
 [ "$(envv "$work/staging.json" xstockstrat-trading OTEL_ENABLED)" = "true" ] || fail "1: OTel"
 [ "$(jq '.services | length' "$work/staging.json")" = "13" ] || fail "1: not 13 services"
 [ "$(jq '[.services[] | select(has("build") or ((.volumes // []) | length > 0))] | length' "$work/staging.json")" = "0" ] || fail "1: build or volumes present"
@@ -187,6 +188,9 @@ mutate unclassified:xstockstrat-new '.services["xstockstrat-new"] = .services["x
 mutate depends-migrator:xstockstrat-config 'del(.services["xstockstrat-config"].depends_on["db-migrator"])'
 mutate depends-migrator:xstockstrat-trading 'del(.services["xstockstrat-config"].depends_on["db-migrator"])'
 mutate ui-hostname 'del(.services["xstockstrat-ui"].environment.HOSTNAME)'
+mutate agent-endpoint 'del(.services["xstockstrat-ui"].environment.AGENT_ENDPOINT)'
+mutate agent-endpoint '.services["xstockstrat-ui"].environment.AGENT_ENDPOINT = "http://xstockstrat-agent:50061"'
+mutate agent-endpoint '.services["xstockstrat-agent"].environment.GRPC_PORT = "50062"'
 mutate trading-mode:xstockstrat-trading '.services["xstockstrat-trading"].environment.TRADING_MODE = "paper"'
 mutate image:xstockstrat-config '.services["xstockstrat-config"].image = "ghcr.io/davcs86/xstockstrat/xstockstrat-config:latest"'
 mutate ports '.services["xstockstrat-trading"].ports = [{"target": 50051, "published": "50051"}]'
@@ -202,7 +206,9 @@ mutate direct:xstockstrat-config '.services["xstockstrat-config"].environment.DA
 mutate pool-budget '.services["xstockstrat-config"].environment.DB_POOL_MAX = "5"'
 mutate pool-budget 'del(.services["xstockstrat-notify"].environment.DB_POOL_MAX)'
 mutate pool-budget:xstockstrat-trading '.services["xstockstrat-trading"].environment.DB_POOL_MAX = "2"'
-[ "$(jq -r '.services["xstockstrat-indicators"] | "\(.mem_limit)/\(.memswap_limit)"' "$work/prod.json")" = "2147483648/2147483648" ] || fail "7: indicators does not render a 2 GiB memory and swap limit"
+[ "$(jq -r '.services["xstockstrat-indicators"] | "\(.mem_limit)/\(.memswap_limit)"' "$work/prod.json")" = "805306368/805306368" ] || fail "7: indicators does not render a 768 MiB memory and swap limit"
+mutate mem-limit:xstockstrat-trading 'del(.services["xstockstrat-trading"].mem_limit)'
+mutate mem-budget '.services["xstockstrat-ui"].mem_limit = "536870912"'
 mutate mem-limit:xstockstrat-indicators 'del(.services["xstockstrat-indicators"].mem_limit)'
 mutate mem-limit:xstockstrat-indicators 'del(.services["xstockstrat-indicators"].memswap_limit)'
 mutate mem-limit:xstockstrat-indicators '.services["xstockstrat-indicators"].mem_limit = "1073741824"'

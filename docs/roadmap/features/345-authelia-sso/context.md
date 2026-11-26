@@ -1,0 +1,626 @@
+# Context: authelia-sso
+
+**Feature**: `docs/roadmap/features/345-authelia-sso/feature.md`
+**Product Spec**: `docs/roadmap/features/345-authelia-sso/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/345-authelia-sso/implementation-spec.md`
+
+---
+
+## Session 2026-11-15T00:00:00Z — sdd-story
+
+- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
+- Decisions taken with the owner before this story. The authoritative record is `davcs86/homelab-edge`
+  `docs/decisions.md` "SSO is Authelia" and `docs/runbooks/sso.md` (PR davcs86/homelab-edge#77):
+  - D1: Authelia v4.39.28 is the only token issuer; clients are pre-registered (no RFC 7591 in a released Authelia; Claude.ai
+    connectors accept a pre-registered public client, redirect `https://claude.ai/api/mcp/auth_callback`). Fallback option F:
+    keep the agent's OAuth server and delegate only its login to Authelia, if the spike fails.
+  - D5/D11: link by `sub`, else by exactly one active unlinked case-insensitive email match (ledger audit), else create; refuse otherwise.
+  - D6: password login stays behind a config flag as the rollback path.
+  - D7: Authelia knows nothing of environments; `xstockstrat` and `xstockstrat-staging` are separate Authelia apps (web + MCP
+    clients each), gated by one Authelia group per app.
+  - D8: roles stay in `identity.users.roles` per environment; the scope bitmask is unchanged. The owner rejected moving roles
+    into Authelia groups (ListAdminUserIds, the SetUserRoles last-admin guard and per-environment roles depend on the DB).
+  - D10: the starting role is `trader`, written explicitly. Owner's reasoning: trading needs the user's own broker account;
+    there are no shared or system accounts. Residual risk recorded as an Open Question (WRITE on shared resources).
+  - D12: MCP narrowing via OAuth scopes (read-only connectors against prompt injection through
+    `extract_website_content`/`extract_email_content`).
+  - D13: ~60 s fail-closed role cache in the agent.
+  - Email is copied from Authelia at each login; emails are edited by admins in SOPS only; usernames are immutable.
+  - Cutover option B: admins align existing rows' emails (e.g. seeded `admin@localhost`) with the person's Authelia email
+    before their first login, hence `manage-users.py update-email` (added to scope by the owner).
+  - `SEED_USER_ID` is untouched; the owner knows a new value only affects future, not-yet-applied migrations.
+- First gate before `/sdd-spec`: the Authelia 4.39.28 spike (product-spec § Feature Workflow Notes).
+
+## Session 2026-11-15 — sdd-review product-spec, pass 1 (FAIL → fixed)
+
+- Tree: `ccr-cb8f5383-len5a9` with `origin/main-dev` @ `9f88562` merged in (the feature branch does not exist yet).
+- Pass 1: FAIL. Blockers: C-05 (config keys lacked the full contract) and 8 open questions. 11 warnings. Overlap: no FAIL;
+  WARN file overlaps with 319 (`identityServiceImpl.ts`, `oauth_server.py`) and 324 (`manage-users.py`); trunk behaviour
+  change on launched 019 (login page) and 051 (authorized apps).
+- Owner decisions:
+  - The password-flag code default is `false` (fail closed).
+  - MCP rollback is a redeploy of the previous release. The agent accepts only Authelia tokens; there is no dual path.
+  - New users stay `trader`; the BackfillBars WRITE risk is **accepted** (no prerequisite fix).
+  - `/accounts/authorized-apps` links to Authelia.
+  - MCP tokens carry the `email` claim, so the first MCP use links and creates like the web.
+  - A "Remember me" checkbox stays next to "Sign in with SSO".
+  - Analysis 029 / IDENTITY-15 is accepted and documented (new migrations resolve the owner by `SEED_USER_ID`).
+- Derived without a new decision, flagged to the owner:
+  - UI session tokens come from a new `IssueSessionForUser` RPC, SAN-gated to `xstockstrat-ui`.
+  - `ResolveExternalIdentity` is SAN-gated to the UI and the agent.
+  - `agent.oidc.resource` is dropped in favour of `AGENT_PUBLIC_URL`.
+  - The password flag lives in namespace `identity`, and the UI reads it one-shot.
+  - The `GetSecret` grant for `ui.oidc.client_secret`.
+  - Seed migration `050`.
+  - Session lifetime is bounded by the refresh TTL plus `SetUserActive false`.
+  - Connector client IDs `xstockstrat[-staging]-mcp-claude[-ro]`.
+- The spec was rewritten (FR-1 to FR-13; Risks section; no open questions). Acceptance has AC-1 to AC-36; existing IDs were
+  kept, AC-7 now covers the UI only, and MCP moved to AC-21.
+
+## Session 2026-11-15 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready (pass 4 of 4: PASS, 0 warnings).
+- Passes 2 and 3 closed:
+  - the C-05 contract (`path:symbol` readers, the `ui.oidc.client_secret` contract);
+  - the MCP 403 for FR-3 refusals;
+  - the `IssueSessionForUser` SAN gate (FR-4, AC-38);
+  - `Max-Age=1209600` (AC-29);
+  - `email required` (AC-39/40);
+  - the identity-outage 503 (FR-8, AC-15; today's `_send_identity_unavailable` contract).
+- Warnings: none.
+- Overlap findings (WARN, soft rebase order only, recorded in the product spec): 319-fix-auth-trust-hardening
+  (`identityServiceImpl.ts`, `oauth_server.py`), 324-fix-ci-enforcement-gaps (`manage-users.py`). Trunk behaviour changes on
+  launched 019 (login page) and 051 (authorized apps).
+- Cross-repo follow-ups for davcs86/homelab-edge#77:
+  - Authelia must put `email` into access tokens (spike item b);
+  - register the client IDs named in FR-13.
+- Recommended design depth: full (4 services, additive proto, two migrations, a security-critical auth path).
+
+## Session 2026-11-15 — owner amendment: backwards compatible with DigitalOcean until cutover
+
+- The owner agreed with every derived call (IssueSessionForUser, SAN gates, AGENT_PUBLIC_URL, the namespaces, seed 050,
+  session lifetime, the client IDs, the ccr-branch sync), with one exception: the change must stay backwards compatible
+  with DigitalOcean until cutover.
+- FR-14 is the per-deployment mode, chosen by config alone. DO (`.do/app*.yaml`) and the homelab have separate
+  databases and config.
+  - Legacy mode (both issuers empty, the seeded default) is exactly today's behaviour.
+  - SSO mode (both issuers set) is FR-1/2/7/8/11.
+  - Half-configured counts as legacy and logs `sso_mode_misconfigured`.
+  - Cutover is config only; clearing the issuers rolls back.
+- This supersedes the earlier "MCP rollback = redeploy" decision. Redeploy stays possible. "No dual path" still holds
+  per deployment: one mode at a time, and the legacy OAuth routes answer 404 in SSO mode.
+- AC-32 changed meaning (half-configured → legacy) before design. Its ID is unchanged; no RED test cites it yet.
+- AC-41 to AC-44 were added. Status went back to draft for re-review.
+- Re-review pass 1 after FR-14: PASS WITH WARNINGS (4). Fixes:
+  - The legacy-mode lockout gets the owner's choice, "seed `true` + guard". The code default stays `false`, `050` seeds
+    `true` on every database, and in legacy mode the password form is never hidden: a banner explains the disabled flag
+    (AC-45).
+  - An unreadable config renders the legacy login (AC-46), and the page reads the mode and flag server-side.
+  - `oauth-login` is unchanged (legacy only).
+  - FR-9 was retitled.
+  - AC-44 is bounded to 60 s.
+- Overlap: still no FAIL. The new WARNs are 331 and 323 (`app/main.py`), on top of 319 and 324. All are soft rebase order.
+- Pass 2 after FR-14: PASS WITH WARNINGS (2). Fixes: the SSO routes return 404 outside SSO mode (FR-14, AC-47); FR-10 applies in both modes.
+- Pass 3 after FR-14: PASS WITH WARNINGS (2). Fixes: the cross-namespace mode read (the UI reads `agent/oidc.issuer` one-shot; the agent adds `ui` to `WATCHED_NAMESPACES` and reads `ui/oidc.issuer` in `app/auth.py:sso_mode`); the Consumer Surface sentence is repaired.
+- Pass 4 after FR-14: PASS WITH WARNINGS (2). Fixes: FR-13 now updates AGENT-1/AGENT-9 (AC-36 extended); the keys are registered in `scripts/config-wiring.json`.
+- Pass 5 after FR-14: PASS WITH WARNINGS (1). Fix: the `config-wiring.json` wording was wrong. Now: zero findings from `check-config-wiring.mjs --final`, `registry.receivers` only for unresolvable bindings, and no baseline entries.
+
+## Session 2026-11-15 — sdd-review product-spec (re-approval after FR-14)
+
+- Product spec approved. Status: draft → spec-ready (pass 6 after FR-14: PASS, 0 warnings).
+- Warnings: none.
+- Overlap findings (WARN, soft rebase order, recorded in the product spec): 319, 324, 331, 323. No FAIL-level collision;
+  config `050` and identity `007` are unclaimed.
+- Recommended design depth: full (4 services, additive proto, two migrations, a two-mode security-critical auth path).
+
+## Session 2026-11-15 — sdd-design (in progress)
+
+- Mode: full debate. The owner authorized more than 5 rounds if necessary (recorded as their override of the cap).
+- Phase 0 Recon: wrote recon.md. Tree `ccr-cb8f5383-len5a9@bf7f6a96` ⊇ origin/main-dev@9f885622. Five scouts: identity,
+  agent, ui, config/proto/scripts/deploy, scenario-recon.
+- Main recon risks:
+  - R-1: agent scope is re-derived from roles at two sites.
+  - R-2: no direct JWT library in the agent.
+  - R-4: `password_hash` is NOT NULL.
+  - R-5: email is case-sensitive everywhere.
+  - R-8: the UI has no public base URL or server config helper, and the middleware matcher does not exclude the SSO
+    routes.
+  - R-13: the metadata builder is in `oauth_metadata.py`, not `main.py`.
+  - R-14: a local mTLS fault returns 401, while an outage returns 503.
+
+## Session 2026-11-16 — sdd-design round 1 gate
+
+- Round 1: 16 decisions settled, 9 alternatives rejected, 18 objections (6 blocking: O-1..O-6), no Floor breach.
+- Owner decisions at gate 1:
+  - Run round 2.
+  - **Approved deviation from FR-2:** an unfetchable JWKS with an unknown `kid` returns 503 without `WWW-Authenticate`; token defects stay 401. FR-2 is amended.
+  - **Approved:** remember-me and the redirect are bound to `state` through the encrypted SSO-transaction cookie. FR-1 is amended.
+  - **Chosen:** `openid-client` v6 for the UI OIDC flow (closes O-13).
+- Round 2: 13 more decisions settled (D-17..D-29) and 2 more alternatives rejected. 16 objections closed and 8 opened, so 9 remain open (O-3 and O-19..O-26; blocking: O-3, O-19, O-20, O-22, O-23, O-26). No Floor breach.
+- The orchestrator verified the `openid-client` v6 API against the published package (D-29). ID-token signatures are NOT validated by default; `enableNonRepudiationChecks` is mandatory for FR-1.
+- C-16 note: `@AC-19 @feature-294` (local auth fault → 401) is reclassified PRESERVE (legacy mode). SSO mode returns 503 per D-17. This is not a change to existing behaviour.
+- Gate 2 owner decisions: run round 3; drop resolve single-flight in favour of trace fidelity (D-30, closes O-21).
+- Round 3: the adversary verdict was SOUND (approvable). It closed every open objection, raised six low/medium ones (O-27..O-32), and the synthesis folded those into D-31..D-37. The orchestrator verified the openid-client 6.8.9 API against 6.9.0 (closes O-30). The register now has 0 open objections, 37 decisions and 14 locked alternatives. No Floor breach.
+- Round 4 (consolidation): the proposer wrote the consolidated design and a seam check (N-1..N-14). The adversary found 3 code-verified blockers that earlier rounds missed: O-33 (the UI's copies of the agent discovery documents), O-34 (UI config reads default to the staging environment) and O-35 (the middleware refresh branch can redirect the SSO callback). The orchestrator verified all three.
+- Gate 4 owner decisions:
+  - **Logout:** use the RP-initiated logout endpoint if Authelia advertises one, else a short Authelia session plus documentation (D-45, FR-15).
+  - **Unlink:** add `manage-users unlink-sso` (D-43, FR-12).
+  - **Connector card:** shows the URL plus both client IDs from new seeded `ui/oidc.mcp_client_id[_readonly]` keys (D-44, FR-11).
+  - **Access denied:** a distinct "no access" message (D-41, FR-15).
+- Spec amended: FR-11, FR-12, new FR-15, two new config keys. AC-48..AC-52 added. The amended spec needs a re-run of `/sdd-review product-spec` after design approval.
+- C-16 label: identity 043 `@AC-2/3/6` are "CHANGE-by-config, pre-signed" (FR-9; context.md 2026-11-15 "seed true + guard").
+- Register: D-1..D-50, R-1..R-17, 0 open objections.
+- Owner steer during round 5: SSO logout ALWAYS redirects to Authelia's logout (end_session_endpoint if advertised, else the portal logout). Reopens D-45 → D-51 (P-1, user reopened). FR-15 amended; AC-53 added.
+- Round 5 (new surface + logout steer):
+  - Adversary O-44 (confirmed against the defect report): an unconditional logout exemption would expose the RevokeToken unverified-decode defect. Fixed in D-52: the route verifies the signature before revoking, the exemption applies only when a session cookie is present, and 319 merges first or alongside.
+  - D-52..D-59 settled.
+- Gate 5 owner decisions:
+  - Accepted the Sign-out button in both modes, and the expired-session logout returning JSON (D-60, O-45).
+  - Accepted that `'error'`-mode logout ends only the xstockstrat session, with a WARN (D-60, O-48).
+  - Chose to run round 6 on the round-5 additions.
+- Spec line 216 and FR-15 amended.
+- Round 6: the adversary rated it SOUND. O-55..O-60 were folded into D-61..D-65. The orchestrator verified jose 5.10.0 (JWTExpired.payload; signature checked before claims) and radix checkbox 1.3.11 (native form submission, unchecked by default). Accepted residual risk: a stolen access token that expired less than 14 days ago can force a 'log out everywhere' for its owner (matches the defect report's Expected section). Register: 65 decisions (D-45 superseded), 22 rejected alternatives, 0 open objections.
+
+### 2026-11-16 — /sdd-design round 7 (final consolidated design + holistic review)
+
+- The proposer consolidated D-1..D-65 into the design.md draft and ran seam check v2 (S-1..S-11). The adversary found no Floor breach and no register violation. Its verdict was "approvable without another adversarial round" once 9 gaps (O-61..O-69) are folded in.
+- Settled D-66..D-76:
+  - validity of the issuers and `APP_URL` is computed once, pinned by a shared vector file, and logout never redirects to an invalid issuer;
+  - `APP_URL` is wired into compose and Playwright;
+  - `isSameOrigin` is new code;
+  - the agent checks `iss`, requires `sub`, and rejects an unverified foreign `iss` before key lookup;
+  - the Configuration cache is keyed by secret hash with a 600 s TTL;
+  - dropped settled details are restored verbatim;
+  - metrics are typed per event, and `sso_login_failed` carries a reason;
+  - callback latency is an accepted residual, under the authorization-code lifespan invariant;
+  - runbook rollback order and cross-repo back-channel reachability are added;
+  - the txn cookie is `secure`, and callback error logging is scrubbed.
+- Spec text fixes were applied to product-spec.md and acceptance.feature: the SSO checkbox label, the 23505 re-classify wording, FR-15 in the SSO-mode list, `/start` POST-only (GET → 405), the Affected Services additions, the `unlink-sso` script entry, the reader lists, the secret seed sentinel, MCP-only refresh in Risks, the AC-24 foreign-key row and the AC-47 wording. `/sdd-review product-spec` must re-run (P-03).
+- P-2, a petition to reopen D-52 (Origin check on logout against same-site sibling apps), awaits the owner.
+- Owner gate (round 7): **run round 8**, and **adopt P-2**. D-52 is reopened and amended by D-77: logout rejects a request with 403 when its Origin header is present and is not the `APP_URL` origin.
+
+### 2026-11-16 — /sdd-design round 8 (D-66..D-77 mechanism)
+
+- The proposer delivered concrete mechanism for D-66..D-77 and proposed new ACs. The adversary found no Floor breach and no register violation. It found two blocking items:
+  - the TS and Python issuer validators diverged, so both languages now share one grammar (D-79);
+  - D-77 in legacy mode needed an FR-14 exception (D-80).
+  O-72..O-78 were folded into D-81..D-87.
+- Spec changes:
+  - FR-15 gains the both-modes Origin 403 and the "invalid configuration fails closed" behaviour, and the FR-14 legacy-exception list gains the 403;
+  - new acceptance scenarios: AC-54 (UI, invalid issuer), AC-55 (agent, invalid issuer), AC-56 (logout with an invalid issuer), AC-57 (cross-origin logout Outline over legacy and SSO).
+- The owner still needs to confirm that D-77 applies in both modes. The evidence: DigitalOcean declares no extra domains, and each homelab app has a single hostname.
+- Owner gate (round 8): confirmed that D-77 applies in **both modes** (D-80), and chose to **run round 9**.
+
+### 2026-11-16 — /sdd-design round 9 (final text for the round-8 fixes)
+
+- The proposer delivered the final regex grammar and the 82-row vector file, plus the remaining shapes. The orchestrator ran the vectors under Python and Node 22: all rows matched.
+- The adversary found no Floor breach and no register violation, and said no further adversarial round is warranted. Its findings:
+  - O-80: openid-client 6.8.9 normalises or skips the discovery issuer equality. The orchestrator verified this at `oc689 index.js:264,287`. Fixed by D-89, an exact `assertDiscoveredMetadata`.
+  - O-79: `next build` does not type-check test files, so D-83 is unenforced. P-3 petitions to reopen D-83 and move the type assertions into `src/lib/authEvents.typecheck.ts` (D-93, pending owner).
+  - O-81..O-84 were folded into D-90..D-92.
+- Spec changes: the invalid-configuration rule moved to FR-14, with references from FR-1, FR-2 and FR-15; FR-14's legacy bullet now lists the both-mode changes non-exhaustively; reader paths and `client_secret` text were fixed; AC-56 gained `@FR-14`.
+
+## Session 2026-11-16 — sdd-design (completion)
+
+- Phase 0 Recon: recon.md (services identity, ui, agent, config, plus proto and the script; reuse patterns: the identity mint path `sessionResponse`, the config seed CTE 046/047, and the vector-file precedent `rpc-status-vectors.json`).
+- Phase 1 Grilling: 9 rounds (full; the owner authorised more than 5).
+  - Chosen approach: Authelia is the OIDC provider. Identity stays the user and role store and mints sessions via `ResolveExternalIdentity` + `IssueSessionForUser`. The agent becomes a JWKS-validating resource server. Each deployment's legacy or SSO mode is chosen by config.
+  - Rejected: R-1..R-22 (e.g. PyJWKClient, a unique `lower(email)` index, ID-token storage, unconditional logout exemption).
+- Owner gate (round 9):
+  - **approved the design**;
+  - P-3 → **D-93: add a `tsc --noEmit` typecheck script and CI step** for the UI. The owner accepted fixing any pre-existing type errors in this feature's PR.
+- Constitution rules touched: C-01, C-03..C-05, C-07..C-13, C-15..C-18, F-01, F-04, F-06, F-07, F-11. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [x] Authelia v4.39.28 spike: items (a)–(e), RS256, end_session/portal/`rd`/GET `/logout`, auth-code lifespan, discovery issuer with no trailing slash. Done 2026-11-16 (D-95..D-98).
+- [x] Re-run `/sdd-review authelia-sso product-spec` on the design-round amendments. Done 2026-11-16 (0 warnings).
+- [ ] Step 4 needs a scratch Postgres 16 (psql + migrate) to regenerate `scripts/config-wiring-stored.json`, or the CI artifact. Due at Step 4.
+- [ ] Step 12's DB tier needs two migrated databases locally, or the CI `identity-db-test` job. Due at Step 12.
+- [ ] `/sdd-review impl-spec` to rule on the spec-level choices listed in the sdd-spec session (JWKS fresh window, alg allow-list, `chromium-sso` project). Due before /sdd-execute.
+- [ ] Feature 319 merges first or alongside. Due at rollout.
+- [ ] First `tsc --noEmit` run; fix any pre-existing errors. Due at the first UI step.
+- [ ] homelab-edge PR #77 follow-ups (`sso.md` §7/§8 `unlink-sso`, logout / `rd`, post-logout redirect, back-channel reachability, rate-limit exemption). Due in a separate homelab-edge PR.
+
+## Session 2026-11-16 — sdd-review product-spec (re-review after design)
+
+- Product spec re-approved after the design-round amendments: **0 warnings after 3 passes**. Status stays `design-approved`.
+- Fixes applied:
+  - **Pass 1:** FR-15 logout Origin skip on invalid `APP_URL`; FR-14 unreadable-config and `/start` POST-only bullets; proto field-number text; FR order; AC-58..60.
+  - **Pass 2:** AC-61..64; config check before the Origin check on `/start`; AC-35 tagged `@FR-14`.
+- Overlap: **FAIL-level collision** on config migration `050`, now owned by feature 341 on trunk. Renumbered to `051` (D-94). No merge-order row was added, since renumbering removes the hard dependency. Re-check `051`/`007` at merge (343 also plans a config seed). WARN-level shared files: `manage-users.py` (324), `ci.yml` (297/298/324), identity service impl (319), agent `main.py` (331/323). All are rebase-only.
+- Notes carried into `/sdd-spec`:
+  - `debate.md` D-36/D-48/D-57 still say `050`. D-94 governs; the impl-spec uses `051`.
+  - AC-64 has no mode column. SSO-mode logout also returns `redirect`; unit tests cover the `verified`/`unverified`/`expired_too_old` reasons.
+
+## Session 2026-11-16 — Authelia v4.39.28 spike (gate for /sdd-spec)
+
+**Setup.**
+- Authelia release `authelia-v4.39.28-linux-amd64.tar.gz`, sha256 `e8ad9ff965cbf3b93138945e13cb4b7874c999c254772b2bb77952863177699c`, matching the release `checksums.sha256`. It ran locally inside the session sandbox; the owner granted permission.
+- Throwaway config:
+  - file user store with SQLite, self-signed TLS, issuer `https://auth.example.test:9091`;
+  - an RS256 JWK;
+  - group policy `group:xstockstrat-staging` with one_factor;
+  - clients `xstockstrat-staging-web` (confidential, `client_secret_basic`, PKCE), `xstockstrat-staging-mcp-claude` and `-ro` (public, PKCE, audience `https://xstockstrat-staging.example.test/agent`);
+  - scopes `xstockstrat.{read,write,admin,trade}`.
+- The flows were driven by a script against the real endpoints. The scripts and config were scratchpad-only and are not committed.
+
+**Results.**
+- **Discovery.** `issuer` has no trailing slash. `jwks_uri` is same-origin. There is **no `end_session_endpoint`**. The custom scopes are not listed in `scopes_supported`, but they are honoured.
+- **ID token (web).**
+  - Header `RS256`, `kid=k-rs256`, `typ=JWT`; the signature verifies against the JWKS.
+  - `aud=[client]` and `azp=client`. The authorization response carries `iss` (RFC 9207).
+  - **`email` is absent by default.** It is present (with `email_verified`) only with a claims policy `id_token: [email, email_verified]`. The email keeps its case (`Alice@Family.Example.Test`); identity lowercases it in SQL, as designed.
+- **(a) PASS.** The pre-registered public MCP clients complete code+PKCE with RFC 8707 `resource` on both the authorize and token requests, and also on authorize only. A foreign `resource` gets `invalid_target`. The client side of Claude.ai and Claude Code cannot be exercised locally, so it stays a cutover check.
+- **(b) PASS, with deviations.** Access-token header: `RS256`, `kid`, `typ=at+jwt`. Claims:
+  - `aud=["…/agent"]` and `email` (with an access-token claims policy);
+  - `sub`, `client_id`, `iss`, `exp`, `iat`, `nbf`, `jti`;
+  - **the scopes arrive as `scp` (array), not `scope` (string)**, which gives D-95;
+  - **with no `resource`, the token has no `aud`** unless `requested_audience_mode: implicit` is set, which gives D-96.
+  
+  The signature verifies against the JWKS, and a refresh keeps `aud`.
+- **(c) PASS.** The custom scopes are granted. The read-only client asking for `xstockstrat.write` gets `invalid_scope`.
+- **(d) Not re-checked.** Removing the user from the group: refresh still succeeds, twice in a row. Disabling the user: refresh fails (HTTP 500 `error`). This gives D-98.
+- **(e) PASS.** `sub` is the same UUID across two MCP sessions and the web ID token.
+- **Group refusal.** A user outside the group gets `error=access_denied`, which drives the D-58 `no_access` message.
+- **Consent.** MCP clients requesting `offline_access` hit the explicit consent page even with `consent_mode: implicit`. They were accepted through `/api/oidc/consent` in the test. This is UX only.
+- **Auth-code lifespan.** Exchanged at 25 s it works; at 70 s it gets `invalid_grant`. The lifespan is about 60 s, above D-73's 30 s pre-exchange budget.
+- **Portal logout.** The `portal.SignOut` bundle reads `rd`. `GET /logout?rd=…` needs no confirmation: the view calls `POST /api/logout {targetURL}` and redirects about 2 s later only if `safeTargetURL` is true. The test found `true` for the in-domain `https://xstockstrat-staging.example.test/auth/login` and `false` for `https://evil.other.test/x`. The session is cleared (`authentication_level` 1 → 0). This gives D-97. A bare `GET /logout` without JS does not log out; it is a SPA route.
+- **Verdict.** Option F is not needed. Design deltas D-95..D-98 are recorded, and FR-7 and the spike section of the spec are updated.
+
+## Session 2026-11-16 — sdd-spec
+
+- Generated implementation-spec.md with 40 steps. Status → implementation-ready.
+- Tree: `ccr-cb8f5383-len5a9@1ea8fe5` ≡ `origin/ccr-cb8f5383-len5a9`, containing `origin/main-dev@4aa55e9`. The tree-freshness
+  procedure resolved TARGET to `main-dev` (`feature/authelia-sso` does not exist on the remote). It did **not** switch,
+  because `main-dev` has no `345-authelia-sso` directory and all SDD artifacts live on this harness branch. This is a
+  deviation from `docs/sdd/tree-freshness.md`, raised to the owner.
+- Discovery was inline: no subagent tool was available in this session. Recon line numbers were re-verified for
+  identity, agent, proto and config. None of those changed between recon `bf7f6a96` and HEAD. UI line numbers were
+  re-read.
+- Key codebase findings:
+  - Next free migrations are config `051` (`050_ui_chart_history_bars` is 341's) and identity `007`.
+  - A config seed needs `scripts/config-wiring-stored.json` regenerated on a scratch Postgres 16. The CI
+    `config-wiring-stored` job diffs it (`ci.yml:1250-1292`). Step 4 is blocked without a DB (P-03), with the CI
+    artifact as the fallback (341 precedent).
+  - The wiring checker attributes a read by `file:receiver` only (`check-config-wiring.mjs:546-551`), and a Python
+    attribute call's receiver is `ast.unparse(func.value)` (`config-wiring-py-reads.py:143-147`).
+    - So `app/sso_mode.py` reads its two namespaces through two module aliases (`agent_config`, `ui_config`).
+    - `oidcConfig.ts` reads through three snapshot bindings (`ui.values`, `agent.values`, `identity.values`).
+    - Each binding gets a `registry.receivers` entry.
+  - The `bffMetrics` typed map breaks the bare `recordAuthEvent('logout')` at `logout/route.ts:11`, so the metric
+    change, `ssoErrors.ts`, the auth verify split and the logout rewrite are one step (30).
+  - The e2e mock `getConfig` answers unknown namespaces with `platform` (`mock-backend.ts:1552-1578`). The Playwright
+    suite is `fullyParallel` with 2 CI workers, so a global SSO-mode switch would race other specs.
+  - Identity test config mocks lack `getBool` at 7 sites. Steps 8 and 9 therefore land together.
+  - There is no identity `test:db` script or CI job yet. Step 12 clones `ledger-db-test` (`ci.yml:957-1014`) and adds
+    a second DB for AC-6.
+- **Spec-level choices not settled by the design (flag at `/sdd-review impl-spec` and at the step gate):**
+  - Step 17: `_JWKS_FRESH_S = 300` (D-13 names a "fresh window" with no value).
+  - Step 17: the asymmetric allow-list `{RS,PS,ES}{256,384,512}`, with EdDSA excluded (D-2 names no members).
+  - Step 38: SSO e2e specs run in a separate `chromium-sso` project with `dependencies: ['chromium']`, driven by a
+    stub-IdP control endpoint that shares state with the mock backend. Cost: a hard `chromium` failure skips the SSO
+    project.
+  - Step 38: the stub-IdP port is to be picked at execute.
+  - Step 23: per insights.md:2948, a bare `tsc --noEmit` may false-RED on `.next/types`. The execute gate decides
+    between `next build` first or excluding `.next/types`.
+  - Step 4: the down guards the secret row on `value_encrypted IS NULL`; confirm the column name from `045`/`049`.
+  - Step 5: a migration-rerun assertion file `scripts/migration-assertions/config-authelia-sso-keys.sql` asserts the
+    re-apply notify count of 0. A fresh-DB notify count of 6 is asserted structurally (DISTINCT namespace, environment).
+- Referrer-Policy constraint (D-54): a future `no-referrer` policy would break `/api/auth/sso/start`. Step 34
+  re-records it at execute.
+
+## Session 2026-11-16 — sdd-review impl-spec (advisory; looped to clean)
+
+- **Result:** 0 failures, 0 open warnings after **8 passes**.
+  - Pass 1: 3 failures, 15 warned steps.
+  - Pass 2: 0 failures, 3 warnings.
+  - Pass 3: 2 warnings. Pass 4: 3 warnings. Pass 5: 4 warnings.
+  - Pass 6: 2 warnings. Pass 7: 1 warning. Pass 8: clean.
+- **Major changes:**
+  - **Config seed renumbered to `052`** (D-99): feature 343 landed `051` on trunk.
+  - **The spec was split from 40 to 52 steps,** each touching at most 5 files.
+  - **The `chromium-sso` Playwright project** runs with `workers: 1` and `fullyParallel: false`. AC-32/44/45/46 moved into `e2e/sso/legacy-global-state.spec.ts`.
+  - **The typecheck step lists exact files.** The orchestrator measured `tsc --noEmit` at 0 errors twice, on the clean tree and at `45be5749`.
+  - **One `traceId` per request** is threaded through every config loader and identity call (C-03). The loaders require it, and `oidcConfig.ts` never generates one.
+  - **Shared test fixtures:** identity `fixtures/sanCall.ts` and agent `conftest.py` `sso_keys` (C-13).
+  - **Real-reader tests** for the seeded password flag and the client IDs (config wiring b).
+  - **`APP_URL` moves into local compose** with its first reader (Step 25).
+- **Accepted residuals** (not open; each is documented in its step):
+  - [x] Step 4: the seed lands before its readers (Steps 8/16/29, three surfaces). It is bridged by `check-config-wiring` PENDING and the `--final` gate at the integration PR.
+  - [x] Steps 14, 44, 45, 46: no coverage threshold exists for `scripts/` pytest or the Playwright harness.
+  - [x] Step 2: the generated proto paths are brace-grouped. Extra paths are logged per F-08.
+  - [x] Steps 39, 40, 42: UI service steps whose RED/GREEN is the Step 47 e2e (the UI has no jsdom unit layer).
+  - [x] Step 52: verification only, with no files (D-48). If the executor requires a commit, it folds into Step 51.
+- **Execute-time checks carried forward:**
+  - [ ] Step 12: `psql` must be present in the `xstockstrat-migrate-ci` image.
+  - [ ] Step 24: paste the fresh `pnpm run typecheck` output.
+  - [ ] Step 37: `pnpm run build` must tolerate the extra middleware exports, or they move to `src/lib/authPaths.ts`.
+  - [ ] Step 46: the per-shard `--list` must show every `chromium-sso` test.
+  - [ ] Merge time: re-check that config `052` and identity `007` are still free.
+- **Overlap:**
+  - Config `051` collided with 343 and was fixed by renumbering. No merge-order row is needed.
+  - Identity `007` is free.
+  - Shared file: `services/xstockstrat-identity/src/telemetry.ts` with 337 (in progress). Rebase only.
+
+## Session 2026-11-16 — pre-merge renumber
+
+- Merging the latest `main-dev` brought in feature 347's `052_alpaca_adaptive_rate_limit_keys`. The config seed is now `053_authelia_sso_keys` (D-100). This was applied in implementation-spec.md, design.md, product-spec.md and feature.md. Step 4 now takes the next free number at execute time, because trunk keeps consuming config numbers.
+- The `fails.md` merge conflict came from two end-of-file appends (347's two entries and ours). It was resolved by keeping both in date order, the same resolution the owner approved earlier.
+
+## Session 2026-11-24 — owner re-spec against the homelab-edge SSO design (amendment before re-review)
+
+- Source of truth: davcs86/homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md` (merged in PR #114),
+  owner-approved 2026-11-23 after two adversarial reviews; its § 1 decisions are final (owner confirmed 2026-11-24).
+  Branch `ccr-589817f0-cyg7gy` ⊇ `origin/main-dev@0dbc26b`.
+- Superseded by the respec (decisions 5–10, § 3, § 5): email linking and SSO-created users (D-6, FR-3 steps 2–3, outcomes
+  `LINKED_BY_EMAIL`/`CREATED`), the issuer-presence mode switch and `identity/auth.password_login_enabled` (FR-9, FR-14), the
+  access-token `email` claim (D-96), the issuer `auth.<domain>` (now `https://auth.public.<domain>`), D-74's rate-limit
+  exemption (now path-scoped Caddy zones, respec § 4.3).
+- Owner decisions 2026-11-24 (this session):
+  - Process: full SDD re-run — amend product-spec/acceptance → `/sdd-review product-spec` → `/sdd-design` full re-run with
+    respec § 1 locked → `/sdd-spec` → `/sdd-review impl-spec`.
+  - Mode is one config key `auth.mode` (`local` default | `oidc` | `both`). Web: `local` password only, `both` SSO and
+    password, `oidc` SSO only. **MCP: built-in OAuth server in `local` and `both`; Authelia tokens only in `oidc`.**
+  - Linking is explicit ("Link SSO"); **no auto-provisioning at all** (decision 8: no passwordless xstockstrat accounts).
+  - **Drop FR-5 (email sync) and `manage-users.py update-email`**; `unlink-sso` stays. The IdP email is displayed on the link
+    confirmation only, never stored. Link uniqueness is xstockstrat's: PK `(issuer, subject)` + `UNIQUE (issuer, user_id)`.
+  - No-login mode switch: a tested `scripts/` command sets `auth.mode` in the config store from the tailnet (respec § 3);
+    design picks the write path.
+- Derived (no new decision): bootstrap/break-glass is the existing `manage-users.py create-user`/`reset-password` (identity's
+  admin is a migration seed, not env); config seed renumbered to the next free `056` (055 is on trunk); identity `007`
+  still free; Claude Code clients `xstockstrat[-staging]-mcp-claude-code[-ro]` (loopback redirect, spike S9); both Claude.ai
+  callback hosts.
+
+## Session 2026-11-24 — sdd-review product-spec (re-spec)
+
+- Tree: `ccr-589817f0-cyg7gy@a2e3350 ≡ origin/ccr-589817f0-cyg7gy` (⊇ `origin/main-dev@0dbc26b`). Same recorded deviation as
+  2026-11-16: `feature/authelia-sso` does not exist, so TARGET would be `main-dev`, which lacks this re-spec; not switched.
+- Product spec approved. Status: draft → spec-ready (pass 3: PASS; pass 1 and 2 PASS WITH WARNINGS, all fixed).
+- Fixes from the passes: AC-54/AC-55 split by which issuer drives each 503 (FR-14); FR-1/FR-16 define every UI message and
+  `error` query value; FR-17 bound to 60 s; FR-15 states the expired-session JSON logout; AC-49 concrete (verified against
+  `app/oauth_metadata.py:24,33`); AC-20/AC-36 cover FR-13's docs; `/accounts/sso` page and nav (`navGroups.tsx:104`,
+  `PlatformHeader.tsx:96`, C-10a); FR-4 states the `GetSecret` grant (AC-35 → @FR-4); config migration number taken at
+  execute time.
+- Warnings: one accepted — AC-28 asserts a log line (same observable as the approved 2026-11-16 AC-28).
+- Overlap: no FAIL. WARN (soft rebase only): 319 (`identityServiceImpl.ts`, `telemetry.ts`, agent `watcher.py`), 331 (agent
+  `main.py`), 324 (`manage-users.py`, unverified from 324's side). Config `056` is free on trunk and also planned by 314, 317
+  and 321 (all implementation-ready): first to merge keeps it. Identity `007`, proto, keys: clean. Note: draft feature
+  `280-third-party-sso-oidc` proposes `identity.sso.*` for the same problem (no key collision; needs an owner decision).
+  Feature 314's `context.md:759` still says 345 claims `053` (stale; outside this feature).
+- Recommended design depth: full (owner-chosen 2026-11-24).
+
+## Session 2026-11-24 — sdd-design re-run (full), Phase 0
+
+- Tree: `ccr-589817f0-cyg7gy@b3055c0 ≡ origin/ccr-589817f0-cyg7gy` (⊇ `origin/main-dev@0dbc26b`); same branch deviation.
+- Recon rewritten (`recon.md`, five scouts: identity, agent, ui, config/proto/scripts/deploy, scenario-recon). Main new
+  risks: R-1 per-user `auth.mode` overlay; R-2 no operator config write path (plain UPDATE not notified; 055 CTE shape);
+  R-3 `oidc` recovery via FR-17; R-4 middleware refresh hides new cookies from the handler; R-5 legacy `/oauth/*` needs an
+  explicit 404; R-6 identity test mocks lack `getString`; R-7 two agent scope sites.
+- C-16: identity 043 `@AC-2/3/6`, ui 153 `@AC-1/2/3`, ui 294 `@AC-33`, agent 294 `@AC-20/47`, agent 147 `@AC-9` are
+  CHANGE-by-config in `oidc` only (PRESERVE in `local`/`both`); sign-off to be re-recorded at the design gate.
+- Phase 1 starts at round 10 (register continues; superseded 2026-11-16 decisions to be petitioned and confirmed).
+
+## Session 2026-11-24 — sdd-design round 10 gate (paused)
+
+- Round 10 ran (proposer + adversary; register D-101..D-110, R-23..R-27, O-85..O-95, P-4..P-5). Verdict NEEDS WORK; the one
+  blocker (O-85, stale cookie in the Link flow) is closed by D-107. No Floor breach.
+- Owner at the gate:
+  - P-4 approved: the ~34 listed 2026-11-16 decisions are superseded by D-101..D-109 (register Status edits pending).
+  - O-86: enforce `auth_time` for Link on the RP side (fail closed), not only `prompt=login`.
+  - Spec amendments approved for round 11: `GetExternalIdentityLinks` RPC; Link starts from `/accounts/api/sso`; P-5 (edge
+    rate-limit zone over the Link confirm POST is a required cutover gate).
+  - C-16 sign-off **not given**. Owner, verbatim: "Preserve the password and built-in OAuth routes for self-hosted or VPS
+    deployments. External OIDC support is just a different authentication method. I'll explore making the identity
+    service Authentik-based."
+- Design paused before round 11 pending clarification of that steer (scope of "preserve", and whether the Authentik
+  exploration changes the issuer or the identity architecture). debate.md State stays `in-debate`.
+
+## Session 2026-11-24 — round-10 gate resolved
+
+- Owner clarifications after the pause:
+  - `oidc` stays as designed; `local` (default, DigitalOcean, any self-hosted/VPS deployment) keeps password login and the
+    built-in OAuth server unchanged. **C-16 sign-off given** for the CHANGE-by-config items, `oidc` only: identity 043
+    `@AC-2/3/6`, ui 153 `@AC-1/2/3`, agent 294 `@AC-20/47`, agent 147 `@AC-9`; ui 294 `@AC-33` unchanged (`oidc` adds a
+    separate 403).
+  - "Don't start identity in `oidc`" is not possible within 345 (identity holds users, roles, links, sessions; serves
+    notify and `manage_user`; FR-17 rollback needs it). Owner chose: identity always on (D-112). Identity-less `oidc` is an
+    idea for the owner's **xstockstrat-only** Authentik exploration; homelab-edge (Authelia + lldap) is unaffected.
+- Register: P-4 applied (35 decisions marked superseded), P-5 reopened O-43, D-111 (`auth_time` check) and D-112 added.
+- Spec amended (no re-review yet; per the 2026-11-16 precedent `/sdd-review product-spec` re-runs after design approval,
+  O-94 open until then): `GetExternalIdentityLinks` (FR-4, Proto, Affected Services, AC-73), Link start from
+  `/accounts/api/sso`, the `auth_time` requirement (AC-74), the edge rate-limit zone as a cutover gate.
+
+## Session 2026-11-24 — round-11 gate
+
+- Round 11: consolidated design + seam check; adversary "approvable with listed fixes", Floor clear. Folded as D-113..D-127
+  (link error destinations, header forwarding, identity mode parse on update, `@feature-350` verbatim move, nav, honest
+  AC-6/AC-25 coverage, cutover gates incl. `max_age=0`, serial e2e file, parse clarification, pure `sessionResponse`,
+  closed refusal details, no password replay, validity definition, identity refuses Link outside `both`, A1 verified
+  against openid-client 6.8.9 / oauth4webapi 3.8.9). R-28..R-30 locked; O-96..O-110 and O-43 closed.
+- Owner: C-16 sign-off extended to ui `@feature-350` `@AC-4/6/9` (vacuous in `oidc`; PRESERVE in `local`/`both`).
+- Owner: run another round (round 12) before approving.
+
+## Session 2026-11-24 — round-12 gate
+
+- Round 12 (confirmation): adversary SOUND, Floor clear; D-128..D-131 fold its precision fixes (AC-28/AC-72 seams,
+  `watchAuthMode`, spec-edit wording, `HEADER_INTERNAL_CALLER`, vector-file partitions, AC-75 adopted, register hygiene).
+- Owner: Link IdP errors return to `/accounts/sso` via a local advisory txn decrypt (D-132, amends D-58's order); UI
+  discovery documents fall back to today's documents on unreadable config (D-133). Owner asked for another round (13).
+
+## Session 2026-11-24 — sdd-design (completion, re-run)
+
+- Phase 0 Recon: recon.md rewritten (services identity, agent, ui, config/proto/scripts/deploy + scenario-recon; reuse:
+  the `authenticateUser` password sequence → `verifyPassword`, `adminDirectory.ts` SAN helpers, the 055 CTE + notify,
+  `apiFetch` refresh-and-retry, `manage-users.py`).
+- Phase 1 Grilling: rounds 10–13 (full; 4 rounds this run). Chosen approach: one global mode key `identity/auth.mode`;
+  identity always on with four SAN-gated RPCs and `007_external_identities`; agent per-request branch (issuer JWTs only in
+  `oidc`); UI RP with login via `/api/auth/sso/*` and Link via session-gated `/accounts/api/sso*` + `auth_time` check;
+  `manage-users.py set-auth-mode`. Rejected (this run): R-23..R-30 (stale-cookie binding, in-handler refresh,
+  metadata-field links, per-issuer bool, SetConfig per-user refusal, two-fake-pool test, flag-arg builder, verbatim detail
+  echo).
+- Owner at the final gate: D-136 (UI PRM 503 when the agent issuer is unreadable in `oidc`), D-137 (link `no_access` copy),
+  approve. O-94 spec edits applied to product-spec.md and acceptance.feature (AC-75, AC-76 added; 67 scenarios).
+- Constitution rules touched: C-01, C-03..C-05, C-07..C-10, C-12..C-18, P-01..P-05, F-01, F-04, F-06, F-07. Floor
+  breaches: none.
+- Status: spec-ready → design-approved. Next: `/sdd-review product-spec` (O-94), then `/sdd-spec`.
+
+## Open Threads (2026-11-24 re-run)
+
+- [x] `/sdd-review authelia-sso product-spec` on the design-round amendments (O-94). Done 2026-11-24 (post-design re-review).
+- [ ] Cutover gates (homelab-edge): rate-limit zone over `POST /accounts/api/sso/confirm`; S17 fresh `auth_time` with
+      `prompt=login` + `max_age=0`; Authelia web client ID-token claims `email`, `preferred_username`, `auth_time`; seed-row
+      `reset-password`. Due before `set-auth-mode both` on a homelab deployment.
+- [ ] Config migration number: next free at execute (`056` contested by 314/317/321). Due at the seed step.
+- [x] Draft feature 280-third-party-sso-oidc overlaps (owner decision). Done 2026-11-24: 280 `demoted/canceled`, superseded by 345.
+- [ ] Identity-less `oidc`: idea for the owner's xstockstrat-only Authentik exploration (out of scope, D-112).
+
+## Session 2026-11-24 — sdd-review product-spec (post-design re-review)
+
+- Product spec re-approved after the design-round amendments: pass 1 PASS WITH WARNINGS (5), pass 2 PASS WITH WARNINGS (1,
+  AC-77 preconditions; fixed). Status stays `design-approved`. O-94 closed.
+- Fixes: FR-15 exceptions consolidated (incl. unset/unreadable secret → portal logout, D-134); FR-14 UI PRM 503 when the agent
+  namespace is unreadable (D-136); FR-16 `linked` fallback; FR-1 full `oidc` message; new AC-77 (link-route statuses) and
+  AC-78 (unreadable agent issuer → PRM 503). 69 scenarios.
+- Overlap: FAIL on config `056` (also planned by 314, 317, 321). Owner chose a conditional renumber row in
+  `merge-order.md` (whoever merges first keeps `056`; others renumber at their own merge), replacing the stale 345 vs 352
+  row; plus a rebase-only row vs 319. Identity `007`, keys, proto: clean.
+- Next: `/sdd-spec authelia-sso` (the existing implementation-spec.md predates the re-spec).
+
+## Session 2026-11-24 — sdd-spec (re-spec)
+
+- Generated implementation-spec.md with 58 steps (supersedes the 2026-11-16 52-step spec, kept in git at `f0ed7dc`).
+  Status: design-approved → implementation-ready.
+- Tree: `ccr-589817f0-cyg7gy@f0ed7dc ≡ origin/ccr-589817f0-cyg7gy` (⊇ `origin/main-dev@0dbc26b`). Same recorded deviation:
+  `feature/authelia-sso` does not exist, so TARGET resolves to `main-dev`, which lacks this re-spec; not switched. The 14
+  commits over `main-dev` are docs-only, so every code citation is `main-dev@0dbc26b`. Discovery was inline (recon.md
+  plus targeted greps); recon and design line numbers re-verified for identity, agent, config, UI and scripts.
+- Key codebase findings:
+  - Next free migrations: identity `007`; config `056` (highest on trunk is `055`; `053` is a gap never to fill).
+  - Seed has 18 rows in two statements (plain `054` shape + secret `049:57-67` shape) and no notify (D-109).
+  - The approved issuer/app_url grammar and its 66/16 vector rows are verbatim in `git show 7eeab3d:…/design.md`
+    lines 769–870; Step 6 copies them and replaces the `mode` rows with the D-121 `auth.mode` parse rows.
+  - The agent's `read_config_value` forwarder is matched by name, so `sso_mode.py` reads through two module aliases
+    (`identity_config`, `agent_config`) and `watcher.py` gains `read_config_value = read_value`.
+  - Only `logout/route.ts:11` breaks under the typed `recordAuthEvent` map, and it is rewritten in the same step (36).
+  - The e2e mock answers unknown config namespaces with `platform` (`mock-backend.ts:1560-1586`); Step 51 adds `identity`
+    and `agent`, with the mode row absent by default.
+- Spec-level choices not settled by the design (flag at `/sdd-review impl-spec`): `OIDC_SCOPE = 'openid email profile'`
+  (FR-16.2's `preferred_username` fallback is a `profile` claim); `_JWKS_FRESH_S = 300` and the RS/PS/ES allow-list
+  (carried); the `chromium-sso` project around D-120's one serial file; the identity `src/authMode.ts:config` and agent
+  `sso_mode.py:agent_config` wiring receivers; `ssoErrorRedirect` event per destination (`sso_login_error` on a login
+  fault, `sso_link_failed` always for link); `prm.expected` includes `scopes_supported` (D-10); no migration-assertion
+  file for the notify-less seed.
+- Product-spec finding to raise at `/sdd-review impl-spec`: AC-77 row 1 ("no session cookie → GET /accounts/api/sso →
+  401") holds at the handler only. Over HTTP the middleware redirects a request with no session cookie before the
+  handler runs (`middleware.ts:80-83`), as for today's `/accounts/api/authorized-apps`; Step 43 asserts it at the handler.
+
+## Open Threads (2026-11-24 sdd-spec)
+
+- [ ] `/sdd-review authelia-sso impl-spec`: rule on the spec-level choices above and AC-77 row 1. Due before /sdd-execute.
+- [ ] Step 4 needs a scratch Postgres 16 to regenerate `scripts/config-wiring-stored.json`, or the CI artifact. Due at Step 4.
+- [ ] Step 25: paste the first `pnpm run typecheck` output. Due at Step 25.
+- [ ] Config migration number re-checked at Step 4 and at merge (`056` vs 314/317/321). Due at Step 4 and merge.
+- [ ] Cutover gates (homelab-edge), draft feature 280 overlap, feature 319 merge order: unchanged from the design run.
+- Post-spec fix (orchestrator, 2026-11-24): AC-77 row 1 now expects the middleware redirect to `/auth/login` for a request
+  with no session cookie (`middleware.ts:80-83`); the route's own 401 (stale token seen by the handler) stays a handler-level
+  test in Step 43, as /sdd-spec flagged.
+
+## Session 2026-11-24 — sdd-review impl-spec (advisory)
+
+- Tree: `ccr-589817f0-cyg7gy@82ff78a ≡ origin/ccr-589817f0-cyg7gy` (⊇ `origin/main-dev@0dbc26b`).
+- Result: 0 blocking failures, 7 warnings (advisory — did not block). Spec-level choices: OIDC scope, JWKS 300 s fresh +
+  RS/PS/ES allow-list, extra config-wiring receivers, `sso_login_error`/`sso_link_failed`, `scopes_supported`, no seed
+  assertion file — accepted; the `chromium-sso` project and the AC-77 handler-level 401 — accepted with fixes below.
+- Unresolved ⚠ carried into execution:
+  - Step 41 / Step 43: AC-77 row 1 now expects the middleware redirect (`acceptance.feature`); add a no-cookie
+    `/accounts/api/sso` → `/auth/login` case to Step 41's `middleware.test.ts`, add AC-77 to its Covers and the coverage
+    table, keep Step 43's 401 as a handler-level (stale-token) case, and update spec-level choice 5 (C-15) — [x] fixed 2026-11-24
+    (final pre-merge review fixes, finding 4)
+  - Step 52: add `testIgnore: /e2e\/sso\//` to the conditional `firefox` project (`playwright.config.ts:113-126`) or state
+    firefox is excluded — [ ] unaddressed
+  - Step 54 / Step 58: the cutover runbook and its grep must list the Authelia client prerequisites (ID-token `email`,
+    `preferred_username`, `auth_time` via claims policy; fresh `auth_time` with `prompt=login` + `max_age=0`) and note the
+    24 h stale-JWKS availability vs key-revocation trade-off — [x] fixed 2026-11-24 (final pre-merge review fixes,
+    findings 1, 7, 10)
+  - Step 37: drive `sso_login_error` and `login_disabled` in the `bffAllowlist` closed-set test — [ ] unaddressed
+  - Step 1 / Step 2: `buf breaking --against …#branch=feature/authelia-sso` needs that branch; fall back to `main-dev` if it
+    is absent — [ ] unaddressed
+  - Step 4 / Step 3 / merge: re-check config `056` (314, 317, 321) and identity `007` at execute and merge — [ ] unaddressed
+  - Step 6: the Node regex-mismatch check prints without asserting (Step 27 asserts) — [ ] unaddressed
+- Overlap: config `056` and the 319 file overlap already recorded in `merge-order.md` (2026-11-24). New rebase-only overlaps,
+  not yet in merge-order: `services/xstockstrat-config/src/grpc/authz.ts` (319), the `telemetry.ts` `:380/:381` seam (319),
+  `telemetry.ts` (337), agent `main.py` (331), agent `tools.py`/`client.py` (309, 310, 314, 322, 327, 328), config-wiring
+  files (314, 317, 321). Feature 317's spec still cites 345 as `053` (stale, 317's doc).
+
+## Session 2026-11-24 — final pre-merge review fixes
+
+- Source: the independent final review of PR #1602 (`ccr-589817f0-cyg7gy` → `main-dev`), 11 findings (1 blocking, 2–8
+  should-fix, 9–11 nits). Tree `ccr-589817f0-cyg7gy@9baef57` (⊇ `origin/main-dev@0dbc26b`). Docs only; status stays
+  `implementation-ready` (execution has not started, so spec-body edits are allowed and listed here).
+- Owner decisions (2026-11-24):
+  - **Finding 1 (scope).** Keep `OIDC_SCOPE = 'openid email profile'`. homelab-edge's SSO spec § 4.6 listed the web
+    client `xstockstrat[-staging]-web` with `openid email`, which Authelia would refuse with `invalid_scope` (spike item
+    (c)); the owner is amending § 4.6 to `openid profile email` in homelab-edge.
+  - **Finding 8.** Feature 280-third-party-sso-oidc is `demoted/canceled`, superseded by 345 (its status.md,
+    feature.md Status History and context.md updated).
+  - **Finding 2.** The SSO spec gains the rate-limit zones over the password-accepting Link/re-auth POSTs (including
+    `POST /accounts/api/sso/confirm`), S17 is extended to `max_age=0` + a fresh `auth_time` in the ID token, and
+    `sso.md` § 6 lists the gates. All are homelab-edge changes, not merged at this commit.
+- Fixes, per finding:
+  1. Scope: design.md § 6 gate 3 now requires the web client registered with `openid profile email` (SSO spec § 4.6
+     as amended) beside the claims policy (**D-119 gate 3 text amended**). design Open Risks "Edge cutover gates" names
+     the scope. implementation-spec spec-level choice 1 and Step 32 cite the amendment; Step 54's runbook content and
+     grep include it. product-spec Feature Workflow Notes lists it among the edge items to prove.
+  2. Edge gates: product-spec Risks "Linking window" no longer says "tracked in homelab-edge"; it says homelab-edge is
+     adding the zone (§ 4.3) and the gate list (`sso.md` § 6), tracked only here until that lands. design § 6 gates 1–2
+     and Open Risks point at the § 4.3 zone and the S17 extension (D-119 gates 1–2: wording only).
+  3. 319 ordering: the `merge-order.md` 345 vs 319 row is now a hard constraint (319 first or in the same train, D-52,
+     the RevokeToken defect); the stale `telemetry.ts :380/:381` prose (BoundCounters are at `:390-404` on
+     `main-dev@0dbc26b`) and the 337/331 rebase-only notes are dropped. product-spec Feature Workflow Notes says
+     "first or alongside" (hard), with 324/331/323 rebase only.
+  4. AC-77: FR-16.6 says a cookie-less request gets the middleware redirect (`middleware.ts:80-83`) and the routes'
+     401 is the stale-token case. Step 41 adds the no-cookie `GET /accounts/api/sso` → `/auth/login` case and AC-77
+     (row 1) to Covers; the coverage table maps AC-77 to 41, 43; Step 43 covers rows 2–8 plus the handler-level 401;
+     spec-level choice 5 rewritten. design seam table gains rows 77 and 78 (mechanisms D-107/D-124 and D-136; no
+     decision text changed).
+  5. "both-mode" → "every-mode" (Origin 403, JSON on an expired session, the Sign-out button) in product-spec FR-14's
+     table and Consumer Surface, design.md Build order (D-60/D-80 wording only) and the impl-spec Execution Summary.
+  6. product-spec Config Key Changes, the impl-spec Execution Summary and Step 4's evidence cite the `merge-order.md` 345 vs
+     314/317/321 row instead of the deleted 352 row; the 355 row's "same rule as the 345 row" now names the
+     config-renumber row.
+  7. The 24 h stale-key window (`_JWKS_STALE_MAX_S = 86400`, D-37; D-31's state machine): spec-level choice 2 names it;
+     product-spec Risks and design Open Risks record it as pending owner sign-off before Step 19; Step 54's runbook
+     content and grep include it. No decision text changed.
+  8. See owner decision above.
+  9. feature.md Summary no longer says SSO replaces password login and the OAuth server; Next Action is
+     `/sdd-execute authelia-sso` after the open ⚠ items. The O-94 `/sdd-review product-spec` item is ticked in
+     design.md Open Risks and the 2026-11-24 Open Threads.
+  10. Step 54's runbook has the operator check the changed row's environment against the deployment's
+      `APPLICATION_ENV` after `set-auth-mode` (both environments' rows exist in every database). The `--expect-database`
+      flag was not added (would change D-108; propose separately if wanted).
+  11. FR-10 records that the access JWT and its roles stay valid until `jwt.access_ttl_seconds` (default 900 s) as a
+      bounded deviation from SSO spec § 3 "Sessions".
+- Not changed: the `merge-order.md` row `third-party-sso-oidc` (280) vs 296 (`Resolved: No`) and the 306 row's
+  "`047` owner is whichever of 306/280 merges first" still name 280; both are moot now that 280 is canceled, left for
+  the owner or `/sdd-archiver`.
+
+## Open Threads (2026-11-24 final pre-merge review)
+
+- [ ] homelab-edge amendments (owner): SSO spec § 4.6 web client scopes `openid profile email`; § 4.3 rate-limit zone
+      over `POST /accounts/api/sso/confirm` (and the other password-accepting Link/re-auth POSTs); S17 extended to
+      `prompt=login` + `max_age=0` returning a fresh `auth_time`; `sso.md` § 6 listing design § 6 gates 1–4; `sso.md` § 4
+      "Change an xstockstrat role" noting the web delay up to `jwt.access_ttl_seconds` (finding 11). Due before
+      `set-auth-mode both` on a homelab deployment.
+- [ ] Owner sign-off on the 24 h stale-key window (`_JWKS_STALE_MAX_S`). Due before Step 19.
+- [ ] Remaining impl-review ⚠ items (Step 52 firefox `testIgnore`, Step 37 `bffAllowlist`, Step 1/2 `buf breaking`
+      fallback, Step 4/3 migration re-check, Step 6 Node assert). Due at those steps.
+
+## Session 2026-11-24 — second pre-merge review fixes
+
+- Step 27: `serverLog.test.ts` already exists on `main-dev`; the step now modifies it and appends the `logOnce` cases after
+  the existing tests (the OTel logger provider can be set only once).
+- Gate 3 (D-119, design § 6): `auth_time` must be present in the ID token by default or via the claims policy, as spike S17
+  shows; the claims policy lists `email` and `preferred_username`. This matches homelab-edge SSO spec § 4.6 at `3b4e7a5`.
+- Step 23's cited range `test_auth_deadline.py:51-99` (the file has 99 lines).

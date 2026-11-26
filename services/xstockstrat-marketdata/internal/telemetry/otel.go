@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -81,7 +80,7 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, forceFlush
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(lexp)),
 		sdklog.WithResource(res),
 	)
-	global.SetLoggerProvider(lp)
+	otel.SetLoggerProvider(lp)
 	logProviderInstalled.Store(true)
 
 	shutdown = func(ctx context.Context) error {
@@ -313,6 +312,7 @@ const (
 	KeyOutcome = "outcome"
 	KeyResult  = "result"
 	KeyKind    = "kind"
+	KeyReason  = "reason"
 )
 
 // Marketdata loop names. LoopBarIngest, LoopClassificationRefresh and LoopAssetRefresh keep their own
@@ -361,14 +361,37 @@ const (
 	BackfillFundamentals = "fundamentals"
 	BackfillWritten      = "written"
 	BackfillEmpty        = "empty"
+	BackfillSkipped      = "skipped"
 	BackfillFailed       = "failed"
 )
 
+const (
+	LeftOutLabelCollision = "label_collision"
+	LeftOutYearEndQuarter = "year_end_quarter"
+)
+
+const (
+	DelistingHookTimeout = "timeout"
+	DelistingHookError   = "error"
+)
+
 var (
-	vendorRequests  = NewCounter("marketdata.vendor.requests")
-	vendorDuration  = NewHistogram("marketdata.vendor.request.duration", metric.WithUnit("s"))
-	streamReconnect = NewCounter("marketdata.stream.reconnects")
-	backfillSymbols = NewCounter("marketdata.backfill.symbols")
+	vendorRequests   = NewCounter("marketdata.vendor.requests")
+	vendorDuration   = NewHistogram("marketdata.vendor.request.duration", metric.WithUnit("s"))
+	streamReconnect  = NewCounter("marketdata.stream.reconnects")
+	backfillSymbols  = NewCounter("marketdata.backfill.symbols")
+	periodsLeftOut   = NewCounter("marketdata.backfill.periods_left_out")
+	ohlcvOutOfMemory = NewCounter("marketdata.ohlcv.out_of_memory_errors")
+
+	delistingHookFailures = NewCounter("marketdata.delisting.hook_failures")
+)
+
+// OHLCV repository op labels for RecordOhlcvOutOfMemory.
+const (
+	OhlcvOpBars       = "bars"
+	OhlcvOpRecentBars = "recent_bars"
+	OhlcvOpBarsBatch  = "bars_batch"
+	OhlcvOpInsertBars = "insert_bars"
 )
 
 // HTTPErrorOutcome classifies a non-success status; it never returns VendorOK.
@@ -402,6 +425,18 @@ func RecordStreamReconnect(ctx context.Context, result string) {
 
 func RecordBackfillSymbol(ctx context.Context, kind, outcome string) {
 	backfillSymbols.Add(ctx, 1, attribute.String(KeyKind, kind), attribute.String(KeyOutcome, outcome))
+}
+
+func RecordPeriodLeftOut(ctx context.Context, reason string) {
+	periodsLeftOut.Add(ctx, 1, attribute.String(KeyReason, reason))
+}
+
+func RecordDelistingHookFailure(ctx context.Context, reason string) {
+	delistingHookFailures.Add(ctx, 1, attribute.String(KeyReason, reason))
+}
+
+func RecordOhlcvOutOfMemory(ctx context.Context, op string) {
+	ohlcvOutOfMemory.Add(ctx, 1, attribute.String(KeyOp, op))
 }
 
 type lastFrameSource struct {

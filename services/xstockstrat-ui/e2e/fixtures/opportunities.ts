@@ -92,6 +92,35 @@ export const MYSZ_FORMULA_UNREADABLE_HELD_OPPORTUNITY = {
   provenance: ['watchlist', 'position', 'formula_unreadable'],
 };
 
+/** Chip-label rows (feature 339, @AC-2): one strategy row and one strategy-less `fundamentals` row
+ *  on LYFT. NOT in OPPORTUNITIES; no `validUntil`, since its BigInt breaks `page.route` JSON bodies. */
+export const LYFT_SOURCE_LABEL_OPPORTUNITIES = [
+  {
+    symbol: 'LYFT',
+    action: OpportunityActionTag.ENTER,
+    conviction: 0.7,
+    passingConditions: 2,
+    totalConditions: 3,
+    thesis: 'Volatility-stopped dip entry',
+    strategyId: 'dip_buyer_vol_stop',
+    source: 'watchlist',
+    opportunityKey: 'u1|LYFT|dip_buyer_vol_stop',
+    provenance: ['watchlist'],
+  },
+  {
+    symbol: 'LYFT',
+    action: OpportunityActionTag.ENTER,
+    conviction: 0.6,
+    passingConditions: 0,
+    totalConditions: 0,
+    thesis: 'Fundamentals screen hit',
+    strategyId: '',
+    source: 'fundamentals',
+    opportunityKey: 'u1|LYFT|',
+    provenance: ['fundamentals'],
+  },
+];
+
 export const OPPORTUNITIES = [
   {
     symbol: 'AAPL',

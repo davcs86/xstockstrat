@@ -2,14 +2,29 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { SERIES_PALETTE } from '../../lib/seriesPalette';
 
+type Srgb = { r: number; g: number; b: number; a: number };
 const req = createRequire(import.meta.url);
 const ui = req('./uiTheme.cjs') as {
   parseRootTokens: (css: string) => Map<string, string>;
   cssDeclarations: (css: string) => { name: string; value: string }[];
   contrastRatio: (x: string, y: string) => number;
-  colorsEqual: (x: string, y: string) => boolean;
+  colorsEqual: (x: string | Srgb, y: string | Srgb) => boolean;
 };
+const cv = req('./colorVision.cjs') as {
+  pairDistances: (
+    colors: string[],
+    sim: 'deuteranopia' | 'protanopia' | 'normal',
+  ) => { i: number; j: number; adjacent: boolean; dE: number }[];
+};
+const bundle = req('./checkThemeBundle.cjs') as {
+  nonSharedTokens: (t: {
+    staging: Map<string, string>;
+    production: Map<string, string>;
+  }) => { theme: string; name: string; color: Srgb }[];
+};
+const SERIES_TOKENS = SERIES_PALETTE.map((p) => p.token);
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const stagingCss = read('./staging.css');
@@ -81,6 +96,7 @@ const PAIRS: Pair[] = [
     nonText(`chart-${n}`, 'card'),
     nonText(`chart-${n}`, 'background'),
   ]),
+  ...SERIES_TOKENS.flatMap((t) => [nonText(t.slice(2), 'card'), nonText(t.slice(2), 'background')]),
 ];
 const ratio = (tokens: Map<string, string>, p: Pair) =>
   ui.contrastRatio(tokens.get(`--${p.fg}`)!, tokens.get(`--${p.bg}`)!);
@@ -99,8 +115,13 @@ describe('theme files', () => {
   it('declares the same token names in both themes', () => {
     expect([...production.keys()].sort()).toEqual([...staging.keys()].sort());
   });
-  it('keeps the staging tokens byte-identical to Nocturne (AC-2, FR-3)', () => {
-    expect([...staging.entries()]).toEqual(NOCTURNE);
+  it('keeps the staging Nocturne tokens byte-identical (AC-2, FR-3; feature 342 AC-1)', () => {
+    expect([...staging.entries()].filter(([k]) => !SERIES_TOKENS.includes(k))).toEqual(NOCTURNE);
+  });
+  it('declares exactly the Nocturne tokens plus the 12 series tokens in staging', () => {
+    expect([...staging.keys()].sort()).toEqual(
+      [...NOCTURNE.map(([k]) => k), ...SERIES_TOKENS].sort(),
+    );
   });
   it('keeps the shared order-side colours out of both theme files (FR-5)', () => {
     for (const tokens of [staging, production]) {
@@ -170,5 +191,61 @@ describe('staging contrast deviations (AC-17)', () => {
       ]),
     );
     expect(Object.fromEntries(listed)).toEqual(Object.fromEntries(failing));
+  });
+});
+
+describe('series palette (feature 342)', () => {
+  const THEMES = [
+    ['staging', staging],
+    ['production', production],
+  ] as const;
+  const values = SERIES_TOKENS.map((t) => staging.get(t)!);
+
+  it.each(THEMES)('%s defines exactly 12 series tokens (AC-1)', (_name, tokens) => {
+    const declared = [...tokens.keys()].filter((k) => k.startsWith('--series-'));
+    expect(declared).toEqual(SERIES_TOKENS);
+    expect(declared).toHaveLength(12);
+  });
+
+  it('keeps every series token equal across themes', () => {
+    // Equal values keep the series tokens outside check (b) (checkThemeBundle.cjs nonSharedTokens)
+    // and keep feature-307 @AC-2 true.
+    for (const t of SERIES_TOKENS)
+      expect(ui.colorsEqual(staging.get(t)!, production.get(t)!), t).toBe(true);
+  });
+
+  it.each(THEMES)('%s series colours meet 3:1 on card and background (AC-4)', (_name, tokens) => {
+    for (const t of SERIES_TOKENS) {
+      for (const bg of ['--card', '--background'])
+        expect(
+          ui.contrastRatio(tokens.get(t)!, tokens.get(bg)!),
+          `${t}/${bg}`,
+        ).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it.each([
+    ['deuteranopia', true, 10],
+    ['protanopia', true, 10],
+    ['deuteranopia', false, 5],
+    ['protanopia', false, 5],
+    ['normal', null, 10],
+  ] as const)('%s pairs (adjacent: %s) differ by at least %s (AC-5)', (sim, adjacent, floor) => {
+    const rows = cv
+      .pairDistances(values, sim)
+      .filter((r) => adjacent === null || r.adjacent === adjacent);
+    const worst = rows.reduce((a, b) => (b.dE < a.dE ? b : a));
+    expect(
+      worst.dE,
+      `worst pair ${worst.i}-${worst.j}: dE ${worst.dE.toFixed(2)} under ${sim}`,
+    ).toBeGreaterThanOrEqual(floor);
+  });
+
+  it('no series colour equals a theme-specific token', () => {
+    const N = bundle.nonSharedTokens({ staging, production });
+    for (const v of values) {
+      for (const n of N)
+        expect(ui.colorsEqual(v, n.color), `${v} vs ${n.theme} ${n.name}`).toBe(false);
+    }
   });
 });

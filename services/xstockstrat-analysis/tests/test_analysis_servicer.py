@@ -6,6 +6,7 @@ populating _backtests/_strategies directly, same pattern as ingest.
 """
 
 import asyncio
+import contextlib
 import inspect
 import json
 import logging
@@ -23,6 +24,7 @@ from gen.analysis.v1 import analysis_pb2
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
 from gen.ingest.v1 import ingest_pb2
+from gen.portfolio.v1 import portfolio_pb2
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -4505,8 +4507,24 @@ class _FakeOppRepo:
         self.rows: dict[str, list[dict]] = {}
         self.actions: dict[tuple[str, str], dict] = {}  # (user, key) -> {action, snooze_until}
 
-    async def replace_for_user(self, user_id, rows):
-        self.rows[user_id] = [dict(r) for r in rows]
+    async def replace_for_user(self, user_id, rows, conn=None):
+        # Mirrors the INSERT's COALESCE(computed_at, now()): a carried row keeps its stored stamp.
+        self.rows[user_id] = [
+            {**r, "computed_at": r.get("computed_at") or datetime.now(UTC)} for r in rows
+        ]
+
+    async def read_attributed_rows(self, user_id):
+        return [dict(r) for r in self.rows.get(user_id, []) if r.get("strategy_id", "") != ""]
+
+    @contextlib.asynccontextmanager
+    async def transaction(self):
+        # Restores the rows on an exception, then re-raises — the real transaction's rollback.
+        snapshot = {uid: [dict(r) for r in rs] for uid, rs in self.rows.items()}
+        try:
+            yield None
+        except BaseException:
+            self.rows = snapshot
+            raise
 
     async def count_for_user(self, user_id):
         return len(self.rows.get(user_id, []))
@@ -4704,7 +4722,9 @@ def _wl(bindings=None, symbols=None):
     """A Watchlist-shaped object: ``bindings`` = [(symbol, strategy_id), …]; ``symbols`` = the
     deprecated flat mirror for legacy-row coverage (FR-6)."""
     return SimpleNamespace(
-        bindings=[SimpleNamespace(symbol=s, strategy_id=st) for s, st in (bindings or [])],
+        bindings=[
+            portfolio_pb2.WatchlistBinding(symbol=s, strategy_id=st) for s, st in (bindings or [])
+        ],
         symbols=list(symbols or []),
     )
 
@@ -5505,7 +5525,7 @@ class TestOpportunityDataUnavailable:
             )
 
         with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _selective_fail):
-            rows = await svc._compute_opportunities("u1", self._META)
+            rows, _ = await svc._compute_opportunities("u1", self._META)
         by_sym = {r["symbol"]: r for r in rows}
         assert set(by_sym) == {"AAPL", "MSFT"}
         # AAPL: terminal unavailable, zeroed on BOTH ranking axes so it sinks in the read ORDER BY.
@@ -5529,7 +5549,7 @@ class TestOpportunityDataUnavailable:
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
             bars={},  # AAPL absent → GetBars returns [] (no raise)
         )
-        rows = await svc._compute_opportunities("u1", self._META)
+        rows, _ = await svc._compute_opportunities("u1", self._META)
         aapl = {r["symbol"]: r for r in rows}["AAPL"]
         assert "unavailable" not in aapl["provenance"]
         assert _row_to_opportunity(aapl).data_unavailable is False
@@ -5551,7 +5571,7 @@ class TestOpportunityDataUnavailable:
             strategies={"sx": _strat_row("sx", entry=three_fail)},
             bars={"AAPL": [50.0, 60.0, 70.0]},  # SMA≈60 — none of the three thresholds pass
         )
-        rows = await svc._compute_opportunities("u1", self._META)
+        rows, _ = await svc._compute_opportunities("u1", self._META)
         opp = _row_to_opportunity({r["symbol"]: r for r in rows}["AAPL"])
         assert opp.data_unavailable is False
         assert (opp.passing_conditions, opp.total_conditions) == (0, 3)
@@ -5619,7 +5639,7 @@ class TestOpportunityDataUnavailable:
             )
 
         with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _maybe_raise):
-            rows = await svc._compute_opportunities("u1", self._META)
+            rows, _ = await svc._compute_opportunities("u1", self._META)
         by_sym = {r["symbol"]: r for r in rows}
         assert _row_to_opportunity(by_sym["AAPL"]).data_unavailable is True
         msft = _row_to_opportunity(by_sym["MSFT"])
@@ -5736,7 +5756,11 @@ class _StampedComputeState:
         return self._row
 
     async def upsert(self, user_id, valid_until):
-        self._row = {"computed_at": datetime.now(UTC), "valid_until": valid_until}
+        # Mirrors the real ON CONFLICT: only computed_at and valid_until change.
+        self._row = {**self._row, "computed_at": datetime.now(UTC), "valid_until": valid_until}
+
+    async def write_cursor(self, user_id, cursor, *, conn=None):
+        self._row = {**self._row, "live_only_cursor": cursor}
 
 
 @pytest.mark.usefixtures("read_path")
@@ -6515,6 +6539,42 @@ class TestScreenSymbolsHeld:
         assert by_symbol.get("AAPL") is True
         assert by_symbol.get("MSFT") is False
 
+    @pytest.mark.asyncio
+    async def test_failed_held_drain_marks_no_row_held(self, caplog):
+        svc = make_servicer()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(
+                bars=[SimpleNamespace(close=c) for c in [10.0, 11.0, 12.0]]
+            )
+        )
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            return_value=SimpleNamespace(result=[SimpleNamespace(value=50.0)])
+        )
+        svc._ingest = MagicMock()
+        svc._ingest.ListSignalSources = AsyncMock(return_value=SimpleNamespace(sources=[]))
+        page1 = SimpleNamespace(
+            positions=[SimpleNamespace(symbol="AAPL", market_value=100.0)],
+            page=SimpleNamespace(next_page_token="p2"),
+        )
+        svc._portfolio = SimpleNamespace(
+            ListPositions=AsyncMock(side_effect=[page1, aio_rpc_error(grpc.StatusCode.UNAVAILABLE)])
+        )
+
+        req = analysis_pb2.ScreenSymbolsRequest(symbols=["AAPL", "MSFT"])
+        with caplog.at_level(logging.WARNING):
+            resp = await svc.ScreenSymbols(req, _ctx(_HEADERS))
+        by_symbol = {r.symbol: r.held for r in resp.results}
+        assert set(by_symbol) == {"AAPL", "MSFT"}
+        assert by_symbol["AAPL"] is False
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "held cross-reference" in r.getMessage()
+        ]
+        assert len(warnings) == 1
+
 
 # ---------------------------------------------------------------------------
 # Feature 089 — honest strategy lifecycle (reactivate + live preconditions)
@@ -7213,6 +7273,112 @@ class TestGetIndicatorSeries:
         with pytest.raises(Exception, match="aborted"):
             await svc.GetIndicatorSeries(req, _owned_ctx())
 
+    @pytest.mark.asyncio
+    async def test_first_value_bars_is_declared_per_component(self):
+        """feature 341 AC-2/AC-4 — each component declares its first-value bars: SMA 200 → 200,
+        SMA 20 → 20, a formula declaring warmup_period 30 → 31, from the one GetFormula pass."""
+        svc = make_servicer()
+        definition = self._definition(
+            [
+                analysis_pb2.StrategyComponent(
+                    ref_name="sma200",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 200.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="sma20",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 20.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="custom",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-warm",
+                ),
+            ]
+        )
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="f-warm", name="warm", warmup_period=30
+            )
+        )
+
+        with patch.object(
+            StrategyEvaluator,
+            "_compute_component",
+            new=AsyncMock(return_value={"value": [None, 1.0, 2.0]}),
+        ):
+            req = analysis_pb2.GetIndicatorSeriesRequest(
+                strategy_id="s1", symbol="AAPL", closes=[1.0, 2.0, 3.0]
+            )
+            resp = await svc.GetIndicatorSeries(req, _owned_ctx())
+
+        by_ref = {c.ref_name: c.first_value_bars for c in resp.components}
+        assert by_ref == {"sma200": 200, "sma20": 20, "custom": 31}
+        assert svc._indicators.GetFormula.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_first_value_bars_zero_on_error_and_fundamentals_formula(self):
+        """A failed component and a fundamentals-only formula both declare 0 first-value bars."""
+        svc = make_servicer()
+        definition = self._definition(
+            [
+                analysis_pb2.StrategyComponent(
+                    ref_name="bad",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 200.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="fund",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-fund",
+                ),
+            ]
+        )
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="f-fund",
+                name="fund",
+                warmup_period=30,
+                fundamental_inputs=[indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO],
+            )
+        )
+        svc._load_fundamentals = AsyncMock(return_value=[])
+        svc._load_fundamentals_snapshot = AsyncMock(return_value=[])
+
+        with (
+            patch.object(
+                StrategyEvaluator,
+                "_compute_component",
+                new=AsyncMock(side_effect=FormulaExecutionError("bad", "boom")),
+            ),
+            patch.object(
+                StrategyEvaluator,
+                "_assemble_component_series",
+                new=AsyncMock(return_value={"value": [1.0, 1.0, 1.0]}),
+            ),
+        ):
+            req = analysis_pb2.GetIndicatorSeriesRequest(
+                strategy_id="s1", symbol="AAPL", closes=[1.0, 2.0, 3.0]
+            )
+            resp = await svc.GetIndicatorSeries(req, _owned_ctx())
+
+        by_ref = {c.ref_name: c for c in resp.components}
+        assert "boom" in by_ref["bad"].error
+        assert by_ref["bad"].first_value_bars == 0
+        assert by_ref["fund"].error == ""
+        assert len(by_ref["fund"].series) == 1
+        assert by_ref["fund"].first_value_bars == 0
+
 
 # ---------------------------------------------------------------------------
 # feature 150 — portfolio sizing routing (Steps 7/8): AC-3, AC-4, AC-5
@@ -7549,7 +7715,7 @@ class TestOpportunityConcurrencyFeature176:
             bars={s: _FIRING_BARS for s in syms},
         )
 
-        rows = await svc._compute_opportunities("u1", ())
+        rows, _ = await svc._compute_opportunities("u1", ())
 
         assert {r["symbol"] for r in rows} == set(syms)  # every symbol still produced its row
         # Feature 183: one BatchGetBars call for all symbols, no per-symbol fan-out.
@@ -7770,8 +7936,8 @@ class TestListOpportunitiesServerFilters190:
 
     @pytest.mark.asyncio
     async def test_symbol_filter_normalized_into_both_reads(self):
-        """feature 215 @AC-15 — request.symbol is normalized once and forwarded to the fresh AND
-        the stale read (expired rows force the stale branch, so both calls are exercised)."""
+        """feature 215 @AC-15 — request.symbol is normalized once and forwarded to both reads. The
+        only row is expired live-only (366 branch (v)), so 365's all-stale body re-reads it."""
         expired = datetime.now(UTC) - timedelta(hours=1)
         svc = self._svc_with_row([["live_strategy"]], [0.9], expired)
         svc._opportunities_repo.read = AsyncMock(wraps=svc._opportunities_repo.read)
@@ -7782,7 +7948,7 @@ class TestListOpportunitiesServerFilters190:
             _ctx(_HEADERS),
         )
         calls = svc._opportunities_repo.read.await_args_list
-        assert [c.kwargs["include_expired"] for c in calls] == [False, True]
+        assert [c.kwargs["include_expired"] for c in calls] == [True, True]
         assert all(c.kwargs["symbol"] == "SCHD" for c in calls)
 
     @pytest.mark.asyncio
@@ -7857,7 +8023,7 @@ class TestSymbolScoreRollup:
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
             bars={"AAPL": _FIRING_BARS, "MSFT": _FIRING_BARS},
         )
-        rows = await svc._compute_opportunities("u1", self._META)
+        rows, _ = await svc._compute_opportunities("u1", self._META)
         by_sym: dict[str, list[dict]] = {}
         for r in rows:
             by_sym.setdefault(r["symbol"], []).append(r)
@@ -7883,7 +8049,7 @@ class TestSymbolScoreRollup:
             )
 
         # Reference: a full compute over the inputs → AAPL's symbol_score.
-        ref_rows = await _fresh_svc()._compute_opportunities("u1", self._META)
+        ref_rows, _ = await _fresh_svc()._compute_opportunities("u1", self._META)
         ref_score = {r["symbol"]: r["symbol_score"] for r in ref_rows}["AAPL"]
         assert ref_score is not None
 
@@ -8032,3 +8198,54 @@ class TestUnguardedReadinessParity_feature215:
             src = inspect.getsource(getattr(AnalysisServicer, name))
             assert "_load_fundamentals" in src or "_formula_fundamentals" in src, name
             assert "failures=" not in src, f"{name} must stay unguarded"
+
+
+def _delisted_binding(symbol, strategy_id=""):
+    return portfolio_pb2.WatchlistBinding(
+        symbol=symbol,
+        strategy_id=strategy_id,
+        delisted=common_pb2.DelistedState(
+            reason=common_pb2.UNSERVABLE_REASON_NOT_TRADABLE, first_unservable_date="2026-11-02"
+        ),
+    )
+
+
+async def _drain_bindings(*watchlists):
+    svc = make_servicer()
+    svc._portfolio = AsyncMock()
+    svc._portfolio.ListWatchlists = AsyncMock(
+        return_value=portfolio_pb2.ListWatchlistsResponse(watchlists=list(watchlists))
+    )
+    out = await svc._drain_watchlist_bindings((("x-user-id", "u1"),))
+    return out, svc._portfolio.ListWatchlists
+
+
+class TestDrainSkipsDelistedBindings:
+    """feature 352 @AC-8 — a flagged binding leaves the opportunity scan."""
+
+    async def test_delisted_binding_is_not_returned(self):
+        tech = portfolio_pb2.Watchlist(
+            name="Tech",
+            bindings=[
+                portfolio_pb2.WatchlistBinding(symbol="AAPL", strategy_id="sx"),
+                _delisted_binding("ROKU", "sx"),
+            ],
+        )
+        out, list_watchlists = await _drain_bindings(tech)
+        assert out == [("AAPL", "sx")]
+        assert list_watchlists.await_count == 1
+
+    async def test_all_delisted_list_never_falls_back_to_legacy_symbols(self):
+        only_flagged = portfolio_pb2.Watchlist(
+            name="Tech", bindings=[_delisted_binding("ROKU")], symbols=["ROKU"]
+        )
+        out, list_watchlists = await _drain_bindings(only_flagged)
+        assert out == []
+        assert list_watchlists.await_count == 1
+
+    async def test_binding_without_delisted_is_unchanged(self):
+        tech = portfolio_pb2.Watchlist(
+            name="Tech", bindings=[portfolio_pb2.WatchlistBinding(symbol="AAPL", strategy_id="sx")]
+        )
+        out, _ = await _drain_bindings(tech)
+        assert out == [("AAPL", "sx")]

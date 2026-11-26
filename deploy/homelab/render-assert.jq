@@ -20,7 +20,7 @@ def project: (if type == "object" and (.services | type) == "object" then .servi
   ports: [(.ports // [])[] | (.published | tostring)],
   mem: (.mem_limit | tostring),
   swap: (.memswap_limit | tostring),
-  env: ((.environment // {}) | {APPLICATION_ENV, TRADING_MODE, OTEL_ENABLED, HOST_PROVIDER, HOSTNAME, DB_PGBOUNCER, pool: .DB_POOL_MAX,
+  env: ((.environment // {}) | {APPLICATION_ENV, TRADING_MODE, OTEL_ENABLED, HOST_PROVIDER, HOSTNAME, DB_PGBOUNCER, AGENT_ENDPOINT, GRPC_PORT, pool: .DB_POOL_MAX,
         otlp: ((.OTEL_EXPORTER_OTLP_ENDPOINT | type == "string" and length > 0) and (.OTEL_EXPORTER_OTLP_HEADERS | authz)),
         db: (.DATABASE_URL | dsn), mtls: ((.MTLS_CERT | pem) and (.MTLS_KEY | pem)), dbca: (.DATABASE_CA_CERT | pem)})
 });
@@ -47,9 +47,14 @@ project as $s | want as $w | ($s | keys - ["db-migrator"]) as $apps | [
   # 7 explicit direct slots + ledger's LISTEN connection = the 8 homelab-edge sizes each role for (a floor, not a cap).
   (if ([direct[] | select(. != "db-migrator") as $k | ($s[$k].env.pool | tonumber?) // 99] | add // 99) > 7 then "pool-budget" else empty end),
   (pooled[] as $k | if $s[$k].env.pool != null then "pool-budget:\($k)" else empty end),
-  (if ($s["xstockstrat-indicators"].mem != "2147483648" or $s["xstockstrat-indicators"].swap != "2147483648")
+  (if ($s["xstockstrat-indicators"].mem != "805306368" or $s["xstockstrat-indicators"].swap != "805306368")
    then "mem-limit:xstockstrat-indicators" else empty end),
+  # Every app is capped and the caps total <= 3 GiB (4 GiB VM less ~0.9 GiB of host daemons; no swap).
+  ($apps[] | select(($s[.].mem | tonumber? // 0) <= 0) | "mem-limit:\(.)"),
+  (if ([$apps[] | $s[.].mem | tonumber? // 0] | add // 0) > 3221225472 then "mem-budget" else empty end),
   (if $s["xstockstrat-agent"].env.db != null then "agent-db" else empty end),
   (if $s["xstockstrat-ui"].env.HOSTNAME != "0.0.0.0" then "ui-hostname" else empty end),
+  # The UI reads the tool catalog on the agent's internal gRPC port: its endpoint must name that port.
+  ($s["xstockstrat-agent"].env.GRPC_PORT as $p | if ($p | type) != "string" or ($p | length) == 0 or $s["xstockstrat-ui"].env.AGENT_ENDPOINT != "xstockstrat-agent:\($p)" then "agent-endpoint" else empty end),
   (if ([$s | to_entries[] | select(.value.ports | length > 0) | "\(.key)=\(.value.ports | join(","))"] | sort) != ["xstockstrat-agent=9000","xstockstrat-ui=3000"] then "ports" else empty end)
 ]

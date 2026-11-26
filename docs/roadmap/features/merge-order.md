@@ -123,6 +123,10 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `fix-sandbox-seed-keys` (243) | `enforce-config-key-wiring` (278) | **Soft — config-wiring ratchet coupling** (recorded 2026-11-02). Either order works: if 243 lands first, 278's first run records its state. Once 278 lands, any further 243 change to a config key or its reader must update `scripts/config-wiring.json` in the same PR (the baseline is shrink-only: a finding 243 fixes must be removed from `findings`, and a new finding cannot be baselined) | No |
 | `expose-score-strategy-mcp` (283) | `block-fundamentals-strategy-on-etf` (215) — **its integration PR merged to `main-dev`, NOT `launched`** | **Step 1 of 3 — code-first (recorded 2026-11-01; split from a single row that read as a PR-level deadlock).** 283's FR-3 scenarios assert the `UNAVAILABLE` "fundamentals availability unknown — grade unchanged" and `NOT_FOUND` "(fundamentals unavailable: …)" messages that 215's `ScoreStrategy` changes introduce (`services/xstockstrat-analysis/app/handlers/servicer.py`), so 215's integration PR must be on trunk before 283's final integration PR. **Deliberate exception to this file's `launched` rule:** the wait is satisfied by 215's *merge*, because 215 cannot reach `launched` until 283 ships (next row) — gating on `launched` here would deadlock both. `/sdd-execute` should treat this row as cleared once 215's integration PR is on `main-dev`. File-level overlap only (rebase, re-anchor by symbol): both touch `services/xstockstrat-agent/app/tools.py` and `app/client.py`, but in different functions (215's spec does not edit `manage_strategy`); the real same-function overlap with 215 is analysis `ScoreStrategy` in `servicer.py` and `tests/test_grade_fundamentals_exclusion.py`, where 283's trailer insert sits just before `return score` — 283 re-anchors by symbol after 215's final edits. Soft overlaps: `docs/runbooks/mcp-tools.md` and `plugins/strat-lab/skills/backtest/SKILL.md` (shared with 215, 275, 281). 283 does not change the tool count, so it does not race 281's `forty-five` guard **Resolved 2026-11-01:** 215's integration PR is on `main-dev` (`ScoreStrategy` "fundamentals availability unknown" path present in `servicer.py`), so this row is already cleared | Yes |
 | `config-dead-rows-prune` (305) | `config-keys-alias-removal` (306) ↔ `third-party-sso-oidc` (280) | Soft — config migration number (first to merge takes max+1; the others renumber: 3 file renames + stored regen, content and P2 sha unchanged); shared `migration-rerun.sh` (305 introduces `cfg_top` and slug-glob discovery; 306/280 rebase onto it and must not re-pin `R1`); shared gate files (305 appends after `membership()`, 306 edits `join()`); shared test file `services/xstockstrat-config/src/__tests__/dormantAlias.test.ts` (305 narrowed its marker-writer scan, 306 inverts its alias assertions); the `047` owner is whichever of 306/280 merges first (306's files are slug-named; a renumber is 3 renames plus a stored-set regeneration); **305 merges before 306's FR-6** (owner hand-off of the kept ledger baseline entry). Operator-approved 2026-11-10. | No |
+| `alert-detail-page` (344) | `fix-symbol-page-alerts-ui` (339) | **Hard — merge order only; 339 need not be `launched`.** Both rewrite the Alerts drawer (`services/xstockstrat-ui/src/components/trader/AlertStream.tsx`): 339 makes it unread-only with mark-read and Clear all; 344 then moves the bell into the shared `PlatformHeader` and puts the unread count on the shared `ALERT_UNREAD_COUNT_KEY` query key. 344's implementation-spec Steps 17-22 are marked blocked on 339 merged and must be re-specified against the post-339 tree (`/sdd-spec alert-detail-page`). Operator decision 2026-11-15 (339 lands first). | No |
+| `backtest-inline-backfill` (343) | `fix-indicator-pane-warmup` (341) | **Hard — merge order only; 341 need not be `launched`.** 343 raises the homelab backfill concurrency against the ohlcv lock budget and depends on the marketdata lock-breach counter (`marketdata.ohlcv.out_of_memory_errors`) that 341 adds; operator decision 2026-11-15 (one counter, owned by 341). Both also add a config seed migration: 343 numbers its migration above 341's at merge time and regenerates `scripts/config-wiring-stored.json`. | No |
+| `ensure-signals-watchlist-on-read` (351) | `fix-listwatchlists-page-token` (354) | **Hard — consumed fix.** 351's Step 5 landing gate requires 354's `ListByUser` token fix (`watchlist_repo.go:139`, token = last returned row) on `main-dev`; both edit `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go` (354 adds `seedNamedWatchlist`, which 351 Step 5 plans to reuse). 354 merges first; 351's Step 6 updates this row rather than adding a second. Found by the 354 impl-spec overlap scan (2026-11-17). **Merge order only — `fix-listwatchlists-page-token` need not be `launched`.** 351's first-page ensure adds a system row for every user, creating page boundaries where `ListByUser`'s former look-ahead token dropped the boundary row (agent limit-1 traversals; owners ≥100 rows). 354 merged to `main-dev` via #1566 (`149351de`); gate verified by 351 Step 5 (context.md, 2026-11-17); row updated in place by 351 Step 6. | Yes |
+| `fix-orphaned-code` (323) | `mediated-source-extraction-instructions` (355) | **Delete-vs-edit and a dangling label (operator decision 2026-11-17).** 323 deletes `services/xstockstrat-agent/app/prompts/signal_extraction.md`, which 355 edits, and `services/xstockstrat-ingest/app/extractors/noop.py`, whose dotted name `app.extractors.noop` 355 stores as `extractor_module` for every mediated source (never imported). 355 merges first; 323 then rebases, resolves the prompt file as a delete, and re-decides `noop.py` against what 355 shipped. | — |
 
 **257 rolling-deploy note**: until every ledger instance runs 257, a token from an old ledger build (an `event_id` UUID)
 or a repeated page makes portfolio `GetPnL` return `UNAVAILABLE`. Realized P&L changes on purpose once 251 lands:
@@ -267,6 +271,9 @@ catalog list + count on each merge. Proto: each adds a distinct enum/message (08
 proto-field collisions, but re-run `./scripts/buf-gen.sh` after each merge.
 | `consolidate-watchlist-signal` (127) | `order-snapshots-pnl-patterns` (042) | **Portfolio migration-NNN collision on `010`** (`/sdd-review` product-spec overlap scan, 2026-08-19): both add a `services/xstockstrat-portfolio/migrations/` migration and the tip is `009_bracket_order_ids`, so each independently computes next-free `010`. 042 (design-approved) specced `010` first (`realized_accum` on `portfolio.positions`) and keeps it; 127 renumbers to `011` (its `system_managed` column + name-constraint rework + `source` column). No proto-field or config collision (042's portfolio change is migration+Go handler only, no `portfolio.proto` edit; 127 owns the next-free `Watchlist`/`WatchlistBinding` field numbers uncontested). Re-derive the NNN across **all remote branches** at `/sdd-spec` (ledger 081), not the local tree. The two may merge in either order as long as 127 uses `011`. | No |
 | `homelab-otel-host-provider` (332) | `ui-env-themed-bundles` (307, `code-completed`) | **File-level overlap — merge order only; 307 need not be `launched`.** Both edit `.github/workflows/deploy-homelab.yml` (307 inserts a `ui-theme` run step before `setup-sops`; 332 adds `LEGACY_OTEL_EXPORTER_OTLP_*` env lines on the resolve step and a release-env change) and `scripts/sops-secrets.test.sh` (307's step-order pins around `resolve`; 332's `check_legacy … homelab` at `:1067` and `COMMON_RE` at `:747`). 332 merges second and rebases; it re-greps those anchors after 307 lands. Operator-approved 2026-11-11. | Yes (307 on `main-dev` at `67b857a`, PR #1507, verified 2026-11-11) |
+| `authelia-sso` (345) | `fix-mcp-deadline-budget` (314), `fix-marketdata-miss-path-noise` (317), `fix-trading-config-plumbing` (321) | **Conditional — config migration renumber; no feature waits for another** (`/sdd-review` product-spec overlap scan, operator decision 2026-11-24; supersedes the 2026-11-17 row against 352, which landed `054`). Trunk's last config migration is `055`; 314, 317 and 321 each plan `056_*`, and 345 takes the next free number at execute (`<NNN>_authelia_sso_keys`). golang-migrate skips a lower version that lands after a higher one, so **whichever merges first keeps `056`, and each other feature renumbers to the then-next free number at its own merge**. Re-derive from `origin/main-dev` at each `/sdd-spec` and merge. | No |
+| `authelia-sso` (345) | `fix-auth-trust-hardening` (319) | **Hard — merge order only; 319 need not be `launched`, and the two may merge in the same train** (D-52, owner-approved design; carried by the 2026-11-24 re-run). 345 exempts `/api/auth/logout` from the middleware's session gate when a session cookie is present, which removes today's UI-side mitigation for identity's unverified-decode `RevokeToken` (O-44, `docs/reports/2026-10-19-identity-revoketoken-unverified-decode-defect.md`); 345's route verifies the signature before revoking, and D-52 still requires 319's identity-side fix first or in the same train, never after 345. Shared files (rebase only): `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`, identity `src/telemetry.ts`, `services/xstockstrat-config/src/grpc/authz.ts`, agent `app/config/watcher.py`; no shared key, migration or proto field. | No |
+| `mediated-source-extraction-instructions` (355) | `delisted-symbol-handling` (352) | **Conditional — ingest migration renumber; neither feature waits for the other** (found at `/sdd-execute` Step 17, 2026-11-17; same golang-migrate rule as the 345 config-renumber row, then against 352 and now against 314/317/321, pending operator confirmation). 355 claims `services/xstockstrat-ingest/migrations/017_signal_source_extraction_instructions`; 352 takes `018_backfill_symbol_results`. golang-migrate skips a lower version that lands after a higher one, so **if 352 merges first, 355 renumbers its ingest migration to the then-next free number at its own merge**; if 355 merges first, nothing changes. **Resolved 2026-11-17: 355 merged first (#1567) with `017`; 352's `018` follows it, no renumber needed.** | Yes |
 
 > **Config-service seed-migration NNN pre-assignment (this batch, 2026-08-31).** Four features in the
 > 021/029/031/043/095/110/128/166/167/168 batch add a seed migration to the shared
@@ -397,3 +404,56 @@ regenerates `scripts/config-wiring-stored.json` (its `inputs_sha256` covers the 
 shares `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts` with 316 (the `emitAlert` body) and 312,
 `services/xstockstrat-ingest/app/handlers/servicer.py` with 313 and 309, and the agent's `app/tools.py` / `app/client.py`
 with 314, 319, 322, 327 and 328 — disjoint functions; the second merger rebases and re-greps its anchors.
+
+## Symbol-page cohort: 339-344 (2026-11-15, non-blocking)
+
+Beyond the two table rows above (344 after 339, 343 after 341), the six features triaged from the 2026-11-15 operator report
+overlap textually only. `chart-series-palette` (342) and `fix-indicator-pane-warmup` (341) both edit
+`services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`, `src/lib/indicatorChart.ts` and the symbol page
+(`src/app/trader/positions/[symbol]/page.tsx`); 339, 340 and 343 also edit that page (disjoint sections). Whichever merges
+second rebases and re-greps its anchors. 343 also shares `src/app/insights/strategies/[id]/page.tsx` and
+`e2e/trader/position-detail.spec.ts` with 341, and `services/xstockstrat-ingest/app/handlers/servicer.py`,
+`tests/test_ingest_servicer.py`, `e2e/mock-backend.ts` and `e2e/fixtures/INVENTORY.md` with 344; the regions are
+disjoint and the second merger rebases. Config seed number: 341 and 343 each name `050` as next free, as does
+`fix-live-enrich-ttl-seed` (330) on its branch; the trunk tip is `049`, so each re-derives its number at execute and at its
+integration PR, and the later merger regenerates `scripts/config-wiring-stored.json`.
+
+## Config seed number and Alpaca client overlap: 347 ↔ 341, 343, 330, 322, 323 (2026-11-16, non-blocking)
+
+`alpaca-adaptive-rate-limit` (347) names config migration `052` (341 landed `050_ui_chart_history_bars` and 343 landed
+`051_ingest_backfill_self_serve_keys` on 2026-11-16; 330 still names `050` on its branch), so 347 re-derives its number at execute and at its integration PR, and the later merger regenerates
+`scripts/config-wiring-stored.json`. 347 also edits `services/xstockstrat-marketdata/internal/alpaca/client.go` (`do` and the
+limiter), which `fix-retired-surface-proto-cleanup` (322, `Paper` plumbing) and `fix-orphaned-code` (323, `AlpacaAsset`
+removal) edit in disjoint hunks; whichever merges second rebases and re-greps its anchors.
+
+Further same-file overlaps for 347, all textual and non-blocking (whichever merges second rebases and re-greps its anchors):
+`services/xstockstrat-marketdata/cmd/server/main.go` with 322 (adjacent hunks in the Alpaca settings closure);
+`services/xstockstrat-trading/internal/service/trading.go` with 311, 312 and 321, and
+`services/xstockstrat-trading/internal/service/order_intent.go` with 321 (the staleness floor, same line);
+`docs/patterns/config-governance.md` (registered-keys log, both prepend at the same anchor),
+`services/xstockstrat-marketdata/CLAUDE.md` and `scripts/config-wiring-stored.json` with 341 (already on trunk; 347
+regenerates the stored set after any renumber).
+
+## Alert targeting overlap: 315 ↔ 312, 333, 357, 321, 337, 311 (2026-11-26, non-blocking)
+
+`fix-alert-event-targeting` (315) has no migration, proto or config-key collision with any peer, so this is a prose
+note, not a table row (statuses read 2026-11-26; none has merged):
+
+- `fix-read-path-owner-trust` (312, `implementation-ready`): no file overlap; either merge order is code-safe. 312's
+  product-spec Open Question 2 decides untargeted `ListAlerts` visibility, which changes who sees 315's empty-owner
+  fallback and the systemic alert. 312's implementation spec keeps `target_user_id IS NULL` rows visible and plans to
+  rebase on 315 (its Step 10).
+- `otel-env-provider-scoped-alerts` (333, `spec-ready`): both edit `packages/otel/alerts/alert-rules.yaml`, its README
+  and the guard's rule-count test. Whichever merges second re-greps and re-pins the count, and 333 scopes 315's new
+  rule `xstk-trading-account-halt` by environment along with the others.
+- `fix-portfolio-internal-position` (357, `in-progress`): same-function overlap in `checkRiskLimits`
+  (`services/xstockstrat-portfolio/internal/service/portfolio_service.go`). Whichever merges second resolves it by hand
+  and re-runs both features' `TestCheckRiskLimits*` tests.
+- `fix-trading-config-plumbing` (321, `implementation-ready`): `maxRetries` in the `flattenAndHalt` retry loop, next to
+  315's `haltAccount` calls in `trading.go`; rebase-only.
+- `metrics-host-provider-label` (337, `in-progress`): `scripts/tests/test_check_otel_produced_signals.py`, other tests
+  than 315's; rebase-only.
+- `fix-position-fold-correctness` (311, `implementation-ready`): `portfolio_service.go` (`processOrderFill`, and
+  `emitEvent` next to 315's `emitRiskAlert`), different functions; rebase-only.
+
+Recorded as a prose note (315 debate.md D-11) so it does not gate either integration PR.

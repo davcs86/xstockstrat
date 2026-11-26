@@ -3,13 +3,20 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
@@ -18,6 +25,7 @@ import (
 	"github.com/xstockstrat/trading/internal/broker"
 	"github.com/xstockstrat/trading/internal/config"
 	"github.com/xstockstrat/trading/internal/repository"
+	"github.com/xstockstrat/trading/internal/telemetry"
 	"github.com/xstockstrat/trading/internal/testdata"
 )
 
@@ -255,6 +263,23 @@ func (noopAccountRepo) UpdateHaltStatus(ctx context.Context, id string, halted b
 	return nil
 }
 
+// alertByCategory returns the one recorded alert of the given category; it fails the test unless exactly one exists.
+func alertByCategory(t *testing.T, notify *fakeNotifyClient, category string) *notifyv1.EmitAlertRequest {
+	t.Helper()
+	notify.mu.Lock()
+	defer notify.mu.Unlock()
+	var found []*notifyv1.EmitAlertRequest
+	for _, c := range notify.calls {
+		if c.Category == category {
+			found = append(found, c)
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("recorded %d %q alerts, want exactly 1 (all calls: %v)", len(found), category, notify.calls)
+	}
+	return found[0]
+}
+
 func TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState(t *testing.T) {
 	for _, status := range []string{"filled", "new"} {
 		t.Run(status, func(t *testing.T) {
@@ -286,6 +311,12 @@ func TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState(t *testi
 			}
 			if !found {
 				t.Errorf("expected a reconciliation.mismatch_found event for status %q, got %v", status, ledger.eventTypes())
+			}
+			notify := svc.notify.(*fakeNotifyClient)
+			for _, category := range []string{"halt", "reconciliation"} {
+				if got := alertByCategory(t, notify, category).TargetUserId; got != "u-1" {
+					t.Errorf("%s alert TargetUserId = %q, want %q", category, got, "u-1")
+				}
 			}
 		})
 	}
@@ -537,13 +568,14 @@ func TestReconcileTick_PartialFillWithinGraceWindow_NoFindingNoHalt(t *testing.T
 }
 
 func TestReconcileTick_QuantityDiscrepancy_PastGraceWindow_HaltsAndEmits(t *testing.T) {
+	notify := &fakeNotifyClient{}
 	svc := newTestReconciliationService(
 		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
 			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
 				return []broker.BrokerOrder{{BrokerOrderID: "bo-1", Status: "partially_filled", FilledQty: 5}}, nil
 			},
 		}, userID: "u-1"}},
-		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, notify, noopAccountRepo{},
 	)
 	svc.orders["order-1"] = &tradingv1.Order{
 		OrderId: "order-1", AccountId: "acct-1", BrokerOrderId: "bo-1",
@@ -571,16 +603,39 @@ func TestReconcileTick_QuantityDiscrepancy_PastGraceWindow_HaltsAndEmits(t *test
 	if !svc.isAccountHalted("acct-1") {
 		t.Error("expected the account to be halted after the grace window passed")
 	}
+	assertOwnerTargetedFindingAlerts(t, notify, "u-1")
+}
+
+// assertOwnerTargetedFindingAlerts pins the accepted double push: exactly the halt and the
+// reconciliation alert, both CRITICAL and both targeted at owner.
+func assertOwnerTargetedFindingAlerts(t *testing.T, notify *fakeNotifyClient, owner string) {
+	t.Helper()
+	notify.mu.Lock()
+	n := len(notify.calls)
+	notify.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("EmitAlert called %d times, want 2 (halt + reconciliation)", n)
+	}
+	for _, category := range []string{"halt", "reconciliation"} {
+		a := alertByCategory(t, notify, category)
+		if a.Severity != notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL {
+			t.Errorf("%s alert severity = %v, want CRITICAL", category, a.Severity)
+		}
+		if a.TargetUserId != owner {
+			t.Errorf("%s alert TargetUserId = %q, want %q", category, a.TargetUserId, owner)
+		}
+	}
 }
 
 func TestReconcileTick_MissingBrokerOrder_HaltsAndEmits(t *testing.T) {
+	notify := &fakeNotifyClient{}
 	svc := newTestReconciliationService(
 		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
 			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
 				return nil, nil // broker reports no orders at all
 			},
 		}, userID: "u-1"}},
-		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, notify, noopAccountRepo{},
 	)
 	svc.orders["order-1"] = &tradingv1.Order{
 		OrderId: "order-1", AccountId: "acct-1", BrokerOrderId: "bo-missing",
@@ -602,6 +657,60 @@ func TestReconcileTick_MissingBrokerOrder_HaltsAndEmits(t *testing.T) {
 	}
 	if !svc.isAccountHalted("acct-1") {
 		t.Error("expected the account to be halted")
+	}
+	assertOwnerTargetedFindingAlerts(t, notify, "u-1")
+}
+
+// TestReconcileTick_EmptyOwner_WarnsAndAlertsUntargeted: an empty pool owner blocks nothing
+// (feature-206 @AC-2) — the halt, the event and both alerts still fire, untargeted, with a WARN.
+func TestReconcileTick_EmptyOwner_WarnsAndAlertsUntargeted(t *testing.T) {
+	logs := captureLogs(t)
+	notify := &fakeNotifyClient{}
+	ledger := &recordingLedgerClient{}
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
+			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+				return nil, nil
+			},
+		}, userID: ""}},
+		&fakeReconciliationPortfolioClient{}, ledger, notify, noopAccountRepo{},
+	)
+	svc.orders["order-1"] = &tradingv1.Order{
+		OrderId: "order-1", AccountId: "acct-1", BrokerOrderId: "bo-missing",
+		Status: tradingv1.OrderStatus_ORDER_STATUS_NEW, Qty: 10, FilledQty: 0,
+	}
+
+	svc.reconcileTick(context.Background(), 0, 1.1)
+
+	if !svc.isAccountHalted("acct-1") {
+		t.Error("expected the account to be halted despite the empty owner")
+	}
+	mismatches := 0
+	for _, e := range ledger.eventTypes() {
+		if e == "reconciliation.mismatch_found" {
+			mismatches++
+		}
+	}
+	if mismatches != 1 {
+		t.Errorf("reconciliation.mismatch_found events = %d, want 1", mismatches)
+	}
+	for _, category := range []string{"halt", "reconciliation"} {
+		if got := alertByCategory(t, notify, category).TargetUserId; got != "" {
+			t.Errorf("%s alert TargetUserId = %q, want untargeted", category, got)
+		}
+	}
+	warned := map[string]bool{}
+	for _, r := range logs() {
+		if r["level"] == "WARN" && r["msg"] == "alert owner unresolved" && r["account_id"] == "acct-1" {
+			if kind, ok := r["alert_kind"].(string); ok {
+				warned[kind] = true
+			}
+		}
+	}
+	for _, kind := range []string{"halt", "reconciliation"} {
+		if !warned[kind] {
+			t.Errorf("missing WARN \"alert owner unresolved\" for alert_kind %q (got %v)", kind, warned)
+		}
 	}
 }
 
@@ -635,6 +744,12 @@ func TestReconcileTick_PositionQuantityDiscrepancy_CaughtViaPositionSide(t *test
 	}
 	if !found {
 		t.Fatalf("expected a position-side quantity_discrepancy finding for AAPL, got %v", ledger.eventTypes())
+	}
+	notify := svc.notify.(*fakeNotifyClient)
+	for _, category := range []string{"halt", "reconciliation"} {
+		if got := alertByCategory(t, notify, category).TargetUserId; got != "u-1" {
+			t.Errorf("%s alert TargetUserId = %q, want %q", category, got, "u-1")
+		}
 	}
 }
 
@@ -761,6 +876,7 @@ func (f *fakeConfigSetter) SetConfig(ctx context.Context, callerID string, req *
 
 func TestReconcileTick_SystemicThresholdCrossed_EscalatesToReduceOnly(t *testing.T) {
 	// Two accounts, both erroring on ListOrders — 2/2 = 1.0, at/above the 0.5 threshold.
+	notify := &fakeNotifyClient{}
 	failingBroker := &fakeReconciliationBroker{
 		listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
 			return nil, context.DeadlineExceeded
@@ -771,12 +887,27 @@ func TestReconcileTick_SystemicThresholdCrossed_EscalatesToReduceOnly(t *testing
 			"acct-1": {client: failingBroker, userID: "u-1"},
 			"acct-2": {client: failingBroker, userID: "u-2"},
 		},
-		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, notify, noopAccountRepo{},
 	)
 	setter := &fakeConfigSetter{}
 	svc.configSetter = setter
 
 	svc.reconcileTick(context.Background(), 0, 0.5)
+
+	var systemic []*notifyv1.EmitAlertRequest
+	notify.mu.Lock()
+	for _, c := range notify.calls {
+		if strings.HasPrefix(c.Title, "Systemic broker-reconciliation failure") {
+			systemic = append(systemic, c)
+		}
+	}
+	notify.mu.Unlock()
+	if len(systemic) != 1 {
+		t.Fatalf("systemic alerts = %d, want 1", len(systemic))
+	}
+	if systemic[0].TargetUserId != "" {
+		t.Errorf("systemic alert TargetUserId = %q, want untargeted", systemic[0].TargetUserId)
+	}
 
 	if len(setter.calls) != 1 {
 		t.Fatalf("expected exactly 1 SetConfig call, got %d", len(setter.calls))
@@ -845,6 +976,9 @@ func (f *fakeReconciliationOrderIntentRepo) FinalizeIntent(ctx context.Context, 
 }
 func (f *fakeReconciliationOrderIntentRepo) SweepStalePending(ctx context.Context, staleBefore time.Time, limit int) ([]*repository.OrderIntentRecord, error) {
 	panic("fakeReconciliationOrderIntentRepo.SweepStalePending not implemented")
+}
+func (f *fakeReconciliationOrderIntentRepo) ReleasePendingIntent(ctx context.Context, intentID string) (bool, error) {
+	panic("fakeReconciliationOrderIntentRepo.ReleasePendingIntent not implemented")
 }
 func (f *fakeReconciliationOrderIntentRepo) ListUnknownForAccount(ctx context.Context, brokerAccountID string) ([]*repository.OrderIntentRecord, error) {
 	if f.listUnknownFn != nil {
@@ -972,5 +1106,417 @@ func TestReconcileTick_UnknownIntent_GenuinelyInconclusive_NoWrite(t *testing.T)
 
 	if len(intents.resolveUnknownCalls) != 0 {
 		t.Errorf("expected zero writes for a genuinely inconclusive intent, got %v", intents.resolveUnknownCalls)
+	}
+}
+
+// ── Feature 358: drain portfolio ListPositions fail-closed ─────────────────────────────────
+// Never run these in parallel: the counter-asserting tests swap the process-global MeterProvider.
+
+const (
+	reconcile358Owner      = "user-358-owner"
+	reconcile358SkipMetric = "trading.reconciliation.position_check_skipped"
+	reconcile358CallCap    = 100
+)
+
+// reconcile358BrokerPositions is the broker truth: SYM001..SYM501, qty 10 each.
+func reconcile358BrokerPositions() []broker.BrokerPosition {
+	out := make([]broker.BrokerPosition, 0, 501)
+	for n := 1; n <= 501; n++ {
+		out = append(out, broker.BrokerPosition{Symbol: fmt.Sprintf("SYM%03d", n), Quantity: 10})
+	}
+	return out
+}
+
+type reconcile358Call struct {
+	token     string
+	pageSize  int32
+	accountID string
+	mode      commonv1.TradingMode
+	userID    string
+	deadline  time.Time
+}
+
+// reconcile358Pager serves page 1 (SYM001..SYM500, next "p2") and page "p2" by token.
+type reconcile358Pager struct {
+	mu    sync.Mutex
+	log   []reconcile358Call
+	calls int
+
+	page2Positions  []*portfoliov1.Position
+	page2Next       string
+	page2Err        error
+	page1Sleep      time.Duration
+	page2BlockOnCtx bool
+	ignoreToken     bool
+}
+
+func newReconcile358Pager() *reconcile358Pager {
+	return &reconcile358Pager{page2Positions: []*portfoliov1.Position{{Symbol: "SYM501", Qty: 10}}}
+}
+
+func (p *reconcile358Pager) listPositions(ctx context.Context, req *portfoliov1.ListPositionsRequest, _ ...grpc.CallOption) (*portfoliov1.ListPositionsResponse, error) {
+	call := reconcile358Call{
+		token: req.GetPage().GetPageToken(), pageSize: req.GetPage().GetPageSize(),
+		accountID: req.GetAccountId(), mode: req.GetTradingMode(),
+	}
+	if md, ok := metadata.FromOutgoingContext(ctx); ok {
+		if v := md.Get("x-user-id"); len(v) > 0 {
+			call.userID = v[0]
+		}
+	}
+	call.deadline, _ = ctx.Deadline()
+	p.mu.Lock()
+	p.calls++
+	n := p.calls
+	p.log = append(p.log, call)
+	p.mu.Unlock()
+	if n > reconcile358CallCap {
+		return nil, grpcstatus.Error(codes.ResourceExhausted, "paging fake call cap exceeded")
+	}
+	token := call.token
+	if p.ignoreToken {
+		token = ""
+	}
+	switch token {
+	case "":
+		time.Sleep(p.page1Sleep) // never observes ctx, so a page-1 overrun cannot hide page 2
+		page := make([]*portfoliov1.Position, 0, 500)
+		for i := 1; i <= 500; i++ {
+			page = append(page, &portfoliov1.Position{Symbol: fmt.Sprintf("SYM%03d", i), Qty: 10})
+		}
+		return &portfoliov1.ListPositionsResponse{Positions: page, Page: &commonv1.PageResponse{NextPageToken: "p2"}}, nil
+	case "p2":
+		if p.page2BlockOnCtx {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		if p.page2Err != nil {
+			return nil, p.page2Err
+		}
+		return &portfoliov1.ListPositionsResponse{Positions: p.page2Positions, Page: &commonv1.PageResponse{NextPageToken: p.page2Next}}, nil
+	}
+	return nil, grpcstatus.Errorf(codes.InvalidArgument, "paging fake: unknown token %q", token)
+}
+
+func (p *reconcile358Pager) takeLog() []reconcile358Call {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := p.log
+	p.log = nil
+	return out
+}
+
+func newReconcile358Service(p *reconcile358Pager) (*TradingService, *recordingLedgerClient) {
+	ledger := &recordingLedgerClient{}
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{"acc-1": {client: &fakeReconciliationBroker{
+			getPositionsFn: func(ctx context.Context) ([]broker.BrokerPosition, error) {
+				return reconcile358BrokerPositions(), nil
+			},
+			isPaper: true,
+		}, userID: reconcile358Owner}},
+		&fakeReconciliationPortfolioClient{listPositionsFn: p.listPositions},
+		ledger, &fakeNotifyClient{}, noopAccountRepo{},
+	)
+	return svc, ledger
+}
+
+func reconcile358Tokens(log []reconcile358Call) []string {
+	out := make([]string, len(log))
+	for i, c := range log {
+		out[i] = c.token
+	}
+	return out
+}
+
+func assert358Tokens(t *testing.T, tick int, log []reconcile358Call, want ...string) {
+	t.Helper()
+	got := reconcile358Tokens(log)
+	if !slices.Equal(got, want) {
+		t.Errorf("tick %d tokens = %q, want %q", tick, got, want)
+	}
+}
+
+func assert358Identity(t *testing.T, tick int, log []reconcile358Call) {
+	t.Helper()
+	for i, c := range log {
+		if c.userID != reconcile358Owner || c.accountID != "acc-1" || c.mode != commonv1.TradingMode_TRADING_MODE_PAPER {
+			t.Errorf("tick %d call %d: x-user-id=%q account=%q mode=%v, want %q acc-1 TRADING_MODE_PAPER",
+				tick, i, c.userID, c.accountID, c.mode, reconcile358Owner)
+		}
+	}
+}
+
+func reconcile358Findings(ledger *recordingLedgerClient) []*ledgerv1.AppendEventRequest {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	var out []*ledgerv1.AppendEventRequest
+	for _, e := range ledger.events {
+		if e.EventType == "reconciliation.mismatch_found" {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func assert358NoFindingNoHalt(t *testing.T, tick int, svc *TradingService, ledger *recordingLedgerClient) {
+	t.Helper()
+	if f := reconcile358Findings(ledger); len(f) != 0 {
+		t.Errorf("tick %d: %d reconciliation.mismatch_found event(s), want none", tick, len(f))
+	}
+	if svc.isAccountHalted("acc-1") {
+		t.Errorf("tick %d: acc-1 halted, want not halted", tick)
+	}
+}
+
+// assert358Skipped pins the fail-closed skip: no position candidate, no finding, no halt.
+func assert358Skipped(t *testing.T, tick int, svc *TradingService, ledger *recordingLedgerClient) {
+	t.Helper()
+	svc.reconcileCandidatesMu.Lock()
+	for k := range svc.reconcileCandidates {
+		if strings.HasPrefix(k, "acc-1:pos:") {
+			t.Errorf("tick %d: position candidate %q recorded, want the position check skipped", tick, k)
+		}
+	}
+	svc.reconcileCandidatesMu.Unlock()
+	assert358NoFindingNoHalt(t, tick, svc, ledger)
+}
+
+func assert358HasToken(t *testing.T, tick int, log []reconcile358Call, token string) {
+	t.Helper()
+	for _, c := range log {
+		if c.token == token {
+			return
+		}
+	}
+	t.Errorf("tick %d tokens = %q, want a %q call", tick, reconcile358Tokens(log), token)
+}
+
+func assert358NoAccountLabels(t *testing.T, keys map[string]map[string]bool) {
+	t.Helper()
+	for _, k := range []string{"account_id", "user_id"} {
+		if keys[reconcile358SkipMetric][k] {
+			t.Errorf("%s carries a %q attribute, want none", reconcile358SkipMetric, k)
+		}
+	}
+}
+
+func TestReconcileTick_358_AC1_DrainsAllPages_NoFindingNoHalt(t *testing.T) {
+	reader := installMetricReader(t)
+	p := newReconcile358Pager()
+	svc, ledger := newReconcile358Service(p)
+	svc.reconcileCandidates["acc-1:pos:SYM501"] = 1
+
+	for tick := 1; tick <= 2; tick++ {
+		svc.reconcileTick(context.Background(), 1, 1.1)
+		log := p.takeLog()
+		assert358Tokens(t, tick, log, "", "p2")
+		assert358Identity(t, tick, log)
+		assert358NoFindingNoHalt(t, tick, svc, ledger)
+		if tick == 1 {
+			svc.reconcileCandidatesMu.Lock()
+			_, ok := svc.reconcileCandidates["acc-1:pos:SYM501"]
+			svc.reconcileCandidatesMu.Unlock()
+			if ok {
+				t.Error("tick 1: seeded acc-1:pos:SYM501 candidate still present, want cleared by a matching page-2 position")
+			}
+		}
+	}
+	if got := counterValue(t, reader, reconcile358SkipMetric); got != 0 {
+		t.Errorf("skip counter total = %d, want 0", got)
+	}
+}
+
+func TestReconcileTick_358_PositiveControl_Page2MismatchHalts(t *testing.T) {
+	reader := installMetricReader(t)
+	p := newReconcile358Pager()
+	p.page2Positions = []*portfoliov1.Position{{Symbol: "SYM501", Qty: 5}}
+	svc, ledger := newReconcile358Service(p)
+
+	for tick := 1; tick <= 2; tick++ {
+		svc.reconcileTick(context.Background(), 1, 1.1)
+		log := p.takeLog()
+		assert358Tokens(t, tick, log, "", "p2")
+		assert358Identity(t, tick, log)
+	}
+	findings := reconcile358Findings(ledger)
+	if len(findings) != 1 {
+		t.Fatalf("%d reconciliation.mismatch_found events, want exactly 1 (%v)", len(findings), ledger.eventTypes())
+	}
+	f := findings[0].Payload.Fields
+	sym, exp, rep := f["order_id"].GetStringValue(), f["expected"].GetNumberValue(), f["broker_reported"].GetNumberValue()
+	if sym != "SYM501" || exp != 5 || rep != 10 {
+		t.Errorf("payload order_id=%q expected=%v broker_reported=%v, want SYM501 5 10", sym, exp, rep)
+	}
+	if !svc.isAccountHalted("acc-1") {
+		t.Error("acc-1 not halted, want halted on a genuine page-2 mismatch")
+	}
+	if got := counterValue(t, reader, reconcile358SkipMetric); got != 0 {
+		t.Errorf("skip counter total = %d, want 0", got)
+	}
+}
+
+func TestReconcileTick_358_AC2_Page2RPCError_SkipsAccountForTick(t *testing.T) {
+	reader := installMetricReader(t)
+	p := newReconcile358Pager()
+	p.page2Err = grpcstatus.Error(codes.Unavailable, "portfolio down")
+	svc, ledger := newReconcile358Service(p)
+
+	for tick := 1; tick <= 2; tick++ {
+		svc.reconcileTick(context.Background(), 1, 1.1)
+		assert358HasToken(t, tick, p.takeLog(), "p2")
+		assert358Skipped(t, tick, svc, ledger)
+	}
+	if got := counterValue(t, reader, reconcile358SkipMetric, outcome("rpc_error")); got != 2 {
+		t.Errorf("rpc_error skips = %d, want 2", got)
+	}
+	assert358NoAccountLabels(t, keysByInstrument(t, reader))
+}
+
+func TestReconcileTick_358_AC2_Page2Deadline_SkipsAccountForTick(t *testing.T) {
+	reader := installMetricReader(t)
+	p := newReconcile358Pager()
+	p.page1Sleep = 5 * time.Millisecond
+	p.page2BlockOnCtx = true
+	svc, ledger := newReconcile358Service(p)
+	svc.cfgW = snapshotInts(map[string]int64{"broker.timeout_ms": 50})
+
+	for tick := 1; tick <= 2; tick++ {
+		svc.reconcileTick(context.Background(), 1, 1.1)
+		log := p.takeLog()
+		assert358HasToken(t, tick, log, "p2")
+		assert358Skipped(t, tick, svc, ledger)
+		if len(log) == 2 && !log[1].deadline.After(log[0].deadline) {
+			t.Errorf("tick %d: page-2 deadline %v not after page-1 deadline %v, want a per-page timeout", tick, log[1].deadline, log[0].deadline)
+		}
+	}
+	if got := counterValue(t, reader, reconcile358SkipMetric, outcome("deadline")); got != 2 {
+		t.Errorf("deadline skips = %d, want 2", got)
+	}
+	assert358NoAccountLabels(t, keysByInstrument(t, reader))
+}
+
+func TestReconcileTick_358_AC3_IgnoredToken_SkipsAccountForTick(t *testing.T) {
+	reader := installMetricReader(t)
+	p := newReconcile358Pager()
+	p.ignoreToken = true
+	svc, ledger := newReconcile358Service(p)
+
+	for tick := 1; tick <= 2; tick++ {
+		svc.reconcileTick(context.Background(), 1, 1.1)
+		assert358Tokens(t, tick, p.takeLog(), "", "p2")
+		assert358Skipped(t, tick, svc, ledger)
+	}
+	if got := counterValue(t, reader, reconcile358SkipMetric, outcome("cursor_invalid")); got != 2 {
+		t.Errorf("cursor_invalid skips = %d, want 2", got)
+	}
+	assert358NoAccountLabels(t, keysByInstrument(t, reader))
+}
+
+// Each guard row asserts its exact text, so deleting any single guard turns a row red.
+func TestListAccountPlatformPositions_358_Guards(t *testing.T) {
+	cases := []struct {
+		name       string
+		setup      func(p *reconcile358Pager)
+		wantErr    string
+		wantPrefix string
+		wantCode   codes.Code
+		wantCause  telemetry.ReconcileSkipOutcome
+	}{
+		{name: "happy two-page drain", setup: func(p *reconcile358Pager) {}},
+		{
+			name:      "repeated token",
+			setup:     func(p *reconcile358Pager) { p.ignoreToken = true },
+			wantErr:   `page 2: repeated next_page_token "p2"`,
+			wantCause: telemetry.ReconcileSkipCursorInvalid,
+		},
+		{
+			name: "empty page with token",
+			setup: func(p *reconcile358Pager) {
+				p.page2Positions, p.page2Next = nil, "p3"
+			},
+			wantErr:   `page 2: empty page with next_page_token "p3"`,
+			wantCause: telemetry.ReconcileSkipCursorInvalid,
+		},
+		{
+			name: "duplicate symbol",
+			setup: func(p *reconcile358Pager) {
+				p.page2Positions = []*portfoliov1.Position{{Symbol: "SYM500", Qty: 10}}
+			},
+			wantErr:   `page 2: duplicate symbol "SYM500"`,
+			wantCause: telemetry.ReconcileSkipCursorInvalid,
+		},
+		{
+			name:       "rpc error",
+			setup:      func(p *reconcile358Pager) { p.page2Err = grpcstatus.Error(codes.Unavailable, "portfolio down") },
+			wantPrefix: "page 2: list positions:",
+			wantCode:   codes.Unavailable,
+			wantCause:  telemetry.ReconcileSkipRPCError,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newReconcile358Pager()
+			tc.setup(p)
+			svc, _ := newReconcile358Service(p)
+
+			got, err := svc.listAccountPlatformPositions(context.Background(), "acc-1", reconcile358Owner, commonv1.TradingMode_TRADING_MODE_PAPER, time.Second)
+			log := p.takeLog()
+
+			if tc.wantErr == "" && tc.wantPrefix == "" {
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+				if len(got) != 501 || got["SYM501"] != 10 {
+					t.Errorf("map has %d entries, SYM501=%v; want 501 entries, SYM501=10", len(got), got["SYM501"])
+				}
+				assert358Tokens(t, 1, log, "", "p2")
+				for i, c := range log {
+					if c.pageSize != reconcilePositionsPageSize {
+						t.Errorf("call %d PageSize = %d, want %d", i, c.pageSize, reconcilePositionsPageSize)
+					}
+				}
+				return
+			}
+			if got != nil {
+				t.Errorf("map = %d entries, want nil on error (never a partial map)", len(got))
+			}
+			if err == nil {
+				t.Fatal("err = nil, want an error")
+			}
+			if tc.wantErr != "" && err.Error() != tc.wantErr {
+				t.Errorf("err = %q, want %q", err.Error(), tc.wantErr)
+			}
+			if tc.wantPrefix != "" {
+				if !strings.HasPrefix(err.Error(), tc.wantPrefix) {
+					t.Errorf("err = %q, want prefix %q", err.Error(), tc.wantPrefix)
+				}
+				if c := grpcstatus.Code(err); c != tc.wantCode {
+					t.Errorf("status.Code(err) = %v, want %v", c, tc.wantCode)
+				}
+			}
+			if cause := reconcilePositionSkipCause(err); cause != tc.wantCause {
+				t.Errorf("reconcilePositionSkipCause = %q, want %q", cause, tc.wantCause)
+			}
+		})
+	}
+}
+
+func TestReconcilePositionSkipCause_358(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want telemetry.ReconcileSkipOutcome
+	}{
+		{"plain context deadline", fmt.Errorf("page 2: list positions: %w", context.DeadlineExceeded), telemetry.ReconcileSkipDeadline},
+		{"grpc DeadlineExceeded", fmt.Errorf("page 2: list positions: %w", grpcstatus.Error(codes.DeadlineExceeded, "x")), telemetry.ReconcileSkipDeadline},
+		{"context canceled", fmt.Errorf("page 2: list positions: %w", context.Canceled), telemetry.ReconcileSkipRPCError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := reconcilePositionSkipCause(tc.err); got != tc.want {
+				t.Errorf("reconcilePositionSkipCause(%v) = %q, want %q", tc.err, got, tc.want)
+			}
+		})
 	}
 }

@@ -130,7 +130,6 @@ describe('CommsgunClient.send', () => {
       [413, '413'],
       [422, '422'],
       [404, '4xx'],
-      [408, '4xx'],
       [302, '3xx'],
     ] as const) {
       const fetched = useFetch(status);
@@ -212,10 +211,14 @@ describe('CommsgunClient.send', () => {
 });
 
 describe('classifyStatus', () => {
-  it('2xx is delivered; 429 and 5xx retry; everything else is permanent', () => {
+  it('2xx is delivered; 408, 429 and 5xx retry; everything else is permanent', () => {
     for (const s of [200, 202, 299]) assert.equal(classifyStatus(s).kind, 'delivered');
     for (const s of [429, 500, 503, 599]) assert.equal(classifyStatus(s).kind, 'retry');
-    for (const s of [0, 100, 301, 400, 401, 408, 418, 600]) assert.equal(classifyStatus(s).kind, 'permanent');
+    for (const s of [0, 100, 301, 400, 401, 418, 600]) assert.equal(classifyStatus(s).kind, 'permanent');
+  });
+
+  it('@AC-4 (346) a 408 is retried as its own class, like the webhook worker', () => {
+    assert.deepEqual(classifyStatus(408), { kind: 'retry', errorClass: '408', outcome: 'http_error', retryAfterSeconds: null });
   });
 });
 

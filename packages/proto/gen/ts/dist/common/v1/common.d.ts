@@ -150,6 +150,17 @@ export declare enum UnservableReason {
 export declare function unservableReasonFromJSON(object: any): UnservableReason;
 export declare function unservableReasonToJSON(object: UnservableReason): string;
 export declare function unservableReasonToNumber(object: UnservableReason): number;
+export declare enum BackfillSymbolOutcome {
+    BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED = "BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED",
+    BACKFILL_SYMBOL_OUTCOME_EMPTY = "BACKFILL_SYMBOL_OUTCOME_EMPTY",
+    BACKFILL_SYMBOL_OUTCOME_SKIPPED = "BACKFILL_SYMBOL_OUTCOME_SKIPPED",
+    BACKFILL_SYMBOL_OUTCOME_FAILED = "BACKFILL_SYMBOL_OUTCOME_FAILED",
+    BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = "BACKFILL_SYMBOL_OUTCOME_INCOMPLETE",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function backfillSymbolOutcomeFromJSON(object: any): BackfillSymbolOutcome;
+export declare function backfillSymbolOutcomeToJSON(object: BackfillSymbolOutcome): string;
+export declare function backfillSymbolOutcomeToNumber(object: BackfillSymbolOutcome): number;
 /** Pagination */
 export interface PageRequest {
     pageSize: number;
@@ -216,6 +227,20 @@ export interface TemplateOrigin {
     /** latest_version > template_version */
     updateAvailable: boolean;
 }
+/**
+ * Lists non-written symbols only; reason is the source's error text (empty for EMPTY),
+ * or for INCOMPLETE the still-missing session ranges.
+ */
+export interface BackfillSymbolResult {
+    symbol: string;
+    outcome: BackfillSymbolOutcome;
+    reason: string;
+}
+/** first_unservable_date is YYYY-MM-DD (NYSE session date), never a timestamp. */
+export interface DelistedState {
+    reason: UnservableReason;
+    firstUnservableDate: string;
+}
 export declare const PageRequest: MessageFns<PageRequest>;
 export declare const PageResponse: MessageFns<PageResponse>;
 export declare const Error: MessageFns<Error>;
@@ -225,6 +250,8 @@ export declare const Asset: MessageFns<Asset>;
 export declare const TimeRange: MessageFns<TimeRange>;
 export declare const TemplateMeta: MessageFns<TemplateMeta>;
 export declare const TemplateOrigin: MessageFns<TemplateOrigin>;
+export declare const BackfillSymbolResult: MessageFns<BackfillSymbolResult>;
+export declare const DelistedState: MessageFns<DelistedState>;
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 export type DeepPartial<T> = T extends Builtin ? T : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>> : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>> : T extends {} ? {
     [K in keyof T]?: DeepPartial<T[K]>;

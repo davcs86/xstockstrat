@@ -152,3 +152,25 @@ enum UnservableReason {
   UNSERVABLE_REASON_OTC = 1;
   UNSERVABLE_REASON_NOT_TRADABLE = 2;
 }
+
+enum BackfillSymbolOutcome {
+  BACKFILL_SYMBOL_OUTCOME_UNSPECIFIED = 0;
+  BACKFILL_SYMBOL_OUTCOME_EMPTY = 1;
+  BACKFILL_SYMBOL_OUTCOME_SKIPPED = 2;
+  BACKFILL_SYMBOL_OUTCOME_FAILED = 3;
+  BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4;
+}
+
+// Lists non-written symbols only; reason is the source's error text (empty for EMPTY),
+// or for INCOMPLETE the still-missing session ranges.
+message BackfillSymbolResult {
+  string symbol = 1;
+  BackfillSymbolOutcome outcome = 2;
+  string reason = 3;
+}
+
+// first_unservable_date is YYYY-MM-DD (NYSE session date), never a timestamp.
+message DelistedState {
+  UnservableReason reason = 1;
+  string first_unservable_date = 2;
+}

@@ -28,6 +28,7 @@ type fakeBroker struct {
 	submitBracketLegsFn func(ctx context.Context, parentBrokerOrderID, parentClientOrderID string, legs broker.BracketLegsRequest) (*broker.BracketLegsResponse, error)
 	cancelOrderFn       func(ctx context.Context, brokerOrderID string) error
 	getOrderFn          func(ctx context.Context, brokerOrderID string) (*broker.BrokerOrder, error)
+	replaceOrderFn      func(ctx context.Context, brokerOrderID string, req broker.OrderRequest) (*broker.BrokerOrder, error)
 
 	mu               sync.Mutex
 	cancelOrderCalls []string
@@ -51,6 +52,9 @@ func (f *fakeBroker) CancelOrder(ctx context.Context, brokerOrderID string) erro
 }
 
 func (f *fakeBroker) ReplaceOrder(ctx context.Context, brokerOrderID string, req broker.OrderRequest) (*broker.BrokerOrder, error) {
+	if f.replaceOrderFn != nil {
+		return f.replaceOrderFn(ctx, brokerOrderID, req)
+	}
 	panic("fakeBroker.ReplaceOrder not implemented")
 }
 
@@ -599,7 +603,7 @@ func TestHaltAccount_SetsInMemoryBeforeReleasingMutexThenWritesDB(t *testing.T) 
 
 	done := make(chan struct{})
 	go func() {
-		svc.haltAccount(context.Background(), "acct-1", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
+		svc.haltAccount(context.Background(), "acct-1", "user-owner", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
 		close(done)
 	}()
 
@@ -621,13 +625,23 @@ func TestHaltAccount_DBWriteFailureDoesNotRollBack(t *testing.T) {
 	accounts := &fakeAccountRepo{updateHaltStatusFn: func(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error {
 		return fmt.Errorf("db unavailable")
 	}}
+	notify := &fakeNotifyClient{}
 	svc := &TradingService{
-		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, accountRepo: accounts, notify: &fakeNotifyClient{},
+		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, accountRepo: accounts, notify: notify,
 		halted: map[string]bool{}, haltReasons: map[string]string{}, haltedLastPolled: map[string]time.Time{},
 	}
-	svc.haltAccount(context.Background(), "acct-1", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
+	svc.haltAccount(context.Background(), "acct-1", "user-owner", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
 	if !svc.isAccountHalted("acct-1") {
 		t.Error("expected isAccountHalted to remain true despite the DB write failure")
+	}
+	notify.mu.Lock()
+	defer notify.mu.Unlock()
+	if len(notify.calls) != 1 {
+		t.Fatalf("EmitAlert called %d times, want 1", len(notify.calls))
+	}
+	a := notify.calls[0]
+	if a.Category != "halt" || a.Severity != notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL || a.TargetUserId != "user-owner" {
+		t.Errorf("halt alert = {Category:%q Severity:%v TargetUserId:%q}, want {halt CRITICAL user-owner}", a.Category, a.Severity, a.TargetUserId)
 	}
 }
 
@@ -690,6 +704,7 @@ func TestCancelOrder_CancelsActiveBracketLegs(t *testing.T) {
 
 	svc := &TradingService{
 		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: brokers, ledger: &fakeLedgerClient{},
+		repo:    repository.NewTradingRepoWithDB(execOnlyDB{}),
 		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 		orders: map[string]*tradingv1.Order{
 			"ord-1": {OrderId: "ord-1", UserId: "user-1", AccountId: "acct-1", BrokerOrderId: "brk-order-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},

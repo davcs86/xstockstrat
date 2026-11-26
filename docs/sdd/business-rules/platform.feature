@@ -495,6 +495,7 @@ Feature: Platform-wide guarantees
       | xstockstrat-ingest     | ingest.backfill.max_concurrent_chunks            | int    | 0      | the backfill chunk semaphore capacity | 3                         |
       | xstockstrat-ingest     | ingest.backfill.chunk_max_bars                   | int    | 0      | the chunk planner's bar cap           | 200000                    |
       | xstockstrat-ingest     | ingest.backfill.chunk_window_days                | int    | 0      | the chunk planner's window in days    | 90                        |
+      | xstockstrat-ingest     | ingest.backfill.self_serve_max_range_days        | int    | 0      | the self-serve backfill range cap in days | 730                   |
       | xstockstrat-ingest     | ingest.mcp_client.poll_interval_seconds          | int    | 0      | the mcp_client poll loop              | 300                       |
       | xstockstrat-indicators | indicators.sandbox.timeout_ms                    | int    | 0      | ExecuteFormula                        | 5000                      |
       | xstockstrat-indicators | indicators.sandbox.memory_bytes                  | int    | 0      | ExecuteFormula                        | 134217728                 |
@@ -531,6 +532,7 @@ Feature: Platform-wide guarantees
       | xstockstrat-analysis   | analysis.opportunity.max_live_strategies_per_symbol | int | 0      | the per-symbol live attribution cap   | 5                         |
       | xstockstrat-analysis   | analysis.opportunity.max_live_only_symbols_per_compute | int | 0   | the live-only symbol cap per compute  | 20                        |
       | xstockstrat-analysis   | analysis.opportunity.max_live_held_symbols_per_compute | int | 0   | the held-symbol live cap per compute  | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.live_only_cycle_max_days    | int    | 0      | the live-only rotation cycle bound    | 3                         |
       | xstockstrat-analysis   | analysis.opportunity.valid_window_hours          | int    | 0      | the opportunity validity window hours | 24                        |
       | xstockstrat-analysis   | analysis.opportunity.snooze_default_hours        | int    | 0      | the default snooze hours              | 24                        |
       | xstockstrat-analysis   | analysis.opportunity.read_db_budget_ms           | int    | 0      | the ListOpportunities DB read budget  | 20000                     |
@@ -793,7 +795,7 @@ Feature: Platform-wide guarantees
 
   @AC-6 @FR-4 @feature-283
   Scenario: The tool count is unchanged and its surfaces agree
-    When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the /api/tools catalog) are read
+    When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the AgentService.ListTools catalog) are read
     Then every statement states the count 45 (in words or digits) and the registered tool count is 45
 
   @AC-10 @FR-4 @feature-283
@@ -1310,12 +1312,12 @@ Feature: Platform-wide guarantees
     And marketdata makes 0 live Alpaca fetches for DNB
     And GetBars does not add DNB to the warm set
 
-  @AC-17 @FR-3 @feature-282
+  @AC-17 @FR-3 @feature-282 @feature-352
   Scenario: A held offline unservable symbol stays valued and warm across later refreshes
     Given an offline account holds FORL, which is unservable and has a stored 1d close
     When portfolio values the account and a later asset-set refresh runs
     Then portfolio requests FORL through GetLatestQuotes and values it from the quote or stored close
-    And FORL stays in the warm set after the later refresh
+    And FORL stays in the warm set after the later refresh, or, once FORL is flagged delisted (feature 352), leaves it at each load and is re-warmed by the next quote read
 
   @AC-22 @FR-1 @FR-5 @feature-282
   Scenario: An oversized servability request is rejected and portfolio lets the write through
@@ -2135,10 +2137,11 @@ Feature: Platform-wide guarantees
 
   # Promoted from docs/roadmap/features/300-fix-sandbox-memory-cap/acceptance.feature (C-16); backed by
   # scripts/homelab-render.test.sh (the mem-limit mutations next to the other render-oracle cases).
+  # Value changed 2147483648 -> 805306368 with operator sign-off 2026-11-25 (C-16; 300 context.md).
   @AC-9 @FR-3 @regression @feature-300
   Scenario: The homelab render oracle asserts the indicators memory limit
     Given the rendered homelab compose configuration
-    When mem_limit and memswap_limit of xstockstrat-indicators are both 2147483648
+    When mem_limit and memswap_limit of xstockstrat-indicators are both 805306368
     Then the render oracle passes
     When either is deleted or set to a different value
     Then the render oracle reports the label "mem-limit:xstockstrat-indicators" and prints no value
@@ -2692,3 +2695,45 @@ Feature: Platform-wide guarantees
     Given the 14 seeded strategy templates and the 9 seeded formula templates
     When non-admin "bob" instantiates each one
     Then all 14 calls succeed and each resulting definition passes strategy validation with every custom-formula component pointing to one of "bob"'s formula copies
+
+  # ─── Delisted symbol handling (feature 352) ────────────────────────────────
+  # Cross-service guarantees of delisted-symbol handling (marketdata state, portfolio watchlists, analysis scans).
+  # Single-service rules live in each service's acceptance/delisted-symbol-handling.feature. Provenance: @feature-352.
+  # "AC-n" inside these scenarios means 352 @AC-n. Source Background: portfolio's delisting refresh runs after every
+  # watchlist change and after every asset-set load; an asset-set load that names no date runs on a trading day.
+  # Amends 282 @AC-17 above for flagged symbols only (the symbol leaves the warm set at each load, stays valued).
+
+  @AC-8 @FR-5 @feature-352
+  Scenario: Watchlist-driven work stops requesting a flagged symbol without a restart
+    Given the user-created watchlist "Tech" holds "AAPL" and "ROKU"
+    And both symbols are warm in marketdata
+    And no quote or price read names "ROKU" after it is flagged
+    When "ROKU" becomes flagged delisted
+    Then "ROKU" is no longer in the warm set, with no service restart
+    And the bars stored by the next bar-ingest cycle include "AAPL" and no new bar for "ROKU"
+    And the opportunities listed after the next scan of "Tech" that follows xstockstrat-portfolio's next delisting refresh include "AAPL" and none for "ROKU"
+
+  @AC-19 @FR-13 @feature-352
+  Scenario: The delisted state is one record per symbol, shared by every watchlist
+    Given "ROKU" is on the watchlist "Tech" owned by user A and the watchlist "Media" owned by user B
+    When "ROKU" becomes flagged delisted with first-unservable date 2026-11-09
+    Then the "ROKU" entries on "Tech" and on "Media" both carry delisted true and first-unservable date 2026-11-09
+    And after xstockstrat-marketdata restarts, the "ROKU" entries on "Tech" and "Media" still carry delisted true and first-unservable date 2026-11-09
+
+  # ─── telemetry startup log names the effective OTLP endpoint (feature 329) ──
+  # Cross-cutting: the Node and Python telemetry modules across services. Source defect:
+  # docs/reports/2026-10-19-telemetry-startup-log-raw-endpoint-defect.md
+
+  @AC-1 @regression @feature-329
+  Scenario Outline: the startup log names the effective export endpoint when the env var is unset
+    Given OTEL_ENABLED is "true" and OTEL_EXPORTER_OTLP_ENDPOINT is unset
+    When the <runtime> service <service> starts
+    Then its telemetry startup log names the SDK default endpoint (or "SDK default")
+    And the log contains neither "undefined" nor "None" as the endpoint
+
+    Examples:
+      | runtime | service                |
+      | Node    | xstockstrat-ui         |
+      | Node    | xstockstrat-config     |
+      | Python  | xstockstrat-analysis   |
+      | Python  | xstockstrat-agent      |

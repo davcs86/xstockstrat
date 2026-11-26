@@ -1,14 +1,16 @@
-"""Tests for the GET /api/tools catalog endpoint (MCP tools UI display feature).
+"""Tests for the agent's tool catalog (MCP tools UI display feature).
 
-Unlike the Streamable HTTP MCP root, this endpoint is unauthenticated — it only ever
-returns tool name/description/inputSchema, the same data already published in
-docs/runbooks/mcp-tools.md, never user data or credentials.
+The catalog is served only by the internal AgentService.ListTools RPC (feature 360); the public
+HTTP route that used to serve it is gone and now answers like any other unauthenticated path.
 """
 
+import json
 import re
 from pathlib import Path
 
 from starlette.testclient import TestClient
+
+from tests.conftest import catalog_tools
 
 _REPO = Path(__file__).resolve().parents[3]
 _TOOL_COUNT = 45
@@ -21,11 +23,8 @@ def _app():
 
 
 def test_list_tools_returns_all_registered_tools():
-    with TestClient(_app()) as tc:
-        r = tc.get("/api/tools")
-    assert r.status_code == 200
-    body = r.json()
-    names = {t["name"] for t in body["tools"]}
+    tools = catalog_tools()
+    names = {t["name"] for t in tools}
     assert names == {
         "query_bars",
         "query_fundamentals",
@@ -73,12 +72,11 @@ def test_list_tools_returns_all_registered_tools():
         "list_templates",
         "instantiate_template",
     }
-    assert len(body["tools"]) == _TOOL_COUNT
+    assert len(tools) == _TOOL_COUNT
 
 
 def _catalog() -> dict:
-    with TestClient(_app()) as tc:
-        return {t["name"]: t for t in tc.get("/api/tools").json()["tools"]}
+    return {t["name"]: t for t in catalog_tools()}
 
 
 def test_public_arguments_are_gone_from_formula_tools():
@@ -111,6 +109,48 @@ def test_docs_and_skill_parity_with_backfill_callback_url():
     assert "callback_url" in (skill / "SKILL.md").read_text()
 
 
+def test_docs_and_skill_parity_with_self_serve_backfill():
+    """feature 343 AC-7: the runbook, the strat-lab skill and the live tool description state the
+    self-serve envelope with the ingest denial tokens and no longer call the trigger admin-only."""
+    contract = json.loads(
+        (_REPO / "services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json").read_text()
+    )
+    prefix = contract["prefix"].rstrip(": ")
+    runbook = (_REPO / "docs/runbooks/mcp-tools.md").read_text()
+    section = runbook.split("### `trigger_backfill`", 1)[1].split("\n### `", 1)[0]
+    skill = _REPO / "plugins/strat-lab/skills/backtest"
+    reference = (skill / "reference/backfill.md").read_text()
+    description = _catalog()["trigger_backfill"]["description"]
+    for name, text in (
+        ("mcp-tools.md § trigger_backfill", section),
+        ("backfill.md", reference),
+        ("trigger_backfill description", description),
+    ):
+        assert "gaps_only" in text, name
+        assert prefix in text, name
+        assert "admin scope required" not in text, name
+    for name, text in (("mcp-tools.md § trigger_backfill", section), ("description", description)):
+        for token in contract["tokens"]:
+            assert token in text, (name, token)
+    assert "gaps_only" in (skill / "SKILL.md").read_text()
+
+
+def test_docs_and_skill_parity_with_incomplete_outcome():
+    """feature 364 AC-6: the live tool description, the runbook and the strat-lab skill name the
+    `incomplete` symbol outcome of get_backfill_status."""
+    runbook = (_REPO / "docs/runbooks/mcp-tools.md").read_text()
+    section = runbook.split("### `get_backfill_status`", 1)[1].split("\n### `", 1)[0]
+    skill = _REPO / "plugins/strat-lab/skills/backtest"
+    for name, text in (
+        ("get_backfill_status description", _catalog()["get_backfill_status"]["description"]),
+        ("mcp-tools.md § get_backfill_status", section),
+        ("backfill.md", (skill / "reference/backfill.md").read_text()),
+    ):
+        assert "incomplete" in text, name
+    # SKILL.md already says "bar series incomplete"; only the backticked outcome name counts.
+    assert "`incomplete`" in (skill / "SKILL.md").read_text()
+
+
 def test_every_catalog_tool_has_a_runbook_section():
     text = (_REPO / "docs/runbooks/mcp-tools.md").read_text()
     sections = set(re.findall(r"^### `([a-z_]+)`$", text, flags=re.M))
@@ -137,10 +177,7 @@ def test_every_tool_count_surface_states_the_catalog_size():
 
 
 def test_list_tools_entries_have_description_and_input_schema():
-    with TestClient(_app()) as tc:
-        r = tc.get("/api/tools")
-    body = r.json()
-    by_name = {t["name"]: t for t in body["tools"]}
+    by_name = _catalog()
     ingest_signal = by_name["ingest_signal"]
     assert "Ingest a trading signal" in ingest_signal["description"]
     assert ingest_signal["inputSchema"]["type"] == "object"
@@ -151,11 +188,13 @@ def test_list_tools_entries_have_description_and_input_schema():
     assert "callback_url" in trigger["inputSchema"]["properties"]
 
 
-def test_list_tools_does_not_require_auth():
-    """No Authorization header — unlike the MCP root, this never 401s."""
+def test_public_port_no_longer_serves_the_catalog():
+    """feature 360 AC-4: without a bearer token the old catalog path answers 401, not a catalog."""
     with TestClient(_app()) as tc:
         r = tc.get("/api/tools")
-    assert r.status_code == 200
+    assert r.status_code == 401
+    assert "WWW-Authenticate" in r.headers
+    assert "tools" not in r.text
 
 
 def test_client_has_get_user_metadata_method():

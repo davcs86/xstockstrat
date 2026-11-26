@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/third-party-sso-oidc`
 **Created**: 2026-10-30
-**Last Updated**: 2026-10-30
+**Last Updated**: 2026-11-24
 
 ---
 
@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-30 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-24 | `draft` → `demoted/canceled` | owner | Superseded by `345-authelia-sso` (owner decision 2026-11-24); see context.md |
 
 ---
 
@@ -45,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review third-party-sso-oidc product-spec` — AI review of product spec before running /sdd-spec
+None — superseded by `345-authelia-sso` (owner decision 2026-11-24).

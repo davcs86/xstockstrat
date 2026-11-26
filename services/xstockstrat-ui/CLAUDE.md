@@ -14,8 +14,9 @@ segment, `/accounts`, hosts the OAuth authorized-apps UI (feature 051) and the M
 
 It is the platform's **Backend-for-Frontend (BFF)**: backend services are gRPC-only, so the UI exposes
 per-segment Connect-RPC routers that authenticate the request (JWT cookie), forward identity headers,
-and proxy to the backend gRPC services. Browsers never talk to the backends directly — they call the
-segment's BFF, which holds the typed gRPC clients.
+and proxy to the backend gRPC services. Browsers never talk to the backends or the agent directly —
+they call the UI's BFF, which holds the typed gRPC clients. The BFF is the only entry point for
+anything the UI's client side needs, always.
 
 ## Styling
 
@@ -35,6 +36,11 @@ dark-only, no light-mode toggle — theme values come entirely from the preset).
     its opacity-modifier fallback), a `var()` of a palette variable, or an arbitrary value — within ±1
     sRGB / ±0.01 alpha of a theme-specific token of either theme fails every build. Use the theme token.
   - A Next 16 / Turbopack switch needs the alias re-declared as `turbopack.resolveAlias`.
+  - **Series palette (feature 342).** `--series-1`…`--series-12` must stay byte-identical in
+    `staging.css` and `production.css`; that keeps them outside check (b) (`nonSharedTokens`). Changing
+    a value means rerunning the feasibility gate (feature 342's `docs/roadmap/features/342-chart-series-palette/context.md`
+    holds its mechanics and the `git show` for the pruned spec's Step 3) and the
+    series tests in `themes.test.ts`. Never put a colour literal in `src/lib/seriesPalette.ts`.
 
 - **Adding a primitive not yet in `src/components/ui/`**: `npx shadcn@latest add <name>`.
 - **Re-applying/updating the preset**: `printf 'y\n' | npx shadcn@latest apply --preset bLTl5gh6 --yes`
@@ -144,6 +150,7 @@ The UI consumes these backend services over gRPC via its segment BFFs (endpoints
 | xstockstrat-notify | 50059 | Trader — alert stream; `/accounts/notifications` inbox read state (`AlertInbox`, feature 203) |
 | xstockstrat-ledger | 50057 | Insights — ledger reads |
 | xstockstrat-config | 50060 | Config-UI — config read/write |
+| xstockstrat-agent | 50061 | Accounts — MCP tool catalog for `/accounts/mcp-tools` (`AgentService.ListTools`, internal only) |
 | TimescaleDB | — | Config-UI audit route only (see Database) |
 
 ## Auth + BFF
@@ -191,7 +198,7 @@ without re-checking that table. All other segments are stateless.
 
 ## Config Keys Consumed
 
-Namespace: `ui` (plus `platform` for the positions banner). Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
+Namespace: `ui` (plus `platform` for the positions banner). Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts`; `/trader` also reads namespace `ui` one-shot, through `traderConfigClient` (`traderBff.ts`) — the UI is a
 stateless BFF with **no `WatchConfig` subscription** (it cannot hold a server stream). Values are read
 with an oneof-presence check (never `value || default`), so a stored `0` / empty string survives.
 
@@ -199,6 +206,7 @@ with an oneof-presence check (never `value || default`), so a stored `0` / empty
 |---|---|---|---|
 | `performance.risk_free_rate_annual` | float | `0.045` | Annualized risk-free rate for the `/insights/performance` dashboard rolling-30d Sharpe (feature 031, FR-3). A stored `0` is legitimate. Seed migration `023_ui_performance_keys`. |
 | `performance.equity_curve_start_date` | string | `""` (auto = earliest closed-position date) | ISO date the cumulative-P&L equity curve starts from (feature 031, FR-1). Empty ⇒ the UI defaults to the earliest closed-position date. Seed migration `023_ui_performance_keys`. |
+| `chart.indicator_history_bars` | int | `200` | Bars of history the `/trader` symbol page fetches for its indicator panes (feature 341); the chart still draws the latest 200. Read by `readHistoryBars` (`src/lib/indicatorChart.ts`), clamped to [200, 1000]; absent, wrong type, error or timeout ⇒ 200. DigitalOcean stays at 200; a raise needs the gate in `docs/runbooks/ohlcv-lock-budget-tuning.md` § Homelab deep indicator history. Seed migration `050_ui_chart_history_bars`. |
 | `trading_state` (namespace `platform`) | string | *(none; owned by trading)* | Read one-shot by `/trader/positions` via `GetConfig(namespace: 'platform')` (`traderConfigClient`, polled every 30 s) to show the REDUCE_ONLY/HALTED banner; the UI never writes it. |
 
 ## Environment Variables
@@ -208,13 +216,14 @@ with an oneof-presence check (never `value || default`), so a stored `0` / empty
 ```text
 JWT_SECRET                  # required — src/lib/auth.ts jose verification
 *_ENDPOINT                  # the 10 backends — see docker-compose.yml
+AGENT_ENDPOINT              # agent tool catalog (internal gRPC): host:port, no scheme; unset ⇒ the MCP Tools page reports the agent unreachable; never falls back to AGENT_PUBLIC_URL
 AGENT_PUBLIC_URL            # runtime (never NEXT_PUBLIC_*): /accounts connector URL + the /auth/oauth-login callback check; unset ⇒ every OAuth agent login is rejected
 VAPID_PUBLIC_KEY            # feature 165 — Web Push public key, exposed to the browser via VapidKeyContext (server→client prop, NOT NEXT_PUBLIC_*); empty ⇒ push enable control reports "not configured"
 DATABASE_URL                # config-ui audit route only
 DATABASE_CA_CERT            # feature 266 — config-ui audit route only; DB CA PEM, required unless DATABASE_URL has exactly sslmode=disable. Missing on a TLS URL (or any ssl*/uselibpqcompat URL param) ⇒ the route logs the error and returns a generic 500
 DB_POOL_MAX=1               # config-ui audit pool cap
 HOST_PROVIDER               # resource attribute host.provider (digitalocean|homelab; else unknown)
-OTEL_EXPORTER_OTLP_ENDPOINT
+OTEL_EXPORTER_OTLP_ENDPOINT  # required when OTEL_ENABLED=true; unset ⇒ SDK default. Base var only (per-signal *_ENDPOINT not reflected in the startup log). Credentials go in OTEL_EXPORTER_OTLP_HEADERS, never the URL.
 ```
 
 ## Frontend gotchas

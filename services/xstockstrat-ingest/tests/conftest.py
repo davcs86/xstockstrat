@@ -6,6 +6,7 @@ The proto stubs live at ../../packages/proto/gen/python relative to the
 service root, mirroring the Dockerfile's `ln -s /proto/gen/python /app/gen`.
 """
 
+import json
 import pathlib
 import sys
 import types
@@ -97,6 +98,14 @@ def snapshot_watcher(namespace="ingest", **values):
             raise TypeError(f"snapshot_watcher: unsupported value type for {key}: {type(val)!r}")
     w._snapshot = snap
     return w
+
+
+@pytest.fixture(scope="session")
+def self_serve_denial_contract():
+    """The TriggerBackfill self-serve denial contract; the UI vitest reads the same JSON file."""
+    return json.loads(
+        pathlib.Path(__file__).parent.joinpath("fixtures", "self_serve_denial.json").read_text()
+    )
 
 
 @pytest.fixture

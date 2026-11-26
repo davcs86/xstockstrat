@@ -13,6 +13,12 @@ order settles to its true terminal state (`expired` or `filled`). It must **not*
 stopped and never captured the eventual `expired` (UI showed CANCELED while the broker showed
 expired).
 
+Feature 347: on every non-IBKR account each `GetOrder` poll runs under a deadline of one
+`trading.broker.timeout_ms`, so the Alpaca client makes exactly one attempt per order. A throttled
+`GetOrder` (HTTP 429, or a refusal while the account's rate-limit window is exhausted) is a failed
+poll for that order, logged as `fill poll: broker GetOrder failed`; a tick whose every poll failed
+writes no `loop tick ok` record, and the order is polled again on the next tick.
+
 ## Broker State Reconciliation
 
 `StartReconciliationPoller`/`reconcileTick` (feature 102) periodically compares open orders and
@@ -25,6 +31,12 @@ resolves on its own with no ledger event and no halt (self-heal). A real finding
 `reconciliation.mismatch_found`, a CRITICAL alert, and routes to the **ordinary, per-account**
 halt (`HaltSource_HALT_SOURCE_RECONCILIATION`, reusing feature 030's `broker_accounts.halted`
 mechanism).
+
+The `halt` and `reconciliation` CRITICAL alerts are targeted at the account owner (`TargetUserId` = the pool entry's
+owner); an empty owner logs WARN `alert owner unresolved` and sends the alert untargeted (feature 315). The owner
+cannot resume, and admins get no in-product signal or account id: they use the Grafana rule `xstk-trading-account-halt`
+and the Loki ERROR line `account halted` until the follow-on `admin-halted-accounts-read` ships. The systemic alert
+stays untargeted, and the `reconciliation.mismatch_found` ledger owner stays NULL.
 
 The `unknown_broker_order` classification is **DB-grounded, not memory-only**. A broker order the
 in-memory map (`s.orders`) doesn't recognize is not immediately foreign: `s.orders` holds only this
@@ -50,7 +62,11 @@ account (e.g. a manual broker-dashboard order), just not at full rate for one th
 trade. The **position-side** quantity check is **DB-grounded** the same way (feature 206). A broker position
 that disagrees with `xstockstrat-portfolio`'s `ListPositions` projection is not immediately a foreign
 position: the projection can legitimately lag (fill→`order.filled`→portfolio fold) or be transiently
-zeroed by an empty `account.positions.synced`. Before halting, `reconcileTick` calls
+zeroed by an empty `account.positions.synced`. The `ListPositions` projection is read page by page
+(500 per page, each page under its own `broker.timeout_ms` deadline); any page error, deadline, empty
+page with a token, repeated `next_page_token` or duplicate symbol skips that account's position-side
+check for the tick (no candidate, no halt, not systemic), and the account is re-checked next tick
+(feature 358). Before halting, `reconcileTick` calls
 `reconcilePositionLookup.NetFilledQtyBySymbol` (one grouped DB round-trip per tick, scoped to the
 diverging symbols) — the platform's own net filled qty per symbol from `trading.orders`, **deduped
 `DISTINCT ON (order_id)`** so a multi-row order isn't double-counted. If the platform's own fills
@@ -89,5 +105,5 @@ indistinguishable from a healthy idle service — zero log output for days. The 
 **Feature 294-signal-map-instrumentation** (the 60 s disabled recheck is a code constant; the other cadences are the `*.interval_ms` config defaults above):
 
 - INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `fill_poller` (5 s), `reconciliation` (60 s), `credential_health` (300 s; `disabled` every 60 s while off), `bracket_watchdog` (5 s) and `order_intent_sweeper` (5 s); states `idle`, `skipped`, `disabled`. `position_sync` keeps the heartbeat above and writes no `loop tick ok`, so a `|= "loop tick ok"` filter misses it; portfolio also has a `position_sync` loop, so filter on `service_name` too.
-- Instruments: `trading.flatten.outcome{outcome}`, `trading.bracket.outcome{outcome}`, `trading.order_submit{broker_type, outcome accepted|rejected|uncertain|invalid_credentials}`, `trading.ledger_emit{event_type, outcome ok|retried_ok|failed}` (unknown event types map to `other`), `trading.alert_emit{alert_kind, outcome ok|failed}` (typed constants, no `other`), `trading.escalation.systemic` (unlabelled).
+- Instruments: `trading.flatten.outcome{outcome}`, `trading.bracket.outcome{outcome}`, `trading.order_submit{broker_type, outcome accepted|rejected|uncertain|invalid_credentials}`, `trading.ledger_emit{event_type, outcome ok|retried_ok|failed}` (unknown event types map to `other`), `trading.alert_emit{alert_kind, outcome ok|failed}` (typed constants, no `other`), `trading.escalation.systemic` (unlabelled), `trading.reconciliation.position_check_skipped{outcome rpc_error|deadline|cursor_invalid}` (feature 358). One skip increment means one account's position check was skipped for one tick, and a sustained non-zero rate means that account is going unreconciled; a deploy/shutdown produces a burst of `rpc_error` (cancelled tick ctx), so any alert needs a rate or for-duration window and must bring its `packages/otel/produced-signals.tsv` row.
 - Load-bearing log: ERROR `flattenAndHalt: position lookup failed` (a non-NotFound lookup error; no flatten). `flattenAndHalt: no open position to flatten` is INFO.

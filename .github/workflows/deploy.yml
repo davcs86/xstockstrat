@@ -110,6 +110,10 @@ jobs:
           --vpc-id "$VPC_ID"
           --out "$RUNNER_TEMP/app.yaml"
 
+      - name: Validate the rendered spec against App Platform
+        # Server-side check of the spec as an update to this app; a rejected spec stops before the update.
+        run: doctl apps propose --spec "$RUNNER_TEMP/app.yaml" --app "$APP_ID" --format ID --no-header > /dev/null
+
       - name: Deploy to DigitalOcean App Platform
         # --update-sources forces DO to re-evaluate the branch and build from the
         # current HEAD instead of the pinned commit stored from the last deploy.

@@ -30,6 +30,7 @@ FR3_KEYS = frozenset(
         "mcp_client.request_timeout_seconds",
         "mcp_client.poll_interval_seconds",
         "backfill.webhook_sweep_interval_seconds",
+        "backfill.self_serve_max_range_days",
     }
 )
 

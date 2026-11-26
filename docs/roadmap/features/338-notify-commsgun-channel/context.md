@@ -1,271 +1,83 @@
-# Context: notify-commsgun-channel
+# Context: notify-commsgun-channel  (archived 2026-11-18)
 
-**Feature**: `docs/roadmap/features/338-notify-commsgun-channel/feature.md`
-**Product Spec**: `docs/roadmap/features/338-notify-commsgun-channel/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/338-notify-commsgun-channel/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-18 — /sdd-archiver
 
-## Session 2026-11-13 — sdd-story
+**What**: `xstockstrat-notify` gained the homelab `commsgun` hub (tailnet-only HTTPS enqueue API) as a second fanout email provider beside SendGrid. One live config key `notify.fanout.email_provider` (`auto` | `commsgun` | `sendgrid`, default `auto`, any other value reads as `auto` everywhere, D-42) picks the provider; exactly one email per alert. commsgun delivery is asynchronous through a dedicated `notify.email_outbox` table and `CommsgunWorker` (modelled on `WebhookWorker`); SendGrid is the fallback only after the outbox gives up (or config is lost) and only in `auto`. The commsgun app key is an encrypted `is_secret` config row resolved through `GetSecret` (new exact-key, SAN-pinned `notify` grant); nine `notify` keys are seeded by config migration `049`, the outbox is notify migration `005`. Alerts for undelivered/rerouted rows use the reserved in-process WARNING category `commsgun`, hard-excluded from email. Shipped as one commit per step (22 steps) on the session branch `ccr-2d98935d-na9x6j` and one integration PR #1537; promoted via PR #1546 (2026-11-15). No proto change, no new env var, no UI code change.
 
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
-- Operator decisions taken before the spec was written (asked, not assumed):
-  - Provider selection: one config key, `auto` | `commsgun` | `sendgrid`, default `auto`; exactly one email per alert.
-  - Failure handling: durable outbox with retries for commsgun; SendGrid fallback only after the outbox gives up, and only in `auto`.
-  - Credential: commsgun app key is an encrypted config secret resolved via `GetSecret`; URL and app id are plain config keys. No env var.
-  - Channels: email only. SMS is out of scope until commsgun has an SMS provider.
-- Verified outside this repo (no change needed there): `davcs86/homelab-edge` already has commsgun apps
-  `xstockstrat` and `xstockstrat-staging` with app keys in SOPS, and `policy/policy.hujson` grants
-  `tag:xstockstrat` and `tag:xstockstrat-staging` → `tag:edge` tcp:443. Enqueue contract:
-  `docs/runbooks/commsgun.md` there.
-  - Recipient: new `notify.commsgun.to_email`; no sender key (`from` omitted, commsgun default sender).
-  - Escalation: one in-process WARNING alert (category `commsgun`) per undelivered row, hard-excluded from email fanout, plus WARN log and counter.
-  - Session scope: run the pipeline through implementation in this session, pausing only at the mandatory gates.
+**Why (irrecoverable rationale)**:
+- Operator decisions taken before the spec was written (asked, not assumed; 2026-11-13 sdd-story): one config key with three values, default `auto`; durable outbox with retries for commsgun, SendGrid fallback only after the outbox gives up and only in `auto`; the app key is an encrypted config secret via `GetSecret` (URL and app id plain keys; no env var); email only, SMS out of scope until commsgun has an SMS provider; recipient is a new `notify.commsgun.to_email` with no sender key (`from` omitted, commsgun default sender); escalation is one in-process WARNING alert (category `commsgun`) per undelivered row, hard-excluded from email fanout, plus WARN log and counter. Verified outside this repo (no change needed): `davcs86/homelab-edge` already has commsgun apps `xstockstrat` and `xstockstrat-staging` with SOPS app keys and policy grants `tag:xstockstrat*` → `tag:edge` tcp:443.
+- Operator steer during design round 1: **a separate commsgun subscriber app per environment** (FR-12/AC-24): production → app `xstockstrat`, staging → `xstockstrat-staging`; `commsgun.app_id` is seeded per environment and `commsgun.app_key` is a per-environment secret row. `GetSecret` is called with the environment mapped exactly as the config watcher maps it, and a test pins the argument (D-22).
+- Round-1 gate operator steers (2026-11-13): (a) mode pinned to `commsgun` while not fully configured = **queue and escalate**: with URL, app id and recipient set the email is queued and a missing app key is a failed retryable attempt so the row reaches `undelivered` and escalates; with any of the three unset no row is queued and one rate-limited WARNING alert is raised; never treated as `auto`. (b) Pending rows after a switch to `sendgrid`, or after `auto` loses its commsgun configuration: **reroute now** with a distinct `rerouted` reason and send once through SendGrid if enabled; a deliberate switch raises no alert, a lost-configuration reroute raises one WARNING alert per incident not per row. (c) Fallback guarantee **at most one email**: mark the row ended and raise the escalation alert first, then try SendGrid once.
+- Round-2 gate steers: a deliberate switch to `sendgrid` while SendGrid is not enabled ends pending rows `rerouted` with no email and **one WARNING alert per incident saying pending emails were dropped**; incident alerts repeat every 24 hours while the condition lasts (later narrowed by D-40); **O-9 waived by the operator**: the email exclusion keys on category `commsgun` alone and the category is documented as reserved (so any producer sending that category opts out of email; no source-service check). Gate outcome: not approved, run another round.
+- Round-3 gate: stalled-secret incident confirmed (D-33): in `auto` with URL, app id and recipient set, alert (24 h repeat) when the key is `absent`, or `unknown` after two consecutive failed resolves, naming the gRPC status class (e.g. `PERMISSION_DENIED`, `UNAVAILABLE`), never a value; silent where commsgun is not set up (DigitalOcean). Rollout rule: the config grant deploys before notify. Gate outcome: run another round.
+- Round-4 gate: the operator **reopened D-15** (petition P-1) and **D-25** (P-2) — alert-before-SendGrid holds for `undelivered` rows only, `rerouted` rows send first and their aggregated summary alert follows from the next sweep (D-39); the 24 h repeat applies only to the two standing incidents (pinned-unconfigured I1, stalled key I4); reroute drains (I2 `lost_config`, I3 `deliberate`) alert once per drain with a plain set/clear latch because dispatch does not queue in those routes, so a "repeat while the condition lasts" could never fire for them (D-40). Gate outcome: run the final round. Round 5 closed with the adversary verdict "sound, no blocking issues" and operator approval (full mode, 5 rounds, no C-11 round-cap override or Commandment override recorded). No Constitution floor breach.
+- Why a dedicated table rather than generalising `webhook_deliveries` (R-1) and why per-row frozen content (D-2/D-13): FR-5 requires byte-identical retries, so the row stores the rendered subject/text/recipient at insert and each attempt serialises the same body in fixed key order with `Idempotency-Key: alert:<alert_id>`; the app key and URL are never stored. Terminal UPDATEs NULL the content and a CHECK enforces "content present iff pending" (product spec: nothing retained beyond what delivery needs). commsgun scopes idempotency per app, so a changed `app_id` can duplicate an accepted send: the worker reads `app_id` live per attempt and WARNs once when it changes with rows pending (D-31).
+- Why these constants/orderings: `Retry-After` is honoured but clamped to `commsgun.backoff_max_seconds` (delay = `min(max(backoff, Retry-After), backoff_max)`) rather than a new 86400 s constant (O-7, F-07/C-18). Status classes: 2xx delivered (body not parsed); 429, 5xx, timeout, network error retry; 401/403/409/413/422, any other status and 3xx permanent; `last_error` holds a class string only (no key, recipient, subject, body, URL in a log or alert; FR-11); log a failing SQL statement by SQLSTATE only because a pg error message can quote row values. Metric outcomes (operator, before execution): `no_app_key`, `secret_unresolved`, `no_endpoint` are each their own `DeliveryOutcome`, not folded into `error`; the existing `dead` outcome is reused for an `undelivered` row (O-17, C-18). One error class per cause and never reuse a dispatch outcome name (O-23, D-30). The sweep reads at most 100 rows per tick (fixed constant beside the 5 s tick); a larger backlog is picked up on following ticks. No per-app rate limit/pacing: existing fanout gates bound volume and a 429 is retried after `Retry-After` with the same idempotency key (product-spec open question, decided).
+- Lineage: the silent-loss objections that drove the alerting design (debate O-2, O-3, O-13, O-19, O-22), FR-8 and incident I4 apply `fails.md:1615-1618` (feature 140: a silent degradation fallback must escalate/alert when its trigger rate is sustained); not a new lesson.
+- Latch handling (O-28 → D-36): the tick runs the sweep before the route read, so a stale latch could silently stamp the rows of a new incident; latches are cleared only in the incidents step (which has the route) and the sweep only reads them. Reordering the tick would reintroduce the silent stamp.
+- Terminal step re-reads the mode (O-15 → D-14/D-27): without it a row in flight across a switch to `sendgrid` would end `undelivered` and raise an alert while its neighbours are rerouted, inconsistent with FR-7; such a row takes the deliberate-reroute path.
+- The aggregated drain alert carries a still-pending count (O-26 → D-35): the first alert fires after the first batch of 4 and the fresh latch then stamps the rest silently, so without the count it under-reports.
+- Step order (impl-spec): config side first (grant must deploy before notify, D-33), then notify leaves inward; nothing constructs the worker before Step 18, so every earlier commit leaves notify behaving as before (safe to bisect or revert).
+- Rotation rule (D-23): set the new key in config first, then retire the old one on the edge — a 401 is permanent and escalates every row sent in between.
+- Why the secret state is three-valued (R-5, D-11, D-41): a boot-time `GetSecret` error mapped to "not configured" would make the worker reroute the whole pending outbox to SendGrid after one transient config outage at restart. So `unknown` (never resolved) is not-ready for dispatch but the worker `hold`s in `auto`; `hold` applies only when the base (URL + app id + recipient) is set, otherwise the route is `reroute_lost` whatever the key state (D-41). Held rows have no age cap (D-38): they deliver when the key resolves, however late; I4 is the operator's signal.
+- Why `FanoutDispatcher(config, sendgrid, commsgun)` takes all three as required args (O-8, D-18): an optional `commsgun?` arg lets a missed wire-up fail silently, and a worker depending on the dispatcher for SendGrid creates a two-way surface; hence the extracted `SendgridSender` and `renderEmail` and a single atomic edit of the five construction sites (done once in Step 18, Step 6 deliberately let the dispatcher build its own sender). Literal reads of the four provider keys live in `fanout/emailProvider.ts` (one reader site per key also keeps the wiring check's `readers-disagree` out).
+- Shutdown (D-29, D-37): the 5 s timer is not a grace period (exit follows `tryShutdown` at once), so `stop()` returns a promise that both shutdown paths await before `pool.end()`; the `if (stopped) return` guard means an aborted POST performs no UPDATE and consumes no attempt; `stop()` aborts commsgun POSTs but not an in-flight SendGrid fallback.
+- Consumer surface (C-14, D-9): `/config-ui` shows only stored rows and cannot create a key or mark one secret (`NamespaceEditor`), so the seed migration is what makes the nine keys reachable and `commsgun.app_key` must be seeded as a **value-less secret row** (017 pattern); recon corrected the product spec's "absent row". No UI source change. The secret page renders `[secret]`; the wire value in `ListKeys` is `[redacted]` — AC-16 wording was clarified accordingly.
+- `commsgun.app_id` is seeded with `default_value ''` and a per-environment `value_data` (production `xstockstrat`, staging `xstockstrat-staging`) — a recorded exception to the config "seed equals code default" gotcha (documented in the config constitution).
 
-## Session 2026-11-13 — sdd-review product-spec
+**Rejected alternatives**:
+- R-1 Generalise `notify.webhook_deliveries` / `WebhookWorker` to carry email rows — changes a documented contract and its requeue SQL; recipient/fallback columns do not belong there; would put feature 334's `@AC-9..@AC-14` at risk (C-16).
+- R-2 Shared retry-worker base class extracted from `WebhookWorker` — rewrites a launched worker and its tests to save about 30 lines (C-18 YAGNI); revisit only if `jscpd` flags the duplication.
+- R-3 Store only the alert id and re-render per attempt — body would depend on live config and the alerts row, breaking byte-identical retries (FR-5).
+- R-4 `fallback_pending` state with send-then-update (at-least-once fallback) — a crash between the SendGrid POST and the update duplicates the email; SendGrid has no idempotency key; violates "at most one".
+- R-5 Two-valued secret state with a boot `GetSecret` error meaning "not configured" for the worker — see Why.
+- Refresh the secret on every watcher `'update'` — debate O-1: config re-sends on each liveness tick, so refresh-on-update would repeat on that cadence (a later config change, CONFIG-12 `skipUnchanged`, dedups re-sends and is not current behaviour as of this design) (O-1 → D-12 version-gated refresh with a dirty flag for an update landing mid-resolve; `lastVersion` stored only after success).
+- Put `GetSecret` into `configWatcher.ts` — three byte-identical copies (ledger/identity/notify, `check-watcher-copies.py`); own module with its own client in the shape of `adminDirectory.ts`.
+- Exclude email only when `sourceService` is `xstockstrat-notify` (O-9 option) — waived by the operator in favour of a documented reserved category.
+- Alert on an enqueue failure in `commsgun` mode — the database is the failing dependency; metric + WARN only (D-19). In `auto` a failed insert falls through to SendGrid once.
+- `noteUnconfigured` in the worker (D-18) — not built; D-36 (tick condition triggers I1; dispatch records only the `unconfigured` metric) governs.
+- In-memory re-raise counts for alerts — replaced by table-derived at-least-once alerts via `escalated_at` and the partial index whose predicate equals D-35 exactly (so successfully rerouted rows never accumulate in it, D-43).
+- Per-row alert for reroute drains — one aggregated alert per incident (counts by fallback, unconfirmed sends, rows still pending), then one bulk stamp, stamping only after the alert persisted (O-26).
 
-- Product spec approved. Status: draft → spec-ready. (First pass FAILED criteria 6 and 9; fixed and re-reviewed.)
-- Tree: `ccr-2d98935d-na9x6j` = `origin/main-dev` + this feature's docs commits (artifacts are not on `main-dev` until PR #1537 merges, so the tree was not switched).
-- Warnings: tailnet name resolution from the notify container and the value-less secret seed row under C-05 are unverified — recon tasks for `/sdd-design`.
-- Overlap findings: WARN `services/xstockstrat-notify/src/telemetry.ts` also modified by in-progress 337-metrics-host-provider-label; low-risk `src/grpc/notifyServiceImpl.ts` vs spec-ready 312-fix-read-path-owner-trust. No config-key, migration-number or proto collision.
-- Demoted-duplicate check: none of the demoted features concerns notify email delivery; not a re-attempt.
-- Recommended design depth: full (two services, schema migration, new secret + GetSecret grant, two deferred design forks).
+**Scars & gotchas**:
+- Config-wiring gate: a config read in a file with no `registry.receivers` entry is `unattributed`, and two tests in `scripts/config-wiring.test.mjs` require `--final` to exit 0 on the real tree, so Step 1 added eight temporary `seeded-unread` baseline entries removed by Steps 10, 12, 14 (334 precedent). `scripts/config-wiring-stored.json` can only be generated against a Postgres with `psql` and `migrate` — operator approved starting the sandbox's local Postgres 16 and `go install` of golang-migrate (the JSON is never hand-written).
+- The notify grant turns `secretCallerAuthz.test.ts`'s unknown-caller sweep red (it used `notify` as the unknown caller); the sweep gained `analysis` as the unknown caller. The indicators `config_inventory.py` mirror is hand-copied and needs the same key.
+- `src/index.ts:45`'s call text and the `webhookWorker.start()/stop()` positions are pinned by tests (`deliveryChannelsLog.test.ts`, `webhookWorker.test.ts`, `dbTlsBoot.test.ts`); the startup line was changed by extending `enabledChannels()` instead of the call. `FanoutDispatcher` constructor break radius is five sites and tests compile with the build.
+- `scriptedPool`/`alertRecorder` helpers moved to `__tests__/fixtures/` when the second worker test consumed them (C-13); the fixture gained `dueMatch` so a worker issuing more than one kind of SELECT per tick is scriptable.
+- A scripted-pool unit test cannot prove the worker's SQL satisfies the table's CHECKs, so Step 20 added `scripts/migration-assertions/notify-commsgun-channel.sql` (PREPARE copies of the shipped statements, 12 CHECK violations, both partial indexes); it was run locally and with `email_outbox_content_iff_pending` dropped it failed as intended (assertions live). Its first run found a PL/pgSQL variable named like a column. Residual: the PREPARE bodies are copies and can drift from `commsgunWorker.ts` (Steps 15/17 pin the statement text on the source side).
+- CI on the integration PR: `Secret scan` failed because gitleaks `generic-api-key` flagged patterned fake key literals in new notify tests; fixed with three exact-literal entries in `.gitleaks.toml` (a file outside every step's list).
+- UI e2e Step 21: first visibility assertion carries a 30 s timeout on a cold dev server (precedent `users.spec.ts`); two sandbox failures (`fundamentals-scan.spec.ts:32`, `users.spec.ts:29`, "reachable from the nav") fail identically without this feature's changes — CI's prebuilt run is the gate.
+- Integration merge with `origin/main-dev` (context-scrubber docs trim, #1539) conflicted in four doc files: upstream had taken notify constitution rules 11 and 12, so this feature's rule became **NOTIFY-13**, and the detailed provider section moved to `services/xstockstrat-notify/docs/email-providers.md` and operator rules to `services/xstockstrat-notify/docs/operations.md`. Node 22 was installed in the sandbox (repo pins 24; both suites pass on 22).
+- Two pre-existing wiring `readers-disagree` findings (`marketdata/fundamentals.provider`, `platform/trading_state`) are unrelated and reappear in `--final`.
+- `webhook` dead-letter alerts must still be emailed (334 `@AC-9..14`): the email exclusion keys on category `commsgun` only.
 
-## Session 2026-11-13 — operator steer (during sdd-design round 1)
+**Permanent deviations**:
+- Branch: every step was one commit on `ccr-2d98935d-na9x6j` with one integration PR #1537 into `main-dev`; no `feature/notify-commsgun-channel` and no per-step PRs (operator-approved before execution, 2026-11-13; sequential-mode entry and the feature plan were also operator-confirmed).
+- Design said an update arriving mid-resolve causes "exactly one follow-up resolve" (D-12); shipped as a `while (dirty)` loop because an update landing during the follow-up would otherwise stay stale until the next version change (O-12). One burst still causes exactly one follow-up (tested).
+- Impl-spec Step 14 instruction 3 said to add `route()`/`keyKind()` as public methods on `CommsgunWorker`; Step 14's execution inlined the route computation in the tick, and the two public methods were added in Step 18 when the dispatcher first needed them (impl-spec Deviation Log 'Step 18'; no behaviour change to Steps 14-17, their 60 cases pass unedited).
+- Step 17 touched `fixtures/scriptedPool.ts` outside its file list; Step 1 started a local Postgres (operator-approved).
+- 408 was classified `4xx` (permanent) here because D-7 retries only 429/5xx; opaque redirect is `3xx`; any status outside 2xx-5xx that is not a redirect is `other`. Feature 346 later changed 408 to retry.
+- D-18's `noteUnconfigured` not built (D-36); design.md's outcome list named only `no_app_key` but shipped has three own outcomes (operator, pre-execution).
+- Business-rule promotion: all 42 scenarios promoted with `@feature-338` — 40 to `services/xstockstrat-notify/acceptance/notify-commsgun-channel.feature` (with the Background), `@AC-14` to `services/xstockstrat-config/acceptance/notify-commsgun-channel.feature`, `@AC-16` to `services/xstockstrat-ui/acceptance/notify-commsgun-channel.feature`, text verbatim; three pointer comments added above the EXTENDED scenarios (notify `notify-external-fanout` `@AC-6`, `signal-map-instrumentation` `@AC-49`, config `config-secrets-and-scoping` `@AC-4`); no existing scenario text changed. C-16: design recorded "no CHANGE" (PRESERVE/EXTEND only), so no C-16 CHANGE sign-off exists or was needed. No `@AC` left unpromoted.
+- Merge-order: no `merge-order.md` entry for this feature. Overlap with feature 337 on `notify/src/telemetry.ts` resolved (337's change already on trunk, `ee78a66`/#1531).
 
-- Operator: commsgun must use a **separate subscriber app per environment**. Recorded as FR-12 / AC-24: `production` → app `xstockstrat`, `staging` → `xstockstrat-staging`; `commsgun.app_id` is seeded per environment and `commsgun.app_key` is a per-environment secret row. Both apps already exist in `davcs86/homelab-edge` (`commsgun_apps`, `commsgun_app_key_xstockstrat`, `commsgun_app_key_xstockstrat_staging`).
+**Cross-feature signal**:
+- Feature 346 (`fix-commsgun-email-channel`, launched 2026-11-15, SEV-3 Track C) fixed five defects from the notify findings log in this feature's output: `commsgun.enqueue_url` must be `https:` (rule centralised in `emailProvider.ts#commsgunSettings`, shared `checkHttpsUrl` extracted from `webhookUrlRule.ts`; a non-https URL reads as unset), subject sanitised/capped (998 code points, CR/LF collapsed), email text capped (256 KiB minus 8 KiB reserve plus a `[truncated]` line, in the shared renderer so SendGrid gets it too), 408 retries, and the pinned-mode stalled-key incident now also raises (D-33 had `auto` only; operator: "pinned-mode missing key is a bug"). NOTIFY-17 widened. Read the code and 346, not this synthesis, for current behaviour.
+- Feature 341 (fix-indicator-pane-warmup) takes config migration `050` because 338 holds `049`; config `049` and notify `005` were volatile until merge (spec-ready 330 also seeds config keys).
+- Feature 337 (metrics-host-provider-label) shares `notify/src/telemetry.ts`; feature 334 provided the `WebhookWorker`, `seeded-unread` and migration-assertions precedents; 338 must not regress 334 `@AC-9..14`.
+- New `notify` grant adds a third `GetSecret` grant (marketdata exact keys, ingest prefix, now notify exact key); the config constitution and `config-governance.md` carry it.
 
-## Session 2026-11-13 — sdd-design round 1 gate (operator steers)
+**Deferred follow-ons**:
+- Accepted test gap: `commsgun.request_timeout_seconds` is exercised only through `fakeConfig` (Step 13), with no real `ConfigWatcher`-snapshot case, unlike the other seven worker-path keys (Step 15); the webhook timeout key has the same shape.
+- Review gates named in product-spec Feature Workflow Notes (Security review for the new secret row and `GetSecret` grant, DBA review for the migration, owner + config-team approval for the new keys) have no sign-off recorded in context.md; the absence is known, not an oversight.
+- Verify at first homelab staging deploy (never recorded as done): tailnet name resolution and certificate trust from the notify container — inferred from `homelab-edge` (`--accept-dns=true`, split-horizon `comms.<magicdns_base_domain>`, ACME wildcard), not observed; one lookup and one enqueue from the container. Also unknown whether a non-default `acme_ca_url` (staging CA) is in use on the edge, which Node would not trust. 346 references an `operations.md` first-deploy check.
+- Operating rules left to the docs/runbook only (no code guard): change `app_id`/`to_email` only with an empty outbox (a changed `app_id` with rows pending can duplicate an accepted send; the worker only WARNs once); clearing the enqueue URL under `auto` drains the queue through SendGrid.
+- Deliberate non-goals (product-spec Out of Scope): SMS through commsgun (follow-up once commsgun has an SMS provider); replacing/deprecating SendGrid or changing Slack/Web Push; a durable outbox for SendGrid; any change to `davcs86/commsgun` or `davcs86/homelab-edge`; reading commsgun delivery/bounce status back; per-user recipients/provider choice; a dedicated config-ui page; an age cap or expiry for held rows; purge/retention of terminal outbox rows; requeue tooling for `undelivered` rows; running more than one notify instance (the worker claim is in memory, as for webhooks — commsgun's `Idempotency-Key` makes a duplicate enqueue a no-op `duplicate` 200, which webhooks lack); an alert when an enqueue fails in `commsgun` mode.
+- Accepted risks that look like bugs: incident latches are in memory, so a restart can repeat a drain alert or the first standing-incident alert once (alerts are at-least-once, email at-most-once); a crash between the gate/dedup and the outbox insert loses that email (dedup is in-memory and consumed before any send — same best-effort as today); `fallback_sent_at` is kept as a diagnostic with no reader (O-14); SendGrid keeps its 3 s timeout and stays a single best-effort POST (as primary and fallback); held rows (key `unknown` in `auto`) have no age cap; a rotation done on the edge before config yields permanent 401s (runbook only).
 
-- Mode pinned to `commsgun` while not fully configured: **queue and escalate**. With URL, app id and recipient set, the email is queued and a missing app key is a failed (retryable) attempt, so the row reaches undelivered and escalates. With any of those three unset, no row is queued and one rate-limited WARNING alert (category `commsgun`) is raised instead. Never treated as `auto`.
-- Pending rows after a switch to `sendgrid`, or after `auto` loses its commsgun configuration: **reroute now** — end each due row with a distinct `rerouted` reason and send once through SendGrid if enabled. A deliberate switch to `sendgrid` raises no alert; a reroute caused by lost configuration under `auto` raises one WARNING alert per incident, not per row.
-- Fallback guarantee: **at most one email**. Mark the row ended and raise the escalation alert first, then try SendGrid once.
-
-## Session 2026-11-13 — sdd-design round 2 gate (operator steers)
-
-- Deliberate switch to `sendgrid` while SendGrid is not enabled: pending rows end `rerouted` with no email and **one WARNING alert per incident** says pending emails were dropped.
-- Incident alerts (pinned-unconfigured, lost-configuration reroute, the case above) **repeat every 24 hours** while the condition lasts.
-- O-9 **waived**: the email exclusion keys on category `commsgun` alone; the category is documented as reserved.
-- Gate outcome: **run another round** (not approved after round 2).
-
-## Session 2026-11-13 — sdd-design round 3 gate (operator steers)
-
-- Stalled-secret incident **confirmed** (D-33): in `auto` with URL, app id and recipient set, alert (24 h repeat) when the key is unset or could not be resolved on two consecutive tries, naming the error class. Silent where commsgun is not set up.
-- Gate outcome: **run another round** (not approved after round 3).
-
-## Session 2026-11-13 — sdd-design round 4 gate (operator steers)
-
-- **Reopened D-15** (petition P-1): alert-before-SendGrid holds for `undelivered` rows only; `rerouted` rows send first and their summary alert follows on the next sweep. Recorded as D-39.
-- **Reopened D-25** (petition P-2): the 24-hour repeat applies to the two standing incidents (pinned-unconfigured, stalled key) only; reroute drains alert once per drain. Recorded as D-40.
-- Gate outcome: **run the final round** (round 5).
-
-## Session 2026-11-13 — sdd-design
-
-- Phase 0 Recon: wrote recon.md (services: notify, config, ui config-ui; key reuse patterns: `WebhookWorker` as the outbox worker template, `adminDirectory` client shape for `GetSecret`, config seed shapes 048 / 017).
-- Phase 1 Grilling: 5 rounds (full). Chosen approach: dedicated `notify.email_outbox` + `CommsgunWorker`, selection in the dispatcher's email branch, three-valued version-gated secret, at-most-once SendGrid fallback, table-derived at-least-once alerts. Rejected: generalising the webhook queue, shared worker base, re-render per attempt, at-least-once fallback, two-valued secret (R-1..R-5).
-- Product spec and acceptance scenarios were brought in line with the debate: FR-3/7/8 rewritten, FR-13..FR-20 added, AC-12/17/22 amended, AC-25..AC-42 added.
-- Constitution rules touched: C-05, C-07, C-08, C-10, C-12, C-13, C-14, C-15, C-16, C-18, F-01, F-06, F-07, P-03, P-06. Floor breaches: none.
-- Final gate: **approved** by the operator after round 5 (adversary verdict: sound, no blocking issues).
-- Status: spec-ready → design-approved.
-
-## Session 2026-11-13T20:08Z — sdd-spec
-
-- Generated implementation-spec.md with 22 steps. Status → implementation-ready.
-- Tree: `ccr-2d98935d-na9x6j@cbe3f5d ≡ origin/ccr-2d98935d-na9x6j (merged origin/main-dev@52f6d5a)`. `feature/notify-commsgun-channel` is not on `origin`, so the tree was not switched; `origin/main-dev` (4 commits, docs of feature 335 only) was merged in and pushed before any evidence was read.
-- Key codebase findings:
-  - Next free numbers on this tree: config `049`, notify `005` (re-derived at execute and at the integration PR; the product spec does not pin them).
-  - The wiring check gates a config read in a file with no `registry.receivers` entry (`unattributed`), and two tests of `scripts/config-wiring.test.mjs` (`:609-612`, `:970-981`) require `--final` to exit 0 on the real tree. So each new reader file adds its receiver, and Step 1 adds eight temporary `seeded-unread` entries that Steps 10, 12 and 14 remove (feature 334 hit this as a deviation).
-  - `scripts/config-wiring-stored.json` can only be generated against a Postgres with `psql` and `migrate`; here the cluster is down, `migrate` is not on `PATH` and the Docker daemon is not running. Step 1 is blocked without one (the JSON is never hand-written).
-  - `config/src/__tests__/secretCallerAuthz.test.ts:97` uses `notify` as its unknown caller, so the grant turns that sweep red; the grant and its tests are one unit and the sweep gains `analysis` as the unknown caller.
-  - `notify/src/index.ts:45` and the `webhookWorker.start()` / `stop()` positions are pinned by tests; Step 18 keeps line 45's text by extending `enabledChannels()` instead of the call.
-  - `notify/src/telemetry.ts` already contains feature 337's change (`ee78a66`, #1531).
-- Decisions taken at spec time (also listed in the spec's Execution Summary for `/sdd-review impl-spec`):
-  - Literal reads of `fanout.email_provider`, `commsgun.enqueue_url`, `commsgun.app_id`, `commsgun.to_email` live in `src/fanout/emailProvider.ts` (D-10, D-42), not in the reader files the product spec planned.
-  - HTTP error classes are spelled `401`, `403`, `409`, `413`, `422`, `429`, `5xx`, `3xx`, `4xx`, `other` (AC-13 fixes `5xx`; the design fixes only "a closed set").
-  - The no-POST attempts `secret_unresolved` and `no_endpoint` are recorded under the existing metric outcome `error`; `no_app_key` under its own outcome (D-20 names only that one). Open for review.
-  - `noteUnconfigured` (D-18) is not built; D-36 governs.
-  - `FanoutDispatcher` builds its own `SendgridSender` in Step 6 and takes `(config, sendgrid, commsgun)` only from Step 18, so the five construction sites change once.
-  - Step 20 adds a CI SQL assertion for the outbox statements and CHECKs (not asked for by `design.md`; precedent: 334 Step 18).
-  - `commsgun.app_id` is seeded with `default_value` `''` and a per-environment `value_data`; Step 22 records it as an exception to the config "seed equals code default" gotcha.
-  - AC-16's "value `[redacted]`" is proved on the wire in Step 4; the page assertion in Step 21 is the rendered `[secret]`.
-
-## Open Threads
-
-- [ ] Tailnet name resolution and certificate trust from the notify container — verify at first homelab staging deploy (one lookup and one enqueue from the container).
-- [x] `services/xstockstrat-notify/src/telemetry.ts` overlap with feature 337 — 337's notify change is already in `main-dev` (`ee78a66`, #1531) and in this tree; nothing left to order.
-- [ ] Docs step (Step 22) must state: reserved category `commsgun`, single instance, in-memory incident latches, key-rotation order, change `app_id` / `to_email` only with an empty outbox, clearing the enqueue URL under `auto` drains the queue.
-- [ ] `/sdd-review impl-spec`: confirm the metric outcome for `secret_unresolved` / `no_endpoint` attempts and the error-class spelling (spec Execution Summary, decisions 2 and 3).
-- [ ] Step 1 needs a scratch Postgres with `psql` and `migrate` to regenerate `scripts/config-wiring-stored.json`; none is running in this sandbox.
-- [ ] Config `049` / notify `005` are volatile until merge (spec-ready 330 also seeds config keys); regenerate the stored set after any renumber.
-
-## Session 2026-11-13 — sdd-review impl-spec (advisory)
-
-- Result: 0 failures, 7 warnings (advisory — did not block). Tree: `ccr-2d98935d-na9x6j@82f296d` (origin/main-dev@52f6d5a merged).
-- Unresolved ✗ / ⚠ carried into execution:
-  - Step 1: regenerating `scripts/config-wiring-stored.json` needs a running Postgres 16 and `migrate`; the sandbox cluster is down and `migrate` is not installed (P-03) — [x] resolved in Step 1 (operator-approved local Postgres + migrate)
-  - Steps 2 / 4 / 10–11 / 13: config-key tests use migration text or `fakeConfig`, not a snapshot built from the seeded values, for `fanout.email_provider`, `commsgun.enqueue_url`, `commsgun.app_id`, `commsgun.to_email`, `commsgun.request_timeout_seconds` (C-05) — [x] resolved in Step 15 for the seven keys the worker path reads (a real `ConfigWatcher` snapshot case with non-default values); `commsgun.request_timeout_seconds` is exercised through `fakeConfig` only (Step 13), as the webhook timeout key is
-  - Steps 12 / 13: error class `other` is listed but produced by no step; status 0 and an opaque redirect have no stated class — [x] resolved in Steps 12+13 (`other` is produced for any status outside 2xx–5xx that is not a redirect; an opaque redirect is `3xx`)
-  - Steps 12–15: metric outcome for `secret_unresolved` / `no_endpoint` attempts is a register gap (D-20 names only `no_app_key`); the spec maps them to `error` — operator confirmation pending — [x] resolved before execution (operator: own outcomes `secret_unresolved`, `no_endpoint`)
-  - Step 16: verification `grep -c … # unchanged from Step 14` has no recorded baseline — [x] resolved in Step 16 (baseline taken from the Step 14 commit: 5 reads before, 5 after)
-  - Step 20: CI-only SQL assertion typed as "migration", an addition beyond the register (334 precedent); proof is a green CI job (C-18) — [x] kept as an addition (334 precedent) and no longer CI-only-proven: run locally against a scratch database before pushing (Step 20 entry); CI `migration-rerun` remains the gate
-  - Steps 4 / 21: no explicit coverage threshold on the indicators pytest line and the Playwright step — [x] noted, not applicable: Step 4 ran one pytest file as specified (the indicators coverage gate is the full-suite CI job), and Step 21 is a Playwright spec, which has no coverage threshold
-  - Docs touch-ups: annotate that D-36 governs over D-18's `noteUnconfigured`; reword AC-16 so `[redacted]` is the wire value and the page shows `[secret]` — [x] resolved in Step 22: AC-16 now says the wire value is `[redacted]` and the page shows `[secret]`; D-36 governing over D-18's `noteUnconfigured` is recorded in the implementation spec (Execution Summary decision 4) — `debate.md` rows are append-only and were not reworded
-- Overlap findings: none blocking. Config `049` and notify `005` are unclaimed; `src/telemetry.ts` shared with in-progress 337 (its change is already on trunk); spec-ready 330 also seeds config keys (renumber risk).
-
-## Session 2026-11-13 — pre-execute operator decisions
-
-- **Branch (deviation from the SDD per-step-PR flow, operator-approved):** implementation runs sequentially as one commit per step on `ccr-2d98935d-na9x6j`; PR #1537 into `main-dev` carries the whole change. No `feature/notify-commsgun-channel` or step branches are created.
-- **Metric outcomes (closes the D-20 gap):** `secret_unresolved` and `no_endpoint` are their own `DeliveryOutcome` values beside `no_app_key`; they are not folded into `error`.
-- **Sandbox:** operator approved starting the local Postgres 16 cluster, installing golang-migrate with `go install`, and `pnpm install` for the affected services.
-
-## Session 2026-11-13 — sdd-execute (sequential)
-
-- Mode entry and the feature plan were confirmed by the operator. Tooling: Node v22.23.4 is installed (the repo pins 24; both suites pass on 22 — notify 259 tests, config 352 — CI runs 24), pnpm 9.15.9, `migrate` v4.17.1, local Postgres 16 for stored-set generation only.
-
-### Step 1 — migration: seed the nine `notify` keys and regenerate the stored set [done]
-- Unit 1+2. Wrote config migration `049_notify_commsgun_channel_keys` (16 plain rows + 2 value-less secret rows; down deletes only untouched seeded rows and never a secret that has been set), regenerated `scripts/config-wiring-stored.json` unedited, added eight temporary `seeded-unread` baseline entries.
-- Files modified: `services/xstockstrat-config/migrations/049_notify_commsgun_channel_keys.up.sql`, `.down.sql`, `scripts/config-wiring-stored.json`, `scripts/config-wiring.json`
-- Verification: step-time wiring check exit 0 with eight `PENDING … seeded-unread` lines; `--final` exit 0; `scripts/config-wiring.test.mjs` 75/75. TDD: N/A (migration).
-- Deviations: local Postgres started for generation (Deviation Log).
-
-### Step 2 — test: seed migration shape [done]
-- Unit 1+2. `notifyCommsgunSeedMigration.test.ts` parses the migration with the shared `migrationSql` helper.
-- AC-16 / AC-24 red: 5/5 failed with "expected exactly one *notify_commsgun_channel_keys.up.sql, got []" → green: 5/5 passed; config suite 357/357, lines 92.21 %, lint 0 errors.
-- Files modified: `services/xstockstrat-config/src/__tests__/notifyCommsgunSeedMigration.test.ts`
-- Deviations: none
-
-### Step 3 — service: `notify` grant in `SECRET_CALLER_ALLOWLIST` and its mirror [done]
-- Unit 3+4. Added the exact-key, SAN-pinned grant `notify` → `notify` / `commsgun.app_key` (`peerSan: xstockstrat-notify`) and the same key to the indicators inventory mirror.
-- Files modified: `services/xstockstrat-config/src/grpc/authz.ts`, `services/xstockstrat-indicators/app/maintenance/config_inventory.py`
-- Deviations: none
-
-### Step 4 — test: `GetSecret` gate and redaction for the notify secret [done]
-- Unit 3+4. Sweep extended (`analysis` is the unknown caller now; notify namespace, key and SAN added; all five denial reasons still reached); four direct gate cases; three real-mTLS cases with a minted `xstockstrat-notify` leaf; one redaction case over `GetConfig` / `ListKeys` / `WatchConfig`; one indicators inventory case.
-- AC-14 red: "authorizes notify for notify / commsgun.app_key over its own SAN" and "notify resolves its commsgun app key over its own mTLS peer" failed (2 of 29), and the indicators case failed with the plaintext probe reaching the output → green: config 365/365 (lines 92.24 %, lint 0 errors), indicators `test_config_inventory.py` 9/9, ruff clean. The redaction case passed before the grant too (redaction does not depend on it): characterization.
-- Files modified: `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts`, `services/xstockstrat-config/src/__tests__/secretsAndScope.test.ts`, `services/xstockstrat-indicators/tests/test_config_inventory.py`
-- Deviations: none
-
-### Step 5 — migration: `notify.email_outbox` [done]
-- Wrote notify migration `005_email_outbox` (next free number after `004`): the table, five named CHECK constraints (content iff pending, fallback iff undelivered/rerouted, reason iff rerouted, `escalated_at` only on terminal non-delivered rows, `fallback_sent_at` only with `fallback = 'sendgrid'`), the pending index and the needs-alert partial index whose predicate is D-35's. The down drops the one table.
-- Verification (offline): both files exist with number 005; the down reverses the up. In addition the up was parsed once inside a rolled-back transaction on the already-running local Postgres (no state kept); the real apply runs in CI. TDD: N/A (migration).
-- Files modified: `services/xstockstrat-notify/migrations/005_email_outbox.up.sql`, `services/xstockstrat-notify/migrations/005_email_outbox.down.sql`
-- Deviations: none
-
-### Step 6 — service: shared email renderer and `SendgridSender` (no behavior change) [done]
-- Unit 6+7. Lifted the SendGrid POST out of `FanoutDispatcher` into `SendgridSender` and the subject/body rendering into `renderEmail`; the dispatcher builds its own sender (constructor unchanged) and Slack imports the one `FANOUT_HTTP_TIMEOUT_MS`. Registered the new config receiver.
-- Files modified: `services/xstockstrat-notify/src/fanout/emailRender.ts`, `services/xstockstrat-notify/src/fanout/sendgridSender.ts`, `services/xstockstrat-notify/src/fanout/fanout.ts`, `scripts/config-wiring.json`
-- Deviations: none
-
-### Step 7 — test: renderer and `SendgridSender` [done]
-- Unit 6+7. New `sendgridSender.test.ts` (10 cases) on the shared fixtures.
-- AC-1 / AC-22 (sender half) red: 8 of 10 failed on assertions against signature-only modules (empty subject, `send` returning false, `enabled()` false) → green: 10/10. Unchanged suites: red N/A — no behavior change; `fanout.test.ts` and `notifyServiceImpl.test.ts` are unedited and pass. notify suite 269/269, lines 89.42 %, lint 0 errors; wiring `--keys` check silent, `--final` exit 0.
-- Files modified: `services/xstockstrat-notify/src/__tests__/sendgridSender.test.ts`
-- Deviations: none
-
-### Step 8 — service: commsgun app-key resolver [done]
-- Unit 8+9. New `services/commsgunSecret.ts`: `resolveCommsgunAppKey` (one `GetSecret` for `notify` / `commsgun.app_key`, environment mapped as the watcher maps it, `x-internal-caller: notify`, 2 s deadline) and `createCommsgunSecret` (three-valued state, version-gated refresh, retry after a failed resolve, follow-up resolve for updates that land mid-resolve, failure count and gRPC status name). `configWatcher.ts` is untouched; `check-watcher-copies.py` passes.
-- Files modified: `services/xstockstrat-notify/src/services/commsgunSecret.ts`
-- Deviations: the follow-up after a mid-resolve update loops while further updates keep arriving, instead of running exactly once — one burst still causes exactly one follow-up (Step 9 case), and an update landing during the follow-up is not left stale.
-
-### Step 9 — test: app-key resolver [done]
-- Unit 8+9. `commsgunSecret.test.ts`, 17 cases with a fake client and a fake watcher.
-- AC-15 / AC-24 / AC-33 / AC-34 / AC-41 (resolver half) red: 15 of 17 failed on assertions against the signature-only module → green: 17/17. notify suite 286/286, lines 89.1 %, lint 0 errors.
-- Files modified: `services/xstockstrat-notify/src/__tests__/commsgunSecret.test.ts`
-- Deviations: none
-
-### Step 10 — service: provider mode, base and route predicates [done]
-- Unit 10+11. New `fanout/emailProvider.ts`: `emailMode`, `commsgunSettings`, `dispatchAction`, `workerRoute` (pure). Wiring: receiver entry added; the four temporary `seeded-unread` entries for `fanout.email_provider`, `commsgun.enqueue_url`, `commsgun.app_id`, `commsgun.to_email` removed (four remain for Steps 12 and 14).
-- Files modified: `services/xstockstrat-notify/src/fanout/emailProvider.ts`, `scripts/config-wiring.json`
-- Deviations: none
-
-### Step 11 — test: provider predicates [done]
-- Unit 10+11. `emailProvider.test.ts`: both full 18-row tables, mode mapping, base predicate.
-- AC-3 / AC-19 / AC-42 (predicate half) red: 6 of 8 failed on assertions against the signature-only module → green: 8/8. notify suite 294/294, lines 89.3 % (`emailProvider.js` 100 %), lint 0 errors; wiring `--keys` silent, `--final` exit 0.
-- Files modified: `services/xstockstrat-notify/src/__tests__/emailProvider.test.ts`
-- Deviations: none
-- Review warning (config-key tests use `fakeConfig`): still open for these four keys — a `ConfigWatcher`-snapshot case is added with the worker in Step 15.
-
-### Step 12 — service: commsgun HTTP client [done]
-- Unit 12+13. New `fanout/commsgunClient.ts`: `commsgunBody` (fixed four-key body, no sender), `classifyStatus`, `parseRetryAfter`, `CommsgunClient.send` (manual redirect, app / bearer / idempotency headers, configured timeout on the caller's controller, body cancelled and never read, classes only in the result). `networkErrorClass` exported from `webhookWorker.ts` (one-word change). Wiring: receiver entry added; the temporary entry for `commsgun.request_timeout_seconds` removed (three remain for Step 14).
-- Files modified: `services/xstockstrat-notify/src/fanout/commsgunClient.ts`, `services/xstockstrat-notify/src/fanout/webhookWorker.ts`, `scripts/config-wiring.json`
-- Deviations: none. Class decisions within the spec's closed set: 408 is `4xx` (permanent, D-7 retries only 429 and 5xx); an opaque redirect is `3xx`; a status outside 2xx–5xx that is not a redirect is `other`.
-
-### Step 13 — test: commsgun HTTP client [done]
-- Unit 12+13. `commsgunClient.test.ts`, 14 cases on `stubFetch` / `fakeConfig`.
-- AC-4 / AC-7 / AC-8 / AC-9 / AC-20 / AC-21 (request and classification half) red: 13 of 14 failed on assertions against the signature-only module → green: 14/14. notify suite 308/308, lines 89.68 % (`commsgunClient.js` 100 %), lint 0 errors; wiring `--keys` silent, `--final` exit 0; the webhook suite is unedited and green.
-- Files modified: `services/xstockstrat-notify/src/__tests__/commsgunClient.test.ts`
-- Deviations: none
-
-### Step 14 — service: `CommsgunWorker` — enqueue, attempt, retry, terminal step, hold, shutdown [done]
-- Unit 14+15. New `fanout/commsgunWorker.ts`: `enqueue` (insert-if-absent), 5 s tick with at most 4 in flight and an in-memory claim, route read once per tick (`hold` returns), live per-attempt settings and key, no-POST classes `no_endpoint` / `no_app_key` / `secret_unresolved`, retry with `min(max(backoff, Retry-After), backoff_max)`, the terminal step (one guarded UPDATE, then metric `dead` → WARN → alert → `escalated_at` → SendGrid once → `fallback_sent_at`), app-id change WARN, and `stop()` returning a promise for terminal steps under way. Telemetry: channel `commsgun` and seven outcomes added. Wiring: receiver added; no `feature 338` baseline entry remains.
-- Files modified: `services/xstockstrat-notify/src/fanout/commsgunWorker.ts`, `services/xstockstrat-notify/src/telemetry.ts`, `scripts/config-wiring.json`
-- Deviations: none. Logs record a failing statement by its SQLSTATE only (a pg error message can quote row values; FR-11).
-
-### Step 15 — test: worker attempts, retries, terminal step, hold, shutdown [done]
-- Unit 14+15. `scriptedPool`, `alertRecorder`, `settle`, `PoolCall`, `PoolOpts` moved to `__tests__/fixtures/scriptedPool.ts` (parametrised by id column and table, scripted extra SELECTs, per-statement row counts, a statement hook); `webhookWorker.test.ts` imports them and none of its assertions changed (48/48). New `commsgunWorker.test.ts`, 38 cases.
-- AC-3/4/6/7/8/9/10/11/12/13/15/18/20/21/22/24/25/32/33/36/37/38/39 red: 34 of 38 failed against the signature-only worker → green: 38/38. notify suite 346/346, lines 90.12 % (`commsgunWorker.js` 93.82 %), lint 0 errors; wiring `--keys` silent, `--final` exit 0; `telemetryAllowlist.test.ts` unedited.
-- Files modified: `services/xstockstrat-notify/src/__tests__/commsgunWorker.test.ts`, `services/xstockstrat-notify/src/__tests__/fixtures/scriptedPool.ts`, `services/xstockstrat-notify/src/__tests__/webhookWorker.test.ts`
-- Deviations: none
-
-### Step 16 — service: reroutes, alert sweep and incidents [done]
-- Unit 16+17. `commsgunWorker.ts`: tick order sweep → route → latch clearing and standing incidents → `hold` returns → select and claim; reroute path (`rerouted` + reason + fallback, SendGrid once, `fallback_sent_at`); a terminal step under mode `sendgrid` takes the deliberate reroute; the sweep (D-35 predicate, in-flight rows excluded, per-row alert for `undelivered`, one aggregated alert per drain with counts and the still-pending count, bulk stamp, stamping only after the alert persisted); standing incidents I1 (pinned without the base) and I4 (stalled key) with the fixed 24-hour repeat.
-- Files modified: `services/xstockstrat-notify/src/fanout/commsgunWorker.ts`
-- Deviations: none. The sweep reads at most 100 rows per tick (a fixed constant beside the tick interval); a larger backlog is covered by the following ticks. No new config key (5 `getInt` / `getString` reads before and after).
-
-### Step 17 — test: reroutes, alert sweep and incidents [done]
-- Unit 16+17. 22 cases added to `commsgunWorker.test.ts` (60 in the file); the fixture gained `dueMatch` so the sweep's SELECT is not mistaken for the due-select.
-- AC-26/27/28/29/30/31/34/35/42 red: 19 failed against the Step 14 worker (no reroute, no sweep, no incidents) → green: 60/60. notify suite 368/368, lines 90.8 % (`commsgunWorker.js` 96.38 %), lint 0 errors, `--final` exit 0.
-- Files modified: `services/xstockstrat-notify/src/__tests__/commsgunWorker.test.ts`, `services/xstockstrat-notify/src/__tests__/fixtures/scriptedPool.ts`
-- Deviations: `fixtures/scriptedPool.ts` is not in Step 17's file list (it is Step 15's); the one-option addition is test-fixture support for this step's cases.
-
-### Step 18 — service: provider selection in `FanoutDispatcher`, wiring, startup log [done]
-- Unit 18+19. `FanoutDispatcher(config, sendgrid, commsgun)` (all required); the email branch now renders once and follows `dispatchAction`: reserved category `commsgun` → no email; `sendgrid` → today's path; `queue` → one outbox row (`queued`), and on a failed insert `enqueue_error` + one WARN, then SendGrid once in `auto` only; `unconfigured` → metric only. `enabledChannels()` and the startup line gained `commsgun` (enabled when the worker's route is `attempt`). `index.ts`: sender → secret (first resolve awaited) → worker → dispatcher; the worker starts after `grpcServer.start()`; shutdown takes the worker's stop promise and both exit paths await it before `pool.end()` / exit. This is the first commit that changes runtime behaviour.
-- Files modified: `services/xstockstrat-notify/src/fanout/fanout.ts`, `services/xstockstrat-notify/src/fanout/deliveryChannels.ts`, `services/xstockstrat-notify/src/index.ts`, `services/xstockstrat-notify/src/fanout/commsgunWorker.ts`
-- Deviations: `commsgunWorker.ts` gained the public `route()` and `keyKind()` methods here (Step 14 instruction 3 named them; they were inlined in the tick then). See Deviation Log.
-
-### Step 19 — test: provider selection, wiring, startup log [done]
-- Unit 18+19. New fixture `fixtures/fakeCommsgun.ts`; the four test construction sites use the three-argument constructor; 17 provider cases in `fanout.test.ts`, 2 service-level cases in `notifyServiceImpl.test.ts`, 3 startup-line cases and one `index.ts` order pin in `deliveryChannelsLog.test.ts` (its existing expectation is now `disabled: sendgrid,commsgun`).
-- AC-1/2/3/4/5/13/17/18/19/23/25/26/33/36/40 red: 18 of 99 failed with the constructor changed but the email branch, the startup entry and the wiring not yet written → green: 99/99 in the three files. notify suite 392/392, lines 90.51 %, lint 0 errors, `--final` exit 0; the `index.ts` pins in `webhookWorker.test.ts` and `dbTlsBoot.test.ts` stay green (51/51).
-- Files modified: `services/xstockstrat-notify/src/__tests__/fixtures/fakeCommsgun.ts`, `services/xstockstrat-notify/src/__tests__/fanout.test.ts`, `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`, `services/xstockstrat-notify/src/__tests__/deliveryChannelsLog.test.ts`
-- Deviations: none
-
-### Step 20 — migration: CI assertion for the outbox SQL [done]
-- `scripts/migration-assertions/notify-commsgun-channel.sql`: `BEGIN … ROLLBACK`, 11 `PREPARE` copies of the worker's shipped statements, assertions for one-row-per-alert, the due-select and retry, the three terminal statements (content blanked, a repeat changes nothing), both stamps, the sweep predicate (including "a confirmed deliberate reroute is not swept"), the bulk stamp, 12 CHECK violations and both partial indexes.
-- Verification: file present, 36 `PREPARE` / `RAISE EXCEPTION` lines. As the step allows when the Step 1 Postgres is available, it was also run with `psql -v ON_ERROR_STOP=1` against a scratch database holding the 005 table: exit 0; and with `email_outbox_content_iff_pending` dropped it failed with "CHECK not enforced: terminal state with content left in place" (the assertions are live). The scratch database was dropped. First run found one defect in the file itself (a PL/pgSQL variable named like a column), fixed before commit. CI job `migration-rerun` is the gate on the PR. TDD: N/A (migration).
-- Residual risk: the `PREPARE` bodies are copies and can drift from `commsgunWorker.ts`; Steps 15 and 17 pin the statement text on the source side.
-- Files modified: `scripts/migration-assertions/notify-commsgun-channel.sql`
-- Deviations: none
-
-### Step 21 — test: `/config-ui` lists, masks and saves the new keys [done]
-- Two rows added to `CONFIG_KEY_FIXTURES` (`fanout.email_provider` seeded `auto`; the secret `commsgun.app_key`), the `INVENTORY.md` row extended, and `e2e/config-ui/notify-commsgun-keys.spec.ts` created (2 cases, admin cookie helper, rows read from the fixture — no inline row literal). No UI source change (D-9).
-- AC-16 (page half) red: both cases failed with "element(s) not found" for `notify.fanout.email_provider` before the fixture rows existed → green: 2/2. Verification run host-native with the pre-installed Chromium: the three named specs 19/19 passed; `pnpm run lint` exit 0.
-- The first visibility assertion in each case carries a 30 s timeout (precedent `users.spec.ts`): on a cold dev server the first load of the namespace route compiles the config API route and exceeds the local 5 s default (CI runs the prebuilt app with 15 s).
-- Wider check: the whole `e2e/config-ui` folder in Chromium → 72 passed, 2 failed (`fundamentals-scan.spec.ts:32`, `users.spec.ts:29`, both "reachable from the nav"). The same two fail identically with this step's changes stashed, so they pre-exist in this sandbox (a click-through to a page the cold dev server must compile within 5 s); CI's prebuilt run is the gate.
-- Files modified: `services/xstockstrat-ui/e2e/fixtures/configKeys.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`, `services/xstockstrat-ui/e2e/config-ui/notify-commsgun-keys.spec.ts`
-- Deviations: none
-
-### Step 22 — docs: notify, config and platform references [done]
-- notify `CLAUDE.md` (dependencies, nine keys, the "Email providers" section with dispatch and route tables, outbox states, attempt and end-of-row rules, alerts, shutdown, operating rules, observability), notify constitution (NOTIFY-3 key list, new NOTIFY-11, pool pointer), config `CLAUDE.md` and constitution (three grants; the `commsgun.app_id` seed as a recorded exception to "seed equals code default"), `config-governance.md` (grant sentence; newest-first registered-keys entry for 338), `inter-service-mtls.md` (SAN-gated grant), root `CLAUDE.md` (pool note, dependency graph). `acceptance.feature` AC-16 wording clarified (review touch-up).
-- Verification: `--doc-check` exit 0; `--final` exit 0; `commsgun` present in each of the five named files; no "two grants" wording left in the config constitution. Every touched passage was re-read against the code (log messages, field names, symbol anchors). TDD: N/A (docs).
-- Files modified: `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-notify/docs/context-constitution.md`, `services/xstockstrat-config/CLAUDE.md`, `services/xstockstrat-config/docs/context-constitution.md`, `docs/patterns/config-governance.md`, `docs/patterns/inter-service-mtls.md`, `CLAUDE.md`
-- Deviations: none
-
-### All steps done — final gates
-- `node scripts/check-config-wiring.mjs --final`: exit 0 (two pre-existing `REPORTED … readers-disagree` lines for `marketdata/fundamentals.provider` and `platform/trading_state`, unrelated to this feature; no `STALE`, no `STALE-STORED`, no `feature 338` baseline entry).
-- Suites at the tip: notify 392/392 (lines 90.51 %), config 365/365 (lines 92.24 %), indicators `test_config_inventory.py` 9/9, UI named specs 19/19; lint 0 errors in notify, config and UI.
-- Status: in-progress → code-completed.
-
-## Session 2026-11-13 — integration (sequential mode, ALL-DONE path)
-
-- **Merge of `origin/main-dev`** (`5c4cc93`, the context-scrubber docs trim, #1539): four doc conflicts, resolved by hand on top of the trimmed upstream text — config `CLAUDE.md` (grant sentence now names three grants), config constitution (the `commsgun.app_id` seed exception; the grant enumeration no longer lives there), notify `CLAUDE.md` (dependencies, nine key rows, a short "Email providers" paragraph, observability), notify constitution (NOTIFY-3 wording, pool pointer, and the new rule as **NOTIFY-13** — upstream had taken 11 and 12). Following upstream's split, the detailed provider section written in Step 22 moved to the new `services/xstockstrat-notify/docs/email-providers.md` and the operator rules to `docs/operations.md`. Gates after the merge: `--doc-check` 0, `--final` 0, `ledger-guard` clean, notify 392/392, config 365/365. Migration numbers unchanged (config `049`, notify `005`).
-- **Merge-order gate**: no entry for this feature in `merge-order.md`.
-- **C-16 promotion** (operator-approved plan): 40 scenarios → `services/xstockstrat-notify/acceptance/notify-commsgun-channel.feature` (with the Background), AC-14 → `services/xstockstrat-config/acceptance/notify-commsgun-channel.feature`, AC-16 → `services/xstockstrat-ui/acceptance/notify-commsgun-channel.feature`; every scenario tagged `@feature-338`, text verbatim. Three pointer comments added above the extended scenarios (notify 020 `@AC-6`, notify 294 `@AC-49`, config 147 `@AC-4`); no existing scenario text changed.
-- **Defect reports**: none cite this feature or are resolved by it.
-- Integration PR: #1537 (`ccr-2d98935d-na9x6j` → `main-dev`).
-- **CI, first run on the integration PR**: `Secret scan (trufflehog + gitleaks)` failed — gitleaks' `generic-api-key` rule flagged the patterned fake key literals in the new notify tests (no real credential). Fixed the repo's way: three exact-literal entries in `.gitleaks.toml` with a comment naming the sites; a local gitleaks run over `origin/main-dev..HEAD` then reports no leaks. `.gitleaks.toml` is outside every step's file list — a CI-gate fix for this feature's own test constants.
-
-## Session 2026-11-13 — sdd-execute (sequential) — summary
-**Steps this session**: 1–22
-**Progress**: 22 done / 22 total
-**Stopped at**: all complete; integration PR #1537 open, CI being watched
-**Next**: merge PR #1537 when CI is green and reviewed; then the homelab staging check in § Open Threads (first item)
+**Ledger entries written**: insights.md (4), fails.md (1) — see the 2026-11-18 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: notify candidate (likely already carried by NOTIFY-13/17 and `email-providers.md`): category `commsgun` is reserved and excluded from email; a single notify instance only (in-memory claim and latches); `app_id`/`to_email` change only with an empty outbox. No new PLAT-level candidate.
+**Pruned artifacts**: product-spec.md, recon.md, debate.md, design.md, implementation-spec.md — last present at 662413d7.

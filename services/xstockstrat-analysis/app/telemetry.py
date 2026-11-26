@@ -244,6 +244,8 @@ def init_telemetry() -> None:
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+        if endpoint is None:
+            endpoint = "SDK default"
         svc_name = os.getenv("SERVICE_NAME", "analysis")
 
         resource = _build_resource()
@@ -442,6 +444,10 @@ _FUNDSIGNAL_SIGNALS = Counter(
 _OPPORTUNITY_RECOMPUTE = Counter(
     "analysis.opportunity.recompute", description="Background opportunity recomputes by outcome"
 )
+_OPPORTUNITY_READ_REISSUE = Counter(
+    "analysis.opportunity.read_reissue",
+    description="ListOpportunities re-reads after expired live-only rows",
+)
 _TEMPLATE_INSTANTIATE = Counter(
     "template.instantiate", description="InstantiateTemplate calls by outcome"
 )
@@ -484,6 +490,10 @@ def record_fundsignal_signal(outcome: str) -> None:
 def record_opportunity_recompute(kind: str, outcome: str) -> None:
     """kind: full | retry; outcome: ok | failed."""
     _OPPORTUNITY_RECOMPUTE.add(1, {KEY_KIND: kind, KEY_OUTCOME: outcome})
+
+
+def record_opportunity_read_reissue() -> None:
+    _OPPORTUNITY_READ_REISSUE.add(1)
 
 
 def record_template_instantiate(code: grpc.StatusCode | None = None) -> None:

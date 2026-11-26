@@ -18,6 +18,7 @@ Feature: fix-auth-trust-hardening (bug fix)
     When IdentityService.RevokeToken is called with an unsigned JWT whose payload is {"user_id":"victim-1"}
     Then both refresh_tokens rows for "victim-1" still have revoked_at NULL
     And RevokeToken with an expired but correctly signed token for "victim-1" sets revoked_at on both rows
+    And the "identity.revoke.unverifiable" counter increases by 1 for the unsigned call and by 0 for the expired-signed call
 
   # guards: docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md
   # Pending Open Question 1 (operator security-posture decision); written for fail-closed.

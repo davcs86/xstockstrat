@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -81,7 +80,7 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, forceFlush
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(lexp)),
 		sdklog.WithResource(res),
 	)
-	global.SetLoggerProvider(lp)
+	otel.SetLoggerProvider(lp)
 	logProviderInstalled.Store(true)
 
 	shutdown = func(ctx context.Context) error {
@@ -335,6 +334,8 @@ var (
 	ledgerEmit         = NewCounter("trading.ledger_emit")
 	alertEmit          = NewCounter("trading.alert_emit")
 	escalationSystemic = NewCounter("trading.escalation.systemic")
+
+	reconcilePositionSkip = NewCounter("trading.reconciliation.position_check_skipped")
 )
 
 // ledgerEventTypes bounds the event_type label; any other type is recorded as "other".
@@ -374,4 +375,17 @@ func RecordAlertEmit(ctx context.Context, alertKind, outcome string) {
 
 func RecordEscalationSystemic(ctx context.Context) {
 	escalationSystemic.Add(ctx, 1)
+}
+
+// ReconcileSkipOutcome is a closed outcome set; no per-account attribute is ever recorded (cardinality).
+type ReconcileSkipOutcome string
+
+const (
+	ReconcileSkipRPCError      ReconcileSkipOutcome = "rpc_error"
+	ReconcileSkipDeadline      ReconcileSkipOutcome = "deadline"
+	ReconcileSkipCursorInvalid ReconcileSkipOutcome = "cursor_invalid"
+)
+
+func RecordReconcilePositionSkip(ctx context.Context, outcome ReconcileSkipOutcome) {
+	reconcilePositionSkip.Add(ctx, 1, attribute.String(KeyOutcome, string(outcome)))
 }

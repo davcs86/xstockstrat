@@ -510,6 +510,8 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       CONFIG_ENDPOINT: xstockstrat-config:50060
       INGEST_ENDPOINT: xstockstrat-ingest:50055
+      # Agent tool catalog (internal gRPC): host:port, no scheme.
+      AGENT_ENDPOINT: xstockstrat-agent:50061
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: ui
       DB_POOL_MAX: "1"
@@ -570,6 +572,7 @@ services:
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "9000"
+      GRPC_PORT: "50061"
       # Feature 147: the OAuth txn blob is HMAC-signed with JWT_SECRET (MCP_AGENT_SECRET retired).
       JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required - copy .env.example to .env (run: openssl rand -hex 32)}"
       UI_BASE_URL: http://localhost:3000

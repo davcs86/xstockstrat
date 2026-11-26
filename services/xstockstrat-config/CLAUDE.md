@@ -37,20 +37,24 @@ This service is **gRPC-only**. config-ui reaches it over gRPC `50060` (`services
    Either branch also rejects `INVALID_ARGUMENT` when a write has no propagated identity — no `x-user-id` and no authorized `x-internal-caller`; `request.author` is ignored (feature 241). Identity is propagated, not authenticated. `GetConfig`/`ListKeys`/`WatchConfig` are deliberately **open**: every service boots by subscribing to `WatchConfig` unauthenticated, and its first message is a full namespace snapshot, so gating reads would break platform startup without hiding anything `WatchConfig` doesn't already serve.
 
    Reads are open but **bound** (feature 263): on `GetConfig`/`ListKeys`, a non-admin caller that propagates `x-user-id` and asks for a different non-empty body `user_id` is read at its own `x-user-id` instead (`boundReadUserId`, `src/grpc/authz.ts`) — bound, not refused. Admins and header-less callers keep the body id; an empty body id stays global. `WatchConfig` and `GetSecret` are **unbound**. A future internal reader must therefore not forward a user's `x-user-id` while asking about another user — send it header-less or admin-scoped.
-6. **Secrets are encrypted at rest (feature 147)** per root `CLAUDE.md` § Config Governance Rules (AES-256-GCM `is_secret` rows, redacted at every read edge, plaintext only via `GetSecret`, `is_secret` row-authoritative on write). Service-specific: the service **fails to boot** without `CONFIG_SECRETS_ENCRYPTION_KEY`. `GetSecret` is gated by `SECRET_CALLER_ALLOWLIST` (`src/grpc/authz.ts`): grants are `marketdata` → the four vendor keys (mTLS peer DNS SAN `xstockstrat-marketdata`, feature 254) `ingest` → `keyPrefixes: ['mcp_credential.']` (SAN `xstockstrat-ingest`) and `notify` → the exact key `commsgun.app_key` (SAN `xstockstrat-notify`, feature 338) — `peerSan` on all three, so the header alone never suffices (`hasSecretCallerAuthority`).
+6. **Secrets are encrypted at rest (feature 147)** per root `CLAUDE.md` § Config Governance Rules (AES-256-GCM `is_secret` rows, redacted at every read edge, plaintext only via `GetSecret`, `is_secret` row-authoritative on write). Service-specific: the service **fails to boot** without `CONFIG_SECRETS_ENCRYPTION_KEY`. `GetSecret` is gated by `SECRET_CALLER_ALLOWLIST` (`src/grpc/authz.ts`, the grant list): every grant carries a `peerSan`, so the header alone never suffices (`hasSecretCallerAuthority`).
 7. **`SetConfig` also accepts an internal-caller write, additive to the admin-scope gate** (feature
    102): a background/automated process (e.g. `xstockstrat-trading`'s reconciliation poller) may
    write a normally human-operator-gated key by propagating `x-internal-caller`
    (`HEADER_INTERNAL_CALLER`, `src/grpc/authz.ts`) instead of `x-access-scope`. This is a **structurally separate**
    metadata channel — never an extension of `x-access-scope`'s human-role bitmap — checked against
-   a hardcoded `INTERNAL_CALLER_ALLOWLIST` of `{callerID, namespace, key, allowedTargetValues}`
+   a hardcoded `INTERNAL_CALLER_ALLOWLIST` of `{callerID, namespace, key, allowedTargetValues, peerSan}`
    grants. Fails closed (an absent header, an unlisted `callerID`, or a `targetValue` outside that
    caller's allowed set are all denied) and is **direction-restricted per grant** — e.g.
    `trading-reconciliation-poller` (namespace `platform`, key `trading_state`, matched by exact
    equality) may only write `REDUCE_ONLY`/`HALTED`, never back to `ACTIVE`, so a bug or compromised caller cannot silently clear a
-   human-set halt. Every internal-caller write also persists `caller_identity` (the propagated
-   `x-internal-caller` value) on both `config.config_values` and `config.config_audit` — `NULL` for
-   every ordinary human/admin write — so an investigator can `WHERE`-filter "an automated process
+   human-set halt. The `trading-reconciliation-poller` grant also requires the mTLS peer certificate
+   to carry DNS SAN `xstockstrat-trading` (`peerSan`, checked by `hasInternalCallerAuthority(call, …)`
+   via `getAuthContext()`), so the header alone never suffices. An authorized internal-caller write
+   also persists `caller_identity` (the propagated `x-internal-caller` value) on both
+   `config.config_values` and `config.config_audit`; it is `NULL` whenever the internal-caller grant
+   did not authorize the write, even if the header was sent (every ordinary human/admin write), so an
+   investigator can `WHERE`-filter "an automated process
    wrote this" instead of grepping `reason`; with no propagated `x-user-id`, the audit `changed_by` is
    the grant `callerID` (feature 241) (see the Author-sentinel conventions
    table in `docs/patterns/config-governance.md`).
@@ -102,7 +106,8 @@ Seeds live across `migrations/*.up.sql`; the reader↔seed baseline is `scripts/
 
 - No `loop tick ok`: the `LISTEN` listener is a reconnect loop, not a tick loop.
 - Instruments: `config.watch.terminated{reason client_error|server_error}`, `config.listener_up`, `config.listener_reconnects`, `config.last_reload_timestamp`.
-- `GetSecret` denial logs carry `reason` (no_caller_header|unknown_caller|key_not_granted|peer_san_mismatch from `secretDenialReason`), a truncated `callerId` and `hadPeerSan`. The gate is still the boolean `hasSecretCallerAuthority`; the reason is log-only. Caller ids are truncated to 64 characters (`LOG_ID_MAX`).
+- `GetSecret` denial logs carry `reason` (`secretDenialReason`), a truncated `callerId` and `hadPeerSan`. The gate is still the boolean `hasSecretCallerAuthority`; the reason is log-only.
+- The `SetConfig` internal-caller denial log (ERROR) also carries `hadPeerSan` and a truncated `peerSan` (the peer's first DNS SAN).
 - Load-bearing logs: INFO `GetSecret served` (`found`), ERROR `GetSecret DB error`, WARN `WatchConfig subscriber error`. No secret value is ever logged.
 
 ## Environment Variables

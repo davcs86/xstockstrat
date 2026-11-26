@@ -1,7 +1,7 @@
 # xstockstrat-agent — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-13 (`main-dev` @
-`52f6d5a`). For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-15 (`main-dev` @
+`d5de836`). For triage/fixing, not
 governance. The internal admin-scope self-grant (`x-access-scope=7`) is a cross-cutting ⚠ security
 question tracked in the root findings log.
 
@@ -45,7 +45,8 @@ _None currently open_ — ~~CLAUDE.md "Config Keys Consumed" lists only `agent.o
 - `snapshot_offline_positions` sets **both** a request-body `user_id` (`app/client.py#snapshot_offline_positions` ~L2523) **and** the `x-user-id` header (~L2535), while the CLAUDE.md caller-identity contract does not list snapshot among the body-`user_id` builders. Is the body `user_id` on `SnapshotOfflinePositionsRequest` a deliberate target selector, or leftover caller-identity duplication to drop (like the feature-164/133 builders)? — status: **open**
 - `manage_signal_source` bearer-token orchestration writes the encrypted secret **before** registering the source, with **no compensating cleanup** on a failed register (`app/tools.py#_write_source_bearer`, docstring "only orphans a redacted secret"). Confirm the orphan-secret-on-partial-failure is an accepted trade-off, not a reconciliation gap. — status: **open**
 - Is `app/auth.py#validate_bearer_jwt` kept only for tests, or can it be removed? `validate_bearer_claims` "deliberately duplicates the ValidateToken call" — status: **open** (found 2026-11-04)
-- `GET /api/tools` is unauthenticated (documented in `docs/oauth.md` and `app/main.py#list_tools_metadata`), exposing the full tool schema publicly — still wanted now that the UI has its own BFF? — status: **open** (found 2026-11-04)
+- `GET /api/tools` is unauthenticated, exposing the full tool schema publicly — still wanted now that the UI has its own BFF? — status: **closed 2026-11-19 by feature 360**: the route was removed; the catalog is served only by the internal `AgentService.ListTools` RPC (`app/catalog_service.py`, mutual TLS, `xstockstrat-ui` certificate only) (found 2026-11-04)
+- A cancelled or deadline-expired `ListTools` call records status 0 in `rpc.server.duration`: the agent did not copy the cancel-status interceptor the other Python gRPC servers carry (`services/xstockstrat-ingest/app/telemetry.py#_CancelStatusInterceptor`). Acceptable for one fast in-memory unary RPC; revisit if the agent gains a slow or streaming RPC — status: **open** (found 2026-11-19, feature 360)
 
 ## MCP tool ↔ backend alignment audit (2026-08-01) — 13/13 resolved
 
@@ -90,7 +91,7 @@ Follow-ups from feature 247 `design.md` § Open Risks, recorded as `docs/reports
 | Report | Title |
 |---|---|
 | `2026-10-29-agent-config-snapshot-read-defect` (pruned 2026-11-10; git show 29f54de3:docs/reports/2026-10-29-agent-config-snapshot-read-defect.md) | Agent `extract_email_content` exceeds the MCP 60 s budget during a config stall for five or more URLs |
-| [`2026-10-29-agent-dcr-fail-closed-defect`](../../../docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md) | Agent OAuth dynamic client registration fails open on a config stall (SECURITY POSTURE) |
+| [`2026-10-29-agent-dcr-fail-closed-defect`](../../../docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md) | Agent OAuth dynamic client registration fails open on a config stall (SECURITY POSTURE) — **resolved (feature 319):** `/oauth/register` fails closed with 503 `server_error` when no `agent` snapshot is readable or a policy read raises |
 | [`2026-10-29-agent-extract-tools-no-mcp-cap-defect`](../../../docs/reports/2026-10-29-agent-extract-tools-no-mcp-cap-defect.md) | (open report absent from this table until 2026-11-04; title not re-read) |
 | [`2026-10-29-agent-list-opportunities-over-mcp-timeout-defect`](../../../docs/reports/2026-10-29-agent-list-opportunities-over-mcp-timeout-defect.md) | (open report absent from this table until 2026-11-04; title not re-read) |
 
