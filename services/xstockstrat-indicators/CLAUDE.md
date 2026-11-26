@@ -118,10 +118,11 @@ pinned to 1. The order is load-bearing — mechanics in the `app/services/sandbo
 - **Memory watchdog (feature 300)**: `RLIMIT_DATA` is not trusted alone; a parent watchdog kills the
   process group on memory growth (INDICATORS-2). R1/R2 mechanics and residuals: this service's `docs/` folder (**`sandbox.md`**).
 - **Container limit and sizing (feature 300)**: homelab runs indicators with `mem_limit` and
-  `memswap_limit` of 2 GiB, matching the 2 GB DigitalOcean `basic-s`. Worst case is roughly
-  `parent + max_concurrent × (baseline + memory_bytes + overshoot)` — about 1-1.4 GiB at the defaults.
-  Re-check it whenever the live `sandbox.max_concurrent` or `sandbox.memory_bytes` change (owned
-  follow-up; there is no sizing WARN).
+  `memswap_limit` of 768 MiB, its share of a 3 GiB stack budget on a 4 GiB VM (`render-assert.jq`
+  enforces the total). Worst case is roughly `parent + max_concurrent × (baseline + memory_bytes +
+  overshoot)` — about 1-1.4 GiB at the defaults and more at homelab's `max_concurrent` 24, so a formula
+  burst can OOM-kill the whole service (risk accepted by the operator). Re-check it whenever the live
+  `sandbox.max_concurrent` or `sandbox.memory_bytes` change (owned follow-up; there is no sizing WARN).
 - **Import whitelist + builtin filter** (unchanged): only `allowed_imports` may be imported; `open`/
   `exec`/`eval`/`__import__`-override removed via a fresh `__builtins__` (INDICATORS-4).
 

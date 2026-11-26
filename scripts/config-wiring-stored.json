@@ -961,6 +961,30 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
+            "key": "opportunity.live_only_cycle_max_days",
+            "file": "056_analysis_live_only_cycle_max_days.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Live-only opportunity rotation (feature 366): a full rotation of the live-only pool should finish within this many days, and a carried live-only row older than this is dropped. Fresh live-only rows are stamped valid_until = computed_at + this many days. Bounds [1,30]. A value of 0 or less reads as 3.",
+            "environment": "production",
+            "default_value": "3",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "opportunity.live_only_cycle_max_days",
+            "file": "056_analysis_live_only_cycle_max_days.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Live-only opportunity rotation (feature 366): a full rotation of the live-only pool should finish within this many days, and a carried live-only row older than this is dropped. Fresh live-only rows are stamped valid_until = computed_at + this many days. Bounds [1,30]. A value of 0 or less reads as 3.",
+            "environment": "staging",
+            "default_value": "3",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
             "key": "opportunity.max_concurrent_bars_fetches",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
@@ -5137,5 +5161,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "554ca640c743a1363eee57f7c7c72c581dda682372011fab029fab2e3d31be8f"
+    "inputs_sha256": "171dc776a579da4384dc040ff3dcc5bc31dbab5aa998b6649fa59c21f3f551de"
 }

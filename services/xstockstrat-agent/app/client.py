@@ -2172,7 +2172,8 @@ _BACKFILL_OUTCOME_PREFIX = "BACKFILL_SYMBOL_OUTCOME_"
 def _backfill_job_to_dict(job) -> dict[str, Any]:
     """Project a BackfillJob to a snake_case dict; zero-valued fields stay visible while polling.
 
-    ``symbol_results`` entries become ``{"symbol", "outcome": empty|skipped|failed, "reason"?}``.
+    ``symbol_results`` entries become
+    ``{"symbol", "outcome": empty|skipped|failed|incomplete, "reason"?}``.
     """
     from gen.common.v1 import common_pb2  # noqa: PLC0415
 

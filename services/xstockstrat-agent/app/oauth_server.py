@@ -25,6 +25,7 @@ import grpc
 from starlette.responses import JSONResponse, RedirectResponse
 
 from app import client, tool_metrics
+from app.config.watcher import has_snapshot as has_config_snapshot
 from app.config.watcher import read_value as read_config_value
 
 log = logging.getLogger(__name__)
@@ -82,12 +83,16 @@ async def register(request):
             {"error": "invalid_request", "error_description": "invalid JSON body"}, 400
         )
 
-    # Best-effort: a config read failure must not 500 DCR.
+    # Defensive: boot blocks on the snapshot, so this is unreachable after a correct start. Do not
+    # remove it as dead code — an unreadable registration policy must never register a client.
+    if not has_config_snapshot("agent"):
+        log.warning("DCR refused: no readable agent config snapshot")
+        return JSONResponse({"error": "server_error"}, 503)
     try:
         reg_enabled = read_config_value("agent", "oauth.registration_enabled")
     except Exception as e:
-        log.warning("oauth.registration_enabled read failed, defaulting to enabled: %s", e)
-        reg_enabled = None
+        log.warning("DCR refused: oauth.registration_enabled read failed: %s", e)
+        return JSONResponse({"error": "server_error"}, 503)
     if reg_enabled is not None and reg_enabled.strip().lower() in ("false", "0", "no"):
         return JSONResponse(
             {"error": "access_denied", "error_description": "registration disabled"}, 403
@@ -104,8 +109,8 @@ async def register(request):
     try:
         allowed_raw = read_config_value("agent", "oauth.allowed_redirect_uris")
     except Exception as e:
-        log.warning("oauth.allowed_redirect_uris read failed, defaulting to empty allowlist: %s", e)
-        allowed_raw = None
+        log.warning("DCR refused: oauth.allowed_redirect_uris read failed: %s", e)
+        return JSONResponse({"error": "server_error"}, 503)
     allowlist = [u.strip() for u in allowed_raw.split(",")] if allowed_raw else []
     allowlist = [u for u in allowlist if u]
     for uri in redirect_uris:

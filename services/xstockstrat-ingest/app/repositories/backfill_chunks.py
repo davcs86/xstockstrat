@@ -148,3 +148,13 @@ async def list_jobs_with_incomplete_chunks(db_pool) -> list[str]:
         CHUNK_FAILED,
     )
     return [str(r["job_id"]) for r in rows]
+
+
+async def list_job_symbols(db_pool, job_id: str) -> list[str]:
+    """Distinct symbols across a job's planned chunks (the GAPS_ONLY resume verify set)."""
+    rows = await db_pool.fetch(
+        "SELECT DISTINCT unnest(symbols) AS symbol FROM ingest.backfill_chunks"
+        " WHERE job_id = $1::uuid ORDER BY symbol",
+        job_id,
+    )
+    return [r["symbol"] for r in rows]
