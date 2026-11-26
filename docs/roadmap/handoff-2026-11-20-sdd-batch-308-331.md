@@ -177,3 +177,28 @@ before asking. Per § 6, record the operator's exact answer in `context.md` befo
 | 9 | 330 | Step-5 post-deploy read-back on staging. | close-out |
 | 10 | 317 | Answer the four spec-time confirmations listed in its `context.md`. | execute |
 | 11 | 321 | Proceed with `/sdd-execute` despite the impl-review warnings on Steps 9 and 10 (`context.md`, commit `6369dc10`)? | execute |
+
+## 10. 2026-11-21 → 11-26 progress
+
+**Batch 1 (`/sdd-batch-execute`, 308, 310, 315, 318, 319)** launched with the operator's "all five, adapt at execute" approval.
+State at 2026-11-26: 318 through Step 7; 308 through Step 5; 319 through Step 6; 310 through Step 3 with a Step 4 blocker;
+315 through Step 4 with a Step 5 blocker; relaunched with the operator rulings below. No PRs yet. `main-dev` moved 19
+commits after the 11-21 sync, so each branch re-syncs on relaunch. Execution agents had no `envsubst`; installed
+`gettext-base` from the main session (reinstall after a container rebuild).
+
+**Operator rulings recorded verbatim in each feature's `context.md`** (§ 9 answers):
+325 confirm bound, **measure B_row first** (staging warm set left as is — measurement must account for it) ·
+311 D-50 confirmed; cutover as designed; **real-Postgres trading job added to scope** (needs re-spec + impl review) ·
+313 AC-1 wording confirmed; **docs step added** (needs re-spec + impl review) · 324 keep Step 9 ·
+331 AC-1 Given reworded (applied in `acceptance.feature`) · 321 **fix the spec first** (Steps 9/10 amended; needs re-review) ·
+317 choices 1/3/4 confirmed, **choice 2 = parallel reader** instead of the registry entries (spec must be amended; re-review) ·
+310 Step 4 blocker: fold the fix into Step 4 · 315 Step 5 blocker: fix the guard (`offset <duration>`).
+316's "168 commits" note is moot (branch synced).
+
+**Distill revert:** see § 8. The four batch-1 features whose `context.md` grew past 65,536 bytes during execution were run
+with `{gate:'distill', decision:'proceed'}` (operator-approved oversize).
+
+**Still waiting on the operator (needs staging access):** 320 probe output (regenerate the script from its spec Step 1);
+330 post-deploy read-back.
+
+**Features needing re-spec + impl-spec review before `/sdd-execute`:** 311, 313, 317, 321. 325 stays gated on the B_row measurement.
