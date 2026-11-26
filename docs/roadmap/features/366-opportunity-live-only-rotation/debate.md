@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-26 | /sdd-batch | 5 | 3 | 0 | 7 | 0 | yes |
 | 2 | 2026-11-26 | /sdd-batch | 4 | 4 | 4 | 7 | 0 | yes |
 | 3 | 2026-11-26 | /sdd-batch | 4 | 3 | 2 | 3 | 0 | yes |
+| 4 | 2026-11-26 | /sdd-batch | 1 | 4 | 10 | 6 | 0 | yes |
 
 ## Settled Decisions
 
@@ -30,6 +31,7 @@
 | D-11 | 3 | The read-side staleness decision is one opps.read(include_expired=True, same filters) split in Python. Any in-scope expired non-live-only row selects today's stale branch. Otherwise, fresh rows take the fresh branch, including the 185 @AC-8 heal. Otherwise, the read falls through to 365's no-rows branch. No has_expired SQL and no WHERE extraction. | servicer.py:4770-4819; opportunities.py:250-253, 340-348; adversary r3 alternative and the 365 composition defect | settled |
 | D-12 | 3 | carried_symbols is built from the pre-step-3 predicates only, and step 3 suppresses (sym,'') only for those symbols. The post-step-5 dedup removes a carried row only when a fresh row has the same opportunity_key. | servicer.py:5557-5560, 5617-5639; adversary r3 verified the invariant | settled |
 | D-13 | 3 | write_cursor's first-insert valid_until is to_timestamp(0), and the on-conflict update touches only live_only_cursor. A real_pg test pins the aware decode and the no-clobber behaviour. | servicer.py:4798-4799; 023_opportunity_compute_state.up.sql:8-13; adversary r3 verified | settled |
+| D-14 | 4 | Under D-11, a read branch's rows are served only from a read whose WHERE matches that branch, never Python-filtered. Branch (iii) (fresh, n_expired == 0) serves the include_expired=True rows as read. Branch (iv) (fresh, n_expired > 0, which can only mean expired live-only rows) re-issues today's unchanged include_expired=False read, sequentially on the same budgeted connection, and sets no kick_full. Both branches run the 185 @AC-8 heal. | opportunities.py:42-60 (every _SORT_ORDER_BY branch ranks by a symbol-partition window aggregate; verified r4); servicer.py:4765-4774, 4776-4789; adversary r4 verified the branch identities | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -46,6 +48,10 @@
 | R-8 | 3 | A has_expired EXISTS sharing an extracted read() WHERE builder, called only in the rows branch | It misses the no-rows branch, where 365's unscoped has_fresh turns true under the D-7 cycle stamp, and it refactors the placeholder-anchored read() SQL (opportunities.py:253) that every ListOpportunities read uses. | locked |
 | R-9 | 3 | Strict stored-action equality as carry predicate (f) | It drops carried 215 fundamentals_unavailable and 289 formula_unreadable rows, whose stored action is the UNSPECIFIED override (servicer.py:5885-5892). | locked |
 | R-10 | 3 | Scoping 365's has_fresh instead of testing for in-scope expired rows | It rewrites 365's predicate after 365 lands, and it cannot tell an expired in-scope row from an absent one. | locked |
+| R-11 | 4 | A Python re-sort of the fresh rows that mirrors _SORT_ORDER_BY | It duplicates four SQL orderings (NULLS LAST, the $3 blend) that would drift (DRY), and the second read is cheap at queue sizes of a few hundred rows. | locked |
+| R-12 | 4 | `MAX(...) FILTER (WHERE valid_until > now()) OVER (...)` inside read() | It changes the stale branch's ordering semantics and edits the placeholder-anchored read() SQL that R-8 guards (opportunities.py:253). | locked |
+| R-13 | 4 | A read-path DELETE of expired live-only rows | It puts writes on the budgeted read-only DB phase (ANALYSIS-14) and races _opportunity_lock (servicer.py:4951, 4987, 6069). | locked |
+| R-14 | 4 | Setting kick_full in read branch (iv), the partial live-only expiry state | Each compute stamps one shared expiry, so every expiry-kick schedules another one cycle later. Chains never merge, so the compute rate grows without bound, and each kick advances the cursor (O-12). | locked |
 
 ## Objections
 
@@ -56,19 +62,25 @@
 | O-2 | 1 | Mixed validity defeats stale-while-revalidate; a read-side staleness trigger independent of per-row validity is needed. | yes | closed @ round 2 (A read-side staleness trigger (has_expired routing to the existing stale branch) was adopted; its scoping defect is tracked as a new round-2 blocking objection, and the synthesis includes the fix.) |
 | O-3 | 1 | The validity (session_end) and FR-8 (computed_at) clocks diverge on weekends, and the heal re-stamps live-only rows at window_hours; drop a carried row on valid_until<=now OR age>=cycle, and give the heal the live-only stamp. | yes | closed @ round 2 (A single clock (live-only valid_until = computed_at + cycle), the pinned drop rule valid_until <= now OR age >= cycle, and the heal applying the live-only stamp.) |
 | O-4 | 1 | Carried rows inflate GetStrategyAnalytics queue_share; declare a C-16 CHANGE or exclude them. | no | closed @ round 2 (queue_share is defined over valid attributed rows, so carried rows count with no rule change; the adversary concurred.) |
-| O-5 | 1 | valid_window_hours is effectively overridden for live-only rows; update the C-05 docs and cap the stamp at 168h or waive. | no | open |
-| O-6 | 1 | The operator must explicitly accept the FR-2 shortfall as the default outcome at homelab scale. | no | open |
+| O-5 | 1 | valid_window_hours is effectively overridden for live-only rows; update the C-05 docs and cap the stamp at 168h or waive. | no | closed @ round 4 (Operator decision 2026-11-26 ('Accept both'): live-only rows are stamped computed_at + cycle_max_days with no extra 168h cap, documented next to valid_window_hours (C-05).) |
+| O-6 | 1 | The operator must explicitly accept the FR-2 shortfall as the default outcome at homelab scale. | no | closed @ round 4 (Operator decision 2026-11-26 ('Accept both'): the FR-2a shortfall is the expected default at homelab scale, logged at INFO, not an error.) |
 | O-7 | 1 | Verify carried-row action re-INSERT against the 308 and 330 diffs before spec. | no | open |
-| O-8 | 2 | has_expired must exclude live-only rows and apply the read's filters (symbol, dispositions), so the partial-expiry state keeps the fresh branch and the 185 @AC-8 surgical heal; otherwise an operator-signed C-16 CHANGE is required. | yes | open |
-| O-9 | 2 | Add carry predicate (f): the current best_direction must resolve to the stored action via _resolve_action_tag, otherwise drop the row; add a RED signal-flip test. | yes | open |
+| O-8 | 2 | has_expired must exclude live-only rows and apply the read's filters (symbol, dispositions), so the partial-expiry state keeps the fresh branch and the 185 @AC-8 surgical heal; otherwise an operator-signed C-16 CHANGE is required. | yes | closed @ round 4 (Proposal r4 adopts D-11's one include_expired read, with branches stale_curated -> stale, fresh -> fresh plus heal, else -> 365's no-rows branch. The new D-14 serving rule fixes symbol-group ordering. The adversary verified branches (ii)-(iv) against servicer.py:4765-4819.) |
+| O-9 | 2 | Add carry predicate (f): the current best_direction must resolve to the stored action via _resolve_action_tag, otherwise drop the row; add a RED signal-flip test. | yes | closed @ round 4 (Proposal r4 adopts D-10's three-way predicate (f) with RED tests for keep and drop. The adversary confirmed that a non-held sell resolves to None (servicer.py:6602-6604), so a buy->sell flip drops.) |
 | O-10 | 2 | Build carried_symbols, which suppresses the step-3 (sym,'') row, from the pre-step-3 predicates (a)(b)(c)(e)(f) only; dedup removes a carried row only when a fresh row with the same key exists; add an invariant test that every pool symbol has at least one row. | yes | closed @ round 3 (Proposal r3 builds carried_symbols from the pre-step-3 predicates, removes a carried row in the dedup only on a fresh opportunity_key collision, and adds the invariant test; the adversary verified it.) |
 | O-11 | 2 | The write_cursor first-insert valid_until sentinel must decode safely at servicer.py:4799; use to_timestamp(0) and pin it with a real_pg test. | yes | closed @ round 3 (Proposal r3 uses the to_timestamp(0) first-insert sentinel and a real_pg decode and no-clobber test; the adversary verified the comparison at servicer.py:4798-4799.) |
-| O-12 | 2 | Read-driven kicks advance the cursor: log only on a change of (pool bucket, N, cycle_days), label the projection in computes, and offer the operator 'advance only on the daily refresh'. | no | open |
-| O-13 | 2 | An unavailable fresh chunk evaluation replaces a good live-only row; either rely on the surgical heal (recorded) or keep the prior eligible row when the fresh row is sym_unavailable. | no | open |
-| O-14 | 2 | C-18: bound and measure the queue row count, since carried rows enlarge the per-poll full-queue Python pagination (servicer.py:4743-4746); decide whether to cap carried rows. | no | open |
-| O-15 | 3 | FR-7: carry predicate (c) must also require strat in _capped_live(sym) (servicer.py:5461-5465), so carried rows never exceed max_live_strategies_per_symbol. | no | open |
-| O-16 | 3 | Carry predicate (b) must use competitive_pool, not live_signal_symbols, so that 'pool' is one set across the chunk, FR-4 and the shortfall. | no | open |
-| O-17 | 3 | Name the cursor plumbing for /sdd-spec: the _compute_opportunities return shape (rows, new_cursor), live_only_cursor in compute_state.get, conn=None on the injected no-pool path (servicer.py:4710), and the conn kwarg on the test fakes. | no | open |
+| O-12 | 2 | Read-driven kicks advance the cursor: log only on a change of (pool bucket, N, cycle_days), label the projection in computes, and offer the operator 'advance only on the daily refresh'. | no | closed @ round 4 (Operator decision 2026-11-26 ('Every recompute'): the cursor advances on every compute. Logs are labelled in computes and fire only on a change of (pool bucket, N, cycle_days).) |
+| O-13 | 2 | An unavailable fresh chunk evaluation replaces a good live-only row; either rely on the surgical heal (recorded) or keep the prior eligible row when the fresh row is sym_unavailable. | no | closed @ round 4 (Recorded disposition: recovery of an unavailable fresh chunk row relies on the surgical heal. Keeping the prior row contradicts fresh-wins (D-6). The adversary raised no objection in r4.) |
+| O-14 | 2 | C-18: bound and measure the queue row count, since carried rows enlarge the per-poll full-queue Python pagination (servicer.py:4743-4746); decide whether to cap carried rows. | no | closed @ round 4 (Recorded disposition: no cap on carried rows. The bound min(P-N, N x computes_per_cycle) x max_live_strategies_per_symbol goes in the CLAUDE.md:295 note, and carried_rows is logged. The adversary raised no objection in r4.) |
+| O-15 | 3 | FR-7: carry predicate (c) must also require strat in _capped_live(sym) (servicer.py:5461-5465), so carried rows never exceed max_live_strategies_per_symbol. | no | closed @ round 4 (Predicate (c) now requires strat in _capped_live(sym) (servicer.py:5461-5465), so the FR-7 per-symbol cap holds on carried rows. The deny gap is tracked as a separate new objection.) |
+| O-16 | 3 | Carry predicate (b) must use competitive_pool, not live_signal_symbols, so that 'pool' is one set across the chunk, FR-4 and the shortfall. | no | closed @ round 4 (Predicate (b) and the chunk both use competitive_pool, so 'pool' is one set across the chunk, FR-4 and the shortfall.) |
+| O-17 | 3 | Name the cursor plumbing for /sdd-spec: the _compute_opportunities return shape (rows, new_cursor), live_only_cursor in compute_state.get, conn=None on the injected no-pool path (servicer.py:4710), and the conn kwarg on the test fakes. | no | closed @ round 4 (Proposal r4 item 5 names the plumbing: the (rows, new_cursor) return, the callers at :4952-4953 and :6070-6071, live_only_cursor in compute_state.get, conn=None on the :4710 no-pool path, and the conn kwarg on the fakes at test_analysis_servicer.py:4501 and :5778. The adversary did not object.) |
+| O-18 | 4 | Predicate (c) must be `strat in _capped_live(sym) and (sym, strat) not in set(denied_covered)`. _capped_live reads the pre-deny resolved.union (live_loop.py:128-130, 155-156; servicer.py:5451-5455), so on its own it is R-2 and drops D-6's universe test. Add a RED test: a carried row whose strategy then denies the symbol leaves only the muted placeholder. | yes | open |
+| O-19 | 4 | Read branch (iv) is the routine steady state (3-day cycle, daily refresh). State it as such and measure the second read (a log or counter). Any predicate-(e) lookahead that shortens visible lifetime below the cycle needs the operator. | no | open |
+| O-20 | 4 | An empty-rows compute with a non-null cursor occurs for an all-sell pool (servicer.py:5884, 6602-6604). Do not rely on the opposite claim. Test that the cursor advances, the empty stamp is applied, and live_only_cursor is not clobbered. | no | open |
+| O-21 | 4 | Type-anchor COALESCE($14::timestamptz, now()) (fails.md:2352-2355). Add a real_pg executemany test with mixed None and datetime values, and extend the bound-param-referenced guard to the new INSERT. | no | open |
+| O-22 | 4 | Add services/xstockstrat-analysis/docs/opportunities.md:7 and, if it lists the columns, the opportunity_compute_state entry in docs/patterns/database.md to the C-05 doc touchpoints. | no | open |
+| O-23 | 4 | Document that predicate (e)'s age clause is load-bearing only after cycle_max_days is lowered, and record the residual: old rows stay visible on fresh reads until the next compute (opportunities.py:233). | no | open |
 
 ## Reopen Petitions
 
