@@ -59,12 +59,15 @@ interior hole.
 - xstockstrat-marketdata — code change: `GetDataCoverage` gap computation must express interior holes.
 - xstockstrat-ingest — code change: GAPS_ONLY work-range planning consumes the corrected gaps and
   enforces FR-2's terminal-state rule.
-- xstockstrat-ui — consumer surface only; no code change expected (it already sends GAPS_ONLY and
-  renders job status). Verified at the surface, not modified, unless design finds a status it cannot
-  render.
-- xstockstrat-agent — consumer surface only; no code change expected (`trigger_backfill` already
-  passes `fill_mode`). If design changes the tool's observable behavior or status shape, the
-  `strat-lab` `backtest` skill must be updated in the same PR (`docs/patterns/strat-lab-plugin.md`).
+- xstockstrat-ui — code change (scope widened by operator decision 2026-11-26):
+  `src/lib/backtestBackfill.ts` maps a PARTIAL job whose only shortfall is `incomplete` symbols to a
+  distinct "vendor has no bars" message (it leads to Re-run, then the no-vendor-data state).
+- xstockstrat-agent — docs-only change: `get_backfill_status` gains the `incomplete` outcome
+  automatically (enum-derived projection); its docstrings, `docs/runbooks/mcp-tools.md`, the agent
+  `CLAUDE.md` and the `strat-lab` `backtest` skill are synced in the same PR
+  (`docs/patterns/strat-lab-plugin.md`).
+- packages/proto — `marketsession` (Go calendar package) gains the one-off NYSE closures since 2000;
+  `common.proto` gains one enum value (see Proto Contract).
 
 ## Consumer Surface(s)
 
@@ -77,12 +80,26 @@ interior hole.
 
 ## Fix Scope
 
-- Proto: no wire change is required by the product outcome. If design adds a field to
-  `GetDataCoverage` (or a new response shape), it must be **additive** (non-breaking) and goes
-  through the proto approval gate (`docs/runbooks/proto-versioning.md`); a breaking change is out of
-  scope for this fix.
+Updated at `/sdd-spec` (2026-11-26) to match the approved design and the operator's scope decision.
+
+- marketdata: `GetDataCoverage` reports head, interior and tail 1d gaps from stored session dates
+  (`timeframe.ComputeSessionGaps`, the shared `marketsession` calendar); 15m/1h unchanged.
+- ingest: the GAPS_ONLY planner coalesces each symbol's gaps into units no wider than
+  `backfill.chunk_window_days`; a verify pass after the chunks (fresh and resume paths) marks a
+  symbol still missing sessions `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE` with the missing ranges in its
+  `reason`, and the job ends PARTIAL. The head gap is exempt (pre-listing carve-out) when the store
+  has no bar in the 730 days before it — a fixed invariant, not a config key.
+- ui: INCOMPLETE-only PARTIAL discriminator in `backtestBackfill.ts`.
+- agent / strat-lab: documentation sync for the new `incomplete` outcome.
 - Database migrations: none — the fix reads existing `marketdata` bars; no schema change.
 - Config keys: none.
+
+## Proto Contract
+
+- Additive, non-breaking: `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4` appended to
+  `common.v1.BackfillSymbolOutcome` (`packages/proto/common/v1/common.proto`). Approval: 1 service
+  owner (operator-accepted 2026-11-26). `buf breaking` must pass against the feature branch.
+- No other wire change: `GetDataCoverageResponse.gaps = 7` already carries N gaps.
 
 ## Acceptance Criteria
 
