@@ -18,6 +18,7 @@ from tests.test_analysis_servicer import (
     _sig,
     _StampedComputeState,
     _strat_row,
+    _unavailable_served_row,
     _wl,
 )
 
@@ -475,3 +476,31 @@ async def test_cursor_write_failure_rolls_back_the_queue_replace():
     await _compute(svc, expect_ok=False)
     assert _rows(svc) == rows_before
     assert _cursor(svc) == POOL[19]
+
+
+async def test_heal_stamps_live_only_row_with_cycle_and_others_with_session_window():
+    """D-7 heal (185 @AC-8 regression guard): a healed live-only row gets now + cycle_max_days; a
+    healed watchlist row keeps session_end + valid_window_hours (the newest bar is ~now here)."""
+    svc = _materialized_svc(
+        watchlists=[_wl(bindings=[("MSFT", "sx")])],
+        strategies={"sx": _strat_row("sx", entry=_GT_100)},
+        bars={"AAPL": _FIRING_BARS, "MSFT": _FIRING_BARS},
+    )
+    old = datetime.now(UTC) - timedelta(seconds=400)
+    svc._opportunities_repo.rows[_UID] = [
+        _unavailable_served_row(
+            "AAPL", "sx", provenance=["live_strategy", "unavailable"], computed_at=old
+        ),
+        _unavailable_served_row(
+            "MSFT", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+        ),
+    ]
+    before = datetime.now(UTC)
+    await svc._retry_unavailable_symbols(_UID, {"AAPL", "MSFT"}, _META)
+    after = datetime.now(UTC)
+    live, watch = _rows(svc, symbol="AAPL")[0], _rows(svc, symbol="MSFT")[0]
+    assert "unavailable" not in live["provenance"] and "unavailable" not in watch["provenance"]
+    assert before + timedelta(days=3) <= live["valid_until"] <= after + timedelta(days=3)
+    session_floor = before.replace(microsecond=0)  # session_end = the newest bar's whole second
+    window = timedelta(hours=24)
+    assert session_floor + window <= watch["valid_until"] <= after + window

@@ -612,7 +612,7 @@ wiring commands.
 
 ### Step 8 — test: heal stamp for live-only vs other rows
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_opportunity_rotation.py` — modify
