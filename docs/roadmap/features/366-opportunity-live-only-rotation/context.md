@@ -1076,3 +1076,9 @@
   - `docs/patterns/config-governance.md`, `services/xstockstrat-analysis/CLAUDE.md`: doc-section rebase with 330 (in-progress).
   - Migrations: analysis `030` and config `056` are free on trunk.
   - Config and proto: no collisions.
+
+## Session 2026-11-26 — operator pre-execute decisions (main session)
+
+- OPERATOR DECISION (Step 4 / O-9 keep-list, verbatim choice 'No, drop it'): 308's `evaluation_failed` marker does NOT join the keep-list. A carried live-only row marked evaluation_failed is dropped; the symbol falls back to its (sym, '') row and is re-evaluated on its next turn. Resolves the Step 4 [ ] unaddressed item → [x].
+- OPERATOR DECISION ('Confirm all five'): impl-spec Assumptions 1–5 are operator-confirmed — (1) pool bucket = projected_computes = ceil(P/N); (2) shortfall fires when projected_computes > cycle_max_days; (3) queue+cursor transaction via a new OpportunitiesRepository.transaction() on the same pool (accepted wording deviation from D-2, same connection/transaction, no F-06 risk); (4) cursor and carry reads only on a non-empty competitive_pool; (5) _rotation_chunk / _carry_within_cycle as pure module-level helpers.
+- Execution mode: /sdd-batch-execute SEQUENTIAL (mode-entry confirmation 'Agree: all three', 2026-11-26). Step 9 is blocked until 365 merges (precondition grep for 'elif not await opps.has_fresh(user_id):'); integration PR waits on 308 and 330 per rebase order 365 → 308/330 → 366.
