@@ -629,6 +629,7 @@ export enum BackfillSymbolOutcome {
   BACKFILL_SYMBOL_OUTCOME_EMPTY = "BACKFILL_SYMBOL_OUTCOME_EMPTY",
   BACKFILL_SYMBOL_OUTCOME_SKIPPED = "BACKFILL_SYMBOL_OUTCOME_SKIPPED",
   BACKFILL_SYMBOL_OUTCOME_FAILED = "BACKFILL_SYMBOL_OUTCOME_FAILED",
+  BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = "BACKFILL_SYMBOL_OUTCOME_INCOMPLETE",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -646,6 +647,9 @@ export function backfillSymbolOutcomeFromJSON(object: any): BackfillSymbolOutcom
     case 3:
     case "BACKFILL_SYMBOL_OUTCOME_FAILED":
       return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED;
+    case 4:
+    case "BACKFILL_SYMBOL_OUTCOME_INCOMPLETE":
+      return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_INCOMPLETE;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -663,6 +667,8 @@ export function backfillSymbolOutcomeToJSON(object: BackfillSymbolOutcome): stri
       return "BACKFILL_SYMBOL_OUTCOME_SKIPPED";
     case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED:
       return "BACKFILL_SYMBOL_OUTCOME_FAILED";
+    case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_INCOMPLETE:
+      return "BACKFILL_SYMBOL_OUTCOME_INCOMPLETE";
     case BackfillSymbolOutcome.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -679,6 +685,8 @@ export function backfillSymbolOutcomeToNumber(object: BackfillSymbolOutcome): nu
       return 2;
     case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED:
       return 3;
+    case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_INCOMPLETE:
+      return 4;
     case BackfillSymbolOutcome.UNRECOGNIZED:
     default:
       return -1;
@@ -760,7 +768,10 @@ export interface TemplateOrigin {
   updateAvailable: boolean;
 }
 
-/** Lists non-written symbols only; reason is the source's error text, empty for EMPTY. */
+/**
+ * Lists non-written symbols only; reason is the source's error text (empty for EMPTY),
+ * or for INCOMPLETE the still-missing session ranges.
+ */
 export interface BackfillSymbolResult {
   symbol: string;
   outcome: BackfillSymbolOutcome;

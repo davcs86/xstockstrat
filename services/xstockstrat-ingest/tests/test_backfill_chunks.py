@@ -94,3 +94,13 @@ class TestChunkRepo:
         pool.fetch = AsyncMock(return_value=[{"job_id": "j1"}, {"job_id": "j2"}])
         jobs = await backfill_chunks.list_jobs_with_incomplete_chunks(pool)
         assert jobs == ["j1", "j2"]
+
+    @pytest.mark.asyncio
+    async def test_list_job_symbols(self):
+        pool = AsyncMock()
+        pool.fetch = AsyncMock(return_value=[{"symbol": "AAPL"}, {"symbol": "IDXX"}])
+        symbols = await backfill_chunks.list_job_symbols(pool, "j1")
+        assert symbols == ["AAPL", "IDXX"]
+        args = pool.fetch.await_args.args
+        assert "DISTINCT unnest(symbols)" in args[0]
+        assert args[1] == "j1"

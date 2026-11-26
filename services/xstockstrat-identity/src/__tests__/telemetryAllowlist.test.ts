@@ -33,6 +33,7 @@ const MIN_INSTRUMENTS = [
   'identity.token.validate_failures',
   'identity.oauth.exchange_failures',
   'identity.refresh.rejections',
+  'identity.revoke.unverifiable',
   'identity.audit.failures',
   'identity.audit.append.duration',
 ];
@@ -43,6 +44,7 @@ function drive(): void {
   telemetry.recordValidateFailure('expired');
   telemetry.recordExchangeFailure('pkce_mismatch');
   telemetry.recordRefreshRejection('oauth');
+  telemetry.recordRevokeUnverifiable();
   telemetry.recordAuditFailure('identity.user.created');
   telemetry.recordAuditFailure('not.an.audited.type');
   telemetry.recordAuditAppendDuration(0.25);

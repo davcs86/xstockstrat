@@ -10,6 +10,8 @@ import * as grpc from '@grpc/grpc-js';
 import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
 import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
+import * as mtls from '../mtls';
+import { startMtlsLoopback } from './mtlsTestPki';
 
 interface Row {
   namespace: string;
@@ -116,13 +118,13 @@ describe('form-tolerant SetConfig — spelling, canonical grants/bounds, error m
       createConfigServiceDefinition(),
       new ConfigServiceImpl(pool) as unknown as grpc.UntypedServiceImplementation,
     );
-    const port: number = await new Promise((resolve, reject) => {
-      server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (err, p) =>
-        err ? reject(err) : resolve(p),
-      );
-    });
+    const { port, clients } = await startMtlsLoopback(server, ['xstockstrat-trading']);
     const { ConfigServiceClient } = await import('@xstockstrat/proto/config/v1/config');
-    client = new ConfigServiceClient(`127.0.0.1:${port}`, grpc.credentials.createInsecure());
+    client = new ConfigServiceClient(
+      `127.0.0.1:${port}`,
+      clients['xstockstrat-trading'],
+      mtls.targetOverride('xstockstrat-config'),
+    );
   });
 
   after(() => {

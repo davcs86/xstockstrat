@@ -47,7 +47,7 @@ def _refresh_svc(user_ids, compute=None):
     svc = make_servicer()
     svc._opportunities_repo = AsyncMock()
     svc._opportunities_repo.distinct_user_ids = AsyncMock(return_value=list(user_ids))
-    svc._compute_opportunities = compute or AsyncMock(return_value=[])
+    svc._compute_opportunities = compute or AsyncMock(return_value=([], None))
     svc._replace_and_stamp_compute_state = AsyncMock()
     return svc
 
