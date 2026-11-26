@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/308-fix-analysis-per-symbol-isolation/feature.md`
-**Total Steps**: 21
+**Total Steps**: 23
 **Feature Branch**: `feature/fix-analysis-per-symbol-isolation`
 **Tree**: docs read at `origin/feature/fix-analysis-per-symbol-isolation@2b660ff1`; that branch holds
 docs commits only and is 168 commits behind `origin/main-dev`. Every code `path:line` below was
@@ -15,8 +15,15 @@ file moved. Re-grep each anchor at execute time. Peers that edit a file this spe
 Peers 309 and 313 cite the ingest servicer, not this one.
 
 **Re-spec 2026-11-26 (operator ruling on O-9)**: Steps 17-20 are new (the cue on the mobile
-`SignalRow` and the Signal-detail header); the former Step 17 (docs) is now Step 21. The UI
-anchors in Steps 17-20 were grepped on the merged branch head `4054a35c`; Steps 1-16 are unchanged.
+`SignalRow` and the Signal-detail header); the former Step 17 (docs) is now Step 23. The UI
+anchors in Steps 17-20 were grepped on the merged branch head `4054a35c`; Steps 1-16 are unchanged
+except as listed next.
+
+**Re-spec 2026-11-26 (operator ruling on the readiness card, and an independent impl-spec review)**:
+Steps 21-22 are new (the `SignalReadiness` "Why this fired" arm and its test); Step 16 loses its
+`mock-backend.ts` edit and gains a whole-suite import check; Step 23 gains the C-10 shell doc.
+Anchors for Steps 17-22 are line numbers from one checkout and can drift: edit by symbol and
+re-grep.
 
 ---
 
@@ -27,17 +34,18 @@ The fix follows design.md's build order in one PR. Steps 1-4 add the typed class
 field). Steps 5-8 add the shared isolation helper and the `evaluation_failed` marker plumbing, both
 additive. Steps 9-14 isolate the five fan-out sites (readiness callers, `_compute_opportunities`,
 heal), each paired with its regression tests. Steps 15-16 land the insights opportunities cue,
-Steps 17-18 land it on the mobile `SignalRow`, Steps 19-20 land it on the Signal-detail header, and
-Step 21 lands the signed-off durable-suite amendments and the documentation.
+Steps 17-18 land it on the mobile `SignalRow`, Steps 19-20 land it on the Signal-detail header,
+Steps 21-22 land a matching arm in the Signal-detail "Why this fired" card, and Step 23 lands the
+signed-off durable-suite amendments and the documentation.
 
 **Scenario coverage (C-15):** `@AC-1` → Step 12. `@AC-2` → Step 10. `@AC-3` → Step 10 (kick and
 materializer) and Step 14 (surgical retry).
 
 **Consumer surfaces (C-14):** the product spec is a bug template with no `## Consumer Surface(s)`
 section; design.md § 5 names the surface. UI `/insights` opportunities page → Steps 15-16; the mobile `SignalRow` on that page → Steps 17-18;
-the `/trader` Signal-detail header → Steps 19-20. Agent
+the `/trader` Signal-detail header → Steps 19-20, and its "Why this fired" card → Steps 21-22. Agent
 `list_opportunities` → no code step: the tool already returns `provenance` verbatim
-(`services/xstockstrat-agent/app/client.py:902`), so the new token reaches it unchanged; Step 21
+(`services/xstockstrat-agent/app/client.py:902`), so the new token reaches it unchanged; Step 23
 documents it in `docs/runbooks/mcp-tools.md`.
 
 **Decisions recorded at /sdd-spec:**
@@ -47,12 +55,14 @@ documents it in `docs/runbooks/mcp-tools.md`.
   `/sdd-spec` deferral to `evaluation-failed-cue-parity`, which is no longer a follow-up). This is
   the first of the two options design.md O-9 names: render `EVALUATION_FAILED_CUE` through a
   `SignalItem` field plumbed via `sections.ts` with the shared constant. Mobile: Steps 17-18. Detail
-  header: Steps 19-20. The Signal-detail "Why this fired" card (`SignalReadiness.tsx`) is outside the
-  ruling ("mobile SignalRow and Signal-detail header") and is unchanged; see context.md Open Threads.
+  header: Steps 19-20. The Signal-detail "Why this fired" card (`SignalReadiness.tsx`) was outside that
+  ruling; a second ruling the same day ("Add a card arm in 308") adds it: Steps 21-22. Before 308 a
+  failing `EvaluateReadiness` raised and the card said "Failed to evaluate readiness"; Step 9 now
+  returns an empty 0-of-0 row, which the card would render as "no entry conditions to evaluate".
 - **Degraded-rate alerting** is deferred to a named follow-up feature, slug
   `analysis-isolation-degraded-counter` (a counter `analysis.isolation.degraded{site}` plus an alert
   rule). Until it lands a sustained degraded rate shows only in WARN/ERROR logs and span attributes.
-  Step 21 records it in the analysis findings log.
+  Step 23 records it in the analysis findings log.
 - **`evaluation_failed` token** gets one Python constant `EVALUATION_FAILED_PROVENANCE` in
   `app/repositories/opportunities.py`, beside `_PROVENANCE_STRUCTURAL_MARKERS`. The SQL floor clause
   keeps a literal, like its three sibling clauses; Step 8 pins the two against each other.
@@ -60,7 +70,7 @@ documents it in `docs/runbooks/mcp-tools.md`.
   (`get_by_owner_and_id`, `_load_benchmark_bars_windowed`, `_formula_fundamentals`,
   `servicer.py:4310-4331`) and in the materializer still fails the whole kick or owner pass. Defect
   report 3 ("a transient outage does not discard the batch") is therefore only partly met for a
-  failure in that setup path; Step 21 records it in the analysis findings log.
+  failure in that setup path; Step 23 records it in the analysis findings log.
 
 ## Step Dependencies
 
@@ -69,7 +79,8 @@ documents it in `docs/runbooks/mcp-tools.md`.
   argument change with test call sites).
 - Step 4 [test] covers Step 3 [service]. Step 6 [test] covers Step 5 [service]. Step 8 [test]
   covers Step 7 [service]. Step 14 [test] covers Step 13 [service]. Step 16 [test] covers Step 15.
-  Step 18 [test] covers Step 17 [service]. Step 20 [test] covers Step 19 [service].
+  Step 18 [test] covers Step 17 [service]. Step 20 [test] covers Step 19 [service]. Step 22 [test]
+  covers Step 21 [service].
   These service steps are additive and pass alone, so no unit is declared. For each, RED is captured
   by running the new test against the prior step's app files (`git checkout <prior-step-sha> --
   <the service step's Files>`, restored before GREEN), per `docs/roadmap/ledger/insights.md`
@@ -86,17 +97,18 @@ documents it in `docs/runbooks/mcp-tools.md`.
 - Step 3 must be in the same PR as Step 11: without it a load-driven deadline refusal is classified
   terminal (design D-9).
 - Step 15 requires Step 7 only by contract (the wire token); it has no build dependency.
-- Steps 17 and 19 require Step 15 (the exports `EVALUATION_FAILED_PROVENANCE` and
-  `EVALUATION_FAILED_CUE` in `src/lib/readinessCue.ts`). Steps 18 and 20 require Step 16 (the
-  fixture `MYSZ_EVALUATION_FAILED_OPPORTUNITY` and its `INVENTORY.md` row). Steps 17-20 stay on
+- Steps 17, 19 and 21 require Step 15 (the exports `EVALUATION_FAILED_PROVENANCE` and
+  `EVALUATION_FAILED_CUE` in `src/lib/readinessCue.ts`). Steps 18, 20 and 22 require Step 16 (the
+  fixture `MYSZ_EVALUATION_FAILED_OPPORTUNITY` and its `INVENTORY.md` row). Steps 17-22 stay on
   the one UI consumer surface and each service step passes its own Verification alone (the one
-  construction site of the new required `SignalItem` field is edited in Step 17), so no unit is
-  declared. RED for Steps 18 and 20 is captured as for Step 16: check out the prior step's app
+  construction site of the new required `SignalItem` field is edited in Step 17, and Step 21 adds
+  no signature), so no unit is declared. Step 22 also requires Step 20 (the in-file
+  `routeEvaluationFailedRow` helper). RED for Steps 18, 20 and 22 is captured as for Step 16: check out the prior step's app
   files, run the new test, restore.
-- Step 21 requires Steps 9-14: the durable scenarios it amends describe the post-fix behavior.
+- Step 23 requires Steps 9-14: the durable scenarios it amends describe the post-fix behavior.
 - Deferred surfaces: `analysis-isolation-degraded-counter` only. It has no feature number yet;
   `scripts/sdd-allocate-feature-number.py` allocates one when it is storied. The O-9 cue parity is
-  built (Steps 17-20), not deferred.
+  built (Steps 17-22), not deferred.
 - Peer `fix-sandbox-result-contract` (310) edits the same indicators `servicer.py` and changes how
   `exit_reason` is derived (its product-spec.md:40,55). Step 3 has no build dependency on it: the
   field and the `"timeout"` map entry (`servicer.py:364`) exist today. Whichever feature lands
@@ -913,7 +925,8 @@ ruff check . && ruff format --check .
      `data-testid={`opportunity-evaluation-failed-${o.symbol}`}` and
      `aria-label={`Evaluation failed for ${o.symbol}`}`;
    - act gate: `fundUnavailable || ((unreadable || evalFailed) && !held) ? null : (`.
-3. Mobile `SignalRow` and the Signal-detail header are not changed here; Steps 17-20 do that (O-9).
+3. Mobile `SignalRow`, the Signal-detail header and the `SignalReadiness` card are not changed here;
+   Steps 17-22 do that (O-9 and the readiness-card ruling).
 
 **Verification**:
 ```bash
@@ -933,7 +946,6 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/opportunities.ts` — modify
 - `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
-- `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify
 
 **Reviewers**: xstockstrat-ui owner — trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log)
@@ -946,18 +958,20 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
   `e2e/insights/opportunities.spec.ts:737`, using `addAuthCookie(page)`, the
   `routeWithUnreadableRow(page, row)` `page.route` helper, and asserting
   `page.getByTestId('snooze-MYSZ')` has count 0.
-- Mock filter that mirrors production: `MARKERS` at `e2e/mock-backend.ts:969-975` and the floor
-  exemption at about `:987-994` (ledger rule, `fails.md` 2026-11-10: list every such fake). The
-  exemption is keyed on boolean row flags (`o.muted || o.dataUnavailable ||
-  fundamentalsUnavailable || formulaUnreadable`), not on provenance, so a provenance check is a
-  new condition there, not a copy of an existing one.
+- No `mock-backend.ts` edit. Its `MARKERS` (`e2e/mock-backend.ts:969`) only feeds the
+  `availableSources` facet over `OPPORTUNITIES`, and its floor exemption only sees rows the mock
+  serves; the evaluation-failed row is not in `OPPORTUNITIES` and every test (Steps 16, 18, 20, 22)
+  serves it through `page.route`, so an edit there is unreachable. The ledger rule (`fails.md`
+  2026-11-10: list every fake that mirrors a production filter) is met by this paragraph.
 - Import loading: no e2e file imports `readinessCue` today (`grep -rn "src/lib" e2e` shows
   `alertShared`, `auth`, `configNamespaces`, `connectClients`, `copilot`, `deadlines`, `headers`,
   `indicatorChart`, `positionLineage`, `traderBff`). `mock-backend.ts` is loaded by
-  `e2e/global-setup.ts:3` in the Playwright process. `package.json` pins `@phosphor-icons/react`
+  `e2e/global-setup.ts:3` in the Playwright process, and `e2e/fixtures/index.ts:22` re-exports
+  `./opportunities`, so a `readinessCue` import in that module reaches every consumer of
+  `'../fixtures'` and, through `mock-backend.ts`, the global setup. `package.json` pins `@phosphor-icons/react`
   `^2.1.7`; the installed version was not re-checked at re-spec (no worktree `node_modules`). In
   plain Node an ESM `import` of that package loads the icons and a CJS `require` returns an empty
-  object without throwing. Not run under Playwright's own transform; Instructions 1 checks it.
+  object without throwing. Not run under Playwright's own transform; Instruction 1 checks it suite-wide.
 
 **TDD**: `red-green required`
 
@@ -969,26 +983,27 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
    EVALUATION_FAILED_PROVENANCE] }`. Import the constant with a relative path, as
    `e2e/fixtures/alerts.ts:1` does (`'../../src/lib/deadlines'`). `readinessCue.ts` value-imports
    the icon library, so check the import first: after adding it, run
-   `pnpm exec playwright test e2e/insights/opportunities.spec.ts --list`. If the tests are listed,
-   keep the import. If the run fails on that import, declare the token once in the fixture module
-   instead. That is a second TS copy of the wire token, so record it in the Deviation Log and the
+   `pnpm exec playwright test --list` (the whole suite, not one spec: the fixture index fans the
+   import out to every spec) and `pnpm exec playwright test e2e/insights/opportunities.spec.ts`
+   (which also loads the global setup). If both succeed, keep the import. If either fails on that
+   import, fall back: declare the token once in the fixture module instead. That is a second TS copy of the wire token, so record it in the Deviation Log and the
    catalog row and report it at the checkpoint (P-03); do not take it silently. Add the fixture's
    row to `INVENTORY.md` after line 44; state that it is not in `OPPORTUNITIES`.
-2. `mock-backend.ts`: add `'evaluation_failed'` to `MARKERS` and add a new condition to the
-   conviction-floor exemption for a row whose provenance includes it (the existing exemptions are
-   boolean row flags; this one is provenance-based), mirroring the backend change in Step 7.
-3. `opportunities.spec.ts`: one test in a new `describe`, served through the existing `page.route`
-   helper. Assert `opportunity-evaluation-failed-MYSZ` is visible with text `evaluation failed`;
+2. `opportunities.spec.ts`: add `MYSZ_EVALUATION_FAILED_OPPORTUNITY` to the import list at lines 3-8.
+   Add one test in a new `describe`, served through the existing `page.route` helper. Assert `opportunity-evaluation-failed-MYSZ` is visible with text `evaluation failed`;
    `snooze-MYSZ` has count 0; `opportunity-unavailable-MYSZ` and
    `opportunity-formula-unreadable-MYSZ` have count 0.
-4. RED: with `page.tsx` checked out at the pre-Step-15 commit the test id is absent.
+3. RED: with `page.tsx` checked out at the pre-Step-15 commit the test id is absent.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui
 pnpm run lint
+pnpm exec tsc --noEmit
+pnpm exec playwright test --list
 pnpm exec playwright test e2e/insights/opportunities.spec.ts
-grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/insights/opportunities.spec.ts e2e/mock-backend.ts
+pnpm run test:coverage   # the UI logic-layer gate (vitest); Playwright steps carry no threshold
+grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/insights/opportunities.spec.ts
 grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md
 ```
 
@@ -1083,6 +1098,8 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
 **Covers**: —
 
 **Instructions**:
+0. `opportunities.spec.ts`: confirm `MYSZ_EVALUATION_FAILED_OPPORTUNITY` is in the import list at lines
+   3-8 (Step 16 adds it); add it if absent.
 1. `opportunities.spec.ts`: add `test.describe('Opportunities — evaluation failed, mobile (feature 308)')`
    after Step 16's describe, with the same 375x800 viewport. One test: `addAuthCookie(page)`,
    `routeWithUnreadableRow(page, MYSZ_EVALUATION_FAILED_OPPORTUNITY)`, `page.goto('/insights/opportunities')`,
@@ -1099,8 +1116,9 @@ cd services/xstockstrat-ui
 pnpm run lint
 pnpm exec tsc --noEmit
 pnpm exec playwright test e2e/insights/opportunities.spec.ts
+pnpm run test:coverage   # the UI logic-layer gate (vitest); Playwright steps carry no threshold
 grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/insights/opportunities.spec.ts
-grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md
+grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md e2e/insights/opportunities.spec.ts
 ```
 
 ---
@@ -1140,8 +1158,7 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md
    `<EnumBadge render={EVALUATION_FAILED_CUE} testId="detail-evaluation-failed" />`. In the final
    branch, beside the action badge, render the same badge when `evalFailed` (the held case), as the
    `formulaUnreadable` line does. No literal `'evaluation_failed'`, no color literal (C-17).
-4. Not changed: the `SignalReadiness` "Why this fired" card (`src/components/insights/SignalReadiness.tsx`),
-   which is outside the ruling; see context.md Open Threads.
+4. Not changed here: the `SignalReadiness` "Why this fired" card; Step 21 adds its arm.
 
 **Verification**:
 ```bash
@@ -1166,6 +1183,8 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
 **Reviewers**: xstockstrat-ui owner — trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log)
 
 **Codebase Evidence**:
+- Edit by symbol; the line numbers below are from one checkout and can drift (about 19 lines in
+  another).
 - Precedent: `test.describe('Signal-detail formula not readable (feature 289)')` at
   `e2e/trader/position-detail.spec.ts:1178`: `addAuthCookie(page)`, `watchlist(page, 'MYSZ',
   'strat-live-001')` (helper at line 1248), a `page.waitForRequest` on the symbol-filtered
@@ -1186,13 +1205,15 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
 **Instructions**:
 1. C-12: reuse `MYSZ_EVALUATION_FAILED_OPPORTUNITY` (Step 16); add it to the existing `'../fixtures'`
    import. No new fixture.
-2. Add `test.describe('Signal-detail evaluation failed (feature 308)')` after the feature-289 describe.
-   One test: `addAuthCookie(page)`, `watchlist(page, 'MYSZ', 'strat-live-001')`, then
-   `page.route('**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities', ...)` that returns
-   `route.fallback()` unless `postDataJSON().symbol === 'MYSZ'` and otherwise
+2. Add `test.describe('Signal-detail evaluation failed (feature 308)')` after the feature-289 describe,
+   with an in-file helper `routeEvaluationFailedRow(page)` (Step 22 reuses it). The helper calls
+   `page.route('**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities', ...)`, which returns
+   `route.fallback()` unless `(route.request().postDataJSON() as { symbol?: string } | null)?.symbol === 'MYSZ'`
+   (null-guarded: a body-less request must fall through) and otherwise
    `fulfillJson(route, { opportunities: [{ ...MYSZ_EVALUATION_FAILED_OPPORTUNITY, validUntil: <ISO
-   string of its validUntil.seconds> }], availableSources: [] })`. `goto` the MYSZ detail URL, then
-   assert `detail-evaluation-failed` is visible (timeout 30000) with text `evaluation failed`, and
+   string of its validUntil.seconds> }], availableSources: [] })`. One test: `addAuthCookie(page)`,
+   `watchlist(page, 'MYSZ', 'strat-live-001')`, `routeEvaluationFailedRow(page)`, `goto` the MYSZ
+   detail URL, then assert `detail-evaluation-failed` is visible (timeout 30000) with text `evaluation failed`, and
    `detail-formula-unreadable` has count 0.
 3. `INVENTORY.md`: append this spec (Signal-detail header cue) to the consumer column of the Step 16 row.
 4. RED: with `trader/positions/[symbol]/page.tsx` checked out at the pre-Step-19 commit, the test id
@@ -1204,22 +1225,132 @@ cd services/xstockstrat-ui
 pnpm run lint
 pnpm exec tsc --noEmit
 pnpm exec playwright test e2e/trader/position-detail.spec.ts
+pnpm run test:coverage   # the UI logic-layer gate (vitest); Playwright steps carry no threshold
 grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/trader/position-detail.spec.ts
 grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md e2e/trader/position-detail.spec.ts
 ```
 
 ---
 
-### Step 21 — docs: amended durable scenarios, contract sentences, sentinel text, follow-ups
+### Step 21 — service: `evaluation_failed` arm in the Signal-detail "Why this fired" card
 
 **Status**: `pending`
-**Service**: `services/xstockstrat-analysis/acceptance/`, `services/xstockstrat-analysis/docs/`, `docs/runbooks/`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/insights/SignalReadiness.tsx` — modify
+
+**Reviewers**: xstockstrat-ui owner — trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log)
+
+**Codebase Evidence**:
+- `src/components/insights/SignalReadiness.tsx`: `import { READINESS_CUE } from '@/lib/readinessCue';`
+  (line 13); `pairRow` is the symbol-filtered `useOpportunities` row for `(symbol, strategyId)`, and
+  `const isHeld = pairRow?.provenance.includes('position') ?? false;` (line 47) reads its provenance;
+  `const readiness = data?.readiness?.[0];` (line 56).
+- The body chain (lines 80-103 on this checkout): `!strategyId` → `isLoading` → `isNotFound` →
+  `error` ("Failed to evaluate readiness.") → `readiness?.formulaUnreadable` (a plain `<div
+  data-testid="readiness-formula-unreadable">` around a `CardNotice`) → `!readiness ||
+  readiness.conditions.length === 0` ("This strategy has no {ruleWord} conditions to evaluate.").
+  `CardNotice` (`src/components/shared/CardNotice.tsx`) takes `children` and `variant` only.
+- Why the arm is needed: `EvaluateReadiness` now returns the failing symbol as an empty 0-of-0
+  `SymbolReadiness` without the unreadable marker (Step 9; wording in Step 23 Instruction 2), where it
+  used to raise and show the error line. Without an arm the card reads "no conditions" under a header
+  that says "evaluation failed" (Step 19).
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+1. Add `EVALUATION_FAILED_PROVENANCE` to the line-13 `readinessCue` import (exported by Step 15).
+2. After `isHeld` derive
+   `const evalFailed = pairRow?.provenance.includes(EVALUATION_FAILED_PROVENANCE) ?? false;`.
+3. Add an arm after the `readiness?.formulaUnreadable` arm and before the `!readiness ||
+   readiness.conditions.length === 0` arm:
+   `<div role="status" data-testid="readiness-evaluation-failed"><CardNotice>Evaluation failed for
+   {symbol}.</CardNotice></div>`. The `error` arm still wins (a failed RPC keeps its own message). No
+   color literal; `CardNotice` already carries the design tokens (C-17).
+4. Keyed on the row's provenance only, as ruled. A provenance row that is stale against a live
+   `EvaluateReadiness` that now returns conditions would also take this arm until the next recompute;
+   that edge is recorded in context.md Open Threads, not handled here.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm exec playwright test e2e/trader/position-detail.spec.ts
+grep -n "readiness-evaluation-failed\|EVALUATION_FAILED_PROVENANCE" src/components/insights/SignalReadiness.tsx
+grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expect no output
+```
+
+---
+
+### Step 22 — test: Playwright assertion for the `evaluation_failed` readiness-card arm
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
+- `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
+
+**Reviewers**: xstockstrat-ui owner — trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log)
+
+**Codebase Evidence**:
+- Edit by symbol; line numbers can drift between checkouts.
+- Per-page `EvaluateReadiness` override precedent: the AC-13 test in
+  `e2e/trader/position-detail.spec.ts` (`'the "Why this fired" panel shows the firing cue (AC-13)'`)
+  calls `page.route('**/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness', ...)` with a
+  `readiness: [...]` JSON body.
+- The shared mock cannot serve this case: `READINESS_BUCKET_OVERRIDE` forces `MYSZ` to
+  `formulaUnreadable: true` (`e2e/fixtures/opportunities.ts`, spread at
+  `e2e/mock-backend.ts` `evaluateReadiness`), which would take the unreadable arm. So the test
+  overrides `EvaluateReadiness` with `page.route`, as the AC-13 test does.
+- `symbolReadiness(symbol)` (single-arg factory, `e2e/fixtures/opportunities.ts`) is the C-12 home
+  for a `SymbolReadiness`; a `{ ...symbolReadiness('MYSZ'), conditions: [], ... }` spread is a scenario
+  override, not a new domain literal.
+
+**TDD**: `red-green required`
+
+**Covers**: —
+
+**Instructions**:
+1. C-12: reuse `symbolReadiness` (add it to the existing `'../fixtures'` import) and Step 20's
+   `routeEvaluationFailedRow(page)` helper. No new fixture.
+2. In the Step 20 describe add one test: `addAuthCookie(page)`, `watchlist(page, 'MYSZ',
+   'strat-live-001')`, `routeEvaluationFailedRow(page)`, then
+   `page.route('**/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness', (route) =>
+   fulfillJson(route, { readiness: [{ ...symbolReadiness('MYSZ'), conviction: 0, passingConditions: 0,
+   totalConditions: 0, conditions: [] }] }))`, `goto('/trader/positions/MYSZ?strategy=strat-live-001')`.
+   Assert `readiness-evaluation-failed` is visible (timeout 30000) with text `Evaluation failed for
+   MYSZ`, `readiness-formula-unreadable` has count 0, and `getByText('conditions to evaluate')` has
+   count 0.
+3. `INVENTORY.md`: append this test to the consumer column of the Step 16 row.
+4. RED: with `SignalReadiness.tsx` checked out at the pre-Step-21 commit, the test id is absent.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm exec playwright test e2e/trader/position-detail.spec.ts
+pnpm run test:coverage   # the UI logic-layer gate (vitest); Playwright steps carry no threshold
+grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/trader/position-detail.spec.ts
+grep -n "readiness-evaluation-failed" e2e/trader/position-detail.spec.ts e2e/fixtures/INVENTORY.md
+```
+
+---
+
+### Step 23 — docs: amended durable scenarios, contract sentences, sentinel text, follow-ups
+
+**Status**: `pending`
+**Service**: `services/xstockstrat-analysis/acceptance/`, `services/xstockstrat-analysis/docs/`, `docs/runbooks/`, `services/xstockstrat-ui/docs/`
 **Files**:
 - `services/xstockstrat-analysis/acceptance/opportunity-compute-robustness.feature` — modify
 - `services/xstockstrat-analysis/acceptance/readiness-caching-poll-discipline.feature` — modify
 - `services/xstockstrat-analysis/docs/opportunities.md` — modify
 - `services/xstockstrat-analysis/docs/context-constitution-findings.md` — modify
 - `docs/runbooks/mcp-tools.md` — modify
+- `services/xstockstrat-ui/docs/opportunities-shell.md` — modify
 
 **Reviewers**: none
 
@@ -1233,6 +1364,9 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md e2e/trade
   is written by the **shared** `compute_readiness_row`". The service `CLAUDE.md` no longer carries
   either sentence (`grep -n "still propagates" services/xstockstrat-analysis/CLAUDE.md` is empty on
   main-dev; the text moved to `docs/opportunities.md`).
+- `services/xstockstrat-ui/docs/opportunities-shell.md` (C-10): its "Formula-unreadable row (289)" bullet
+  lists the per-surface test ids and says `readinessState` and `SignalItem` take a **required**
+  `formulaUnreadable`. Edit by symbol, after that bullet.
 - `docs/runbooks/mcp-tools.md:1225-1230` documents `formula_unreadable` and its provenance marker
   for `list_opportunities`.
 - `services/xstockstrat-analysis/docs/context-constitution-findings.md` — the service findings log;
@@ -1272,8 +1406,19 @@ grep -n "MYSZ_EVALUATION_FAILED_OPPORTUNITY" e2e/fixtures/INVENTORY.md e2e/trade
    there still discards the whole kick or owner pass (feature 308 isolates the per-symbol body
    only). Re-grep the symbols and cite them by `#symbol`, as the file's other rows do.
 
+7. `opportunities-shell.md`: add a bullet after the "Formula-unreadable row (289)" bullet for the
+   evaluation-failed row (feature 308): `evaluation_failed` provenance (a structural, floor-exempt
+   marker, not a proto field) renders `EVALUATION_FAILED_CUE` ("evaluation failed") instead of a 0/0 or
+   "no data" verdict; a non-held row shows it in place of the action badge with no act buttons. List the
+   test ids `opportunity-evaluation-failed-<sym>` (desktop queue), `opportunity-evaluation-failed-mobile-<sym>`
+   (mobile queue), `detail-evaluation-failed` (Signal-detail header) and `readiness-evaluation-failed`
+   (the `SignalReadiness` notice, keyed off the opportunity row's provenance, not the `EvaluateReadiness`
+   result). State that `SignalItem` now has a second required field, `evaluationFailed`, beside
+   `formulaUnreadable`, so `tsc` flags every construction site.
+
 **Verification**:
 ```bash
+grep -n "evaluation-failed\|evaluationFailed" services/xstockstrat-ui/docs/opportunities-shell.md
 grep -n "still fails the opportunities recompute\|still aborts EvaluateReadiness" services/xstockstrat-analysis/acceptance/*.feature   # expect no output
 grep -n "@feature-308" services/xstockstrat-analysis/acceptance/opportunity-compute-robustness.feature services/xstockstrat-analysis/acceptance/readiness-caching-poll-discipline.feature
 grep -n "FormulaExecutionError. still propagates" services/xstockstrat-analysis/docs/opportunities.md   # expect no output
