@@ -829,7 +829,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 
 ### Step 18 — docs: runbook and strat-lab `backtest` skill sync for `incomplete`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`, `plugins/strat-lab/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify

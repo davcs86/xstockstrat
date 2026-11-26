@@ -517,3 +517,15 @@ Each thread names its target step.
 - TDD (interim; durable RED/GREEN at Step 19): red: uncommitted probe `'"incomplete"' in` the `get_backfill_status` catalog description → `AssertionError`, `1 failed`, `exit=1` → green: probe `1 passed`, `exit=0`; Step 17 Verification `All checks passed!`, `79 files already formatted`, `87 passed`, `exit=0` (this command has no coverage threshold; Step 19 runs `--cov-fail-under=40`).
 - Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/CLAUDE.md`
 - Deviations: RED captured now with an uncommitted probe (Deviation Log).
+
+## Session 2026-11-26 — sdd-execute sequential, step 18
+
+- Tooling: none needed (docs; grep, plus `python3` for the strat-lab validator). Config-key wiring gate: N/A (no config key touched).
+- Discovery: `mcp-tools.md` delisted note `:1028-1030` and outcome table `:1123-1127`, `historical-backfill.md:357-359`, strat-lab `SKILL.md:222-224` and `reference/backfill.md:59-62` all confirmed on the dev branch; `incomplete` was absent as an outcome before the edit.
+
+### Step 18 — docs: runbook and strat-lab `backtest` skill sync for `incomplete` [done]
+- `mcp-tools.md`: an `incomplete` row in the `get_backfill_status` outcome table (gaps_only bars only; reason names the ranges; job `PARTIAL`; not in `failed_symbols`; no alert; 730-day head-gap exemption) and one sentence under `trigger_backfill` that `gaps_only` now fills interior holes. `historical-backfill.md` Gaps-only bullet: session-aware interior gaps, an unfillable range ends `PARTIAL` with `incomplete` symbols, plus the two accepted residuals (IEX holes recur; late last session). strat-lab `SKILL.md` and `reference/backfill.md`: `incomplete` = vendor has no bars, do not re-trigger the same range; an `incomplete`-only `PARTIAL` is data-final. `gaps_only` kept in all three files.
+- TDD: N/A (docs). Verification: grep lists `incomplete` in all four files; `gaps_only` counts SKILL.md 2 / backfill.md 2 / mcp-tools.md 4; `exit=0`. Extra check: `plugins/strat-lab/scripts/validate.py --self-test` and the plain run `passed all checks`, `exit=0`.
+- Files modified: `docs/runbooks/mcp-tools.md`, `docs/runbooks/historical-backfill.md`, `plugins/strat-lab/skills/backtest/SKILL.md`, `plugins/strat-lab/skills/backtest/reference/backfill.md`
+- Deviations: none
+- Note: the strat-lab `plugin.json` version (`.claude-plugin/` and `.cursor-plugin/`) was not bumped; it is outside this step's **Files**.
