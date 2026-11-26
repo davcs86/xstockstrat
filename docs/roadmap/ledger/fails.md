@@ -3973,6 +3973,11 @@ ambiguity is logged here).
 - **Evidence**: `git show adf411c3:docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md` (lines 14, 16-17, 80-81); `git show adf411c3:docs/reports/2026-10-19-config-claude-md-drift-defect.md` (13, 35); `git show adf411c3:docs/reports/2026-10-19-identity-claude-md-drift-defect.md` (15, 47); fix commit adf411c3 (#1504).
 - **Rule it implies**: A PR that adds/removes an RPC, outbound dependency or payload field, or fixes a defect listed in a service CLAUDE.md banner, updates that CLAUDE.md (banner, method list, dependency table, diagrams) in the same PR; never copy service-type boilerplate into a service of a different shape. Extends `fails.md:306-309` from agent tool docs to every service CLAUDE.md (related `fails.md:1511`); candidate binding extension of C-10.
 
+### 2026-11-20 — fix-alert-event-targeting — assumption
+- **Mistake**: A design packet framed owner-targeting a per-account halt alert as "admins lose only Web Push". It took two rounds to notice that admins are the only role that can resume a halt and that the untargeted alert's title was their only in-product source of another user's halted account_id, so narrowing the audience removed the remediator's sole signal.
+- **Evidence**: `docs/roadmap/features/315-fix-alert-event-targeting/debate.md` R-7, O-5 (round 3); `services/xstockstrat-trading/internal/service/trading.go:3181` (`RequireAdminScope`), `internal/repository/account_repo.go:90`.
+- **Rule it implies**: Before narrowing an alert's audience, list who can act on it and how each of them learns the affected id today; if the alert is their only source, pair the change with a replacement signal and state the loss in the C-16 CHANGE row.
+
 ### 2026-11-10 — ui-env-themed-bundles — assumption
 - **Mistake**: Recon stated "dev and prod build distinct SHAs because `main` gets merge commits", and three design rounds were built on that claim. It was false for `main-dev`: the post-promotion sync (`sync-main-to-maindev.yml:52`) ran `git merge origin/main` without `--no-ff`, fast-forwarding main-dev onto main's merge commit. Both deploys would then build the same `<sha>` image tag with different contents (here, opposite UI themes). Turning on `--no-ff` then broke two more assumptions:
   - the commit-count "nothing to promote" gate (`promote.yml:42`);
