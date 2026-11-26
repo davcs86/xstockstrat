@@ -429,3 +429,8 @@ Each thread names its target step.
 - TDD: N/A (proto-gen). Verification `exit=0`.
 - Files modified: `packages/proto/gen/go/common/v1/common.pb.go`, `packages/proto/gen/python/common/v1/common_pb2.py`, `packages/proto/gen/ts/common/v1/common.ts`, `packages/proto/gen/ts/common/v1/common_pb.ts`, `packages/proto/gen/ts/dist/common/v1/common.{d.ts,js}`, `packages/proto/gen/ts/dist/common/v1/common_pb.{d.ts,js}`
 - Deviations: ingest assertion gets the conftest import path (operator A); codegen ran in the container (Deviation Log).
+
+## Session 2026-11-26 — operator standing authorization: adjacent folds (main session)
+
+- OPERATOR DECISION (blocker:9, verbatim choice 'A: fold Steps 9+10'): fold Step 10 into Step 9 as the atomic unit 'steps 9+10' — write Step 10's tests first and capture RED (40 units > 5), implement the per-symbol coalescing in _plan_work_ranges, GREEN with both Verification blocks, one commit, fold logged in the Deviation Log.
+- STANDING AUTHORIZATION (verbatim choice 'Yes, auto-fold adjacent'), anchor `auth-364-adjacent-folds-2026-11-26`: for the rest of this feature's /sdd-batch-execute run, foldPolicy 'adjacent' is authorized — a step that cannot pass its own Verification because the immediately following step(s) repair it (adjacent, one consumer surface, unit ≤ 4) is folded per sdd-execute/reference/atomic-units.md without halting, with a Deviation Log entry; any other gap still halts for the operator. Scope: 364 only.
