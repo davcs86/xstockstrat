@@ -706,3 +706,84 @@ Carried into `/sdd-execute`; announce every unchecked item at each checkpoint an
 - [ ] Open `/sdd-story admin-halted-accounts-read` (no number yet). Target: operator, no later than the integration PR.
 - [ ] Step 5 reviewer (Platform Lead; `packages/otel` has no registry row). Target: operator, integration PR.
 - [ ] `feature.md` § Next Action still names `/sdd-review … impl-spec`. Target: the integration-PR session.
+
+## Session 2026-11-26 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-alert-event-targeting (feature 315)
+
+Source read: /home/user/xstockstrat/docs/roadmap/features/315-fix-alert-event-targeting/acceptance.feature. The path in the task text was doubled (`features/docs/roadmap/features/...`), so I used the real path. I read the working-tree copy, not `origin/feature/fix-alert-event-targeting`. I have no git access, so the caller should confirm the branch copy matches before writing. The source scenarios carry no `@FR-*` tags, so none are invented. Each block keeps `@AC-n @regression` and adds `@feature-315`.
+
+Affected services (feature.md Reviewers): xstockstrat-trading and xstockstrat-portfolio. Platform Lead is listed only for the Step 5 `packages/otel` alert rule, which has no scenario here.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-trading/acceptance/fix-alert-event-targeting.feature | CREATE | NEW | The Then asserts on trading's halt and reconciliation `EmitAlertRequest.TargetUserId`. No existing trading suite asserts alert targeting. |
+| AC-2 | services/xstockstrat-portfolio/acceptance/fix-alert-event-targeting.feature | CREATE | NEW | The Then asserts on the ledger event type and payload attribution for a concentration breach. No existing portfolio scenario asserts this. |
+| AC-3 | services/xstockstrat-portfolio/acceptance/fix-alert-event-targeting.feature | CREATE (same file as AC-2) | NEW | The Then asserts on the ledger event type, owner and payload for a drawdown breach. |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-alert-event-targeting.feature (CREATE) ---
+```
+# Promoted from docs/roadmap/features/315-fix-alert-event-targeting/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-315` tag.
+# Durable business rule: per-account risk alerts reach the account owner; only the systemic alert stays untargeted.
+
+Feature: xstockstrat-trading — per-account halt and reconciliation alerts target the account owner
+  Regression guard for docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md.
+
+  # guards: docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md
+  @AC-1 @regression @feature-315
+  Scenario: an automatic account halt alert targets the account owner
+    Given trading account "acct-1" whose broker_accounts row has user_id "user-owner"
+    And "user-owner" is a non-admin user with a registered push subscription
+    When haltAccount halts "acct-1" after a reconciliation mismatch past the grace window
+    Then the "halt" CRITICAL EmitAlertRequest has TargetUserId "user-owner"
+    And the "reconciliation" CRITICAL EmitAlertRequest from emitReconciliationFinding has TargetUserId "user-owner"
+    And the systemic "Systemic broker-reconciliation failure" alert still has an empty TargetUserId
+```
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-alert-event-targeting.feature (CREATE) ---
+```
+# Promoted from docs/roadmap/features/315-fix-alert-event-targeting/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-315` tag.
+# Durable business rule: risk-breach ledger events are labelled by kind and attributable to a user.
+
+Feature: xstockstrat-portfolio — risk-breach ledger events are labelled by kind and attributable to the owner
+  Regression guard for docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md.
+
+  # guards: docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md
+  @AC-2 @regression @feature-315
+  Scenario: a concentration breach is recorded as a concentration event, not a drawdown
+    Given portfolio.risk.concentration_limit_pct is 0.20
+    And user "user-1" holds AAPL at 35% of portfolio value with no drawdown breach
+    When checkRiskLimits runs for "user-1"
+    Then the appended ledger event type is not "portfolio.risk.drawdown_breach"
+    And the event payload carries user_id "user-1" and symbol "AAPL"
+
+  # guards: docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md
+  @AC-3 @regression @feature-315
+  Scenario: a drawdown breach still emits a drawdown event, attributed to the owner and account
+    Given portfolio.risk.max_drawdown_pct is 0.10
+    And user "user-1" has account "acct-1" with equity 8500.00 and peak equity 10000.00 and no concentration breach
+    When checkRiskLimits runs for "user-1"
+    Then the appended ledger event type is "portfolio.risk.drawdown_breach"
+    And the event is owned by "user-1" and its payload carries user_id "user-1" and account_id "acct-1"
+```
+
+Neither file exists, so the orchestrator must create both and their `acceptance/` directories already exist. `docs/sdd/business-rules/platform.feature` gets nothing, because no scenario spans services.
+
+### Notes / ambiguities / conflicts
+- **Attribution:** AC-1's Given mentions a notify push subscription, but its Then asserts on trading's `EmitAlertRequest`, so it goes to trading. AC-2 and AC-3 assert on portfolio's `checkRiskLimits` ledger append, so both go to portfolio.
+- **No OVERLAP.** Near-neighbors assert different observables:
+  - /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-push-untargeted-broadcast.feature (@feature-242 AC-3 and AC-6) asserts notify `EmitAlert` `target_user_id` for portfolio risk alerts, not the ledger event type or payload.
+  - /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/drawdown-enforcement.feature (@feature-172) asserts the drawdown WARNING alert and the peak-equity high-water-mark.
+  - /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-reconciliation-false-halt.feature (@feature-206) asserts when a halt occurs, not who the halt alert targets.
+- **No CONFLICT.** AC-3 keeps `portfolio.risk.drawdown_breach` for drawdown, consistent with the 172 and 242 drawdown guarantees. AC-2 only moves concentration off that event type. No existing suite asserts that concentration logs as `drawdown_breach`. I grepped `acceptance/*.feature` and `platform.feature` for `drawdown_breach`, `TargetUserId`, `haltAccount`, `emitReconciliationFinding` and `checkRiskLimits`, and found no contradiction.
+- **Doc drift, not part of the promotion:** /home/user/xstockstrat/services/xstockstrat-portfolio/CLAUDE.md lists `portfolio.risk.drawdown_breach` as the "Max drawdown exceeded" event. That stays accurate after the fix. The implementation steps should cover the new concentration event name.
+
+### Coverage check
+- Source scenarios: 3 (AC-1, AC-2, AC-3). Planned (NEW+DUP+OVERLAP): 3, made up of 3 NEW, 0 DUP, 0 OVERLAP and 0 CONFLICT. Every @AC-* is accounted for and none were skipped.
+````
