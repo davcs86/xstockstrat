@@ -396,3 +396,19 @@ Each thread names its target step.
 - The inline `stored` helper `weekdayStamps` lists every weekday (a superset of trading days) minus the excluded dates, so the calendar subtest fails if a closure or holiday were treated as a trading day; single consumer, stays inline (C-13).
 - Files modified: `services/xstockstrat-marketdata/internal/timeframe/timeframe_test.go`
 - Deviations: none
+
+## Session 2026-11-26 — sdd-execute sequential, steps 5+6
+
+- Tooling: go1.27 ✓ · golangci-lint ✓ v2.14.0 (`$HOME/go/bin`, first on `PATH`; `/usr/local/bin` is the stale v2.5.0). Config-key wiring gate: N/A (no config key touched).
+
+### Step 5 — service: 1d `GetDataCoverage` reads stored session times and reports session gaps [done]
+- Added repo `GetDailyCoverage` (one query: `MIN/MAX/COUNT + COALESCE(array_agg(time ORDER BY time), '{}')`, same predicate as `GetCoverage` with `timeframe='1d'`), the `dailyCoverageReader` seam + `dailyCoverage` field (assigned in the `if repo != nil` block), and the 1d branch in `GetDataCoverage` that fills `Gaps` from `timeframe.ComputeSessionGaps(start, end, times, time.Now())`; 15m/1h keep `GetCoverage` + `ComputeGaps`; `CoveredRanges` unchanged (R-5). marketdata `CLAUDE.md` names session-aware 1d gaps and the closure-table maintenance rule. Part of the unit `steps 5+6`.
+- TDD (unit 5+6, AC-1/AC-3): red: `unknown field dailyCoverage in struct literal of type MarketDataService` (build failed, `exit=1`) → green: Step 5 Verification `ok …/internal/service`, `0 issues.`, `exit=0`; Step 6 Verification all packages `ok`, `total: (statements) 87.5%` (≥ 40%), `0 issues.`, `exit=0`; `-v` shows `TestGetDataCoverageDaily` PASS over its 4 subtests.
+- Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go`, `services/xstockstrat-marketdata/CLAUDE.md`
+- Deviations: none
+
+### Step 6 — test: service-level `GetDataCoverage` with a stubbed daily coverage reader [done]
+- Created `TestGetDataCoverageDaily` with an inline `stubDailyCoverage` (records symbol/start/end) over a 2026-01-02..2026-11-20 window: AC-1 interior hole (one gap `[DayStart(2026-04-01), DayStart(2026-09-25)+12h]`, bars/earliest/latest from the stub, one covered range), AC-3 full coverage (no gaps), unset start floors at 2000-01-01 UTC, and a reader error wrapped as `get coverage:`. Part of the unit `steps 5+6`.
+- Files modified: `services/xstockstrat-marketdata/internal/service/coverage_test.go`
+- Deviations: none
+- Note: the repo SQL (`array_agg` scan into `[]time.Time`) has no offline test (needs a DB); the Step 6 dev smoke remains the required pre-promotion gate (operator decision (a)).

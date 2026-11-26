@@ -273,7 +273,7 @@ Coverage total must be ≥ 40%. Before Step 3 this fails to compile (unit RED); 
 
 ### Step 5 — service: 1d `GetDataCoverage` reads stored session times and reports session gaps
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
@@ -321,7 +321,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 
 ### Step 6 — test: service-level `GetDataCoverage` with a stubbed daily coverage reader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/coverage_test.go` — create
