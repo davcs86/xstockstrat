@@ -251,3 +251,16 @@ Full debate (/sdd-design via /sdd-batch) halted at the approval gate after round
   - Line correction: design item (f) cites `docs/opportunities.md:7`, but the sentence to change ("filters both the fresh and the stale read") is at L9 (L8-10). Recorded in Step 3's evidence.
   - O-6 resolution: real-kick tests (stub `_compute_opportunities`, drain `_opportunity_recomputing`) cover the `valid_until` and follow-up Then clauses of AC-1, AC-3 and AC-4. AC-2's `valid_until` clause uses the kick-spy proxy, stated in Step 2's Verification.
   - Not run in this session: the analysis venv lacks dev deps here (`asyncpg` missing), so the test baseline was not executed. Execute must run `uv sync --extra dev` first.
+
+## Session 2026-11-26 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 4 warnings (criteria PASS, no Floor breaches); overlap WARN (rebase-only). Advisory: lifecycle unchanged (still implementation-ready).
+- Addressed (edited implementation-spec.md):
+  - [x] Step 2 item 10 (DRY guard rail, C-13): it no longer adds a local `_drain`. It reuses the existing module-level `_drain_opportunity_recompute(svc, user_id, *, budget=20000)` at `tests/test_analysis_servicer.py:4875`, imported through the deadlines file's existing `from tests.test_analysis_servicer import (...)` block (L25-31). Verification now greps for no `def _drain` in that file. The evidence line now cites the nested `_drain` at `test_opportunity_compute_state.py:84` correctly.
+  - [x] Overlap with 308-fix-analysis-per-symbol-isolation (servicer.py, test_opportunities_repo.py, test_analysis_servicer.py, test_opportunity_compute_state.py): Step Dependencies now has a rebase-only note. Whichever lands second rebases and re-runs Step 2's Verification.
+- Still open (carried into /sdd-execute; no spec change needed, the spec already states each one):
+  - [ ] Step 2: the real_pg `has_fresh` test (item 11) skips locally when no PostgreSQL binary is present, so it runs for real only under `CI=true`. Execute should not treat a local skip as GREEN evidence for item 11.
+  - [ ] Step 2: AC-2's `valid_until` Then clause is verified only through the kick-spy proxy (O-6, accepted trade-off, C-15).
+  - [ ] Step 3 (docs) is verified by grep only, with no ruff or pytest run. This is adequate for a docs edit.
+  - [ ] Overlap: 366-opportunity-live-only-rotation edits `_compute_opportunities` in the same servicer.py and has no impl-spec yet. Merge 365 first (D-4); 366's rebase keeps the elif fall-through.
+  - [ ] Overlap: re-verify 330-fix-live-enrich-ttl-seed's reader-line citation at merge time (carried from the product-spec review).
