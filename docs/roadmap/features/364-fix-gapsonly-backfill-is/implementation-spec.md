@@ -501,7 +501,7 @@ cd services/xstockstrat-ingest && uv run ruff check . && uv run ruff format --ch
 
 ### Step 11 — service: fresh-path GAPS_ONLY verify, INCOMPLETE outcome, widened finalize gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -582,7 +582,7 @@ cd services/xstockstrat-ingest && uv run ruff check . && uv run ruff format --ch
 
 ### Step 12 — test: verify pass — AC-1/2/3/4, head probe, RPC failure, cancel, SKIPPED, alert gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify

@@ -451,3 +451,20 @@ Each thread names its target step.
 - Added `test_gaps_only_coalesces_scattered_gaps_within_window` (40 one-session gaps every 9 days from 2025-11-20 → ≤ 5 units, each ≤ 90 days, covering every gap, one `plan_chunks` chunk per unit) and `test_gaps_only_long_gap_stays_its_own_unit` (2026-04-01..2026-09-25 plus 2026-10-15 → 2 units; `plan_chunks` splits the long one into 2). A real `GetDataCoverageResponse` is built by the inline `_gaps_only_req` helper (single consumer, C-13). Part of the unit `steps 9+10`.
 - Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
 - Deviations: folded into Step 9 (Deviation Log).
+
+## Session 2026-11-26 — sdd-execute sequential, steps 11+12
+
+- Planned atomic unit `steps 11+12` (`**Lands with**`). Tooling: uv ✓ (`uv sync --extra dev` in ingest) · ruff ✓ · pytest ✓. Config-key wiring gate: N/A (no config key touched; K = 730 is a code invariant).
+- Discovery: every Codebase Evidence symbol found; line cites drift by ~+9 after Step 9 (e.g. `_execute_backfill` plan-time `update_job` now `:865`, `_finalize_backfill` `:877`); substance unchanged.
+
+### Step 11 — service: fresh-path GAPS_ONLY verify, INCOMPLETE outcome, widened finalize gate [done]
+- Added `_GAPS_ONLY_VERIFY_KEY`, `_SYMBOL_INCOMPLETE`, `_HEAD_PROBE_DAYS = 730` (constraint comment) and precedence EMPTY 1 / SKIPPED 2 / INCOMPLETE 3 / FAILED 4; new `_verify_gaps_only` (cancel checks, SKIPPED skip, `gaps[1:]` missing, 730-day head probe, RPC error → FAILED + `failed_symbols`, wholesale `gaps_only` write + persist, WARN log); GAPS_ONLY `_execute_backfill` seeds the marker at plan time and into `_run_chunks`, then verifies; `_finalize_backfill` adds the INCOMPLETE → PARTIAL branch, `incomplete_symbols` in the completed payload, and alerts only on failed symbols/chunks. Ingest `CLAUDE.md` documents verify, K = 730 (fixed invariant, O-1 residual verbatim in substance) and the O-7 residual. Part of the unit `steps 11+12`.
+- TDD (unit 11+12, AC-1/2/3/4): AC-2 red: `assert 3 == 5` (final status COMPLETED, want PARTIAL), 9 failed / 609 passed, `exit=1` → green: `All checks passed!`, `58 files already formatted`, `618 passed`, `Required test coverage of 40% reached. Total coverage: 87.41%`, `exit=0`.
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/CLAUDE.md`
+- Deviations: none
+
+### Step 12 — test: verify pass — AC-1/2/3/4, head probe, RPC failure, cancel, SKIPPED, alert gate [done]
+- `test_gaps_only_plans_from_coverage_gaps` now uses real `GetDataCoverageResponse` plan/verify values, asserts `await_count == 2` and a final COMPLETED. New `TestGapsOnlyVerify` (inline per-symbol coverage fake, single consumer, C-13; reuses `_job_row`): AC-1 SCHW, AC-2 IDXX (stored INCOMPLETE reason, merged read, no alert, `incomplete_symbols == ["IDXX"]`), AC-3 RLI (one coverage call, no BackfillBars, `bars_processed` 0), AC-4 NEWCO probe miss/hit with the exact 730-day probe range, interior-after-carved-head, verify RPC failure (WARNING alert), cancel during verify (only the RUNNING status write; BBB never verified), SKIPPED PSKY not verified, precedence EMPTY+INCOMPLETE → INCOMPLETE and FAILED+INCOMPLETE → FAILED. Part of the unit `steps 11+12`.
+- Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
+- Deviations: none
+- Note: `_assert_results_invariant` (feature 352 helper) merges by `max(outcome)`, which would rank INCOMPLETE (4) above FAILED (3); none of its callers store INCOMPLETE, so it is untouched (out of scope).

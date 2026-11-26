@@ -306,16 +306,22 @@ def _dt_to_ts(dt: datetime) -> Timestamp:
 
 
 _FUNDAMENTALS_RESULTS_KEY = "fundamentals"
+_GAPS_ONLY_VERIFY_KEY = "gaps_only"
 _SYMBOL_FAILED = common_pb2.BACKFILL_SYMBOL_OUTCOME_FAILED
+_SYMBOL_INCOMPLETE = common_pb2.BACKFILL_SYMBOL_OUTCOME_INCOMPLETE
+# Fixed invariant (operator 2026-11-26, F-07), not a config key; aligned with
+# backfill.self_serve_max_range_days.
+_HEAD_PROBE_DAYS = 730
 _OUTCOME_PRECEDENCE = {
     common_pb2.BACKFILL_SYMBOL_OUTCOME_EMPTY: 1,
     common_pb2.BACKFILL_SYMBOL_OUTCOME_SKIPPED: 2,
-    _SYMBOL_FAILED: 3,
+    _SYMBOL_INCOMPLETE: 3,
+    _SYMBOL_FAILED: 4,
 }
 
 
 def _merged_symbol_results(stored: str | None) -> list[common_pb2.BackfillSymbolResult]:
-    """Merge the stored per-chunk results per symbol (FAILED > SKIPPED > EMPTY), by symbol."""
+    """Merge the stored per-chunk results per symbol (FAILED > INCOMPLETE > SKIPPED > EMPTY)."""
     best: dict[str, dict] = {}
     for chunk_results in (json.loads(stored) if stored else {}).values():
         for symbol, entry in chunk_results.items():
@@ -861,18 +867,96 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             log.info("backfill job %s completed with no chunks (nothing to fetch)", job_id)
             return
 
+        gaps_only = getattr(request, "fill_mode", 0) == ingest_pb2.FILL_MODE_GAPS_ONLY
+        seed = {_GAPS_ONLY_VERIFY_KEY: {}} if gaps_only else {}
         await backfill_chunks.insert_chunks(self._db, job_id, planned)
         await backfill_jobs.update_job(
             self._db,
             job_id,
             chunks_total=len(planned),
             bars_total=backfill_chunks.estimate_bars(planned, timeframe),
+            **({"symbol_results": json.dumps(seed)} if gaps_only else {}),
         )
         log.info("backfill job %s planned %d chunk(s)", job_id, len(planned))
 
         chunks = await backfill_chunks.get_incomplete_chunks(self._db, job_id)
-        state = await self._run_chunks(job_id, request, timeframe, chunks, propagation_meta)
+        state = await self._run_chunks(
+            job_id, request, timeframe, chunks, propagation_meta, symbol_results=seed
+        )
+        if gaps_only:
+            await self._verify_gaps_only(
+                job_id,
+                sorted({s for c in planned for s in c["symbols"]}),
+                request.range,
+                _STR_TO_ENUM.get(timeframe, 0),
+                state,
+                propagation_meta,
+            )
         await self._finalize_backfill(job_id, state, len(planned), propagation_meta)
+
+    async def _verify_gaps_only(self, job_id, symbols, time_range, tf_enum, state, meta):
+        """Re-read coverage after the chunks; mark still-missing symbols INCOMPLETE.
+
+        gaps[1:] are missing by construction; gaps[0] counts only if the store holds bars in the
+        _HEAD_PROBE_DAYS before it (else it is the pre-listing carve-out). An RPC error is FAILED.
+        """
+        if job_id in self._canceled_jobs:
+            return
+        merged = {
+            r.symbol: r.outcome for r in _merged_symbol_results(json.dumps(state["symbol_results"]))
+        }
+        results: dict = {}
+        for sym in sorted(symbols):
+            if merged.get(sym) == common_pb2.BACKFILL_SYMBOL_OUTCOME_SKIPPED:
+                continue
+            if job_id in self._canceled_jobs:
+                return
+            try:
+                cov = await self._marketdata.GetDataCoverage(
+                    marketdata_pb2.GetDataCoverageRequest(
+                        symbol=sym, timeframe=tf_enum, range=time_range
+                    ),
+                    metadata=meta,
+                )
+                missing = list(cov.gaps[1:])
+                if cov.gaps:
+                    head = cov.gaps[0]
+                    head_start = _ts_to_dt(head.start)
+                    probe = await self._marketdata.GetDataCoverage(
+                        marketdata_pb2.GetDataCoverageRequest(
+                            symbol=sym,
+                            timeframe=tf_enum,
+                            range=common_pb2.TimeRange(
+                                start=_dt_to_ts(head_start - timedelta(days=_HEAD_PROBE_DAYS)),
+                                end=head.start,
+                            ),
+                        ),
+                        metadata=meta,
+                    )
+                    if probe.bars_total > 0:
+                        missing.insert(0, head)
+            except Exception as e:
+                results[sym] = {"outcome": _SYMBOL_FAILED, "reason": f"coverage verify failed: {e}"}
+                state["failed_symbols"].add(sym)
+                continue
+            if missing:
+                ranges = "; ".join(
+                    f"{_ts_to_dt(g.start).date()}..{_ts_to_dt(g.end).date()}" for g in missing
+                )
+                results[sym] = {
+                    "outcome": _SYMBOL_INCOMPLETE,
+                    "reason": f"missing sessions {ranges}",
+                }
+                state.setdefault("incomplete_symbols", set()).add(sym)
+        state["symbol_results"][_GAPS_ONLY_VERIFY_KEY] = results
+        await backfill_jobs.update_job(
+            self._db, job_id, symbol_results=json.dumps(state["symbol_results"])
+        )
+        incomplete = {
+            s: r["reason"] for s, r in results.items() if r["outcome"] == _SYMBOL_INCOMPLETE
+        }
+        if incomplete:
+            log.warning("backfill job %s incomplete: %s", job_id, incomplete)
 
     async def _finalize_backfill(self, job_id, state, total_chunks, propagation_meta):
         """Set terminal job status from chunk outcomes and emit the completed/failed event+alert.
@@ -887,9 +971,11 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             return
         now = datetime.now(UTC)
         failed_symbols = sorted(state["failed_symbols"])
+        incomplete = sorted(state.get("incomplete_symbols", ()))
+        failed_work = bool(failed_symbols) or state["chunks_failed"] > 0
         if state["chunks_failed"] > 0 and state["chunks_done"] == 0:
             status = ingest_pb2.BACKFILL_STATUS_FAILED
-        elif failed_symbols or state["chunks_failed"] > 0:
+        elif failed_work or incomplete:
             status = ingest_pb2.BACKFILL_STATUS_PARTIAL
         else:
             status = ingest_pb2.BACKFILL_STATUS_COMPLETED
@@ -920,10 +1006,15 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             await self._emit_backfill_event(
                 "ingest.backfill.completed",
                 job_id,
-                {"bars_written": state["bars"], "failed_symbols": failed_symbols},
+                {
+                    "bars_written": state["bars"],
+                    "failed_symbols": failed_symbols,
+                    "incomplete_symbols": incomplete,
+                },
                 propagation_meta,
             )
-            if status == ingest_pb2.BACKFILL_STATUS_PARTIAL:
+            # An INCOMPLETE-only PARTIAL is a vendor fact that recurs on every retry: no alert.
+            if status == ingest_pb2.BACKFILL_STATUS_PARTIAL and failed_work:
                 await self._emit_backfill_alert(
                     job_id,
                     status,
