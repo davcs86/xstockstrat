@@ -202,3 +202,18 @@ with `{gate:'distill', decision:'proceed'}` (operator-approved oversize).
 330 post-deploy read-back.
 
 **Features needing re-spec + impl-spec review before `/sdd-execute`:** 311, 313, 317, 321. 325 stays gated on the B_row measurement.
+
+## 11. 2026-11-26 operator directives and state
+
+- **"Suspended" is not cancelled or demoted** (operator, 2026-11-26). A suspended feature keeps its lifecycle status
+  (`implementation-ready` or `in-progress`), its `feature/<slug>` branch and its recorded rulings; only active
+  execution is paused, and it can rejoin any later batch. The `[Suspended]` progress PRs (#1611 320, #1612 321,
+  #1613 324, #1614 325, #1615 331, #1616 318) only save progress; the title prefix does not change status.
+  Suspended at the operator's priority cut: 318 (stopped at a Step 11 markdownlint blocker), 320, 324, 325, 331.
+- **Priority set:** 308, 310, 311, 313–316, 317, 330 and their shared-file peers (309, 312, 321, 323, 327, 328).
+  319 merged (#1610); 315's PR #1609 and the handoff/progress PRs go through `/merge-train`.
+- **Operator rulings 2026-11-26** (verbatim in each `context.md`): 308 build the `evaluation_failed` cue parity;
+  310 sidecars marked resolved and surface unchanged (O-5); 311 repository-level `bracket_legs` real-Postgres job;
+  313 keep AC-1 as confirmed; 317 reader in `bars_miss.go` with one `bars_miss.go:cfg` receiver entry;
+  323 keep `signal_extraction.md` and `noop.py` and split Step 9 by surface; 312 merge 315 first (D-12);
+  config migration `056` is taken by feature 366 — 314, 317 and 321 renumber from `057`, first to merge keeps the next free number.
