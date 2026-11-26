@@ -1346,3 +1346,153 @@ Feature: opportunity-live-only-rotation
 ### Coverage check
 - Source scenarios: 12 (AC-1 to AC-12). Planned (NEW+DUP+OVERLAP): 12 NEW. None skipped, so the counts match.
 ```
+
+
+## Session 2026-11-26 — sdd-batch-execute promotion plan, amended and confirmed by the operator (main session)
+
+- OPERATOR DECISION (promotion gate, verbatim choice "Confirm + add seed row"): apply the plan below. It is the scenario-promoter plan unchanged, plus ONE extra item: an Examples row for the new key in `docs/sdd/business-rules/platform.feature`'s `@AC-6 @feature-244` stored-zero table (the same pre-launch EXTEND pattern feature 343 used, recorded in 343 context.md). This block supersedes the earlier `sdd-batch-promotion-plan` block.
+
+```sdd-batch-promotion-plan
+## Promotion plan — opportunity-live-only-rotation (feature 366)
+
+I read the feature's acceptance.feature from the working tree (docs/roadmap/features/366-opportunity-live-only-rotation/acceptance.feature), not from origin/feature/opportunity-live-only-rotation. The Reviewers table names only xstockstrat-analysis (plus the DBA for the schema), so every scenario routes to the analysis suite.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-analysis/acceptance/opportunity-live-only-rotation.feature | CREATE | NEW | per-compute chunk cap |
+| AC-2 | same | CREATE | NEW | cycle coverage |
+| AC-3 | same | CREATE | NEW | carried rows keep valid_until |
+| AC-4 | same | CREATE | NEW | pool leave prunes carried rows |
+| AC-5 | same | CREATE | NEW | rotation cursor survives restart |
+| AC-6 | same | CREATE | NEW | a joining symbol is covered within one cycle |
+| AC-7 | same | CREATE | NEW | held and bound rows unaffected |
+| AC-8 | same | CREATE | NEW | pool shrink keeps the cycle bound |
+| AC-9 | same | CREATE | NEW | held-symbol and per-symbol caps unchanged |
+| AC-10 | same | CREATE | NEW | cycle bound over calendar days |
+| AC-11 | same | CREATE | NEW | oversized pool records a shortfall |
+| AC-12 | same | CREATE | NEW | stale carried rows are removed |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/opportunity-live-only-rotation.feature (CREATE) ---
+# Promoted from docs/roadmap/features/366-opportunity-live-only-rotation/acceptance.feature (C-16). Verbatim; do not hand-edit.
+Feature: opportunity-live-only-rotation
+  As a trader, I want every non-held signal symbol that a live strategy covers to eventually get that
+  strategy's opportunity row, so that symbols outside the top 20 by signal conviction are not
+  permanently excluded from the Decide queue.
+
+  Background:
+    Given opportunity.max_live_only_symbols_per_compute is 20
+    And opportunity.live_only_cycle_max_days is 3
+    And the user holds no positions
+    And live strategies squeeze_breakout_trend and fundamentals_macd_blend cover every watchlisted symbol
+    And 45 watchlisted symbols, including AAPL and NVDA, have an active signal and are bound only to dip_buyer_vol_stop
+
+  @AC-1 @FR-1 @feature-366
+  Scenario: One compute evaluates at most one chunk of live-only symbols
+    When the opportunity queue is computed once
+    Then exactly 20 of the 45 symbols have squeeze_breakout_trend rows
+    And exactly 20 of the 45 symbols have fundamentals_macd_blend rows
+
+  @AC-2 @FR-1 @FR-2 @feature-366
+  Scenario: Successive computes cover the whole live-only pool
+    When the opportunity queue is computed 3 times with no change to signals, watchlists or positions
+    Then all 45 symbols have a squeeze_breakout_trend row
+    And all 45 symbols have a fundamentals_macd_blend row
+    And AAPL has a squeeze_breakout_trend row
+
+  @AC-3 @FR-3 @feature-366
+  Scenario: Rows from an earlier chunk survive the next compute
+    Given the first compute produced a squeeze_breakout_trend row for AAPL with valid_until 2026-11-28T05:00Z
+    When the opportunity queue is computed a second time and AAPL is not in the second chunk
+    Then AAPL still has a squeeze_breakout_trend row
+    And that row's valid_until is still 2026-11-28T05:00Z
+
+  @AC-4 @FR-4 @feature-366
+  Scenario: A symbol that leaves the pool loses its carried live-only rows
+    Given AAPL has a carried squeeze_breakout_trend row from an earlier chunk
+    When AAPL's only active signal expires
+    And the opportunity queue is computed again
+    Then AAPL has no squeeze_breakout_trend row
+    And AAPL keeps its dip_buyer_vol_stop row
+
+  @AC-5 @FR-5 @feature-366
+  Scenario: The rotation position survives a restart
+    Given the first compute produced squeeze_breakout_trend rows for the 20 symbols of the first chunk, which includes NVDA but not AAPL
+    When the analysis service restarts
+    And the opportunity queue is computed again
+    Then 20 symbols that had no squeeze_breakout_trend row after the first compute now have one
+    And NVDA's squeeze_breakout_trend row still has the valid_until stamped by the first compute
+
+  @AC-6 @FR-6 @feature-366
+  Scenario: A symbol joining the pool gets its rows within one full cycle
+    Given the first compute has run
+    When ZM gains an active signal and joins the live-only pool
+    And the opportunity queue is computed 3 more times
+    Then ZM has a squeeze_breakout_trend row
+
+  @AC-7 @FR-7 @feature-366
+  Scenario: Held and watchlist-bound rows are unaffected by the rotation
+    Given the user holds AAPL
+    When the opportunity queue is computed once
+    Then AAPL has rows for dip_buyer_vol_stop, squeeze_breakout_trend and fundamentals_macd_blend
+    And those rows are traced against each strategy's exit rule
+
+  @AC-8 @FR-6 @feature-366
+  Scenario: Removing pool members does not delay the remaining members past one full cycle
+    Given the first compute has run
+    When 10 symbols that already have squeeze_breakout_trend rows lose their active signals
+    And the opportunity queue is computed 3 more times
+    Then every one of the remaining 35 symbols has a squeeze_breakout_trend row
+    And none of the 10 removed symbols has a squeeze_breakout_trend row
+
+  @AC-9 @FR-7 @feature-366
+  Scenario: The held-symbol and per-symbol strategy caps keep their current limits
+    Given opportunity.max_live_held_symbols_per_compute is 20
+    And opportunity.max_live_strategies_per_symbol is 5
+    And the user holds 25 symbols that are not watchlist-bound and are covered by 7 live strategies each
+    When the opportunity queue is computed once
+    Then exactly 20 of the 25 held symbols have live-attributed rows
+    And no held symbol has more than 5 live-attributed rows
+
+  @AC-10 @FR-2 @feature-366
+  Scenario: A full rotation finishes within the configured cycle bound
+    Given the queue is recomputed once a day by the daily refresh
+    And the live-only pool has 45 symbols
+    When 3 calendar days pass from the first compute
+    Then all 45 symbols have a squeeze_breakout_trend row
+    And no single compute produced squeeze_breakout_trend rows for more than 20 symbols
+
+  @AC-11 @FR-2a @feature-366
+  Scenario: An oversized pool keeps the per-compute limit and reports the shortfall
+    Given the queue is recomputed once a day by the daily refresh
+    And the live-only pool has 350 symbols
+    When the opportunity queue is computed once
+    Then no more than 20 symbols get new squeeze_breakout_trend rows in that compute
+    And a live-only rotation shortfall is recorded with pool size 350 and a projected cycle longer than 3 days
+
+  @AC-12 @FR-8 @feature-366
+  Scenario: A carried row older than one full cycle is removed
+    Given AAPL has a carried squeeze_breakout_trend row computed at 2026-11-22T05:00Z
+    And AAPL is still in the live-only pool
+    When the opportunity queue is computed at 2026-11-26T05:00Z and AAPL is not in that compute's chunk
+    Then AAPL has no squeeze_breakout_trend row
+    And AAPL keeps its dip_buyer_vol_stop row
+
+### Notes / ambiguities / conflicts
+- All 12 scenarios are attributed to xstockstrat-analysis. Their observable subject is the opportunity queue compute, and the rotation cursor migration is in the analysis schema. None spans services, so nothing goes to platform.feature.
+- Dedup: grep found no existing @feature-366 tag in any suite. The file opportunity-live-only-rotation.feature does not exist yet, so the target is a CREATE. Related existing suites are opportunity-compute-robustness, opportunity-live-market-enrichment and fix-analysis-held-position-drains. None asserts live-only chunking.
+- OVERLAP: docs/sdd/business-rules/platform.feature:532-534 and feature 244's feature file only seed-check the config keys max_live_only_symbols_per_compute, max_live_held_symbols_per_compute and max_live_strategies_per_symbol. They don't assert rotation behavior, so I flagged no overlap or conflict.
+- AC-1 changes the old "top 20 by conviction" behavior. The old rule isn't asserted in any promoted suite, so I found no CONFLICT. I only grepped for it, so a reviewer may want to confirm.
+- I reproduced the Background verbatim. The orchestrator should check that the Background and the `@feature-366` tags survive the write.
+- The scenarios also rely on a new config key, opportunity.live_only_cycle_max_days. It isn't in platform.feature's seed table yet, so the config-registration step will need to add it separately.
+
+### Coverage check
+- Source scenarios: 12 (AC-1 to AC-12). Planned (NEW+DUP+OVERLAP): 12 NEW. None skipped, so the counts match.
+
+### Operator amendment (2026-11-26) — EXTEND platform.feature @AC-6 @feature-244
+--- docs/sdd/business-rules/platform.feature (APPEND one Examples row) ---
+Insert this row directly after the existing `analysis.opportunity.max_live_held_symbols_per_compute` row (same table, same column widths):
+      | xstockstrat-analysis   | analysis.opportunity.live_only_cycle_max_days    | int    | 0      | the live-only rotation cycle bound    | 3                         |
+Do not add an @feature-366 tag to that row (the table carries none per row, as with 343's row). Change nothing else in platform.feature.
+```
