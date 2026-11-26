@@ -5353,9 +5353,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             else datetime.now(UTC)
         )
         healed_valid_until = session_end + timedelta(hours=window_hours)
+        cycle_days = self._live_only_cycle_days()
         for hr in heal_rows:
             if hr.pop("_healed", False):
-                hr["valid_until"] = healed_valid_until
+                hr["valid_until"] = (
+                    datetime.now(UTC) + timedelta(days=cycle_days)
+                    if _is_live_only_row(hr["provenance"])
+                    else healed_valid_until
+                )
         await self._label_fundamentals_skip_rows(skip_labels, propagation_meta)
 
         await self._opportunities_repo.replace_symbols(user_id, heal_rows)

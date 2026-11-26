@@ -584,7 +584,7 @@ wiring commands.
 
 ### Step 7 — service: the surgical heal stamps live-only rows with the cycle window
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
