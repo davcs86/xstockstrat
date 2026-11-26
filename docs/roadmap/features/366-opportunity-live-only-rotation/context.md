@@ -1056,3 +1056,23 @@
 
 - [ ] O-7 residual: re-verify after 308 merges (line numbers move; re-locate sites by symbol), and gate Step 9 on 365 being merged.
 - [ ] Impl-spec review: confirm Assumptions 1-5 (spec § Assumptions) and the 308 `evaluation_failed` finding.
+
+## Session 2026-11-26 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings (advisory, did not block). No Floor breach. Lifecycle unchanged (implementation-ready). Tree: `origin/feature/opportunity-live-only-rotation@5497ad67`.
+- Addressed in implementation-spec.md:
+  - [x] Config wiring criterion (b): Step 5 item 3 adds a real-reader test in `tests/test_config_zero_clamps.py`. It builds `AnalysisServicer(snapshot_watcher(...))` with the value parsed from the config `056` up.sql and with a stored `5`, and asserts `_live_only_cycle_days()` returns it.
+  - [x] C-14: the consumer-surface rationale moved to § Step Dependencies (served rows map through `_row_to_opportunity`, `servicer.py:4746`/`:6925`, per-row `valid_until`). Step 10 adds a `ListOpportunities` test with distinct per-row `valid_until` values.
+  - [x] Steps 4 and 6 now point to one combined Verification block in Step 5, covering analysis tests, config tests and lint, and `check-config-wiring.mjs --final`/`--doc-check`.
+  - [x] The 308 `evaluation_failed` finding is now a row in § Open Risks, which points to the Open Thread below.
+- Unresolved ⚠ carried into execution:
+  - Step 4: [ ] unaddressed. Needs an operator ruling on the 308 interaction. A carried `evaluation_failed` live-only row (stored UNSPECIFIED) is outside the O-9 keep-list, so it is dropped and its symbol falls back to `(sym, "")`. Rule before Step 4 executes or 308 merges. Otherwise record it as an accepted residual in Step 11 (P-03).
+  - Step 9: [ ] unaddressed. Blocked until 365 merges. The Precondition grep for `elif not await opps.has_fresh(user_id):` must find one hit; trunk still has a bare `else:` at about `servicer.py:4790` (P-03). Steps 9-10 cannot be verified against the post-365 shape until then.
+  - Step 6: [ ] unaddressed (execution risk). Regenerating `scripts/config-wiring-stored.json` needs a DB, or the CI artifact fallback; without either the step is blocked. Never hand-edit the file.
+  - Spec § Assumptions 1-5: [ ] unaddressed. Operator confirmation needed. Assumption 3 (a repo-owned `transaction()` in place of D-2's literal servicer-owned acquire) deviates from D-2's wording. It is the same pool and connection, so there is no F-06 risk.
+- Overlap findings (WARN only, no merge-order write):
+  - `servicer.py`: Step 9 depends on 365 (draft). Hard precondition: 365 merges before Step 9.
+  - `opportunities.py`, `servicer.py`, `tests/test_analysis_servicer.py`: rebase-only overlap with 308 (implementation-ready).
+  - `docs/patterns/config-governance.md`, `services/xstockstrat-analysis/CLAUDE.md`: doc-section rebase with 330 (in-progress).
+  - Migrations: analysis `030` and config `056` are free on trunk.
+  - Config and proto: no collisions.
