@@ -749,7 +749,7 @@ grep -n "fetch_failed.add" app/handlers/servicer.py   # expect only the bars and
 
 ### Step 13 — service: isolate the surgical retry (heal)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -1175,3 +1175,27 @@ _Populated by /sdd-execute as implementation proceeds._
   mutation was reverted without being committed.
 - **Disposition**: scope expanded by the operator. No other file outside the unit's **Files**
   changed.
+
+### Step 13: RED from a temporary probe test; long comments re-wrapped (2026-11-26)
+
+- **Expected**: Step Dependencies has Step 14's new tests capture RED for Step 13, run against the
+  pre-Step-13 `servicer.py`.
+- **Actual**: Step 13 was executed on its own, and no test in its Verification files pins heal
+  isolation yet. A temporary untracked `tests/test_tmp_step13_probe.py` patched
+  `StrategyEvaluator.evaluate_conditions_traced` to raise `ZeroDivisionError` for an aged
+  `["watchlist", "unavailable"]` `MYSZ` row. It asserted four things: the heal returns, the row
+  carries `EVALUATION_FAILED_PROVENANCE` and no `unavailable`, nothing is staged, and a second heal
+  does not reselect it.
+  - RED: `ZeroDivisionError: boom`, raised from `_retry_unavailable_symbols` at `servicer.py:5209`.
+  - GREEN: `1 passed`.
+  - The probe was deleted before the commit.
+  - The first probe run failed in the harness because `GetFormula` was not mocked. The probe was
+    fixed and re-run before the RED was taken.
+- **Lint**: re-indenting the wrapped blocks pushed three existing comments past 100 columns (ruff
+  E501). Those comments and the rewritten docstring were re-wrapped. The wording of the three
+  existing comments is unchanged.
+- **Exit status**: the Verification block reports `exit=1`. That status comes from its last line,
+  the "expect no output" grep, which exits 1 when nothing matches. The pytest and ruff results were
+  read from the log.
+- **Disposition**: no file outside Step 13's **Files** is committed. Step 14 still adds the
+  permanent tests and the cancellation mutation run as specced.

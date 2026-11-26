@@ -654,3 +654,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ### Open Threads
 - [ ] The comment above `sym_unavailable` in `_row_for` still says a sibling candidate may add this symbol to `fetch_failed` concurrently. That can no longer happen, because `fetch_failed` is now filled before Phase 2. Step 11 rewrote only the two comments it names, so the stale sentence remains for Step 17 or the integration PR.
 - [ ] `_FakeOppRepo.available_sources` (`tests/test_analysis_servicer.py`) still lacks `evaluation_failed` in its skip list (noted at Step 8). No Step 12 test reads the facet, so it is unchanged.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), step 13
+
+- Tooling: the analysis `.venv` was synced with `uv sync --extra dev`; ruff 0.16.9 on PATH; hook check hook=0.
+
+### Step 13 — service: isolate the surgical retry (heal) [done]
+- In `_retry_unavailable_symbols`, one `try` / `except Exception` now covers the loaders, `assess` and the eval. The inner `except grpc.RpcError` is absorbed by it.
+  - A fault that `_is_transient_formula_error` accepts keeps the row `unavailable`, with the same "indicator RPC still failing" WARNING as before.
+  - Any other fault sets a row-local `eval_failed`.
+  - Both kinds are appended to a per-heal `failures` list.
+- A new `if eval_failed:` branch, placed before `if unreadable:`, mirrors that branch with `EVALUATION_FAILED_PROVENANCE`:
+  - `unavailable` is dropped, so the selector does not pick the row again.
+  - A held row omits `action`. A non-held row binds UNSPECIFIED with zeroed axes.
+  - `_healed` is True.
+  - The branch ends in `continue`, so no readiness-cache row is staged for it.
+- The readiness-cache subset body is wrapped too. A failure there appends to `failures` and stages nothing.
+- `log_isolation_tally(log, "opportunity_heal", failures, len(targets))` runs after the loop.
+- The docstring sentence and the eval comment now state the new contract. No new outbound RPC; header propagation unchanged.
+- TDD:
+  - Probe: a temporary probe test (Deviation Log "Step 13") patched the eval to raise `ZeroDivisionError`.
+  - RED (`.sdd-logs/v-2.log`): `ZeroDivisionError: boom`, raised from `servicer.py:5209` in `_retry_unavailable_symbols`.
+  - GREEN (`.sdd-logs/v-3.log`): `1 passed`. The probe was then deleted.
+  - Verification (`.sdd-logs/v-4.log`): `488 passed in 6.73s`, ruff `All checks passed!` and `144 files already formatted`, and the stale-phrase grep printed nothing. It reports `exit=1`, which is that grep's no-match status.
+  - Full suite (`.sdd-logs/v-5.log`): `1801 passed`, `Required test coverage of 40% reached. Total coverage: 91.56%`, exit=0.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: RED came from a temporary untracked probe test. Three existing comments that the re-indent pushed past 100 columns were re-wrapped (Deviation Log "Step 13").
+
+### Open Threads
+- [ ] A bars-fetch failure in the heal still only logs "bars fetch still failing" and is not counted in the `opportunity_heal` tally. Instruction 1 scopes the tally to the wrapped `else:` branch.
