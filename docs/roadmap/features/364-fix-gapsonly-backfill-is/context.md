@@ -33,3 +33,225 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Operator 2026-11-25: SEV-2, environment dev (main-dev) -> Track C (not a production hotfix); strategies fail closed on a missing SMA200 and a FULL backfill is a working manual remediation.
 - Root cause evidence: services/xstockstrat-marketdata/internal/timeframe/timeframe.go ComputeGaps derives only head/tail gaps from (earliest, latest, count) — 'interior holes out of scope'; ingest GAPS_ONLY planner (services/xstockstrat-ingest/app/handlers/servicer.py _plan_work_ranges) consumes cov.gaps. Consumers relying on GAPS_ONLY: xstockstrat-ui 'Backfill missing data' (feature 343, non-admin), agent-scheduled backfills (feature 054 default).
 - Observed on homelab staging: SCHW/IDXX/~19 symbols missing 2026-04-01..2026-09-25; remediated out-of-band 2026-11-25 with FULL+overwrite backfill (8 jobs, ~96k bars).
+
+## Session 2026-11-26 — sdd-batch design gate (round 2)
+
+`/sdd-design fix-gapsonly-backfill-is` (full) halted at its approval gate after round 2 (gate policy: halt). design.md is not written and status.md is unchanged. The register is `debate.md` (D-1..D-10, R-1..R-9, O-1..O-9).
+
+## Open Threads
+
+- **Approach (round-2 synthesis).** marketdata `GetDataCoverage` reports head, interior and tail 1d gaps via a new `timeframe.ComputeSessionGaps`. Bars come from one `MIN/MAX/COUNT + array_agg(time)` query, gaps are bounded at the last completed session, and one-off NYSE closures are added to `marketsession.isHoliday` (D-1, D-5). The ingest GAPS_ONLY planner coalesces each symbol's gaps into units no wider than `backfill.chunk_window_days` (D-6). A new `_verify_gaps_only` step re-reads coverage after `_run_chunks` on both the fresh and resume paths. `gaps[1:]` count as missing because of the separation invariant. `gaps[0]` counts as missing only if one store probe over the 365 days before it finds bars (D-10). Still-missing symbols get the new outcome `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4` and the job ends PARTIAL (D-2). A verify RPC failure records FAILED instead, which is retryable. The resume marker is the reserved `symbol_results["gaps_only"]` key (D-3, D-8). Resume rebuilds the time range NULL-safely (D-7). An INCOMPLETE-only PARTIAL sends no notify alert; the ledger payload gains an additive `incomplete_symbols` field (D-9). The UI helper `backtestBackfill.ts` maps an INCOMPLETE-only PARTIAL to the no-vendor-data state, which keeps `@AC-13 @feature-343` (D-4). Agent and strat-lab docs are synced in the same PR.
+- **Strongest open objection: O-1 (blocking).** The head-gap carve-out has a wider residual than the proposal stated. An unfilled `gaps[0]` ends COMPLETED whenever the store has no bar in the 365 days before it. That happens when the symbol was not yet listed, when it was never fetched before, or when the request starts inside a hole longer than 365 days. The operator must either accept exactly this wording here or choose walk-back-to-2000 probing. Non-blocking threads also need operator records:
+  - O-6: K = 365 as a fixed invariant (F-07).
+  - O-7: in-flight pre-deploy jobs resume unverified, a one-time residual.
+  - O-8: worst-case full-history scans, doubled by verify, against the `@AC-1 @feature-153` budget.
+  - O-9: the exact coalescing boundary, and whether `chunk_max_bars` still splits inside merged units.
+- **Floor status.** No Floor breaches.
+- **Uncovered @AC changes.**
+  - EXTEND (no operator decision covers these yet): `AC-1@feature-364`, `AC-2@feature-364`, `AC-13@feature-343`, `AC-9@feature-343`, `AC-11@feature-352`, `AC-14@feature-352`.
+  - PRESERVE: `AC-3@feature-364`, `AC-4@feature-343`, `AC-23@feature-352`, `AC-24@feature-352`, `AC-1@feature-153`.
+  - CHANGE: none.
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "Round-2 synthesis. This round takes the proposal's design, which rests on D-1 to D-5, and folds in the adversary's two code-verified corrections. I spot-checked both in servicer.py. `_dt_to_ts(None)` raises, and `range_start`/`range_end` are persisted as `_ts_to_dt(request.range.*)`, which is `None` for an unset bound (`:569-570`). `_plan_work_ranges` emits one unit per `cov.gaps` entry (`:807-810`), and each unit is chunked separately (`:829-832`).\n\n**1. marketdata (D-1, D-5).**\n- Add `timeframe.ComputeSessionGaps` in `internal/timeframe/timeframe.go`, beside `ComputeGaps` (`:77,84`).\n- For `1d`, use one query in `marketdata_repo.go:243-247`: `MIN/MAX/COUNT + array_agg(time ORDER BY time)`, with the same predicate as today.\n- Bound gaps at `marketsession.Reference(now)` with live=false.\n- Merge runs of missing sessions. `TestComputeSessionGaps` pins the invariant that two consecutive gaps are always separated by at least one stored session.\n- Add the closure table to `packages/proto/marketsession/marketsession.go:74` `isHoliday`.\n\n**2. ingest planner: coalesce GAPS_ONLY gaps per symbol (new; answers the adversary's C-18 chunk-explosion point).**\n- In `_plan_work_ranges` (`servicer.py:807-810`), merge each symbol's consecutive gaps into one unit while the merged span (first gap start to last gap end) stays within `self._cfg.backfill_chunk_window_days` (default 90, ingest `CLAUDE.md:159`). Then emit `([sym], merged_start, merged_end)`.\n- `overwrite=false` makes re-fetching the stored sessions between gaps harmless.\n- No durable `@AC` pins the \"one unit per gap\" shape (grep of `*.feature` for GAPS_ONLY found none).\n- RED pytest: about 40 scattered one-session gaps in a year produce at most about `ceil(365/90)` units for the symbol.\n- The fresh-path planner still calls `GetDataCoverage` with `range=request.range` raw (`:803`).\n\n**3. ingest verify: `_verify_gaps_only(job_id, symbols, time_range, state, meta)` (new method in `servicer.py`).**\n- **When it runs.** Between `_run_chunks` and `_finalize_backfill`, on both the fresh path (`:865-866`) and the resume path (`:964-972`). It is skipped when `job_id in self._canceled_jobs` (`:876`).\n- **Which symbols.** Only symbols that had planned units and whose merged outcome is not SKIPPED (keeps `@AC-23 @feature-352`).\n- **Coverage call.** Re-call `GetDataCoverage` with the planner's call shape (`:801-806`).\n- **Missing gaps.** `gaps[1:]` are missing by construction, because of the separation invariant.\n- **Head gap.** `gaps[0]` is missing only if one probe `GetDataCoverage(range=[gaps[0].start − 365d, gaps[0].start))` returns `bars_total > 0`. Otherwise it is the head carve-out. The probe uses no comparison against earliest/latest, so it does not reintroduce R-3.\n- **Still-missing symbols.** Write `{outcome: INCOMPLETE, reason: \"missing sessions YYYY-MM-DD..YYYY-MM-DD[; …]\"}` under the verify key and add the symbol to `state[\"incomplete_symbols\"]`.\n- **Verify or probe RPC failure.** Record FAILED with reason `coverage verify failed: <err>` and add the symbol to `failed_symbols`, giving a retryable PARTIAL (consistent with R-6).\n- **Finalize order** (`:881-886`):\n  1. FAILED (`chunks_failed>0 && chunks_done==0`)\n  2. PARTIAL (failed symbols or chunks)\n  3. PARTIAL (`incomplete_symbols`)\n  4. COMPLETED\n- CANCELED keeps its early return. The FR-3 empty-plan path (`:835-853`) is unchanged.\n- **Precedence** (`:310-314`): EMPTY 1, SKIPPED 2, INCOMPLETE 3, FAILED 4 (D-2).\n\n**4. Resume marker (D-3; answers O-3) and NULL-safe range rebuild (new fix for the adversary's blocking resume crash).**\n- Add `_GAPS_ONLY_VERIFY_KEY = \"gaps_only\"` beside `_FUNDAMENTALS_RESULTS_KEY` (`:308`).\n- **Fresh run.** Persist `symbol_results={\"gaps_only\": {}}` in the `update_job` at `:856`. Pass the same dict as the `symbol_results=` seed to `_run_chunks` (`:988`, copied at `:1004`), so the chunk writes at `:1082-1088` do not erase the marker.\n- **Merge.** The value is always `{symbol: entry}`, so `_merged_symbol_results` (`:320-326`) needs no special case.\n- **Resume.** `_resume_job` runs verify when `\"gaps_only\"` is present.\n  - It rebuilds a `common_pb2.TimeRange` that sets `start` and `end` only when `row[\"range_start\"]` / `row[\"range_end\"]` are non-NULL, each through `_dt_to_ts` (`:302`).\n  - This mirrors the fresh path's raw `request.range`, so marketdata's 2000-01-01 floor applies the same way (`marketdata_service.go:521-524`).\n  - RED pytest: resume a GAPS_ONLY job with `range_start=None` (and one with `range_end=None`). It must not raise and must finalize.\n- **Idempotence.** Verify overwrites the key wholesale.\n- **No re-drive.** A PARTIAL caused only by INCOMPLETE has every chunk COMPLETED, so `list_jobs_with_incomplete_chunks` never re-drives it.\n- The broader re-finalize finding (ingest `docs/context-constitution-findings.md:30`) stays out of scope.\n\n**5. Alerts and ledger (answers O-4, plus the adversary's observability point).**\n- A PARTIAL caused only by INCOMPLETE sends no notify alert. The `:917-924` alert is gated on `failed_symbols or chunks_failed`.\n- The `ingest.backfill.completed` event payload (`:911-916`) gains an additive `incomplete_symbols` list. This is JSON only, with no proto change, and the webhook payload is untouched (O-5 stays closed).\n- Log a WARN with the missing session ranges.\n\n**6. UI (D-4; O-2 closed, BFF is a passthrough at `insightsBff.ts:89-93`, `useBackfills.ts:33`).**\n- The change is limited to `src/lib/backtestBackfill.ts`.\n- `BackfillJobLike` (`:20`) gains `symbolResults?: {outcome}[]`.\n- The PARTIAL branch (`:90`) first checks `chunksFailed === 0`, at least one INCOMPLETE entry and no FAILED entry. If so, it returns `{state: 'ready', text: 'Backfill finished: vendor has no bars for some sessions of <SYM>'}`. The text is distinct from the retry message at `:97-100`.\n- `page.tsx` is unchanged. `handleRerun` sets `filledGapKey`, which renders `noVendorDataMessage` (`:1319-1320`) and hides \"Backfill missing data\" (`:1322`). That is the `@AC-13 @feature-343` flow.\n- Acceptance additions:\n  - an `@AC-9` Examples row (or sibling scenario) pinning the discriminator;\n  - an `@AC-13` variant whose Given is an INCOMPLETE-only PARTIAL;\n  - the existing `@AC-9` fixture keeps no INCOMPLETE entries.\n- Tests: vitest, plus an e2e mock using C-12 fixtures.\n\n**7. Agent and strat-lab.**\n- `incomplete` surfaces through MessageToDict (`client.py:2169-2172`).\n- Same-PR doc sync: `tools.py` docstrings, `docs/runbooks/mcp-tools.md`, and the agent `CLAUDE.md`, including the `get_backfill_status` outcome list (`empty`/`skipped`/`failed` plus `incomplete`). Also `plugins/strat-lab` `SKILL.md:218` and `reference/backfill.md:18`.\n- New agent `@AC` extending `@AC-14 @feature-352`. `@AC-11 @feature-352` is reclassified as EXTEND.\n\n**Build order.**\n1. RED `TestComputeSessionGaps`, including the separation invariant.\n2. The closure table.\n3. Repo and service, with a service test.\n4. Proto enum `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4` (`common.proto:156`) and buf-gen.\n5. Ingest: coalescing planner, verify, probe, marker, NULL-safe resume, precedence, finalize, alert gate and ledger payload. RED pytest for:\n   - AC-1/2/3;\n   - coalescing bound;\n   - resume with NULL bounds;\n   - head-probe hit and miss;\n   - verify-RPC failure;\n   - cancel during verify.\n6. UI helper, vitest, e2e and acceptance rows.\n7. Agent docs, strat-lab and the agent `@AC`.\n\n**Operator records required before approval (`context.md`).**\n- (a) The exact O-1 residual wording below.\n- (b) K = 365 as a fixed invariant (F-07 convention, as in marketdata `CLAUDE.md` § \"Adaptive rate limit — fixed invariants\").\n- (c) In-flight GAPS_ONLY jobs created before deploy carry no marker and resume unverified: a one-time residual.",
+    "open_objections": [
+      {
+        "text": "O-1 (still open). The residual the proposal stated was narrower than what the carve-out actually does (P-03). The accurate wording is: an unfilled head gap (gaps[0]) is treated as the pre-listing carve-out, and the job ends COMPLETED, whenever the store has no bar in the 365 days before it. That covers three cases: the symbol was not yet listed, it was never fetched before (for example a first GAPS_ONLY run where only recent bars are stored and the vendor returns EMPTY or a short head), or the request starts inside a hole longer than 365 days. The operator must accept exactly this wording in context.md, or the walk-back-to-2000 classifier must be adopted instead.",
+        "blocking": true
+      },
+      {
+        "text": "K = 365 is a code constant. It needs the operator's approval as a fixed invariant, recorded in context.md and in the ingest CLAUDE.md (F-07 convention, as in marketdata CLAUDE.md § Adaptive rate limit — fixed invariants). Proposing it is not enough.",
+        "blocking": false
+      },
+      {
+        "text": "GAPS_ONLY jobs in flight at deploy time have no 'gaps_only' marker, so a resume after the deploy skips verify. Record this as an operator-accepted one-time residual in context.md.",
+        "blocking": false
+      },
+      {
+        "text": "The worst-case scan size is understated. On an agent call with no start bound, the planner and verify (and on resume, the rebuilt range) run over 2000-01-01..end (marketdata_service.go:521-524). With array_agg that returns the symbol's full stored history, so verify doubles the planner's scan and its chunk locks. Replace 'about 252 timestamps' in the design's Assumptions with the real bound, and either measure it against the @AC-1 @feature-153 budget or record it as accepted.",
+        "blocking": false
+      },
+      {
+        "text": "The next proposer must confirm the coalescing rule's exact boundary: a merged span <= chunk_window_days, measured from the first gap start to the last gap end, with the window read from config. They must also confirm that plan_chunks still splits by chunk_max_bars inside the merged unit.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-1@feature-364",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-2@feature-364",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-3@feature-364",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-13@feature-343",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-9@feature-343",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-4@feature-343",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-23@feature-352",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-24@feature-352",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-11@feature-352",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-14@feature-352",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-1@feature-153",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Keeping one planner unit per gap. Once D-1 surfaces interior gaps, a thinly traded symbol with N scattered holes (the IEX feed, alpaca.feed=iex at internal/alpaca/client.go:43) plans N chunks, persisted rows and BackfillBars RPCs on every GAPS_ONLY run, and the vendor can never fill them. That repeats for up to 50 symbols per agent job. It lost to per-symbol coalescing within chunk_window_days.",
+      "Converting the persisted range_start/range_end with _dt_to_ts unconditionally on resume. FromDatetime(None) raises when a bound is NULL. NULL bounds are real: agent one-sided ranges persist as None (servicer.py:569-570). The job would be left RUNNING and unverified, the R-4 failure mode. It lost to rebuilding a TimeRange that sets only the non-NULL bounds.",
+      "Classifying the head gap from the vendor's chunk answer (carve-out when the chunk succeeded). It needs no RPC and no K, but it returns COMPLETED for the case where the request starts inside a hole, which the store probe catches.",
+      "Walking back in 365-day probes to the 2000 floor. It closes O-1 fully but costs up to about 26 calls per symbol per run for recently listed symbols (C-18). It stays the fallback if the operator refuses the restated O-1 residual.",
+      "Sending a notify alert for an INCOMPLETE-only PARTIAL. An unfillable hole is a vendor fact that would fire on every retry. It lost to no alert plus an additive incomplete_symbols field in the ledger event payload and a WARN log.",
+      "Reusing the existing 'Backfill partial: … returned no data for part of the range' text for the INCOMPLETE-only case. That text offers a retry, while the INCOMPLETE case leads to Re-run and then no-vendor-data. Near-identical text for opposite actions is a UX hazard, so a distinct 'vendor has no bars for some sessions' text is used.",
+      "A BFF change to expose symbol_results. Not needed: getBackfillStatus is a passthrough (insightsBff.ts:89-93) and BackfillJob field 16 already reaches the browser."
+    ],
+    "open_risks": [
+      "The O-1 residual depends on the operator accepting the restated wording. If refused, walk-back probing adds per-run cost for recently listed symbols.",
+      "Coalescing re-fetches stored sessions between gaps. That is harmless under overwrite=false, but adds vendor bandwidth and rate-limit pressure on dense-hole symbols.",
+      "IEX-feed holes that can never be filled leave those symbols as INCOMPLETE/PARTIAL on every GAPS_ONLY run. The UI shows 'no vendor data' for them, which is correct but persistent.",
+      "Full-history array_agg scans for unset-start agent ranges are doubled by verify. The payload and the chunk-lock cost are unmeasured against the @AC-1 @feature-153 budget.",
+      "A probe into pre-004 1-day chunks locks more chunks than one into 30-day chunks. Not measured.",
+      "The hand-maintained closure table in marketsession. A missed or future one-off closure becomes a permanent INCOMPLETE for every symbol covering it, and no CI check notices.",
+      "Pre-2022 Juneteenth is over-applied (marketsession.go:82). It hides real sessions in admin windows reaching 2021 or earlier.",
+      "If the vendor publishes the last completed session late, that session reads INCOMPLETE until the next run.",
+      "An EMPTY symbol with stored bars in the 365 days before its first gap now becomes INCOMPLETE. It is assumed that no @AC-24 @feature-352 scenario uses GAPS_ONLY with prior history. To re-check in spec.",
+      "The /insights/strategies/[id] GAPS_ONLY action (page.tsx:547) does not use backfillJobMessage, so it shows an INCOMPLETE-only PARTIAL as plain PARTIAL. Verified by grep only."
+    ],
+    "constitution_rules_touched": [
+      "C-04",
+      "C-11",
+      "C-12",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "F-01",
+      "F-06",
+      "F-07",
+      "PLAT-N1",
+      "strat-lab same-PR sync (docs/patterns/strat-lab-plugin.md)"
+    ],
+    "rationale": "I spot-checked the adversary's blocking claims in servicer.py, and both code-level claims hold:\n- `TriggerBackfill` persists `range_start`/`range_end` as `_ts_to_dt(request.range.*)`, which returns None for an unset bound (`:296-299`, `:569-570`).\n- `_dt_to_ts` calls `FromDatetime` with no None guard (`:302-305`), so the proposal's resume conversion would raise on agent one-sided ranges.\n- `_plan_work_ranges` appends one unit per `cov.gaps` entry (`:807-810`), and each unit is planned into chunks separately (`:829-832`). Once D-1 adds interior gaps, chunk counts scale with hole count.\n\nBoth fixes are folded into the approach as new decisions:\n- The NULL-safe TimeRange rebuild honors D-3/R-4, keeping resumed jobs verified.\n- Per-symbol gap coalescing within `chunk_window_days` contradicts no D-n. \"Planner unchanged\" was a round-1 approach note, not a settled decision. A grep of `*.feature` found no durable AC pinning the one-unit-per-gap shape.\n\nObjections closed:\n- O-2: `insightsBff.ts` is a passthrough and the adversary did not contest it.\n- O-3: the marker shape, the seed into `_run_chunks`, and the no-re-drive argument are concrete.\n- O-4: no alert, plus the adversary's additive ledger field.\n- O-5: the webhook scenarios key only on status.\n\nO-1 stays blocking. The proposal itself says it cannot close the gap without operator acceptance, and the adversary showed the residual wording was too narrow (P-03). The synthesis carries the corrected wording for the operator.\n\nBusiness-rule changes:\n- `@AC-13 @feature-343` moves from PRESERVE to EXTEND. Its behavior is preserved (D-4), but a new Given variant (the INCOMPLETE-only PARTIAL) is added.\n- `@AC-11 @feature-352` is EXTEND, because the outcome vocabulary grows.\n- No operator decision sanctions a CHANGE, so none is used.\n\nRegister check:\n- The approach respects D-1 to D-5.\n- The head probe compares no timestamps against earliest/latest, so R-3 is not reintroduced.\n- `covered_ranges` is untouched (R-5).\n- EMPTY and FAILED are not reused for missing sessions (R-6). The verify-RPC-failure FAILED is an RPC error, not missing data.\n- No closed O-n is re-raised.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The GAPS_ONLY planner coalesces each symbol's consecutive coverage gaps into one work unit while the merged span (first gap start to last gap end) stays within backfill.chunk_window_days. This bounds chunks per symbol at about the FULL-mode count. Re-fetching the stored sessions between gaps is harmless under overwrite=false.",
+          "evidence": "servicer.py:807-810 (one unit per gap), :829-832 (per-unit chunking); alpaca.feed=iex default at internal/alpaca/client.go:43; ingest CLAUDE.md:159; no *.feature pins the per-gap unit shape"
+        },
+        {
+          "text": "Resume verify rebuilds a common.v1.TimeRange that sets start/end only for non-NULL persisted range_start/range_end, mirroring the fresh path's raw request.range. A RED pytest covers a resume with a NULL bound.",
+          "evidence": "servicer.py:296-305 (_ts_to_dt returns None; _dt_to_ts has no None guard), :569-570 (persisted range bounds), agent app/client.py:2151-2158 (one-sided ranges)"
+        },
+        {
+          "text": "The resume marker is the reserved symbol_results key 'gaps_only', valued {symbol: entry}. It is persisted as {} at plan time and passed as the _run_chunks symbol_results seed. INCOMPLETE ranks 3 in _OUTCOME_PRECEDENCE, between SKIPPED 2 and FAILED 4.",
+          "evidence": "servicer.py:308,310-326,856,988,1004,1082-1088"
+        },
+        {
+          "text": "An INCOMPLETE-only PARTIAL sends no notify alert. The ingest.backfill.completed ledger payload gains an additive incomplete_symbols list, and the webhook payload is unchanged.",
+          "evidence": "servicer.py:905-924"
+        },
+        {
+          "text": "The head gap (gaps[0]) is classified by one GetDataCoverage store probe over [gaps[0].start - 365d, gaps[0].start), judged on bars_total > 0. gaps[1:] are missing by the separation invariant pinned in TestComputeSessionGaps. A verify or probe RPC failure records FAILED (retryable PARTIAL), not INCOMPLETE.",
+          "evidence": "proposal r2 §2; timeframe.go:77,84; servicer.py:335-346; @AC-1 @feature-153 400-day envelope"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "One planner work unit per coverage gap under GAPS_ONLY once interior gaps are reported",
+          "why": "Chunks, persisted rows and RPCs scale with hole count and repeat on every run for vendor-unfillable IEX holes (C-18)"
+        },
+        {
+          "text": "Converting persisted range bounds with _dt_to_ts unconditionally on resume",
+          "why": "Raises on the NULL bounds that one-sided agent ranges produce, leaving the job RUNNING and unverified (the R-4 failure mode)"
+        },
+        {
+          "text": "Notify alert for an INCOMPLETE-only PARTIAL",
+          "why": "Fires on every retry of a vendor-unfillable hole; the ledger field and WARN log carry the signal"
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "K = 365 needs operator approval as a fixed invariant, recorded in context.md and ingest CLAUDE.md (F-07 convention).",
+          "blocking": false
+        },
+        {
+          "text": "GAPS_ONLY jobs in flight at deploy have no marker and resume unverified. Record this as an operator-accepted one-time residual.",
+          "blocking": false
+        },
+        {
+          "text": "The worst-case scan for unset-start ranges is the symbol's full history (2000 floor), doubled by verify. Restate the Assumptions and measure against, or accept within, the @AC-1 @feature-153 budget.",
+          "blocking": false
+        },
+        {
+          "text": "Confirm the exact coalescing boundary rule and that plan_chunks still applies chunk_max_bars inside merged units.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-2",
+          "how": "insightsBff.ts:89-93 returns getBackfillStatus unchanged and useBackfills.ts:33 passes the proto BackfillJob through, so symbolResults (field 16) reaches backtestBackfill.ts with no BFF change. The adversary did not contest this."
+        },
+        {
+          "id": "O-3",
+          "how": "The marker is 'gaps_only': {symbol: entry}, persisted at :856 and seeded into _run_chunks (:988,:1004) so chunk writes keep it. It merges with no special case. An INCOMPLETE-only PARTIAL has all chunks COMPLETED and is never re-driven. The broader findings:30 issue is out of scope. The NULL-bound resume crash is fixed by the new range-rebuild decision."
+        },
+        {
+          "id": "O-4",
+          "how": "No notify alert for an INCOMPLETE-only PARTIAL (the alert stays gated on failed_symbols or chunks_failed). The ledger event gains an incomplete_symbols field, plus a WARN log."
+        },
+        {
+          "id": "O-5",
+          "how": "webhook-fanout-callback.feature:50,103 and notify :47-51 key only on status. No scenario requires a non-empty failed_symbols for PARTIAL."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
