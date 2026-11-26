@@ -672,3 +672,17 @@ Orchestrator note (not an operator quote): choices 1, 3 and 4 match the spec. Ch
   - design.md Build order step 3 and the C-18 line still name the `resolveOffMs` wrapper; not edited, superseded by the O-15 "otherwise" branch and this ruling.
   - `origin/main-dev` has moved to `2b2dec92` (`marketdata_service.go` changed by 26 lines since `36aed60b`); spec anchors are unchanged and still re-grepped at `/sdd-execute` BRANCH SYNC.
   - Re-run `/sdd-review fix-marketdata-miss-path-noise impl-spec` after this amendment.
+
+## Session 2026-11-26 — operator ruling on reader placement, recorded by the orchestrator (verbatim)
+
+Question (the open item left by the sdd-spec re-spec of 2026-11-26): where `resolveBarsMissBackoff` lives. In `bar_hold.go` with no registry change (as specced), or in `bars_miss.go` with exactly one receiver entry `bars_miss.go:cfg` in `scripts/config-wiring.json` (prototyped green).
+
+Operator's answer, 2026-11-26: "bars_miss.go, one receiver entry" — option text as offered: "Keep the reader beside the miss-path code in bars_miss.go and add exactly one `bars_miss.go:cfg` receiver entry to scripts/config-wiring.json. Touches the 345-authelia-sso overlap file again."
+
+Amendment summary (implementation-spec.md; step count, numbering and unit order unchanged):
+- Spec-time decision 2 now reads: overridden by the operator, parallel reader in `bars_miss.go` with one receiver entry; no `resolveOffMs` wrapper, no forwarder.
+- Step 10: `scripts/config-wiring.json` is back on the Files list with exactly one `registry.receivers` entry, `bars_miss.go:cfg`, placed after `bar_hold.go:cfg` (`:115`); `bar_hold.go` is not modified and `resolveBarIngestBackoff` stays byte-identical (O-15). The key constants and `resolveBarsMissBackoff(cfg intGetter)` are in `bars_miss.go` (parameter named `cfg`). The gate check runs after the entry and the reader exist. Verification: the `config-wiring.json` diff is exactly the one added line, no `resolveOffMs` anywhere, empty `bar_hold.go` diff.
+- Evidence kept from the prototype (scratch copy of `origin/main-dev` @ `2b2dec92`, seed rows hand-added to the scratch stored set): reader in `bars_miss.go` without the entry is `unattributed`; with the one entry `--final` exits 0 and `node --test scripts/config-wiring.test.mjs` passes 75/75.
+- Step 8 and Step 11: the reader's file is `bars_miss.go` again; the registered-keys text names the one receiver entry.
+- Step Dependencies: the `345-authelia-sso` overlap note on `scripts/config-wiring.json` is restored (disjoint keys; on a conflict keep both sets); the `bar_hold.go` append-only note is removed.
+- Still open: the real regenerated `scripts/config-wiring-stored.json`, `go build` and the jscpd run were not exercised (see the earlier 2026-11-26 entry); re-run `/sdd-review fix-marketdata-miss-path-noise impl-spec`.
