@@ -31,11 +31,8 @@ Order:
    (i)-(v), plus the `analysis.opportunity.read_reissue` counter.
 6. **Docs (Step 11).** The C-05 doc sync and the C-16 CHANGE rule text.
 
-**Consumer surfaces (C-14).** The product spec names `xstockstrat-ui` `/insights/opportunities`,
-`/trader/positions/[symbol]` and the agent tool `list_opportunities`. design.md (Consumer surfaces)
-decides they are reached only through the existing `ListOpportunities` rows and their per-row
-`valid_until`. There is no proto, UI or agent code change (recon.md:107). This is a recorded decision,
-not an omission, so no `xstockstrat-ui` or `xstockstrat-agent` step exists.
+**Consumer surfaces (C-14).** No `xstockstrat-ui` or `xstockstrat-agent` step exists; the recorded
+rationale and its pinning test are in § Step Dependencies ("Consumer surfaces (C-14)").
 
 ### Scenario Coverage (C-15)
 
@@ -85,6 +82,14 @@ The design made O-7 the `/sdd-spec` gate. It was checked on tree `origin/feature
 
 ## Step Dependencies
 
+- **Consumer surfaces (C-14).** The product spec names `xstockstrat-ui` `/insights/opportunities`,
+  `/trader/positions/[symbol]` and the agent tool `list_opportunities`. design.md (Consumer surfaces)
+  decides they are reached only through the existing `ListOpportunities` rows and their per-row
+  `valid_until`: every served row is mapped by `_row_to_opportunity` (`servicer.py:4746`, defined at
+  `:6925`), which already sets `Opportunity.valid_until` per row (pinned at
+  `tests/test_analysis_servicer.py:6462`). There is no proto, UI or agent code change (recon.md:107).
+  This is a recorded decision, not an omission. Step 10 adds the test that pins mixed per-row
+  `valid_until` values reaching the `ListOpportunities` response.
 - **Precondition before Step 1.** Rebase in the order 365, then 308 and 330, then 366 (operator
   decision 2026-11-26). Merge `origin/main-dev` into `feature/opportunity-live-only-rotation` once 365
   has merged. Then confirm
@@ -398,7 +403,7 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
 12. **Clock.** Freshness uses the app clock (`now_utc`), the same trade-off as `:4799`. This is
     documented only. Header propagation: no new outbound gRPC call (two DB reads), so §B does not apply.
 
-**Verification**: runs as one unit with Steps 5 and 6. Use the union of the Step 5 and Step 6 commands.
+**Verification**: Step 5's combined unit gate (Steps 4+5+6).
 
 ---
 
@@ -448,6 +453,13 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
 3. **Config tables.** Add `("opportunity.live_only_cycle_max_days", "int", 3)` to `AC6_ROWS`, and
    `"opportunity.live_only_cycle_max_days"` to `FR3_KEYS` (stored zero reads as 3, the EXTEND of
    `@AC-6 @feature-244`).
+   - **Real reader returns the seeded value** (config-wiring criterion (b)). In
+     `tests/test_config_zero_clamps.py`, add a test parametrized over two stored values: the value
+     parsed from `services/xstockstrat-config/migrations/056_analysis_live_only_cycle_max_days.up.sql`
+     (repo-relative from `Path(__file__)`; the CI checkout is not sparse) and a stored `5`. Each case
+     builds `AnalysisServicer(snapshot_watcher(**{"opportunity.live_only_cycle_max_days": value}), ...)`
+     in the `test_ac6_servicer_init_semaphores_and_pool` construction shape (`:110-127`, including the
+     `svc._compute.shutdown(wait=False)` teardown) and asserts `svc._live_only_cycle_days() == value`.
 4. **New module `tests/test_opportunity_rotation.py`.** Reuse the harness above and import it, never
    copy it (C-13). The Background is a 45-symbol pool: watchlisted, bound only to
    `dip_buyer_vol_stop`, each with an active signal, and two live strategies covering every symbol.
@@ -495,13 +507,20 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
    - **Atomic persist.** `write_cursor` raising inside the transaction leaves the fake's rows
      unchanged. The fake transaction must re-raise.
 
-**Verification**:
+**Verification** (the single gate for the Steps 4+5+6 unit; Steps 4 and 6 have no separate gate):
 ```bash
+# analysis (Steps 4+5)
 cd services/xstockstrat-analysis
 uv run pytest tests/test_opportunity_rotation.py tests/test_analysis_servicer.py tests/test_opportunities_fundamentals_guard.py tests/test_unreadable_formula.py tests/test_opportunity_compute_state.py tests/test_analysis_tick_telemetry.py tests/test_config_zero_clamps.py tests/test_config_read_classification.py -q
 uv run pytest --cov=app --cov-fail-under=40
 uv run ruff check . && uv run ruff format --check .
 grep -n "from tests\.\|from \.test_analysis_servicer\|conftest" tests/test_opportunity_rotation.py   # C-13: harness imported, not copied
+grep -n "_live_only_cycle_days" tests/test_config_zero_clamps.py   # real-reader seeded-value test present
+# config (Step 6)
+cd ../xstockstrat-config && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40 && pnpm run lint
+# whole-tree config wiring (Steps 4+6)
+cd ../.. && node scripts/check-config-wiring.mjs --final && node scripts/check-config-wiring.mjs --doc-check
+grep -n "live_only_cycle_max_days" services/xstockstrat-config/src/grpc/configServiceImpl.ts scripts/config-wiring-stored.json
 ```
 
 ---
@@ -558,12 +577,8 @@ grep -n "from tests\.\|from \.test_analysis_servicer\|conftest" tests/test_oppor
    route, or the CI artifact fallback; record the run URL in `context.md`). If neither route works,
    the step is blocked (P-03).
 
-**Verification** (the union with Step 5's commands is the unit's gate):
-```bash
-cd services/xstockstrat-config && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40 && pnpm run lint
-cd ../.. && node scripts/check-config-wiring.mjs --final && node scripts/check-config-wiring.mjs --doc-check
-grep -n "live_only_cycle_max_days" services/xstockstrat-config/src/grpc/configServiceImpl.ts scripts/config-wiring-stored.json
-```
+**Verification**: Step 5's combined unit gate (Steps 4+5+6), which includes this step's config and
+wiring commands.
 
 ---
 
@@ -714,6 +729,9 @@ uv run ruff check . && uv run ruff format --check .
      a stale serve). With a fresh row elsewhere for the user (a symbol-filtered read): no kick, an empty
      page.
    - `read_reissue` increments on (iv) only.
+   - **Consumer surface (C-14).** A `ListOpportunities` call over a fresh row and a carried live-only
+     row with distinct, unexpired `valid_until` values returns both opportunities, each with its own
+     `valid_until` (`opp.valid_until.ToDatetime(tzinfo=UTC)`, the `:6462` assertion form).
    - Symbol grouping: in (iii), rows come back in the repository's order, never re-sorted
      (190 @AC-8/@AC-9).
 3. C-13: reuse `_materialized_svc` / `_FakeOppRepo` / `_unavailable_served_row`; add no new domain
@@ -816,6 +834,7 @@ grep -n "max_live_only_symbols_per_compute" docs/patterns/config-governance.md |
 | D-3 fail-closed blocks held/watchlist refresh | Step 5 fail-closed test |
 | `best_direction_by_symbol` coupling | Step 5 parity test |
 | Lowered cycle leaves old rows visible | Step 5 lowered-cycle test, Step 11 |
+| 308 `evaluation_failed` carried row dropped (stored UNSPECIFIED, not in the O-9 keep-list) | Operator ruling pending before Step 4 executes or 308 merges (context.md Open Thread); otherwise an accepted residual recorded in Step 11 |
 
 ---
 
