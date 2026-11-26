@@ -684,3 +684,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ### Open Threads
 - [ ] A bars-fetch failure in the heal still only logs "bars fetch still failing" and is not counted in the `opportunity_heal` tally. Instruction 1 scopes the tally to the wrapped `else:` branch.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), step 14
+
+- Tooling: the analysis `.venv` was synced with `uv sync --extra dev` (pytest reports Python 3.12.3, as in Step 1); ruff 0.16.9 on PATH; hook check hook=0.
+
+### Step 14 — test: heal isolation regressions (`@AC-3` surgical retry) [done]
+- `tests/test_per_symbol_isolation.py` gains 7 heal test cases (29 in the file), built on a two-row (`AAPL`, `NVDA`) `_heal_svc` over `_materialized_svc`, with `replace_symbols` spied and `_FakeReadinessCache` swapped in:
+  - `@AC-3` outage: `NVDA`'s reversed closes make `ExecuteFormula` raise `UNAVAILABLE` (the Steps 9+10 technique). One `replace_symbols` await holds both rows, `AAPL` is healed, `NVDA` keeps `unavailable`, only `AAPL` is staged, and one WARNING `opportunity_heal` tally names `NVDA:AioRpcError`.
+  - Terminal fault (`ZeroDivisionError` in `evaluate_conditions_traced`), parametrized held / non-held: the heal returns, `AAPL` is healed, `NVDA` carries `EVALUATION_FAILED_PROVENANCE` without `unavailable`, nothing is staged for it, a held row omits `action`, and a second heal does not reselect it (`await_count == 1`, extends feature-289 `@AC-9`).
+  - TIMEOUT (`success=False`, `exit_reason=TIMEOUT`) keeps the `MYSZ` row `unavailable`. A RUNTIME_ERROR response marks it. Both assert the classifier spy received a `FormulaExecutionError` with that `exit_reason` (O-10).
+  - A raising `compute_readiness_row` in the cache subset leaves both rows healed and stages only `AAPL`.
+  - `CancelledError` from the eval propagates; nothing is written.
+- The module docstring now names the heal. C-13: every harness comes from `test_analysis_servicer`, `test_unreadable_formula` and this module's existing helpers.
+- TDD:
+  - RED (`.sdd-logs/v-1.log`, `servicer.py` checked out at the pre-Step-13 commit `dceacb11`, restored before GREEN): `6 failed, 74 passed`. Both terminal-fault variants failed with the propagated `ZeroDivisionError: boom`, the TIMEOUT and RUNTIME_ERROR cases with `FormulaExecutionError: formula f-zscore failed: boom`, the cache-subset case with `ZeroDivisionError: boom`, and the outage case with the classifier never called (`not enough values to unpack (expected 1, got 0)`).
+  - GREEN (`.sdd-logs/v-2.log`): `80 passed in 0.91s`, full suite `1808 passed`, `Required test coverage of 40% reached. Total coverage: 91.78%`, ruff `All checks passed!` and `144 files already formatted`, exit=0 (which reflects only the last line).
+  - Mutation (`except BaseException` on the heal's eval handler, reverted without committing; `.sdd-logs/v-3.log`): `FAILED tests/test_per_symbol_isolation.py::test_heal_propagates_cancellation`, `Failed: DID NOT RAISE <class 'asyncio.exceptions.CancelledError'>`, `1 failed, 7 passed`. Re-run after the revert (`.sdd-logs/v-4.log`): `8 passed`.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/tests/test_per_symbol_isolation.py`
+- Deviations: none

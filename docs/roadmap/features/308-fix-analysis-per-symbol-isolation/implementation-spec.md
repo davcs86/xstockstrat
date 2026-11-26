@@ -805,7 +805,7 @@ grep -n "FormulaExecutionError.. propagates\|FormulaExecutionError propagates\|l
 
 ### Step 14 — test: heal isolation regressions (`@AC-3` surgical retry)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_per_symbol_isolation.py` — modify

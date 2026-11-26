@@ -1,14 +1,16 @@
-"""Feature 308 — per-symbol isolation at the readiness callers (@AC-2, @AC-3 kick + materializer)
-and in the opportunities compute (@AC-1).
+"""Feature 308 — per-symbol isolation at the readiness callers (@AC-2, @AC-3 kick + materializer),
+in the opportunities compute (@AC-1) and in the surgical retry (@AC-3 heal).
 
 One failing symbol degrades only itself: EvaluateReadiness returns it empty and unstaged; the kick
-and the materializer cache the bar_epoch = -1 sentinel for it; the opportunities compute keeps its
-row, marked `unavailable` (transient) or `evaluation_failed`. CancelledError always propagates.
+and the materializer cache the bar_epoch = -1 sentinel for it; the opportunities compute and the
+heal keep its row, marked `unavailable` (transient) or `evaluation_failed`, and the heal stages no
+cache row for it. CancelledError always propagates.
 C-13: the servicer harnesses, bars and strategy fixtures are imported from sibling test modules.
 """
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -27,9 +29,11 @@ from tests.test_analysis_servicer import (
     _GT_100,
     _HEADERS,
     _ctx,
+    _FakeReadinessCache,
     _list_opps,
     _materialized_svc,
     _strat_row,
+    _unavailable_served_row,
     _wl,
 )
 from tests.test_owner_header_guard import _BOB
@@ -37,8 +41,10 @@ from tests.test_readiness_cache import _cache_svc
 from tests.test_readiness_materializer import _due_schedule, _materializer_svc, _upserted_rows
 from tests.test_readiness_opportunities_source_symbol import _real_bars
 from tests.test_unreadable_formula import (
+    _AGED,
     _CLOSES,
     _META,
+    _aged_row,
     _classifier_spy,
     _definition,
     _drain,
@@ -410,3 +416,160 @@ async def test_opportunities_compute_propagates_cancellation():
 
     with _raise_in_eval(svc, asyncio.CancelledError()), pytest.raises(asyncio.CancelledError):
         await svc._compute_opportunities("u1", _META)
+
+
+# ── @AC-3: the surgical retry (heal) degrades only the failing row ──────────────────────────────
+
+_HEAL_SYMBOLS = ["AAPL", _FAILING]
+
+
+def _heal_svc(*, held=False, outage=False):
+    # Two aged `unavailable` rows; with `outage`, ExecuteFormula is UNAVAILABLE for NVDA's closes.
+    svc = _with_formula(
+        _materialized_svc(
+            watchlists=[_wl(bindings=[(s, "s-1") for s in _HEAL_SYMBOLS])],
+            strategies={"s-1": _row(_held_definition() if held else None)},
+            bars={
+                s: _OUTAGE_CLOSES if outage and s == _FAILING else _FIRING_BARS
+                for s in _HEAL_SYMBOLS
+            },
+            held=_HEAL_SYMBOLS if held else (),
+        )
+    )
+    origin = "position" if held else "watchlist"
+    svc._opportunities_repo.rows["u1"] = [
+        _unavailable_served_row(
+            s, "s-1", provenance=[origin, "unavailable"], computed_at=datetime.now(UTC) - _AGED
+        )
+        for s in _HEAL_SYMBOLS
+    ]
+    real = svc._opportunities_repo.replace_symbols
+    svc._opportunities_repo.replace_symbols = AsyncMock(side_effect=real)
+    svc._readiness_cache_repo = _FakeReadinessCache()
+    return svc
+
+
+async def _heal(svc):
+    await svc._retry_unavailable_symbols("u1", set(_HEAL_SYMBOLS), _META)
+    spy = svc._opportunities_repo.replace_symbols
+    return {hr["opportunity_key"].split("|")[1]: hr for hr in spy.await_args.args[1]}
+
+
+def _assert_healed(row):
+    assert "unavailable" not in row["provenance"]
+    assert EVALUATION_FAILED_PROVENANCE not in row["provenance"]
+    assert row["readiness_json"]["total_conditions"] > 0
+
+
+def _heal_tally(caplog):
+    (record,) = [r for r in caplog.records if r.getMessage().startswith("opportunity_heal:")]
+    return record
+
+
+def _staged_symbols(svc):
+    return [r["symbol"] for r in svc._readiness_cache_repo.upserted]
+
+
+async def test_heal_outage_keeps_only_the_failing_row_unavailable(caplog):
+    svc = _heal_svc(outage=True)
+
+    with _classifier_spy() as spy, caplog.at_level(logging.WARNING):
+        rows = await _heal(svc)
+
+    svc._opportunities_repo.replace_symbols.assert_awaited_once()
+    assert set(rows) == set(_HEAL_SYMBOLS)
+    _assert_healed(rows["AAPL"])
+    assert "unavailable" in rows[_FAILING]["provenance"]
+    assert _staged_symbols(svc) == ["AAPL"]
+    (received,) = [call.args[0] for call in spy.call_args_list]
+    assert isinstance(received, grpc.RpcError)
+    record = _heal_tally(caplog)
+    assert record.levelno == logging.WARNING
+    assert f"{_FAILING}:{type(received).__name__}" in record.getMessage()
+
+
+@pytest.mark.parametrize("held", [False, True], ids=["watchlist_entry", "held_exit"])
+async def test_heal_terminal_fault_rewrites_to_marker_and_is_not_reselected(held, caplog):
+    svc = _heal_svc(held=held)
+
+    with (
+        _raise_in_eval(svc, ZeroDivisionError("boom")),
+        _classifier_spy() as spy,
+        caplog.at_level(logging.WARNING),
+    ):
+        rows = await _heal(svc)
+
+    assert isinstance(spy.call_args.args[0], ZeroDivisionError)
+    _assert_healed(rows["AAPL"])
+    failing = rows[_FAILING]
+    _assert_marked(failing)
+    assert failing["conviction"] == 0.0
+    if held:
+        assert "action" not in failing
+        assert _staged_symbols(svc) == []
+    else:
+        assert failing["action"] == _UNSPECIFIED
+        assert (failing["signal_axis"], failing["composite_score"]) == (0.0, None)
+        assert _staged_symbols(svc) == ["AAPL"]
+    assert f"{_FAILING}:ZeroDivisionError" in _heal_tally(caplog).getMessage()
+
+    await svc._retry_unavailable_symbols("u1", set(_HEAL_SYMBOLS), _META)
+    assert svc._opportunities_repo.replace_symbols.await_count == 1
+
+
+def _mysz_heal_svc(exit_reason):
+    svc = _failing_formula(_mysz_svc(), exit_reason)
+    svc._opportunities_repo.rows["u1"] = [_aged_row(["watchlist", "unavailable"])]
+    svc._readiness_cache_repo = _FakeReadinessCache()
+    return svc
+
+
+async def test_heal_timeout_keeps_the_row_unavailable():
+    svc = _mysz_heal_svc(indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT)
+
+    with _classifier_spy() as spy:
+        await svc._retry_unavailable_symbols("u1", {"MYSZ"}, _META)
+
+    (received,) = [call.args[0] for call in spy.call_args_list]
+    assert isinstance(received, FormulaExecutionError)
+    assert received.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+    (row,) = svc._opportunities_repo.rows["u1"]
+    assert "unavailable" in row["provenance"]
+    assert EVALUATION_FAILED_PROVENANCE not in row["provenance"]
+    assert svc._readiness_cache_repo.upserted == []
+
+
+async def test_heal_classifier_receives_the_terminal_exit_reason():
+    svc = _mysz_heal_svc(indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR)
+
+    with _classifier_spy() as spy:
+        await svc._retry_unavailable_symbols("u1", {"MYSZ"}, _META)
+
+    (received,) = [call.args[0] for call in spy.call_args_list]
+    assert isinstance(received, FormulaExecutionError)
+    assert received.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR
+    (row,) = svc._opportunities_repo.rows["u1"]
+    _assert_marked(row)
+    assert svc._readiness_cache_repo.upserted == []
+
+
+async def test_heal_cache_subset_failure_keeps_the_row_healed_and_stages_nothing(caplog):
+    svc = _heal_svc()
+
+    with _raise_in_compute(svc, ZeroDivisionError("boom")), caplog.at_level(logging.WARNING):
+        rows = await _heal(svc)
+
+    for symbol in _HEAL_SYMBOLS:
+        _assert_healed(rows[symbol])
+    assert _staged_symbols(svc) == ["AAPL"]
+    assert f"{_FAILING}:ZeroDivisionError" in _heal_tally(caplog).getMessage()
+
+
+async def test_heal_propagates_cancellation():
+    svc = _heal_svc()
+
+    with _raise_in_eval(svc, asyncio.CancelledError()), pytest.raises(asyncio.CancelledError):
+        await svc._retry_unavailable_symbols("u1", set(_HEAL_SYMBOLS), _META)
+
+    svc._opportunities_repo.replace_symbols.assert_not_awaited()
+    assert svc._readiness_cache_repo.upserted == []
