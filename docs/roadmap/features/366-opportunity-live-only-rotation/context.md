@@ -1026,3 +1026,33 @@
 - [ ] `best_direction_by_symbol` is coupled to step 3's iteration order and strict `>`. Target: the compute step (parity test).
 - [ ] After `cycle_max_days` is lowered, rows stamped under the old cycle stay visible on fresh reads until the next compute. Target: the docs step plus the lowered-cycle RED test.
 - [ ] Re-derive the migration numbers (analysis `030`, config `056`) from the merged tree. Target: `/sdd-spec`.
+
+## Session 2026-11-26 — sdd-spec
+
+- Wrote implementation-spec.md with 11 steps. Status: design-approved → implementation-ready. Tree: `origin/feature/opportunity-live-only-rotation@dfa444c2` (`origin/main-dev@34f68c57` is 1 commit ahead, with no `services/` diff).
+- Atomic units (§C):
+  - Steps 4+5+6. The `_compute_opportunities` return becomes `(rows, new_cursor)`, which breaks about 25 unpacking test call sites and 3 stubs. A new read must be classified in `test_config_read_classification.py`. The config `056` seed must land with its reader, because CI's `check-config-wiring.mjs --final` gates read-unseeded and seeded-unread keys.
+  - Steps 9+10. The first read becomes `include_expired=True`, which turns `tests/test_analysis_servicer.py:7930` (`[False, True]` → `[True, True]`) red.
+- Key codebase findings:
+  - Migration numbers: analysis `030` and config `056` are free on all 220 remote refs (`git log --remotes --diff-filter=A`).
+  - Step 6 must regenerate `scripts/config-wiring-stored.json` with `scripts/config-wiring-stored.py`, which needs a DB. Use the CI artifact fallback, as in 330. Never hand-edit it.
+  - The `read_path` "pool" fixture swaps `self._db_pool` for a `FakePool` whose `acquire` is a coroutine (`tests/conftest.py:280-288`). So the persist transaction is opened through a new `OpportunitiesRepository.transaction()`, on the same pool.
+  - `docs/patterns/database.md` does not list the `opportunity_compute_state` columns, so it needs no change (O-22).
+- O-7 gate result:
+  - 365 has no code yet; the Precondition gates Step 9 on its `elif not await opps.has_fresh(user_id):`.
+  - 308 does not touch step 2b, the stamp or the persist path, so its R-4 holds.
+  - 330 has no conflict.
+  - Finding: under the binding O-9 rule, a carried 308 `evaluation_failed` row (stored UNSPECIFIED) is compared and dropped; its symbol falls back to `(sym, "")`. Changing that needs an operator ruling.
+
+### Decisions
+
+- Pool bucket in the O-12 log key = `projected_computes = -(-P // N)`. The shortfall fires when `projected_computes > cycle_max_days`. The exact INFO text is `opportunity live-only rotation shortfall: user=%s pool=%d per_compute=%d projected_computes=%d cycle_max_days=%d` (O-24 text fixed). These are assumptions for impl-spec review.
+- The cursor read and the carried-row read run only when `competitive_pool` is non-empty.
+- Pure helpers `_rotation_chunk`, `_carry_within_cycle` and `_is_live_only_row` pin the `>=` boundary and the wrap/churn cases without patching the clock.
+- O-25 is recorded as accepted (operator 'Keep best-effort'): the empty stamp stays outside and after the queue+cursor transaction.
+- Read branch (v) also covers "only expired live-only rows" and falls through to 365's body.
+
+### Open Threads
+
+- [ ] O-7 residual: re-verify after 308 merges (line numbers move; re-locate sites by symbol), and gate Step 9 on 365 being merged.
+- [ ] Impl-spec review: confirm Assumptions 1-5 (spec § Assumptions) and the 308 `evaluation_failed` finding.
