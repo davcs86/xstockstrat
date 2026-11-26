@@ -20,3 +20,15 @@
 ## Session 2026-11-26 — cursor store decision
 
 - OPERATOR DECISION: "yes, use postgres" — rotation cursor persists in Postgres, not Redis. Rationale given: no Redis anywhere in the stack (compose, .do, deploy, service deps); cursor must commit in the same transaction as the queue rows (a split write skips or repeats a chunk, breaking FR-2/FR-6); state is one value per user per ~daily compute; FR-5 restart-survival is free in Postgres; Redis would add a new service in both environments, mTLS wiring (feature 210) and a new failure mode. Preferred shape: cursor column on analysis.opportunity_compute_state (migration 023). Redis does not address the coverage-latency question (cadence-bound, not store-bound).
+
+## Session 2026-11-26 — sdd-review product-spec (round 1: FAIL → revised)
+
+- Tree: c166919 (feature/opportunity-live-only-rotation == origin, main-dev merged).
+- Demoted-duplicate check: operator answered "No" — not a re-attempt.
+- spec-reviewer round 1: FAIL — criterion 7 (migration strategy unstated, contradictory checkbox), criterion 8 (AC-5 non-observable; AC-2/AC-6 "evaluated" wording; FR-6 removals and FR-7 caps unpinned), criterion 9 (7 open questions unchecked). No Floor breach.
+- feature-overlap: no FAIL-level collision. WARN: same function/file as in-flight 308-fix-analysis-per-symbol-isolation (`_compute_opportunities`, `opportunities.py`; 308 debate.md R-4 locks "never drop held/watchlist/muted rows on a failure path") and 330-fix-live-enrich-ttl-seed (`_compute_opportunities` bars request). Spec's "migration 023" was the existing table's creator, not the new migration's number (next free analysis NNN ≥ 030). 364/365 live on PR #1605's branch, not in this checkout.
+- OPERATOR DECISIONS (question dialog, verbatim choices):
+  - Coverage latency: "Bound the cycle" → FR-2/FR-2a; new key `analysis.opportunity.live_only_cycle_max_days` (int, default 3, bounds [1,30]). The 3-day value is the default the option proposed; a config key, not a literal, per the no-hardcoded-values rule. Per-compute limit wins over the cycle bound, with a recorded shortfall (FR-2a) — orchestrator-stated default, open to operator correction at the design gate.
+  - Carried-row freshness: "Keep own age, max age" → FR-8 (row keeps its own computed_at/valid_until; dropped after one full cycle). Existing per-row `valid_until` ("expires" label) carries it — no proto change; an explicit per-row "as of" cue is a design decision.
+  - Remaining open questions: "Yes, defer to design" — rotation order, persistence shape vs replace_for_user, C-16 CHANGE restatement, live_loop scheduler reuse, test gap, 308/330 overlap. /sdd-design must resolve each.
+- Revisions: product-spec FR-2/FR-2a/FR-3/FR-8, Config Key Changes (new key contract + meaning change of max_live_only_symbols_per_compute), Database Changes (additive ALTER, NNN ≥ 030 re-derived at /sdd-spec, up/down, db-migrate), Consumer Surface UI note; acceptance.feature AC-2/AC-3/AC-5/AC-6 reworded to observable row outcomes, AC-8..AC-12 appended (IDs append-only; AC-1..AC-7 keep their original subjects).
