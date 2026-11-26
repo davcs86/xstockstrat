@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/313-fix-system-identity-paths/feature.md`
-**Total Steps**: 7
+**Total Steps**: 8
 **Feature Branch**: `feature/fix-system-identity-paths`
 
 ---
@@ -14,7 +14,8 @@ The order is the design's build order (D-16): docs first, then analysis, then th
 the ingest per-cycle id as a separate final unit. Step 1 lands the signed-off `@AC-1`/`@AC-2` rewordings and
 the new `@AC-3` in `acceptance.feature` before any test cites them. Steps 2-3 make a `system` order owner
 degrade in the P&L consumer. Steps 4-5 stamp the ledger owner on `ingest.signal.ingested`. Steps 6-7 add the
-per-cycle `trace_id` and land as one commit, because the loop change breaks an existing test spy.
+per-cycle `trace_id` and land as one commit, because the loop change breaks an existing test spy. Step 8 (docs
+only, added after the operator ruling of 2026-11-21) updates the two ingest docs that Steps 4 and 6 make stale.
 
 There is no proto, migration, config, env-var, port or ledger-code step (recon.md:141-145), so there is no
 `buf` or migration verification in this spec.
@@ -68,7 +69,12 @@ omission. The analysis change is internal-only.
   the `TypeError` is swallowed by the per-item `except` and `test_second_identical_cycle_deduplicates`
   fails. Two adjacent steps, one consumer surface (backend).
 - Steps 6-7 require Steps 4-5: both edit the same `AppendEventRequest` literal and the same test file.
-- Steps 6-7 stay last (D-16, F-09): a later ruling on the per-cycle id then needs no step swap.
+- Steps 6-7 stay the last code steps (D-16, F-09): a later ruling on the per-cycle id then needs no code-step
+  swap. Step 8 is docs-only and follows them; if FR-3 were ruled out, only Step 8's per-cycle wording would
+  change (Deviation Log).
+- Step 8 requires Steps 4 and 6: it documents the owner stamp (Step 4) and the per-cycle `correlation_id`
+  (Step 6, proved by Step 7). It runs after Step 7 so the docs never describe behaviour the tree lacks.
+  Step 8 stands alone: it touches two markdown files and no code, so it has no `**Lands with**`.
 - Open risk, `**kw` spy: the spy accepts any keyword, so a rename of `trace_id` would not fail the dedup
   test. Step 7's `correlation_id` assertion is the guard.
 - Open risk, append-only metadata: a caller passing both `trace_id` and an `x-trace-id` entry in
@@ -78,11 +84,12 @@ omission. The analysis change is internal-only.
   assertion covers today's loop caller only, not a future caller that passes both.
 - Open risk, marketdata headerless read: for a `system` owner the bars call runs with empty metadata, the
   same as the empty-owner path. It sits inside `_compose`'s `try`, so the event degrades either way; no step.
-- Proposed, not specced (outside the design's scope; decide at `/sdd-review impl-spec`):
-  - `services/xstockstrat-ingest/docs/context-constitution-findings.md:38` records this defect as an open
-    finding. Steps 4 and 6 resolve it, but no step edits the row.
-  - `services/xstockstrat-ingest/CLAUDE.md:146` describes `ingest.signal.ingested` without the owner or the
-    poll-cycle `correlation_id`.
+- Operator ruling of 2026-11-21 (context.md, "operator ruling on the stale ingest docs"): add a docs step for
+  the ingest findings row and `services/xstockstrat-ingest/CLAUDE.md`. This is Step 8.
+- Proposed, not specced: the analysis findings go stale the same way once Steps 2 and 3 land
+  (`services/xstockstrat-analysis/docs/context-constitution-findings.md:24`, the `_compose` latent-bug row,
+  and `:32`, its open question; both read the same on the feature branch and `origin/main-dev`). The ruling
+  named only the ingest docs, so no step edits them; the operator decides whether to extend Step 8's pattern.
 
 ---
 
@@ -637,6 +644,87 @@ cd services/xstockstrat-ingest && ruff check . && ruff format --check . \
   && pytest tests/test_mcp_client_loop.py -q -k "feature313_ac3 or second_identical_cycle" \
   && pytest --cov=app --cov-fail-under=40
 grep -n "async def spy" -A2 services/xstockstrat-ingest/tests/test_mcp_client_loop.py   # **kw taken and forwarded
+```
+
+---
+
+### Step 8 — docs: ingest findings row and CLAUDE.md event row after Steps 4 and 6
+
+**Status**: `pending`
+**Service**: `xstockstrat-ingest`
+**Files**:
+- `services/xstockstrat-ingest/docs/context-constitution-findings.md` — modify
+- `services/xstockstrat-ingest/CLAUDE.md` — modify
+
+**Reviewers**: none
+
+**Codebase Evidence** (both files re-grepped on `origin/feature/fix-system-identity-paths@8c1db49e` and
+`origin/main-dev@2b2dec92` on 2026-11-26; the earlier `CLAUDE.md:146` cite no longer matches either tree):
+- Findings row, `services/xstockstrat-ingest/docs/context-constitution-findings.md:38` on both trees (the file
+  is byte-identical on both: `git diff --stat 8c1db49e origin/main-dev` lists only `CLAUDE.md` under the
+  ingest docs). It sits under `## Open questions` (`:34`) and reads: "The `mcp_client` loop drives
+  `_ingest_external_signal` with **no `propagation_meta`** (`mcp_client_loop.py#poll_one_source` ~L148), so
+  loop-emitted `ingest.signal.ingested` ledger events carry empty `x-user-id`/`x-trace-id` ... Likely
+  intentional ... confirm whether ledger/analysis expect a trace id on these rows. — status: **open**".
+- What goes stale: "carry empty `x-user-id`/`x-trace-id`" and the open question. After Step 4 the event
+  carries `user_id=owner` as a request field; after Step 6 it carries the per-cycle `correlation_id` and an
+  `x-trace-id` header. It still carries no `x-user-id` header (R-3), and the RPC path's `correlation_id`
+  stays empty (R-9).
+- Resolution format to follow, `## Resolved` (`:41`): newest-first bullets of the form
+  `- **RESOLVED <date> — <title>**: <what changed, with `path#symbol`> (feature N)` (`:43-53`), separated by
+  blank lines. Open-question bullets are removed when resolved (`:36-39` hold only open ones).
+- Row to leave alone: `## Filed as defect reports (2026-10-19)` (`:56`) states at `:59` "A row stays here
+  until its report is resolved"; the ownerless-report row is at `:65`. That report's sidecar flips through
+  `/sdd-triage backmerge`, not this step.
+- CLAUDE.md event row: `| ingest.signal.ingested | Newsletter signal persisted |` at
+  `services/xstockstrat-ingest/CLAUDE.md:185` on the feature branch and `:197` on main-dev (heading
+  `## Ledger Events Emitted` at `:177` and `:189`; main-dev's 12 extra lines are the feature-364 verify-pass
+  text near `:144-155`). Edit by the row text, not the number.
+- Checked and not stale: `CLAUDE.md` § Ownership (`### Ownership (feature 224)` `:52`, the reserved `system`
+  owner at `:57-62`): the owner stamped on the request is the `_resolve_owner` value that `IngestSignal`
+  already forwarded as `x-user-id`, so the `system` rules are unchanged. `docs/context-constitution.md`
+  INGEST-12 (`:25`) concerns the backfill hand-off loop, not `ingest.signal.ingested`.
+- Symbols named in the new text exist today: `app/handlers/servicer.py#_ingest_external_signal`
+  (`:1015` branch, `:1346` main-dev), `app/engine/mcp_client_loop.py#poll_one_source` (`:116` on both).
+
+**TDD**: `N/A (docs)`
+
+**Covers**: —
+
+**Instructions**:
+
+0. Before editing, re-grep both anchors (`grep -n 'no .propagation_meta' services/xstockstrat-ingest/docs/context-constitution-findings.md`
+   and `grep -n '^| `ingest.signal.ingested`' services/xstockstrat-ingest/CLAUDE.md`). Edit by text; the
+   line numbers above are hints. Run only after Steps 4 to 7 have landed, so the text matches the tree.
+1. `docs/context-constitution-findings.md`:
+   - Delete the `## Open questions` bullet that starts "The `mcp_client` loop drives
+     `_ingest_external_signal` with **no `propagation_meta`**". Leave the other three bullets.
+   - Add this as the first bullet under `## Resolved`, above the 2026-11-10 entries, with a blank line after
+     it. Use the landing date (`date +%F`) for `<date>`:
+
+     ```markdown
+     - **RESOLVED <date> — `mcp_client` loop `ingest.signal.ingested` events carried no owner or trace id (feature 313)**: `app/handlers/servicer.py#_ingest_external_signal` now sets `AppendEventRequest.user_id=owner`, and `app/engine/mcp_client_loop.py#poll_one_source` mints one id per source per poll cycle, persisted as the event's `correlation_id` and sent as an `x-trace-id` header. The loop still sends no `x-user-id` header (the ledger reads the request field first). The `IngestSignal` RPC path keeps an empty `correlation_id`.
+     ```
+
+   - Do not edit the `## Filed as defect reports` row, the header paragraph, or any other row.
+2. `CLAUDE.md`: replace the `ingest.signal.ingested` row of `## Ledger Events Emitted` with:
+
+   ```markdown
+   | `ingest.signal.ingested` | Newsletter signal persisted; carries the signal owner as `AppendEventRequest.user_id` on both paths. On the `mcp_client` loop path `correlation_id` is one id per source per poll cycle (also sent as `x-trace-id`); on the `IngestSignal` RPC path it is empty |
+   ```
+
+   Change no other line of `CLAUDE.md`.
+3. No code, test or config file is touched; no new comment is added to any source file.
+
+**Verification**:
+
+```bash
+F=services/xstockstrat-ingest/docs/context-constitution-findings.md
+! sed -n '/^## Open questions/,/^## Resolved/p' $F | grep -n 'propagation_meta'
+sed -n '/^## Resolved/,/^## Filed as defect reports/p' $F | grep -c 'RESOLVED .*feature 313'   # 1
+grep -c 'ingest-mcp-loop-ledger-events-ownerless-defect' $F                                    # 1 (row stays)
+grep -n '^| `ingest.signal.ingested`' services/xstockstrat-ingest/CLAUDE.md | grep -c 'user_id.*correlation_id'   # 1
+git diff --name-only HEAD -- services/                                      # exactly the two files above
 ```
 
 ---
