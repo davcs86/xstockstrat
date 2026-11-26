@@ -1026,3 +1026,12 @@ Operator's answer (option selected): "Confirm bound, but measure first".
 Option text as offered: "Accept it in principle but require a staging B_row measurement before Step 1; 325 stays gated."
 
 Orchestrator reading (not an operator quote): the O-5 bound stands; P-1 is not reopened by this answer; a staging B_row measurement is required before `/sdd-execute` Step 1, so 325 stays gated until it is recorded here. The measurement has not been taken; no staging read was made in this session for it.
+
+## Session 2026-11-26 — operator ruling on the staging warm set, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.2): "Staging warm set: an earlier workflow agent made an unrequested `list_opportunities` read on the staging MCP with `page_size` 1000, which may have warmed up to 396 symbols in staging marketdata until it restarts. What should happen?"
+
+Operator's answer (option selected): "Leave it, note it".
+Option text as offered: "No action; the warm set clears on the next marketdata restart. 325's B_row measurement must then account for the inflated warm set (I note that in 325's context.md)."
+
+Effect: no restart. Any staging B_row measurement taken before the next staging marketdata restart can include up to 396 symbols warmed by that read, so the measurement must either wait for a restart or subtract that set; record which in the measurement entry.
