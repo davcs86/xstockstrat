@@ -770,3 +770,229 @@
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-26 — sdd-batch design gate (round 5)
+
+- /sdd-design full debate halted at its approval gate after round 5 (gate policy: halt). design.md not written; status.md unchanged (spec-ready). Register: `debate.md` (D-1..D-16, R-1..R-16, O-1..O-25; O-18..O-23 closed @ round 5; O-7, O-24, O-25 open, all non-blocking).
+
+## Open Threads
+
+- **Approach (round-5 synthesis).** Proposal r5 carries r4 forward with D-1..D-14 and the operator decisions on O-5, O-6 and O-12 kept, and none of R-1..R-14 reintroduced. New this round: carry predicate (c) is deny-safe, `strat in _capped_live(sym) and (sym, strat) not in denied_covered_set` (D-15). It is exact for non-held symbols, and predicates (a) and (b) guarantee those, so no second `resolve_universe` pass is needed (R-15). Read branch (iv) is documented as the routine steady state, never kicks (R-14), and is counted by a new module-level `analysis.opportunity.read_reissue` Counter (D-16; a log was rejected, R-16). The persist path is `_replace_and_stamp_compute_state(..., cursor=None)`: replace_for_user plus write_cursor run in one transaction, with `COALESCE($14::timestamptz, now())` binding computed_at, and the best-effort empty-universe upsert stays after the transaction. New RED tests: deny on a carried row (asserted per opportunity_key, with (sym,'') parity), held+denied pinning predicate (b), an all-sell pool, mixed None/datetime binds in real_pg, a lowered cycle (5 to 3 drops a 4-day-old row), and the read_reissue counter on branch (iv) only. Touchpoints: analysis migration 030 (live_only_cursor) and config migration 056 (opportunity.live_only_cycle_max_days = 3, [1,30]), both renumbered at /sdd-spec, plus the C-05 docs (analysis CLAUDE.md :274/:295 and § Observability, config-governance.md:538, docs/opportunities.md:7, and database.md if it lists the columns). No proto change and no new inter-service edge.
+- **Strongest open objection.** O-7 (non-blocking, the /sdd-spec gate): verify the carried-row re-INSERT against the 308 diff (R-4: no failure path may drop held, watchlist or muted rows), the 330 diff and the 365 diff once it merges, in rebase order 365, then 308 and 330, then 366. Also open and non-blocking: O-24 (list read_reissue and the exact D-5 shortfall log text in CLAUDE.md § Observability) and O-25 (/sdd-spec must accept or remove the empty-stamp-failure residual; accepting it is the default and preserves 177's never-fail-the-write behaviour).
+- **Floor status.** No Floor breaches. The adversary returned SOUND in round 5.
+- **Uncovered @AC changes.** None is a CHANGE or EXTEND without operator cover. 131@AC-8 (CHANGE), 366@AC-12 and the live-only valid_until = computed_at + cycle_max_days stamp (EXTEND) are covered by operator decisions. Not covered by an operator decision (all PRESERVE): 132 deny list (FR-4), 131 FR-7 per-symbol live-strategy cap, 185@AC-6, 185@AC-7, 185@AC-8 (surgical heal), 190@AC-8, 190@AC-9, 177 empty-universe stamp, 289@AC-21, 215 fundamentals_unavailable skip row, 365@AC-1, 365@AC-2, 193@AC-1, 356@AC-5, 356@AC-10, 200@AC-10.
+
+```sdd-batch-design-state
+{
+  "round": 5,
+  "synth": {
+    "approach": "Round-5 synthesis. The base is proposal r5, which carries the r4 synthesis forward. It honors D-1..D-14 and the operator decisions on O-5, O-6 and O-12, and brings back none of R-1..R-14. I checked the adversary's r5 claims against the code and they hold:\n- servicer.py:5451-5455 fills live_by_symbol from resolved.union and collects denied ∩ union into denied_covered.\n- _capped_live (:5461-5465) is pre-deny.\n- live_signal_symbols applies `- held_norm` (:5540).\n- Step 3 (:5557-5560) runs before the step-5 muted loop (:5619-5625).\n- The empty-universe upsert runs after replace_for_user and is best-effort (:4932-4940).\n- _OPPORTUNITY_RECOMPUTE is a module-level Counter (telemetry.py:444-446).\n\nAll paths below are under services/xstockstrat-analysis/.\n\n**1. Chunk and cursor (D-1, D-5; O-6 and O-12 operator decisions). Unchanged from r4.**\n- The chunk is taken from `pool = sorted(competitive_pool)`, starting at bisect_right(pool, cursor) and wrapping.\n- The cursor advances on every compute.\n- The shortfall is computed from the full pool and logged at INFO, only when (pool bucket, N, cycle_days) changes. It is labelled in computes.\n\n**2. Carry predicates, all before step 3 (D-6, D-10, D-12).**\n- (a) The row is live-only by provenance.\n- (b) sym is in competitive_pool and not in the chunk. competitive_pool is already non-held (:5540).\n- (c) **Final form:** `strat in _capped_live(sym) and (sym, strat) not in denied_covered_set`, where `denied_covered_set = set(denied_covered)` is built once after :5455.\n  - For a non-held sym, `(sym, strat) ∉ denied_covered` holds exactly when sym is in resolved.universe for that strategy (live_loop.py:147,150,155-156). This also holds for the blend.\n  - This restores D-6's universe test with no second resolve_universe pass.\n  - The _capped_live half takes cap slots in pre-deny order, the same way as the fresh path (:5535-5537), so carry and fresh agree on which strategies fit under the FR-7 cap.\n  - A carried pair that becomes denied is rejected at (c), before carried_symbols is built.\n  - **The non-held precondition rests on predicate (b)**, through competitive_pool's `- held_norm`, as well as on (a). The spec must document this dependency on both (a) and (b).\n- (e) The row is kept only while `valid_until > now AND now - computed_at < cycle`; a row aged exactly one cycle drops (>=).\n  - The age clause matters only after cycle_max_days is lowered, and must not be deleted as dead code.\n  - Residual: rows stamped under the old, longer cycle stay visible on fresh reads until the next compute, because the read filters on valid_until only (opportunities.py:233).\n- (f) is D-10 verbatim.\n\nCarried rows are appended after step 5, the cut and the stamp (:5961-5963), and before the symbol_score fold. Fresh rows win on an opportunity_key collision.\n\n**3. Stamp (D-7, O-5).**\n- A fresh live-only row gets `valid_until = now + cycle_days × 24h`, with no 168h cap.\n- The heal (replace_symbols) applies the same stamp to live-only rows.\n- replace_symbols never writes the cursor, because the heal does not advance rotation (fails.md:2282-2284). The spec states this.\n\n**4. Read side (D-11, D-14).**\n- Branches (i)-(v) are as in r4.\n- **Branch (iv) is the documented routine steady state.** Under a 3-day cycle and a daily refresh, about one chunk sits expired for roughly 24 h, so most polls in that window run two reads.\n- (iv) never sets kick_full (R-14). It runs sequentially on the same budgeted connection (ANALYSIS-14).\n- (iv) increments a new label-free module-level `Counter(\"analysis.opportunity.read_reissue\", ...)` beside _OPPORTUNITY_RECOMPUTE (telemetry.py:444-446), through a named helper like its siblings, not an ad-hoc create_counter.\n- The predicate-(e) lookahead is not adopted, because it needs operator sign-off. The roughly 24 h invisibility is a documented residual.\n\n**5. Atomic persist (D-2, D-13).**\n- `_compute_opportunities` returns (rows, new_cursor).\n- `_replace_and_stamp_compute_state(..., cursor=None)` (:4922) opens one pool.acquire() and conn.transaction(). Inside it:\n  - replace_for_user(conn=conn), whose INSERT binds `COALESCE($14::timestamptz, now())`. A fresh row passes None; a carried row passes its stored computed_at.\n  - then write_cursor(conn) when cursor is not None, using the to_timestamp(0) first insert and the cursor-only ON CONFLICT.\n- The best-effort empty-universe upsert (:4932-4940) stays outside and after the transaction. It only SETs computed_at and valid_until, so it cannot clobber live_only_cursor.\n- An all-sell pool yields rows == [] with a non-null cursor (:5884; :6602-6604). The design does not claim otherwise.\n- Accepted residual (default, preserving 177's 'a stamp failure never fails the write', :4939): if the stamp fails after a committed cursor advance, every poll recomputes until the next stamp succeeds, and each such compute advances the cursor (O-12). /sdd-spec records this, or the operator chooses to move the stamp into the transaction.\n- conn=None on the no-pool path (:4710). The fakes at tests/test_analysis_servicer.py:4501 and :5778 gain a conn kwarg. compute_state.get selects live_only_cursor.\n\n**RED tests (P-06).** All r4 tests carry over. New this round:\n- **Deny.** A carried (AAPL, squeeze_breakout_trend) row whose strategy then denies AAPL leaves exactly one row **for that opportunity_key**, the muted placeholder, rejected at (c). The test also asserts that the (AAPL, \"\") row is present or absent exactly as it would be for a never-carried denied non-chunk symbol (parity with today).\n- **Held + denied + a carried row present → the carried row is dropped.** The test is documented as pinning predicate (b), not only (a).\n- **All-sell pool.** The cursor advances, the empty stamp is applied, and live_only_cursor survives the upsert.\n- **Mixed binds.** A real_pg executemany with mixed None and datetime $14 values. The new INSERT is added to the bound-param-referenced guard (tests/test_opportunities_repo.py:236+).\n- **Lowered cycle.** Lowering the cycle from 5 to 3 drops a 4-day-old carried row.\n- **Re-read counter.** read_reissue increments on branch (iv) only.\n\n**Touchpoints.**\n- Migrations, both renumbered at /sdd-spec:\n  - analysis 030: `ADD COLUMN live_only_cursor TEXT NULL`, with a down migration;\n  - config 056: seeds opportunity.live_only_cycle_max_days = 3, bounds [1,30]. Also touch configServiceImpl.ts:137, test_config_zero_clamps.py:61 and test_config_read_classification.py:56.\n- Docs (C-05):\n  - services/xstockstrat-analysis/CLAUDE.md:274 and :295, plus the valid_window_hours row;\n  - **CLAUDE.md § Observability: the read_reissue instrument, and the exact message text of the shortfall log;**\n  - docs/patterns/config-governance.md:538 (get_int → int_positive, plus the new row);\n  - services/xstockstrat-analysis/docs/opportunities.md:7 (branches (i)-(v), the cursor transaction, and the steady-state note on (iv));\n  - docs/patterns/database.md, if it lists the opportunity_compute_state columns.\n- No proto change and no new inter-service edge.\n- O-7 stays the /sdd-spec gate. Rebase order: 365, then 308 and 330, then 366.",
+    "open_objections": [
+      {
+        "text": "O-7: at /sdd-spec, verify the carried-row re-INSERT against the 308 diff (R-4: no failure path may drop held, watchlist or muted rows), the 330 diff (live-enrich TTL, same function) and the 365 diff once it merges. Rebase order: 365, then 308 and 330, then 366.",
+        "blocking": false
+      },
+      {
+        "text": "C-05 / FR-2a observability. CLAUDE.md § Observability must list the new analysis.opportunity.read_reissue counter. The counter is defined at module level beside _OPPORTUNITY_RECOMPUTE (telemetry.py:444-446) with a named helper. The same section must record the D-5 shortfall diagnostic's exact log message text, because operators alert on that text.",
+        "blocking": false
+      },
+      {
+        "text": "The empty-universe stamp stays best-effort and outside the cursor transaction (servicer.py:4932-4940). If the stamp fails after the cursor advance commits, every poll recomputes and advances the cursor until a stamp succeeds. /sdd-spec must explicitly either accept this residual, which is the default and preserves 177's 'a stamp failure never fails the write', or move the stamp into the transaction.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "131@AC-8 (live-only truncation per compute)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "366@AC-12 (carried row older than one cycle dropped; >= boundary)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "366 live-only valid_until = computed_at + cycle_max_days (overrides valid_window_hours for live-only rows)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "132 deny list (deny-listed pair removed / muted placeholder; FR-4)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "131 FR-7 per-symbol live-strategy cap",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "185@AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "185@AC-7",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "185@AC-8 (surgical read-time heal)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "190@AC-8 (symbol-group ordering)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "190@AC-9 (symbol-group ordering / paging tiebreak)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "177 empty-universe compute-state stamp (best-effort, never fails the write)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "289@AC-21 (formula_unreadable marker round-trips storage)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "215 fundamentals_unavailable skip row (UNSPECIFIED override)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "365@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "365@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "193@AC-1 (blend evaluates only on fundamentals universe)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "356@AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "356@AC-10",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "200@AC-10",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Calling resolve_universe a second time, or carrying a per-strategy resolved.universe dict, for predicate (c). It lost because it duplicates state that denied_covered already holds (C-18 DRY) and costs an extra pass. The set lookup is exact for non-held symbols, and predicates (a) and (b) guarantee those symbols are non-held.",
+      "A rate-limited INFO log, instead of a counter, for the branch-(iv) second read. It lost because (iv) is the steady state on a 15 s UI poll, so a log line is noise. The Counter wrapper (telemetry.py:325-338) costs nothing extra and swallows errors.",
+      "A predicate-(e) lookahead that treats rows expiring within one refresh interval as expired. It is not adopted, because it shortens visible lifetime below the cycle, and that needs operator sign-off nobody has requested. The operator can still choose it, so it is not locked.",
+      "Predicate (c) as _capped_live(sym) alone. It lost because that is the locked R-2: it reads the pre-deny resolved.union."
+    ],
+    "open_risks": [
+      "Branch (iv) is the common steady state, so most polls run two reads on the budgeted connection. The cost is now measured by read_reissue but not yet bounded.",
+      "Expired live-only rows stay invisible for about 24 h between their expiry and the next compute that reaches their chunk. This is an accepted residual, and the lookahead fix is left to the operator.",
+      "Predicate (c)'s deny equivalence relies on carried symbols being non-held, which predicates (a) and (b) guarantee. A later change to either predicate could let a held+denied (deny_entry) pair through. A RED test pins this.",
+      "After a committed cursor advance, a failed empty-universe stamp leaves each poll recomputing and advancing the cursor until a stamp succeeds. This is the existing 177 behaviour, amplified by O-12.",
+      "366 edits the head of _read_opportunity_queue, which 365 has just rewritten, and the 308, 330 and 365 diffs are still unread (O-7).",
+      "Freshness is judged by the app clock, not DB now(), so app/DB skew shifts the boundary. The same trade-off is already accepted at servicer.py:4799.",
+      "D-3 fails closed: a transient error on the carry read also blocks that compute's held and watchlist refresh.",
+      "best_direction_by_symbol stays correct only while step 3 keeps its iteration order and its strict >. A parity test pins this coupling.",
+      "After cycle_max_days is lowered, rows stamped under the old, longer cycle stay visible on fresh reads until the next compute."
+    ],
+    "constitution_rules_touched": [
+      "C-16",
+      "C-05",
+      "C-11",
+      "C-08",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-06",
+      "F-01",
+      "F-04",
+      "F-06",
+      "F-07",
+      "ANALYSIS-14"
+    ],
+    "rationale": "The adversary returned SOUND with no floor breaches. I checked its load-bearing claims in the code this round:\n- servicer.py:5451-5455 shows union-based live_by_symbol and denied_covered = denied ∩ union.\n- :5540 shows live_signal_symbols minus held_norm, which feeds competitive_pool.\n- :5557-5560, against :5619-5625, shows step 3 running before the step-5 muted placeholders. So today a non-chunk denied symbol gets both a (sym,'') row and the placeholder. That is why the deny RED test must assert per opportunity_key, with parity for (sym,'').\n- :4932-4940 shows the empty upsert is outside the transaction, after it, and best-effort.\n- telemetry.py:444-446 shows the module-level Counter pattern.\n\nClosures:\n- **O-18** closes. The deny-safe (c) is adopted and verified (live_loop.py:147,150,155-156), and the deny RED test is added. I record it as D-15 because r4 carried it only as approach text.\n- **O-19** closes. (iv) is stated as the steady state and counted by read_reissue (D-16). It never kicks (R-14), and the lookahead is declined pending the operator.\n- **O-20** closes. The ordering argument is verified, the all-sell RED test is added, and the false claim is dropped. The stamp-failure residual is a new non-blocking item.\n- **O-21** closes. The $14::timestamptz anchor, the mixed real_pg test and the guard extension are adopted.\n- **O-22** closes. Both doc touchpoints are added.\n- **O-23** closes. The age clause is documented as load-bearing, with the lowering RED test, and the residual is recorded.\n- **O-7** stays open as the /sdd-spec gate.\n\nTwo new non-blocking objections capture the adversary's remaining C-05 points: Observability doc entries for the counter and the shortfall log text, and an explicit spec choice on the empty-stamp residual. Neither blocks approval.\n\nRegister check: no D-n is contradicted, no R-n is reintroduced, no closed O-n is re-raised, no petitions were filed, and the operator steer reopens nothing.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Carry predicate (c) is `strat in _capped_live(sym) and (sym, strat) not in denied_covered_set`, where denied_covered_set = set(denied_covered) is built once after servicer.py:5455. For a non-held sym this holds exactly when sym is in resolved.universe for that strategy. A carried pair that becomes denied is rejected at (c), before carried_symbols is built. The non-held precondition rests on predicate (b) (competitive_pool excludes held_norm) as well as on (a), and the spec documents both. The RED test asserts per opportunity_key that only the muted placeholder remains, and that the (sym,'') row has parity with a never-carried denied symbol.",
+          "evidence": "live_loop.py:147,150,155-156; servicer.py:5451-5455, 5461-5465, 5535-5540, 5557-5560, 5619-5625; adversary r5 verified the equivalence, including the blend"
+        },
+        {
+          "text": "Read branch (iv) is documented as the routine steady state. It never sets kick_full and is measured by a new label-free module-level Counter analysis.opportunity.read_reissue beside _OPPORTUNITY_RECOMPUTE, with a named helper, listed in CLAUDE.md § Observability. The predicate-(e) lookahead is not adopted without operator sign-off.",
+          "evidence": "telemetry.py:325-338, 444-446; servicer.py:4765-4774; R-14; adversary r5"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "A second resolve_universe pass, or a per-strategy resolved.universe dict, for carry predicate (c)",
+          "why": "It duplicates state that denied_covered already holds (C-18 DRY) and costs an extra pass. The set lookup is exact because carried symbols are non-held under predicates (a) and (b)."
+        },
+        {
+          "text": "A rate-limited per-user INFO log, instead of a counter, for the branch-(iv) re-read",
+          "why": "(iv) is the steady state on a 15 s poll, so a log line is noise. The Counter wrapper costs nothing extra and swallows errors (telemetry.py:325-338)."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "C-05 / FR-2a: list analysis.opportunity.read_reissue in CLAUDE.md § Observability, as a module-level Counter beside _OPPORTUNITY_RECOMPUTE (telemetry.py:444-446) with a named helper. Record the D-5 shortfall log's exact message text in the same section, because operators alert on that text.",
+          "blocking": false
+        },
+        {
+          "text": "The empty-universe stamp is best-effort and runs outside the cursor transaction (servicer.py:4932-4940). A stamp failure after a committed cursor advance makes every poll recompute and advance the cursor until a stamp succeeds. /sdd-spec must explicitly either accept this residual, which is the default and preserves 177's never-fail-the-write property, or move the stamp into the transaction.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-18",
+          "how": "Proposal r5 adopts the deny-safe predicate (c), `strat in _capped_live(sym) and (sym, strat) not in denied_covered_set` (D-15), with a RED test asserted per opportunity_key. The adversary r5 verified the equivalence against live_loop.py:147,150,155-156 and servicer.py:5454-5455."
+        },
+        {
+          "id": "O-19",
+          "how": "(iv) is stated as the steady state, counted by analysis.opportunity.read_reissue, and never kicks (R-14). The lookahead is declined pending the operator (D-16)."
+        },
+        {
+          "id": "O-20",
+          "how": "The false claim is dropped. The ordering (replace, then cursor inside the transaction, then the upsert of computed_at and valid_until after it) was verified at servicer.py:4932-4940, and an all-sell RED test was added. The stamp-failure residual is tracked as a new non-blocking objection."
+        },
+        {
+          "id": "O-21",
+          "how": "The INSERT binds COALESCE($14::timestamptz, now()), and a real_pg executemany test covers mixed None and datetime values. The new INSERT is added to the bound-param-referenced guard (tests/test_opportunities_repo.py:236+)."
+        },
+        {
+          "id": "O-22",
+          "how": "services/xstockstrat-analysis/docs/opportunities.md:7 (branches (i)-(v), the cursor transaction, steady-state (iv)) and docs/patterns/database.md (if it lists the columns; /sdd-spec confirms) are added to the C-05 touchpoints."
+        },
+        {
+          "id": "O-23",
+          "how": "The spec documents the age clause as load-bearing only after cycle_max_days is lowered, adds a RED test that lowers 5 to 3 and expects a 4-day-old row to drop, and records the opportunities.py:233 residual."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
