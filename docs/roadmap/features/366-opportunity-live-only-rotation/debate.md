@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -12,6 +12,7 @@
 | 2 | 2026-11-26 | /sdd-batch | 4 | 4 | 4 | 7 | 0 | yes |
 | 3 | 2026-11-26 | /sdd-batch | 4 | 3 | 2 | 3 | 0 | yes |
 | 4 | 2026-11-26 | /sdd-batch | 1 | 4 | 10 | 6 | 0 | yes |
+| 5 | 2026-11-26 | /sdd-batch | 2 | 2 | 6 | 2 | 0 | yes |
 
 ## Settled Decisions
 
@@ -32,6 +33,8 @@
 | D-12 | 3 | carried_symbols is built from the pre-step-3 predicates only, and step 3 suppresses (sym,'') only for those symbols. The post-step-5 dedup removes a carried row only when a fresh row has the same opportunity_key. | servicer.py:5557-5560, 5617-5639; adversary r3 verified the invariant | settled |
 | D-13 | 3 | write_cursor's first-insert valid_until is to_timestamp(0), and the on-conflict update touches only live_only_cursor. A real_pg test pins the aware decode and the no-clobber behaviour. | servicer.py:4798-4799; 023_opportunity_compute_state.up.sql:8-13; adversary r3 verified | settled |
 | D-14 | 4 | Under D-11, a read branch's rows are served only from a read whose WHERE matches that branch, never Python-filtered. Branch (iii) (fresh, n_expired == 0) serves the include_expired=True rows as read. Branch (iv) (fresh, n_expired > 0, which can only mean expired live-only rows) re-issues today's unchanged include_expired=False read, sequentially on the same budgeted connection, and sets no kick_full. Both branches run the 185 @AC-8 heal. | opportunities.py:42-60 (every _SORT_ORDER_BY branch ranks by a symbol-partition window aggregate; verified r4); servicer.py:4765-4774, 4776-4789; adversary r4 verified the branch identities | settled |
+| D-15 | 5 | Carry predicate (c) is `strat in _capped_live(sym) and (sym, strat) not in denied_covered_set`, where denied_covered_set = set(denied_covered) is built once after servicer.py:5455. For a non-held sym this holds exactly when sym is in resolved.universe for that strategy. A carried pair that becomes denied is rejected at (c), before carried_symbols is built. The non-held precondition rests on predicate (b) (competitive_pool excludes held_norm) as well as on (a), and the spec documents both. The RED test asserts per opportunity_key that only the muted placeholder remains, and that the (sym,'') row has parity with a never-carried denied symbol. | live_loop.py:147,150,155-156; servicer.py:5451-5455, 5461-5465, 5535-5540, 5557-5560, 5619-5625; adversary r5 verified the equivalence, including the blend | settled |
+| D-16 | 5 | Read branch (iv) is documented as the routine steady state. It never sets kick_full and is measured by a new label-free module-level Counter analysis.opportunity.read_reissue beside _OPPORTUNITY_RECOMPUTE, with a named helper, listed in CLAUDE.md § Observability. The predicate-(e) lookahead is not adopted without operator sign-off. | telemetry.py:325-338, 444-446; servicer.py:4765-4774; R-14; adversary r5 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -52,6 +55,8 @@
 | R-12 | 4 | `MAX(...) FILTER (WHERE valid_until > now()) OVER (...)` inside read() | It changes the stale branch's ordering semantics and edits the placeholder-anchored read() SQL that R-8 guards (opportunities.py:253). | locked |
 | R-13 | 4 | A read-path DELETE of expired live-only rows | It puts writes on the budgeted read-only DB phase (ANALYSIS-14) and races _opportunity_lock (servicer.py:4951, 4987, 6069). | locked |
 | R-14 | 4 | Setting kick_full in read branch (iv), the partial live-only expiry state | Each compute stamps one shared expiry, so every expiry-kick schedules another one cycle later. Chains never merge, so the compute rate grows without bound, and each kick advances the cursor (O-12). | locked |
+| R-15 | 5 | A second resolve_universe pass, or a per-strategy resolved.universe dict, for carry predicate (c) | It duplicates state that denied_covered already holds (C-18 DRY) and costs an extra pass. The set lookup is exact because carried symbols are non-held under predicates (a) and (b). | locked |
+| R-16 | 5 | A rate-limited per-user INFO log, instead of a counter, for the branch-(iv) re-read | (iv) is the steady state on a 15 s poll, so a log line is noise. The Counter wrapper costs nothing extra and swallows errors (telemetry.py:325-338). | locked |
 
 ## Objections
 
@@ -75,12 +80,14 @@
 | O-15 | 3 | FR-7: carry predicate (c) must also require strat in _capped_live(sym) (servicer.py:5461-5465), so carried rows never exceed max_live_strategies_per_symbol. | no | closed @ round 4 (Predicate (c) now requires strat in _capped_live(sym) (servicer.py:5461-5465), so the FR-7 per-symbol cap holds on carried rows. The deny gap is tracked as a separate new objection.) |
 | O-16 | 3 | Carry predicate (b) must use competitive_pool, not live_signal_symbols, so that 'pool' is one set across the chunk, FR-4 and the shortfall. | no | closed @ round 4 (Predicate (b) and the chunk both use competitive_pool, so 'pool' is one set across the chunk, FR-4 and the shortfall.) |
 | O-17 | 3 | Name the cursor plumbing for /sdd-spec: the _compute_opportunities return shape (rows, new_cursor), live_only_cursor in compute_state.get, conn=None on the injected no-pool path (servicer.py:4710), and the conn kwarg on the test fakes. | no | closed @ round 4 (Proposal r4 item 5 names the plumbing: the (rows, new_cursor) return, the callers at :4952-4953 and :6070-6071, live_only_cursor in compute_state.get, conn=None on the :4710 no-pool path, and the conn kwarg on the fakes at test_analysis_servicer.py:4501 and :5778. The adversary did not object.) |
-| O-18 | 4 | Predicate (c) must be `strat in _capped_live(sym) and (sym, strat) not in set(denied_covered)`. _capped_live reads the pre-deny resolved.union (live_loop.py:128-130, 155-156; servicer.py:5451-5455), so on its own it is R-2 and drops D-6's universe test. Add a RED test: a carried row whose strategy then denies the symbol leaves only the muted placeholder. | yes | open |
-| O-19 | 4 | Read branch (iv) is the routine steady state (3-day cycle, daily refresh). State it as such and measure the second read (a log or counter). Any predicate-(e) lookahead that shortens visible lifetime below the cycle needs the operator. | no | open |
-| O-20 | 4 | An empty-rows compute with a non-null cursor occurs for an all-sell pool (servicer.py:5884, 6602-6604). Do not rely on the opposite claim. Test that the cursor advances, the empty stamp is applied, and live_only_cursor is not clobbered. | no | open |
-| O-21 | 4 | Type-anchor COALESCE($14::timestamptz, now()) (fails.md:2352-2355). Add a real_pg executemany test with mixed None and datetime values, and extend the bound-param-referenced guard to the new INSERT. | no | open |
-| O-22 | 4 | Add services/xstockstrat-analysis/docs/opportunities.md:7 and, if it lists the columns, the opportunity_compute_state entry in docs/patterns/database.md to the C-05 doc touchpoints. | no | open |
-| O-23 | 4 | Document that predicate (e)'s age clause is load-bearing only after cycle_max_days is lowered, and record the residual: old rows stay visible on fresh reads until the next compute (opportunities.py:233). | no | open |
+| O-18 | 4 | Predicate (c) must be `strat in _capped_live(sym) and (sym, strat) not in set(denied_covered)`. _capped_live reads the pre-deny resolved.union (live_loop.py:128-130, 155-156; servicer.py:5451-5455), so on its own it is R-2 and drops D-6's universe test. Add a RED test: a carried row whose strategy then denies the symbol leaves only the muted placeholder. | yes | closed @ round 5 (Proposal r5 adopts the deny-safe predicate (c), `strat in _capped_live(sym) and (sym, strat) not in denied_covered_set` (D-15), with a RED test asserted per opportunity_key. The adversary r5 verified the equivalence against live_loop.py:147,150,155-156 and servicer.py:5454-5455.) |
+| O-19 | 4 | Read branch (iv) is the routine steady state (3-day cycle, daily refresh). State it as such and measure the second read (a log or counter). Any predicate-(e) lookahead that shortens visible lifetime below the cycle needs the operator. | no | closed @ round 5 ((iv) is stated as the steady state, counted by analysis.opportunity.read_reissue, and never kicks (R-14). The lookahead is declined pending the operator (D-16).) |
+| O-20 | 4 | An empty-rows compute with a non-null cursor occurs for an all-sell pool (servicer.py:5884, 6602-6604). Do not rely on the opposite claim. Test that the cursor advances, the empty stamp is applied, and live_only_cursor is not clobbered. | no | closed @ round 5 (The false claim is dropped. The ordering (replace, then cursor inside the transaction, then the upsert of computed_at and valid_until after it) was verified at servicer.py:4932-4940, and an all-sell RED test was added. The stamp-failure residual is tracked as a new non-blocking objection.) |
+| O-21 | 4 | Type-anchor COALESCE($14::timestamptz, now()) (fails.md:2352-2355). Add a real_pg executemany test with mixed None and datetime values, and extend the bound-param-referenced guard to the new INSERT. | no | closed @ round 5 (The INSERT binds COALESCE($14::timestamptz, now()), and a real_pg executemany test covers mixed None and datetime values. The new INSERT is added to the bound-param-referenced guard (tests/test_opportunities_repo.py:236+).) |
+| O-22 | 4 | Add services/xstockstrat-analysis/docs/opportunities.md:7 and, if it lists the columns, the opportunity_compute_state entry in docs/patterns/database.md to the C-05 doc touchpoints. | no | closed @ round 5 (services/xstockstrat-analysis/docs/opportunities.md:7 (branches (i)-(v), the cursor transaction, steady-state (iv)) and docs/patterns/database.md (if it lists the columns; /sdd-spec confirms) are added to the C-05 touchpoints.) |
+| O-23 | 4 | Document that predicate (e)'s age clause is load-bearing only after cycle_max_days is lowered, and record the residual: old rows stay visible on fresh reads until the next compute (opportunities.py:233). | no | closed @ round 5 (The spec documents the age clause as load-bearing only after cycle_max_days is lowered, adds a RED test that lowers 5 to 3 and expects a 4-day-old row to drop, and records the opportunities.py:233 residual.) |
+| O-24 | 5 | C-05 / FR-2a: list analysis.opportunity.read_reissue in CLAUDE.md § Observability, as a module-level Counter beside _OPPORTUNITY_RECOMPUTE (telemetry.py:444-446) with a named helper. Record the D-5 shortfall log's exact message text in the same section, because operators alert on that text. | no | open |
+| O-25 | 5 | The empty-universe stamp is best-effort and runs outside the cursor transaction (servicer.py:4932-4940). A stamp failure after a committed cursor advance makes every poll recompute and advance the cursor until a stamp succeeds. /sdd-spec must explicitly either accept this residual, which is the default and preserves 177's never-fail-the-write property, or move the stamp into the transaction. | no | open |
 
 ## Reopen Petitions
 
