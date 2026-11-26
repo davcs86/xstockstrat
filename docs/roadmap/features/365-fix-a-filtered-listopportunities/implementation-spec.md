@@ -59,6 +59,11 @@ ran (O-6). Step 2's Verification states this.
   keep the `elif` fall-through and the "one compute stamps a single `valid_until`" constraint.
   Re-verify `330-fix-live-enrich-ttl-seed`'s reader-line citation at merge time (context.md
   sdd-review overlap).
+- Cross-feature (impl-spec review overlap, rebase-only): `308-fix-analysis-per-symbol-isolation`
+  also modifies `servicer.py`, `tests/test_opportunities_repo.py` and
+  `tests/test_analysis_servicer.py`, and runs `tests/test_opportunity_compute_state.py`. There is
+  no field, config or migration clash; whichever lands second rebases and re-runs Step 2's
+  Verification.
 
 ---
 
@@ -168,8 +173,9 @@ Behavioural verification comes from Step 2 (same atomic unit): run Step 2's full
   with `read` / `count_for_user` / `replace_for_user` stubbed. Without a stub,
   `await svc._opportunities_repo.has_fresh(...)` returns a truthy `MagicMock`. The cold-path kick
   in `test_empty_universe_never_recomputes_synchronously` (expects `computing is True` and 4 kicks)
-  and `test_fresh_empty_serve_kicks_self_heal_and_writes_new_row` would then disappear. Its
-  `_drain()` pattern (L76-98) is the real-kick template.
+  and `test_fresh_empty_serve_kicks_self_heal_and_writes_new_row` (L76-98) would then disappear.
+- Real-kick drain helper: `_drain_opportunity_recompute` at `tests/test_analysis_servicer.py:4875`
+  (module-level; `test_list_opportunities_deadlines.py` already imports from that module at L25).
 - `tests/test_opportunities_repo.py:657-668` `test_stored_zero_signal_rank_weight_reaches_the_read`:
   `opps = MagicMock()` with `read`, `count_for_user`, `available_sources` as `AsyncMock`. It calls
   `svc._read_opportunity_queue(opps, None, "u1", ...)` directly.
@@ -253,19 +259,20 @@ New tests in `tests/test_list_opportunities_deadlines.py` **(a)**. Use the `read
      `kicks["full"] == []`. This matches today's `count_for_user`-timeout behaviour, so it passes
      pre- and post-fix.
 10. Real-kick tests on the direct path, with no `_record_kicks`. They close O-6 for AC-1/AC-3/AC-4.
-    Add a local `_drain(svc)` copied from the `test_opportunity_compute_state.py:76-98` pattern,
-    which loops `await asyncio.sleep(0)` until `"u1" not in svc._opportunity_recomputing`. It is
-    inline because it has a single consumer file; if it gains a second consumer, move it to
-    `tests/conftest.py`.
+    Drain with the existing module-level `_drain_opportunity_recompute(svc, user_id, *, budget=20000)`
+    (`tests/test_analysis_servicer.py:4875`), which loops `await asyncio.sleep(0)` until
+    `user_id not in svc._opportunity_recomputing`. Add it to this file's existing
+    `from tests.test_analysis_servicer import (...)` block (L25-31). Do not add a local `_drain`
+    (DRY guard rail; the nested copy at `test_opportunity_compute_state.py:84` is not reused).
     - `test_ac1_filtered_empty_over_fresh_queue_leaves_valid_until_unchanged` — **RED pre-fix**.
       - Setup: `svc = _svc(rows=[_row("AAPL")])`, `before = svc._opportunities_repo.rows["u1"][0]["valid_until"]`,
         `svc._compute_opportunities = AsyncMock(return_value=[_row("AAPL")])`.
-      - Call: `_list(svc, min_conviction=1.01)`, then `await _drain(svc)`.
+      - Call: `_list(svc, min_conviction=1.01)`, then `await _drain_opportunity_recompute(svc, "u1")`.
       - Assert: `svc._compute_opportunities.await_count == 0` and
         `svc._opportunities_repo.rows["u1"][0]["valid_until"] == before`.
     - `test_ac3_cold_read_recompute_then_follow_up_read_not_computing` — PRESERVE.
       - Setup: `_svc()`, `svc._compute_opportunities = AsyncMock(return_value=[_row("AAPL")])`.
-      - First `_list(svc, symbol="SCKT")` gives `computing is True`. Then `await _drain(svc)`.
+      - First `_list(svc, symbol="SCKT")` gives `computing is True`. Then `await _drain_opportunity_recompute(svc, "u1")`.
       - A follow-up `_list(svc, symbol="SCKT")` gives `computing is False`, because the recompute
         materialized a fresh AAPL row. (The fake ignores `symbol`, so this read is served from the
         `if rows:` branch; the assertion is on the response flag only.) Also assert
@@ -273,7 +280,7 @@ New tests in `tests/test_list_opportunities_deadlines.py` **(a)**. Use the `read
     - `test_ac4_all_stale_filtered_read_restamps_valid_until` — PRESERVE.
       - Setup: `start = datetime.now(UTC)`, `svc = _svc(rows=[_row("AAPL", fresh=False)])`,
         `svc._compute_opportunities = AsyncMock(return_value=[_row("AAPL")])`.
-      - Call: `_list(svc, min_conviction=1.01)`, then `await _drain(svc)`.
+      - Call: `_list(svc, min_conviction=1.01)`, then `await _drain_opportunity_recompute(svc, "u1")`.
       - Assert: `_compute_opportunities.await_count == 1` and every
         `svc._opportunities_repo.rows["u1"][i]["valid_until"] > start`.
 
@@ -308,8 +315,9 @@ uv run pytest -q tests/test_list_opportunities_deadlines.py tests/test_opportuni
 uv run pytest -q tests/test_analysis_servicer.py -k "ListOpportunities or Opportunit"
 uv run pytest --cov=app --cov-fail-under=40
 uv run ruff check . && uv run ruff format --check .
-# C-13: no second inline copy of a domain literal
-grep -n "def _drain\|from tests.conftest\|conftest" tests/test_list_opportunities_deadlines.py
+# DRY / C-13: reuse the shared drain helper, no local copy
+grep -n "def _drain" tests/test_list_opportunities_deadlines.py            # no hit
+grep -n "_drain_opportunity_recompute" tests/test_list_opportunities_deadlines.py  # import + uses
 ```
 Accepted proxy (O-6): for AC-2, "full kick not called" stands in for the `valid_until` unchanged
 Then clause. AC-1, AC-3 and AC-4 also get real-kick assertions (item 10). The real_pg test (item 11)
