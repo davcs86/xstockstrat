@@ -12,6 +12,7 @@ ScoreStrategy grades backtests using Sharpe ratio, max drawdown, and win rate.
 
 import asyncio
 import base64
+import bisect
 import functools
 import hashlib
 import json
@@ -638,6 +639,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # once it reaches _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS. In-memory (process-local, reset on
         # restart) — the _opportunity_recomputing guard precedent.
         self._opportunity_compute_failures: dict[str, int] = {}
+        # feature 366 FR-2a: per-user last (projected_computes, per_compute, cycle_days) key, so
+        # the shortfall line is logged only when it changes. In-memory, process-local.
+        self._live_only_shortfall_key: dict[str, tuple[int, int, int]] = {}
         # feature 185 FR-5: in-flight guard for the surgical read-time recovery, keyed by user_id,
         # so concurrent fresh reads don't stack duplicate per-symbol retries. Cleared in a finally.
         self._opportunity_retrying: set[str] = set()
@@ -4920,8 +4924,33 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             self._opportunity_locks[user_id] = lock
         return lock
 
+    def _live_only_cycle_days(self) -> int:
+        """feature 366 — the single read of the live-only rotation cycle bound (days)."""
+        return int_positive(self._cfg, "opportunity.live_only_cycle_max_days", 3)
+
+    def _log_live_only_shortfall(
+        self, user_id: str, pool_size: int, n: int, cycle_days: int
+    ) -> None:
+        """feature 366 FR-2a — operators alert on this exact INFO text; it fires only when the
+        (projected_computes, per_compute, cycle_days) key changes, and is labelled in computes."""
+        projected = -(-pool_size // n)
+        key = (projected, n, cycle_days)
+        if self._live_only_shortfall_key.get(user_id) == key:
+            return
+        self._live_only_shortfall_key[user_id] = key
+        if projected > cycle_days:
+            log.info(
+                "opportunity live-only rotation shortfall: user=%s pool=%d per_compute=%d "
+                "projected_computes=%d cycle_max_days=%d",
+                user_id,
+                pool_size,
+                n,
+                projected,
+                cycle_days,
+            )
+
     async def _replace_and_stamp_compute_state(
-        self, user_id: str, rows, propagation_meta=None
+        self, user_id: str, rows, propagation_meta=None, cursor=None
     ) -> None:
         """Replace the user's materialized rows, then (feature 177 FR-3) stamp the empty-universe
         compute-state when the compute yielded nothing. An empty ``replace_for_user`` DELETEs
@@ -4929,8 +4958,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         records a short ``valid_until`` window so the empty result is served without a synchronous
         recompute until it elapses. Stamping is best-effort (mirrors the recompute try/except) — it
         never fails the write path. ``propagation_meta`` is accepted for call-site symmetry (the
-        DB-only stamp needs no header trio)."""
-        await self._opportunities_repo.replace_for_user(user_id, rows)
+        DB-only stamp needs no header trio). A non-None live-only ``cursor`` (feature 366) commits
+        in the same transaction as the queue replace; the empty stamp stays outside, after it."""
+        if cursor is not None and self._opportunity_compute_state_repo is not None:
+            async with self._opportunities_repo.transaction() as conn:
+                await self._opportunities_repo.replace_for_user(user_id, rows, conn=conn)
+                await self._opportunity_compute_state_repo.write_cursor(user_id, cursor, conn=conn)
+        else:
+            await self._opportunities_repo.replace_for_user(user_id, rows)
         if not rows and self._opportunity_compute_state_repo is not None:
             ttl = max(1, self._cfg.get_int_present("opportunity.empty_recompute_ttl_seconds", 30))
             try:
@@ -4950,8 +4985,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         async def _run():
             try:
                 async with self._opportunity_lock(user_id):
-                    rows = await self._compute_opportunities(user_id, propagation_meta)
-                    await self._replace_and_stamp_compute_state(user_id, rows, propagation_meta)
+                    rows, cursor = await self._compute_opportunities(user_id, propagation_meta)
+                    await self._replace_and_stamp_compute_state(
+                        user_id, rows, propagation_meta, cursor=cursor
+                    )
                 # feature 185 FR-4 — a successful recompute clears the terminal-failed counter.
                 self._opportunity_compute_failures.pop(user_id, None)
                 telemetry.record_opportunity_recompute("full", "ok")
@@ -5357,7 +5394,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         return _lookup
 
-    async def _compute_opportunities(self, user_id: str, propagation_meta) -> list[dict]:
+    async def _compute_opportunities(
+        self, user_id: str, propagation_meta
+    ) -> tuple[list[dict], str | None]:
         """Build the user's opportunity Universe and return persistable row dicts (feature 097).
 
         Universe = active signals (QuerySignals) ∪ held positions (ListPositions) ∪ watchlist
@@ -5541,22 +5580,81 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # entry-traced duplicate (held symbols already got their exit-traced rows above).
         live_signal_symbols = (signals_by_symbol.keys() & live_by_symbol.keys()) - held_norm
         competitive_pool = [sym for sym in live_signal_symbols if _new_live_strats(sym)]
+        # feature 366: the per-compute chunk limit of the live-only rotation (feature 131's cap).
         max_live_only = int_positive(self._cfg, "opportunity.max_live_only_symbols_per_compute", 20)
-        ranked_live_only = sorted(
-            competitive_pool,
-            key=lambda sym: (-max(sig.conviction for sig in signals_by_symbol[sym]), sym),
-        )[:max_live_only]
-        for sym in ranked_live_only:
+        cycle_days = self._live_only_cycle_days()
+        pool = sorted(competitive_pool)
+        if pool:
+            state = (
+                await self._opportunity_compute_state_repo.get(user_id)
+                if self._opportunity_compute_state_repo is not None
+                else None
+            )
+            chunk, new_cursor = _rotation_chunk(
+                pool, (state or {}).get("live_only_cursor"), max_live_only
+            )
+            self._log_live_only_shortfall(user_id, len(pool), max_live_only, cycle_days)
+            stored = (
+                await self._opportunities_repo.read_attributed_rows(user_id)
+                if self._opportunities_repo is not None
+                else []
+            )
+        else:
+            chunk, new_cursor, stored = [], None, []
+        for sym in chunk:
             for strat in _new_live_strats(sym):
                 c = _candidate(sym, strat)
                 c["is_live"] = True
                 _add_provenance(c, "live_strategy")
+
+        # Carry selection (feature 366 D-12), from data known before step 3. (a)+(b) make every
+        # carried symbol non-held, which (c)'s denied_covered test relies on (D-15).
+        denied_covered_set = set(denied_covered)
+        chunk_set = set(chunk)
+        pool_set = set(pool)
+        best_direction_by_symbol: dict[str, str] = {}
+        for sym in pool_set - chunk_set:
+            best_conv, best_dir = -1.0, ""
+            for sig in signals_by_symbol[sym]:
+                if sig.conviction > best_conv:  # step 3's tie rule: first seen, strict >
+                    best_conv, best_dir = sig.conviction, sig.direction
+            best_direction_by_symbol[sym] = best_dir
+        carried: list[dict] = []
+        for r in stored:
+            sym, strat = r["symbol"], r["strategy_id"]
+            if not _is_live_only_row(r["provenance"]) or sym not in best_direction_by_symbol:
+                continue  # (a), (b)
+            if strat not in _capped_live(sym) or (sym, strat) in denied_covered_set:
+                continue  # (c)
+            if not _carry_within_cycle(r["valid_until"], r["computed_at"], now_utc, cycle_days):
+                continue  # (e)
+            expected = _resolve_action_tag(
+                {
+                    "is_held": False,
+                    "is_watchlist": False,
+                    "best_direction": best_direction_by_symbol[sym],
+                },
+                False,
+            )
+            if expected is None:
+                continue  # (f)
+            prov = r["provenance"]
+            if not (
+                "fundamentals_unavailable" in prov
+                or "formula_unreadable" in prov
+                or int(expected) == r["action"]
+            ):
+                continue  # (f)
+            carried.append(r)
+        carried_symbols = {r["symbol"] for r in carried}
 
         # 3. Signals — merge into every existing candidate for the symbol (collapse); if none
         #    exists, stand alone as an unattributed (symbol, "") candidate.
         for sym, sigs in signals_by_symbol.items():
             targets = [k for k in candidates if k[0] == sym]
             if not targets:
+                if sym in carried_symbols:
+                    continue  # its carried rows stand in for the (sym, "") row (D-4)
                 _candidate(sym, "")
                 targets = [(sym, "")]
 
@@ -5960,8 +6058,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         else:
             session_end = datetime.now(UTC)
         valid_until = session_end + timedelta(hours=window_hours)
+        # feature 366 D-7: a live-only row lives one rotation cycle from now (no 168h cap, O-5).
+        live_only_valid_until = now_utc + timedelta(days=cycle_days)
         for r in rows:
-            r["valid_until"] = valid_until
+            r["valid_until"] = (
+                live_only_valid_until if _is_live_only_row(r["provenance"]) else valid_until
+            )
+        # Carried rows keep their stored computed_at/valid_until/composite_score; fresh wins (D-6).
+        fresh_keys = {r["opportunity_key"] for r in rows}
+        rows.extend(r for r in carried if r["opportunity_key"] not in fresh_keys)
         # feature 200 — roll each symbol's opportunities into one bounded symbol_score and stamp it
         # (symbol-uniform) on EVERY row of the symbol (incl. NULL-composite / muted /
         # data-unavailable rows). owned_ids = the strategies the user owns (watchlist ∪ live
@@ -5982,7 +6087,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             for r in sym_rows:
                 r["symbol_score"] = score
-        return rows
+        return rows, new_cursor
 
     async def _load_strategy_definition(self, user_id: str, strategy_id: str, cache: dict):
         """Load + cache a StrategyDefinition for the compute (one DB read per distinct strategy).
@@ -6068,8 +6173,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             try:
                 meta = owner_metadata(uid)
                 async with self._opportunity_lock(uid):
-                    rows = await self._compute_opportunities(uid, meta)
-                    await self._replace_and_stamp_compute_state(uid, rows, meta)
+                    rows, cursor = await self._compute_opportunities(uid, meta)
+                    await self._replace_and_stamp_compute_state(uid, rows, meta, cursor=cursor)
             except Exception as e:  # one bad user never kills the pass
                 failed += 1
                 telemetry.record_opportunity_recompute("full", "failed")
@@ -6806,6 +6911,30 @@ def _opportunity_key(user_id: str, symbol: str, strategy_id: str) -> str:
     is a stored annotation, NOT part of the key, so a snooze survives an ENTER→ADD flip. The
     client echoes this verbatim to SetOpportunityAction and never derives it."""
     return f"{user_id}|{_normalize_symbol(symbol)}|{strategy_id}"
+
+
+def _is_live_only_row(provenance) -> bool:
+    """A row attributed only through live coverage (feature 366): never watchlist, held or muted."""
+    p = provenance or []
+    return "live_strategy" in p and not any(m in p for m in ("watchlist", "position", "denied"))
+
+
+def _rotation_chunk(pool: list[str], cursor: str | None, n: int) -> tuple[list[str], str | None]:
+    """The next ``min(n, len(pool))`` symbols of the sorted ``pool`` after ``cursor``, wrapping
+    (the live_loop identity-resume algorithm); an empty pool leaves the cursor unchanged."""
+    if not pool:
+        return [], cursor
+    start = bisect.bisect_right(pool, cursor) if cursor is not None else 0
+    if start >= len(pool):
+        start = 0
+    chunk = [pool[(start + i) % len(pool)] for i in range(min(n, len(pool)))]
+    return chunk, chunk[-1]
+
+
+def _carry_within_cycle(valid_until, computed_at, now, cycle_days: int) -> bool:
+    """A row aged exactly one cycle is dropped (FR-8 ``>=``). The age clause only bites after
+    ``live_only_cycle_max_days`` is lowered — do not delete it as redundant."""
+    return valid_until > now and now - computed_at < timedelta(days=cycle_days)
 
 
 def _resolve_action_tag(candidate: dict, exit_fires: bool):

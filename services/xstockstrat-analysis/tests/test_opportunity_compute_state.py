@@ -50,7 +50,7 @@ def _opp_svc():
     svc._opportunities_repo.has_fresh = AsyncMock(return_value=False)
     svc._opportunities_repo.replace_for_user = AsyncMock()
     svc._opportunity_compute_state_repo = _FakeComputeState()
-    svc._compute_opportunities = AsyncMock(return_value=[])
+    svc._compute_opportunities = AsyncMock(return_value=([], None))
     return svc
 
 
@@ -79,7 +79,7 @@ async def test_fresh_empty_serve_kicks_self_heal_and_writes_new_row():
     stamps empty; a later poll (fresh stamp) kicks a self-heal that surfaces the newly-appeared row
     (replace_for_user receives it) — neither poll recomputes synchronously."""
     svc = _opp_svc()
-    svc._compute_opportunities = AsyncMock(side_effect=[[], [{"symbol": "AAPL"}]])
+    svc._compute_opportunities = AsyncMock(side_effect=[([], None), ([{"symbol": "AAPL"}], None)])
     req = analysis_pb2.ListOpportunitiesRequest(min_conviction=0.0)
 
     async def _drain():

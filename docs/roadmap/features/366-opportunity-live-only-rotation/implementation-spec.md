@@ -295,7 +295,7 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
 
 ### Step 4 — service: rotation chunk, carried rows, live-only stamp, shortfall log and atomic persist
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -409,7 +409,7 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
 
 ### Step 5 — test: rotation behaviour (`@AC-1`..`@AC-12`), invariants, call-site and fake updates, config-read tables
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_opportunity_rotation.py` — create
@@ -527,7 +527,7 @@ grep -n "live_only_cycle_max_days" services/xstockstrat-config/src/grpc/configSe
 
 ### Step 6 — config: seed `opportunity.live_only_cycle_max_days` (config `056`) and its SetConfig bounds
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/056_analysis_live_only_cycle_max_days.up.sql` — create
@@ -841,3 +841,10 @@ grep -n "max_live_only_symbols_per_compute" docs/patterns/config-governance.md |
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-11-26 — Steps 4+5+6 (atomic unit)
+
+- **Spec miss — old-shape stub file not listed in Step 5's Files.** `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py` has three `svc._compute_opportunities = AsyncMock(return_value=[_row("AAPL")])` stubs (at `:277`, `:286`, `:298` on this tree; the operator note cited `:275/:284/:296`, same code). They break on the `(rows, new_cursor)` return. **Disposition**: operator decision A (2026-11-26) — the unit's scope is expanded by this one file; the stubs now return `([_row("AAPL")], None)`.
+- **CI-equivalent fallback — `scripts/config-wiring-stored.json` regenerated on a throwaway local PostgreSQL 16** (artifact generation only, not verification; operator ruling `auth-366-throwaway-pg16-2026-11-26`). Cluster from `/usr/lib/postgresql/16/bin`, data dir under the worktree's `.sdd-logs/`, `listen_addresses=127.0.0.1`; `migrate` built with `go install -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.17.1`; `DATABASE_URL=<that cluster> python3 scripts/config-wiring-stored.py`. The diff is exactly `inputs_sha256` plus the two `analysis` / `opportunity.live_only_cycle_max_days` rows (staging, production). The cluster was stopped and deleted, and the JSON was never hand-edited. **Disposition**: CI-equivalent fallback.
+- **Node 24 via PATH** (operator-authorized 2026-11-26): the Verification block and the wiring gate ran under `PATH=/opt/node24/bin:$PATH` (Node 24.22.3); the block text itself ran verbatim. **Disposition**: CI-equivalent fallback.
+- **Test-fake fidelity beyond Step 5 item 2's wording.** `_FakeOppRepo.transaction()` snapshots the stored rows and restores them before re-raising, so the atomic-persist test observes a rollback (a bare `yield None` cannot). `_StampedComputeState.upsert` now updates only `computed_at`/`valid_until` on its existing row (the real `ON CONFLICT` shape), so the all-sell test sees `live_only_cursor` survive the empty stamp. **Disposition**: in-scope fake changes needed by Step 5's own tests.

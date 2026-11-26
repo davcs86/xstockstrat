@@ -274,7 +274,7 @@ async def test_has_fresh_timeout_is_unavailable_without_kick():
 async def test_ac1_filtered_empty_over_fresh_queue_leaves_valid_until_unchanged():
     svc = _svc(rows=[_row("AAPL")])
     before = svc._opportunities_repo.rows["u1"][0]["valid_until"]
-    svc._compute_opportunities = AsyncMock(return_value=[_row("AAPL")])
+    svc._compute_opportunities = AsyncMock(return_value=([_row("AAPL")], None))
     await _list(svc, min_conviction=1.01)
     await _drain_opportunity_recompute(svc, "u1")
     assert svc._compute_opportunities.await_count == 0
@@ -283,7 +283,7 @@ async def test_ac1_filtered_empty_over_fresh_queue_leaves_valid_until_unchanged(
 
 async def test_ac3_cold_read_recompute_then_follow_up_read_not_computing():
     svc = _svc()
-    svc._compute_opportunities = AsyncMock(return_value=[_row("AAPL")])
+    svc._compute_opportunities = AsyncMock(return_value=([_row("AAPL")], None))
     first, _ = await _list(svc, symbol="SCKT")
     assert first.computing is True
     await _drain_opportunity_recompute(svc, "u1")
@@ -295,7 +295,7 @@ async def test_ac3_cold_read_recompute_then_follow_up_read_not_computing():
 async def test_ac4_all_stale_filtered_read_restamps_valid_until():
     start = datetime.now(UTC)
     svc = _svc(rows=[_row("AAPL", fresh=False)])
-    svc._compute_opportunities = AsyncMock(return_value=[_row("AAPL")])
+    svc._compute_opportunities = AsyncMock(return_value=([_row("AAPL")], None))
     await _list(svc, min_conviction=1.01)
     await _drain_opportunity_recompute(svc, "u1")
     assert svc._compute_opportunities.await_count == 1
