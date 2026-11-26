@@ -33,9 +33,9 @@ Feature: xstockstrat-config - namespace-relative stored keys (contract)
     When the deployment is rolled back to feature 295's images without running the down migration
     Then the trading image reads "trading.risk.bracket_orders_enabled" as false, not its code default true
 
-  @AC-5 @FR-1 @regression @feature-296
+  @AC-5 @FR-1 @regression @feature-296 @feature-319
   Scenario: The previous-image reconciliation poller can still escalate during rollout
-    Given the trading poller sends SetConfig "platform" / "platform.trading_state" = "REDUCE_ONLY" as internal caller "trading-reconciliation-poller"
+    Given the trading poller sends SetConfig "platform" / "platform.trading_state" = "REDUCE_ONLY" as internal caller "trading-reconciliation-poller" from an mTLS peer with DNS SAN "xstockstrat-trading"
     When the contract config server handles it
     Then the row "platform" / "trading_state" holds "REDUCE_ONLY"
     And a WARN records the canonicalised internal-caller key

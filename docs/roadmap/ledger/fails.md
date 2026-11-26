@@ -4237,3 +4237,13 @@ ambiguity is logged here).
 - **Mistake**: Two design rounds accepted guard tests that could not fail: a `fetch` mock that throws was planned as the proof that a route makes no request, although the route's bare `catch` turns the throw into the expected degraded response; and a spec guard's mutation rows asserted through a different predicate than its positive test, with no baseline, so a broken lookup would still "stop matching".
 - **Evidence**: `docs/roadmap/features/360-fix-mcp-tools-page/debate.md` O-3/D-11 and O-15/D-15; `services/xstockstrat-ui/src/app/accounts/api/mcp-tools/route.ts` (bare `catch` → `reachable: false`); precedent done right: `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts` (`missingCa` shared by the positive and mutation tests).
 - **Rule it implies**: When the code under test swallows errors, prove "no call" by asserting on the mock's call count, never by making the mock throw; a mutation self-check must call the same predicate as the positive test and assert the unmutated baseline first (reinforces the 2026-07-29 vacuous-gate rule; no new ID).
+
+### 2026-11-24 — authelia-sso — assumption
+- **Mistake**: The round-10 design bound a new account action to "the session the handler sees", assuming the UI middleware's
+  token refresh makes the refreshed session visible to the route on the same request. It does not: the middleware sets the
+  refreshed cookies only on the response and forwards the original request headers, so the handler and server components
+  still read the expired access token on the first request after a long idle gap (exactly the landing after an external
+  IdP round trip).
+- **Evidence**: `services/xstockstrat-ui/src/middleware.ts:56-69` (refresh branch), `:86-111`; `docs/roadmap/features/345-authelia-sso/debate.md` O-85, R-23, D-107.
+- **Rule it implies**: A UI step that needs the signed-in user after any idle gap reads it through a session-gated JSON route
+  called with `apiFetch` (401 → refresh → retry once), never from a server component or a middleware-exempt route's cookies.

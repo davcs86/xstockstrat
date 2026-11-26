@@ -14,6 +14,7 @@ import {
   hasInternalCallerAuthority,
   hasPeerDnsSan,
   hasSecretCallerAuthority,
+  peerDnsSans,
   secretDenialReason,
   userIdFrom,
 } from './authz';
@@ -135,6 +136,7 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'analysis.opportunity.max_universe_size': { minValue: 1, maxValue: 1000 },
   'analysis.opportunity.max_live_strategies_per_symbol': { minValue: 1, maxValue: 50 },
   'analysis.opportunity.max_live_only_symbols_per_compute': { minValue: 1, maxValue: 500 },
+  'analysis.opportunity.live_only_cycle_max_days': { minValue: 1, maxValue: 30 },
   'analysis.opportunity.max_live_held_symbols_per_compute': { minValue: 1, maxValue: 500 },
   'analysis.opportunity.max_concurrent_candidates': { minValue: 1, maxValue: 50 },
   'analysis.opportunity.valid_window_hours': { minValue: 1, maxValue: 168 },
@@ -684,7 +686,7 @@ export class ConfigServiceImpl {
     const internalCallerAuthorized =
       userIdParam === null &&
       hasInternalCallerAuthority(
-        call.metadata,
+        call,
         call.request?.namespace,
         call.request?.key,
         rawValue,
@@ -707,7 +709,12 @@ export class ConfigServiceImpl {
           ) {
             fields.targetState = truncateForLog(rawValue);
           }
-          log.error(msg, { ...fields, internalCaller: truncateForLog(internalCaller) });
+          log.error(msg, {
+            ...fields,
+            internalCaller: truncateForLog(internalCaller),
+            hadPeerSan: hasPeerDnsSan(call),
+            peerSan: truncateForLog(peerDnsSans(call)[0] ?? ''),
+          });
         } else {
           log.warn(msg, fields);
         }
@@ -726,7 +733,7 @@ export class ConfigServiceImpl {
       callback(PER_USER_SCOPE_ERROR);
       return;
     }
-    const callerIdentity = first(call.metadata, HEADER_INTERNAL_CALLER) || null;
+    const callerIdentity = internalCallerAuthorized ? first(call.metadata, HEADER_INTERNAL_CALLER) || null : null;
 
     const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);

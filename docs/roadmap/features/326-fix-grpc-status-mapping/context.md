@@ -721,3 +721,10 @@ Feature: fix-grpc-status-mapping (bug fix)
   - `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go` — imports `os` + `sort`; `fakeWatchlistStore` keeps main-dev's 351/352 fields plus `createErr/updateErr/updatePartialErr`.
 - Non-conflicting but required: main-dev added two adapter call sites (`SyncWatchlistDelistings`, `AckDelistingAlerts`) calling `toGRPCError(err)`; both now pass `ctx` (21 call sites; `grep "toGRPCError(err)"` in marketdata/internal is empty). `classifyWatchlistWriteErr` is still called at Create, UpdatePartial and the legacy Update; main-dev added no new name-write site.
 - Verification after the merge: marketdata and portfolio `go build`/`go vet`/`go test ./...` green (Go 1.27.0, `GOWORK=off`); golangci-lint v2.14.0 0 issues in both; peer-merge re-checks green — marketdata `TestToGRPCError_*`, `TestGetSectorHistory_AC2_*`, `AC53`/`AC54`, `feature254`; portfolio `TestToGRPCError`, `TestWatchlist*`, `TestWire_CreateWatchlistDuplicateName_AC3`; agent `tests/test_watchlist_tools.py` 26 passed, ruff check and format clean, `uv.lock` unchanged.
+
+## Session 2026-11-23 (CI: feature status automation)
+
+- Promotion PR #1598 merged to main
+- Feature promoted and committed: 21e0d004e2ef2d7b79d3606e4f05843cd95a9d2d
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-23
