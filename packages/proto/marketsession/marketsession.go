@@ -1,5 +1,5 @@
 // Package marketsession is the NYSE regular-session calendar in America/New_York — a fact of the
-// exchange, not config. Early closes and one-off closures are not modelled.
+// exchange, not config. Early closes are not modelled; one-off closures are listed in `closures`.
 package marketsession
 
 import (
@@ -71,20 +71,47 @@ func Reference(now time.Time) (ref time.Time, live bool) {
 	return day, now.Before(closeAt(day))
 }
 
+type ymd struct {
+	y int
+	m time.Month
+	d int
+}
+
+// Add every new one-off NYSE closure here: a missing date reads as a permanently missing session in
+// GetDataCoverage gaps.
+var closures = map[ymd]bool{
+	{2001, time.September, 11}: true,
+	{2001, time.September, 12}: true,
+	{2001, time.September, 13}: true,
+	{2001, time.September, 14}: true,
+	{2004, time.June, 11}:      true,
+	{2007, time.January, 2}:    true,
+	{2012, time.October, 29}:   true,
+	{2012, time.October, 30}:   true,
+	{2018, time.December, 5}:   true,
+	{2025, time.January, 9}:    true,
+}
+
 func isHoliday(day time.Time) bool {
 	y, m, d := day.Year(), day.Month(), day.Day()
-	for _, h := range []time.Time{
+	if closures[ymd{y, m, d}] {
+		return true
+	}
+	holidays := []time.Time{
 		newYearsObserved(y),
 		nthWeekday(y, time.January, time.Monday, 3),
 		nthWeekday(y, time.February, time.Monday, 3),
 		easter(y).AddDate(0, 0, -2),
 		lastWeekday(y, time.May, time.Monday),
-		observed(date(y, time.June, 19)),
 		observed(date(y, time.July, 4)),
 		nthWeekday(y, time.September, time.Monday, 1),
 		nthWeekday(y, time.November, time.Thursday, 4),
 		observed(date(y, time.December, 25)),
-	} {
+	}
+	if y >= 2022 {
+		holidays = append(holidays, observed(date(y, time.June, 19)))
+	}
+	for _, h := range holidays {
 		if h.Year() == y && h.Month() == m && h.Day() == d {
 			return true
 		}
