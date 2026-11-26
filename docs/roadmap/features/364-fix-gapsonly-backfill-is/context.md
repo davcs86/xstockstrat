@@ -484,3 +484,8 @@ Each thread names its target step.
 - Added `TestChunkRepo.test_list_job_symbols` (SQL has `DISTINCT unnest(symbols)`, passes `job_id`) and `TestGapsOnlyResumeVerify`: (a) NULL start → verify request has no `start`, `end` = 2026-11-25, probe hit → PARTIAL + stored INCOMPLETE `missing sessions 2026-04-01..2026-09-25`; (b) NULL end → no `end`, COMPLETED; (c) no marker → `GetDataCoverage` never awaited. Reuses `_job_row` and Step 12's `TestGapsOnlyVerify._coverage`/`_cov`/`_HOLE` (C-13). Part of the unit `steps 13+14`.
 - Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`, `services/xstockstrat-ingest/tests/test_backfill_chunks.py`
 - Deviations: none
+
+## Session 2026-11-26 — merge-order open item resolved (main session)
+
+- RESOLVED (open item "add a non-blocking merge-order.md entry for 364 before the integration PR"): intentionally NOT added. `docs/roadmap/features/merge-order.md` § Coverage note lists only hard ordering constraints and says ordinary textual overlap "is intentionally not listed"; and /sdd-batch-execute preflight item 5 treats any row naming this feature with Resolved != Yes as a merge-order block. 364's overlaps (317/322 marketdata_service.go, 322 common.proto, 308/325/345 INVENTORY.md, ingest servicer.py and agent tools.py/client.py peers) are rebase-only — no shared migration NNN, proto field number or config key — so no row is warranted. Whichever lands second rebases.
+- Operator checkpoint:13 decision (verbatim 'Proceed'): continue to Steps 15–19 (UI, agent, docs) and the integration PR.
