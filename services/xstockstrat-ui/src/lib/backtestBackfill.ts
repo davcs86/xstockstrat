@@ -1,5 +1,5 @@
 import { Code, ConnectError } from '@connectrpc/connect';
-import type { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
+import { BackfillSymbolOutcome, type Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 import { BackfillStatus, type FillMode } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import type { insightsIngestClient } from '@/lib/browserClients/insightsIngestClient';
 import { errMessage } from '@/lib/errMessage';
@@ -24,6 +24,7 @@ export interface BackfillJobLike {
   error?: string;
   chunksTotal?: number;
   chunksCompleted?: number;
+  symbolResults?: { outcome: BackfillSymbolOutcome }[];
 }
 
 export type BackfillJobState = 'running' | 'ready' | 'failed' | 'partial' | 'canceled';
@@ -87,7 +88,18 @@ export function backfillJobMessage(
         };
       }
       return { state: 'failed', text: 'Backfill failed' };
-    case BackfillStatus.PARTIAL:
+    case BackfillStatus.PARTIAL: {
+      const outcomes = (job.symbolResults ?? []).map((r) => r.outcome);
+      if (
+        chunksFailed === 0 &&
+        outcomes.includes(BackfillSymbolOutcome.INCOMPLETE) &&
+        !outcomes.includes(BackfillSymbolOutcome.FAILED)
+      ) {
+        return {
+          state: 'ready',
+          text: `Backfill finished: vendor has no bars for some sessions of ${symbol}`,
+        };
+      }
       if (chunksFailed > 0) {
         return {
           state: 'partial',
@@ -98,6 +110,7 @@ export function backfillJobMessage(
         state: 'partial',
         text: `Backfill partial: ${symbol} returned no data for part of the range`,
       };
+    }
     case BackfillStatus.CANCELED:
       return { state: 'canceled', text: 'Backfill canceled' };
     default: {

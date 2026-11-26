@@ -532,6 +532,7 @@ Feature: Platform-wide guarantees
       | xstockstrat-analysis   | analysis.opportunity.max_live_strategies_per_symbol | int | 0      | the per-symbol live attribution cap   | 5                         |
       | xstockstrat-analysis   | analysis.opportunity.max_live_only_symbols_per_compute | int | 0   | the live-only symbol cap per compute  | 20                        |
       | xstockstrat-analysis   | analysis.opportunity.max_live_held_symbols_per_compute | int | 0   | the held-symbol live cap per compute  | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.live_only_cycle_max_days    | int    | 0      | the live-only rotation cycle bound    | 3                         |
       | xstockstrat-analysis   | analysis.opportunity.valid_window_hours          | int    | 0      | the opportunity validity window hours | 24                        |
       | xstockstrat-analysis   | analysis.opportunity.snooze_default_hours        | int    | 0      | the default snooze hours              | 24                        |
       | xstockstrat-analysis   | analysis.opportunity.read_db_budget_ms           | int    | 0      | the ListOpportunities DB read budget  | 20000                     |
@@ -2136,10 +2137,11 @@ Feature: Platform-wide guarantees
 
   # Promoted from docs/roadmap/features/300-fix-sandbox-memory-cap/acceptance.feature (C-16); backed by
   # scripts/homelab-render.test.sh (the mem-limit mutations next to the other render-oracle cases).
+  # Value changed 2147483648 -> 805306368 with operator sign-off 2026-11-25 (C-16; 300 context.md).
   @AC-9 @FR-3 @regression @feature-300
   Scenario: The homelab render oracle asserts the indicators memory limit
     Given the rendered homelab compose configuration
-    When mem_limit and memswap_limit of xstockstrat-indicators are both 2147483648
+    When mem_limit and memswap_limit of xstockstrat-indicators are both 805306368
     Then the render oracle passes
     When either is deleted or set to a different value
     Then the render oracle reports the label "mem-limit:xstockstrat-indicators" and prints no value

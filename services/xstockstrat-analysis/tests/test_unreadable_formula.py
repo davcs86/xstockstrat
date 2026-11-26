@@ -619,7 +619,7 @@ async def test_opportunities_held_refused_row_keeps_its_signal_action(signals, a
     svc = _mysz_svc(_held_definition(), signals=signals, held=["MYSZ"])
     _refuse(svc, _permission_denied)
 
-    row = _find(await svc._compute_opportunities("u1", _META), "s-1")
+    row = _find((await svc._compute_opportunities("u1", _META))[0], "s-1")
 
     assert "formula_unreadable" in row["provenance"]
     assert "unavailable" not in row["provenance"]
@@ -653,7 +653,7 @@ async def test_opportunities_sibling_outage_never_flips_marked_rows(outage_yield
 
     svc._indicators.ComputeIndicator = AsyncMock(side_effect=_compute)
     with caplog.at_level(logging.WARNING):
-        rows = await svc._compute_opportunities("u1", _META)
+        rows, _ = await svc._compute_opportunities("u1", _META)
 
     for strategy_id in ("s-1", "s-3"):
         provenance = _find(rows, strategy_id)["provenance"]
@@ -666,12 +666,12 @@ async def test_opportunities_sibling_outage_never_flips_marked_rows(outage_yield
 async def test_opportunities_marker_clears_once_formula_is_readable():
     svc = _mysz_svc()
     _refuse(svc, _permission_denied)
-    first = _find(await svc._compute_opportunities("u1", _META), "s-1")
+    first = _find((await svc._compute_opportunities("u1", _META))[0], "s-1")
     assert "formula_unreadable" in first["provenance"]
 
     svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
     svc._indicators.ExecuteFormula = AsyncMock(side_effect=_ok_formula)
-    second = _find(await svc._compute_opportunities("u1", _META), "s-1")
+    second = _find((await svc._compute_opportunities("u1", _META))[0], "s-1")
 
     assert "formula_unreadable" not in second["provenance"]
     assert second["readiness_json"]["total_conditions"] == 2
@@ -684,7 +684,7 @@ async def test_opportunities_execute_outage_stays_data_unavailable_without_marke
     svc._indicators.ExecuteFormula = AsyncMock(
         side_effect=aio_rpc_error(grpc.StatusCode.UNAVAILABLE, "down")
     )
-    row = _find(await svc._compute_opportunities("u1", _META), "s-1")
+    row = _find((await svc._compute_opportunities("u1", _META))[0], "s-1")
     assert "unavailable" in row["provenance"]
     assert "formula_unreadable" not in row["provenance"]
 

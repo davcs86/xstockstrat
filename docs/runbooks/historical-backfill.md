@@ -356,7 +356,12 @@ to `ingest.backfill.max_concurrent_chunks` (default 3), per-chunk progress is tr
   (re-fetch is safe — marketdata upserts bars idempotently). No manual re-trigger needed.
 - **Gaps-only**: set `fill_mode = FILL_MODE_GAPS_ONLY` on `TriggerBackfill` to fetch *only* the
   ranges `marketdata.GetDataCoverage` reports missing — ideal for topping up a partially-covered
-  symbol without re-downloading existing bars.
+  symbol without re-downloading existing bars. For 1d bars the gaps are session-aware and include
+  interior holes, not only the head and tail. After the fetch the job re-checks coverage: a range
+  the vendor cannot fill ends the job `PARTIAL`, with those symbols reported `incomplete` (not in
+  `failed_symbols`, no alert). Accepted residuals (feature 364):
+  - holes the IEX feed never has bars for recur as `incomplete` on every gaps-only run;
+  - a last session the vendor publishes late reads `incomplete` until the next run.
 - **Tuning**: lower `chunk_max_bars` for finer progress granularity / smaller Alpaca requests; raise
   `max_concurrent_chunks` to fetch faster (watch `marketdata.backfill.rate_limit_rps`).
 

@@ -4237,3 +4237,13 @@ ambiguity is logged here).
 - **Mistake**: The spec planned a contract reversal (a `FormulaExecutionError` no longer propagates out of `_compute_opportunities`), but its Step Dependencies listed only one of the two tests that pin the old contract. The second test, `test_formula_execution_error_still_propagates`, lived in a file outside the unit's **Files**, so Step 11 could not go green and blocked until the operator widened the scope. This is the same gap as the 2026-11-18 seed-curated-templates entry, where a seed migration broke earlier assertions nobody had listed. Design and spec both enumerated pinning tests by recall instead of by search.
 - **Evidence**: `docs/roadmap/features/308-fix-analysis-per-symbol-isolation/implementation-spec.md` Deviation Log "Steps 11+12"; `services/xstockstrat-analysis/tests/test_analysis_servicer.py:5637` at `4b52469c`; fails.md "2026-11-18 — seed-curated-templates — migration".
 - **Rule it implies**: When a step reverses a behavior, `/sdd-spec` must find every test that pins it with a repo-wide grep for the old outcome (for example `pytest.raises(<Error>)` near the changed entry point), not only the tests the debate cited, and list them all in the unit's **Files**. Candidate binding rule: extend step-constraints §C row 1.
+
+### 2026-11-24 — authelia-sso — assumption
+- **Mistake**: The round-10 design bound a new account action to "the session the handler sees", assuming the UI middleware's
+  token refresh makes the refreshed session visible to the route on the same request. It does not: the middleware sets the
+  refreshed cookies only on the response and forwards the original request headers, so the handler and server components
+  still read the expired access token on the first request after a long idle gap (exactly the landing after an external
+  IdP round trip).
+- **Evidence**: `services/xstockstrat-ui/src/middleware.ts:56-69` (refresh branch), `:86-111`; `docs/roadmap/features/345-authelia-sso/debate.md` O-85, R-23, D-107.
+- **Rule it implies**: A UI step that needs the signed-in user after any idle gap reads it through a session-gated JSON route
+  called with `apiFetch` (401 → refresh → retry once), never from a server component or a middleware-exempt route's cookies.

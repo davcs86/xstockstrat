@@ -214,7 +214,7 @@ def _find(rows, sym, strat):
 @pytest.mark.asyncio
 async def test_ac4_ac5_schd_skip_row_etf_labelled_aapl_evaluated():
     svc = _svc(watch=[("SCHD", _BLEND), ("AAPL", _BLEND)], strategies={_BLEND: _blend_row()})
-    rows = await svc._compute_opportunities("u1", _META)
+    rows, _ = await svc._compute_opportunities("u1", _META)
 
     schd = _find(rows, "SCHD", _BLEND)
     assert schd["action"] == _A.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
@@ -240,7 +240,7 @@ async def test_ac4_ac5_schd_skip_row_etf_labelled_aapl_evaluated():
 @pytest.mark.asyncio
 async def test_ac4_unknown_etf_flag_leaves_label_absent():
     svc = _svc(watch=[("SCHD", _BLEND)], strategies={_BLEND: _blend_row()}, etf=None)
-    schd = _find(await svc._compute_opportunities("u1", _META), "SCHD", _BLEND)
+    schd = _find((await svc._compute_opportunities("u1", _META))[0], "SCHD", _BLEND)
     assert _SKIP in schd["provenance"]
     assert "fundamentals_gap" not in schd["readiness_json"]
 
@@ -252,7 +252,7 @@ async def test_held_schd_keeps_exit_reduce_row():
         held=["SCHD"],
         strategies={_BLEND: _blend_row(exit_=_GT_100)},
     )
-    schd = _find(await svc._compute_opportunities("u1", _META), "SCHD", _BLEND)
+    schd = _find((await svc._compute_opportunities("u1", _META))[0], "SCHD", _BLEND)
     assert schd["action"] == _A.OPPORTUNITY_ACTION_TAG_REDUCE
     assert _SKIP not in schd["provenance"] and "unavailable" not in schd["provenance"]
 
@@ -264,7 +264,7 @@ async def test_speculative_sell_without_position_still_dropped():
         strategies={_BLEND: _blend_row()},
         live=[_blend_row(symbols=["SCHD"])],
     )
-    rows = await svc._compute_opportunities("u1", _META)
+    rows, _ = await svc._compute_opportunities("u1", _META)
     assert not [r for r in rows if r["symbol"] == "SCHD" and r["strategy_id"] == _BLEND]
 
 
@@ -283,7 +283,7 @@ async def test_ac8_outage_rows_unavailable_technical_row_evaluated():
         snap={"SCHD": _rpc(grpc.StatusCode.UNAVAILABLE)},
         pit={"SCHD": _rpc(grpc.StatusCode.UNAVAILABLE)},
     )
-    rows = await svc._compute_opportunities("u1", _META)
+    rows, _ = await svc._compute_opportunities("u1", _META)
     for sid in (_BLEND, "pe_gate"):
         r = _find(rows, "SCHD", sid)
         assert "unavailable" in r["provenance"] and _SKIP not in r["provenance"]
@@ -301,7 +301,7 @@ async def test_ac9_disabled_snapshot_evaluated_without_markers():
         strategies={_BLEND: _blend_row()},
         snap={"SCHD": _rpc(grpc.StatusCode.FAILED_PRECONDITION)},
     )
-    schd = _find(await svc._compute_opportunities("u1", _META), "SCHD", _BLEND)
+    schd = _find((await svc._compute_opportunities("u1", _META))[0], "SCHD", _BLEND)
     assert "unavailable" not in schd["provenance"] and _SKIP not in schd["provenance"]
     assert schd["action"] == _A.OPPORTUNITY_ACTION_TAG_ENTER
     assert schd["readiness_json"]["total_conditions"] > 0  # evaluated, so no 300s retry
@@ -311,7 +311,7 @@ async def test_ac9_disabled_snapshot_evaluated_without_markers():
 async def test_ac13_bars_outage_stays_unavailable_not_skip():
     svc = _svc(watch=[("SCHD", _BLEND)], strategies={_BLEND: _blend_row()})
     svc._marketdata.BatchGetBars = AsyncMock(side_effect=RuntimeError("bars down"))
-    schd = _find(await svc._compute_opportunities("u1", _META), "SCHD", _BLEND)
+    schd = _find((await svc._compute_opportunities("u1", _META))[0], "SCHD", _BLEND)
     assert "unavailable" in schd["provenance"] and _SKIP not in schd["provenance"]
     assert schd["action"] == _A.OPPORTUNITY_ACTION_TAG_ENTER
 
@@ -328,7 +328,7 @@ async def test_skip_row_and_sibling_indicator_outage_are_mutually_exclusive():
         raise _rpc(grpc.StatusCode.UNAVAILABLE)
 
     svc._indicators.ComputeIndicator = AsyncMock(side_effect=_down)
-    rows = await svc._compute_opportunities("u1", _META)
+    rows, _ = await svc._compute_opportunities("u1", _META)
     blend = _find(rows, "SCHD", _BLEND)
     assert _SKIP in blend["provenance"] and "unavailable" not in blend["provenance"]
     assert blend["action"] == _A.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
@@ -343,7 +343,7 @@ async def test_snapshot_quota_is_unknown_row_and_retried():
         strategies={_BLEND: _blend_row(), "tech": _strat_row("tech", entry=_GT_100)},
         snap={"SCHD": _rpc(grpc.StatusCode.RESOURCE_EXHAUSTED)},
     )
-    rows = await svc._compute_opportunities("u1", _META)
+    rows, _ = await svc._compute_opportunities("u1", _META)
     schd = _find(rows, "SCHD", _BLEND)
     assert "unavailable" in schd["provenance"] and _SKIP not in schd["provenance"]
     assert schd["action"] == _A.OPPORTUNITY_ACTION_TAG_ENTER
@@ -431,7 +431,7 @@ async def test_ac24_refused_formula_gate_on_marks_compute_and_heal():
     svc._indicators.GetFormula = AsyncMock(side_effect=_rpc(grpc.StatusCode.NOT_FOUND))
     svc._indicators.ExecuteFormula = AsyncMock(side_effect=_rpc(grpc.StatusCode.NOT_FOUND))
 
-    aapl = _find(await svc._compute_opportunities("u1", _META), "AAPL", _BLEND)
+    aapl = _find((await svc._compute_opportunities("u1", _META))[0], "AAPL", _BLEND)
     assert "formula_unreadable" in aapl["provenance"]
     assert "unavailable" not in aapl["provenance"] and _SKIP not in aapl["provenance"]
     assert aapl["action"] == _A.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
@@ -455,7 +455,7 @@ async def test_ac24_refused_formula_gate_on_marks_compute_and_heal():
 async def test_ac25_formula_outage_gate_on_stays_data_unavailable_with_action():
     svc = _svc(watch=[("AAPL", _BLEND)], strategies={_BLEND: _blend_row()})
     svc._indicators.GetFormula = AsyncMock(side_effect=_rpc(grpc.StatusCode.UNAVAILABLE))
-    aapl = _find(await svc._compute_opportunities("u1", _META), "AAPL", _BLEND)
+    aapl = _find((await svc._compute_opportunities("u1", _META))[0], "AAPL", _BLEND)
     assert "unavailable" in aapl["provenance"]
     assert "formula_unreadable" not in aapl["provenance"]
     assert aapl["action"] == _A.OPPORTUNITY_ACTION_TAG_ENTER
