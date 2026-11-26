@@ -18,12 +18,14 @@ import pytest
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: F401 (imported via conftest path)
+from gen.marketdata.v1 import marketdata_pb2
 from gen.notify.v1 import notify_pb2
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
-from app.handlers.servicer import IngestServicer, job_row_to_proto
+from app.handlers.servicer import IngestServicer, _merged_symbol_results, job_row_to_proto
+from app.repositories import backfill_chunks
 from tests._helpers import job_row as _job_row
 from tests._helpers import rpc_error, transaction_conn
 from tests.conftest import (  # feature 092 (C-13): centralized admin/no-admin context builder
@@ -1103,10 +1105,10 @@ class TestRunBackfill:
         gap = common_pb2.TimeRange(
             start=Timestamp(seconds=1_700_000_000), end=Timestamp(seconds=1_701_000_000)
         )
-        cov = MagicMock()
-        cov.gaps = [gap]
+        plan_cov = marketdata_pb2.GetDataCoverageResponse(gaps=[gap])
+        verify_cov = marketdata_pb2.GetDataCoverageResponse()
         svc._marketdata = MagicMock()
-        svc._marketdata.GetDataCoverage = AsyncMock(return_value=cov)
+        svc._marketdata.GetDataCoverage = AsyncMock(side_effect=[plan_cov, verify_cov])
         svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(5, []))
 
         req = _make_backfill_req(["AAPL"])
@@ -1119,12 +1121,69 @@ class TestRunBackfill:
             ),
             patch(f"{_CHUNKS}.mark_chunk_running", AsyncMock()),
             patch(f"{_CHUNKS}.mark_chunk_completed", AsyncMock()),
-            patch(f"{_REPO}.update_job", AsyncMock()),
+            patch(f"{_REPO}.update_job", AsyncMock()) as uj,
         ):
             await svc._run_backfill("job-7", req)
 
-        svc._marketdata.GetDataCoverage.assert_awaited_once()
+        assert svc._marketdata.GetDataCoverage.await_count == 2
         svc._marketdata.BackfillBars.assert_awaited()
+        assert _status_writes(uj, "job-7")[-1] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+
+    @staticmethod
+    def _gaps_only_req(gaps, start, end):
+        def ts(dt):
+            return Timestamp(seconds=int(dt.timestamp()))
+
+        cov = marketdata_pb2.GetDataCoverageResponse(
+            gaps=[common_pb2.TimeRange(start=ts(gs), end=ts(ge)) for gs, ge in gaps]
+        )
+        req = _make_backfill_req(["AAPL"])
+        req.fill_mode = ingest_pb2.FILL_MODE_GAPS_ONLY
+        req.range = common_pb2.TimeRange(start=ts(start), end=ts(end))
+        return req, AsyncMock(return_value=cov)
+
+    @pytest.mark.asyncio
+    async def test_gaps_only_coalesces_scattered_gaps_within_window(self):
+        # O-9: 40 one-session gaps over a year merge into <= ceil(365/90) units of one chunk each.
+        svc = make_servicer(chunk_window_days=90)
+        first = datetime(2025, 11, 20, tzinfo=UTC)
+        gaps = [
+            (first + timedelta(days=9 * i), first + timedelta(days=9 * i, hours=12))
+            for i in range(40)
+        ]
+        req, cov = self._gaps_only_req(gaps, first, datetime(2026, 11, 20, tzinfo=UTC))
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetDataCoverage = cov
+
+        units = await svc._plan_work_ranges(req, ["AAPL"], "1d", ())
+
+        assert len(units) <= 5
+        assert all(syms == ["AAPL"] and ue - us <= timedelta(days=90) for syms, us, ue in units)
+        assert all(any(us <= gs and ge <= ue for _, us, ue in units) for gs, ge in gaps)
+        for syms, us, ue in units:
+            assert len(backfill_chunks.plan_chunks(syms, "1d", us, ue, 90, 10_000_000)) == 1
+
+    @pytest.mark.asyncio
+    async def test_gaps_only_long_gap_stays_its_own_unit(self):
+        # AC-1: a 178-day hole is one unit (split by window in plan_chunks); a later gap is another.
+        svc = make_servicer(chunk_window_days=90)
+        long_gap = (datetime(2026, 4, 1, tzinfo=UTC), datetime(2026, 9, 25, 12, tzinfo=UTC))
+        short_gap = (datetime(2026, 10, 15, tzinfo=UTC), datetime(2026, 10, 15, 12, tzinfo=UTC))
+        req, cov = self._gaps_only_req(
+            [long_gap, short_gap],
+            datetime(2025, 11, 20, tzinfo=UTC),
+            datetime(2026, 11, 20, tzinfo=UTC),
+        )
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetDataCoverage = cov
+
+        units = await svc._plan_work_ranges(req, ["AAPL"], "1d", ())
+
+        assert units == [(["AAPL"], *long_gap), (["AAPL"], *short_gap)]
+        long_chunks = backfill_chunks.plan_chunks(["AAPL"], "1d", *long_gap, 90, 10_000_000)
+        assert len(long_chunks) == 2
+        assert long_chunks[0]["range_start"] == long_gap[0]
+        assert long_chunks[-1]["range_end"] == long_gap[1]
 
     @pytest.mark.asyncio
     async def test_resume_incomplete_jobs_returns_count(self):
@@ -2968,3 +3027,244 @@ class TestBackfillSymbolResults:
         stored = _stored_results(uj)
         assert stored == {"chunk-1": {"TSLA": {"outcome": _SYM_FAILED, "reason": ""}}}
         _assert_results_invariant(stored, final["failed_symbols"])
+
+
+# ---------------------------------------------------------------------------
+# Feature 364 — GAPS_ONLY verify pass after the chunks (AC-1/2/3/4).
+# ---------------------------------------------------------------------------
+
+_INCOMPLETE = common_pb2.BACKFILL_SYMBOL_OUTCOME_INCOMPLETE
+_HOLE = (datetime(2026, 4, 1, 4, tzinfo=UTC), datetime(2026, 9, 25, 16, tzinfo=UTC))
+_HEAD = (datetime(2025, 11, 20, 5, tzinfo=UTC), datetime(2026, 1, 15, 17, tzinfo=UTC))
+
+
+def _ts_of(dt):
+    return Timestamp(seconds=int(dt.timestamp()))
+
+
+def _cov(*gaps, bars_total=0):
+    return marketdata_pb2.GetDataCoverageResponse(
+        bars_total=bars_total,
+        gaps=[common_pb2.TimeRange(start=_ts_of(gs), end=_ts_of(ge)) for gs, ge in gaps],
+    )
+
+
+def _completed_payloads(svc):
+    return [
+        c.args[0].payload
+        for c in svc._ledger.AppendEvent.call_args_list
+        if c.args[0].event_type == "ingest.backfill.completed"
+    ]
+
+
+class TestGapsOnlyVerify:
+    @staticmethod
+    def _coverage(per_symbol):
+        """GetDataCoverage fake serving each symbol's queued responses (plan, verify, probe)."""
+        calls: list = []
+
+        async def fake(req, metadata=None):
+            calls.append(req)
+            item = per_symbol[req.symbol].pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item() if callable(item) else item
+
+        return AsyncMock(side_effect=fake), calls
+
+    @staticmethod
+    async def _run(svc, symbols, coverage, results=()):
+        svc._marketdata.GetDataCoverage = coverage
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_bars_resp(5, [], list(results)))
+        req = _make_backfill_req(symbols)
+        req.fill_mode = ingest_pb2.FILL_MODE_GAPS_ONLY
+        req.range = common_pb2.TimeRange(
+            start=_ts_of(datetime(2025, 11, 20, tzinfo=UTC)),
+            end=_ts_of(datetime(2026, 11, 20, tzinfo=UTC)),
+        )
+        with patch_chunk_repo([_chunk(symbols, "g1")]) as m, patch("asyncio.sleep", AsyncMock()):
+            await svc._run_backfill("job-364", req)
+        return m["update_job"]
+
+    @pytest.mark.asyncio
+    async def test_AC_1_filled_interior_hole_completes(self):
+        svc = _results_servicer()
+        cov, calls = self._coverage({"SCHW": [_cov(_HOLE), _cov()]})
+        uj = await self._run(svc, ["SCHW"], cov)
+        assert len(calls) == 2
+        assert _status_writes(uj, "job-364")[-1] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        assert _stored_results(uj)["gaps_only"] == {}
+        svc._notify.EmitAlert.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_AC_2_unfilled_interior_hole_is_partial_and_named(self):
+        svc = _results_servicer()
+        cov, _ = self._coverage({"IDXX": [_cov(_HOLE), _cov(_HOLE), _cov(bars_total=120)]})
+        uj = await self._run(svc, ["IDXX"], cov)
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        assert final["failed_symbols"] == []
+        stored = _stored_results(uj)
+        assert stored["gaps_only"]["IDXX"] == {
+            "outcome": _INCOMPLETE,
+            "reason": "missing sessions 2026-04-01..2026-09-25",
+        }
+        row = _job_row("job-364", final["status"], symbol_results=json.dumps(stored))
+        assert _read_results(row) == [
+            ("IDXX", _INCOMPLETE, "missing sessions 2026-04-01..2026-09-25")
+        ]
+        svc._notify.EmitAlert.assert_not_awaited()
+        assert [list(p["incomplete_symbols"]) for p in _completed_payloads(svc)] == [["IDXX"]]
+
+    @pytest.mark.asyncio
+    async def test_AC_3_fully_covered_range_fetches_nothing(self):
+        svc = _results_servicer()
+        cov, calls = self._coverage({"RLI": [_cov()]})
+        uj = await self._run(svc, ["RLI"], cov)
+        assert len(calls) == 1
+        assert _status_writes(uj, "job-364")[-1] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+        svc._marketdata.BackfillBars.assert_not_awaited()
+        assert all(c.kwargs.get("bars_processed", 0) == 0 for c in uj.await_args_list)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("probe_bars", "status"),
+        [(0, ingest_pb2.BACKFILL_STATUS_COMPLETED), (5, ingest_pb2.BACKFILL_STATUS_PARTIAL)],
+        ids=["probe-miss", "probe-hit"],
+    )
+    async def test_AC_4_head_gap_probe(self, probe_bars, status):
+        svc = _results_servicer()
+        cov, calls = self._coverage(
+            {"NEWCO": [_cov(_HEAD), _cov(_HEAD), _cov(bars_total=probe_bars)]}
+        )
+        uj = await self._run(svc, ["NEWCO"], cov)
+        assert _status_writes(uj, "job-364")[-1] == status
+        probe = calls[2].range
+        assert probe.start == _ts_of(_HEAD[0] - timedelta(days=730))
+        assert probe.end == _ts_of(_HEAD[0])
+        gaps_only = _stored_results(uj)["gaps_only"]
+        if probe_bars:
+            assert gaps_only["NEWCO"]["outcome"] == _INCOMPLETE
+        else:
+            assert gaps_only == {}
+
+    @pytest.mark.asyncio
+    async def test_interior_after_carved_head_is_the_only_missing_range(self):
+        svc = _results_servicer()
+        cov, _ = self._coverage(
+            {"NEWCO": [_cov(_HEAD, _HOLE), _cov(_HEAD, _HOLE), _cov(bars_total=0)]}
+        )
+        uj = await self._run(svc, ["NEWCO"], cov)
+        assert _status_writes(uj, "job-364")[-1] == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        assert _stored_results(uj)["gaps_only"]["NEWCO"] == {
+            "outcome": _INCOMPLETE,
+            "reason": "missing sessions 2026-04-01..2026-09-25",
+        }
+
+    @pytest.mark.asyncio
+    async def test_verify_rpc_failure_is_a_retryable_failed_symbol(self):
+        svc = _results_servicer()
+        cov, _ = self._coverage({"SCHW": [_cov(_HOLE), Exception("unavailable")]})
+        uj = await self._run(svc, ["SCHW"], cov)
+        final = uj.await_args_list[-1].kwargs
+        assert final["status"] == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        assert final["failed_symbols"] == ["SCHW"]
+        entry = _stored_results(uj)["gaps_only"]["SCHW"]
+        assert entry["outcome"] == _SYM_FAILED
+        assert entry["reason"].startswith("coverage verify failed:")
+        svc._notify.EmitAlert.assert_awaited_once()
+        alert = svc._notify.EmitAlert.await_args.args[0]
+        assert alert.severity == notify_pb2.ALERT_SEVERITY_WARNING
+
+    @pytest.mark.asyncio
+    async def test_cancel_during_verify_writes_no_terminal_status(self):
+        svc = _results_servicer()
+
+        def cancel_then_clean():
+            svc._canceled_jobs.add("job-364")
+            return _cov()
+
+        cov, calls = self._coverage(
+            {"AAA": [_cov(_HOLE), cancel_then_clean], "BBB": [_cov(_HOLE), _cov()]}
+        )
+        uj = await self._run(svc, ["AAA", "BBB"], cov)
+        assert _status_writes(uj, "job-364") == [ingest_pb2.BACKFILL_STATUS_RUNNING]
+        assert [c.symbol for c in calls] == ["AAA", "BBB", "AAA"]
+
+    @pytest.mark.asyncio
+    async def test_skipped_symbol_is_not_verified(self):
+        svc = _results_servicer()
+        cov, calls = self._coverage({"AAPL": [_cov(_HOLE), _cov()], "PSKY": [_cov(_HOLE)]})
+        uj = await self._run(
+            svc, ["AAPL", "PSKY"], cov, results=[_sr("PSKY", _SKIPPED, "flagged delisted")]
+        )
+        assert [c.symbol for c in calls].count("PSKY") == 1
+        assert _status_writes(uj, "job-364")[-1] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+
+    @pytest.mark.parametrize(
+        ("chunk_outcome", "want"), [(_EMPTY, _INCOMPLETE), (_SYM_FAILED, _SYM_FAILED)]
+    )
+    def test_precedence_places_incomplete_between_skipped_and_failed(self, chunk_outcome, want):
+        stored = {
+            "c1": {"X": {"outcome": chunk_outcome, "reason": ""}},
+            "gaps_only": {"X": {"outcome": _INCOMPLETE, "reason": "missing sessions"}},
+        }
+        merged = _merged_symbol_results(json.dumps(stored))
+        assert [(r.symbol, r.outcome) for r in merged] == [("X", want)]
+
+
+class TestGapsOnlyResumeVerify:
+    @staticmethod
+    async def _resume(svc, coverage, **row):
+        svc._marketdata.GetDataCoverage = coverage
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_bars_resp(5, [], []))
+        job = _job_row("job-364r", ingest_pb2.BACKFILL_STATUS_RUNNING, symbols=["IDXX"], **row)
+        with (
+            patch_chunk_repo([_chunk(["IDXX"], "g1")]) as m,
+            patch(f"{_REPO}.get_job", AsyncMock(return_value=job)),
+            patch(f"{_CHUNKS}.list_job_symbols", AsyncMock(return_value=["IDXX"])),
+            patch("asyncio.sleep", AsyncMock()),
+        ):
+            await svc._resume_job("job-364r")
+        return m["update_job"]
+
+    @pytest.mark.asyncio
+    async def test_null_start_resume_verifies_and_names_the_hole(self):
+        svc = _results_servicer()
+        cov, calls = TestGapsOnlyVerify._coverage({"IDXX": [_cov(_HOLE), _cov(bars_total=120)]})
+        uj = await self._resume(
+            svc,
+            cov,
+            range_start=None,
+            range_end=datetime(2026, 11, 25, tzinfo=UTC),
+            symbol_results=json.dumps({"gaps_only": {}}),
+        )
+        assert calls[0].range.HasField("start") is False
+        assert calls[0].range.end == _ts_of(datetime(2026, 11, 25, tzinfo=UTC))
+        assert _status_writes(uj, "job-364r")[-1] == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        assert _stored_results(uj)["gaps_only"]["IDXX"] == {
+            "outcome": _INCOMPLETE,
+            "reason": "missing sessions 2026-04-01..2026-09-25",
+        }
+
+    @pytest.mark.asyncio
+    async def test_null_end_resume_verifies_and_finalizes(self):
+        svc = _results_servicer()
+        cov, calls = TestGapsOnlyVerify._coverage({"IDXX": [_cov()]})
+        uj = await self._resume(
+            svc,
+            cov,
+            range_start=datetime(2025, 11, 20, tzinfo=UTC),
+            range_end=None,
+            symbol_results=json.dumps({"gaps_only": {}}),
+        )
+        assert calls[0].range.HasField("end") is False
+        assert _status_writes(uj, "job-364r")[-1] == ingest_pb2.BACKFILL_STATUS_COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_resume_without_marker_skips_verify(self):
+        svc = _results_servicer()
+        cov = AsyncMock()
+        uj = await self._resume(svc, cov, symbol_results=None)
+        cov.assert_not_awaited()
+        assert _status_writes(uj, "job-364r")[-1] == ingest_pb2.BACKFILL_STATUS_COMPLETED

@@ -633,6 +633,7 @@ var BackfillSymbolOutcome;
     BackfillSymbolOutcome["BACKFILL_SYMBOL_OUTCOME_EMPTY"] = "BACKFILL_SYMBOL_OUTCOME_EMPTY";
     BackfillSymbolOutcome["BACKFILL_SYMBOL_OUTCOME_SKIPPED"] = "BACKFILL_SYMBOL_OUTCOME_SKIPPED";
     BackfillSymbolOutcome["BACKFILL_SYMBOL_OUTCOME_FAILED"] = "BACKFILL_SYMBOL_OUTCOME_FAILED";
+    BackfillSymbolOutcome["BACKFILL_SYMBOL_OUTCOME_INCOMPLETE"] = "BACKFILL_SYMBOL_OUTCOME_INCOMPLETE";
     BackfillSymbolOutcome["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(BackfillSymbolOutcome || (exports.BackfillSymbolOutcome = BackfillSymbolOutcome = {}));
 function backfillSymbolOutcomeFromJSON(object) {
@@ -649,6 +650,9 @@ function backfillSymbolOutcomeFromJSON(object) {
         case 3:
         case "BACKFILL_SYMBOL_OUTCOME_FAILED":
             return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED;
+        case 4:
+        case "BACKFILL_SYMBOL_OUTCOME_INCOMPLETE":
+            return BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_INCOMPLETE;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -665,6 +669,8 @@ function backfillSymbolOutcomeToJSON(object) {
             return "BACKFILL_SYMBOL_OUTCOME_SKIPPED";
         case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED:
             return "BACKFILL_SYMBOL_OUTCOME_FAILED";
+        case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_INCOMPLETE:
+            return "BACKFILL_SYMBOL_OUTCOME_INCOMPLETE";
         case BackfillSymbolOutcome.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -680,6 +686,8 @@ function backfillSymbolOutcomeToNumber(object) {
             return 2;
         case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_FAILED:
             return 3;
+        case BackfillSymbolOutcome.BACKFILL_SYMBOL_OUTCOME_INCOMPLETE:
+            return 4;
         case BackfillSymbolOutcome.UNRECOGNIZED:
         default:
             return -1;
