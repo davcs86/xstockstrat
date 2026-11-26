@@ -489,3 +489,20 @@ Each thread names its target step.
 
 - RESOLVED (open item "add a non-blocking merge-order.md entry for 364 before the integration PR"): intentionally NOT added. `docs/roadmap/features/merge-order.md` § Coverage note lists only hard ordering constraints and says ordinary textual overlap "is intentionally not listed"; and /sdd-batch-execute preflight item 5 treats any row naming this feature with Resolved != Yes as a merge-order block. 364's overlaps (317/322 marketdata_service.go, 322 common.proto, 308/325/345 INVENTORY.md, ingest servicer.py and agent tools.py/client.py peers) are rebase-only — no shared migration NNN, proto field number or config key — so no row is warranted. Whichever lands second rebases.
 - Operator checkpoint:13 decision (verbatim 'Proceed'): continue to Steps 15–19 (UI, agent, docs) and the integration PR.
+
+## Session 2026-11-26 — sdd-execute sequential, steps 15+16
+
+- OPERATOR DECISION (binding, 2026-11-26): blocker on Step 15 resolved with **A** — the main checkout was detached at `origin/feature/fix-gapsonly-backfill-is` (9f6f3bae), so the linked `@xstockstrat/proto` dist carries Step 8's `BackfillSymbolOutcome.INCOMPLETE = 4`; Steps 15+16 run as the adjacent-fold unit (standing authorization `auth-364-adjacent-folds-2026-11-26`), RED from vitest row (a), GREEN from both Verification blocks. Logged in the Deviation Log.
+- Tooling: node v22 + pnpm 9.15.9 ✓ (linked main-checkout `node_modules`, no install) · Playwright Chromium ✓ `/opt/pw-browsers` · host `pnpm dev` warmup ✗ (10 s timeout) → Playwright under `CI=1` (CI-equivalent fallback, Deviation Log). Config-key wiring gate: N/A (no config key touched).
+
+### Step 15 — service: UI maps an INCOMPLETE-only PARTIAL to the vendor-has-no-bars state [done]
+- `BackfillJobLike` gains `symbolResults?: { outcome: BackfillSymbolOutcome }[]` (value import from `common_pb`); the PARTIAL case first returns `{ state: 'ready', text: 'Backfill finished: vendor has no bars for some sessions of <SYM>' }` when no chunk failed and `symbolResults` has an INCOMPLETE and no FAILED entry; the existing PARTIAL texts are unchanged; `page.tsx` unchanged. Part of the unit `steps 15+16`.
+- TDD (unit 15+16, AC-5): red: vitest row `@AC-5 partial with only INCOMPLETE symbols` — `AssertionError: expected { state: 'partial', …(1) } to deeply equal { state: 'ready', …(1) }`, `Tests 1 failed | 747 passed` → green: Step 15 Verification `exit=0`; Step 16 Verification `Tests 748 passed | 2 skipped (750)`, `Lines : 82.13%` (≥ 40%), Playwright `7 passed (1.8m)` incl. the new `@AC-5 an INCOMPLETE-only partial …` and `@AC-13`, `exit=0`.
+- Files modified: `services/xstockstrat-ui/src/lib/backtestBackfill.ts`
+- Deviations: folded with Step 16 (Deviation Log).
+
+### Step 16 — test: vitest discriminator rows and a Playwright INCOMPLETE-only scenario [done]
+- Added the fixture `incompleteSymbolResult(symbol, reason?)` (numeric `BackfillSymbolOutcome.INCOMPLETE`, two consumers, C-12) and its INVENTORY entry; vitest rows (a) INCOMPLETE-only → ready text, (b) INCOMPLETE + FAILED → "returned no data" partial, (c) INCOMPLETE with 2/3 chunks → chunk-failed text; Playwright `@AC-5` INCOMPLETE-only PARTIAL → status text, Re-run, then `No vendor data for` and no backfill action. Part of the unit `steps 15+16`.
+- Files modified: `services/xstockstrat-ui/src/lib/backtestBackfill.test.ts`, `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/backfillJobs.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: folded into Step 15; Verification grep line run from the repo root and Playwright under `CI=1` (Deviation Log).
+- Note: the new Playwright title reuses the `@AC-5` tag that feature 343's re-run test already carries in this describe; the grep `@AC-5|@AC-13|@AC-4` selects both.

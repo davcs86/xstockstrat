@@ -710,7 +710,7 @@ cd services/xstockstrat-ingest && uv run ruff check . && uv run ruff format --ch
 
 ### Step 15 — service: UI maps an INCOMPLETE-only PARTIAL to the vendor-has-no-bars state
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/backtestBackfill.ts` — modify
@@ -745,7 +745,7 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint
 
 ### Step 16 — test: vitest discriminator rows and a Playwright INCOMPLETE-only scenario
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/backtestBackfill.test.ts` — modify
@@ -938,3 +938,15 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: Steps 9+10 executed as one unplanned atomic unit: Step 10's two tests were written first (RED `assert 40 <= 5`), then the coalescing in `_plan_work_ranges`; GREEN ran Step 9's Verification and then Step 10's, each unchanged. `test_gaps_only_long_gap_stays_its_own_unit` also passes on the pre-Step-9 tree (characterization of the long-gap rule).
 **Reason**: Step 9 cannot show its own RED→GREEN without Step 10's test.
 **Disposition**: folded Step 10 into Step 9 — test step pairs the service step's red-green (operator choice A, 2026-11-26).
+
+### Deviation: Step 15 — service: UI maps an INCOMPLETE-only PARTIAL to the vendor-has-no-bars state
+**Spec said**: Step Dependencies states "Step 16 [test] covers Step 15 [service]"; Step 15 is red-green but specs no test of its own (its Verification is `tsc --noEmit && pnpm run lint`).
+**Actual**: Steps 15+16 executed as one unplanned atomic unit: Step 16's fixture, vitest rows and Playwright test were written first (RED: vitest row (a) `expected { state: 'partial', …(1) } to deeply equal { state: 'ready', …(1) }`), then the discriminator in `backfillJobMessage`; GREEN ran Step 15's Verification and then Step 16's.
+**Reason**: Step 15 cannot show its own RED→GREEN without Step 16's test.
+**Disposition**: folded Step 16 into Step 15 — test step pairs the service step's red-green (operator choice A, 2026-11-26).
+
+### Deviation: Step 16 — Verification run form (grep line from the repo root; Playwright under `CI=1`)
+**Spec said**: Step 16 **Verification** runs `cd services/xstockstrat-ui && … && pnpm exec playwright test e2e/trader/position-detail.spec.ts --project=chromium --grep "@AC-5|@AC-13|@AC-4"`, then on the next line `grep -n … services/xstockstrat-ui/e2e/trader/position-detail.spec.ts services/xstockstrat-ui/src/lib/backtestBackfill.test.ts`.
+**Actual**: Each line ran from the repo root in its own subshell, and the Playwright command ran with `CI=1` (the `playwright.config.ts` CI branch: `pnpm build && pnpm start`, 30 s test timeout, 1 retry); commands unchanged otherwise. Two verbatim runs failed only at `[setup] › e2e/warmup.setup.ts › pre-warm SSR routes — Test timeout of 10000ms exceeded` (local `pnpm dev` cold compile) and at the grep line (`No such file or directory`, resolved from `services/xstockstrat-ui`). The Docker runner `scripts/run-e2e.py` was not used: the repo has no `.dockerignore`, so `Dockerfile.e2e`'s `COPY services/xstockstrat-ui/` would copy this worktree's `node_modules` symlink and `.next` output into the image.
+**Reason**: the grep line's paths are repo-root relative, so it cannot run after the first line's `cd` (same cause as the Step 1 entry); the host dev server cannot warm 25 SSR routes inside the local 10 s timeout.
+**Disposition**: CI-equivalent fallback — `CI=1` is the configuration the `frontend-e2e` job uses; grep line in a per-line subshell from the repo root, as for Step 1.
