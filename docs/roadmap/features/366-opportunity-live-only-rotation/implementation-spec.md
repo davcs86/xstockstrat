@@ -302,16 +302,16 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
 
 **Reviewers**: xstockstrat-analysis owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
-**Codebase Evidence** (tree `dfa444c2`, recon.md Codebase Map re-confirmed this session):
-- `async def _compute_opportunities(self, user_id: str, propagation_meta) -> list[dict]:` at `:5359`. Its only `return rows` is at `:5984`. `now_utc = datetime.now(UTC)` is at `:5382`.
-- `denied_covered: list[tuple[str, str]] = []` at `:5415`. It is filled at `:5454-5455` (`for sym in resolved.denied & resolved.union: denied_covered.append(...)`).
-- `_capped_live(sym, exclude=frozenset())` at `:5461-5465`. `_candidate` at `:5469`.
-- Step 2b at `:5533-5552`: `_new_live_strats` (`:5535-5537`); `live_signal_symbols = (...) - held_norm` (`:5541`); `competitive_pool` (`:5542`); `max_live_only = int_positive(self._cfg, "opportunity.max_live_only_symbols_per_compute", 20)` (`:5543`); the conviction sort and `[:max_live_only]` (`:5544-5547`); the per-symbol loop (`:5548-5552`).
-- Step 3 at `:5554-5560`: `targets = [k for k in candidates if k[0] == sym]` / `if not targets: _candidate(sym, ""); targets = [(sym, "")]`. The tie rule is `if sig.conviction > c["_best_sig_conv"]` starting from `-1.0` (`:5601-5603`).
-- Muted rows at `:5619-5625`. The cut is at `:5629-5639`.
-- Stamp at `:5955-5963`: `valid_until = session_end + timedelta(hours=window_hours)`, then `for r in rows: r["valid_until"] = valid_until`. The `symbol_score` fold is at `:5964-5983`.
-- `_resolve_action_tag(candidate, exit_fires)` at `:6810-6832`. A non-held, non-watchlist candidate resolves through `_action_for(best_direction, False)` only, else `None`.
-- `_replace_and_stamp_compute_state(self, user_id, rows, propagation_meta=None)` at `:4922-4940`. Callers: `_kick_opportunity_recompute._run` (`:4952-4953`) and `_opportunity_refresh_tick` (`:6070-6071`). The only production callers of `_compute_opportunities` are those two sites (grep `_compute_opportunities(` in `app`).
+**Codebase Evidence** (re-located by symbol on main-dev `6dead381` after the 365 merge, 2026-11-26):
+- `async def _compute_opportunities(self, user_id: str, propagation_meta) -> list[dict]:` at `:5360`. Its only `return rows` is at `:5985`. `now_utc = datetime.now(UTC)` is at `:5383`.
+- `denied_covered: list[tuple[str, str]] = []` at `:5416`. It is filled at `:5455-5456` (`for sym in resolved.denied & resolved.union: denied_covered.append(...)`).
+- `_capped_live(sym, exclude=frozenset())` at `:5462-5466`. `_candidate` at `:5470`.
+- Step 2b at `:5534-5553`: `_new_live_strats` (`:5536-5538`); `live_signal_symbols = (...) - held_norm` (`:5542`); `competitive_pool` (`:5543`); `max_live_only = int_positive(self._cfg, "opportunity.max_live_only_symbols_per_compute", 20)` (`:5544`); the conviction sort and `[:max_live_only]` (`:5545-5548`); the per-symbol loop (`:5549-5553`).
+- Step 3 at `:5555-5561`: `targets = [k for k in candidates if k[0] == sym]` / `if not targets: _candidate(sym, ""); targets = [(sym, "")]`. The tie rule is `if sig.conviction > c["_best_sig_conv"]` starting from `-1.0` (init `:5485`, compare `:5602-5603`).
+- Muted rows at `:5620-5626`. The cut is at `:5630-5640`.
+- Stamp at `:5956-5964`: `valid_until = session_end + timedelta(hours=window_hours)`, then `for r in rows: r["valid_until"] = valid_until`. The `symbol_score` fold is at `:5965-5984`.
+- `_resolve_action_tag(candidate, exit_fires)` at `:6811-6833`. A non-held, non-watchlist candidate resolves through `_action_for(best_direction, False)` only, else `None`.
+- `_replace_and_stamp_compute_state(self, user_id, rows, propagation_meta=None)` at `:4923-4941`. Callers: `_kick_opportunity_recompute._run` (`:4953-4954`) and `_opportunity_refresh_tick` (`:6071-6072`). The only production callers of `_compute_opportunities` are those two sites (grep `_compute_opportunities(` in `app`).
 - `self._opportunity_compute_failures` init at `servicer.py:640`, the per-user in-memory precedent.
 - Live-loop log precedent: `live_loop.py:467-486` (`-(-len(pairs) // n)`).
 
@@ -322,7 +322,7 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
 **Covers**: —
 
 **Instructions**:
-1. **Module-level pure helpers** (next to `_opportunity_key`, `:6803`). Each docstring is at most 2
+1. **Module-level pure helpers** (next to `_opportunity_key`, `:6804`). Each docstring is at most 2
    lines of constraint (CLAUDE.md "How to Act" #5).
    - `_is_live_only_row(provenance) -> bool`: `"live_strategy" in p` and none of `"watchlist"`,
      `"position"`, `"denied"` (D-6 predicate (a)).
@@ -337,7 +337,7 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
      not be deleted (O-23).
 2. **Config read.** Add `def _live_only_cycle_days(self) -> int: return int_positive(self._cfg, "opportunity.live_only_cycle_max_days", 3)`.
    It is the single read site, read once per compute (F-07, C-05). Step 7 reuses it.
-3. **Step 2b** (replaces `:5543-5552`). Keep the `max_live_only` read: its meaning is now the chunk
+3. **Step 2b** (replaces `:5544-5553`). Keep the `max_live_only` read: its meaning is now the chunk
    limit (R-1 is locked, so the limit wins).
    - `pool = sorted(competitive_pool)`.
    - When `pool` is non-empty (Assumption 4):
@@ -353,7 +353,7 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
    - `denied_covered_set = set(denied_covered)`, built once.
    - `best_direction_by_symbol`: for each non-chunk pool symbol, the direction of the max raw
      `sig.conviction` over `signals_by_symbol[sym]`, with step 3's strict `>` starting from `-1.0`
-     (`:5601-5603`).
+     (`:5602-5603`).
    - A stored row `r` is carried only when **all** of these hold:
      - (a) `_is_live_only_row(r["provenance"])`;
      - (b) `r["symbol"]` is in `pool` and not in `chunk`. Since `competitive_pool` excludes `held_norm`,
@@ -378,7 +378,7 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
      the stored one, it stores the key. When `projected > cycle_days`, it also logs at INFO, exactly:
      `log.info("opportunity live-only rotation shortfall: user=%s pool=%d per_compute=%d projected_computes=%d cycle_max_days=%d", user_id, pool_size, n, projected, cycle_days)`.
    - This is a log, not an error. It is labelled in computes (Assumptions 1-2).
-7. **Stamp** (`:5961-5963`). `live_only_valid_until = now_utc + timedelta(days=cycle_days)`. Each fresh
+7. **Stamp** (`:5962-5964`). `live_only_valid_until = now_utc + timedelta(days=cycle_days)`. Each fresh
    row gets `live_only_valid_until` when `_is_live_only_row(r["provenance"])`, else today's
    `valid_until` (D-7, operator O-5: no 168h cap).
 8. **Append** (after the stamp, before the `owned_ids` fold). `fresh_keys = {r["opportunity_key"] for r in rows}`,
@@ -398,9 +398,9 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
       (operator 'Keep best-effort'). The accepted residual O-25: while that stamp keeps failing, each
       poll recomputes and each recompute advances the cursor.
     - Update the docstring, at most 2 lines of constraint.
-11. **Callers** (`:4952-4953`, `:6070-6071`). Use `rows, cursor = await self._compute_opportunities(...)`,
+11. **Callers** (`:4953-4954`, `:6071-6072`). Use `rows, cursor = await self._compute_opportunities(...)`,
     then `await self._replace_and_stamp_compute_state(<uid>, rows, <meta>, cursor=cursor)`.
-12. **Clock.** Freshness uses the app clock (`now_utc`), the same trade-off as `:4799`. This is
+12. **Clock.** Freshness uses the app clock (`now_utc`), the same trade-off as `:4800`. This is
     documented only. Header propagation: no new outbound gRPC call (two DB reads), so §B does not apply.
 
 **Verification**: Step 5's combined unit gate (Steps 4+5+6).
@@ -429,8 +429,8 @@ grep -n "def .*fixture\|from .conftest\|conftest\|from tests\." tests/test_oppor
   - `test_analysis_servicer.py:5511, 5535, 5557, 5625, 7697, 8005, 8031`;
   - `test_opportunities_fundamentals_guard.py:217, 243, 255, 267, 286, 304, 314, 331, 346, 434, 458`;
   - `test_unreadable_formula.py:601, 635, 648, 653, 666`.
-  - Sites that discard the result need no change: `test_analysis_servicer.py:5658, 5697`, `test_opportunities_latency.py:94`, `test_owner_header_guard.py:272`.
-- Stubs returning the old shape: `test_opportunity_compute_state.py:52` (`AsyncMock(return_value=[])`), `:81` (`side_effect=[[], [{"symbol": "AAPL"}]]`), and `test_analysis_tick_telemetry.py:50` (`compute or AsyncMock(return_value=[])`). `test_opportunity_refresh.py:77` raises, so it needs no change.
+  - Sites that discard the result need no change: `test_analysis_servicer.py:5658, 5697`, `test_opportunities_latency.py:94, 181`, `test_owner_header_guard.py:272`.
+- Stubs returning the old shape: `test_opportunity_compute_state.py:53` (`AsyncMock(return_value=[])`), `:82` (`side_effect=[[], [{"symbol": "AAPL"}]]`), and `test_analysis_tick_telemetry.py:50` (`compute or AsyncMock(return_value=[])`). `test_opportunity_refresh.py:77` raises, so it needs no change.
 - Config guards: `AC6_ROWS` (`tests/test_config_zero_clamps.py:32-67`, the row for `max_live_only` is at `:61`) and `FR3_KEYS` (`tests/test_config_read_classification.py:25-62`, the row at `:56`). The module docstring says "A new read must be classified here".
 
 **Lands with**: `Step 4, Step 6`
@@ -592,7 +592,7 @@ wiring commands.
 **Reviewers**: xstockstrat-analysis owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_retry_unavailable_symbols` heal: `window_hours = int_positive(self._cfg, "opportunity.valid_window_hours", 24)` (`:5023`). Heal rows carry `"provenance": provenance`, `"valid_until": None` and `"_healed": True` (`:5250-5260`). The window is applied post-loop: `healed_valid_until = session_end + timedelta(hours=window_hours)`, then `for hr in heal_rows: if hr.pop("_healed", False): hr["valid_until"] = healed_valid_until` (`:5312-5320`). It is persisted by `replace_symbols` (`:5323`, which re-stamps `computed_at = now()`, `opportunities.py:138-153`).
+- `_retry_unavailable_symbols` heal: `window_hours = int_positive(self._cfg, "opportunity.valid_window_hours", 24)` (`:5025`). Heal rows carry `"provenance": provenance`, `"valid_until": None` and `"_healed": True` (`:5248-5262`). The window is applied post-loop: `healed_valid_until = session_end + timedelta(hours=window_hours)`, then `for hr in heal_rows: if hr.pop("_healed", False): hr["valid_until"] = healed_valid_until` (`:5318-5321`). It is persisted by `replace_symbols` (`:5324`, which re-stamps `computed_at = now()`, `opportunities.py:138-153`).
 
 **TDD**: `red-green required`
 
@@ -656,8 +656,8 @@ uv run ruff check . && uv run ruff format --check .
   - the fresh read `opps.read(..., include_expired=False, sources=req_sources, action_filter=request.action_filter, sort=request.sort, symbol=req_symbol)` at `:4765-4774`;
   - the heal selection at `:4775-4789`;
   - the no-rows branch at `:4790-4819`, which after 365 is `elif not await opps.has_fresh(user_id):`;
-  - `q.rows = rows` at `:4820`, and the facet using `q.served_include_expired` at `:4824-4828`.
-- Kicks fire in the caller's `finally`, after the budgeted connection is released (`:4719-4725`, ANALYSIS-14).
+  - `q.rows = rows` at `:4821`, and the facet using `q.served_include_expired` at `:4825-4829`.
+- Kicks fire in the caller's `finally`, after the budgeted connection is released (`:4721-4725`, ANALYSIS-14).
 - `_OPPORTUNITY_RECOMPUTE = Counter("analysis.opportunity.recompute", ...)` at `telemetry.py:444-446`, and helper `record_opportunity_recompute` at `:486-488`. `Counter.add` swallows errors (`:325-338`).
 
 **Lands with**: `Step 10`
