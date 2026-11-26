@@ -1023,3 +1023,21 @@ ENV node=v24.22.1 grpc-js=1.14.7 dir=/home/user/xstockstrat/node_modules/.pnpm/@
 - [ ] No evidence was found that feature 324 touches a notify file, although design.md's Open Risks names it — target: before `/sdd-execute` (re-check once 324 has an implementation spec).
 - [ ] If `origin/main-dev` moves past `fb52065c` before Step 1 runs, line numbers drift again — target: `/sdd-execute` Phase 1 (re-grep each anchor by symbol).
 - [ ] Earlier threads still open and unchanged by this review: the grpc-js status path is verified on 1.14.7 only; `^1.14.7` can float; a renamed `writableLength` fails open (Steps 6 and 8); the four accepted residuals have no step.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+**Up-front confirmation** (operator-approved record, binding, verbatim):
+
+```json
+{"mainDev":"2b2dec92afa14123ac1d796846632db713bbd9dc","dev":"7540f38f58eb3f880a60e82f6009a4ff27deb391","specHash":"25bd5ee919603c8ae19a151a1d19056b88bd631a","directive":"conditional","pending":[1,2,3,4,5,6,7,8],"mismatches":[{"n":1,"detail":"Codebase Evidence is out of date. The spec expects the feature branch to pin `\"@grpc/grpc-js\": \"^1.14.5\"` at package.json:21 and pnpm-lock.yaml:378-380 (`specifier: ^1.14.5` / `version: 1.14.5`), and to be 168 commits behind main-dev. At the branch tip 7540f38f it already pins `^1.14.7` and lock `1.14.7`, because the earlier merge c0f0757b (\"merge main-dev into feature branch (pre-execute sync)\") brought it in. The branch is 21 commits behind origin/main-dev 2b2dec92, not 168. `git diff --stat 2b2dec92...7540f38f` shows only docs/roadmap/ledger/fails.md (+5); the feature directory is identical on both sides. After the local `-X ours` merge (HEAD 8675aede, two parents), package.json:21 is `^1.14.7`, the importer block at :378-380 is `^1.14.7`/`1.14.7`, and `git diff 2b2dec92 HEAD --stat` shows only fails.md. Step 1's target state already holds, so its evidence and its premise that grpc-js still needs bumping are stale. The Files paths (services/xstockstrat-notify/package.json, pnpm-lock.yaml) exist."},{"n":2,"detail":"Wrong line cite: the Evidence puts the AlertSeverity enum names at `packages/proto/notify/v1/notify.proto:57-63`. They are at :65-70: `enum AlertSeverity` at :65, UNSPECIFIED=0 at :66, INFO=1 at :67, CRITICAL=4 at :70. Lines :57-63 are Alert message fields (acknowledged, correlation_id, read, read_at). All other Step 2 anchors in notifyServiceImpl.test.ts and notifyServiceImpl.ts match. The Files path exists."}]}
+```
+
+- Branch sync: `origin/main-dev` `2b2dec92` merged as `6bc876bb` (clean auto-merge of `docs/roadmap/ledger/fails.md`; merge-train resolver and ledger-guard both clean).
+- Tooling setup (steps 1–8): node ✓ v24.22.3 (`/opt/node24`; default PATH node is v22.23.5) · pnpm ✓ 9.15.9 · linked notify `node_modules` grpc-js ✓ 1.14.7.
+- Re-spec commits (`respec(fix-notify-stream-contract)` in `git log --first-parent origin/main-dev..HEAD`):
+  - `08d357b8` respec(fix-notify-stream-contract): align steps 1,2 with current codebase — Step 1 is now a verify-only gate (no in-step merge, no `pnpm install`, ancestry check instead of the two-parent check); Step 2's AlertSeverity cite moved to `notify.proto:65-70`.
+- Status: `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"2b2dec92afa14123ac1d796846632db713bbd9dc","date":"2026-11-26"}
+```
