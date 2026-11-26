@@ -567,3 +567,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-analysis/tests/test_isolation.py`
 - Deviations: RED from the step's specced mutation run rather than the Step Dependencies prior-step checkout (Deviation Log).
+
+### Step 7 — service: `evaluation_failed` structural marker and read-floor exemption [done]
+- `app/repositories/opportunities.py` gains `EVALUATION_FAILED_PROVENANCE = "evaluation_failed"` above `_PROVENANCE_STRUCTURAL_MARKERS`, appended to that list (so `_primary_source` and the source filter/facet skip it), with one block-comment line. The `ListOpportunities` read floor adds `OR o.provenance ? 'evaluation_failed'` as a literal beside its siblings. `data_unavailable=("unavailable" in provenance)` (`servicer.py`) is untouched. No migration (JSONB token).
+- TDD red: a temporary probe test failed with `ImportError: cannot import name 'EVALUATION_FAILED_PROVENANCE' from 'app.repositories.opportunities'` → green: probe `2 passed`, then deleted (Deviation Log). Verification: the grep prints the comment (`:28`), the constant (`:29`) and the SQL clause (`:270`); `tests/test_opportunities_repo.py` `40 passed`; ruff "All checks passed!" and "143 files already formatted", exit=0.
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-analysis/app/repositories/opportunities.py`
+- Deviations: RED came from a temporary untracked probe test (Deviation Log).

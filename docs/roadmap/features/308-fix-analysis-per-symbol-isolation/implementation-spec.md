@@ -384,7 +384,7 @@ ruff check . && ruff format --check .
 
 ### Step 7 — service: `evaluation_failed` structural marker and read-floor exemption
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/opportunities.py` — modify
@@ -1112,3 +1112,16 @@ _Populated by /sdd-execute as implementation proceeds._
   (`ModuleNotFoundError`) is already on record from Step 5's probe.
 - **Disposition**: no code change. The Verification block's `exit=` reflects only its last line
   (ruff); the pytest results were read from the log.
+
+### Step 7: RED captured with a temporary probe test (2026-11-26)
+
+- **Expected**: Step Dependencies has Step 8's new tests capture RED for Step 7, run against the
+  pre-Step-7 `opportunities.py`.
+- **Actual**: Step 7 was executed on its own, and its Verification (`tests/test_opportunities_repo.py`)
+  does not reference the new marker yet. A temporary untracked `tests/test_tmp_step7_probe.py` held
+  Step 8's two assertions (the floor clause built from `EVALUATION_FAILED_PROVENANCE`, list membership
+  and `_primary_source([EVALUATION_FAILED_PROVENANCE, "uw"]) == "uw"`). RED gave `ImportError: cannot
+  import name 'EVALUATION_FAILED_PROVENANCE'` and GREEN gave `2 passed`. The probe was deleted before
+  the commit.
+- **Disposition**: no file outside Step 7's **Files** is committed. Step 8 still adds the permanent
+  tests and the `_FakeOppRepo.read` mirror as specced.
