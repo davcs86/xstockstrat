@@ -81,9 +81,12 @@ _Constitution **C-14**._
 
 ## Database Changes
 
-- [ ] No schema changes — to be decided at design: the persisted rotation cursor (FR-5) may need a new
-  `analysis` table or column (migration + DBA review), or reuse of existing per-user state
-  (`analysis.opportunity_compute_state`, migration `023`).
+- [ ] No schema changes
+- The persisted rotation cursor (FR-5) lives in **Postgres** (operator decision 2026-11-26; Redis
+  rejected — not in the stack, and the cursor must commit atomically with the queue rows it produced).
+  Preferred shape for design to confirm or reject: a cursor column on the existing per-user
+  `analysis.opportunity_compute_state` (migration `023`), written in the same transaction as the
+  compute's queue replace. A new analysis migration → DBA review + service owner.
 
 ## Feature Workflow Notes
 
@@ -91,7 +94,7 @@ Branch to create: `feature/opportunity-live-only-rotation` (branch from `main-de
 Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (non-breaking proto or config change)
 - [ ] 2 service owners + platform lead (breaking proto change)
-- [ ] DBA review + service owner (schema migration) — if design adds a migration
+- [x] DBA review + service owner (schema migration) — cursor column in the `analysis` schema
 
 ## Acceptance Criteria
 

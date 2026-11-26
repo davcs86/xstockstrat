@@ -39,7 +39,7 @@ re-run /sdd-spec if the registry changes.)_
 | Role | Review Focus |
 |---|---|
 | xstockstrat-analysis owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
-| DBA (only if the design adds a migration for the rotation cursor) | Schema ownership, migration run order, connection budget |
+| DBA (rotation-cursor migration in the `analysis` schema) | Schema ownership, migration run order, connection budget |
 
 ## Next Action
 
