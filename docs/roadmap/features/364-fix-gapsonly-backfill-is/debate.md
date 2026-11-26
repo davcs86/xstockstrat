@@ -1,6 +1,6 @@
 # Debate Register: fix-gapsonly-backfill-is
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
