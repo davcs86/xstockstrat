@@ -461,3 +461,29 @@ Two rulings on the open items the previous re-spec raised, relayed by the orches
 - `services/xstockstrat-agent/docs/context-constitution-findings.md:36` still says `signal_extraction.md` is "still unreferenced"; 355's tests now read it. No step edits agent docs.
 - `noop.py` is left without a dedicated test once `tests/test_extractor.py` is deleted; the operator may want a minimal replacement test or accept that.
 - Peer 322's impl spec was not re-read; its Step 27 (`alpaca/client.go`) needs a re-grep against Step 5's `:817-825` at execute time. Step 4 still needs Docker for `docker compose build`.
+
+## Session 2026-11-26 — operator ruling on AC-2 and noop.py test, recorded by the orchestrator (verbatim)
+
+- Question (verbatim): "323 follow-up from the re-spec: @AC-2 in 323's own acceptance.feature still says the files noop.py and signal_extraction.md (among the orphans) no longer exist, which can't be true now that you chose to keep both. Also the spec still deletes tests/test_extractor.py whole, which leaves noop.py with no test. How should I handle these?"
+- Answer (verbatim): "Amend @AC-2, add a noop test (Recommended)" — option text: "Reword @AC-2 (same ID, Given/When unchanged) to list only the files actually deleted, and add a minimal replacement test for noop.py in Step 6 so it is not left untested. Recorded with your answer; 323 then needs a small re-spec and re-review."
+
+### Changes applied (the spec stays at 9 steps; no renumbering)
+
+- `acceptance.feature` `@AC-2`: ID, tags, title, Given and When unchanged (C-15 append-only IDs holds). The Then is split in three lines: the deleted items (configWatcher.ts and its test, the four migrate scripts and `node-pg-migrate` devDependencies, notify `jsonwebtoken`/`bcrypt`, `AlpacaAsset`, `example_simple_email.py`, `tests/test_extractor.py`), "ingest noop.py and agent signal_extraction.md still exist", and the build-and-test line. A comment above the tag records the amendment. The title still reads "are gone"; only the Then was reworded, as ruled.
+- Step 6: new file `services/xstockstrat-ingest/tests/test_noop_extractor.py` (confirmed absent; created from scratch). Three tests replace the noop assertions in the deleted `test_extractor.py` (`:83-84`, `:86-111`, `:124-128`, `:132-143`) without any of the five removed dataclasses: `issubclass(NoopExtractor, BaseExtractor)`; `import_module(servicer_mod._MEDIATED_EXTRACTOR_MODULE).NoopExtractor is NoopExtractor` (pins the label 355 stores to the kept module); `await NoopExtractor().extract(McpClientInput(result_items=[...])) == []`. Pattern: `tests/test_mcp_client_extractor.py:9-12,48`, `asyncio_mode = "auto"` (`pyproject.toml:34`), `from app.handlers import servicer as servicer_mod` (`tests/test_seed_source_templates.py:17`). TDD note in the step: a characterization test of kept code has no RED; GREEN pre-edit, and it must stay GREEN after the `base.py` trim (it guards `noop.py`'s `BaseExtractor`/`RawInput` imports). Verification adds the test run and a `grep -c` of 3. The pairing is unchanged (service Step 6, paired test Step 7, whose ingest pytest run now includes it); no unit grows.
+- Scenario Coverage: `@AC-2` → Step 7 (deleted items, `noop.py` kept) and Step 8 (`signal_extraction.md` kept); `@AC-3` → Step 8; `@AC-1` → Step 2. Step 8 now has `**Covers**: AC-2, AC-3` with a `git ls-files` check that the prompt remains; Step 7's `**Covers**` says "backend part".
+- Counting text: the Execution Summary, the re-spec findings list (the `@AC-2` open item is removed) and `feature.md`'s Summary ("Ten orphaned…" now says two were later kept, eight removed) are updated.
+- Self-review (no subagent tool in this session, so a hand review against `impl-spec-criteria.md` §B2, §B3, §B3b, not a `spec-reviewer` run): every new anchor was grepped; the new test's two non-servicer tests were run locally (the async one needs `pytest-asyncio`, and the servicer import needs `asyncpg` and generated stubs, neither installed in this sandbox, so the full file was not run here and is first run by `/sdd-execute`); `ruff check` and `ruff format --check` on the file passed; every `**Covers**` ID exists in `acceptance.feature`; every scenario is covered; no FAIL.
+
+### Stale text not edited (this ruling did not authorize it)
+
+- `product-spec.md` and `design.md` (D-3 and its `noop.py` rationale) still list the `noop.py` and `signal_extraction.md` deletions and the "ten items" scope.
+- `docs/reports/2026-10-19-orphaned-code-defect.md` items 6 (the `noop.py` half) and 8 stay open when 323 merges.
+- `merge-order.md:129` (the 323 ↔ 355 row) describes a conflict that no longer exists.
+- `services/xstockstrat-agent/docs/context-constitution-findings.md:36` still says the prompt is "unreferenced".
+
+## Open Threads
+
+- [ ] Run `/sdd-review fix-orphaned-code impl-spec` again on the amended spec (operator ruling asks for a re-review) — all steps.
+- [ ] Stale text above (`product-spec.md`, `design.md`, defect report, `merge-order.md:129`, agent findings `:36`) needs a decision on who edits it — Step 6, Step 8.
+- [ ] `tests/test_noop_extractor.py` was not run end to end in the spec session; confirm GREEN pre-edit and post-trim at execute — Step 6.

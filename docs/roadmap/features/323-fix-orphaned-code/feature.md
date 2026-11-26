@@ -34,8 +34,9 @@
 
 ## Summary
 
-Ten orphaned modules, scripts, dependencies and code paths across nine services have no runtime caller;
-one (portfolio `r.pool` stragglers) nil-panics under pgxmock and blocks unit testing.
+Ten orphaned modules, scripts, dependencies and code paths across nine services were reported as having no runtime
+caller; one (portfolio `r.pool` stragglers) nil-panics under pgxmock and blocks unit testing. Two were later kept
+(agent `signal_extraction.md`, ingest `noop.py`, since feature 355 depends on both), so eight are removed.
 
 ## Reviewers
 
