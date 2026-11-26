@@ -1,100 +1,133 @@
 # Implementation Spec: authelia-sso
 
 **Status**: `pending`
-**Created**: 2026-11-16
+**Created**: 2026-11-24 (regenerated after the 2026-11-24 re-spec; the 2026-11-16 52-step spec is superseded and stays in git history at `f0ed7dc`)
 **Feature**: `docs/roadmap/features/345-authelia-sso/feature.md`
-**Total Steps**: 52
+**Total Steps**: 58
 **Feature Branch**: `feature/authelia-sso`
+**Tree**: `ccr-589817f0-cyg7gy@f0ed7dc ≡ origin/ccr-589817f0-cyg7gy (⊇ origin/main-dev@0dbc26b)`. The 14 commits over `main-dev` are docs-only (`docs/roadmap/**`), so every code citation below is `main-dev@0dbc26b`.
 
 ---
 
 ## Execution Summary
 
-The spec follows the design's rollout order (D-20, D-48): proto, then migrations, then identity, the
-config grant, the admin script, the agent, the UI, and the docs. Every intermediate state is legacy
-mode. The two issuers stay `""` and the password flag is seeded `true` until a deployment cuts over,
-so no step can lock anyone out. Within each surface the order is leaf modules first, then the code
-that composes them, then routes and pages, so each `service` step passes its own Verification before
-the next one starts. Every step touches at most five files.
+The steps follow design.md § 0 "Build order": proto, the two migrations and the shared vector file, then identity,
+the config grant, the operator script, the agent, the UI and the docs. Every intermediate state behaves as `local`
+(D-109): the mode key is seeded `local`, every reader defaults to `local`, and the new RPCs are unused until the UI
+and agent steps land. The only behaviour change before cutover is FR-15's every-mode logout (Origin 403, JSON on an
+expired session, the header Sign-out button), which ships with the UI steps. Within each surface the order is leaf
+modules, then the code that composes them, then routes and pages, so each `service` step passes its own
+Verification before the next starts. Every step touches at most five hand-written files.
 
-The step bodies cite the debate register (`D-n`), not the design-layer prose (design.md §Precedence).
-The config seed is **`053_authelia_sso_keys`**: renumbered `050`→`051` (D-94; feature 341 took `050`)
-then `051`→`052` (D-99; feature 343 took `051`) and `052`→`053` (D-100; feature 347 took `052`). `debate.md` D-20, D-36, D-44, D-48 and D-57 still say
-`050`, D-94 says `051` and D-99 says `052`; D-100 governs. Re-check the next free number at merge.
+The step bodies cite the debate register (`D-n`); design.md's four approval amendments (D-134..D-137) win over its
+body text. The config seed is **`056_authelia_sso_keys`** on trunk today (`055` is the highest file; `053` is a gap
+that must never be filled, `merge-order.md` row 345 vs 314/317/321). Features 314, 317 and 321 also plan `056`: whoever merges
+first keeps it, and Step 4 takes the next free number above trunk's highest at execute time.
 
-**Consumer surfaces (C-14):** UI. This covers the login page, `/api/auth/sso/{start,callback}`, logout
-plus the header Sign-out button, `/accounts/authorized-apps`, and the `.well-known` copies (Steps
-24–47). The agent's authentication and effective scope for every MCP tool are in Steps 15–23. The
-script `manage-users.py update-email|unlink-sso` is in Steps 13–14. No new page or route segment is
-added, so no `PLATFORM_SUBNAV` registration is needed (C-10a). The new routes are API routes and the
-two changed pages already exist.
+**Consumer surfaces (C-14):**
+- **UI** (`xstockstrat-ui`): the login page (Step 44), `/api/auth/sso/{start,callback}` (Step 40), the Link SSO
+  routes (Step 42) and the new `/accounts/sso` page with its two nav registrations (Step 45, C-10a), the header
+  Sign-out button (Step 46), logout (Step 36), `/accounts/authorized-apps` (Step 47) and the two discovery documents
+  (Step 48). E2E reachability and behaviour: Step 53.
+- **Agent** (`xstockstrat-agent`): every MCP tool's authentication and effective scope in `oidc` (Steps 17–24); no
+  tool name, parameter or response changes.
+- **Script**: `scripts/manage-users.py set-auth-mode` and `unlink-sso` (Steps 15–16).
 
-**Business rules (C-16):** this is the design.md §Business Rules list. One CHANGE is owner-signed: logout
-in both modes (D-60, D-77, D-80). One rule is PRESERVE in legacy mode only: agent `@AC-19 @feature-294`
-(D-17). The integration PR promotes the `@AC-*` scenarios into the durable suites.
+**Business rules (C-16):** design.md § Business Rules Touched. CHANGE-by-config items are owner-signed for `oidc`
+only (context.md 2026-11-24). The integration PR promotes the `@AC-*` scenarios into the durable suites.
 
 ### Scenario Coverage (C-15)
 
+Guards are labelled `(guard)` in the covering step's `**Covers**` and Verification (D-118).
+
 | AC | Step(s) | AC | Step(s) | AC | Step(s) | AC | Step(s) |
 |---|---|---|---|---|---|---|---|
-| AC-1 | 12, 47 | AC-17 | 9, 47 | AC-33 | 12 | AC-49 | 43, 47 |
-| AC-2 | 12 | AC-18 | 14 | AC-34 | 47 | AC-50 | 12, 14 |
-| AC-3 | 12 | AC-19 | 14 | AC-35 | 5, 7 | AC-51 | 38, 47 |
-| AC-4 | 11, 12, 28, 38 | AC-20 | 52 | AC-36 | 52 | AC-52 | 32, 34 |
-| AC-5 | 11, 12, 28, 38 | AC-21 | 23 | AC-37 | 23 | AC-53 | 32, 34, 47 |
-| AC-6 | 12 | AC-22 | 21, 23 | AC-38 | 11 | AC-54 | 26, 30, 38, 43, 47 |
-| AC-7 | 11, 12, 28, 38 | AC-23 | 23 | AC-39 | 11, 12, 28, 38 | AC-55 | 17, 23 |
-| AC-8 | 12 | AC-24 | 32, 38 | AC-40 | 23 | AC-56 | 34, 47 |
-| AC-9 | 11, 12 | AC-25 | 12 | AC-41 | 5, 47 | AC-57 | 26, 34, 47 |
-| AC-10 | 23 | AC-26 | 11, 12, 28, 38 | AC-42 | 23, 47 | AC-58 | 26, 34, 38, 47 |
-| AC-11 | 23, 43 | AC-27 | 11 | AC-43 | 23 | AC-59 | 26, 38, 47 |
-| AC-12 | 21 | AC-28 | 11, 12 | AC-44 | 23, 47 | AC-60 | 30, 38 |
-| AC-13 | 21 | AC-29 | 38, 47 | AC-45 | 36, 47 | AC-61 | 19, 23 |
-| AC-14 | 23 | AC-30 | 12, 23 | AC-46 | 30, 47 | AC-62 | 34 |
-| AC-15 | 23 | AC-31 | 9 | AC-47 | 38 | AC-63 | 47 |
-| AC-16 | 9, 36, 47 | AC-32 | 17, 23, 30, 47 | AC-48 | 47 | AC-64 | 34, 47 |
+| AC-1 | 12, 41, 53 | AC-23 | 24 | AC-45 | 53 | AC-63 | 53 |
+| AC-2 | 12, 41 | AC-24 | 33, 41 | AC-46 | 31, 49, 53 | AC-64 | 37, 53 |
+| AC-3 | 12, 29, 41, 53 | AC-25 | 12 (+guard) | AC-47 | 41, 53 | AC-65 | 12, 41, 43, 53 |
+| AC-4 | 12, 29, 43, 53 | AC-27 | 12 | AC-48 | 31, 53 | AC-66 | 12, 29, 43, 53 |
+| AC-6 | 12 (+guard), 41 | AC-28 | 12 | AC-49 | 24, 49, 53 | AC-67 | 12, 29, 43, 53 |
+| AC-7 | 12, 29, 41, 53 | AC-29 | 41, 53 | AC-50 | 12, 16 | AC-68 | 35, 37, 43 |
+| AC-10 | 24 | AC-30 | 24 | AC-51 | 41, 53 | AC-69 | 43, 53 |
+| AC-11 | 24, 49 | AC-31 | 8, 10, 18, 31, 53 | AC-52 | 33, 37 | AC-70 | 12 |
+| AC-12 | 22 | AC-32 | 24 | AC-53 | 33, 37, 53 | AC-71 | 8, 16, 24 |
+| AC-13 | 22 | AC-33 | 12 (guard) | AC-54 | 27, 31, 41, 53 | AC-72 | 8, 18, 31 |
+| AC-14 | 24 | AC-34 | 53 | AC-55 | 18, 24, 49 | AC-73 | 12 |
+| AC-15 | 24 | AC-35 | 14, 31 | AC-56 | 37, 53 | AC-74 | 41, 53 |
+| AC-16 | 10, 39, 53 | AC-36 | 58 | AC-57 | 27, 37, 53 | AC-75 | 12 |
+| AC-17 | 10, 53 | AC-38 | 12 | AC-58 | 27, 37, 41 | AC-76 | 35, 41, 53 |
+| AC-20 | 58 | AC-41 | 5, 53 | AC-59 | 27, 41, 53 | AC-77 | 41, 43 |
+| AC-21 | 24 | AC-42 | 24 (guard), 53 | AC-60 | 31, 41, 53 | AC-78 | 49 |
+| AC-22 | 22, 24 | AC-43 | 24 | AC-61 | 20, 24 | | |
+| | | AC-44 | 8, 16, 24, 53 | AC-62 | 37, 53 | | |
+
+Retired IDs (never reused): AC-5, AC-8, AC-9, AC-18, AC-19, AC-26, AC-37, AC-39, AC-40.
+
+### Spec-level choices the design did not settle (flag at `/sdd-review impl-spec` and at each step gate)
+
+1. **`OIDC_SCOPE = 'openid email profile'`** (Step 32). FR-16.2's label falls back to `preferred_username`, a
+   `profile`-scope claim (OIDC Core § 5.4); design.md names `OIDC_SCOPE` without a value. The owner kept this scope on
+   2026-11-24, and homelab-edge's SSO spec § 4.6 is amended to register `xstockstrat[-staging]-web` with
+   `openid profile email` (it listed `openid email`, which Authelia would refuse with `invalid_scope`); that
+   registration is design § 6 cutover gate 3.
+2. **`_JWKS_FRESH_S = 300`** and the asymmetric allow-list `{RS,PS,ES}{256,384,512}` with EdDSA excluded (Step 19;
+   carried from the 2026-11-16 spec, which `/sdd-review impl-spec` accepted; D-2/D-13 name no values). With them,
+   D-37's **`_JWKS_STALE_MAX_S = 86400`**: while the JWKS cannot be fetched, a known `kid` keeps verifying for up to
+   24 h after the last successful fetch, so a retired or revoked key stays accepted that long (product-spec Risks,
+   design Open Risks; owner sign-off due before Step 19; stated in the cutover runbook, Step 54).
+3. **One serial SSO spec file inside a `chromium-sso` Playwright project** (`dependencies: ['chromium']`,
+   `workers: 1`, Step 52). D-120 fixes the serial file; the separate project keeps the parallel `chromium` files
+   from reading the mock's global mode while the serial file changes it.
+4. **config-wiring receivers the design did not list** (Step 6): identity `src/authMode.ts:config` → `identity`
+   (a new file, so the existing `identityServiceImpl.ts:this.config` receiver does not cover it) and agent
+   `app/sso_mode.py:agent_config` → `agent` (the `agent/oidc.issuer` read sits beside the mode read).
+5. **AC-77 row 1** (no session cookie → the middleware's redirect to `/auth/login`) is asserted in
+   `middleware.test.ts` (Step 41): a request with no session cookie at all never reaches the handler
+   (`middleware.ts:80-83`), exactly as for today's `/accounts/api/authorized-apps` (`route.ts:15-16`). The handler's
+   own 401 is the stale-token case, what `apiFetch` sees after an idle gap (R-4, D-107), asserted at the handler in
+   Step 43 (FR-16.6).
+6. **`ssoErrorRedirect` events** (Step 36): login destination records `sso_login_error` when `fault`, else
+   `sso_login_failed{reason}`; link destination always records `sso_link_failed{reason}` (D-72 remainder, D-113).
+7. **`prm.expected` includes `scopes_supported`** with the four `xstockstrat.*` scopes (D-10, carried by D-110).
+8. **No migration-assertion file for the config seed.** It sends no notify (D-109), and its idempotence comes from
+   `ON CONFLICT DO NOTHING` replayed by `migration-rerun`.
 
 ## Step Dependencies
 
-- Steps 1 + 2 land together: the step edits a `.proto`, so the `proto-gen` step must commit with it (§C).
-  No descriptor-parity guard covers identity messages. A grep for `_MAPPED` / `covers_every_proto_field`
-  found hits only in agent tests that never import `identity_pb2`.
-- Steps 8 + 9 land together. Step 8 adds `this.config.getBool(...)` to `authenticateUser`. The identity
-  test mocks have only `getInt` (`identityServiceImpl.test.ts:58,292,357,1141,1388`,
-  `identityServiceImpl.otlp.test.ts:40`, `identityTelemetry.test.ts:13`; recon R-7), so every existing
-  password-login test would throw at runtime until Step 9 adds `getBool`.
-- Step 4 seeds the keys. Their readers land in Step 8 (identity), Step 16 (agent) and Step 29 (UI),
-  across three surfaces, so they cannot form one §C unit. The bridge is the step-time
-  `check-config-wiring.mjs` mode: a missing leg prints `PENDING` and does not block
-  (`docs/patterns/config-governance.md:85-88`). `--final` runs only at the integration PR (the 338/341
-  precedent).
-- Steps 3–4 (migrations) precede Step 12 (the identity DB tier applies them) and Step 5 (the seed test
-  reads 053).
-- Step 6 (config grant) precedes Step 29. `loadOidcClientSecret` is denied without the grant in any
-  live run; the unit tests mock it.
-- Steps 10–11 precede Step 23: the agent resolve path calls `ResolveExternalIdentity`. Unit tests mock it.
-- Step 15 precedes Step 16: the `sso_mode.py` receivers must be registered before its reads exist, or
-  step time gates them as `unattributed`. Step 15 also precedes Steps 17 and 26 (the issuer vector file).
-- Step 18 precedes Step 22, and Step 20 precedes Step 22: `sso_auth.py` composes `jwks.py`, `scopes.py` and the client helper.
-- Step 24 (`typecheck` in CI) precedes Step 33. D-83's `@ts-expect-error` cases only go RED under a real `tsc` (D-93); the RED is recorded in Step 34.
-- Step 25 precedes Steps 29/31/33/37; Step 27 precedes Steps 33/37 (`refusalCode`, `safeRedirect`); Step 29 precedes Steps 31/33/37/39/40/41; Step 31 precedes Steps 33/37.
-- Step 33 precedes Step 35 (the `login_disabled` `AuthEvent` member).
-- Step 37 precedes Step 39: the login form posts to `/api/auth/sso/start`.
-- Step 41 → Step 43: the discovery routes' paired unit tests (AC-11 UI side, AC-49) are Step 43; Step 42 sits between them because it shares no file with either.
-- Steps 44 → 45 → 46 → 47: the stub IdP and fixtures precede the mock backend that serves their state,
-  and the serialized `chromium-sso` project precedes the specs it runs. Step 47 (e2e) requires every UI
-  step 24–46.
-- Steps 48–51 (docs) precede Step 52. Step 48's first action runs Step 52's Verification on the pre-docs
-  tree to record the RED. No `**Lands with**`: a docs-presence grep matches no §C trigger.
+- Steps 1 + 2 land together: a `.proto` edit lands with its `proto-gen` step (§C). No descriptor-parity guard covers
+  identity messages (`grep -rn "_MAPPED\|covers_every_proto_field" services` hits only agent tests that never
+  import `identity_pb2`).
+- Steps 9 + 10 land together: Step 9 adds `this.config.getString(...)` to `authenticateUser`, and every identity
+  config mock has only `getInt` (`identityServiceImpl.test.ts:58,292,357,1141,1388`,
+  `identityServiceImpl.otlp.test.ts:40`, `identityTelemetry.test.ts:13`; recon R-6), so every existing
+  password-login test throws until Step 10 replaces them with `fakeConfig()`.
+- Step 4 seeds the keys; their readers land in Steps 7 (identity), 17 (agent) and 30 (UI), on three consumer
+  surfaces, so they cannot form one §C unit. The bridge is step-time `check-config-wiring.mjs`: a missing leg prints
+  `PENDING` and does not fail (`check-config-wiring.mjs:887-899`). `--final` runs at the integration PR.
+- Step 6 (receivers, vector file) precedes Steps 7, 8, 17, 18, 30 and every test that loads the vector file
+  (Steps 8, 12, 18, 24, 27, 29, 31, 49): the receivers must exist no later than the reads, or step time gates them
+  as `unattributed` (`GATED_UNLESS_BASELINED`, `check-config-wiring.mjs:691`).
+- Steps 3 (identity `007`) precedes Step 12 (its constraint-name test reads the up file).
+- Step 11 precedes Steps 23 and 40–43 (the agent and UI call the new RPCs; their unit tests mock them).
+- Step 13 (config grant) precedes Step 30 in any live run; the UI unit tests mock `getSecret`.
+- Steps 19 and 21 precede Step 23 (`sso_auth.py` composes `jwks.py`, `scopes.py` and the client helper).
+- Step 25 (UI `typecheck` in CI) precedes Step 36: D-83's `@ts-expect-error` cases go RED only under a real `tsc`
+  (D-93); the RED is recorded in Step 37.
+- UI leaf order: 26 → 28 → 30 → 32 → 34 → 36 → 38 → 40 → 42 → 44 → 45 → 46 → 47 → 48. Step 30 needs Step 26
+  (`oidcIssuer`, `sameOrigin`, deadlines); Step 36 needs Steps 28, 30, 32, 34; Step 40 needs 34 and 36; Step 42
+  needs 40 (the shared callback seals the link cookie); Step 44 needs 36 (`SSO_ERROR_CODES`) and 40 (the form posts
+  to `/start`); Step 45 needs 42 and 36.
+- Steps 50 → 51 → 52 → 53: the stub IdP and fixtures precede the mock backend that serves their state, and the
+  serialized project precedes the spec file it runs. Step 53 requires every UI step 25–49.
+- Steps 54–57 (docs) precede Step 58. Step 54's first action runs Step 58's Verification on the pre-docs tree to
+  record the RED. No `**Lands with**`: a docs-presence grep matches no §C trigger.
 - **Merge order (rollout, not steps):** feature 319 merges first or alongside (D-52; the RevokeToken
-  unverified-decode defect). Rebase over 324 (`manage-users.py`, `ci.yml`), 331 and 323 (agent `main.py`).
-  Re-check that config `053` and identity `007` are still the next free numbers at merge (D-94, D-99, D-100:
-  050→051→052→053; 341's `050`, 343's `051` and 347's `052` have all landed). Trunk keeps taking config
-  numbers, so at execute time Step 4 uses the next free number shown by `ls services/xstockstrat-config/migrations | tail -2` and logs any further renumber in the Deviation Log.
+  unverified-decode defect), `merge-order.md` row. Rebase over 324 (`manage-users.py`, `ci.yml`), 331 and 323 (agent
+  `main.py`). At merge, re-check config `056` (conditional row vs 314/317/321) and identity `007`.
 
 ---
 
-### Step 1 — proto: Add ResolveExternalIdentity, IssueSessionForUser and ExternalIdentityOutcome
+### Step 1 — proto: Add ResolveExternalIdentity, LinkExternalIdentity, GetExternalIdentityLinks and IssueSessionForUser
 
 **Status**: `pending`
 **Service**: `packages/proto`
@@ -104,9 +137,9 @@ in both modes (D-60, D-77, D-80). One rule is PRESERVE in legacy mode only: agen
 **Reviewers**: Proto Reviewer — field number uniqueness per message, additive-only, `buf lint` + `buf breaking` against the dev trunk; `packages/proto` owner — backward compatibility, naming conventions; `xstockstrat-identity` owner — JWT expiry and rotation
 
 **Codebase Evidence**:
-- `grep -n "rpc ListAdminUserIds" packages/proto/identity/v1/identity.proto` → `:49`, the last RPC of the service block, which closes at `:50`; the SAN-gate comment precedent is at `:47-48`.
-- `AuthTokenResponse{access_token=1, refresh_token=2, expires_at=3, claims=4}` is at `:57-62`. `enum Role { ROLE_UNSPECIFIED = 0; … }` is at `:170-175`. The file is 218 lines and has no `reserved` ranges.
-- `packages/proto/buf.yaml` lint `STANDARD` except `RPC_RESPONSE_STANDARD_NAME`, `RPC_REQUEST_RESPONSE_UNIQUE`, so returning the existing `AuthTokenResponse` is allowed (recon).
+- `grep -n "rpc ListAdminUserIds" packages/proto/identity/v1/identity.proto` → `:49`, the last RPC; its SAN comment precedent is at `:47-48`.
+- `message AuthTokenResponse` is at `:57`; `enum Role` at `:170`. The file is 218 lines (`wc -l`).
+- `packages/proto/buf.yaml` excepts `RPC_RESPONSE_STANDARD_NAME`, so returning the existing `AuthTokenResponse` passes lint (recon § Codebase Map).
 
 **Lands with**: Step 2
 
@@ -115,21 +148,24 @@ in both modes (D-60, D-77, D-80). One rule is PRESERVE in legacy mode only: agen
 **Covers**: —
 
 **Instructions**:
-1. After `rpc ListAdminUserIds(...)` (`:49`), add two RPCs, each with a SAN comment in the `:47-48` style:
-   - `// Resolves an Authelia (iss, sub, email) to an identity.users row (feature 345). Authorized by mTLS peer SAN xstockstrat-ui or xstockstrat-agent only; every request header is ignored.`
-     `rpc ResolveExternalIdentity(ResolveExternalIdentityRequest) returns (ResolveExternalIdentityResponse);`
-   - `// Mints a first-party session for a resolved user (feature 345). Authorized by mTLS peer SAN xstockstrat-ui only.`
-     `rpc IssueSessionForUser(IssueSessionForUserRequest) returns (AuthTokenResponse);`
-2. Append these messages at the end of the file (D-11):
-   - `message ResolveExternalIdentityRequest { string issuer = 1; string subject = 2; string email = 3; }`
-   - `message ResolveExternalIdentityResponse { string user_id = 1; repeated Role roles = 2; bool is_active = 3; ExternalIdentityOutcome outcome = 4; }`
+1. After `rpc ListAdminUserIds(...)` (`:49`), add four RPCs, each with a one-line SAN comment in the `:47-48` style (FR-4, D-103):
+   - `rpc ResolveExternalIdentity(ResolveExternalIdentityRequest) returns (ResolveExternalIdentityResponse);` — peer SAN `xstockstrat-ui` or `xstockstrat-agent` only; headers ignored.
+   - `rpc IssueSessionForUser(IssueSessionForUserRequest) returns (AuthTokenResponse);` — `xstockstrat-ui` only.
+   - `rpc LinkExternalIdentity(LinkExternalIdentityRequest) returns (LinkExternalIdentityResponse);` — `xstockstrat-ui` only.
+   - `rpc GetExternalIdentityLinks(GetExternalIdentityLinksRequest) returns (GetExternalIdentityLinksResponse);` — `xstockstrat-ui` only.
+2. Append at the end of the file (fields numbered from 1; product spec § Proto Contract Changes):
+   - `message ResolveExternalIdentityRequest { string issuer = 1; string subject = 2; }`
+   - `message ResolveExternalIdentityResponse { string user_id = 1; repeated Role roles = 2; bool is_active = 3; }`
    - `message IssueSessionForUserRequest { string user_id = 1; }`
-   - `enum ExternalIdentityOutcome { EXTERNAL_IDENTITY_OUTCOME_UNSPECIFIED = 0; EXTERNAL_IDENTITY_OUTCOME_LINKED_EXISTING = 1; EXTERNAL_IDENTITY_OUTCOME_LINKED_BY_EMAIL = 2; EXTERNAL_IDENTITY_OUTCOME_CREATED = 3; }` (C-04)
-3. Add no `refusal` enum value: refusals are gRPC statuses (FR-3, D-11).
+   - `message LinkExternalIdentityRequest { string user_id = 1; string issuer = 2; string subject = 3; string password = 4; }`
+   - `message LinkExternalIdentityResponse {}`
+   - `message GetExternalIdentityLinksRequest { string user_id = 1; }`
+   - `message GetExternalIdentityLinksResponse { repeated string issuers = 1; }`
+3. No outcome enum (dropped by the re-spec): refusals are gRPC statuses with a closed detail set (D-123).
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-dev,subdir=packages/proto'   # baseline = the dev trunk; the path is relative to packages/proto (ci.yml:240)
+cd packages/proto && buf lint && buf breaking --against "../../.git#branch=feature/authelia-sso,subdir=packages/proto"
 ```
 
 ---
@@ -139,15 +175,15 @@ cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/ts/identity/v1/{identity.ts,identity_pb.ts,identity_connect.ts}` + `packages/proto/gen/ts/dist/identity/v1/{identity.js,identity.d.ts,identity_pb.js,identity_pb.d.ts}` — modify (generated)
+- `packages/proto/gen/ts/identity/v1/*` + `packages/proto/gen/ts/dist/identity/v1/*` — modify (generated)
 - `packages/proto/gen/python/identity/v1/{identity_pb2.py,identity_pb2_grpc.py}` — modify (generated)
-- `packages/proto/gen/go/identity/v1/{identity.pb.go,identity_grpc.pb.go,identityv1connect/identity.connect.go}` — modify (generated)
-- Any other path `buf-gen.sh` changes (e.g. an incidental WKT doc-comment refresh, insights.md:895) is committed too and recorded in the Deviation Log (F-08); generated output never counts toward the 5-file limit.
+- `packages/proto/gen/go/identity/v1/*` — modify (generated)
+- Any other path `buf-gen.sh` changes (an incidental WKT doc-comment refresh, insights.md:895) is committed too and recorded in the Deviation Log (F-08); generated output never counts toward the 5-file limit.
 
 **Reviewers**: Proto Reviewer — field number uniqueness, `buf lint` + `buf breaking`; `packages/proto` owner — backward compatibility; `xstockstrat-identity` owner — JWT expiry and rotation
 
 **Codebase Evidence**:
-- Root `CLAUDE.md` § Generating Proto Stubs: `./scripts/buf-gen.sh` generates TS, Python and Go stubs and compiles the TS package. The CI `proto-freshness` job is at `.github/workflows/ci.yml:255`.
+- Root `CLAUDE.md` § Generating Proto Stubs: `./scripts/buf-gen.sh` generates TS, Python and Go stubs and compiles the TS package; the CI `proto-freshness` job diffs `packages/proto/gen/`.
 - Ledger `insights.md:895-897`: incidental WKT comment diffs from `buf-gen` are committed, not reverted.
 
 **Lands with**: Step 1
@@ -157,15 +193,14 @@ cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-
 **Covers**: —
 
 **Instructions**:
-1. Run `./scripts/buf-gen.sh` from the repo root. Commit every changed file under `packages/proto/gen/`, including any incidental WKT doc-comment refresh (insights.md:895).
-2. Never Read/Grep the generated files (root `CLAUDE.md` Key File Paths). Check them only through the build below.
+1. Run `./scripts/buf-gen.sh` from the repo root and commit every changed file under `packages/proto/gen/`.
+2. Never Read/Grep the generated files (root `CLAUDE.md` Key File Paths); check them through the build below.
 
 **Verification**:
 ```bash
-./scripts/buf-gen.sh && git status --porcelain packages/proto/gen | head -5 && pnpm --filter @xstockstrat/proto run build
-# re-running buf-gen.sh must leave `git diff --exit-code packages/proto/gen/` empty
-./scripts/buf-gen.sh && git diff --exit-code packages/proto/gen/
-(cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-dev,subdir=packages/proto')
+./scripts/buf-gen.sh && pnpm --filter @xstockstrat/proto run build
+./scripts/buf-gen.sh && git diff --exit-code packages/proto/gen/   # a second run changes nothing
+(cd packages/proto && buf lint && buf breaking --against "../../.git#branch=feature/authelia-sso,subdir=packages/proto")
 ```
 
 ---
@@ -181,133 +216,114 @@ cd packages/proto && buf lint && buf breaking --against '../../.git#branch=main-
 **Reviewers**: DBA — migration NNN numbering, up+down pair, index correctness, run order per `scripts/db-migrate.sh`; `xstockstrat-identity` owner — JWT expiry and rotation
 
 **Codebase Evidence**:
-- `ls services/xstockstrat-identity/migrations | tail -3` → `005_drop_api_keys.up.sql`, `006_user_metadata.down.sql`, `006_user_metadata.up.sql`. So the next number is `007` (C-07).
-- `identity.users`: `email TEXT NOT NULL UNIQUE`, `password_hash TEXT NOT NULL`, `roles TEXT[] DEFAULT '{"trader"}'` (`001:6-14`, recon). There is no `lower(email)` index (recon R-5).
-- `scripts/db-migrate.sh` runs config, then identity, then the rest (recon § Deploy).
+- `ls services/xstockstrat-identity/migrations | tail -3` → `005_drop_api_keys.up.sql`, `006_user_metadata.down.sql`, `006_user_metadata.up.sql`; next is `007` (C-07).
+- `identity.users.user_id` is the PK referenced (`001_identity_tables.up.sql:6-14`, recon).
+- `migration-rerun` replays every up-file (`.github/workflows/ci.yml:898`, "every up-file must be idempotent").
 
 **TDD**: N/A (migration)
 
 **Covers**: —
 
 **Instructions**:
-1. Up (D-5, D-7; the product spec § Database Changes):
+1. Up (D-104; product spec § Database Changes), idempotent:
    ```sql
-   CREATE TABLE identity.external_identities (
+   CREATE TABLE IF NOT EXISTS identity.external_identities (
      issuer    TEXT        NOT NULL,
      subject   TEXT        NOT NULL,
      user_id   UUID        NOT NULL REFERENCES identity.users(user_id) ON DELETE CASCADE,
      linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-     PRIMARY KEY (issuer, subject),
-     UNIQUE (issuer, user_id)
+     CONSTRAINT external_identities_pkey PRIMARY KEY (issuer, subject),
+     CONSTRAINT external_identities_issuer_user_key UNIQUE (issuer, user_id)
    );
-   CREATE INDEX users_email_lower_idx ON identity.users (lower(email));
    ```
-   The index is **non-unique** (R-2 locked: existing mixed-case duplicates must resolve to `ambiguous email`).
-2. Down: `DROP INDEX IF EXISTS identity.users_email_lower_idx; DROP TABLE IF EXISTS identity.external_identities;`
-3. Edit no applied migration (F-01).
+   No email index (nothing matches by email).
+2. Down: `DROP TABLE IF EXISTS identity.external_identities;`
+3. One header comment of at most two lines per file naming feature 345; edit no applied migration (F-01).
 
 **Verification**:
 ```bash
 ls services/xstockstrat-identity/migrations/007_*.up.sql services/xstockstrat-identity/migrations/007_*.down.sql
-# read both: the CREATE TABLE and CREATE INDEX in .up have DROP inverses in .down; the index is not UNIQUE
-grep -c "UNIQUE INDEX" services/xstockstrat-identity/migrations/007_external_identities.up.sql   # expect 0
+grep -c "CONSTRAINT external_identities_pkey\|CONSTRAINT external_identities_issuer_user_key\|IF NOT EXISTS" services/xstockstrat-identity/migrations/007_external_identities.up.sql   # 3
+# read both: the CREATE TABLE has its DROP TABLE IF EXISTS inverse
 ```
 
 ---
 
-### Step 4 — migration: config 053_authelia_sso_keys and the regenerated stored set
+### Step 4 — migration: config 056_authelia_sso_keys and the regenerated stored set
 
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/053_authelia_sso_keys.up.sql` — create
-- `services/xstockstrat-config/migrations/053_authelia_sso_keys.down.sql` — create
+- `services/xstockstrat-config/migrations/056_authelia_sso_keys.up.sql` — create (number re-checked at execute)
+- `services/xstockstrat-config/migrations/056_authelia_sso_keys.down.sql` — create
 - `scripts/config-wiring-stored.json` — modify (regenerated, never hand-written)
 
 **Reviewers**: DBA — migration NNN numbering, up+down pair, run order; `xstockstrat-config` owner — key naming, environment scoping, secret encryption + redaction
 
-**§C acknowledgement (seed before readers)**: the seed's readers land in Steps 8 (identity), 16 (agent) and 29 (UI), three consumer surfaces, so no single `Lands with` can pair them. The gap is bridged mechanically: `check-config-wiring.mjs` reports these keys as `PENDING` (not a finding) at each intermediate step, and `--final` must pass at the integration PR (Step 52 / CI `config-wiring`). Every intermediate deployment stays legacy because the issuers are seeded empty and the flag is seeded `true` (D-48).
+**§C acknowledgement (seed before readers)**: readers land in Steps 7, 17 and 30 on three surfaces; `check-config-wiring.mjs` reports the missing legs as `PENDING` at step time and `--final` gates the integration PR.
 
 **Codebase Evidence**:
-- `ls services/xstockstrat-config/migrations | tail -4` → `050_ui_chart_history_bars.{down,up}.sql` (feature 341) `051_ingest_backfill_self_serve_keys.{down,up}.sql` (feature 343) and `052_alpaca_adaptive_rate_limit_keys.{down,up}.sql` (feature 347). So the next number is `053`: renumbered 050→051 (D-94), 051→052 (D-99) and 052→053 (D-100). Re-check the next free number at merge.
-- The seed row column order and conflict target come from `049_notify_commsgun_channel_keys.up.sql:4-55`: `(namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by, environment, user_id)` and `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
-- The seeded-empty secret comes from `049_*.up.sql:57-67`: `value_data '[redacted]'`, `is_secret TRUE`, ciphertext NULL, and the comment "Ciphertext stays NULL: a migration has no master key".
-- The notify CTE comes from `046_config_dead_rows_prune.up.sql:57-61`: `nt AS (SELECT pg_notify('config_changed', json_build_object('namespace', t.namespace, 'environment', t.environment)::text) AS sent FROM (SELECT DISTINCT namespace, environment FROM d) t) SELECT (SELECT count(*) FROM d) …, (SELECT count(*) FROM nt) AS notified;`
-- The down guard comes from `050_ui_chart_history_bars.down.sql` and 049: `updated_by` sentinel plus seed value.
-- `scripts/check-config-wiring.mjs:716` reports `STALE-STORED … regenerate it with DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py`. CI regenerates the file and diffs it (`ci.yml:1250-1292`, job `config-wiring-stored`).
+- `ls services/xstockstrat-config/migrations | tail -6` → `052_*`, `054_*`, `055_*` (no `053`); next free above the highest is `056`. `merge-order.md` row 345 vs 314/317/321: a number below trunk's highest is never used.
+- Plain seed shape: `054_marketdata_delisting_confirmation_days.up.sql:4-13` (`(namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by, environment, user_id)` + `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`).
+- Secret seed shape: `049_notify_commsgun_channel_keys.up.sql:57-67` (`is_secret` column, `'[redacted]'`, comment "Ciphertext stays NULL: a migration has no master key").
+- Down guard shape: `049_*.down.sql:5-18` (sentinel `updated_by` + seed value; secret row `is_secret AND value_encrypted IS NULL`, so `value_encrypted` is the ciphertext column) and `054_*.down.sql:4-10`.
+- `scripts/check-config-wiring.mjs` reports `STALE-STORED` when `scripts/config-wiring-stored.json` lags the migrations; the CI `config-wiring-stored` job regenerates and diffs it (`ci.yml:1323`).
 
 **TDD**: N/A (migration)
 
 **Covers**: —
 
 **Instructions**:
-1. **Up**: one statement, using the 046/047 CTE shape (D-20, D-57):
-   `WITH ins AS (INSERT INTO config.config_values (...) VALUES … ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING RETURNING namespace, environment), nt AS (SELECT pg_notify('config_changed', json_build_object('namespace', t.namespace, 'environment', t.environment)::text) AS sent FROM (SELECT DISTINCT namespace, environment FROM ins) t) SELECT (SELECT count(*) FROM ins) AS inserted, (SELECT count(*) FROM nt) AS notified;`
-   - It seeds 14 rows: 7 keys × `staging` / `production`, `user_id NULL`, `updated_by = 'system:config-migration-feature-authelia-sso'`.
-   - `identity` / `auth.password_login_enabled`: `bool`, value `'true'`, default_value `'false'`, consuming_service `xstockstrat-identity`.
-   - `ui` / `oidc.issuer`, `oidc.client_id`, `oidc.mcp_client_id`, `oidc.mcp_client_id_readonly`: `string`, value `''`, default `''`, consuming_service `xstockstrat-ui`.
-   - `ui` / `oidc.client_secret`: `string`, `is_secret TRUE`, value `'[redacted]'`, default `''`, ciphertext column left NULL (the 049 sentinel, D-57).
-     - The secret row needs the `is_secret` column, so the VALUES list must name it for every row. Use `FALSE` on the other 12 rows. One INSERT keeps the single CTE.
-   - `agent` / `oidc.issuer`: `string`, value `''`, default `''`, consuming_service `xstockstrat-agent`.
-   - Each description states the operator effect. The issuer descriptions include the FR-14 grammar: https or loopback http, a lowercase host, no default port, no trailing slash, no query or fragment, and `""` = legacy. The flag description says "seeded true until this deployment's cutover; code default false (fail closed)".
-   - A fresh DB gives `notified = 6` (identity, ui and agent × 2 environments); a re-apply gives 0.
-2. **Down** (D-36): a `WITH d AS (DELETE FROM config.config_values WHERE environment IN ('staging','production') AND user_id IS NULL AND updated_by = 'system:config-migration-feature-authelia-sso' AND ((namespace='ui' AND key IN ('oidc.issuer','oidc.client_id','oidc.mcp_client_id','oidc.mcp_client_id_readonly') AND value_data='') OR (namespace='ui' AND key='oidc.client_secret' AND value_data='[redacted]' AND value_encrypted IS NULL) OR (namespace='agent' AND key='oidc.issuer' AND value_data='')) RETURNING namespace, environment)` CTE feeding the same `pg_notify` select.
-   - It **never** deletes `identity` / `auth.password_login_enabled` (D-36: removing it would make the code default `false` lock out password login).
-   - Confirm the ciphertext column's name at execute by reading `045` / `049`; `value_encrypted` is the name D-36 cites.
-3. Add a header comment of two lines at most to each file. It cites feature 345 and states the constraint **without naming any key**: in the up, that the identity flag row's seed differs from its code default (the config-constitution exception, D-20); in the down, that the identity flag row is deliberately kept. The literal `password_login_enabled` must not appear in the down file at all (the Verification below and Step 5's test assert its absence).
-4. Regenerate the stored set **after** the files carry their final `053_` name (its `inputs_sha256` hashes every config migration path and body, so a stored set generated before the rename reports `STALE-STORED`, `check-config-wiring.mjs:714-717`). Regenerate on a scratch Postgres 16 with `psql` + `migrate` (the generator creates and drops its own DB):
-   `DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py`. Commit `scripts/config-wiring-stored.json`.
-   - The file is **never hand-written**.
-   - If no scratch Postgres is reachable, block the step (P-03) and run the CI `config-wiring-stored` job. It uploads the regenerated file as an artifact (`ci.yml:1294-1300`); commit that artifact. This is the 341 precedent.
+1. **Number.** At execute, `ls services/xstockstrat-config/migrations | tail -2`; use highest + 1 (`056` today). Any other number is recorded in the Deviation Log and every `056` below reads as that number.
+2. **Up**: two statements, both `ON CONFLICT … DO NOTHING`, `user_id NULL`, `updated_by = 'system:config-migration-feature-authelia-sso'`, each key for `staging` and `production` (18 rows, D-109). **No notify**: every seed equals its code default.
+   - Statement 1 (the `054` shape), 16 rows:
+     - `identity` / `auth.mode`, `string`, value `'local'`, default `'local'`, consuming_service `xstockstrat-identity`. Description: "Login mode for this deployment: local (password; built-in MCP OAuth), both (SSO and password; Link SSO; built-in MCP OAuth) or oidc (SSO only; MCP accepts issuer tokens only). Any other value reads as local. Read globally; set with scripts/manage-users.py set-auth-mode."
+     - `ui` / `oidc.issuer`, `oidc.client_id`, `oidc.mcp_client_id`, `oidc.mcp_client_id_readonly`, `oidc.mcp_client_id_claude_code`, `oidc.mcp_client_id_claude_code_readonly`: `string`, `''`/`''`, `xstockstrat-ui`.
+     - `agent` / `oidc.issuer`: `string`, `''`/`''`, `xstockstrat-agent`.
+     - The issuer descriptions state the FR-14 grammar: https (http only on localhost, 127.0.0.1, [::1]), a lowercase host, no IP except loopback, no IDN/`xn--`, no default port, no userinfo/query/fragment/`%`, no trailing slash; `""` is invalid in `both`/`oidc`.
+   - Statement 2 (the `049:57-67` shape), 2 rows: `ui` / `oidc.client_secret`, `string`, `'[redacted]'`, `is_secret TRUE`, default `''`, `xstockstrat-ui`, with the "Ciphertext stays NULL" comment.
+3. **Down**: one `DELETE` with the `049` guard: `environment IN ('staging','production') AND user_id IS NULL AND updated_by = '<sentinel>' AND ((namespace='identity' AND key='auth.mode' AND value_data='local') OR (namespace='ui' AND key IN (<the six plain ui keys>) AND value_data='') OR (namespace='agent' AND key='oidc.issuer' AND value_data='') OR (namespace='ui' AND key='oidc.client_secret' AND is_secret AND value_encrypted IS NULL))`. A row an operator changed is never deleted.
+4. Header comments: at most two lines per file, naming feature 345 and the constraint (namespace-relative keys; operator-changed rows survive the down).
+5. Regenerate the stored set **after** the file has its final number (its `inputs_sha256` hashes every config migration): `DATABASE_URL=<scratch postgres 16> python3 scripts/config-wiring-stored.py`, then commit `scripts/config-wiring-stored.json`. Never hand-write it. Without a scratch Postgres, block (P-03) and take the CI `config-wiring-stored` artifact (the 341 precedent).
 
 **Verification**:
 ```bash
-ls services/xstockstrat-config/migrations/053_*.up.sql services/xstockstrat-config/migrations/053_*.down.sql
-ls services/xstockstrat-config/migrations | grep -c '^053_'   # 2: no other feature holds 053
-# SQL only (comment lines stripped): the down never names the flag row; expect no match
-! grep -v '^[[:space:]]*--' services/xstockstrat-config/migrations/053_authelia_sso_keys.down.sql | grep -n "password_login_enabled"
-# The 14-tuple count (7 keys x 2 environments) is asserted by Step 5's test, not by a line count here.
-# Step-time wiring: declared keys whose reader is not written yet print PENDING and do not fail (exit 0)
-node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-config/migrations/053_authelia_sso_keys.up.sql
-git diff --stat scripts/config-wiring-stored.json   # regenerated after the 053 rename, non-empty
-! node scripts/check-config-wiring.mjs --final 2>&1 | grep STALE-STORED   # the stored set matches the 053 inputs
+ls services/xstockstrat-config/migrations/056_*.up.sql services/xstockstrat-config/migrations/056_*.down.sql
+ls services/xstockstrat-config/migrations | grep -c '^056_'   # 2: no other feature holds 056
+! grep -n "pg_notify" services/xstockstrat-config/migrations/056_authelia_sso_keys.up.sql   # no notify (D-109)
+node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-config/migrations/056_authelia_sso_keys.up.sql   # exit 0; readers not yet written print PENDING
+git diff --stat scripts/config-wiring-stored.json   # regenerated, non-empty
+! node scripts/check-config-wiring.mjs --final 2>&1 | grep STALE-STORED
 ```
 
 ---
 
-### Step 5 — test: Static seed test and migration-rerun assertion for 053
+### Step 5 — test: Static seed test for 056
 
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/autheliaSsoSeedMigration.test.ts` — create
-- `scripts/migration-assertions/config-authelia-sso-keys.sql` — create
 
 **Reviewers**: `xstockstrat-config` owner — key naming, environment scoping, secret encryption + redaction
 
 **Codebase Evidence**:
-- The helper is `src/__tests__/migrationSql.ts`: `findOne(suffix, 'up'|'down')` (`:8`) and `splitStatements(sql)` (`:19`).
-- The precedent is `src/__tests__/uiChartHistoryBarsSeedMigration.test.ts:1-30` (`SUFFIX`, `ACTOR`, a `ROW` regex, the `upInsert()` single-statement assertion).
-- `scripts/migration-assertions/notify-commsgun-channel.sql:1-2` is the slug-named assertion run by `migration-rerun.py` after all migrations (`docs/patterns/database.md:66-72`). Name it by slug, not number (fails.md:3962-3964).
+- `src/__tests__/migrationSql.ts` exports `findOne` and `splitStatements` (`notifyCommsgunSeedMigration.test.ts:3`).
+- Precedent with a secret row: `src/__tests__/notifyCommsgunSeedMigration.test.ts:1-30` (`SUFFIX`, `ACTOR`, `CONFLICT`, `ENVIRONMENTS`, `SECRET_KEY`, `splitTopLevel`).
 
 **TDD**: red-green required
 
-**Covers**: AC-35 (the secret is seeded `is_secret`, NULL ciphertext), AC-41 (both issuers `""` and the flag `true` on every DB)
+**Covers**: AC-41 (every database seeds `auth.mode` = `local`, the code default)
 
 **Instructions**:
-1. In `autheliaSsoSeedMigration.test.ts` (node:test, the `uiChartHistoryBarsSeedMigration.test.ts` style), assert on `findOne('_authelia_sso_keys', 'up'|'down')`:
-   - The up is exactly one statement. It inserts 14 tuples whose `(namespace, key, environment)` set equals the 7 keys × 2 environments.
-   - Every key is relative: no key starts with `ui.`, `agent.` or `identity.` (045 CHECK, `@AC-1 @feature-296`).
-   - The flag rows carry value `'true'` and default `'false'`. The issuer and client-ID rows carry `''`/`''`.
-   - The secret row has `TRUE` and `'[redacted]'`, and the other rows have `is_secret` `FALSE`.
-   - `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING` is present.
-   - `pg_notify` is fed by `SELECT DISTINCT namespace, environment FROM ins`. That gives 6 notifies on a fresh DB by construction (3 namespaces × 2 environments).
-   - The down never names `password_login_enabled`, and guards the secret row on `value_encrypted IS NULL`.
-2. In `config-authelia-sso-keys.sql` (BEGIN … ROLLBACK, `DO $$ … RAISE EXCEPTION` on a mismatch, the notify-commsgun shape):
-   - Assert that the 14 global rows exist.
-   - Assert that the two `ui/oidc.client_secret` rows have `is_secret` true and NULL ciphertext.
-   - Re-run a copy of the 053 up statement and assert `inserted = 0 AND notified = 0`. The PREPARE body is a copy of the shipped statement; change both together.
-3. The domain literals have a single consumer (this test), so they stay inline (C-13).
+1. Clone the `notifyCommsgunSeedMigration.test.ts` shape for `SUFFIX = 'authelia_sso_keys'`:
+   - the up has exactly two statements; their tuples equal the 9 keys × 2 environments (18), `user_id NULL`, the sentinel actor;
+   - every stored key is relative: none starts with `identity.`, `ui.` or `agent.` (`@AC-1 @feature-296`);
+   - **@AC-41:** both `auth.mode` rows carry value and default `'local'`;
+   - every other plain row carries `''`/`''`; the two secret rows carry `TRUE`, `'[redacted]'` and default `''`;
+   - both statements carry the `ON CONFLICT … DO NOTHING` target; the up contains no `pg_notify`;
+   - the down deletes only by the sentinel and the seed value, and guards the secret row on `value_encrypted IS NULL`.
+2. The literals have one consumer (this file), so they stay inline (C-13).
 
 **Verification**:
 ```bash
@@ -317,67 +333,128 @@ grep -n "__tests__/fixtures" src/__tests__/autheliaSsoSeedMigration.test.ts || e
 
 ---
 
-### Step 6 — service: GetSecret grant for ui/oidc.client_secret
+### Step 6 — config: Shared vector file, CI change filters and the config-wiring receivers
 
 **Status**: `pending`
-**Service**: `xstockstrat-config`
+**Service**: `scripts/` (shared test data, config-wiring registry) and `.github/workflows/ci.yml`
 **Files**:
-- `services/xstockstrat-config/src/grpc/authz.ts` — modify
+- `scripts/testdata/oidc-issuer-vectors.json` — create
+- `scripts/config-wiring.json` — modify
+- `.github/workflows/ci.yml` — modify
 
-**Reviewers**: `xstockstrat-config` owner — secret encryption + redaction; Security — secrets decryptable only via `GetSecret` gated by the `x-internal-caller` allow-list
+**Reviewers**: `xstockstrat-config` owner — key naming, environment scoping; `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness; Platform Lead — CI gate parity
 
 **Codebase Evidence**:
-- `SECRET_CALLER_ALLOWLIST` is at `authz.ts:136-155`. It holds three grants, each with a `peerSan`; the last is `{callerID:'notify', namespace:'notify', keys:['commsgun.app_key'], peerSan:'xstockstrat-notify'}` at `:149-154`.
-- `hasSecretCallerAuthority` (`authz.ts:178-193`) requires the `x-internal-caller` header, a matching callerID and namespace, the key, and the `peerSan`.
+- `scripts/testdata/` holds `rpc-status-vectors.json`, the shared-vector precedent (D-66 basis, carried by D-79/D-88).
+- The approved grammar and its 66 `issuer` and 16 `app_url` rows are verbatim in `git show 7eeab3d:docs/roadmap/features/345-authelia-sso/design.md` lines 769–870 (keys `issuer_pattern`, `app_url_pattern`, `issuer`, `app_url`, `mode`; counted at spec time with `json.load`: 66/16/10). D-110 carries D-79/D-88; D-101 repurposes the `mode` rows; D-130e adds `refusals` and `prm`.
+- Receivers: `attribute()` maps `"<file>:<receiver>"` to one namespace (`check-config-wiring.mjs:547-551`); a TS getter's receiver is `receiverBefore(src, m.index)` and an index read's is `receiverBefore(…, 'values')` (`:471-472`); a Python attribute call's receiver is `ast.unparse(func.value)` (`config-wiring-py-reads.py:142-144`). Existing: `"services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:this.config": "identity"` (`config-wiring.json:105`), `"services/xstockstrat-ui/src/lib/indicatorChart.ts:values": "ui"` (`:141`), forwarder `"services/xstockstrat-agent/app/config/watcher.py:read_config_value"` (`:42`).
+- `validateState` never requires the file to exist, so receivers may land before their readers (Step 6 precedes Steps 7, 17, 30).
+- CI `changes` filters: `xstockstrat-agent` `ci.yml:59`, `xstockstrat-identity` `:62`, `xstockstrat-ui` `:64`.
 
-**TDD**: red-green required
+**TDD**: N/A (test data and registry configuration; RED→GREEN in Steps 8, 12, 18, 24, 27, 29, 31, 49)
 
 **Covers**: —
 
 **Instructions**:
-1. Append `{ callerID: 'ui', namespace: 'ui', keys: ['oidc.client_secret'], peerSan: 'xstockstrat-ui' }` to `SECRET_CALLER_ALLOWLIST` (product spec § Affected Services, AC-35). Change no other grant.
+1. **Vector file.** Create `scripts/testdata/oidc-issuer-vectors.json`:
+   - `issuer_pattern`, `app_url_pattern`, `issuer` (66 rows) and `app_url` (16 rows): copied byte-for-byte from `git show 7eeab3d:…/design.md` lines 769–870. The old `mode` array is **not** copied.
+   - `mode` (D-101, D-121), 10 rows `{name, value, expected, logs}` where `value: null` means the row is absent: `absent` (null → `local`, false), `local`, `both`, `oidc` (each itself, false), `empty` (`""` → `local`, true), `upper` (`"BOTH"` → `local`, true), `leading_space` (`" both"` → `local`, true), `trailing_space` (`"oidc "` → `local`, true), `legacy_word` (`"sso"` → `local`, true), `typo` (`"oidcc"` → `local`, true).
+   - `refusals` (design.md § 1 "Refusal contract", D-123/D-130e): `{"resolve": ["not linked","account inactive"], "link": ["invalid credentials","account inactive","account already linked","already linked to this issuer","link disabled"], "session": ["account inactive"]}`.
+   - `prm` (D-10, D-130e): `{"agent_public_url": "https://xstockstrat-staging.example.test/agent", "issuer": "https://auth.example.test", "expected": {"resource": "https://xstockstrat-staging.example.test/agent", "authorization_servers": ["https://auth.example.test"], "scopes_supported": ["xstockstrat.read","xstockstrat.write","xstockstrat.admin","xstockstrat.trade"]}}`.
+2. **`config-wiring.json` `registry.receivers`** (D-109; spec-level choice 4):
+   - `"services/xstockstrat-identity/src/authMode.ts:config": "identity"`;
+   - `"services/xstockstrat-agent/app/sso_mode.py:identity_config": "identity"`, `"services/xstockstrat-agent/app/sso_mode.py:agent_config": "agent"`;
+   - `"services/xstockstrat-ui/src/lib/oidcConfig.ts:identity.values": "identity"`, `"…:ui.values": "ui"`, `"…:agent.values": "agent"`.
+   - No `findings` baseline entry (`docs/patterns/config-governance.md` § Baseline).
+3. **`ci.yml`**: append `'scripts/testdata/oidc-issuer-vectors.json'` to the `xstockstrat-agent` (`:59`), `xstockstrat-identity` (`:62`) and `xstockstrat-ui` (`:64`) filters.
+4. Hand-check the JSON once against both engines (D-88 practice): every `issuer` row through Python `re.fullmatch` and Node `new RegExp(...).test` gives its `valid`; record the output in the step's evidence.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-config && pnpm run lint && grep -n "callerID: 'ui'" src/grpc/authz.ts
+python3 -c "import json;d=json.load(open('scripts/testdata/oidc-issuer-vectors.json'));print(len(d['issuer']),len(d['app_url']),len(d['mode']),sorted(d['refusals']),sorted(d['prm']))"   # 66 16 10 ['link','resolve','session'] ['agent_public_url','expected','issuer']
+python3 -c "import json,re;d=json.load(open('scripts/testdata/oidc-issuer-vectors.json'));r=re.compile(d['issuer_pattern']);bad=[x['name'] for x in d['issuer'] if (r.fullmatch(x['value']) is not None)!=x['valid']];print('python mismatches',bad);assert not bad"
+node -e "const d=require('./scripts/testdata/oidc-issuer-vectors.json');const r=new RegExp(d.issuer_pattern);const bad=d.issuer.filter(x=>r.test(x.value)!==x.valid).map(x=>x.name);console.log('node regex-only mismatches',bad)"   # any mismatch must be a row the TS URL round-trip rejects (Step 27 asserts it)
+node --input-type=module -e "import {loadState} from './scripts/check-config-wiring.mjs'; const r=loadState(process.cwd()).registry.receivers; const want={'services/xstockstrat-identity/src/authMode.ts:config':'identity','services/xstockstrat-agent/app/sso_mode.py:identity_config':'identity','services/xstockstrat-agent/app/sso_mode.py:agent_config':'agent','services/xstockstrat-ui/src/lib/oidcConfig.ts:identity.values':'identity','services/xstockstrat-ui/src/lib/oidcConfig.ts:ui.values':'ui','services/xstockstrat-ui/src/lib/oidcConfig.ts:agent.values':'agent'}; for (const [k,v] of Object.entries(want)) if (r[k]!==v) { console.error('missing '+k); process.exit(1) } console.log('receivers registered')"
+grep -c "scripts/testdata/oidc-issuer-vectors.json" .github/workflows/ci.yml   # 3
 ```
 
 ---
 
-### Step 7 — test: The ui secret grant is SAN-bound
+### Step 7 — service: Identity mode reader (src/authMode.ts) and the watcher hook
 
 **Status**: `pending`
-**Service**: `xstockstrat-config`
+**Service**: `xstockstrat-identity`
 **Files**:
-- `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts` — modify
+- `services/xstockstrat-identity/src/authMode.ts` — create
+- `services/xstockstrat-identity/src/index.ts` — modify
 
-**Reviewers**: `xstockstrat-config` owner — secret encryption + redaction
+**Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation; Security — auth scope correctness
 
 **Codebase Evidence**:
-- `secretCallerAuthz.test.ts:97-98` holds `describe('hasSecretCallerAuthority — notify grant', …)` with the `@AC-14` case. The SAN near-miss and missing-auth-context cases are at `:81-95`.
+- `ConfigWatcher.getString(key, def = '')` at `src/services/configWatcher.ts:203-207`: an absent key returns `def` (after the watcher's own rate-limited WARN, `:184-193`), a present `stringVal` (including `''`) is returned as-is.
+- The watcher emits `'update'` on every snapshot/delta at `configWatcher.ts:107`; `configWatcher.ts` is byte-identical across services and is not edited (`scripts/check-watcher-copies.py`, D-129).
+- `src/index.ts:24-26`: `new ConfigWatcher(configEndpoint, 'identity')`, `await configWatcher.waitForSnapshot(90_000)`, `log.info('Config snapshot received')`; `main()` runs at import (`:71`).
+- The receiver `src/authMode.ts:config` → `identity` is registered in Step 6.
+
+**TDD**: red-green required (paired test: Step 8)
+
+**Covers**: —
+
+**Instructions**:
+1. **`src/authMode.ts`** (D-101, D-121, D-129):
+   - `export const AUTH_MODES = ['local', 'both', 'oidc'] as const; export type AuthMode = (typeof AUTH_MODES)[number];`
+   - `export function parseAuthMode(raw: string | undefined): { mode: AuthMode; invalid: boolean }`: `undefined` → `{local, false}`; one of the three exact strings → itself; anything else (`''`, case or whitespace variants) → `{local, true}`.
+   - `export function readAuthMode(config: { getString(key: string, def?: string): string }): AuthMode` — the **only** read: `config.getString('auth.mode', 'local')`, then `parseAuthMode`; on `invalid`, `log.warn('auth_mode_invalid', { value })` once per distinct value (a module-level `Set`; export `__resetAuthModeLogOnce()` for tests). The parameter must be named `config` (wiring receiver).
+   - `export function watchAuthMode(watcher: { getString(...): string; on(event: 'update', fn: () => void): unknown }): void`: calls `readAuthMode(watcher)` once, then on every `'update'`.
+   - Use the service logger (`src/services/logger.ts`).
+2. **`src/index.ts`**: after `log.info('Config snapshot received')` (`:26`), add `watchAuthMode(configWatcher);` and its import.
+
+**Verification**:
+```bash
+cd services/xstockstrat-identity && pnpm run lint && pnpm run build
+grep -n "watchAuthMode(configWatcher)" src/index.ts   # 1
+cd ../.. && node scripts/check-config-wiring.mjs --keys identity.auth.mode   # exit 0: the read is attributed to identity
+```
+
+---
+
+### Step 8 — test: authMode parsing, log-once, watcher re-parse and the seeded row
+
+**Status**: `pending`
+**Service**: `xstockstrat-identity`
+**Files**:
+- `services/xstockstrat-identity/src/__tests__/authMode.test.ts` — create
+- `services/xstockstrat-identity/src/__tests__/configWatcher.test.ts` — modify
+
+**Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation
+
+**Codebase Evidence**:
+- `configWatcher.test.ts` builds a real watcher from a snapshot (`seeded(values)`, `:93-98`) and asserts `w.getString('labels.issuer','xs')` at `:115`.
+- `src/__tests__/` compiles to `dist/__tests__/` (`package.json` `"test": "tsc && node --test dist/__tests__/*.test.js"`), so the vector file is `path.resolve(__dirname, '../../../../scripts/testdata/oidc-issuer-vectors.json')`.
 
 **TDD**: red-green required
 
-**Covers**: AC-35
+**Covers**: AC-72 (identity logs `auth_mode_invalid` once), AC-31 (absent row → `local`, no log), AC-71 and AC-44 (identity leg: an update re-parses; the `index.ts` hook is a labelled guard)
 
 **Instructions**:
-1. Add `describe('hasSecretCallerAuthority — ui grant (feature 345)')`, cloning the notify block, with these cases:
-   - **@AC-35:** `x-internal-caller: ui` + SAN `DNS:xstockstrat-ui` → true for `('ui','oidc.client_secret')`.
-   - The same with SAN `xstockstrat-agent` → false.
-   - Caller `agent` → false.
-   - Key `oidc.client_id` → false (not a secret grant).
-   - A near-miss SAN `xstockstrat-uix` → false.
-   - No header → false.
-2. Redaction for `GetConfig`/`WatchConfig` is unchanged code (`@AC-2/3/14 @feature-147` PRESERVE). Add no new assertion here.
+1. **`authMode.test.ts`**:
+   - every vector `mode` row: `parseAuthMode(value ?? undefined)` gives `expected` and `invalid === logs`;
+   - **@AC-72:** `readAuthMode` on a stub returning `'sso'` twice logs `auth_mode_invalid` exactly once; a second distinct value logs again;
+   - **@AC-31:** a stub returning its default (absent row) gives `local` and no `auth_mode_invalid`;
+   - **@AC-71/@AC-44:** `watchAuthMode` with an `EventEmitter` fake that has `getString`: the first parse happens immediately; after the fake's value changes to `'oidc'` and it emits `'update'`, the next `getString` call count rises and a changed invalid value logs (D-129);
+   - `__resetAuthModeLogOnce()` in `beforeEach`.
+2. **`configWatcher.test.ts`** (seeded row → real reader, config-wiring b): `seeded({ 'auth.mode': { stringVal: 'both' } })` → `readAuthMode(w) === 'both'`; `stringVal: ''` → `local` + one `auth_mode_invalid`; a snapshot without the key → `local`.
+3. C-13: the test literals have one consumer each; the shared vectors come from `scripts/testdata/`.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
+cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
+grep -n "watchAuthMode(configWatcher)" src/index.ts   # (guard) AC-44/AC-71: index.ts runs main() at import (:71), so the hook is grep-guarded (D-129)
 ```
 
 ---
 
-### Step 8 — service: Password-login flag gate in AuthenticateUser
+### Step 9 — service: verifyPassword, the pure sessionResponse builder and the oidc password gate
 
 **Status**: `pending`
 **Service**: `xstockstrat-identity`
@@ -388,77 +465,75 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 **Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation; Security — auth scope correctness
 
 **Codebase Evidence**:
-- `authenticateUser` is at `identityServiceImpl.ts:150-206`. It validates fields at `:151-155` and then runs the DB query at `:156-160`.
-- `ConfigWatcher.getBool(key, def)` is at `src/services/configWatcher.ts:222-226`. That file is byte-identical across services and is not edited (`scripts/check-watcher-copies.py`, recon).
-- `LoginFailureReason` is at `telemetry.ts:357-362` (`'missing_fields' | 'unknown_or_inactive' | 'blocked_default_admin' | 'bad_password' | 'internal'`). `recordLoginFailure` is at `:410`.
-- The config-wiring receiver `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:this.config` → `identity` already exists (`scripts/config-wiring.json:105`), so no registry edit is needed.
+- `authenticateUser` `identityServiceImpl.ts:150-206`: missing fields → 3 (`:151-155`); `SELECT user_id, password_hash, roles … WHERE email = $1 AND is_active = true` (`:157-160`); none → `recordLoginFailure('unknown_or_inactive')` + 16 (`:161-164`); seed-admin guard with `log.warn` + `blocked_default_admin` + 16 (`:170-177`); `bcrypt.compare` → `bad_password` + 16 (`:179-183`); mint `:185-186`; reply literal `:189-200`.
+- `refreshToken` builds the same reply literal at `:258-269`.
+- `LoginFailureReason` `telemetry.ts:357-362`.
 
-**Lands with**: Step 9
+**Lands with**: Step 10
 
 **TDD**: red-green required
 
 **Covers**: —
 
 **Instructions**:
-1. Add `'password_login_disabled'` to `LoginFailureReason` (`telemetry.ts:357-362`).
-2. In `authenticateUser`, after the `missing_fields` check and **before** the `pool.query` (D-12):
-   - `if (!this.config.getBool('auth.password_login_enabled', false)) { recordLoginFailure('password_login_disabled'); return callback({ code: 7, message: 'password login disabled' }); }`
-   - The code default `false` is the FR-9 fail-closed default. The stored key is relative (C-05).
-3. Leave the email comparison case-sensitive here. FR-3's lowercasing applies to the SSO paths only (D-49 N-3).
+1. **`verifyPassword(selector, password)`** (D-102), a private method: `selector` is `{ email }` (exact `email = $1`) or `{ userId }`; `SELECT user_id, email, password_hash, roles, is_active FROM identity.users WHERE <column> = $1` (no `is_active` filter). Order: no row → `{ok:false, reason:'unknown'}`; `!is_active` → `'inactive'`; `isBlockedDefaultAdmin(hash, APPLICATION_ENV)` → `'blocked_default_admin'`; `bcrypt.compare` false → `'bad_password'`; else `{ok:true, user}`. It records no metric and logs nothing.
+2. **`sessionResponse({accessToken, issuedAt, expiresAt}, refreshToken, claims: {userId, email, roles})`** (D-122): a pure function returning today's reply object; every argument required. Replace both literals (`:189-200`, `:258-269`) with it.
+3. **`authenticateUser`**: after the missing-fields check and before any query, `if (readAuthMode(this.config) === 'oidc') { recordLoginFailure('password_login_disabled'); return callback({ code: 7, message: 'password login disabled' }); }` (D-102). Then call `verifyPassword({email}, password)` and map: `unknown`/`inactive` → `unknown_or_inactive` + 16; `blocked_default_admin` → today's `log.warn` + metric + 16; `bad_password` → today's. Mint with the **request** `email` as today. Observable behaviour in `local`/`both` is unchanged (`@AC-2/3/6 @feature-043` PRESERVE there).
+4. **`telemetry.ts`**: add `'password_login_disabled'` to `LoginFailureReason`.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-identity && pnpm run lint && node ../../scripts/check-config-wiring.mjs --keys identity.auth.password_login_enabled
+cd services/xstockstrat-identity && pnpm run lint && pnpm run build
+grep -c "sessionResponse(" src/grpc/identityServiceImpl.ts   # definition + 2 call sites
 ```
 
 ---
 
-### Step 9 — test: Password gate and the getBool mock fix
+### Step 10 — test: fakeConfig fixture, the mock sites and the oidc gate
 
 **Status**: `pending`
 **Service**: `xstockstrat-identity`
 **Files**:
+- `services/xstockstrat-identity/src/__tests__/fixtures/fakeConfig.ts` — create
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.otlp.test.ts` — modify
 - `services/xstockstrat-identity/src/__tests__/identityTelemetry.test.ts` — modify
 - `services/xstockstrat-identity/src/__tests__/telemetryAllowlist.test.ts` — modify
-- `services/xstockstrat-identity/src/__tests__/configWatcher.test.ts` — modify
 
 **Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation
 
 **Codebase Evidence**:
-- The config mocks have only `getInt`: `identityServiceImpl.test.ts:58,292,357,1141,1388`, `identityServiceImpl.otlp.test.ts:40`, `identityTelemetry.test.ts:13` (grep `getInt\|getBool` over `src/__tests__`).
-- `telemetryAllowlist.test.ts:46` drives `telemetry.recordAuditFailure('identity.user.created')`.
-- The real reader: `configWatcher.test.ts` patches `ConfigServiceClient`/`clientCredentials`/`getLogger` in `before` (`:63-67`), builds a `ConfigSnapshot` with `snap(values)` (`:84`) and feeds it to a real `ConfigWatcher` with `seeded(values)` (`:93-98`). `ConfigWatcher.getBool` is at `src/services/configWatcher.ts:222-226`. The cross-service model is `services/xstockstrat-ingest/tests/test_config_watcher.py:56,74`.
+- Config mocks with only `getInt`: `identityServiceImpl.test.ts:58,292,357,1141,1388`, `identityServiceImpl.otlp.test.ts:40`, `identityTelemetry.test.ts:13` (grep `getInt\|getString\|getBool` over `src/__tests__`). Seven consumers → one fixture (C-13, R-6).
+- Node fixture home exists: `src/__tests__/fixtures/` (`collectingReader.ts`, `otlpReceiver.ts`).
+- `telemetryAllowlist.test.ts` drives the closed label sets.
 
-**Lands with**: Step 8
+**Lands with**: Step 9
 
 **TDD**: red-green required
 
-**Covers**: AC-16, AC-17, AC-31
+**Covers**: AC-16, AC-17, AC-31 (AuthenticateUser legs)
 
 **Instructions**:
-1. At every mock site above, add `getBool: (k: string, d: boolean) => (k === 'auth.password_login_enabled' ? true : d)`. This keeps the existing password-login tests (`@AC-2/3/6 @feature-043`, flag-on PRESERVE) green.
-2. Add these cases to `identityServiceImpl.test.ts`:
-   - **@AC-16:** the flag is false → code 7 "password login disabled", **zero** `pool.query` calls, and `password_login_disabled` recorded.
-   - **@AC-31:** `getBool` returns its default (the row is missing) → the same denial.
-   - **@AC-17:** the flag is true → today's token pair.
-3. In `telemetryAllowlist.test.ts`, drive `recordLoginFailure('password_login_disabled')` and keep the label keys closed (`@AC-22 @feature-294` PRESERVE).
-4. **Seeded row → real reader** (`configWatcher.test.ts`): add `describe('auth.password_login_enabled gate reads the seeded row (feature 345)')`. In the existing `before`, after the module patches, also `await import('../grpc/identityServiceImpl')`.
-   - `seeded({ 'auth.password_login_enabled': { boolVal: false } })` → pass that real watcher as `config` to `new IdentityServiceImpl(recordingPool, w)` and call `authenticateUser` → code 7 "password login disabled" and zero `pool.query` calls (@AC-16).
-   - `seeded({ 'auth.password_login_enabled': { boolVal: true } })` → the gate passes and `pool.query` runs once (the empty fake pool then gives today's `unknown_or_inactive` reply) (@AC-17).
-   - A snapshot without the key → the code default `false` denies (@AC-31).
-5. The new literals have a single consumer and stay inline (C-13).
+1. `fixtures/fakeConfig.ts`: `export function fakeConfig(overrides: { ints?: Record<string, number>; strings?: Record<string, string> } = {})` returning `{ getInt(k, d), getString(k, d) }` (absent key → default). Header comment: a call-builder fixture, not domain data, so no inventory row (`docs/patterns/test-data-inventory.md`).
+2. Replace all seven mock sites with `fakeConfig(...)` (the `:292` site keeps `jwt.access_ttl_seconds = 1800`).
+3. Cases in `identityServiceImpl.test.ts`:
+   - **@AC-16:** `strings: {'auth.mode': 'oidc'}` → code 7 "password login disabled", **zero** `pool.query` calls, `password_login_disabled` counted;
+   - **@AC-17:** `'both'` → today's token pair;
+   - **@AC-31:** no `auth.mode` → today's token pair;
+   - an inactive user selected by email → 16 `unknown_or_inactive` and no bcrypt (PRESERVE);
+   - frozen clock: `authenticateUser` and `refreshToken` replies deep-equal their pre-refactor shape (D-122; claims have no `aud`).
+4. `telemetryAllowlist.test.ts`: drive `recordLoginFailure('password_login_disabled')`; the label keys stay closed (`@AC-22 @feature-294` EXTEND).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
-grep -n "__tests__/fixtures" src/__tests__/identityServiceImpl.test.ts || echo "C-13: single consumer, inline"
+grep -n "fixtures/fakeConfig" src/__tests__/identityServiceImpl.test.ts src/__tests__/identityServiceImpl.otlp.test.ts src/__tests__/identityTelemetry.test.ts
+! grep -n "{ getInt:" src/__tests__/*.test.ts   # no inline config mock left
 ```
 
 ---
 
-### Step 10 — service: ResolveExternalIdentity, IssueSessionForUser and the shared mint path
+### Step 11 — service: The four SAN-gated external-identity RPCs
 
 **Status**: `pending`
 **Service**: `xstockstrat-identity`
@@ -471,198 +546,145 @@ grep -n "__tests__/fixtures" src/__tests__/identityServiceImpl.test.ts || echo "
 **Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation, secret store integration; Security — JWT claims minimal, auth scope correctness
 
 **Codebase Evidence**:
-- SAN gate (`adminDirectory.ts`):
-  - `peerDnsSans(call)` is module-private at `:12-19`; `ADMIN_DIRECTORY_PEER_SANS` is at `:6`.
-  - `PEER_SAN_ERROR` is at `:27-30`; the gate runs before `pool.query` at `:37-40`.
-  - The file comment is at `:1-2`: "No relative imports (loads under strip-types). Header-blind by design".
-- Delegation precedent: `identityServiceImpl.ts:988-990` `async listAdminUserIds(call, callback) { return listAdminUserIds(this.pool, call, callback); }`.
-- Mint path:
-  - `authenticateUser` mints at `:185-186`: `this.mintAccessToken(user.user_id, email, user.roles)` + `this.issueRefreshToken(user.user_id)`, and builds the reply at `:189-200`.
-  - `mintAccessToken` is at `:304-324`, private, claims `{user_id,email,roles,issued_at,expires_at}` plus `aud` only when given. `issueRefreshToken(userId, clientId?, db)` is at `:330-343`.
-- Errors and roles:
-  - `mapDbError` is at `:116-120` (`23505` → code 6 "user already exists").
-  - `ROLE_ENUM_TO_STRING`, `rolesToStrings` and `stringsToRoles` are at `:33-43`.
-- Audit:
-  - `auditSafe(eventType, targetUserId, metadata, payload)` is at `:777-788`.
-  - `AUDIT_EVENT_TYPES` (six `identity.user.*`) is at `telemetry.ts:381-388`.
-- `createUser` hashes with `bcrypt.hash(password, 10)` at `:810`.
-- `setUserActive` revokes every refresh token at `:962-968` (recon R-11).
+- `adminDirectory.ts`: header "No relative imports (loads under strip-types). Header-blind by design" (`:1-2`); `AdminDirectoryCall` (`:8-10`); module-private `peerDnsSans` (`:12-19`) and `hasAdminDirectoryPeer` (`:21-25`); denial before `pool.query` (`:37-40`).
+- Delegation precedent `identityServiceImpl.ts:988` `async listAdminUserIds(call, callback)`.
+- `mintAccessToken` (`:304-324`), `issueRefreshToken(userId, clientId?, db)` (`:330-343`), `stringsToRoles` (`:40-43`), `mapDbError` (`:116-120`), `auditSafe` (`:777-788`).
+- `AUDIT_EVENT_TYPES` `telemetry.ts:381-388` with the doc comment "The audited user.* event types" (`:380`); `recordAuditFailure` `:426-429`; `BoundCounter` used for `identity.login.failures` (`:390`).
+- Server wiring binds methods by camelCase name (`src/index.ts:43-46`).
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 12)
 
 **Covers**: —
 
 **Instructions**:
-1. **`adminDirectory.ts`** (D-4):
-   - Add `export` to `peerDnsSans` and to its `AdminDirectoryCall` interface. Add no import and no relative import.
-   - `ADMIN_DIRECTORY_PEER_SANS`, `hasAdminDirectoryPeer` and `PEER_SAN_ERROR` are unchanged (`@AC-10 @feature-242`).
-2. **New `externalIdentity.ts`.** Import `peerDnsSans` from `./adminDirectory` (identity's own `tsc` build; strip-types applies only to adminDirectory). Export:
-   - `EXTERNAL_IDENTITY_REFUSALS = { emailRequired: 'email required', inactive: 'account inactive', alreadyLinked: 'account already linked', ambiguous: 'ambiguous email' } as const` (D-24).
-   - Two SAN lists and two `PERMISSION_DENIED` errors (D-4):
-     - `RESOLVE_PEER_SANS = ['xstockstrat-ui','xstockstrat-agent']`, with "peer not authorized for ResolveExternalIdentity";
-     - `ISSUE_SESSION_PEER_SANS = ['xstockstrat-ui']`, with "peer not authorized for IssueSessionForUser".
-     - Exact `includes` membership, never a prefix.
-   - A pure `decideExternalIdentity(classify)` implementing the D-49 N-4 table, where "linked" means linked under this issuer:
-     - link + active → `LINKED_EXISTING`;
-     - link + inactive → `account inactive`;
-     - no link + empty email → `email required`;
-     - more than one `lower(email)` match in any state → `ambiguous email`;
-     - exactly one match: linked → `account already linked`; inactive → `account inactive`; otherwise → `LINK`;
-     - no match → `CREATE`.
-   - The **classify** SQL is one autocommit `pool.query` (D-32). Given `$1=issuer, $2=subject, $3=email`, it returns:
-     - the linked row `(user_id, roles, is_active)` for `(issuer, subject)`;
-     - the `lower(email)=lower($3)` match rows `(user_id, is_active, linked_under_issuer)`, with `linked_under_issuer` = `EXISTS(SELECT 1 FROM identity.external_identities e WHERE e.user_id=u.user_id AND e.issuer=$1)`.
-     - JS only trims and checks for empty; lowercasing happens only in SQL (D-49 N-3).
-3. **`identityServiceImpl.ts`.**
-   - **`sessionResponse`.** Extract a private `sessionResponse(userId, email, roles)` = `mintAccessToken` + `issueRefreshToken(userId)` + the `:189-200` reply object.
-     - `authenticateUser` calls it with its **request** `email` unchanged.
-     - Claims stay byte-identical and the refresh `client_id` stays NULL (`@AC-4 @feature-265` EXTEND; D-49).
-   - **`resolveExternalIdentity(call, callback)`**, in this order:
-     1. The SAN gate, before any DB access. Headers are never read (FR-4).
-     2. Validation: issuer and subject are non-empty, else code 3.
-     3. Classify, then `decideExternalIdentity`.
-     4. Refusals → `callback({code: 9, message: <detail>})`. `LINKED_EXISTING` does no write and no bcrypt (D-32).
-     5. **LINK**: `INSERT INTO identity.external_identities (issuer, subject, user_id) SELECT $1, $2, u.user_id FROM identity.users u WHERE u.user_id=$3 AND u.is_active AND lower(u.email)=lower($4) AND NOT EXISTS (SELECT 1 FROM identity.external_identities e WHERE e.issuer=$1 AND (e.subject=$2 OR e.user_id=u.user_id))`. `rowCount===0` counts as a lost race (D-32, D-71).
-     6. **CREATE**: first `bcrypt.hash(randomBytes(32).toString('base64url'), 10)` (D-6, D-35). Then one data-modifying CTE: `WITH u AS (INSERT INTO identity.users (email, password_hash, roles) VALUES (lower($3), $4, '{trader}') RETURNING user_id, roles, is_active) INSERT INTO identity.external_identities (issuer, subject, user_id) SELECT $1, $2, user_id FROM u RETURNING user_id`. Roles are explicit `{trader}` (D-10, FR-3).
-     7. A raw `err.code === '23505'` (checked **before** `mapDbError`), or LINK `rowCount===0`, means **re-classify once** from step 3 and answer from that. A second conflict → code 13 (D-5, R-10).
-     8. **Email sync** (D-19) on every success, effective only for `LINKED_EXISTING`, skipped when the email is empty:
-        - `UPDATE identity.users SET email = lower($2) WHERE user_id=$1 AND lower(email)<>lower($2) AND NOT EXISTS (SELECT 1 FROM identity.users o WHERE lower(o.email)=lower($2) AND o.user_id<>$1)`, autocommit, awaited before the reply.
-        - A clash (`rowCount===0` while the emails differ, or 23505) → `log.warn('email_sync_conflict', { user_id, issuer })` with no email values (FR-5, AC-9).
-     9. Reply `{ userId, roles: stringsToRoles(roles), isActive, outcome }`.
-     10. **Audit**, after `callback`: `void this.auditSafe('identity.external.linked' | 'identity.external.created', user_id, call.metadata, { user_id, issuer, outcome })`, only for `LINKED_BY_EMAIL` / `CREATED` (D-21; no email, no token).
-     - Each statement is its own `pool.query`, so at most one client is held at a time (D-21, F-06).
-   - **`issueSessionForUser(call, callback)`** (D-11, FR-4):
-     - the SAN gate (ui only);
-     - `SELECT user_id, email, roles, is_active FROM identity.users WHERE user_id=$1`;
-     - missing → code 5 `NOT_FOUND` (D-72);
-     - inactive → code 9 `account inactive`;
-     - else `sessionResponse(user_id, <stored email>, roles)` (D-19: the stored email).
-4. **`telemetry.ts`.** Append `'identity.external.linked'` and `'identity.external.created'` to `AUDIT_EVENT_TYPES` (`:381-388`).
+1. **`adminDirectory.ts`** (D-103): `export` `AdminDirectoryCall` and `peerDnsSans`; add `export function hasPeerSan(call: AdminDirectoryCall, allowed: readonly string[]): boolean` (exact `includes`, never a prefix). No new import; `ADMIN_DIRECTORY_PEER_SANS`, `hasAdminDirectoryPeer`, `PEER_SAN_ERROR` unchanged (`@AC-10 @feature-242`).
+2. **`externalIdentity.ts`** (new; may import `./adminDirectory`): export
+   - `EXTERNAL_IDENTITY_REFUSALS = { resolve: ['not linked','account inactive'], link: ['invalid credentials','account inactive','account already linked','already linked to this issuer','link disabled'], session: ['account inactive'] } as const` (D-123, D-130e);
+   - `EXTERNAL_IDENTITIES_PKEY = 'external_identities_pkey'`, `EXTERNAL_IDENTITIES_ISSUER_USER_KEY = 'external_identities_issuer_user_key'` (D-118);
+   - per-RPC SAN lists and `PERMISSION_DENIED` messages: Resolve `['xstockstrat-ui','xstockstrat-agent']`; IssueSession, Link, GetLinks `['xstockstrat-ui']`; message `peer not authorized for <RpcName>`.
+3. **`identityServiceImpl.ts`** — four methods, each: SAN check first (no header read, no pool access before it, FR-4), then fields (code 3), then the design § 1 RPC table:
+   - `resolveExternalIdentity`: one `pool.query` `SELECT u.user_id, u.roles, u.is_active FROM identity.external_identities e JOIN identity.users u USING (user_id) WHERE e.issuer = $1 AND e.subject = $2`; none → 9 `not linked`; inactive → 9 `account inactive`; else `{userId, roles: stringsToRoles(roles), isActive: true}`; any throw → 13 `resolve failed`. Writes nothing.
+   - `issueSessionForUser`: `SELECT user_id, email, roles, is_active FROM identity.users WHERE user_id = $1`; none → 5 `user not found` (D-72 remainder); inactive → 9 `account inactive`; else `mintAccessToken(user_id, <stored email>, roles)` + `issueRefreshToken(user_id)` + `sessionResponse(...)`; throw → 13.
+   - `linkExternalIdentity`: `readAuthMode(this.config) !== 'both'` → 9 `link disabled` + `recordLinkFailure('link_disabled')`, before any pool access and any bcrypt (D-126, AC-75). Then `verifyPassword({userId}, password)`: `unknown`/`blocked_default_admin`/`bad_password` → 9 `invalid credentials`; `inactive` → 9 `account inactive`. Then one autocommit `INSERT INTO identity.external_identities (issuer, subject, user_id) VALUES ($1,$2,$3)`. On `err.code === '23505'`, **before** `mapDbError`: `err.constraint === EXTERNAL_IDENTITIES_ISSUER_USER_KEY` → `already linked to this issuer`; `=== EXTERNAL_IDENTITIES_PKEY` → one owner re-read (`SELECT user_id … WHERE issuer=$1 AND subject=$2`): same user → `already linked to this issuer`, another → `account already linked`, none → retry the INSERT once (a second failure → 13). Success → `callback(null, {})`, then `void this.auditSafe('identity.external.linked', user_id, call.metadata, { user_id, issuer, outcome: 'linked' })` (no email, no subject, no password). Every refusal calls `recordLinkFailure(<reason>)`; `password` is never logged.
+   - `getExternalIdentityLinks`: `SELECT issuer FROM identity.external_identities WHERE user_id = $1 ORDER BY issuer` → `{issuers}`; unknown user → `[]`; throw → 13.
+4. **`telemetry.ts`**: append `'identity.external.linked'` to `AUDIT_EVENT_TYPES` and change its doc comment to "The audited event types"; add a `BoundCounter` `identity.link.failures` with closed `reason ∈ {invalid_credentials, inactive, already_linked, already_linked_issuer, link_disabled, internal}` and `export function recordLinkFailure(reason)`. Link never calls `recordLoginFailure`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-identity && pnpm run lint && pnpm run build
-grep -n "peerDnsSans" src/grpc/adminDirectory.ts src/grpc/externalIdentity.ts
 grep -n "x-access-scope\|x-user-id\|x-internal-caller" src/grpc/externalIdentity.ts || echo "header-blind OK"
+grep -n "hasPeerSan" src/grpc/adminDirectory.ts src/grpc/identityServiceImpl.ts
 ```
 
 ---
 
-### Step 11 — test: Unit tests for the SAN gates, the decision table, the mint shape and the audit
+### Step 12 — test: SAN gates, resolve, link, sessions, refusal contract and the audit seam
 
 **Status**: `pending`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/externalIdentity.test.ts` — create
-- `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
-- `services/xstockstrat-identity/src/__tests__/telemetryAllowlist.test.ts` — modify
 - `services/xstockstrat-identity/src/__tests__/fixtures/sanCall.ts` — create
-- `services/xstockstrat-identity/src/__tests__/adminDirectory.test.ts` — modify (import `callWith` from the fixture; no behaviour change)
+- `services/xstockstrat-identity/src/__tests__/adminDirectory.test.ts` — modify (import `callWith`; no behaviour change)
+- `services/xstockstrat-identity/src/__tests__/identityTelemetry.test.ts` — modify
+- `services/xstockstrat-identity/src/__tests__/telemetryAllowlist.test.ts` — modify
 
-**Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation
+**Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation; Security — auth scope correctness
 
 **Codebase Evidence**:
-- The SAN test template is `adminDirectory.test.ts:25-30` `callWith(san?, md, noAuthContext)`, with look-alike SANs, a missing auth context, spoofed headers and zero DB queries (recon Patterns to REUSE). A fake pool records `queries` at `:14-22`.
+- `callWith(san?, md, noAuthContext)` and `fakePool` (records `queries`) at `adminDirectory.test.ts:13-30`; second consumer → `fixtures/sanCall.ts` (C-13, D-135).
+- Real ledger-audit harness: `identityTelemetry.test.ts:76-92` (patch `LedgerServiceClient.prototype.appendEvent` to fail, `mtls.clientCredentials` insecure, `createLedgerAudit('localhost:1')`, then `counterValue(reader, 'identity.audit.failures', 'event_type', …)`); ERROR `ledger audit append failed (best-effort)` at `src/grpc/ledgerAudit.ts:68` (D-128).
+- `rotateRefreshToken` refuses inactive users at `identityServiceImpl.ts:364` (`AND u.is_active = true`); `deactivate flips is_active=false AND revokes refresh tokens` test at `identityServiceImpl.test.ts:1304`.
+- Per-deployment databases: `.do/app.yaml` DATABASE_URL `…/production` and `.do/app.dev.yaml` `…/staging` (line 88 in each).
 
 **TDD**: red-green required
 
-**Covers**: AC-27, AC-38, AC-9, AC-28, AC-4, AC-5, AC-7, AC-26, AC-39
+**Covers**: AC-1, AC-2, AC-3, AC-4, AC-6 (+guard), AC-7, AC-25 (+guard), AC-27, AC-28, AC-33 (guard), AC-38, AC-50 (identity leg), AC-65 (identity leg), AC-66, AC-67, AC-70, AC-73, AC-75
 
 **Instructions**:
-1. **SAN gates** in `externalIdentity.test.ts`:
-   - **@AC-27:** peer `xstockstrat-notify` with header `x-access-scope: 15` → `PERMISSION_DENIED` and zero `pool.query`. Also cover `xstockstrat-uix`, no auth context, and spoofed `x-user-id` / `x-internal-caller` → denied.
-   - `xstockstrat-ui` and `xstockstrat-agent` → allowed.
-   - **@AC-38:** `IssueSessionForUser` from `xstockstrat-agent` → `PERMISSION_DENIED`, zero queries, so no refresh-token INSERT.
-2. **Decision table**: pure `decideExternalIdentity` rows for every D-49 N-4 branch (@AC-4 linked, @AC-5 ambiguous, @AC-7/@AC-26 inactive, @AC-39 email required, link, create, linked-existing).
-3. **Refusal contract**: assert `EXTERNAL_IDENTITY_REFUSALS` equals the four literal strings (D-24; the UI mirror test is Step 28).
-4. **Handler paths with a scripted fake pool**:
-   - `23505` on LINK → re-classify → `LINKED_EXISTING`.
-   - `mapDbError` is never called for that path.
-   - **@AC-9:** email-sync `rowCount 0` → one `warn email_sync_conflict` whose detail has keys exactly `{user_id, issuer}`.
-   - **@AC-28:** the audit sink rejects → the reply still succeeds and `recordAuditFailure('identity.external.linked')` is counted (`@AC-24 @feature-294` EXTEND).
-   - The audit payload keys are exactly `{user_id, issuer, outcome}`.
-5. **Mint shape**: a frozen-clock (`mock.timers` / `Date.now` stub) deep-equal shows `authenticateUser` and `issueSessionForUser` claims are identical in shape. Neither has `aud`, and the refresh INSERT passes `client_id` null (`@AC-4 @feature-265` EXTEND).
-6. Allowlist: `telemetryAllowlist.test.ts` drives `recordAuditFailure('identity.external.created')` and asserts it is not bucketed as `other`.
-7. **C-13**: `callWith` gains its second consumer here (`externalIdentity.test.ts`). Move it verbatim from `adminDirectory.test.ts:25-30` into `src/__tests__/fixtures/sanCall.ts`, import it from both files. The fixture needs its own `import * as grpc from '@grpc/grpc-js'`; `adminDirectory.test.ts` keeps its `grpc` import for `ServiceError`, and its `ReturnType<typeof callWith>` uses (`:37`, `:48`) work unchanged with the import. `callWith` is a call-builder helper, not domain data, so no identity `INVENTORY.md` is required (`docs/patterns/test-data-inventory.md:70-76`); the fixture file's header says so. `adminDirectory.test.ts` must keep every existing case green unchanged.
+1. **`fixtures/sanCall.ts`**: move `callWith` verbatim from `adminDirectory.test.ts:25-30` (with its own `@grpc/grpc-js` import); import it in both files. Header: call-builder helper, no inventory row. `adminDirectory.test.ts` keeps every case green unchanged.
+2. **`externalIdentity.test.ts`** (scripted fake pool recording statements; `fakeConfig` from Step 10):
+   - **SAN gates, pool untouched:** @AC-27 Resolve from `xstockstrat-notify` with `x-access-scope: 15` → 7; @AC-38 IssueSession from `xstockstrat-agent` → 7 and no `refresh_tokens` INSERT; @AC-70 Link from agent → 7; @AC-73 GetLinks from agent → 7; plus `xstockstrat-uix`, no auth context, spoofed `x-user-id`/`x-internal-caller` → 7. Allowed peers pass.
+   - **Resolve:** @AC-1 linked active user → `user_id` and roles `[ADMIN, TRADER]`; @AC-2 the only statement is the JOIN `SELECT` (no UPDATE/INSERT) and the request carries no email field; @AC-3 no row → 9 `not linked`; @AC-6 the AC-3 case with `APPLICATION_ENV=production` → 9 `not linked`, no write; @AC-7 inactive → 9 `account inactive`.
+   - **IssueSession:** missing → 5; inactive → 9; success → stored email in the claims, no `aud`, refresh `client_id` null (`@AC-4 @feature-265` PRESERVE).
+   - **Link:** @AC-75 Outline `local`/`oidc` → 9 `link disabled`, zero pool calls, bcrypt spy untouched, `identity.link.failures{link_disabled}`; @AC-65 success → one INSERT `(issuer, subject, user_id)`, audit payload keys exactly `{user_id, issuer, outcome}` and the audit metadata carries the caller's `x-user-id` (D-114); @AC-66 wrong password → 9 `invalid credentials`, no INSERT; blocked seed admin in production → `invalid credentials`; @AC-67 23505 with `err.constraint = EXTERNAL_IDENTITIES_ISSUER_USER_KEY` → `already linked to this issuer`; @AC-4/@AC-25 23505 `EXTERNAL_IDENTITIES_PKEY` + re-read another user → `account already linked` (RED on the constraint-name branch), `mapDbError` never reached; re-read same user → `already linked to this issuer`; re-read none → one retry.
+   - **GetLinks:** issuers ordered; unknown user → `[]`. @AC-50 (identity leg): after the user's rows are deleted, Resolve → `not linked` and a new Link succeeds.
+   - **Contract:** `EXTERNAL_IDENTITY_REFUSALS` deep-equals the vector file's `refusals`; both constraint-name constants appear as `CONSTRAINT <name>` in `migrations/007_external_identities.up.sql` (read from disk; D-118).
+3. **`identityTelemetry.test.ts`** — **@AC-28** (D-128, D-135): with the `:76-92` harness, drive `linkExternalIdentity` with `createLedgerAudit('localhost:1')` as the impl's audit; the callback returns OK; after `await new Promise(setImmediate)`, `identity.audit.failures{event_type="identity.external.linked"}` = 1 and the ERROR was logged.
+4. **`telemetryAllowlist.test.ts`**: `recordAuditFailure('identity.external.linked')` is not bucketed as `other`; `identity.link.failures` keys are exactly `['reason']`.
+5. C-13: domain literals per file have one consumer, inline; `callWith` and `fakeConfig` are the shared homes.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
-grep -n "__tests__/fixtures\|from './fixtures" src/__tests__/externalIdentity.test.ts src/__tests__/adminDirectory.test.ts
+grep -n "fixtures/sanCall\|fixtures/fakeConfig" src/__tests__/externalIdentity.test.ts src/__tests__/adminDirectory.test.ts
+# (guard) AC-25: the "exactly one row" property is the Postgres PK, applied for real by CI migration-rerun (ci.yml:898)
+grep -n "CONSTRAINT external_identities_pkey PRIMARY KEY (issuer, subject)" migrations/007_external_identities.up.sql
+# (guard) AC-33: deactivation ends a web session at the next refresh (PRESERVE)
+grep -n "AND u.is_active = true" src/grpc/identityServiceImpl.ts && grep -n "deactivate flips is_active=false AND revokes refresh tokens" src/__tests__/identityServiceImpl.test.ts && grep -n "@AC-6: expired access + failed refresh" ../xstockstrat-ui/src/middleware.test.ts
+# (guard) AC-6: each deployment has its own database
+grep -n "25061/production" ../../.do/app.yaml | head -1 && grep -n "25061/staging" ../../.do/app.dev.yaml | head -1
 ```
 
 ---
 
-### Step 12 — test: Identity DB tier (real Postgres) and the identity-db-test CI job
+### Step 13 — service: GetSecret grant for ui/oidc.client_secret
 
 **Status**: `pending`
-**Service**: `xstockstrat-identity`
+**Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-identity/src/__tests__/db/externalIdentity.db.test.ts` — create
-- `services/xstockstrat-identity/package.json` — modify
-- `.github/workflows/ci.yml` — modify
+- `services/xstockstrat-config/src/grpc/authz.ts` — modify
 
-**Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation; DBA — index correctness, run order; Platform Lead — CI gate parity
+**Reviewers**: `xstockstrat-config` owner — secret encryption + redaction; Security — secrets decryptable only via `GetSecret` gated by the `x-internal-caller` allow-list
 
 **Codebase Evidence**:
-- `services/xstockstrat-ledger/package.json:15`: `"test:db": "tsc && node --test --test-concurrency=1 dist/__tests__/db/*.test.js"`.
-- `ledger/src/__tests__/db/streamResolve.db.test.ts:17-23`: `const url = process.env.LEDGER_DB_TEST_URL; before(() => { if (!url) throw new Error('LEDGER_DB_TEST_URL is required'); pool = new Pool({ connectionString: url, max: 1 }); })`.
-- In `ci.yml`, the `ledger-db-test` job spans `:957-1014`: the services block, the migrator build at `:1000`, `Apply migrations` at `:1003-1008` with `SEED_USER_ID`, and `test:db` at `:1010-1014`.
-- `ci-gate.needs` includes `ledger-db-test` at `:1322`; the echo line is at `:1353`.
-- The changes filters are `xstockstrat-identity: ['services/xstockstrat-identity/**']` at `:62` and `migrations:` at `:88-94`.
+- `SECRET_CALLER_ALLOWLIST` at `authz.ts:136-155`; the last grant is `notify` with `peerSan: 'xstockstrat-notify'` (`:150-153`).
+- `hasSecretCallerAuthority` requires `HEADER_INTERNAL_CALLER` (`:74`), the callerID, the key and, for a grant with `peerSan`, that exact DNS SAN (`:175-184`).
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 14)
 
-**Covers**: AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-25, AC-26, AC-28, AC-30, AC-33, AC-39, AC-50
+**Covers**: —
 
 **Instructions**:
-1. **`package.json`**: add `"test:db": "tsc && node --test --test-concurrency=1 dist/__tests__/db/*.test.js"`.
-   - Leave `test` / `test:coverage` unchanged; their glob `dist/__tests__/*.test.js` does not descend into `db/`.
-2. **`externalIdentity.db.test.ts`**:
-   - `IDENTITY_DB_TEST_URL` is required (throw when unset, D-33). `IDENTITY_DB_TEST_URL_B` is required for AC-6.
-   - Drive `IdentityServiceImpl` with a real `Pool`, a fake config (`getInt` default, `getBool` true), a recording audit sink, and a call whose `getAuthContext` returns `DNS:xstockstrat-ui` or `DNS:xstockstrat-agent`.
-   - Each test uses unique random emails and subjects, and cleans up its rows.
-   - Cases:
-     - **@AC-1**: active unlinked `alice@…` with mixed-case token email → `LINKED_BY_EMAIL`, the link row, and one `identity.external.linked` audit with no email field.
-     - **@AC-2 / @AC-8**: linked subject + new email → `LINKED_EXISTING`, and the row's email becomes the lowercased new email.
-     - **@AC-3**: unknown `Bob@…` → a new row with `email='bob@…'`, `roles='{trader}'`, active, and linked.
-     - **@AC-4**: an email linked to another subject → code 9 `account already linked`, nothing written.
-     - **@AC-5**: `dave@` + `Dave@` → `ambiguous email`, no link.
-     - **@AC-7**: an inactive linked user → `account inactive`.
-     - **@AC-26**: an inactive unlinked match → `account inactive`, no new row.
-     - **@AC-39**: unlinked subject + empty email → `email required`, no row.
-     - **@AC-9**: a clash keeps the old email and logs `email_sync_conflict`.
-     - **@AC-28**: the audit sink throws → the link still commits.
-     - **@AC-30**: the agent SAN + an unlinked email → `LINKED_BY_EMAIL`.
-     - **@AC-33**: after `setUserActive(false)` (admin metadata), `refreshToken` with the session's refresh token is refused (UNAUTHENTICATED).
-     - **@AC-25** (D-33): deterministic 23505.
-       1. A blocker client runs `BEGIN; INSERT INTO identity.external_identities …` for the same `(issuer, subject)`.
-       2. Start the resolve and poll `SELECT pid FROM pg_stat_activity WHERE pg_blocking_pids(pid) @> ARRAY[<blocker pid>]` until the waiter appears.
-       3. `COMMIT` the blocker.
-       4. Assert `LINKED_EXISTING`, exactly one user and one link.
-       5. Run a sibling variant that expects `LINKED_BY_EMAIL`.
-       6. Run a `Promise.all` of two resolves that asserts invariants only: one user, one link, the same `user_id`.
-     - **@AC-6**: link subject `a1b2` in DB-A. Against DB-B (`IDENTITY_DB_TEST_URL_B`), with an unlinked `alice@` whose roles are `{viewer}`, resolve → `LINKED_BY_EMAIL` with roles `viewer`. DB-A's link is unchanged.
-     - **@AC-50** (identity leg): delete the user's `external_identities` rows (the SQL `unlink-sso` runs, Step 13), then resolve with a new subject → `LINKED_BY_EMAIL`.
-   - **R-13 contingency:** if a non-23505 error appears on the CREATE CTE, record it in the Deviation Log and switch to `BEGIN` + two INSERTs on one client (D-32).
-3. **`ci.yml`**: add an `identity-db-test` job cloned from `ledger-db-test` (`:957-1014`).
-   - `if:` on `xstockstrat-identity` / `migrations` / `proto` / `ci` / `node-shared`.
-   - After `Apply migrations`, add a step that creates and migrates a second database for AC-6: `docker run --rm --network host --entrypoint psql xstockstrat-migrate-ci "postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" -c 'CREATE DATABASE xstockstrat_b'`, then the same `Apply migrations` run with `DATABASE_URL=…/xstockstrat_b`.
-   - `test:db` runs with `working-directory: services/xstockstrat-identity`, `IDENTITY_DB_TEST_URL` and `IDENTITY_DB_TEST_URL_B`.
-   - Add `identity-db-test` to `ci-gate.needs` (next to `:1322`) and to the echo list (next to `:1353`).
+1. Append `{ callerID: 'ui', namespace: 'ui', keys: ['oidc.client_secret'], peerSan: 'xstockstrat-ui' }` (FR-4, D-109). Change no other grant.
 
 **Verification**:
 ```bash
-docker run --rm --entrypoint sh xstockstrat-migrate-ci -c 'command -v psql'   # the CREATE DATABASE line above needs psql in this image; if absent, run it via the postgres service container's psql instead and log it in the Deviation Log
-cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
-# DB tier: needs a migrated Postgres 16 (two databases). Without one, the CI identity-db-test job is the gate (block per P-03 until it is green).
-IDENTITY_DB_TEST_URL=<db-a> IDENTITY_DB_TEST_URL_B=<db-b> pnpm run test:db
-grep -n "identity-db-test" ../../.github/workflows/ci.yml   # job, needs, echo: 3+ hits
+cd services/xstockstrat-config && pnpm run lint && grep -n "callerID: 'ui'" src/grpc/authz.ts
 ```
 
 ---
 
-### Step 13 — service: manage-users.py update-email and unlink-sso
+### Step 14 — test: The ui secret grant is header- and SAN-bound
+
+**Status**: `pending`
+**Service**: `xstockstrat-config`
+**Files**:
+- `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts` — modify
+- `services/xstockstrat-config/src/__tests__/secretsAndScope.test.ts` — modify
+
+**Reviewers**: `xstockstrat-config` owner — secret encryption + redaction; Security — secrets via `GetSecret` only
+
+**Codebase Evidence**:
+- `describe('hasSecretCallerAuthority — notify grant')` at `secretCallerAuthz.test.ts:97`.
+- Real-mTLS harness `secretsAndScope.test.ts:68-104`: `mintLeaf(dir, '<san>', ca, caKey)` per caller, `getSecretAs(client, md, req)`, `state.getSecretCiphertext = encryptSecret(...)`; redaction cases under `describe('redaction and per-user overlay')` at `:249`.
+
+**TDD**: red-green required
+
+**Covers**: AC-35
+
+**Instructions**:
+1. `secretCallerAuthz.test.ts`: `describe('hasSecretCallerAuthority — ui grant (feature 345)')` cloning the notify block: `x-internal-caller: ui` + SAN `xstockstrat-ui` → true for `('ui','oidc.client_secret')`; SAN `xstockstrat-agent` → false; callerID `agent` → false; key `oidc.client_id` → false; SAN `xstockstrat-uix` → false; no header → false.
+2. `secretsAndScope.test.ts`, in the GetSecret block: mint `xstockstrat-ui` and `xstockstrat-agent` leaves. **@AC-35:** the UI client with `x-internal-caller: ui` gets the decrypted value; the agent client with the same header gets `PERMISSION_DENIED`. GetConfig/WatchConfig redaction is existing code (`@AC-2/3/14 @feature-147` PRESERVE); no new redaction case.
+
+**Verification**:
+```bash
+cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
+```
+
+---
+
+### Step 15 — service: manage-users.py set-auth-mode and unlink-sso
 
 **Status**: `pending`
 **Service**: `scripts/manage-users.py`
@@ -672,37 +694,33 @@ grep -n "identity-db-test" ../../.github/workflows/ci.yml   # job, needs, echo: 
 **Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation; Security — auth scope correctness
 
 **Codebase Evidence**:
-- Commands are `@app.command("reset-password")` at `:165`, `create-user` at `:213`, `list-users` at `:269`, `update-roles` at `:339-412` (matches `WHERE email = %s` case-sensitively, recon) and `delete-user` at `:415`.
-- `delete-user` has `--force` (`:420-422`) and a `typer.confirm` gate (`:478-485`).
-- DB access is `_load_db_url()` (`:62`) with psycopg 3.
-- The module docstring lists non-interactive usage (`:19-22`).
+- Typer commands at `manage-users.py:165` (`reset-password`), `:213`, `:269`, `:339` (`update-roles`), `:415` (`delete-user`, `--force` at `:420`, exact `WHERE email = %s` lookup at `:448`, `typer.confirm` at `:478-485`); `_load_db_url()` at `:62` (falls back to `.env` POSTGRES_PASSWORD, docstring `:24-25`); usage docstring `:11-26`.
+- The 055 CTE: `055_analysis_live_enrich_ttl_reseed.up.sql:4-23` (`WITH u AS (UPDATE … RETURNING …), nt AS (SELECT pg_notify('config_changed', json_build_object('namespace', …, 'key', …, 'environment', …, 'user_id', NULL)::text) …) SELECT …`).
+- `docs/patterns/script-tooling.md` Rules 0–2 (tested Python, `scripts/tests/`).
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 16)
 
 **Covers**: —
 
 **Instructions**:
-1. **`update-email <old-email> <new-email>`** (FR-12), modelled on `update-roles`:
-   - Look up the user by exact `old-email`.
-   - Refuse with "email already in use" and exit 1 when `SELECT 1 FROM identity.users WHERE lower(email)=lower(%s) AND user_id<>%s` finds a row.
-   - Otherwise `UPDATE identity.users SET email = lower(%s) WHERE user_id = %s`. `user_id` is kept.
-   - A 23505 race also maps to "email already in use", exit 1.
-   - All SQL is parameterized.
-2. **`unlink-sso <email> [--issuer <url>] [--force/-f]`** (D-43, D-56):
-   - Look up `SELECT user_id, email FROM identity.users WHERE lower(email)=lower(%s) LIMIT 2`. 0 rows → "user not found", exit 1. 2 rows → "ambiguous email — fix with update-email", exit 1.
-   - Without `--force`, `typer.confirm` the deletion. A decline exits 0 with nothing deleted, mirroring `delete-user`.
-   - Run `DELETE FROM identity.external_identities WHERE user_id = %s [AND issuer = %s] RETURNING issuer, subject`. 0 rows → "no SSO link found", exit 1.
-   - Print the count and the email the person must have in Authelia to relink. Never print a subject beyond the count.
-3. Add both commands to the docstring usage block (`:19-22`).
+1. **`set-auth-mode <value> --environment <production|staging> --reason <text>`** (FR-17, D-108):
+   - `value ∉ {local, both, oidc}` → print the allowed values, exit 2, **before** any connection.
+   - `DATABASE_URL` required (exit 1 when unset); no `.env` fallback for this command.
+   - Print the redacted host and database name, then both environments' `identity/auth.mode` global rows before.
+   - One statement: `WITH u AS (UPDATE config.config_values SET value_data = %s, updated_by = 'operator:manage-users', update_reason = %s, caller_identity = NULL, updated_at = NOW() WHERE namespace = 'identity' AND key = 'auth.mode' AND environment = %s AND user_id IS NULL RETURNING namespace, key, environment), nt AS (SELECT pg_notify('config_changed', json_build_object('namespace','identity','key','auth.mode','environment', %s,'user_id', NULL)::text) AS sent) SELECT (SELECT count(*) FROM u), (SELECT count(*) FROM nt)` — it **always** notifies (D-108).
+   - 0 rows updated: `local` → success (an absent row reads `local`); `both`/`oidc` → "seed migration not applied", exit 1.
+   - Print both rows after. Help text names the break-glass use (`local`) and rollback.
+2. **`unlink-sso <email> [--issuer <url>] [--force/-f]`** (FR-12): exact `SELECT user_id FROM identity.users WHERE email = %s` (the `:448` lookup); none → exit 1; without `--force`, `typer.confirm` (decline exits 0, nothing deleted); `DELETE FROM identity.external_identities WHERE user_id = %s [AND issuer = %s] RETURNING issuer`; 0 rows → "no SSO link found", exit 1; success prints the count and "<email> can link again with Link SSO while the deployment's auth.mode is both." (D-130b). Never print a subject.
+3. Add both commands to the usage docstring.
 
 **Verification**:
 ```bash
-cd scripts && uv run --no-sync ruff check . && uv run --no-sync ruff format --check . && uv run --no-sync python manage-users.py --help | grep -E "update-email|unlink-sso"
+cd scripts && uv run --no-sync ruff check . && uv run --no-sync ruff format --check . && uv run --no-sync python manage-users.py --help | grep -E "set-auth-mode|unlink-sso"
 ```
 
 ---
 
-### Step 14 — test: update-email and unlink-sso
+### Step 16 — test: set-auth-mode and unlink-sso
 
 **Status**: `pending`
 **Service**: `scripts/manage-users.py`
@@ -712,77 +730,32 @@ cd scripts && uv run --no-sync ruff check . && uv run --no-sync ruff format --ch
 **Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation
 
 **Codebase Evidence**:
-- `_mock_conn(execute_returns)` at `test_manage_users.py:47-61` feeds successive `fetchone` values only. `TestUpdateRolesCmd` is at `:297`. `TestSqlParameterization` is at `:446`.
-- CI `scripts-python` runs `uv run --no-sync pytest` in `scripts/` (`ci.yml:862-893`).
+- `_mock_conn(execute_returns)` at `test_manage_users.py:47`; `TestUpdateRolesCmd` `:297`; `TestSqlParameterization` `:446`.
+- CI `scripts-python` runs ruff and `uv run --no-sync pytest` in `scripts/` with no `--cov` (`ci.yml:861-894`).
 
 **TDD**: red-green required
 
-**Covers**: AC-18, AC-19, AC-50
+**Covers**: AC-44, AC-50, AC-71 (script legs)
 
 **Instructions**:
-1. Extend `_mock_conn` with an optional `fetchall_returns` list fed to `cursor.fetchall.side_effect` (D-64). The existing callers are unchanged.
-2. `TestUpdateEmailCmd`:
-   - **@AC-18:** the UPDATE parameter is lowercased (`Alice@Example.test` → `alice@example.test`) and `user_id` is preserved.
-   - **@AC-19:** a held email → exit 1 and "email already in use", with no UPDATE executed.
-   - An unknown old email → exit 1.
-3. `TestUnlinkSsoCmd`:
-   - **@AC-50:** with `--force`, it deletes and prints the relink email.
-   - A declined confirmation deletes nothing.
-   - The ambiguous `LIMIT 2` case returns the message and exit 1.
-   - Zero deleted rows → exit 1.
-   - `--issuer` adds `AND issuer = %s`.
-4. `TestSqlParameterization`: both new commands pass every value as a parameter, never formatted into the SQL.
+1. Extend `_mock_conn` with an optional `fetchall_returns` list (D-64); existing callers unchanged.
+2. `TestSetAuthModeCmd`:
+   - **@AC-71 row 2:** `oidcc` → exit 2, output names `local, both, oidc`, and `psycopg.connect` is never called;
+   - **@AC-71 row 1 / @AC-44:** `both` and `local` run the CTE with the value, environment and reason as parameters, `updated_by='operator:manage-users'`, and a `pg_notify` for `identity`/`auth.mode`;
+   - 0 rows + `local` → exit 0; 0 rows + `oidc` → exit 1 "seed migration not applied";
+   - unset `DATABASE_URL` → exit 1 (no `.env` fallback).
+3. `TestUnlinkSsoCmd`: **@AC-50** `--force` deletes and prints the relink sentence; a declined confirmation deletes nothing; unknown email → exit 1; 0 deleted → exit 1; `--issuer` adds `AND issuer = %s`.
+4. `TestSqlParameterization`: both commands pass every value as a parameter.
 
 **Verification**:
 ```bash
 cd scripts && uv run --no-sync ruff check . && uv run --no-sync ruff format --check . && uv run --no-sync pytest tests/test_manage_users.py -q
-# Coverage: no coverage threshold — the scripts-python job has none (ci.yml:861-893 runs `uv run --no-sync pytest` with no --cov flag)
-grep -n "cov" pyproject.toml || echo "no coverage gate configured for scripts/"
+# Coverage: no threshold for scripts/ (the scripts-python job runs pytest without --cov, ci.yml:861-894)
 ```
 
 ---
 
-### Step 15 — config: Issuer vector file, CI change filters and the config-wiring receivers for the agent reads
-
-**Status**: `pending`
-**Service**: `scripts/` (shared test data, config-wiring registry) and `.github/workflows/ci.yml`
-**Files**:
-- `scripts/testdata/oidc-issuer-vectors.json` — create
-- `scripts/config-wiring.json` — modify
-- `.github/workflows/ci.yml` — modify
-
-**Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness; `xstockstrat-config` owner — key naming, environment scoping; Platform Lead — CI gate parity
-
-**Codebase Evidence**:
-- Config-wiring receivers:
-  - `config-wiring.json` registers the forwarder `"services/xstockstrat-agent/app/config/watcher.py:read_config_value": {"keyArg": 1}` (`:42-44`) and the receivers `"services/xstockstrat-agent/app/tools.py:read_config_value": "agent"` (`:88`).
-  - A Python forwarder call's receiver is the bare callee name, or `ast.unparse(func.value)` for an attribute call (`scripts/config-wiring-py-reads.py:143-147`).
-  - `attribute()` maps `file:receiver` to one namespace (`check-config-wiring.mjs:546-551`).
-  - `validateState` (`check-config-wiring.mjs:176-203`) checks only that each receiver maps to a namespace or a list; it never requires the file to exist. Step time gates every `unattributed` read (`GATED_UNLESS_BASELINED`, `:691`; `stepTime`, `:888-899`). So the receivers must land no later than the reader (Step 16), and landing them first is harmless.
-- CI and testdata:
-  - The `changes` filters are `xstockstrat-agent` at `ci.yml:59` and `xstockstrat-ui` at `ci.yml:64`; portfolio's out-of-tree entry at `:55` is the precedent.
-  - `scripts/testdata/` holds `rpc-status-vectors.json` (precedent, D-66).
-- The vector-file JSON is given in full in design.md (C) §1 (`:767-871`).
-
-**TDD**: N/A (test data and registry configuration; the vectors go RED→GREEN in Steps 17 and 26, the receivers in Step 16's attribution check)
-
-**Covers**: —
-
-**Instructions**:
-1. **Vector file.** Create `scripts/testdata/oidc-issuer-vectors.json` with exactly the JSON in design.md (C) §1: `issuer_pattern`, `app_url_pattern`, 66 `issuer`, 16 `app_url` and 10 `mode` rows (D-79, D-88).
-2. **`config-wiring.json`.** Under `registry.receivers` add `"services/xstockstrat-agent/app/sso_mode.py:agent_config": "agent"` and `"services/xstockstrat-agent/app/sso_mode.py:ui_config": "ui"`. Add no `findings` entry (fails.md:3830-3832).
-3. **`ci.yml`.** Append `'scripts/testdata/oidc-issuer-vectors.json'` to the `xstockstrat-agent` filter (`:59`) and the `xstockstrat-ui` filter (`:64`) (D-78).
-
-**Verification**:
-```bash
-python3 -c "import json;d=json.load(open('scripts/testdata/oidc-issuer-vectors.json'));print(len(d['issuer']),len(d['app_url']),len(d['mode']))"   # 66 16 10
-node --input-type=module -e "import {loadState} from './scripts/check-config-wiring.mjs'; const r=loadState(process.cwd()).registry.receivers; const f='services/xstockstrat-agent/app/sso_mode.py'; if (r[f+':agent_config']!=='agent'||r[f+':ui_config']!=='ui') process.exit(1); console.log('receivers registered')"
-grep -c "scripts/testdata/oidc-issuer-vectors.json" .github/workflows/ci.yml   # 2 (agent and ui filters)
-```
-
----
-
-### Step 16 — service: Agent SSO-mode foundation (PyJWT, issuer grammar, mode, ui watcher)
+### Step 17 — service: Agent mode foundation (PyJWT, sso_mode.py, the identity watcher)
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -792,94 +765,76 @@ grep -c "scripts/testdata/oidc-issuer-vectors.json" .github/workflows/ci.yml   #
 - `services/xstockstrat-agent/app/sso_mode.py` — create
 - `services/xstockstrat-agent/app/config/watcher.py` — modify
 
-**Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness; Security — auth scope correctness; Platform Lead — inter-service dependency graph (agent → config `ui` stream)
+**Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness; Security — auth scope correctness; Platform Lead — inter-service dependency graph (agent → config `identity` stream)
 
 **Codebase Evidence**:
-- Dependencies and the namespace list:
-  - `pyproject.toml:6-22` has no JWT library. `uv.lock:932` has `name = "pyjwt"` 2.15.0, transitive via `mcp` (`:607` `{ name = "pyjwt", extra = ["crypto"] }`).
-  - `watcher.py:16` `WATCHED_NAMESPACES = ("agent", "indicators")`. `read_value(namespace, key)` is at `:68-77` and returns `None` for an unwatched namespace. `ConfigWatcher.__init__` derives the environment from `resolve_scope("")` (`:31-35`).
-- The receivers `sso_mode.py:agent_config` → `agent` and `sso_mode.py:ui_config` → `ui` are registered in Step 15.
-- `check-config-wiring.mjs` has `--final` and `--json` (`parseArgs`, `:906-911`), but `--json` prints only `findings`/`results` (`:942`), not the per-read attribution. `--final` fails at step time on the UI keys whose reader lands in Step 29; it runs at the integration PR. The positive check below therefore imports the checker's own `extractReads` (`:512`) and registry (`loadState`, `:205`).
+- `pyproject.toml:5-19` has no JWT library; `uv.lock:932` `name = "pyjwt"` 2.15.0, transitive via `mcp` (`:607` `{ name = "pyjwt", extra = ["crypto"] }`).
+- `watcher.py:16` `WATCHED_NAMESPACES = ("agent", "indicators")`; `read_value(namespace, key)` `:68-77` returns `None` for an absent key or unwatched namespace; docstring `:1-4`; `start_watchers` waits for every namespace's snapshot (`:92-97`).
+- Today's readers import `from app.config.watcher import read_value as read_config_value` (`oauth_server.py:28`, `tools.py:79`); the forwarder is registered as `watcher.py:read_config_value` (`config-wiring.json:42`), so an attribute call must use that name.
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 18)
 
 **Covers**: —
 
 **Instructions**:
-1. **Dependency.** Add `"pyjwt[crypto]>=2.15.0"` to `[project].dependencies` and run `uv lock` in `services/xstockstrat-agent` (D-2; root `CLAUDE.md` uv lock rule).
-2. **`app/sso_mode.py`** (D-1, D-66, D-78, D-86, D-90):
-   - `ISSUER_PATTERN = r"…"`, the literal from the vector file (Step 15). `_ISSUER_RE = re.compile(ISSUER_PATTERN)` with no flags.
-   - `is_valid_issuer(v: object) -> bool`: `isinstance(v, str) and _ISSUER_RE.fullmatch(v) is not None`.
-   - `@dataclass(frozen=True) class SsoMode: kind: Literal['legacy','sso']; valid: bool = False; agent_issuer: str = ''; reason: str = ''`.
-   - `current_sso_mode() -> SsoMode`:
-     - Read `agent` / `oidc.issuer` and `ui` / `oidc.issuer` from the snapshot; `None` → `""`.
-     - Either empty (`== ''`, no trim) → legacy. If exactly one is set, `_log_once('warning', 'sso_mode_misconfigured', …)`.
-     - Otherwise SSO. Validate the ui issuer, then the agent issuer. The first failure gives `valid=False, reason='ui_issuer'|'agent_issuer'` and `_log_once('error', 'sso_issuer_invalid', key=(reason, value), {'reason': reason})`.
-   - `_log_once(level, message, key, extra)` uses a module set. Add a `_reset_log_once()` for tests (D-90).
-   - **Reads, with one receiver per namespace for the wiring checker:**
-     - `from app.config import watcher as agent_config` and `from app.config import watcher as ui_config`, each read through an attribute call named after the registered forwarder.
-     - Directly above the two imports, write this constraint comment (two lines, C-18) and nothing else:
-       `# Two aliases of one module exist only so check-config-wiring attributes each read to one`
-       `# namespace (receivers sso_mode.py:agent_config / :ui_config, C-18); do not merge them.`
-     - Concretely: add `read_config_value = read_value` at module level in `watcher.py` (an alias, no behaviour change; it also makes the existing forwarder registration `watcher.py:read_config_value` name a real symbol).
-     - Then call `agent_config.read_config_value("agent", "oidc.issuer")` and `ui_config.read_config_value("ui", "oidc.issuer")`.
-   - The agent has no `'error'` mode (an absent snapshot key reads as `""` = legacy, D-66).
-3. **`watcher.py`.** `WATCHED_NAMESPACES = ("agent", "indicators", "ui")` (D-1).
-   - Update the module docstring (`:1-4`).
-   - Startup now waits for the `ui` snapshot (recon R-3); the `ui` namespace already has rows (config `023`).
+1. Add `"pyjwt[crypto]>=2.15.0"` to `[project].dependencies`; run `uv lock` (D-2; root `CLAUDE.md` uv lock rule).
+2. **`watcher.py`**: `WATCHED_NAMESPACES = ("agent", "indicators", "identity")` and the docstring; add the module-level alias `read_config_value = read_value` (no behaviour change).
+3. **`app/sso_mode.py`** (D-79, D-88, D-101, D-121):
+   - `ISSUER_PATTERN = r"…"` equal to the vector file literal; `_ISSUER_RE = re.compile(ISSUER_PATTERN)`; `is_valid_issuer(v) -> bool` = `isinstance(v, str) and _ISSUER_RE.fullmatch(v) is not None`.
+   - `AUTH_MODES = ("local", "both", "oidc")`; `parse_auth_mode(raw: str | None) -> tuple[str, bool]` (same rules as identity).
+   - `_log_once(level, message, key, extra)` over a module set; `_reset_log_once()` for tests (D-90 carried as one helper per service).
+   - Reads, one receiver per namespace (comment above the imports, two lines, constraint only):
+     `from app.config import watcher as identity_config` and `from app.config import watcher as agent_config`.
+   - `current_auth_mode() -> str`: `parse_auth_mode(identity_config.read_config_value("identity", "auth.mode"))`; invalid → `_log_once('warning', 'auth_mode_invalid', ('auth_mode', raw), {'value': raw})`.
+   - `agent_issuer() -> tuple[str, bool]`: `v = agent_config.read_config_value("agent", "oidc.issuer") or ""`; invalid → `_log_once('error', 'sso_issuer_invalid', ('agent_issuer', v), {'reason': 'agent_issuer'})`; returns `(v, is_valid_issuer(v))`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-agent && uv lock --check && uv run ruff check . && uv run ruff format --check .
-uv run pytest --cov=app --cov-fail-under=40 -q   # adding "ui" to WATCHED_NAMESPACES must leave every lifespan/snapshot test green here, not first at Step 17
-cd ../.. && node scripts/check-config-wiring.mjs --keys agent.oidc.issuer,ui.oidc.issuer   # exit 0: no unattributed read (PENDING lines only)
-# Positive attribution: both oidc.issuer reads in app/sso_mode.py resolve to agent and ui through the registry
-node --input-type=module -e "import {extractReads,loadState} from './scripts/check-config-wiring.mjs'; const root=process.cwd(); const rc=loadState(root).registry.receivers; const f='services/xstockstrat-agent/app/sso_mode.py'; const ns=extractReads(root).reads.filter((r)=>r.file===f&&r.key==='oidc.issuer').map((r)=>rc[r.file+':'+r.receiver]).sort().join(','); if (ns!=='agent,ui') { console.error('sso_mode.py oidc.issuer attribution: '+ns); process.exit(1) } console.log('agent/oidc.issuer and ui/oidc.issuer attributed to app/sso_mode.py')"
+uv run pytest --cov=app --cov-fail-under=40 -q   # adding "identity" to WATCHED_NAMESPACES keeps every lifespan/snapshot test green here
+cd ../.. && node scripts/check-config-wiring.mjs --keys identity.auth.mode,agent.oidc.issuer   # exit 0: no unattributed read
 ```
 
 ---
 
-### Step 17 — test: Issuer vectors and SSO-mode resolution in the agent
+### Step 18 — test: Agent vectors and mode resolution
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
 **Files**:
-- `services/xstockstrat-agent/tests/test_oidc_issuer_vectors.py` — create
+- `services/xstockstrat-agent/tests/test_oidc_vectors.py` — create
 - `services/xstockstrat-agent/tests/test_sso_mode.py` — create
 - `services/xstockstrat-agent/tests/conftest.py` — modify
 
 **Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness
 
 **Codebase Evidence**:
-- The vector-load idiom is `SERVICE_DIR.parent.parent / "scripts" / "testdata" / …`, cloned from `services/xstockstrat-ingest/tests/test_telemetry.py:112-115` (design.md (B) §D-66).
-- `install_watcher(monkeypatch, namespace, **values)` is at `tests/test_config_watcher.py:46-50`.
-- The autouse `config_snapshots` fixture (`conftest.py:112-130`) iterates `watcher.WATCHED_NAMESPACES`, so it covers `ui` automatically.
+- `install_watcher(monkeypatch, namespace, **values)` at `tests/test_config_watcher.py:46-50`.
+- The autouse `config_snapshots` fixture iterates `watcher.WATCHED_NAMESPACES` (`conftest.py:145-157`), so it covers `identity`.
+- Vector-path idiom: `Path(__file__).resolve().parents[3] / "scripts" / "testdata" / "oidc-issuer-vectors.json"` (`tests/` → service → `services/` → repo).
 
 **TDD**: red-green required
 
-**Covers**: AC-32, AC-55
+**Covers**: AC-72 (agent leg), AC-55 (agent log), AC-31 (agent leg)
 
 **Instructions**:
-1. `test_oidc_issuer_vectors.py`:
-   - Assert `sso_mode.ISSUER_PATTERN == data['issuer_pattern']` byte-for-byte.
-   - Every `issuer` row gives `is_valid_issuer(value) == valid`.
-   - Every `mode` row, applied through `install_watcher` on `agent`/`ui`, gives `current_sso_mode()` mapped as `sso_invalid` ⇔ `kind=='sso' and not valid`.
+1. `test_oidc_vectors.py`: `ISSUER_PATTERN == data['issuer_pattern']`; every `issuer` row → `is_valid_issuer == valid`; every `mode` row → `parse_auth_mode(value)` gives `(expected, logs)`.
 2. `test_sso_mode.py`:
-   - **@AC-32:** ui set and agent `""` → legacy, with one WARN `sso_mode_misconfigured` across two calls (caplog).
-   - **@AC-55:** ui `http://auth.example.test` with a valid agent → `kind='sso', valid=False, reason='ui_issuer'`, and exactly one ERROR `sso_issuer_invalid` per distinct `(reason, value)`.
-   - A second distinct invalid value logs again.
-   - Assert that `WATCHED_NAMESPACES` contains `"ui"`.
-3. `conftest.py`: add an autouse fixture that calls `sso_mode._reset_log_once()` (D-90 test isolation).
+   - **@AC-72:** `identity` `auth.mode = "sso"` → `current_auth_mode() == "local"`, one `auth_mode_invalid` across two calls;
+   - **@AC-31:** no row → `local`, no `auth_mode_invalid`;
+   - **@AC-55:** `agent` `oidc.issuer = "http://auth.example.test"` → `(…, False)` and one ERROR `sso_issuer_invalid`; a second distinct value logs again;
+   - `"identity" in WATCHED_NAMESPACES`.
+3. `conftest.py`: an autouse fixture calling `sso_mode._reset_log_once()`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .
-grep -n "conftest\|install_watcher" tests/test_sso_mode.py
+grep -n "install_watcher" tests/test_sso_mode.py
 ```
 
 ---
 
-### Step 18 — service: Async JWKS and discovery cache (app/jwks.py)
+### Step 19 — service: Async JWKS and discovery cache (app/jwks.py)
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -889,41 +844,19 @@ grep -n "conftest\|install_watcher" tests/test_sso_mode.py
 **Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness; Security — auth scope correctness
 
 **Codebase Evidence**:
-- `httpx` is a direct dependency (`pyproject.toml:8`). `respx` is a dev dependency (`:21`).
-- **Not found**: there is no existing async JWKS or discovery client in the repo. This module is new (recon R-2; R-1 locks out `PyJWKClient`).
-- PyJWT 2.15.0 (`uv.lock:932`) provides `jwt.PyJWK`, `jwt.get_unverified_header` and `jwt.decode`. The error classes were verified at 2.15.0 (design Open Risks).
+- `httpx` is a direct dependency (`pyproject.toml:7`); `respx` is a dev dependency (`:22`).
+- **Not found**: no async JWKS or discovery client exists (recon); `PyJWKClient` is locked out (R-1).
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 20)
 
 **Covers**: —
 
 **Instructions**:
-1. **Fixed invariants (F-07 comment form, D-13, D-37, D-49 N-14):**
-   - `_JWKS_FRESH_S = 300` — fixed by this spec; D-13 names "JWKS fresh window" without a value. Flagged in context.md. Write it with exactly this two-line F-07 constraint comment:
-     `# Fixed invariant (F-07, D-13): JWKS fresh window; 300 s is fixed by the feature-345 impl-spec.`
-     `# Not a config key; changing it needs a spec amendment.`
-   - `_JWKS_COOLDOWN_S = 30`, `_JWKS_FETCH_TIMEOUT_S = 5`, `_JWKS_STALE_MAX_S = 86400`, `_JWKS_MAX_BYTES = 65536`, `_DISCOVERY_FRESH_S = 600`.
-   - `_ASYMMETRIC_ALGS = frozenset({"RS256","RS384","RS512","PS256","PS384","PS512","ES256","ES384","ES512"})` — the D-2 allow-list. Membership is fixed by this spec; flagged. `EdDSA` (OKP keys) and `none` are deliberately outside it, so a JWK or a token carrying either is rejected (Steps 19 and 23; recorded in the cutover runbook, Step 48).
-2. **Discovery** (D-18, D-27, D-35, D-89): `async def discovery(issuer) -> dict`, cached separately for `_DISCOVERY_FRESH_S`.
-   - GET `f"{issuer}/.well-known/openid-configuration"` with `httpx.AsyncClient(follow_redirects=False, timeout=_JWKS_FETCH_TIMEOUT_S, headers={'Accept-Encoding':'identity'})`.
-   - Reject a `Content-Length` above `_JWKS_MAX_BYTES` before reading, and cap the streamed body too.
-   - Require `doc['issuer'] == issuer` byte-exact and `jwks_uri` same-origin with the issuer. These checks re-run on every refetch.
-   - `verify=` stays default. A loopback issuer is `http://` by grammar, so there is no TLS to skip.
-3. **`class _IssuerKeys`**, one per issuer (D-31). State: `keys_by_kid: dict[str, tuple[PyJWK, str]]`, `fetched_at`, `last_attempt_at`, `last_fetch_ok`, `task`.
-   - A fetch is eligible only if `task is None` and (`now - last_attempt_at >= _JWKS_COOLDOWN_S` or it was never attempted).
-   - The task wraps the fetch in `asyncio.timeout(_JWKS_FETCH_TIMEOUT_S)`, is the **only** writer of the state, and has a done-callback that calls `t.exception()`, so no exception is left unretrieved.
-   - **Ingest** (D-35): for each JWK, `alg = jwk.get('alg')`. Skip it with one WARN when `alg` is absent or not in `_ASYMMETRIC_ALGS`, or when `PyJWK(jwk)` raises. The fetch fails only when zero usable keys remain.
-4. **`async def key_for(issuer, kid) -> tuple[PyJWK, str] | Literal['unknown_kid','unavailable']`**:
-   - **Known `kid`, fresh** → the key.
-   - **Known `kid`, stale ≤ `_JWKS_STALE_MAX_S`** → the key, plus a gated, non-awaited refresh.
-   - **Known `kid`, older** → treat as unknown.
-   - **Unknown `kid`**: if a task is eligible or running, `await asyncio.shield(task)`.
-     - Found → the key.
-     - The task succeeded but the `kid` is still absent → `'unknown_kid'` (401).
-     - The task failed → `'unavailable'` (503).
-   - **Inside the cooldown with no task**: `last_fetch_ok` and ≤ STALE_MAX → `'unknown_kid'`, else `'unavailable'` (D-71).
-   - The caller's `asyncio.timeout_at` deadline (D-18) bounds the `shield` await. A deadline expiry surfaces as `TimeoutError`, which the caller maps to 503.
-5. Add `_reset_for_tests()` to clear the module state.
+1. Fixed invariants, each with the two-line F-07 constraint comment (D-13, D-37): `_JWKS_FRESH_S = 300` (spec-level choice 2), `_JWKS_COOLDOWN_S = 30`, `_JWKS_FETCH_TIMEOUT_S = 5`, `_JWKS_STALE_MAX_S = 86400`, `_JWKS_MAX_BYTES = 65536`, `_DISCOVERY_FRESH_S = 600`, `_ASYMMETRIC_ALGS = frozenset({"RS256","RS384","RS512","PS256","PS384","PS512","ES256","ES384","ES512"})`.
+2. `async def discovery(issuer) -> dict`, cached for `_DISCOVERY_FRESH_S` (D-18, D-27, D-35, D-89): `GET {issuer}/.well-known/openid-configuration` with `httpx.AsyncClient(follow_redirects=False, timeout=_JWKS_FETCH_TIMEOUT_S, headers={'Accept-Encoding':'identity'})`; reject a `Content-Length` above `_JWKS_MAX_BYTES` and cap the streamed body; require `doc['issuer'] == issuer` byte-exact and a same-origin `jwks_uri` on every refetch.
+3. `_IssuerKeys` per issuer (D-31): `keys_by_kid`, `fetched_at`, `last_attempt_at`, `last_fetch_ok`, `task`; a fetch starts only when `task is None` and the cooldown passed (or never attempted); the task owns `asyncio.timeout(_JWKS_FETCH_TIMEOUT_S)`, is the only writer, and its done-callback calls `t.exception()`. Ingest (D-35): skip a JWK with one WARN when `alg` is absent or outside `_ASYMMETRIC_ALGS`, or `PyJWK(jwk)` raises; fail only when zero usable keys remain.
+4. `async def key_for(issuer, kid) -> tuple[PyJWK, str] | Literal['unknown_kid','unavailable']` per D-31: fresh → key; stale ≤ STALE_MAX → key + gated non-awaited refresh; older → unknown; unknown → `await asyncio.shield(task)` (found → key; ok but absent → `'unknown_kid'`; failed → `'unavailable'`); inside the cooldown with no task → `last_fetch_ok` and ≤ STALE_MAX ? `'unknown_kid'` : `'unavailable'`. The caller's deadline bounds the `shield` (D-18).
+5. `_reset_for_tests()`.
 
 **Verification**:
 ```bash
@@ -932,51 +865,37 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 
 ---
 
-### Step 19 — test: JWKS state machine
+### Step 20 — test: JWKS state machine
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_jwks.py` — create
-- `services/xstockstrat-agent/tests/conftest.py` — modify (adds the shared `sso_keys` fixture)
+- `services/xstockstrat-agent/tests/conftest.py` — modify (shared `sso_keys` fixture)
 
 **Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness
 
 **Codebase Evidence**:
-- `respx` is a dev dependency (`pyproject.toml:21`). The `HANG_GUARD_S` outer bound is at `conftest.py:20`.
+- `HANG_GUARD_S = 10` at `conftest.py:20`; `respx` dev dependency (`pyproject.toml:22`).
 
 **TDD**: red-green required
 
 **Covers**: AC-61
 
 **Instructions**:
-1. In `conftest.py`, add the `sso_keys` fixture (C-13; consumers: this file and Step 23's three files): an RSA key pair generated with `cryptography`, its JWKS (`kid`, `alg=RS256`), and a `mint(**claims)` builder that signs RS256 with `kid` and `typ=at+jwt`. `test_jwks.py` uses `sso_keys` and mocks discovery and JWKS with `respx`. Cases:
-   - fresh hit;
-   - stale serve + background refresh;
-   - beyond STALE_MAX treated as unknown;
-   - **@AC-61:** unknown `kid` + JWKS 500 → `'unavailable'`;
-   - fetch ok but `kid` absent → `'unknown_kid'`;
-   - the cooldown suppresses a second fetch within 30 s (the call count stays 1), and `last_fetch_ok` gives `'unknown_kid'` versus `'unavailable'`;
-   - concurrent unknown-`kid` callers share one fetch;
-   - discovery `issuer` with a trailing slash → reject (D-89);
-   - cross-origin `jwks_uri` → reject;
-   - a redirect is not followed;
-   - an oversized `Content-Length` → reject;
-   - an unusable key is skipped with a WARN while the others are kept;
-   - a JWK whose `alg` is `EdDSA` (an OKP key) or `none` is skipped with a WARN, and a JWKS holding only such keys fails the fetch → `'unavailable'` (alg not in the RS/PS/ES 256/384/512 allow-list);
-   - a JWK without `alg` is skipped.
-2. A task that fails with no awaiter leaves no "exception was never retrieved" (`loop.set_exception_handler` + `gc.collect()`, D-35).
-3. No key material is generated inline in `test_jwks.py`; every key comes from `sso_keys` (C-13).
+1. `conftest.py` `sso_keys` fixture (C-13; consumers: this file and Step 24's three files): an RSA key pair (`cryptography`), its JWKS (`kid`, `alg=RS256`), and `mint(**claims)` signing RS256 with `kid` and `typ=at+jwt`.
+2. `test_jwks.py` (respx-mocked discovery and JWKS): fresh hit; stale serve + background refresh; beyond STALE_MAX → unknown; **@AC-61** unknown `kid` + JWKS 500 → `'unavailable'`; fetch ok but `kid` absent → `'unknown_kid'`; cooldown keeps the call count at 1 within 30 s; concurrent unknown-`kid` callers share one fetch; discovery issuer with a trailing slash → reject (D-89); cross-origin `jwks_uri` → reject; no redirect followed; oversized `Content-Length` → reject; an unusable or `EdDSA`/`none`/alg-less JWK skipped with a WARN, and a JWKS of only such keys → `'unavailable'`; a failed task with no awaiter leaves no "exception was never retrieved" (`loop.set_exception_handler` + `gc.collect()`).
+3. No key generated inline in `test_jwks.py` (C-13).
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && grep -n "def sso_keys" tests/conftest.py && ! grep -n "generate_private_key" tests/test_jwks.py   # shared key fixture, none inline (C-13)
+cd services/xstockstrat-agent && grep -n "def sso_keys" tests/conftest.py && ! grep -n "generate_private_key" tests/test_jwks.py
 uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .
 ```
 
 ---
 
-### Step 20 — service: Effective scope, the resolve client helper and the new auth-rejection reasons
+### Step 21 — service: Effective scope, the resolve client helper and the new rejection reasons
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -989,44 +908,30 @@ uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run 
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability, admin `x-access-scope` forwarded only by management tools; Security — auth scope correctness
 
 **Codebase Evidence**:
-- Scope bits and stamping:
-  - `scopes.py:33-36` holds the private bits `_READ/_WRITE/_ADMIN/_TRADING`. `roles_to_access_scope` is at `:39-56`; `MCP_CLAIMS_SCOPE_KEY` is at `:18`.
-  - `tools.py:146` `return roles_to_access_scope(claims.get("roles"))` (in `_caller_access_scope`, `:137`).
-  - `tools.py:216` `roles_to_access_scope(claims.get("roles")),` (in `CallerPropagationMiddleware.__call__`, `:209-224`). These are the two sites (recon R-1, C-10).
-- Identity client:
-  - `client.py:1572-1590` `validate_token` opens `mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity")` and calls `stub.ValidateToken(…, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)`.
-  - `_RPC_TIMEOUT_S = 10.0` is at `:44`.
-- `tool_metrics.py:39-42` `record_auth_rejected` lists `missing_bearer | wrong_audience | identity_unavailable | invalid_token | internal_error`.
+- Scope sites: `tools.py:148` `return roles_to_access_scope(claims.get("roles"))` in `_caller_access_scope` (`:139`), and `tools.py:218` in `CallerPropagationMiddleware` (`:195`); import at `tools.py:80` (recon R-7).
+- `scopes.py:39` `roles_to_access_scope`.
+- `client.py:45` `_RPC_TIMEOUT_S = 10.0`; `validate_token` at `:1595` opens `mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity")`; `_metadata(*extra)` at `:81`.
+- `tool_metrics.py:36-39` `record_auth_rejected` docstring set.
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 22)
 
 **Covers**: —
 
 **Instructions**:
-1. **`scopes.py`** (D-3, D-95):
-   - `_OAUTH_SCOPE_BITS = {"xstockstrat.read": _READ, "xstockstrat.write": _WRITE, "xstockstrat.admin": _ADMIN, "xstockstrat.trade": _TRADING}`.
-   - `MCP_SCOPES_SUPPORTED = ("xstockstrat.read", "xstockstrat.write", "xstockstrat.admin", "xstockstrat.trade")`.
-   - `granted_scopes(payload) -> set[str]`: `scp` when it is a `list` of `str`; else a space-split `scope` when it is a `str`; else an empty set.
-   - `scopes_to_mask(scopes) -> int`. Unknown scopes contribute 0.
-   - `effective_access_scope(claims) -> int`: `claims["access_scope"]` when present (SSO), else `roles_to_access_scope(claims.get("roles"))` (legacy claims never carry `access_scope`).
-2. **`tools.py`**: replace both sites (`:146`, `:216`) with `effective_access_scope(claims)`, and update the import at `:78`.
-3. **`client.py`**: add `async def resolve_external_identity(issuer, subject, email, *, trace_id: str, timeout_s: float) -> dict` next to `validate_token`.
-   - It uses its own `mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity")` (AGENT-1) and a lazy `gen.identity` import (AGENT-2).
-   - It sends `metadata=[("x-trace-id", trace_id)]`: a pre-auth call carries the trace id only (C-03 per design; the caller identity does not exist yet).
-   - It passes `timeout=timeout_s` (`@AC-10 @feature-273`).
-   - It returns `{user_id, roles: [role names], is_active, outcome}`, mapping `Role` enum values to `admin`/`trader`/`viewer` like identity's `ROLE_ENUM_TO_STRING`.
-   - `grpc.aio.AioRpcError` propagates to the caller.
-4. **`tool_metrics.py`**: extend the `record_auth_rejected` docstring set with `jwks_unavailable | account_refused` (D-42).
+1. **`scopes.py`** (D-3, D-95, D-105): `_OAUTH_SCOPE_BITS` (`xstockstrat.read|write|admin|trade` → READ/WRITE/ADMIN/TRADING); `MCP_SCOPES_SUPPORTED` (the four, in that order); `granted_scopes(payload)` = `scp` if `list[str]`, else a space-split `scope` if `str`, else empty; `scopes_to_mask(scopes)`; `effective_access_scope(claims)` = `claims["access_scope"]` when the **key is present** (0 is legal), else `roles_to_access_scope(claims.get("roles"))`.
+2. **`tools.py`**: both sites call `effective_access_scope(claims)`; update the import.
+3. **`client.py`**: `def rpc_timeout_s() -> float: return _RPC_TIMEOUT_S` beside `:45`; `async def resolve_external_identity(issuer, subject, *, trace_id, timeout_s) -> dict` beside `validate_token`: its own `mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity")` (AGENT-1), lazy `gen.identity` import (AGENT-2), `metadata=[("x-trace-id", trace_id)]` (pre-auth: trace id only, D-114/C-03), `timeout=timeout_s`; returns `{user_id, roles: [Role.Name(r).removeprefix('ROLE_').lower()], is_active}`; `grpc.aio.AioRpcError` propagates.
+4. **`tool_metrics.py`**: add `jwks_unavailable | account_refused` to the docstring set (D-42).
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --check . && grep -n "effective_access_scope" app/tools.py   # 2 call sites + import
-grep -n "x-trace-id\|timeout=" app/client.py | grep -n "resolve" || grep -n "def resolve_external_identity" -A20 app/client.py | grep -E "trace|timeout"
+cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --check . && grep -c "effective_access_scope" app/tools.py   # import + 2 sites
+grep -n "def resolve_external_identity" -A25 app/client.py | grep -E "x-trace-id|timeout=timeout_s"
 ```
 
 ---
 
-### Step 21 — test: Scope narrowing at both sites, the resolve helper and the telemetry allow-list
+### Step 22 — test: Scope narrowing at both sites, the resolve helper and the telemetry allow-list
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -1038,34 +943,26 @@ grep -n "x-trace-id\|timeout=" app/client.py | grep -n "resolve" || grep -n "def
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability
 
 **Codebase Evidence**:
-- `conftest.py:15-17` holds the `ADMIN`/`TRADER`/`VIEWER` claim sets; `_ctx(claims)` is at `:23-33`.
-- `test_telemetry_allowlist.py:37-42` `_drive()` calls `record_auth_rejected("missing_bearer")`.
+- `conftest.py:15-17` `ADMIN`/`TRADER`/`VIEWER`; `_ctx(claims)` `:23`.
 - `test_client_deadlines.py` is the per-RPC deadline net (`@AC-10 @feature-273`).
 
 **TDD**: red-green required
 
-**Covers**: AC-12, AC-13, AC-22
+**Covers**: AC-12, AC-13, AC-22 (scope arithmetic)
 
 **Instructions**:
-1. `test_sso_scope.py`:
-   - **@AC-12:** trader roles (11) & `scp=["xstockstrat.read"]` → 1, with neither 0x02 nor 0x08.
-   - **@AC-13:** viewer & all four scopes → 1.
-   - **@AC-22:** trader & `read write` → 3.
-   - A `scope` string fallback gives the same results as `scp`. Neither → 0. A non-list `scp` → falls back.
-   - Both sites honour a stamped `access_scope`: `_caller_access_scope(_ctx({...,'access_scope':1}))` → 1, and `CallerPropagationMiddleware` binds `access_scope` 1 through `client.set_caller`.
-   - A legacy claim without `access_scope` keeps `roles_to_access_scope` (`@AC-1..9 @feature-183` PRESERVE).
-2. `test_telemetry_allowlist.py`: `_drive()` adds `record_auth_rejected("jwks_unavailable")` and `("account_refused")`; the key set stays closed.
+1. `test_sso_scope.py`: **@AC-12** trader (11) & `scp=["xstockstrat.read"]` → 1; **@AC-13** viewer & all four → 1; **@AC-22** trader & `read write` → 3; `scope` string fallback = `scp`; neither → 0; non-list `scp` → fallback; both sites honour a stamped `access_scope` (including 0: `scp=[]` → `x-access-scope 0`, D-105); a legacy claim without `access_scope` keeps `roles_to_access_scope` (PRESERVE).
+2. `test_telemetry_allowlist.py`: `_drive()` adds `record_auth_rejected("jwks_unavailable")` and `("account_refused")`; keys stay closed.
 3. `test_client_deadlines.py`: `resolve_external_identity` passes `timeout=` and `x-trace-id`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .
-grep -n "from tests.conftest import\|conftest" tests/test_sso_scope.py
 ```
 
 ---
 
-### Step 22 — service: SSO token validator, role cache, the 401/403/503 map and mode-gated routes
+### Step 23 — service: oidc token validator, role cache, the status map and mode-gated routes
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -1073,74 +970,41 @@ grep -n "from tests.conftest import\|conftest" tests/test_sso_scope.py
 - `services/xstockstrat-agent/app/sso_auth.py` — create
 - `services/xstockstrat-agent/app/main.py` — modify
 - `services/xstockstrat-agent/app/oauth_metadata.py` — modify
-- `services/xstockstrat-agent/app/client.py` — modify (public deadline accessor)
 
 **Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness (`instance_count > 1` safe), MCP tool contract stability; Security — JWT claims minimal, auth scope correctness
 
 **Codebase Evidence**:
-- `main.py`:
-  - `_authorized(scope)` is at `:154-177`: it parses `Bearer`, returns False with `record_auth_rejected("missing_bearer")`, calls `validate_bearer_claims`, and stamps `scope["state"][MCP_CLAIMS_SCOPE_KEY] = claims`.
-  - `_send_unauthorized` (`:179-190`) sends WWW-Authenticate `resource_metadata="{AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource"`.
-  - `_send_identity_unavailable` (`:192-196`) sends 503 text/plain with no WWW-Authenticate.
-  - `handle_mcp` is at `:209-237`. The route table is at `:250-267`: `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`, `/oauth/{register,authorize,callback,token}`, `/api/tools`, and `Mount("/", handle_mcp)` last.
-- `oauth_metadata.py:16` reads `AGENT_PUBLIC_URL` at import (AGENT-8). `protected_resource_metadata` (`:19-26`) returns `{resource, authorization_servers:[AGENT_PUBLIC_URL]}`; `authorization_server_metadata` is at `:29-41`.
-- `auth.py:27` `IDENTITY_UNAVAILABLE = object()`. FR-8 says this sentinel is **not** reused for SSO.
-- `_new_trace_id()` is at `tools.py:181-183`.
-- `client.py:42-44`: `_RPC_TIMEOUT_S = 10.0` under the comment "Read at call time so tests can monkeypatch them". It has 119 references across `app/` and `tests/` (`grep -rnw`: `client.py`, `auth.py`, `tools.py` and four test modules), so it stays; a new module must not reach into the private name.
+- `main.py`: `_authorized` `:140-163` (bearer `:147-152`, `validate_bearer_claims` `:154`, stamp `:159-162`); `_send_unauthorized` `:165-176`; `_send_identity_unavailable` `:178-182` (503 text/plain, no WWW-Authenticate); `handle_mcp` `:195-221` (verdict order `:213-219`); routes `:236-251` with `Mount("/", handle_mcp)` last (an unrouted `/oauth/*` falls to `handle_mcp` → 401, recon R-5).
+- `oauth_metadata.py:16` `AGENT_PUBLIC_URL` read at import (AGENT-8); `protected_resource_metadata` `:19-26`; `authorization_server_metadata` `:29-41`.
+- `_new_trace_id()` `tools.py:178`; `IDENTITY_UNAVAILABLE` sentinel in `app/auth.py` is not reused (FR-8).
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 24)
 
 **Covers**: —
 
 **Instructions**:
-1. **`app/sso_auth.py`** (new). Import `AGENT_PUBLIC_URL` from `app.oauth_metadata`; add no fifth independent env read (AGENT-8).
-   - Fixed invariants: `_ROLE_TTL_S = 60.0` and `_CLOCK_SKEW_S = 30` (F-07 form, D-13, D-37).
-   - `class SsoOutcome(enum.Enum)`: `OK`, `UNAUTHORIZED`, `FORBIDDEN`, `UNAVAILABLE`, `INTERNAL`, plus `@dataclass Verdict(outcome, claims: dict | None)`. This is an explicit refusal, not a truthy sentinel (FR-8).
-   - **`_precheck(token, agent_issuer) -> str | None`**: exactly design.md (C) §5 (D-84), plus the `typ` check (D-95 typ clause / D-26: the spike found `typ` = `at+jwt`, which enables D-26's conditional check): `str(header.get("typ","")).lower() == "at+jwt"`, else None.
-   - **`async def authenticate(token, mode, trace_id) -> Verdict`**:
-     1. `kid = _precheck(...)`. None → `record_auth_rejected("invalid_token")`, UNAUTHORIZED. This runs outside the deadline (D-69 step 3).
-     2. `deadline = loop.time() + client.rpc_timeout_s()`, then `async with asyncio.timeout_at(deadline):` (D-18):
-        - a. `await jwks.discovery(mode.agent_issuer)`.
-        - b. `jwks.key_for(...)`: `'unknown_kid'` → 401 `invalid_token`; `'unavailable'` → `record_auth_rejected("jwks_unavailable")`, UNAVAILABLE.
-        - c. `jwt.decode(token, key, algorithms=[jwk_alg], audience=AGENT_PUBLIC_URL, issuer=mode.agent_issuer, leeway=_CLOCK_SKEW_S, options={"require":["exp","iss","aud","sub"]})`.
-          - Then, inside the same `try`, a strict `int(exp) > time.time()` check, then `aud == X or aud == [X]` byte-exact (D-26; R-11 locks out `strict_aud`), then `isinstance(sub, str) and sub`.
-          - Any `jwt.InvalidTokenError` / `ValueError` / `TypeError` here → 401 `invalid_token`. A wrong `aud` → `record_auth_rejected("wrong_audience")`.
-        - d. **Role cache** `_cache[(iss, sub)] = (monotonic_expiry, user_id, roles)`. It holds successes only and is never served stale (D-49 N-6, FR-8). On a miss, call `client.resolve_external_identity(iss, sub, payload.get("email") or "", trace_id=trace_id, timeout_s=max(0.0, deadline - loop.time()))`.
-          - `FAILED_PRECONDITION` → `record_auth_rejected("account_refused")`, FORBIDDEN.
-          - `UNAVAILABLE` / `DEADLINE_EXCEEDED` → `record_auth_rejected("identity_unavailable")`, UNAVAILABLE.
-          - Any other `AioRpcError` → INTERNAL.
-          - On success, cache the result only when `is_active`.
-     3. A `TimeoutError` (the overall deadline) → `identity_unavailable`, UNAVAILABLE. Any other exception → `record_auth_rejected("internal_error")`, one `log.error` naming `type(e).__name__`, INTERNAL (D-17).
-     4. On OK, the claims are `{user_id, roles, access_scope: roles_to_access_scope(roles) & scopes_to_mask(granted_scopes(payload)), aud, trace_id}`, with **no** `email` and no `sub` (D-3, R-6).
-   - Never log the token or the `email` claim (FR-2).
-   - `_reset_for_tests()` clears `_cache`.
-2. **`main.py`** (D-1, D-10, D-17, D-69, D-78):
-   - In `_authorized`, call `mode = current_sso_mode()` first:
-     - **legacy**: today's code, byte-identical (`@AC-19 @feature-294` PRESERVE).
-     - **SSO and `not mode.valid`**: return an "invalid config" verdict **before** the bearer check.
-     - **SSO and valid**: missing bearer → 401 as today (`:164-166`); otherwise `trace_id = _new_trace_id()` and `sso_auth.authenticate`. On OK, stamp the claims exactly as today (`:174-176`).
-   - Map verdicts in `handle_mcp`:
-     - UNAUTHORIZED → `_send_unauthorized`;
-     - FORBIDDEN → a new `_send_forbidden` (403 text/plain, no WWW-Authenticate, no backend RPC);
-     - UNAVAILABLE / INTERNAL / invalid config → `_send_identity_unavailable` (503, no WWW-Authenticate; AC-55, AC-61).
-   - **Gate the legacy routes.** In SSO mode, `/oauth/{register,authorize,callback,token}` and `/.well-known/oauth-authorization-server` answer 404. Wrap each endpoint in a small `_legacy_only(endpoint)` that checks `current_sso_mode().kind == 'sso'` per request. In legacy mode the endpoints are called unchanged (byte-identical).
-3. **`client.py`**: next to `_RPC_TIMEOUT_S` (`:44`), add `def rpc_timeout_s() -> float: return _RPC_TIMEOUT_S`, the public read of the per-RPC deadline. It reads the module global at call time, so existing `monkeypatch.setattr(client, "_RPC_TIMEOUT_S", …)` tests keep steering it. Change nothing else in `client.py`.
-4. **`oauth_metadata.py`** (D-10, D-78):
-   - `protected_resource_metadata` legacy: unchanged.
-   - SSO valid: `JSONResponse({"resource": AGENT_PUBLIC_URL, "authorization_servers": [mode.agent_issuer], "scopes_supported": list(MCP_SCOPES_SUPPORTED)})`.
-   - SSO invalid: `Response(status_code=503, headers={"Cache-Control": "no-store"})`.
-   - `authorization_server_metadata` is unchanged (the 404 comes from the `_legacy_only` wrap in `main.py`).
+1. **`app/sso_auth.py`** (design § 2 status map; D-17, D-18, D-25, D-26, D-30, D-69, D-84, D-95):
+   - `from app.oauth_metadata import AGENT_PUBLIC_URL` (no fifth env read, AGENT-8); fixed invariants `_ROLE_TTL_S = 60.0`, `_CLOCK_SKEW_S = 30` (F-07 form); `RESOLVE_REFUSALS = ("not linked", "account inactive")` (mirror of `refusals.resolve`).
+   - `class Outcome(enum.Enum)`: `OK, UNAUTHORIZED, FORBIDDEN, UNAVAILABLE, INTERNAL`; `@dataclass Verdict(outcome, claims: dict | None = None, body: str = "")` — an explicit refusal, not a truthy sentinel.
+   - `_precheck(token, issuer) -> str | None` (outside the deadline): `jwt.get_unverified_header` → `kid` a non-empty `str`, `isinstance(alg, str)` and `alg in _ASYMMETRIC_ALGS` (HS256/`none` refused), `typ.lower() == "at+jwt"`; unverified payload is a `dict` whose `iss == issuer`; any `jwt.InvalidTokenError`/garbage → `None`.
+   - `async def authenticate(token, issuer, trace_id) -> Verdict`: precheck `None` → `record_auth_rejected("invalid_token")`, UNAUTHORIZED. Then `async with asyncio.timeout_at(loop.time() + client.rpc_timeout_s())`: `jwks.discovery(issuer)`; `jwks.key_for(issuer, kid)` (`'unknown_kid'` → 401 `invalid_token`; `'unavailable'` → `jwks_unavailable`, UNAVAILABLE); `jwt.decode(token, key, algorithms=[jwk_alg], audience=AGENT_PUBLIC_URL, issuer=issuer, leeway=_CLOCK_SKEW_S, options={"require": ["exp","iss","aud","sub"]})`, then strict `int(exp) > time.time()`, `aud == X or aud == [X]` (else `wrong_audience`), `sub` a non-empty `str`; any decode error → 401 `invalid_token`. Cache `(iss, sub) → (monotonic expiry, user_id, roles)`, successes only, never stale. Miss → `client.resolve_external_identity(iss, sub, trace_id=…, timeout_s=max(0, deadline - loop.time()))`: `FAILED_PRECONDITION` with `details() in RESOLVE_REFUSALS` → `account_refused`, FORBIDDEN, `body = details()`; another detail → `internal_error` + ERROR, INTERNAL (R-30); `UNAVAILABLE`/`DEADLINE_EXCEEDED`/overall `TimeoutError` → `identity_unavailable`, UNAVAILABLE; any other exception → `internal_error` + one ERROR naming `type(e).__name__`, INTERNAL.
+   - OK claims: `{user_id, roles, access_scope: roles_to_access_scope(roles) & scopes_to_mask(granted_scopes(payload)), trace_id}` — no `email`, no `sub`. Never log the token or any claim value.
+   - `_reset_for_tests()` clears the cache.
+2. **`main.py`** (D-105):
+   - `handle_mcp` reads `mode = current_auth_mode()` per request. `local`/`both` → today's `_authorized` path, byte-identical.
+   - `oidc`, in order: `issuer, valid = agent_issuer()`; invalid → `record_auth_rejected("internal_error")` + `_send_identity_unavailable` (before the bearer check, AC-55); no bearer → `missing_bearer` + `_send_unauthorized`; else `sso_auth.authenticate(token, issuer, _new_trace_id())`: OK → stamp `scope["state"][MCP_CLAIMS_SCOPE_KEY]` as today; UNAUTHORIZED → `_send_unauthorized`; FORBIDDEN → new `_send_forbidden(body)` (403 text/plain, body = the detail, no WWW-Authenticate); UNAVAILABLE/INTERNAL → `_send_identity_unavailable`.
+   - `_legacy_only(endpoint)`: in `oidc` → 404 text/plain; otherwise calls the endpoint unchanged. Wrap `/.well-known/oauth-authorization-server` and the four `/oauth/*` routes (they stay registered, R-5).
+3. **`oauth_metadata.py`**: `protected_resource_metadata` in `local`/`both` → unchanged; `oidc` + valid issuer → `{"resource": AGENT_PUBLIC_URL, "authorization_servers": [issuer], "scopes_supported": list(MCP_SCOPES_SUPPORTED)}`; `oidc` + invalid → `Response("Service Unavailable", 503, media_type="text/plain", headers={"Cache-Control": "no-store"})`.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --check . && uv run pytest tests/test_oauth.py tests/test_streamable_http_auth.py tests/test_auth_deadline.py -q   # legacy regression net stays green
-grep -n "x-trace-id" app/client.py | head -3   # resolve carries the trace id (C-03)
-! grep -n "_RPC_TIMEOUT_S" app/sso_auth.py   # sso_auth uses the public client.rpc_timeout_s()
+cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --check . && uv run pytest tests/test_oauth.py tests/test_streamable_http_auth.py tests/test_auth_deadline.py -q   # local regression net
+! grep -n "_RPC_TIMEOUT_S" app/sso_auth.py   # uses client.rpc_timeout_s()
 ```
 
 ---
 
-### Step 23 — test: Agent SSO auth end-to-end (status map, deadline, routes, metadata)
+### Step 24 — test: Agent oidc auth end to end (status map, deadline, routes, metadata)
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -1153,81 +1017,56 @@ grep -n "x-trace-id" app/client.py | head -3   # resolve carries the trace id (C
 **Reviewers**: `xstockstrat-agent` owner — OAuth 2.1 edge-auth correctness and statelessness, MCP tool contract stability
 
 **Codebase Evidence**:
-- The end-to-end template is `test_streamable_http_auth.py:37-60`: `TestClient(_app())` with `patch("app.auth.validate_bearer_claims", …)` and an SSE `data:` parse.
-- The deadline template is `test_auth_deadline.py:51,62,89`: `test_ac11_stalled_identity_returns_503_without_www_authenticate`, `…_valid_token_stamps_the_same_trace_id…` and `…_invalid_token_still_401…`.
-- The legacy net is `tests/test_oauth.py` (`@AC-42` legacy).
-- `install_watcher` is at `test_config_watcher.py:46`.
+- End-to-end template `test_streamable_http_auth.py:24-60` (`build_http_app()`, `TestClient`, SSE `data:` parse).
+- Deadline template `test_auth_deadline.py:51,62,89`.
+- Legacy net `tests/test_oauth.py`.
 
 **TDD**: red-green required
 
-**Covers**: AC-10, AC-11, AC-14, AC-15, AC-21, AC-22, AC-23, AC-30, AC-32, AC-37, AC-40, AC-42, AC-43, AC-44, AC-55, AC-61
+**Covers**: AC-10, AC-11 (agent), AC-14, AC-15, AC-21, AC-22, AC-23, AC-30, AC-32, AC-42 (guard), AC-43, AC-44 (agent leg), AC-49 (agent PRM), AC-55, AC-61, AC-71 (agent leg)
 
 **Instructions**:
-1. **`conftest.py`** (C-13):
-   - Reuse the `sso_keys` fixture added in Step 19 (do not redefine it).
-   - Add `sso_mode_on(monkeypatch)`, which installs `agent`/`ui` issuer watchers and respx-mocks discovery and JWKS.
-   - `sso_mode_on` has three consumers (the three new files), so it belongs in `conftest.py`.
-   - Reset `sso_auth`/`jwks` state per test.
-2. **`test_sso_auth.py`** (unit level, `client.resolve_external_identity` mocked):
-   - **@AC-10:** `aud` = a webhooks URL → 401.
-   - **@AC-23**, one case per row: foreign `iss`, expired, foreign signature, identity HS256 → 401.
-     - Rows 1 and 4 stay 401 while the JWKS mock raises, and the fetch is never awaited (D-69).
-   - D-84 rows: non-JSON payload, `[1]` payload, list `alg`, integer `kid`, missing `kid` → 401.
-   - A token whose header `alg` is `EdDSA` or `none` → 401 from `_precheck`, with the JWKS mock never awaited (alg outside the RS/PS/ES 256/384/512 allow-list, Step 18).
-   - `sub` `""` or `123` → 401. Missing `exp`/`aud`/`sub` → 401. `typ` other than `at+jwt` → 401.
-   - `aud` `"X"` and `["X"]` both pass.
-   - **@AC-21 / @AC-37 / @AC-40:** resolve `FAILED_PRECONDITION` → FORBIDDEN, metric `account_refused`, and no backend RPC.
-   - **@AC-14:** with a fake monotonic clock, the cache hit at +55 s forwards the old scope and +61 s re-resolves the new roles.
-   - **@AC-15:** cached at t0, identity `UNAVAILABLE` after expiry → UNAVAILABLE.
-   - A deactivated user (`is_active` false) is not cached.
-   - **@AC-61:** an unknown `kid` with the JWKS unreachable → UNAVAILABLE and `jwks_unavailable`.
-   - Logs never contain the token or the email (caplog with a sentinel email).
-3. **`test_sso_auth_deadline.py`**: clone `test_auth_deadline.py:51-100` for SSO.
-   - A stalled resolve → 503 without WWW-Authenticate within 10.5 s and the same `x-trace-id` (`@AC-11 @feature-273` EXTEND).
-   - A pre-check reject consumes no budget.
-4. **`test_sso_routes.py`** (`TestClient(build_http_app())`):
-   - **@AC-22 / @AC-30:** a valid token calls `list_strategies`, and the backend metadata carries the resolved `x-user-id` (never `sub`) and `x-access-scope` 3 (or 1 for the AC-30 viewer).
-   - **@AC-11:** in SSO mode the PRM equals `{"resource": AGENT_PUBLIC_URL, "authorization_servers": [issuer], "scopes_supported": ["xstockstrat.read","xstockstrat.write","xstockstrat.admin","xstockstrat.trade"]}`, pinned whole. The UI side of this contract is Step 43 (D-55).
-   - **@AC-43:** `/oauth/register` → 404, and an identity-minted HS256 token on MCP → 401.
-   - **@AC-55:** ui `http://auth.example.test` → any bearer → 503 with no WWW-Authenticate, and the PRM → 503 `no-store`.
-   - **@AC-32 / @AC-42 / @AC-44:** half-configured or cleared issuers → legacy. `validate_bearer_claims` is used, the `aud`-bound identity token is accepted, and `/oauth/register` is routed. The existing `test_oauth.py` stays green.
+1. `conftest.py`: `oidc_mode(monkeypatch)` fixture (three consumers) installing `identity` `auth.mode="oidc"` and `agent` `oidc.issuer` watchers and respx-mocking discovery + JWKS from `sso_keys`; reset `sso_auth`/`jwks` state per test.
+2. `test_sso_auth.py` (`client.resolve_external_identity` mocked): **@AC-10** foreign `aud` → 401 + `wrong_audience`; **@AC-23** one case per row (foreign `iss`, expired, foreign signature, identity HS256) → 401, rows 1 and 4 without awaiting JWKS; D-84 garbage rows; `EdDSA`/`none` header → 401; empty/int `sub`, missing claims, wrong `typ` → 401; `aud` `"X"` and `["X"]` pass; **@AC-21** Resolve 9 `account inactive` → FORBIDDEN body `account inactive`; **@AC-30** `not linked` → body `not linked`; an unknown detail → INTERNAL; `RESOLVE_REFUSALS` equals the vector `refusals.resolve`; **@AC-14** fake monotonic clock: +55 s cached scope, +61 s re-resolves new roles; **@AC-15** expired entry + `UNAVAILABLE` → UNAVAILABLE and no backend RPC; inactive results not cached; **@AC-61** unknown `kid` + JWKS down → UNAVAILABLE + `jwks_unavailable`; caplog never contains the token or a sentinel email.
+3. `test_sso_auth_deadline.py`: clone `test_auth_deadline.py:51-99` for `oidc` — a stalled Resolve → 503 without WWW-Authenticate within 10.5 s, same `x-trace-id`; a precheck reject consumes no budget.
+4. `test_sso_routes.py` (`TestClient(build_http_app())`): **@AC-22** a valid token runs `list_strategies` with backend `x-user-id` = the resolved id (never `sub`) and `x-access-scope` 3; **@AC-21/@AC-30** 403 text/plain bodies and no backend stub called; **@AC-11/@AC-49** PRM deep-equals `prm.expected` from the vector file (with `AGENT_PUBLIC_URL` patched to `prm.agent_public_url`); **@AC-43** `/oauth/register` → 404, AS metadata → 404, an identity HS256 token → 401; **@AC-55** invalid `agent/oidc.issuer` → any bearer 503 without WWW-Authenticate, PRM 503 `no-store`; **@AC-32** `both` → `validate_bearer_claims` path, identity token accepted, an issuer RS256 token for a linked subject → 401; **@AC-44/@AC-71** changing the installed `identity` snapshot from `oidc` to `local` between two requests switches the next request back to `validate_bearer_claims` (the 60 s delivery is the config watch, a labelled guard).
+5. **(guard) AC-42**: `tests/test_oauth.py` stays green unchanged in `local`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .
-grep -n "def sso_keys\|def sso_mode_on" tests/conftest.py
+grep -n "def sso_keys\|def oidc_mode" tests/conftest.py
+uv run pytest tests/test_oauth.py -q   # (guard) AC-42: local MCP keeps the built-in OAuth server
 ```
 
 ---
 
-### Step 24 — service: UI typecheck script and CI step
+### Step 25 — service: UI typecheck script and CI step
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify
-- `services/xstockstrat-ui/tsconfig.json` — modify (add `".next"` to `exclude`)
+- `services/xstockstrat-ui/tsconfig.json` — modify
 - `.github/workflows/ci.yml` — modify
 
-**Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
+**Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety; Platform Lead — CI gate parity
 
 **Codebase Evidence**:
 - `package.json` scripts (`:6-19`) have no `typecheck`.
-- `tsconfig.json` has `"noEmit": true`, `"include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"]` (`:21`) and `"exclude": ["node_modules"]` (`:22`). So test files, `e2e/**` and the `*.config.ts` files are type-checked.
-- **Measured at spec time (2026-11-16, this branch, no `.next/`):** `pnpm install --frozen-lockfile` (pnpm 9.15.9) at the root, then `npx tsc --noEmit -p tsconfig.json` (TypeScript 5.9.3) in `services/xstockstrat-ui` → exit 0, **0 errors in 0 files**. Re-measured at `/sdd-review impl-spec` pass 5 on commit `45be5749` (`tsc` 5.9.3, no `.next/`): `npx tsc --noEmit -p tsconfig.json` printed nothing and exited 0. No pre-existing error needs fixing, so no `src/**` file is in scope. The executor re-runs `pnpm run typecheck` and pastes its exit code and output into this step's TDD evidence; any error that trunk drift introduced is fixed in this step and its file logged in the Deviation Log (F-08).
-- `grep -rn "PageProps\|LayoutProps" services/xstockstrat-ui/src` → no hits. Nothing depends on the Next-generated `.next/types` globals, so excluding `.next` is safe and no `next build` is needed before the typecheck.
-- The `node-test` matrix entry for `xstockstrat-ui` is at `ci.yml:745-773`. Its steps are install (`:784-785`), proto build (`:787-788`) and `test with coverage` (`:790-792`).
-- **Ledger trap** (insights.md:2948): a bare `tsc --noEmit` can false-RED on a Next app because `.next/types` exists only after `next build`, and a stale local `.next/` can do the same. D-93 still chooses `tsc`; the `exclude` entry removes the trap.
+- `tsconfig.json:21` `"include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"]`, `:22` `"exclude": ["node_modules"]`.
+- `node-test` job: matrix entry `xstockstrat-ui` and the `test with coverage` step at `ci.yml:794`.
+- Ledger `insights.md:2948`: a bare `tsc --noEmit` can false-RED on `.next/types`; `exclude` removes the trap.
 
-**TDD**: N/A (tooling gate; its RED proof is the D-83 `@ts-expect-error` removal in Step 34)
+**TDD**: N/A (tooling gate; its RED proof is the D-83 `@ts-expect-error` removal in Step 37)
 
 **Covers**: —
 
 **Instructions**:
-1. Add `"typecheck": "tsc --noEmit"` to `services/xstockstrat-ui/package.json` (D-93).
-2. In `tsconfig.json`, set `"exclude": ["node_modules", ".next"]`. Leave `include` unchanged; `exclude` filters the `.next/types/**/*.ts` include, so a local `next build` / `next dev` output can never feed the gate.
-3. In `node-test`, add a step `- name: typecheck (xstockstrat-ui)`, `if: matrix.service == 'xstockstrat-ui'`, `working-directory: services/xstockstrat-ui`, `run: pnpm run typecheck`. It goes **before** `test with coverage`.
-4. Run it once at execute. The spec-time run was clean. If trunk drift makes it report errors, fix each one in this PR (owner-accepted widening, D-93) with no `@ts-ignore`. In scope: `src/**`, `e2e/**` and the `*.config.ts` files. Log every additionally touched path in the Deviation Log **before** the commit (F-08).
+1. `"typecheck": "tsc --noEmit"` in `package.json` (D-93).
+2. `tsconfig.json` `"exclude": ["node_modules", ".next"]`.
+3. In `node-test`, before `test with coverage`: `- name: typecheck (xstockstrat-ui)`, `if: matrix.service == 'xstockstrat-ui'`, `working-directory: services/xstockstrat-ui`, `run: pnpm run typecheck`.
+4. Run it once; paste the exit code and output into the step's evidence. Fix any pre-existing error here without `@ts-ignore` (owner-accepted widening, D-93) and log each touched path in the Deviation Log before the commit (F-08).
 
 **Verification**:
 ```bash
@@ -1237,7 +1076,7 @@ grep -n "typecheck (xstockstrat-ui)" ../../.github/workflows/ci.yml
 
 ---
 
-### Step 25 — service: UI leaf modules (issuer grammar, Origin check, deadlines, log-once, compose APP_URL)
+### Step 26 — service: UI leaf modules (issuer grammar, Origin check, deadlines, log-once, compose APP_URL)
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1251,49 +1090,37 @@ grep -n "typecheck (xstockstrat-ui)" ../../.github/workflows/ci.yml
 **Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI, Connect-RPC call safety; Security — auth scope correctness; Platform Lead — deploy config parity (`APP_URL`)
 
 **Codebase Evidence**:
-- `deadlines.ts:1-14` is a leaf module ("Leaf module (no imports)") with `REFRESH_TIMEOUT_MS = 10_000` at `:3`.
-- `serverLog.ts:37-41` `export const serverLog = { info, warn, error }`.
-- The vector file is `scripts/testdata/oidc-issuer-vectors.json` (Step 15).
-- `APP_URL` is already set on every deploy target: `.do/app.yaml:650-651`, `.do/app.dev.yaml:647-648` and `deploy/homelab/compose.yml:283` (`APP_URL: ${APP_URL:?APP_URL is required}`) (D-67). `appOrigin()` reads that existing variable. Root `docker-compose.yml` does not set it (UI block: `AGENT_PUBLIC_URL` at `:520`, `ports: "3000:3000"` at `:524-525`), so this step adds it there, keeping every service-env read wired on every target in the same step (D-67). Playwright's `webServer.env` gains it in Step 46.
+- `deadlines.ts:1` "Leaf module (no imports)", `REFRESH_TIMEOUT_MS = 10_000` at `:3`.
+- `serverLog.ts:37` `export const serverLog = { … }`.
+- `APP_URL` is set on every deploy target: `.do/app.yaml:658-659`, `.do/app.dev.yaml:655-656`, `deploy/homelab/compose.yml:285`; **absent** from `docker-compose.yml` (UI block: `AGENT_PUBLIC_URL` at `:522`, `ports` at `:526-527`) and from Playwright (D-67).
+- The grammar literals and the TS round-trip are in `git show 7eeab3d:…/design.md` § (C) 1 (lines 702–766), carried by D-110 (D-79, D-88).
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 27)
 
 **Covers**: —
 
 **Instructions**:
-1. **`oidcIssuer.ts`** (D-79, D-88, design.md (C) §1):
-   - Export `ISSUER_PATTERN` and `APP_URL_PATTERN` as `String.raw` literals equal to the JSON.
-   - `const ISSUER_RE = new RegExp(ISSUER_PATTERN)` with no flags.
-   - `isValidIssuer(v)` is the regex plus the `new URL` round-trip from design.md (C) §1.
-2. **`sameOrigin.ts`** (D-68, D-77, D-81, D-86). It imports only `serverLog` and `oidcIssuer`:
-   - `parseAppOrigin(raw)`: `typeof raw==='string' && APP_URL_RE.test(raw) && new URL(raw).origin===raw ? raw : null`.
-   - `appOrigin()`: `parseAppOrigin(process.env.APP_URL)`. On null, `logOnce('error','app_url_invalid', 'app_url\0'+(APP_URL ?? '<unset>'), {reason:'app_url'})`, unset included (D-86).
-   - `isSameOrigin(req, policy, origin = appOrigin())`, with the `required` / `if_present` semantics in design.md (B) §D-68.
-   - `originHost(h)` per design.md (C) §2.
-3. **`deadlines.ts`** (D-47, D-61; it stays a leaf):
-   - `AUTH_CONFIG_TIMEOUT_MS = 10_000`, with a 2-line F-07 constraint comment.
-   - `OIDC_TIMEOUT_S = 10` and `OIDC_DISCOVERY_FRESH_S = 600` (D-37, D-70).
-   - `OIDC_ID_TOKEN_ALG = 'RS256'` (D-37; spike-confirmed RS256).
-   - `raceDeadline<T>(p: Promise<T>, ms: number): Promise<T>`, which rejects on timeout and clears its own timer in `finally`.
-4. **`serverLog.ts`** (D-90): add `export function logOnce(level: 'warn'|'error', message: string, key: string, detail?: Record<string,string>)` over a module `Set`, plus `__resetLogOnce()` for tests.
-5. **`docker-compose.yml`** (D-67): in the `xstockstrat-ui` block, add `APP_URL: http://localhost:3000` after `:520`, with a 2-line constraint comment: it must equal the browser origin exactly, and local compose SSO is unsupported (D-91).
+1. **`oidcIssuer.ts`**: `ISSUER_PATTERN`, `APP_URL_PATTERN` as `String.raw` literals equal to the vector file; `ISSUER_RE`/`APP_URL_RE` with no flags; `isValidIssuer(v)` = regex + `new URL` round-trip (`u.origin + (v.length > u.origin.length ? u.pathname : '') === v`).
+2. **`sameOrigin.ts`** (D-68, D-77, D-81, D-86): `parseAppOrigin(raw)` (`typeof raw === 'string' && APP_URL_RE.test(raw) && new URL(raw).origin === raw ? raw : null`); `appOrigin()` = `parseAppOrigin(process.env.APP_URL)`, logging `logOnce('error', 'app_url_invalid', …, {reason:'app_url'})` on null (unset included); `isSameOrigin(req, 'required' | 'if_present', origin = appOrigin())` (`required`: Origin present and equal; `if_present`: absent passes, present must equal, a null `appOrigin` fails open); `originHost(h)`.
+3. **`deadlines.ts`** (stays a leaf; F-07 two-line comments): `AUTH_CONFIG_TIMEOUT_MS = 10_000`, `OIDC_TIMEOUT_S = 10`, `OIDC_DISCOVERY_FRESH_S = 600`, `OIDC_ID_TOKEN_ALG = 'RS256'`, `OIDC_CLOCK_SKEW_S = 30` (D-13, D-37, D-70), and `raceDeadline<T>(p, ms)` that rejects on timeout and clears its timer.
+4. **`serverLog.ts`** (D-90): `logOnce(level: 'warn'|'error', message, key, detail?)` over a module `Set`, plus `__resetLogOnce()`.
+5. **`docker-compose.yml`**: in the `xstockstrat-ui` block after `AGENT_PUBLIC_URL` (`:522`), `APP_URL: http://localhost:3000` with a two-line constraint comment (must equal the browser origin exactly; local compose SSO is unsupported, D-91).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
-grep -n "APP_URL" ../../.do/app.yaml ../../.do/app.dev.yaml ../../deploy/homelab/compose.yml | grep -c "key: APP_URL\|APP_URL:"   # 3: every deploy target already sets it
-grep -n "APP_URL: http://localhost:3000" ../../docker-compose.yml   # 1: local compose wired in this step
-docker compose -f ../../docker-compose.yml config --quiet   # compose file still parses
+grep -c "key: APP_URL\|APP_URL: \${APP_URL" ../../.do/app.yaml ../../.do/app.dev.yaml ../../deploy/homelab/compose.yml   # each deploy target already sets it
+grep -n "APP_URL: http://localhost:3000" ../../docker-compose.yml && docker compose -f ../../docker-compose.yml config --quiet
 ```
 
 ---
 
-### Step 26 — test: UI leaf-module unit tests (vectors, Origin, deadline, log-once)
+### Step 27 — test: UI leaf-module unit tests
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/lib/__tests__/oidcIssuerVectors.test.ts` — create
+- `services/xstockstrat-ui/src/lib/oidcIssuer.test.ts` — create
 - `services/xstockstrat-ui/src/lib/sameOrigin.test.ts` — create
 - `services/xstockstrat-ui/src/lib/deadlines.test.ts` — create
 - `services/xstockstrat-ui/src/lib/serverLog.test.ts` — modify
@@ -1301,38 +1128,30 @@ docker compose -f ../../docker-compose.yml config --quiet   # compose file still
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
 
 **Codebase Evidence**:
-- The vector-load idiom is `fileURLToPath(new URL('../../../../../scripts/testdata/oidc-issuer-vectors.json', import.meta.url))`; `vitest.config.ts:16` uses `import.meta.url` (design.md (B) §D-66).
-- `vitest.config.ts:19-20` uses the node environment and `include: ['src/**/*.test.ts']`. Coverage covers `src/lib/**` (`:25`) with thresholds `lines: 40, functions: 40, statements: 40` (`:29-33`).
-- `serverLog.test.ts` exists.
+- `vitest.config.ts:19-20` node environment, `include: ['src/**/*.test.ts']`; coverage over `src/lib/**` with thresholds 40 (`:25`, `:29-33`); `import.meta.url` path idiom at `:16`.
+- `serverLog.test.ts` exists (50 lines, last changed `d711817`): its "no provider" test must run first, since the OTel logger
+  provider can be set only once.
 
 **TDD**: red-green required
 
-**Covers**: AC-54, AC-57, AC-58, AC-59
+**Covers**: AC-54 (issuer grammar), AC-57, AC-58, AC-59 (Origin semantics)
 
 **Instructions**:
-1. `oidcIssuerVectors.test.ts`:
-   - Each pattern constant equals its JSON literal.
-   - Every `issuer` row gives `isValidIssuer === valid`, and `ISSUER_RE.test(v) === isValidIssuer(v)` (the round-trip never changes an outcome).
-   - Every `app_url` row gives `parseAppOrigin(value ?? undefined) === origin`.
-   - Assert the row counts 66/16/10.
-2. `sameOrigin.test.ts`, with `vi.stubEnv('APP_URL', …)`:
-   - `required`: missing, `null`, matching, other port, other scheme, `appOrigin` null.
-   - `if_present`: absent, matching, sibling `https://dashboard.example.test` (@AC-57), `null`, and `appOrigin` null with a sibling header → true (@AC-58).
-   - Unset or invalid `APP_URL` → one ERROR `app_url_invalid` (logOnce) for repeated calls.
-   - @AC-59: no Origin under `required` → false.
-3. `deadlines.test.ts`: `raceDeadline` rejects after `ms` (fake timers), resolves when earlier, and clears its timer (`vi.getTimerCount() === 0`).
-4. `serverLog.test.ts`: `logOnce` emits once per key and `__resetLogOnce` resets it.
-5. **C-12**: these are scenario one-offs (issuer strings, origins) with no domain object, so they are exempt from the fixture inventory. State this in the test file header comment.
+1. `oidcIssuer.test.ts` (vector path `fileURLToPath(new URL('../../../../scripts/testdata/oidc-issuer-vectors.json', import.meta.url))`): pattern constants equal the JSON; every `issuer` row → `isValidIssuer === valid`; every `app_url` row → `parseAppOrigin(value ?? undefined) === origin` (imported from `sameOrigin`); row counts 66/16; **@AC-54** `http://auth.example.test` is invalid.
+2. `sameOrigin.test.ts` (`vi.stubEnv('APP_URL', …)`): `required` — missing, `null`, match, other port, other scheme, null `appOrigin`; **@AC-59** no Origin → false; `if_present` — absent, match, **@AC-57** `https://dashboard.example.test` → false, `null`, **@AC-58** null `appOrigin` + sibling → true; one `app_url_invalid` ERROR across repeated calls.
+3. `deadlines.test.ts`: `raceDeadline` rejects after `ms` (fake timers), resolves when earlier, leaves `vi.getTimerCount() === 0`.
+4. `serverLog.test.ts`: append after the existing tests (keep their order): `logOnce` emits once per key; `__resetLogOnce`
+   resets.
+5. C-12: scenario one-offs (issuer strings, origins), no domain object — say so in each file header.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
-# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage   # vitest thresholds 40% over src/lib/** (vitest.config.ts:29-33)
 ```
 
 ---
 
-### Step 27 — service: Extract safeRedirect and add the SSO refusal mirror
+### Step 28 — service: safeRedirect extraction and the refusal mirror
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1344,18 +1163,16 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI; Security — auth scope correctness
 
 **Codebase Evidence**:
-- `src/app/auth/login/page.tsx:7-18` holds the local `safeRedirect(target)` (allow-list `/trader` / `/insights` / `/config-ui`, else `/trader`).
-- Identity's `EXTERNAL_IDENTITY_REFUSALS` (Step 10) holds the four refusal literals the mirror keys on (D-24).
+- Local `safeRedirect(target)` at `src/app/auth/login/page.tsx:7-18` (allow-list `/trader`, `/insights`, `/config-ui`, else `/trader`).
+- Identity's `EXTERNAL_IDENTITY_REFUSALS` (Step 11) and the vector `refusals` (Step 6).
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 29)
 
 **Covers**: —
 
 **Instructions**:
-1. **`safeRedirect.ts`**: move `safeRedirect` from `login/page.tsx:8-18` verbatim and import it in `page.tsx`. The behaviour is unchanged (D-46).
-2. **`ssoRefusals.ts`** (D-24):
-   - `SSO_REFUSAL_DETAILS = { 'email required': 'no_email', 'account inactive': 'inactive', 'account already linked': 'linked', 'ambiguous email': 'ambiguous' } as const`. The keys are identity's `EXTERNAL_IDENTITY_REFUSALS` values.
-   - Export a `refusalCode(detail): SsoErrorCode | null` mapper. To keep this leaf import-free, type the return as the string-literal union; Step 33 types it with `SsoErrorCode`.
+1. Move `safeRedirect` verbatim into `src/lib/safeRedirect.ts`; `page.tsx` imports it (D-46). Behaviour unchanged.
+2. `ssoRefusals.ts` (D-123, D-130e): `export const SSO_REFUSALS = { resolve: [...], link: [...], session: [...] } as const` with the identity strings, plus `export type ResolveRefusal`, `LinkRefusal`, `SessionRefusal`. No mapping here (the code maps live in Step 36's `ssoErrors.ts`).
 
 **Verification**:
 ```bash
@@ -1365,7 +1182,7 @@ grep -n "safeRedirect" src/app/auth/login/page.tsx src/lib/safeRedirect.ts
 
 ---
 
-### Step 28 — test: safeRedirect and the refusal-mirror unit tests
+### Step 29 — test: safeRedirect and the refusal-mirror contract
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1376,84 +1193,62 @@ grep -n "safeRedirect" src/app/auth/login/page.tsx src/lib/safeRedirect.ts
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
 
 **Codebase Evidence**:
-- `vitest.config.ts:19-20` uses the node environment and `include: ['src/**/*.test.ts']`. Coverage covers `src/lib/**` (`:25`) with thresholds `lines: 40, functions: 40, statements: 40` (`:29-33`).
-- The identity side of the refusal contract is asserted in Step 11 (`EXTERNAL_IDENTITY_REFUSALS`).
+- `vitest.config.ts:19-33` (node env, `src/lib/**` coverage, 40%).
 
 **TDD**: red-green required
 
-**Covers**: AC-4, AC-5, AC-7, AC-26, AC-39 (the UI refusal-mirror leg: each identity refusal detail maps to its `?error=` code)
+**Covers**: AC-3, AC-4, AC-7, AC-66, AC-67 (the UI mirror of the identity refusal details these scenarios surface)
 
 **Instructions**:
-1. `safeRedirect.test.ts`: today's allow-list, plus `/trader/../..//evil.com` (D-54, D-71). Pin that case to whatever the current function returns; the behaviour is unchanged.
-2. `ssoRefusals.test.ts`: the map keys equal the four identity literals (D-24 contract; the identity side is Step 11), and `refusalCode` maps `account already linked` → `linked` (@AC-4), `ambiguous email` → `ambiguous` (@AC-5), `account inactive` → `inactive` (@AC-7 / @AC-26), `email required` → `no_email` (@AC-39), and an unknown detail → `null`.
-3. **C-12**: scenario one-offs (redirect paths, refusal strings) with no domain object, so they are exempt from the fixture inventory. State this in the test file header comment.
+1. `safeRedirect.test.ts`: today's allow-list plus `/trader/../..//evil.com` pinned to the current return value (D-54).
+2. `ssoRefusals.test.ts`: `SSO_REFUSALS` deep-equals the vector `refusals` (the three-language contract, D-123).
+3. C-12: scenario one-offs; say so in the headers.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
-# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 ```
 
 ---
 
-### Step 29 — service: Server-side config reads (oidcConfig.ts) and the MCP scope list
+### Step 30 — service: Server-side config loaders (oidcConfig.ts)
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/oidcConfig.ts` — create
-- `services/xstockstrat-ui/src/lib/mcpScopes.ts` — create
 - `services/xstockstrat-ui/src/lib/headers.ts` — modify
-- `scripts/config-wiring.json` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — environment (`production`/`staging`) scope correctness, no secret values rendered in UI; Security — secrets via `GetSecret` only
 
 **Codebase Evidence**:
-- `headers.ts:5-7` holds `HEADER_USER_ID`, `HEADER_ACCESS_SCOPE`, `HEADER_TRACE_ID`. **Not found**: no UI constant for `x-internal-caller` (recon R-9). The config side is `HEADER_INTERNAL_CALLER='x-internal-caller'` at `services/xstockstrat-config/src/grpc/authz.ts:74`. `loadOidcClientSecret()` below is its first UI consumer. `HEADER_TRACE_ID` is `headers.ts:7`; `generateTraceId` is exported from `auth.ts:104-106` and used only by the callers, not by `oidcConfig.ts`.
-- `connectClients.ts:109` `configClient`. Its transport defaults the timeout to `DEFAULT_UNARY_TIMEOUT_MS` unless one is passed (`:66-74`).
-- `deploymentEnv.ts:13-16` `nativeConfigEnvironment()`. The BFF precedent `insightsBff.ts:173-174` is `configClient.getConfig({ ...req, environment: nativeConfigEnvironment() }, opts)`.
-- `config.proto:103-108` `GetConfigRequest{namespace, environment, user_id}`; `:49-53` `ConfigSnapshot.values map<string, ConfigValue>`; `:110-120` `GetSecretRequest{namespace,key,environment,user_id}` / `GetSecretResponse{value, found}`.
-- Config `CLAUDE.md` invariant 5: reads by a header-less caller keep the body `user_id`. Global = `''`.
-- Wiring: the TS index read `values[...]` has receiver `receiverBefore(src, m.index, 'values')` (`check-config-wiring.mjs:472`). Receivers map `file:receiver` → namespace (`:546-551`). The precedent is `"services/xstockstrat-ui/src/lib/indicatorChart.ts:values": "ui"` (`config-wiring.json:141`).
-- `services/xstockstrat-ui/CLAUDE.md` § Config Keys Consumed: "Values are read with an oneof-presence check (never `value || default`)".
+- `headers.ts:5-7` `HEADER_USER_ID`, `HEADER_ACCESS_SCOPE`, `HEADER_TRACE_ID`; the config side's `HEADER_INTERNAL_CALLER = 'x-internal-caller'` at `services/xstockstrat-config/src/grpc/authz.ts:74`; precedent sender `notify commsgunSecret.ts:43` (design § 3).
+- `configClient` at `connectClients.ts:113`; per-call `timeoutMs` honoured (`:72-76`).
+- `nativeConfigEnvironment()` at `deploymentEnv.ts:13` (unset `APPLICATION_ENV` → STAGING, D-39); BFF precedent `insightsBff.ts:171-175`.
+- Oneof-presence reads: UI `CLAUDE.md` § Config Keys Consumed; the mock's `values` shape `{ value: { case, value } }` (`e2e/mock-backend.ts:1569-1576`).
+- Receivers `oidcConfig.ts:{identity,ui,agent}.values` registered in Step 6.
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 31)
 
 **Covers**: —
 
 **Instructions**:
-1. **`oidcConfig.ts`** (D-22, D-27, D-39, D-47, D-66, D-78). All reads:
-   - are header-less for identity (no `x-user-id` / `x-access-scope`), with `user_id: ''`, and send `{[HEADER_TRACE_ID]: traceId}` so pre-auth config reads stay traceable (C-03). Each loader (`loadOidcConfig`, `loadPasswordLoginEnabled`, `loadOidcClientSecret`) takes a **required** `traceId: string`. `oidcConfig.ts` never generates one, so it does not import `@/lib/auth`. Callers compute it once per request: route handlers use `req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()` (the middleware normally sets it); server components and discovery routes (Steps 39–41) use `generateTraceId()`;
-   - pass `environment: nativeConfigEnvironment()` and `{ timeoutMs: AUTH_CONFIG_TIMEOUT_MS }`;
-   - read values through a oneof-presence check.
-2. Export the `OidcConfigResult` discriminated union exactly as in design.md (B) §D-66.
-3. **`loadOidcConfig(traceId)`**:
-   - `Promise.all` of `getConfig({namespace:'ui'})` and `getConfig({namespace:'agent'})`. Bind each snapshot to its own receiver: `const ui = …; ui.values['oidc.issuer']`, `const agent = …; agent.values['oidc.issuer']`.
-   - Any rejection → `{mode:'error'}`.
-   - Either issuer `''` → `'legacy'`. If exactly one is set, `logOnce('warn','sso_mode_misconfigured', …)`.
-   - Otherwise validate `isValidIssuer(ui)`, then `isValidIssuer(agent)`, then `appOrigin()`.
-     - An issuer failure → `logOnce('error','sso_issuer_invalid', reason+'\0'+value, {reason})`.
-     - An `app_url` failure logs only through `appOrigin()` (D-86).
-   - Return `valid:false, reason`, or `valid:true` with `issuer`, `clientId` (`ui.values['oidc.client_id']`), `agentIssuer` and `appOrigin`.
-   - Both variants carry `mcpClientId` / `mcpClientIdReadonly`, from `ui.values['oidc.mcp_client_id']` / `['oidc.mcp_client_id_readonly']`, default `''`.
-4. **`loadPasswordLoginEnabled(traceId)`**: `getConfig({namespace:'identity'})`, `const identity = …; identity.values['auth.password_login_enabled']`, oneof `boolVal`, default `false` (FR-9). A rejection propagates so the page can treat it as `'error'`.
-5. **`loadOidcClientSecret(traceId)`**:
-   - `configClient.getSecret({namespace:'ui', key:'oidc.client_secret', environment, userId:''}, {timeoutMs: AUTH_CONFIG_TIMEOUT_MS, headers: {[HEADER_INTERNAL_CALLER]: 'ui'}})`.
-   - `found=false` or an empty value → `null`, which means `not_configured` (D-41, R-15).
-   - Never log the value.
-6. **`headers.ts`**: add `export const HEADER_INTERNAL_CALLER = 'x-internal-caller';` (first consumer: item 5).
-7. **`mcpScopes.ts`**: `export const MCP_SCOPES_SUPPORTED = ['xstockstrat.read','xstockstrat.write','xstockstrat.admin','xstockstrat.trade'] as const;` (D-38).
-8. **`config-wiring.json`** `registry.receivers`: add `"services/xstockstrat-ui/src/lib/oidcConfig.ts:ui.values": "ui"`, `"…:agent.values": "agent"` and `"…:identity.values": "identity"`. Each binding resolves one namespace (product spec § Config Key Changes). No `findings` entries.
+1. `headers.ts`: `export const HEADER_INTERNAL_CALLER = 'x-internal-caller';` (D-130d).
+2. `oidcConfig.ts` (design § 3 loader table; D-39, D-101, D-125, D-134). Every read: `environment: nativeConfigEnvironment()`, `userId: ''`, `{ timeoutMs: AUTH_CONFIG_TIMEOUT_MS }`; `GetConfig` with **no headers**; oneof-presence; any rejection or timeout → `'error'`.
+   - `parseAuthMode` (same rules as identity) and `loadAuthMode()`: `const identity = await configClient.getConfig({namespace:'identity', …})`; `identity.values['auth.mode']` absent → `local` silently; present → parse, invalid → `logOnce('warn','auth_mode_invalid', value)`. Returns `'local'|'both'|'oidc'|'error'`.
+   - `loadOidcConfig()`: `const ui = …getConfig({namespace:'ui'})`; reads `ui.values['oidc.issuer']`, `['oidc.client_id']` and the four `mcp_client_id*` keys (absent → `''`). `valid = isValidIssuer(issuer) && clientId !== '' && appOrigin() !== null`; an invalid issuer logs `logOnce('error','sso_issuer_invalid', …, {reason:'ui_issuer'})` (the `APP_URL` failure logs only through `appOrigin()`, D-86). Returns `{issuer, clientId, mcpClientIds: {claude, claudeReadonly, claudeCode, claudeCodeReadonly}, valid} | 'error'`.
+   - `loadOidcClientSecret()`: `configClient.getSecret({namespace:'ui', key:'oidc.client_secret', environment, userId:''}, {timeoutMs, headers: {[HEADER_INTERNAL_CALLER]: 'ui'}})` — that header only; returns `{found, value} | 'error'` (`found=false` or `''` value → `{found:false}`); never logs the value.
+   - `loadAgentIssuer()`: `const agent = …getConfig({namespace:'agent'})`; `agent.values['oidc.issuer']` → `{issuer, valid: isValidIssuer(issuer)} | 'error'` (invalid logs `sso_issuer_invalid` with `reason:'agent_issuer'`).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
-cd ../.. && node scripts/check-config-wiring.mjs --declared-from docs/roadmap/features/345-authelia-sso/product-spec.md   # every declared key either clean or PENDING; no prefixed-read/unattributed
+cd ../.. && node scripts/check-config-wiring.mjs --declared-from docs/roadmap/features/345-authelia-sso/product-spec.md   # every declared key clean or PENDING; no unattributed read
 ```
 
 ---
 
-### Step 30 — test: oidcConfig mode, validity, environment and secret behaviour
+### Step 31 — test: Loader modes, validity, environment and the secret header
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1463,37 +1258,31 @@ cd ../.. && node scripts/check-config-wiring.mjs --declared-from docs/roadmap/fe
 **Reviewers**: `xstockstrat-ui` owner — environment (`production`/`staging`) scope correctness
 
 **Codebase Evidence**:
-- The `vi.mock('@/lib/connectClients')` pattern is used by existing BFF unit tests (`src/lib/__tests__/insightsBff.test.ts`).
-- The mode rows are in `scripts/testdata/oidc-issuer-vectors.json` `mode[]` (Step 15).
+- `vi.mock('@/lib/connectClients')` pattern in `src/lib/__tests__/insightsBff.test.ts`.
 
 **TDD**: red-green required
 
-**Covers**: AC-32, AC-46, AC-54, AC-60
+**Covers**: AC-31 (UI leg), AC-35 (UI leg), AC-46 (loader leg), AC-48 (seeded client IDs reach the reader), AC-54 (loader leg), AC-60 (loader leg), AC-72 (UI leg)
 
 **Instructions**:
-1. Mock `configClient.getConfig` / `getSecret`. Cases:
-   - Every vector `mode` row with `APP_URL=http://localhost:3000` → `legacy` / `sso` valid / `sso` invalid.
-   - **@AC-32:** half-configured → legacy and one WARN `sso_mode_misconfigured`.
-   - **@AC-46 / @AC-60:** a `getConfig` rejection or timeout → `{mode:'error'}`.
-   - **@AC-54:** ui `http://auth.example.test` → `valid:false, reason:'ui_issuer'` and one ERROR `sso_issuer_invalid`.
-   - An invalid `APP_URL` → `reason:'app_url'` with exactly one ERROR, `app_url_invalid` (no `sso_issuer_invalid`).
-   - Every call passes `environment: Environment.PRODUCTION` when `APPLICATION_ENV=production` (D-39), `userId: ''`, no `x-user-id` header, and `timeoutMs: 10_000`.
-   - **Trace id forwarded verbatim (C-03):** every `getConfig` / `getSecret` call made by `loadOidcConfig('t-1')`, `loadPasswordLoginEnabled('t-1')` and `loadOidcClientSecret('t-1')` carries `x-trace-id: t-1`; `oidcConfig.ts` never calls `generateTraceId` (assert `vi.mock('@/lib/auth')`'s `generateTraceId` is not called).
-   - `getSecret` sends `x-internal-caller: ui`. `found:false` → null, and `''` → null.
-   - The flag defaults to `false` when the row is absent.
-   - A stored `false` is read as false, not as the default (oneof presence).
-   - **Seeded client IDs reach the reader** (config-key wiring b): for a valid SSO snapshot with `ui` / `oidc.client_id`, `oidc.mcp_client_id` and `oidc.mcp_client_id_readonly` set to three distinct values, `loadOidcConfig('t-1')` returns `valid:true` with `clientId`, `mcpClientId` and `mcpClientIdReadonly` equal to them; with those keys absent from the snapshot each defaults to `''`.
-2. These are scenario one-offs (config snapshots), so they stay inline and are exempt from C-12. Say so in the file header.
+1. Mock `configClient.getConfig`/`getSecret`:
+   - every vector `mode` row → `loadAuthMode()` result, and `logs` ⇔ one `auth_mode_invalid` (**@AC-72**); absent row → `local`, no log (**@AC-31**);
+   - **@AC-46/@AC-60:** a rejection or timeout of each loader → `'error'`;
+   - **@AC-54:** `ui` issuer `http://auth.example.test` → `valid:false` + one `sso_issuer_invalid`; empty `client_id` → `valid:false`; invalid `APP_URL` → `valid:false` with only `app_url_invalid`;
+   - **@AC-48:** four distinct `mcp_client_id*` values come back verbatim; absent → `''`;
+   - every call: `environment: Environment.PRODUCTION` when `APPLICATION_ENV=production`, `userId: ''`, `timeoutMs: 10_000`, and GetConfig with no headers;
+   - **@AC-35:** `getSecret` carries exactly `{ 'x-internal-caller': 'ui' }`; `found:false` and `''` → `{found:false}`;
+   - `loadAgentIssuer` valid / invalid / `'error'`.
+2. C-12: config snapshots are scenario one-offs; say so.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
-# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 ```
 
 ---
 
-### Step 31 — service: openid-client wiring, the Configuration cache and the logout URL builders
+### Step 32 — service: openid-client wiring, the Configuration cache and the logout URL builders
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1506,43 +1295,34 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety, no secret values rendered in UI; Security — JWT claims minimal
 
 **Codebase Evidence**:
-- `package.json` has `"jose": "^5.0.0"` and `"next": "^15.5.28"`. **Not found**: no OIDC client library (recon).
-- The openid-client 6.8.9 API (`discovery`, `ClientSecretBasic`, `enableNonRepudiationChecks`, `allowInsecureRequests`, `randomState` / `randomNonce` / `randomPKCECodeVerifier` / `calculatePKCECodeChallenge`, `buildAuthorizationUrl`, `authorizationCodeGrant`, `buildEndSessionUrl`) was verified by the orchestrator (D-29, D-34, D-89).
-- The root lockfile is used by the Dockerfiles (insights.md:2948-2955: "all leaf Dockerfiles use the ROOT lock").
-- `next.config.js` emits `output: 'standalone'` (UI `CLAUDE.md` § Docker Build Pattern).
+- `package.json` has `"jose": "^5.0.0"` (`:46`) and no OIDC client (recon).
+- openid-client 6.8.9 API (`discovery`, `ClientSecretBasic`, `enableNonRepudiationChecks`, `allowInsecureRequests`, `randomState`/`randomNonce`/`randomPKCECodeVerifier`/`calculatePKCECodeChallenge`, `buildAuthorizationUrl`, `authorizationCodeGrant`, `buildEndSessionUrl`) verified by the orchestrator (D-29, D-34, D-89); `tokens.claims()` returns the validated ID-token claims and `auth_time` is optional without `maxAge` (D-127).
+- Leaf Dockerfiles use the root lockfile (insights.md:2948-2955); `next.config.js` `output: 'standalone'`.
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 33)
 
 **Covers**: —
 
 **Instructions**:
-1. Add `"openid-client": "6.8.9"` (an exact pin, D-34) to the UI's dependencies. Run `pnpm install` at the root and commit `pnpm-lock.yaml`.
-2. **`oidcClient.ts`** (D-29, D-34, D-65, D-70, D-87, D-89):
-   - A single slot keyed `${issuer}\n${clientId}\n${sha256(secret)}`, with TTL `OIDC_DISCOVERY_FRESH_S` (design.md (B) §D-70).
-   - `getOidcConfiguration(issuer, clientId, secret)` calls `discovery(new URL(issuer), clientId, { id_token_signed_response_alg: OIDC_ID_TOKEN_ALG }, ClientSecretBasic(secret), { timeout: OIDC_TIMEOUT_S, execute: [enableNonRepudiationChecks, ...(issuer.startsWith('http://') ? [allowInsecureRequests] : [])] })`. These are imported function references.
-   - It ends with `.then((cfg) => assertDiscoveredMetadata(cfg, issuer))`: `serverMetadata().issuer === issuer` byte-exact, then a same-origin `jwks_uri`. A missing `jwks_uri` rejects.
-   - A rejection clears the slot only if the slot still holds that promise.
-   - Export `__resetOidcConfigurationCache()` for tests.
-   - Export thin helpers for Step 37:
-     - `buildSsoAuthorizationUrl(cfg, {redirectUri, state, nonce, codeChallenge})` with `scope: 'openid email'`, `response_mode: 'query'`, `code_challenge_method: 'S256'` (D-9, D-41);
-     - `exchangeCode(cfg, currentUrl, {pkceCodeVerifier, expectedState, expectedNonce})` wrapping `authorizationCodeGrant(..., { pkceCodeVerifier, expectedState, expectedNonce, idTokenExpected: true })`, returning `claims()` `{ iss, sub, email }` only.
-3. **`ssoLogout.ts`** (D-51, D-65, D-97):
-   - `autheliaPortalLogoutUrl(issuer, appOrigin)` = `` `${issuer}/logout?rd=${encodeURIComponent(new URL('/auth/login', appOrigin).href)}` ``. The issuer has no trailing slash by grammar.
-   - `endSessionUrl(cfg, appOrigin, clientId)` uses `buildEndSessionUrl(cfg, { post_logout_redirect_uri: new URL('/auth/login', appOrigin).href, client_id })` only when `serverMetadata().end_session_endpoint` is set and same-origin with the issuer; otherwise `null`.
-   - `resolveLogoutRedirect(cfgResult, secret)`, under one `raceDeadline(…, AUTH_CONFIG_TIMEOUT_MS)`: the end-session URL if available, else the portal URL. A throw or timeout → the portal URL plus `serverLog.warn('sso_logout_portal_fallback')`.
-4. Build check (D-50): openid-client is ESM-only and pulls `jose ^6`, while the UI keeps `jose ^5` for sessions and the txn JWE.
+1. `"openid-client": "6.8.9"` (exact, D-34); `pnpm install` at the root; commit `pnpm-lock.yaml`.
+2. **`oidcClient.ts`** (D-34, D-65, D-70, D-87, D-89):
+   - `OIDC_SCOPE = 'openid email profile'` (spec-level choice 1; the web client's registration per homelab-edge SSO spec § 4.6 as amended 2026-11-24).
+   - `getOidcConfiguration(issuer, clientId, secret)`: one slot keyed `${issuer}\n${clientId}\n${sha256(secret)}`, TTL `OIDC_DISCOVERY_FRESH_S`; `discovery(new URL(issuer), clientId, { id_token_signed_response_alg: OIDC_ID_TOKEN_ALG }, ClientSecretBasic(secret), { timeout: OIDC_TIMEOUT_S, execute: [enableNonRepudiationChecks, ...(issuer.startsWith('http://') ? [allowInsecureRequests] : [])] })` with the imported function references, then `.then(cfg => assertDiscoveredMetadata(cfg, issuer))` (byte-exact `serverMetadata().issuer`, then a same-origin `jwks_uri`); a rejection clears the slot only if it still holds that promise; `__resetOidcConfigurationCache()`.
+   - `buildSsoAuthorizationUrl(cfg, {redirectUri, state, nonce, codeChallenge, link?: boolean})`: `scope: OIDC_SCOPE`, `response_mode: 'query'`, `code_challenge_method: 'S256'`; when `link`, also `prompt: 'login'` and `max_age: '0'` (D-119; `checks.maxAge` is never passed).
+   - `exchangeCode(cfg, currentUrl, {pkceCodeVerifier, expectedState, expectedNonce})` wrapping `authorizationCodeGrant(…, { …, idTokenExpected: true })`; returns `{ iss, sub, email?, preferred_username?, auth_time? }` from `tokens.claims()` only.
+3. **`ssoLogout.ts`** (D-51, D-65, D-97, D-134): `portalLogoutUrl(issuer, appOrigin)` = `` `${issuer}/logout?rd=${encodeURIComponent(new URL('/auth/login', appOrigin).href)}` ``; `endSessionUrl(cfg, appOrigin, clientId)` via `buildEndSessionUrl` only when `end_session_endpoint` is advertised and same-origin with the issuer, else `null`; `resolveLogoutRedirect({issuer, clientId, appOrigin}, secret: string | null)` under one `raceDeadline(…, AUTH_CONFIG_TIMEOUT_MS)`: `secret === null` (unset or unreadable) → portal URL; else end-session URL if available, else portal; any throw or timeout → portal URL + `serverLog.warn('sso_logout_portal_fallback')`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run build
 cd ../.. && grep -n '"openid-client": "6.8.9"' services/xstockstrat-ui/package.json
-docker compose build --no-cache xstockstrat-ui   # D-50: standalone image builds with the ESM-only dependency
-docker run --rm -d --name ui-smoke -p 3999:3000 -e JWT_SECRET="$(openssl rand -hex 32)" $(docker compose config --images xstockstrat-ui) && sleep 8 && curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3999/auth/login; docker rm -f ui-smoke   # boot smoke: the standalone server answers (any HTTP status, not a crash)
+docker compose build --no-cache xstockstrat-ui   # D-50: the standalone image builds with the ESM-only dependency
+docker run --rm -d --name ui-smoke -p 3999:3000 -e JWT_SECRET="$(openssl rand -hex 32)" $(docker compose config --images xstockstrat-ui) && sleep 8 && curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3999/auth/login; docker rm -f ui-smoke   # boot smoke: any HTTP status, not a crash
 ```
 
 ---
 
-### Step 32 — test: oidcClient production path through a fetch stub, and the logout URLs
+### Step 33 — test: oidcClient through a fetch stub, and the logout URLs
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1553,101 +1333,130 @@ docker run --rm -d --name ui-smoke -p 3999:3000 -e JWT_SECRET="$(openssl rand -h
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
 
 **Codebase Evidence**:
-- D-34: "`oidcClient.test.ts` exercises the production discovery/grant path through `vi.stubGlobal('fetch', …)`, with `https` URLs and the Configuration cache reset between cases."
-- `jose ^5` is available for signing test ID tokens (`package.json`).
+- D-34: the production discovery/grant path is exercised through `vi.stubGlobal('fetch', …)` with `https` URLs and the cache reset between cases. `jose ^5` signs test ID tokens.
 
 **TDD**: red-green required
 
-**Covers**: AC-24, AC-52, AC-53
+**Covers**: AC-24 (library leg), AC-52, AC-53 (URL builders)
 
 **Instructions**:
-1. `oidcClient.test.ts`: stub `fetch` with discovery, JWKS and token endpoints on `https://auth.example.test`, and sign ID tokens with `jose` (RS256).
-   - Correct signature → `exchangeCode` returns `{iss, sub, email}`.
-   - **@AC-24 row 4:** a foreign key with the same `kid` → reject (proves `enableNonRepudiationChecks` is active).
-   - An ES256 or `none` ID token → reject. A nonce mismatch → reject. An `aud` mismatch → reject.
-   - Cache cases (D-70): a rotated secret → a second `discovery` call; the same key within 600 s → one call; after 601 s → a refetch.
-   - A rejected discovery is not cached, and a stale rejection does not clear a newer slot.
-   - A discovery `issuer` with a trailing slash → reject. A configured `/.well-known/openid-configuration` issuer → reject (D-89). A cross-origin `jwks_uri` → reject, and the next call rediscovers (D-87).
-2. `ssoLogout.test.ts`:
-   - **@AC-53:** no `end_session_endpoint` → `https://auth.example.test/logout?rd=https%3A%2F%2Fxstockstrat-staging.example.test%2Fauth%2Flogin`.
-   - **@AC-52:** an advertised same-origin endpoint → that URL with `post_logout_redirect_uri` and `client_id`. A cross-origin endpoint → the portal URL.
-   - A discovery throw or timeout → the portal URL plus one WARN `sso_logout_portal_fallback`.
-3. The stub discovery documents and JWKS are scenario one-offs, so they stay inline here. The e2e stub IdP's fixtures go to `e2e/fixtures/` in Step 44.
+1. `oidcClient.test.ts` (stub discovery, JWKS and token endpoints on `https://auth.example.test`; RS256 ID tokens):
+   - correct signature → `{iss, sub, email, preferred_username, auth_time}`;
+   - **@AC-24:** a foreign key with the same `kid` rejects (non-repudiation active); nonce mismatch rejects; `aud` mismatch rejects; ES256/`none` reject;
+   - `link: true` URL carries `prompt=login` and `max_age=0`; the login URL carries neither; both carry `scope=openid email profile`, `response_mode=query`, `code_challenge_method=S256`;
+   - an ID token without `auth_time` still returns claims (the library does not enforce it; D-127);
+   - cache: rotated secret → second discovery; same key within 600 s → one; after 601 s → refetch; rejected discovery not cached; a stale rejection does not clear a newer slot; trailing-slash discovery issuer → reject; a configured `/.well-known/…` issuer → reject; cross-origin `jwks_uri` → reject and rediscover next time.
+2. `ssoLogout.test.ts`: **@AC-53** no `end_session_endpoint` → `https://auth.example.test/logout?rd=https%3A%2F%2Fxstockstrat-staging.example.test%2Fauth%2Flogin`; **@AC-52** an advertised same-origin endpoint → that URL with `post_logout_redirect_uri` and `client_id`; cross-origin endpoint → portal; `secret === null` → portal with no discovery call (D-134); a throw or timeout → portal + one `sso_logout_portal_fallback` WARN.
+3. Stub documents are scenario one-offs here; the e2e stub IdP's live in `e2e/fixtures/` (Step 50).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
-# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 ```
 
 ---
 
-### Step 33 — service: Typed auth metrics, SSO error redirects and the logout rewrite
+### Step 34 — service: The SSO transaction and link cookies (ssoTxn.ts)
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/lib/ssoTxn.ts` — create
+
+**Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI; Security — JWT claims minimal, auth scope correctness
+
+**Codebase Evidence**:
+- `setSessionCookies` base `{ httpOnly: true, secure: isProduction, sameSite: 'lax', path: '/' }` at `auth.ts:53-54`; `verifyAccessToken` accepts any HS256 `JWT_SECRET` JWS (`auth.ts:30`), hence the JWE (R-7).
+- **Not found**: no transaction cookie, HKDF helper or link cookie; Node `crypto.hkdfSync` and jose ^5 `CompactEncrypt`/`compactDecrypt` (dir/A256GCM) are available.
+
+**TDD**: red-green required (paired test: Step 35)
+
+**Covers**: —
+
+**Instructions**:
+1. Keys: `hkdfSync('sha256', JWT_SECRET, '', 'xstockstrat-ui/sso-txn', 32)` and `…'xstockstrat-ui/sso-link'…` (D-8, D-107).
+2. Txn (design § 3 "Txn cookie"; D-8, D-15, D-23, D-75): `type SsoTxn = { purpose:'login'; state; nonce; code_verifier; remember: boolean; redirect: string; exp } | { purpose:'link'; state; nonce; code_verifier; user_id: string; created_at: number; exp }`; `sealSsoTxn(txn)` → JWE with `exp = now + 600` (link: `created_at = now`); `openSsoTxn(jwe)` → payload or `null` (decrypt + `exp`, no network, D-135); `txnCookieName(state)` = `` `sso_txn_${sha256(state).slice(0,16)}` ``; `TXN_COOKIE_OPTS = { httpOnly: true, sameSite: 'lax', secure: isProduction, path: '/api/auth/sso/callback', maxAge: 600 }`; `clearAllTxnCookies(req, res)`.
+3. Link cookie (D-107): `SSO_LINK_COOKIE = 'sso_link'`; `sealSsoLink({link_id, iss, sub, label, user_id, exp})` with `exp = txn.exp` (absolute); `openSsoLink(jwe)` → payload or `null`; options `{ httpOnly: true, sameSite: 'lax', secure: isProduction, path: '/', maxAge: max(0, exp - now) }`; `clearSsoLink(res)`.
+4. Never an HS256 JWS.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
+```
+
+---
+
+### Step 35 — test: Transaction and link cookies
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/lib/ssoTxn.test.ts` — create
+
+**Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
+
+**Codebase Evidence**:
+- `e2e/helpers/auth.ts:20` `TEST_JWT_SECRET`, `:29` `signTestJwt`.
+
+**TDD**: red-green required
+
+**Covers**: AC-68 (absolute expiry), AC-76 (an expired link txn does not open)
+
+**Instructions**:
+1. Both purposes round-trip; tampered → `null`; **@AC-76** an expired txn → `null` (fake timers, +601 s); an HS256 JWS made with `JWT_SECRET` is not accepted (R-7); the cookie name derives from sha256(state); options carry `secure` in production and the callback path.
+2. **@AC-68:** `sso_link` carries the txn's absolute `exp`: at +601 s from the link start `openSsoLink` → `null`; its `maxAge` shrinks with elapsed time.
+3. C-12: sign with `TEST_JWT_SECRET` from `e2e/helpers/auth.ts`; no new secret literal.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
+grep -n "helpers/auth" src/lib/ssoTxn.test.ts
+```
+
+---
+
+### Step 36 — service: Typed auth metrics, error codes, logout verify and the logout rewrite
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/bffMetrics.ts` — modify
 - `services/xstockstrat-ui/src/lib/ssoErrors.ts` — create
-- `services/xstockstrat-ui/src/lib/ssoRefusals.ts` — modify (type the return as `SsoErrorCode`)
 - `services/xstockstrat-ui/src/lib/auth.ts` — modify
 - `services/xstockstrat-ui/src/app/api/auth/logout/route.ts` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety, no secret values rendered in UI; Security — auth scope correctness
 
 **Codebase Evidence**:
-- `HEADER_TRACE_ID` is `services/xstockstrat-ui/src/lib/headers.ts:7`; `generateTraceId` is exported from `services/xstockstrat-ui/src/lib/auth.ts:104`; the idiom `req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()` already exists at `src/middleware.ts:43` and `src/lib/restBackendHeaders.ts:13` (C-03).
-- `bffMetrics.ts`: `AuthEvent` (10 members) is at `:9-19`, `JwtRejectReason` at `:20`, and `recordAuthEvent(event, reason?: JwtRejectReason)` at `:47-49`.
-- Callers, from `grep -rn "recordAuthEvent(" src`: `auth.ts:27,33`, `identity.ts:22,32,35`, `login/route.ts:11,27,33,37`, `refresh/route.ts:9`, `logout/route.ts:11` (bare `'logout'`, which would fail the typed map) and `bffAllowlist.test.ts:48-49`. Only `logout/route.ts:11` breaks under the typed map, and it is rewritten in this step, so the step type-checks on its own (§C: the caller lands with the signature change).
-- `auth.ts`:
-  - `verifyAccessToken` is at `:23-36`. It uses `jwtVerify(token, new TextEncoder().encode(secret))` and catches `errors.JWTExpired`.
-  - `REMEMBER_ME_MAX_AGE_SECONDS = 1_209_600` is at `:17`. `clearSessionCookies` is at `:76-80`. `setSessionCookies` uses the base `{httpOnly, secure: isProduction, sameSite:'lax', path:'/'}` (`:53-54`).
-- `logout/route.ts:6-15` revokes any cookie token, records `'logout'`, clears the cookies and returns `{ok:true}`. It calls the existing `revokeToken` (`identity.ts:42-48`); that helper's deadline is Step 35's (D-61).
+- `bffMetrics.ts`: `AuthEvent` `:9-19`, `JwtRejectReason` `:20`, `recordAuthEvent(event, reason?: JwtRejectReason)` `:47-49`.
+- Every caller (`grep -rn "recordAuthEvent(" src`): `auth.ts:27,33`, `identity.ts:22,32,35`, `login/route.ts:11,27,33,37`, `refresh/route.ts:9`, `logout/route.ts:11` (bare `'logout'`, which fails the typed map) and `bffAllowlist.test.ts:48-49`. Only `logout/route.ts:11` breaks, and it is rewritten here (§C satisfied in-step).
+- `auth.ts`: `verifyAccessToken` `:23-36` (catches `errors.JWTExpired`); `REMEMBER_ME_MAX_AGE_SECONDS` `:17`; `clearSessionCookies` `:76-80`.
+- `logout/route.ts:6-17` revokes any cookie token, records `'logout'`, clears cookies, returns `{ok:true}`.
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 37)
 
 **Covers**: —
 
 **Instructions**:
-1. **`bffMetrics.ts`** (D-72, design.md (B) §D-72):
-   - Add `'sso_login_ok' | 'sso_login_failed' | 'sso_login_error' | 'login_disabled'` to `AuthEvent`.
-   - `LOGOUT_REASONS = ['verified','unverified','expired_too_old','cross_origin'] as const`, and its `LogoutReason` type.
-   - `AuthEventReason = { jwt_rejected: JwtRejectReason; logout: LogoutReason; sso_login_failed: SsoErrorCode }`.
-   - The generic rest-tuple `recordAuthEvent` from the design. It imports `type { SsoErrorCode }` from `ssoErrors`.
-2. **`ssoErrors.ts`** (D-82, D-83; design.md (C) §3):
-   - `SSO_ERROR_CODES` and `SsoErrorCode`.
-   - `ssoErrorRedirect(code, appOrigin, opts)`, which returns a 303 `NextResponse` and clears the txn cookie when asked (path `/api/auth/sso/callback`, `maxAge 0`, D-75 attributes).
-   - It holds the only two literal `recordAuthEvent` calls: `'sso_login_error'` when `fault`, else `('sso_login_failed', code)`.
-3. **`ssoRefusals.ts`**: type `refusalCode` as returning `SsoErrorCode | null`.
-4. **`auth.ts`** (D-61, D-72):
-   - Extract `verifySessionJwt(token)` returning `{ok:true; payload} | {ok:false; kind: JwtRejectReason; payload?}`. It records nothing and holds the shared key loading.
-   - `verifyAccessToken` maps it to `recordAuthEvent('jwt_rejected', kind)`, with unchanged behaviour.
-   - Add `verifyAccessTokenForLogout(token): Promise<LogoutReason>`:
-     - `'verified'` when the signature is valid, or on a `JWTExpired` whose `payload.exp` is within `REMEMBER_ME_MAX_AGE_SECONDS` of now (R-21: not `clockTolerance`);
-     - `'expired_too_old'` beyond that;
-     - otherwise `'unverified'` (`no_secret` / `invalid` → `unverified`).
-   - It never records `jwt_rejected`.
-5. **`logout/route.ts`**: rewrite as design.md (B) §D-68 + D-77. At the top, `const traceId = req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()`, computed once and passed to every loader call below. Order:
-   1. `if (!isSameOrigin(req,'if_present'))`: `recordAuthEvent('logout','cross_origin')`, `serverLog.warn('logout_origin_mismatch', { origin_host: originHost(origin) })`, and return 403 `{error:'origin mismatch'}` with no Set-Cookie.
-   2. `reason = await verifyAccessTokenForLogout(cookie)`, then `recordAuthEvent('logout', reason)`.
-   3. Only when `'verified'`, run in parallel and await both: `revokeToken(token)` ‖ (`loadOidcConfig(traceId)` then, when SSO-valid, `loadOidcClientSecret(traceId)` + `getOidcConfiguration` → `resolveLogoutRedirect`). The redirect side is bounded by `AUTH_CONFIG_TIMEOUT_MS`.
-   4. `clearSessionCookies`.
-   5. Respond:
-      - legacy → `{ok:true}`;
-      - `'error'` → `{ok:true}` plus `serverLog.warn('sso_logout_mode_unknown')`;
-      - SSO valid + verified → `{ok:true, redirect}`;
-      - SSO `valid:false`, or not verified → `{ok:true}`.
-   - Keep the `withBffMetrics('auth', '/api/auth/logout', …)` wrapper.
+1. **`bffMetrics.ts`** (D-72 remainder, D-113): `AuthEvent` gains `sso_login_ok | sso_login_failed | sso_login_error | sso_link_failed | login_disabled`; `LOGOUT_REASONS = ['verified','unverified','expired_too_old','cross_origin'] as const`; per-event reason map `{ jwt_rejected: JwtRejectReason; logout: LogoutReason; sso_login_failed: SsoErrorCode; sso_link_failed: LinkErrorCode }` with a generic rest-tuple `recordAuthEvent` (type-only import from `ssoErrors`).
+2. **`ssoErrors.ts`** (design § 3 tables; D-82, D-83, D-113, D-132, D-137): `SSO_ERROR_CODES` (`failed`, `not_configured`, `not_linked`, `inactive`, `no_access`) and `LINK_ERROR_CODES` (`failed`, `not_configured`, `no_access`, `invalid_credentials`, `inactive`, `already_linked_other`, `already_linked_self`) with their exact messages (the `not_linked` message has a `both` and an `oidc` variant); `resolveRefusalCode(detail)` (`not linked`→`not_linked`, `account inactive`→`inactive`, else `failed`); `linkRefusalCode(detail)` (`invalid credentials`→`invalid_credentials`, `account inactive`→`inactive`, `account already linked`→`already_linked_other`, `already linked to this issuer`→`already_linked_self`, `link disabled`→`failed`, else `null`), both keyed on `SSO_REFUSALS`; `ssoErrorRedirect(target: {dest:'login'; code: SsoErrorCode} | {dest:'link'; code: LinkErrorCode}, appOrigin: string | null, {fault?, clearTxnCookie?})` → `new NextResponse(null, {status: 303, headers: {location}})` to `/auth/login?error=` or `/accounts/sso?error=` (relative when `appOrigin` is null), clearing the named txn cookie with `TXN_COOKIE_OPTS` + `maxAge: 0`; it holds the only literal `sso_login_*`/`sso_link_failed` records (spec-level choice 6).
+3. **`auth.ts`** (D-61): extract `verifySessionJwt(token)` (`{ok:true; payload} | {ok:false; kind: JwtRejectReason; payload?}`, records nothing); `verifyAccessToken` keeps its behaviour on top of it; add `verifyAccessTokenForLogout(token): Promise<LogoutReason>` (`verified` for a valid signature or a `JWTExpired` whose `exp` is within `REMEMBER_ME_MAX_AGE_SECONDS`; `expired_too_old` beyond; else `unverified`; never records `jwt_rejected`).
+4. **`logout/route.ts`** (design § 3 logout row; D-52, D-60, D-61, D-77, D-80, D-134): keep `withBffMetrics('auth', '/api/auth/logout', …)`. Order:
+   1. `!isSameOrigin(req, 'if_present')` → `recordAuthEvent('logout','cross_origin')`, `serverLog.warn('logout_origin_mismatch', {origin_host})`, 403 `{error:'origin mismatch'}`, no Set-Cookie, no config read.
+   2. `reason = await verifyAccessTokenForLogout(cookie)` → `recordAuthEvent('logout', reason)`.
+   3. In parallel, both awaited: `reason === 'verified' ? revokeToken(token) : skip` ‖ the redirect lookup: `mode = await loadAuthMode()`; `local` → none; `'error'` → none + `serverLog.warn('sso_logout_mode_unknown')`; `both`/`oidc` → `cfg = await loadOidcConfig()`; `'error'` or `!cfg.valid` → none; else `secret = await loadOidcClientSecret()` (`'error'` or `found:false` → `null`) and `resolveLogoutRedirect(...)`.
+   4. `clearSessionCookies(res)` and `clearSsoLink(res)`.
+   5. `{ok:true, redirect}` only when verified and a redirect was resolved; else `{ok:true}`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:unit
-grep -rn "recordAuthEvent('sso_login" src | grep -v test   # exactly the 2 sites in ssoErrors.ts (+ sso_login_ok added in Step 37)
+grep -rn "recordAuthEvent('sso_" src | grep -v "test\|ssoErrors.ts"   # only sso_login_ok (Step 40) outside ssoErrors.ts
 ```
 
 ---
 
-### Step 34 — test: Metric typing, SSO error redirects, logout verify and the logout route
+### Step 37 — test: Metric typing, error redirects, logout verify and the logout route
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1660,48 +1469,29 @@ grep -rn "recordAuthEvent('sso_login" src | grep -v test   # exactly the 2 sites
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
 
 **Codebase Evidence**:
-- `bffAllowlist.test.ts:18-27` holds `ALLOWED_KEYS['ui.auth.events'] = ['event','reason']`; `drive()` calls are at `:48-49`.
-- The route-test precedent is `src/app/config-ui/api/audit/route.test.ts`.
-- `auth.test.ts` exists.
-- Coverage covers `src/lib/**` with thresholds `lines: 40, functions: 40, statements: 40` (`vitest.config.ts:29-33`).
+- `bffAllowlist.test.ts` drives `recordAuthEvent('login_ok')`, `('jwt_rejected','expired')` at `:48-49`.
+- Route-test precedent `src/app/config-ui/api/audit/route.test.ts`; `src/lib/auth.test.ts` exists.
 
 **TDD**: red-green required
 
-**Covers**: AC-52, AC-53, AC-56, AC-57, AC-58, AC-62, AC-64
+**Covers**: AC-52, AC-53, AC-56, AC-57, AC-58, AC-62, AC-64, AC-68 (logout clears `sso_link`)
 
 **Instructions**:
-1. **`bffAllowlist.test.ts`** (D-72, D-83, D-93):
-   - Add the `it('recordAuthEvent reason typing is enforced by tsc (D-83)')` block verbatim from design.md (C) §4.
-   - `drive()` adds `('logout','cross_origin')`, `('sso_login_failed','no_access')` and `('sso_login_ok')`.
-   - Assert `SSO_ERROR_CODES` / `LOGOUT_REASONS` equal the literal lists. The keys stay `['event','reason']` (`@AC-41 @feature-294`).
-   - **RED proof for D-93:** remove one `@ts-expect-error` and see `pnpm run typecheck` fail with TS2578, then restore it. Record the output in the step's TDD evidence.
-2. **`ssoErrors.test.ts`**: `ssoErrorRedirect('not_configured', null, {clearTxnCookie:'sso_txn_ab'})` → 303, `Location: /auth/login?error=not_configured`, and a `Set-Cookie` with Max-Age=0 on path `/api/auth/sso/callback`. With `fault:true`, it records `sso_login_error`.
-3. **`auth.test.ts`**:
-   - `verifyAccessTokenForLogout`: valid → verified; expired 1 day → verified; expired 15 days → expired_too_old; wrong key → unverified; no secret → unverified.
-   - `vi.spyOn` proves `jwt_rejected` is never recorded on these paths.
-4. **`logout/route.test.ts`** (mock `revokeToken`, `loadOidcConfig`, `loadOidcClientSecret`, `getOidcConfiguration`):
-   - **@AC-57** (legacy and SSO): a sibling Origin with cookies → 403, no `revokeToken`, no `Set-Cookie`, no config read, and one WARN `logout_origin_mismatch`.
-   - Revoke happens **iff** the token is signature-valid (D-64).
-   - **@AC-53:** SSO valid → `{ok:true, redirect: <portal URL>}` and cleared cookies.
-   - **@AC-52:** an end-session endpoint → that URL.
-   - **@AC-56:** `valid:false` → `{ok:true}` with no `redirect` and no discovery call.
-   - **@AC-62:** a config reject → `{ok:true}` and WARN `sso_logout_mode_unknown`, with revoke still done.
-   - **@AC-64:** only an expired-but-signed access cookie → 200 `{ok:true}`, cookies cleared.
-   - **@AC-58:** an invalid `APP_URL` plus a sibling Origin → passes, cookies cleared.
-   - Legacy → `{ok:true}`, byte-identical.
-   - **Trace id (C-03):** with inbound `x-trace-id: t-in`, `loadOidcConfig` and `loadOidcClientSecret` are called with `'t-in'`; with no inbound header, both receive the same non-empty generated id.
-5. **C-12**: the route and auth tests use scenario one-offs (cookies, origins) and `signTestJwt` / `TEST_JWT_SECRET` from `e2e/helpers/auth.ts` when signing session JWTs. They declare no new secret literal.
+1. `bffAllowlist.test.ts` (D-72, D-83, D-93): `@ts-expect-error` cases (a reason on `login_ok`; a missing reason on `logout`; a `JwtRejectReason` on `logout`; a `LinkErrorCode` on `sso_login_failed`); `drive()` adds `('logout','cross_origin')`, `('sso_login_failed','no_access')`, `('sso_link_failed','no_access')`, `('sso_login_ok')`; `SSO_ERROR_CODES`, `LINK_ERROR_CODES`, `LOGOUT_REASONS` equal their literal lists; keys stay `['event','reason']`. **RED proof for D-93:** remove one directive, `pnpm run typecheck` fails with TS2578, restore it; record the output.
+2. `ssoErrors.test.ts`: login and link destinations; null `appOrigin` → relative `Location`; the txn cookie cleared with Max-Age=0 on `/api/auth/sso/callback`; `fault` → `sso_login_error`; link → `sso_link_failed{code}` and never `sso_login_*`; both refusal mappers per detail; every message string verbatim.
+3. `auth.test.ts`: `verifyAccessTokenForLogout` valid/expired 1 day/expired 15 days/wrong key/no secret; `jwt_rejected` never recorded on these paths.
+4. `logout/route.test.ts` (mock `revokeToken`, the loaders, `resolveLogoutRedirect`): **@AC-57** sibling Origin in `local`/`both`/`oidc` → 403, no revoke, no Set-Cookie, no config read, one WARN; revoke iff verified (D-64); **@AC-53/@AC-52** `both`/`oidc` + valid → `{ok:true, redirect}`; **@AC-56** `valid:false` → `{ok:true}`, no discovery; **@AC-62** `'error'` → `{ok:true}` + WARN, revoke still done; **@AC-64** an expired-but-signed access cookie → 200 `{ok:true…}`, cookies cleared; **@AC-58** invalid `APP_URL` + sibling Origin → passes; secret `found:false` → portal redirect (D-134); `local` → `{ok:true}`; **@AC-68** `sso_link` cleared on every non-403 path.
+5. C-12: sign session JWTs with `signTestJwt`/`TEST_JWT_SECRET` from `e2e/helpers/auth.ts`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
-# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 grep -n "helpers/auth" src/app/api/auth/logout/route.test.ts src/lib/auth.test.ts
 ```
 
 ---
 
-### Step 35 — service: Revoke deadline and the password-login 403
+### Step 38 — service: Revoke deadline and the oidc password 403
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1712,17 +1502,16 @@ grep -n "helpers/auth" src/app/api/auth/logout/route.test.ts src/lib/auth.test.t
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety; Security — auth scope correctness
 
 **Codebase Evidence**:
-- `identity.ts:42-48` `revokeToken(token)` calls `identityClient.revokeToken({ token })` with no timeout. `REFRESH_TIMEOUT_MS = 10_000` is at `deadlines.ts:3`.
-- `login/route.ts:29-44` maps `Unauthenticated` → 401 and everything else → 503 (recon R-8). Its `recordAuthEvent` calls are at `:11,27,33,37`.
-- The `'login_disabled'` `AuthEvent` member is added in Step 33.
+- `identity.ts:42-44` `revokeToken` calls `identityClient.revokeToken({ token })` with no timeout; `refreshSession` passes `{ timeoutMs: REFRESH_TIMEOUT_MS }` at `:20`.
+- `login/route.ts:29-44`: `Unauthenticated` → 401 "Invalid credentials"; everything else → 503.
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 39)
 
 **Covers**: —
 
 **Instructions**:
-1. **`identity.ts`**: `revokeToken` passes `{ timeoutMs: REFRESH_TIMEOUT_MS }` (D-61).
-2. **`login/route.ts`**: `Code.PermissionDenied` → `recordAuthEvent('login_disabled')` and 403 `{ error: 'password login disabled' }` (D-12). The other branches are unchanged.
+1. `identity.ts`: `revokeToken` passes `{ timeoutMs: REFRESH_TIMEOUT_MS }` (D-61).
+2. `login/route.ts` (D-106): `Code.PermissionDenied` → `recordAuthEvent('login_disabled')` + 403 `{ error: 'login_disabled' }`. `Unauthenticated` keeps 401 "Invalid credentials" (`@AC-33 @feature-294` PRESERVE).
 
 **Verification**:
 ```bash
@@ -1732,7 +1521,7 @@ grep -n "REFRESH_TIMEOUT_MS" src/lib/identity.ts && grep -n "login_disabled" src
 
 ---
 
-### Step 36 — test: Revoke deadline and the login 403
+### Step 39 — test: Revoke deadline and the login 403
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1743,34 +1532,29 @@ grep -n "REFRESH_TIMEOUT_MS" src/lib/identity.ts && grep -n "login_disabled" src
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
 
 **Codebase Evidence**:
-- `identity.test.ts` exists. The route-test precedent is `src/app/config-ui/api/audit/route.test.ts`.
-- `src/lib/identity.ts` is excluded from coverage (`vitest.config.ts:28`); the thresholds `lines: 40, functions: 40, statements: 40` (`:29-33`) still gate the `src/lib/**` total.
+- `src/lib/identity.ts` is excluded from coverage (`vitest.config.ts:28`); the `src/lib/**` thresholds still gate.
 
 **TDD**: red-green required
 
-**Covers**: AC-16, AC-45
+**Covers**: AC-16 (UI password POST in `oidc`)
 
 **Instructions**:
-1. **`identity.test.ts`**: `revokeToken` passes `timeoutMs: 10_000`.
-2. **`login/route.test.ts`**:
-   - **@AC-16 / @AC-45:** `authenticateUser` rejects `PermissionDenied` → 403 `{error:'password login disabled'}` and `login_disabled` recorded.
-   - `Unauthenticated` → 401 as today.
-3. **C-12**: scenario one-offs (credentials, error codes); no session JWT is signed and no new secret literal is declared.
+1. `identity.test.ts`: `revokeToken` passes `timeoutMs: 10_000`.
+2. `login/route.test.ts`: **@AC-16** `authenticateUser` rejects `PermissionDenied` → 403 `{error:'login_disabled'}` + `login_disabled`; `Unauthenticated` → 401 "Invalid credentials"; other → 503.
+3. C-12: scenario one-offs.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
-# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 ```
 
 ---
 
-### Step 37 — service: SSO start and callback routes, the transaction cookie and the middleware sets
+### Step 40 — service: SSO start and callback routes and the middleware sets
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/lib/ssoTxn.ts` — create
 - `services/xstockstrat-ui/src/app/api/auth/sso/start/route.ts` — create
 - `services/xstockstrat-ui/src/app/api/auth/sso/callback/route.ts` — create
 - `services/xstockstrat-ui/src/middleware.ts` — modify
@@ -1778,80 +1562,50 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety, no secret values rendered in UI; Security — JWT claims minimal, auth scope correctness
 
 **Codebase Evidence**:
-- `middleware.ts`:
-  - `PUBLIC_HEALTH_PATHS = new Set([...])` (exact paths) is at `:27-36`. The function starts at `:38` and checks `PUBLIC_HEALTH_PATHS.has(...)` before `getSessionFromRequest` (`:39-41`).
-  - The matcher at `:22` excludes `api/auth/login|api/auth/refresh|auth/login|auth/oauth-login|\.well-known|api/oauth` but **not** `api/auth/sso/*` or `api/auth/logout` (recon R-8).
-  - The refresh branches at `:45-84` and `:86-110` redirect.
-- `identityClient` is at `connectClients.ts:101`. `HEADER_TRACE_ID` and `generateTraceId` are at `headers.ts:7` and `auth.ts:104-106`.
-- `setSessionCookies(res, access, refresh, opts?)` is at `auth.ts:47-66`.
-- **Not found**: no SSO transaction cookie, no HKDF helper, no SSO route. These are new (D-8, D-23). Node `crypto.hkdfSync` and jose ^5 `CompactEncrypt` / `compactDecrypt` (dir / A256GCM) are available.
+- `middleware.ts`: matcher `:22` excludes `api/auth/login|api/auth/refresh|auth/login|auth/oauth-login|\.well-known|api/oauth` but not `api/auth/sso/*` or `api/auth/logout`; `PUBLIC_HEALTH_PATHS` `:27-36` checked first at `:39`; refresh branches `:45-112`.
+- `identityClient` at `connectClients.ts:105`; `HEADER_TRACE_ID` (`headers.ts:7`) and `generateTraceId` (`auth.ts:104`); idiom `req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()` at `middleware.ts:43`.
+- `setSessionCookies(res, access, refresh, opts?)` `auth.ts:47-66`; `REMEMBER_ME_MAX_AGE_SECONDS` `:17`.
 
-**TDD**: red-green required
+**TDD**: red-green required (paired test: Step 41)
 
 **Covers**: —
 
 **Instructions**:
-1. **`ssoTxn.ts`** (D-8, D-15, D-23, D-35, D-75):
-   - `key = hkdfSync('sha256', JWT_SECRET, '', 'xstockstrat-ui/sso-txn', 32)`.
-   - `sealTxn({state, nonce, codeVerifier, remember, redirect})` → a JWE `dir`/`A256GCM` with `exp` now + 600.
-   - `openTxn(jwe)` → the payload or `null`.
-   - `txnCookieName(state)` = `` `sso_txn_${sha256(state).slice(0,16)}` ``.
-   - `TXN_COOKIE_OPTS = { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/api/auth/sso/callback', maxAge: 600 }`.
-   - `clearAllTxnCookies(req, res)` clears every `sso_txn_*` with the same path.
-   - Never an HS256 JWS (R-7).
-2. **`start/route.ts`**: export `POST` only, so GET → 405 (D-46, D-54). Wrap it in `withBffMetrics('auth', '/api/auth/sso/start', …)`. At the top, `const traceId = req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()`. Order (S-2 amended, design.md (B)):
-   1. `cfg = await loadOidcConfig(traceId)`:
-      - `'legacy'` → 404;
-      - `'error'` → `ssoErrorRedirect('failed', appOrigin(), {fault:true})`;
-      - `valid:false` → `ssoErrorRedirect('not_configured', appOrigin())`.
-   2. `!isSameOrigin(req,'required')` → `failed`.
-   3. `secret = await loadOidcClientSecret(traceId)`. Null → `not_configured`; a throw → `failed` with fault.
-   4. Read `remember` and `redirect` from `req.formData()`. `redirect` goes through `safeRedirect`.
-   5. Generate `state`, `nonce` and `code_verifier`. `getOidcConfiguration`; a throw → `failed` with fault.
-   6. Respond 303 to `buildSsoAuthorizationUrl(...)` with `redirect_uri = new URL('/api/auth/sso/callback', cfg.appOrigin).href`, setting the txn cookie.
-3. **`callback/route.ts`**: export `GET`. At the top, `const traceId = req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()`: one id for the whole login, passed to `loadOidcConfig(traceId)`, `loadOidcClientSecret(traceId)`, `resolveExternalIdentity` and `issueSessionForUser` (C-03, D-30). Canonical order (S-3, D-41, D-58, D-66, D-82):
-   1. Mode:
-      - `'legacy'` → 404;
-      - `'error'` → `failed` with fault;
-      - `valid:false` → `not_configured`.
-   2. IdP `error` param: clear this request's txn cookie if `state` is present. `access_denied` → `no_access`; any other error → `failed`.
-   3. A missing or undecryptable txn for `state` → `failed`.
-   4. Secret null → `not_configured`.
-   5. `exchangeCode(...)`: any failure → `failed` (fault on a transport error or timeout), and **no** resolve.
-   6. `identityClient.resolveExternalIdentity({issuer: claims.iss, subject: claims.sub, email: claims.email ?? ''}, {timeoutMs: AUTH_CONFIG_TIMEOUT_MS, headers: {[HEADER_TRACE_ID]: traceId}})`:
-      - `FailedPrecondition` → `refusalCode(detail)` (`linked` / `ambiguous` / `inactive` / `no_email`);
-      - other codes → `failed` with fault.
-   7. `identityClient.issueSessionForUser({userId}, {…same opts})`:
-      - `FailedPrecondition` → `inactive`;
-      - anything else → `failed`.
-      - No session cookies are set, and the link stays (D-49 N-5).
-   8. `setSessionCookies(res, access, refresh, txn.remember ? { maxAge: REMEMBER_ME_MAX_AGE_SECONDS } : undefined)`, then `clearAllTxnCookies`, `recordAuthEvent('sso_login_ok')`, and a 303 to `new URL(txn.redirect, cfg.appOrigin)`.
-   - Error logging: `serverLog.warn('sso_callback_failed', { error_class: err.constructor.name, code })`. It never logs the auth code, the tokens, the token response or the email (D-75).
-   - Every failure path uses `ssoErrorRedirect(code, appOrigin, {clearTxnCookie: thisRequestsName})`.
-4. **`middleware.ts`** (D-40, D-52, D-62):
-   - Export the sets `SSO_PUBLIC_PATHS = new Set(['/api/auth/sso/start','/api/auth/sso/callback'])` and `COOKIE_GATED_PATHS = new Set(['/api/auth/logout'])`, and export `PUBLIC_HEALTH_PATHS`.
-   - At the top, before `getSessionFromRequest`:
-     - `SSO_PUBLIC_PATHS.has(path)` → `NextResponse.next()`;
-     - `COOKIE_GATED_PATHS.has(path) && (req.cookies.get('access_token') || req.cookies.get('refresh_token'))` → `NextResponse.next()`.
-   - The matcher at `:22` is **unchanged**.
+1. **`start/route.ts`** — `POST` only (GET → 405; D-46, D-54), `withBffMetrics('auth', '/api/auth/sso/start', …)`. Order (design § 3 row; D-134):
+   1. `loadAuthMode()`: `local` → 404; `'error'` → login `failed` (fault).
+   2. `loadOidcConfig()`: `'error'` → login `failed` (fault); `!valid` → login `not_configured` (before the Origin check, AC-54/58).
+   3. `!isSameOrigin(req, 'required')` → login `failed`.
+   4. `loadOidcClientSecret()`: `found:false` → `not_configured`; `'error'` → `failed` (fault).
+   5. Form fields `remember` (`'1'` → true) and `redirect` (`safeRedirect`).
+   6. `randomState`, `randomNonce`, `randomPKCECodeVerifier`; `getOidcConfiguration` (throw → `failed`, fault).
+   7. 303 to `buildSsoAuthorizationUrl(cfg, {redirectUri: new URL('/api/auth/sso/callback', appOrigin).href, …})` with `Set-Cookie` `sealSsoTxn({purpose:'login', …})` under `txnCookieName(state)`.
+2. **`callback/route.ts`** — `GET`. One `traceId` from the inbound header or generated (D-30, D-114). Order (design § 3 "Callback order"; D-58, D-113, D-125, D-132, D-135); every `Location` on `appOrigin`:
+   1. `loadAuthMode()`: `local` → 404 (no redirect); `'error'` → login `failed` (fault).
+   2. `loadOidcConfig()`: `'error'` → login `failed`; `!valid` → login `not_configured`.
+   3. IdP `error` param: if `state`, clear `txnCookieName(state)`; if that cookie opens through `openSsoTxn` with `purpose:'link'` → link dest (`access_denied` → `no_access`, else `failed`); otherwise login dest (same mapping).
+   4. Missing/undecryptable/expired txn → login `failed`. From here `txn.purpose` picks the destination.
+   5. `loadOidcClientSecret()`: `found:false` → `not_configured`; `'error'` → `failed`.
+   6. `getOidcConfiguration` + `exchangeCode(...)`; any throw → `failed`, logging only `serverLog.warn('sso_callback_failed', {error_class})` (D-75).
+   7. `purpose:'login'`: `identityClient.resolveExternalIdentity({issuer: claims.iss, subject: claims.sub}, {timeoutMs: AUTH_CONFIG_TIMEOUT_MS, headers: {[HEADER_TRACE_ID]: traceId}})` — `FailedPrecondition` → `resolveRefusalCode(detail)`, else `failed`; then `issueSessionForUser({userId}, same opts)` — `FailedPrecondition` → `inactive`, else `failed`; no cookies on any failure. Success: `setSessionCookies(res, access, refresh, txn.remember ? {maxAge: REMEMBER_ME_MAX_AGE_SECONDS} : undefined)`, `clearAllTxnCookies`, `recordAuthEvent('sso_login_ok')`, 303 to `new URL(safeRedirect(txn.redirect), appOrigin)`.
+   8. `purpose:'link'`: step 1's mode must be `both`, else link `failed` (D-125). `auth_time` check (D-111/D-127): `typeof c.auth_time === 'number' && Number.isFinite(c.auth_time) && c.auth_time >= txn.created_at - OIDC_CLOCK_SKEW_S`, else `serverLog.warn('sso_link_refused', {reason: 'auth_time_missing'|'auth_time_stale'})` + link `failed`. `label = c.email ?? c.preferred_username ?? 'your single sign-on account'`. Seal `sso_link` `{link_id: randomUUID(), iss, sub, label, user_id: txn.user_id, exp: txn.exp}`, `clearAllTxnCookies`, 303 to `/accounts/sso`. No identity call.
+   - Never log the code, tokens, the token response, email or `sub`.
+3. **`middleware.ts`** (D-40, D-62): export `SSO_PUBLIC_PATHS = new Set(['/api/auth/sso/start', '/api/auth/sso/callback'])`, `COOKIE_GATED_PATHS = new Set(['/api/auth/logout'])` and `PUBLIC_HEALTH_PATHS`; at the top: `SSO_PUBLIC_PATHS.has(path)` → `next()`; `COOKIE_GATED_PATHS.has(path) && (access_token || refresh_token cookie)` → `next()`. `/accounts/api/sso*` are **not** exempt. Matcher unchanged.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm run build   # Next tolerates the extra middleware.ts exports (SSO_PUBLIC_PATHS, COOKIE_GATED_PATHS, PUBLIC_HEALTH_PATHS); a build error here means move them to src/lib/authPaths.ts
-cd ../..
-cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:unit
-grep -n "HEADER_TRACE_ID" src/app/api/auth/sso/callback/route.ts src/app/api/auth/sso/start/route.ts src/app/api/auth/logout/route.ts   # C-03: each handler derives one traceId and forwards it
+cd services/xstockstrat-ui && pnpm run build   # Next tolerates the extra middleware exports; a build error moves them to src/lib/authPaths.ts (Deviation Log)
+pnpm run typecheck && pnpm run lint && pnpm run test:unit
 grep -n "export async function GET" src/app/api/auth/sso/start/route.ts || echo "start is POST-only"
+grep -n "HEADER_TRACE_ID" src/app/api/auth/sso/callback/route.ts
 ```
 
 ---
 
-### Step 38 — test: Start and callback routes, the txn cookie and the middleware exemptions
+### Step 41 — test: Start and callback routes and the middleware exemptions
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/lib/ssoTxn.test.ts` — create
 - `services/xstockstrat-ui/src/app/api/auth/sso/start/route.test.ts` — create
 - `services/xstockstrat-ui/src/app/api/auth/sso/callback/route.test.ts` — create
 - `services/xstockstrat-ui/src/middleware.test.ts` — modify
@@ -1859,54 +1613,105 @@ grep -n "export async function GET" src/app/api/auth/sso/start/route.ts || echo 
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
 
 **Codebase Evidence**:
-- `src/middleware.test.ts` has a `matches()` helper over the matcher regex (recon).
-- The route-test precedent is `src/app/config-ui/api/audit/route.test.ts`.
+- `src/middleware.test.ts` exists (its `@AC-6` expired-access case at `:250`).
+- User-id fixtures: `e2e/fixtures/users.ts` (C-12).
 
 **TDD**: red-green required
 
-**Covers**: AC-4, AC-5, AC-7, AC-24, AC-26, AC-29, AC-39, AC-47, AC-51, AC-54, AC-58, AC-59, AC-60
+**Covers**: AC-1, AC-2, AC-3, AC-6 (UI leg), AC-7, AC-24, AC-29, AC-47, AC-51, AC-54, AC-58, AC-59, AC-60, AC-65 (callback link leg), AC-74, AC-76, AC-77 (row 1)
 
 **Instructions**:
-1. **`ssoTxn.test.ts`**:
-   - Seal and open round-trip.
-   - A tampered JWE → null. An expired JWE → null.
-   - A cookie signed as an HS256 JWS with `JWT_SECRET` is **not** accepted (R-7).
-   - The cookie name is derived from sha256(state).
-   - The options include `secure` in production and the callback path.
-2. **`start/route.test.ts`** (mock `fetch` to prove no IdP request):
-   - **@AC-47:** legacy → 404.
-   - **@AC-60:** config unreadable → 303 `?error=failed`.
-   - **@AC-54:** `valid:false` → `not_configured`, before the Origin check, with `fetch` never called.
-   - **@AC-58:** an invalid `APP_URL` → a relative `Location: /auth/login?error=not_configured`, whatever the Origin.
-   - **@AC-59:** a sibling Origin or no Origin → `failed`, with `fetch` never called.
-   - Secret `found=false` → `not_configured`.
-   - **Trace id (C-03):** with inbound `x-trace-id: t-in`, `loadOidcConfig` and `loadOidcClientSecret` receive `'t-in'`.
-   - Happy path → a 303 to the authorize URL with `scope=openid email`, `response_mode=query`, `code_challenge_method=S256` and `redirect_uri=http://localhost:3000/api/auth/sso/callback`, plus a txn cookie whose content has `remember=true` when the form has `remember=1`.
-3. **`callback/route.test.ts`** (mock `exchangeCode` / identity client):
-   - **@AC-47 / @AC-60:** legacy 404, and `'error'` → `failed` with no resolve.
-   - **@AC-51:** `error=access_denied` → `no_access`, with this txn cookie cleared.
-   - **@AC-24:** state `s-999` (no txn cookie), a nonce mismatch and an `aud` mismatch (`exchangeCode` rejects) → `failed`. `resolveExternalIdentity` is never called and no session cookie is set.
-   - **@AC-4 / @AC-5 / @AC-7 / @AC-26 / @AC-39:** each refusal detail maps to `linked` / `ambiguous` / `inactive` / `inactive` / `no_email`, with no session cookies.
-   - `IssueSessionForUser` `FailedPrecondition` → `inactive`.
-   - **@AC-29:** with remember → session cookies `Max-Age=1209600` and `remember_me=1`. Without it → session cookies. On success every `sso_txn_*` is cleared.
-   - **One trace per login (C-03, D-30):** with inbound `x-trace-id: t-in`, `loadOidcConfig`, `loadOidcClientSecret`, `resolveExternalIdentity` and `issueSessionForUser` all receive `t-in` (the loaders as their argument, the identity calls as the `x-trace-id` header); with no inbound header, all four receive the same generated id.
-   - Sentinels (`CODE-SENTINEL`, `IDTOKEN-SENTINEL`, `sentinel@example.test`) never appear in any `serverLog` or console argument (D-75).
-4. **`middleware.test.ts`** (D-40, D-59, D-62):
-   - Every path in `SSO_PUBLIC_PATHS ∪ COOKIE_GATED_PATHS ∪ PUBLIC_HEALTH_PATHS` has a `route.ts` under `src/app/`, checked with `fs.existsSync`.
-   - `/api/auth/sso/startx` and `/api/auth/logoutx` redirect.
-   - A near-expiry token with a failing refresh on `/api/auth/sso/callback` passes through.
-   - Logout with no cookie → today's redirect. Logout with a cookie → passes.
-5. **C-12**: the tests use scenario one-offs (state values, refusal details, sentinels). Where a domain user id is needed, import it from `e2e/fixtures/users.ts` rather than declaring a new literal.
+1. **`start/route.test.ts`** (`fetch` mocked to prove no IdP request): **@AC-47** `local` → 404; **@AC-60** mode `'error'` → `?error=failed`; **@AC-54** `valid:false` → `not_configured` before the Origin check, `fetch` never called; **@AC-58** invalid `APP_URL` → relative `Location: /auth/login?error=not_configured` whatever the Origin; **@AC-59** sibling or missing Origin → `failed`, GET → 405; secret unset → `not_configured`; happy path → 303 to the authorize URL (`scope`, `response_mode=query`, S256, `redirect_uri=http://localhost:3000/api/auth/sso/callback`, no `prompt`) + a login txn with `remember=true` for `remember=1`.
+2. **`callback/route.test.ts`** (mock `exchangeCode` and the identity client):
+   - **@AC-47** `local` → 404, Resolve not called; **@AC-60** `'error'` → `failed`;
+   - **@AC-51** `error=access_denied` with a login txn → `/auth/login?error=no_access`, txn cleared; **@AC-76** with a link txn → `/accounts/sso?error=no_access`, `sso_link_failed{no_access}`, no `sso_login_failed`; `server_error` → link `failed`; an expired link txn → login page;
+   - **@AC-24** state `s-999` (no txn), nonce and `aud` mismatch (`exchangeCode` rejects) → `failed`, Resolve never called, no session cookie;
+   - **@AC-1** Resolve OK → IssueSession → session cookies, 303 to `/trader`; **@AC-2** the Resolve request has exactly `{issuer, subject}` (no email);
+   - **@AC-3** `not linked` → `not_linked` in `both` and in `oidc` (the page renders the per-mode message, Step 44); **@AC-6** the same refusal under `APPLICATION_ENV=production`;
+   - **@AC-7** `account inactive` → `inactive`; IssueSession `FailedPrecondition` → `inactive`; no cookies;
+   - **@AC-29** remember → `Max-Age=1209600` + `remember_me=1`; without → session cookies; every `sso_txn_*` cleared on success;
+   - one trace per login: inbound `x-trace-id: t-in` reaches Resolve and IssueSession headers; without it, both get the same generated id;
+   - **@AC-65** link txn + fresh `auth_time` → `sso_link` sealed with `label` = email, then `preferred_username`, then the default, 303 `/accounts/sso`, no identity call; mode `oidc` on a link txn → link `failed`;
+   - **@AC-74** link txn with `auth_time` absent, or `created_at − 31 s` → `/accounts/sso?error=failed`, WARN `sso_link_refused`, no `sso_link`; `created_at − 30 s` accepted;
+   - sentinels (`CODE-SENTINEL`, `IDTOKEN-SENTINEL`, `sentinel@example.test`) never appear in any log argument (D-75).
+3. **`middleware.test.ts`** (D-40, D-59, D-62): every path in `SSO_PUBLIC_PATHS ∪ COOKIE_GATED_PATHS ∪ PUBLIC_HEALTH_PATHS` has a `route.ts` (`fs.existsSync`); `/api/auth/sso/startx` and `/api/auth/logoutx` redirect; a near-expiry token with a failing refresh on the callback passes through; logout without a cookie → today's redirect, with a cookie → passes; `/accounts/api/sso` is not exempt: **@AC-77** row 1, `GET /accounts/api/sso` with no session cookie → redirect to `/auth/login` (with `redirect=/accounts/api/sso`), the handler never runs.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
-# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
+grep -n "fixtures/users\|helpers/auth" src/app/api/auth/sso/callback/route.test.ts
 ```
 
 ---
 
-### Step 39 — service: Login page as a server component with the SSO form and the FR-9 banner
+### Step 42 — service: Link SSO routes (/accounts/api/sso, /link, /confirm)
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/app/accounts/api/sso/route.ts` — create
+- `services/xstockstrat-ui/src/app/accounts/api/sso/link/route.ts` — create
+- `services/xstockstrat-ui/src/app/accounts/api/sso/confirm/route.ts` — create
+
+**Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety, environment scope correctness, no secret values rendered in UI; Security — auth scope correctness
+
+**Codebase Evidence**:
+- Session-gated route precedent `src/app/accounts/api/authorized-apps/route.ts:14-18` (`getSessionFromRequest` → 401 JSON; `restBackendHeaders(req, claims.user_id, claims.roles)`; `withBffMetrics`).
+- `restBackendHeaders` `src/lib/restBackendHeaders.ts:9-15` (the platform header trio, D-114).
+- `apiFetch` retries a 401 once after a refresh (`authRedirect.ts:67-73`), so a refusal is never 401; `connectCodeToHttp` maps `FailedPrecondition` → 400 (`connectClients.ts:134-139`).
+- `JwtClaims.email` (`auth.ts:7`) is the session email.
+
+**TDD**: red-green required (paired test: Step 43)
+
+**Covers**: —
+
+**Instructions**:
+All three: `withBffMetrics('accounts', …)`, `getSessionFromRequest(req)` first (none → **401** `{error:'unauthorized'}`), identity calls with `{ headers: restBackendHeaders(req, claims.user_id, claims.roles), timeoutMs: AUTH_CONFIG_TIMEOUT_MS }`. Design § 3 "Link routes" table, D-107, D-124, D-134:
+1. **`GET /accounts/api/sso`**: `mode = loadAuthMode()`, `cfg = loadOidcConfig()` (fault → treat as unreadable for `linked`), `getExternalIdentityLinks({userId})` (fail → **503** `{error:'failed'}`). `linked = cfg !== 'error' && isValidIssuer(cfg.issuer) ? issuers.includes(cfg.issuer) : issuers.length > 0` (D-134). `canLink = mode === 'both'`. `pending = canLink && sso_link opens && its user_id === claims.user_id ? {linkId, label, accountEmail: claims.email} : null`. Mode `'error'` → 200 `{mode:'error', linked, canLink:false, pending:null}`. The body never carries `iss` or `sub`.
+2. **`POST /accounts/api/sso/link`** (no body): mode not `both` → **404** `{error:'not_found'}` (`'error'` → **503** `{error:'failed'}`); `cfg` `'error'` → 503; `!cfg.valid` → **400** `{error:'not_configured'}`; `!isSameOrigin(req,'required')` → **403** `{error:'failed'}`; secret `found:false` → **400** `not_configured`; secret `'error'` or a discovery fault → **503** `failed`; else **200** `{url: buildSsoAuthorizationUrl(…, {link: true})}` with the link txn cookie `{purpose:'link', user_id: claims.user_id, created_at: now, …}`.
+3. **`POST /accounts/api/sso/confirm`** `{linkId, password}`: mode gate as `/link`; Origin → **403** `failed`; `sso_link` missing, unopenable, expired, `user_id !== claims.user_id` or `link_id !== linkId` → **400** `failed` + clear the cookie; empty password → **400** `invalid_credentials` (identity not called); `linkExternalIdentity({userId: claims.user_id, issuer: link.iss, subject: link.sub, password})`: OK → 200 `{ok:true}` + clear; `FailedPrecondition` → `linkRefusalCode(detail)` → **400** `{error: code}` (`invalid_credentials` keeps the cookie, the others clear it; `link disabled` → `failed`); `Unavailable`/`DeadlineExceeded`/other → **503** `failed`, cookie kept. Every refusal records `sso_link_failed{reason}`. Never log the password.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run build
+grep -n "restBackendHeaders" src/app/accounts/api/sso/route.ts src/app/accounts/api/sso/link/route.ts src/app/accounts/api/sso/confirm/route.ts
+```
+
+---
+
+### Step 43 — test: Link SSO route statuses
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/app/accounts/api/sso/route.test.ts` — create
+- `services/xstockstrat-ui/src/app/accounts/api/sso/link/route.test.ts` — create
+- `services/xstockstrat-ui/src/app/accounts/api/sso/confirm/route.test.ts` — create
+
+**Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
+
+**Codebase Evidence**:
+- Route-test precedent `src/app/config-ui/api/audit/route.test.ts`; session JWTs via `e2e/helpers/auth.ts` `signTestJwt` (`:29`).
+
+**TDD**: red-green required
+
+**Covers**: AC-4, AC-65 (routes), AC-66, AC-67, AC-68, AC-69, AC-77 (rows 2–8)
+
+**Instructions**:
+1. **@AC-77** rows 2–8, one case per row, at the handler (row 1 is Step 41's middleware case, spec-level choice 5); plus the FR-16.6 handler-level case: a stale session token (`getSessionFromRequest` → null) → 401 on each of the three routes; GetLinks fails → 503 `failed`; config unreadable → 200 `mode:'error'`, `canLink:false`; `/link` with a sibling Origin → 403 `failed`; `client_id ""` → 400 `not_configured`; secret unset + sibling Origin → 403 (Origin before secret); secret unset same-origin → 400 `not_configured`; `/confirm` with config unreadable → 503 `failed`.
+2. GET: `linked` per D-134 (valid issuer in `issuers`; invalid issuer → any link; ui fault → any link); `canLink` true in `both` even when linked (AC-67); `pending` only for a matching `user_id`; **@AC-69** `local`/`oidc` → `canLink:false`, and `/link` → 404.
+3. `/link` happy path: 200 `{url}` with `prompt=login&max_age=0`, the link txn's `user_id` is the session's, never a body value; identity calls carry the session `x-user-id` (D-114).
+4. `/confirm`: **@AC-65** OK → 200 and the cookie cleared; **@AC-66** `invalid credentials` → 400 `invalid_credentials`, cookie kept; **@AC-4** `account already linked` → 400 `already_linked_other`; **@AC-67** `already linked to this issuer` → 400 `already_linked_self`; `link disabled` → 400 `failed`; **@AC-68** a `sso_link` for another `user_id`, or expired → 400 `failed`, identity not called; empty password → 400, identity not called; `Unavailable` → 503, cookie kept; no response is ever 401 after the session check.
+5. C-12: user ids from `e2e/fixtures/users.ts`; other literals are scenario one-offs.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
+```
+
+---
+
+### Step 44 — service: Login page per mode and the SSO sign-in form
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1918,43 +1723,19 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness, no secret values rendered in UI
 
 **Codebase Evidence**:
-- `HEADER_TRACE_ID` is `services/xstockstrat-ui/src/lib/headers.ts:7`; `generateTraceId` is exported from `services/xstockstrat-ui/src/lib/auth.ts:104`; the idiom `req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()` already exists at `src/middleware.ts:43` and `src/lib/restBackendHeaders.ts:13` (C-03).
-- `login/page.tsx:1-55` is a `'use client'` page. It holds `LoginForm` (`useRouter` + `useSearchParams`, `CredentialsForm submitLabel="Sign in" … showRememberMe onSuccess=…`) inside `AuthCardShell`, with a `Suspense` fallback `LoginSkeleton`.
-- `AuthForm.tsx`: `CredentialsForm` shows `data.error` from the login response (`:58-67`) and renders `{error && <p className="text-sm text-destructive">…}` (`:121`). Its remember-me control is `id="rememberMe"` (`:105-114`).
-- `src/components/ui/checkbox.tsx` exports `Checkbox` (`:29`).
-- `src/app/auth/layout.tsx` forces `dynamic = 'force-dynamic'` (UI `CLAUDE.md` § Auth + BFF).
+- `login/page.tsx:1-53`: `'use client'`, `LoginForm` (`CredentialsForm submitLabel="Sign in" … showRememberMe`) in `AuthCardShell`, `Suspense` with `LoginSkeleton`.
+- `CardNotice` at `src/components/shared/CardNotice.tsx:5`; `Checkbox` at `src/components/ui/checkbox.tsx`.
+- Ledger `fails.md:4236-4244`: a server component may read config but must not read the signed-in user.
 
-**TDD**: red-green required (RED/GREEN via the Step 47 e2e; no jsdom unit layer exists — `vitest.config.ts:19` node env)
+**TDD**: red-green required (RED/GREEN via the Step 53 e2e; the UI has no jsdom unit layer, `vitest.config.ts:19`)
 
 **Covers**: —
 
 **Instructions**:
-1. Move today's client `LoginForm` and `LoginSkeleton` verbatim into `LoginForm.tsx` (`'use client'`). `CredentialsForm` is untouched (D-54).
-2. **`page.tsx`** becomes a server component (FR-9, D-22, D-47):
-   - `const traceId = generateTraceId()`; read `loadOidcConfig(traceId)` and `loadPasswordLoginEnabled(traceId)` together with `Promise.allSettled`. Any rejection, or `mode:'error'`, means legacy rendering (AC-46).
-   - Read `searchParams.error` and `searchParams.redirect` (Next 15 async `searchParams`).
-   - Render per the D-54 table:
-     - legacy or `'error'` + flag on → `LoginForm` only;
-     - legacy or `'error'` + flag off → `LoginForm` + the FR-9 banner;
-     - SSO + flag on → `LoginForm` + `SsoSignInForm`;
-     - SSO + flag off → `SsoSignInForm` only.
-   - SSO `valid:false` still renders the SSO button (D-66).
-   - The banner text is exactly "Password login is disabled in config (identity/auth.password_login_enabled) while SSO is not configured. Ask an admin.", rendered with the canonical `CardNotice` primitive (C-17).
-   - The `?error=` message map is `Record<SsoErrorCode, string>`:
-     - `failed` → "Sign-in failed. Try again."
-     - `not_configured` → "SSO not configured"
-     - `linked` → "This account is already linked to another sign-in. Ask an admin."
-     - `ambiguous` → "More than one account uses this email. Ask an admin."
-     - `inactive` → "This account is disabled. Ask an admin."
-     - `no_email` → "Your sign-in has no email. Ask an admin."
-     - `no_access` → "You don't have access to xstockstrat. Ask an admin."
-     - An unknown code shows nothing.
-3. **`SsoSignInForm.tsx`** (D-54): a native `<form method="post" action="/api/auth/sso/start">` with:
-   - a hidden `redirect`;
-   - an uncontrolled `Checkbox` with `id="ssoRememberMe" name="remember" value="1"` and the label "Keep me signed in for 14 days (SSO)";
-   - a `Button` "Sign in with SSO".
-   - It uses design tokens only (C-17), and the accessible names differ from `CredentialsForm`'s.
-4. Record the Referrer-Policy constraint in `context.md` at execute: a future `no-referrer` policy would break `/start` (D-54).
+1. Move `LoginForm` and `LoginSkeleton` verbatim into `LoginForm.tsx` (`'use client'`); `CredentialsForm` is untouched (D-54).
+2. **`page.tsx`** becomes a server component reading **only** `loadAuthMode()` (design § 3 row; D-106): `local` or `'error'` → `LoginForm`; `both` → `SsoSignInForm` + `LoginForm`; `oidc` → `SsoSignInForm` only. Rendered whatever the web config's validity. Next 15 async `searchParams`: `error` from `SSO_ERROR_CODES` shown in a `CardNotice` (`not_linked` uses the mode's variant; an unknown code shows nothing); `redirect` passed to both forms.
+3. **`SsoSignInForm.tsx`** (D-54): native `<form method="post" action="/api/auth/sso/start">`, hidden `redirect`, uncontrolled `Checkbox` `id="ssoRememberMe" name="remember" value="1"` labelled "Keep me signed in for 14 days (SSO)", `Button` "Sign in with SSO"; design tokens only (C-17); accessible names distinct from `CredentialsForm`.
+4. At execute, record in `context.md` that a future `Referrer-Policy: no-referrer` would break `/start`'s Origin check (D-54).
 
 **Verification**:
 ```bash
@@ -1964,7 +1745,70 @@ grep -n "'use client'" src/app/auth/login/page.tsx || echo "page is a server com
 
 ---
 
-### Step 40 — service: Authorized-apps page split and the SSO pointer card
+### Step 45 — service: /accounts/sso page and its nav registrations
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/app/accounts/sso/page.tsx` — create
+- `services/xstockstrat-ui/src/components/shared/navGroups.tsx` — modify
+- `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify
+
+**Reviewers**: `xstockstrat-ui` owner — Trading UI correctness, no secret values rendered in UI
+
+**Codebase Evidence**:
+- `navGroups.tsx:104` `{ label: 'Authorized apps', href: '/accounts/authorized-apps' }`; accounts subnav `PlatformHeader.tsx:93-98` (`'Authorized Apps'` at `:96`).
+- `accounts/layout.tsx:16-33` wraps every accounts page in `PlatformHeader` + providers.
+- Primitives: `QueryStateMessages`, `CardNotice`, `FormDialog` (`src/components/shared/*.tsx`; `FormDialog` props `open, onOpenChange, trigger?, title, description?, children` at `:18-32`); `apiFetch(input, init)` at `authRedirect.ts:67`.
+
+**TDD**: red-green required (RED/GREEN via the Step 53 e2e and `nav-reachability.spec.ts`)
+
+**Covers**: —
+
+**Instructions**:
+1. **`page.tsx`** (`'use client'`; D-107, D-117, D-124): `apiFetch('/accounts/api/sso')` on mount; render "Single sign-on" with linked / not-linked status; `mode:'error'` or a fetch error through `QueryStateMessages`; `?error=` via `CardNotice` from `LINK_ERROR_CODES`. When `canLink`: a "Link SSO" button posting `apiFetch('/accounts/api/sso/link', {method:'POST'})` then `location.assign(url)`. When `pending`: a `FormDialog` "You are linking {label} to {accountEmail}." with a password field (held in component state across one retry) posting `apiFetch('/accounts/api/sso/confirm', {method:'POST', redirect:'manual', body})`; an `opaqueredirect` → `location.assign('/auth/login')`; a 400 code shows its `LINK_ERROR_CODES` message; 200 → reload status. No `iss`/`sub` rendered.
+2. **`navGroups.tsx`**: `{ label: 'Single sign-on', href: '/accounts/sso' }` next to `:104`.
+3. **`PlatformHeader.tsx`**: `{ label: 'Single Sign-On', href: '/accounts/sso', match: 'exact' }` in the accounts subnav after `:96` (C-10a).
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run build
+grep -n "/accounts/sso" src/components/shared/navGroups.tsx src/components/shared/PlatformHeader.tsx   # 2
+```
+
+---
+
+### Step 46 — service: Sign-out button in the shared header
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/shared/SignOutButton.tsx` — create
+- `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify
+
+**Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
+
+**Codebase Evidence**:
+- `PlatformHeader.tsx:246-249`: `<div className="flex items-center gap-2 ml-auto">{actions}<AlertStream /><CopilotToggle />`, then the `sm:hidden` sidebar block.
+- `Button` in `src/components/ui/button.tsx` (icon size convention, D-63).
+- **Not found**: no logout caller in `src/` (recon).
+
+**TDD**: red-green required (RED/GREEN via the Step 53 e2e)
+
+**Covers**: —
+
+**Instructions**:
+1. **`SignOutButton.tsx`** (`'use client'`; D-53, D-60, D-63): `Button variant="ghost" size="icon" className="size-11 sm:size-8" aria-label="Sign out"` with a sign-out icon from the icon set in use; `pending` state; on click (try/catch): `res = await fetch('/api/auth/logout', {method:'POST', redirect:'manual'})`; a JSON `res.ok` with `body.redirect` → `location.assign(body.redirect)`; every other outcome → `location.assign('/auth/login')`; `pending` never sticks.
+2. **`PlatformHeader.tsx`**: `<SignOutButton />` right after `<CopilotToggle />`, in every mode.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run build
+```
+
+---
+
+### Step 47 — service: Authorized-apps split and the issuer pointer card
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -1977,28 +1821,18 @@ grep -n "'use client'" src/app/auth/login/page.tsx || echo "page is a server com
 **Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI, environment scope correctness
 
 **Codebase Evidence**:
-- `HEADER_TRACE_ID` is `services/xstockstrat-ui/src/lib/headers.ts:7`; `generateTraceId` is exported from `services/xstockstrat-ui/src/lib/auth.ts:104`; the idiom `req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()` already exists at `src/middleware.ts:43` and `src/lib/restBackendHeaders.ts:13` (C-03).
-- `authorized-apps/page.tsx`:
-  - It is a 256-line `'use client'` page. It uses `useAgentUrl()` (`:29`), `apiFetch('/accounts/api/authorized-apps')` (`:42-47`) and `copyAgentUrl` (`:146-153`).
-  - The connector field (an `input readOnly value={agentUrl} aria-label="MCP connector URL"` plus a Copy `Button`) is at `:195-213`.
-  - The list `Card` is at `:229-253`.
-- `accounts/layout.tsx:18-20` reads `AGENT_PUBLIC_URL` server-side into `AgentUrlProvider`; the layout is untouched (D-28).
+- `authorized-apps/page.tsx` (270 lines): `'use client'` (`:1`), `useAgentUrl()` (`:68`), `apiFetch('/accounts/api/authorized-apps')` (`:80`, `:113`), `columns` memo (`:127`), `copyAgentUrl` (`:160`), connector field with `aria-label="MCP connector URL"` (`:209-221`), list `Card` (`:245-264`).
+- `accounts/layout.tsx:19` reads `AGENT_PUBLIC_URL` server-side into `AgentUrlProvider`; untouched.
 
-**TDD**: red-green required (RED/GREEN via the Step 47 e2e `sso-accounts.spec.ts` and the legacy `auth.spec.ts` AC-42 case)
+**TDD**: red-green required (RED/GREEN via the Step 53 e2e and the existing `auth.spec.ts` list cases)
 
 **Covers**: —
 
 **Instructions**:
-1. Extract `ConnectorUrlField` (`'use client'`; `useAgentUrl` + copy state) from `page.tsx:195-213` (D-55).
-2. Move the current page body verbatim into `AuthorizedAppsList.tsx` (`'use client'`), using `ConnectorUrlField` in its dialog.
-3. **`page.tsx`** becomes a server component calling `loadOidcConfig(generateTraceId())` (D-28, D-49 N-12):
-   - `'sso'` → `SsoAppsCard`;
-   - `'legacy'` or `'error'` (including a rejection) → `AuthorizedAppsList`.
-4. **`SsoAppsCard.tsx`** (`'use client'`, props `{ autheliaUrl: string | null; mcpClientId: string; mcpClientIdReadonly: string }`), built from `Card` primitives (C-17):
-   - It explains that connected apps are managed in Authelia.
-   - It links to `autheliaUrl`, the valid issuer; the link is omitted when `valid:false` (D-66).
-   - It shows `ConnectorUrlField`, and a row for each **non-empty** client ID (full / read-only), with the instruction to paste them into the connector's advanced OAuth settings (FR-11, D-44).
-   - It lists no grants and offers no revoke control (AC-34).
+1. Extract `ConnectorUrlField` (`'use client'`; `useAgentUrl` + copy state) from `:205-225` (D-55 remainder, D-131).
+2. Move the page body **verbatim** into `AuthorizedAppsList.tsx` (`'use client'`), including the `columns` memo and focus target, using `ConnectorUrlField` (D-116; `@feature-350 @AC-4/6/9` PRESERVE in `local`/`both`).
+3. **`page.tsx`** becomes a server component: `loadAuthMode()`; `oidc` → `loadOidcConfig()` → `SsoAppsCard`; `local`/`both`/`'error'` → `AuthorizedAppsList`. A `loadOidcConfig` fault in `oidc` renders `SsoAppsCard` with no issuer link and no client-ID rows.
+4. **`SsoAppsCard.tsx`** (`'use client'`; props `{ issuerUrl: string | null; clientIds: {claude, claudeReadonly, claudeCode, claudeCodeReadonly} }`; `Card` primitives, C-17): explains that connected apps are managed at the issuer; links to `issuerUrl` only when valid; `ConnectorUrlField`; one row per non-empty client ID labelled for Claude.ai (full / read-only) and Claude Code (full / read-only), with the instruction to paste them into the connector's OAuth settings; no grants, no revoke (AC-34, AC-48).
 
 **Verification**:
 ```bash
@@ -2008,36 +1842,29 @@ grep -n "'use client'" src/app/accounts/authorized-apps/page.tsx || echo "page i
 
 ---
 
-### Step 41 — service: Mode-aware discovery documents
+### Step 48 — service: Mode-aware discovery documents
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/api/oauth/protected-resource/route.ts` — modify
 - `services/xstockstrat-ui/src/app/api/oauth/authorization-server/route.ts` — modify
+- `services/xstockstrat-ui/src/lib/mcpScopes.ts` — create
 
 **Reviewers**: `xstockstrat-ui` owner — no secret values rendered in UI, environment scope correctness
 
 **Codebase Evidence**:
-- `HEADER_TRACE_ID` is `services/xstockstrat-ui/src/lib/headers.ts:7`; `generateTraceId` is exported from `services/xstockstrat-ui/src/lib/auth.ts:104`; the idiom `req.headers.get(HEADER_TRACE_ID) ?? generateTraceId()` already exists at `src/middleware.ts:43` and `src/lib/restBackendHeaders.ts:13` (C-03).
-- `api/oauth/protected-resource/route.ts:8-13` and `authorization-server/route.ts:8-19` take `export const dynamic = 'force-dynamic'` and return the agent-named documents. The `next.config.js:54-64` rewrites map `/.well-known/oauth-*/agent` to them.
-- `MCP_SCOPES_SUPPORTED` is exported by `src/lib/mcpScopes.ts` (Step 29).
+- `protected-resource/route.ts:8-13` returns `{resource: agent, authorization_servers: [agent]}`; `authorization-server/route.ts:8-19` returns the agent AS document; both `dynamic = 'force-dynamic'`; rewrites at `next.config.js:57-62`.
+- A Next route file may not export extra names, so the scope list lives in `src/lib/`.
 
-**TDD**: red-green required (the paired unit tests are Step 43)
+**TDD**: red-green required (paired test: Step 49)
 
 **Covers**: —
 
 **Instructions**:
-Both routes call `loadOidcConfig(req.headers.get(HEADER_TRACE_ID) ?? generateTraceId())` once per request (C-03).
-
-1. **`protected-resource/route.ts`** (D-38, D-55, D-78):
-   - legacy → byte-identical;
-   - SSO valid → `{resource: AGENT_PUBLIC_URL, authorization_servers: [cfg.agentIssuer], scopes_supported: [...MCP_SCOPES_SUPPORTED]}`;
-   - SSO invalid or `'error'` → `new NextResponse(null, {status: 503, headers: {'Cache-Control':'no-store'}})`.
-2. **`authorization-server/route.ts`**:
-   - legacy → byte-identical;
-   - SSO (valid or not) → 404;
-   - `'error'` → 503 `no-store`.
+1. `mcpScopes.ts`: `export const MCP_SCOPES_SUPPORTED = ['xstockstrat.read','xstockstrat.write','xstockstrat.admin','xstockstrat.trade'] as const;` (mirrors agent `scopes.MCP_SCOPES_SUPPORTED`).
+2. **PRM** (design § 3 rows; D-106, D-133, D-136): `loadAuthMode()`: `local`, `both` or `'error'` → today's document byte-identical; `oidc` → `loadAgentIssuer()`: valid → `{resource: AGENT_PUBLIC_URL, authorization_servers: [issuer], scopes_supported: [...MCP_SCOPES_SUPPORTED]}`; invalid, empty or `'error'` → `new NextResponse(null, {status: 503, headers: {'Cache-Control': 'no-store'}})`.
+3. **AS**: `local`, `both` or `'error'` → today's; `oidc` → 404.
 
 **Verification**:
 ```bash
@@ -2046,44 +1873,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run bu
 
 ---
 
-### Step 42 — service: Sign-out button in the shared header
-
-**Status**: `pending`
-**Service**: `xstockstrat-ui`
-**Files**:
-- `services/xstockstrat-ui/src/components/shared/SignOutButton.tsx` — create
-- `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify
-
-**Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
-
-**Codebase Evidence**:
-- `PlatformHeader.tsx:201-202`: `<header …><div className="flex h-[49px] items-center gap-2 …">` is row 1.
-- `:246-248`: `<div className="flex items-center gap-2 ml-auto">{actions}<CopilotToggle />`, before the `sm:hidden` mobile sidebar block.
-- `Button` lives in `src/components/ui/button.tsx`; the icon-size convention is at `button.tsx:35` (D-63 evidence).
-
-**TDD**: red-green required (RED/GREEN via the Step 47 e2e)
-
-**Covers**: —
-
-**Instructions**:
-1. **`SignOutButton.tsx`** (`'use client'`; D-53, D-60, D-63):
-   - It renders a `Button` with `variant="ghost"`, `size="icon"`, `className="size-11 sm:size-8"`, `aria-label="Sign out"`, and a sign-out icon from the icon set already in use.
-   - It holds `pending` state.
-   - On click, inside try/catch:
-     - `res = await fetch('/api/auth/logout', {method:'POST', redirect:'manual'})`;
-     - a JSON `res.ok` with `body.redirect` → `location.assign(body.redirect)`;
-     - every other outcome (a rejection, non-ok including 403, an `opaqueredirect`, non-JSON) → `location.assign('/auth/login')`;
-     - `pending` never sticks.
-2. **`PlatformHeader.tsx`**: render `<SignOutButton />` right after `<CopilotToggle />` (`:248`), in both modes.
-
-**Verification**:
-```bash
-cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run build
-```
-
----
-
-### Step 43 — test: Discovery-route and PRM contract unit tests
+### Step 49 — test: Discovery routes and the whole-PRM contract
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -2095,31 +1885,25 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run bu
 **Reviewers**: `xstockstrat-ui` owner — Connect-RPC call safety
 
 **Codebase Evidence**:
-- The agent side of the PRM contract is pinned in Step 23 (`test_sso_routes.py`, AC-11) against `oauth_metadata.py`.
-- The route-test precedent is `src/app/config-ui/api/audit/route.test.ts`.
+- The agent side of the PRM contract is pinned against the same vector `prm.expected` in Step 24 (D-130e).
 
 **TDD**: red-green required
 
-**Covers**: AC-11, AC-49, AC-54
+**Covers**: AC-11 (UI copy), AC-46 (discovery leg), AC-49, AC-55 (UI PRM), AC-78
 
 **Instructions**:
-1. `protected-resource/route.test.ts` (mock `loadOidcConfig`):
-   - legacy → `{resource, authorization_servers:[AGENT_PUBLIC_URL]}`, byte-identical.
-   - **@AC-49 / @AC-11:** SSO valid → `{resource: AGENT_PUBLIC_URL, authorization_servers:['https://auth.example.test'], scopes_supported:['xstockstrat.read','xstockstrat.write','xstockstrat.admin','xstockstrat.trade']}`, pinned **whole** with the same literal object as the agent test (D-55 two-sided contract).
-   - **@AC-54:** `valid:false` → 503 `no-store`. `'error'` → 503.
-   - **Trace id (C-03):** `loadOidcConfig` is called once, with the inbound `x-trace-id` when present, else a non-empty string.
-2. `authorization-server/route.test.ts`: legacy → byte-identical; SSO → 404 (@AC-49); `'error'` → 503.
-3. `mcpScopes.test.ts`: `MCP_SCOPES_SUPPORTED` equals the four-literal list (mirrors agent `scopes.MCP_SCOPES_SUPPORTED`, Step 21/23).
+1. `protected-resource/route.test.ts` (mock the loaders; `AGENT_PUBLIC_URL = prm.agent_public_url`): `local`/`both` → today's object; **@AC-49/@AC-11** `oidc` + valid → deep-equals `prm.expected`; **@AC-55** `oidc` + invalid issuer → 503 `no-store`; **@AC-78** `oidc` + `loadAgentIssuer` `'error'` → 503 `no-store`; **@AC-46** `loadAuthMode` `'error'` → today's object with `authorization_servers: [AGENT_PUBLIC_URL]`.
+2. `authorization-server/route.test.ts`: `local`/`both` → today's; **@AC-49** `oidc` → 404; **@AC-46** `'error'` → today's with `issuer = AGENT_PUBLIC_URL`.
+3. `mcpScopes.test.ts`: equals `prm.expected.scopes_supported`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run test:coverage
-# coverage threshold 40% lines/functions/statements over src/lib/** (services/xstockstrat-ui/vitest.config.ts:29-33); test:coverage fails below it
 ```
 
 ---
 
-### Step 44 — test: e2e SSO fixtures and the stub IdP
+### Step 50 — test: e2e SSO fixtures and the stub IdP
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -2132,35 +1916,28 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
 
 **Codebase Evidence**:
-- The mock ports are `TRADER_MOCK_PORT = 9091` etc. (`mock-backend.ts:122-124`).
-- `e2e/helpers/auth.ts`: `TEST_JWT_SECRET` (`:20`), `signTestJwt` (`:29`), `addAuthCookie` (`:83`). `e2e/fixtures/users.ts` and `INVENTORY.md` exist.
-- The stub-IdP host is fixed by D-91 (`127.0.0.1`, an `http://` loopback issuer the grammar accepts).
+- Mock ports `TRADER_MOCK_PORT = 9091`, `INSIGHTS_MOCK_PORT = 9092`, `CONFIG_UI_MOCK_PORT = 9093` (`mock-backend.ts:124-126`).
+- `e2e/helpers/auth.ts`: `TEST_JWT_SECRET` (`:20`), `signTestJwt` (`:29`), `addAuthCookie` (`:83`); `e2e/fixtures/users.ts` and `INVENTORY.md` exist.
+- D-91: the stub issuer is `http://127.0.0.1:<port>`, which the grammar accepts.
 
-**TDD**: N/A (test harness with no assertions of its own; it is exercised RED→GREEN by the Step 47 specs)
+**TDD**: N/A (harness with no assertions of its own; RED→GREEN via Step 53)
 
-**Covers**: — (harness only; the scenarios it enables are covered by Step 47)
+**Covers**: — (harness only; scenarios covered by Step 53)
 
 **Instructions**:
-1. **Stub IdP** (`e2e/helpers/stubIdp.ts`; D-34, D-59, D-91). A `node:http` server on `127.0.0.1:<STUB_IDP_PORT>` (pick a free fixed port next to `9091-9093`; confirm it is unused at execute) serving:
-   - discovery (`issuer` = `http://127.0.0.1:<port>`, byte-exact; `jwks_uri` same-origin; `end_session_endpoint` only when the `endSession` knob is set);
-   - `/jwks`;
-   - `/authorize`, which redirects to `redirect_uri` with `code` and `state`, or `error=access_denied` under the knob;
-   - `/token`, which returns an RS256 ID token signed with jose: `aud` = client_id, the nonce from the authorize request, `email` / `sub` per knob, and `signWith:'foreign'` signing with a key absent from the JWKS;
-   - `/logout`, which records the call.
-   - Control: `POST /__test/state` sets the knobs plus the SSO config values the mock `getConfig` serves (Step 45), and `POST /__test/reset` restores legacy. Export the state object and `startStubIdp()` / `stopStubIdp()` so the mock backend and the global setup share one module instance.
-2. **Fixtures (C-12)**: `e2e/fixtures/sso.ts` holds the stub issuer, the client IDs `xstockstrat-staging-mcp-claude[-ro]`, the SSO user (reuse `users.ts`'s user id and spread overrides) and the discovery-document builder. Export them from `fixtures/index.ts` and add `INVENTORY.md` catalog rows.
+1. **Stub IdP** (`node:http` on `127.0.0.1:<STUB_IDP_PORT>`, a free fixed port next to 9091–9093 confirmed unused at execute): discovery (byte-exact issuer, same-origin `jwks_uri`, `end_session_endpoint` only under the `endSession` knob), `/jwks`, `/authorize` (records `prompt`/`max_age`; redirects with `code`+`state`), `/token` (RS256 ID token via jose: `aud` = client id, the authorize nonce, `sub`/`email`/`preferred_username` per state, `auth_time` per the `authTime: 'fresh'|'absent'|'stale'` knob, `signWith:'foreign'` signs with a key absent from the JWKS), `/logout` (records the call). Control: `POST /__test/state` sets the knobs plus the mode and the config/identity values the mock serves (Step 51); `POST /__test/reset` restores the default (mode row absent). Export the state object, `startStubIdp()`, `stopStubIdp()`.
+2. **Fixtures (C-12)**: `fixtures/sso.ts` holds the stub issuer builder, the four staging client IDs, the SSO subject and link labels (reusing `users.ts` ids via spread), and the discovery-document builder; export from `fixtures/index.ts`; add `INVENTORY.md` rows.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
 grep -n "sso" e2e/fixtures/index.ts e2e/fixtures/INVENTORY.md
-grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/helpers/stubIdp.ts
-# e2e harness: no coverage threshold (Playwright); the vitest 40% gate covers src/lib/** only (vitest.config.ts:29-33)
+grep -n "from '../fixtures'\|helpers/auth" e2e/helpers/stubIdp.ts
 ```
 
 ---
 
-### Step 45 — test: Mock-backend SSO handlers and the stub-IdP lifecycle
+### Step 51 — test: Mock-backend SSO handlers and the stub-IdP lifecycle
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -2172,34 +1949,29 @@ grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/helpers/stubId
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
 
 **Codebase Evidence**:
-- `mock-backend.ts`:
-  - `identityHandlers` is at `:285-320`: `authenticateUser`, `refreshToken`, `revokeToken`, `listAuthorizedApps`.
-  - `getConfig(req)` is at `:1552-1578`. It answers namespace `ui` with the `performance.*` values and **every other namespace with `platform`** (recon R-8).
-- `global-setup.ts` / `global-teardown.ts` start and stop the mock backend; the stub IdP (Step 44) starts in the same process so the shared state module is one instance.
+- `identityHandlers` at `mock-backend.ts:287-325` (`authenticateUser`, `refreshToken`, `revokeToken`, `listAuthorizedApps`, `revokeAuthorizedApp`).
+- `getConfig(req)` at `:1560-1586`: requires an environment, answers `ui` with `performance.*`, and **every other namespace with `platform`** (recon R-9).
+- `playwright.config.ts:91-92` `globalSetup`/`globalTeardown`.
 
-**TDD**: N/A (test harness with no assertions of its own; the default state is legacy, so the existing suite is its regression net and the Step 47 specs are its RED→GREEN)
+**TDD**: N/A (harness; the default state is `local` with the mode row absent, so the existing suite is its regression net)
 
-**Covers**: — (harness only; the scenarios it enables are covered by Step 47)
+**Covers**: — (harness only; scenarios covered by Step 53)
 
 **Instructions**:
-1. **`mock-backend.ts`**:
-   - `getConfig` answers namespaces `identity` (`auth.password_login_enabled`), `agent` (`oidc.issuer`) and `ui` (the existing `performance.*` plus `oidc.issuer`, `oidc.client_id`, `oidc.mcp_client_id`, `oidc.mcp_client_id_readonly`) from the shared stub state. The default state is legacy: issuers `""`, flag `true`. A `getConfigFails` knob makes `getConfig` throw (AC-46).
-   - Add `getSecret` for `ui/oidc.client_secret`. It returns `found` per the state and asserts `x-internal-caller: ui`.
-   - `identityHandlers` gains:
-     - `resolveExternalIdentity`, which returns the fixture user or throws `FailedPrecondition` with the refusal detail per the stub state;
-     - `issueSessionForUser`, which returns a `signTestJwt` session.
-2. Start the stub IdP in `global-setup.ts`, in the same process as the mock backend (shared module state), and stop it in `global-teardown.ts`.
+1. `getConfig`: namespace `identity` → `auth.mode` from the stub state (row **absent** by default, D-130e); `agent` → `oidc.issuer`; `ui` → the existing `performance.*` plus `oidc.issuer`, `oidc.client_id` and the four client IDs; a `getConfigFails` knob throws (AC-46/60/62). Other namespaces unchanged.
+2. `getSecret` for `ui/oidc.client_secret`: `found` per state; asserts `x-internal-caller: ui`.
+3. `identityHandlers` gain `resolveExternalIdentity` (fixture user or `FailedPrecondition` with the state's detail), `issueSessionForUser` (a `signTestJwt` session), `linkExternalIdentity` (records links; refusal per state; `link disabled` unless mode is `both`), `getExternalIdentityLinks` (from the recorded links), and `authenticateUser` answers `PermissionDenied` "password login disabled" when the mode is `oidc`.
+4. Start the stub IdP in `global-setup.ts` in the mock's process; stop it in `global-teardown.ts`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
-pnpm exec playwright test e2e/auth.spec.ts --project=chromium   # the default (legacy) state keeps the existing suite green
-# e2e harness: no coverage threshold (Playwright); the vitest 40% gate covers src/lib/** only (vitest.config.ts:29-33)
+pnpm exec playwright test e2e/auth.spec.ts --project=chromium   # default state keeps the existing suite green
 ```
 
 ---
 
-### Step 46 — test: Serialized `chromium-sso` Playwright project and the APP_URL wiring
+### Step 52 — test: Serialized chromium-sso project and the APP_URL wiring
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -2209,109 +1981,70 @@ pnpm exec playwright test e2e/auth.spec.ts --project=chromium   # the default (l
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
 
 **Codebase Evidence**:
-- `playwright.config.ts`:
-  - `fullyParallel: true`, `workers: isCI ? 2 : undefined`, `retries: isCI ? 1 : 0` (`:84-86`).
-  - `use.baseURL: 'http://localhost:3000'` (`:94`). `projects` setup / chromium is at `:98-125`.
-  - `webServer.env` has `AGENT_PUBLIC_URL: 'http://127.0.0.1:9099'` (`:168`).
-- `@playwright/test` is pinned at `1.62.1` (`package.json:67`). Its `TestProject` type has a project-level `workers?: number|string` ("workers limit for this project", `playwright/types/test.d.ts:735-752`). So the serialized project needs no separate CI invocation.
-- CI's `frontend-e2e` job runs the default `playwright test` in the e2e image (`ci.yml:631-634`, `--shard=N/2`), which includes every project. `ci.yml` is unchanged.
-- Root `docker-compose.yml` gains `APP_URL` in Step 25 (with its first reader).
-- `.do/app.yaml:650-651`, `.do/app.dev.yaml:647-648` and `deploy/homelab/compose.yml:283` already set `APP_URL` (D-67), so they need no change.
+- `playwright.config.ts`: `fullyParallel: true` (`:83`), `workers: isCI ? 2 : undefined` (`:85`), `retries` (`:86`), `use.baseURL: 'http://localhost:3000'` (`:94`), `projects` (`:98-125`: `setup`, `chromium`), `webServer` (`:128`) with `AGENT_PUBLIC_URL: 'http://127.0.0.1:9099'` (`:168`).
+- `@playwright/test` `1.62.1` (`package.json:67`) has a project-level `workers` option, so no separate CI invocation is needed; CI `frontend-e2e` runs every project (`ci.yml:609`).
 
-**TDD**: N/A (test configuration; the Step 47 specs are its RED→GREEN)
+**TDD**: N/A (test configuration; RED→GREEN via Step 53)
 
-**Covers**: — (harness only; the scenarios it enables are covered by Step 47)
+**Covers**: — (harness only)
 
 **Instructions**:
-1. **APP_URL wiring for Playwright** (D-67):
-   - In `playwright.config.ts`, hoist `const BASE_URL = 'http://localhost:3000'`, use it for `use.baseURL`, and add `APP_URL: BASE_URL` to `webServer.env`.
-2. **Isolation from the parallel suite.** SSO mode, the password flag and the `getConfig` failure knob are global server state, so every spec that changes them runs serialized:
-   - Add a project `chromium-sso` with `testMatch: /e2e\/sso\/.*\.spec\.ts/`, `dependencies: ['chromium']`, `fullyParallel: false` and **`workers: 1`**, so it starts only after the whole default project and never runs two specs at once.
-   - The `chromium` project gains `testIgnore: /e2e\/sso\//`.
-   - Each spec in `e2e/sso/` also uses `test.describe.configure({ mode: 'serial' })` and resets the state in `afterAll`.
-   - This is a spec-level choice the design did not settle (D-91 fixes only the stub-IdP host). It is flagged in context.md.
-   - Known cost: a hard failure in `chromium` skips `chromium-sso`; CI `retries: 1` absorbs flakes.
+1. `const BASE_URL = 'http://localhost:3000'` for `use.baseURL` and `APP_URL: BASE_URL` in `webServer.env` (D-67).
+2. Project `chromium-sso`: `testMatch: /e2e\/sso\/.*\.spec\.ts/`, `dependencies: ['chromium']`, `fullyParallel: false`, `workers: 1`; the `chromium` project gains `testIgnore: /e2e\/sso\//` (spec-level choice 3). Known cost: a hard `chromium` failure skips `chromium-sso`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
-grep -n "chromium-sso\|workers: 1\|testIgnore" playwright.config.ts
-pnpm exec playwright test --list > /dev/null   # the config loads with the new project
-grep -n "APP_URL" playwright.config.ts
-# shard check: chromium-sso tests are listed in the shard(s) CI runs, after that shard's chromium tests
-pnpm exec playwright test --list --shard=1/2 | grep -c 'chromium-sso' ; pnpm exec playwright test --list --shard=2/2 | grep -c 'chromium-sso'   # sum = total e2e/sso tests; none silently dropped
-# e2e harness: no coverage threshold (Playwright); the vitest 40% gate covers src/lib/** only (vitest.config.ts:29-33)
+grep -n "chromium-sso\|workers: 1\|testIgnore\|APP_URL" playwright.config.ts
+pnpm exec playwright test --list > /dev/null
 ```
 
 ---
 
-### Step 47 — test: SSO and legacy global-state e2e specs
+### Step 53 — test: The serial SSO e2e file, the local cases and nav reachability
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/e2e/sso/sso-login.spec.ts` — create
-- `services/xstockstrat-ui/e2e/sso/sso-logout.spec.ts` — create
-- `services/xstockstrat-ui/e2e/sso/sso-accounts.spec.ts` — create
-- `services/xstockstrat-ui/e2e/sso/legacy-global-state.spec.ts` — create
+- `services/xstockstrat-ui/e2e/sso/sso.spec.ts` — create
 - `services/xstockstrat-ui/e2e/auth.spec.ts` — modify
+- `services/xstockstrat-ui/e2e/nav-reachability.spec.ts` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
 
 **Codebase Evidence**:
-- `e2e/auth.spec.ts:300-312` holds the logout block; `page.request.post` sends no Origin (D-52).
-- The serialized `chromium-sso` project (Step 46) matches `e2e/sso/**`; the stub IdP, fixtures and mock handlers are Steps 44–45.
+- `e2e/auth.spec.ts` holds today's login and logout cases (`page.request.post` sends no Origin, D-77).
+- `nav-reachability.spec.ts:22` `GROUPS` lists nav entries per tab.
 
 **TDD**: red-green required
 
-**Covers**: AC-1, AC-16, AC-17, AC-29, AC-32, AC-34, AC-41, AC-42, AC-44, AC-45, AC-46, AC-48, AC-49, AC-51, AC-53, AC-54, AC-56, AC-57, AC-58, AC-59, AC-63, AC-64
+**Covers**: AC-1, AC-3, AC-4, AC-7, AC-16, AC-17, AC-29, AC-31, AC-34, AC-41, AC-42, AC-44, AC-45, AC-46, AC-47, AC-48, AC-49, AC-51, AC-53, AC-54, AC-56, AC-57, AC-59, AC-60, AC-62, AC-63, AC-64, AC-65, AC-66, AC-67, AC-69, AC-74, AC-76
 
 **Instructions**:
-1. **`e2e/sso/sso-login.spec.ts`**:
-   - **@AC-1:** sign in with SSO → lands on `/trader` with a session.
-   - **@AC-29:** checked → cookies `Max-Age=1209600` plus `remember_me=1`. Intercept the `/start` body with `page.route` to assert `remember=1` only when checked (D-64).
-   - **@AC-16:** flag off → only the SSO button and checkbox, no password field.
-   - **@AC-17:** flag on → both.
-   - **@AC-51:** access_denied → the no-access message.
-   - **@AC-59:** a cross-origin `page.request.post` with an `Origin` header → `?error=failed`; GET → 405.
-   - **@AC-54:** ui issuer `http://auth.example.test` → `?error=not_configured`, and `/.well-known/oauth-protected-resource/agent` → 503.
-   - **@AC-58:** state with an invalid APP_URL is not reachable in one webServer, so AC-58 is covered by Steps 26/34/38. Note this in the spec header.
-   - SSO-mode accessible names resolve uniquely (D-54).
-2. **`e2e/sso/sso-logout.spec.ts`**:
-   - **@AC-53 / @AC-63 (SSO):** the header "Sign out" → cookies cleared and navigation to the stub `/logout?rd=…/auth/login`, caught with a `page.route()` intercept (D-64).
-   - **@AC-56:** an invalid issuer → lands on `/auth/login`, not the stub.
-   - **@AC-57 (SSO):** a cross-origin POST with cookies → 403, cookies unchanged.
-   - **@AC-64:** an expired access cookie plus a refresh cookie → 200 JSON `ok`.
-   - A mobile 375 px `/trader`: `scrollWidth <= clientWidth` and the button is in the viewport (D-63). If this fails, the fallback is the offcanvas sheet; log it in the Deviation Log.
-3. **`e2e/sso/sso-accounts.spec.ts`**:
-   - **@AC-34 / @AC-48:** the Authelia link, the connector URL with copy, both client IDs, and no revoke button.
-   - **@AC-49:** the protected-resource document lists the stub issuer, and the authorization-server document → 404.
-4. **`e2e/sso/legacy-global-state.spec.ts`** (legacy mode, but each case changes global stub state, so it runs in the serialized `chromium-sso` project and resets in `afterAll`):
-   - **@AC-45:** flag off in legacy → the banner plus "password login disabled" on submit.
-   - **@AC-46:** the `getConfig` failure knob → the legacy login.
-   - **@AC-32 / @AC-44:** half-configured or cleared issuers → no SSO button.
-5. **`e2e/auth.spec.ts`** keeps only cases that leave the global state at its default (legacy, flag on):
-   - **@AC-41:** no SSO button, and the password login lands on `/trader`.
-   - **@AC-42:** `/accounts/authorized-apps` lists the grant with revoke.
-   - **@AC-57 (legacy):** a cross-origin POST with cookies → 403.
-   - **@AC-63 (legacy):** Sign out → `/auth/login`.
-   - The existing `:300-312` logout block stays green: `page.request.post` sends no Origin.
-   - It never calls `/__test/state`; any case that would belongs in `e2e/sso/`.
+1. **`e2e/sso/sso.spec.ts`** — `test.describe.configure({ mode: 'serial' })` (D-120); every case sets state through `/__test/state` and `afterAll` resets:
+   - login (`oidc` unless noted): **@AC-1** Sign in with SSO → `/trader`; **@AC-29** checked → `Max-Age=1209600` + `remember_me=1`, and a `page.route` intercept on `/start` sees `remember=1` only when checked (D-64); **@AC-16** only the SSO button + checkbox; **@AC-17** `both` → both forms; **@AC-3** `not linked` → per-mode message (`both`, `oidc`); **@AC-7** inactive message; **@AC-51** `access_denied` (intercept) → no-access message; **@AC-59** a cross-origin POST with `Origin` → `?error=failed`, GET → 405; **@AC-54** `ui` issuer `http://auth.example.test` → `not_configured`; **@AC-47** `local` with issuers set → `/start` and `/callback` 404; **@AC-60** `getConfigFails` → `failed`;
+   - local/global: **@AC-31** mode row absent → password form only; **@AC-44** `oidc` → set the stub mode to `local` → next render shows the password form only; **@AC-45** `both` with the stub IdP stopped → password login lands on `/trader`; **@AC-46** `getConfigFails` → password form, and `/.well-known/oauth-authorization-server/agent` 200 with `issuer` = `AGENT_PUBLIC_URL` and the PRM's `authorization_servers` = `[AGENT_PUBLIC_URL]`;
+   - logout: **@AC-53/@AC-63** (`both`, `oidc`) header Sign out → cookies cleared, navigation to the stub `/logout?rd=…/auth/login` (`page.route`); **@AC-56** invalid issuer → `/auth/login`; **@AC-62** `getConfigFails` → `/auth/login`; **@AC-57** (`both`, `oidc`) cross-origin POST with cookies → 403, cookies unchanged; **@AC-64** expired access + refresh cookie → 200 JSON `ok`; mobile 375 px `/trader`: no horizontal overflow and the button in the viewport (D-63; fallback logged in the Deviation Log);
+   - accounts: **@AC-34/@AC-48** `oidc` → issuer link, connector URL with copy, four labelled client IDs, no revoke; **@AC-49** `oidc` → PRM lists the stub issuer, AS 404; `both` → today's documents;
+   - Link SSO (`both`): **@AC-65** Link SSO → stub with `prompt=login&max_age=0` and `authTime:'fresh'` → confirmation "You are linking {email} to {account email}." → correct password → linked; then Sign in with SSO lands on `/trader`; **@AC-66** wrong password → "Incorrect password."; **@AC-67** already linked → `already_linked_self` message; **@AC-4** subject linked to another → `already_linked_other` message; **@AC-74** `authTime:'absent'`/`'stale'` → "Sign-in failed. Try again.", no confirmation; **@AC-76** `access_denied`/`server_error` on the link request (intercept) → `/accounts/sso` with the D-137 message / `failed`; **@AC-69** `local`/`oidc` → status shown, no Link SSO action, `/link` → 404.
+2. **`e2e/auth.spec.ts`** (default state only; never calls `/__test/state`): **@AC-41** no SSO button, password login lands on `/trader`; **@AC-42** `/accounts/authorized-apps` lists the grant with revoke; **@AC-57** (`local`) cross-origin POST with cookies → 403; **@AC-63** (`local`) Sign out → `/auth/login`. The existing logout cases stay green.
+3. **`nav-reachability.spec.ts`**: add `{ label: 'Single sign-on', href: '/accounts/sso' }` to the accounts group (C-10a).
+4. C-12: fixtures from `e2e/fixtures/sso.ts` and `users.ts`; helpers from `e2e/helpers/{auth,stubIdp}.ts`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint
-pnpm exec playwright test --list --project=chromium-sso | grep -c "\[chromium-sso\] › sso/"   # every SSO and legacy-global-state case is in the serialized project
-! pnpm exec playwright test --list --project=chromium | grep -q "\[chromium\] › sso/"   # none leaks into the parallel project
-! grep -n "__test/state\|@AC-32\|@AC-44\|@AC-45\|@AC-46" e2e/auth.spec.ts   # global-state cases are out of the parallel suite
-pnpm exec playwright test e2e/auth.spec.ts e2e/sso --project=chromium --project=chromium-sso
-grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth\|helpers/stubIdp" e2e/sso/*.spec.ts
-# e2e: no coverage threshold (Playwright); the vitest 40% gate covers src/lib/** only (vitest.config.ts:29-33)
+pnpm exec playwright test --list --project=chromium-sso | grep -c "sso.spec.ts"
+! pnpm exec playwright test --list --project=chromium | grep -q "sso/sso.spec.ts"
+! grep -n "__test/state" e2e/auth.spec.ts
+pnpm exec playwright test e2e/auth.spec.ts e2e/nav-reachability.spec.ts e2e/sso --project=chromium --project=chromium-sso
+pnpm exec playwright test --list --shard=1/2 | grep -c 'chromium-sso' ; pnpm exec playwright test --list --shard=2/2 | grep -c 'chromium-sso'   # sum = every SSO case; none dropped
+# e2e: no coverage threshold (Playwright); the vitest 40% gate covers src/lib/** only
 ```
 
 ---
 
-### Step 48 — docs: MCP connector runbook and the SSO cutover runbook
+### Step 54 — docs: MCP connector runbook and the SSO cutover runbook
 
 **Status**: `pending`
 **Service**: `docs/runbooks/`
@@ -2322,44 +2055,28 @@ grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth\|helpers/stubIdp" e
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `docs/runbooks/authelia-sso-cutover.md` does not exist (`ls`), so it is new (D-74, D-78).
-- `docs/runbooks/mcp-tools.md` documents today's DCR connector flow only.
-- The agent's JWS allow-list is `_ASYMMETRIC_ALGS` (Step 18): RS/PS/ES 256/384/512, with EdDSA and `none` excluded.
+- `docs/runbooks/authelia-sso-cutover.md` does not exist (`ls docs/runbooks`).
+- `docs/runbooks/mcp-tools.md` documents today's DCR connector flow; it is in the agent CI filter (`ci.yml:59`).
 
-**TDD**: N/A (docs; the RED/GREEN for AC-20/AC-36 is Step 52, whose RED this step's first action captures)
+**TDD**: N/A (docs; RED/GREEN for AC-20/AC-36 is Step 58, whose RED this step's first action captures)
 
 **Covers**: —
 
 **Instructions**:
-1. **RED capture first.** Before any docs edit (this step or Steps 49–51), run Step 52's Verification block from the repo root against the unedited tree and record the non-zero exit in Step 52's TDD evidence.
-2. **`mcp-tools.md`** (FR-13, AC-20):
-   - Connector setup for SSO mode, with the client IDs `xstockstrat-mcp-claude`, `xstockstrat-mcp-claude-ro`, `xstockstrat-staging-mcp-claude`, `xstockstrat-staging-mcp-claude-ro` and the redirect URI `https://claude.ai/api/mcp/auth_callback`.
-   - The scope list (`xstockstrat.read|write|admin|trade`) and the narrowing rule.
-   - Legacy mode keeps today's DCR flow.
-3. **`authelia-sso-cutover.md`** (D-42, D-49 N-8/N-9, D-73, D-74, D-91, D-96, D-97, D-98):
-   - **Pre-check:** the app VM reaches `auth.<domain>` for discovery and JWKS.
-   - **APP_URL and issuer rules:** `APP_URL` has no trailing slash and matches the browser origin exactly. The issuer grammar covers trailing slashes, IP literals and IDN.
-   - **Authelia requirements:** byte-exact redirect and audience; the ID-token and access-token `email` claims policies; `requested_audience_mode: implicit`.
-   - **Signing algorithms:** the agent accepts RS256/384/512, PS256/384/512 and ES256/384/512 only. EdDSA (and `none`) are excluded from the allow-list, so Authelia's JWKS must publish an RSA or EC key for the MCP access tokens; an EdDSA-only JWKS makes every MCP call 503 `jwks_unavailable`.
-   - **Cutover steps** (FR-14):
-     1. Set `ui.oidc.client_id`, the secret and the MCP client IDs.
-     2. Set both issuers.
-     3. Verify one web login, one MCP connection and one logout using the signal list: `wrong_audience`, `jwks_unavailable`, `account_refused`, `ui.auth.events{sso_login_failed,reason|sso_login_error|logout reason=cross_origin}`, ERRORs `sso_issuer_invalid` / `app_url_invalid`.
-     4. Run `reset-password` on the staging seed row.
-     5. Set the flag `false`.
-   - **Rollback:** config first (clear the issuers, flag `true`, verify AC-44), then code (identity first; `053` down is optional), then `reset-password` for CREATED users.
-   - **Residuals:** D-61, R-14, D-73, D-74, D-81, D-78, D-98 (group removal does not end an MCP connection; disable in Authelia and/or deactivate), plus trader `BackfillBars` and analysis 029.
-   - Local docker-compose SSO is unsupported.
+1. **RED capture first**: run Step 58's Verification against the unedited tree and record the non-zero exit in Step 58's evidence.
+2. **`mcp-tools.md`** (FR-13, AC-20): connector setup in `oidc` with client IDs `xstockstrat-mcp-claude`, `xstockstrat-mcp-claude-ro`, `xstockstrat-mcp-claude-code`, `xstockstrat-mcp-claude-code-ro` and the `xstockstrat-staging-` set; redirect URIs `https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback` and the Claude Code loopback redirect; the four scopes and the narrowing rule; `local`/`both` keep today's DCR flow; a link to the cutover runbook.
+3. **`authelia-sso-cutover.md`** (design § 6; D-42, D-49 N-9, D-73, D-91, D-97, D-98, D-108, D-119): the mode table; pre-checks (config listener up; issuer and `APP_URL` grammar incl. trailing slash, IP literal, IDN; `ui/oidc.client_secret` set; app VM reaches the issuer); the four cutover gates before `both`, written out as the Authelia prerequisites (the `POST /accounts/api/sso/confirm` rate-limit zone; S17: `prompt=login` + `max_age=0` returns a fresh `auth_time`; the web client registered with scopes `openid profile email` and `claims_policy.id_token` with `email` and `preferred_username`, `auth_time` present by default or via the policy per S17; the seed-row `reset-password`); the lifecycle `local` → `both` → each person links (Link SSO) → every admin linked → `oidc`, each switch by `uv run scripts/manage-users.py set-auth-mode <mode> --environment <env> --reason <text>`, after which the operator checks that the changed row's environment is the deployment's `APPLICATION_ENV` (every database holds both environments' rows and the services read only their own, so a wrong `--environment` changes nothing that runs); the stale-key trade-off (`_JWKS_STALE_MAX_S`: during a JWKS outage a retired or revoked signing key stays accepted for up to 24 h after the agent's last successful fetch); verification signals (`wrong_audience`, `jwks_unavailable`, `account_refused`, `ui.auth.events{sso_login_failed|sso_login_error|sso_link_failed|logout reason=cross_origin}`, `identity.link.failures`, WARN `sso_link_refused`, ERRORs `sso_issuer_invalid`/`app_url_invalid`/`auth_mode_invalid`); rollback and break-glass = `set-auth-mode local`; unlinking with `unlink-sso`; signing algorithms (RS/PS/ES only, EdDSA excluded); offboarding (`SetUserActive false` + `unlink-sso`; group removal blocks new logins only, D-98); local docker-compose SSO unsupported.
 
 **Verification**:
 ```bash
-grep -c "xstockstrat-staging-mcp-claude-ro" docs/runbooks/mcp-tools.md
-ls docs/runbooks/authelia-sso-cutover.md && grep -n "EdDSA" docs/runbooks/authelia-sso-cutover.md
+grep -c "xstockstrat-staging-mcp-claude-code-ro" docs/runbooks/mcp-tools.md
+grep -n "set-auth-mode\|unlink-sso\|EdDSA" docs/runbooks/authelia-sso-cutover.md
+for s in "openid profile email" "preferred_username" "auth_time" "max_age=0" "/accounts/api/sso/confirm" "APPLICATION_ENV" "_JWKS_STALE_MAX_S"; do grep -qF "$s" docs/runbooks/authelia-sso-cutover.md || { echo "missing: $s"; exit 1; }; done
 ```
 
 ---
 
-### Step 49 — docs: Pattern docs and the root dependency graph
+### Step 55 — docs: Pattern docs and the root dependency graph
 
 **Status**: `pending`
 **Service**: `docs/patterns/` and root `CLAUDE.md`
@@ -2373,68 +2090,60 @@ ls docs/runbooks/authelia-sso-cutover.md && grep -n "EdDSA" docs/runbooks/authel
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `docs/patterns/config-governance.md:145` "## Per-Feature Registered Keys".
-- Root `CLAUDE.md:283` "## Inter-Service Dependencies".
+- `docs/patterns/config-governance.md` § Per-Feature Registered Keys and § Baseline; root `CLAUDE.md` § Inter-Service Dependencies (the `xstockstrat-notify → xstockstrat-identity (ListAdminUserIds …)` line).
 
 **TDD**: N/A (docs)
 
 **Covers**: —
 
 **Instructions**:
-1. **`frontend-auth.md`:** the SSO flow (start, callback, txn cookie, `IssueSessionForUser`), logout (step 0 Origin, verify, revoke, redirect) and the middleware sets.
-2. **`database.md`:**
-   - The schema map gains `identity.external_identities` and `users_email_lower_idx`.
-   - IDENTITY-15 note: new migrations resolve the seed owner by `SEED_USER_ID`, never by `admin@localhost`.
-3. **`inter-service-mtls.md`:** the new `ui` `GetSecret` grant and the two new SAN-gated identity RPCs.
-4. **`config-governance.md` § Per-Feature Registered Keys:** a row per key from 053, with type, default, reader and live mechanism.
-5. **Root `CLAUDE.md` § Inter-Service Dependencies:** add `xstockstrat-ui → xstockstrat-identity (ResolveExternalIdentity, IssueSessionForUser)`, `xstockstrat-agent → xstockstrat-identity (ResolveExternalIdentity)`, `xstockstrat-ui → xstockstrat-config (GetSecret, ui OIDC client secret)`, and the external HTTPS edges to Authelia from the UI and the agent.
+1. `frontend-auth.md`: the keys `identity/auth.mode`, `ui/oidc.*` and `agent/oidc.issuer` (AC-36); the mode-driven login page, SSO start/callback, the txn and `sso_link` cookies, Link SSO through `/accounts/api/sso*` with `apiFetch` (ledger `fails.md:4236`), `IssueSessionForUser`, logout (Origin step 0, verify, revoke, redirect), the middleware sets.
+2. `database.md`: `identity.external_identities` in the schema map; IDENTITY-15 note (new migrations resolve the seed owner by `SEED_USER_ID`, never `admin@localhost`).
+3. `inter-service-mtls.md`: the `ui` `GetSecret` grant and the four SAN-gated identity RPCs.
+4. `config-governance.md`: a row per seeded key (type, default, reader, live mechanism) and the author sentinel `operator:manage-users` (D-109).
+5. Root `CLAUDE.md`: `xstockstrat-ui → xstockstrat-identity (ResolveExternalIdentity, IssueSessionForUser, LinkExternalIdentity, GetExternalIdentityLinks)`, `xstockstrat-agent → xstockstrat-identity (ResolveExternalIdentity)`, `xstockstrat-ui → xstockstrat-config (GetSecret, ui OIDC client secret)`, and the external HTTPS edges from the UI and the agent to the OIDC issuer.
 
 **Verification**:
 ```bash
 node scripts/check-config-wiring.mjs --doc-check
-grep -n "ResolveExternalIdentity" CLAUDE.md docs/patterns/inter-service-mtls.md && grep -n "external_identities" docs/patterns/database.md
+grep -n "ResolveExternalIdentity" CLAUDE.md docs/patterns/inter-service-mtls.md && grep -n "external_identities" docs/patterns/database.md && grep -n "operator:manage-users" docs/patterns/config-governance.md
 ```
 
 ---
 
-### Step 50 — docs: Identity docs and the config constitution
+### Step 56 — docs: Identity docs
 
 **Status**: `pending`
-**Service**: `xstockstrat-identity` and `xstockstrat-config` docs
+**Service**: `xstockstrat-identity` docs
 **Files**:
 - `services/xstockstrat-identity/CLAUDE.md` — modify
 - `services/xstockstrat-identity/docs/context-constitution.md` — modify
 - `services/xstockstrat-identity/docs/operations.md` — modify
-- `services/xstockstrat-config/docs/context-constitution.md` — modify
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `services/xstockstrat-identity/docs/context-constitution.md:27` (IDENTITY-15: "the seed email `admin@localhost` are read by another service's migration … analysis `029`") and `:25` (IDENTITY-12: `ListAdminUserIds` SAN-only).
-- `services/xstockstrat-identity/CLAUDE.md:57` "## Config Keys Consumed".
-- `services/xstockstrat-config/docs/context-constitution.md:30` ("Seed values must equal the code default … Migration `049` … is another deliberate exception").
+- `services/xstockstrat-identity/CLAUDE.md` sections: Ports `:19`, Database / Migrations `:41`, Config Keys Consumed `:57`, Observability `:68`.
+- `docs/context-constitution.md:25` IDENTITY-12 (`ListAdminUserIds` SAN-only) and `:27` IDENTITY-15 (seed email read by analysis `029`).
 
-**TDD**: N/A (docs; the AC-36 IDENTITY-15 RED/GREEN is Step 52)
+**TDD**: N/A (docs; AC-36's IDENTITY-15 RED/GREEN is Step 58)
 
 **Covers**: —
 
 **Instructions**:
-1. **Identity docs:**
-   - `CLAUDE.md` Config Keys gains `auth.password_login_enabled` (bool, default `false`, seeded `true`).
-   - Ports/RPCs gain the two new RPCs.
-   - `context-constitution.md`: IDENTITY-12 is extended to the two new per-RPC SAN lists. IDENTITY-15 gains: "admin@localhost may be renamed by SSO cutover (FR-12); new migrations resolve the seed owner by SEED_USER_ID" (AC-36).
-   - `operations.md`: `update-email` / `unlink-sso` usage.
-2. **Config constitution (`:30`):** record migration `053` as a seed≠default exception (the flag seeded `true`, code default `false`; D-20). Also record the CONFIG-4 `user_id` omission in its notify (D-36).
+1. `CLAUDE.md`: an "SSO (feature 345)" paragraph naming `identity/auth.mode`, the `ui/oidc.*` keys, `agent/oidc.issuer` and the Link SSO flow (AC-36); Config Keys gains `auth.mode` (string, `local`, read globally at login, Link and every watcher update); Ports/RPCs gain the four RPCs and their SANs; Database gains `007_external_identities`; Observability lists `identity.external.linked` among the audited types, `identity.link.failures`, and the `password_login_disabled` reason (D-130f).
+2. `context-constitution.md`: IDENTITY-12 extended to the per-RPC SAN lists; IDENTITY-15 gains "new migrations resolve the seed owner by `SEED_USER_ID`, never by `admin@localhost`" (AC-36).
+3. `operations.md`: `set-auth-mode` and `unlink-sso` usage, break-glass.
 
 **Verification**:
 ```bash
 grep -n "SEED_USER_ID" services/xstockstrat-identity/docs/context-constitution.md
-grep -n "053" services/xstockstrat-config/docs/context-constitution.md && grep -n "unlink-sso" services/xstockstrat-identity/docs/operations.md
+grep -n "auth.mode" services/xstockstrat-identity/CLAUDE.md && grep -n "set-auth-mode" services/xstockstrat-identity/docs/operations.md
 ```
 
 ---
 
-### Step 51 — docs: UI and agent docs
+### Step 57 — docs: UI and agent docs
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui` and `xstockstrat-agent` docs
@@ -2447,65 +2156,59 @@ grep -n "053" services/xstockstrat-config/docs/context-constitution.md && grep -
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `services/xstockstrat-agent/docs/context-constitution.md:15` (AGENT-1: "the two lifespan `WatchConfig` channels (`agent`, `indicators`; …)") and `:24` (AGENT-9: "only the `WATCHED_NAMESPACES` (`agent`, `indicators`) have a snapshot … Sites (N=5)").
-- `services/xstockstrat-ui/CLAUDE.md` § Environment Variables lists no `APP_URL`; § Auth + BFF lists the auth files.
-- `services/xstockstrat-agent/CLAUDE.md:99` "## Config Keys Consumed".
+- UI `CLAUDE.md`: Auth + BFF `:156`, Config Keys Consumed `:199`, Environment Variables `:212` (no `APP_URL`), Testing `:247`.
+- Agent `CLAUDE.md`: Config Keys Consumed `:112`; `docs/context-constitution.md:23` AGENT-8, `:24` AGENT-9 (watched namespaces `agent`, `indicators`); AGENT-1 names the lifespan channels.
 
-**TDD**: N/A (docs; the AC-36 AGENT-9 RED/GREEN is Step 52)
+**TDD**: N/A (docs; AC-36's AGENT-9 RED/GREEN is Step 58)
 
 **Covers**: —
 
 **Instructions**:
-1. **UI `CLAUDE.md`:**
-   - Environment Variables gains the `APP_URL` line from design.md (B) §D-67.
-   - Config Keys Consumed gains `ui/oidc.*`, the `identity` / `agent` one-shot reads and the `GetSecret` read.
-   - The Auth + BFF table gains the SSO routes, `oidcConfig.ts`, `oidcClient.ts`, `ssoTxn.ts` and `sameOrigin.ts`.
-   - Testing: the serialized `chromium-sso` project (`workers: 1`) and the rule that every global-state e2e case lives in `e2e/sso/`.
-2. **Agent docs:**
-   - `CLAUDE.md` Config Keys gains `agent/oidc.issuer` and the `ui/oidc.issuer` read.
-   - `context-constitution.md`:
-     - AGENT-1: the lifespan channels are now (`agent`, `indicators`, `ui`).
-     - AGENT-9: `WATCHED_NAMESPACES` is (`agent`, `indicators`, `ui`), and the sites now include `app/sso_mode.py#current_sso_mode` and the SSO validator (`app/sso_auth.py`) (AC-36).
-     - AGENT-8: `AGENT_PUBLIC_URL` is now read by `sso_auth.py` via `oauth_metadata`.
-   - `docs/oauth.md`: the SSO-mode resource-server path, the 404 legacy routes and path-insertion.
+1. UI `CLAUDE.md`: `APP_URL` (exact browser origin, D-81); Config Keys gains `identity/auth.mode`, `ui/oidc.*`, `agent/oidc.issuer` and the `GetSecret` read; Auth + BFF gains the SSO routes and the Link SSO flow (`/accounts/sso`, `/accounts/api/sso*`), `oidcConfig.ts`, `oidcClient.ts`, `ssoTxn.ts`, `sameOrigin.ts`, `ssoErrors.ts`; Testing gains the `chromium-sso` project and the rule that every mode-changing e2e case lives in `e2e/sso/sso.spec.ts`.
+2. Agent `CLAUDE.md`: Config Keys gains `identity/auth.mode` and `agent/oidc.issuer`; the `oidc` auth path; the same "SSO (feature 345)" paragraph as identity's, naming `identity/auth.mode`, the `ui/oidc.*` keys, `agent/oidc.issuer` and the Link SSO flow (AC-36). The UI `CLAUDE.md` names all four in item 1.
+3. Agent constitution: AGENT-1 channels (`agent`, `indicators`, `identity`); AGENT-9 `WATCHED_NAMESPACES` (`agent`, `indicators`, `identity`) and the new sites `app/sso_mode.py#current_auth_mode`, `#agent_issuer` (AC-36); AGENT-8 notes `sso_auth.py` imports `AGENT_PUBLIC_URL` from `oauth_metadata`.
+4. `docs/oauth.md`: the `oidc` resource-server path, the 404 legacy routes, the PRM by mode.
 
 **Verification**:
 ```bash
 grep -n "APP_URL" services/xstockstrat-ui/CLAUDE.md && grep -n "chromium-sso" services/xstockstrat-ui/CLAUDE.md
-grep -n "AGENT-9" services/xstockstrat-agent/docs/context-constitution.md | grep -F '`ui`'
+grep -n "AGENT-9" services/xstockstrat-agent/docs/context-constitution.md | grep -F '`identity`'
 ```
 
 ---
 
-### Step 52 — test: AC-20 and AC-36 documentation assertions
+### Step 58 — test: AC-20 and AC-36 documentation assertions
 
 **Status**: `pending`
 **Service**: `docs/`
 **Files**:
-- (no file changes — verification-only step; the assertion is the Verification block below, run from the repo root)
+- (no file changes — verification-only step; run from the repo root)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- D-48: "AC-20/AC-36 are RED-assertion `grep -F` checks inside a named test step with `**Covers**: AC-20, AC-36`, accepted by the orchestrator as C-15 coverage."
-- Insights.md:2940-2946: a construct-scoped presence RED→GREEN is a named `**Covers**` step, not a permanent CI guard.
+- D-48's coverage rule for AC-20/AC-36 (named RED/GREEN `grep -F` step) is carried as the design's **DG** seam (design.md § 7).
+- `insights.md:2940-2946`: a construct-scoped presence RED→GREEN is a named `**Covers**` step, not a permanent CI guard.
 
-**TDD**: red-green required (RED captured on the pre-docs tree by Step 48's first action; GREEN here, after Steps 48–51)
+**TDD**: red-green required (RED captured by Step 54's first action; GREEN here after Steps 54–57)
 
 **Covers**: AC-20, AC-36
 
 **Instructions**:
-1. Confirm Step 48 recorded the RED (non-zero exit of the block below on the pre-docs tree). Run the block now and record the GREEN.
-2. Add no CI guard (C-18; insights.md:2940-2946). No coverage threshold applies: these are shell assertions over docs, with no code under test.
+1. Confirm Step 54 recorded the RED; run the block and record the GREEN. Add no CI guard (C-18).
 
-**Execute note**: this step changes no files, so `/sdd-execute` records its Verification output in `context.md` instead of a commit (D-48). If the executor requires a commit per step, fold this Verification block and `Covers: AC-20, AC-36` into Step 51 and log the fold in the Deviation Log.
+**Execute note**: no files change, so `/sdd-execute` records the output in `context.md`; if the executor requires a commit per step, fold this block and `Covers: AC-20, AC-36` into Step 57 and log the fold.
 
 **Verification**:
 ```bash
 set -e
-for s in xstockstrat-mcp-claude xstockstrat-mcp-claude-ro xstockstrat-staging-mcp-claude xstockstrat-staging-mcp-claude-ro "https://claude.ai/api/mcp/auth_callback"; do grep -qF "$s" docs/runbooks/mcp-tools.md; done   # @AC-20
+for s in xstockstrat-mcp-claude xstockstrat-mcp-claude-ro xstockstrat-mcp-claude-code xstockstrat-mcp-claude-code-ro xstockstrat-staging-mcp-claude xstockstrat-staging-mcp-claude-ro xstockstrat-staging-mcp-claude-code xstockstrat-staging-mcp-claude-code-ro "https://claude.ai/api/mcp/auth_callback" "https://claude.com/api/mcp/auth_callback"; do grep -qF "$s" docs/runbooks/mcp-tools.md; done   # @AC-20
+for s in set-auth-mode unlink-sso "Link SSO" both oidc; do grep -qF "$s" docs/runbooks/authelia-sso-cutover.md; done   # @AC-20 runbook
 grep -F "SEED_USER_ID" services/xstockstrat-identity/docs/context-constitution.md | grep -qF "admin@localhost"   # @AC-36 IDENTITY-15
-grep -F "AGENT-9" services/xstockstrat-agent/docs/context-constitution.md | grep -F '`ui`' | grep -F '`agent`' | grep -qF '`indicators`'   # @AC-36 AGENT-9
+grep -F "AGENT-9" services/xstockstrat-agent/docs/context-constitution.md | grep -F '`identity`' | grep -F '`agent`' | grep -qF '`indicators`'   # @AC-36 AGENT-9
+for f in services/xstockstrat-identity/CLAUDE.md services/xstockstrat-ui/CLAUDE.md services/xstockstrat-agent/CLAUDE.md docs/patterns/frontend-auth.md; do
+  for s in "auth.mode" "ui/oidc." "agent/oidc.issuer" "Link SSO"; do grep -qF "$s" "$f"; done
+done   # @AC-36 the three CLAUDE.md files and frontend-auth.md name the mode key, the ui/oidc.* and agent/oidc.issuer keys, and the Link SSO flow
 echo GREEN
 ```
 
@@ -2514,6 +2217,3 @@ echo GREEN
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
-
-- 2026-11-16, `/sdd-review impl-spec` pass 1: the config seed is renumbered a second time, `051_authelia_sso_keys` → `052_authelia_sso_keys` (feature 343 landed `051_ingest_backfill_self_serve_keys` on trunk; D-99, after D-94's 050 → 051). Step 4 regenerates `scripts/config-wiring-stored.json` against the `052` file. Re-check the next free number at merge.
-- 2026-11-16, before merging PR #1542: the config seed is renumbered a third time, `052_authelia_sso_keys` → `053_authelia_sso_keys` (feature 347 landed `052_alpaca_adaptive_rate_limit_keys` on trunk; D-100). Step 4 regenerates `scripts/config-wiring-stored.json` against the `053` file.

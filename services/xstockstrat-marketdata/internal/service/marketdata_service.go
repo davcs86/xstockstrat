@@ -117,6 +117,8 @@ type MarketDataService struct {
 	prevClose prevCloseReader
 	// dailyCloses is GetLatestQuotes' stored-1d-close seam for one-sided marks; nil means mid-only marks.
 	dailyCloses dailyCloseReader
+	// dailyCoverage is GetDataCoverage's 1d session-time seam; nil falls back to the aggregate s.repo path.
+	dailyCoverage dailyCoverageReader
 	// quoteStore is the quote cache read/write seam; nil (test literals) treats every symbol as cold and caches nothing.
 	quoteStore quoteStore
 	// barsStore is the bar cache seam of BatchGetBars (nil treats every symbol as cold), of
@@ -164,6 +166,11 @@ type prevCloseReader interface {
 // dailyCloseReader is the repo surface GetLatestQuotes reads the newest in-bound 1d close from (feature 231).
 type dailyCloseReader interface {
 	GetLatestDailyClosesBatch(ctx context.Context, symbols []string, since time.Time) (map[string]float64, error)
+}
+
+// dailyCoverageReader is the repo surface GetDataCoverage reads 1d coverage and stored session times from.
+type dailyCoverageReader interface {
+	GetDailyCoverage(ctx context.Context, symbol string, start, end time.Time) (earliest, latest time.Time, barCount int64, times []time.Time, err error)
 }
 
 // fundamentalsConfig is the slice of *config.Watcher the fundamentals RPCs read.
@@ -260,6 +267,7 @@ func NewMarketDataService(
 		svc.prevClose = repo
 		svc.barInserter = repo
 		svc.dailyCloses = repo
+		svc.dailyCoverage = repo
 		svc.quoteStore = repo
 		svc.barsStore = repo
 		svc.retention = repo
@@ -523,7 +531,17 @@ func (s *MarketDataService) GetDataCoverage(ctx context.Context, req *marketdata
 		start = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
 
-	earliest, latest, count, err := s.repo.GetCoverage(ctx, req.Symbol, canonical, start, end)
+	daily := canonical == "1d" && s.dailyCoverage != nil
+	var (
+		earliest, latest time.Time
+		count            int64
+		times            []time.Time
+	)
+	if daily {
+		earliest, latest, count, times, err = s.dailyCoverage.GetDailyCoverage(ctx, req.Symbol, start, end)
+	} else {
+		earliest, latest, count, err = s.repo.GetCoverage(ctx, req.Symbol, canonical, start, end)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("get coverage: %w", err)
 	}
@@ -542,7 +560,13 @@ func (s *MarketDataService) GetDataCoverage(ctx context.Context, req *marketdata
 			BarCount: count,
 		}}
 	}
-	for _, g := range timeframe.ComputeGaps(start, end, earliest, latest, count) {
+	var gaps []timeframe.Gap
+	if daily {
+		gaps = timeframe.ComputeSessionGaps(start, end, times, time.Now())
+	} else {
+		gaps = timeframe.ComputeGaps(start, end, earliest, latest, count)
+	}
+	for _, g := range gaps {
 		resp.Gaps = append(resp.Gaps, &commonv1.TimeRange{
 			Start: timestamppb.New(g.Start),
 			End:   timestamppb.New(g.End),

@@ -34,13 +34,13 @@ Feature: xstockstrat-agent - get_config_value is deadline-bounded
     Then the tool returns {signal_id: <int>, deduplicated: false} within D plus 1 second after IngestSignal completes
     And one alert with category "signal" is emitted, because 0.9 is at least the default alert threshold of 0.6
 
-  @AC-4 @FR-2 @regression @feature-247
+  @AC-4 @FR-2 @regression @feature-247 @feature-319
   Scenario: OAuth dynamic client registration does not hang
-    Given the config service accepts connections but never answers GetConfig
+    Given the agent has no readable config snapshot for namespace "agent"
     And identity RegisterOAuthClient succeeds
     When a client POSTs to /oauth/register with redirect_uris ["https://client.example/cb"]
-    Then the endpoint responds within 2 × D plus 1 second with HTTP 201
-    And the body carries a client_id and redirect_uris ["https://client.example/cb"]
+    Then the endpoint responds within 2 × D plus 1 second with HTTP 503
+    And no client_id is issued
 
   @AC-5 @FR-3 @feature-247
   Scenario: a healthy config service is read unchanged under the deadline

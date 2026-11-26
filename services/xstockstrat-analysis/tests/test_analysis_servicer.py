@@ -6,6 +6,7 @@ populating _backtests/_strategies directly, same pattern as ingest.
 """
 
 import asyncio
+import contextlib
 import inspect
 import json
 import logging
@@ -4506,8 +4507,24 @@ class _FakeOppRepo:
         self.rows: dict[str, list[dict]] = {}
         self.actions: dict[tuple[str, str], dict] = {}  # (user, key) -> {action, snooze_until}
 
-    async def replace_for_user(self, user_id, rows):
-        self.rows[user_id] = [dict(r) for r in rows]
+    async def replace_for_user(self, user_id, rows, conn=None):
+        # Mirrors the INSERT's COALESCE(computed_at, now()): a carried row keeps its stored stamp.
+        self.rows[user_id] = [
+            {**r, "computed_at": r.get("computed_at") or datetime.now(UTC)} for r in rows
+        ]
+
+    async def read_attributed_rows(self, user_id):
+        return [dict(r) for r in self.rows.get(user_id, []) if r.get("strategy_id", "") != ""]
+
+    @contextlib.asynccontextmanager
+    async def transaction(self):
+        # Restores the rows on an exception, then re-raises — the real transaction's rollback.
+        snapshot = {uid: [dict(r) for r in rs] for uid, rs in self.rows.items()}
+        try:
+            yield None
+        except BaseException:
+            self.rows = snapshot
+            raise
 
     async def count_for_user(self, user_id):
         return len(self.rows.get(user_id, []))
@@ -5508,7 +5525,7 @@ class TestOpportunityDataUnavailable:
             )
 
         with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _selective_fail):
-            rows = await svc._compute_opportunities("u1", self._META)
+            rows, _ = await svc._compute_opportunities("u1", self._META)
         by_sym = {r["symbol"]: r for r in rows}
         assert set(by_sym) == {"AAPL", "MSFT"}
         # AAPL: terminal unavailable, zeroed on BOTH ranking axes so it sinks in the read ORDER BY.
@@ -5532,7 +5549,7 @@ class TestOpportunityDataUnavailable:
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
             bars={},  # AAPL absent → GetBars returns [] (no raise)
         )
-        rows = await svc._compute_opportunities("u1", self._META)
+        rows, _ = await svc._compute_opportunities("u1", self._META)
         aapl = {r["symbol"]: r for r in rows}["AAPL"]
         assert "unavailable" not in aapl["provenance"]
         assert _row_to_opportunity(aapl).data_unavailable is False
@@ -5554,7 +5571,7 @@ class TestOpportunityDataUnavailable:
             strategies={"sx": _strat_row("sx", entry=three_fail)},
             bars={"AAPL": [50.0, 60.0, 70.0]},  # SMA≈60 — none of the three thresholds pass
         )
-        rows = await svc._compute_opportunities("u1", self._META)
+        rows, _ = await svc._compute_opportunities("u1", self._META)
         opp = _row_to_opportunity({r["symbol"]: r for r in rows}["AAPL"])
         assert opp.data_unavailable is False
         assert (opp.passing_conditions, opp.total_conditions) == (0, 3)
@@ -5622,7 +5639,7 @@ class TestOpportunityDataUnavailable:
             )
 
         with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _maybe_raise):
-            rows = await svc._compute_opportunities("u1", self._META)
+            rows, _ = await svc._compute_opportunities("u1", self._META)
         by_sym = {r["symbol"]: r for r in rows}
         assert _row_to_opportunity(by_sym["AAPL"]).data_unavailable is True
         msft = _row_to_opportunity(by_sym["MSFT"])
@@ -5739,7 +5756,11 @@ class _StampedComputeState:
         return self._row
 
     async def upsert(self, user_id, valid_until):
-        self._row = {"computed_at": datetime.now(UTC), "valid_until": valid_until}
+        # Mirrors the real ON CONFLICT: only computed_at and valid_until change.
+        self._row = {**self._row, "computed_at": datetime.now(UTC), "valid_until": valid_until}
+
+    async def write_cursor(self, user_id, cursor, *, conn=None):
+        self._row = {**self._row, "live_only_cursor": cursor}
 
 
 @pytest.mark.usefixtures("read_path")
@@ -7694,7 +7715,7 @@ class TestOpportunityConcurrencyFeature176:
             bars={s: _FIRING_BARS for s in syms},
         )
 
-        rows = await svc._compute_opportunities("u1", ())
+        rows, _ = await svc._compute_opportunities("u1", ())
 
         assert {r["symbol"] for r in rows} == set(syms)  # every symbol still produced its row
         # Feature 183: one BatchGetBars call for all symbols, no per-symbol fan-out.
@@ -7915,8 +7936,8 @@ class TestListOpportunitiesServerFilters190:
 
     @pytest.mark.asyncio
     async def test_symbol_filter_normalized_into_both_reads(self):
-        """feature 215 @AC-15 — request.symbol is normalized once and forwarded to the fresh AND
-        the stale read (expired rows force the stale branch, so both calls are exercised)."""
+        """feature 215 @AC-15 — request.symbol is normalized once and forwarded to both reads. The
+        only row is expired live-only (366 branch (v)), so 365's all-stale body re-reads it."""
         expired = datetime.now(UTC) - timedelta(hours=1)
         svc = self._svc_with_row([["live_strategy"]], [0.9], expired)
         svc._opportunities_repo.read = AsyncMock(wraps=svc._opportunities_repo.read)
@@ -7927,7 +7948,7 @@ class TestListOpportunitiesServerFilters190:
             _ctx(_HEADERS),
         )
         calls = svc._opportunities_repo.read.await_args_list
-        assert [c.kwargs["include_expired"] for c in calls] == [False, True]
+        assert [c.kwargs["include_expired"] for c in calls] == [True, True]
         assert all(c.kwargs["symbol"] == "SCHD" for c in calls)
 
     @pytest.mark.asyncio
@@ -8002,7 +8023,7 @@ class TestSymbolScoreRollup:
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
             bars={"AAPL": _FIRING_BARS, "MSFT": _FIRING_BARS},
         )
-        rows = await svc._compute_opportunities("u1", self._META)
+        rows, _ = await svc._compute_opportunities("u1", self._META)
         by_sym: dict[str, list[dict]] = {}
         for r in rows:
             by_sym.setdefault(r["symbol"], []).append(r)
@@ -8028,7 +8049,7 @@ class TestSymbolScoreRollup:
             )
 
         # Reference: a full compute over the inputs → AAPL's symbol_score.
-        ref_rows = await _fresh_svc()._compute_opportunities("u1", self._META)
+        ref_rows, _ = await _fresh_svc()._compute_opportunities("u1", self._META)
         ref_score = {r["symbol"]: r["symbol_score"] for r in ref_rows}["AAPL"]
         assert ref_score is not None
 

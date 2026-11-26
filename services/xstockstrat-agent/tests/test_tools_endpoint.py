@@ -135,6 +135,22 @@ def test_docs_and_skill_parity_with_self_serve_backfill():
     assert "gaps_only" in (skill / "SKILL.md").read_text()
 
 
+def test_docs_and_skill_parity_with_incomplete_outcome():
+    """feature 364 AC-6: the live tool description, the runbook and the strat-lab skill name the
+    `incomplete` symbol outcome of get_backfill_status."""
+    runbook = (_REPO / "docs/runbooks/mcp-tools.md").read_text()
+    section = runbook.split("### `get_backfill_status`", 1)[1].split("\n### `", 1)[0]
+    skill = _REPO / "plugins/strat-lab/skills/backtest"
+    for name, text in (
+        ("get_backfill_status description", _catalog()["get_backfill_status"]["description"]),
+        ("mcp-tools.md § get_backfill_status", section),
+        ("backfill.md", (skill / "reference/backfill.md").read_text()),
+    ):
+        assert "incomplete" in text, name
+    # SKILL.md already says "bar series incomplete"; only the backticked outcome name counts.
+    assert "`incomplete`" in (skill / "SKILL.md").read_text()
+
+
 def test_every_catalog_tool_has_a_runbook_section():
     text = (_REPO / "docs/runbooks/mcp-tools.md").read_text()
     sections = set(re.findall(r"^### `([a-z_]+)`$", text, flags=re.M))

@@ -13,7 +13,7 @@
  * Registered in e2e/fixtures/INVENTORY.md — update it when this file changes.
  */
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
-import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
+import { BackfillSymbolOutcome, Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 
 export function backfillJob(over: Record<string, unknown> = {}) {
   return {
@@ -30,4 +30,11 @@ export function backfillJob(over: Record<string, unknown> = {}) {
     timeframeEnum: Timeframe.TIMEFRAME_1DAY,
     ...over,
   };
+}
+
+export function incompleteSymbolResult(
+  symbol: string,
+  reason = 'missing sessions 2026-04-01..2026-09-25',
+) {
+  return { symbol, outcome: BackfillSymbolOutcome.INCOMPLETE, reason };
 }

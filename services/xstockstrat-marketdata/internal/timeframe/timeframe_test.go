@@ -5,6 +5,7 @@ import (
 	"time"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	"github.com/xstockstrat/contracts/marketsession"
 )
 
 func TestFromString(t *testing.T) {
@@ -131,5 +132,119 @@ func TestComputeGaps(t *testing.T) {
 		if gaps := ComputeGaps(end, start, time.Time{}, time.Time{}, 0); gaps != nil {
 			t.Errorf("want nil for end<=start, got %+v", gaps)
 		}
+	})
+}
+
+func nyDay(s string) time.Time {
+	d, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		panic(err)
+	}
+	return marketsession.DayStart(d.Add(12 * time.Hour))
+}
+
+// weekdayStamps lists every weekday (so holidays too) in [from,to] minus exclude; the calendar
+// subtest relies on stored non-trading days being ignored.
+func weekdayStamps(from, to string, exclude ...string) []time.Time {
+	skip := map[string]bool{}
+	for _, e := range exclude {
+		skip[e] = true
+	}
+	var out []time.Time
+	for d := nyDay(from); !d.After(nyDay(to)); d = d.AddDate(0, 0, 1) {
+		if wd := d.Weekday(); wd == time.Saturday || wd == time.Sunday || skip[d.Format("2006-01-02")] {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
+func TestComputeSessionGaps(t *testing.T) {
+	now := time.Date(2026, 11, 26, 18, 0, 0, 0, time.UTC)
+	reqStart := time.Date(2025, 11, 20, 0, 0, 0, 0, time.UTC)
+	reqEnd := time.Date(2026, 11, 25, 23, 59, 0, 0, time.UTC)
+	noon := func(s string) time.Time { return nyDay(s).Add(12 * time.Hour) }
+	wantGaps := func(t *testing.T, got []Gap, want ...Gap) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("got %d gaps %+v, want %d %+v", len(got), got, len(want), want)
+		}
+		for i := range want {
+			if !got[i].Start.Equal(want[i].Start) || !got[i].End.Equal(want[i].End) {
+				t.Errorf("gap[%d] = [%v, %v], want [%v, %v]", i, got[i].Start, got[i].End, want[i].Start, want[i].End)
+			}
+		}
+	}
+
+	t.Run("AC-1 interior hole", func(t *testing.T) {
+		stored := append(weekdayStamps("2025-11-20", "2026-03-31"), weekdayStamps("2026-09-28", "2026-11-25")...)
+		wantGaps(t, ComputeSessionGaps(reqStart, reqEnd, stored, now),
+			Gap{Start: nyDay("2026-04-01"), End: noon("2026-09-25")})
+	})
+
+	t.Run("AC-3 fully covered", func(t *testing.T) {
+		if gaps := ComputeSessionGaps(reqStart, reqEnd, weekdayStamps("2025-11-20", "2026-11-25"), now); len(gaps) != 0 {
+			t.Errorf("want no gaps, got %+v", gaps)
+		}
+	})
+
+	t.Run("head and tail", func(t *testing.T) {
+		wantGaps(t, ComputeSessionGaps(reqStart, reqEnd, weekdayStamps("2026-01-05", "2026-11-20"), now),
+			Gap{Start: nyDay("2025-11-20"), End: noon("2026-01-02")},
+			Gap{Start: nyDay("2026-11-23"), End: noon("2026-11-25")})
+	})
+
+	t.Run("separation invariant", func(t *testing.T) {
+		stored := weekdayStamps("2026-06-01", "2026-07-31",
+			"2026-06-05", "2026-06-08", "2026-06-10", "2026-06-18", "2026-06-22", "2026-07-02", "2026-07-06")
+		start := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+		end := time.Date(2026, 7, 31, 23, 0, 0, 0, time.UTC)
+		gaps := ComputeSessionGaps(start, end, stored, now)
+		wantGaps(t, gaps,
+			Gap{Start: nyDay("2026-06-05"), End: noon("2026-06-08")},
+			Gap{Start: nyDay("2026-06-10"), End: noon("2026-06-10")},
+			Gap{Start: nyDay("2026-06-18"), End: noon("2026-06-22")},
+			Gap{Start: nyDay("2026-07-02"), End: noon("2026-07-06")})
+		for i := 0; i+1 < len(gaps); i++ {
+			separated := false
+			for _, s := range stored {
+				if marketsession.IsTradingDay(s) && s.After(gaps[i].End) && s.Before(gaps[i+1].Start) {
+					separated = true
+					break
+				}
+			}
+			if !separated {
+				t.Errorf("no stored session between gap[%d] %+v and gap[%d] %+v", i, gaps[i], i+1, gaps[i+1])
+			}
+		}
+	})
+
+	t.Run("calendar closures and holidays never missing", func(t *testing.T) {
+		stored := weekdayStamps("2024-12-02", "2025-12-31", "2025-01-09", "2025-12-25")
+		start := time.Date(2024, 12, 2, 12, 0, 0, 0, time.UTC)
+		end := time.Date(2025, 12, 31, 23, 0, 0, 0, time.UTC)
+		if gaps := ComputeSessionGaps(start, end, stored, now); len(gaps) != 0 {
+			t.Errorf("want no gaps (2025-01-09 closure, 2025-12-25 holiday), got %+v", gaps)
+		}
+	})
+
+	t.Run("live session not reported", func(t *testing.T) {
+		live := time.Date(2026, 11, 25, 15, 0, 0, 0, time.UTC)
+		start := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+		if gaps := ComputeSessionGaps(start, reqEnd, weekdayStamps("2026-11-02", "2026-11-24"), live); len(gaps) != 0 {
+			t.Errorf("want no gaps while 2026-11-25 is live, got %+v", gaps)
+		}
+	})
+
+	t.Run("reversed range → nil", func(t *testing.T) {
+		if gaps := ComputeSessionGaps(reqEnd, reqStart, nil, now); gaps != nil {
+			t.Errorf("want nil, got %+v", gaps)
+		}
+	})
+
+	t.Run("no bars → first to last session", func(t *testing.T) {
+		wantGaps(t, ComputeSessionGaps(reqStart, reqEnd, nil, now),
+			Gap{Start: nyDay("2025-11-20"), End: noon("2026-11-25")})
 	})
 }
