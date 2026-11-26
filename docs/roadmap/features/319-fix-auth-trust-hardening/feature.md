@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md, docs/reports/2026-10-19-identity-revoketoken-unverified-decode-defect.md, docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-21
+**Last Updated**: 2026-11-26
 
 ---
 
@@ -18,6 +18,7 @@
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 | 2026-11-21 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
+| 2026-11-26 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done (Steps 7+8 unit: agent DCR fails closed with 503) |
 
 ---
 

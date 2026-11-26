@@ -567,3 +567,49 @@ design.md is not written and status.md is unchanged. Register: `debate.md` (D-1.
 - Steps 5-6 Verification ran with `/opt/node24/bin` leading PATH, as in Step 1. The unit's union of Verifications ran as two runs, one per member block, each unchanged.
 - Files modified: `services/xstockstrat-identity/src/__tests__/revokeToken.test.ts`, `services/xstockstrat-identity/src/__tests__/telemetryAllowlist.test.ts`
 - Deviations: none
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Steps 7+8
+
+- Tooling setup (steps 7-8): python ✓ 3.13.18 · uv ✓ 0.11.32 (`uv sync --extra dev` in agent, indicators, ingest, analysis) · ruff ✓ 0.16.9 · node ✓ (only for `check-config-wiring.mjs`) · hook check hook=0.
+- Discovery re-verified at `origin/feature/fix-auth-trust-hardening@f82506d5`: the four `watch_core.py` copies had md5 `13dc1f2497c20f17b34b349d9c8ee4cb` before the edit and `88c92764df6cd31c51214f18ef8247f8` after it. The other Step 7 and Step 8 anchors match the re-spec'd lines.
+
+### Step 7 — service: agent DCR fails closed when no policy snapshot is readable [done]
+- Atomic unit Steps 7+8 (one commit). `WatchCore.has_snapshot()` was added after `wait_for_snapshot`, identically in all four copies. `watcher.has_snapshot(namespace)` returns False when no watcher is registered. `register` returns 503 `{"error": "server_error"}` with one WARN when `has_config_snapshot("agent")` is false; the check runs after the JSON parse and before the `registration_enabled` read. Both read `except` branches also return 503 now; neither defaults any more. The 2-line D-7 constraint comment replaces the "Best-effort" comment. A readable unset key still uses the defaults, a readable `false` still returns 403, and the identity-failure 500 is unchanged. No metric label was added.
+- Docs: in agent `CLAUDE.md:122`, the row now reads "(disabled ⇒ 403; policy snapshot absent ⇒ 503)". The findings row `2026-10-29-agent-dcr-fail-closed-defect` is marked resolved (feature 319). 247 `@AC-4` was amended in place: it gains `@feature-319`, its Given is now no readable `agent` snapshot, its Then is HTTP 503 (the no-hang bound is kept), and its last line is now "no client_id is issued". The title and lines `:40-41` are unchanged.
+- TDD: red/green captured with Step 8 (below). Green, Step 7 Verification (`.sdd-logs/v-2.log`, `exit=0`):
+  - `check-watcher-copies: all groups byte-identical`
+  - agent: `All checks passed!` / `79 files already formatted` / `829 passed`, with `Total coverage: 88.47%`
+  - indicators, ingest and analysis `test_config_watcher.py`: `30 passed` / `33 passed` / `14 passed`
+  - `def has_snapshot` at `watch_core.py:162` and `watcher.py:68`
+  - `defaulting to`: no match
+  - The R-3 `_snapshot` grep matches `:28` and `:88`. Both lines are the mandated `has_config_snapshot` name, not attribute access. See the Deviation Log.
+- Config-key wiring gate: step-time is not applicable (no key declared). Feature-final `node scripts/check-config-wiring.mjs --final` (`.sdd-logs/v-4.log`) gave `exit=0`. It REPORTED two unrelated findings, both `readers-disagree`: `fundsignal_loop.py:marketdata/fundamentals.provider` and `trading.go:platform/trading_state`. Neither is a blocking finding.
+- Files modified: `services/xstockstrat-{agent,indicators,ingest,analysis}/app/config/watch_core.py`, `services/xstockstrat-agent/app/config/watcher.py`, `services/xstockstrat-agent/app/oauth_server.py`, `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-agent/docs/context-constitution-findings.md`, `services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature`
+- Deviations: the R-3 grep expectation cannot be met with the mandated import name (Deviation Log).
+
+### Step 8 — test: 319 @AC-3, the inverted fail-open test and the readable-false 403 [done]
+- Atomic unit Steps 7+8. `test_register_survives_config_read_failure` became `test_register_fails_closed_on_config_read_failure`, which expects 503, `server_error`, no `client_id` and `register_oauth_client` not awaited. New tests:
+  - `@AC-3 (319)` `test_register_refused_without_policy_snapshot`: the `agent` watcher is deleted inside the `TestClient` block, then a POST with `attacker.example`.
+  - `test_register_refused_when_watcher_has_no_snapshot`: a bare `__new__` watcher.
+  - `test_register_readable_false_returns_403`.
+  - `test_register_snapshot_check_precedes_redirect_validation`: an empty `redirect_uris` gets 503, and invalid JSON gets 400 `invalid_request`.
+  - The shared assertions use an inline `_assert_refused_503` helper. There is no fixture, and the literals are inline (C-13). `test_register_returns_client_id` and `test_register_disabled_returns_403` are unchanged.
+- AC-3 red (pre-Step-7 tree with the new tests, `.sdd-logs/v-1.log`): `4 failed, 825 passed`.
+  - The two no-snapshot tests and the inverted test failed with `assert 201 == 503`.
+  - The ordering test failed with `assert 400 == 503`.
+  - The readable-false 403 test passed, as expected. Red was correct.
+- Green (Step 8 Verification, `.sdd-logs/v-3.log`, `exit=0`):
+  - `All checks passed!` / `79 files already formatted` / `829 passed`, with `Total coverage: 88.47%`.
+  - `-k register`: `8 passed, 18 deselected`.
+  - The `survives` grep: no match. `AC-3 (319)` is at `:190` and `attacker.example` at `:197`.
+  - The `_snapshot\b` grep matches the existing `:164` attribute line, the `:163` comment and two mandated test names (Deviation Log).
+  - The fixture/conftest grep matches only the existing `:163` comment.
+  - Preserved in the same run: 247 `@AC-1/@AC-5` and the agent `@AC-47` suites (all in the 829).
+- Files modified: `services/xstockstrat-agent/tests/test_oauth.py`
+- Deviations: `install_watcher` is called inside the `TestClient` block, because its watcher has no `_snapshot_event` and the lifespan would wait on it (Deviation Log).
+
+## Open Threads
+
+- [ ] unaddressed — `/oauth/register` vs 345-authelia-sso (carried from the impl-spec review): the status under SSO (404 per 345 `@AC-43`) and which feature merges first still need an operator decision. The legacy route now returns 503 with no snapshot. Target: the integration PR / merge-order.
+- [ ] unaddressed — merge-order row for 319 (outside this feature's Files); re-run `python3 scripts/check-watcher-copies.py` after merging `origin/main-dev` at the integration PR.
+- [ ] C-16 launch promotion: 319 `@AC-3` → agent suite; defect sidecar `docs/reports/2026-10-29-agent-dcr-fail-closed-defect.status` is for integration/launch.

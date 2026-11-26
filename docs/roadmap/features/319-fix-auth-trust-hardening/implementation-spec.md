@@ -550,7 +550,7 @@ Preserved in the same run: 265 `@AC-1/@AC-2/@AC-4` and the `validateToken` suite
 
 ### Step 7 — service: agent DCR fails closed when no policy snapshot is readable
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (plus the three byte-identical `watch_core.py` copies — spec-time finding F-A)
 **Files**:
 - `services/xstockstrat-agent/app/config/watch_core.py` — modify
@@ -652,7 +652,7 @@ Run as the Steps 7+8 unit.
 
 ### Step 8 — test: 319 @AC-3, the inverted fail-open test and the readable-false 403
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_oauth.py` — modify
@@ -724,3 +724,24 @@ Preserved in the same run: 247 `@AC-1/@AC-5` and agent `@AC-47` suites.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-11-26 — Step 8: `install_watcher` runs inside the `TestClient` block
+- **Spec said**: Instructions 2 and 4 call `install_watcher(monkeypatch, "agent", …)` and then enter
+  `with TestClient(_app()) as tc:`.
+- **Actual**: both tests call `install_watcher` as the first statement inside the block.
+- **Why**: `install_watcher` builds a watcher with no `_snapshot_event`. The lifespan's `start_watchers`
+  (`app/config/watcher.py:96-97`) awaits `wait_for_snapshot` on every registered watcher, so installing it
+  before the lifespan starts fails with `AttributeError` rather than exercising DCR. The Given (policy readable
+  as `false` before the snapshot is lost) and the asserted outcomes are unchanged. No other file changed.
+- **Disposition**: in-scope harness ordering, inside the step's own **Files**.
+
+### 2026-11-26 — Step 7: the `grep -n "_snapshot"` R-3 check matches the mandated import
+- **Spec said**: `grep -n "_snapshot" services/xstockstrat-agent/app/oauth_server.py` should print nothing (R-3).
+- **Actual**: it prints `:28` (`from app.config.watcher import has_snapshot as has_config_snapshot`) and
+  `:88` (`if not has_config_snapshot("agent"):`). Instruction 3 mandates that import name, so the substring
+  always matches. R-3's intent (no private `_snapshot` attribute access in module code) holds:
+  `grep -n "\._snapshot\|[^a-z]_snapshot" app/oauth_server.py` gives no match (rc=1). Likewise, Step 8's
+  `_snapshot\b` grep also matches the two test names the spec mandates (`…_without_policy_snapshot`,
+  `…_has_no_snapshot`) and the existing `:163` comment. The only attribute use is the existing `:164` line.
+- **Disposition**: Verification run unchanged; the expectation comment is a spec-text defect; the intent is
+  verified separately.
