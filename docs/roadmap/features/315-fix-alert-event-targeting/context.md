@@ -637,3 +637,33 @@ Carried into `/sdd-execute`; announce every unchecked item at each checkpoint an
 - TDD (AC-2, AC-3) red: `.sdd-logs/v-1.log` — AC2 `event type="portfolio.risk.drawdown_breach" stream="portfolio:risk" owner=""`, want concentration_breach / user-1; AC3 `owner=""`, want "user-1" → green: `.sdd-logs/v-3.log` exit=0, `ok github.com/xstockstrat/portfolio/internal/service`, `total: (statements) 79.1%` (≥ 40%), golangci-lint v2.14.0 `0 issues.`, go.mod/go.sum unchanged, testdata symbol greps present, `3`. Executed-case check `.sdd-logs/v-4.log`: 11 `--- PASS` (incl. the preserved AC3, AC9, 242_AC6, 304_AC2 and 357 tests). Block `exit=` reflects only its last grep; RED/GREEN judged from the `go test` lines.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_risk_test.go`
 - Deviations: shared assertion helper (within scope); pinned linter on PATH — see Deviation Log
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 5
+
+- **Operator decision (binding, approved 2026-11-21, relayed by the workflow): Option A** on the Step 5 blocker.
+  The step's `offset 15m` arm tripped the guard, which read the `m` as a metric. The decision expands Step 5 to fix
+  the guard (`metric_identifiers` strips `offset <duration>`), re-pins the unit test to `['a_total', 'b:ratio', 'c_count']`
+  and keeps the expression unchanged. It overrides instruction 5. The overlap with 337 is rebase-only.
+- Tooling (step 5): python3.13 ✓ · uv ✓ (`scripts` dev extra, ruff + pytest). Hook check: hook=0.
+
+### Step 5 — config: Grafana rule on halt and reconciliation alert emits (operator decision b′) [done]
+- New group `xstockstrat-account-halts` holds rule `xstk-trading-account-halt`: 1m interval, `for: 0m`,
+  `noDataState: OK`, critical. It uses the two-arm `increase … or … unless … offset 15m` expression on
+  `trading_alert_emit_total{alert_kind=~"halt|reconciliation"}` per `deployment_environment`. Its description names
+  the Loki ERROR line `account halted` and says only an admin can resume.
+  - `produced-signals.tsv` gains the `trading_alert_emit_total` row.
+  - README: "Four alert rules", a table row and a paragraph on the admin signal (it also fires on the systemic
+    escalation; the account id comes from Loki; routing is per environment).
+  - pytest re-pins: the count test is now `…_four_rules == 4`, and the removal prose now reads "five".
+  - The guard strips `offset <duration>` (operator decision A).
+- TDD: N/A (config). Guard red → green. RED is `.sdd-logs/v-1.log`: the guard printed
+  `AC-8 P1 packages/otel/alerts/alert-rules.yaml:192: m`, and pytest showed `15 failed, 67 passed`, including
+  `test_metric_identifiers_…` with "Left contains one more item: 'm'". GREEN is `.sdd-logs/v-2.log`: the guard
+  printed no hits, pytest showed `82 passed`, and the greps found `4`, the uid in both files, the TSV row at `:28` and
+  `Four alert rules` at README `:9`. In `.sdd-logs/v-3.log` the guard returned `rc=0` and ruff check and format were
+  clean. The block's `exit=0` reflects only its last grep, so RED and GREEN were judged from the guard and pytest
+  lines. The config-wiring gate (`.sdd-logs/v-4.log`, step-time) gave `exit=0` with no findings.
+- Files modified: `packages/otel/alerts/alert-rules.yaml`, `packages/otel/produced-signals.tsv`,
+  `packages/otel/alerts/README.md`, `scripts/tests/test_check_otel_produced_signals.py`,
+  `scripts/check-otel-produced-signals.py` (operator-approved addition)
+- Deviations: the guard now strips `offset <duration>` (operator Option A; 337 overlap is rebase-only). See the Deviation Log.

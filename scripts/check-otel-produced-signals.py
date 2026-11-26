@@ -97,6 +97,7 @@ PIPE_STAGE = re.compile(
 BRACES = re.compile(r"\{[^}]*\}")
 BRACKETS = re.compile(r"\[[^]]*\]")
 GROUPING = re.compile(r"(by|without|on|ignoring|group_left|group_right)\s*\([^)]*\)", A)
+OFFSET = re.compile(r"\boffset\s+-?(?:\d+(?:ms|[smhdwy]))+", A)
 IDENTIFIER = re.compile(r"[A-Za-z_:][A-Za-z0-9_:]*")
 CALL = re.compile(r"^\s*\(", A)
 
@@ -557,7 +558,7 @@ def metric_identifiers(expr):
     s = QUOTED.sub("", expr)
     if LABEL_VALUES.match(s):
         s = LABEL_VALUES_ARGS.sub(")", s, count=1)
-    for pattern in (PIPE_STAGE, BRACES, BRACKETS, GROUPING):
+    for pattern in (PIPE_STAGE, BRACES, BRACKETS, GROUPING, OFFSET):
         s = pattern.sub("", s)
     out = []
     for m in IDENTIFIER.finditer(s):

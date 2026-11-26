@@ -455,7 +455,7 @@ grep -c "@AC-" ../../docs/roadmap/features/315-fix-alert-event-targeting/accepta
 
 ### Step 5 — config: Grafana rule on halt and reconciliation alert emits (operator decision b′)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel` (provisioning asset; not a config key, so the C-05 config-key contract does not apply)
 **Category note**: `config` is the nearest of the seven template categories for a provisioning file. The product spec
 declares no config key, and this step adds no namespace, key, `value_type`, seed migration or reader.
@@ -644,3 +644,16 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: the host's default `golangci-lint` is still v2.5.0; the block ran unchanged with `/root/go/bin`
   (v2.14.0 built with go1.27.0, installed for Steps 1+2) first on `PATH`.
 - **Disposition**: CI-equivalent fallback (same tool, CI-pinned version).
+
+### Step 5 — guard strips `offset <duration>` (2026-11-26)
+- **Spec said**: instruction 5 says not to edit `scripts/check-otel-produced-signals.py`, and the evidence says the
+  instruction-1 expression passes the guard.
+- **Actual**: the expression's second arm, `… offset 15m`, failed Part 1 (`AC-8 P1 packages/otel/alerts/alert-rules.yaml:192: m`).
+  `metric_identifiers` read the `m` of `15m` as a metric, and the guard's unit test pinned that (`… offset 5m` →
+  `[…, "m"]`). Operator decision A (2026-11-21) overrode instruction 5. `metric_identifiers` now strips
+  `offset <duration>` (`OFFSET`, `\boffset\s+-?(?:\d+(?:ms|[smhdwy]))+`) before it scans identifiers, and
+  `test_metric_identifiers_drop_functions_keywords_matchers_and_strings` expects `["a_total", "b:ratio", "c_count"]`.
+  `scripts/check-otel-produced-signals.py` joins the step's Files. The live-validated expression is unchanged.
+- **Overlap**: feature 337 (`metrics-host-provider-label`) also edits `scripts/tests/test_check_otel_produced_signals.py`,
+  in other tests. This is rebase-only: whichever feature merges second re-applies its hunks.
+- **Disposition**: operator-approved scope expansion (Option A).
