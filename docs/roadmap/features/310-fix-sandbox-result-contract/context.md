@@ -605,3 +605,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: not applicable (no config key, no migration).
 - Files modified: `services/xstockstrat-indicators/app/services/sandbox_probe.py`
 - Deviations: RED evidence from a scratch probe; the run script puts the Verification's closing `)` on its own line (full detail in Deviation Log)
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 4
+
+- Operator decision for the Step 4 blocker (binding; option A, operator-approved 2026-11-21): fold the fix into Step 4, widening its scope to `app/services/sandbox_probe.py`. The boot self-test must not change the watchdog-observability outcome. Add a regression assertion that a blind self-test sample leaves the gauge at 1 and logs no `CANNOT_OBSERVE_MSG`.
+
+### Step 4 — test: boot self-test logs a measured figure and reports an unmeasurable runtime [done]
+- Added `UNMEASURABLE_MSG`, `SELF_TEST_MSG` and the five spec `test_boot_self_test_*` tests. They use `dataclasses.replace` on a real `execute_formula("result = {}", {}, [])` result, so there is no new `SandboxResult(` literal (C-13).
+- Fold: the new `_self_test_isolated()` in `sandbox_probe.py` pre-marks the `unobservable` once-flag around `_self_test()`. Afterwards it re-arms the flag if this call set it, and restores `telemetry._memory_watchdog_observable`. `run_startup_probe` calls it.
+- The fold's regression test is `test_boot_self_test_blind_sample_leaves_the_probe_outcome_unchanged`. It simulates the blind tick by calling `_warn_unobservable_once()` inside a wrapped `execute_formula`.
+- TDD RED for the fold test, on the post-Step-3 tree (`.sdd-logs/v-1.log`, exit=1): `1 failed, 630 passed` and `1 failed, 5 passed, 7 deselected`. The failure was `assert not [<LogRecord: app.services.sandbox, 40, ... "sandbox memory watchdog cannot observe child">]`.
+- TDD RED for the five spec tests, against the pre-Step-3 `sandbox_probe.py` restored from `5755e29d~1` and put back afterwards (`.sdd-logs/v-2.log`, exit=0 from the trailing restore): `5 failed, 1 passed, 7 deselected`, each with `assert 0 == 1` / `where 0 = len([])` on the self-test or unmeasurable records.
+- TDD GREEN (`.sdd-logs/v-3.log`, exit=1 from the expected empty C-13 grep): `631 passed in 75.42s`, `Total coverage: 87.29%`, `All checks passed!`, `65 files already formatted`, `6 passed, 7 deselected in 0.81s`. The C-13 grep found no `SandboxResult(` match.
+- The `test_ac8_fork_bomb…` flake did not appear in any run.
+- Config-key wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-indicators/tests/test_sandbox_probe.py`, `services/xstockstrat-indicators/app/services/sandbox_probe.py` (fold)
+- Deviations: operator-approved fold of `sandbox_probe.py`; `-k boot_self_test` reports 6 passed, not 5; RED for the spec tests ran against the restored pre-Step-3 file (full detail in Deviation Log)

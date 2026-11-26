@@ -335,10 +335,26 @@ def _self_test() -> None:
         log.error(_UNMEASURABLE_MSG)
 
 
+def _self_test_isolated() -> None:
+    # The probe owns watchdog observability: a blind tick in the self-test must not log,
+    # latch the once-flag, or change the gauge.
+    with sandbox._ONCE_LOCK:
+        latched_here = "unobservable" not in sandbox._ONCE_SEEN
+        sandbox._ONCE_SEEN.add("unobservable")
+    observable = telemetry._memory_watchdog_observable
+    try:
+        _self_test()
+    finally:
+        if latched_here:
+            with sandbox._ONCE_LOCK:
+                sandbox._ONCE_SEEN.discard("unobservable")
+        telemetry._memory_watchdog_observable = observable
+
+
 def run_startup_probe() -> None:
     """Probe the runtime once; any failure is logged and both gauges read 0. Never raises."""
     _run_memory_probe()
     try:
-        _self_test()
+        _self_test_isolated()
     except Exception:  # noqa: BLE001 - the self-test must never stop startup
         log.exception(_UNMEASURABLE_MSG)

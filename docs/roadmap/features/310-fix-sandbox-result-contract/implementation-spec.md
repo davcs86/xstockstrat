@@ -545,7 +545,7 @@ Step 4.
 
 ### Step 4 — test: boot self-test logs a measured figure and reports an unmeasurable runtime
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox_probe.py` — modify
@@ -906,3 +906,21 @@ _Populated by /sdd-execute as implementation proceeds._
   self-test line and no unmeasurable ERROR. After the change it passed. In the run script the
   Verification's closing `)` is on its own line, because the block's trailing `# expect …` comment
   would otherwise swallow it. **Disposition**: evidence recorded in context.md; no spec text changed.
+- **2026-11-26 (Step 4, operator-approved fold, decision A of 2026-11-21)** — Step 4's tests showed
+  that the boot self-test could change the watchdog-observability outcome. A blind watchdog tick in
+  the self-test's sandbox run calls `_warn_unobservable_once()`. That logs `sandbox memory watchdog
+  cannot observe child`, latches the `unobservable` once-flag and sets
+  `indicators.sandbox.memory_watchdog_observable` to 0, overriding what the probe found. The fold
+  widens Step 4's scope to `services/xstockstrat-indicators/app/services/sandbox_probe.py`. A new
+  `_self_test_isolated()` pre-marks the `unobservable` once-flag for the duration of `_self_test()`,
+  so nothing is logged. Afterwards it re-arms the flag (unless the probe had already latched it) and
+  restores the gauge value. `run_startup_probe` now calls it in place of `_self_test()`. A sixth
+  test, `test_boot_self_test_blind_sample_leaves_the_probe_outcome_unchanged`, asserts no
+  `CANNOT_OBSERVE_MSG`, a gauge of 1, and a once-flag that is still armed. It simulates the blind
+  tick by calling `sandbox._warn_unobservable_once()` inside a wrapped `execute_formula`, because a
+  real tick needs the `result = {}` run to outlive one 50 ms `_TICK_S`. As a result the
+  Verification's `-k "boot_self_test"` line reports `6 passed`, not the commented `5 passed`. RED
+  for the five spec tests ran against the pre-Step-3 `sandbox_probe.py`, restored temporarily from
+  `5755e29d~1` and put back before GREEN. The Verification's trailing C-13 grep finds no match, so
+  it sets `exit=1`, which is the expected "no match". **Disposition**: fold approved by the
+  operator; in scope.
