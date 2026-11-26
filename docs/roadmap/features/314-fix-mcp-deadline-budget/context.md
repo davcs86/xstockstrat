@@ -863,3 +863,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Evidence tree**: the feature branch is 168 commits behind `origin/main-dev`; merge it before Step 1 and
   re-grep every cited `path:line`.
 - The enumeration sign-off is still "unenumerated" until Step 9's pre-deploy run.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+**Up-front confirmation (operator-approved record, binding):** mainDev `2b2dec92afa14123ac1d796846632db713bbd9dc`,
+dev `6f320da9aca511f2f909a5cc97576c060732516f`, specHash `c31662ab64f40bcb9ba43b5a3b9f68fb840ea339`,
+directive `conditional`, pending steps 1–9, mismatches on steps 3, 1, 2, 5, 7, 8. The verbatim record is in
+the first body line of the re-spec commit below.
+
+- **Merge**: `origin/main-dev` @ `2b2dec92` merged into the dev branch (`d8501938`); resolver and
+  ledger-guard were clean.
+- **Tooling setup (steps 1–9)**: node ✓ v24.22.3 (`/opt/node24`; the default PATH node is v22) · pnpm ✓
+  9.15.9 · tsc ✓ (config node_modules) · uv ✓ · python ✓ 3.13. Migration and docs steps need nothing extra.
+  Pre-commit hook check: hook=0.
+- **Re-spec** (`respec(fix-mcp-deadline-budget)` commits in `git log --first-parent origin/main-dev..HEAD`):
+  - `518681bf43d563a6af6b9be84c879a33babb7beb`: respec(fix-mcp-deadline-budget): align steps 3,1,2,5,7,8
+    with current codebase.
+  - Step 3: the migration moves from `056` to **`057_mcp_deadline_budget.{up,down}.sql`**, because
+    main-dev now holds feature 366's `056_analysis_live_only_cycle_max_days`. Feature 321 also still claims
+    `056` in flight. Steps 1, 2, 5, 7 and 8 got their line anchors re-pinned to `2b2dec92`. The step headings
+    and the preamble (decision 1, renumber checklist) still say `056`. They were outside the step-body
+    re-spec scope, and the renumber checklist governs.
+- Status: `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"2b2dec92afa14123ac1d796846632db713bbd9dc","date":"2026-11-26"}
+```
