@@ -99,7 +99,11 @@ export function forwardAdmin<Req, Res>(
 
 /** A Connect router preconfigured with the platform's accepted compressions. */
 export function createBffRouter(): ConnectRouter {
-  return createConnectRouter({ acceptCompression: [compressionGzip, compressionBrotli] });
+  // Responses must stay uncompressed: Next >=15.5.29 drops content-encoding, leaving raw gzip bodies.
+  return createConnectRouter({
+    acceptCompression: [compressionGzip, compressionBrotli],
+    compressMinBytes: Number.MAX_SAFE_INTEGER,
+  });
 }
 
 function bodyAsIterable(body: ReadableStream<Uint8Array> | null): AsyncIterable<Uint8Array> {

@@ -59,7 +59,11 @@ that carries one is refused `self-serve backfill denied: callback_url`.
 - **Per-symbol outcomes.** `get_backfill_status` lists `symbol_results` (`symbol`, `outcome`,
   `reason`) for symbols that wrote nothing. A `skipped` symbol is delisted and has no new data — do
   not re-trigger it and do not treat the job as failed. `failed_symbols` still lists only real
-  failures. The webhook body is unchanged.
+  failures. An `incomplete` symbol (`gaps_only` bars jobs only) means the vendor has no bars for
+  the sessions its `reason` lists (`missing sessions YYYY-MM-DD..YYYY-MM-DD[; …]`) — do not
+  re-trigger the same range. A `PARTIAL` job whose only problem symbols are `incomplete` is
+  data-final: backtest, and expect insufficient data for those sessions. The webhook body is
+  unchanged.
 
 ## When to skip
 

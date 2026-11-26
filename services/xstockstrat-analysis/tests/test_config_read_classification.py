@@ -54,6 +54,7 @@ FR3_KEYS = frozenset(
         "opportunity.max_live_strategies_per_symbol",
         "opportunity.max_live_held_symbols_per_compute",
         "opportunity.max_live_only_symbols_per_compute",
+        "opportunity.live_only_cycle_max_days",
         "opportunity.valid_window_hours",
         "opportunity.snooze_default_hours",
         "opportunity.read_db_budget_ms",

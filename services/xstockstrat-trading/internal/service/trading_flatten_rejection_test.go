@@ -139,6 +139,9 @@ func TestFlattenAndHalt_AlwaysRejected_HaltsAccount(t *testing.T) {
 	if !h.svc.isAccountHalted("acct-1") {
 		t.Fatal("account not halted after every flatten attempt was rejected (pre-fix: attempt 1 replayed REJECTED as success)")
 	}
+	if got := alertByCategory(t, h.svc.notify.(*fakeNotifyClient), "halt").TargetUserId; got != "user-1" {
+		t.Errorf("halt alert TargetUserId = %q, want the pool owner %q", got, "user-1")
+	}
 	if rec.Status == bracketStatusCanceled {
 		t.Fatal("bracket marked CANCELED although the position was never flattened")
 	}
