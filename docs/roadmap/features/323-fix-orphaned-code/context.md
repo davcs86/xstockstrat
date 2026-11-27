@@ -625,3 +625,73 @@ Accountability:
 - Out-of-scope changes: none
 - Open questions / items: stale text listed earlier in this log (`product-spec.md`, `design.md` D-3, `feature.md` Summary, `merge-order.md:129`, agent findings `:36`) remains unedited; the vestigial per-service `pnpm-lock.yaml` files are recorded in the root findings (D-11)
 - Unaddressed review warnings: none new from this session
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-orphaned-code (feature 323)
+
+Source: docs/roadmap/features/323-fix-orphaned-code/acceptance.feature. I read it from the working tree, not from origin/feature/fix-orphaned-code, because I had no git access. The orchestrator should confirm the working-tree copy matches the branch.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | services/xstockstrat-portfolio/acceptance/fix-orphaned-code.feature | CREATE | NEW | The Then asserts on portfolio's GetSnapshot. No existing portfolio scenario mentions NewPortfolioRepoWithDB or GetSnapshot. |
+| @AC-2 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Cross-cutting. It spans config, ledger, identity, notify, marketdata, ingest and agent, and asserts on repo-wide state (package.json files, pnpm-lock.yaml importers, `git ls-files`). |
+| @AC-3 | services/xstockstrat-agent/acceptance/fix-orphaned-code.feature | CREATE | NEW | The Then asserts on `services/xstockstrat-agent/app/config/watcher.py` and the agent's `tests/test_config_watcher.py`. |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-orphaned-code.feature (CREATE) ---
+# Promoted from docs/roadmap/features/323-fix-orphaned-code/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-323` tag.
+# Durable business rules xstockstrat-portfolio already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-portfolio — mock-DB repository serves GetSnapshot without panicking (bug fix)
+  Regression guard for defect report: orphaned modules, scripts and dependencies across services.
+
+  # guards: docs/reports/2026-10-19-orphaned-code-defect.md
+  @AC-1 @regression @feature-323
+  Scenario: The portfolio repository built on a mock DB serves GetSnapshot without panicking
+    Given a PortfolioRepo constructed with NewPortfolioRepoWithDB over a pgxmock pool
+    When GetSnapshot is called
+    Then it queries through the mock and returns a result or a mock error, with no nil-pointer panic
+
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-orphaned-code.feature (CREATE) ---
+# Promoted from docs/roadmap/features/323-fix-orphaned-code/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-323` tag.
+# Durable business rules xstockstrat-agent already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-agent — live config watcher package survives orphaned-code cleanup (bug fix)
+  Regression guard for defect report: orphaned modules, scripts and dependencies across services.
+
+  # guards: docs/reports/2026-10-19-orphaned-code-defect.md
+  @AC-3 @regression @feature-323
+  Scenario: The live agent config package survives the cleanup
+    Given the agent imports app.config.watcher at startup (app/main.py) and for formula deadlines (app/client.py)
+    When the cleanup lands
+    Then services/xstockstrat-agent/app/config/watcher.py still exists
+    And the agent's tests/test_config_watcher.py passes
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  # guards: docs/reports/2026-10-19-orphaned-code-defect.md
+  @AC-2 @regression @feature-323
+  Scenario: Orphaned modules, scripts and dependencies are gone
+    Given the orphaned items listed in the report (config configWatcher.ts, the ledger, config, identity and notify node-pg-migrate migrate script and devDependency, notify jsonwebtoken and bcrypt, marketdata AlpacaAsset, ingest example_simple_email.py and noop.py, agent signal_extraction.md)
+    When each touched leaf's package.json and the root pnpm-lock.yaml importers are inspected, and git ls-files is searched for the deleted paths
+    Then none of them exists and every affected service still builds and passes its tests
+
+### Notes / ambiguities / conflicts
+- **AC-1 attribution:** The Then lives in portfolio's repository code (GetSnapshot via NewPortfolioRepoWithDB), so it goes in the portfolio suite.
+- **AC-2 attribution:** No single service owns it, and `git ls-files` plus the root lockfile are repo-wide. The platform suite already holds repo-wide absence checks, such as @feature-147 for MCP_AGENT_SECRET.
+- **AC-3 attribution:** The agent suite is the right home even though the cleanup touches other services. It is the live-keep counterpart to AC-2's deletions.
+- **No @FR-* tags:** The source scenarios carry none, and I did not invent any (rule 2). The tags are `@AC-n @regression @feature-323`, the same shape as platform.feature's @feature-329 scenario. The business-rules/CLAUDE.md convention asks for at least one @FR tag. If the orchestrator wants strict conformance, the fix is on the source acceptance.feature, not here.
+- **AC-2 and AC-3 overlap:** Both mention the config service's watcher, but they assert different things. AC-2 deletes the TS `configWatcher.ts`. AC-3 keeps the agent's Python `watcher.py`. This is not a conflict. Services/xstockstrat-ledger/acceptance/config-keys-relative-consumers.feature:10 references `configWatcher.test.ts`, the ledger's core log-format test. AC-2 lists only the config service's `configWatcher.ts` as deleted, so I flag this only as an informational cross-reference and plan no write for it. The implementer should confirm the ledger test file is not among the deleted paths.
+- **Dedup results:** I grepped all of services/*/acceptance/*.feature and platform.feature for NewPortfolioRepoWithDB, GetSnapshot, config/watcher, test_config_watcher, configWatcher, node-pg-migrate, AlpacaAsset, signal_extraction, example_simple_email and jsonwebtoken. There are no `@feature-323` tags anywhere. Hits on other features' scenarios (the agent suite mentions the signal_extraction prompt, the ingest suite mentions the example_simple_email extractor) assert different outcomes. There are no DUP, OVERLAP or CONFLICT verdicts.
+- **Placement:** In platform.feature, append after the last scenario, which currently ends with the @feature-329 Scenario Outline. Re-check the file tail before writing, since it is long. The `acceptance/` directories already exist for portfolio and agent, and neither already has a fix-orphaned-code.feature.
+
+### Coverage check
+- Source scenarios: 3 (@AC-1, @AC-2, @AC-3). Planned: 3 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC-* is accounted for, nothing was skipped, and the scenario text is verbatim from the source.
+```
