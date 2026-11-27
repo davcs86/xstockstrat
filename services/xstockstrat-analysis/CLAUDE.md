@@ -257,7 +257,7 @@ second watcher.
 | `fundsignal.daily_call_budget` | int | `200` | Max cached `GetFundamentalsMulti` chunk calls per cycle; ≤ `marketdata.fmp.daily_request_cap` (250) |
 | `fundsignal.source_slug` | string | `fundamentals` | Slug of the registered `derived` signal source the producer emits under |
 | `fundsignal.scoring_formula_id` | string | `""` | Optional 063 scoring formula id; empty → built-in deterministic default score. Scale contract: a system scoring composite is in [0,1], 0.5 neutral; not clamped |
-| `fundsignal.buy_quantile` | float | `0.80` | Cross-sectional score quantile ≥ → `buy`; small or collapsed cross-sections follow the degenerate rule (the **Direction** bullet in `docs/fundsignal.md`) |
+| `fundsignal.buy_quantile` | float | `0.80` | Cross-sectional score quantile ≥ → `buy`; small or collapsed cross-sections follow the degenerate rule (the **Direction** bullet in **`fundsignal.md`**, in this service's `docs/` folder) |
 | `fundsignal.sell_quantile` | float | `0.20` | Cross-sectional score quantile ≤ → `sell` |
 | `fundsignal.min_conviction_to_emit` | float | `0.0` | Drop symbols whose score is below this before emitting |
 | `fundsignal.valid_days` | int | `90` | Emitted signal validity window (`valid_until` = run date + this) |
