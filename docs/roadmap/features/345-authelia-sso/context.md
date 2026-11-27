@@ -1088,3 +1088,9 @@
 - TDD: recorded under Step 49. Verification: typecheck, lint, build exit 0.
 - Files modified: `services/xstockstrat-ui/src/app/api/oauth/{protected-resource,authorization-server}/route.ts`, `services/xstockstrat-ui/src/lib/mcpScopes.ts` (new)
 - Deviations: none. Gap filled: the AS route reads the mode only (no agent-issuer read), so an AS request in `oidc` never touches the agent namespace.
+
+### Step 49 — test: Discovery routes and the whole-PRM contract [done]
+- `protected-resource/route.test.ts` (7; `AGENT_PUBLIC_URL = prm.agent_public_url` from the vector file): `local`/`both` → today's object without an agent read; **@AC-49/@AC-11** `oidc` + valid deep-equals `prm.expected`; **@AC-55** invalid, empty and **@AC-78** `'error'` → 503 `no-store`, empty body; **@AC-46** (guard) `'error'` mode → `authorization_servers: [AGENT_PUBLIC_URL]`. `authorization-server/route.test.ts` (4): `local`/`both` → today's; **@AC-49** `oidc` → 404; **@AC-46** (guard) `'error'` → today's with `issuer = AGENT_PUBLIC_URL`. `mcpScopes.test.ts`: equals `prm.expected.scopes_supported`.
+- TDD: red (before Step 48): `Cannot find module './mcpScopes'`, `expected 200 to be 404`, `expected { …(2) } to deeply equal { …(3) }`, `expected 200 to be 503` ×3 (5 failed, 6 passed) → green: 12 passed; full `pnpm run test:coverage` 106 files, 1101 passed / 2 skipped, `src/lib/**` 85.23 % lines; typecheck and lint exit 0.
+- Files modified: `services/xstockstrat-ui/src/app/api/oauth/{protected-resource,authorization-server}/route.test.ts` (new), `services/xstockstrat-ui/src/lib/mcpScopes.test.ts` (new)
+- Deviations: none

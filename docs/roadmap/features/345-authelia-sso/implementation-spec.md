@@ -1878,7 +1878,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run bu
 
 ### Step 49 — test: Discovery routes and the whole-PRM contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/api/oauth/protected-resource/route.test.ts` — create
