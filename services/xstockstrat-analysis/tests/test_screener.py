@@ -42,7 +42,7 @@ def bars(closes):
 def formula_resp(value):
     out = Struct()
     out.update({"value": value})
-    return SimpleNamespace(success=True, output=out, error="")
+    return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
 
 def formula_criterion(ref, formula_id, op, threshold, weight=1.0, hard=False):
@@ -546,7 +546,7 @@ async def test_single_symbol_criterion_raw_values_and_passed():
         side_effect=[
             formula_resp([0.8]),
             formula_resp([0.8]),
-            SimpleNamespace(success=False, output=Struct(), error="boom"),
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0),
         ]
     )
     engine = make_engine(md, ind)

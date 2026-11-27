@@ -147,7 +147,7 @@ Each step is red before green, and each helper lands with its production caller.
 
 1. (A) with the AC-1 tests.
 2. (C) with its tests (D-7).
-3. (B) in one commit: seed, bounds, tests, the `resolveOffMs` wrapper, `bars_miss.go`, `liveRefetch` wired at
+3. (B) in one commit: seed, bounds, tests, the `resolveOffMs` wrapper, `bars_miss.go`, `liveRefetch` wired at  <!-- Superseded 2026-11-26: operator ruling, implementation-spec spec-time decision 2 — the O-15 parallel-reader branch (resolveBarsMissBackoff in bars_miss.go + one bars_miss.go:cfg receiver entry); no resolveOffMs wrapper. -->
    `:347`, `barsFetch`, and the retargeted structural test.
 4. Docs:
    - the marketdata `CLAUDE.md` key table and GetBars bullet;
@@ -194,7 +194,7 @@ Each step is red before green, and each helper lands with its production caller.
   decision O-11.
 - `C-16` — honored by: the Business Rules list below; no existing guarantee is altered.
 - `C-18` — honored by: the seed test builds on the shared `migrationSql.ts` helpers, the reader shares
-  `resolveOffMs` where byte-identity allows, and the hit path gains no lock.
+  `resolveOffMs` where byte-identity allows, and the hit path gains no lock.  <!-- Superseded 2026-11-26: operator ruling, implementation-spec spec-time decision 2 — the O-15 parallel-reader branch (resolveBarsMissBackoff in bars_miss.go + one bars_miss.go:cfg receiver entry); no resolveOffMs wrapper. -->
 - `P-02` — honored by: every proposer and adversary exchange was mediated through the synthesized state.
 - `P-03` — honored by: unverified items stay marked *(debate)* or listed in Open Risks, not guessed.
 - `P-06` — honored by: an entry is recorded only on a confirmed empty (D-3), with positive, disabled and scope

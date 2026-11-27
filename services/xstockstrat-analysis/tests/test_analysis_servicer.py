@@ -37,6 +37,7 @@ from app.handlers.servicer import (
     _InsufficientData,
     _row_to_opportunity,
 )
+from app.repositories.opportunities import EVALUATION_FAILED_PROVENANCE
 from app.services import warmup as warmup_sizing
 from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
 from tests.conftest import OWNER_HEADERS, aio_rpc_error, ctx_with, snapshot_watcher
@@ -1163,7 +1164,7 @@ class TestScreenSymbols:
 
         out = Struct()
         out.update({"value": value})
-        return SimpleNamespace(success=True, output=out, error="")
+        return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
     @pytest.mark.asyncio
     async def test_repoints_off_config_to_ingest_reliability_weights(self):
@@ -1699,7 +1700,7 @@ class TestBacktestDiagnostics:
         out = Struct()
         out.update({"value": [None] * len(bars)})
         svc._indicators.ExecuteFormula = AsyncMock(
-            return_value=SimpleNamespace(success=True, output=out, error="")
+            return_value=SimpleNamespace(success=True, output=out, error="", exit_reason=0)
         )
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=3)
@@ -1756,8 +1757,8 @@ class TestFormulaErrorSurfacing:
         ok_out.update({"value": [1.0] * len(bars)})  # sibling trades (ff > 0)
         # AAPL formula fails (success=False → FormulaExecutionError); MSFT succeeds.
         side_effect = [
-            SimpleNamespace(success=False, output=Struct(), error="boom"),
-            SimpleNamespace(success=True, output=ok_out, error=""),
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0),
+            SimpleNamespace(success=True, output=ok_out, error="", exit_reason=0),
         ]
         svc = make_servicer()
         self._wire(svc, bars, side_effect)
@@ -1787,8 +1788,8 @@ class TestFormulaErrorSurfacing:
 
         bars = [_bar(7100 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 15])]
         side_effect = [
-            SimpleNamespace(success=False, output=Struct(), error="boom"),
-            SimpleNamespace(success=False, output=Struct(), error="boom"),
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0),
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0),
         ]
         svc = make_servicer()
         self._wire(svc, bars, side_effect)
@@ -1837,7 +1838,7 @@ class TestEvaluationFailureSurfacing:
 
         out = Struct()
         out.update({"value": [1.0] * n})  # ff > 0 on every bar
-        return SimpleNamespace(success=True, output=out, error="")
+        return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
     def _svc(self, execute_outcome=None):
         svc = make_servicer()
@@ -2042,7 +2043,9 @@ class TestEvaluationFailureSurfacing:
     async def test_formula_contract_error_adds_no_eval_warning(self):
         from google.protobuf.struct_pb2 import Struct
 
-        svc = self._svc(SimpleNamespace(success=False, output=Struct(), error="boom"))
+        svc = self._svc(
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0)
+        )
         result = await self._run(svc)
 
         assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR
@@ -4205,7 +4208,7 @@ class TestPrefixFormulaCost:
             sizes.append(n)
             out = Struct()
             out.update({"value": [1.0] * n})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
         svc._indicators.GetFormula = AsyncMock(
@@ -4260,7 +4263,7 @@ class TestPrefixFormulaCost:
             sizes.append(n)
             out = Struct()
             out.update({"value": [1.0] * n})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
         svc._indicators.GetFormula = AsyncMock(
@@ -4563,6 +4566,7 @@ class _FakeOppRepo:
                 and "denied" not in _prov
                 and "unavailable" not in _prov
                 and "formula_unreadable" not in _prov
+                and EVALUATION_FAILED_PROVENANCE not in _prov
             ):
                 continue
             act = self.actions.get((user_id, r["opportunity_key"]))
@@ -5647,9 +5651,9 @@ class TestOpportunityDataUnavailable:
         assert msft.passing_conditions == 1
 
     @pytest.mark.asyncio
-    async def test_formula_execution_error_still_propagates(self):
-        """A ``FormulaExecutionError`` is a formula BUG, not a data outage — it must NOT be
-        swallowed as unavailable; it propagates out of the compute (design Rejected Alt 8)."""
+    async def test_formula_execution_error_degrades_only_its_row(self, caplog):
+        """A ``FormulaExecutionError`` is a formula fault, not a data outage: the compute returns
+        and the row carries ``evaluation_failed``, never ``unavailable`` (feature 308 CHANGE)."""
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[("AAPL", "sx")])],
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
@@ -5670,9 +5674,15 @@ class TestOpportunityDataUnavailable:
         ):
             raise FormulaExecutionError("f-bad", "boom")
 
-        with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _boom):
-            with pytest.raises(FormulaExecutionError):
-                await svc._compute_opportunities("u1", self._META)
+        with (
+            patch.object(StrategyEvaluator, "evaluate_conditions_traced", _boom),
+            caplog.at_level(logging.WARNING),
+        ):
+            rows, _ = await svc._compute_opportunities("u1", self._META)
+        provenance = {r["symbol"]: r for r in rows}["AAPL"]["provenance"]
+        assert EVALUATION_FAILED_PROVENANCE in provenance
+        assert "unavailable" not in provenance
+        assert "opportunity_compute: 1/1" in caplog.text
 
 
 class _CountingSem:
@@ -6834,7 +6844,7 @@ class TestBacktestDeletedFormulaWarning:
             n = len(req.input_data["close"])
             out = Struct()
             out.update({"value": [1.0] * n})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
         svc._indicators.GetFormula = AsyncMock(

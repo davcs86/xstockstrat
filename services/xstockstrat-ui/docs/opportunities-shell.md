@@ -20,3 +20,13 @@ Moved from `CLAUDE.md` § Opportunities-first shell → Decide screens.
     the `EvaluateReadiness` result) and `readiness-cue-unreadable` (watchlist readiness panel).
   - `readinessState` takes a **required** `formulaUnreadable` (as does `SignalItem`), so `tsc`
     flags every call site; `rollupReadiness` counts it in its own `unreadable` bucket.
+- **Evaluation-failed row (308).** `evaluation_failed` in `provenance` (a structural, floor-exempt
+  marker, not a proto field) renders `EVALUATION_FAILED_CUE` ("evaluation failed") instead of a 0/0
+  or "no data" verdict.
+  - A non-held row shows the cue in place of the action badge, with no act buttons.
+  - The test ids are `opportunity-evaluation-failed-<sym>` (desktop queue),
+    `opportunity-evaluation-failed-mobile-<sym>` (mobile queue), `detail-evaluation-failed`
+    (Signal-detail header) and `readiness-evaluation-failed` (the `SignalReadiness` notice, keyed off
+    the opportunity row's provenance, not the `EvaluateReadiness` result).
+  - `SignalItem` has a second required field, `evaluationFailed`, beside `formulaUnreadable`, so
+    `tsc` flags every construction site.

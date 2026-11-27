@@ -22,6 +22,8 @@ export interface SignalItem {
   dataUnavailable?: boolean;
   // feature 289 — required (unlike its optional siblings) so tsc flags every construction site.
   formulaUnreadable: boolean;
+  // feature 308 — required like `formulaUnreadable` so tsc flags every construction site.
+  evaluationFailed: boolean;
   // feature 215 — fundamentals skip row: a "Fundamentals unavailable" badge replaces the action badge.
   fundamentalsUnavailable?: boolean;
   fundamentalsGap?: FundamentalsGap;

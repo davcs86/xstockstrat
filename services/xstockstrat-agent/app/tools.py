@@ -71,6 +71,7 @@ from typing import Literal
 from urllib.parse import quote, urljoin, urlparse
 
 import grpc
+import httpx
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
@@ -239,7 +240,12 @@ _PASS_THROUGH_CODES = frozenset(
 )
 # Exact backend strings a call site allow-lists for UNAVAILABLE; a cross-service contract pinned by
 # tests/test_tool_errors.py::test_unavailable_pass_strings_match_backend_sources.
-_SCORE_UNAVAILABLE_PASS = frozenset({"fundamentals availability unknown — grade unchanged"})
+_SCORE_UNAVAILABLE_PASS = frozenset(
+    {
+        "fundamentals availability unknown — grade unchanged",
+        "formula version unavailable — grade unchanged",
+    }
+)
 _OFFLINE_UNAVAILABLE_PASS = frozenset({"positions not published; re-confirm to retry"})
 _BACKFILL_UNAVAILABLE_PASS = frozenset({"callback_url could not be validated; no job was created"})
 _RETRY_TAIL = "retry shortly"
@@ -675,7 +681,13 @@ def register_tools(server: MCPServer) -> None:
         attachments_b64: list of base64-encoded attachment bytes (PDF, etc.).
         urls: list of URLs to fetch (for mediated_linked_email sources).
         At least one of attachments_b64 or urls must be provided.
-        Returns {raw_text: str}. Credentials are never exposed in the response.
+        Returns {raw_text: str} when every URL is fetched. Credentials are never exposed.
+        URL fetches share one whole-call budget (agent extract.call_budget_seconds, default 35 s).
+            A URL that times out or fails in transport, or is not reached before the budget expires,
+            is skipped and the call returns {raw_text, error: "PARTIAL: N of M URLs not fetched
+            (deadline: a, transport: b)", unfetched_urls: [the given URLs, in input order]};
+            raw_text holds every text gathered (attachments included). An egress refusal or an
+            HTTP error status still fails the whole call.
         CREDENTIAL CAVEAT (feature 093): a source that requires credentials (has_credentials=true)
             currently RAISES — secure per-source credential resolution is not yet supported, because
             the platform stores secrets as is_secret references that the config service redacts, so
@@ -697,12 +709,57 @@ def register_tools(server: MCPServer) -> None:
                 text = _extract_from_bytes(raw, password=None)
                 texts.append(text)
 
-        if urls:
-            for url in urls:
-                text = await _fetch_url(url, password=None)
-                texts.append(text)
+        if not urls:
+            return {"raw_text": "\n\n".join(texts)}
 
-        return {"raw_text": "\n\n".join(texts)}
+        budget = await _extract_call_budget_s()
+        unfetched: list[str] = []
+        failed_classes: set[str] = set()
+        deadline_n = transport_n = 0
+        next_i = 0
+        scope = asyncio.timeout(budget)
+        try:
+            async with scope:
+                for i, url in enumerate(urls):
+                    try:
+                        texts.append(await _fetch_url(url, password=None))
+                    except httpx.TimeoutException as e:
+                        deadline_n += 1
+                        unfetched.append(url)
+                        failed_classes.add(type(e).__name__)
+                    except httpx.TransportError as e:
+                        transport_n += 1
+                        unfetched.append(url)
+                        failed_classes.add(type(e).__name__)
+                    next_i = i + 1
+        except TimeoutError:
+            if not scope.expired():
+                raise
+            remaining = urls[next_i:]
+            deadline_n += len(remaining)
+            unfetched.extend(remaining)
+            failed_classes.add("TimeoutError")
+
+        raw_text = "\n\n".join(texts)
+        if not unfetched:
+            return {"raw_text": raw_text}
+        log.warning(
+            "extract_email_content partial: %d of %d URLs not fetched "
+            "(deadline=%d, transport=%d, errors=%s)",
+            len(unfetched),
+            len(urls),
+            deadline_n,
+            transport_n,
+            ",".join(sorted(failed_classes)),
+        )
+        return {
+            "raw_text": raw_text,
+            "error": (
+                f"PARTIAL: {len(unfetched)} of {len(urls)} URLs not fetched "
+                f"(deadline: {deadline_n}, transport: {transport_n})"
+            ),
+            "unfetched_urls": unfetched,
+        }
 
     @server.tool()
     async def extract_website_content(
@@ -716,6 +773,10 @@ def register_tools(server: MCPServer) -> None:
             config_json.scrape_selector is NOT applied — it is only a hint naming the elements of
             raw_text that hold the content; read those and follow the source's
             extraction_instructions. Credentials are never exposed in the response.
+        The fetch has a whole-call budget (agent extract.call_budget_seconds, default 35 s).
+            Errors: "DEADLINE_EXCEEDED: content fetch did not complete within Ns" when the budget
+            expires; "FETCH_FAILED: <ExceptionClass>" on a transport failure (a per-request
+            connect/read timeout included). Neither message echoes the source URL.
         CREDENTIAL CAVEAT (feature 093): a source that requires credentials (has_credentials=true)
             currently RAISES — secure per-source credential resolution is not yet supported (the
             platform stores secrets as is_secret references the config service redacts). Only
@@ -736,7 +797,19 @@ def register_tools(server: MCPServer) -> None:
         if not isinstance(request_headers, dict):
             request_headers = None
 
-        text = await _fetch_url(url, password=None, headers=request_headers)
+        budget = await _extract_call_budget_s()
+        scope = asyncio.timeout(budget)
+        try:
+            async with scope:
+                text = await _fetch_url(url, password=None, headers=request_headers)
+        except TimeoutError:
+            if not scope.expired():
+                raise
+            raise ToolError(
+                f"DEADLINE_EXCEEDED: content fetch did not complete within {budget:g}s"
+            ) from None
+        except httpx.TransportError as e:
+            raise ToolError(f"FETCH_FAILED: {type(e).__name__}") from None
         return {"raw_text": text}
 
     @server.tool()
@@ -1202,7 +1275,8 @@ def register_tools(server: MCPServer) -> None:
         found nothing"), and null when analysis did not report it. Errors: PERMISSION_DENIED
         (strategy missing or not owned); NOT_FOUND (no eligible evidence — the stale grade is
         cleared; includes the "all evidence symbols excluded (fundamentals unavailable: …)"
-        variant); UNAVAILABLE ('fundamentals availability unknown — grade unchanged' is passed
+        and "formula … is not readable" variants); UNAVAILABLE ('fundamentals availability
+        unknown — grade unchanged' and 'formula version unavailable — grade unchanged' are passed
         through verbatim; a store outage surfaces as 'UNAVAILABLE: upstream unavailable; outcome
         unknown, verify before retrying'). A deadline means the outcome is unknown: verify with
         list_strategies rather than assuming the grade was or was not refreshed.
@@ -2828,6 +2902,20 @@ def _same_origin(a: str, b: str) -> bool:
 # Outer bound keeping list_opportunities inside the MCP client's 60 s budget; looked up at call
 # time so tests can monkeypatch it.
 _POLICY_READ_TIMEOUT_S = 3.0
+
+# auth 10 s + _get_source 10 s + this budget must stay <= 57 s (the MCP client's 60 s timeout less
+# headroom); the [5,35] ceiling lives only in the config SetConfig registry.
+_EXTRACT_CALL_BUDGET_DEFAULT_S = 35.0
+
+
+async def _extract_call_budget_s() -> float:
+    """Whole-call fetch budget for the extract tools; non-finite or <= 0 falls back to 35 s."""
+    budget = await _agent_policy(
+        "extract.call_budget_seconds", _EXTRACT_CALL_BUDGET_DEFAULT_S, float
+    )
+    if not math.isfinite(budget) or budget <= 0:
+        return _EXTRACT_CALL_BUDGET_DEFAULT_S
+    return budget
 
 
 async def _agent_policy(key: str, default: float, cast: type) -> float:

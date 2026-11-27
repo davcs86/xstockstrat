@@ -140,8 +140,8 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'analysis.opportunity.max_live_held_symbols_per_compute': { minValue: 1, maxValue: 500 },
   'analysis.opportunity.max_concurrent_candidates': { minValue: 1, maxValue: 50 },
   'analysis.opportunity.valid_window_hours': { minValue: 1, maxValue: 168 },
-  // feature 227: ceilings keep analysis B+3.05+E < 30s (the BFF deadline); the agent floor of 30
-  // sits above analysis's own 27.05s worst case.
+  // feature 227: ceilings keep analysis B+3.05+E < 30s (the BFF deadline), under the agent floor of 30;
+  // enrich > marketdata price batch is enforced by CROSS_KEY_ORDERING (strict >, prevents inversion only).
   'analysis.opportunity.read_db_budget_ms': { minValue: 1000, maxValue: 20000 },
   'analysis.opportunity.live_enrich_timeout_ms': { minValue: 500, maxValue: 4000 },
   // xstk-analysis-no-scoring fires after 1800s without a cycle: interval + cycle duration (which scales
@@ -149,9 +149,12 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'analysis.engine.max_strategies_per_cycle': { minValue: 1, maxValue: 1000 },
   'analysis.engine.eval_interval_seconds': { minValue: 30, maxValue: 600 },
   'marketdata.price.batch_timeout_ms': { minValue: 500, maxValue: 2500 },
-  'agent.opportunities.read_timeout_seconds': { minValue: 30, maxValue: 55 },
-  // feature 229: retention floor (31d) must stay above the lookback ceiling (720h); the portfolio quote
-  // deadline (default 4000) must exceed max(batch, mark) budget plus the warm read.
+  // identity auth (10s) + the policy read (3s) + this value must stay <= 57s, 3s under the MCP client's 60s timeout.
+  'agent.opportunities.read_timeout_seconds': { minValue: 30, maxValue: 44 },
+  // auth (10s) + the source lookup (10s) + this whole-call extract budget must stay <= 57s.
+  'agent.extract.call_budget_seconds': { minValue: 5, maxValue: 35 },
+  // feature 229: retention floor (31d) must stay above the lookback ceiling (720h); quote > max(batch, mark)
+  // is enforced by CROSS_KEY_ORDERING (strict >, prevents inversion only — no warm-read margin).
   'portfolio.marketdata.quote_timeout_ms': { minValue: 500, maxValue: 8000 },
   'marketdata.quotes.latest_lookback_hours': { minValue: 24, maxValue: 720 },
   'marketdata.quotes.batch_timeout_ms': { minValue: 500, maxValue: 5000 },
@@ -163,6 +166,9 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   // feature 291: bar-ingest dead-symbol back-off. 0 is the documented kill switch; the 24h ceiling bounds how long a
   // false-positive hold can freeze a warm symbol's daily bar.
   'marketdata.stream.bar_ingest_backoff_ms': { minValue: 0, maxValue: 86400000 },
+  // feature 317: GetBars miss-path back-off. 0 is the documented kill switch; the 6h ceiling bounds how long a
+  // newly populated symbol can go without its first live fetch.
+  'marketdata.bars.miss_backoff_ms': { minValue: 0, maxValue: 21600000 },
   // feature 240: FR-5 last-close search window for offline marks (default 21 days).
   'portfolio.marketdata.last_close_lookback_days': { minValue: 5, maxValue: 60 },
   // feature 281: mirrors the portfolio reader clamp (60..86400), so no writable value is silently re-clamped.
@@ -187,6 +193,60 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
 
 function lookupScalarBounds(namespace: string, key: string) {
   return SCALAR_BOUNDS_REGISTRY[`${namespace}.${key}`];
+}
+
+type CrossKeyRule = { greater: string; lesser: readonly string[] };
+
+// Global-write deadline ordering (PLAT-13), keyed like SCALAR_BOUNDS_REGISTRY; every member must also be
+// scalar-bounded there, so the written value is already finite when this gate runs.
+const CROSS_KEY_ORDERING: ReadonlyArray<CrossKeyRule> = [
+  {
+    greater: 'portfolio.marketdata.quote_timeout_ms',
+    lesser: ['marketdata.quotes.batch_timeout_ms', 'marketdata.quotes.mark_timeout_ms'],
+  },
+  { greater: 'analysis.opportunity.live_enrich_timeout_ms', lesser: ['marketdata.price.batch_timeout_ms'] },
+];
+
+const CROSS_KEY_RULES_BY_KEY: ReadonlyMap<string, readonly CrossKeyRule[]> = (() => {
+  const m = new Map<string, CrossKeyRule[]>();
+  for (const rule of CROSS_KEY_ORDERING) {
+    for (const k of [rule.greater, ...rule.lesser]) m.set(k, [...(m.get(k) ?? []), rule]);
+  }
+  return m;
+})();
+
+function crossKeySiblings(fqn: string, rules: readonly CrossKeyRule[]): string[] {
+  return [...new Set(rules.flatMap((r) => (r.greater === fqn ? r.lesser : [r.greater])))];
+}
+
+/** Rejection message for a write of `value` to `fqn`, or null; absent siblings are skipped. */
+function crossKeyOrderingViolation(
+  fqn: string,
+  value: number,
+  rules: readonly CrossKeyRule[],
+  stored: ReadonlyMap<string, number>,
+): string | null {
+  for (const rule of rules) {
+    if (rule.greater === fqn) {
+      const violating = rule.lesser.filter((l) => stored.has(l) && !(value > stored.get(l)!));
+      if (violating.length === 0) continue;
+      const floor = Math.max(...violating.map((l) => stored.get(l)!));
+      const lowerFirst = violating.length === 1 ? `, or lower ${violating[0]} below ${value} first` : '';
+      return (
+        `${fqn} (${value}) must be greater than ` +
+        violating.map((l) => `${l} (stored: ${stored.get(l)})`).join(' and ') +
+        ` — cross-key deadline ordering. Remedy: raise ${fqn} above ${floor}${lowerFirst}`
+      );
+    }
+    const greaterValue = stored.get(rule.greater);
+    if (greaterValue !== undefined && !(greaterValue > value)) {
+      return (
+        `${fqn} (${value}) must be less than ${rule.greater} (stored: ${greaterValue})` +
+        ` — cross-key deadline ordering. Remedy: raise ${rule.greater} above ${value} first`
+      );
+    }
+  }
+  return null;
 }
 
 // Feature 296: the stored key is namespace-relative; a prefixed spelling is refused before authz.
@@ -767,6 +827,50 @@ export class ConfigServiceImpl {
           code: 3, // INVALID_ARGUMENT
           message: `${namespace}.${key} must be a number in [${scalarBounds.minValue}, ${scalarBounds.maxValue}] (got: ${extractValueData(value)})`,
         });
+        return;
+      }
+    }
+
+    // Cross-key ordering: global writes only, against global siblings — every reader watches global config.
+    const crossKeyFqn = `${namespace}.${key}`;
+    const crossKeyRules = userIdParam === null ? CROSS_KEY_RULES_BY_KEY.get(crossKeyFqn) : undefined;
+    if (crossKeyRules) {
+      const siblingFqns = crossKeySiblings(crossKeyFqn, crossKeyRules);
+      let siblingRows: { namespace: string; key: string; value_data: string }[];
+      try {
+        const res = await this.pool.query(
+          `SELECT namespace, key, value_data FROM config.config_values
+           WHERE environment = $1 AND user_id IS NULL AND namespace || '.' || key = ANY($2::text[])`,
+          [env, siblingFqns]
+        );
+        siblingRows = res.rows;
+      } catch (err: any) {
+        log.error('setConfig cross-key sibling read failed', { namespace, key, env, error: err.message });
+        callback({ code: 13, message: err.message });
+        return;
+      }
+      const stored = new Map<string, number>();
+      for (const row of siblingRows) {
+        const n = Number(row.value_data);
+        if (Number.isFinite(n)) stored.set(`${row.namespace}.${row.key}`, n);
+      }
+      for (const sib of siblingFqns) {
+        if (!stored.has(sib)) {
+          const dot = sib.indexOf('.');
+          log.warn('setConfig cross-key sibling absent or non-numeric — ordering check skipped', {
+            namespace: sib.slice(0, dot),
+            key: sib.slice(dot + 1),
+          });
+        }
+      }
+      const violation = crossKeyOrderingViolation(
+        crossKeyFqn,
+        Number(extractValueData(value)),
+        crossKeyRules,
+        stored,
+      );
+      if (violation) {
+        callback({ code: 3, message: violation }); // INVALID_ARGUMENT
         return;
       }
     }

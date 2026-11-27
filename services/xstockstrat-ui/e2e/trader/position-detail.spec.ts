@@ -1,7 +1,13 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { addAuthCookie, addAdminCookie } from '../helpers/auth';
-import { FUNDAMENTALS_STALL_SYMBOL, STRATEGY_DEF_LIVE, UI_CHART_HISTORY_VALUES } from '../fixtures';
+import {
+  FUNDAMENTALS_STALL_SYMBOL,
+  MYSZ_EVALUATION_FAILED_OPPORTUNITY,
+  STRATEGY_DEF_LIVE,
+  UI_CHART_HISTORY_VALUES,
+  symbolReadiness,
+} from '../fixtures';
 import { backfillJob, incompleteSymbolResult } from '../fixtures/backfillJobs';
 import { historyBarsWire, indicatorSeriesWire } from '../fixtures/indicatorHistory';
 import { noCriteriaDataRow } from '../fixtures/screenResults';
@@ -1195,6 +1201,81 @@ test.describe('Signal-detail formula not readable (feature 289)', () => {
     const notice = page.getByTestId('readiness-formula-unreadable');
     await expect(notice).toBeVisible({ timeout: 30000 });
     await expect(notice).toContainText('readable by your account');
+  });
+});
+
+/** Serve the symbol-filtered MYSZ ListOpportunities with the evaluation-failed row; the shared mock
+ *  serves only the unreadable row for MYSZ. */
+async function routeEvaluationFailedRow(page: Page): Promise<void> {
+  await page.route(
+    '**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities',
+    async (route) => {
+      const req = route.request().postDataJSON() as { symbol?: string } | null;
+      if (req?.symbol !== 'MYSZ') return route.fallback();
+      const row = MYSZ_EVALUATION_FAILED_OPPORTUNITY;
+      await fulfillJson(route, {
+        opportunities: [
+          { ...row, validUntil: new Date(Number(row.validUntil.seconds) * 1000).toISOString() },
+        ],
+        availableSources: [],
+      });
+    },
+  );
+}
+
+test.describe('Signal-detail evaluation failed (feature 308)', () => {
+  test('header shows the evaluation-failed cue, not the unreadable cue', async ({ page }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'MYSZ', 'strat-live-001');
+    await routeEvaluationFailedRow(page);
+    await page.goto('/trader/positions/MYSZ?strategy=strat-live-001');
+
+    const header = page.getByTestId('detail-evaluation-failed');
+    await expect(header).toBeVisible({ timeout: 30000 });
+    await expect(header).toContainText('evaluation failed');
+    await expect(page.getByTestId('detail-formula-unreadable')).toHaveCount(0);
+  });
+
+  test('readiness card shows the evaluation-failed notice for an empty row', async ({ page }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'MYSZ', 'strat-live-001');
+    await routeEvaluationFailedRow(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness', (route) =>
+      fulfillJson(route, {
+        readiness: [
+          {
+            ...symbolReadiness('MYSZ'),
+            conviction: 0,
+            passingConditions: 0,
+            totalConditions: 0,
+            conditions: [],
+          },
+        ],
+      }),
+    );
+    await page.goto('/trader/positions/MYSZ?strategy=strat-live-001');
+
+    const notice = page.getByTestId('readiness-evaluation-failed');
+    await expect(notice).toBeVisible({ timeout: 30000 });
+    await expect(notice).toContainText('Evaluation failed for MYSZ');
+    await expect(page.getByTestId('readiness-formula-unreadable')).toHaveCount(0);
+    await expect(page.getByText('conditions to evaluate')).toHaveCount(0);
+  });
+
+  test('readiness card keeps real conditions when the row is evaluation-failed', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'MYSZ', 'strat-live-001');
+    await routeEvaluationFailedRow(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness', (route) =>
+      fulfillJson(route, { readiness: [symbolReadiness('MYSZ')] }),
+    );
+    await page.goto('/trader/positions/MYSZ?strategy=strat-live-001');
+
+    await expect(readinessCard(page).getByText('2/3 conditions')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByTestId('readiness-evaluation-failed')).toHaveCount(0);
+    await expect(page.getByTestId('readiness-formula-unreadable')).toHaveCount(0);
   });
 });
 

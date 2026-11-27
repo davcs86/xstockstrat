@@ -10,7 +10,7 @@ import {
   ReadinessRule,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { CONDITION_STATE, EnumBadge } from '@/lib/opportunityShared';
-import { READINESS_CUE } from '@/lib/readinessCue';
+import { EVALUATION_FAILED_PROVENANCE, READINESS_CUE } from '@/lib/readinessCue';
 import { readinessState } from '@/lib/readinessRollup';
 import { StrategyPicker } from '@/components/insights/StrategyPicker';
 import { useOpportunities, useReadiness, useStrategyAnalytics } from '@/hooks/useOpportunities';
@@ -45,6 +45,7 @@ export function SignalReadiness({
     [opps, symbol, strategyId],
   );
   const isHeld = pairRow?.provenance.includes('position') ?? false;
+  const evalFailed = pairRow?.provenance.includes(EVALUATION_FAILED_PROVENANCE) ?? false;
   const rule = isHeld ? ReadinessRule.EXIT : ReadinessRule.ENTRY;
   const ruleWord = isHeld ? 'exit' : 'entry';
 
@@ -54,6 +55,7 @@ export function SignalReadiness({
     rule,
   );
   const readiness = data?.readiness?.[0];
+  const noConditions = !readiness || readiness.conditions.length === 0;
   // Strategy track record block.
   const { data: analytics } = useStrategyAnalytics(strategyId || undefined);
 
@@ -97,7 +99,11 @@ export function SignalReadiness({
               here.
             </CardNotice>
           </div>
-        ) : !readiness || readiness.conditions.length === 0 ? (
+        ) : evalFailed && noConditions ? (
+          <div role="status" data-testid="readiness-evaluation-failed">
+            <CardNotice>Evaluation failed for {symbol}.</CardNotice>
+          </div>
+        ) : noConditions ? (
           <p className="text-sm text-muted-foreground">
             This strategy has no {ruleWord} conditions to evaluate.
           </p>

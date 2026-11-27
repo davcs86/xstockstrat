@@ -39,8 +39,16 @@ On DigitalOcean, the `db-migrator` PRE_DEPLOY job runs automatically on every de
 ## Adding a new migration
 
 1. Create `services/<service>/migrations/NNN_description.up.sql` — NNN is the next integer after `ls services/<service>/migrations/ | sort | tail -1`.
+   Migrations are **forward-only**: golang-migrate applies only versions above the stored one, so a
+   number at or below the target branch's maximum is skipped on every persistent database. Take the
+   next free NNN **at merge**: numbers written in `merge-order.md` are advisory, so renumber before
+   merge, never after. CI enforces it (`migration-order-gate`). This narrows the pre-assignment
+   pattern in `docs/roadmap/ledger/insights.md:900`: pre-assigned numbers are a plan, re-checked
+   against the base maximum at merge.
 2. Create matching `NNN_description.down.sql` (rollback SQL, or a stub comment if rollback is not supported).
 3. **Never edit an applied `.up.sql`** (committed to `main-dev`) — add a new numbered migration instead.
+   `migration-order-gate` also refuses a modified or deleted merged `.up.sql`, comment and typo fixes
+   included; the escape is a new numbered file.
 4. Test locally: `./scripts/db-migrate.sh`
 
 ### Migration header directives (feature 224)
@@ -59,8 +67,8 @@ Both are read from the **first 5 lines** of an `.up.sql`:
 
 **Expand and contract up-files must be idempotent** on both the expanded and the contracted schema
 (`IF NOT EXISTS`, `to_regclass` guards, one-shot `DO` blocks, `IS NULL`-guarded backfills), because
-the `migration-rerun` job replays them. `db-migrate.sh`'s dirty-state recovery (`force 0`, a replay
-from version 0) is refused at or above a contract floor (§ Contract migration recovery).
+the `migration-rerun` job replays them. `db-migrate.sh up` never recovers a dirty service; it prints
+the recovery and exits 1 (§ Contract migration recovery).
 
 **CI jobs** (`.github/workflows/ci.yml`, on `migrations`/`ci` path changes):
 
@@ -69,7 +77,7 @@ from version 0) is refused at or above a contract floor (§ Contract migration r
   re-applies the feature-224 expand and feature-225 contract up-files (indicators `007`, ingest
   `013`/`014`, analysis `026`/`027`) a second time and asserts the N-1 trigger count is 0. It then
   proves the contract downs are refused and leave the state dirty, that the dirty guard blocks
-  `db-migrate.sh up` until `migrate force <n-1>`, runs `scripts/migration-assertions/*.sql`, and
+  `db-migrate.sh up` until the printed `migrate force <prev>`, runs `scripts/migration-assertions/*.sql`, and
   executes the indicators write SQL against a schema without `is_public` (feature 225 AC-11). Pass 4
   (feature 279) runs an older copy of the tree whose marketdata dir lacks its newest file and proves
   the clean-ahead skip and the dirty-ahead refusal (§ Contract migration recovery, *Ahead rule*).
@@ -77,29 +85,48 @@ from version 0) is refused at or above a contract floor (§ Contract migration r
   `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md`).
 - `migration-contract-gate` — PR-only; runs `scripts/check-migration-contract.py` against the base
   branch.
+- `migration-order-gate` — PR-only; runs `scripts/check-migration-order.py` against the base branch.
+  It refuses a new NNN at or below the base maximum, a duplicate NNN, and a modified or deleted merged
+  up-file. Verdicts: a promotion PR (`main-dev` → `main`, same repository) passes by construction;
+  every other PR into `main` runs with `--forbid-new`, so a hotfix carries no migration and a schema
+  fix ships through `main-dev` and a promotion. The cost: an urgent production schema fix forces
+  promotion of all unpromoted `main-dev` work. Two PRs can still each take the same next number
+  against a stale base; branch protection "require branches to be up to date" on `main-dev` and
+  `main` closes that, and golang-migrate fails loudly on a duplicate version if it slips through.
 
 ### Contract migration recovery
 
-- **Guard.** `db-migrate.sh up` runs `scripts/migration-dirty-guard.sh` (shipped in the migrator image
-  by `scripts/Dockerfile.migrate`) before its `force 0` on a dirty service.
-- **Floor rule.** A service's floor is the lowest version named by any `-- contract-of` header in its
-  migrations dir. The guard allows `force 0` below the floor or when the service has no contract file;
-  at or above it, it exits non-zero and prints the recovery text. An unparseable version or a
-  `contract-of` target outside the service's own dir fails closed.
-- **Recovery** for a refused service dirty at version `n` (the guard prints the exact command):
-  `migrate -path services/xstockstrat-<svc>/migrations -database
-  "$DATABASE_URL&x-migrations-table=<svc>_schema_migrations" force <n-1>` (`?` when the URL has no
-  query string), then `scripts/db-migrate.sh up`. Use `migrate force <n-1>`, never
-  `db-migrate.sh force` (it forces every service to its highest version). `db-migrate.sh` has no
-  `down`, so a contract down — which always raises (`irreversible contract`) and leaves the state
+- **Guard.** `db-migrate.sh up` calls `scripts/migration-dirty-guard.sh` (shipped in the migrator
+  image by `scripts/Dockerfile.migrate`) for a dirty service and then exits 1. There is no automatic
+  recovery for any service. Exit 3 prints a recovery; exit 2 means none can be computed (unparsable
+  version, no up-file for the dirty version, an unparsable file name).
+- **Recovery (a ratchet)** for a service dirty at version `n` (the guard prints the exact command).
+  Read the dirty file first — a data (DML) file that already took effect applies twice, without
+  error, when replayed. Then run the printed command: `migrate -path
+  services/xstockstrat-<svc>/migrations -database
+  "$DATABASE_URL&x-migrations-table=<svc>_schema_migrations" force <prev>` (`?` when the URL has no
+  query string), where `<prev>` is the highest existing version below `n` (gaps are skipped), or
+  `TRUNCATE public.<svc>_schema_migrations` when the dirty file is the service's first; then
+  `scripts/db-migrate.sh up`. Only if that `up` fails with "already exists" in version K (the dirty
+  version, then the next one) and every effect of K is verified present: `force K` and `up` again.
+  Never force forward on doubt — a forced version is skipped for good, which is how seed files get
+  lost. For a contract or prune file verify the effect, not that objects exist. Use `migrate force`,
+  never `db-migrate.sh force` (it forces every service to its highest version). `db-migrate.sh` has
+  no `down`, so a contract down — which always raises (`irreversible contract`) and leaves the state
   dirty — is reachable only via a raw `migrate goto`.
+
+  `force 0` printed for a `000`-based service dirty at version 1 is ordinary previous-version
+  recovery, not the removed replay-from-zero path.
+
+  Accepted cost: a dirty row stops every later migrator run — the PRE_DEPLOY job and DigitalOcean's
+  automated rollback deploy included — until an operator runs the printed command.
 - **Ahead rule (feature 279).** Before the guard, `db-migrate.sh up` runs
   `scripts/migration-ahead-check.sh` (also in the migrator image, so DO's PRE_DEPLOY job and the homelab
   migrator behave the same). A **clean** service whose database version is newer than the image's
   highest up-file is skipped (`[ahead]`) — the rollback case, where an older release's migrator runs
-  against a schema a newer release already migrated. A **dirty** one is refused before any `force 0`
+  against a schema a newer release already migrated. A **dirty** one is refused
   (the older image cannot see the newer file's contract header); recover with the newer release's files
-  (the printed `force <n-1>`), then fix forward. An unparsable version, an unparsable filename, or a
+  (the printed `force <n-1>` — `n-1` assumes the newer release has no gap below `n`), then fix forward. An unparsable version, an unparsable filename, or a
   numeric version with no up-files fails closed. Migrations must therefore stay backward-compatible with
   the previous release: a rollback restores images, not schema.
 - **Adjacency convention.** A contract migration directly follows its expand file (analysis `027`

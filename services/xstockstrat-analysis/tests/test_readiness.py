@@ -18,6 +18,7 @@ from app.services.readiness import (
     compute_readiness_row,
     is_readiness_row_fresh,
     readiness_valid_until,
+    unavailable_readiness_row,
 )
 
 from .conftest import RecordingStub, aio_rpc_error
@@ -150,6 +151,31 @@ async def test_compute_readiness_row_unreadable_formula_is_marked_not_sentinel()
     assert trace["formula_unreadable"] is True
     assert (trace["passing_conditions"], trace["total_conditions"]) == (0, 0)
     assert row["bar_epoch"] == bars[-1].time.seconds >= 0
+
+
+@pytest.mark.asyncio
+async def test_unavailable_readiness_row_is_the_stale_sentinel_with_the_computed_shape():
+    """Feature 308: a caller-isolated failure stages the -1 sentinel in the computed row's shape."""
+    computed = await _compute(AsyncMock(return_value=[]), benchmark_epoch=0)
+    now = datetime.now(UTC)
+    row = unavailable_readiness_row(
+        computed["symbol"],
+        rule=computed["rule"],
+        fingerprint=computed["def_fingerprint"],
+        strategy_id=computed["strategy_id"],
+        user_id=computed["user_id"],
+        now=now,
+        valid_until=now + timedelta(hours=1),
+    )
+    assert row.keys() == computed.keys()
+    assert row["bar_epoch"] == -1
+    assert row["readiness_json"] == {}
+    assert (
+        is_readiness_row_fresh(
+            row, now=now, fingerprint=computed["def_fingerprint"], latest_bar_epoch=0
+        )
+        is False
+    )
 
 
 # ── AC-1: byte-identity of the shared SLOW compute path ─────────────────────
