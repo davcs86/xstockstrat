@@ -3074,3 +3074,12 @@ Up-front confirmation: the operator approved the plan with this record (verbatim
 ```sdd-batch-setup
 {"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
 ```
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 1
+
+### Step 1 — migration: portfolio `019_fill_applied_events` [done]
+- Created `019_fill_applied_events.{up,down}.sql`. The `.up` creates `portfolio.consumer_applied_events`, with PK `(consumer, user_id, account_id, order_id)`, `event_id`, an `outcome` CHECK of `applied`/`parked`, `parked_reason`, `pending_closed JSONB` and `applied_at`. It also creates `portfolio.consumer_floors (consumer PK, floor_recorded_at)`. It seeds no row, creates no trigger and creates no other table. The `.down` drops both tables in reverse order. `019` was still the next free number: the highest on the merged tree is `018_watchlist_signal_expiry`. Other features' unmerged branches were not checked.
+- TDD: N/A (migration). Verified offline: run `.sdd-logs/v-1.log` printed both paths, `2` and `0`. `exit=1` is `grep -c` exiting on a zero count; see the Deviation Log. Inspection: each CREATE TABLE has a matching DROP TABLE. No database was started. The config-wiring gate does not apply, because the migration writes no `config.config_values` row and the step declares no key.
+- Tooling: none needed (migration step).
+- Files modified: `services/xstockstrat-portfolio/migrations/019_fill_applied_events.up.sql`, `services/xstockstrat-portfolio/migrations/019_fill_applied_events.down.sql`
+- Deviations: the Verification block exits 1 when it passes (Deviation Log, Step 1).
