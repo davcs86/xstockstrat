@@ -816,3 +816,9 @@
 - TDD: AC-41 red: with the `060` files moved aside, `findOne` → "expected exactly one *authelia_sso_keys.up.sql, got []" (exit 1) → green: `pnpm run lint` 0, `pnpm run test:coverage` 445/445 pass (exit 0), `c8 check-coverage --lines 40` 0 (94.33 % lines). C-13: single consumer, inline.
 - Files modified: `services/xstockstrat-config/src/__tests__/autheliaSsoSeedMigration.test.ts`
 - Deviations: none. Note: the `splitTopLevel`/`unquote`/`parseInsert` helpers are cloned from `notifyCommsgunSeedMigration.test.ts` as the step instructs ("clone the shape"); hoisting them into `migrationSql.ts` would touch files outside the step — a DRY follow-up candidate, not done here.
+
+### Step 6 — config: Shared vector file, CI change filters and the config-wiring receivers [done]
+- `scripts/testdata/oidc-issuer-vectors.json`: `issuer_pattern`, `app_url_pattern`, `issuer` (66) and `app_url` (16) copied verbatim from `git show 7eeab3d:…/design.md` 769–870 (value-equality asserted against the source while building); the old `mode` array dropped; new `mode` (10 rows, D-101/D-121), `refusals`, `prm`. Six `registry.receivers` added (identity `authMode.ts:config`; agent `sso_mode.py:{identity,agent}_config`; UI `oidcConfig.ts:{identity,ui,agent}.values`). The vector file added to the agent, identity and UI CI filters.
+- Verification: counts `66 16 10 ['link','resolve','session'] ['agent_public_url','expected','issuer']`; python mismatches `[]`; node regex-only mismatches `[]` (so the impl-review ⚠ "Node check prints without asserting" has nothing to assert here; Step 27 still asserts); `receivers registered` exit=0; ci.yml count 3; `check-config-wiring.mjs --declared-from product-spec.md` exit=0. TDD: N/A.
+- Files modified: `scripts/testdata/oidc-issuer-vectors.json`, `scripts/config-wiring.json`, `.github/workflows/ci.yml`
+- Deviations: none

@@ -56,12 +56,12 @@ jobs:
             xstockstrat-indicators: ['services/xstockstrat-indicators/**']
             xstockstrat-ingest:     ['services/xstockstrat-ingest/**']
             xstockstrat-analysis:   ['services/xstockstrat-analysis/**', 'services/xstockstrat-indicators/migrations/*_seed_formula_templates.up.sql']
-            xstockstrat-agent:      ['services/xstockstrat-agent/**', 'services/xstockstrat-analysis/app/handlers/servicer.py', 'services/xstockstrat-trading/internal/service/trading.go', 'services/xstockstrat-ingest/app/handlers/servicer.py', 'services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json', 'docs/runbooks/mcp-tools.md', 'services/xstockstrat-ingest/app/peer_identity.py', 'services/xstockstrat-indicators/app/peer_identity.py']
+            xstockstrat-agent:      ['services/xstockstrat-agent/**', 'services/xstockstrat-analysis/app/handlers/servicer.py', 'services/xstockstrat-trading/internal/service/trading.go', 'services/xstockstrat-ingest/app/handlers/servicer.py', 'services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json', 'docs/runbooks/mcp-tools.md', 'services/xstockstrat-ingest/app/peer_identity.py', 'services/xstockstrat-indicators/app/peer_identity.py', 'scripts/testdata/oidc-issuer-vectors.json']
             xstockstrat-config:     ['services/xstockstrat-config/**', 'scripts/config-heal/mcp-credential-orphan-sweep*.sql']
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
-            xstockstrat-identity:   ['services/xstockstrat-identity/**']
+            xstockstrat-identity:   ['services/xstockstrat-identity/**', 'scripts/testdata/oidc-issuer-vectors.json']
             xstockstrat-notify:     ['services/xstockstrat-notify/**']
-            xstockstrat-ui:         ['services/xstockstrat-ui/**', '.do/**', 'services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json']
+            xstockstrat-ui:         ['services/xstockstrat-ui/**', '.do/**', 'services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json', 'scripts/testdata/oidc-issuer-vectors.json']
             dockerfiles:
               - '**/Dockerfile*'
               - '.hadolint.yaml'

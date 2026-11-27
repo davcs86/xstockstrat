@@ -337,7 +337,7 @@ grep -n "__tests__/fixtures" src/__tests__/autheliaSsoSeedMigration.test.ts || e
 
 ### Step 6 — config: Shared vector file, CI change filters and the config-wiring receivers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (shared test data, config-wiring registry) and `.github/workflows/ci.yml`
 **Files**:
 - `scripts/testdata/oidc-issuer-vectors.json` — create
