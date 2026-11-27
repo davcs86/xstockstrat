@@ -300,6 +300,10 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 	defer s.brokersMu.Unlock()
 
 	for _, rec := range accounts {
+		if rec.UserID == "" {
+			slog.WarnContext(ctx, "LoadBrokerPool: account has no owner, skipping account", "account_id", rec.ID)
+			continue
+		}
 		// Offline accounts have no credentials and no broker client — loaded with a nil client
 		// (tagged OFFLINE) so they resolve after a restart; every broker poller skips OFFLINE entries.
 		if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
@@ -2724,6 +2728,9 @@ func (s *TradingService) warnCredSkip(accountID string) {
 // RegisterBrokerAccount registers a new broker account, encrypts credentials, and adds it to the pool.
 // Paper vs. live is derived from the environment (req.IsPaper is ignored).
 func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *tradingv1.RegisterBrokerAccountRequest, userID string) (*tradingv1.BrokerAccount, error) {
+	if userID == "" {
+		return nil, grpcstatus.Errorf(codes.PermissionDenied, missingCallerMsg)
+	}
 	// Offline account: no credentials, no broker client. Skip the encrypt/instantiate/validate
 	// path and persist with credentials_enc = NULL (migration 008 made the column nullable).
 	if req.BrokerType == commonv1.BrokerType_BROKER_TYPE_OFFLINE {
@@ -2793,6 +2800,9 @@ func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *trading
 // UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
 // account, re-instantiates its broker client, and re-validates the credentials.
 func (s *TradingService) UpdateBrokerAccountCredentials(ctx context.Context, accountID, callerUserID, credentialsJSON string) (*tradingv1.BrokerAccount, error) {
+	if callerUserID == "" {
+		return nil, grpcstatus.Errorf(codes.PermissionDenied, missingCallerMsg)
+	}
 	if !json.Valid([]byte(credentialsJSON)) {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "credentials_json is not valid JSON")
 	}
@@ -3208,6 +3218,9 @@ func (s *TradingService) checkBracketProtection(ctx context.Context) {
 
 // ListBrokerAccountsSvc returns all broker accounts for the given user.
 func (s *TradingService) ListBrokerAccountsSvc(ctx context.Context, userID string) ([]*tradingv1.BrokerAccount, error) {
+	if userID == "" {
+		return nil, grpcstatus.Errorf(codes.PermissionDenied, missingCallerMsg)
+	}
 	recs, err := s.accountRepo.ListBrokerAccounts(ctx, userID)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "list broker accounts: %v", err)
@@ -3283,6 +3296,9 @@ func logCredentialStatusTransition(accountID string, seen bool, prev, status int
 
 // DeregisterBrokerAccountSvc deactivates a broker account and removes it from the pool.
 func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, accountID, callerUserID string) error {
+	if callerUserID == "" {
+		return grpcstatus.Errorf(codes.PermissionDenied, missingCallerMsg)
+	}
 	rec, err := s.accountRepo.GetBrokerAccount(ctx, accountID)
 	if err != nil {
 		return grpcstatus.Errorf(codes.NotFound, "account %s not found: %v", accountID, err)

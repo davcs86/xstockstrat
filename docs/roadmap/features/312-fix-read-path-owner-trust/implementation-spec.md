@@ -285,7 +285,7 @@ cd services/xstockstrat-trading && export GOWORK=off \
 
 ### Step 4 — service: trading broker-account owner gate and owner-less pool skip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify

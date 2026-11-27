@@ -572,3 +572,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-trading/internal/service/trading.go`, `services/xstockstrat-trading/internal/service/trading_ownership_test.go`, `services/xstockstrat-trading/internal/service/trading_offline_test.go`, `services/xstockstrat-trading/internal/service/trading_order_race_test.go`
 - Deviations: none
+
+### Step 4 — service: trading broker-account owner gate and owner-less pool skip [done]
+- Added an inline `if <caller> == "" { … grpcstatus.Errorf(codes.PermissionDenied, missingCallerMsg) }` as the first statement of `RegisterBrokerAccount` (before the OFFLINE branch, so ALPACA, IBKR and OFFLINE are all covered), `UpdateBrokerAccountCredentials` (before `json.Valid`), `ListBrokerAccountsSvc` and `DeregisterBrokerAccountSvc` (D-13). `LoadBrokerPool`'s loop now opens with the owner-less skip, `slog.WarnContext(ctx, "LoadBrokerPool: account has no owner, skipping account", "account_id", rec.ID)` then `continue` (D-9). `ResumeAccountSvc` is unchanged (admin-gated). Accepted side effects (resolveAccount sole-account count, lost hydration, pollFills) carry no code, per Instruction 4.
+- TDD: red-green. This step's **Files** have no paired test; Step 7 asserts the behaviour. RED was this step's Verification on the pre-fix tree: exit=1 (`.sdd-logs/v-1.log`). Build and `ok  github.com/xstockstrat/trading/internal/service 14.026s` passed; the `codes.PermissionDenied, missingCallerMsg` count was 1, not 5. GREEN was the same Verification: exit=0 (`.sdd-logs/v-2.log`) with `ok  github.com/xstockstrat/trading/internal/service 14.596s`, `304:			slog.WarnContext(ctx, "LoadBrokerPool: account has no owner, skipping account", "account_id", rec.ID)`, and golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run).
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: none
