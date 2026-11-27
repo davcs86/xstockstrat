@@ -2182,7 +2182,7 @@ grep -n "AGENT-9" services/xstockstrat-agent/docs/context-constitution.md | grep
 
 ### Step 58 — test: AC-20 and AC-36 documentation assertions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - (no file changes — verification-only step; run from the repo root)

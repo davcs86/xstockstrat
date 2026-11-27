@@ -1149,3 +1149,9 @@
 - TDD: N/A (docs). Verification: `APP_URL` hits UI `CLAUDE.md:178,181,232`, `chromium-sso` `:275`; AGENT-9 line `:24` contains `` `identity` ``. `check-config-wiring.mjs --doc-check` exit 0.
 - Files modified: `services/xstockstrat-ui/CLAUDE.md`, `services/xstockstrat-agent/{CLAUDE.md,docs/context-constitution.md,docs/oauth.md}`
 - Deviations: none
+
+### Step 58 — test: AC-20 and AC-36 documentation assertions [done]
+- Ran the Step 58 block from the repo root after Steps 54–57; no file changes and no CI guard (C-18). Committed as its own bookkeeping commit, so no fold into Step 57 was needed.
+- TDD: red: on the pre-docs tree (before Step 54) the block exited 1 at its first check, `grep -qF xstockstrat-mcp-claude docs/runbooks/mcp-tools.md`; every later check also failed (no `authelia-sso-cutover.md`, no IDENTITY-15 `SEED_USER_ID` line, no `` `identity` `` in AGENT-9, none of `auth.mode`/`ui/oidc.`/`agent/oidc.issuer`/`Link SSO` in the three CLAUDE.md files or `frontend-auth.md`) → green: the block prints `GREEN`, exit 0. Covers @AC-20, @AC-36.
+- Files modified: none (verification-only)
+- Deviations: none
