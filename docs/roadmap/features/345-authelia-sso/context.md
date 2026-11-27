@@ -1064,3 +1064,9 @@
 - TDD: RED/GREEN via Step 53's e2e and `nav-reachability.spec.ts`. Verification: typecheck, lint exit 0; build exit 0 (`ƒ /accounts/sso`); the nav grep hits 2; `test:unit` 103 files, 1089 passed / 2 skipped (the split changes no behaviour). The pre-split build failed with `UnhandledSchemeError: Reading from "node:crypto"` (`page.tsx` → `ssoErrors.ts` → `ssoTxn.ts`).
 - Files modified: `services/xstockstrat-ui/src/app/accounts/sso/page.tsx` (new), `services/xstockstrat-ui/src/components/shared/{navGroups,PlatformHeader}.tsx`, plus `services/xstockstrat-ui/src/lib/ssoErrorCodes.ts` (new) and `services/xstockstrat-ui/src/lib/ssoErrors.ts` (Deviation Log)
 - Deviations: the client-safe split (Deviation Log). Gaps filled: a Cancel in the dialog only closes it (the `sso_link` cookie stays until it expires or a later confirm); a non-`invalid_credentials` confirm refusal reloads the status so a cleared link stops showing as pending.
+
+### Step 46 — service: Sign-out button in the shared header [done]
+- New `SignOutButton` (`'use client'`): `Button variant="ghost" size="icon" className="size-11 sm:size-8" aria-label="Sign out"` with phosphor `SignOut` (the header's icon set), disabled while pending; `fetch('/api/auth/logout', {method:'POST', redirect:'manual'})`, a JSON `ok` body with a string `redirect` → `location.assign(redirect)`, every other outcome (non-OK, non-JSON, opaque redirect, network error) → `/auth/login`; `pending` reset in `finally`. Mounted right after `<CopilotToggle />` (`PlatformHeader.tsx:254`) in every mode.
+- TDD: RED/GREEN via Step 53's e2e. Verification: typecheck, lint, build exit 0.
+- Files modified: `services/xstockstrat-ui/src/components/shared/SignOutButton.tsx` (new), `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`
+- Deviations: none. Gap filled: `data-testid="sign-out"` added for the e2e (the accessible name "Sign out" stays the primary locator).

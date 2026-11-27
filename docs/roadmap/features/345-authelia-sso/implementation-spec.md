@@ -1783,7 +1783,7 @@ grep -n "/accounts/sso" src/components/shared/navGroups.tsx src/components/share
 
 ### Step 46 — service: Sign-out button in the shared header
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/SignOutButton.tsx` — create

@@ -11,6 +11,7 @@ import { CopilotRail } from '../copilot/CopilotRail';
 import { BottomTabBar } from '../mobile/BottomTabBar';
 import { NAV_GROUPS, HOME_HREF, type SubNavItem, type NavItem, type NavGroup } from './navGroups';
 import { AlertStream } from './AlertStream';
+import { SignOutButton } from './SignOutButton';
 import {
   SidebarProvider,
   Sidebar,
@@ -250,6 +251,7 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
           {actions}
           <AlertStream />
           <CopilotToggle />
+          <SignOutButton />
           {/* Override SidebarProvider's default `flex min-h-svh w-full` page-root sizing — here it's
               scoped to just the Row 1 trigger+panel, not the page. */}
           {/* sm:hidden must wrap the whole subtree: Sidebar's desktop branch renders off-screen (negative
