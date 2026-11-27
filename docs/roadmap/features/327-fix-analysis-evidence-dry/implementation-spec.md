@@ -359,7 +359,7 @@ ruff check . && ruff format --check .
 
 ### Step 7 — service: owner-scoped `latest_formula_fingerprint` prefix read
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/backtest_run_symbols.py` — modify
@@ -399,7 +399,7 @@ ruff check . && ruff format --check .
 
 ### Step 8 — test: the prefix read against SQL shape and a real PostgreSQL
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_backtest_run_symbols_repo.py` — modify

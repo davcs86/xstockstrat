@@ -693,3 +693,16 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 - TDD: AC-1 red: `FAILED tests/test_formula_digest_read.py::test_ac1_source_edit_moves_digest_through_the_read[FormulaDefinition-False]`, within `9 failed` (`.sdd-logs/v-1.log`, exit=1). Green: `10 passed` (`.sdd-logs/v-3.log`, exit=0).
 - Files modified: `services/xstockstrat-analysis/tests/test_formula_digest_read.py`
 - Deviations: none
+
+### Step 7 — service: owner-scoped `latest_formula_fingerprint` prefix read [done]
+- Atomic unit Steps 7+8 (one red→green, one commit). Added `BacktestRunSymbolsRepository.latest_formula_fingerprint(user_id, strategy_id, def_hash)` after `fetch_all_for_fingerprint`: one `fetchval` of `SELECT definition_fingerprint … WHERE user_id = $1 AND strategy_id = $2 AND starts_with(definition_fingerprint, $3) ORDER BY completed_at DESC LIMIT 1` with `$3 = def_hash + "."`. The docstring records the owner scope, the composite-only match, the O-20 index-prefix cost and the `completed_at` ordering limitation. `fetch_eligible` and `fetch_all_for_fingerprint` are unchanged. Nothing calls it yet (Step 11).
+- TDD: AC-3 red (`.sdd-logs/v-1.log`, Step 8 Verification): `AttributeError: 'BacktestRunSymbolsRepository' object has no attribute 'latest_formula_fingerprint'`, `5 failed, 6 passed`. The four real_pg tests built the table and inserted their rows before failing on the call. Green, Step 7 Verification (`.sdd-logs/v-2.log`, exit=0): both greps hit (`108:    async def latest_formula_fingerprint(`, `122: … starts_with(definition_fingerprint, $3)`), `11 passed`, `All checks passed!`, `146 files already formatted`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/repositories/backtest_run_symbols.py`
+- Deviations: none
+
+### Step 8 — test: the prefix read against SQL shape and a real PostgreSQL [done]
+- Atomic unit Steps 7+8. Added `test_latest_formula_fingerprint_is_owner_scoped_prefix_read` (SQL fragments and args `("alice", "s1", "h.")`). Created `tests/test_backtest_run_symbols_real_pg.py` (`pytestmark = pytest.mark.real_pg`). It builds the table from the 007 `CREATE TABLE` statement, which the regex stops at the first `\n);` so the 007 `backtest_runs`/`strategy_scores` ALTERs never run, plus the 026 `user_id` ALTER line. Both are read from the migration files. Rows are inline (C-13), and each test uses its own `strategy_id` because `local_pg` is session-scoped. Cases: a bare `h` cell is never returned (AC-3); the newest composite wins; another owner, another strategy, the `hh.` prefix and a `NULL` fingerprint are all ignored; only bare cells → `None`.
+- TDD: red as in Step 7 → green (`.sdd-logs/v-3.log`, exit=0): `11 passed` with no skip lines under `-rs` (real_pg ran against PostgreSQL 16), the conftest grep printed no lines, `1869 passed`, `Total coverage: 91.96%`, `backtest_run_symbols.py 21 0 100%`, `All checks passed!`, `146 files already formatted`.
+- Files modified: `services/xstockstrat-analysis/tests/test_backtest_run_symbols_repo.py`, `services/xstockstrat-analysis/tests/test_backtest_run_symbols_real_pg.py`
+- Deviations: none
