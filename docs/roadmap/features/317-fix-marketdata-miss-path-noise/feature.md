@@ -18,6 +18,7 @@
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); steps 8,11 re-spec'd against main-dev `f802b184` |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done (sequential, sdd-batch-execute); `check-config-wiring.mjs --final` exit 0 |
 
 ---
 

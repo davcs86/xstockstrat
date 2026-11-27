@@ -946,7 +946,7 @@ Plus the Verification of Steps 7, 8 and 9, which together are the unit's green r
 
 ### Step 11 — docs: key table, GetBars / cancel-stop invariants, registered keys, product-spec corrections
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`, `xstockstrat-portfolio` (service docs); `docs/patterns/`; feature directory
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
@@ -1115,3 +1115,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Anchors**: lines moved after BRANCH SYNC (`GetBars` `:271` → `:279`, the guard `:354` → `:362`,
   `fetchAndCacheBars` `:410` → `:428`). Every symbol was found, so this is not a deviation (F-04). The
   `scripts/config-wiring.json` neighbour `bar_hold.go:cfg` is still at `:115`.
+
+### Deviation 5 — Step 11: Verification shell framing; doc-check exit captured alone (2026-11-27)
+
+- **Spec said**: the Step 11 `**Verification**` block, run as written.
+- **Actual**: the block ran verbatim inside `( … )` with the closing paren on its own line, so the trailing `# …`
+  comments could not swallow it (run K=1). The block's exit status is only its last grep's, so
+  `node scripts/check-config-wiring.mjs --doc-check` was also run alone (K=2, exit 0, no output). `PATH` put
+  Node 24 first. Two small consistency edits inside the step's own Files, beyond the literal instructions:
+  MARKETDATA-3's "re-read failure logs a WARN" gains the done-ctx Debug note, and the `alpaca-integration.md`
+  `GetBars` bullet names the bar-ingest early return, so neither text contradicts Steps 2 and 10.
+- **Disposition**: CI-equivalent fallback for the framing; the commands and the judgment are unchanged.

@@ -887,3 +887,27 @@ Up-front confirmation: the operator approved the plan with this record (binding,
   writers.
 - Files modified: `services/xstockstrat-marketdata/internal/service/bars_miss.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go`, `scripts/config-wiring.json`
 - Deviations: Deviation 4 (shared).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 11
+
+- Tree: detached at `origin/feature/fix-marketdata-miss-path-noise` @ `4f202749`. Anchors re-grepped: key row
+  `stream.bar_ingest_backoff_ms` `services/xstockstrat-marketdata/CLAUDE.md:55`; `GetBars` bullet
+  `alpaca-integration.md:9`; MARKETDATA-3 `:17`, MARKETDATA-8 `:22`; PORTFOLIO-3 `:16`; first registered-keys
+  entry `### feature 366` `config-governance.md:152`; `product-spec.md:17-19`, `:63-65`. Code symbols the docs
+  name were read on the tree: `liveRefetch` `bars_miss.go:72`, `fetchAndCacheBars` `marketdata_service.go:426`,
+  `cacheLiveBars` `:397`, `barsCacheWriteGrace` `:393`, the `s.liveRefetch(` call `:368`, `warnUnlessDone` `:416`.
+- Tooling: Node v24.22.3 (`/opt/node24/bin`, first on `PATH`); no install.
+
+### Step 11 — docs: key table, GetBars / cancel-stop invariants, registered keys, product-spec corrections [done]
+- Added the `bars.miss_backoff_ms` key row; the miss back-off and cancel-quiet text in the `GetBars` bullet;
+  MARKETDATA-8's rule now names the implicit-page back-off and MARKETDATA-3 points at `bars_miss.go#liveRefetch`
+  with refreshed `~L` hints; PORTFOLIO-3 covers the deregistration cancel-stop and the bracket/balance done-ctx
+  Debug, with the new guard tests; a `### feature 317` registered-keys entry above feature 366; product-spec
+  order-fill correction (O-9) and § Fix Scope (config key yes; one config seed migration, no schema migration).
+- TDD: N/A (docs). Verification K=1 exit 0 (each grep as expected; "fires on every window" no match);
+  `--doc-check` alone K=2 exit 0, no output.
+- Config-key wiring gate, last step: `node scripts/check-config-wiring.mjs --final` K=3 exit 0; it prints only the
+  two pre-existing `REPORTED: … readers-disagree` lines (analysis `fundamentals.provider`, trading
+  `trading_state`), unrelated. Status → `code-completed`.
+- Files modified: `services/xstockstrat-marketdata/CLAUDE.md`, `services/xstockstrat-marketdata/docs/alpaca-integration.md`, `services/xstockstrat-marketdata/docs/context-constitution.md`, `services/xstockstrat-portfolio/docs/context-constitution.md`, `docs/patterns/config-governance.md`, `docs/roadmap/features/317-fix-marketdata-miss-path-noise/product-spec.md`
+- Deviations: Deviation 5 (Verification framing; two consistency edits within the step's Files).
