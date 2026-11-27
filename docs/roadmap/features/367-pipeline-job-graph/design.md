@@ -1,7 +1,7 @@
 # Design: pipeline-job-graph
 
 **Created**: 2026-11-27
-**Rounds**: 9 (full; round cap lifted by the operator; termination: pending operator approval)
+**Rounds**: 10 (full; round cap lifted by the operator; termination: pending operator approval)
 **Approved by**: pending
 **Grounded in**: recon.md
 **Debate register**: debate.md
@@ -23,14 +23,16 @@ Analysis migration `031_pipeline_job_graph` creates two plain tables, disjoint f
 - Identity and key: `job_id BIGINT GENERATED ALWAYS AS IDENTITY` primary key; `kind`, `subject`,
   `epoch`, `run_id` (`TEXT NOT NULL`); unique index on `(kind, subject, epoch)`.
 - Scheduling: `lane SMALLINT` with `CHECK (lane IN (10, 20))` (`watchlist` = 10, `held` = 20);
-  `state` in `ready`, `running`, `waiting`, `succeeded`, `failed`, `dead`, `blocked`;
+  `state` in `ready`, `running`, `waiting`, `succeeded`, `failed`, `dead`, `blocked` (`failed`,
+  `dead` and `blocked` are the terminal states; with `succeeded` they are the finished states);
   `attempts INT`; `wait_round SMALLINT`; `next_attempt_at TIMESTAMPTZ`.
-- Lease: `lease_token UUID`, `lease_expires_at TIMESTAMPTZ`.
+- Lease: `lease_token UUID` (from `gen_random_uuid()`), `lease_expires_at TIMESTAMPTZ`.
 - Outcome: `verdict`, `error_class` (`transient` or `permanent`), `last_error` (1 KB),
   `created_at`, `finished_at`. No result column.
 - Checks: a row is `running` exactly when it has a lease token and expiry; `blocked` implies a
   verdict; a finished state implies `finished_at`, and only a finished state has one.
-- Indexes: the unique key; `(state, lane DESC, next_attempt_at, job_id)` over unfinished rows;
+- Indexes: the unique key; `(state, lane DESC, next_attempt_at, job_id) WHERE state IN ('ready','running','waiting')`, so
+  each claim, reap, settle and stats predicate on `state` implies it;
   `(state, finished_at)` over finished rows; `(run_id)`.
 
 `analysis.pipeline_job_deps`: `(parent_id, child_id)` primary key, both referencing
@@ -51,9 +53,9 @@ State transitions:
 ### Clocks, fencing and at-least-once (D-2, D-3, D-14, D-20, D-54)
 
 The database clock decides lease expiry, next-attempt time, retention cutoffs and ready age. The
-instance clock decides only the prune's UTC-date epoch and local timers. Every result write is one
-statement fenced by `job_id`, `lease_token` and `state = 'running'`; zero rows means the report is
-rejected. Execution is at-least-once, so effects outside the fenced report must be idempotent.
+instance clock decides only the prune's UTC-date epoch and local timers. Every report is one statement, and every
+park one transaction whose first statement is, fenced by `job_id`, `lease_token` and
+`state = 'running'`; zero rows means the report or park is rejected. Execution is at-least-once, so effects outside the fenced report must be idempotent.
 Correctness rests on the fence and on idempotent effects alone; the local self-fence only limits
 duplicate work. Expiry alone does not end a lease; a reap does. A heartbeat or report against an
 expired lease that has not been reaped succeeds. A reap skips a row that a heartbeat, report or
@@ -99,7 +101,7 @@ pooled services (`docs/patterns/database.md:150-152,185`), so a control operatio
 queue behind another service's transaction. Only the client timer bounds that wait. A missed
 heartbeat costs duplicate work and one attempt, never a double-recorded result.
 
-### Repository and SQL (D-4, D-5, D-18, D-22, D-30, D-35, D-38, D-41, D-44, D-49, D-52, D-55, D-56, D-57)
+### Repository and SQL (D-4, D-5, D-18, D-22, D-30, D-35, D-38, D-41, D-44, D-49, D-52, D-55, D-56, D-57, D-58)
 
 `PipelineJobsRepository` in `app/repositories/pipeline_jobs.py` follows the existing repository
 shape (`app/repositories/opportunities.py:82-92`); every method takes `conn=None`. Without `conn`,
@@ -119,10 +121,9 @@ uses `bounded_txn(control_pool, 3 s)` without the lane lock.
   `error_class = 'transient'` and `last_error = 'lease_expired'` once attempts are used up.
   Candidates are selected with `ORDER BY job_id FOR NO KEY UPDATE SKIP LOCKED`, so two instances
   never block or deadlock each other and a park's `FOR KEY SHARE` on a child does not hide it; the outer update re-checks the state and the expiry. A reap does
-  not count an attempt. Reap has no `LIMIT`; its candidates are bounded by the slots held across
-  instances. `max_attempts` is
-  read fresh at each report and reap and compared with `>=`, so a job already above a lowered
-  value runs once more and goes `dead` on its next failure.
+  not increment `attempts`. Reap has no `LIMIT`; its candidates are the expired `running` rows, at
+  most the slots of the instances that claimed them plus the jobs of claims whose
+  acknowledgement was lost.
 - **Heartbeat:** one batched update of the leases this instance holds, fenced by `job_id`,
   `lease_token` and `state = 'running'` with no expiry test, returning the renewed pairs.
 - **Report:** one fenced statement; the target state is computed in SQL.
@@ -138,7 +139,10 @@ uses `bounded_txn(control_pool, 3 s)` without the lane lock.
 - **Settle:** wakes or blocks parents whose children are all finished or include a failure, 500
   per batch, selected with `ORDER BY job_id FOR NO KEY UPDATE SKIP LOCKED`. A batch is one UPDATE
   statement: the candidate subquery and the target state and verdict are evaluated under that
-  statement's single snapshot. The settleable
+  statement's single snapshot. Shape: `UPDATE pipeline_jobs j SET … WHERE j.job_id IN (SELECT
+  job_id … ORDER BY job_id LIMIT 500 FOR NO KEY UPDATE SKIP LOCKED) RETURNING j.job_id`; the
+  outer UPDATE adds no predicate, so the rows returned are the rows the candidate select locked.
+  The settleable
   predicate is inside the candidate subquery, before `LIMIT`; a batch is full when that select
   returns 500 rows. Each batch is its own lane operation, queued at the tail. Settle repeats
   while a batch is full; the check is made before queueing for the next batch, and it stops once
@@ -158,13 +162,13 @@ uses `bounded_txn(control_pool, 3 s)` without the lane lock.
   park raises `ParkRace`, or, if its child insert ran after the delete, inserts a fresh child. Locked rows that fail the repeated guard are kept. Terminal states are
   pruned before `succeeded`, so a succeeded backlog cannot starve them. A loop ends when the
   candidate select returns fewer than 500 rows. The cutoffs are read once per DELETE loop. Every
-  candidate select in this repository locks only the outer `pipeline_jobs` alias, and its guards
-  and predicates are `EXISTS` / `NOT EXISTS` subqueries, which take no row locks.
+  candidate select in this repository locks only the outer `pipeline_jobs` alias, and any guard or
+  predicate over another table is an `EXISTS` / `NOT EXISTS` subquery, which takes no row locks.
 - **List by run.**
 - **Ready stats per lane:** over rows with `state = 'ready' AND next_attempt_at <= now()`, depth is
   the count and age is `now() − min(next_attempt_at)`. Jobs in backoff are not backlog.
 
-### Worker runtime (D-6 to D-9, D-19, D-21, D-28, D-31, D-32, D-37, D-43, D-46, D-48 to D-54, D-57)
+### Worker runtime (D-6 to D-9, D-19, D-21, D-28, D-31, D-32, D-37, D-43, D-46, D-48 to D-54, D-57, D-58)
 
 `app/engine/job_graph.py` holds the settings reader, lanes, outcomes, classifier, backoff, attempt
 and worker. Handlers live in `app/jobs/`. Three tasks start through `supervision.spawn`
@@ -186,7 +190,8 @@ and worker. Handlers live in `app/jobs/`. Three tasks start through `supervision
   settle, then the daily prune ensure, then stats every third tick, each in its own transaction.
   `worker_enabled` is read again before each step and before queueing each settle batch. The
   in-memory "ensured for this UTC day" marker is set only after a committed ensure.
-- **Heartbeat loop** (fixed period 7.5 s, whatever `lease_seconds` is). One batched renewal of
+- **Heartbeat loop** (fixed period 7.5 s, whatever `lease_seconds` is). An in-flight attempt is
+  keyed by its `(job_id, lease_token)` pair and removes only its own key. One batched renewal of
   attempts in phase `running` or `retry_wait`; an empty set issues no statement. It leaves out
   attempts that are reporting or were stopped as lost or self-fenced; an attempt stopped at the
   900 s deadline stays in the batch until its report is written or it is abandoned at the 10 s
@@ -267,7 +272,7 @@ and worker. Handlers live in `app/jobs/`. Three tasks start through `supervision
   statements. A tick that reads `worker_enabled` false at any check issues no further statement,
   writes the `disabled` record (claim loop) and returns 5 s. A claim transaction already sent
   when the flag changes completes. The stats step stops too, so the ready gauges report nothing
-  from 45 s after the worker is disabled. Jobs already running keep their
+  within 45 s after the worker is disabled. Jobs already running keep their
   heartbeat and write their result. While every instance is disabled no expired lease is reaped.
 - **Shutdown.** No lease is released; in-flight leases expire.
 
@@ -317,7 +322,9 @@ so until then the figures are two renewals and 19 s at 45, three and 34 s at 60.
 The send time is recorded before the transaction's `BEGIN` is sent, so it precedes the `now()`
 the lease is computed from. Only when the COMMIT is acknowledged
 and returns the pair does the attempt's fence deadline become that send time + `lease_seconds` −
-3 s; a failed batch leaves it unchanged. Timer lateness beyond 2 s is logged.
+3 s; a failed batch leaves it unchanged. A claim reads `lease_seconds` once; each claimed
+attempt's fence deadline is the claim's send time + that value − 3 s. Timer lateness beyond 2 s
+is logged.
 
 A job whose worker stopped is claimable again within `lease_seconds` + 10 s, plus up to 4 s of
 event-loop lag, while the database answers normally (70 s at defaults, 74 s with lag). This needs an enabled
@@ -346,7 +353,7 @@ The worst case is therefore linear in `worker_concurrency`. It is measured by
 `db.duration{phase=wait}` and `oldest_ready_age`, not tested in CI. Any other caller of a
 repository method without `conn=` adds to the lane queue and voids the bound.
 
-### Retention prune (D-38; product-spec FR-7)
+### Retention prune (D-38, D-45, D-50, D-58, D-59; product-spec FR-7)
 
 Kind `pipeline.retention_prune`, subject `global`, epoch the UTC date, `run_id`
 `retention_prune:<UTC date>`, lane `watchlist`. Each
@@ -359,12 +366,38 @@ the next day. The handler stops starting batches after 600 s and returns success
 backlog is spread over days and never ends `dead` on the attempt deadline.
 
 Manual recovery, documented in `services/xstockstrat-analysis/docs/pipeline-jobs.md` until program
-feature 4 adds a requeue: for a `failed` or `dead` job, set `state = 'ready'`, `attempts = 0`,
-`next_attempt_at = now()` and clear `finished_at`, `verdict`, `error_class`, `last_error`; for a
-`blocked` parent, in one transaction, first delete its edges, then run the update with
-`wait_round = 0`. Every recovery update is guarded by `WHERE job_id = <id> AND state =
-'<expected state>'` and changes nothing if the row has moved. Requeuing a child does not
-unblock parents that are already `blocked`. The same page names what to watch:
+feature 4 adds a requeue. Every statement, the edge delete included, is guarded by the job id and
+the expected state, so a repeated or concurrent run changes nothing once the row has moved.
+
+For a `failed` or `dead` job:
+
+```sql
+UPDATE analysis.pipeline_jobs
+   SET state = 'ready', attempts = 0, next_attempt_at = now(), finished_at = NULL,
+       verdict = NULL, error_class = NULL, last_error = NULL
+ WHERE job_id = <id> AND state = '<failed|dead>';
+```
+
+For a `blocked` parent, in one transaction; the lock holds the row in `blocked` until commit:
+
+```sql
+BEGIN;
+SELECT job_id FROM analysis.pipeline_jobs
+ WHERE job_id = <id> AND state = 'blocked' FOR UPDATE;
+DELETE FROM analysis.pipeline_job_deps
+ WHERE parent_id = <id>
+   AND EXISTS (SELECT 1 FROM analysis.pipeline_jobs WHERE job_id = <id> AND state = 'blocked');
+UPDATE analysis.pipeline_jobs
+   SET state = 'ready', attempts = 0, wait_round = 0, next_attempt_at = now(), finished_at = NULL,
+       verdict = NULL, error_class = NULL, last_error = NULL
+ WHERE job_id = <id> AND state = 'blocked';
+COMMIT;
+```
+
+Recover a `failed` or `dead` child before its `blocked` parents: a parent recovered first
+re-declares the child, finds it still failed, and is blocked again. Requeuing a child does not
+unblock parents that are already `blocked`; recover each one, and any ancestor blocked by its
+verdict, as a `blocked` parent. The same page names what to watch:
 `lease_events{outcome=handler_abandoned}`, `oldest_ready_age`, `attempts{outcome=dead}`, and that
 an instance whose slots are all held by unresponsive handlers needs a restart.
 
@@ -400,7 +433,8 @@ test rows and the docs rows land in one step and one commit.
   `lost_heartbeat|lost_self_fence|report_rejected|report_abandoned|handler_abandoned`.
 - Histogram `analysis.pipeline.db.duration` (seconds) with `step` in
   `heartbeat|claim|reap|settle|ensure|stats|report|park|handler`, `phase` in `wait|total`, and
-  `outcome` in `ok|error|timeout` on `phase=total`. Buckets:
+  `outcome` in `ok|error|timeout` on `phase=total`. The label keys `lane`, `step` and `phase` are
+  added to `tests/test_telemetry_allowlist.py`. Buckets:
   `[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30]`.
 - Gauges `analysis.pipeline.ready_depth{lane}` and `oldest_ready_age{lane}`, through a small
   extension of the `Gauge` wrapper (`app/telemetry.py:365-397`), registered in `main.py` after
@@ -425,6 +459,9 @@ test rows and the docs rows land in one step and one commit.
    client connections to PgBouncer, not backend slots". The analysis `CLAUDE.md` sentence "Reuses
    the existing asyncpg pool (no new pool — budget stays 2)" is amended.
 
+Real-Postgres tests use `local_pg` and the `real_pg` marker. Database time is moved by rewriting
+time columns, never by sleeping; process time comes from injected `monotonic` and `utc_today`.
+
 Step 3's real-Postgres tests gate step 4:
 
 - a statement over budget is cancelled by the server and the connection is reused;
@@ -436,15 +473,20 @@ Step 3's real-Postgres tests gate step 4:
 - a park with a repeated key succeeds; two overlapping parks in opposite order do not deadlock;
 - a park whose parent is a new or existing child of a concurrent park of its own parent kind
   neither waits nor deadlocks;
-- the prune batch's DELETE keeps a locked row that has an edge from an unfinished parent committed
-  after the candidate ids were chosen (the test chooses the ids, commits the park, then locks and
-  deletes), and its edge is kept; a park that reaches a row an open batch has locked waits, then
-  either inserts the child afresh or raises `ParkRace`, and its re-run leaves the parent
-  `waiting` with every edge present;
+- the prune batch's DELETE keeps a row with an edge from an unfinished parent committed after the
+  ids were chosen: the test selects the ids without a lock, commits a park that re-declares that
+  finished child, locks the ids `FOR UPDATE`, then runs the batch's DELETE statement on them; the
+  row and its edge survive. A park started after an open batch's candidate select but before its
+  DELETE waits on the child lock and raises `ParkRace`, and its re-run inserts the child afresh
+  and leaves the parent `waiting` with every edge present. A park started after the DELETE waits
+  on the unique check and inserts the child afresh;
+- a `blocked`-parent recovery run a second time, after the parent was re-claimed and parked
+  again, deletes no edge and updates no row;
 - a 10 000-child park plus its settle finishes within 5 s;
 - 1 200 settleable parents are woken in one tick with the lowest-id verdict;
-- each prune candidate select uses the `(state, finished_at)` index on a seeded table, and a `dead` row aged
-  `retention_days` + 1 survives;
+- each prune candidate select uses the `(state, finished_at)` index, and the claim select the
+  unfinished-rows index, on a seeded table; with `retention_days` = 7, a `dead` row aged 8 days
+  survives;
 - a runner that waited for an in-flight heartbeat batch records no false loss;
 - a waiting parent held `FOR KEY SHARE` by another parent's open park is still settled, and a
   ready child held the same way is still claimed;
@@ -515,8 +557,12 @@ prune batch 500 with a 30 s block budget; stats every third maintenance tick (15
 - [ ] A claim that committed but whose acknowledgement was lost leaves its jobs `running` under
   tokens no instance holds; each costs one attempt and waits for lease expiry and the reap.
 - [ ] A backlog of terminal rows larger than 600 s per day delays the `succeeded` prune.
-- [ ] Throughput: one control lane and one handler gate per instance. Measurements and thresholds
-  are named (D-40) for program feature 3.
+- [ ] Throughput: one control lane and one handler gate per instance. To be measured in program
+  feature 3's shadow run: attempts per second against the slope of `ready_depth`; handler gate
+  wait p95 (revisit above 1 s); heartbeat duration p99 (revisit above 1.5 s); claim and report
+  duration p99; settle duration p95 (above 100 ms, or more than 10 000 waiting parents, adopt a
+  child-driven settle alongside the sweep); dead-tuple ratio on `pipeline_jobs` (above 0.2, set
+  per-table autovacuum).
 - [ ] Until program feature 4 adds a requeue, a `dead` or `failed` key blocks parents on the same
   key for that epoch; recovery is the manual SQL in `pipeline-jobs.md`.
 - [ ] Same-kind dependencies are impossible under the kind DAG. A dynamic cycle check in park is
@@ -588,5 +634,5 @@ prune batch 500 with a 30 s block budget; stats every third maintenance tick (15
   attributes.
 - EXTEND `@AC-3 @feature-337` — new case added: the new instruments carry `host.provider`.
 - PRESERVE `@AC-4 @feature-176` — not regressed by: the job graph holds at most one service-pool
-  connection, for at most 30 s.
+  connection, for at most 30 s plus the 2 s grace and the 1 s release.
 - PRESERVE `@AC-2 @feature-274` — not regressed by: no RPC changes.

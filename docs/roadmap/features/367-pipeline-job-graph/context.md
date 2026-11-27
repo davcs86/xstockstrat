@@ -173,3 +173,12 @@
 
 - **OPERATOR (design gate): "Run round 10"** — the round-9 text edits have not been re-read by
   either reviewer. Round 10 started. Not approved.
+
+## Session 2026-11-27 — sdd-design round 10
+
+- Round 10 run as a clean final read. No mechanism changed. One substance item, found
+  independently by both sides: the `blocked`-parent recovery SQL's edge delete was unguarded
+  (O-81 → D-59); the SQL is now written out in design.md. Two settled decisions (D-13, D-39) that
+  were missing from the document were added. The adversary's sweep of every numeric and
+  "never / at most" claim found three that depended on unstated conditions; all corrected.
+- No Floor breach, no register violation, no petition. FR-1..FR-9 and `@AC-1`..`@AC-18` PASS.

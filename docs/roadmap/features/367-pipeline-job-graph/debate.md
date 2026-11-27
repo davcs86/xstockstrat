@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full (round cap lifted by operator override, context.md 2026-11-27)
-**Rounds run**: 9 (round 10 in progress)
+**Rounds run**: 10
 
 ## Rounds
 
@@ -17,6 +17,7 @@
 | 7 | 2026-11-27 | /sdd-design | 2 | 0 | 3 | 3 | 1 | yes |
 | 8 | 2026-11-27 | /sdd-design | 2 | 0 | 4 | 4 | 0 | yes |
 | 9 | 2026-11-27 | /sdd-design | 1 | 0 | 3 | 3 | 0 | yes |
+| 10 | 2026-11-27 | /sdd-design | 1 | 0 | 2 | 2 | 0 | yes |
 
 ## Settled Decisions
 
@@ -81,6 +82,7 @@
 | D-56 | 8 | A prune batch is two statements in one transaction: an unordered candidate `SELECT … FOR UPDATE SKIP LOCKED LIMIT 500` with the unfinished-parent guard, then `DELETE … WHERE job_id = ANY(<locked ids>)` that repeats the guard under a snapshot taken after the locks are held. Locked rows that fail the repeated guard are kept. Makes D-22's "the prune never deletes a child of an unfinished parent" true under READ COMMITTED; refines D-38 and D-52. | O-74; FR-4; `@AC-9` | settled |
 | D-57 | 8 | Park locks its parent `FOR NO KEY UPDATE`. The 300 s give-up is measured from the end of the handler task and checked before each queueing for the lane, when the lane is granted and before each retry sleep; a started try completes. Fence and deadline timers are cancelled in the handler task's done-callback. An attempt whose handler has ended and that is not `reporting` and whose pair a committed heartbeat omits writes nothing and counts `lost_heartbeat` once. A lost-lease or self-fence stop replaces a pending deadline stop, never the reverse. A handler that ends within the stop grace of a deadline stop is reported with the outcome it returned, or as `attempt_timeout` if it ended cancelled or with `AttemptStopped`. A park follows the report's rules. Refines D-21, D-22, D-53 and D-54. | O-75, O-76, O-77 | settled |
 | D-58 | 9 | The manual recovery SQL for a `blocked` parent runs in one transaction, edges deleted first, then the update; every recovery update is guarded by the job id and the expected state. The prune's candidate select is `FOR UPDATE OF j` with a `NOT EXISTS` sublink guard; settle's batch is one UPDATE statement under one snapshot. Park's child and edge inserts are `ON CONFLICT DO NOTHING` (restores D-23 in the text). The first of a lost lease or a self-fence is counted once. Refines D-22, D-38, D-45, D-56 and D-57. | O-78, O-79 | settled |
+| D-59 | 10 | The `blocked`-parent recovery locks the row `FOR UPDATE` while it is `blocked`, deletes edges only while an `EXISTS` on that state holds, then updates under the same guard; every recovery statement, the edge delete included, is guarded, so a repeated or concurrent run changes nothing. A failed or dead child is recovered before its blocked parents. The SQL is written out in design.md. The unfinished-rows index predicate is `state IN ('ready','running','waiting')`. Settle's statement shape is `UPDATE … WHERE job_id IN (SELECT … LIMIT 500 FOR NO KEY UPDATE SKIP LOCKED) RETURNING`, with no extra outer predicate. Refines D-58 and D-1. | O-81, O-82 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -191,6 +193,8 @@
 | O-78 | 9 | The documented manual recovery SQL for a `blocked` parent gave no order and no transaction: updating to `ready` first lets the parent be claimed and park with new edges, which the later edge delete removes; settle then wakes it over zero edges while its children are unfinished. `@AC-8`, `@AC-9`. | yes | closed @ round 9 (D-58) |
 | O-79 | 9 | Text-level gaps: the prune test for D-56 described an interleaving that cannot be built (the park blocks on the prune's lock); the prune's lock target and guard shape and settle's single-statement form were unstated; D-23's `ON CONFLICT DO NOTHING` had dropped out of the park bullet; counting of a lost lease or self-fence while the handler runs was lost in the restructure; `ParkRace` overstated; the 314 s case missing from one Open Risk. | no | closed @ round 9 (D-58; text in design.md) |
 | O-80 | 9 | A prune batch's cost grows with the edges its rows cascade, not with the 500-row batch size; a wide parent deleted before its children can exceed the 30 s block and roll the batch back. | no | closed @ round 9 (recorded under Open Risks) |
+| O-81 | 10 | The `blocked`-parent recovery's edge delete was unguarded: run twice (or by two operators), the second run deletes the new edges of a parent that was requeued and parked again, its guarded update matches nothing, and settle wakes the parent over zero edges with its children unfinished. `@AC-8`. Found independently by both sides. | yes | closed @ round 10 (D-59) |
+| O-82 | 10 | Text-level gaps: D-13 (test clocks) and D-39's allow-list additions were missing from design.md; the unfinished-rows index predicate was unstated (a `finished_at IS NULL` predicate would not be implied by the queries' `state` filters); settle's statement shape unstated; the in-memory attempt key and "terminal" undefined; "every result write is one statement" contradicted park; three claims depended on unstated conditions (reap candidates "bounded by slots held"; a dead row surviving at `retention_days` + 1; "at most 30 s" for a service connection); measurements for program feature 3 referenced by ID only. | no | closed @ round 10 (text in design.md) |
 
 ## Reopen Petitions
 
