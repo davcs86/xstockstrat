@@ -334,7 +334,7 @@ New logic is in an excluded package (`service`) — no coverage threshold applie
 
 ### Step 7 — service: fill floor at boot and `observed()` sentinels
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -379,7 +379,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 8 — test: floor and sentinel handling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_fill_floor_test.go` — create
@@ -1453,3 +1453,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 5 and Step 6 each give a three-line block whose lines each start `cd services/xstockstrat-portfolio && …` or name a repo-root-relative path.
 - **Actual**: the same pattern as Steps 3+4. Inside the one subshell the first line's `cd` persists, so every later line fails with `cd: services/xstockstrat-portfolio: No such file or directory` (Step 5's `grep` prints `No such file or directory`). Run verbatim, Step 5's block ran only `go build` and `go vet -tags dbtest`, and Step 6's block ran only the filtered `go test -race`. Both exited 1 for this reason alone.
 - **Disposition**: each block was run verbatim once, then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the `Prune` run printed `ok`, the grep listed every `emitEventAs(` call with six arguments, and `golangci-lint` v2.14.0 printed `0 issues.`. The step bodies were not changed (F-09).
+
+### Steps 7+8 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 7 and Step 8 each give a three-line block whose lines each start `cd services/xstockstrat-portfolio && …` or name a repo-root-relative path.
+- **Actual**: the same pattern as Steps 3-6. Inside the one subshell the first line's `cd` persists, so every later line fails with `cd: services/xstockstrat-portfolio: No such file or directory` (Step 8's `grep` prints `No such file or directory`). Run verbatim, Step 7's block ran only `go build` and `go vet -tags dbtest`, and Step 8's block ran only the filtered `go test -race`. Both exited 1 for this reason alone. Step 8's last line ends in a `#` comment, so the wrapper's closing `)` was put on its own line to keep it out of the comment.
+- **Disposition**: each block was run verbatim once, then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the whole-package `-race` run printed `ok`, `golangci-lint` v2.14.0 (the line both blocks share) printed `0 issues.`, and the `RecordedAt` grep printed nothing (`exit=1`, no match: no inline builder outside `testdata`). The step bodies were not changed (F-09).

@@ -75,6 +75,9 @@ type PortfolioService struct {
 	now func() time.Time
 	// sleep is the stream-retry wait; nil means time.Sleep.
 	sleep func(time.Duration)
+
+	// fillFloor is set by ConsumeOrderFills before its stream opens; the zero value folds every fill.
+	fillFloor time.Time
 }
 
 // stopNearThresholdPct — a position whose stop sits within this fraction of current price is
@@ -177,8 +180,29 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 // ConsumeOrderFills subscribes to ledger StreamEvents filtered on "order.filled"
 // and updates positions accordingly.
 func (s *PortfolioService) ConsumeOrderFills(ctx context.Context) {
+	if !s.loadFillFloor(ctx) {
+		return
+	}
 	s.consumeEventStream(ctx, "order fill", "order.filled", s.observed("order fill", "ok", s.processOrderFill))
 }
+
+// loadFillFloor retries until the floor loads; false means ctx ended first and no fill may be consumed.
+func (s *PortfolioService) loadFillFloor(ctx context.Context) bool {
+	for ctx.Err() == nil {
+		floor, stampedNow, err := s.repo.EnsureFillFloor(ctx)
+		if err == nil {
+			s.fillFloor = floor
+			slog.InfoContext(ctx, "order fill floor loaded", "floor", floor, "stamped_now", stampedNow)
+			return true
+		}
+		slog.ErrorContext(ctx, "order fill floor load failed, retrying", "error", err)
+		s.sleepFor(streamRetryDelay)
+	}
+	return false
+}
+
+// errFillAcked marks a fill consumed without folding; observed counts it "acked" and advances the cursor.
+var errFillAcked = errors.New("fill acked")
 
 // eventHandler returns a non-nil error only for a retryable failure: the stream then reconnects
 // from the failed event instead of advancing past it.
@@ -230,16 +254,26 @@ func (c *consumerSignal) handled(ctx context.Context, outcome string, start, now
 	}
 }
 
-// observed records okOutcome or "error" around h without changing its result.
+// observed records okOutcome, "acked", "parked" or "error" around h. The fill sentinels
+// (errFillAcked, ErrFillUnattributable) return nil so the stream advances past them.
 func (s *PortfolioService) observed(name, okOutcome string, h eventHandler) eventHandler {
 	sig := newConsumerSignal(name)
 	return func(ctx context.Context, ev *ledgerv1.LedgerEvent) error {
 		start := s.clock()
-		if err := h(ctx, ev); err != nil {
+		err := h(ctx, ev)
+		switch {
+		case err == nil:
+			sig.handled(ctx, okOutcome, start, s.clock())
+		case errors.Is(err, errFillAcked):
+			sig.handled(ctx, "acked", start, s.clock())
+		case errors.Is(err, ErrFillUnattributable):
+			slog.ErrorContext(ctx, "event parked", "event_id", ev.EventId, "sequence", ev.Sequence, "stream_key", ev.StreamKey,
+				"consumer", name, "attempts", 1, "error", err)
+			sig.count(ctx, "parked")
+		default:
 			sig.count(ctx, "error")
 			return err
 		}
-		sig.handled(ctx, okOutcome, start, s.clock())
 		return nil
 	}
 }
@@ -394,6 +428,10 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 
 	if fill.StopPrice > 0 && s.stops != nil {
 		s.stops.set(stopKey{user: fill.UserID, symbol: fill.Symbol, mode: mode}, fill.StopPrice)
+	}
+
+	if event.GetRecordedAt().AsTime().Before(s.fillFloor) {
+		return errFillAcked
 	}
 
 	s.positionsMu.Lock()
