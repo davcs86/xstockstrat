@@ -3599,3 +3599,18 @@ Feature: xstockstrat-portfolio — the live position fold applies each fill exac
 ### Coverage check
 - Source scenarios: 5 (@AC-1..@AC-5). Planned (NEW+DUP+OVERLAP): 5 (5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Nothing skipped. Counts match.
 ```
+
+## Session 2026-11-27 — O-61 preconditions: operator answers recorded by the orchestrator (verbatim)
+
+Runbook `docs/runbooks/position-fold-cutover.md` §1 (staging only; production never launched). Operator answers, 2026-11-27:
+
+| # | Precondition | Answer | Basis |
+|---|---|---|---|
+| 2 | Homelab stop method (`docker compose stop xstockstrat-portfolio`, nothing restarts it before the deploy) | **yes** — operator: "I accept them" | Repo: the compose file's only restart policy at service level is `unless-stopped`, which keeps a manually stopped container stopped. |
+| 4 | Alpaca returns bracket legs as top-level orders in every open state | **yes** — operator: "I'm fine with your call on #4" | `alpaca.go` lists `GET /v2/orders?status=all&limit=500` with no `nested`; Alpaca's docs return each leg as its own order without `nested=true`. The docs do not define `held` or state the default of `nested`; the 500-row truncation is covered by the Step 27 complete-list gate. |
+| 5 | Trading's behaviour while portfolio is stopped (risk check only warns, reconciliation skips, `flattenAndHalt` cannot flatten) | **accepted** — operator: "I accept them" | Staging only. |
+| 6 | The freeze and the stop-before-merge order are manual, enforced by no tool | **accepted** — operator: "I accept them" | Only the §2 recorded evidence shows an overlap. |
+| 1 | DO accepts a spec with the `xstockstrat-portfolio` service removed (four references remain at `.do/app.dev.yaml:80,321,377,635`) | **open** | Needs a `doctl apps propose` dry run by the operator. |
+| 3 | Homelab `gate deploy` exits non-zero when the VM rolls a release back | **open** | The `gate` script is on the VM, not in this repo; the workflow step runs under `bash -e`, so a non-zero exit would fail the job. Needs the VM script read. |
+
+The cutover does not start until #1 and #3 are answered "yes".
