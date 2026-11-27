@@ -78,6 +78,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | OTel / Grafana Cloud wiring | `docs/setup/grafana-cloud.md` |
 | Feature workflow (branch, PR, promote) | `docs/runbooks/feature-workflow.md` |
 | Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
+| Changing a deployment's `identity/auth.mode` (`local`/`both`/`oidc`), Authelia SSO cutover, rollback or break-glass | `docs/runbooks/authelia-sso-cutover.md` |
 | Adding/refactoring a skill, subagent, saved workflow (`.claude/workflows/`), or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory, multi-feature workflows) | `docs/patterns/context-engineering.md` |
 | SDD binding rules — Constitution constraint IDs (`C-*`/`P-*`/`F-*`) cited by review/design/execute | `docs/sdd/constitution.md` |
 | Acceptance scenarios & business rules (Gherkin `@AC-*`) — per-feature `acceptance.feature`, durable per-service suites read by recon/design, C-15/C-16 | `docs/sdd/business-rules/CLAUDE.md`, `docs/sdd/constitution.md` |
