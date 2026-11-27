@@ -630,3 +630,241 @@ Each open risk from design.md, with its target. Step numbers do not exist until 
 - The four `[ ] unaddressed` items above must be announced at each `/sdd-execute` checkpoint (P-03).
 - Still open from the sdd-spec session: branch protection "up to date before merge" on `main-dev` and `main`
   (operator action).
+
+## Session 2026-11-21 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan with this binding record (verbatim):
+  `{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","dev":"3f556f04c293daf42eac87846234196991d6a0fc","specHash":"42f5c01acc11e02ac618d92d4ee905e9321504b6","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13],"mismatches":[{"n":5,"detail":"Minor, non-blocking. The spec says `grep -n \"prev\\|refusing\" scripts/migration-ahead-check.sh` returns :55, :58, :59, :60. It actually returns 17, 46, 55, 58, 59. Line :60 (the `(use '?x-migrations-table=' ...` note) contains neither word, and :17 and :46 also match. The text at :55/:58/:59/:60 is exactly what the spec quotes, so the instructions still apply unchanged."},{"n":11,"detail":"Codebase Evidence points to `docs/patterns/config-governance.md:513` for the precedent wording. Line 513 is a blank line next to the `### feature 184 — opportunity-config-operability` heading, and it is the same on the evidence tree fb52065c2. The renumber precedent (\"**Migration renumbered `024` → `026`:** `merge-order.md` pre-assigned `024`, but feature 166's `025_...` merged ... first\") is at line 634. All other Step 11 anchors match their quoted text: database.md:35, :41, :43, :60-63, :65-79, :81-107; script-tooling.md:54 and :62; config-rollout.md:248-250; context-constitution.md:82; insights.md:900."}]}`
+- Merge: origin/main-dev 8baf3976c is already an ancestor of the dev branch. Nothing to merge.
+- Re-spec commits (conditional directive; only the Codebase Evidence of steps 5 and 11 changed):
+  - `4269ae02` respec(fix-migration-tooling-safety): align steps 5,11 with current codebase
+- Tooling detection (steps 1–13): python3 3.13 ✓ · uv ✓ · go ✓ · shellcheck ✗ (documented fallback
+  `uv tool install shellcheck-py`, installed per step) · shfmt ✗ (documented fallback
+  `go install mvdan.cc/sh/v3/cmd/shfmt@v3.8.0`, installed per step).
+- Status: implementation-ready → in-progress.
+
+```sdd-batch-setup
+{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","date":"2026-11-21"}
+```
+
+### Step 1 — service: remove the `force 0` arm from `db-migrate.sh up` [done]
+- The `up` dirty arm of `scripts/db-migrate.sh` now runs `migration-dirty-guard.sh ... || true` for its text and then `exit 1`; the `force 0` call, its echo and the stale `:66-67` comment are gone, a one-line refuse comment sits above the dirty `case`, and the ahead-check comment is reworded. The `force` subcommand and header are untouched.
+- TDD (Red order): Step 2's test was authored in the working tree first and run on the unmodified script. AC-1 red: `assert proc.returncode == 1` failed with `E       assert 0 == 1` (output showed `[dirty] force-resetting xstockstrat-indicators to version 0`) → green: `1 passed in 0.48s`, ruff `All checks passed!`, `61 files already formatted`. The test file was removed before this commit; it is committed under Step 2.
+- Verification: shellcheck 0.11.0 + shfmt v3.8.0 clean, `migration-dirty-guard.test.sh: all assertions passed`, `migration-ahead-check.test.sh: all assertions passed`, no `force 0` in `scripts/db-migrate.sh`; `exit=0`. Tools came from the spec's own documented fallbacks (`uv tool install shellcheck-py`, `go install mvdan.cc/sh/v3/cmd/shfmt@v3.8.0`). No coverage gate applies to `scripts/`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/db-migrate.sh`
+- Deviations: none
+
+### Step 2 — test: `db-migrate.sh up` never forces a dirty service [done]
+- Created `scripts/tests/test_db_migrate.py`: `run_up` runs `bash scripts/db-migrate.sh up` with stub `psql`/`migrate` (reusing `Stubs` and `SCRIPTS_DIR`, real PATH appended); every schema answers `9999` (ahead skip) except indicators `5 (dirty)`. The test asserts exit 1, no `migrate ... force` call, no `analysis_schema_migrations` call and no `hunter2` in stdout/stderr.
+- TDD: AC-1 red, re-run in this session against the pre-Step-1 tree (`git archive HEAD^ scripts services` into a scratch dir, no stash): `E       assert 0 == 1` with `[dirty] force-resetting xstockstrat-indicators to version 0` in stdout, `1 failed in 0.68s`, `exit=1` → green on the dev branch: `1 passed in 0.50s`, ruff `All checks passed!`, `61 files already formatted`, `exit=0`. No coverage gate applies to `scripts/`. Between now and Steps 3+4 the refused indicators run prints no recovery text (expected per Step Dependencies).
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/tests/test_db_migrate.py`
+- Deviations: none
+
+### Step 3 — service: the dirty guard refuses every dirty state and computes the recovery [done] (atomic unit Steps 3+4)
+- `scripts/migration-dirty-guard.sh` replaced with the spec body: the contract-floor scan and both exit-0 allow-paths are gone; it exits 3 with the state-keyed ratchet (`force <prev>`, or `TRUNCATE public.<schema>_schema_migrations` for the lowest up-file, then the `force <n>` / `force <next>` escalation lines), 2 when no recovery is computable, 1 on usage. Keeps the "is dirty at version N" prefix and the literal `$DATABASE_URL`; still executable and still `r0` in the allowlist.
+- TDD (unit): red = Step 4's modules against the pre-unit guard, `.sdd-logs/v-1.log` `exit=1`: `E       assert 0 == 3` (legacy-a: `returncode=0 ... stderr=''`), `16 failed, 3 passed in 2.36s` (legacy-e, usage and the Step 2 no-force test pass on the old guard) → green `.sdd-logs/v-2.log` `exit=0`: shellcheck + shfmt clean, no `floor`/`contract-of` in the guard, `19 passed in 1.96s`. No coverage gate applies to `scripts/`.
+- Verification: operator decision A (2026-11-21) — `envsubst` (gettext-base 0.21) now on the host; both Verification blocks re-run with fresh logs.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/migration-dirty-guard.sh`
+- Deviations: none
+
+### Step 4 — test: port the guard tests to pytest and delete the legacy shell test [done] (atomic unit Steps 3+4)
+- Created `scripts/tests/test_migration_dirty_guard.py` (one parametrized test over the 16-row case table, whole-line `Recover:` matching, no `postgres://`/`hunter2` anywhere, literal `$DATABASE_URL` on exit 3, no `  Recover:` line on exit 2, plus a usage test); added `test_ac1_output_names_the_recovery` to `scripts/tests/test_db_migrate.py`; deleted `scripts/migration-dirty-guard.test.sh`, its `scripts/shell-allowlist.txt` line and its `ci.yml:841` chain entry (the other five stay in order). Legacy (f), (h), (i) not ported (design §4).
+- TDD: AC-1/AC-3/AC-4/AC-5 red in `.sdd-logs/v-1.log` (AC-1 recovery line: `assert '  Recover: migrate -path services/xstockstrat-indicators/migrations ... force 4' in []`) → green `.sdd-logs/v-3.log` `exit=0`: `38 passed in 2.20s`, ruff `All checks passed!`, `62 files already formatted`, `check-shell-freeze: clean (23 allowlisted)`, `render-migrations.test.sh: all assertions passed`, `migration-ahead-check.test.sh: all assertions passed`.
+- Config-key wiring gate: N/A.
+- Files modified: `scripts/tests/test_migration_dirty_guard.py`, `scripts/tests/test_db_migrate.py`, `scripts/migration-dirty-guard.test.sh` (deleted), `scripts/shell-allowlist.txt`, `.github/workflows/ci.yml`
+- Deviations: none
+
+### Step 5 — service: reword the ahead-check's dirty-ahead refusal [done]
+- `scripts/migration-ahead-check.sh:58` now says "refusing to migrate it" instead of "refusing \`force 0\`"; `:60` names `$prev` as the previous version present in the newer release and states it assumes no gap below `$n`. `:59`, `prev=$((n - 1))` and exit 4 are unchanged.
+- TDD (Red order): Step 6's test was authored in the working tree first. Red `.sdd-logs/v-1.log` `exit=1`: `E       assert "  (force the previous version present in the newer release: 9998 assumes it has no gap below 9999; ..." in [... "  (use '?x-migrations-table=' when DATABASE_URL has no query string), then fix forward and redeploy that release."]`, `1 failed, 2 passed in 1.22s` → green `.sdd-logs/v-3.log` `exit=0`: `3 passed in 1.12s`, ruff `All checks passed!`, `62 files already formatted`. The test file was removed before this commit; it is committed under Step 6. No coverage gate applies to `scripts/`.
+- Verification `.sdd-logs/v-2.log` `exit=0`: shellcheck + `shfmt -d -i 2` clean, `migration-ahead-check.test.sh: all assertions passed`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/migration-ahead-check.sh`
+- Deviations: none
+
+### Step 6 — test: a dirty-ahead service is refused with the reworded recovery [done]
+- Added `test_dirty_ahead_service_is_refused_with_the_newer_release_recovery` to `scripts/tests/test_db_migrate.py`: `run_up` with marketdata `9999 (dirty)` asserts exit 1, no `migrate ... force` call, both exact recovery lines (`... force 9998` and the reworded "(force the previous version present in the newer release: 9998 assumes it has no gap below 9999; ...)" line) and no `hunter2`/`postgres://` in stdout or stderr. Regression guard for durable `@AC-25` (279).
+- TDD: red re-run in this session against the pre-Step-5 tree (`git archive HEAD^` (32ba2194) `scripts services` into a scratch dir with the new test copied in, no stash), log `scratchpad/red6/.sdd-logs/v-1.log` `exit=1`: `E       assert "  (force the previous version present in the newer release: 9998 assumes it has no gap below 9999; ..." in [... "  (use '?x-migrations-table=' when DATABASE_URL has no query string), then fix forward and redeploy that release."]`, `1 failed, 2 passed in 1.20s` → green on the dev branch `.sdd-logs/v-2.log` `exit=0`: `3 passed in 1.22s`, ruff `All checks passed!`, `62 files already formatted`. No coverage gate applies to `scripts/`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/tests/test_db_migrate.py`
+- Deviations: none
+
+### Step 7 — service: add the ordering gate `scripts/check-migration-order.py` [done]
+- Created `scripts/check-migration-order.py` (stdlib, executable, shaped like `check-migration-contract.py`): `<base_ref> [--forbid-new]`, one `git diff --name-status --no-renames --diff-filter=ADM base...HEAD -- 'services/*/migrations/*.up.sql'` call, per-service base maximum from `git ls-tree` compared with `int()`, and the five `order-gate: ` refusal lines from the spec (every violation reported, exit 1), success line on stdout, exit 2 for any other argument shape. A base ref beginning with `-` is also treated as usage (exit 2), so a lone unknown flag never reaches `git`.
+- TDD (Step 7 RED protocol): Step 8's module was authored in the working tree first and run against an argument-handling-only stub. AC-2 red `.sdd-logs/v-1.log` `exit=1`: `test_ac2_late_lower_number_is_refused` `E       AssertionError: assert 0 == 1`, `11 failed, 14 passed in 1.07s` (every refusal case fails on its exit code) → green `.sdd-logs/v-3.log` `exit=0`: `25 passed in 0.83s`, ruff `All checks passed!`, `64 files already formatted`. The test file was removed before this commit; it is committed under Step 8. No coverage gate applies to `scripts/`.
+- Verification `.sdd-logs/v-2.log` `exit=0`: `usage: check-migration-order.py <base_ref> [--forbid-new]` (no-arg run, exit 2), `order-gate: ok — 0 new migration(s), each above the base maximum` against `origin/main-dev`, ruff `All checks passed!`, `64 files already formatted`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/check-migration-order.py`
+- Deviations: none
+
+### Step 8 — test: the ordering gate against a throwaway repository [done]
+- Created `scripts/tests/test_check_migration_order.py` with its own `git`/`add`/`commit` helpers and `repo` fixture (base `main`: config `023_a`/`025_b` up+down with a gap at 024, plus a second service with `008_a`/`009_b`; then `checkout -q -b work`). 18 cases cover every row of the Step 8 list: usage (3), AC-2 `024`, `025_dup`, `026_next`, stale branch (`026_x` on `main` after branching), renumber as delete, delete, modify, shared `026`, down-files only, new service `000`, decimal `010_c`/`009_c`, `abc.up.sql`, and `--forbid-new` with and without an added file.
+- TDD: AC-2 red, re-run in this session in a scratch copy (`git archive HEAD scripts`, `check-migration-order.py` cut to argument handling only, no stash), log `scratchpad/red8/.sdd-logs/v-1.log` `exit=1`: `test_ac2_late_lower_number_is_refused` `E       AssertionError: assert 0 == 1`, `14 failed, 11 passed in 0.79s` (every refusal and ok-line case fails) → green on the dev branch `.sdd-logs/v-2.log` `exit=0`: `25 passed in 0.72s`, ruff `All checks passed!`, `64 files already formatted`. No coverage gate applies to `scripts/`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/tests/test_check_migration_order.py`
+- Deviations: none
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+- Operator decision (binding, 2026-11-26) on the Step 9 blocker: "10 spaces". Step 9 keeps its `ci.yml` convention (the `FORBID_NEW` env line and the `check-migration-order.py` run line at 10 spaces); Step 10's two expected strings become 10 spaces. Logged in the `## Deviation Log`.
+
+### Step 9 — service: CI job `migration-order-gate` [done]
+- `.github/workflows/ci.yml`: `scripts/check-migration-order.py` added to the `migrations` path filter; the stale `migration-rerun` comment rewritten (no more "replays the chain from version 0"); new PR-only job `migration-order-gate` after `migration-contract-gate` (checkout `fetch-depth: 0`, `BASE_REF`/`FORBID_NEW` env, positive-form D-11 expression, `head_ref` only inside the expression); registered in `ci-gate` `needs:` and its result echo.
+- TDD (Red order): Step 10's wiring test was authored in the working tree first with the operator-corrected 10-space strings. AC-2 red `.sdd-logs/v-1.log` `exit=1`: `E           AssertionError:   migration-order-gate:`, `1 failed, 18 passed in 0.67s` → green `.sdd-logs/v-3.log` `exit=0`: `19 passed in 0.60s`, ruff `All checks passed!`, `64 files already formatted`. The test edit was reverted before this commit; it is committed under Step 10. No coverage gate applies to `scripts/`.
+- Verification `.sdd-logs/v-2.log` `exit=0`: `959:  migration-order-gate:`; `migration-order-gate` on 3 lines, `scripts/check-migration-order.py` on 2, no "replays the chain from version 0", PyYAML 6.0.3 `safe_load` parsed the file.
+- The `FORBID_NEW` expression still cannot run locally; its first real runs are the integration PR (base `main-dev` → empty) and the next promotion PR (base `main`, head `main-dev` → empty) — note both in the integration PR.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `.github/workflows/ci.yml`
+- Deviations: Step 10's expected indentation for two lines corrected to 10 spaces (operator decision; Deviation Log)
+
+### Step 10 — test: the CI wiring of the ordering gate [done]
+- Added `test_ci_runs_the_order_gate_and_the_ci_gate_requires_it` to `scripts/tests/test_check_migration_order.py`: it reads `SCRIPTS_DIR.parent / ".github/workflows/ci.yml"` as text and asserts six whole lines (job key, `ci-gate` needs entry, result echo, path filter, `FORBID_NEW` expression, run line), the last two at 10 spaces per the 2026-11-26 operator decision (Deviation Log).
+- TDD: AC-2 red against the pre-Step-9 tree (`git archive HEAD^` (8e88fddb) `scripts .github` into a scratch dir with the final test copied in, no stash), log `scratchpad/red10/.sdd-logs/v-4.log` `exit=1`: `E           AssertionError:   migration-order-gate:`, `1 failed, 18 passed in 0.67s` → green on the dev branch `.sdd-logs/v-3.log` `exit=0`: `19 passed in 0.65s`, ruff `All checks passed!`, `64 files already formatted`. A first green run (`v-2.log`) failed ruff `ISC004` on the test's own implicit concatenation; parenthesised, then re-run. No coverage gate applies to `scripts/`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `scripts/tests/test_check_migration_order.py`
+- Deviations: none beyond the Step 9/10 indentation entry already logged
+
+## Session 2026-11-27 — operator ruling on the Step 11 markdownlint blocker, recorded by the orchestrator (verbatim)
+
+Question (Step 11 blocker): "Step 11's Verification ends with markdownlint-cli2 on the four docs and exits 1 because of 17 findings that already exist on lines this step did not touch (docs/context-constitution.md 4, docs/runbooks/config-rollout.md 13). A (recommended): fix the 17 existing markdownlint findings in docs/runbooks/config-rollout.md and docs/context-constitution.md (both already in Step 11's Files)... B: accept as a deviation... C: narrow the lint target."
+Operator answer (2026-11-27): "B3 fix the lint".
+
+Effect: option A — expand Step 11 scope to fix the 17 pre-existing findings in the two files, re-run Verification for exit=0, log the expansion in the Deviation Log. 318 is no longer suspended: it resumes at Step 11.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute)
+
+### Step 11 — docs: forward-only rule, refuse-all recovery and the gate verdicts [done]
+- `docs/patterns/database.md`: forward-only rule and next-free-NNN-at-merge under "Adding a new migration" item 1 (narrows insights.md:900), the modify/delete ban under item 3, the `force 0` sentence replaced (up never recovers, exits 1), "the printed `migrate force <prev>`" in the `migration-rerun` bullet, a new `migration-order-gate` CI bullet with the O-4 verdicts, cost and stale-base race, Guard and Recovery rewritten as the ratchet (Floor rule deleted; `000`-based `force 0` paragraph, D-13; O-1 accepted-cost paragraph), Ahead rule reworded. `script-tooling.md` R0 tests cell and ported list, `config-rollout.md` floor sentence, `context-constitution.md:82` CI list updated.
+- TDD: N/A (docs). Pre-edit baseline `.sdd-logs/v-1.log` `exit=1` (`Floor rule` and `contract floor of 40` still present; `Summary: 17 issues in 2 files`) → Verification `.sdd-logs/v-2.log` `exit=0`: all three positive greps match, both `!` greps empty, `Summary: 0 issues in 0 files`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `docs/patterns/database.md`, `docs/patterns/script-tooling.md`, `docs/runbooks/config-rollout.md`, `docs/context-constitution.md`
+- Deviations: scope expanded to fix 17 pre-existing markdownlint findings in config-rollout.md and context-constitution.md (operator decision 2026-11-27, option A; Deviation Log)
+
+### Step 12 — docs: record the gaps this feature leaves open [done]
+- Operator decision (2026-11-27, option A, by extension of the Step 11 ruling "B3 fix the lint"): Step 12 also fixes the 3 pre-existing markdownlint findings in `docs/context-constitution-findings.md`.
+- Added three rows dated "found 2026-11-20, feature 318": two Latent bugs (the ahead-check's `force <n-1>` can name a missing version, marketdata 007 / config 024, 035, 036, 053; a cross-service `-- contract-of:` header passes every check) and one Documentation-that-lies row (`migration-rerun.py` `~L7`, `~L735`, `~L1067-1068`, `~L1079` still describe a contract floor and an automatic `force 0`; reword when next edited). Lint fixes: one blank line deleted at `:83-84`, footer `_..._` → `*...*`; no wording changed.
+- TDD: N/A (docs). Pre-edit baseline `.sdd-logs/v-1.log` `exit=1` (`Summary: 3 issues in 1 file`: MD012 `:84`, MD049 `:109`, `:110`) → Verification `.sdd-logs/v-2.log` `exit=0`: marker count 3, `Summary: 0 issues in 0 files`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `docs/context-constitution-findings.md`
+- Deviations: scope expanded to fix 3 pre-existing markdownlint findings in the same file (operator decision 2026-11-27, option A; Deviation Log)
+
+### Step 13 — docs: operator-signed changes to two durable business rules (C-16) [done]
+- Instruction 0: `grep -n '^- \*\*O-3: C-16 sign-off\*\*' context.md` matched `:524`. `docs/sdd/business-rules/platform.feature` `@AC-19 @FR-8 @feature-225`: tags kept, scenario replaced by the refuse-all Scenario Outline (five Examples rows) under a two-line `# Changed by @feature-318 ...` comment. `services/xstockstrat-config/acceptance/fix-config-keys-drift.feature` `@AC-28`: change comment added above the tag line and the last clause reworded to "the dirty guard refuses a dirty 041 with exit 3 naming force 40 ... migrate force 40 and up converge"; its other lines unchanged.
+- TDD: N/A (docs). Pre-edit baseline `.sdd-logs/v-1.log` `exit=0` but with `390:    Then both evaluations allow the automatic force-0 recovery` and `109:    And an automatic force 0 from a dirty 041 ...` printed (the block's status is its last line only) → Verification `.sdd-logs/v-2.log` `exit=0`: `feature-318` at `platform.feature:386` and `fix-config-keys-drift.feature:102`, both `!` greps print nothing, `@AC-19 @FR-8 @feature-225` count 1.
+- Config-key wiring gate (`--final`, last step) `.sdd-logs/v-3.log` `exit=0`: two baseline `REPORTED:` lines (analysis `marketdata/fundamentals.provider`, trading `platform/trading_state`, both `readers-disagree`), neither touched by 318. Status: in-progress → code-completed.
+- At integration the scenario-promoter promotes `@AC-1`…`@AC-5` from the branch-tip `acceptance.feature` and dedups `@AC-3`…`@AC-5` against the rewritten `@AC-19` (Step 13 instruction 3).
+- Files modified: `docs/sdd/business-rules/platform.feature`, `services/xstockstrat-config/acceptance/fix-config-keys-drift.feature`
+- Deviations: none
+
+## Session 2026-11-27 — sdd-execute
+**Steps this session**: 11, 12, 13
+**Progress**: 13 done / 13 total
+**Stopped at**: Step 13 (all complete)
+**Next**: integration PR `feature/fix-migration-tooling-safety` → `main-dev` (name 345's config `053` renumber, the `FORBID_NEW` first-run checks and the four `[ ] unaddressed` impl-spec warnings in its description)
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-migration-tooling-safety (feature 318)
+
+Source: docs/roadmap/features/318-fix-migration-tooling-safety/acceptance.feature, read from the working tree. I had no git access, so I could not read it on origin/feature/fix-migration-tooling-safety. It matches the branch-tip content described in implementation-spec Step 13. I also could not see the branch-tip platform.feature, so the dedup below runs against the main-dev copy (see Notes 1 and 2).
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | Refuse-all for a dirty service with no contract floor. The related 225 @AC-18 and 279 @AC-25 cover other states: contract-floor dirty, and migrator-ahead dirty. |
+| @AC-2 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | CI migration-ordering gate. A grep for "ordering" and "below the maximum" in platform.feature and the service suites found nothing. The 225 @AC-5 contract gate checks the `-- contract-of:` header, not NNN ordering. |
+| @AC-3 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | The rewritten 225 @AC-19 (Step 13) covers the `force 3` row, but not the full Recover line, the `force 6` escalation text, or the "$DATABASE_URL, no postgres://" assertions. See Note 2. |
+| @AC-4 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | Same partial overlap with the rewritten 225 @AC-19 TRUNCATE row. The full psql line and the "no force -1" assertion are unique to this scenario. |
+| @AC-5 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | The rewritten 225 @AC-19 covers two of the three rows. The `7 (dirty)` row is unique, and the "no Recover: line" assertion is unique. See Note 2. |
+
+All five scenarios go to platform.feature. The guarantee lives in `scripts/db-migrate.sh`, `scripts/migration-dirty-guard.sh` and `.github/workflows/ci.yml`. These are platform tooling that no single service owns. The db-migrate dirty-guard rules from 225, 279 and 295 already live in platform.feature, or in the config suite where they are config-specific.
+
+### Ready-to-write blocks
+Append at the end of the file, after line 2737 ("| Python  | xstockstrat-agent      |"). The file exists, so no Feature header is needed. The source scenarios carry no @FR tags (bug fix, and the product-spec defines no FR ids). The tags are kept verbatim, and I did not invent FR tags. Feature 329, appended just above, has the same shape.
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+```gherkin
+
+  # ─── migration tooling safety: refuse-all dirty recovery + ordering gate (feature 318) ──
+  # Platform tooling: scripts/db-migrate.sh, scripts/migration-dirty-guard.sh and the CI migration-ordering check.
+  # Source defects: docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md,
+  # docs/reports/2026-10-19-config-seed-migration-late-lower-nnn-defect.md
+  # Operator decision O-1 (2026-11-20, 318 context.md): db-migrate.sh up never recovers a dirty service by itself.
+  # 318 changed 225 @AC-19 and the last clause of config 295 @AC-28 in place (operator-signed C-16 CHANGE O-3); these scenarios extend them.
+
+  @AC-1 @regression @feature-318
+  Scenario: dirty recovery for a service without a contract floor does not replay from 001
+    Given services/xstockstrat-indicators/migrations has no "-- contract-of:" migration
+    And the indicators schema_migrations row is "5 (dirty)"
+    And indicators 001_formulas.up.sql contains a bare "CREATE TABLE indicators.formulas ("
+    When scripts/db-migrate.sh up runs
+    Then no "migrate ... force" command is executed for any service
+    And the run exits 1 and no service after indicators is migrated
+    And its output carries the line 'Recover: migrate -path services/xstockstrat-indicators/migrations -database "$DATABASE_URL&x-migrations-table=indicators_schema_migrations" force 4'
+
+  @AC-2 @regression @feature-318
+  Scenario: CI rejects a new migration numbered below the target branch maximum
+    Given main-dev's services/xstockstrat-config/migrations maximum is 025
+    When a PR adds services/xstockstrat-config/migrations/024_late_seed.up.sql
+    Then the CI migration-ordering check fails naming 024 and the current maximum 025
+
+  @AC-3 @regression @feature-318
+  Scenario: the recovery names the previous existing version across a numbering gap
+    Given a migrations directory for schema "x" holding up-files 001, 002, 003, 005 and 006
+    When the dirty guard evaluates "5 (dirty)"
+    Then it exits 3 with the line 'Recover: migrate -path services/xstockstrat-x/migrations -database "$DATABASE_URL&x-migrations-table=x_schema_migrations" force 3'
+    And its output names "force 6" only as an escalation after "already exists" in version 6
+    And its output contains the literal "$DATABASE_URL" and no "postgres://" URL
+
+  @AC-4 @regression @feature-318
+  Scenario: a service dirty at its first migration is told to empty the tracking table
+    Given a migrations directory for schema "x" holding up-files 001, 002, 003, 005 and 006
+    When the dirty guard evaluates "1 (dirty)"
+    Then it exits 3 with the line "Recover: psql "$DATABASE_URL" -c 'TRUNCATE public.x_schema_migrations'"
+    And its output contains no "force -1"
+
+  @AC-5 @regression @feature-318
+  Scenario Outline: the dirty guard fails closed when it cannot compute a recovery
+    Given a migrations directory for schema "x" holding up-files <files>
+    When the dirty guard evaluates "<version>"
+    Then it exits 2 naming "cannot compute recovery" and prints no "Recover:" line
+
+    Examples:
+      | files                   | version   |
+      | (none)                  | 5 (dirty) |
+      | 001, 002, 003, 005, 006 | 4 (dirty) |
+      | 001, 002, 003, 005, 006 | 7 (dirty) |
+```
+
+### Notes / ambiguities / conflicts
+1. **No CONFLICT planned, and no existing scenario is edited by this promotion.** On the main-dev copy, platform.feature:386-390 (225 @AC-19, "both evaluations allow the automatic force-0 recovery") and config fix-config-keys-drift.feature:109 (295 @AC-28, "an automatic force 0 from a dirty 041") contradict 318. Both are covered by operator-signed C-16 CHANGE O-3 (318 context.md; design.md §10). implementation-spec Step 13 rewrites them in place on the branch as hand edits, not as promotion output. Before this plan is applied, check that on the branch tip:
+   - platform.feature carries the rewritten `@AC-19 @FR-8 @feature-225` outline with the "# Changed by @feature-318" comment.
+   - fix-config-keys-drift.feature:109 carries the reworded clause.
+
+   If either is still the old text, stop. Appending AC-1, AC-3 or AC-4 would put contradictory rules side by side, which is the "alongside promotion" mistake in fails.md 2026-11-04. In that case the verdict for those scenarios becomes CONFLICT and needs a human decision.
+2. **Overlap consolidation candidate.** The rewritten 225 @AC-19 (Step 13) shares rows with 318 @AC-3, @AC-4 and @AC-5: `5 (dirty)` → force 3, `1 (dirty)` → TRUNCATE, `4 (dirty)` → exit 2, and the empty directory. The 318 scenarios add assertions that the outline lacks:
+   - the full Recover command text;
+   - the "force 6" escalation wording;
+   - the literal `$DATABASE_URL` with no `postgres://` URL;
+   - "no force -1";
+   - the `7 (dirty)` row;
+   - "no Recover: line".
+
+   I judged them NEW rather than OVERLAP for that reason. If the promoting skill instead judges them OVERLAP against the branch-tip @AC-19, skip the writes for @AC-3, @AC-4 and @AC-5. I would still prefer keeping them, because the exact-text assertions are what the regression guard needs. Consolidating the two is a human curation step. Nothing is deleted.
+3. **Related, not overlapping, rules that stay as they are.** None of these is a conflict with 318.
+   - 225 @AC-18 (contract-floor dirty, "force 25"): the guard still refuses and names the previous version.
+   - 279 @AC-25 (ahead-dirty refusal, `force 8`, literal `$DATABASE_URL`): consistent with AC-3.
+   - 279 @AC-26 and @AC-27: PRESERVE/EXTEND per design.
+   - 225 @AC-12 and 279 @AC-30: PRESERVE.
+4. **Tags and numbering.** AC numbers are not renumbered. They repeat the numbers of other features' scenarios in platform.feature, as the file already does. Uniqueness comes from the `@AC-n`+`@feature-318` pair. The source has no @FR tags, so none were invented (feature 329's block has the same shape). The `@regression` tag is kept.
+5. **Comment header.** The three comment lines under the section banner are provenance only, taken from the source's `# guards:` lines and design.md §10. Drop them if you want a tags-only append.
+6. **Other suites.** No service suite receives a scenario. The config suite's @AC-28 last-clause change is a Step 13 in-place edit, not a promotion.
+
+### Coverage check
+- Source scenarios: 5 (@AC-1, @AC-2, @AC-3, @AC-4, and @AC-5 as one Scenario Outline with 3 example rows). Planned (NEW+DUP+OVERLAP): 5 (5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT, conditional on Note 1). Every @AC-* is accounted for, with none skipped.
+- Files: /home/user/xstockstrat/docs/roadmap/features/318-fix-migration-tooling-safety/acceptance.feature (source), /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (the only target).
+````

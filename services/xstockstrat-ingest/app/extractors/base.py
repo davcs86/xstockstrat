@@ -7,39 +7,6 @@ from dataclasses import dataclass
 
 
 @dataclass
-class SimpleEmailInput:
-    body_text: str
-    body_html: str
-
-
-@dataclass
-class EmailAttachmentInput:
-    body_text: str
-    body_html: str
-    attachments: list[bytes]
-
-
-@dataclass
-class LinkedEmailInput:
-    body_text: str
-    body_html: str
-    urls: list[str]
-
-
-@dataclass
-class SimpleWebsiteInput:
-    url: str
-    html: str
-
-
-@dataclass
-class AuthenticatedWebsiteInput:
-    url: str
-    html: str
-    credentials: dict
-
-
-@dataclass
 class McpClientInput:
     # The already-fetched MCP tool result (CallToolResult.structured_content list);
     # the fetch/credentials live in the loop so the extractor stays pure.
@@ -48,14 +15,7 @@ class McpClientInput:
     slug: str = ""
 
 
-RawInput = (
-    SimpleEmailInput
-    | EmailAttachmentInput
-    | LinkedEmailInput
-    | SimpleWebsiteInput
-    | AuthenticatedWebsiteInput
-    | McpClientInput
-)
+RawInput = McpClientInput
 
 
 class BaseExtractor(ABC):

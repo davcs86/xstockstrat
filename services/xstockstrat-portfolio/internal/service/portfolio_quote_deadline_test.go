@@ -539,6 +539,90 @@ func TestCheckRiskLimits_242_AC6_DrawdownTargetsOwner(t *testing.T) {
 	}
 }
 
+// assertOneRiskEvent requires exactly one ledger append: eventType on portfolio:risk, owned by owner, payload == want.
+func assertOneRiskEvent(t *testing.T, ledger *fakeLedger, eventType, owner string, want map[string]string) {
+	t.Helper()
+	if len(ledger.reqs) != 1 {
+		t.Fatalf("want exactly 1 ledger event, got %d", len(ledger.reqs))
+	}
+	req := ledger.reqs[0]
+	if req.EventType != eventType || req.StreamKey != "portfolio:risk" || req.UserId != owner {
+		t.Fatalf("event type=%q stream=%q owner=%q, want %q, portfolio:risk, %q", req.EventType, req.StreamKey, req.UserId, eventType, owner)
+	}
+	got := map[string]string{}
+	for k, v := range req.GetPayload().GetFields() {
+		got[k] = v.GetStringValue()
+	}
+	if len(got) != len(want) {
+		t.Fatalf("payload = %v, want exactly %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("payload[%q] = %q, want %q (payload %v)", k, got[k], v, got)
+		}
+	}
+}
+
+// @AC-2 (feature 315): a concentration breach is a concentration event, owner-attributed and naming the symbol.
+func TestCheckRiskLimits_315_AC2_ConcentrationEventKindAndOwner(t *testing.T) {
+	svc, mock, ledger := newQuoteSvc(t, &stubMarketData{}, 0)
+	notify := &recordingNotify{}
+	svc.cfg = config.MustSnapshotWatcher("portfolio", map[string]*configv1.ConfigValue{
+		"risk.concentration_limit_pct": {Value: &configv1.ConfigValue_FloatVal{FloatVal: 0.20}},
+	})
+	svc.notify = notify
+	rows := posRow(mock.NewRows(positionCols), testdata.Aapl, "acct-1", 35, 1.0, 1.0)
+	for _, sym := range []string{testdata.Lyft, testdata.Msft, testdata.Elwt, testdata.Tsla} {
+		rows = posRow(rows, sym, "acct-1", 16.25, 1.0, 1.0)
+	}
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(rows)
+	mock.ExpectQuery(`FROM portfolio.account_balances`).WithArgs("user-1", "TRADING_MODE_PAPER").
+		WillReturnRows(mock.NewRows([]string{"account_id", "equity", "peak_equity"}))
+
+	svc.checkRiskLimits(ctxWithUser(t, "user-1"), "user-1", commonv1.TradingMode_TRADING_MODE_PAPER)
+
+	msg := "concentration limit breach: AAPL at 35.0%"
+	assertOneRiskEvent(t, ledger, "portfolio.risk.concentration_breach", "user-1",
+		map[string]string{"user_id": "user-1", "symbol": testdata.Aapl, "message": msg})
+	if len(notify.reqs) != 1 {
+		t.Fatalf("want exactly 1 alert, got %d: %v", len(notify.reqs), notify.bodies)
+	}
+	if req := notify.reqs[0]; req.Body != msg || req.Category != "risk" || req.Severity != notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING || req.TargetUserId != "user-1" {
+		t.Fatalf("alert body=%q category=%q severity=%v target=%q, want %q, risk, WARNING, user-1", req.Body, req.Category, req.Severity, req.TargetUserId, msg)
+	}
+}
+
+// @AC-3 (feature 315): a drawdown breach keeps its event type, owner-attributed and naming the account.
+func TestCheckRiskLimits_315_AC3_DrawdownEventKeepsTypeWithOwnerAndAccount(t *testing.T) {
+	svc, mock, ledger := newQuoteSvc(t, &stubMarketData{}, 0)
+	notify := &recordingNotify{}
+	svc.cfg, svc.notify = &config.Watcher{}, notify
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(mock.NewRows(positionCols))
+	balances := mock.NewRows([]string{"account_id", "equity", "peak_equity"}).AddRow("acct-1", 8500.0, 10000.0)
+	mock.ExpectQuery(`FROM portfolio.account_balances`).WithArgs("user-1", "TRADING_MODE_PAPER").WillReturnRows(balances)
+
+	svc.checkRiskLimits(ctxWithUser(t, "user-1"), "user-1", commonv1.TradingMode_TRADING_MODE_PAPER)
+
+	msg := "drawdown limit breach: account acct-1 at 15.0% (peak 10000.00, current 8500.00)"
+	assertOneRiskEvent(t, ledger, "portfolio.risk.drawdown_breach", "user-1",
+		map[string]string{"user_id": "user-1", "account_id": "acct-1", "message": msg})
+	if len(notify.reqs) != 1 || notify.reqs[0].Body != msg {
+		t.Fatalf("alerts = %v, want exactly [%q]", notify.bodies, msg)
+	}
+}
+
+// D-6 (feature 315): the helper's user_id and message win over colliding keys in extra.
+func TestEmitRiskAlert_HelperKeysOverrideExtra(t *testing.T) {
+	svc, _, ledger := newQuoteSvc(t, &stubMarketData{}, 0)
+	svc.notify = &recordingNotify{}
+	extra := map[string]interface{}{"symbol": testdata.Aapl, "user_id": "spoofed-user", "message": "spoofed message"}
+
+	svc.emitRiskAlert(ctxWithUser(t, "user-1"), "user-1", "portfolio.risk.concentration_breach", extra, "real message")
+
+	assertOneRiskEvent(t, ledger, "portfolio.risk.concentration_breach", "user-1",
+		map[string]string{"user_id": "user-1", "symbol": testdata.Aapl, "message": "real message"})
+}
+
 // Feature 251 — GetPnL reads the canonical trading source, resolves each fill's side and folds in ledger order.
 
 const (

@@ -13,10 +13,10 @@
 
 - **Observed**: the server-side `mcp_client` poll loop calls `_ingest_external_signal` with `owner=` but no
   `propagation_meta`; the `ingest.signal.ingested` AppendEvent sets no `AppendEventRequest.user_id` and
-  forwards `metadata=None`, so ledger resolves the owner to NULL (no trace id either) and `ExportEvents`
+  forwards an empty `propagation_meta` list (defaulted in `_ingest_external_signal`), so ledger resolves the owner to NULL (no trace id either) and `ExportEvents`
   (scoped `user_id = caller`) never returns the events to the source owner. The same event via
   `IngestSignal` is owner-stamped.
-- **Expected**: the AppendEvent sets `user_id=owner` explicitly; optionally a trace id is minted per cycle.
+- **Expected**: the AppendEvent sets `user_id=owner` explicitly; a per-cycle id is persisted as `correlation_id` (FR-3).
 - Report: [`docs/reports/2026-10-19-ingest-mcp-loop-ledger-events-ownerless-defect.md`](../../../reports/2026-10-19-ingest-mcp-loop-ledger-events-ownerless-defect.md)
 
 ### P&L snapshot compose can raise ValueError for a system-owned order event (SEV-3)
@@ -28,6 +28,12 @@
 - **Expected**: a `system` owner degrades to a partial snapshot, the same way the empty-owner branch skips
   indicators and signals.
 - Report: [`docs/reports/2026-10-19-analysis-pnl-compose-system-owner-raises-defect.md`](../../../reports/2026-10-19-analysis-pnl-compose-system-owner-raises-defect.md)
+
+## Functional Requirements
+
+FR-1. On the `mcp_client` poll-loop path, the `ingest.signal.ingested` ledger event is attributed to the source owner through `AppendEventRequest.user_id`. No `x-user-id` header is forged. (The RPC path receives the same field as incidental hardening.)
+FR-2. A `system` owner alone never causes a P&L order event to be retried or parked: the event yields a partial snapshot and opens no `pnl_positions` window. Poison payloads still park under `@AC-7 @feature-259`.
+FR-3. Each `mcp_client` source's poll cycle mints one id, persisted as the `correlation_id` of every `ingest.signal.ingested` ledger event from that cycle. Ledger ignores the `x-trace-id` header.
 
 ## Reproduction Steps
 
@@ -60,6 +66,12 @@ inbound request; the feature-225 fail-closed identity helper was inserted ahead 
 - xstockstrat-analysis (P&L snapshot compose)
 - xstockstrat-ledger (owner resolution; named by report 1, no change expected)
 
+## Consumer Surface(s)
+
+- The `/trader` ledger export. No UI or ledger code change. In that export the `correlation_id` column
+  shows a poll-cycle id on `mcp_client` `ingest.signal.ingested` rows, not a request trace; RPC-path rows
+  stay empty. The analysis change is internal-only.
+
 ## Fix Scope
 
 - Proto changes: **no** — `AppendEventRequest.user_id` (field 9) already exists.
@@ -68,9 +80,9 @@ inbound request; the feature-225 fail-closed identity helper was inserted ahead 
 
 ## Open Questions
 
-1. Report 1: mint a trace id per poll cycle (report calls it optional) — in scope?
-2. Report 1: existing `ingest.signal.ingested` rows with NULL `user_id` — leave (ledger is append-only) or attribute?
-3. Report 2: is the fix only the analysis degrade, or should trading also gain an explicit `system` guard on `order.*` producers (report notes there is none)?
+1. Report 1: mint a trace id per poll cycle (report calls it optional) — in scope? **Resolved: in scope (FR-3, D-17).**
+2. Report 1: existing `ingest.signal.ingested` rows with NULL `user_id` — leave (ledger is append-only) or attribute? **Resolved: leave the rows; `ledger.events` is append-only (D-5).**
+3. Report 2: is the fix only the analysis degrade, or should trading also gain an explicit `system` guard on `order.*` producers (report notes there is none)? **Resolved: no trading guard; out of scope (D-6).**
 
 ## Acceptance Criteria
 

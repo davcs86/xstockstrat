@@ -525,6 +525,33 @@ async def run_until_stopped(consumer):
         await consumer.run_forever()
 
 
+async def test_feature313_ac2_system_owned_order_event_degrades_on_first_attempt(sleeps):
+    composer = _MetaRecordingComposer()
+    consumer, pool, snaps, positions, samples, ledger = make_consumer(composer=composer)
+    original = consumer.process_event
+    runs = []
+
+    async def counting_process_event(event):
+        runs.append(event.sequence)
+        await original(event)
+
+    consumer.process_event = counting_process_event
+    await consumer._process_with_retry(
+        make_event(1, "order.filled", {**ORDER_PAYLOAD, "user_id": "system"})
+    )
+    sleeps.assert_not_awaited()
+    assert runs == [1], "processed on its first attempt"
+    assert len(snaps.rows) == 1
+    assert snaps.rows[0]["indicators"] == {}
+    assert snaps.rows[0]["signals"] == []
+    assert "analysis.snapshot.degraded" in ledger.appended
+    assert "analysis.snapshot.captured" not in ledger.appended
+    assert positions.open_rows == {}, "a system owner opens no pnl_positions window"
+    assert parked_calls(ledger) == []
+    assert composer.metas == {"ohlcv": []}, "headerless bars read; no owner-scoped call"
+    assert pool.cursor == 1
+
+
 async def test_ac6_failed_event_is_retried_in_place_before_the_next(sleeps):
     consumer, pool, ledger = streaming_consumer(max_streams=1)
     handled = fail_seq_10(

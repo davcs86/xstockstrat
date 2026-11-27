@@ -85,7 +85,7 @@ may print the FQN `portfolio.<key>`.
 | `watchlist.signal_prune_interval_seconds` | int | `300` | Feature 281 — seconds between signal-entry expiry prune ticks, read live each iteration. Read clamp: `≤ 0` → `300`, `1..59` → `60`, `> 86400` → `86400`; SetConfig-bounded `[60,86400]` (`SCALAR_BOUNDS_REGISTRY`). Seeded by config migration `037_portfolio_signal_prune_interval` (global staging + production rows at `300`). No pause switch — raising it is not a pause. |
 | `exposure.factor_map` | string (JSON) | `"{}"` | JSON object mapping symbol → factor name for the Exposure screen's factor grouping (feature 083). marketdata exposes no sector, so this operator-defined map is the factor source; unmapped symbols group as "Unclassified". Read via `Watcher.FactorMap()`; invalid JSON → empty map. |
 | `marketdata.last_close_lookback_days` | int | `21` | Feature 240 — how many calendar days back the offline-valuation `BatchGetBars` (`allow_partial`) searches for a daily close to mark an offline position that has no live quote (`MARK_SOURCE_LAST_CLOSE`), and the window for Day P&L's previous close. Read live per read; nil/`≤ 0` → `21`. Seeded by config migration `041`; SetConfig-bounded `[5,60]`. |
-| `marketdata.quote_timeout_ms` | int | `4000` | Feature 229 — deadline on the marketdata `GetLatestQuotes` fetch (`latestQuotesFor`, the single choke point for every read and background path). On expiry the un-broker-valued positions stay unenriched (never fabricated) and the read still answers. Must exceed max(`marketdata.quotes.batch_timeout_ms` (2500), `marketdata.quotes.mark_timeout_ms` (500)) plus the warm read so a cold timeout still returns the warm subset. Read live; nil/`≤ 0` → `4000`. Seeded by config migration `041`; SetConfig-bounded `[500,8000]`. |
+| `marketdata.quote_timeout_ms` | int | `4000` | Feature 229 — deadline on the marketdata `GetLatestQuotes` fetch (`latestQuotesFor`, the single choke point for every read and background path). On expiry the un-broker-valued positions stay unenriched (never fabricated) and the read still answers. The order `quote_timeout_ms` > max(`marketdata.quotes.batch_timeout_ms`, `marketdata.quotes.mark_timeout_ms`) is enforced at `SetConfig` for global writes (feature 314 `CROSS_KEY_ORDERING`, strict `>`, prevents inversion only — no warm-read margin); a write to either side that would invert it is refused with code 3. Read live; nil/`≤ 0` → `4000`. Seeded by config migration `041`; SetConfig-bounded `[500,8000]`. |
 | `marketdata.servability_timeout_ms` | int | `2000` | Feature 282 — deadline on the marketdata `GetSymbolServability` check (`refuseUnservable`) on the three watchlist insert paths. On timeout or error the write proceeds unfiltered with a WARN (fail-open). Read live per write; nil/`≤ 0` → `2000`, `< 500` → `500`, `> 4000` → `4000`. SetConfig-bounded `[500,4000]`. Seeded by config migration `039_portfolio_servability_timeout` (global staging + production rows at `2000`). |
 
 ## Ledger Events Consumed
@@ -114,10 +114,16 @@ may print the FQN `portfolio.<key>`.
 |---|---|
 | `portfolio.position.opened` | New position created |
 | `portfolio.position.closed` | Position fully closed |
-| `portfolio.risk.drawdown_breach` | Max drawdown exceeded |
+| `portfolio.risk.drawdown_breach` | Per-account max drawdown exceeded — payload `{user_id, account_id, message}` |
+| `portfolio.risk.concentration_breach` | A symbol exceeds `risk.concentration_limit_pct` of the portfolio — payload `{user_id, symbol, message}` |
 | `portfolio.snapshot` | Snapshot written after each processed fill |
 | `portfolio.watchlist.signal_entry_expired` | Prune removed a tracked SIGNAL entry whose `valid_until` passed — payload `{user_id, watchlist_id, symbol, strategy_id, signal_id, valid_until}` (RFC3339), stream key `watchlist:<watchlist_id>`; the owner also rides in `AppendEventRequest.user_id` (feature 281) |
 | `portfolio.watchlist.signal_entry_removed_untracked` | Prune removed a backfill-marked (`signal_id NULL`) SIGNAL entry — payload `{user_id, watchlist_id, symbol, strategy_id}`, same stream key and `AppendEventRequest.user_id` owner (feature 281) |
+
+**Risk events (feature 315)** — both `portfolio.risk.*` rows use the fixed, global stream key `portfolio:risk` (not a
+user id); the owner also rides in `AppendEventRequest.user_id`. `checkRiskLimits` re-emits a persisting breach on every
+run (no dedup), and the events are visible in the owner's `owner_only` `QueryEvents` / `ExportEvents`. Before feature
+315 a concentration breach was recorded under the drawdown event type, which an external ledger reader may still assume.
 
 **Signal-entry expiry prune (feature 281)** — see PORTFOLIO-18; legacy entries are classified by `portfolio backfill-signal-expiry` (procedure → [`docs/runbooks/signal-watchlist-expiry-backfill.md`](../../docs/runbooks/signal-watchlist-expiry-backfill.md)).
 

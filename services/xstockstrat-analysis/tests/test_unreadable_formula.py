@@ -485,7 +485,7 @@ async def test_evaluate_readiness_fast_serves_formula_unreadable_marker():
     svc._strategies_repo = MagicMock(get_by_owner_and_id=AsyncMock(return_value=strategy))
     svc._marketdata = MagicMock()  # GetDataCoverage probe is best-effort; a miss reads as 0
     svc._indicators = MagicMock()
-    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.GetFormula = AsyncMock(return_value=indicators_pb2.FormulaDefinition())
     svc._indicators.ComputeIndicator = AsyncMock(side_effect=lambda req, **_kw: _sma_resp(req))
     svc._indicators.ExecuteFormula = AsyncMock()
     svc._readiness_cache_repo = MagicMock(read_many=AsyncMock(return_value={"MYSZ": cached}))
@@ -669,7 +669,7 @@ async def test_opportunities_marker_clears_once_formula_is_readable():
     first = _find((await svc._compute_opportunities("u1", _META))[0], "s-1")
     assert "formula_unreadable" in first["provenance"]
 
-    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.GetFormula = AsyncMock(return_value=indicators_pb2.FormulaDefinition())
     svc._indicators.ExecuteFormula = AsyncMock(side_effect=_ok_formula)
     second = _find((await svc._compute_opportunities("u1", _META))[0], "s-1")
 
@@ -717,7 +717,7 @@ async def test_opportunity_recompute_timeout_marks_the_row_unavailable(caplog):
 
 async def test_evaluate_readiness_timeout_degrades_the_symbol():
     svc = _cache_svc({"MYSZ": _real_bars("MYSZ", _CLOSES)}, strategy_row=_row(_definition()))
-    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.GetFormula = AsyncMock(return_value=indicators_pb2.FormulaDefinition())
     svc._indicators.ExecuteFormula = AsyncMock(
         return_value=SimpleNamespace(
             success=False, error=_TIMEOUT, exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
@@ -888,7 +888,7 @@ async def test_heal_refusal_rewrites_to_marker_and_is_not_reselected(held):
 
 async def test_heal_recovery_restores_an_evaluated_row():
     svc = _mysz_svc()
-    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.GetFormula = AsyncMock(return_value=indicators_pb2.FormulaDefinition())
     svc._indicators.ExecuteFormula = AsyncMock(side_effect=_ok_formula)
     svc._opportunities_repo.rows["u1"] = [_aged_row(["watchlist", "unavailable"])]
 
