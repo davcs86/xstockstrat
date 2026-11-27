@@ -67,6 +67,11 @@ AC6_ROWS = [
     ("opportunity.snooze_default_hours", "int", 24),
     ("opportunity.read_db_budget_ms", "int", 20000),
     ("opportunity.live_enrich_timeout_ms", "int", 3000),
+    ("pipeline.worker_concurrency", "int", 4),
+    ("pipeline.poll_interval_ms", "int", 1000),
+    ("pipeline.lease_seconds", "int", 60),
+    ("pipeline.max_attempts", "int", 5),
+    ("pipeline.retention_days", "int", 7),
 ]
 
 _TYPE_BY_KEY = {key: typ for key, typ, _ in AC6_ROWS}

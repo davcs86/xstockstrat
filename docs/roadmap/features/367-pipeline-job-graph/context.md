@@ -411,3 +411,37 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   - [x] N1 Step 12's sleep regex let `sleep(0.5)` through; the pattern now catches it.
 - Still open by choice, for `/sdd-execute`: the stored-set regeneration database route, and the
   config-service lint and tests (not runnable in the spec sandbox).
+
+## Session 2026-11-27 — sdd-execute (sequential)
+
+- **OPERATOR DECISION (mode entry): "Agree, minimal"** — sequential mode with no 5-step-cap checkpoint;
+  the run pauses only for blockers and once at the end of the feature, before the integration PR.
+- **OPERATOR DECISION (stored set): "Throwaway local PG16"** — the route for regenerating
+  `scripts/config-wiring-stored.json` (implementation-spec Step 1 item 7; closes review note N6).
+- **OPERATOR (feature plan): "Proceed"** — re-spec gate passed with no mismatch (the only changes between
+  the spec tree `19d095b` and `origin/main-dev@334d3b7` are docs); no re-spec.
+- Branch `feature/pipeline-job-graph` created from `origin/main-dev@334d3b7` and pushed.
+- Tooling setup (all steps): uv ✓ · analysis deps ⬇ `uv sync --extra dev` · ruff ✓ · PostgreSQL 16
+  binaries ✓ · pnpm ✓ 9.15.9 · Node 22.23.5 (no Node 24; CI-equivalent) · config `node_modules` ⬇
+  `pnpm install --frozen-lockfile` · golang-migrate ⬇ 4.17.1 (scratchpad, stored-set only). Baselines:
+  analysis 1977 passed; config 438 passed, lint 0 errors.
+- Config migration number re-checked: trunk's highest is `059`, so `061` stands (Step 1 item 1).
+
+### Steps 1+2+3 — config unit [done]
+- Seeded six `analysis.pipeline.*` keys (config `061`), five `SCALAR_BOUNDS_REGISTRY` rows,
+  `JobGraphSettings` in `app/engine/job_graph.py`, two wiring receivers, the regenerated stored set,
+  the read-classification rows and the docs rows.
+- TDD: red — `setConfigScalarBounds.test.ts` 5 failures on the new rows before the registry entries;
+  `tests/test_job_graph_settings.py` failed to collect (no `app.engine.job_graph`). Green — config 453
+  passed (c8 lines ≥ 40); analysis 2007 passed under `--cov-fail-under=40`; ruff clean.
+- Gates: `check-config-wiring.mjs --final` and `--doc-check` exit 0 (two `REPORTED` baseline findings,
+  neither this feature's); watcher copies, context map and migration order pass; 12 stored rows from
+  `061`; 5 bounds entries.
+- Files modified: `services/xstockstrat-config/migrations/061_analysis_pipeline_keys.{up,down}.sql`,
+  `services/xstockstrat-config/src/grpc/configServiceImpl.ts`,
+  `services/xstockstrat-config/src/__tests__/{analysisPipelineKeysSeedMigration,setConfigScalarBounds}.test.ts`,
+  `scripts/config-wiring-stored.json`, `scripts/config-wiring.json`,
+  `services/xstockstrat-analysis/app/engine/job_graph.py`,
+  `services/xstockstrat-analysis/tests/{test_job_graph_settings,test_config_read_classification,test_config_zero_clamps}.py`,
+  `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`.
+- Deviations: stored-set route and tooling versions (Deviation Log); none to the plan.

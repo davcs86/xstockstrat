@@ -171,7 +171,7 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
 
 ### Step 1 — config: seed the six `analysis.pipeline.*` keys (config `061`), their SetConfig bounds, the stored set and the docs rows
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/061_analysis_pipeline_keys.up.sql` — create
@@ -280,7 +280,7 @@ config, stored-set and wiring commands.
 
 ### Step 2 — service: `JobGraphSettings` reader and the wiring registry entries
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/job_graph.py` — create
@@ -347,7 +347,7 @@ config, stored-set and wiring commands.
 
 ### Step 3 — test: settings reader, read classification and the unit gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_job_graph_settings.py` — create
@@ -1619,3 +1619,12 @@ _Populated by /sdd-execute as implementation proceeds._
 
 - **Spec time (2026-11-27).** The config migration is `061`, not highest + 1 (`060`), by operator
   ruling (C-07 override; `060` is feature 345's). See `merge-order.md` § Config seed number: 367 ↔ 345.
+- **Steps 1+2+3 (execute, 2026-11-27).** Stored-set route: a throwaway local PostgreSQL 16 (operator
+  choice at mode entry), with golang-migrate 4.17.1 (the `scripts/Dockerfile.migrate` pin) in the session
+  scratchpad. The cluster lived under a `mkdtemp` in `/tmp`, as `tests/conftest.py:local_pg` does (the Unix
+  socket path limit), and was removed afterwards. `config-heal-dryrun.py --fresh` was also run (CI's same
+  job): no diff in `scripts/config-heal/dryrun-fresh.tsv`. **Disposition**: operator-approved route, no
+  spec change.
+- **Steps 1+2+3, tooling.** Config lint and tests ran on Node 22.23.5 with pnpm 9.15.9 (the sandbox has no
+  Node 24); the analysis venv uses the service's `.python-version` (3.12). **Disposition**: CI-equivalent
+  fallback; CI runs the pinned versions.

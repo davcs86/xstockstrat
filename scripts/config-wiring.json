@@ -82,6 +82,8 @@
       "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:self._cfg": "analysis",
       "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:self._md_cfg": "marketdata",
       "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:str_nonempty": "analysis",
+      "services/xstockstrat-analysis/app/engine/job_graph.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/engine/job_graph.py:self._cfg": "analysis",
       "services/xstockstrat-analysis/app/engine/live_loop.py:int_positive": "analysis",
       "services/xstockstrat-analysis/app/engine/live_loop.py:self._cfg": "analysis",
       "services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:int_positive": "analysis",

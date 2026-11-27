@@ -318,6 +318,11 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     { ns: 'marketdata', key: 'assets.delisting_confirmation_trading_days', field: 'intVal', min: 1, max: 30 },
     { ns: 'portfolio', key: 'marketdata.servability_timeout_ms', field: 'intVal', min: 500, max: 4000 },
     { ns: 'portfolio', key: 'watchlist.max_symbols_per_list', field: 'intVal', min: 1, max: 1000 },
+    { ns: 'analysis', key: 'pipeline.worker_concurrency', field: 'intVal', min: 1, max: 16 },
+    { ns: 'analysis', key: 'pipeline.poll_interval_ms', field: 'intVal', min: 200, max: 5000 },
+    { ns: 'analysis', key: 'pipeline.lease_seconds', field: 'intVal', min: 45, max: 600 },
+    { ns: 'analysis', key: 'pipeline.max_attempts', field: 'intVal', min: 2, max: 20 },
+    { ns: 'analysis', key: 'pipeline.retention_days', field: 'intVal', min: 1, max: 90 },
   ];
 
   for (const { ns, key, field, min, max } of TIMEOUT_KEY_FORMS) {
