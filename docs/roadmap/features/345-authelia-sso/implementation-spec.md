@@ -839,7 +839,7 @@ grep -n "install_watcher" tests/test_sso_mode.py
 
 ### Step 19 — service: Async JWKS and discovery cache (app/jwks.py)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/jwks.py` — create

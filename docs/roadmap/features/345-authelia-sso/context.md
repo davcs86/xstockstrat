@@ -892,3 +892,9 @@
 - TDD: red (before Step 17): collection `ImportError: cannot import name 'sso_mode' from 'app'` (2 errors) → green: `pytest --cov=app --cov-fail-under=40` 941 passed (88.77 %), the two new files 83 passed; ruff check + format clean; `install_watcher` used in `test_sso_mode.py:7,20,35`.
 - Files modified: `services/xstockstrat-agent/tests/{test_oidc_vectors,test_sso_mode,conftest}.py`
 - Deviations: none
+
+### Step 19 — Async JWKS and discovery cache (app/jwks.py) [done]
+- New `app/jwks.py`: the seven F-07 constants (`_JWKS_MAX_AGE_S = 3600`, D-138), `JwksError`, `discovery(issuer)` (600 s cache, no redirects, `Accept-Encoding: identity`, Content-Length + streamed 64 KiB cap, byte-exact `issuer`, same-origin `jwks_uri` on every refetch), per-issuer `_IssuerKeys` with a single-flight task under `asyncio.timeout(5)` (sole writer; done-callback retrieves the exception), per-key ingest skip with one WARN, `key_for` per D-31/D-138 returning `(PyJWK, jwk_alg)` | `'unknown_kid'` | `'unavailable'`, `_reset_for_tests`.
+- Verification: ruff check + format clean; `python -c "import app.jwks"` ok. TDD: recorded under Step 20.
+- Files modified: `services/xstockstrat-agent/app/jwks.py`
+- Deviations: none. Notes: the clock is the module function `_now()` (monotonic) so tests can patch it; a JWK without a string `kid` counts as unusable (skipped with the WARN), since a token must name a `kid`.
