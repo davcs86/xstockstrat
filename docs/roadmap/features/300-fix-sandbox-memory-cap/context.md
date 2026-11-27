@@ -138,3 +138,9 @@ Operator decisions and C-16 sign-offs copied verbatim from the pre-archive sessi
 _From: Session 2026-11-09 — sdd-design Phase 1 round 2 gate_
 
 - Operator decisions at the gate: **Run round 3**. Smoke gate = **honest owned follow-up** (advisory, owner = operator; no /promote change). DO = **no spec change** (basic-s 2 GB per docs/runbooks/infra-cost-reduction.md; homelab gets explicit mem_limit/memswap_limit 2g by parity; fix the basic-xs doc drift in docs/setup/digitalocean.md:252 and infra-cost-reduction.md:18; the FR-2 probe logs memory.max). SIGKILL attribution = **evidence-based via cgroup memory.events oom_kill delta**, else runtime_error 'killed by signal 9'; RLIMIT_CPU and 209 wording untouched (no C-16 CHANGE).
+
+### Session 2026-11-25 — homelab memory budget (C-16 CHANGE sign-off)
+
+- Operator decision, verbatim: "1. Do it  2. I assume the risk." Question put to them: change `platform.feature` `@AC-9 @feature-300` from a 2 GiB to a 768 MiB indicators `mem_limit`/`memswap_limit`, accepting that homelab's `sandbox.max_concurrent` (24, deliberately not lowered) can exceed it and OOM-kill the service.
+- Why: homelab VMs shrink from 8 GiB to 4 GiB (6 GiB acceptable). Measured on staging: host daemons ~940 MiB, stack idle ~807 MiB. The 12 per-service caps total 3 GiB (3221225472); indicators needs 768 MiB for that. Supersedes "Homelab got 2g" above (lines 11, 20).
+- Enforced by `deploy/homelab/render-assert.jq` (`mem-limit:<svc>` for every app, `mem-budget` for the total) and `scripts/homelab-render.test.sh`.

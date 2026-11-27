@@ -91,7 +91,7 @@ Follow-ups from feature 247 `design.md` § Open Risks, recorded as `docs/reports
 | Report | Title |
 |---|---|
 | `2026-10-29-agent-config-snapshot-read-defect` (pruned 2026-11-10; git show 29f54de3:docs/reports/2026-10-29-agent-config-snapshot-read-defect.md) | Agent `extract_email_content` exceeds the MCP 60 s budget during a config stall for five or more URLs |
-| [`2026-10-29-agent-dcr-fail-closed-defect`](../../../docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md) | Agent OAuth dynamic client registration fails open on a config stall (SECURITY POSTURE) |
+| [`2026-10-29-agent-dcr-fail-closed-defect`](../../../docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md) | Agent OAuth dynamic client registration fails open on a config stall (SECURITY POSTURE) — **resolved (feature 319):** `/oauth/register` fails closed with 503 `server_error` when no `agent` snapshot is readable or a policy read raises |
 | [`2026-10-29-agent-extract-tools-no-mcp-cap-defect`](../../../docs/reports/2026-10-29-agent-extract-tools-no-mcp-cap-defect.md) | (open report absent from this table until 2026-11-04; title not re-read) |
 | [`2026-10-29-agent-list-opportunities-over-mcp-timeout-defect`](../../../docs/reports/2026-10-29-agent-list-opportunities-over-mcp-timeout-defect.md) | (open report absent from this table until 2026-11-04; title not re-read) |
 

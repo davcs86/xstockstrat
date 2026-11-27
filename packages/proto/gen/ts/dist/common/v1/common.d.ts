@@ -155,6 +155,7 @@ export declare enum BackfillSymbolOutcome {
     BACKFILL_SYMBOL_OUTCOME_EMPTY = "BACKFILL_SYMBOL_OUTCOME_EMPTY",
     BACKFILL_SYMBOL_OUTCOME_SKIPPED = "BACKFILL_SYMBOL_OUTCOME_SKIPPED",
     BACKFILL_SYMBOL_OUTCOME_FAILED = "BACKFILL_SYMBOL_OUTCOME_FAILED",
+    BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = "BACKFILL_SYMBOL_OUTCOME_INCOMPLETE",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function backfillSymbolOutcomeFromJSON(object: any): BackfillSymbolOutcome;
@@ -226,7 +227,10 @@ export interface TemplateOrigin {
     /** latest_version > template_version */
     updateAvailable: boolean;
 }
-/** Lists non-written symbols only; reason is the source's error text, empty for EMPTY. */
+/**
+ * Lists non-written symbols only; reason is the source's error text (empty for EMPTY),
+ * or for INCOMPLETE the still-missing session ranges.
+ */
 export interface BackfillSymbolResult {
     symbol: string;
     outcome: BackfillSymbolOutcome;

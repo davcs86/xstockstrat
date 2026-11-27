@@ -8,6 +8,7 @@ import (
 	"time"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	"github.com/xstockstrat/contracts/marketsession"
 )
 
 // ToCanonical maps a Timeframe enum to the canonical DB string. The bool is false for
@@ -79,8 +80,8 @@ type Gap struct {
 	End   time.Time
 }
 
-// ComputeGaps returns the missing ranges in [reqStart,reqEnd] given the covered [earliest,latest]
-// span. No bars → whole window; else only leading/trailing segments (interior holes out of scope).
+// ComputeGaps is the 15m/1h path (1d uses ComputeSessionGaps): missing ranges in [reqStart,reqEnd]
+// from the covered [earliest,latest] span. No bars → whole window; else only leading/trailing segments.
 func ComputeGaps(reqStart, reqEnd, earliest, latest time.Time, count int64) []Gap {
 	if !reqEnd.After(reqStart) {
 		return nil
@@ -95,5 +96,50 @@ func ComputeGaps(reqStart, reqEnd, earliest, latest time.Time, count int64) []Ga
 	if latest.Before(reqEnd) {
 		gaps = append(gaps, Gap{Start: latest, End: reqEnd})
 	}
+	return gaps
+}
+
+// ComputeSessionGaps: consecutive gaps are always separated by at least one stored session (ingest's
+// verify relies on this); End is noon America/New_York of the last missing session.
+func ComputeSessionGaps(reqStart, reqEnd time.Time, stored []time.Time, now time.Time) []Gap {
+	if !reqEnd.After(reqStart) {
+		return nil
+	}
+	last, live := marketsession.Reference(now)
+	if live {
+		last = marketsession.PrevTradingDay(last)
+	}
+	lastDay := marketsession.DayStart(last)
+	have := make(map[time.Time]bool, len(stored))
+	for _, t := range stored {
+		have[marketsession.SessionDate(t)] = true
+	}
+	var gaps []Gap
+	var first, prev time.Time
+	inRun := false
+	flush := func() {
+		if inRun {
+			gaps = append(gaps, Gap{Start: marketsession.DayStart(first), End: marketsession.DayStart(prev).Add(12 * time.Hour)})
+			inRun = false
+		}
+	}
+	d := marketsession.DayStart(reqStart)
+	if d.Before(reqStart) {
+		d = marketsession.DayStart(d.AddDate(0, 0, 1))
+	}
+	for ; !d.After(reqEnd) && !d.After(lastDay); d = marketsession.DayStart(d.AddDate(0, 0, 1)) {
+		if !marketsession.IsTradingDay(d) {
+			continue
+		}
+		if have[d] {
+			flush()
+			continue
+		}
+		if !inRun {
+			first, inRun = d, true
+		}
+		prev = d
+	}
+	flush()
 	return gaps
 }
