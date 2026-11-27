@@ -1253,7 +1253,7 @@ cd ../.. && node scripts/check-config-wiring.mjs --declared-from docs/roadmap/fe
 
 ### Step 31 — test: Loader modes, validity, environment and the secret header
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/oidcConfig.test.ts` — create

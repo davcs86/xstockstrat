@@ -964,3 +964,9 @@
 - TDD: recorded under Step 31. Verification: typecheck and lint exit 0; `check-config-wiring.mjs --declared-from …/product-spec.md` exit 0 with no output (no unattributed read). A probe renaming one receiver to `uiX` printed `oidcConfig.ts:uiX.values:oidc.issuer:unattributed`, so the scanner does see these reads; restored.
 - Files modified: `services/xstockstrat-ui/src/lib/oidcConfig.ts` (new), `services/xstockstrat-ui/src/lib/headers.ts`
 - Deviations: none. Gaps filled: a present non-string `auth.mode` value reads as absent (`local`, no log); the `sso_issuer_invalid` log-once key is reason + issuer value, so a different bad value logs again; the "timeout" leg is the transport's `timeoutMs` (a `DeadlineExceeded` rejection), with no extra `raceDeadline`.
+
+### Step 31 — test: Loader modes, validity, environment and the secret header [done]
+- `oidcConfig.test.ts` (28 cases, mocked `configClient`): every vector `mode` row with its log (@AC-72), absent → `local` silently (@AC-31), Unavailable/DeadlineExceeded → `'error'` for all four loaders (@AC-46/@AC-60), @AC-54 issuer + empty client id + invalid `APP_URL` (only `app_url_invalid`), @AC-48 four verbatim client IDs, production/staging environment + `userId ''` + 10 s + no GetConfig headers, @AC-35 exact `{ 'x-internal-caller': 'ui' }` and the secret never logged, `found:false`/`''` → `{found:false}`, `loadAgentIssuer` valid/invalid.
+- TDD: red (before Step 30): `Cannot find module '/src/lib/oidcConfig'` → green: 28 passed; full `pnpm run test:coverage` 92 files, 893 passed / 2 skipped, `src/lib/**` 83.66 % lines (`oidcConfig.ts` 100 % lines); typecheck and lint exit 0.
+- Files modified: `services/xstockstrat-ui/src/lib/oidcConfig.test.ts` (new)
+- Deviations: none
