@@ -14,7 +14,7 @@ The steps follow design.md § Build order. Design decisions are cited as `D-n` (
 that says "as design.md § X" means that section is the authority for the behaviour and this spec
 adds only the file, symbol and test seams.
 
-1. **Config (Steps 1-3, one atomic unit).** Six `analysis` keys: seed (config `060`), `SetConfig`
+1. **Config (Steps 1-3, one atomic unit).** Six `analysis` keys: seed (config `061`), `SetConfig`
    bounds, the `JobGraphSettings` reader, the wiring registry, the regenerated stored set, the
    read-classification rows and the docs rows. One commit, because CI's whole-tree wiring check
    (`node scripts/check-config-wiring.mjs --final`) fails on a seeded-unread or read-unseeded key.
@@ -109,17 +109,18 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
   `tests/test_config_read_classification.py:206-212` (`test_rule2_key_sets_match_classification`)
   red until Step 3 classifies them. One backend surface; two services, as in feature 366's
   Steps 4-6.
-- **Config migration number.** `060` is the next free number on `origin/main-dev` today (`059` is
-  the highest). Feature 345 (`authelia-sso`, `implementation-ready`) also plans
-  `060_authelia_sso_keys` (`docs/roadmap/features/345-authelia-sso/implementation-spec.md:254-260`).
-  golang-migrate skips a lower version that lands after a higher one, and CI's
-  `migration-order-gate` (`scripts/check-migration-order.py`) refuses it. Whichever feature merges
-  first keeps `060`; the other takes the then-next number at its own merge. Re-check at execute
-  (Step 1 item 1) and before the integration PR. No `merge-order.md` row exists yet for 367 against
-  345; `/sdd-review pipeline-job-graph impl-spec` owns adding it.
+- **Config migration number.** This feature's config seed is `061`. Trunk's highest is `059`;
+  `060` is planned by feature 345 (`authelia-sso`, `implementation-ready`,
+  `060_authelia_sso_keys`, `docs/roadmap/features/345-authelia-sso/implementation-spec.md:254-260`),
+  which was specced first and keeps it (operator decision 2026-11-27). golang-migrate skips a
+  lower version that lands after a higher one, and CI's `migration-order-gate`
+  (`scripts/check-migration-order.py`) refuses it, so if 367 merges before 345, feature 345 moves
+  above `061` at its own merge and `060` stays an unused gap (gaps are allowed; `053` is one
+  today). Re-check at execute (Step 1 item 1) and before the integration PR. The pair is recorded
+  in `docs/roadmap/features/merge-order.md` § Config seed number: 367 ↔ 345.
 - **Stored set.** Step 1 regenerates `scripts/config-wiring-stored.json`. Regenerate it again after
   any `origin/main-dev` merge that brings in another config migration (`inputs_sha256`), and after
-  a renumber of `060`.
+  a renumber of `061`.
 - Step 4 requires nothing from Steps 1-3. Steps 7-19 require Step 4 (the tables).
 - Step 5 [service] is covered by Step 6 [test]. **Step 6 gates Step 9 onward**: if one of its
   asyncpg pins fails, apply the matching fallback from design.md § Open Risks (first item), record
@@ -164,13 +165,13 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
 
 ---
 
-### Step 1 — config: seed the six `analysis.pipeline.*` keys (config `060`), their SetConfig bounds, the stored set and the docs rows
+### Step 1 — config: seed the six `analysis.pipeline.*` keys (config `061`), their SetConfig bounds, the stored set and the docs rows
 
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/060_analysis_pipeline_keys.up.sql` — create
-- `services/xstockstrat-config/migrations/060_analysis_pipeline_keys.down.sql` — create
+- `services/xstockstrat-config/migrations/061_analysis_pipeline_keys.up.sql` — create
+- `services/xstockstrat-config/migrations/061_analysis_pipeline_keys.down.sql` — create
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
 - `services/xstockstrat-config/src/__tests__/analysisPipelineKeysSeedMigration.test.ts` — create
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -181,7 +182,7 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
 **Reviewers**: `xstockstrat-config` service owner — Config key naming (`<service>.<category>.<key>`), environment (`production`/`staging`) / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability; `xstockstrat-analysis` service owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias; DBA — Migration NNN numbering (no gaps, no conflicts), up+down pair present, hypertable partitioning strategy, index correctness, run-order compliance with `scripts/db-migrate.sh`
 
 **Codebase Evidence**:
-- Last config migration: `059_trading_broker_paper_per_environment` (`ls services/xstockstrat-config/migrations | tail -2`). `060` is free on `origin/main-dev`; see Step Dependencies for feature 345.
+- Last config migration: `059_trading_broker_paper_per_environment` (`ls services/xstockstrat-config/migrations | tail -2`). `060` is reserved for feature 345 and this feature takes `061`; see Step Dependencies.
 - Multi-key seed precedent with a `bool` type: `migrations/052_alpaca_adaptive_rate_limit_keys.up.sql:4-17`, `INSERT INTO config.config_values (namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by, environment, user_id) VALUES (…) ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING;`. Its down (`052_….down.sql`) deletes by actor, `user_id IS NULL`, environment, value and an OR-list of keys; its header notes "the outer parentheses are load-bearing".
 - Single-key int precedent: `migrations/056_analysis_live_only_cycle_max_days.up.sql` and `.down.sql`.
 - Test precedents: `src/__tests__/alpacaAdaptiveRateLimitSeedMigration.test.ts` (multi-key, `HEAD` / `CONFLICT` / `ROW` regex) and `src/__tests__/liveOnlyCycleMaxDaysSeedMigration.test.ts`; both use `findOne` / `splitStatements` from `src/__tests__/migrationSql.ts`.
@@ -199,8 +200,10 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
 **Covers**: —
 
 **Instructions**:
-1. **Number.** `ls services/xstockstrat-config/migrations | tail -2`; use highest + 1 (`060` today).
-   Any other number goes in the Deviation Log, and every `060` below reads as that number.
+1. **Number.** `ls services/xstockstrat-config/migrations | tail -2`. Use `061` while the highest
+   file on `origin/main-dev` is `059` or `060` (`060` is feature 345's). If the highest is `061` or
+   more, use highest + 1, record it in the Deviation Log, and read every `061` below as that
+   number.
 2. **Up.** One `INSERT` in the 052 shape, namespace `analysis`, twelve tuples: each key once for
    `staging` and once for `production`, `user_id NULL`, `consuming_service`
    `'xstockstrat-analysis'`, actor `'system:config-migration-feature-pipeline-job-graph'`, ending
@@ -254,11 +257,11 @@ Names and seams the design leaves open. Each is this spec's choice and is open t
    - a throwaway local PostgreSQL 16, the route feature 366 used under an operator ruling.
    The first and third start a database for artifact generation, so name the route at the Phase-2
    confirmation. If no route works the unit is blocked (P-03). The expected diff is `inputs_sha256`
-   plus twelve rows whose `file` is `060_analysis_pipeline_keys.up.sql`.
+   plus twelve rows whose `file` is `061_analysis_pipeline_keys.up.sql`.
 8. **Docs rows (C-10).**
    - `services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed: six rows after `:292`, each
      with type, default, bounds, reader (`app/engine/job_graph.py:JobGraphSettings`), "read fresh at
-     each use", "seeded by config migration `060`", and for the int keys "read via `int_positive`,
+     each use", "seeded by config migration `061`", and for the int keys "read via `int_positive`,
      then clamped to the bounds with one WARN per distinct clamped value".
    - `docs/patterns/config-governance.md`: a `### feature 367 — pipeline-job-graph
      (`xstockstrat-config` / `xstockstrat-analysis`)` entry directly under the intro at `:152`
@@ -315,7 +318,7 @@ config, stored-set and wiring commands.
      (`app/config/watch_core.py:92`). It is not a config read, so it needs no wiring or
      read-classification entry.
 2. The config-key contract for this reader (C-05). Namespace `analysis`, live mechanism: the
-   service's `WatchConfig` watcher, read at each use. Seed migration: config `060` (Step 1).
+   service's `WatchConfig` watcher, read at each use. Seed migration: config `061` (Step 1).
 
    | Key | `value_type` | Code default | Reader |
    |---|---|---|---|
@@ -395,13 +398,13 @@ ruff check . && ruff format --check .
 grep -n "snapshot_watcher\|from tests.conftest\|conftest" tests/test_job_graph_settings.py   # C-13: harness imported, not copied
 # config (Step 1)
 cd ../xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
-ls migrations/060_*.up.sql migrations/060_*.down.sql
+ls migrations/061_*.up.sql migrations/061_*.down.sql
 # read both: every seeded (key, value) in the .up is deleted by the .down's guarded DELETE
 # whole-tree wiring, stored set and docs (Steps 1+2)
 cd ../.. && node scripts/check-config-wiring.mjs --final && node scripts/check-config-wiring.mjs --doc-check
 python3 scripts/check-watcher-copies.py && python3 scripts/check-context-map.py
 python3 scripts/check-migration-order.py origin/main-dev
-grep -c '"file": "060_analysis_pipeline_keys.up.sql"' scripts/config-wiring-stored.json   # 12
+grep -c '"file": "061_analysis_pipeline_keys.up.sql"' scripts/config-wiring-stored.json   # 12
 grep -n "analysis.pipeline\." services/xstockstrat-config/src/grpc/configServiceImpl.ts   # 5 entries
 ```
 

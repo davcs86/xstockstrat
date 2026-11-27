@@ -351,3 +351,13 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
     an execute-time choice, not a spec defect.
   - N6 config-service lint and tests not run in this sandbox (`node_modules` absent) —
     [ ] unaddressed: run at execute.
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 3: overlap)
+
+- Overlap scan round 3: the `060` collision still fails by the letter of the overlap rule
+  ("Rename one before executing"); a prose note is not a waiver.
+- **OPERATOR DECISION: "Renumber 367 to 061"** — 345 was specced first and keeps `060`. Every
+  `060` in implementation-spec.md, design.md and product-spec.md now reads `061`; the merge-order
+  note is updated. If 367 merges first, 345 moves above `061` and `060` stays a gap.
+- The scan's `host.provider` seam with feature 337 is moot: `_with_host_provider` is already on
+  `main-dev` for analysis (`app/telemetry.py:49`).

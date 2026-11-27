@@ -448,7 +448,8 @@ and logs one WARN per distinct clamped value.
 | `max_attempts` | 5 | `[2, 20]` |
 | `retention_days` | 7 | `[1, 90]` |
 
-Config migration `060_analysis_pipeline_keys`, the `SCALAR_BOUNDS_REGISTRY` rows
+Config migration `061_analysis_pipeline_keys` (`060` is feature 345's; operator decision
+2026-11-27), the `SCALAR_BOUNDS_REGISTRY` rows
 (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:115`), the reader, the two
 `scripts/config-wiring.json` receivers, the regenerated stored set, the five int keys in `FR3_KEYS` of
 `tests/test_config_read_classification.py:25-63` (each also a literal in another test,
@@ -639,7 +640,7 @@ prune batch 500 with a 30 s block budget; stats every third maintenance tick (15
 
 - `C-05` — honored by: six namespace-relative keys, each seeded and read, declared in the product
   spec.
-- `C-07` — honored by: analysis `031`, config `060`, each the next free number.
+- `C-07` — honored by: analysis `031`, config `061` (`060` is reserved for feature 345), re-checked at execute.
 - `C-08` — honored by: paired test steps; real-Postgres tests for the SQL; analysis threshold 40.
 - `C-13` — honored by: job-row fixtures in `services/xstockstrat-analysis/tests/conftest.py`.
 - `C-14` — honored by: consumer surface None, justified in the product spec.

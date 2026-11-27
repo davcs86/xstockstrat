@@ -106,7 +106,8 @@ each use through the service's `WatchConfig` watcher (PLAT-6). The reader for ev
 `services/xstockstrat-analysis/app/engine/job_graph.py:JobGraphSettings`, **to be created** by this
 feature (the name is the story's proposal; `/sdd-design` may move it). Integer keys are read through
 the existing `services/xstockstrat-analysis/app/config/watcher.py:int_positive`. Seed migration:
-`services/xstockstrat-config/migrations/060_analysis_pipeline_keys` (`059` is the latest today;
+`services/xstockstrat-config/migrations/061_analysis_pipeline_keys` (`059` is the latest today and
+`060` is reserved for feature 345, operator decision 2026-11-27;
 re-check the number at `/sdd-spec` and `/sdd-execute`).
 
 - `analysis.pipeline.worker_enabled` — bool, code default `true`. Kill switch for claiming and for the daily prune enqueue (FR-9).

@@ -482,14 +482,14 @@ this. Peer features need not wait. They must not merge to `main-dev` between `T_
 
 ## Config seed number: 367 ↔ 345 (2026-11-27, non-blocking)
 
-`pipeline-job-graph` (367, `implementation-ready`) plans
-`services/xstockstrat-config/migrations/060_analysis_pipeline_keys`, and `authelia-sso` (345,
-`implementation-ready`) plans `060_authelia_sso_keys`; trunk's last config migration is `059`. There is no ordering
-constraint between them, so this is a prose note, not a table row: neither feature waits for the other. Renumbering
-at merge is the accepted remedy (operator decision 2026-11-27, `/sdd-review` impl-spec overlap scan): whichever merges
-first keeps `060`, and the other renumbers its config migration above the trunk tip at its own merge, updates every
-`060` in its own steps, and regenerates `scripts/config-wiring-stored.json` (its `inputs_sha256` covers the whole
-config migration set). Each re-derives the number from `origin/main-dev` at the `/sdd-execute` step that creates the
-migration and again at merge; the CI `migration-order-gate` refuses a lower number. The two also share
-`scripts/config-wiring.json` (`registry.receivers`), `docs/patterns/config-governance.md`,
+`authelia-sso` (345, `implementation-ready`) plans
+`services/xstockstrat-config/migrations/060_authelia_sso_keys`; trunk's last config migration is `059`.
+`pipeline-job-graph` (367, `implementation-ready`) first planned `060` too and was renumbered to
+`061_analysis_pipeline_keys` at `/sdd-review` impl-spec (operator decision 2026-11-27): 345 was specced first and
+keeps `060`. There is no ordering constraint between them, so this is a prose note, not a table row: neither feature
+waits for the other. If 367 merges first, 345 renumbers its config migration above `061` at its own merge (the CI
+`migration-order-gate` refuses a lower number) and `060` stays an unused gap. Whichever merges second regenerates
+`scripts/config-wiring-stored.json` (its `inputs_sha256` covers the whole config migration set). Each re-derives the
+number from `origin/main-dev` at the `/sdd-execute` step that creates the migration and again at merge. The two also
+share `scripts/config-wiring.json` (`registry.receivers`), `docs/patterns/config-governance.md`,
 `docs/patterns/database.md` and the root `CLAUDE.md` in different sections; the second merger rebases.
