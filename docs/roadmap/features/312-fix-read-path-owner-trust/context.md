@@ -754,3 +754,14 @@ Operator ran the A6 detail query on the DO staging database and pasted the resul
 ```
 
 DO staging: 1 active owner-less `trading.broker_accounts` row (the detail query lists exactly one row; the `count(*)` line was not pasted, so the count is taken from the listing). Homelab staging: 0 (previous entry). Production: not taken — production is out of scope and was never launched (standing operator ruling), so no production count will be supplied. Per Step 20 Instruction 4, a non-zero count does not block the merge; it sizes the Step 19 cleanup follow-up (one paper Alpaca account, created 2026-05-31).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 20
+
+### Step 20 — docs: record the owner-less broker-account row count (operator gate) [done]
+- Recorded the operator-supplied O-11 counts from the two 2026-11-27 entries above. DO staging is 1: the A6 detail query (`WHERE user_id = '' AND is_active`) listed one row, `6c9252af-393a-49a5-8af3-e36845249078` "Alpaca 1", paper, created 2026-05-31. Homelab staging is 0 (`count(*)` pasted). Production was waived by the standing operator ruling (production out of scope, never launched), so no count was invented (Instruction 3). The non-zero DO staging count does not block the merge (Instruction 4); it sizes the Step 19 cleanup follow-up `docs/reports/2026-11-20-trading-broker-accounts-ownerless-rows-cleanup-defect.md`.
+- TDD: N/A (docs). Baseline: the step Verification on the pre-edit tree gave exit=1 (`.sdd-logs/v-1.log`, empty). After the edit the same Verification gave exit=0 (`.sdd-logs/v-3.log`) and matched the last bullet of this entry.
+- Config-key wiring gate (last step, `--final`): exit=0 (`.sdd-logs/v-2.log`). It printed two non-blocking `REPORTED:` lines, both outside 312's scope: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. This feature declares no config key.
+- All 20 steps are done. Status `in-progress` → `code-completed`.
+- Files modified: `docs/roadmap/features/312-fix-read-path-owner-trust/context.md`
+- Deviations: Instruction 1 asks for a staging and a production count. Production was waived by operator ruling, and staging is reported per environment (DO and homelab). Full detail is in the Deviation Log.
+- O-11 row count: DO staging 1 (2026-11-27); homelab staging 0 (2026-11-27); production waived (standing ruling: production out of scope)

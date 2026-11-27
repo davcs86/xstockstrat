@@ -1238,7 +1238,7 @@ done
 
 ### Step 20 — docs: record the owner-less broker-account row count (operator gate)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/312-fix-read-path-owner-trust/`
 **Files**:
 - `docs/roadmap/features/312-fix-read-path-owner-trust/context.md` — modify
@@ -1291,3 +1291,4 @@ Execution-time deviations (`/sdd-execute`, 2026-11-27):
 - **Steps 12+13 — scope expansion of Step 13 (operator ruling 2026-11-27, option A).** Once the deprecation was generated, the trading lint failed with `internal/service/trading_helpers_test.go:292:6: SA1019: ... ListOrdersRequest).UserId is deprecated`. The unit also edits `services/xstockstrat-trading/internal/service/trading_helpers_test.go`, which is not in Step 13's **Files**. It deletes the stale `if req.UserId != "" && o.UserId != req.UserId { return false }` clause from the `TestListOrdersInMemoryFilters` copy of the filter. The production filter has been owner-based since Step 3, and no case in this test sets `UserId`. **Disposition**: scope expansion approved by the operator; ruling recorded verbatim in context.md.
 - **Step 13 — codegen in Docker (CI-equivalent fallback).** The host has `buf` 1.72.0 but not the pinned Go plugins, `grpcio-tools` or the `packages/proto/gen/ts` dependencies. The Verification's `./scripts/buf-gen.sh` therefore ran inside the cached, version-pinned `xstockstrat-codegen` image (`Dockerfile.codegen`, the image `scripts/localenv-setup.py` builds), with the main checkout's root and `gen/ts` `node_modules` mounted read-only. `localenv-setup.py` itself was not run, because it would also write dev certs. Inside the container `buf-gen.sh` skips `buf breaking` (the worktree's git dir is not mounted), but Step 12's Verification ran `buf breaking` on the host and it was clean. The rest of the union Verification ran on the host unchanged. **Disposition**: CI-equivalent fallback.
 - **Step 13 — `gen/ts/dist/{trading,notify}/v1/{trading,notify}.js` were left byte-identical by the generator** and so were not staged (Instruction 2). The other 14 listed paths changed.
+- **Step 20 — O-11 counts by environment, production waived (operator ruling 2026-11-27).** Instruction 1 asks for one staging count and one production count. The operator supplied two staging counts, DO staging 1 and homelab staging 0. DO staging was taken from the A6 detail listing (`WHERE user_id = '' AND is_active`, one row), because its `count(*)` line was not pasted. Production was waived by the standing ruling (production out of scope, never launched), and no count was invented (Instruction 3). **Disposition**: operator ruling; both inputs recorded verbatim in context.md.
