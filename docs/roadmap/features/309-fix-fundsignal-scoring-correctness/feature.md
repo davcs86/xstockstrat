@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: `docs/reports/2026-10-21-analysis-fundsignal-formula-partial-row-wire-zero-defect.md`, `docs/reports/2026-10-21-analysis-fundsignal-small-cross-section-quantile-defect.md`, `docs/reports/2026-10-21-analysis-zero-conviction-read-as-neutral-defect.md`, `docs/reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-26
+**Last Updated**: 2026-11-27
 
 ---
 

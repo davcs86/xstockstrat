@@ -122,7 +122,7 @@ that is a design decision, not an omission (design.md § Consumer surfaces; no T
 
 ### Step 1 — proto: add `conviction_provided` to `ExternalSignal`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -162,7 +162,7 @@ Run this only after BRANCH SYNC. The local `feature/fix-fundsignal-scoring-corre
 
 ### Step 2 — proto-gen: regenerate ingest stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/ingest/v1/` — modify (generated)
@@ -819,3 +819,13 @@ grep -n "019" docs/patterns/database.md CLAUDE.md services/xstockstrat-ingest/CL
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 1 — proto: add `conviction_provided` to `ExternalSignal`
+**Spec said**: `buf breaking --against "$(git rev-parse --path-format=absolute --git-common-dir)#branch=feature/fix-fundsignal-scoring-correctness,subdir=packages/proto"`; "If the ref is stale or absent, use the `#ref=HEAD` form with the Step 1 edit uncommitted."
+**Actual**: Ran `#ref=5dfa9e1434ab60e689198e6e881bd45387371f53,subdir=packages/proto` (the synced dev-branch tip, edit uncommitted), inside the pinned `xstockstrat-codegen` image (buf 1.72.0).
+**Reason**: The local `feature/fix-fundsignal-scoring-correctness` ref is stale (`bfb2f32d`; its `common.proto` differs from the tip). `#ref=HEAD` against the common git dir resolves the main checkout's HEAD (another branch, different `ingest.proto`), not this worktree's. buf is not installed on the host. **Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 2 — proto-gen: regenerate ingest stubs
+**Spec said**: `./scripts/buf-gen.sh && …` run on the host.
+**Actual**: The Verification block ran verbatim inside the pinned `xstockstrat-codegen` image (buf 1.72.0, Go plugins and grpcio-tools 1.80.0 pinned to CI `proto-freshness`), with the main checkout mounted read-only and its `packages/proto/gen/ts/node_modules` bind-mounted read-only so `tsc` could compile `gen/ts/dist`. The block ran twice: once before staging (line 3 printed `second run clean: 1`, as expected unstaged), then again after staging the regenerated stubs (`second run clean: 0`).
+**Reason**: buf and grpcio-tools are not on the host, and the worktree has no `packages/proto/gen/ts/node_modules`. Line 3 says "after staging", so a single pre-staging run cannot satisfy it. **Disposition**: CI-equivalent fallback.

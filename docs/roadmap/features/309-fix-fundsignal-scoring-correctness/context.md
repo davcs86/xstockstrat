@@ -642,3 +642,18 @@ The batch executor reported that Step 2 Verification line 2 prints 0 on a correc
   - New: `python3 -c "import sys; sys.path.insert(0,'packages/proto/gen/python'); from ingest.v1 import ingest_pb2; assert ingest_pb2.ExternalSignal.DESCRIPTOR.fields_by_name['conviction_provided'].number == 12"   # exit 0 (run from the repo root; KeyError before the stubs are regenerated)`
   - Checked on the current tree: it raises `KeyError: 'conviction_provided'` today (the intended RED) and imports cleanly otherwise.
 - **Scan result, no other change**: no other `grep` reads generated protobuf bytes; every `cd` is the first command of its block and later lines in that block are relative to it (no line expects the repo root after a `cd`); every trailing no-match grep is guarded by `; test $? -eq 1`, and no block ends on a bare grep that exits 1 on the expected result; the file, test and doc anchors that exist before their step all resolve on this tree.
+
+## Session 2026-11-27 — sdd-execute sequential (steps 1+2, atomic unit)
+
+Tooling setup (steps 1+2): buf ✗ on host → Docker `xstockstrat-codegen` (cached image; buf 1.72.0, protoc-gen-go v1.36.11, protoc-gen-go-grpc v1.6.2, protoc-gen-connect-go v1.19.2, grpcio-tools 1.80.0) · docker ✓ · no Node install.
+
+### Step 1 — proto: add `conviction_provided` to `ExternalSignal` [done]
+- Unit 1+2. Added `bool conviction_provided = 12;` to `ExternalSignal`, rewrote the `conviction = 4` comment, extended the `deduplicated` comment (explicit 0.0 vs omitted are different dedup values), and added `ingest.proto#ExternalSignal` (`conviction` + `conviction_provided`) to PROTO-7's sibling-flag sentence. TDD: N/A (proto).
+- **`buf breaking` verdict: PASS** (no output, `buf lint` clean) against `#ref=5dfa9e14…,subdir=packages/proto` (synced tip, edit uncommitted), log `.sdd-logs/v-1.log`, `exit=0`. buf-gen.sh's own `buf breaking (against main-dev)` also passed in the Step 2 runs. CI `proto-lint` result still to be recorded on the integration PR.
+- Files modified: `packages/proto/ingest/v1/ingest.proto`, `packages/proto/docs/context-constitution.md`
+- Deviations: `buf breaking` ref form and containerized buf (Deviation Log).
+
+### Step 2 — proto-gen: regenerate ingest stubs [done]
+- Unit 1+2. Ran `./scripts/buf-gen.sh` (in the codegen container); the diff touches only ingest stubs (Go `ingest.pb.go`, Python `ingest_pb2.py`, TS `ingest.ts`/`ingest_pb.ts`, dist `ingest.{js,d.ts}`/`ingest_pb.{js,d.ts}`). The descriptor assert (field 12) passed; the second run after staging printed `second run clean: 0` (`.sdd-logs/v-3.log`, `exit=0`). TDD: N/A (proto-gen).
+- Files modified: `packages/proto/gen/go/ingest/v1/ingest.pb.go`, `packages/proto/gen/python/ingest/v1/ingest_pb2.py`, `packages/proto/gen/ts/ingest/v1/ingest.ts`, `packages/proto/gen/ts/ingest/v1/ingest_pb.ts`, `packages/proto/gen/ts/dist/ingest/v1/{ingest.js,ingest.d.ts,ingest_pb.js,ingest_pb.d.ts}`
+- Deviations: Verification ran in the codegen container with read-only mounts, twice (pre/post staging) — Deviation Log.

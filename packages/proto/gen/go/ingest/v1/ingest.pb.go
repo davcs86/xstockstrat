@@ -986,20 +986,23 @@ func (x *NormalizeRawDataResponse) GetErrors() []string {
 
 // ExternalSignal represents a newsletter or signal-source trade recommendation.
 type ExternalSignal struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Source        string                 `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`           // "unusual_whales" | "marketwatch" | "dividendology" | "pure_power_picks" | "simply_wall_st"
-	Symbol        string                 `protobuf:"bytes,2,opt,name=symbol,proto3" json:"symbol,omitempty"`           // ticker (e.g. "AAPL")
-	Direction     string                 `protobuf:"bytes,3,opt,name=direction,proto3" json:"direction,omitempty"`     // "buy" | "sell" | "hold" | "watchlist"
-	Conviction    float64                `protobuf:"fixed64,4,opt,name=conviction,proto3" json:"conviction,omitempty"` // 0.0 – 1.0 confidence (0.0 if not provided by source)
-	ValidFrom     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=valid_from,json=validFrom,proto3" json:"valid_from,omitempty"`
-	ValidUntil    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=valid_until,json=validUntil,proto3" json:"valid_until,omitempty"` // omit for open-ended
-	Headline      string                 `protobuf:"bytes,7,opt,name=headline,proto3" json:"headline,omitempty"`
-	RawUrl        string                 `protobuf:"bytes,8,opt,name=raw_url,json=rawUrl,proto3" json:"raw_url,omitempty"`
-	Tags          []string               `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
-	IngestedAt    *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=ingested_at,json=ingestedAt,proto3" json:"ingested_at,omitempty"` // platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022
-	UserId        string                 `protobuf:"bytes,11,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`             // owner of the signal (feature 224); server-stamped, ignored on write
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Source     string                 `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`           // "unusual_whales" | "marketwatch" | "dividendology" | "pure_power_picks" | "simply_wall_st"
+	Symbol     string                 `protobuf:"bytes,2,opt,name=symbol,proto3" json:"symbol,omitempty"`           // ticker (e.g. "AAPL")
+	Direction  string                 `protobuf:"bytes,3,opt,name=direction,proto3" json:"direction,omitempty"`     // "buy" | "sell" | "hold" | "watchlist"
+	Conviction float64                `protobuf:"fixed64,4,opt,name=conviction,proto3" json:"conviction,omitempty"` // 0.0 – 1.0 confidence; a 0.0 with conviction_provided unset means "not given"
+	ValidFrom  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=valid_from,json=validFrom,proto3" json:"valid_from,omitempty"`
+	ValidUntil *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=valid_until,json=validUntil,proto3" json:"valid_until,omitempty"` // omit for open-ended
+	Headline   string                 `protobuf:"bytes,7,opt,name=headline,proto3" json:"headline,omitempty"`
+	RawUrl     string                 `protobuf:"bytes,8,opt,name=raw_url,json=rawUrl,proto3" json:"raw_url,omitempty"`
+	Tags       []string               `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
+	IngestedAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=ingested_at,json=ingestedAt,proto3" json:"ingested_at,omitempty"` // platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022
+	UserId     string                 `protobuf:"bytes,11,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`             // owner of the signal (feature 224); server-stamped, ignored on write
+	// True when the sender set conviction, including an explicit 0.0. Readers treat
+	// `conviction_provided || conviction != 0.0` as "given".
+	ConvictionProvided bool `protobuf:"varint,12,opt,name=conviction_provided,json=convictionProvided,proto3" json:"conviction_provided,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ExternalSignal) Reset() {
@@ -1109,6 +1112,13 @@ func (x *ExternalSignal) GetUserId() string {
 	return ""
 }
 
+func (x *ExternalSignal) GetConvictionProvided() bool {
+	if x != nil {
+		return x.ConvictionProvided
+	}
+	return false
+}
+
 type IngestSignalRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Signal        *ExternalSignal        `protobuf:"bytes,1,opt,name=signal,proto3" json:"signal,omitempty"`
@@ -1159,6 +1169,7 @@ type IngestSignalResponse struct {
 	// True when this submission matched an existing signal within the dedup window
 	// (ingest.signals.dedup_window_hours) on (source, symbol, direction, conviction,
 	// valid_until); signal_id is then the EXISTING signal's id, not a newly-inserted one.
+	// An explicit 0.0 conviction and an omitted conviction are different dedup values.
 	Deduplicated  bool `protobuf:"varint,2,opt,name=deduplicated,proto3" json:"deduplicated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2041,7 +2052,7 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x06format\x18\x03 \x01(\tR\x06format\"[\n" +
 	"\x18NormalizeRawDataResponse\x12'\n" +
 	"\x0frows_normalized\x18\x01 \x01(\x03R\x0erowsNormalized\x12\x16\n" +
-	"\x06errors\x18\x02 \x03(\tR\x06errors\"\x95\x03\n" +
+	"\x06errors\x18\x02 \x03(\tR\x06errors\"\xc6\x03\n" +
 	"\x0eExternalSignal\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x16\n" +
 	"\x06symbol\x18\x02 \x01(\tR\x06symbol\x12\x1c\n" +
@@ -2059,7 +2070,8 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\vingested_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"ingestedAt\x12\x17\n" +
-	"\auser_id\x18\v \x01(\tR\x06userId\"T\n" +
+	"\auser_id\x18\v \x01(\tR\x06userId\x12/\n" +
+	"\x13conviction_provided\x18\f \x01(\bR\x12convictionProvided\"T\n" +
 	"\x13IngestSignalRequest\x12=\n" +
 	"\x06signal\x18\x01 \x01(\v2%.xstockstrat.ingest.v1.ExternalSignalR\x06signal\"W\n" +
 	"\x14IngestSignalResponse\x12\x1b\n" +
