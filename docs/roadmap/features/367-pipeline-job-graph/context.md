@@ -485,3 +485,18 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
 - Files modified: `services/xstockstrat-analysis/tests/test_bounded_txn_real_pg.py`,
   `services/xstockstrat-analysis/tests/test_bounded_txn.py`.
 - Deviations: the reset pin (Deviation Log).
+
+### Step 7 — `PipelineJobsRepository` [done]
+- `app/repositories/pipeline_jobs.py`: the FIFO control lane (`lane()`, `lane_held=`), `enqueue`,
+  `claim`, `reap`, `heartbeat` (no lane, 3 s), `report`, `park` (`ParkRace`), `settle_batch`,
+  `list_by_run`, `ready_stats`, the module-level `prune_batch` and `BATCH_SIZE = 500`.
+- Build choices inside the step's seams: `report` returns the state written, or `None` when fenced out
+  (truthiness keeps the spec's True/False); `ready_stats` returns both lanes, an absent lane as
+  `(0, 0.0)`; the prune candidate select takes its state as a whitelisted SQL literal
+  (`prune_candidates_sql`), so a cached generic plan can still prove the finished-rows partial index;
+  `CLAIM_SQL` and `prune_candidates_sql` are module-level so Step 8's `EXPLAIN` runs the exact text.
+- TDD: behaviour gated by Step 8 (red/green recorded there). Gate: ruff clean; import ok; no
+  `asyncio.timeout`/`wait_for`/`shield`/`is_transient_db_error`/`datetime.now`/`app.engine`; 4
+  `SKIP LOCKED` (claim, reap, settle, prune).
+- Files modified: `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py`.
+- Deviations: none.

@@ -623,7 +623,7 @@ uv run --extra dev pytest tests/test_bounded_txn_real_pg.py -q -rs | grep -c SKI
 
 ### Step 7 — service: `PipelineJobsRepository`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/pipeline_jobs.py` — create
