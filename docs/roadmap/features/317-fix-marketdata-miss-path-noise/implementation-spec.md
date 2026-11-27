@@ -636,16 +636,19 @@ All pass with Step 8 applied.
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/056_marketdata_bars_miss_backoff.up.sql` — create
-- `services/xstockstrat-config/migrations/056_marketdata_bars_miss_backoff.down.sql` — create
+- `services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.up.sql` — create
+- `services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.down.sql` — create
 - `scripts/config-wiring-stored.json` — modify (regenerated, never hand-edited)
 
 **Reviewers**: DBA — Migration NNN numbering (no gaps, no conflicts), up+down pair present, run-order compliance with `scripts/db-migrate.sh`; xstockstrat-config owner — Config key naming, environment (`production`/`staging`) / global-per-user scoping, WatchConfig stream stability
 
-**Codebase Evidence** (`36aed60b`):
+**Codebase Evidence** (re-grounded 2026-11-26 on the merged tree `a68b1294` = feature tip `7a3692fd` + `origin/main-dev` `f802b184`):
 - Trunk tail of `services/xstockstrat-config/migrations/`: `054_marketdata_delisting_confirmation_days`,
-  `055_analysis_live_enrich_ttl_reseed`. `053` is absent on every ref. `git log --all` finds no `056`–`058`
-  (§ Step Dependencies, merge checklist).
+  `055_analysis_live_enrich_ttl_reseed`, `056_analysis_live_only_cycle_max_days` (feature 366
+  opportunity-live-only-rotation, `540f8ff7`). `056` is taken; the next free number is `057`.
+- Merge checklist command 2 (§ Step Dependencies) also finds `056_mcp_deadline_budget` on the unmerged
+  `fix-mcp-deadline-budget` branch (`270e850d`); it sits at the trunk tail's number, so it renumbers on merge and
+  may take `057` if it merges first. No ref carries `057`/`058`; command 3 (`miss_backoff_ms`) returns nothing.
 - Row shape to follow (design D-5 / O-10): `048_webhook_fanout_callback_keys.up.sql:4-43` and its single-key
   twin `054_marketdata_delisting_confirmation_days.up.sql:4-13` — ten columns, relative key, sentinel
   `updated_by`, two environments, `user_id` `NULL`, `ON CONFLICT (namespace, key, environment,
@@ -653,8 +656,8 @@ All pass with Step 8 applied.
 - Down shape: `054_…down.sql:4-10` — a `DELETE` filtered by namespace, key, environment, `user_id IS NULL`,
   the sentinel and the seeded `value_data`.
 - Never modelled on `042` (FQN key) or `047` (latched DELETE) — D-5.
-- `scripts/config-wiring-stored.json` records every seeded row with its file name (for example `:2596-2597`
-  for `054`) and an `inputs_sha256` over all config migrations; `--final` fails `STALE-STORED` on a mismatch
+- `scripts/config-wiring-stored.json` records every seeded row with its file name (for example `:2621` and
+  `:2633` for `054`, `:965` and `:977` for `056`) and an `inputs_sha256` over all config migrations; `--final` fails `STALE-STORED` on a mismatch
   (`scripts/check-config-wiring.mjs:714`, `freshness`).
 - Header comment convention: `-- Migration: <file>` / `-- Service: xstockstrat-config, feature <slug>. …`
   (`054_…up.sql:1-2`).
@@ -667,7 +670,8 @@ All pass with Step 8 applied.
 
 **Instructions**:
 1. Re-run the merge checklist (§ Step Dependencies) and take the number as max(`origin/main-dev`) + 1. It is
-   `056` at spec time. The file content carries no number outside its header comment line.
+   `057` after the `f802b184` merge (`056` was `max + 1` at spec time and is now taken by feature 366). The
+   file content carries no number outside its header comment line.
 2. Up: one `INSERT` of two rows (`staging`, `production`):
    `('marketdata', 'bars.miss_backoff_ms', 'int', '1800000', <description>, '1800000', 'xstockstrat-marketdata',
    'system:config-migration-feature-fix-marketdata-miss-path-noise', <env>, NULL)`, ending with the
@@ -690,11 +694,12 @@ All pass with Step 8 applied.
 
 **Verification** (offline, no database):
 ```bash
-ls services/xstockstrat-config/migrations/056_marketdata_bars_miss_backoff.up.sql \
-   services/xstockstrat-config/migrations/056_marketdata_bars_miss_backoff.down.sql
+ls services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.up.sql \
+   services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.down.sql
 ls services/xstockstrat-config/migrations | sort | tail -2   # this pair is the highest number
+ls services/xstockstrat-config/migrations | grep -c '^057_'   # 2: no other 057 pair on the merged tree
 # read both: the up's two-row INSERT is reversed by the down's sentinel- and value-filtered DELETE
-grep -c "056_marketdata_bars_miss_backoff.up.sql" scripts/config-wiring-stored.json   # 2 (staging, production)
+grep -c "057_marketdata_bars_miss_backoff.up.sql" scripts/config-wiring-stored.json   # 2 (staging, production)
 node scripts/check-config-wiring.mjs --keys marketdata.bars.miss_backoff_ms --final   # exit 0, with Step 10 applied
 ```
 On the local-Postgres route the generator applies every config migration's `up` on a scratch database, one
@@ -966,8 +971,9 @@ Plus the Verification of Steps 7, 8 and 9, which together are the unit's green r
   parked) … and only the bracket and balance consumers keep `ackAlways` (best-effort)".
   `services/xstockstrat-portfolio/CLAUDE.md:97` only points to PORTFOLIO-3 — not edited.
 - `docs/patterns/config-governance.md`: `## Per-Feature Registered Keys` is "Append-only … Newest first"
-  (`:146-148`); the first entry is `### feature 330` at `:152`; single-key marketdata precedent `### feature
-  352` at `:166-179`. The generic sentinel row `system:config-migration-feature-<slug>` is at `:143`.
+  (`:146-148`); re-grounded 2026-11-26 on the merged tree `a68b1294`: the first entry is now `### feature 366 —
+  opportunity-live-only-rotation` at `:152` (`### feature 330` moved to `:173`); single-key marketdata precedent
+  `### feature 352` at `:187-200`. The generic sentinel row `system:config-migration-feature-<slug>` is at `:143`.
 - `product-spec.md:17-19` lists "the `ackAlways` consumers draining at shutdown (balance sync, bracket update,
   order-fill)".
 - `product-spec.md` § Fix Scope (`:60-64`): "DB migrations anticipated: **no**" (`:63`) and "Config key changes
@@ -1003,7 +1009,9 @@ Plus the Verification of Steps 7, 8 and 9, which together are the unit's green r
    balance consumers keep `ackAlways` and log a write failure at Debug when ctx is done. Add the new guard
    tests to its pointer list.
 5. `docs/patterns/config-governance.md`: add `### feature 317 — fix-marketdata-miss-path-noise
-   (`xstockstrat-marketdata` / `xstockstrat-config`)` directly above `:152`, shaped like the feature-352 entry:
+   (`xstockstrat-marketdata` / `xstockstrat-config`)` directly above the current first entry (`### feature 366`
+   at `:152` on the merged tree; re-check the first `### feature` heading under `## Per-Feature Registered Keys`
+   after any later `origin/main-dev` merge), shaped like the feature-352 entry (`:187-200`):
    one paragraph (what the window does; full-dotted `SCALAR_BOUNDS_REGISTRY` entry; seeded `1800000` in staging
    and production, global, `int`, insert-if-absent, by config migration `marketdata_bars_miss_backoff` with the
    actor sentinel `system:config-migration-feature-fix-marketdata-miss-path-noise`; the down deletes only a
