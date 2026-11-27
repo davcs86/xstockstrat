@@ -888,3 +888,7 @@ Gate, run after the merge: `node scripts/check-config-wiring.mjs --final`, exit 
 REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree
 REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree
 ```
+
+## Session 2026-11-27 — C-16 promotion applied (per-service suites)
+
+Per the operator ruling above, all four scenarios were promoted as NEW (no DUP / OVERLAP / CONFLICT): `@AC-1`, `@AC-2` to `services/xstockstrat-agent/acceptance/fix-agent-bearer-secret-orphan.feature`, `@AC-3` to `services/xstockstrat-ui/acceptance/fix-agent-bearer-secret-orphan.feature`, `@AC-4` to `services/xstockstrat-config/acceptance/fix-agent-bearer-secret-orphan.feature`, each tagged `@feature-328`. The Scenario/Given/When/Then/And lines were diffed against the branch's `acceptance.feature` and are identical. `status.md` stays `code-completed`.
