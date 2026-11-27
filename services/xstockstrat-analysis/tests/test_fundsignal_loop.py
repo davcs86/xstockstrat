@@ -947,6 +947,7 @@ class TestUnscoredSymbols:
 
     @pytest.mark.asyncio
     async def test_ac3_formula_all_missing_skipped_partial_scored(self):
+        """@AC-1 @feature-309: the formula input carries only the present metrics."""
         loop = _identity_loop({"fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
         rows = {
             "NODATA": fundamentals_row(
@@ -963,14 +964,26 @@ class TestUnscoredSymbols:
         assert len(executed) == 1
         _m, req, meta = executed[0]
         inputs = dict(req.input_data)
+        assert set(inputs) == {"dividend_yield"}
         assert inputs["dividend_yield"] == pytest.approx(0.013)
-        assert inputs["pe_ratio"] == 0.0
         _assert_system_identity(meta)
         ingested = loop._ingest.of("IngestSignal")
         assert [r.signal.symbol for _m, r, _meta in ingested] == ["DIVONLY"]
         inserts = _emitted_inserts(loop)
         assert [c.args[1] for c in inserts] == ["DIVONLY"]
         assert inserts[0].args[4] == pytest.approx(0.7)
+
+    @pytest.mark.asyncio
+    async def test_formula_partial_row_matches_strategy_omit_absent(self):
+        loop = _identity_loop({"fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
+        _serve_rows(loop, {"PART": _fund("PART", pe_ratio=0.0, roe=0.0, missing=("pe_ratio",))})
+        await loop.run_once(override_symbols=["PART"])
+
+        (_m, req, _meta), *rest = loop._indicators.of("ExecuteFormula")
+        assert rest == []
+        inputs = dict(req.input_data)
+        assert set(inputs) == {"pb_ratio", "dividend_yield", "roe", "debt_to_equity", "eps"}
+        assert inputs["roe"] == 0.0
 
     @pytest.mark.asyncio
     async def test_formula_exception_skip_not_counted_unscored(self, caplog):

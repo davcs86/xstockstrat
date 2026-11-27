@@ -657,3 +657,19 @@ Tooling setup (steps 1+2): buf ✗ on host → Docker `xstockstrat-codegen` (cac
 - Unit 1+2. Ran `./scripts/buf-gen.sh` (in the codegen container); the diff touches only ingest stubs (Go `ingest.pb.go`, Python `ingest_pb2.py`, TS `ingest.ts`/`ingest_pb.ts`, dist `ingest.{js,d.ts}`/`ingest_pb.{js,d.ts}`). The descriptor assert (field 12) passed; the second run after staging printed `second run clean: 0` (`.sdd-logs/v-3.log`, `exit=0`). TDD: N/A (proto-gen).
 - Files modified: `packages/proto/gen/go/ingest/v1/ingest.pb.go`, `packages/proto/gen/python/ingest/v1/ingest_pb2.py`, `packages/proto/gen/ts/ingest/v1/ingest.ts`, `packages/proto/gen/ts/ingest/v1/ingest_pb.ts`, `packages/proto/gen/ts/dist/ingest/v1/{ingest.js,ingest.d.ts,ingest_pb.js,ingest_pb.d.ts}`
 - Deviations: Verification ran in the codegen container with read-only mounts, twice (pre/post staging) — Deviation Log.
+
+## Session 2026-11-27 — sdd-execute sequential (steps 3+4, atomic unit)
+
+Tooling setup (steps 3+4): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 3 — service: build the formula input from present metrics only [done]
+- Unit 3+4. `_score_via_formula` builds `fundamentals` only from the six keys not in `set(f.missing_metrics)`; an empty dict goes to `unscored` (replaces the `issuperset` test). The `score_fundamentals` call, the `composite` read and the `except` branch are unchanged; no clamp.
+- TDD: RED `.sdd-logs/v-1.log` — `2 failed, 80 passed` (`assert set(inputs) == {"dividend_yield"}` failed with extra `pe_ratio`/`pb_ratio`/`roe`/`debt_to_equity`/`eps`; the omit-absent test failed with extra `pe_ratio`); `issuperset` still at `:579`. The block printed `exit=0` because its last command (ruff) passed. GREEN `.sdd-logs/v-2.log` `exit=0` — `82 passed`, no `issuperset` hit, ruff clean.
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`
+- Deviations: none
+
+### Step 4 — test: formula-path input and the changed durable rules [done]
+- Unit 3+4. AC-1 red: `set(inputs) == {"dividend_yield"}` failed → green: passed. `test_ac3_formula_all_missing_skipped_partial_scored` now pins the dividend-only input (`@AC-1 @feature-309` docstring); new `test_formula_partial_row_matches_strategy_omit_absent` (row via `_fund` → `fundamentals_row`, `pe_ratio` missing, `roe=0.0` present) pins the five present keys and the present zero. Durable rules changed per the 2026-11-20 C-16 sign-off: 246 `@AC-3` Then ("… with dividend_yield 0.013 as its only input"); 201 `@AC-4` stale comment deleted; 201 `@AC-8` title "… and matches the producer", second Then "… matches … which also omits pe_ratio", divergence sentence trimmed from the trailing comment. Tags/IDs unchanged. Two `test_fundamentals_formula_operand.py` docstrings now say the producer omits the metric too.
+- GREEN `.sdd-logs/v-3.log` `exit=0` — `88 passed`; full suite `1827 passed`, `Required test coverage of 40% reached. Total coverage: 91.88%`; ruff clean; the `pe_ratio 0.0|diverges` grep found nothing.
+- Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`, `services/xstockstrat-analysis/tests/test_fundamentals_formula_operand.py`, `services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature`, `services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature`
+- Deviations: none (the `pe_ratio` assertion sat at `:967`, not `:966` — line drift only, recorded at the 2026-11-26 up-front confirm).

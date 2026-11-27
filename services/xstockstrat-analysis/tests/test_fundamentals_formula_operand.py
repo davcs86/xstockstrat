@@ -5,7 +5,7 @@ filing-boundary epoch, and broadcast across the span.
 Covers @AC-1 (broadcast composite, rule fires on the dotted ``.composite``), @AC-2 (PIT epochs,
 no look-ahead, one ExecuteFormula per epoch, mid-window transition), @AC-5 (missing/​error → None
 hold, no fabrication), @AC-7 (a technical formula NOT declaring fundamentals is byte-identical),
-and @AC-8 (partial row omits the absent metric — never 0.0 — the producer-divergent option b).
+and @AC-8 (partial row omits the absent metric — never 0.0 — option b; the producer omits it too).
 
 Real ``marketdata_pb2.Bar`` (``bar.time``), never MagicMock — Ledger 2026-08-06 / fails.md:727.
 """
@@ -185,7 +185,7 @@ class TestFundamentalsFormulaOperand:
     @pytest.mark.asyncio
     async def test_ac8_partial_row_omits_absent_metric(self):
         """@AC-8 (option b): a row missing roe (present pe_ratio) omits roe from input_data entirely
-        — never fed as 0.0 — so the formula neutral-drops it (diverges from the producer)."""
+        — never fed as 0.0 — so the formula neutral-drops it (the producer omits it too)."""
         fed = {}
 
         async def _exec(req, metadata=None):

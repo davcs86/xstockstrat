@@ -195,7 +195,7 @@ python3 -c "import sys; sys.path.insert(0,'packages/proto/gen/python'); from ing
 
 ### Step 3 — service: build the formula input from present metrics only
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
@@ -227,7 +227,7 @@ ruff check . && ruff format --check .
 
 ### Step 4 — test: formula-path input and the changed durable rules
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify

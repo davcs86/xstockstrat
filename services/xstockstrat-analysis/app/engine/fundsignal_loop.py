@@ -568,15 +568,13 @@ class FundamentalsSignalLoop:
         out = {}
         unscored = []
         for sym, f in fundamentals_by_symbol.items():
+            missing = set(f.missing_metrics)
             fundamentals = {
-                "pe_ratio": f.pe_ratio,
-                "pb_ratio": f.pb_ratio,
-                "dividend_yield": f.dividend_yield,
-                "roe": f.roe,
-                "debt_to_equity": f.debt_to_equity,
-                "eps": f.eps,
+                k: getattr(f, k)
+                for k in ("pe_ratio", "pb_ratio", "dividend_yield", "roe", "debt_to_equity", "eps")
+                if k not in missing
             }
-            if set(f.missing_metrics).issuperset(fundamentals):
+            if not fundamentals:
                 unscored.append(sym)
                 continue
             try:
