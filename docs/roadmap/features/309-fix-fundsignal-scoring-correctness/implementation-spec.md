@@ -385,7 +385,7 @@ grep -n "conftest\|fundamentals_row" tests/test_fundsignal_loop.py | head -3
 
 ### Step 8 — docs: producer scoring and direction contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/docs/fundsignal.md` — modify

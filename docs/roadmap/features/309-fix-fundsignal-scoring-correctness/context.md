@@ -706,3 +706,14 @@ Tooling setup (steps 6+7): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree
 - GREEN `.sdd-logs/v-3.log` `exit=0` — `98 passed` in the file; full suite `1843 passed`, `Required test coverage of 40% reached. Total coverage: 91.91%`; ruff clean; the conftest grep prints `from tests.conftest import fundamentals_row, snapshot_watcher`.
 - Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`
 - Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (step 8)
+
+Tooling setup (step 8): docs step, none needed · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 8 — docs: producer scoring and direction contract [done]
+- `docs/fundsignal.md`: the unscored bullet now says a partial formula row omits its missing inputs and an empty input is unscored (the "wire 0.0" clause is gone). A new **Direction (feature 309)** bullet covers the degenerate-only gate: folded set < `_MIN_CROSS_SECTION` = 5 or `buy_cut <= sell_cut`, the side tie-break at `_NEUTRAL_SCORE` = 0.5 (hold band exactly 0.5), the n ≥ 5 all-weak top-quantile `buy`, and the 5 calibrated to the default 0.80 / 0.20 quantiles while those keys stay live. `docs/fundamentals-guard.md`: "diverges by design" → "the producer omits absent metrics too". Analysis `CLAUDE.md`: the `scoring_formula_id` row gains the [0,1], 0.5-neutral, no-clamp scale contract (D-10); the `buy_quantile` row points to the Direction bullet. This closes the "document the coupling and scale contract" Open Thread.
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0`: the `wire 0.0|diverges by design` grep found nothing; `_MIN_CROSS_SECTION` at `fundsignal.md:19`; `0.5 neutral` at `CLAUDE.md:259`.
+- A re-grep of `diverges by design|wire 0.0` across the analysis `acceptance/`, `docs/` and `CLAUDE.md` finds nothing (Step 4 already trimmed the `fundamentals-formula-inputs.feature` comment).
+- Files modified: `services/xstockstrat-analysis/docs/fundsignal.md`, `services/xstockstrat-analysis/docs/fundamentals-guard.md`, `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none
