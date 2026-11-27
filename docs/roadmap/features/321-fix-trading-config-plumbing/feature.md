@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-11-10
 **Last Updated**: 2026-11-27
+**Committed to main**: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+**Launched date**: 2026-11-27
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); main-dev `f802b184` merged, steps 1, 3, 6, 8, 12, 13 re-specced (conditional) |
 | 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (Step 13: staging pre-deploy re-check recorded); `check-config-wiring.mjs --final` exit 0 |
 
+| 2026-11-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1633; committed 5eeca9c8d00bc549c14dcd852862574d806b0fd2 |
 ---
 
 ## Artifacts

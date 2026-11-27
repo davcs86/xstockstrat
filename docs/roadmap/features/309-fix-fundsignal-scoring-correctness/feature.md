@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-11-10
 **Last Updated**: 2026-11-27
+**Committed to main**: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+**Launched date**: 2026-11-27
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-11-27 | `in-progress` (unchanged) | /sdd-spec re-spec | Steps 16-18 (ingest `019` retraction migration, fixture, cross-schema docs) dropped by operator ruling: the frozen retraction list is empty; spec now 15 steps, `@AC-4` closed by recorded zero-row evidence |
 | 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 15 steps done; @AC-1..@AC-3 and @AC-5 promoted to the durable analysis/ingest suites (C-16); @AC-4 not promoted (operator ruling, zero-row evidence) |
 
+| 2026-11-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1633; committed 5eeca9c8d00bc549c14dcd852862574d806b0fd2 |
 ---
 
 ## Artifacts

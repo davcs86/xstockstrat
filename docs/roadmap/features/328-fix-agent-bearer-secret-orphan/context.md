@@ -896,3 +896,10 @@ Per the operator ruling above, all four scenarios were promoted as NEW (no DUP /
 ## Session 2026-11-27 — defect-report closure ruling recorded by the orchestrator (verbatim)
 
 Question: mark `docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md` resolved (ref feature:328)? Operator answer: **"resolve the 328 report"**. The sidecar is now `resolved` / `ref: feature:328-fix-agent-bearer-secret-orphan`. Basis: the unbounded, unreclaimable persistence is gone because the operator-run sweep `scripts/config-heal/mcp-credential-orphan-sweep.sql` reclaims unreferenced per-user `ingest` / `mcp_credential.*` secrets after a 24 h grace; each failed register still mints one orphan row by design (secret-first write kept, `app/tools.py`). The sweep is operator-run, not scheduled; staging only.
+
+## Session 2026-11-27 (CI: feature status automation)
+
+- Promotion PR #1633 merged to main
+- Feature promoted and committed: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-27

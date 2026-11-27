@@ -1496,3 +1496,10 @@ Insert this row directly after the existing `analysis.opportunity.max_live_held_
       | xstockstrat-analysis   | analysis.opportunity.live_only_cycle_max_days    | int    | 0      | the live-only rotation cycle bound    | 3                         |
 Do not add an @feature-366 tag to that row (the table carries none per row, as with 343's row). Change nothing else in platform.feature.
 ```
+
+## Session 2026-11-27 (CI: feature status automation)
+
+- Promotion PR #1633 merged to main
+- Feature promoted and committed: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-27

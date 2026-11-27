@@ -1395,3 +1395,10 @@ Feature: xstockstrat-analysis - a system-owned order event degrades instead of r
 
 Question (C-16 promotion gate): the promoter's plan reworded @AC-1 and cited @AC-41 @feature-294 in the wrong suite; how should the scenarios be promoted?
 Operator answer: **"Branch text, fix the cite (Recommended)"** — promote @AC-1 verbatim as the branch's acceptance.feature has it (operator rulings 2026-11-21 and 2026-11-26), @AC-2 and @AC-3 verbatim, and correct only the @AC-3 PRESERVE comment's file reference for @AC-41 (platform.feature:1346). The `sdd-batch-promotion-plan` block above was corrected accordingly before the gate was approved.
+
+## Session 2026-11-27 (CI: feature status automation)
+
+- Promotion PR #1633 merged to main
+- Feature promoted and committed: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-27

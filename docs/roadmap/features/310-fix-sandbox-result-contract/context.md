@@ -805,3 +805,10 @@ The operator ran the A1 totals query on the **homelab staging** database:
 ```
 
 No saved formula on homelab staging lacks a `result` binding by either static heuristic. With the DO staging result recorded in the previous entry (0 of 14), the OQ1 dev/staging check is done for both staging stacks; the production half stays waived (standing ruling). Per the 2026-11-27 ruling, PR #1617 may be squash-merged once its CI is green.
+
+## Session 2026-11-27 (CI: feature status automation)
+
+- Promotion PR #1633 merged to main
+- Feature promoted and committed: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-27

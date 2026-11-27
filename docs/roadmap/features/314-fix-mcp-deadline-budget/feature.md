@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-11-10
 **Last Updated**: 2026-11-27
+**Committed to main**: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+**Launched date**: 2026-11-27
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); steps 3,1,2,5,7,8 re-spec'd (migration renumbered 056 → 057) |
 | 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | Steps 1–8 done; Step 9 skipped (operator decision B: operator-run after deploy, sign-off "unenumerated"); `check-config-wiring --final` exit 0 |
 
+| 2026-11-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1633; committed 5eeca9c8d00bc549c14dcd852862574d806b0fd2 |
 ---
 
 ## Artifacts

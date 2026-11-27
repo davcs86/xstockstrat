@@ -695,3 +695,10 @@ Feature: xstockstrat-agent — live config watcher package survives orphaned-cod
 ### Coverage check
 - Source scenarios: 3 (@AC-1, @AC-2, @AC-3). Planned: 3 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC-* is accounted for, nothing was skipped, and the scenario text is verbatim from the source.
 ```
+
+## Session 2026-11-27 (CI: feature status automation)
+
+- Promotion PR #1633 merged to main
+- Feature promoted and committed: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-27

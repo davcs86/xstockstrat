@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-10
 **Last Updated**: 2026-11-27
+**Committed to main**: 5eeca9c8d00bc549c14dcd852862574d806b0fd2
+**Launched date**: 2026-11-27
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); main-dev `f802b184` merged, steps 1,3,4,5,6,7,8,10,11,12,13,15,16,17,18,19 re-specced (`9f69d778`) |
 | 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 20 steps done (sequential, sdd-batch-execute); Step 20 O-11 count recorded (DO staging 1, homelab staging 0, production waived) |
 
+| 2026-11-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1633; committed 5eeca9c8d00bc549c14dcd852862574d806b0fd2 |
 ---
 
 ## Artifacts
