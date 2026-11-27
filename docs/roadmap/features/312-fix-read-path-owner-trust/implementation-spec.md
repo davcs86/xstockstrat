@@ -195,7 +195,7 @@ Confirm the `total:` line is ≥ 40%.
 
 ### Step 3 — service: trading order reads resolve the owner from the header
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify

@@ -386,17 +386,15 @@ func (s *TradingService) resolveAccount(accountID string) (resolvedID string, en
 	return "", brokerPoolEntry{}, grpcstatus.Errorf(codes.InvalidArgument, "multiple broker accounts registered; account_id is required")
 }
 
-// orderSubscriber is a StreamOrderUpdates subscriber channel plus its per-subscription user
-// filter. userID == "" means "all users" (the documented internal cross-user selector); a
-// non-empty userID scopes delivery to that user's own orders so one tenant can never receive
-// another tenant's live order updates.
+// orderSubscriber is a StreamOrderUpdates subscriber channel plus its owner filter: it receives
+// only orders whose UserId equals userID, and an empty userID receives nothing.
 type orderSubscriber struct {
 	ch     chan *tradingv1.Order
 	userID string
 }
 
-// SubscribeOrderUpdates registers a subscriber channel for order update broadcasts, scoped to
-// userID (empty = all users — the internal cross-user selector).
+// SubscribeOrderUpdates registers a subscriber channel for userID's own order updates; callers
+// pass the header-resolved owner, never a body field.
 func (s *TradingService) SubscribeOrderUpdates(id, userID string) <-chan *tradingv1.Order {
 	ch := make(chan *tradingv1.Order, 64)
 	s.mu.Lock()
@@ -415,8 +413,6 @@ func (s *TradingService) UnsubscribeOrderUpdates(id string) {
 	s.mu.Unlock()
 }
 
-// broadcastOrder fans out an order update only to subscribers whose user filter matches the
-// order's owner — a scoped subscriber (userID != "") never receives another user's order.
 // updateOrder publishes mutate applied to a clone of order's latest s.orders snapshot and returns
 // it. Values in s.orders are immutable once stored — never write through a pointer read from it.
 func (s *TradingService) updateOrder(order *tradingv1.Order, mutate func(o *tradingv1.Order)) *tradingv1.Order {
@@ -432,11 +428,13 @@ func (s *TradingService) updateOrder(order *tradingv1.Order, mutate func(o *trad
 	return next
 }
 
+// broadcastOrder fans out an order update only to subscribers whose owner filter equals the
+// order's owner; there is no all-users selector.
 func (s *TradingService) broadcastOrder(order *tradingv1.Order) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, sub := range s.subs {
-		if sub.userID != "" && order.UserId != sub.userID {
+		if order.UserId != sub.userID {
 			continue
 		}
 		select {
@@ -1667,19 +1665,39 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 	return order, nil
 }
 
+const missingCallerMsg = "x-user-id is required"
+
+// ResolveOrderOwner returns the x-user-id owner for an order read, or PermissionDenied when it is
+// absent. It never reads a request body and has no admin branch (D-7).
+func (s *TradingService) ResolveOrderOwner(ctx context.Context) (string, error) {
+	owner := middleware.FromContext(ctx).UserID
+	if owner == "" {
+		return "", grpcstatus.Errorf(codes.PermissionDenied, missingCallerMsg)
+	}
+	return owner, nil
+}
+
 func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRequest) (*tradingv1.Order, error) {
+	owner, err := s.ResolveOrderOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	notFound := grpcstatus.Errorf(codes.NotFound, "order %s not found", req.OrderId)
 	s.mu.Lock()
 	order, ok := s.orders[req.OrderId]
 	s.mu.Unlock()
 	if ok {
+		if order.UserId != owner {
+			return nil, notFound
+		}
 		order = proto.Clone(order).(*tradingv1.Order)
 		normalizeFilledQty(order)
 		hideUnconfirmedFill(order)
 		return order, nil
 	}
-	order, err := s.repo.GetOrder(ctx, req.OrderId)
-	if err != nil || order == nil {
-		return nil, fmt.Errorf("order %s not found", req.OrderId)
+	order, err = s.repo.GetOrder(ctx, req.OrderId)
+	if err != nil || order == nil || order.UserId != owner {
+		return nil, notFound
 	}
 	normalizeFilledQty(order)
 	hideUnconfirmedFill(order)
@@ -1687,13 +1705,17 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 }
 
 func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrdersRequest) (*tradingv1.ListOrdersResponse, error) {
-	orders, err := s.repo.ListOrders(ctx, req.UserId, req.Status, req.TradingMode, req.StrategyId, req.Symbol, req.Side, req.OrderType, req.AccountId, req.Range)
+	owner, err := s.ResolveOrderOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	orders, err := s.repo.ListOrders(ctx, owner, req.Status, req.TradingMode, req.StrategyId, req.Symbol, req.Side, req.OrderType, req.AccountId, req.Range)
 	if err != nil {
 		slog.WarnContext(ctx, "db list orders failed, falling back to in-memory", "error", err)
 		var mem []*tradingv1.Order
 		s.mu.Lock()
 		for _, o := range s.orders {
-			if req.UserId != "" && o.UserId != req.UserId {
+			if o.UserId != owner {
 				continue
 			}
 			if req.Status != tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED && o.Status != req.Status {
@@ -1768,10 +1790,14 @@ func paginateOrders(all []*tradingv1.Order, page *commonv1.PageRequest) ([]*trad
 }
 
 func (s *TradingService) StreamOrderUpdates(req *tradingv1.StreamOrderUpdatesRequest, stream tradingv1.TradingService_StreamOrderUpdatesServer) error {
+	owner, err := s.ResolveOrderOwner(stream.Context())
+	if err != nil {
+		return err
+	}
 	s.mu.Lock()
 	snapshot := make([]*tradingv1.Order, 0)
 	for _, order := range s.orders {
-		if req.UserId != "" && order.UserId != req.UserId {
+		if order.UserId != owner {
 			continue
 		}
 		snapshot = append(snapshot, order)
