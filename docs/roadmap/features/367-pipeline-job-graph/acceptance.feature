@@ -102,3 +102,16 @@ Feature: pipeline-job-graph
     And 1 ready job exists
     When 10 seconds pass
     Then the job is still ready with attempt count 0
+
+  @AC-15 @FR-7 @FR-1
+  Scenario: The daily prune runs once across instances
+    Given 2 analysis instances are running on 2026-11-27 (UTC)
+    When both instances ensure the day's prune job
+    Then exactly 1 job of kind "pipeline.retention_prune" exists for epoch "2026-11-27"
+    And it finishes in state "succeeded"
+
+  @AC-16 @FR-9
+  Scenario: The kill switch also stops the daily prune
+    Given analysis.pipeline.worker_enabled is false
+    When 10 seconds pass on 2026-11-27 (UTC)
+    Then no job of kind "pipeline.retention_prune" exists for epoch "2026-11-27"

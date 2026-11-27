@@ -19,4 +19,15 @@
     that ruling cited: a lease taken before a crash wedging the work for the full hold.
 - Open fork raised to the operator (product-spec Open Questions, first item): a core that migrates
   no pipeline has no consumer, which the "minimum that solves the stated problem" rule and C-18
-  will challenge. Not decided.
+  will challenge.
+
+## Session 2026-11-27 — operator decision on the consumer fork
+
+- **OPERATOR DECISION: "go with B"** — the retention prune is the first real job kind, so the core
+  runs itself in production. Rejected: (a) test-only job kinds; (c) merging with program feature 2.
+- Spec changes: FR-7 now runs the prune as job kind `pipeline.retention_prune`, one per UTC day,
+  ensured by every instance through the idempotent enqueue. FR-9 became a kill switch. Added
+  `@AC-15` and `@AC-16`.
+- Author inference, not an operator statement: `analysis.pipeline.worker_enabled` now defaults to
+  `true`, because a prune that needs an operator step would not exercise the core. Flagged in
+  product-spec Open Questions for confirmation at `/sdd-review`.

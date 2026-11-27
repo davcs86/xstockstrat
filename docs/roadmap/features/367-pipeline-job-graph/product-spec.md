@@ -42,19 +42,25 @@ ready job in a lower lane, whatever their enqueue order.
 FR-6. **Universe-run id.** Each job carries the id of the universe run that created it, and a
 run's jobs can be listed with their states.
 
-FR-7. **Retention.** Succeeded jobs older than `analysis.pipeline.retention_days` are deleted.
-Dead and blocked jobs are kept for inspection.
+FR-7. **Retention, run as the first job kind.** Succeeded jobs older than
+`analysis.pipeline.retention_days` are deleted; dead and blocked jobs are kept for inspection. The
+prune is itself a job on the graph, kind `pipeline.retention_prune`, one per calendar day (UTC).
+Every instance ensures the day's job exists through the idempotent enqueue (FR-1), so the day's
+prune runs once however many instances are up. This is the core's only production job kind in this
+feature (operator decision, 2026-11-27).
 
 FR-8. **Telemetry.** The runtime exports ready depth and oldest-ready age per lane, plus counts of
 attempts by outcome.
 
-FR-9. **Off by default, no behavior change.** With `analysis.pipeline.worker_enabled` false, no job
-is claimed. This feature moves no existing loop and changes no RPC response.
+FR-9. **Kill switch, no behavior change.** With `analysis.pipeline.worker_enabled` false, no job
+is claimed and no prune job is enqueued. The worker is on by default so that the prune (FR-7)
+exercises the core in production. This feature moves no existing loop and changes no RPC response.
 
 ## Out of Scope
 
 - Moving any loop onto the job graph (program features 2 to 4).
-- Any job kind with pipeline meaning (data fetch, evaluation, backfill).
+- Any job kind with pipeline meaning (data fetch, evaluation, backfill). The retention prune
+  (FR-7) is the only production job kind.
 - A broker or any new infrastructure component (operator decision D-1).
 - A job mechanism in Go or Node services; marketdata and ingest stay RPC servers.
 - An outbox for alerts and ledger events (program feature 3).
@@ -89,7 +95,7 @@ each use through the service's `WatchConfig` watcher (PLAT-6). The reader `path:
 key does not exist yet and is fixed at `/sdd-spec`. One config seed migration, the next free number
 in `services/xstockstrat-config/migrations/` at spec time (`059` is the latest today).
 
-- `analysis.pipeline.worker_enabled` — bool, code default `false`. Gates all claiming (FR-9).
+- `analysis.pipeline.worker_enabled` — bool, code default `true`. Kill switch for claiming and for the daily prune enqueue (FR-9).
 - `analysis.pipeline.worker_concurrency` — int, code default `4`. Jobs one instance runs at once.
 - `analysis.pipeline.poll_interval_ms` — int, code default `1000`. Delay between claim polls.
 - `analysis.pipeline.lease_seconds` — int, code default `60`. Lease length without a heartbeat (FR-2).
@@ -123,12 +129,11 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **A core with no consumer.** FR-9 means nothing uses the job graph when this feature ships.
-  The "minimum that solves the stated problem" rule and C-18 will challenge that as speculative.
-  Options: (a) keep the split and prove the core with test-only job kinds; (b) make the retention
-  prune (FR-7) the first real job kind, so the core runs itself in production; (c) merge this
-  feature with program feature 2 so the core ships with its first pipeline consumer. Operator to
-  choose before `/sdd-design`.
+- [x] **A core with no consumer.** Resolved 2026-11-27: the operator chose to make the retention
+  prune the first real job kind (FR-7), so the core runs in production from this feature on.
+- [ ] **Worker default.** FR-9 sets `analysis.pipeline.worker_enabled` to `true` by default so the
+  prune runs without an operator step. That default is the story author's inference from the
+  decision above, not an operator statement. Confirm at `/sdd-review`.
 - [ ] **Known trap — the lease reversal.** Features 156 and 158 rejected leases because a lease
   taken before a crash wedged the schedule for the full hold (`docs/roadmap/ledger/insights.md`,
   2026-08-26). Operator decision D-11 reverses that ruling. The design must show how heartbeat
