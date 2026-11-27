@@ -1287,7 +1287,7 @@ cd services/xstockstrat-ui && pnpm run typecheck && pnpm run lint && pnpm run te
 
 ### Step 32 — service: openid-client wiring, the Configuration cache and the logout URL builders
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify
@@ -2230,3 +2230,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: regenerate `scripts/config-wiring-stored.json` on a scratch Postgres 16, or block (P-03) and take the CI `config-wiring-stored` artifact; the execute rails forbid starting a database.
 - **Actual**: CI runs only on pull requests, so no artifact existed. The owner chose "Allow scratch Postgres" (2026-11-27, this session) over an early PR or a deferral. Ran one throwaway local Postgres 16 (host binaries, no container) only for `config-wiring-stored.py`; stopped and deleted it right after. No migration was verified against it beyond the generator's own apply.
 - **Disposition**: owner-signed override of the no-database rail for this one regeneration; CI's `config-wiring-stored` job re-checks freshness on the integration PR.
+
+### Step 32 — openid-client wiring, the Configuration cache and the logout URL builders
+- **Expected**: `pnpm-lock.yaml` updated for the new dependency; `docker compose build --no-cache xstockstrat-ui` succeeds and the `docker run` boot smoke returns an HTTP status.
+- **Actual**: `pnpm add` reordered `package.json`, so the line was inserted by hand and `pnpm install --frozen-lockfile` passed against the lockfile pnpm wrote (+21 lines: `openid-client@6.8.9`, `oauth4webapi@3.8.9`); staged as the sanctioned lockfile exception. The compose build failed in the base stage (`corepack prepare pnpm@9.15.9` cannot reach registry.npmjs.org from inside the build container on this host). A scratch copy of the Dockerfile with only the host proxy CA + proxy env added to the base stage, built with `--network host`, completed (exit 0); the repo Dockerfile is unchanged. The boot smoke (`docker run …`) was refused by the session's permission policy and was not run. At this step no route imports `openid-client` yet; the logout route imports it from Step 36, whose `pnpm run build` is the first build that bundles it.
+- **Disposition**: host-environment limitation, not a code change. Re-run the compose build and the boot smoke on a host with registry egress before the integration PR (or rely on CI's image build).
