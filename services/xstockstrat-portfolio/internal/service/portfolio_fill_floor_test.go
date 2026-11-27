@@ -42,7 +42,7 @@ func TestFillFloor_BelowFloorAckedWithNoDBCall(t *testing.T) {
 func TestFillFloor_SameMillisecondFolds(t *testing.T) {
 	svc, mock, _ := newFillSvc(t)
 	svc.fillFloor = testFillFloor
-	mock.ExpectQuery("FROM portfolio.positions").WithArgs(anyArgs(4)...).WillReturnError(errDBBlip)
+	mock.ExpectQuery(`FROM portfolio\.consumer_applied_events`).WithArgs(anyArgs(4)...).WillReturnError(errDBBlip)
 
 	err := svc.processOrderFill(context.Background(), testdata.Stamped(fillEvent(t, 7, 5), testFillFloor))
 	if !errors.Is(err, errDBBlip) {

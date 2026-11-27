@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
-	"time"
 
 	"github.com/pashagolub/pgxmock/v4"
 	"google.golang.org/grpc"
@@ -21,16 +21,21 @@ import (
 
 var errDBBlip = errors.New("conn reset")
 
+// fillEvent carries an order id and an event id so the fill reaches the DB path; side follows qty's sign.
 func fillEvent(t *testing.T, seq int64, qty float64) *ledgerv1.LedgerEvent {
 	t.Helper()
+	side := "ORDER_SIDE_BUY"
+	if qty < 0 {
+		side = "ORDER_SIDE_SELL"
+	}
 	p, err := structpb.NewStruct(map[string]interface{}{
 		"user_id": "u1", "symbol": "AAPL", "qty": qty, "fill_price": 100.0,
-		"trading_mode": "TRADING_MODE_PAPER", "account_id": "acc-1",
+		"trading_mode": "TRADING_MODE_PAPER", "account_id": "acc-1", "order_id": "ord-1", "side": side,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &ledgerv1.LedgerEvent{Sequence: seq, EventType: "order.filled", Payload: p}
+	return &ledgerv1.LedgerEvent{EventId: fmt.Sprintf("ev-fill-%d", seq), Sequence: seq, EventType: "order.filled", Payload: p}
 }
 
 func anyArgs(n int) []any {
@@ -48,11 +53,6 @@ var positionCols = []string{
 	"day_pnl_pct", "stop_order_id", "take_profit_order_id", "source", "as_of",
 }
 
-func positionRow(mock pgxmock.PgxPoolIface, qty float64) *pgxmock.Rows {
-	return mock.NewRows(positionCols).AddRow("AAPL", qty, 100.0, qty*100, time.Now(), "TRADING_MODE_PAPER", "acc-1",
-		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "", "", 0, nil)
-}
-
 func newFillSvc(t *testing.T) (*PortfolioService, pgxmock.PgxPoolIface, *fakeLedger) {
 	t.Helper()
 	mock, err := pgxmock.NewPool()
@@ -64,9 +64,9 @@ func newFillSvc(t *testing.T) (*PortfolioService, pgxmock.PgxPoolIface, *fakeLed
 	return &PortfolioService{repo: repository.NewPortfolioRepoWithDB(mock), ledger: ledger}, mock, ledger
 }
 
-func TestProcessOrderFill_GetPositionError_NoWriteNoEvent(t *testing.T) {
+func TestProcessOrderFill_PreCheckError_NoWriteNoEvent(t *testing.T) {
 	svc, mock, ledger := newFillSvc(t)
-	mock.ExpectQuery("FROM portfolio.positions").WithArgs(anyArgs(4)...).WillReturnError(errDBBlip)
+	mock.ExpectQuery(appliedSelectSQL).WithArgs(anyArgs(4)...).WillReturnError(errDBBlip)
 
 	// Pre-fix: the error read as "no position", so a SELL 4 against a 10-share row deleted it.
 	if err := svc.processOrderFill(context.Background(), fillEvent(t, 7, -4)); !errors.Is(err, errDBBlip) {
@@ -80,10 +80,32 @@ func TestProcessOrderFill_GetPositionError_NoWriteNoEvent(t *testing.T) {
 	}
 }
 
+func TestProcessOrderFill_LockedReadError_NoWriteNoEvent(t *testing.T) {
+	svc, mock, ledger := newFillSvc(t)
+	expectNotApplied(mock)
+	mock.ExpectBegin()
+	mock.ExpectExec(appliedInsertSQL).WithArgs(anyArgs(5)...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec(advisoryLockSQL).WithArgs(pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+	mock.ExpectQuery(lockedReadSQL).WithArgs(anyArgs(4)...).WillReturnError(errDBBlip)
+	mock.ExpectRollback()
+
+	if err := svc.processOrderFill(context.Background(), fillEvent(t, 7, -4)); !errors.Is(err, errDBBlip) {
+		t.Fatalf("err = %v, want wrapped %v", err, errDBBlip)
+	}
+	if ledger.calls != 0 {
+		t.Fatalf("ledger AppendEvent calls = %d, want 0", ledger.calls)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestProcessOrderFill_UpsertError_NoEvent(t *testing.T) {
 	svc, mock, ledger := newFillSvc(t)
-	mock.ExpectQuery("FROM portfolio.positions").WithArgs(anyArgs(4)...).WillReturnRows(positionRow(mock, 10))
-	mock.ExpectExec("INSERT INTO portfolio.positions").WithArgs(anyArgs(9)...).WillReturnError(errDBBlip)
+	expectNotApplied(mock)
+	expectLockedRead(mock, lockedRow(mock, 10, 1000, 0, 0))
+	mock.ExpectExec(positionUpsertSQL).WithArgs(anyArgs(9)...).WillReturnError(errDBBlip)
+	mock.ExpectRollback()
 
 	if err := svc.processOrderFill(context.Background(), fillEvent(t, 7, 5)); !errors.Is(err, errDBBlip) {
 		t.Fatalf("err = %v, want wrapped %v", err, errDBBlip)
@@ -91,20 +113,26 @@ func TestProcessOrderFill_UpsertError_NoEvent(t *testing.T) {
 	if ledger.calls != 0 {
 		t.Fatalf("ledger AppendEvent calls = %d, want 0 (no position.updated for a failed write)", ledger.calls)
 	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestProcessOrderFill_CloseError_NoEvent(t *testing.T) {
 	svc, mock, ledger := newFillSvc(t)
-	mock.ExpectQuery("FROM portfolio.positions").WithArgs(anyArgs(4)...).WillReturnRows(positionRow(mock, 10))
-	mock.ExpectQuery("realized_accum").WithArgs(anyArgs(4)...).WillReturnRows(mock.NewRows([]string{"a"}).AddRow(0.0))
-	mock.ExpectQuery("fees_accum").WithArgs(anyArgs(4)...).WillReturnRows(mock.NewRows([]string{"a"}).AddRow(0.0))
-	mock.ExpectExec("DELETE FROM portfolio.positions").WithArgs(anyArgs(4)...).WillReturnError(errDBBlip)
+	expectNotApplied(mock)
+	expectLockedRead(mock, lockedRow(mock, 10, 1000, 0, 0))
+	mock.ExpectExec(positionDeleteSQL).WithArgs(anyArgs(4)...).WillReturnError(errDBBlip)
+	mock.ExpectRollback()
 
 	if err := svc.processOrderFill(context.Background(), fillEvent(t, 7, -10)); !errors.Is(err, errDBBlip) {
 		t.Fatalf("err = %v, want wrapped %v", err, errDBBlip)
 	}
 	if ledger.calls != 0 {
 		t.Fatalf("ledger AppendEvent calls = %d, want 0 (no position.closed for a failed delete)", ledger.calls)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 

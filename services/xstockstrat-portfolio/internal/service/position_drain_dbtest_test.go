@@ -53,7 +53,7 @@ func serviceTestPool(t *testing.T) *pgxpool.Pool {
 func drainDBFixture(t *testing.T, pool *pgxpool.Pool, userID, account string, n int) *PortfolioService {
 	t.Helper()
 	repo := repository.NewPortfolioRepoWithDB(pool)
-	seedDrainPositions(t, repo, userID, account, n)
+	seedDrainPositions(t, pool, userID, account, n)
 	stub := &stubMarketData{}
 	for i := 0; i < n; i++ {
 		stub.quotes = append(stub.quotes, quote(fmt.Sprintf("S%03d", i), 11))
@@ -61,11 +61,13 @@ func drainDBFixture(t *testing.T, pool *pgxpool.Pool, userID, account string, n 
 	return &PortfolioService{repo: repo, marketdata: stub, ledger: &fakeLedger{}, subs: map[string]snapshotSubscriber{}}
 }
 
-func seedDrainPositions(t *testing.T, repo *repository.PortfolioRepo, userID, account string, n int) {
+func seedDrainPositions(t *testing.T, pool *pgxpool.Pool, userID, account string, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
-		if err := repo.UpsertPosition(context.Background(), userID, fmt.Sprintf("S%03d", i), 1, 10, 10,
-			commonv1.TradingMode_TRADING_MODE_PAPER, account, 0, 0); err != nil {
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id)
+			 VALUES ($1, $2, 1, 10, 10, $3, $4)`,
+			userID, fmt.Sprintf("S%03d", i), commonv1.TradingMode_TRADING_MODE_PAPER.String(), account); err != nil {
 			t.Fatalf("seed position %d: %v", i, err)
 		}
 	}
@@ -117,7 +119,7 @@ func TestPositionDrain_357_AC3_AccountScopedPast500(t *testing.T) {
 	userID := drainDBUser(t)
 	acctA, acctB := userID+"-a", userID+"-b"
 	svc := drainDBFixture(t, pool, userID, acctA, 501)
-	seedDrainPositions(t, repository.NewPortfolioRepoWithDB(pool), userID, acctB, 3)
+	seedDrainPositions(t, pool, userID, acctB, 3)
 
 	p, err := svc.GetPortfolio(ctxWithUser(t, userID), &portfoliov1.GetPortfolioRequest{
 		TradingMode: commonv1.TradingMode_TRADING_MODE_PAPER,

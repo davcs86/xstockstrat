@@ -421,7 +421,7 @@ New logic is in an excluded package — no coverage threshold applies.
 
 ### Step 9 — service: exactly-once, signed fill path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -487,7 +487,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 10 — test: fill-path regression suite (pgxmock)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_fill_fold_test.go` — create
@@ -1464,3 +1464,20 @@ _Populated by /sdd-execute as implementation proceeds._
 
 ### Step 10 — re-spec: add `portfolio_fill_floor_test.go` (2026-11-27, operator ruling B)
 - Step 10 now lists `portfolio_fill_floor_test.go` and Instruction 8 re-points the `TestFillFloor_SameMillisecondFolds` expectation (`:45`) from the `GetPosition` read to the `FillApplied` pre-check; Steps 9 and 10 stay `pending` and no other step changed.
+
+### Steps 9+10 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 9 gives a five-line block and Step 10 a five-line block. Each line starts `cd services/xstockstrat-portfolio && …` or names a repo-root-relative path.
+- **Actual**: this is the same pattern as Steps 3-8. Inside the one subshell the first line's `cd` persists, so every later line fails with `cd: services/xstockstrat-portfolio: No such file or directory`, and the greps print `No such file or directory`. Run verbatim, Step 9's block ran only `go build` and `go vet -tags dbtest`, and Step 10's block ran only `go test ./internal/... -race`. Both exited 1 for this reason alone.
+- **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed:
+  - `golangci-lint` v2.14.0 printed `0 issues.`
+  - The three "none" greps printed nothing (`exit=1`, no match).
+  - The `instance_count` grep printed the three unchanged `instance_count: 1` lines.
+  - The coverage line printed `total: (statements) 79.1%`.
+  
+  The step bodies were not changed (F-09).
+
+### Step 10 — how Instructions 2, 5 and 8 were met (2026-11-27)
+- **Spec said** (Instruction 2): re-point the three DB-error cases at the pre-check error, the `FOR UPDATE` read error and the write error. **Actual**: there are four tests, because the write case is split into the upsert error and the close (`DELETE`) error. This keeps both failed writes from the old suite, and each one still proves that no position event is emitted. `positionRow` lost its last caller and was deleted, because lint flagged it `unused`.
+- **Spec said** (Instruction 5): make `runOrderFillBatch` use a DB that supports `Begin`. **Actual**: `syncRecorderDB` in `portfolio_offline_test.go` gained `Begin`. It returns a recording `pgx.Tx`, and `noRow` moved into the same file. `portfolio_telemetry_test.go` needed no edit and is unchanged. `TestOrderFillConsumer_AC56_OneTickRecordPerBatch` still counts 4 `ok` with one tick record.
+- **Spec said** (Instruction 8): change only `:45` of `portfolio_fill_floor_test.go`. **Actual**: only that line changed. Its `fillEvent` now carries `order_id`, `side` and an event id (Instruction 2), so the case reaches the pre-check.
+- **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed.

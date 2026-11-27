@@ -405,8 +405,8 @@ type orderFillPayload struct {
 	Fees float64 `json:"fees"`
 }
 
-// processOrderFill returns an error only for a DB failure (retried on redelivery); a malformed
-// payload is skipped, since redelivering it can never succeed.
+// processOrderFill returns a plain error only for a DB or ledger failure (retried on redelivery); a
+// malformed or unusable payload is skipped, since redelivering it can never succeed.
 func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1.LedgerEvent) error {
 	if event.Payload == nil {
 		return nil
@@ -430,101 +430,155 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 		s.stops.set(stopKey{user: fill.UserID, symbol: fill.Symbol, mode: mode}, fill.StopPrice)
 	}
 
+	// Checked before the applied key is taken: a partial-shaped event must not claim the order's key.
+	if fill.Qty == 0 || fill.OrderID == "" || fill.UserID == "" || fill.Symbol == "" {
+		slog.WarnContext(ctx, "order fill skipped: payload lacks qty, order_id, user_id or symbol",
+			"event_id", event.EventId, "sequence", event.Sequence)
+		return nil
+	}
+
 	if event.GetRecordedAt().AsTime().Before(s.fillFloor) {
 		return errFillAcked
-	}
-
-	s.positionsMu.Lock()
-	locked := true
-	defer func() {
-		if locked {
-			s.positionsMu.Unlock()
-		}
-	}()
-
-	// Fetch the existing position scoped to the fill's account: without account scoping a multi-account
-	// user's fill would compute the new avg entry from the wrong account's most-recent position.
-	existing, err := s.repo.GetPosition(ctx, fill.UserID, fill.Symbol, mode, fill.AccountId)
-	if errors.Is(err, repository.ErrPositionNotFound) {
-		existing, err = nil, nil
-	}
-	if err != nil {
-		return fmt.Errorf("get position: %w", err)
-	}
-	var (
-		newQty      float64
-		newAvgEntry float64
-		newCost     float64
-	)
-	if existing != nil {
-		newQty = existing.Qty + fill.Qty
-		if fill.Qty > 0 { // buying more
-			newCost = existing.CostBasis + fill.Qty*fill.FillPrice
-			newAvgEntry = newCost / newQty
-		} else { // selling
-			newCost = existing.CostBasis * (newQty / existing.Qty)
-			newAvgEntry = existing.AvgEntryPrice
-		}
-	} else {
-		newQty = fill.Qty
-		newCost = fill.Qty * fill.FillPrice
-		newAvgEntry = fill.FillPrice
 	}
 
 	acctID := fill.AccountId
 	if acctID == "" {
 		acctID = "alpaca-default"
 	}
+	key := repository.FillKey{Consumer: repository.ConsumerOrderFill, UserID: fill.UserID, AccountID: acctID, OrderID: fill.OrderID}
 
-	// Realized P&L this fill contributed by reducing the position — 0 when opening/adding or when no
-	// prior position exists (a redelivered post-close sell must not nil-deref).
-	var delta float64
-	if existing != nil {
-		delta = pnl.RealizedDelta(existing.Qty, existing.CostBasis, fill.Qty, fill.FillPrice)
+	prior, err := s.repo.FillApplied(ctx, key)
+	if err != nil {
+		return fmt.Errorf("fill pre-check: %w", err)
+	}
+	if prior != nil {
+		return s.ackAppliedFill(ctx, key, prior)
 	}
 
-	if newQty <= 0 {
-		// Row is about to be deleted: the sealed realized goes into the emitted payload only, never
-		// persisted. Read prior accum + this closing delta.
-		var sealed float64
-		// realized_pnl stays GROSS/authoritative; net = realized_pnl - fees_total downstream.
-		var feesSealed float64
-		if existing != nil {
-			priorAccum, err := s.repo.GetRealizedAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
-			if err != nil {
-				return fmt.Errorf("get realized accum: %w", err)
-			}
-			sealed = priorAccum + delta
-			priorFees, err := s.repo.GetFeesAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
-			if err != nil {
-				return fmt.Errorf("get fees accum: %w", err)
-			}
-			feesSealed = priorFees + fill.Fees
+	side := fill.Side
+	var sideErr error
+	if side == "" {
+		side, sideErr = s.orderSide(ctx, fill.OrderID)
+	}
+	if sideErr != nil && !errors.Is(sideErr, ErrFillUnattributable) {
+		return fmt.Errorf("fill side: %w", sideErr)
+	}
+	signed, ok := signedQty(side, math.Abs(fill.Qty))
+	if !ok {
+		return s.parkFill(ctx, key, event.EventId, fmt.Sprintf("side %q unattributable", side))
+	}
+
+	posKey := repository.PositionKey{UserID: fill.UserID, Symbol: fill.Symbol, Mode: mode, AccountID: acctID}
+	// positionsMu is taken before BEGIN so a same-process sync cannot wait inside the fill's transaction.
+	res, err := func() (*repository.FillResult, error) {
+		s.positionsMu.Lock()
+		defer s.positionsMu.Unlock()
+		return s.repo.ApplyFill(ctx, key, event.EventId, posKey, foldOrderFill(fill, acctID, mode, signed))
+	}()
+	if errors.Is(err, repository.ErrFillAlreadyApplied) {
+		return errFillAcked
+	}
+	if err != nil {
+		return fmt.Errorf("apply fill: %w", err)
+	}
+
+	streamKey := "portfolio:" + fill.UserID
+	switch res.Outcome.Write {
+	case repository.FoldDelete, repository.FoldFlip:
+		s.emitPendingClosed(ctx, key, event.EventId, *res.Outcome.PendingClosed)
+		if res.Outcome.Write == repository.FoldFlip {
+			s.emitEvent(ctx, "portfolio.position.opened", streamKey, map[string]interface{}{
+				"user_id": fill.UserID, "symbol": fill.Symbol, "qty": res.Outcome.Position.Qty,
+			})
 		}
-		if err := s.repo.ClosePosition(ctx, fill.UserID, fill.Symbol, mode, acctID); err != nil {
-			return fmt.Errorf("close position: %w", err)
-		}
-		s.emitEvent(ctx, "portfolio.position.closed", "portfolio:"+fill.UserID,
-			closedPositionPayload(fill.UserID, fill.Symbol, acctID, mode.String(), sealed, feesSealed, existing))
-	} else {
-		if err := s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID, delta, fill.Fees); err != nil {
-			return fmt.Errorf("upsert position: %w", err)
-		}
+	default:
 		eventType := "portfolio.position.opened"
-		if existing != nil {
+		if res.Prior != nil {
 			eventType = "portfolio.position.updated"
 		}
-		s.emitEvent(ctx, eventType, "portfolio:"+fill.UserID, map[string]interface{}{
-			"user_id": fill.UserID, "symbol": fill.Symbol, "qty": newQty,
+		s.emitEvent(ctx, eventType, streamKey, map[string]interface{}{
+			"user_id": fill.UserID, "symbol": fill.Symbol, "qty": res.Outcome.Position.Qty,
 		})
 	}
 
-	// Released before the marketdata-calling read paths so a slow quote fetch never stalls a sync.
-	locked = false
-	s.positionsMu.Unlock()
 	s.checkRiskLimits(ctx, fill.UserID, mode)
 	s.broadcastSnapshot(ctx, fill.UserID, mode)
 	return nil
+}
+
+// foldOrderFill returns the pure fold ApplyFill runs over the locked row. A close or flip seals the
+// row's accumulators plus this fill into the position.closed outbox; a flip's fresh row starts at 0.
+func foldOrderFill(fill orderFillPayload, acctID string, mode commonv1.TradingMode, signed float64) repository.FoldFn {
+	return func(row *repository.LockedPosition) repository.FoldOutcome {
+		baseline := map[string]pnl.Lot{}
+		var realizedAccum, feesAccum float64
+		var existing *portfoliov1.Position
+		if row != nil {
+			baseline[fill.Symbol] = pnl.Lot{Qty: row.Qty, CostBasis: row.CostBasis}
+			realizedAccum, feesAccum = row.RealizedAccum, row.FeesAccum
+			existing = &portfoliov1.Position{CostBasis: row.CostBasis, OpenedAt: timestamppb.New(row.OpenedAt)}
+		}
+		res := pnl.FoldFrom(baseline, []pnl.Fill{{Symbol: fill.Symbol, Qty: signed, Price: fill.FillPrice}})
+		realized := realizedAccum + res.Realized
+		fees := feesAccum + fill.Fees
+		lot, open := res.Positions[fill.Symbol]
+
+		sealed := func() *string {
+			// realized_pnl stays GROSS/authoritative; net = realized_pnl - fees_total downstream.
+			b, _ := json.Marshal(closedPositionPayload(fill.UserID, fill.Symbol, acctID, mode.String(), realized, fees, existing))
+			out := string(b)
+			return &out
+		}
+		if !open {
+			return repository.FoldOutcome{Write: repository.FoldDelete, PendingClosed: sealed()}
+		}
+		values := repository.PositionValues{Qty: lot.Qty, AvgEntryPrice: lot.CostBasis / lot.Qty, CostBasis: lot.CostBasis}
+		if row != nil && (lot.Qty > 0) != (row.Qty > 0) {
+			return repository.FoldOutcome{Write: repository.FoldFlip, Position: values, PendingClosed: sealed()}
+		}
+		values.RealizedAccum, values.FeesAccum = realized, fees
+		return repository.FoldOutcome{Write: repository.FoldUpsert, Position: values}
+	}
+}
+
+// ackAppliedFill handles a pre-check hit: only an applied fill's uncleared position.closed is re-emitted.
+func (s *PortfolioService) ackAppliedFill(ctx context.Context, key repository.FillKey, prior *repository.AppliedFill) error {
+	if prior.Outcome == "parked" {
+		slog.DebugContext(ctx, "order fill already parked", "order_id", key.OrderID, "event_id", prior.EventID)
+		return errFillAcked
+	}
+	if prior.PendingClosed != nil {
+		s.emitPendingClosed(ctx, key, prior.EventID, *prior.PendingClosed)
+	}
+	return errFillAcked
+}
+
+// emitPendingClosed keys the emit on the applied row's event id, so a redelivery never appends twice.
+func (s *PortfolioService) emitPendingClosed(ctx context.Context, key repository.FillKey, appliedEventID, payloadJSON string) {
+	var payload map[string]interface{}
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		slog.WarnContext(ctx, "position closed outbox unreadable", "order_id", key.OrderID, "error", err)
+		return
+	}
+	if err := s.emitEventAs(ctx, "", "portfolio.position.closed", "portfolio:"+key.UserID,
+		"position.closed:"+appliedEventID, payload); err != nil {
+		return
+	}
+	if err := s.repo.ClearPendingClosed(ctx, key); err != nil {
+		slog.WarnContext(ctx, "position closed outbox clear failed", "order_id", key.OrderID, "error", err)
+	}
+}
+
+// parkFill records an unattributable fill once; only the delivery that inserted the row reports it.
+func (s *PortfolioService) parkFill(ctx context.Context, key repository.FillKey, eventID, reason string) error {
+	inserted, err := s.repo.ParkFill(ctx, key, eventID, reason)
+	if err != nil {
+		return fmt.Errorf("park fill: %w", err)
+	}
+	if !inserted {
+		return errFillAcked
+	}
+	return fmt.Errorf("order %s: %s: %w", key.OrderID, reason, ErrFillUnattributable)
 }
 
 // closedPositionPayload builds the portfolio.position.closed emit payload. The base keys are the

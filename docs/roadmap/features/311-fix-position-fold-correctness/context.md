@@ -3151,3 +3151,62 @@ Question (blocker on Steps 9+10): "Steps 9+10 cannot pass `go test ./internal/..
 Operator's answer (option selected): "B: re-spec first".
 
 Effect: `implementation-spec.md` re-specced minimally: Step 10 **Files** gains `portfolio_fill_floor_test.go`, a new Instruction 8 re-points that one expectation to ``FROM portfolio\.consumer_applied_events`` (intent unchanged: a fill at the floor reaches the DB path and is not acked), Codebase Evidence cites the verified lines, and a one-line Deviation Log entry records it. Steps 9 and 10 stay `pending`; no other step changed.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 9+10
+
+Tooling (steps 9+10): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 9 — service: exactly-once, signed fill path [done]
+- Atomic unit with Step 10 (planned, **Lands with**). `processOrderFill` now runs in this order:
+  1. The A-2 skip class sits after the stop-store update and before Step 7's unchanged floor check. A payload with `qty` 0, or an empty `order_id`, `user_id` or `symbol`, logs a WARN and returns nil with no DB call.
+  2. The `alpaca-default` account fallback, then the `FillKey`.
+  3. The `FillApplied` pre-check, outside `positionsMu`. A DB error is returned. A parked hit logs DEBUG and returns `errFillAcked`. An applied hit re-emits a non-NULL `pending_closed` under `position.closed:<stored event_id>`, clears it only when the append returns nil (a failed clear is a WARN), and returns `errFillAcked`.
+  4. The side: payload `side`, else `orderSide`. `ErrLedgerUnavailable` is returned. `ErrFillUnattributable`, or a side `signedQty` rejects, calls `ParkFill`: an insert returns an error wrapping `ErrFillUnattributable`, and a conflict returns `errFillAcked`.
+  5. `positionsMu` is taken before `ApplyFill` and released right after it. `ErrFillAlreadyApplied` returns `errFillAcked` with no emit.
+- The fold is the pure `foldOrderFill`, using `pnl.FoldFrom` over the locked row:
+  - Flat: delete. `PendingClosed` holds the `closedPositionPayload` JSON, built from the row's `realized_accum` plus this fill's realized, and the row's `fees_accum` plus this fill's fees.
+  - Same sign, or no row: an absolute upsert that carries the accumulators.
+  - Opposite sign: a flip with the same sealed outbox, and the new row's accumulators at 0.
+- After the unlock, a close or flip emits `position.closed` through `emitEventAs` with key `position.closed:<event_id>`, then clears the outbox. A flip then emits `position.opened`. Every other fill emits `opened` or `updated`, then the risk check and the snapshot run. `positionsMu`, its comment and the other lock sites are unchanged. `.do/app.yaml` is unchanged.
+- `portfolio_repo.go`: deleted `UpsertPosition`, `GetRealizedAccum`, `GetFeesAccum` and `ClosePosition` (A-9). The `UpsertPositionFromSync` comment had compared itself to the deleted `UpsertPosition`; that comparison was dropped, and the comment's facts were kept.
+- TDD (unit): RED `.sdd-logs/v-2.log` `exit=1`, the right reason. 25 new or re-pointed tests fail on the old path, for example `TestFillFold_AC3_SellClosesAndSealsRealized`: `get position: scan position: could not match actual sql: "SELECT symbol, qty, … FROM portfolio.positions … ORDER BY opened_at DESC LIMIT 1" with expected regexp "FROM portfolio\.consumer_applied_events"`. The skip-class subtests fail with `… call to method Query() was not expected, want nil`. (`v-1.log` was discarded: it was a compile error in my own test, `WillDelayFor(…).WillReturnRows undefined`, fixed before this RED.)
+- GREEN:
+  - Step 10 block `v-12.log`: `ok github.com/xstockstrat/portfolio/internal/service 11.242s`, and every `internal/...` package is `ok` under `-race`.
+  - Step 9 block `v-13.log`: build and vet clean.
+  - Per-line runs: vet `v-14.log` `exit=0`; lint `v-16.log` `0 issues.` `exit=0`.
+  - The three "none" greps (`v-15`, `v-18`, `v-19`) print nothing (`exit=1`, no match).
+  - `instance_count` grep `v-20.log`: `55/109/151: instance_count: 1`, unchanged.
+  - Coverage `v-17.log`: `total: (statements) 79.1%` `exit=0`.
+  - Executed count `v-21.log`: `33` `--- PASS` lines for the fill, floor, race and AC-56 filter.
+- Mutation check: with the fill path's `positionsMu` removed, `TestFillAndSync_SameRow_Serialized` failed. The sync's write arrived inside the fill's transaction and stayed unmatched. The lock was then restored.
+- The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`
+- Deviations: the Verification blocks stop after their first line (Deviation Log, Steps 9+10).
+
+### Step 10 — test: fill-path regression suite (pgxmock) [done]
+- Atomic unit with Step 9. `portfolio_fill_fold_test.go` (new) runs over pgxmock through `recordingDB`, which records every pool-level SQL so "no transaction" and "no risk/snapshot read" can be asserted. It covers:
+  - `@AC-3`: close at a realized 500 with key `position.closed:<event_id>`.
+  - `@AC-1`: a duplicate makes 1 pool call and no append; a below-floor fill makes 0 calls.
+  - `@AC-4`/`@AC-5` fold half: buy 10 @100, then leg `leg-tp-1` SELL 10 @110, which closes at a realized 100.
+  - Buy-add and partial-sell exact upsert args, with the accumulators taken from the locked row.
+  - A flip that emits closed then opened (short −5, accumulators 0).
+  - 029 `@AC-10`: `fees_total` 3 and a gross `realized_pnl` 500.
+  - Side resolution: the `orderSide` fallback; park once, then ack; a park conflict acks; a ledger-unavailable lookup parks nothing.
+  - `pending_closed`: a re-emit under the stored id, a failed append that keeps the outbox, and a failed clear that is not an error.
+  - An INSERT conflict that acks with no emit or read.
+  - The four skip-class subtests.
+  - Risk and snapshot running after Commit, in order.
+- Other test files:
+  - `portfolio_fill_errors_test.go`: `fillEvent` carries `order_id`, `side` (from the qty sign) and an event id. Four DB-error tests cover the pre-check, the `FOR UPDATE` read, the upsert write and the close write. The orphaned `positionRow` was deleted.
+  - `portfolio_fill_sync_race_test.go`: `interleaveDB` and `noRow` are gone from this file. The race test uses ordered pgxmock expectations with a 300 ms delayed `FOR UPDATE` read.
+  - `portfolio_offline_test.go`: holds `noRow`, plus `syncRecorderDB.Begin` with a recording `pgx.Tx`.
+  - `portfolio_helpers_test.go`: `positionState`, `computeNewPosition` and their 5 tests were deleted.
+  - `portfolio_repo_test.go`: `TestGetFeesAccum` was deleted.
+  - `position_drain_dbtest_test.go`: seeds with a direct pool `INSERT` (both call sites).
+  - `portfolio_fill_floor_test.go`: only `:45` changed.
+  - `portfolio_telemetry_test.go` needed no edit.
+- Fails-ledger rule (feature 347): the whole package ran green. The only `recover()` in the package's tests is `watchlist_service_test.go:344`, which is unrelated to the fill service. No fill test builds its service with a nil dependency that the success path reaches: `newFoldSvc` sets `cfg`, `marketdata` and `subs`.
+- TDD: the RED/GREEN results above.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_fill_fold_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_fill_errors_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_fill_sync_race_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_offline_test.go`, `services/xstockstrat-portfolio/internal/service/position_drain_dbtest_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_fill_floor_test.go`, `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go`
+- Deviations: the same Deviation Log entry (Steps 9+10), plus "Step 10 — how Instructions 2, 5 and 8 were met".
+- Step 11 needs to know: `ApplyFill` gets the ledger `event.EventId` as the applied row's `event_id`, which is a UUID column, so a dbtest fixture must use UUID event ids (the `testdata` `ev-<seq>` ids work only under pgxmock).
