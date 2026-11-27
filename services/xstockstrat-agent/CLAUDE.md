@@ -119,7 +119,7 @@ the MCP auth path. In `oidc` the agent is a resource server for `agent/oidc.issu
 `app/jwks.py`): it verifies the issuer's access token, resolves `(iss, sub)` to the xstockstrat user with identity
 `ResolveExternalIdentity` (cached 60 s), stamps that `user_id` and `roles_to_access_scope(roles) & scopes_to_mask(granted)`,
 and 404s the built-in OAuth routes. The web UI's SSO uses the `ui/oidc.*` keys; users connect their issuer account
-through Link SSO in the UI while the mode is `both`. Statuses and PRM by mode → `docs/oauth.md`; connector setup →
+through Link SSO in the UI while the mode is `both`. Statuses and PRM by mode → `oauth.md` in this service's `docs/` folder; connector setup →
 `docs/runbooks/mcp-tools.md`.
 
 ## Config Keys Consumed
