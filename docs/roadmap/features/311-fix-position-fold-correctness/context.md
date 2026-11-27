@@ -3265,3 +3265,21 @@ Tooling (steps 14+15): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1
 - TDD: the RED/GREEN results above.
 - Files modified: `services/xstockstrat-trading/internal/broker/alpaca_test.go`, `services/xstockstrat-trading/internal/broker/ibkr_do_test.go`
 - Deviations: the same Deviation Log entry (Steps 14+15).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 16+17
+
+Tooling (steps 16+17): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 16 — service: `appendLedgerEvent` takes the idempotency key [done]
+- Atomic unit with Step 17 (planned, **Lands with**). `appendLedgerEvent(ctx, eventType, streamKey, userID, idempotencyKey string, payload) error`: an empty key gets `uuid.NewString()`. The key is set once on the request before the retry loop, so the `Unavailable` retry reuses it. The retry loop, `ledgerEmitTimeout` and the `RecordLedgerEmit` calls are unchanged (294 `@AC-4`). The two production callers pass `""`: `account.positions.synced` (`:1123`) and `emitLedgerEvent` (`:4000`), whose signature is unchanged. The doc comment now names the empty-key rule and stays at two lines.
+- Step 23 needs to know: pass the D-4 leg key (`bracket-leg:<account_id>:<legID>:<status>:<filledQty>`) as the fifth argument. `emitLedgerEvent` always generates a key, so a keyed leg emit must call `appendLedgerEvent` directly.
+- TDD (unit): RED `.sdd-logs/v-1.log` `exit=1`, the right reason: `too many arguments in call to s.appendLedgerEvent` … `want (context.Context, string, string, string, map[string]interface{})`, `FAIL github.com/xstockstrat/trading/internal/service [build failed]`. GREEN: Step 17 block `v-3.log` `ok github.com/xstockstrat/trading/internal/service 1.692s` (`-race`, `Ledger|Offline`); `v-6.log` (`-v`) shows 5 `--- PASS`, the 3 new tests plus the unchanged `TestEmitLedgerEventStampsOwningUserId` and `TestAppendLedgerEvent_RetriesUnavailableWithSameIdempotencyKey`. Verification: build (`v-2.log`) clean; the grep (`v-4.log`) lists 8 calls, all with the key argument; lint `v-5.log` `0 issues.` `exit=0`. No coverage threshold (`service` is excluded). The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: the Verification blocks stop after their first line, plus line drift (Deviation Log, Steps 16+17).
+
+### Step 17 — test: keyed ledger append [done]
+- Atomic unit with Step 16. `trading_offline_test.go:2215,2228` pass `""`; their assertions are unchanged. `trading_ledger_userid_test.go` (on `recordingLedger` and a bare `&TradingService{ledger: rec}`): `TestAppendLedgerEvent_CallerKeyReachesLedgerUnchanged`, `TestAppendLedgerEvent_CallerKeyReusedOnUnavailableRetry` (one `Unavailable`, then success: 2 requests with the same caller key) and `TestAppendLedgerEvent_EmptyKeyGeneratesOne` (two empty-key appends: non-empty, distinct keys). The imports `codes`, `grpcstatus` and `ledgerv1` use the aliases from `trading_offline_test.go`.
+- TDD: the RED/GREEN results above.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_offline_test.go`, `services/xstockstrat-trading/internal/service/trading_ledger_userid_test.go`
+- Deviations: the same Deviation Log entry (Steps 16+17).
+- Context read: the execution sessions (2026-11-20 sdd-design approval to here) were read in full; the design-round sessions (lines 30-2874) were searched for `appendLedgerEvent` and R-5, which match this step (key parameter, empty means a uuid).

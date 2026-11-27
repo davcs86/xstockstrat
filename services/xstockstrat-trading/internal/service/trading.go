@@ -1120,7 +1120,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	}
 	// Emit account.positions.synced ONLY (never order.filled) — the disjointness invariant that keeps
 	// portfolio from double-folding. Run on the inbound request ctx for header propagation.
-	if err := s.appendLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
+	if err := s.appendLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, "", map[string]interface{}{
 		"account_id":          accountID,
 		"user_id":             userID,
 		"trading_mode":        tradingMode,
@@ -3948,13 +3948,16 @@ const (
 	offlineRecomputeTimeout = 30 * time.Second
 )
 
-// appendLedgerEvent appends an event, retrying only codes.Unavailable under one idempotency key, and
-// returns the last error. It never takes confirmLock: callers may hold it and the lock is non-reentrant.
-func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) error {
+// appendLedgerEvent appends an event, retrying only codes.Unavailable under one idempotency key (empty: a
+// fresh uuid), and returns the last error. It never takes confirmLock: callers may hold it (non-reentrant).
+func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, streamKey, userID, idempotencyKey string, payload map[string]interface{}) error {
 	p, err := structpb.NewStruct(payload)
 	if err != nil {
 		telemetry.RecordLedgerEmit(ctx, eventType, outcomeFailed)
 		return fmt.Errorf("build %s payload: %w", eventType, err)
+	}
+	if idempotencyKey == "" {
+		idempotencyKey = uuid.NewString()
 	}
 	req := &ledgerv1.AppendEventRequest{
 		EventType:      eventType,
@@ -3962,7 +3965,7 @@ func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, strea
 		StreamKey:      streamKey,
 		UserId:         userID,
 		Payload:        p,
-		IdempotencyKey: uuid.NewString(),
+		IdempotencyKey: idempotencyKey,
 	}
 	for attempt := 1; ; attempt++ {
 		emitCtx, cancel := context.WithTimeout(ctx, ledgerEmitTimeout)
@@ -3994,7 +3997,7 @@ func (s *TradingService) persistOrderBestEffort(ctx context.Context, order *trad
 // emitLedgerEvent is the fail-soft wrapper of appendLedgerEvent. Pass the order/account owner as userID for
 // user-owned events (background pollers have no inbound x-user-id); pass "" for platform-scoped events.
 func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) {
-	if err := s.appendLedgerEvent(ctx, eventType, streamKey, userID, payload); err != nil {
+	if err := s.appendLedgerEvent(ctx, eventType, streamKey, userID, "", payload); err != nil {
 		slog.WarnContext(ctx, "ledger emit failed", "event_type", eventType, "stream_key", streamKey, "error", err)
 	}
 }

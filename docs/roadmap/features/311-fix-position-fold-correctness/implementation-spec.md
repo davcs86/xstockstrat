@@ -750,7 +750,7 @@ cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -
 
 ### Step 16 — service: `appendLedgerEvent` takes the idempotency key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -784,7 +784,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 17 — test: keyed ledger append
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify
@@ -1501,3 +1501,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 14 gives a four-line block and Step 15 a three-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path.
 - **Actual**: the same pattern as Steps 3-13. Inside the one subshell the first line's `cd` persists, so later lines fail with `cd: services/xstockstrat-trading: No such file or directory` and the greps print `No such file or directory`. Run verbatim, Step 14's block (`.sdd-logs/v-3.log`) ran only `go build ./...`, and Step 15's block (`v-7.log`) ran only the broker `go test -race`. Both exited 1 for this reason alone.
 - **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the `Orders[0]` grep (`v-4.log`) and the `status=all&limit=500` grep (`v-5.log`) printed nothing (`exit=1`, no match); `golangci-lint` v2.14.0, the line both blocks share, printed `0 issues.` (`v-6.log`); the coverage line printed `total: (statements) 84.9%` with every package `ok` (`v-8.log`). The step bodies were not changed (F-09).
+
+### Steps 16+17 — Verification blocks stop after their first line; line drift (2026-11-27)
+- **Spec said**: Step 16 gives a three-line block and Step 17 a two-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path. Step 16's evidence cites `trading.go:3953`, `:3965` and `:3997`.
+- **Actual**: the same pattern as Steps 3-15. Inside the one subshell the first line's `cd` persists, so later lines fail with `cd: services/xstockstrat-trading: No such file or directory` and the grep prints `No such file or directory`. Run verbatim, Step 16's block (`.sdd-logs/v-2.log`) ran only `go build ./...`, and Step 17's block (`v-3.log`) ran only the filtered `go test -race`. Both exited 1 for this reason alone. After the edit, `appendLedgerEvent` is still at `:3953` and the `emitLedgerEvent` call moved to `:4000` (three lines added: the empty-key fallback). The code located by symbol matched the evidence.
+- **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the grep (`v-4.log`) lists all 8 calls with the key argument; `golangci-lint` v2.14.0, the line both blocks share, printed `0 issues.` (`v-5.log`). The step bodies were not changed (F-09).
