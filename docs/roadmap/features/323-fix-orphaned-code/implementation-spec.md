@@ -556,7 +556,7 @@ node scripts/check-config-wiring.mjs --final
 
 ### Step 8 — test: agent — regression check that the live config package and the kept prompt survive
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `docs/roadmap/features/323-fix-orphaned-code/context.md` — modify (record the outputs below)

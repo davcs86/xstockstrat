@@ -597,3 +597,11 @@ Two rulings on the open items the previous re-spec raised, relayed by the orches
 - TDD: RED was the per-item pre-edit capture of Steps 3-6; this step's consolidated GREEN is the run above.
 - Files modified: none outside `docs/roadmap/features/323-fix-orphaned-code/` (`context.md`, `implementation-spec.md` Status)
 - Deviations: none
+
+### Step 8 — test: agent — regression check that the live config package and the kept prompt survive [done]
+- Verification-only; no agent file or test changed. Tooling: `uv sync --extra dev` in `services/xstockstrat-agent` (worktree-local `.venv`).
+- AC-2 (amended): `git ls-files services/xstockstrat-agent/app/prompts/signal_extraction.md` printed the path (kept, O-1). AC-3: `git ls-files services/xstockstrat-agent/app/config/watcher.py` printed the path; `uv run pytest tests/test_config_watcher.py -q` printed `8 passed`, rc 0.
+- Agent gate: `uv run pytest --cov=app --cov-fail-under=40` `831 passed`, `Total coverage: 88.47%` (>= 40); `ruff check .` `All checks passed!`; `ruff format --check .` `79 files already formatted`.
+- TDD: N/A (verification-only: no agent file or test changes; commands green before and after).
+- Files modified: none outside `docs/roadmap/features/323-fix-orphaned-code/` (`context.md`, `implementation-spec.md` Status)
+- Deviations: none
