@@ -903,3 +903,11 @@ Feature: fix-fundsignal-scoring-correctness (bug fix)
 ## Session 2026-11-27 — C-16 promotion ruling recorded by the orchestrator (verbatim)
 
 Question: with the retraction migration dropped, what happens to @AC-4 ("pre-246 fabricated signals no longer active: When the retraction runs...") at promotion? Operator answer: **"Do not promote AC-4 (Recommended)"** — promote @AC-1, @AC-2, @AC-3 and @AC-5 only; record @AC-4 as a C-15 exception closed by the zero-row evidence (DO staging and homelab staging, 2026-11-27), not by a guarded scenario. The `sdd-batch-promotion-plan` block above was corrected accordingly before the gate was approved.
+
+## Session 2026-11-27 — sdd-execute all-done path: C-16 promotion applied, code-completed
+
+- Config-wiring gate (`node scripts/check-config-wiring.mjs --final`, rc=0): two REPORTED lines, both outside this feature's files — `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. No key was added or changed by 309.
+- Merge-order: 309 has no row in `merge-order.md` (it is only named in the 334 servicer.py shared-file prose note, non-blocking).
+- Promotion plan (`sdd-batch-promotion-plan`, operator-confirmed, @AC-4 excluded) applied exactly: `services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature` (@AC-1, @AC-2, @AC-3) and `services/xstockstrat-ingest/acceptance/fix-fundsignal-scoring-correctness.feature` (@AC-5), each scenario tagged `@feature-309`. The plan's @AC-1 gate was checked on the branch: `@AC-3 @feature-246` now says "dividend_yield 0.013 as its only input" and no `pe_ratio 0.0` remains in the analysis suites; `@AC-8 @feature-201` carries the omit-absent wording.
+- @AC-4 is a recorded C-15 exception: not promoted, closed by the zero-row evidence (DO staging and homelab staging, 2026-11-27), not by a guarded scenario.
+- status.md `in-progress` → `code-completed`; feature.md history row added.
