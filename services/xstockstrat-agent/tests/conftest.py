@@ -163,6 +163,14 @@ def config_snapshots(monkeypatch):
         monkeypatch.setitem(watcher._WATCHERS, ns, w)
 
 
+@pytest.fixture(autouse=True)
+def sso_mode_log_once():
+    """Each test starts with an empty sso_mode log-once set (feature 345)."""
+    from app import sso_mode  # noqa: PLC0415
+
+    sso_mode._reset_log_once()
+
+
 @pytest.fixture
 def hung_config_server(monkeypatch):
     """Start an in-process ConfigService and point ``client.get_config_value`` at it (feature 247).

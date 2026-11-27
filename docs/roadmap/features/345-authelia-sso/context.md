@@ -886,3 +886,9 @@
 - Verification: `uv lock --check` ok; ruff check + format clean; `pytest --cov=app --cov-fail-under=40` 941 passed (88.77 %); `check-config-wiring.mjs --keys identity.auth.mode,agent.oidc.issuer` exit 0. TDD: recorded under Step 18.
 - Files modified: `services/xstockstrat-agent/{pyproject.toml,uv.lock,app/sso_mode.py,app/config/watcher.py}`
 - Deviations: none. Note: the host uv (0.11.32) rewrote the lock header `revision = 5` → `3`; restored to `5` by hand (`uv lock --check` passes), so the lock diff is only the two `pyjwt` lines.
+
+### Step 18 — Agent vectors and mode resolution [done]
+- `test_oidc_vectors.py` (pattern literal, 66 issuer rows, 10 mode rows → `(expected, logs)`); `test_sso_mode.py` (**@AC-72** `sso` → `local`, one `auth_mode_invalid` over two calls; **@AC-31** absent → `local`, no log; `oidc` returned; **@AC-55** `http://auth.example.test` → `(…, False)`, one ERROR `sso_issuer_invalid` `reason=agent_issuer`, a second distinct value logs again; valid issuer silent; `identity` watched); `conftest.py` autouse `sso_mode_log_once`.
+- TDD: red (before Step 17): collection `ImportError: cannot import name 'sso_mode' from 'app'` (2 errors) → green: `pytest --cov=app --cov-fail-under=40` 941 passed (88.77 %), the two new files 83 passed; ruff check + format clean; `install_watcher` used in `test_sso_mode.py:7,20,35`.
+- Files modified: `services/xstockstrat-agent/tests/{test_oidc_vectors,test_sso_mode,conftest}.py`
+- Deviations: none

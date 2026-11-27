@@ -802,7 +802,7 @@ cd ../.. && node scripts/check-config-wiring.mjs --keys identity.auth.mode,agent
 
 ### Step 18 — test: Agent vectors and mode resolution
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_oidc_vectors.py` — create
