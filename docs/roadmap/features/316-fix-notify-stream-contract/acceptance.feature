@@ -13,7 +13,7 @@ Feature: fix-notify-stream-contract (bug fix)
   # guards: docs/reports/2026-10-19-notify-stream-ignores-backpressure-defect.md
   @AC-2 @regression
   Scenario: a subscriber whose stream stops draining is evicted
-    Given a StreamAlerts subscriber whose call.write returns false and never emits drain
+    Given a StreamAlerts subscriber whose stream has 1024 alerts queued and unwritten
     When EmitAlert is called repeatedly past the backpressure threshold
     Then the subscriber is removed from the fan-out set or its stream is ended
     And further EmitAlert calls do not write to it
