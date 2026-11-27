@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: `docs/reports/2026-10-19-sandbox-exit-reason-stderr-substring-defect.md`, `docs/reports/2026-10-19-sandbox-memory-used-bytes-always-zero-defect.md`, `docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-20
+**Last Updated**: 2026-11-26
 
 ---
 
@@ -17,6 +17,8 @@
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
+| 2026-11-21 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); steps 5,6,8 re-specced (line anchors only) |
+| 2026-11-26 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done (sequential, sdd-batch-execute); `check-config-wiring.mjs --final` exit=0 |
 
 ---
 

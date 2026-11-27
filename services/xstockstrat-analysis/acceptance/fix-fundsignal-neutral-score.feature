@@ -39,6 +39,6 @@ Feature: fix-fundsignal-neutral-score (bug fix)
     And "NODATA" has every formula input in missing_metrics
     And "DIVONLY" has only dividend_yield 0.013 present
     When a fundamentals scan runs
-    Then ExecuteFormula is called exactly once, as the system identity, with dividend_yield 0.013 and pe_ratio 0.0
+    Then ExecuteFormula is called exactly once, as the system identity, with dividend_yield 0.013 as its only input
     And exactly one analysis.fundsignal_emitted row exists, for "DIVONLY"
     And no ExternalSignal is sent for "NODATA"

@@ -9,7 +9,7 @@ A `COMPONENT_KIND_CUSTOM_FORMULA` component whose formula declares
 **only** those fundamentals (never OHLCV `close`), scored **once per filing-boundary epoch**, and the
 scalar output broadcast across the span — the same input/output contract as the fundamentals-signal
 producer's scoring formula (feature 062), so one formula id works in both places (FR-5, full-row
-parity; the partial-row case diverges by design — see `@AC-8`). This is disjoint from the feature-198
+parity; the producer omits absent metrics too — see `@AC-8`). This is disjoint from the feature-198
 `COMPONENT_KIND_FUNDAMENTAL` single-metric operand: 198 reads **one** metric per component off the
 bar; 200 feeds a **set** of metrics into a formula.
 

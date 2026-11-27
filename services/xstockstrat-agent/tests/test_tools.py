@@ -197,6 +197,90 @@ async def test_manage_signal_source_mcp_client_secret_first_two_write():
 
 
 @pytest.mark.asyncio
+async def test_failed_mcp_client_register_mints_one_secret_per_attempt():
+    """@AC-1 (feature 328) — each failed mcp_client register writes exactly one fresh secret and
+    forwards it as ``ingest.<key>``, the form the orphan sweep's owner-exact join strips."""
+    import grpc  # noqa: PLC0415
+
+    set_config_mock = AsyncMock(return_value={"version": "1", "updated_at": "2026-09-01T00:00:00"})
+    manage_mock = AsyncMock(
+        side_effect=_rpc_error(
+            grpc.StatusCode.ALREADY_EXISTS, "signal source dup-src already exists"
+        )
+    )
+    with (
+        patch.object(client, "set_config", set_config_mock),
+        patch.object(client, "manage_signal_source", manage_mock),
+    ):
+        server = _make_server()
+        for _ in range(3):
+            with pytest.raises(ToolError, match="ALREADY_EXISTS"):
+                await _tool_fn(server, "manage_signal_source")(
+                    _ctx(ADMIN),
+                    operation="register",
+                    slug="dup-src",
+                    display_name="Dup MCP",
+                    source_type="mcp_client",
+                    config_json={
+                        "mcp_endpoint": "https://mcp.acme.example/mcp",
+                        "mcp_tool": "get_signals",
+                    },
+                    bearer_token="sk-live-dup",
+                )
+
+    assert set_config_mock.await_count == 3
+    keys = [c.kwargs["key"] for c in set_config_mock.await_args_list]
+    assert len(set(keys)) == 3
+    assert all(re.fullmatch(r"mcp_credential\.[0-9a-f-]{36}", k) for k in keys)
+    assert [c.kwargs["credentials_ref"] for c in manage_mock.await_args_list] == [
+        f"ingest.{k}" for k in keys
+    ]
+
+
+@pytest.mark.asyncio
+async def test_failed_signal_source_instantiate_mints_one_secret():
+    """@AC-2 (feature 328) — a failed signal_source instantiate writes exactly one secret and
+    forwards it as ``ingest.<key>``."""
+    import grpc  # noqa: PLC0415
+
+    set_config_mock = AsyncMock(return_value={"version": "1", "updated_at": "2026-09-01T00:00:00"})
+    instantiate_mock = AsyncMock(
+        side_effect=_rpc_error(
+            grpc.StatusCode.ALREADY_EXISTS, "signal source dup-src already exists"
+        )
+    )
+    with (
+        patch.object(client, "set_config", set_config_mock),
+        patch.object(client, "instantiate_template", instantiate_mock),
+    ):
+        server = _make_server()
+        with pytest.raises(ToolError, match="ALREADY_EXISTS"):
+            await _tool_fn(server, "instantiate_template")(
+                _ctx(ADMIN),
+                kind="signal_source",
+                template_id="t-mcp",
+                slug="dup-src",
+                bearer_token="sk-live-dup",
+            )
+
+    set_config_mock.assert_awaited_once()
+    key = set_config_mock.await_args.kwargs["key"]
+    assert instantiate_mock.await_args.kwargs["credentials_ref"] == f"ingest.{key}"
+
+
+def test_bearer_docs_name_the_orphan_sweep():
+    """feature 328 — the manage_signal_source description and its runbook section both name the
+    operator orphan sweep."""
+    from tests.test_tools_endpoint import _REPO, _catalog  # noqa: PLC0415
+
+    assert "orphan sweep" in _catalog()["manage_signal_source"]["description"]
+    runbook = (_REPO / "docs/runbooks/mcp-tools.md").read_text()
+    section = runbook.split("### `manage_signal_source`", 1)[1].split("\n### ", 1)[0]
+    assert "orphan sweep" in section
+    assert "config-rollout.md" in section
+
+
+@pytest.mark.asyncio
 async def test_list_signal_sources_source_type_filter():
     """source_type filter returns only matching sources."""
     with patch.object(client, "list_signal_sources", AsyncMock(return_value=_SOURCES)):
@@ -1960,6 +2044,13 @@ class TestAdditiveTools:
             )
         assert result == {"success": True}
         assert m.call_args.kwargs["formula_source"] == "result = {'value': 1}"
+
+    def test_test_formula_description_defines_memory_used_bytes(self):
+        description = _make_server()._tool_manager.get_tool("test_formula").description or ""
+        normalized = " ".join(description.split())
+        assert "memory_used_bytes" in normalized
+        assert "not measured" in normalized
+        assert "not usage of the memory cap" in normalized
 
     @pytest.mark.asyncio
     async def test_cancel_backfill_dispatches(self):

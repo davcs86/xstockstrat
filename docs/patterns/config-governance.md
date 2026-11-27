@@ -142,6 +142,7 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 | `system:config-migration-<NNN>` | `xstockstrat-config` (SQL migration) | A config migration's raw-SQL data write sets `updated_by` to this sentinel and `caller_identity` to NULL (not a SetConfig write); first used by 031 (feature 243) |
 | `system:config-migration-feature-<slug>` | `xstockstrat-config` (SQL migration) | A number-free actor sentinel for a config migration whose content must not carry its number, so a merge-time renumber renames files only; first used by feature 305 |
 | `system:config-migration-feature-330` | `xstockstrat-config` (SQL migration) | Feature 330's guarded reseed of `analysis` / `opportunity.live_enrich_ttl_seconds` (`*_analysis_live_enrich_ttl_reseed`): set only on the global rows whose value it moved `10 → 20`, with `caller_identity` NULL. Its down reverts only rows still carrying it, so an operator `SetConfig` (which rewrites `updated_by`) is never reverted |
+| `system:config-heal-mcp-credential-sweep` | operator SQL (`scripts/config-heal/mcp-credential-orphan-sweep.sql`) | Not a SetConfig write: the operator orphan sweep's `config_audit.changed_by` for each deleted per-user `ingest` / `mcp_credential.*` secret (`new_value` NULL, `old_value` the `[redacted]` sentinel, `caller_identity` NULL); feature 328 |
 | `system:config-migration-feature-fix-mcp-deadline-budget` | `xstockstrat-config` (SQL migration) | Feature 314's `*_mcp_deadline_budget`: the seed rows of `agent` / `extract.call_budget_seconds`, and the global `agent` / `opportunities.read_timeout_seconds` rows it clamped to `44`, with `caller_identity` NULL. Its down deletes only seed rows still carrying it and still holding `35`; the clamp is forward-only |
 
 ## Per-Feature Registered Keys
@@ -533,7 +534,9 @@ is now a **per-user** secret row at an opaque key `ingest.mcp_credential.<uuid>`
 `user_id` = the source owner; never the slug, so it cannot collide across owners or leak the source
 name), written secret-first by the owner via `SetConfig(is_secret=true, create_key=true,
 user_id=<owner>)`. Ingest resolves it with `GetSecret(user_id=<source owner>)` — exact scope — under
-the `ingest` grant, now also bound to the mTLS peer SAN `xstockstrat-ingest`.
+the `ingest` grant, now also bound to the mTLS peer SAN `xstockstrat-ingest`. A secret left
+unreferenced by a failed register is reclaimed by the operator orphan sweep (runbook
+`docs/runbooks/config-rollout.md`).
 
 ### feature 217 — sector-classification-strategy-params (`xstockstrat-marketdata`)
 
@@ -740,7 +743,8 @@ settable 0; the `SCALAR_BOUNDS_REGISTRY` hardening was declined in favor of the 
 **Also introduces a dynamic secret key family** `ingest.mcp_credential.<slug>` (`is_secret=true`, one
 per registered `mcp_client` source) — **not seeded**; written at registration via
 `SetConfig(is_secret=true, create_key=true)` and resolvable only by ingest via `GetSecret` under the
-new `SECRET_CALLER_ALLOWLIST` `keyPrefixes: ['mcp_credential.']` grant (`authz.ts`). Superseded by
+new `SECRET_CALLER_ALLOWLIST` `keyPrefixes: ['mcp_credential.']` grant (`authz.ts`) + reclaimed by
+the orphan sweep (runbook). Superseded by
 feature 224 (below): the key is now an opaque per-user `ingest.mcp_credential.<uuid>`.
 
 ### feature 031 — strategy-performance-dashboard (`xstockstrat-ui`)

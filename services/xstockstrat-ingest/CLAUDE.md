@@ -185,6 +185,8 @@ errors may print the FQN `ingest.<key>`.
 > with `x-internal-caller: ingest` under config's `keyPrefixes: ['mcp_credential.']` grant, which is
 > bound to the mTLS peer SAN `xstockstrat-ingest`. A missing or empty bearer marks the source
 > "bearer not configured". It is never in `config_json` and never returned by any read edge.
+> A secret no source of the same owner references is reclaimed by the operator orphan sweep after
+> its grace window (`docs/runbooks/config-rollout.md`).
 
 ## Ledger Events Emitted
 

@@ -93,6 +93,7 @@ def _build_external_signal(slug: str, item: dict) -> ingest_pb2.ExternalSignal:
         symbol=item["symbol"],
         direction=item["direction"],
         conviction=item["conviction"],
+        conviction_provided=True,
     )
     if item.get("headline"):
         signal.headline = item["headline"]

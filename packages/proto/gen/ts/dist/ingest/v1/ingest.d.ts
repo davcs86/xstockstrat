@@ -170,7 +170,7 @@ export interface ExternalSignal {
     symbol: string;
     /** "buy" | "sell" | "hold" | "watchlist" */
     direction: string;
-    /** 0.0 – 1.0 confidence (0.0 if not provided by source) */
+    /** 0.0 – 1.0 confidence; a 0.0 with conviction_provided unset means "not given" */
     conviction: number;
     validFrom?: Date | undefined;
     /** omit for open-ended */
@@ -182,6 +182,11 @@ export interface ExternalSignal {
     ingestedAt?: Date | undefined;
     /** owner of the signal (feature 224); server-stamped, ignored on write */
     userId: string;
+    /**
+     * True when the sender set conviction, including an explicit 0.0. Readers treat
+     * `conviction_provided || conviction != 0.0` as "given".
+     */
+    convictionProvided: boolean;
 }
 export interface IngestSignalRequest {
     signal?: ExternalSignal | undefined;
@@ -192,6 +197,7 @@ export interface IngestSignalResponse {
      * True when this submission matched an existing signal within the dedup window
      * (ingest.signals.dedup_window_hours) on (source, symbol, direction, conviction,
      * valid_until); signal_id is then the EXISTING signal's id, not a newly-inserted one.
+     * An explicit 0.0 conviction and an omitted conviction are different dedup values.
      */
     deduplicated: boolean;
 }

@@ -11,6 +11,7 @@ import json
 import re
 from contextlib import ExitStack, contextmanager
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
@@ -1984,6 +1985,32 @@ class TestQuerySignals:
         assert resp.signals[0].HasField("ingested_at")
         assert resp.signals[0].ingested_at.ToDatetime(tzinfo=UTC) == ingested
 
+    @pytest.mark.asyncio
+    async def test_conviction_presence_round_trip(self):
+        """Feature 309 (D-8): a non-NULL row reads back with conviction_provided=True (a stored 0
+        included); a NULL row leaves both fields unset."""
+        rows = [
+            {
+                "source": "unusual_whales",
+                "symbol": sym,
+                "direction": "buy",
+                "conviction": conviction,
+                "valid_from": datetime(2026, 8, 1, tzinfo=UTC),
+                "valid_until": None,
+                "headline": "h",
+                "raw_url": "",
+                "tags": [],
+                "ingested_at": datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+            }
+            for sym, conviction in (("AAPL", Decimal("0.000")), ("MSFT", None), ("TSLA", 0.9))
+        ]
+        db = MagicMock()
+        db.fetch = AsyncMock(return_value=rows)
+        svc = make_servicer(db=db)
+        resp = await svc.QuerySignals(ingest_pb2.QuerySignalsRequest(), _ctx("0"))
+        got = [(s.conviction_provided, round(s.conviction, 6)) for s in resp.signals]
+        assert got == [(True, 0.0), (False, 0.0), (True, 0.9)]
+
 
 # ---------------------------------------------------------------------------
 # ConfigWatcher getters
@@ -2207,11 +2234,42 @@ class TestIngestSignalConvictionValidation:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("conviction", [0.7, 0.0])
     async def test_in_range_conviction_proceeds(self, conviction):
-        # 0.7 proceeds to INSERT; 0.0 passes the guard and falls through to the NULL
-        # sentinel (stored NULL, not rejected) — both must still succeed.
+        # 0.7 proceeds to INSERT; 0.0 without conviction_provided passes the guard and is
+        # stored NULL (not rejected) — both must still succeed.
         svc = self._servicer_full_happy_path()
         resp = await svc.IngestSignal(self._make_signal_req(conviction), context=_ctx("0"))
         assert resp.signal_id == 42
+
+    async def _stored_convictions(self, req):
+        svc = make_servicer()
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 42}, {"signal_id": 42}],
+        )
+        svc._db = db
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        resp = await svc.IngestSignal(req, context=_ctx("0"))
+        assert resp.signal_id == 42
+        calls = conn.fetchrow.await_args_list
+        return calls[0].args[4], calls[1].args[6]
+
+    @pytest.mark.asyncio
+    async def test_explicit_zero_conviction_is_stored_as_zero(self):
+        """@AC-5 @feature-309: an explicit 0.0 (conviction_provided) is stored as 0, not NULL,
+        in both the newsletter_signals INSERT and the dedup claim."""
+        req = self._make_signal_req(0.0)
+        req.signal.conviction_provided = True
+        inserted, claimed = await self._stored_convictions(req)
+        assert inserted is not None and inserted == 0.0
+        assert claimed is not None and claimed == 0.0
+
+    @pytest.mark.asyncio
+    async def test_omitted_conviction_is_stored_as_null(self):
+        """Feature 309: a 0.0 without conviction_provided means not given and is stored NULL."""
+        inserted, claimed = await self._stored_convictions(self._make_signal_req(0.0))
+        assert inserted is None
+        assert claimed is None
 
 
 # ---------------------------------------------------------------------------

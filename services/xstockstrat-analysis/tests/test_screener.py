@@ -776,6 +776,41 @@ def _patch_compute_signal_score_raising_on_sentinel(monkeypatch, exc):
     monkeypatch.setattr(screener_mod.scoring, "compute_signal_score", _raising)
 
 
+async def test_ac3_screen_scores_explicit_zero_conviction_as_zero(monkeypatch):
+    """@AC-3 @feature-309"""
+    md = AsyncMock()
+    day_bars = [_timed_bar(10.0 + i, d) for i, d in enumerate(_BAR_DAYS)]
+    md.GetBars = AsyncMock(return_value=SimpleNamespace(bars=day_bars))
+    ind = AsyncMock()
+    ind.ExecuteFormula = AsyncMock(return_value=formula_resp([0.5]))
+    ind.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=[]))
+    sig = _in_window_signal("buy", 0.0)
+    sig.conviction_provided = True
+    ingest = AsyncMock()
+    ingest.QuerySignals = AsyncMock(return_value=ingest_pb2.QuerySignalsResponse(signals=[sig]))
+
+    original = screener_mod.scoring.compute_signal_score
+    captured = []
+
+    def _capturing(signals_map, latest_bar, signal_sources, source_weights=None):
+        captured.append(original(signals_map, latest_bar, signal_sources, source_weights))
+        return captured[-1]
+
+    monkeypatch.setattr(screener_mod.scoring, "compute_signal_score", _capturing)
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["ZERO"],
+        criteria=[formula_criterion("f1", "fid", analysis_pb2.COMPARATOR_GT, 0.0)],
+        signal_sources=["fundamentals"],
+        signal_weight=1.0,
+        technical_weight=0.0,
+    )
+
+    resp = await make_engine(md, ind, ingest=ingest).screen(req)
+
+    assert resp.results[0].status == analysis_pb2.SCREEN_RESULT_STATUS_OK
+    assert captured == [pytest.approx(0.5)]
+
+
 def _patch_technical_value_raising_for(monkeypatch, exc, should_raise):
     original = ScreenerEngine._technical_value
 

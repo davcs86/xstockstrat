@@ -1364,7 +1364,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             raise _SignalValidationError(f"direction must be one of {valid_directions}")
 
         # Inverted-range form also rejects NaN (all NaN comparisons are False), which `<0 or >1`
-        # would leak to the `>0.0` NULL-sentinel below. 0.0 passes and is stored as NULL.
+        # would let through. An explicit 0.0 is stored as 0; an omitted conviction as NULL.
         if not (0.0 <= signal.conviction <= 1.0):
             raise _SignalValidationError("conviction must be between 0.0 and 1.0")
 
@@ -1385,7 +1385,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if signal.HasField("valid_until") and signal.valid_until.seconds > 0:
             valid_until = signal.valid_until.ToDatetime(tzinfo=UTC)
 
-        conviction = signal.conviction if signal.conviction > 0.0 else None
+        conviction = (
+            signal.conviction if (signal.conviction_provided or signal.conviction != 0.0) else None
+        )
 
         symbol_upper = signal.symbol.upper()
 
@@ -1636,11 +1638,13 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 source=row["source"],
                 symbol=row["symbol"],
                 direction=row["direction"],
-                conviction=float(row["conviction"]) if row["conviction"] is not None else 0.0,
                 headline=row["headline"] or "",
                 raw_url=row["raw_url"] or "",
                 tags=list(row["tags"]) if row["tags"] else [],
             )
+            if row["conviction"] is not None:
+                sig.conviction = float(row["conviction"])
+                sig.conviction_provided = True
             vf = Timestamp()
             vf.FromDatetime(row["valid_from"])
             sig.valid_from.CopyFrom(vf)

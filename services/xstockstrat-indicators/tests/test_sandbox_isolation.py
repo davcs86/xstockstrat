@@ -238,6 +238,17 @@ class TestExitReasonClassification:
         assert res.success is False
         assert res.exit_reason == "memory_exceeded"
 
+    def test_without_a_status_line_a_stderr_memory_marker_is_memory_exceeded(self, monkeypatch):
+        """310 D-7 step 4: when `_status` could not print, the stderr marker still classifies."""
+        monkeypatch.setattr(
+            "app.services.sandbox.subprocess.Popen",
+            _fake_popen({}, returncode=1, stdout="", stderr="MemoryError\n"),
+        )
+        res = _run("result = {}", allowed=())
+        assert res.success is False
+        assert res.exit_reason == "memory_exceeded"
+        assert res.memory_used_bytes == 0
+
 
 class TestBaselineProbe:
     def test_probe_reads_positive_vmdata(self):

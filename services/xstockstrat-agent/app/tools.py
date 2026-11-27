@@ -485,8 +485,9 @@ def _historical_to_csv(periods: list[dict]) -> str:
 async def _write_source_bearer(ctx: Context, tool: str, slug: str, bearer_token: str) -> str:
     """Write a source bearer as the caller's own encrypted secret; return the credentials_ref.
 
-    Secret-first: a failed source write afterwards only orphans a redacted secret. The key is opaque
-    (never the slug), so it cannot collide across owners or leak the source name."""
+    Secret-first: a failed source write afterwards only orphans a redacted secret, reclaimed by the
+    operator orphan sweep (docs/runbooks/config-rollout.md). The key is opaque (never the slug), so
+    it cannot collide across owners or leak the source name."""
     secret_key = f"mcp_credential.{uuid.uuid4()}"
     try:
         await client.set_config(
@@ -829,10 +830,11 @@ def register_tools(server: MCPServer) -> None:
         symbol: ticker symbol e.g. 'NVDA'.
         direction: one of 'buy', 'sell', 'hold', 'watchlist'.
         valid_from: ISO 8601 datetime string e.g. '2026-05-01T00:00:00Z'.
-        conviction: float in (0.0, 1.0], optional. There is NO source default — an omitted
-            conviction is stored as NULL, not backfilled, so pass it explicitly whenever known. An
+        conviction: float in [0.0, 1.0], optional. There is NO source default — an omitted
+            conviction is stored as NULL ("not given"), not backfilled, so pass it explicitly
+            whenever known. An explicit 0.0 is stored as 0 and scored as zero confidence. An
             out-of-range value (< 0.0 or > 1.0) or NaN is rejected INVALID_ARGUMENT at the ingest
-            boundary; 0.0 (or an omitted conviction) is stored as NULL.
+            boundary.
         SIDE EFFECT: on success this tool AUTO-EMITS an alert when conviction is present and >= the
             agent.signal.alert_threshold config value (default 0.6); an alert failure does not fail
             the ingest. Do NOT also call emit_alert for the same signal, or you will double-alert.
@@ -1615,7 +1617,9 @@ def register_tools(server: MCPServer) -> None:
         credentials_ref: reference forwarded to the backend; NEVER echoed back (FR-12). On update it
             is preserved when omitted; pass "" to explicitly clear it. A `authenticated_website` or
             `mediated_authenticated_website` source requires a credential (validated on the merged
-            result).
+            result). A `mcp_credential.*` secret that no source of yours references for longer than
+            the sweep's grace window (24h by default) is deleted by the operator orphan sweep, so
+            attach a staged credential within that window.
         reliability_weight: per-source ranking multiplier in [0, 1] (default 1.0 on register);
             higher weights rank this source's signals higher, 0 effectively ignores the source
             (feature 134). On update it is applied ONLY when supplied — omit it to preserve the
@@ -1911,7 +1915,11 @@ def register_tools(server: MCPServer) -> None:
         timeout_ms: 0 = use the configured sandbox timeout.
         Returns the full sandbox result: success, output (the result dict; NON-FINITE values such
             as NaN/Infinity are returned as null), stdout, stderr, error, exit_reason,
-            parameter_errors, execution_ms (int64 as a JSON string)."""
+            parameter_errors, execution_ms and memory_used_bytes (int64 as JSON strings).
+        memory_used_bytes: peak resident memory of the sandbox process in bytes, INCLUDING the
+            interpreter and the imported modules, so it is not usage of the memory cap. "0"
+            means not measured (timeout, kill, abort or os._exit; most memory_exceeded runs
+            report "0")."""
         deadline_s = client.formula_deadline_s(timeout_ms)
         try:
             return await client.execute_formula(

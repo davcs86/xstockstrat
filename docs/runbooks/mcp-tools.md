@@ -287,7 +287,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 | `symbol` | `string` | Yes | Ticker symbol, e.g. `"NVDA"` |
 | `direction` | `string` | Yes | One of `"buy"`, `"sell"`, `"hold"`, `"watchlist"` |
 | `valid_from` | `string` | Yes | ISO 8601 datetime, e.g. `"2026-05-01T00:00:00Z"` |
-| `conviction` | `float` | No | Signal confidence, `0.0`–`1.0`. Omit if unknown — ingest stores an absent (or `0.0`) value as unset (NULL) and reads it back as `0.0` meaning "unknown confidence" (invariant INGEST-4). **No source default is applied.** An out-of-range value (`< 0.0` or `> 1.0`) or NaN is rejected `INVALID_ARGUMENT` at the ingest boundary (not `INTERNAL`). |
+| `conviction` | `float` | No | Signal confidence, `0.0`–`1.0`. Omit if unknown — ingest stores an omitted value as NULL ("not given"; invariant INGEST-4). An explicit `0.0` is stored as `0` and scored as zero confidence. **No source default is applied.** An out-of-range value (`< 0.0` or `> 1.0`) or NaN is rejected `INVALID_ARGUMENT` at the ingest boundary (not `INTERNAL`). |
 | `valid_until` | `string` | No | ISO 8601 datetime — signal expiry |
 | `headline` | `string` | No | Short summary for display |
 | `raw_url` | `string` | No | Source URL for attribution |
@@ -916,8 +916,8 @@ rejected `PERMISSION_DENIED`.
 | `config_json` | `object` | No | Source configuration (on `update`, changed only if supplied) |
 | `extractor_module` | `string` | No | Extractor module name, for a non-mediated source only (on `update`, changed only if supplied). A `mediated_*` source takes none: ingest stores `app.extractors.noop` itself, whatever is sent |
 | `extraction_instructions` | `string` | No | (`mediated_*` only) prose telling the consuming agent what to extract from the source and how to map it to `ingest_signal`; at most 16,000 characters. **Required non-empty** when registering a `mediated_*` source, and on an `update` that changes `source_type` to a mediated type. On `update` it is applied only when supplied — omit it to preserve the stored text; `""` or whitespace is rejected on a mediated source |
-| `credentials_ref` | `string` | No | Reference to stored credentials — forwarded, **never echoed**. On `update`, omit to preserve the stored ref; pass `""` to clear it |
-| `bearer_token` | `string` | No | The MCP bearer for a `mcp_client` source (feature 166). Supplied on `register`; written FIRST to the caller's own encrypted per-user config secret under an opaque key (`ingest.mcp_credential.<uuid>`, `is_secret=true`), then the source is registered with `credentials_ref` pointing at it. Stored encrypted at rest and **never returned** |
+| `credentials_ref` | `string` | No | Reference to stored credentials — forwarded, **never echoed**. On `update`, omit to preserve the stored ref; pass `""` to clear it. A `mcp_credential.*` secret that no source of yours references for longer than the sweep's grace window (24h by default) is deleted by the operator orphan sweep, so attach a staged credential within that window |
+| `bearer_token` | `string` | No | The MCP bearer for a `mcp_client` source (feature 166). Supplied on `register`; written FIRST to the caller's own encrypted per-user config secret under an opaque key (`ingest.mcp_credential.<uuid>`, `is_secret=true`), then the source is registered with `credentials_ref` pointing at it. Stored encrypted at rest and **never returned**. A bearer left behind by a failed `register` is reclaimed by the orphan sweep ([config-rollout.md](config-rollout.md#operator-sweep-orphaned-mcp_credential-secrets-feature-328)) |
 
 > **`mcp_client` source type (feature 166).** A server-side MCP query source. Its `config_json`
 > carries `mcp_endpoint` (the Streamable-HTTP MCP URL) and `mcp_tool` (the tool name), plus optional
@@ -1199,7 +1199,10 @@ Use before `manage_formula(operation="register", …)` to validate behavior.
 
 **Return** — the full sandbox result: `success`, `output` (the result dict; **non-finite values such
 as `NaN`/`Infinity` are returned as `null`** so the projection never fails), `stdout`, `stderr`,
-`error`, `exit_reason`, `parameter_errors`, `execution_ms` (int64 as a JSON string).
+`error`, `exit_reason`, `parameter_errors`, `execution_ms` and `memory_used_bytes` (int64 as JSON
+strings). `memory_used_bytes` is the peak resident memory of the sandbox process in bytes, including
+the interpreter and the imported modules, so it is not usage of the memory cap; `"0"` means not
+measured (timeout, kill, abort or `os._exit`; most `memory_exceeded` runs report `"0"`).
 
 ---
 
