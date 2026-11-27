@@ -383,11 +383,21 @@ Feature: Platform-wide guarantees
     And after "migrate force 25" for the analysis schema, "scripts/db-migrate.sh up" exits 0
     And the analysis migration state is clean at version 27 and "analysis.backtest_runs.user_id" is NOT NULL
 
+  # Changed by @feature-318 (fix-migration-tooling-safety), operator-signed 2026-11-20 (C-16 CHANGE, 318 context.md O-3):
+  # the guard no longer allows a force-0 recovery for any dirty state.
   @AC-19 @FR-8 @feature-225
-  Scenario: Dirty recovery below the contract floor is unchanged
-    Given a migrations directory whose only contract file "027_x.up.sql" declares "-- contract-of: services/xstockstrat-x/migrations/026_y.up.sql"
-    When the dirty guard evaluates "20 (dirty)", and separately a directory with no contract file evaluates "27 (dirty)"
-    Then both evaluations allow the automatic force-0 recovery
+  Scenario Outline: The dirty guard refuses every dirty state and names a recovery it can compute
+    Given a migrations directory for schema "x" holding up-files <files>
+    When the dirty guard evaluates "<version>"
+    Then it exits <exit> and its output names "<names>"
+
+    Examples:
+      | files                                             | version    | exit | names                               |
+      | 001, 002, 003, 005, 006                           | 5 (dirty)  | 3    | force 3                             |
+      | 001, 002, 003, 005, 006                           | 1 (dirty)  | 3    | TRUNCATE public.x_schema_migrations |
+      | 001, 002, 003, 005, 006                           | 4 (dirty)  | 2    | cannot compute recovery             |
+      | (none)                                            | 5 (dirty)  | 2    | cannot compute recovery             |
+      | 019, 020, 026, 027 (027 declares contract-of 026) | 20 (dirty) | 3    | force 19                            |
 
   @AC-1 @FR-1 @regression @feature-226
   Scenario Outline: A backend service exports traces over OTLP/HTTP to a path-prefixed gateway URL
@@ -2737,6 +2747,56 @@ Feature: Platform-wide guarantees
       | Node    | xstockstrat-config     |
       | Python  | xstockstrat-analysis   |
       | Python  | xstockstrat-agent      |
+
+  # ─── migration tooling safety: refuse-all dirty recovery + ordering gate (feature 318) ──
+  # Platform tooling: scripts/db-migrate.sh, scripts/migration-dirty-guard.sh and the CI migration-ordering check.
+  # Source defects: docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md,
+  # docs/reports/2026-10-19-config-seed-migration-late-lower-nnn-defect.md
+  # Operator decision O-1 (2026-11-20, 318 context.md): db-migrate.sh up never recovers a dirty service by itself.
+  # 318 changed 225 @AC-19 and the last clause of config 295 @AC-28 in place (operator-signed C-16 CHANGE O-3); these scenarios extend them.
+
+  @AC-1 @regression @feature-318
+  Scenario: dirty recovery for a service without a contract floor does not replay from 001
+    Given services/xstockstrat-indicators/migrations has no "-- contract-of:" migration
+    And the indicators schema_migrations row is "5 (dirty)"
+    And indicators 001_formulas.up.sql contains a bare "CREATE TABLE indicators.formulas ("
+    When scripts/db-migrate.sh up runs
+    Then no "migrate ... force" command is executed for any service
+    And the run exits 1 and no service after indicators is migrated
+    And its output carries the line 'Recover: migrate -path services/xstockstrat-indicators/migrations -database "$DATABASE_URL&x-migrations-table=indicators_schema_migrations" force 4'
+
+  @AC-2 @regression @feature-318
+  Scenario: CI rejects a new migration numbered below the target branch maximum
+    Given main-dev's services/xstockstrat-config/migrations maximum is 025
+    When a PR adds services/xstockstrat-config/migrations/024_late_seed.up.sql
+    Then the CI migration-ordering check fails naming 024 and the current maximum 025
+
+  @AC-3 @regression @feature-318
+  Scenario: the recovery names the previous existing version across a numbering gap
+    Given a migrations directory for schema "x" holding up-files 001, 002, 003, 005 and 006
+    When the dirty guard evaluates "5 (dirty)"
+    Then it exits 3 with the line 'Recover: migrate -path services/xstockstrat-x/migrations -database "$DATABASE_URL&x-migrations-table=x_schema_migrations" force 3'
+    And its output names "force 6" only as an escalation after "already exists" in version 6
+    And its output contains the literal "$DATABASE_URL" and no "postgres://" URL
+
+  @AC-4 @regression @feature-318
+  Scenario: a service dirty at its first migration is told to empty the tracking table
+    Given a migrations directory for schema "x" holding up-files 001, 002, 003, 005 and 006
+    When the dirty guard evaluates "1 (dirty)"
+    Then it exits 3 with the line "Recover: psql "$DATABASE_URL" -c 'TRUNCATE public.x_schema_migrations'"
+    And its output contains no "force -1"
+
+  @AC-5 @regression @feature-318
+  Scenario Outline: the dirty guard fails closed when it cannot compute a recovery
+    Given a migrations directory for schema "x" holding up-files <files>
+    When the dirty guard evaluates "<version>"
+    Then it exits 2 naming "cannot compute recovery" and prints no "Recover:" line
+
+    Examples:
+      | files                   | version   |
+      | (none)                  | 5 (dirty) |
+      | 001, 002, 003, 005, 006 | 4 (dirty) |
+      | 001, 002, 003, 005, 006 | 7 (dirty) |
 
   # ─── orphaned modules, scripts and dependencies removed (feature 323) ──
   # Cross-cutting: spans config, ledger, identity, notify, marketdata, ingest and agent. Source defect:

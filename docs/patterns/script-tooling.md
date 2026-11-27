@@ -51,7 +51,7 @@ The tier is the script's blast radius, and decides whether a port is allowed.
 | Script | Tier | Tests today | Disposition |
 |---|---|---|---|
 | `docker-entrypoint.sh`, `wait-for-deps.sh` | R0 | none | Keep in `sh` (7 service images) |
-| `db-migrate.sh`, `render-migrations.sh`, `migration-dirty-guard.sh`, `migration-ahead-check.sh` | R0 | `.test.sh` ×3 | Keep in bash (migrator image) |
+| `db-migrate.sh`, `render-migrations.sh`, `migration-dirty-guard.sh`, `migration-ahead-check.sh` | R0 | `.test.sh` ×2, pytest (`test_migration_dirty_guard.py`, `test_db_migrate.py`) | Keep in bash (migrator image) |
 | `do-db-cluster.sh` | R1 | via `sops-secrets.test.sh` (stub `doctl`) | Port |
 | `homelab-release-env.sh`, `homelab-render-check.sh` | R1 | `homelab-render.test.sh` | Port |
 | `ui-theme-label.sh` | R1 (`deploy.yml`, `staging-up.yml`) | `ui-theme-label.test.sh` | Port |
@@ -59,7 +59,7 @@ The tier is the script's blast radius, and decides whether a port is allowed.
 | `buf-gen.sh` | R2 (run inside the codegen image, which has Python) | none | Port last: a linear wrapper around `buf` with 36 doc references |
 | `integration-test.sh` | R3 | none | Undecided: it still targets the removed backend HTTP ports, so delete, port as-is or rewrite against gRPC |
 | `sops-secrets.test.sh`, `homelab-render.test.sh` and the other `*.test.sh` | — | — | Move to pytest together with the script they test; delete when empty |
-| `check-prereqs.py`, `setup-env.py`, `bootstrap.py`, `localenv-setup.py`, `run-e2e.py`, `check-duplication.py`, `security-audit.py`, `setup-branch-protection.py`, `db-connect.py`, `do-setup-check.py`, `migration-rerun.py`, `config-wiring-stored.py`, `config-heal-dryrun.py` (+ `scratch_db.py`), `check-otel-produced-signals.py`, `check-context-map.py`, `check-watcher-copies.py`, `check-migration-contract.py`, `sdd-allocate-feature-number.py`, `check-shell-freeze.py`, `ledger-guard.py`, `homelab-mtls-env.py`, `config-wiring-py-reads.py`, `do-render-app-spec.py`, `sops_secrets.py`, `manage-users.py` | — | pytest | Done |
+| `check-prereqs.py`, `setup-env.py`, `bootstrap.py`, `localenv-setup.py`, `run-e2e.py`, `check-duplication.py`, `security-audit.py`, `setup-branch-protection.py`, `db-connect.py`, `do-setup-check.py`, `migration-rerun.py`, `config-wiring-stored.py`, `config-heal-dryrun.py` (+ `scratch_db.py`), `check-otel-produced-signals.py`, `check-context-map.py`, `check-watcher-copies.py`, `check-migration-contract.py`, `check-migration-order.py`, `sdd-allocate-feature-number.py`, `check-shell-freeze.py`, `ledger-guard.py`, `homelab-mtls-env.py`, `config-wiring-py-reads.py`, `do-render-app-spec.py`, `sops_secrets.py`, `manage-users.py` | — | pytest | Done |
 | `build-launch-pdfs.py`, `measure-insertbars-cost.py` | R3 | none | Lint only: one needs WeasyPrint, the other a live `pg_stat_statements` |
 | `check-config-wiring.mjs`, `merge-train-resolve.mjs` | R2 | `node --test` | Keep in Node (already tested) |
 

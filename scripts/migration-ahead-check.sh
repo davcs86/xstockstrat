@@ -55,8 +55,8 @@ fi
 prev=$((n - 1))
 # shellcheck disable=SC2016 # $DATABASE_URL is printed as a literal so no credential is ever expanded
 {
-  echo "db-migrate: $schema is dirty at version $n, newer than this image's highest migration $highest; refusing \`force 0\` (a newer release's migration failed part-way; this image cannot see its files)."
+  echo "db-migrate: $schema is dirty at version $n, newer than this image's highest migration $highest; refusing to migrate it (a newer release's migration failed part-way; this image cannot see its files)."
   echo "  Recover with the newer release's files: migrate -path services/xstockstrat-$schema/migrations -database \""'$DATABASE_URL'"&x-migrations-table=${schema}_schema_migrations\" force $prev"
-  echo "  (use '?x-migrations-table=' when DATABASE_URL has no query string), then fix forward and redeploy that release."
+  echo "  (force the previous version present in the newer release: $prev assumes it has no gap below $n; use '?x-migrations-table=' when DATABASE_URL has no query string), then fix forward and redeploy that release."
 } >&2
 exit 4
