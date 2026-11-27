@@ -304,3 +304,112 @@ Step 13 read-back summary (both environments, staging only; production out of sc
 - Deviations: none
 - TDD: N/A (config, operator-only). Config-key wiring gate (step-time, `--declared-from product-spec.md`): exit=0, no findings printed. `--final` (last step): exit=0, only the two pre-existing `REPORTED:` readers-disagree lines (`fundsignal_loop.py:marketdata/fundamentals.provider`, `trading.go:platform/trading_state`); `broker.paper` count `0`.
 - All 13 steps done → status `code-completed`. Integration PR opens as a draft; this entry satisfies its draft gate.
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan: fix-trading-config-plumbing (feature 321)
+
+Source: docs/roadmap/features/321-fix-trading-config-plumbing/acceptance.feature (4 scenarios, read from the working tree). Affected service: xstockstrat-trading (config seed and gate are cross-cutting). Dedup targets: the 20 existing files under /home/user/xstockstrat/services/xstockstrat-trading/acceptance/, services/xstockstrat-config/acceptance/fix-config-keys-drift.feature, and /home/user/xstockstrat/docs/sdd/business-rules/platform.feature. A grep for `@feature-321` across all service suites found nothing, so no scenario has been promoted before.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | services/xstockstrat-trading/acceptance/fix-trading-config-plumbing.feature | CREATE | NEW | The observable subject is the IBKR signed order request's deadline and the handshake bound, which live in trading. The closest existing rule, 295 @AC-17 in fix-config-keys-drift.feature, covers only an Alpaca client's live timeout. It is complementary, not an overlap (design.md marks it EXTEND). |
+| @AC-2 | same file | CREATE | NEW | The subject is the flattenAndHalt attempt count with int-typed rows. No existing trading scenario asserts it. 347 @AC-28 uses max_retries 3 with a 429 hold. 295 @AC-12 covers getter fallback on timeout_ms. |
+| @AC-3 | same file | CREATE | NEW | A grep of the trading suites for requires_approval found no match. |
+| @AC-4 | docs/sdd/business-rules/platform.feature | APPEND | CONFLICT (signed-off supersession of 304 @AC-14) | The guarantee spans the config seed migrations, trading's APPLICATION_ENV fallback and the repo-wide scripts/config-wiring.json gate, so no single service owns it. It contradicts the standing platform.feature scenario 304 @AC-14 at line 2095 (see Notes). |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-trading-config-plumbing.feature (CREATE) ---
+```gherkin
+# Promoted from docs/roadmap/features/321-fix-trading-config-plumbing/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-321` tag.
+# Durable regression guards for three xstockstrat-trading config/persistence defects: the IBKR signed-request
+# timeout, the int-typed retry rows, and requires_approval persistence. A rule enters only by promotion from a
+# reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: fix-trading-config-plumbing (bug fix, trading config and persistence guarantees)
+  Regression guard for three xstockstrat-trading defect reports (IBKR timeout, accessor type
+  mismatch, requires_approval persistence).
+
+  # guards: docs/reports/2026-10-19-trading-ibkr-timeout-hardcoded-defect.md
+  @AC-1 @regression @feature-321
+  Scenario: Signed IBKR requests honour the live trading.broker.timeout_ms
+    Given trading.broker.timeout_ms is 2000
+    And an IBKR account whose order endpoint never answers
+    When an order is placed for that account
+    Then the signed order request times out after about 2 seconds, not 10
+    And a later change of trading.broker.timeout_ms applies to the same broker client without a restart
+    And a handshake slower than trading.broker.timeout_ms but within trading.ibkr.handshake_timeout_ms still succeeds
+
+  # guards: docs/reports/2026-10-19-trading-config-accessor-type-mismatch-defect.md
+  @AC-2 @regression @feature-321
+  Scenario Outline: An int-typed trading.order.max_retries row sets the emergency flatten's attempts
+    Given trading.order.max_retries is stored as an int row with value <max_retries>
+    And trading.order.retry_delay_ms is stored as an int row below its 500 ms default
+    When every broker submission of a protection-window flatten is definitively rejected
+    Then the flatten submits <attempts> times, which is 1 + max_retries, before halting the account
+    And it waits the stored retry delay between attempts, not the default
+
+    Examples:
+      | max_retries | attempts |
+      | 1           | 2        |
+      | 5           | 6        |
+
+  # guards: docs/reports/2026-10-19-trading-requires-approval-always-false-defect.md
+  @AC-3 @regression @feature-321
+  Scenario: An order that crosses the approval threshold is persisted with requires_approval true
+    Given trading.approval.require_above_qty is 20
+    When an order with qty 21 is placed and returns ORDER_STATUS_PENDING_APPROVAL
+    Then the trading.orders row first written for that order_id has requires_approval = true
+    And an order written with any other status has requires_approval = false
+```
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+HOLD: write this block only after the orchestrator confirms the 304 @AC-14 supersession sign-off (see Notes). If it is not confirmed, drop the block and the comment edit below.
+```gherkin
+  # guards: docs/reports/2026-11-06-trading-broker-paper-env-derived-default-unseedable-defect.md
+  # Supersedes @feature-304 @AC-14 (the broker.paper baseline entry is removed, not respelled).
+  @AC-4 @regression @feature-321
+  Scenario: trading.broker.paper is seeded per environment and falls back to the application environment
+    Given the config catalog row for trading.broker.paper has an environment-derived default
+    When the config seed migrations run for staging and production
+    Then trading.broker.paper is stored true in staging and false in production, never one literal for both
+    And a row that already exists is left unchanged
+    And with no stored row trading resolves paper unless APPLICATION_ENV is production, whatever TRADING_MODE says
+    And staging resolves to paper and production resolves to live
+    And scripts/config-wiring.json holds no entry for trading.broker.paper and "node scripts/check-config-wiring.mjs --final" exits 0 with no read-unseeded or STALE line for it
+```
+
+Companion comment edit, which is additive and leaves the scenario text unchanged. Insert this single line directly above the tag line `@AC-14 @FR-4 @feature-304` (currently line 2095) in platform.feature:
+```
+  # Superseded by @feature-321 @AC-4 (user sign-off 2026-11-20, feature 321 design.md § Business Rules Touched); text intentionally not rewritten.
+```
+
+### Notes / ambiguities / conflicts
+- **CONFLICT, AC-4 against 304 @AC-14** (`/home/user/xstockstrat/docs/sdd/business-rules/platform.feature:2095`).
+  - 304 @AC-14 requires `scripts/config-wiring.json` to hold a respelled `broker.paper` read-unseeded entry that stays owned by the defect.
+  - 321 @AC-4 requires the entry to be removed once the key is seeded.
+  - Feature 321 design.md § Business Rules Touched records this as `CHANGE 304 @AC-14 ... superseded by 321 @AC-4; signed off by user @ 2026-11-20`. The same decision appears as the open C-16 item at context.md:68.
+  - I could not independently verify the sign-off wording in context.md; my grep output omitted the long matching line (line 44). The orchestrator should confirm the sign-off is in context.md before writing.
+  - I recommend keeping the existing 304 @AC-14 in place and adding only the "Superseded" comment. Nothing is deleted or rewritten.
+- **AC-4 routing.**
+  - Per-service routing was rejected because the Then clauses span the config seed migrations (config service), trading's `APPLICATION_ENV` fallback, and the repo-level `check-config-wiring.mjs` gate.
+  - It is placed in platform.feature next to 304 @AC-14, which it supersedes.
+  - Splitting it was rejected because promotion must be verbatim and one scenario maps to one target.
+- **Related rules, not conflicts.**
+  - 295 @AC-12 and @AC-17 (trading `fix-config-keys-drift.feature`) are preserved. There is no getter change.
+  - 347 @AC-28 is preserved (design says PRESERVE).
+  - Config `@AC-29` "A key whose readers disagree on the default is not seeded" (`services/xstockstrat-config/acceptance/fix-config-keys-drift.feature:112`) is extended by 321 @AC-4 but not contradicted.
+  - The platform scenarios at lines 1201 and 2360, which render `TRADING_MODE` paper or live, stay consistent with AC-4's "whatever TRADING_MODE says", since there is no render change.
+  - None of these is an OVERLAP.
+- **Tags.** The source scenarios carry no `@FR-*` tags (only `@AC-n @regression`). I did not invent any, so promoted tags are `@AC-n @regression @feature-321`. Source `# guards:` comments are kept verbatim; the defect-report paths may be pruned later, as noted in the 192 suite header.
+- **Dropped from the Feature description.** The source header line "Scenarios amended at design approval (2026-11-20...)" is process history and was not carried into the trading file header.
+- **P-06 waiver.** AC-2 passes at HEAD, with an operator-granted natural-RED waiver recorded in context.md:54. This has no effect on promotion.
+
+### Coverage check
+- Source scenarios: 4 (AC-1, AC-2 as a Scenario Outline with 2 example rows, AC-3, AC-4). Planned: 4 (NEW 3, CONFLICT 1 with its block held pending sign-off confirmation, DUP 0, OVERLAP 0). Nothing was skipped. Every @AC-* is accounted for, and counts match.
+- Files: 1 CREATE (trading, 3 scenarios) and 1 APPEND (platform.feature, 1 scenario plus one additive comment line). The `services/xstockstrat-trading/acceptance/` directory already exists.
+````
