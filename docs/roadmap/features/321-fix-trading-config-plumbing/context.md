@@ -128,3 +128,21 @@ Done by the orchestrator (not an operator quote): the two warnings listed `[ ] u
 ## Session 2026-11-26 — independent impl-spec re-review (spec-reviewer), recorded by the orchestrator
 
 Verdict: PASS WITH WARNINGS, no blockers (independent `spec-reviewer` subagent, older main-dev checkout). Both 2026-11-21 warnings confirmed addressed; three residual warnings fixed in `implementation-spec.md` the same day: (1) Execution Summary item 1 now matches Step 9 Instruction 3 (replace with `Array.isArray`; the 75/75 prototype used the deletion variant); (2) Step 10's `buf breaking` uses `branch=origin/main-dev`, as CI does (`ci.yml:240`); (3) Step 10's comment-only diff check is `git diff -U0 origin/main-dev -- …` (the worktree diff was vacuous after the commit). Still to re-verify at execute time: config migration `056` is also claimed by 314 and 317 (the merge checklist covers the renumber); anchors on current `main-dev` at BRANCH SYNC.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+Up-front confirmation: the operator approved the plan with this record (binding, verbatim):
+
+`{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"77d8d2d22d93050479362b3d31624ec57357af5c","specHash":"9cebe140a3fb499953b20743a6cbfc178b39cfd1","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13],"mismatches":[{"n":8,"detail":"Migration number 056 is taken: origin/main-dev now has services/xstockstrat-config/migrations/056_analysis_live_only_cycle_max_days.up.sql and .down.sql (feature 366, commits 540f8ff7 and 92769965). The Files paths services/xstockstrat-config/migrations/056_tr"},{"n":12,"detail":"docs/patterns/config-governance.md: the Per-Feature Registered Keys log now starts with feature 366 at :152, and feature 330 has moved to :173. The instruction to add the feature 321 entry 'above the feature-330 entry' would break the newest-first order; it mu"},{"n":1,"detail":"internal/service/trading.go has drifted after the main-dev merge (feature fix-alert-event-targeting #1609); every symbol is present. brokerCallTimeout is at :2637-2644 (spec :2633-2640). instantiateBrokerLocked starts at :3356 (spec :3348), with the IBKR liter"},{"n":3,"detail":"Line drift; the symbols are present. trading.go maxRetries and retryDelay are at :3091-3092 and the loop at :3095 (spec :3083-3084, :3087), so the mutation targets move. trading_flatten_rejection_test.go changed in the merge (+3 lines): TestFlattenAndHalt_Unce"},{"n":6,"detail":"Line drift in trading.go; the symbols are present. environmentIsPaper is at :2834-2838 (spec :2828-2832). Its callers are :1080, :2709, :2743 and :2823 (spec :1080, :2705, :2739, :2819), and GetTradingEnvironment is at :2821 (spec :2817). resolveTradingMode is"},{"n":13,"detail":"The scripts/config-wiring-stored.json broker.timeout_ms description is now at :4546 (spec :4522). The context.md pre-deploy records exist (:43, :55, :73, :81), and the configServiceImpl.ts SetConfig insert is at about :841, inside the cited :831-845. The Files"}]}`
+
+- Merged `origin/main-dev` `f802b184` into the feature branch (`e08a3b9e`; resolver clean, ledger-guard clean).
+- Re-spec commits (`git log --first-parent origin/main-dev..HEAD`): `52ca97d6` respec(fix-trading-config-plumbing): align steps 8,12,1,3,6,13 with current codebase.
+  - Step 8: the migration pair is now `057_trading_broker_paper_per_environment` (`056` is feature 366's; no `origin` ref carries `057`+ on 2026-11-26).
+  - Step 12: the feature 321 log entry goes above feature 366 (`:152`), keeping newest first.
+  - Steps 1, 3, 6, 13: line anchors only; every symbol is present. Re-grepped `environmentIsPaper` is `:2832-2836` (func `:2834`), not the record's `:2834-2838`.
+- Tooling (detection only): go1.27 ✓ · golangci-lint v2.5.0 on PATH (v2.14.0 pinned: `go install` per step) · pnpm 9.15.9 ✓ · node v22 (pinned 24) · uv ✓ · ruff ✓ · buf ✗ (Docker codegen route; daemon not running, start per tooling-setup) · hook check hook=0.
+- Status → `in-progress` (feature.md row and status.md).
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
+```
