@@ -1076,7 +1076,7 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
 
 ### Step 18 — test: Playwright assertion for the mobile `evaluation_failed` row
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify
@@ -1674,3 +1674,25 @@ _Populated by /sdd-execute as implementation proceeds._
         `49 passed (2.9m)`.
 - **Disposition**: CI-equivalent fallback. No file outside Step 17's **Files** is committed. Step 18
   still adds the permanent Playwright test and its own RED as specced.
+
+### Step 18: targeted RED run, stale linked proto dist and host-harness timeout (2026-11-27)
+
+- **Expected**: Instruction 3 takes RED with `SectionRenderer.tsx`, `sections.ts` and `page.tsx` checked
+  out at the pre-Step-17 commit. The Verification block (`lint`, `tsc --noEmit`, the spec,
+  `test:coverage`, two greps) passes as written.
+- **Actual**:
+  - RED: the three files were checked out at `b8322200` and restored before GREEN. The new test was run
+    alone (`-g "evaluation failed, mobile"`, `--project=chromium --no-deps --timeout=240000`).
+    `getByTestId('opportunity-evaluation-failed-mobile-MYSZ')` gave `element(s) not found`, with the
+    `MYSZ` row rendered (`1 failed`).
+  - The verbatim block exited 0, but that status comes from its last grep.
+    - Lint passed, with warnings in untouched files only.
+    - vitest: `Tests  748 passed | 2 skipped (750)`, `Statements   : 81.13%`.
+    - Both greps hit.
+    - Two failures were environmental, the same as in Steps 15-17:
+      - `tsc` reported `BackfillSymbolOutcome.INCOMPLETE` in two untouched files, because the linked
+        proto dist is stale. Against this branch's dist, through a `paths` override under `.sdd-logs/`,
+        it exited 0, and it compiled `opportunities.spec.ts`.
+      - The Playwright warmup timed out at 10 s. A re-run with only `--timeout=240000` added gave
+        `47 passed (2.9m)`, and the new test was among them.
+- **Disposition**: CI-equivalent fallback. No file outside Step 18's **Files** is committed.

@@ -831,3 +831,32 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-wiring gate: not applicable (no config key, no migration). Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
 - Files modified: `services/xstockstrat-ui/src/components/mobile/sections.ts`, `services/xstockstrat-ui/src/components/mobile/SectionRenderer.tsx`, `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx`
 - Deviations: probe RED, the stale linked proto dist and the host-harness timeout (Deviation Log "Step 17").
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 18
+
+- Tooling: pnpm 9.15.9 ✓ · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. No install was run. Lockfile gate: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` rc=0.
+- Discovery: at `origin/feature/fix-analysis-per-symbol-isolation@4abba94e` everything the step needs is there:
+  - the import at `opportunities.spec.ts:8`
+  - Step 16's describe at `:787`
+  - the mobile precedent at `:802`
+  - `routeWithUnreadableRow` at `:717`
+  - the Step 16 catalog row at `INVENTORY.md:45`
+  - Step 17's `opportunity-evaluation-failed-mobile-` test id at `SectionRenderer.tsx:261`
+
+  The advisory digest's missing-Step-16/17 blockers came from an older tree and do not hold here.
+
+### Step 18 — test: Playwright assertion for the mobile `evaluation_failed` row [done]
+- `opportunities.spec.ts` has a new describe, `Opportunities — evaluation failed, mobile (feature 308)`, at 375x800 after Step 16's describe. It serves `MYSZ_EVALUATION_FAILED_OPPORTUNITY` through `routeWithUnreadableRow`. It asserts that `opportunity-evaluation-failed-mobile-MYSZ` is visible, contains `evaluation failed` and has `aria-label` `Evaluation failed for MYSZ`, and that the unreadable and unavailable mobile ids each have count 0. The import was already present. `INVENTORY.md` has the mobile cue added to the consumer column of the Step 16 row. No new fixture (C-12).
+- TDD:
+  - RED (`.sdd-logs/v-1.log`): run with `SectionRenderer.tsx`, `sections.ts` and `page.tsx` checked out at the pre-Step-17 commit `b8322200`, then restored. `getByTestId('opportunity-evaluation-failed-mobile-MYSZ')` gave `element(s) not found`, with `MYSZ` rendered (`1 failed`).
+  - GREEN (`.sdd-logs/v-4.log`): `47 passed (2.9m)`, the new test included.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-2.log`) printed exit=0, but that status comes from the last grep.
+    - Lint passed, with warnings in untouched files only.
+    - vitest: `Tests  748 passed | 2 skipped (750)`, `Statements   : 81.13%`.
+    - Both greps hit.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE`, because the linked proto dist is stale. Against this branch's dist it exited 0 (`.sdd-logs/v-3.log`).
+  - The warmup timed out at 10 s. A re-run with `--timeout=240000` gave `47 passed (2.9m)`, exit=0 (`.sdd-logs/v-4.log`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: a targeted RED run, plus the stale linked proto dist and the host-harness timeout (Deviation Log "Step 18").

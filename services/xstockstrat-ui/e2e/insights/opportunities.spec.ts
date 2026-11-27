@@ -799,6 +799,25 @@ test.describe('Opportunities — evaluation failed (feature 308)', () => {
   });
 });
 
+test.describe('Opportunities — evaluation failed, mobile (feature 308)', () => {
+  test.use({ viewport: { width: 375, height: 800 } });
+
+  test('the mobile row shows the evaluation-failed cue, not unreadable or unavailable', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await routeWithUnreadableRow(page, MYSZ_EVALUATION_FAILED_OPPORTUNITY);
+    await page.goto('/insights/opportunities');
+
+    const cue = page.getByTestId('opportunity-evaluation-failed-mobile-MYSZ');
+    await expect(cue).toBeVisible({ timeout: 15000 });
+    await expect(cue).toContainText('evaluation failed');
+    await expect(cue).toHaveAttribute('aria-label', 'Evaluation failed for MYSZ');
+    await expect(page.getByTestId('opportunity-formula-unreadable-mobile-MYSZ')).toHaveCount(0);
+    await expect(page.getByTestId('opportunity-unavailable-mobile-MYSZ')).toHaveCount(0);
+  });
+});
+
 test.describe('Opportunities — formula not readable, mobile (feature 289)', () => {
   test.use({ viewport: { width: 375, height: 800 } });
 
