@@ -910,3 +910,9 @@
 - Verification: ruff check + format clean; `grep -c effective_access_scope app/tools.py` = 3; the resolve body shows `metadata=[("x-trace-id", trace_id)]` and `timeout=timeout_s`. TDD: recorded under Step 22.
 - Files modified: `services/xstockstrat-agent/app/{scopes,tools,client,tool_metrics}.py`
 - Deviations: none
+
+### Step 22 — Scope narrowing at both sites, the resolve helper and the telemetry allow-list [done]
+- `test_sso_scope.py` (13 cases): **@AC-12** trader & `read` → 1; **@AC-13** viewer & all four → 1; **@AC-22** trader & `read write` → 3; `scope` string = `scp`; neither → 0; non-list `scp` → `scope` fallback; bit map + `MCP_SCOPES_SUPPORTED` order; key-presence (0) at `effective_access_scope`; both sites (`_caller_access_scope`, `CallerPropagationMiddleware`) honour stamped 3 and 0, `scp=[]` → `x-access-scope 0`; legacy claims keep `roles_to_access_scope` (PRESERVE). `test_telemetry_allowlist.py` `_drive()` records `jwks_unavailable` and `account_refused`. `test_client_deadlines.py`: `resolve_external_identity` passes `timeout=4.5` and exactly `[("x-trace-id", …)]` on the identity channel, maps roles; `rpc_timeout_s()` reads the patched constant; the AST deadline guard allow-lists `(resolve_external_identity, ResolveExternalIdentity): timeout_s`.
+- TDD: red (before Step 21): 13 failed (`AttributeError: module 'app.scopes' has no attribute 'scopes_to_mask'` / `'app.client' has no attribute 'resolve_external_identity'`, …), 27 passed → green: full `pytest --cov=app --cov-fail-under=40` 971 passed (89.11 %); the two files 36 passed; ruff clean.
+- Files modified: `services/xstockstrat-agent/tests/{test_sso_scope,test_telemetry_allowlist,test_client_deadlines}.py`
+- Deviations: none. Note: the telemetry allow-list case was green before Step 21 too (`record_auth_rejected` takes any label; Step 21 only documents the two values), so its RED is not behavioural.

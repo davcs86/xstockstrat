@@ -936,7 +936,7 @@ grep -n "def resolve_external_identity" -A25 app/client.py | grep -E "x-trace-id
 
 ### Step 22 — test: Scope narrowing at both sites, the resolve helper and the telemetry allow-list
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_sso_scope.py` — create
