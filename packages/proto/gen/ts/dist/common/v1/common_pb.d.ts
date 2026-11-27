@@ -227,7 +227,8 @@ export type TemplateOrigin = Message<"xstockstrat.common.v1.TemplateOrigin"> & {
  */
 export declare const TemplateOriginSchema: GenMessage<TemplateOrigin>;
 /**
- * Lists non-written symbols only; reason is the source's error text, empty for EMPTY.
+ * Lists non-written symbols only; reason is the source's error text (empty for EMPTY),
+ * or for INCOMPLETE the still-missing session ranges.
  *
  * @generated from message xstockstrat.common.v1.BackfillSymbolResult
  */
@@ -571,7 +572,11 @@ export declare enum BackfillSymbolOutcome {
     /**
      * @generated from enum value: BACKFILL_SYMBOL_OUTCOME_FAILED = 3;
      */
-    FAILED = 3
+    FAILED = 3,
+    /**
+     * @generated from enum value: BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4;
+     */
+    INCOMPLETE = 4
 }
 /**
  * Describes the enum xstockstrat.common.v1.BackfillSymbolOutcome.

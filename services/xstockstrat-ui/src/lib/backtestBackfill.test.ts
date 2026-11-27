@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Code, ConnectError } from '@connectrpc/connect';
+import { BackfillSymbolOutcome } from '@xstockstrat/proto/common/v1/common_pb';
 import { BackfillStatus, FillMode } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { describe, expect, it } from 'vitest';
 import { insufficientDataResult } from '../../e2e/fixtures/backtests';
-import { backfillJob } from '../../e2e/fixtures/backfillJobs';
+import { backfillJob, incompleteSymbolResult } from '../../e2e/fixtures/backfillJobs';
 import {
   SELF_SERVE_DENIAL_PREFIX,
   SELF_SERVE_DENIAL_TOKENS,
@@ -129,6 +130,39 @@ describe('backfillJobMessage', () => {
       '@AC-9 partial with every chunk completed',
       backfillJob({ status: BackfillStatus.PARTIAL, chunksCompleted: 3, chunksTotal: 3 }),
       { state: 'partial', text: 'Backfill partial: LYFT returned no data for part of the range' },
+    ],
+    [
+      '@AC-5 partial with only INCOMPLETE symbols',
+      backfillJob({
+        status: BackfillStatus.PARTIAL,
+        chunksCompleted: 3,
+        chunksTotal: 3,
+        symbolResults: [incompleteSymbolResult('LYFT')],
+      }),
+      { state: 'ready', text: 'Backfill finished: vendor has no bars for some sessions of LYFT' },
+    ],
+    [
+      'partial with INCOMPLETE and FAILED symbols',
+      backfillJob({
+        status: BackfillStatus.PARTIAL,
+        chunksCompleted: 3,
+        chunksTotal: 3,
+        symbolResults: [
+          incompleteSymbolResult('LYFT'),
+          { symbol: 'AAPL', outcome: BackfillSymbolOutcome.FAILED, reason: 'vendor error' },
+        ],
+      }),
+      { state: 'partial', text: 'Backfill partial: LYFT returned no data for part of the range' },
+    ],
+    [
+      'partial with INCOMPLETE symbols and failed chunks',
+      backfillJob({
+        status: BackfillStatus.PARTIAL,
+        chunksCompleted: 2,
+        chunksTotal: 3,
+        symbolResults: [incompleteSymbolResult('LYFT')],
+      }),
+      { state: 'partial', text: 'Backfill partial: 1 of 3 chunks failed' },
     ],
     [
       '@AC-9 canceled',

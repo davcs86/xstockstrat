@@ -792,3 +792,12 @@ The /sdd-design full debate stopped at the approval gate after round 4 (gate pol
 - [ ] Step 7: if `scripts-python` turns red before execute, stop and escalate; do not fix `scripts/` here.
 - [ ] Peer edits to `ci.yml` (297, 298, 318) and the four leaf `package.json` files (323, 316): re-grep cited lines after any later main-dev merge.
 - [ ] Merge-train (O-21): re-run Step 7's wiring check only.
+
+## Session 2026-11-21 — operator ruling on Step 9, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.6): "Feature 324 (fix-ci-enforcement-gaps), Step 9: it marks the ruff defect report as resolved with a commit ref (`ref: commit:c4b70c27`). The /sdd-archiver could prune that report before 324 launches. Keep Step 9 as written, or change it?"
+
+Operator's answer (option selected): "Keep as written (Recommended)".
+Option text as offered: "Step 9 marks the report resolved with the commit ref. If the archiver prunes it first, the step becomes a recorded no-op deviation. Recorded verbatim."
+
+Effect: Step 9 unchanged; the Step 9 confirmation is cleared. If the report is already pruned at Step 9, record a no-op deviation in the Deviation Log.

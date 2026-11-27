@@ -65,6 +65,11 @@ def get_watcher(namespace: str):
     return _WATCHERS.get(namespace)
 
 
+def has_snapshot(namespace: str) -> bool:
+    w = get_watcher(namespace)
+    return w is not None and w.has_snapshot()
+
+
 def read_value(namespace: str, key: str) -> str | None:
     """The key's active oneof stringified (client.get_config_value's projection); None if absent."""
     w = get_watcher(namespace)

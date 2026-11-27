@@ -227,3 +227,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Peer landing order: if 360 or 345 reaches `main-dev` before Steps 1+2 run, re-anchor the cited lines and re-measure the 825/828 and 15/18 counts before capturing RED. Not measured for 345 (not yet executed).
 - [ ] Post-merge dev smoke test: agent serves :9000 with `MCP_TRANSPORT=http`; watch for a supervisord restart loop.
 - Next: `/sdd-execute fix-agent-mcp-transport-fallthrough`.
+
+## Session 2026-11-21 — operator ruling on AC-1's Given, recorded by the orchestrator (verbatim)
+
+Question (handoff § 3.7): "Feature 331 (fix-agent-mcp-transport-fallthrough): confirm rewording AC-1's Given to "the agent process starts"?"
+
+Operator's answer (option selected): "Confirm reword (Recommended)".
+Option text as offered: "AC-1's Given becomes "the agent process starts"; recorded verbatim in 331's context.md and the confirmation is cleared. 331 is the smallest feature (3 steps)."
+
+Effect: `acceptance.feature` @AC-1 Given changed from "the agent container starts with MCP_TRANSPORT="htp"" to "the agent process starts with MCP_TRANSPORT="htp"" (O-2 closed; the proof is process-level, supervisord keeps the container alive). Only the Given text changed; the @AC-1 ID, When and Then are unchanged (C-15).

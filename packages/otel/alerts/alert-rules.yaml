@@ -163,3 +163,51 @@ groups:
               expression: B
               conditions:
                 - evaluator: { type: lt, params: [1] }
+
+  - orgId: 1
+    name: xstockstrat-account-halts
+    folder: xstockstrat
+    interval: 1m
+    rules:
+      # Owner-targeted halt and reconciliation alerts leave admins no in-product signal (feature 315).
+      - uid: xstk-trading-account-halt
+        title: Trading account halt or reconciliation alert emitted
+        condition: C
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+          platform: xstockstrat
+        annotations:
+          summary: "A trading account halt or reconciliation alert was emitted in {{ $labels.deployment_environment }}"
+          description: "trading_alert_emit_total has no account_id label. The account id is in the trading service's ERROR log line 'account halted' in Loki. Only an admin can resume a halted account."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 900, to: 0 }
+            datasourceUid: ${DS_PROMETHEUS_UID}
+            model:
+              refId: A
+              editorMode: code
+              expr: |
+                sum by (deployment_environment) (increase(trading_alert_emit_total{alert_kind=~"halt|reconciliation"}[15m])) > 0
+                or
+                sum by (deployment_environment) (trading_alert_emit_total{alert_kind=~"halt|reconciliation"} unless trading_alert_emit_total{alert_kind=~"halt|reconciliation"} offset 15m) > 0
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }

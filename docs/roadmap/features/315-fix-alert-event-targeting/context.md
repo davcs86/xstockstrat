@@ -597,3 +597,193 @@ Carried into `/sdd-execute`; announce every unchecked item at each checkpoint an
 - [ ] The new Step 2 assertions on the unknown-order and position-side tests assume each finding records exactly one `halt` and one `reconciliation` alert. If RED fails for another reason, stop and report. Target: Step 2.
 - [ ] The feature branch is 168 commits behind main-dev (measured by the sdd-spec session). Target: `/sdd-execute` BRANCH SYNC; re-grep every anchor by symbol, and treat a tree that still holds the `.sh` guard as a Step 5 blocker.
 - [ ] Still open from earlier sessions and unchanged: the accepted double CRITICAL push (Step 2 pins it), the reachable `user_id=''` account (Step 2 empty-owner test; the guard is out of scope), and the undeduplicated risk events (Step 6 documents it).
+
+## Session 2026-11-21 — sdd-execute sequential (sdd-batch-execute)
+
+**Up-front confirmation (operator-approved record, binding).** The `mismatches` array is in full in the body of the respec commit `315905b4`. Summary:
+`{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","dev":"b6421cd8e986ab5128e1e989b2e0b0dedd296901","specHash":"37f3296b573e700eecd91e84d0b82dddf8dd7202","directive":"conditional","pending":[1,2,3,4,5,6]}` plus six mismatch entries. Step 2 is substantive (wrong C-13 evidence). Steps 1, 3, 4, 5 and 6 have line-anchor drift only.
+
+- Stale check passed: `origin/main-dev` = `8baf3976`, `origin/feature/fix-alert-event-targeting` = `b6421cd8`. The merge was skipped because `8baf3976` is already an ancestor.
+- Tooling detection (steps 1–6): go1.27 ✓ · golangci-lint ✗ v2.5.0 built with go1.25. The pinned v2.14.0 goes in per step via `GOTOOLCHAIN=go1.27.0 go install …@v2.14.0`. python3.13 ✓ · uv ✓. Hook check: hook=0.
+- Re-spec commits (`git log --first-parent origin/main-dev..HEAD`, `respec(fix-alert-event-targeting)`):
+  - `315905b4` respec(fix-alert-event-targeting): align steps 2,1,3,4,5,6 with current codebase
+- Re-spec decision, Step 2 instruction 7 (C-13 recheck). `internal/testdata` does hold `S1UserID = "user-1"`, but it is the feature-240 S1 offline-history constant (account `acc-1`). The new assertions compare against the owner literal that the same test's pool entry sets, so those ids stay inline as sentinel one-offs. Repointing them at `testdata.S1UserID` is forbidden. Verification now checks that `internal/testdata` is unchanged. A reviewer may overturn this.
+- Status: `implementation-ready` → `in-progress` (feature.md row + status.md).
+
+```sdd-batch-setup
+{"mainDev":"8baf3976c17f2f074f834d63ad9a1e8ffd8af22e","date":"2026-11-21"}
+```
+
+### Step 1 — service: owner-targeted halt and reconciliation alerts [done]
+- Atomic unit steps 1+2 (one commit). `haltAccount` and `emitReconciliationFinding` take `ownerUserID` and set `TargetUserId` on their CRITICAL alerts. An empty owner logs WARN `alert owner unresolved` with `alert_kind` at each emit site (S-1). `reconcileTick` passes `entry.userID` at all four finding calls; `flattenAndHalt` passes `accountEntry.userID` at both halt calls (no `order.UserId` fallback, R-5). The `reconciliation.mismatch_found` owner stays `""` (D-8). The systemic and resume alerts are untouched. `TestHaltAccount_DBWriteFailureDoesNotRollBack` pins the bracket-protection halt alert (halt, CRITICAL, `TargetUserId == "user-owner"`).
+- TDD (AC-1) red: `.sdd-logs/v-1.log` — `TestReconcileTick_MissingBrokerOrder_HaltsAndEmits` "halt alert TargetUserId = \"\", want \"u-1\"", `TestReconcileTick_EmptyOwner_WarnsAndAlertsUntargeted` "missing WARN \"alert owner unresolved\"", `TestFlattenAndHalt_AlwaysRejected_HaltsAccount` "halt alert TargetUserId = \"\", want the pool owner \"user-1\"" failed → green: `.sdd-logs/v-2.log` `ok github.com/xstockstrat/trading/internal/service`; `grep -c` TargetUserId ownerUserID = 2; two `alert owner unresolved` lines. The block's `exit=` reflects only its last grep (exit=0 on both runs), so RED/GREEN were judged from the `go test` lines.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`, `services/xstockstrat-trading/internal/service/trading_bracket_test.go`
+- Deviations: pinned linter on PATH (CI-equivalent fallback) — see Deviation Log
+
+### Step 2 — test: AC-1 regression — both alerts reach the owner, systemic stays untargeted [done]
+- Atomic unit steps 1+2. Added `alertByCategory` (exactly-one) and `assertOwnerTargetedFindingAlerts`. Both templates pin exactly two CRITICAL alerts targeted at `u-1` (the accepted double push). The unknown-order (both sub-tests) and position-side tests pin owner `u-1` on both alerts. The systemic test pins one untargeted `Systemic broker-reconciliation failure` alert (guard; green before and after). New `TestReconcileTick_EmptyOwner_WarnsAndAlertsUntargeted`. The flatten test pins halt `TargetUserId == "user-1"`. Ids stay inline (C-13: 19 `userID: "u-1"` sites, `internal/testdata` unchanged).
+- TDD (AC-1) red: same run `.sdd-logs/v-1.log` (6 tests FAIL, each on the missing TargetUserId/WARN; no exactly-one helper failure) → green: `.sdd-logs/v-3.log` exit=0, every package `ok`, `total: (statements) 84.8%` (≥ 40%), golangci-lint v2.14.0 `0 issues.`, go.mod/go.sum unchanged, `19`, `rc=0`. Executed-case check `.sdd-logs/v-4.log`: 9 `--- PASS` for the touched tests.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go`, `services/xstockstrat-trading/internal/service/trading_flatten_rejection_test.go`
+- Deviations: second test helper (within scope) — see Deviation Log
+
+### Step 3 — service: risk ledger events split by kind, owner-attributed [done]
+- Atomic unit steps 3+4 (one commit). `evaluateDrawdowns` returns `[]drawdownBreach{AccountID, Message}` (message text byte-identical). `emitRiskAlert(ctx, userID, eventType, extra, msg)` builds the payload from `extra`, then sets `user_id` and `message` (D-6), and emits via `emitEventAs(ctx, userID, eventType, "portfolio:risk", payload)`. Concentration → `portfolio.risk.concentration_breach` `{symbol}`; drawdown → `portfolio.risk.drawdown_breach` `{account_id}`. The notify `EmitAlert` block is unchanged (D-4). No dedup. Peer 357's `listAllPositions` read in `checkRiskLimits` is already on this tree; its `TestCheckRiskLimits_357_*` tests pass unchanged.
+- TDD: see Step 4 (one red→green cycle). Step 3 Verification `.sdd-logs/v-2.log` exit=0: build + vet clean, `2`, `1360:	s.emitEventAs(ctx, userID, eventType, "portfolio:risk", payload)`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: pinned linter on PATH (CI-equivalent fallback) — see Deviation Log
+
+### Step 4 — test: AC-2 and AC-3 regression — one event type per breach kind [done]
+- Atomic unit steps 3+4. New `TestCheckRiskLimits_315_AC2_ConcentrationEventKindAndOwner`, `TestCheckRiskLimits_315_AC3_DrawdownEventKeepsTypeWithOwnerAndAccount`, `TestEmitRiskAlert_HelperKeysOverrideExtra` (D-6), sharing `assertOneRiskEvent`. `TestEvaluateDrawdowns` reads `.Message` and asserts `AccountID == "acc-1"`. `acceptance.feature` not edited (`@AC-3` values matched: 0.10, user-1, acct-1, 8500.00, 10000.00). Symbols from `internal/testdata`; user/account ids inline (C-13).
+- TDD (AC-2, AC-3) red: `.sdd-logs/v-1.log` — AC2 `event type="portfolio.risk.drawdown_breach" stream="portfolio:risk" owner=""`, want concentration_breach / user-1; AC3 `owner=""`, want "user-1" → green: `.sdd-logs/v-3.log` exit=0, `ok github.com/xstockstrat/portfolio/internal/service`, `total: (statements) 79.1%` (≥ 40%), golangci-lint v2.14.0 `0 issues.`, go.mod/go.sum unchanged, testdata symbol greps present, `3`. Executed-case check `.sdd-logs/v-4.log`: 11 `--- PASS` (incl. the preserved AC3, AC9, 242_AC6, 304_AC2 and 357 tests). Block `exit=` reflects only its last grep; RED/GREEN judged from the `go test` lines.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_risk_test.go`
+- Deviations: shared assertion helper (within scope); pinned linter on PATH — see Deviation Log
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 5
+
+- **Operator decision (binding, approved 2026-11-21, relayed by the workflow): Option A** on the Step 5 blocker.
+  The step's `offset 15m` arm tripped the guard, which read the `m` as a metric. The decision expands Step 5 to fix
+  the guard (`metric_identifiers` strips `offset <duration>`), re-pins the unit test to `['a_total', 'b:ratio', 'c_count']`
+  and keeps the expression unchanged. It overrides instruction 5. The overlap with 337 is rebase-only.
+- Tooling (step 5): python3.13 ✓ · uv ✓ (`scripts` dev extra, ruff + pytest). Hook check: hook=0.
+
+### Step 5 — config: Grafana rule on halt and reconciliation alert emits (operator decision b′) [done]
+- New group `xstockstrat-account-halts` holds rule `xstk-trading-account-halt`: 1m interval, `for: 0m`,
+  `noDataState: OK`, critical. It uses the two-arm `increase … or … unless … offset 15m` expression on
+  `trading_alert_emit_total{alert_kind=~"halt|reconciliation"}` per `deployment_environment`. Its description names
+  the Loki ERROR line `account halted` and says only an admin can resume.
+  - `produced-signals.tsv` gains the `trading_alert_emit_total` row.
+  - README: "Four alert rules", a table row and a paragraph on the admin signal (it also fires on the systemic
+    escalation; the account id comes from Loki; routing is per environment).
+  - pytest re-pins: the count test is now `…_four_rules == 4`, and the removal prose now reads "five".
+  - The guard strips `offset <duration>` (operator decision A).
+- TDD: N/A (config). Guard red → green. RED is `.sdd-logs/v-1.log`: the guard printed
+  `AC-8 P1 packages/otel/alerts/alert-rules.yaml:192: m`, and pytest showed `15 failed, 67 passed`, including
+  `test_metric_identifiers_…` with "Left contains one more item: 'm'". GREEN is `.sdd-logs/v-2.log`: the guard
+  printed no hits, pytest showed `82 passed`, and the greps found `4`, the uid in both files, the TSV row at `:28` and
+  `Four alert rules` at README `:9`. In `.sdd-logs/v-3.log` the guard returned `rc=0` and ruff check and format were
+  clean. The block's `exit=0` reflects only its last grep, so RED and GREEN were judged from the guard and pytest
+  lines. The config-wiring gate (`.sdd-logs/v-4.log`, step-time) gave `exit=0` with no findings.
+- Files modified: `packages/otel/alerts/alert-rules.yaml`, `packages/otel/produced-signals.tsv`,
+  `packages/otel/alerts/README.md`, `scripts/tests/test_check_otel_produced_signals.py`,
+  `scripts/check-otel-produced-signals.py` (operator-approved addition)
+- Deviations: the guard now strips `offset <duration>` (operator Option A; 337 overlap is rebase-only). See the Deviation Log.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 6
+
+- Tooling (step 6): python3 ✓ · node ✓ (the config-wiring gate). Nothing installed. Hook check: hook=0.
+- Peer statuses, re-read on `origin/main-dev` and each peer's own branch: 312 `implementation-ready`, 333 `spec-ready`,
+  357 `in-progress`, 321 `implementation-ready`, 337 `in-progress`, 311 `implementation-ready`. None has merged, so none
+  was dropped. 312's implementation spec (Step 10) keeps `target_user_id IS NULL` rows visible and plans to rebase on
+  315. 311's spec edits `processOrderFill` and `emitEvent`, not 315's risk functions.
+
+### Step 6 — docs: event catalogue, stream key, alert audience, merge-order note [done]
+- Portfolio `CLAUDE.md` rewrites the drawdown row as `{user_id, account_id, message}`, adds the concentration row
+  `{user_id, symbol, message}`, and adds one note for both rows: the global `portfolio:risk` key, the owner in
+  `AppendEventRequest.user_id`, no dedup, `owner_only` visibility, and the pre-315 behaviour. The note names the old
+  behaviour without the literal event type, so the Verification grep still finds exactly 2 rows.
+  - The portfolio findings row `:63` is marked resolved by feature 315.
+  - Ledger stream keys gain the `portfolio:risk` row.
+  - The trading `docs/reconciliation.md` gains the owner-targeting / admin-signal paragraph.
+  - `merge-order.md` gains one non-blocking prose section, with no table row.
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0`. It shows rows `117`/`118`, `portfolio:risk` in both
+  CLAUDE.md files (`:123`, ledger `:98`), the findings `:63` "resolved by feature 315", and reconciliation.md `:36-38`.
+  It also shows `## Alert targeting overlap: 315 ↔ …` at merge-order `:436`. The guard is the last command and printed
+  no hits. The final config-wiring gate (`.sdd-logs/v-2.log`, `--final`) gave `exit=0` with two baseline `REPORTED:`
+  lines (analysis `fundamentals.provider`, trading `platform/trading_state`); neither is a key from this feature.
+- Files modified: `services/xstockstrat-portfolio/CLAUDE.md`,
+  `services/xstockstrat-portfolio/docs/context-constitution-findings.md`, `services/xstockstrat-ledger/CLAUDE.md`,
+  `services/xstockstrat-trading/docs/reconciliation.md`, `docs/roadmap/features/merge-order.md`
+- Deviations: none.
+- Status: `in-progress` → `code-completed` (all 6 steps done); the spec header is `complete`.
+
+## Open Threads
+
+- [ ] The defect sidecar `docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.status` still reads
+  `triaged`. It is not in Step 6's Files. Target: launch / `/sdd-archiver`.
+- [ ] Integration PR checklist (C-10): import `xstk-trading-account-halt` into Grafana Cloud and confirm its routing;
+  check the prod Slack/SendGrid fanout; state that concentration breaches no longer arrive as the drawdown type.
+  Target: operator, integration PR.
+- [ ] Open `/sdd-story admin-halted-accounts-read` (no number yet). Target: operator, no later than the integration PR.
+- [ ] Step 5 reviewer (Platform Lead; `packages/otel` has no registry row). Target: operator, integration PR.
+- [ ] `feature.md` § Next Action still names `/sdd-review … impl-spec`. Target: the integration-PR session.
+
+## Session 2026-11-26 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-alert-event-targeting (feature 315)
+
+Source read: /home/user/xstockstrat/docs/roadmap/features/315-fix-alert-event-targeting/acceptance.feature. The path in the task text was doubled (`features/docs/roadmap/features/...`), so I used the real path. I read the working-tree copy, not `origin/feature/fix-alert-event-targeting`. I have no git access, so the caller should confirm the branch copy matches before writing. The source scenarios carry no `@FR-*` tags, so none are invented. Each block keeps `@AC-n @regression` and adds `@feature-315`.
+
+Affected services (feature.md Reviewers): xstockstrat-trading and xstockstrat-portfolio. Platform Lead is listed only for the Step 5 `packages/otel` alert rule, which has no scenario here.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-trading/acceptance/fix-alert-event-targeting.feature | CREATE | NEW | The Then asserts on trading's halt and reconciliation `EmitAlertRequest.TargetUserId`. No existing trading suite asserts alert targeting. |
+| AC-2 | services/xstockstrat-portfolio/acceptance/fix-alert-event-targeting.feature | CREATE | NEW | The Then asserts on the ledger event type and payload attribution for a concentration breach. No existing portfolio scenario asserts this. |
+| AC-3 | services/xstockstrat-portfolio/acceptance/fix-alert-event-targeting.feature | CREATE (same file as AC-2) | NEW | The Then asserts on the ledger event type, owner and payload for a drawdown breach. |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-alert-event-targeting.feature (CREATE) ---
+```
+# Promoted from docs/roadmap/features/315-fix-alert-event-targeting/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-315` tag.
+# Durable business rule: per-account risk alerts reach the account owner; only the systemic alert stays untargeted.
+
+Feature: xstockstrat-trading — per-account halt and reconciliation alerts target the account owner
+  Regression guard for docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md.
+
+  # guards: docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md
+  @AC-1 @regression @feature-315
+  Scenario: an automatic account halt alert targets the account owner
+    Given trading account "acct-1" whose broker_accounts row has user_id "user-owner"
+    And "user-owner" is a non-admin user with a registered push subscription
+    When haltAccount halts "acct-1" after a reconciliation mismatch past the grace window
+    Then the "halt" CRITICAL EmitAlertRequest has TargetUserId "user-owner"
+    And the "reconciliation" CRITICAL EmitAlertRequest from emitReconciliationFinding has TargetUserId "user-owner"
+    And the systemic "Systemic broker-reconciliation failure" alert still has an empty TargetUserId
+```
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-alert-event-targeting.feature (CREATE) ---
+```
+# Promoted from docs/roadmap/features/315-fix-alert-event-targeting/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-315` tag.
+# Durable business rule: risk-breach ledger events are labelled by kind and attributable to a user.
+
+Feature: xstockstrat-portfolio — risk-breach ledger events are labelled by kind and attributable to the owner
+  Regression guard for docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md.
+
+  # guards: docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md
+  @AC-2 @regression @feature-315
+  Scenario: a concentration breach is recorded as a concentration event, not a drawdown
+    Given portfolio.risk.concentration_limit_pct is 0.20
+    And user "user-1" holds AAPL at 35% of portfolio value with no drawdown breach
+    When checkRiskLimits runs for "user-1"
+    Then the appended ledger event type is not "portfolio.risk.drawdown_breach"
+    And the event payload carries user_id "user-1" and symbol "AAPL"
+
+  # guards: docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md
+  @AC-3 @regression @feature-315
+  Scenario: a drawdown breach still emits a drawdown event, attributed to the owner and account
+    Given portfolio.risk.max_drawdown_pct is 0.10
+    And user "user-1" has account "acct-1" with equity 8500.00 and peak equity 10000.00 and no concentration breach
+    When checkRiskLimits runs for "user-1"
+    Then the appended ledger event type is "portfolio.risk.drawdown_breach"
+    And the event is owned by "user-1" and its payload carries user_id "user-1" and account_id "acct-1"
+```
+
+Neither file exists, so the orchestrator must create both and their `acceptance/` directories already exist. `docs/sdd/business-rules/platform.feature` gets nothing, because no scenario spans services.
+
+### Notes / ambiguities / conflicts
+- **Attribution:** AC-1's Given mentions a notify push subscription, but its Then asserts on trading's `EmitAlertRequest`, so it goes to trading. AC-2 and AC-3 assert on portfolio's `checkRiskLimits` ledger append, so both go to portfolio.
+- **No OVERLAP.** Near-neighbors assert different observables:
+  - /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-push-untargeted-broadcast.feature (@feature-242 AC-3 and AC-6) asserts notify `EmitAlert` `target_user_id` for portfolio risk alerts, not the ledger event type or payload.
+  - /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/drawdown-enforcement.feature (@feature-172) asserts the drawdown WARNING alert and the peak-equity high-water-mark.
+  - /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-reconciliation-false-halt.feature (@feature-206) asserts when a halt occurs, not who the halt alert targets.
+- **No CONFLICT.** AC-3 keeps `portfolio.risk.drawdown_breach` for drawdown, consistent with the 172 and 242 drawdown guarantees. AC-2 only moves concentration off that event type. No existing suite asserts that concentration logs as `drawdown_breach`. I grepped `acceptance/*.feature` and `platform.feature` for `drawdown_breach`, `TargetUserId`, `haltAccount`, `emitReconciliationFinding` and `checkRiskLimits`, and found no contradiction.
+- **Doc drift, not part of the promotion:** /home/user/xstockstrat/services/xstockstrat-portfolio/CLAUDE.md lists `portfolio.risk.drawdown_breach` as the "Max drawdown exceeded" event. That stays accurate after the fix. The implementation steps should cover the new concentration event name.
+
+### Coverage check
+- Source scenarios: 3 (AC-1, AC-2, AC-3). Planned (NEW+DUP+OVERLAP): 3, made up of 3 NEW, 0 DUP, 0 OVERLAP and 0 CONFLICT. Every @AC-* is accounted for and none were skipped.
+````

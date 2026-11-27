@@ -159,6 +159,9 @@ class WatchCore:
                 f"namespace={self.namespace}"
             )
 
+    def has_snapshot(self) -> bool:
+        return getattr(self, "_snapshot", None) is not None
+
     async def _coverage_loop(self):
         while True:
             await self._clk.sleep(READ_COVERAGE_INTERVAL_S)

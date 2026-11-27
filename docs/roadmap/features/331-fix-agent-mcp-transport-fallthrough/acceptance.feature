@@ -5,7 +5,7 @@ Feature: fix-agent-mcp-transport-fallthrough (bug fix)
   # guards: docs/reports/2026-10-19-agent-mcp-transport-stdio-fallthrough-defect.md
   @AC-1 @regression
   Scenario: an unrecognized MCP_TRANSPORT fails the agent at startup
-    Given the agent container starts with MCP_TRANSPORT="htp"
+    Given the agent process starts with MCP_TRANSPORT="htp"
     When the agent resolves its transport
     Then the process exits non-zero with an error naming the value "htp"
     And it does not start the stdio transport

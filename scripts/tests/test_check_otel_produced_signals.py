@@ -484,8 +484,8 @@ def test_the_host_provider_contract_stays_documented(tree):
 # --- AC-8 / AC-14: alert rule invariants (Part 5) ---------------------------------------------------
 
 
-def test_the_real_tree_declares_three_rules(tree):
-    assert len(og.alert_rules((tree / RULES).read_text().split("\n"))) == 3
+def test_the_real_tree_declares_four_rules(tree):
+    assert len(og.alert_rules((tree / RULES).read_text().split("\n"))) == 4
 
 
 def test_rule_without_nodatastate(tree):
@@ -644,7 +644,7 @@ def test_a_comment_cannot_make_a_deleted_asset_exist(tree):
 
 
 def test_a_wrong_count_in_removal_prose_fails(tree):
-    append(tree, "packages/otel/alerts/README.md", "Delete the four alert rules below")
+    append(tree, "packages/otel/alerts/README.md", "Delete the five alert rules below")
     assert_hit(tree, "AC-3 P3-count packages/otel/alerts/README.md:")
 
 
@@ -681,7 +681,7 @@ def test_feature_files_are_outside_the_scan(tree):
 
 def test_metric_identifiers_drop_functions_keywords_matchers_and_strings():
     expr = 'sum by (svc) (rate(a_total{x="y"}[5m])) / on (svc) b:ratio and c_count offset 5m'
-    assert og.metric_identifiers(expr) == ["a_total", "b:ratio", "c_count", "m"]
+    assert og.metric_identifiers(expr) == ["a_total", "b:ratio", "c_count"]
 
 
 def test_metric_identifiers_of_a_label_values_query():
