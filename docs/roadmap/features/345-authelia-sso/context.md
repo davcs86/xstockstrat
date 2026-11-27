@@ -934,3 +934,9 @@
 - TDD: N/A (tooling gate; RED proof recorded under Step 37). First `pnpm run typecheck` on the tree: exit 0, no output (no pre-existing errors, so no file was touched for D-93's widening); `pnpm run lint` exit 0 (warnings only); `grep` finds the CI step at `ci.yml:818`.
 - Files modified: `services/xstockstrat-ui/package.json`, `services/xstockstrat-ui/tsconfig.json`, `.github/workflows/ci.yml`
 - Deviations: none
+
+### Step 26 — service: UI leaf modules (issuer grammar, Origin check, deadlines, log-once, compose APP_URL) [done]
+- New `oidcIssuer.ts` (vector-equal `String.raw` patterns, flagless regexes, WHATWG round-trip) and `sameOrigin.ts` (`parseAppOrigin`, `appOrigin` with one `app_url_invalid` ERROR, `isSameOrigin` required/if_present, `originHost`); `deadlines.ts` gains the five auth constants and `raceDeadline`; `serverLog.ts` gains `logOnce`/`__resetLogOnce`; compose sets `APP_URL: http://localhost:3000`.
+- TDD: recorded under Step 27. Verification: typecheck exit 0, lint exit 0, each deploy target greps 1 `APP_URL`, `docker compose config --quiet` exit 0 (run with `--env-file .env.example`; without an `.env` compose refuses on `POSTGRES_PASSWORD`, unrelated to this step).
+- Files modified: `services/xstockstrat-ui/src/lib/{oidcIssuer,sameOrigin}.ts` (new), `services/xstockstrat-ui/src/lib/{deadlines,serverLog}.ts`, `docker-compose.yml`
+- Deviations: none. Gaps filled: `appOrigin`'s log-once key is the constant `app_url_invalid` (APP_URL is per-process); `logOnce` keys its set on message+key so two messages never share a key; `originHost` returns `'null'` for a `null` Origin and `'invalid'` for an unparseable one; `raceDeadline` rejects with `Error('deadline exceeded')`.

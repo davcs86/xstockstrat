@@ -1081,7 +1081,7 @@ grep -n "typecheck (xstockstrat-ui)" ../../.github/workflows/ci.yml
 
 ### Step 26 — service: UI leaf modules (issuer grammar, Origin check, deadlines, log-once, compose APP_URL)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/oidcIssuer.ts` — create

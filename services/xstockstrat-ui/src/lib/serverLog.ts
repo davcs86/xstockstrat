@@ -39,3 +39,21 @@ export const serverLog = {
   warn: (message: string, detail?: unknown) => write('warn', message, detail),
   error: (message: string, detail?: unknown) => write('error', message, detail),
 };
+
+const loggedOnce = new Set<string>();
+
+export function logOnce(
+  level: 'warn' | 'error',
+  message: string,
+  key: string,
+  detail?: unknown,
+): void {
+  const k = `${message}\u0000${key}`;
+  if (loggedOnce.has(k)) return;
+  loggedOnce.add(k);
+  write(level, message, detail);
+}
+
+export function __resetLogOnce(): void {
+  loggedOnce.clear();
+}
