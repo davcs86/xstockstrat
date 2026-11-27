@@ -101,7 +101,7 @@ func (h *TradingHandler) GetOrder(ctx context.Context, req *connect.Request[trad
 	}
 	order, err := h.svc.GetOrder(ctx, req.Msg)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connectCodeFromErr(err), err)
 	}
 	return connect.NewResponse(order), nil
 }
@@ -109,14 +109,18 @@ func (h *TradingHandler) GetOrder(ctx context.Context, req *connect.Request[trad
 func (h *TradingHandler) ListOrders(ctx context.Context, req *connect.Request[tradingv1.ListOrdersRequest]) (*connect.Response[tradingv1.ListOrdersResponse], error) {
 	resp, err := h.svc.ListOrders(ctx, req.Msg)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connectCodeFromErr(err), err)
 	}
 	return connect.NewResponse(resp), nil
 }
 
 func (h *TradingHandler) StreamOrderUpdates(ctx context.Context, req *connect.Request[tradingv1.StreamOrderUpdatesRequest], stream *connect.ServerStream[tradingv1.Order]) error {
-	subID := fmt.Sprintf("trading-%s-%p", req.Msg.UserId, stream)
-	ch := h.svc.SubscribeOrderUpdates(subID, req.Msg.UserId)
+	owner, err := h.svc.ResolveOrderOwner(ctx)
+	if err != nil {
+		return connect.NewError(connectCodeFromErr(err), err)
+	}
+	subID := fmt.Sprintf("trading-%s-%p", owner, stream)
+	ch := h.svc.SubscribeOrderUpdates(subID, owner)
 	defer h.svc.UnsubscribeOrderUpdates(subID)
 
 	for {
@@ -202,8 +206,12 @@ func (a *grpcTradingAdapter) ListOrders(ctx context.Context, req *tradingv1.List
 }
 
 func (a *grpcTradingAdapter) StreamOrderUpdates(req *tradingv1.StreamOrderUpdatesRequest, grpcStream tradingv1.TradingService_StreamOrderUpdatesServer) error {
-	subID := fmt.Sprintf("trading-%s-%p", req.UserId, grpcStream)
-	ch := a.h.svc.SubscribeOrderUpdates(subID, req.UserId)
+	owner, err := a.h.svc.ResolveOrderOwner(grpcStream.Context())
+	if err != nil {
+		return err
+	}
+	subID := fmt.Sprintf("trading-%s-%p", owner, grpcStream)
+	ch := a.h.svc.SubscribeOrderUpdates(subID, owner)
 	defer a.h.svc.UnsubscribeOrderUpdates(subID)
 	for {
 		select {
@@ -274,7 +282,7 @@ func (h *TradingHandler) RegisterBrokerAccount(
 	userID := extractUserID(ctx)
 	account, err := h.svc.RegisterBrokerAccount(ctx, req.Msg, userID)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, connect.NewError(connectCodeFromErr(err), err)
 	}
 	return connect.NewResponse(&tradingv1.RegisterBrokerAccountResponse{Account: account}), nil
 }
@@ -286,7 +294,7 @@ func (h *TradingHandler) ListBrokerAccounts(
 	userID := extractUserID(ctx)
 	accounts, err := h.svc.ListBrokerAccountsSvc(ctx, userID)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, connect.NewError(connectCodeFromErr(err), err)
 	}
 	return connect.NewResponse(&tradingv1.ListBrokerAccountsResponse{Accounts: accounts}), nil
 }
@@ -297,7 +305,7 @@ func (h *TradingHandler) DeregisterBrokerAccount(
 ) (*connect.Response[tradingv1.DeregisterBrokerAccountResponse], error) {
 	userID := extractUserID(ctx)
 	if err := h.svc.DeregisterBrokerAccountSvc(ctx, req.Msg.AccountId, userID); err != nil {
-		return nil, toGRPCError(err)
+		return nil, connect.NewError(connectCodeFromErr(err), err)
 	}
 	return connect.NewResponse(&tradingv1.DeregisterBrokerAccountResponse{}), nil
 }
@@ -312,7 +320,7 @@ func (h *TradingHandler) UpdateBrokerAccountCredentials(
 	userID := extractUserID(ctx)
 	account, err := h.svc.UpdateBrokerAccountCredentials(ctx, req.Msg.AccountId, userID, req.Msg.CredentialsJson)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, connect.NewError(connectCodeFromErr(err), err)
 	}
 	return connect.NewResponse(&tradingv1.UpdateBrokerAccountCredentialsResponse{Account: account}), nil
 }

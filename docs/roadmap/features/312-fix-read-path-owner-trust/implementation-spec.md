@@ -354,7 +354,7 @@ cd services/xstockstrat-trading && export GOWORK=off \
 
 ### Step 5 — service: trading handler owner resolution and status mapping
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/handler/trading.go` — modify

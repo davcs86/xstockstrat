@@ -579,3 +579,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-trading/internal/service/trading.go`
 - Deviations: none
+
+### Step 5 — service: trading handler owner resolution and status mapping [done]
+- `GetOrder`, `ListOrders` and the four broker-account Connect methods (Register, List, Deregister, UpdateCredentials) now return `connect.NewError(connectCodeFromErr(err), err)`, so `PermissionDenied`, `NotFound`, `FailedPrecondition` and `InvalidArgument` reach the wire instead of a blanket `NotFound`/`Internal` (D-14). Connect `StreamOrderUpdates` calls `h.svc.ResolveOrderOwner(ctx)` first and maps its error. The gRPC adapter's `StreamOrderUpdates` calls `a.h.svc.ResolveOrderOwner(grpcStream.Context())` and returns that status unchanged, without reading metadata itself (R-1). Both streams use the resolved owner for `subID` and `SubscribeOrderUpdates`. `ResumeAccount` is unchanged.
+- TDD: red-green. This step's **Files** have no paired test; Step 6 proves the refusal codes on the wire. RED was this step's Verification on the pre-fix tree: exit=1 (`.sdd-logs/v-1.log`). Build and `ok  github.com/xstockstrat/trading/internal/service 14.781s` passed, but the mapped-return count was 5, not 12. GREEN was the same Verification: exit=0 (`.sdd-logs/v-2.log`) with `ok  github.com/xstockstrat/trading/internal/service 14.524s`, the count at 12, a single `UserId` (`:90`), and golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run).
+- Consumer mappers (design Open Risk 4): per the spec's audit, the agent `_PASS_THROUGH_CODES` and the UI `connectCodeToHttp` need no edit. I did not re-read either here, because that is outside this step's **Files**.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/internal/handler/trading.go`
+- Deviations: none
