@@ -160,7 +160,7 @@ test "$(grep -c "__tests__/fixtures" services/xstockstrat-notify/src/__tests__/n
 
 ### Step 3 — service: type `StreamSubscriber.severities` as `AlertSeverity[]`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts` — modify

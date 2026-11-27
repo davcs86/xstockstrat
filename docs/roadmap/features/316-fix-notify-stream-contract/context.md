@@ -1106,3 +1106,15 @@ test "$(git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c 
 - The block's `exit=` reflects only its last command; lint and test were judged from their log lines (no `ELIFECYCLE` in the green log).
 - Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`; `implementation-spec.md` Step 2 status → done, `context.md`.
 - Deviations: none.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 3
+
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `0dadf38b`. Tooling: node v24 (`/opt/node24/bin` prefixed on PATH for the run; default PATH node is v22.23.5) · pnpm 9.15.9 · linked notify `node_modules`. No install run.
+- Discovery confirmed: import `notifyServiceImpl.ts:3`; `severities: number[]` `:31` inside `interface StreamSubscriber`; registration `:162`; filter `:392`; reuse pattern `src/fanout/fanout.ts:6`.
+
+### Step 3 — service: type `StreamSubscriber.severities` as `AlertSeverity[]` [done]
+- Added `AlertSeverity` to the `@xstockstrat/proto/notify/v1/notify` import at `:3` and typed `:31` as `severities: AlertSeverity[];`; `:162` and `:392` unchanged.
+- TDD: red N/A — no behavior change (type-only); covered by Step 2's AC-1 mutation red.
+- Green run `.sdd-logs/v-1.log`: lint `✖ 384 problems (0 errors, 384 warnings)`; `ℹ tests 417` / `ℹ pass 417` / `ℹ fail 0`; `All files | 90.7` lines; `c8 check-coverage --lines 40` passed silently; grep hits `31:  severities: AlertSeverity[];` and `392:    if (sub.severities.length > 0 && !sub.severities.includes(alert.severity)) {`; `exit=0`.
+- Files modified: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`; `implementation-spec.md` Step 3 status → done, `context.md`.
+- Deviations: none.

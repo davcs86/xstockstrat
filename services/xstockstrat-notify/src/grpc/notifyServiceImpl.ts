@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
-import { alertSeverityToNumber, alertSeverityFromJSON } from '@xstockstrat/proto/notify/v1/notify';
+import { alertSeverityToNumber, alertSeverityFromJSON, AlertSeverity } from '@xstockstrat/proto/notify/v1/notify';
 import { ConfigWatcher } from '../services/configWatcher';
 import { FanoutDispatcher } from '../fanout/fanout';
 import { WebPushDispatcher } from '../fanout/webPush';
@@ -28,7 +28,7 @@ function peerDnsSans(call: any): string[] {
 interface StreamSubscriber {
   userId: string;
   categories: string[];
-  severities: number[];
+  severities: AlertSeverity[];
   includeAcknowledged: boolean;
   call: any;
 }
