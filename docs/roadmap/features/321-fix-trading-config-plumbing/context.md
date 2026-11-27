@@ -413,3 +413,7 @@ Companion comment edit, which is additive and leaves the scenario text unchanged
 - Source scenarios: 4 (AC-1, AC-2 as a Scenario Outline with 2 example rows, AC-3, AC-4). Planned: 4 (NEW 3, CONFLICT 1 with its block held pending sign-off confirmation, DUP 0, OVERLAP 0). Nothing was skipped. Every @AC-* is accounted for, and counts match.
 - Files: 1 CREATE (trading, 3 scenarios) and 1 APPEND (platform.feature, 1 scenario plus one additive comment line). The `services/xstockstrat-trading/acceptance/` directory already exists.
 ````
+
+## Session 2026-11-27 — C-16 promotion ruling recorded by the orchestrator (verbatim)
+
+Question: promote @AC-1..@AC-4 (trading suite for @AC-1..@AC-3; @AC-4 appended to platform.feature with only a "Superseded by @feature-321 @AC-4" comment above 304 @AC-14)? Operator answer: **"promote 321"** (the offered option "Promote all, comment only (Recommended)"). The HOLD line in the `sdd-batch-promotion-plan` block above was replaced by this confirmation before the gate was approved.
