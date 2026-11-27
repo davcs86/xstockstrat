@@ -318,7 +318,7 @@ Record the RED run (items 1, 2, 4, 5, 6) and the green run in the PR body and `c
 
 ### Step 3 — test: an int `order.max_retries` row sets the flatten's attempts (AC-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_flatten_rejection_test.go` — modify
