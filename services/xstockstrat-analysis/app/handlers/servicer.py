@@ -933,13 +933,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Fingerprint the executed definition only when the run executes the strategy's OWN
         # registered definition; the hash is from the DB definition_json, never a request dict.
-        run_fingerprint = None
-        if (
+        stamps_fingerprint = bool(
             request.strategy_id_ref
             and request.strategy_id == request.strategy_id_ref
             and executed_row is not None
-        ):
-            run_fingerprint = _definition_fingerprint(executed_row["definition_json"])
+        )
 
         # Cap every backtest to analysis.backtest.max_range_days: both bounds set + span over cap
         # → reject (not silent clamp); an unset bound is defaulted so ALL backtests stay bounded.
@@ -1000,6 +998,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fund_refusals = 0
         fund_unknown: list[str] = []
         refused_diags: dict[str, analysis_pb2.SymbolDiagnostics] = {}
+        formula_digests: dict = {}
         formula_fund_map: dict[str, list] = {}
         if active_definition is not None:
             if start_set:
@@ -1010,11 +1009,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     formula_deleted_cache,
                     formula_fund_map,
                     failures=fund_failures,
+                    digests=formula_digests,
                 )
             else:
                 formula_fund_map = await self._formula_fundamentals(
-                    active_definition, propagation_meta, failures=fund_failures
+                    active_definition,
+                    propagation_meta,
+                    failures=fund_failures,
+                    digests=formula_digests,
                 )
+        run_fingerprint = None
+        if stamps_fingerprint and all(isinstance(d, str) for d in formula_digests.values()):
+            run_fingerprint = _evidence_fingerprint(
+                executed_row["definition_json"], formula_digests
+            )
 
         # Benchmark (source_symbol) bars preloaded ONCE per run, shared across evaluated symbols.
         # A benchmark warmup shortfall is a run-wide coverage gap → INSUFFICIENT_DATA (AC-4).
@@ -1352,6 +1360,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # definition). Detected during the warm-up prefetch's GetFormula — no extra fetch here.
         if formula_deleted_cache:
             result.warnings.extend(formula_deleted_cache.values())
+        if stamps_fingerprint and any(d is None for d in formula_digests.values()):
+            result.warnings.append(_FORMULA_VERSION_WARNING)
         if seed_symbols:
             sector_warnings.append(
                 sector_params.SEED_SPAN_WARNING.format(symbols=", ".join(sorted(seed_symbols)))
@@ -1423,14 +1433,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Feature 215 (@AC-11): a refused-only run still recomputes, so a legacy grade built on
         # the refused symbol clears; the run-level PIT cache/failures are reused.
         if result.status == analysis_pb2.BACKTEST_STATUS_OK or fund_refusals > 0:
+            recompute_formulas = {
+                fid: _FormulaRead(formula_fund_map.get(fid, []), d)
+                for fid, d in formula_digests.items()
+                if d is not None
+            }
             try:
                 await self._recompute_headline(
                     caller_user_id,
                     request.strategy_id,
                     fund_cache=fund_cache,
+                    formula_cache=recompute_formulas,
                     failures=fund_failures,
                     meta=propagation_meta,
                 )
+            except _FormulaVersionUnknown as e:
+                log.warning("formula version unavailable — grade unchanged: %s", e)
             except _GradeInputsUnknown as e:
                 log.warning("fundamentals availability unknown — grade unchanged: %s", e)
             except Exception as e:
@@ -7591,6 +7609,7 @@ def _formula_digest(formula) -> str:
 
 # A refused formula's digest marker; an object(), never a string, so it can never be hashed.
 _UNREADABLE = object()
+_FORMULA_VERSION_WARNING = "evidence not recorded: formula version unavailable — rerun"
 
 
 class _FormulaRead(NamedTuple):

@@ -706,3 +706,31 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 - TDD: red as in Step 7 → green (`.sdd-logs/v-3.log`, exit=0): `11 passed` with no skip lines under `-rs` (real_pg ran against PostgreSQL 16), the conftest grep printed no lines, `1869 passed`, `Total coverage: 91.96%`, `backtest_run_symbols.py 21 0 100%`, `All checks passed!`, `146 files already formatted`.
 - Files modified: `services/xstockstrat-analysis/tests/test_backtest_run_symbols_repo.py`, `services/xstockstrat-analysis/tests/test_backtest_run_symbols_real_pg.py`
 - Deviations: none
+
+### Step 9 — service: `_run_backtest` stamps the formula-aware fingerprint [done]
+- Atomic unit Steps 9+10 (one red→green, one commit). What changed in `_run_backtest`:
+  - The early `_definition_fingerprint` stamp is gone. Only the eligibility flag `stamps_fingerprint` is computed there.
+  - `formula_digests` is filled through `digests=` on the prefetch call and on the `_formula_fundamentals` call.
+  - After the formula-map build, `run_fingerprint = _evidence_fingerprint(...)` is set only when every digest is a `str`. An outage or a refusal leaves it `None`.
+  - `_FORMULA_VERSION_WARNING` (next to `_UNREADABLE`) is appended once, after the deleted-formula warnings. This happens only when `stamps_fingerprint` is set and some digest is `None` (outage only).
+  - The recompute gets `formula_cache=recompute_formulas`. Readable and refused fids are seeded as `_FormulaRead`; an outage fid is not seeded.
+  - A new `except _FormulaVersionUnknown` before `except _GradeInputsUnknown` logs "formula version unavailable — grade unchanged".
+- TDD: RED was run with only the `_FORMULA_VERSION_WARNING` constant pre-added, so the new test module imports cleanly and fails on behaviour (`.sdd-logs/v-1.log`, exit=1): `15 failed, 2 passed`. Failures included cells carrying the bare hash (`'ff76c34d9f52...31a6d51f4a37e' == 'ff76c34d9f52...5c10c0c44dbe7'`), `KeyError: 'formula_cache'` and `assert 2 == 1`. GREEN (`.sdd-logs/v-3.log`, exit=0): the bare-stamp grep printed nothing, the three new symbols grep hit, `521 passed`, `All checks passed!` and `147 files already formatted`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none
+
+### Step 10 — test: backtest stamp, outage warning and single formula read per run [done]
+- Atomic unit Steps 9+10. Created `tests/test_run_backtest_fingerprint.py`. Definitions and formulas are inline (C-13), and `make_servicer`, `_owned_ctx`, `_row_for` and `_windowed_req` are imported from `tests.test_analysis_servicer`. The prefixed and unprefixed paths are parametrized. Cases:
+  - AC-1 stamp: an edit to `source` moves the stamp; an edit to `author` does not.
+  - Outage: `None` stamp, and the warning appears exactly once.
+  - Refusal: `None` stamp, and no warning.
+  - Inline and id-mismatch runs: no warning.
+  - Recompute seed: readable fids are `_FormulaRead([], digest)` and the digest matches the stamp; a refused fid is `_FormulaRead([], _UNREADABLE)`; an outage fid is not seeded.
+  - Real recompute with the gate on: `GetFormula.await_count == 1` for the whole run.
+  - Duplicate components on one fid: the stamp carries the one-component digest map. The prefixed path read once.
+  - `_FormulaVersionUnknown` raised by the recompute: the run is OK and the new log line appears.
+- TDD: AC-1 red: `FAILED tests/test_run_backtest_fingerprint.py::test_ac1_registered_run_stamps_formula_aware_fingerprint[prefixed]`, within `15 failed, 2 passed` (`.sdd-logs/v-1.log`, exit=1). Green (`.sdd-logs/v-3.log`, exit=0): `17 passed`, the conftest grep printed no lines, `1886 passed`, `Total coverage: 91.99%`, `All checks passed!`, `147 files already formatted`.
+- `tests/test_analysis_servicer.py` needed no change. No existing assertion turned red, and the `GetFormula` count pins stayed green.
+- Files modified: `services/xstockstrat-analysis/tests/test_run_backtest_fingerprint.py`
+- Deviations: in the duplicate-component case the assertion compares the formula digest map, not the full stamp (each definition has its own `def_hash`). Full detail is in the Deviation Log.

@@ -441,7 +441,7 @@ ruff check . && ruff format --check .
 
 ### Step 9 — service: `_run_backtest` stamps the formula-aware fingerprint
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -483,7 +483,7 @@ ruff check . && ruff format --check .
 
 ### Step 10 — test: backtest stamp, outage warning and single formula read per run
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_run_backtest_fingerprint.py` — create
@@ -863,5 +863,11 @@ grep -n "_FORMULA_VERSION_UNKNOWN_MSG" services/xstockstrat-agent/docs/context-c
 **Actual**: `services/xstockstrat-analysis/tests/test_unreadable_formula.py` was also edited. Its four `GetFormula` mocks returned `SimpleNamespace(fundamental_inputs=[])` (lines ~476, 651, 693, 859) and now return `indicators_pb2.FormulaDefinition()`, with the same empty `fundamental_inputs`. `from gen.indicators.v1 import indicators_pb2` was added.
 **Reason**: `_formula_fundamentals` now computes `_formula_digest(formula)` on every successful fetch. `json_format.MessageToDict` needs a real proto message, so those four tests raised `AttributeError: 'types.SimpleNamespace' object has no attribute 'DESCRIPTOR'` in the Step 5 Verification. The break-radius grep only matched direct helper calls and missed mocks reached through RPC paths.
 **Disposition**: existing mocks made proto-real for the digest read (operator-approved Option A, 2026-11-27). Behaviour is unchanged.
+
+### Deviation: Step 10 — test: backtest stamp, outage warning and single formula read per run
+**Spec said**: Instruction 5, duplicate-component case: "assert only that the stamp equals the one-component stamp".
+**Actual**: `test_duplicate_components_on_one_formula_stamp_one_digest` asserts the stamp equals `_evidence_fingerprint(<two-component definition_json>, {"f-9": _formula_digest(formula)})`, which is the same digest map as the one-component run. On the prefixed path it also asserts `GetFormula.await_count == 1`, and that held.
+**Reason**: The two-component definition has its own `definition_json`, so its `def_hash` and full stamp can never equal the one-component stamp byte for byte. Only the formula part can match.
+**Disposition**: interpretation of the spec text; no code or scope change.
 
 _Further entries are added by /sdd-execute as implementation proceeds._
