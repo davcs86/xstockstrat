@@ -2049,7 +2049,7 @@ pnpm exec playwright test --list --shard=1/2 | grep -c 'chromium-sso' ; pnpm exe
 
 ### Step 54 — docs: MCP connector runbook and the SSO cutover runbook
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
