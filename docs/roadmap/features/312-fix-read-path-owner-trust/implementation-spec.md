@@ -1178,7 +1178,7 @@ grep -n "status IN ('new', 'partially_filled')" docs/runbooks/inter-service-mtls
 
 ### Step 19 — docs: file the two follow-up defect reports
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/reports/`
 **Files**:
 - `docs/reports/2026-11-20-notify-streamalerts-acknowledgealert-body-user-id-defect.md` — create

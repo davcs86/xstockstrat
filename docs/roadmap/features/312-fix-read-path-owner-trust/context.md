@@ -714,3 +714,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `docs/runbooks/inter-service-mtls-rollout.md`
 - Deviations: none
+
+### Step 19 — docs: file the two follow-up defect reports [done]
+- Filed both reports from the `defect-filing.md` template with `**Recorded**: 2026-11-20` and a single `**Severity**: SEV-3` token, each with an `open` sidecar. Report 1 (D-11) covers notify `StreamAlerts` (body `user_id`, empty = all, `notifyServiceImpl.ts:160`, `:388`) and `AcknowledgeAlert` (no owner check, `acknowledged_by` from the body, `:188`), with the NOTIFY-5 header-only model as Expected, and notes that 312 scoped only `ListAlerts`. Report 2 (D-9) covers active `user_id = ''` broker accounts skipped by the Step 4 `LoadBrokerPool` WARN (`trading.go:304`), the accepted side effects, the WARN trigger, a candidate trading `012` deactivation migration with DBA approval, and a pointer to the Step 20 O-11 count here.
+- Evidence re-grepped on this tree (`12fd7270`): `resolveAccount` is now `:360` and `pollFills` `:1846` (the spec cites `:356` and `:1816`). Report 2 also records that `pollFills`' sole-broker fallback (`:1880-1893`) can poll a phantom account's in-flight order through the one remaining non-offline account's client, rather than only skipping it.
+- TDD: N/A (docs). Verification: exit=0 (`.sdd-logs/v-1.log`, empty, as the block prints nothing on success). `grep -oE 'SEV-[123]'` printed exactly one `SEV-3` per report, and neither report contains `[x]` or `config-propagation`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `docs/reports/2026-11-20-notify-streamalerts-acknowledgealert-body-user-id-defect.md`, `docs/reports/2026-11-20-notify-streamalerts-acknowledgealert-body-user-id-defect.status`, `docs/reports/2026-11-20-trading-broker-accounts-ownerless-rows-cleanup-defect.md`, `docs/reports/2026-11-20-trading-broker-accounts-ownerless-rows-cleanup-defect.status`
+- Deviations: none
