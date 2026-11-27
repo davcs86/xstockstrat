@@ -1243,3 +1243,35 @@ Steps fixed: 2, 3, 4, 5, 6, 7, 8. Re-run Step 2 onward with the updated blocks v
 ## Open Threads
 
 - [ ] Carried: Verification `exit=` reflects only the last line (Steps 6-8), `@AC-3` PRESERVE comment file placement (operator), `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), steps 6+7
+
+- Tooling (steps 6+7): uv ✓ 0.11.32 · `uv sync --extra dev` in `services/xstockstrat-ingest` ⬇ (`.venv` on Python 3.12, as in Steps 2-5) · ruff ✓ 0.16.9 (host) · pytest ✓ 9.0.3 (service `.venv`, put first on `PATH` for each run). Hook check hook=0.
+- Anchors re-grepped before editing (Step 6 instruction 0): `_ingest_external_signal` at `servicer.py:1346`, the `ingest.signal.ingested` emit at `:1507` (with Step 4's `user_id=owner`), `for item in parsed:` at `mcp_client_loop.py:156`, the per-item call at `:158`, the spy at `tests/test_mcp_client_loop.py:198-199`. No peer (309, 328) edit present.
+
+### Step 6 — service: one per-cycle id, sent as `correlation_id` and `x-trace-id` [done] (atomic unit Steps 6+7)
+- `_ingest_external_signal` gains the keyword-only `trace_id: str = ""` after `owner`, plus a two-line docstring constraint. On the `ingest.signal.ingested` request only, it adds `correlation_id=trace_id`. Its `AppendEvent` metadata is `[*propagation_meta, ("x-trace-id", trace_id)] if trace_id else propagation_meta`: append only, `propagation_meta` is not mutated, and with no `trace_id` the request and metadata are what Step 4 left (R-9). `mcp_client_loop.py` adds `import uuid`, mints `str(uuid.uuid4())` once before `for item in parsed:` and passes it as `trace_id=`. There is no `propagation_meta`, no `x-user-id`, and no id goes to the metric or tick helpers. The RPC caller is unchanged.
+- TDD: Step 6 has no `**Covers**`; the unit's RED is Step 7's AC-3 test (below).
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/app/engine/mcp_client_loop.py`
+- Deviations: none
+
+### Step 7 — test: AC-3, per-source per-cycle `correlation_id`, and the spy fix [done] (atomic unit Steps 6+7)
+- Spy fix (D-19): `spy(signal, propagation_meta=None, owner=None, **kw)` forwards `**kw` to `orig`; nothing else in `test_second_identical_cycle_deduplicates` changed. Added `test_feature313_ac3_cycle_signals_share_a_per_source_correlation_id(monkeypatch)` after the Step 5 test.
+  - Setup: two `_mcp_source(...)` rows owned by `user-a` (`alpha-mcp`, `beta-mcp`), and the MCP fake returning `[_item("AAPL"), _item("MSFT")]`. A dedup-miss `transaction_conn` holds four `db.fetchrow` and eight `conn.fetchrow` rows, and the real core runs.
+  - Assertions: exactly four `ingest.signal.ingested` calls, and one distinct non-empty `correlation_id` per `payload["source"]`. The two ids differ, and no `x-user-id` is in the metadata. For every call, `("x-trace-id", correlation_id)` is in the metadata exactly once.
+  - RPC path: `IngestSignal` with `_ctx` (inbound `x-trace-id: t1`) gives `correlation_id == ""`.
+- TDD: AC-3 red: `assert ('x-trace-id', '') in []` failed → green: passed.
+  - RED (`.sdd-logs/v-1.log`, Step 7 block, pre-Step-6 tree with the test and spy fix applied) failed at `tests/test_mcp_client_loop.py:273`, `1 failed, 1 passed, 22 deselected`. The `len(calls) == 4` assertion passed first, so the RED is the missing id, not a vacuous harness. The log's `exit=0` is its last line, the spy count check.
+  - GREEN, Step 6 block (`.sdd-logs/v-2.log`, `exit=0`): `All checks passed!`, `58 files already formatted`, `253 passed`.
+  - GREEN, Step 7 block (`.sdd-logs/v-3.log`, `exit=0`): `2 passed, 22 deselected`, `624 passed`, `Total coverage: 87.69%`.
+  - Each block reports only its last line's status, so the root-level lines were re-run one at a time: both `trace_id` greps rc 0, the `x-user-id` count in `mcp_client_loop.py` is 0, and both spy counts are 1.
+- C-13: all domain data comes from `_mcp_source()` and `_item()`, and the RPC half reuses `_fresh_ingest_svc`, `_signal_req` and `_ctx` (already imported by Step 5).
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`
+- Deviations: none
+
+## Open Threads
+
+- [ ] `**kw` spy rename risk: accepted by D-19; the AC-3 `correlation_id` assertion is the guard. Two-header residual: the docstring constraint plus AC-3's one-`x-trace-id` assertion cover today's loop caller only.
+- [ ] Carried: Verification `exit=` reflects only the last line (Step 8), `@AC-3` PRESERVE comment file placement (operator), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.

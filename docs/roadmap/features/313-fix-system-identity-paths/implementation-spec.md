@@ -537,7 +537,7 @@ test "$(grep -c "from tests.test_signal_ownership import\|from tests.conftest im
 
 ### Step 6 — service: one per-cycle id, sent as `correlation_id` and `x-trace-id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -622,7 +622,7 @@ test "$(grep -c "x-user-id" services/xstockstrat-ingest/app/engine/mcp_client_lo
 
 ### Step 7 — test: AC-3, per-source per-cycle `correlation_id`, and the spy fix
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_mcp_client_loop.py` — modify

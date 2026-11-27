@@ -1344,14 +1344,16 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         return ingest_pb2.IngestSignalResponse(signal_id=signal_id, deduplicated=deduplicated)
 
     async def _ingest_external_signal(
-        self, signal, propagation_meta=None, *, owner: str
+        self, signal, propagation_meta=None, *, owner: str, trace_id: str = ""
     ) -> tuple[int, bool]:
         """feature 166 — the validate + persist + dedup + health + ledger core of IngestSignal,
         raising _SignalValidationError / _SignalIngestError instead of aborting a gRPC context so
         both the RPC and the scheduled mcp_client loop drive one ingest path. Returns
         (signal_id, deduplicated).
 
-        feature 224: the signal is filed under `owner`."""
+        feature 224: the signal is filed under `owner`.
+        `trace_id` is for callers with no inbound metadata; it is appended to the call metadata,
+        never merged with an inbound `x-trace-id`."""
         propagation_meta = propagation_meta or []
 
         if not signal.source or not signal.symbol or not signal.direction:
@@ -1509,8 +1511,11 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                         stream_key=f"signal:{signal.source}:{signal.symbol}",
                         payload=payload,
                         user_id=owner,
+                        correlation_id=trace_id,
                     ),
-                    metadata=propagation_meta,
+                    metadata=[*propagation_meta, ("x-trace-id", trace_id)]
+                    if trace_id
+                    else propagation_meta,
                 )
             except Exception as e:
                 log.warning("failed to emit ledger event for signal %d: %s", signal_id, e)

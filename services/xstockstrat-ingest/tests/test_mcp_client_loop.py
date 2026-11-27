@@ -195,8 +195,8 @@ async def test_second_identical_cycle_deduplicates(monkeypatch):
     results = []
     orig = svc._ingest_external_signal
 
-    async def spy(signal, propagation_meta=None, owner=None):
-        r = await orig(signal, propagation_meta, owner=owner)
+    async def spy(signal, propagation_meta=None, owner=None, **kw):
+        r = await orig(signal, propagation_meta, owner=owner, **kw)
         results.append(r)
         return r
 
@@ -239,6 +239,49 @@ async def test_feature313_ac1_loop_signal_event_is_owner_stamped(monkeypatch):
     rpc_svc, _db, _rpc_conn = _fresh_ingest_svc(11)
     await rpc_svc.IngestSignal(_signal_req("motley-fool"), _ctx("0", user_id="alice"))
     assert rpc_svc._ledger.AppendEvent.call_args.args[0].user_id == "alice"
+
+
+async def test_feature313_ac3_cycle_signals_share_a_per_source_correlation_id(monkeypatch):
+    sources = [
+        _mcp_source(slug="alpha-mcp", endpoint="https://alpha.example/mcp", user_id="user-a"),
+        _mcp_source(slug="beta-mcp", endpoint="https://beta.example/mcp", user_id="user-a"),
+    ]
+    monkeypatch.setattr(loop, "list_all_sources", AsyncMock(return_value=sources))
+    db, _conn = transaction_conn(
+        db_fetchrow_side_effect=[{"slug": s["slug"]} for s in sources for _ in range(2)],
+        conn_fetchrow_side_effect=[
+            row for n in range(1, 5) for row in ({"id": n}, {"signal_id": n})
+        ],
+    )
+    svc = make_servicer(db=db)
+    svc._db = db
+    mcp = _FakeMcpClient(result=_FakeResult([_item("AAPL"), _item("MSFT")]))
+
+    await loop.run_one_cycle(svc, _FakeCfgWatcher(), mcp)
+
+    calls = [
+        c
+        for c in svc._ledger.AppendEvent.call_args_list
+        if c.args[0].event_type == "ingest.signal.ingested"
+    ]
+    assert len(calls) == 4
+    ids_by_source = {}
+    for c in calls:
+        req, meta = c.args[0], c.kwargs["metadata"]
+        ids_by_source.setdefault(req.payload["source"], set()).add(req.correlation_id)
+        assert "x-user-id" not in dict(meta)
+        assert ("x-trace-id", req.correlation_id) in meta
+        assert [k for k, _ in meta].count("x-trace-id") == 1
+    assert set(ids_by_source) == {"alpha-mcp", "beta-mcp"}
+    for ids in ids_by_source.values():
+        assert len(ids) == 1
+        assert "" not in ids
+    assert ids_by_source["alpha-mcp"] != ids_by_source["beta-mcp"]
+
+    # The RPC path's inbound x-trace-id is never stored as correlation_id (R-9).
+    rpc_svc, _db, _rpc_conn = _fresh_ingest_svc(11)
+    await rpc_svc.IngestSignal(_signal_req("motley-fool"), _ctx("0", user_id="alice"))
+    assert rpc_svc._ledger.AppendEvent.call_args.args[0].correlation_id == ""
 
 
 async def test_source_failure_records_health_and_continues(monkeypatch):
