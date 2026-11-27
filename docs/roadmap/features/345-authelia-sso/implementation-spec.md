@@ -384,7 +384,7 @@ grep -c "scripts/testdata/oidc-issuer-vectors.json" .github/workflows/ci.yml   #
 
 ### Step 7 — service: Identity mode reader (src/authMode.ts) and the watcher hook
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/authMode.ts` — create

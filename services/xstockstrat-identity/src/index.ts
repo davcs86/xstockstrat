@@ -7,6 +7,7 @@ import { resolveDbConnection } from './dbTls';
 import { IdentityServiceService } from '@xstockstrat/proto/identity/v1/identity';
 import { Pool } from 'pg';
 import { ConfigWatcher } from './services/configWatcher';
+import { watchAuthMode } from './authMode';
 import { IdentityServiceImpl } from './grpc/identityServiceImpl';
 import { createLedgerAudit } from './grpc/ledgerAudit';
 import { getLogger } from './services/logger';
@@ -24,6 +25,7 @@ async function main() {
   const configWatcher = new ConfigWatcher(configEndpoint, 'identity');
   await configWatcher.waitForSnapshot(90_000);
   log.info('Config snapshot received');
+  watchAuthMode(configWatcher);
 
   const pool = new Pool({
     connectionString: dbConn.connectionString,

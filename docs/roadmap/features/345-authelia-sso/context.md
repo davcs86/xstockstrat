@@ -822,3 +822,9 @@
 - Verification: counts `66 16 10 ['link','resolve','session'] ['agent_public_url','expected','issuer']`; python mismatches `[]`; node regex-only mismatches `[]` (so the impl-review ⚠ "Node check prints without asserting" has nothing to assert here; Step 27 still asserts); `receivers registered` exit=0; ci.yml count 3; `check-config-wiring.mjs --declared-from product-spec.md` exit=0. TDD: N/A.
 - Files modified: `scripts/testdata/oidc-issuer-vectors.json`, `scripts/config-wiring.json`, `.github/workflows/ci.yml`
 - Deviations: none
+
+### Step 7 — service: Identity mode reader (src/authMode.ts) and the watcher hook [done]
+- `src/authMode.ts`: `AUTH_MODES`, `parseAuthMode` (exact `local`/`both`/`oidc`, else `local` + invalid; absent → `local`, valid), `readAuthMode(config)` (the only read, `getString('auth.mode','local')`, `auth_mode_invalid` WARN once per distinct value), `watchAuthMode` (once, then on every `'update'`), `__resetAuthModeLogOnce`. `index.ts` calls `watchAuthMode(configWatcher)` after the snapshot.
+- Verification: `pnpm run lint` exit 0 (0 errors, pre-existing warnings only); `pnpm run build` exit 0; hook grep → `src/index.ts:28`; `check-config-wiring.mjs --keys identity.auth.mode` exit 0. TDD: red/green recorded under Step 8 (one cycle).
+- Files modified: `services/xstockstrat-identity/src/authMode.ts`, `services/xstockstrat-identity/src/index.ts`
+- Deviations: none
