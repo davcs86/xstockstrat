@@ -1299,6 +1299,9 @@ Steps fixed: 2, 3, 4, 5, 6, 7, 8. Re-run Step 2 onward with the updated blocks v
 - Branch check (`origin/feature/fix-system-identity-paths` at `5e54f560`): `acceptance.feature` holds @AC-1/@AC-2/@AC-3 with `@FR-*` tags. Its AC-2 and AC-3 match the blocks below. Its AC-1 still has the old Thens ("ledger event has user_id", "ExportEvents called as "user-a" returns that event"), so per the plan the AC-1 wording goes to the operator before anything is promoted. Nothing was written to any durable suite.
 
 ```sdd-batch-promotion-plan
+> CORRECTED 2026-11-27 by the orchestrator under the operator ruling "Branch text, fix the cite": @AC-1 below is the branch
+> acceptance.feature text verbatim (operator rulings 2026-11-21 and 2026-11-26: keep @AC-1 as written; the reworded AC-1 in the
+> earlier plan is withdrawn), and the @AC-3 PRESERVE comment cites platform.feature for @AC-41. Nothing else changed.
 ## Promotion plan — fix-system-identity-paths (feature 313)
 
 ### BLOCKER TO CLEAR BEFORE WRITING (source-of-truth gap)
@@ -1333,12 +1336,12 @@ Feature: xstockstrat-ingest - mcp_client loop ledger events keep owner attributi
   Scenario: mcp_client loop signal events are owner-stamped in the ledger
     Given an mcp_client signal source registered by owner "user-a"
     When one ingest.mcp_client.poll_interval_seconds cycle ingests a signal from it
-    Then the ingest.signal.ingested AppendEvent request carries user_id "user-a"
-    And no x-user-id call metadata is sent with it
+    Then the ingest.signal.ingested ledger event has user_id "user-a"
+    And ExportEvents called as "user-a" returns that event
 
   # the id persists as the ledger event's correlation_id; ledger ignores the x-trace-id header
   # PRESERVE @AC-41, @AC-28, @AC-29 and @AC-53 @feature-294
-  # (services/xstockstrat-ingest/acceptance/signal-map-instrumentation.feature): neither user_id nor
+  # (@AC-41 is in docs/sdd/business-rules/platform.feature; the others in services/xstockstrat-ingest/acceptance/signal-map-instrumentation.feature): neither user_id nor
   # the per-cycle id becomes a metric label.
   @AC-3 @FR-3 @feature-313
   Scenario: Signals from one mcp_client poll cycle share a per-source correlation id
@@ -1387,3 +1390,8 @@ Feature: xstockstrat-analysis - a system-owned order event degrades instead of r
 - Planned (NEW + DUP + OVERLAP): 3 (3 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Nothing is skipped. The counts match, so no scenario is dropped.
 - Files written: 2 CREATE (ingest 2 scenarios, analysis 1 scenario), 0 APPEND, 0 to platform.feature.
 ```
+
+## Session 2026-11-27 — operator ruling recorded by the orchestrator (verbatim)
+
+Question (C-16 promotion gate): the promoter's plan reworded @AC-1 and cited @AC-41 @feature-294 in the wrong suite; how should the scenarios be promoted?
+Operator answer: **"Branch text, fix the cite (Recommended)"** — promote @AC-1 verbatim as the branch's acceptance.feature has it (operator rulings 2026-11-21 and 2026-11-26), @AC-2 and @AC-3 verbatim, and correct only the @AC-3 PRESERVE comment's file reference for @AC-41 (platform.feature:1346). The `sdd-batch-promotion-plan` block above was corrected accordingly before the gate was approved.
