@@ -761,3 +761,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ### Open Threads
 
 - [x] The "arm keyed on provenance only" open thread of the 2026-11-26 readiness-card session is resolved by this ruling.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 15
+
+- Tooling: pnpm 9.15.9 ✓ · node v22.23.5 on PATH (`/opt/node24` present, not on PATH) · chromium ✓ (`/opt/pw-browsers`) · Docker e2e runner ✗ (`corepack prepare pnpm@9.15.9` registry fetch error, so the host fallback was used) · hook check hook=0.
+
+### Step 15 — service: `evaluation_failed` cue on the insights opportunities page [done]
+- `readinessCue.ts` exports `EVALUATION_FAILED_PROVENANCE = 'evaluation_failed'`, the only TS copy of the wire token, and `EVALUATION_FAILED_CUE`: label `evaluation failed`, role `secondary`, Phosphor `Warning`. Both sit beside `IN_QUEUE_CUE`.
+- `page.tsx` derives `evalFailed` from `o.provenance` beside `held`/`unreadable`. The header gains an `evalFailed && !held` arm after the unreadable arm, plus a held companion badge. The readiness slot gains an `evalFailed` arm (`role="status"`, `opportunity-evaluation-failed-<sym>`, `Evaluation failed for <sym>`). The act gate is now `fundUnavailable || ((unreadable || evalFailed) && !held)`.
+- TDD:
+  - RED (temporary probe spec, `.sdd-logs/v-5.log`): `getByTestId('opportunity-evaluation-failed-MYSZ')`, `element(s) not found`, with the card visible.
+  - GREEN (`.sdd-logs/v-6.log`): `1 passed`. The probe was then deleted.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-7.log`) exited 1. Lint passed (warnings in untouched files only). The `'evaluation_failed'` grep printed nothing.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE` in two untouched files. Cause: the linked proto package is the main checkout's stale dist. Against this branch's dist, tsc exited 0 (`.sdd-logs/v-8.log`).
+  - The Playwright warmup timed out at 10 s. A re-run with `--timeout=240000` gave `45 passed (2.9m)`, exit=0 (`.sdd-logs/v-9.log`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/src/lib/readinessCue.ts`, `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx`
+- Deviations: probe RED, the host-harness timeout and the stale linked proto dist (Deviation Log "Step 15").
+
+### Open Threads
+- [ ] The 2026-11-26 thread "the `sdd-batch-setup` approval record is stale; `/sdd-execute` must re-confirm before Step 15" was not re-confirmed inside this agent. The workflow launched Step 15 directly, so the orchestrator's approvals are taken as the re-confirmation.
+- [ ] Host e2e in a worktree needs a raised `--timeout` (cold `pnpm dev` compile), and `tsc` needs the branch's own proto dist when the main checkout's `packages/proto/gen/ts` is stale. Steps 16-22 will hit both.

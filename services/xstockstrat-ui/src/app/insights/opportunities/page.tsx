@@ -38,7 +38,12 @@ import {
 import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { fmtUsd, fmtPct, pnlClass } from '@/lib/money';
 import { compositeColor, formatComposite } from '@/lib/scoreDisplay';
-import { IN_QUEUE_CUE, READINESS_CUE } from '@/lib/readinessCue';
+import {
+  EVALUATION_FAILED_CUE,
+  EVALUATION_FAILED_PROVENANCE,
+  IN_QUEUE_CUE,
+  READINESS_CUE,
+} from '@/lib/readinessCue';
 import { readinessState } from '@/lib/readinessRollup';
 import { useOpportunities, useSetOpportunityAction } from '@/hooks/useOpportunities';
 import { useOhlcBars } from '@/hooks/useOhlcBars';
@@ -506,6 +511,7 @@ function OpportunityRow({
   // Feature 289: a non-held unreadable row is not actionable; a held one keeps its action badge.
   const held = o.provenance.includes('position');
   const unreadable = o.formulaUnreadable;
+  const evalFailed = o.provenance.includes(EVALUATION_FAILED_PROVENANCE);
   const chips = opportunityChips(o);
   return (
     <div className="space-y-2 px-4 py-3">
@@ -517,6 +523,8 @@ function OpportunityRow({
           />
         ) : unreadable && !held ? (
           <EnumBadge render={READINESS_CUE.unreadable} />
+        ) : evalFailed && !held ? (
+          <EnumBadge render={EVALUATION_FAILED_CUE} />
         ) : muted ? (
           <Badge variant="outline" className="text-[11px]" data-testid={`muted-badge-${o.symbol}`}>
             Muted
@@ -525,6 +533,7 @@ function OpportunityRow({
           <EnumBadge render={OPPORTUNITY_ACTION[o.action]} />
         )}
         {unreadable && held && <EnumBadge render={READINESS_CUE.unreadable} />}
+        {evalFailed && held && <EnumBadge render={EVALUATION_FAILED_CUE} />}
         {o.strategyId && (
           <span className="font-mono text-xs text-muted-foreground">{o.strategyId}</span>
         )}
@@ -572,6 +581,15 @@ function OpportunityRow({
               aria-label={`Formula not readable for ${o.symbol}`}
             >
               <EnumBadge render={READINESS_CUE.unreadable} />
+            </span>
+          ) : evalFailed ? (
+            <span
+              className="flex flex-1 items-center"
+              role="status"
+              data-testid={`opportunity-evaluation-failed-${o.symbol}`}
+              aria-label={`Evaluation failed for ${o.symbol}`}
+            >
+              <EnumBadge render={EVALUATION_FAILED_CUE} />
             </span>
           ) : fundUnavailable ? (
             <span className="flex-1 text-xs text-muted-foreground/70">—</span>
@@ -656,7 +674,7 @@ function OpportunityRow({
         <Button asChild size="sm" variant="outline" data-testid={`manage-deny-${o.symbol}`}>
           <Link href={href}>Manage deny list</Link>
         </Button>
-      ) : fundUnavailable || (unreadable && !held) ? null : (
+      ) : fundUnavailable || ((unreadable || evalFailed) && !held) ? null : (
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm" onClick={onTake}>
             <Link href={href}>Review &amp; add</Link>

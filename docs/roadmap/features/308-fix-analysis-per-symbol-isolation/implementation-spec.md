@@ -889,7 +889,7 @@ ruff check . && ruff format --check .
 
 ### Step 15 — service: `evaluation_failed` cue on the insights opportunities page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/readinessCue.ts` — modify
@@ -1592,3 +1592,28 @@ _Populated by /sdd-execute as implementation proceeds._
   read from the log.
 - **Disposition**: no file outside Step 13's **Files** is committed. Step 14 still adds the
   permanent tests and the cancellation mutation run as specced.
+
+### Step 15: probe RED, host-harness timeout and stale linked proto dist (2026-11-27)
+
+- **Expected**: Step Dependencies has Step 16's test capture RED for Step 15. The Verification block
+  (`lint`, `tsc --noEmit`, `playwright test e2e/insights/opportunities.spec.ts`, the literal grep)
+  passes as written.
+- **Actual**:
+  - RED/GREEN came from a temporary untracked probe, `e2e/insights/tmp-step15-probe.spec.ts`. It served
+    one non-held `MYSZ` row with provenance `['watchlist', 'evaluation_failed']` through `page.route`
+    and asserted the cue test id, text, aria-label, two cue glyphs and no `snooze-MYSZ`. It ran with
+    `--project=chromium --no-deps --timeout=240000`. RED: `getByTestId('opportunity-evaluation-failed-MYSZ')`
+    `element(s) not found` with the card visible. GREEN: `1 passed`. The probe was deleted before the
+    commit.
+  - The verbatim block exited 1. Lint passed (warnings only, in untouched files). The grep printed
+    nothing. Two failures were environmental:
+    - `tsc` reported `Property 'INCOMPLETE' does not exist on type 'typeof BackfillSymbolOutcome'` in
+      `e2e/fixtures/backfillJobs.ts` and `src/lib/backtestBackfill.ts` (untouched). The worktree's
+      linked `node_modules/@xstockstrat/proto` resolves to the main checkout's older generated
+      dist, which lacks `BACKFILL_SYMBOL_OUTCOME_INCOMPLETE`; this branch's dist has it. A re-run
+      against the branch's own dist through a temporary `tsconfig` `paths` override (deleted) exited 0.
+    - Playwright's `warmup.setup.ts` hit its 10 s test timeout on a cold `pnpm dev` compile. The Docker
+      runner (`scripts/run-e2e.py`) failed at `corepack prepare pnpm@9.15.9` (registry fetch error
+      in the base stage). A host re-run with only `--timeout=240000` added gave `45 passed (2.9m)`.
+- **Disposition**: CI-equivalent fallback. No file outside Step 15's **Files** is committed. Step 16
+  still adds the permanent Playwright test and its own RED as specced.
