@@ -182,7 +182,7 @@ grep -ci 'insert into' services/xstockstrat-trading/migrations/012_bracket_legs.
 - `internal/repository/portfolio_repo.go:23-27`: `queryRower` has `QueryRow`, `Query`, `Exec` and no `Begin`. `:30-35` `PortfolioRepo{pool; db queryRower}`. `:50` `NewPortfolioRepoWithDB(db queryRower)` leaves `pool` nil, and the service dbtests build the repo this way over a real pool (`internal/service/position_drain_dbtest_test.go:54`), so the transaction must start from `r.db`, not `r.pool`.
 - `internal/repository/pool.go:29-31`: `DB_PGBOUNCER` switches to `QueryExecModeExec`; only a transaction-scoped lock is safe.
 - `portfolio_repo.go:62-70`: the position row's write columns and the conflict target `(user_id, symbol, trading_mode, account_id)`.
-- **Not found**: `pg_advisory`, `FOR UPDATE` or `Begin` anywhere in `internal/repository/`.
+- Existing transactions in `internal/repository/` all start from `r.pool` or a `*pgxpool.Pool` argument, never from `r.db`: `watchlist_repo.go:39,194,301,325,350,388` and `signal_expiry_repo.go:62`, `delisted_removal_repo.go:76` (`r.pool.Begin`), `signal_expiry_backfill.go:131,229` (`pool.BeginTx`). Row locks exist only as `FOR UPDATE SKIP LOCKED` (`signal_expiry_repo.go:90,152`, `delisted_removal_repo.go:118`). `portfolio_repo.go` has no `Begin`. **Not found**: `pg_advisory` anywhere in `internal/repository/`.
 
 **Lands with**: `Step 4`
 
@@ -271,9 +271,10 @@ New logic is in an excluded package (`repository`) — no coverage threshold app
 **Reviewers**: xstockstrat-portfolio owner — position snapshot consistency
 
 **Codebase Evidence**:
-- `portfolio_service.go:1366-1368` `emitEvent` calls `s.emitEventAs(ctx, "", eventType, streamKey, payload)`.
-- `:1371` `func (s *PortfolioService) emitEventAs(ctx, ownerUserID, eventType, streamKey string, payload map[string]interface{})` has no return value; `:1385` sets `IdempotencyKey: uuid.NewString()`; `:1393-1407` retry loop; `:1408` WARN "ledger append failed".
-- Call sites, from `grep -rn 'emitEventAs(' services/xstockstrat-portfolio --include=*.go`: `portfolio_service.go:1367`, `signal_prune.go:60`, `signal_prune.go:70`. No test calls it directly.
+- `portfolio_service.go:1374-1376` `emitEvent` calls `s.emitEventAs(ctx, "", eventType, streamKey, payload)`.
+- `:1379` `func (s *PortfolioService) emitEventAs(ctx, ownerUserID, eventType, streamKey string, payload map[string]interface{})` has no return value; `:1393` sets `IdempotencyKey: uuid.NewString()`; `:1399-1415` retry loop; `:1416` WARN "ledger append failed".
+- `:1353-1372` `emitRiskAlert(ctx, userID, eventType, extra, msg)` calls `s.emitEventAs(ctx, userID, eventType, "portfolio:risk", payload)` at `:1360`, then `s.notify.EmitAlert`; its callers are `checkRiskLimits` (`:1338`, `:1347`) and `portfolio_quote_deadline_test.go:620`.
+- Call sites, from `grep -rn 'emitEventAs(' services/xstockstrat-portfolio --include=*.go`: `portfolio_service.go:1360` (`emitRiskAlert`), `portfolio_service.go:1375` (`emitEvent`), `signal_prune.go:60`, `signal_prune.go:70`. No test calls it directly.
 
 **Lands with**: `Step 6`
 
@@ -282,9 +283,9 @@ New logic is in an excluded package (`repository`) — no coverage threshold app
 **Covers**: —
 
 **Instructions**:
-1. Change the signature to `emitEventAs(ctx, ownerUserID, eventType, streamKey, idempotencyKey string, payload map[string]interface{}) error` (D-21). An empty `idempotencyKey` keeps today's `uuid.NewString()`. Return the last error; return `ctx.Err()` where the loop returns on `ctx.Done()`. Keep the WARN at `:1408`.
+1. Change the signature to `emitEventAs(ctx, ownerUserID, eventType, streamKey, idempotencyKey string, payload map[string]interface{}) error` (D-21). An empty `idempotencyKey` keeps today's `uuid.NewString()`. Return the last error; return `ctx.Err()` where the loop returns on `ctx.Done()`. Keep the WARN at `:1416`.
 2. `emitEvent` stays the fail-soft wrapper: it passes `""` for the key and discards the error.
-3. `signal_prune.go:60` and `:70`: pass `""` for the key and discard the error (`_ =`), so their behaviour is unchanged.
+3. `signal_prune.go:60` and `:70`, and `emitRiskAlert` at `portfolio_service.go:1360`: pass `""` for the key and discard the error (`_ =`), so their behaviour is unchanged (`emitRiskAlert` still calls `EmitAlert` after the append).
 4. Do not change any other emit site in this step.
 
 **Verification**:
@@ -341,13 +342,13 @@ New logic is in an excluded package (`service`) — no coverage threshold applie
 **Reviewers**: xstockstrat-portfolio owner — concurrent write safety, position snapshot consistency
 
 **Codebase Evidence**:
-- `portfolio_service.go:179-181` `ConsumeOrderFills` wraps the handler as `s.observed("order fill", "ok", s.processOrderFill)`; it does not use `boundedRetry`.
+- `portfolio_service.go:178-180` `ConsumeOrderFills` wraps the handler as `s.observed("order fill", "ok", s.processOrderFill)`; it does not use `boundedRetry`.
 - `:234-245` `observed` counts `"error"` and returns the error, or calls `sig.handled(ctx, okOutcome, …)`.
-- `:1574-1576`: `boundedRetry` logs `slog.ErrorContext(ctx, "event parked", "event_id", …, "sequence", …, "stream_key", …, "consumer", …, "attempts", …, "error", err)` and counts `"parked"`.
+- `:1550` `boundedRetry`; `:1582-1584`: it logs `slog.ErrorContext(ctx, "event parked", "event_id", …, "sequence", …, "stream_key", …, "consumer", …, "attempts", …, "error", err)` and counts `"parked"`.
 - `:975` `ErrFillUnattributable`; `:929` `ErrLedgerUnavailable`.
 - `:376-397` `processOrderFill` parses the payload before any DB call. `:248` `streamRetryDelay`; `:253` `sleepFor`.
 - `packages/proto/ledger/v1/ledger.proto:30`: `LedgerEvent.recorded_at` is the server write time.
-- Other consumers keep boot replay from 0 (`:1468-1470`, `:1480-1482`, `:1734`, `:1782`); this step does not touch them (290 `@AC-3`).
+- Other consumers keep boot replay from 0 (`:1477`, `:1489`, `:1743`, `:1791`); this step does not touch them (290 `@AC-3`).
 
 **Lands with**: `Step 8`
 
@@ -429,11 +430,11 @@ New logic is in an excluded package — no coverage threshold applies.
 **Reviewers**: xstockstrat-portfolio owner — P&L calculation accuracy, concurrent write safety
 
 **Codebase Evidence**:
-- `portfolio_service.go:399-405` takes `positionsMu`; `:409` `s.repo.GetPosition` (non-transactional); `:420-432` unsigned add with `if fill.Qty > 0 { // buying more`; `:434-437` `alpaca-default` fallback; `:445` `pnl.RealizedDelta`; `:448-470` close branch with `GetRealizedAccum` (`:455`), `GetFeesAccum` (`:460`), `ClosePosition` (`:466`) and the `portfolio.position.closed` emit; `:472` `UpsertPosition`; `:485-488` unlock, then `checkRiskLimits` and `broadcastSnapshot`.
+- `portfolio_service.go:399-405` takes `positionsMu`; `:409` `s.repo.GetPosition` (non-transactional); `:421-434` unsigned add with `if fill.Qty > 0 { // buying more` (`:423`); `:436-439` `alpaca-default` fallback (`:438`); `:445` `pnl.RealizedDelta`; `:448-471` close branch with `GetRealizedAccum` (`:455`), `GetFeesAccum` (`:460`), `ClosePosition` (`:466`) and the `portfolio.position.closed` emit (`:469-470`); `:472` `UpsertPosition`; `:485-488` unlock, then `checkRiskLimits` and `broadcastSnapshot`.
 - `:494-506` `closedPositionPayload` is the producer contract (`services/xstockstrat-portfolio/docs/position-closed-contract.md`); base keys must not change (029 `@AC-10`, 042, ui `strategy-performance-dashboard.feature:48`).
 - `:1068-1077` `signedQty(side, qty)`; `:1080-1110` `orderSide(ctx, orderID)` returns `ErrFillUnattributable` or a wrapped `ErrLedgerUnavailable`.
 - `packages/proto/pnl/pnl.go:54` `FoldFrom(baseline map[string]Lot, fills []Fill) FoldResult`; `:80-92` handles a flip through zero; `:43` `QtyEpsilon`.
-- Lock sites that stay: `:1602-1603` (`processAccountDeregistered`), `:1649-1650` (`processPositionSync`).
+- Lock sites that stay: `:1610-1611` (`processAccountDeregistered`), `:1657-1658` (`processPositionSync`).
 - Remaining callers, from `grep -rn '\.UpsertPosition(\|\.ClosePosition(\|\.GetRealizedAccum(\|\.GetFeesAccum(' services/xstockstrat-portfolio --include=*.go`: the four fill-path lines above, `portfolio_repo_test.go:113,137` (`GetFeesAccum`) and `position_drain_dbtest_test.go:67` (`UpsertPosition`, a seed).
 
 **Lands with**: `Step 10`
@@ -680,7 +681,7 @@ cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(go list ./... | grep
 **Codebase Evidence**:
 - `internal/broker/broker.go:8-21`: the sentinel block (`ErrInvalidCredentials`, `ErrOutcomeUncertain`, `ErrOrderNotCancelable`, `ErrRateLimited`). **Not found**: `ErrOrderNotFound`.
 - `internal/broker/alpaca.go:431` `func (c *Client) GetOrder`; `:452-454` any non-200 returns `fmt.Errorf("alpaca get order error (status %d): %s", …)`.
-- `alpaca.go:485`: `"%s/v2/orders?status=all&limit=500"` — the list ceiling is an inline literal.
+- `alpaca.go:485`: `"%s/v2/orders?status=all&limit=500"` — the list ceiling is an inline literal. The comment above it (`:483`) also names `limit=500` ("status=all keeps just-filled/canceled orders visible; limit=500 is the bulk-list ceiling."), so a bare `limit=500` grep matches it.
 - `internal/broker/ibkr.go:414-444` `GetOrder` requests `/iserver/account/orders?orderId=…`, fails on an empty `orders` array (`:439-441`) and returns `result.Orders[0]` without comparing ids (`:442-443`).
 - `ibkr.go:448-483` `ListOrders` returns an empty slice with a nil error for a 200 with no orders.
 
@@ -702,7 +703,7 @@ Broker coverage: this step handles both brokers, differently by design (D-26).
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go build ./...
 grep -n 'Orders\[0\]' services/xstockstrat-trading/internal/broker/ibkr.go   # none
-grep -n 'limit=500' services/xstockstrat-trading/internal/broker/alpaca.go   # none
+grep -n 'status=all&limit=500' services/xstockstrat-trading/internal/broker/alpaca.go   # none: the URL uses ListOrdersLimit (the :483 comment may keep its wording)
 cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
 
@@ -754,9 +755,9 @@ cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -
 **Reviewers**: xstockstrat-trading owner — order execution correctness
 
 **Codebase Evidence**:
-- `trading.go:3945` `func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) error`; `:3957` `IdempotencyKey: uuid.NewString()`.
-- Call sites, from `grep -rn 'appendLedgerEvent(' services/xstockstrat-trading --include=*.go`: `trading.go:1123`, `trading.go:3989` (inside `emitLedgerEvent`), `trading_offline_test.go:2215`, `trading_offline_test.go:2228`.
-- `:3988-3992` `emitLedgerEvent` is the fail-soft wrapper.
+- `trading.go:3953` `func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) error`; `:3965` `IdempotencyKey: uuid.NewString()`.
+- Call sites, from `grep -rn 'appendLedgerEvent(' services/xstockstrat-trading --include=*.go`: `trading.go:1123`, `trading.go:3997` (inside `emitLedgerEvent`), `trading_offline_test.go:2215`, `trading_offline_test.go:2228`.
+- `:3996-4000` `emitLedgerEvent` is the fail-soft wrapper.
 
 **Lands with**: `Step 17`
 
@@ -766,7 +767,7 @@ cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -
 
 **Instructions**:
 1. Add an `idempotencyKey string` parameter after `userID`. An empty value keeps `uuid.NewString()` (R-5: one function, the key is a parameter).
-2. `trading.go:1123` and `:3989` pass `""`. Do not change `emitLedgerEvent`'s signature.
+2. `trading.go:1123` and `:3997` pass `""`. Do not change `emitLedgerEvent`'s signature.
 3. Keep the retry loop, the timeout and the `RecordLedgerEmit` calls as they are (294 `@AC-4`).
 
 **Verification**:
@@ -870,11 +871,11 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 **Reviewers**: xstockstrat-trading owner — order execution correctness, fill detection
 
 **Codebase Evidence**:
-- `trading.go:3680` (Alpaca, `createBracket`): `s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, "")`; an error is a WARN only (`:3681`).
-- `:3697` (IBKR, `createBracket`): the same call with `resp.StopLegOrderID`, `resp.TakeProfitLegOrderID`.
-- `:3739` (IBKR, `resizeBracket`): the same call after `ReArmProtection` (`:3724`) and the resubmit (`:3728-3731`).
-- `:3610-3625` `emitBracketFailureAlert(ctx, order, reason)`; `:3572-3577` `oppositeSide(tradingv1.OrderSide) string` returns `"buy"` or `"sell"`.
-- `:3559-3568` the `bracketStatus*` constants.
+- `trading.go:3688` (Alpaca, `createBracket`): `s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, "")`; an error is a WARN only (`:3689`).
+- `:3705` (IBKR, `createBracket`): the same call with `resp.StopLegOrderID`, `resp.TakeProfitLegOrderID`.
+- `:3747` (IBKR, `resizeBracket`): the same call after `ReArmProtection` (`:3732`) and the resubmit (`:3736-3739`).
+- `:3618-3632` `emitBracketFailureAlert(ctx, order, reason)`; `:3580-3585` `oppositeSide(tradingv1.OrderSide) string` returns `"buy"` or `"sell"`.
+- `:3568-3576` the `bracketStatus*` constants.
 
 **Lands with**: `Step 18, Step 20`
 
@@ -883,11 +884,11 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 **Covers**: —
 
 **Instructions**:
-Broker coverage: both brokers are handled here — the Alpaca atomic path at `:3680` and the IBKR paths at `:3697` and `:3739`. Order type and trading-mode handling are unaffected by this step.
-1. Replace each of the three ACTIVE `UpdateBracketStatus` calls with `s.bracketRepo.ActivateBracket(...)`, passing the leg ids and a parent built from `order` (account, order id, user, `order.TradingMode.String()`, symbol) with `Side` set to the leg side as a `tradingv1.OrderSide` (A-13): `ORDER_SIDE_BUY` when `order.Side` is `ORDER_SIDE_SELL`, otherwise `ORDER_SIDE_SELL`, the same rule as `oppositeSide`. Do not pass `oppositeSide`'s string to the repository, and do not change `oppositeSide` or its two broker call sites (`:3687`, `:3729`).
+Broker coverage: both brokers are handled here — the Alpaca atomic path at `:3688` and the IBKR paths at `:3705` and `:3747`. Order type and trading-mode handling are unaffected by this step.
+1. Replace each of the three ACTIVE `UpdateBracketStatus` calls with `s.bracketRepo.ActivateBracket(...)`, passing the leg ids and a parent built from `order` (account, order id, user, `order.TradingMode.String()`, symbol) with `Side` set to the leg side as a `tradingv1.OrderSide` (A-13): `ORDER_SIDE_BUY` when `order.Side` is `ORDER_SIDE_SELL`, otherwise `ORDER_SIDE_SELL`, the same rule as `oppositeSide`. Do not pass `oppositeSide`'s string to the repository, and do not change `oppositeSide` or its two broker call sites (`:3695`, `:3737`).
 2. On an `ActivateBracket` error at any of the three sites: keep the WARN and also `go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, …)` (D-14). The leg id is then untracked; that residual is accepted (`design.md` § Open Risks).
 3. `resizeBracket`: do not return early when `ActivateBracket` fails. `ReArmProtection` and the resubmit already ran; the `order.bracket_updated` emit that follows stays (R-6).
-4. Leave every non-ACTIVE `UpdateBracketStatus` call (`:1435`, `:3109`, `:3691`, `:3708`, `:3721`, `:3733`) unchanged.
+4. Leave every non-ACTIVE `UpdateBracketStatus` call (`:1435`, `:3117`, `:3699`, `:3716`, `:3729`, `:3741`) unchanged.
 
 **Verification**:
 ```bash
@@ -1066,10 +1067,10 @@ No Go coverage threshold applies to this step: it edits no Go source, and the un
 - `trading.go:1793-1814` `StartFillPoller` — must gain no hunk (294 `@AC-6`).
 - `:1816-1878` `pollFills`: `:1819-1828` builds `brokerMap` without OFFLINE accounts; `:1877` `s.logTick(ctx, telemetry.LoopFillPoller, start, len(candidates), polled, failed)` is its last statement.
 - `:1866-1868`: `pollCtx, cancelPoll := s.alpacaCallContext(ctx, entry)` around `GetOrder`; `:1476-1481` `alpacaCallContext`.
-- `:1898` `applyBrokerOrderStatus` and `:3630` `maybeSubmitBracket` — the observer must call neither (D-3).
+- `:1898` `applyBrokerOrderStatus` and `:3638` `maybeSubmitBracket` — the observer must call neither (D-3).
 - `:1930-1942` the parent `order.filled` payload keys: `order_id, symbol, qty, fill_price, user_id, trading_mode, account_id, fees`, and `side` when set; `:1952-1963` the `order.partially_filled` keys with `filled_qty`.
-- `:3907-3928` `alpacaStatusToProto`; `ibkr.go:443,479` pass the IBKR status through raw (A-4).
-- `:3945` `appendLedgerEvent` (keyed after Step 16); `:3932-3935` `ledgerEmitTimeout`, `appendMaxAttempts`.
+- `:3915-3936` `alpacaStatusToProto`; `ibkr.go:443,479` pass the IBKR status through raw (A-4).
+- `:3953` `appendLedgerEvent` (keyed after Step 16); `:3940` `ledgerEmitTimeout`, `:3943` `appendMaxAttempts`.
 - `:201` `s.clock()`.
 - Fixtures that call `pollFills`, from `grep -rn 'pollFills(' services/xstockstrat-trading/internal --include=*_test.go`: `trading_telemetry_test.go:612-613,687,689,743,748`, `trading_order_race_test.go:30`, `trading_rate_limit_test.go:372`.
 
@@ -1181,9 +1182,9 @@ New logic is in an excluded package — no coverage threshold applies to it.
 
 **Codebase Evidence**:
 - `trading.go:180-183`: `haltedLastPolled map[string]time.Time` and `haltedMu sync.Mutex`; `:284` initialises the map in the constructor.
-- `:2949-2960` `shouldPollHaltedAccount(accountID string, intervalMs float64) bool`: `now := time.Now()`; under `haltedMu`, returns false when `intervalMs > 0` and the last poll is within the interval; otherwise stamps and returns true.
-- `:2984` `haltAccount` pre-stamps `haltedLastPolled`; `:3314` `ResumeAccountSvc` deletes the entry (TRADING-N2).
-- `trading_reconciliation_test.go:491-513` `TestShouldPollHaltedAccount_ThrottlesAndRecovers` builds the service as a literal with only `halted` and `haltedLastPolled`.
+- `:2953-2964` `shouldPollHaltedAccount(accountID string, intervalMs float64) bool`: `now := time.Now()`; under `haltedMu`, returns false when `intervalMs > 0` and the last poll is within the interval; otherwise stamps and returns true.
+- `:2977` `haltAccount` pre-stamps `haltedLastPolled` (`:2988`); `:3295` `ResumeAccountSvc` deletes the entry (`:3322`, TRADING-N2).
+- `trading_reconciliation_test.go:514-537` `TestShouldPollHaltedAccount_ThrottlesAndRecovers` builds the service as a literal with only `halted` and `haltedLastPolled`.
 
 **Lands with**: `Step 26, Step 27`
 
@@ -1216,11 +1217,11 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 **Reviewers**: xstockstrat-trading owner — fill detection, broker API safety
 
 **Codebase Evidence**:
-- `trading.go:2010-2035` `StartReconciliationPoller`: `s.cfgW.GetFloat("reconciliation.interval_ms", defaultIntervalMs)` with `defaultIntervalMs = 60000.0` (`:2012`, `:2023`); a value `<= 0` keeps the previous interval (`:2024`).
-- `:2674-2676` `haltedPollInterval()` reads `reconciliation.halted_poll_interval_ms`, default 300000.
-- `:2163-2168` copies `s.credStatus` under `credStatusMu`; `:2174` `credentialsKnownInvalid(credStatus[accountID])` skips before the list; `:2190-2193` `broker.ErrInvalidCredentials` is a WARN and a skip with no failure count; `:3227` `credentialsKnownInvalid`.
-- `:2940-2944` `isAccountHalted`.
-- `:3565-3566` `bracketStatusActive`, `bracketStatusCanceling`.
+- `trading.go:2011-2033` `StartReconciliationPoller`: `s.cfgW.GetFloat("reconciliation.interval_ms", defaultIntervalMs)` with `defaultIntervalMs = 60000.0` (`:2012`, `:2023`); a value `<= 0` keeps the previous interval (`:2024`).
+- `:2678-2679` `haltedPollInterval()` reads `reconciliation.halted_poll_interval_ms`, default 300000.
+- `:2166-2171` copies `s.credStatus` under `credStatusMu`; `:2178` `credentialsKnownInvalid(credStatus[accountID])` skips before the list; `:2194-2197` `broker.ErrInvalidCredentials` is a WARN and a skip with no failure count; `:3235` `credentialsKnownInvalid`.
+- `:2945-2949` `isAccountHalted`.
+- `:3572-3573` `bracketStatusActive`, `bracketStatusCanceling`.
 - `internal/config/watchcore.go:406-419` `GetFloat` widens an int value; `internal/config/config.go:119` `MustSnapshotWatcher(ns, values)` is the test seam for a set key.
 - `ibkr.go:448-483`: an empty slice with a nil error on a 200 with no orders. `broker.ListOrdersLimit` (Step 14) is the Alpaca ceiling.
 - Config contract (C-05; no key is added, R-39): namespace `trading`, keys `reconciliation.interval_ms` (float, code default 60000) and `reconciliation.halted_poll_interval_ms` (float, code default 300000), both already seeded and documented at `services/xstockstrat-trading/CLAUDE.md:95,98`, read live on each tick.
@@ -1346,7 +1347,7 @@ New logic is in an excluded package — no coverage threshold applies to it.
 **Codebase Evidence**:
 - **Not found**: a runbook for this cutover (`ls docs/runbooks/` has no matching file). `docs/runbooks/delisting-rollout.md` is the nearest precedent for a one-off rollout runbook.
 - `docs/runbooks/CLAUDE.md:5-11`: the index table (`| File | Purpose | Key trigger |`).
-- `docs/roadmap/features/merge-order.md:430`: the existing entry that names 311's overlap on `trading.go`.
+- `docs/roadmap/features/merge-order.md:431`: the existing entry that names 311's overlap on `trading.go`.
 - `.do/app.dev.yaml:101` is the `xstockstrat-portfolio` service block; other components reference `${xstockstrat-portfolio.PRIVATE_DOMAIN}`; `.do/app.dev.yaml:439` gives ledger `${xstockstrat.DATABASE_URL}` and portfolio uses the PgBouncer pool on the same `xstockstrat` cluster (`:701-707`), so on DO staging ledger and portfolio share one Postgres server clock. The homelab compose DSNs are not in this repository and were not checked.
 - Operator rulings: `context.md` sessions "operator rulings after round 6" and "production scope" (stop-then-start on staging, no write fence, production check-only).
 
@@ -1394,11 +1395,11 @@ grep -n "consumer_floors\|stamped_now\|bracket_legs\|consumer_applied_events" do
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `services/xstockstrat-portfolio/CLAUDE.md:91-96`: "Ledger Events Consumed" with the `order.filled` and `order.partially_filled` rows; `:126` points to `docs/position-closed-contract.md`.
+- `services/xstockstrat-portfolio/CLAUDE.md:91-96`: "Ledger Events Consumed" with the `order.filled` and `order.partially_filled` rows; `:132` points to `docs/position-closed-contract.md`.
 - `services/xstockstrat-portfolio/docs/position-closed-contract.md`: the "Named v1 scope limitation" paragraph (a short covered by a live buy takes the "buying more" branch). The design says the portfolio `CLAUDE.md` paragraph is rewritten (D-10); on `main-dev` that paragraph now lives in this file.
 - `services/xstockstrat-portfolio/docs/context-constitution.md:16`: PORTFOLIO-3 (all consumers resume from an in-memory `lastSeq`).
 - `services/xstockstrat-trading/CLAUDE.md:95,98`: the `reconciliation.interval_ms` and `halted_poll_interval_ms` rows (the design cites the drift at its older line `:119`); `:111` the `trading.order_brackets` table note; `:125` the `order.filled` event row.
-- `services/xstockstrat-trading/docs/reconciliation.md:70-75`: the residual "Alpaca bracket-leg fills, which never reach `trading.orders`".
+- `services/xstockstrat-trading/docs/reconciliation.md:76-79`: the residual "Alpaca bracket-leg fills, which never reach `trading.orders`".
 - `services/xstockstrat-trading/docs/context-constitution-findings.md`: the defects table (last rows link `docs/reports/2026-10-19-…`).
 - `docs/patterns/ci-overview.md:26-28`: the `ledger-db-test`, `portfolio-db-test` and `marketdata-db-test` rows of the CI job table (`| Job | What it checks | Coverage threshold |`); the portfolio and marketdata rows each name the build tag, the command and what the cases cover, and end "gated into `ci-gate`". There is no `trading-db-test` row (**Not found**: `grep -n 'trading-db-test' docs/patterns/ci-overview.md` → nothing).
 
