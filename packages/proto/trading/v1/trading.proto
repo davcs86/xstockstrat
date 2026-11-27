@@ -166,7 +166,7 @@ message ConfirmOrderRequest {
 }
 
 message ListOrdersRequest {
-  string user_id = 1;
+  string user_id = 1 [deprecated = true]; // DEPRECATED: ignored; the owner is resolved from the x-user-id header.
   string strategy_id = 2;
   OrderStatus status = 3;
   xstockstrat.common.v1.TimeRange range = 4;
@@ -187,7 +187,7 @@ message ListOrdersResponse {
 }
 
 message StreamOrderUpdatesRequest {
-  string user_id = 1;
+  string user_id = 1 [deprecated = true]; // DEPRECATED: ignored; the owner is resolved from the x-user-id header.
   repeated OrderStatus status_filter = 2;
 }
 

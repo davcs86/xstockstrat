@@ -659,3 +659,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`
 - Deviations: none
+
+### Operator decision (2026-11-27, binding) — Steps 12+13 blocker
+- Ruling, verbatim: "Operator ruling 2026-11-27: option A. Add services/xstockstrat-trading/internal/service/trading_helpers_test.go to the Step 12+13 unit and delete the stale `if req.UserId != "" && o.UserId != req.UserId { return false }` clause (:292-294) from the TestListOrdersInMemoryFilters copy, since the production filter has been owner-based since Step 3 and no case in this test sets UserId. Log it in the Deviation Log as a scope expansion of Step 13, record this ruling verbatim in context.md, re-run the Verification and commit steps 12+13."
+
+### Step 12 — proto: deprecate the three ignored body user_id fields [done] (atomic unit Steps 12+13)
+- `ListOrdersRequest.user_id`, `StreamOrderUpdatesRequest.user_id` (`trading.proto`) and `ListAlertsRequest.user_id` (`notify.proto`) are now `[deprecated = true]` with the comment `// DEPRECATED: ignored; the owner is resolved from the x-user-id header.` (D-10). Each keeps field number `1`. `StreamAlertsRequest` and `AcknowledgeAlertRequest` are untouched (D-11). Under the union Verification, `buf lint` and `buf breaking` (against `feature/fix-read-path-owner-trust`, `subdir=packages/proto`) were clean.
+- TDD: N/A (proto).
+- Files modified: `packages/proto/trading/v1/trading.proto`, `packages/proto/notify/v1/notify.proto`
+- Deviations: none
+
+### Step 13 — proto-gen: regenerate trading and notify stubs [done] (atomic unit Steps 12+13)
+- Ran `scripts/buf-gen.sh` in the pinned `xstockstrat-codegen` image. 14 of the 16 listed stubs changed. `gen/ts/dist/{trading,notify}/v1/{trading,notify}.js` were byte-identical and were not staged. No path outside `trading/v1` or `notify/v1` changed. Per the operator ruling, the stale body-`UserId` clause was deleted from the `TestListOrdersInMemoryFilters` filter copy in `trading_helpers_test.go`.
+- TDD: N/A (proto-gen). Lint red → green.
+  - RED: the union Verification ran before the test edit. Result: exit=1 (`.sdd-logs/v-1.log`) with `internal/service/trading_helpers_test.go:292:6: SA1019: (github.com/xstockstrat/contracts/gen/go/trading/v1.ListOrdersRequest).UserId is deprecated` and `1 issues:`.
+  - GREEN: the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `ok  	github.com/xstockstrat/trading/internal/service	14.706s`, golangci-lint v2.14.0 `0 issues.`, and notify `# tests 419` / `# pass 419` / `# fail 0`. Only the Step 6 `//nolint:staticcheck` helpers still write the deprecated fields.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `packages/proto/gen/go/{trading,notify}/v1/*.pb.go`, `packages/proto/gen/python/{trading,notify}/v1/*_pb2.py`, `packages/proto/gen/ts/{trading,notify}/v1/*.ts`, `packages/proto/gen/ts/dist/{trading,notify}/v1/*.d.ts` and `*_pb.js`, `services/xstockstrat-trading/internal/service/trading_helpers_test.go`
+- Deviations: scope expansion (`trading_helpers_test.go`, operator ruling) and the Docker codegen fallback. Full detail is in the Deviation Log.

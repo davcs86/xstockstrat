@@ -217,6 +217,11 @@ export interface ConfirmOrderRequest {
     fees?: number | undefined;
 }
 export interface ListOrdersRequest {
+    /**
+     * DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+     *
+     * @deprecated
+     */
     userId: string;
     strategyId: string;
     status: OrderStatus;
@@ -238,6 +243,11 @@ export interface ListOrdersResponse {
     page?: PageResponse | undefined;
 }
 export interface StreamOrderUpdatesRequest {
+    /**
+     * DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+     *
+     * @deprecated
+     */
     userId: string;
     statusFilter: OrderStatus[];
 }

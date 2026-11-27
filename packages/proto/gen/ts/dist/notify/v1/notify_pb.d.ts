@@ -213,7 +213,10 @@ export declare const AcknowledgeAlertResponseSchema: GenMessage<AcknowledgeAlert
  */
 export type ListAlertsRequest = Message<"xstockstrat.notify.v1.ListAlertsRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**

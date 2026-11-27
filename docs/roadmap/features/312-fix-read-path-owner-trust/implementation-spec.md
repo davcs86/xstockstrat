@@ -822,7 +822,7 @@ cd services/xstockstrat-notify \
 
 ### Step 12 — proto: deprecate the three ignored body user_id fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -869,7 +869,7 @@ cd packages/proto && buf lint \
 
 ### Step 13 — proto-gen: regenerate trading and notify stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/trading/v1/trading.pb.go` — modify (regenerated)
@@ -1285,3 +1285,9 @@ Spec-time deviations from design.md, recorded at `/sdd-review impl-spec` (2026-1
 |---|---|---|---|---|
 | 6 | §8: the `export_test.go` constructor sets `repo`, `orders` and `subs` "and nothing else" | `NewOwnerScopeTestService` takes a third parameter, `accounts repository.AccountRepository` | The same test carries the agent `@AC-7` wire proof, which reaches the unexported `accountRepo` (`trading.go:140`). `export_test.go` stays at two funcs (constructor plus broadcast shim), so the C-18 minimality bound holds | Trading owner ack pending (context.md Open Thread) |
 | 12+13 | Build order puts the proto deprecation first | Proto and proto-gen land after Steps 3, 5, 6 and 10 | `[deprecated = true]` trips staticcheck SA1019 (`services/xstockstrat-trading/.golangci.yml:7`) at the body `UserId` read sites until those steps remove them. `nolintlint` is not enabled, so the `//nolint:staticcheck` lines Step 6 adds before the deprecation lands are inert | Proto reviewer and trading owner ack pending (context.md Open Thread) |
+
+Execution-time deviations (`/sdd-execute`, 2026-11-27):
+
+- **Steps 12+13 — scope expansion of Step 13 (operator ruling 2026-11-27, option A).** Once the deprecation was generated, the trading lint failed with `internal/service/trading_helpers_test.go:292:6: SA1019: ... ListOrdersRequest).UserId is deprecated`. The unit also edits `services/xstockstrat-trading/internal/service/trading_helpers_test.go`, which is not in Step 13's **Files**. It deletes the stale `if req.UserId != "" && o.UserId != req.UserId { return false }` clause from the `TestListOrdersInMemoryFilters` copy of the filter. The production filter has been owner-based since Step 3, and no case in this test sets `UserId`. **Disposition**: scope expansion approved by the operator; ruling recorded verbatim in context.md.
+- **Step 13 — codegen in Docker (CI-equivalent fallback).** The host has `buf` 1.72.0 but not the pinned Go plugins, `grpcio-tools` or the `packages/proto/gen/ts` dependencies. The Verification's `./scripts/buf-gen.sh` therefore ran inside the cached, version-pinned `xstockstrat-codegen` image (`Dockerfile.codegen`, the image `scripts/localenv-setup.py` builds), with the main checkout's root and `gen/ts` `node_modules` mounted read-only. `localenv-setup.py` itself was not run, because it would also write dev certs. Inside the container `buf-gen.sh` skips `buf breaking` (the worktree's git dir is not mounted), but Step 12's Verification ran `buf breaking` on the host and it was clean. The rest of the union Verification ran on the host unchanged. **Disposition**: CI-equivalent fallback.
+- **Step 13 — `gen/ts/dist/{trading,notify}/v1/{trading,notify}.js` were left byte-identical by the generator** and so were not staged (Instruction 2). The other 14 listed paths changed.

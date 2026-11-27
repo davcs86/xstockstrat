@@ -675,6 +675,11 @@ export interface ConfirmOrderRequest {
 }
 
 export interface ListOrdersRequest {
+  /**
+   * DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+   *
+   * @deprecated
+   */
   userId: string;
   strategyId: string;
   status: OrderStatus;
@@ -700,6 +705,11 @@ export interface ListOrdersResponse {
 }
 
 export interface StreamOrderUpdatesRequest {
+  /**
+   * DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+   *
+   * @deprecated
+   */
   userId: string;
   statusFilter: OrderStatus[];
 }
