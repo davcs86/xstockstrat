@@ -792,3 +792,12 @@ The operator ran the Step 16 read-only SELECT (the one in `implementation-spec.m
 - Homelab staging (`xstockstrat-staging` on the homelab VM): `(0 rows)`.
 
 The union over the in-scope environments is therefore empty. Production is out of scope (never launched; standing ruling), so it is not part of the union. Operator Gate 1 is answered with an empty list. Gates 2 (cutoff confirmation) and 4 (second cross-schema read approval) were not answered by the operator; they only matter if a migration is still written. The follow-up decision (drop Steps 16-18, keep them as a guarded no-op, or hold) is recorded in the entry that follows.
+
+## Session 2026-11-27 — operator rulings recorded by the orchestrator (verbatim)
+
+Operator rulings, recorded verbatim by the orchestrator:
+
+1. Question: what should happen with Steps 16-18 (the ingest `019_retract_fabricated_fundsignals` migration, its migration-assertions fixture, the cross-schema docs) given the empty frozen retraction list? Operator answer: **"Drop 16-18 (Recommended)"** — re-spec 309 to close out at Step 15: no retraction migration and no cross-schema read; the two zero-row results are the recorded evidence; Operator Gates 1, 2 and 4 become moot; `@AC-4` stays as the guarantee, closed by that evidence (state the AC-4 handling in the re-spec; the operator will be asked before promotion).
+2. Question: confirm O-14 (stored wrong-direction `buy` rows from degenerate days expire naturally up to `fundsignal.valid_days`, 90; no step retracts them), O-15 (opportunity rows built from retracted signals stay readable up to about 24 h, `opportunity.valid_window_hours`; no recompute step) and the `@AC-5` wording (added by /sdd-review impl-spec with no operator in the loop)? Operator answer: **"Confirm all three (Recommended)"**.
+
+Re-spec applied (`implementation-spec.md`): Steps 16-18 removed from the step list and recorded in `## Dropped Steps` plus a Deviation Log entry; Total Steps 18 → 15; Operator Gates 1-4 answered or moot; the O-18 post-deploy checks withdrawn. `@AC-4` has no covering step: it is closed by the two zero-row Operator Gate 1 results (entry above) and is not guarded by an automated test. The operator is to be asked about that C-15/C-16 exception before promotion. `feature.md` and `product-spec.md` carry a one-line note; `acceptance.feature` and `design.md` are untouched (C-15; design is a historical record).

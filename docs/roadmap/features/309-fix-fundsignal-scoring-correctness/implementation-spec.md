@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/309-fix-fundsignal-scoring-correctness/feature.md`
-**Total Steps**: 18
+**Total Steps**: 15
 **Feature Branch**: `feature/fix-fundsignal-scoring-correctness`
 **Severity**: SEV-2
 **Anchors read from**: `origin/main-dev@36aed60b` (read-only `git archive` snapshot). The feature branch tip
@@ -17,9 +17,9 @@ symbol before editing; a moved line is not a deviation, a missing symbol is (F-0
 
 The build order follows design.md: proto first (Steps 1-2), then the two producer fixes in
 xstockstrat-analysis (formula input, Steps 3-5; direction gate, Steps 6-8), then conviction presence
-across ingest, analysis and the agent (Steps 9-15), and last the ingest retraction migration with its
-assertion fixture and docs (Steps 16-18). The migration is last because it is the only step that waits
-on operator input (the frozen symbol list); everything before it can land without that input.
+across ingest, analysis and the agent (Steps 9-15). The spec ends at Step 15. The ingest retraction
+migration with its assertion fixture and docs (former Steps 16-18) was dropped on 2026-11-27 by operator
+ruling: the frozen retraction list is empty (§ Dropped Steps).
 There is no xstockstrat-indicators code change (recon.md:60) and no new config key (`R-2`); indicators
 gets one characterization test step. Consumer surfaces (C-14): the agent `ingest_signal` path changes in
 Steps 13-14; `/insights/opportunities` (xstockstrat-ui) and MCP `list_opportunities` need no code change —
@@ -33,43 +33,37 @@ that is a design decision, not an omission (design.md § Consumer surfaces; no T
 | `@AC-1` formula input omits absent metrics | Step 4 (producer input), Step 5 (no pb / debt_to_equity sub-score of 1.0) |
 | `@AC-2` lone low-scoring symbol is not `buy` | Step 7 |
 | `@AC-3` explicit conviction 0.0 scored as 0.0 | Step 12 (scorer and screener path); Step 10 pins the store / read-back seam it depends on |
-| `@AC-4` pre-246 fabricated signals no longer active | Step 17 |
+| `@AC-4` pre-246 fabricated signals no longer active | No step: closed by the recorded zero-row evidence (Operator Gate 1 results in context.md, 2026-11-27); not guarded by an automated test — flag for the C-16 promotion decision |
 | `@AC-5` mcp_client explicit conviction 0.0 ingested as 0.0 | Step 10 |
 
 ## Operator Gates (P-03 — execute blocks and asks; never guesses)
 
-1. **Frozen retraction list (blocks Step 16).** The migration needs a literal symbol list. It is the
-   union, over every environment, of the read-only SELECT in Step 16, run by the operator and recorded
-   in `context.md` under a `Frozen retraction list` entry. The list is not in the repo and is not the
-   report's example symbols. Without the entry, Step 16 blocks.
-2. **Retraction cutoff (blocks Step 16).** `2026-10-31T00:00:00Z` comes from
-   `docs/roadmap/features/246-fix-fundsignal-neutral-score/feature.md:30` and is unchecked against
-   deploy logs (design.md Open Risks). The operator confirms it, or supplies the corrected instant, in
-   the same `context.md` entry.
-3. **O-14 / O-15 — not confirmed (ask before Step 1).** design.md asks `/sdd-spec` to confirm two
-   accepted residuals with the operator. The 2026-11-20 operator record names neither, and neither the
-   `/sdd-spec` run nor the `/sdd-review impl-spec` run had an operator to ask. The spec plans on the
-   synthesis default. `/sdd-execute` asks the operator at its up-front confirmation, before Step 1, and
-   records the answer in `context.md`:
+All four gates are resolved by the 2026-11-27 operator rulings (`context.md` § Session 2026-11-27 — operator
+rulings recorded by the orchestrator (verbatim)). No gate remains open and no step is blocked.
+
+1. **Frozen retraction list — answered, empty.** The Step 16 read-only SELECT returned `(0 rows)` on DO
+   staging and on homelab staging (`context.md` § Session 2026-11-27 — Operator Gate 1 read-only SELECT
+   results). Production is out of scope. The union is empty, so there is no list to freeze and no migration
+   to write (§ Dropped Steps).
+2. **Retraction cutoff — moot.** The cutoff `2026-10-31T00:00:00Z` was a parameter of the dropped migration.
+3. **O-14 / O-15 and the `@AC-5` wording — answered, "Confirm all three (Recommended)".**
    - O-14: stored wrong-direction `buy` rows from degenerate days expire naturally (up to
      `fundsignal.valid_days`, 90). No step retracts them.
    - O-15: opportunity rows built from retracted signals stay readable for up to about 24h
      (`opportunity.valid_window_hours`). No step triggers a recompute.
-   Choosing otherwise for either adds steps and needs a re-spec.
-4. **Second cross-schema migration read (blocks Step 16).** Step 16 reads `marketdata.fundamentals` at
-   migration time. Root `CLAUDE.md` § Database records one such exception today (analysis `029`), so
-   this is a second one. `context.md` § Session 2026-11-10 holds approval in principle for the
-   retraction (operator, as DBA + ingest owner), written before the mechanism was chosen; it does not
-   name the cross-schema read. Before Step 16 lands, `context.md` must hold the operator's explicit
-   approval of the second exception and the marketdata owner's acknowledgement (root `CLAUDE.md`
-   § Approval Flow: DB migration = DBA + service owner). Without it, Step 16 blocks.
+   - `@AC-5` (added by `/sdd-review impl-spec` with no operator in the loop) is confirmed as worded.
+4. **Second cross-schema migration read — moot.** No migration reads `marketdata.fundamentals`; root
+   `CLAUDE.md` § Database keeps its single recorded exception (analysis `029`).
 
-## Post-Deploy Checks (O-18 — per environment, recorded in `context.md`; not an execute step)
+**`@AC-4` handling.** The scenario stays in `acceptance.feature` (C-15: `@AC-*` ids are append-only) and is
+not edited. It has no covering step and no automated test. It is closed by the two zero-row Operator Gate 1
+results, which show no pre-246 fabricated row was active in either in-scope environment. This is a recorded
+exception to the C-15 coverage rule; the operator will be asked before promotion (C-16) whether to accept it.
 
-- Compare the `ingest 019: retracted N …` NOTICE in the db-migrator job log with the row count of the
-  frozen-list SELECT taken for that environment (Step 16).
-- Run the Step 16 SELECT again with the list leg added: it must return zero rows. A log line
-  `ingest 019: marketdata.fundamentals absent` means the guard no-opped and the retraction did not run.
+## Post-Deploy Checks (O-18 — withdrawn)
+
+The O-18 per-environment checks (the `ingest 019: retracted N …` NOTICE count, the repeat SELECT, the
+`marketdata.fundamentals absent` guard log line) belonged to the dropped migration and no longer apply.
 
 ## Step Dependencies
 
@@ -88,13 +82,7 @@ that is a design decision, not an omission (design.md § Consumer surfaces; no T
   `conviction_provided` truthy; Step 12 rebuilds the helper on a real proto.
 - Step 14 [test] covers Step 13 [service]. Not a unit: no existing agent test changes result under Step 13.
 - Step 15 [docs] requires Steps 9, 11 and 13.
-- Step 16 requires operator gates 1, 2 and 4. Migration number `019` is the next free number on
-  `main-dev@36aed60b` (last: `018_backfill_symbol_results`). No peer branch in this batch claims an
-  ingest `019` (grep of peer `design.md` / `implementation-spec.md`). Re-run
-  `ls services/xstockstrat-ingest/migrations | sort | tail -2` at execute; if `019` is taken, take the
-  next free number and rename the Step 17 fixture to match (record in the Deviation Log).
-- Step 17 [test] requires Step 16: the fixture `\ir`-includes the up file.
-- Step 18 [docs] requires Step 16.
+- Steps 16-18 were dropped (§ Dropped Steps); the spec ends at Step 15 and no step needs an operator gate.
 - The EXTEND of `services/xstockstrat-ingest/acceptance/mcp-client-signal-source.feature:34`
   (design.md § Business Rules Touched) is `@AC-5` in `acceptance.feature`, added by
   `/sdd-review impl-spec` on 2026-11-20 from the design.md wording. Step 10 covers it.
@@ -680,139 +668,28 @@ grep -n "unknown confidence" services/xstockstrat-ingest/docs/context-constituti
 
 ---
 
-### Step 16 — migration: ingest `019_retract_fabricated_fundsignals`
+## Dropped Steps
 
-**Status**: `pending`
-**Service**: `xstockstrat-ingest`
-**Files**:
-- `services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql` — create
-- `services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.down.sql` — create
+Removed from the step list on 2026-11-27 by operator ruling, so every remaining step status marker is
+`pending` or `done`. The operator ruled "Drop 16-18 (Recommended)" (`context.md` § Session 2026-11-27 —
+operator rulings recorded by the orchestrator (verbatim)). Reason common to all three: the frozen
+retraction list is empty. The Step 16 read-only SELECT returned `(0 rows)` on DO staging and `(0 rows)` on
+homelab staging; production is out of scope. The two zero-row results are the recorded evidence.
 
-**Reviewers**: DBA — NNN numbering, up+down pair, run-order compliance; `xstockstrat-ingest` owner — idempotent ingestion; `xstockstrat-marketdata` owner — acknowledges the migration-time read of `marketdata.fundamentals` (D-12)
+**Dropped step 16 — migration: ingest `019_retract_fabricated_fundsignals`.** It would have expired
+pre-246 fabricated `0.5` fundamentals signals for data-less symbols by setting `valid_until` from a frozen
+operator list, behind a `to_regclass('marketdata.fundamentals')` guard. With no row matching in either
+in-scope environment there is nothing to expire; no migration and no cross-schema read are written.
 
-**Codebase Evidence**:
-- Last ingest migration on `main-dev@f802b184` (and on the merged feature tree): `018_backfill_symbol_results` → next is `019`. design.md's provisional `017` is taken (`017_signal_source_extraction_instructions`).
-- `migrations/013_signal_ownership_templates.up.sql:101-104` — the `to_regclass`-guarded `DO $$` precedent; `:75`, `:80` — `GET DIAGNOSTICS … ROW_COUNT` and `RAISE NOTICE` precedent.
-- `migrations/001_newsletter_signals.up.sql` — `ingest.newsletter_signals` columns `ingested_at`, `source`, `symbol`, `conviction NUMERIC(4,3)`, `valid_until`; `user_id` added by `013` (`servicer.py:1415` binds it as `owner`).
-- `ingest.signal_sources`: `user_id` (`013:24-32`), `source_type` with `'derived'` (`006_signal_source_type_derived.up.sql`); `013:27` sets `user_id = 'system'` for derived sources.
-- `services/xstockstrat-marketdata/migrations/002_fundamentals.up.sql:7-25` — `marketdata.fundamentals(symbol text PRIMARY KEY, as_of timestamptz NOT NULL, pe_ratio, pb_ratio, dividend_yield, eps, roe, debt_to_equity numeric, …)`.
-- Run order puts marketdata before ingest (`docs/patterns/database.md` § Migration tooling; `scripts/migration-rerun.py:26-37`); both schemas share one database per environment (D-2).
-- Reader filter the expiry must defeat: `servicer.py:1589` `(valid_until IS NULL OR valid_until >= ${idx})`.
-- Down-file precedent: `docs/patterns/database.md` § Adding a new migration, item 2 ("or a stub comment if rollback is not supported").
-- Approval in principle: `context.md` § Session 2026-11-10 (operator, as DBA + ingest owner).
+**Dropped step 17 — test: migration-assertions fixture for ingest 019.** `scripts/migration-assertions/ingest-019.sql`
+asserted Step 16 and was the only step that covered `@AC-4`. With Step 16 dropped it has nothing to
+exercise. `@AC-4` is closed by the recorded zero-row evidence and carries no automated guard (§ Scenario
+Coverage).
 
-**TDD**: `N/A (migration)`
-
-**Covers**: —
-
-**Instructions**:
-0. **Precondition (operator gates 1, 2 and 4).** `context.md` must hold the `Frozen retraction list` entry, the cutoff confirmation, and the approval of the second cross-schema read. If any is missing, block and ask. `<frozen list>` in instruction 1 is a placeholder for the recorded list, and the cutoff literal is the confirmed instant; never commit the placeholder or a guessed list (F-04). The operator builds the list by running this read-only SELECT per environment and taking the union:
-   ```sql
-   SELECT DISTINCT s.symbol
-     FROM ingest.newsletter_signals s
-    WHERE s.user_id = 'system'
-      AND s.source IN (SELECT slug FROM ingest.signal_sources WHERE user_id = 'system' AND source_type = 'derived')
-      AND s.conviction = 0.5
-      AND s.ingested_at < '2026-10-31T00:00:00Z'
-      AND (s.valid_until IS NULL OR s.valid_until > now())
-      AND NOT EXISTS (SELECT 1 FROM marketdata.fundamentals f
-                       WHERE f.symbol = s.symbol
-                         AND COALESCE(f.pe_ratio, f.pb_ratio, f.dividend_yield, f.roe, f.debt_to_equity, f.eps) IS NOT NULL)
-    ORDER BY 1;
-   ```
-1. Up file: a three-line header (migration, service, "feature 309: expires pre-246 fabricated 0.5 fundamentals signals; reads marketdata.fundamentals"), then one `DO $$` block:
-   - `IF to_regclass('marketdata.fundamentals') IS NULL THEN RAISE NOTICE 'ingest 019: marketdata.fundamentals absent, nothing retracted'; RETURN; END IF;`
-   - `UPDATE ingest.newsletter_signals s SET valid_until = now() WHERE` the SELECT's predicate `AND s.symbol = ANY (ARRAY[<frozen list>])`.
-   - `GET DIAGNOSTICS retracted = ROW_COUNT; RAISE NOTICE 'ingest 019: retracted % fabricated fundamentals signal(s)', retracted;`
-2. Set `valid_until` only. Do not touch `conviction` or `ingest.signal_dedup_claims` (recon.md:152). Use no `requires-env` or `contract-of` header.
-3. A rerun is a no-op: an expired row fails `valid_until > now()`.
-4. Down file: a stub comment — the expiry is not reversible (the prior `valid_until` is not kept) (D-5).
-5. Record in `context.md`: the list used, the confirmed cutoff, and that EDGAR self-heal was reviewed against the list (design.md Open Risks).
-
-**Verification** (offline — no database):
-```bash
-ls services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.down.sql
-ls services/xstockstrat-ingest/migrations | sort | tail -2          # 019 is the highest number, used once
-grep -c "to_regclass('marketdata.fundamentals')\|GET DIAGNOSTICS\|RAISE NOTICE" services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql   # >= 3
-grep -n "signal_dedup_claims\|SET conviction\|DELETE" services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql ; test $? -eq 1
-grep -n "<frozen" services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql ; test $? -eq 1   # no placeholder left
-# read both files: the up changes valid_until only; the down is a comment stating why there is no reverse
-```
-
----
-
-### Step 17 — test: migration-assertions fixture for ingest 019
-
-**Status**: `pending`
-**Service**: `xstockstrat-ingest` (`scripts/migration-assertions/`)
-**Files**:
-- `scripts/migration-assertions/ingest-019.sql` — create
-
-**Reviewers**: `xstockstrat-ingest` owner — idempotent ingestion; DBA — run-order compliance
-
-**Codebase Evidence**:
-- `scripts/migration-rerun.py:575-576` — `assertion_names()` globs `scripts/migration-assertions/*.sql`; `:562-572` `split_assertions` runs every non-`fixtures-*`, non-`config-<below R>` file after the passes. A new file needs no harness edit.
-- Shape precedent: `scripts/migration-assertions/ingest-017.sql` and `ingest-016.sql:19-35` — `BEGIN; … \ir ../../services/xstockstrat-ingest/migrations/<file>.up.sql … DO $$ … RAISE EXCEPTION … $$; ROLLBACK;`.
-- The shared fixture holds a `system` `fundamentals` derived source (`fixtures-pre-224.sql:19-22`, re-owned by `013:27`). Its 120 signals are `FX<i>` symbols ingested at `NOW() - i hours`, so migration 019 changes none of them and no existing assertion file (`ingest-013.sql`, `ingest-014.sql`) is affected.
-- A fixture that INSERTs into `marketdata.fundamentals`: **Not found** — no precedent; columns per `002_fundamentals.up.sql:7-25` (`symbol`, `as_of` are required).
-- CI job `migration-rerun` (`.github/workflows/ci.yml:898`) is the only runner; its path filter includes `scripts/migration-assertions/**` (`:95`).
-
-**TDD**: `N/A (SQL assertion fixture; runs only in the CI job migration-rerun, which needs a database)`
-
-**Covers**: `AC-4`
-
-**Instructions**:
-Create `ingest-019.sql` with a two-line header naming migration 019 and feature 309 `@AC-4`. Every scenario is its own `BEGIN … ROLLBACK`, INSERTs its own `ingest.newsletter_signals` rows (`user_id='system'`, `source='fundamentals'`, `conviction=0.5`, `ingested_at` before the cutoff, future `valid_until`) and `marketdata.fundamentals` rows, then `\ir`-includes the up file and raises on a failed check. Never `CREATE` `marketdata.fundamentals` (D-13). Use symbols taken from the migration's frozen list for (a)-(c), (e), (f).
-- (a) a listed symbol whose fundamentals row has all six metrics NULL, and a listed symbol with no fundamentals row: both end with `valid_until <= now()`, and neither satisfies `(valid_until IS NULL OR valid_until >= clock_timestamp())` — the `QuerySignals` active filter at a later instant.
-- (b) a listed symbol with one non-null metric (`dividend_yield` only) keeps its `valid_until`.
-- (c) a listed, fully populated symbol with a computed 0.5 signal keeps its `valid_until`.
-- (d) a symbol outside the list, all-null, keeps its `valid_until`.
-- (e) `ALTER TABLE marketdata.fundamentals RENAME TO fundamentals_309_hidden;` then apply: zero rows change (the guard branch).
-- (f) apply twice: the second apply changes no row (`valid_until` equal before and after).
-Each retracted row also keeps its `conviction`, and `ingest.signal_dedup_claims` is unchanged.
-
-**Verification** (offline; the real run is CI `migration-rerun`):
-```bash
-ls scripts/migration-assertions/ingest-019.sql
-grep -c "^BEGIN;" scripts/migration-assertions/ingest-019.sql ; grep -c "^ROLLBACK;" scripts/migration-assertions/ingest-019.sql   # equal, >= 6
-grep -c "019_retract_fabricated_fundsignals.up.sql" scripts/migration-assertions/ingest-019.sql   # >= 6
-grep -n "CREATE TABLE" scripts/migration-assertions/ingest-019.sql ; test $? -eq 1
-uv run pytest scripts/tests/test_migration_rerun.py -q
-```
-No coverage threshold applies: the fixture is SQL outside every service's coverage scope, and the assertions run only in CI `migration-rerun`. Steps 16 and 17 therefore count as verified only when that job is green on the integration PR; record its result in `context.md` and do not mark `@AC-4` covered before then.
-
----
-
-### Step 18 — docs: second migration-time cross-schema read
-
-**Status**: `pending`
-**Service**: `docs/patterns/`, root `CLAUDE.md`, `xstockstrat-ingest`
-**Files**:
-- `docs/patterns/database.md` — modify
-- `CLAUDE.md` — modify
-- `services/xstockstrat-ingest/CLAUDE.md` — modify
-
-**Reviewers**: none
-
-**Codebase Evidence**:
-- `docs/patterns/database.md:21-22` — "The only migration-time cross-schema read is analysis `029_seed_fundamentals_blend_strategy`, which reads `identity.users` …".
-- Root `CLAUDE.md:195` (§ Database) — "A migration stays inside its own schema; the single recorded exception is analysis `029` reading `identity.users`".
-- `services/xstockstrat-ingest/CLAUDE.md:112-134` — the per-migration notes (`015`..`018`).
-
-**TDD**: `N/A (docs)`
-
-**Covers**: —
-
-**Instructions**:
-1. `database.md:21-22`: the migration-time cross-schema reads are two — analysis `029` (`identity.users`) and ingest `019` (`marketdata.fundamentals`, read-only, `to_regclass`-guarded; marketdata migrates before ingest).
-2. Root `CLAUDE.md` § Database: "the two recorded exceptions are analysis `029` reading `identity.users` and ingest `019` reading `marketdata.fundamentals`". Change that sentence only.
-3. `services/xstockstrat-ingest/CLAUDE.md`: add a `019_retract_fabricated_fundsignals` note (feature 309, data only; sets `valid_until`, logs a NOTICE with the count, down is a stub).
-
-**Verification**:
-```bash
-grep -n "The only migration-time cross-schema read\|single recorded exception" docs/patterns/database.md CLAUDE.md ; test $? -eq 1
-grep -n "019" docs/patterns/database.md CLAUDE.md services/xstockstrat-ingest/CLAUDE.md
-```
+**Dropped step 18 — docs: second migration-time cross-schema read.** It would have amended
+`docs/patterns/database.md`, root `CLAUDE.md` § Database and `services/xstockstrat-ingest/CLAUDE.md` for a
+second migration-time cross-schema read. With no such read, the docs keep their single recorded exception
+(analysis `029` reading `identity.users`) and stay correct.
 
 ---
 
@@ -849,3 +726,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: `**TDD**: red-green required`; RED "today: the flag is `False`".
 **Actual**: Step 13 had already landed, so the new tests pass on the branch tip. RED ran the Verification block with `services/xstockstrat-agent/app/client.py` temporarily checked out from `385ce947` (pre-Step-13) and restored before GREEN: 1 failed (`test_explicit_zero_conviction_sets_presence`, `assert False is True`). `test_omitted_conviction_leaves_presence_unset` passes on both trees because it pins the unchanged not-given behaviour. That block printed `exit=0` because its last command (ruff) passed.
 **Reason**: Step 13 lands before Step 14 (Step Dependencies; not an atomic unit). **Disposition**: in-scope TDD evidence, no scope change.
+
+### Deviation: Steps 16-18 — dropped
+**Spec said**: Steps 16-18 add ingest migration `019_retract_fabricated_fundsignals`, its `ingest-019.sql` assertion fixture and the cross-schema docs, behind Operator Gates 1, 2 and 4.
+**Actual**: The three steps are removed from the step list and recorded in § Dropped Steps. Operator Gates 1, 2 and 4 are answered or moot; `@AC-4` has no covering step.
+**Reason**: The operator's Step 16 SELECT returned `(0 rows)` on DO staging and homelab staging (production out of scope), and the operator ruled "Drop 16-18 (Recommended)" on 2026-11-27. **Disposition**: operator-approved scope reduction.
