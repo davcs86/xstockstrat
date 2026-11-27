@@ -530,3 +530,14 @@ Two rulings on the open items the previous re-spec raised, relayed by the orches
 - TDD: AC-1 red: each test panicked with `invalid memory address or nil pointer dereference` in `pgxpool.(*Pool).Acquire(0x0, …)` from `portfolio_repo.go:247`, `:271`, `:379` → green: all three pass with both subtests listed; full race suite ok, coverage `total: (statements) 79.1%` (≥ 40%), `golangci-lint` `0 issues.`
 - Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go`
 - Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 3
+
+- Tooling setup (step 3): pnpm ✓ 9.15.9 (worktree links the main checkout's `node_modules`; no install) · node v22 ✓ (Node 24 pinned; no `engines` constraint). Nothing installed.
+- Discovery re-verified at `origin/feature/fix-orphaned-code` @ `cf67cec5`: `ConfigWatcher` at `src/services/configWatcher.ts:18`; sole importer `src/__tests__/configWatcher.test.ts:23,26`; `src/services/logger.ts` exists (directory survives); `scripts/config-wiring.json:52-55` (4 entries); config `CLAUDE.md:119` (`APPLICATION_ENV`) and `:72` (generic `WaitForSnapshot` line, kept); findings `:4`, `:14`, `:35`, `## Resolved` `:37`; constitution `:3`, `:14`, `:44`; only other non-feature reference is the defect report.
+
+### Step 3 — service: config — delete the orphan `ConfigWatcher`, its test, its registry entries and its doc rows [done]
+- Deleted `configWatcher.ts` and its test (`git rm`) and the four `config-wiring.json` `dynamic` entries; reworded the `APPLICATION_ENV` comment to "telemetry resource attribute only"; moved findings rows `:14` and `:35` to `## Resolved` (dated 2026-11-27) and refreshed both docs' stamps; dropped the dead-copy clauses from the constitution's 90s pointer and CONFIG-1.
+- TDD: red (pre-edit presence check, `.sdd-logs/v-1.log`): `git ls-files` printed both paths and the registry `grep -c` printed `4` → green (`.sdd-logs/v-2.log`, `exit=0`): `git ls-files` empty, `0`, `3` kept `:lookup` entries; `config-wiring.test.mjs` 75/75 pass; config tests 396/396 pass (405 before; the deleted test's 9 cases gone); c8 `All files` lines 94.05% (≥ 40; was 92.31%); lint 0 errors. Config-key wiring gate: N/A (no key touched); `--final` ran in the Verification block anyway.
+- Files modified: `services/xstockstrat-config/src/services/configWatcher.ts` (deleted), `services/xstockstrat-config/src/__tests__/configWatcher.test.ts` (deleted), `scripts/config-wiring.json`, `services/xstockstrat-config/CLAUDE.md`, `services/xstockstrat-config/docs/context-constitution-findings.md`, `services/xstockstrat-config/docs/context-constitution.md`
+- Deviations: CONFIG-1 clause naming the deleted file also dropped; the emptied "Dead / orphaned code" table replaced by `_None open._` — full detail in Deviation Log.

@@ -244,7 +244,7 @@ grep -rn "TestGetSnapshot_UsesMockableDB" --include="*_test.go" .   # one declar
 
 ### Step 3 — service: config — delete the orphan `ConfigWatcher`, its test, its registry entries and its doc rows
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/services/configWatcher.ts` — delete
@@ -632,3 +632,14 @@ pnpm exec playwright test e2e/trader/offline-pnl.spec.ts     # or python3 script
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 3 — config `context-constitution.md` CONFIG-1 clause (2026-11-27)
+- **Spec said**: Instruction 6 — review `:14`/`:15`; "the expected edit is a refresh stamp at `:3` only".
+- **Actual**: CONFIG-1 (`:14`) ended its consumer cite with "— config's own `src/services/configWatcher.ts` is dead (findings)", which names the file this step deletes. That clause was dropped too; the live identity/ledger/notify cites are unchanged. `:15` (CONFIG-2) cites only the identity copy and is unchanged.
+- **Disposition**: in-step doc teardown, same file as the step's **Files**; no scope added.
+
+### Step 3 — config findings "Dead / orphaned code" section (2026-11-27)
+- **Spec said**: Instruction 5 — move rows `:14` and `:35` to `## Resolved`.
+- **Actual**: `:35` was the section's only row, so the emptied table was replaced with `_None open._` under the kept heading rather than leaving a header-only table.
+- **Disposition**: formatting consequence of the instructed move; same file.
+
