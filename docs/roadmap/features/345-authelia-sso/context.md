@@ -716,3 +716,53 @@
 - Status stays `implementation-ready`: FR-16.1's parameter value changed with the owner's decision and AC-65 is still
   covered by Steps 33/43/53 (C-15); an advisory `/sdd-review authelia-sso impl-spec` pass over Steps 32/33/43/53/54 is
   optional.
+
+## Session 2026-11-27 — re-ground on main-dev@187e9f8
+
+- Source: a read-only check of PR #1631 against the latest `main-dev`. Tree: `ccr-589817f0-cyg7gy@2c1d154`
+  (⊇ `origin/main-dev@187e9f8`; 31 commits since the spec's `0dbc26b`). Docs only; execution has not started (every
+  step `pending`), so the step-body edits below are allowed (F-09 binds only during execution). No decision, FR, scenario
+  or step design changed.
+- **Config seed `056` → `060`.** `main-dev` has `056_analysis_live_only_cycle_max_days` (366, #1608),
+  `057_mcp_deadline_budget` (314, #1622), `058_marketdata_bars_miss_backoff` (317, #1626) and
+  `059_trading_broker_paper_per_environment` (321, #1630); `053` stays a gap. Identity `007` is still free (`006` is the
+  highest). The new CI `migration-order-gate` (`ci.yml:1004-1024`, `scripts/check-migration-order.py`, feature 318 #1619)
+  refuses an added up-file not above the base branch's maximum, which is Step 4's rule.
+  - implementation-spec.md: Execution Summary seed sentence; Step Dependencies merge-order bullet (`060`; 319 satisfied);
+    Step 4 title, Files, Codebase Evidence (`tail -6` → `057`–`059`; cites the gate), Instruction 1 and Verification
+    (`060_*`, `grep -c '^060_'`); Step 5 title.
+  - product-spec.md: **Amended** line; Config Key Changes `NNN` sentence (`060` on 2026-11-27; the gate).
+  - design.md Open Risks: "Config migration number contested" ticked as settled.
+  - feature.md: Reviewers DBA row (`060`); an `(unchanged)` Status History row.
+  - merge-order.md: row 345 vs 314/317/321 **Resolved** (Yes); row 345 vs 319 **Resolved** (Yes: 319 merged first,
+    #1610, 2026-11-26; `revokeToken` verifies at `identityServiceImpl.ts:284-293`).
+- **Tree header** now `ccr-589817f0-cyg7gy@2c1d154 ≡ origin/ccr-589817f0-cyg7gy (⊇ origin/main-dev@187e9f8)`.
+- **Line citations re-verified** at `187e9f8` (old → new; content unchanged unless noted below):
+  - identity `identityServiceImpl.ts`: `authenticateUser` 150-206 → 151-207 and its sub-ranges +1; reply literals
+    189-200 / 258-269 → 190-201 / 259-270; `rotateRefreshToken` 364 → 373; `listAdminUserIds` 988 → 997. `telemetry.ts`
+    `recordAuditFailure` 426-429 → 434-437 (357-362, 380-388, 390 unchanged).
+  - config `authz.ts` `SECRET_CALLER_ALLOWLIST` 136-155 → 143-162, notify grant 150-153 → 157-160 (`:74` unchanged).
+  - agent: `watcher.py` `read_value` 68-77 → 73-82, `start_watchers` wait 92-97 → 97-102; `oauth_server.py` 28 → 29;
+    `tools.py` 79/80 → 80/81, 139 → 140, 148 → 149, 178 → 179, 195 → 196, 218 → 219; `main.py` every cited range +2
+    (`_authorized` 142-165, `handle_mcp` 197-223, routes 238-253); `client.py` `validate_token` 1595 → 1596.
+  - `ci.yml`: `frontend-e2e` 609 → 611, coverage step 794 → 818, `scripts-python` 861-894 → 907-940, `migration-rerun`
+    898 → 944, `config-wiring-stored` 1323 → 1444 (filters 59/62/64 unchanged). `config-wiring.json` receivers 105 → 94,
+    141 → 131, forwarder 42 → 35. `deploy/homelab/compose.yml` `APP_URL` 285 → 307.
+  - UI: `vitest.config.ts` include 20 → 24, coverage include 25 → 29, exclude 28 → 32, thresholds 29-33 → 33-37 (env `:19`
+    and `:16` unchanged); `playwright.config.ts` `globalSetup`/`globalTeardown` 91-92 → 98-99, `baseURL` 94 → 101, projects
+    98-125 → 105-132, `webServer` 128 → 135, `AGENT_PUBLIC_URL` 168 → 175.
+  - Ledger `fails.md` 4236-4244 → 4251-4259; agent `CLAUDE.md` Config Keys Consumed 112 → 114.
+- **Beyond line shifts** (flagged, not redesigned):
+  - `migration-rerun` no longer replays every up-file: since 318 (#1619) it applies every migration once and replays only
+    the feature-224/225 up-files ("Older up-files are not replayed.", `ci.yml:942-943`). Step 3's evidence now says so;
+    its instruction (idempotent DDL) is unchanged. Spec-level choice 8 ("idempotence comes from `ON CONFLICT DO NOTHING`
+    replayed by `migration-rerun`") no longer holds as written: the seed is applied once and no CI job replays it. Left
+    for the owner or the next `/sdd-review authelia-sso impl-spec`.
+  - `authz.ts` internal-caller grants gained an optional `peerSan` (319); Step 13's `SECRET_CALLER_ALLOWLIST` append is
+    unaffected.
+  - recon.md (the dated Phase-0 dossier) and design.md body citations still carry `0dbc26b` line numbers (e.g. design
+    `main.py:195-221`, `tools.py:148,218`, `telemetry.ts:426-429`, `authz.ts:136-155`, `identityServiceImpl.ts:364`) and
+    recon's `056`; not edited. product-spec Feature Workflow Notes "until 319 lands" is unchanged (319 has landed).
+- Not changed: FR-13, AC-20 and Steps 54/58's Claude Code client documentation (open owner question, session "owner
+  decisions: no stale keys; no Claude Code clients" above).
+- Status stays `implementation-ready`.

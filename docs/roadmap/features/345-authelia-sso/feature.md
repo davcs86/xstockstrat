@@ -24,6 +24,7 @@
 | 2026-11-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec regenerated after the re-spec with 58 steps (supersedes the 2026-11-16 52-step spec) |
 | 2026-11-27 | `implementation-ready` (unchanged) | owner | Owner decisions: no tokens on stale keys (D-138 via P-6, AC-79; Steps 19, 20, 24, 54 amended before execution) and no Claude Code clients on the homelab (Step 54 runbook) |
 | 2026-11-27 | `implementation-ready` (unchanged) | owner | Spike S17: Link requests send `prompt=login` + `max_age=1`, not `max_age=0` (D-139 via P-7; AC-65 text, same ID; Steps 32, 33, 43, 53, 54 amended before execution); cutover gate 2 proven on the spike |
+| 2026-11-27 | `implementation-ready` (unchanged) | owner | Specs re-grounded on `main-dev@187e9f8` (docs only): config seed `056` → `060`, Tree header, shifted line citations; `merge-order.md` 345 rows resolved |
 
 ---
 
@@ -55,7 +56,7 @@ implementation-spec.md, per docs/runbooks/reviewer-registry.md. Stable unless `/
 |---|---|
 | Proto Reviewer | Field number uniqueness per message, additive-only `identity.proto` change (four RPCs), `buf lint` + `buf breaking` against the dev trunk |
 | `packages/proto` owner | Backward compatibility (no field removal or type change), naming conventions |
-| DBA | Migration NNN numbering, up+down pair, index correctness, run order per `scripts/db-migrate.sh` (identity `007`, config `056` taken at execute) |
+| DBA | Migration NNN numbering, up+down pair, index correctness, run order per `scripts/db-migrate.sh` (identity `007`, config `060` taken at execute) |
 | `xstockstrat-identity` owner | JWT expiry and rotation, secret store integration (never plaintext secrets in config) |
 | `xstockstrat-config` owner | Key naming, environment (`production`/`staging`) scoping, secret encryption + redaction |
 | `xstockstrat-agent` owner | OAuth 2.1 edge-auth correctness and statelessness (`instance_count > 1` safe), MCP tool contract stability, admin `x-access-scope` forwarded only by management tools |

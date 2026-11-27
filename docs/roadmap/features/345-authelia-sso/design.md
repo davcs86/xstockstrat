@@ -514,8 +514,9 @@ All locked alternatives in debate.md, both runs (R-2, R-13 and R-14 are moot und
   runbook states it, Step 54).
 - [ ] **No identity DB-test job** (recon R-8): AC-25's row count and AC-50 rest on labelled Postgres guards and
   `migration-rerun` (D-118). — accepted residual.
-- [ ] **Config migration number contested**: `056` is also planned by 314, 317 and 321; take the next free number at
-  execute. — config seed step.
+- [x] **Config migration number contested**: `056` is also planned by 314, 317 and 321; take the next free number at
+  execute. — config seed step. Settled 2026-11-27: 314, 317 and 321 merged with `057`–`059` (366 took `056`); the seed
+  is `060` today, still highest + 1 at execute, which the CI `migration-order-gate` enforces.
 - [ ] **New shared vector file** `scripts/testdata/oidc-issuer-vectors.json` (issuer, app_url, mode, refusals {resolve,
   link, session}, expected PRM) gates identity, UI and agent CI filters. — first step that creates it.
 - [x] **Draft feature 280-third-party-sso-oidc** overlaps the problem (no key collision). — owner decision 2026-11-24:

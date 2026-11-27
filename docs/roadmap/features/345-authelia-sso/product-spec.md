@@ -1,7 +1,7 @@
 # Product Spec: authelia-sso
 
 **Created**: 2026-11-15
-**Amended**: 2026-11-24 (re-spec against homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md`; see `context.md`); 2026-11-27 (owner: no stale signing keys, no Claude Code clients on the homelab; Link requests send `max_age=1`, spike S17; see `context.md`)
+**Amended**: 2026-11-24 (re-spec against homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md`; see `context.md`); 2026-11-27 (owner: no stale signing keys, no Claude Code clients on the homelab; Link requests send `max_age=1`, spike S17; see `context.md`); 2026-11-27 (re-ground on `main-dev@187e9f8`: config seed number `060`; see `context.md`)
 
 ---
 
@@ -359,9 +359,9 @@ Additive only (non-breaking), in `packages/proto/identity/v1/identity.proto`:
 ## Config Key Changes
 
 One seed migration: `services/xstockstrat-config/migrations/<NNN>_authelia_sso_keys` (up + down, C-07). `NNN` is the next
-free config number when the step executes: `056` on trunk on 2026-11-24, which features 314, 317 and 321 also plan, so
-whichever merges first keeps it and the others renumber. A number below trunk's highest is never used, because
-golang-migrate skips a lower version that lands after a higher one (`merge-order.md` row 345 vs 314/317/321). It seeds every key below for both
+free config number when the step executes: `060` on trunk on 2026-11-27 (features 314, 317 and 321 merged with
+`057`–`059`). A number below trunk's highest is never used, because golang-migrate skips a lower version that lands
+after a higher one (`merge-order.md` row 345 vs 314/317/321); the CI `migration-order-gate` refuses one. It seeds every key below for both
 `production` and `staging`. Operators then set the real values per environment.
 
 - `identity.auth.mode`
