@@ -898,3 +898,9 @@
 - Verification: ruff check + format clean; `python -c "import app.jwks"` ok. TDD: recorded under Step 20.
 - Files modified: `services/xstockstrat-agent/app/jwks.py`
 - Deviations: none. Notes: the clock is the module function `_now()` (monotonic) so tests can patch it; a JWK without a string `kid` counts as unusable (skipped with the WARN), since a token must name a `kid`.
+
+### Step 20 — JWKS state machine [done]
+- `conftest.py` session `sso_keys` fixture (C-13: RSA key + JWKS, a `rotated_jwk` under the same `kid`, `mint(headers=, signer=, **claims)` RS256 `typ=at+jwt`); `test_jwks.py` (16 cases, respx + fake `_now` clock): fresh hit, FRESH..MAX_AGE serve + background refresh, **@AC-79** known `kid` 3601 s past its fetch + JWKS 500 → `'unavailable'`, inside the cooldown no new fetch, then a refetch → the rotated key; never-fetched cooldown; **@AC-61** unknown `kid` + JWKS 500 → `'unavailable'`; ok but absent → `'unknown_kid'`; 30 s cooldown count; 5 concurrent callers share one fetch; trailing-slash discovery issuer, cross-origin `jwks_uri` (also on a cached-then-expired refetch), 302 not followed, oversized body; EdDSA/`none`/alg-less/broken JWKs skipped with one WARN each, only-unusable → `'unavailable'`; a failed unawaited refresh logs no "never retrieved".
+- TDD: red (before Step 19): collection `ImportError: cannot import name 'jwks' from 'app'` → green: `test_jwks.py` 16 passed; full `pytest --cov=app --cov-fail-under=40` 957 passed (89.01 %); ruff clean; `def sso_keys` at `conftest.py:404`, no `generate_private_key` in `test_jwks.py`. Mutation checks: dropping the done-callback's `t.exception()` fails the never-retrieved case; serving keys past MAX_AGE fails the AC-79 case.
+- Files modified: `services/xstockstrat-agent/tests/{test_jwks,conftest}.py`
+- Deviations: none

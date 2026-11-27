@@ -388,3 +388,37 @@ def metric_reader(otel_reset):
     reader = InMemoryMetricReader()
     metrics.set_meter_provider(MeterProvider(metric_readers=[reader]))
     return reader
+
+
+def _rsa_signer(kid: str):
+    from cryptography.hazmat.primitives.asymmetric import rsa  # noqa: PLC0415
+    from jwt.algorithms import RSAAlgorithm  # noqa: PLC0415
+
+    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    jwk = RSAAlgorithm.to_jwk(private.public_key(), as_dict=True)
+    jwk.update({"kid": kid, "alg": "RS256", "use": "sig"})
+    return private, jwk
+
+
+@pytest.fixture(scope="session")
+def sso_keys():
+    """Issuer signing keys (feature 345, C-13): `jwk`/`jwks`, and `mint(**claims)` signing RS256
+    with `kid` and `typ=at+jwt`; `rotated_jwk` is a second key under the same `kid`."""
+    import jwt  # noqa: PLC0415
+
+    kid = "test-kid-1"
+    private, jwk = _rsa_signer(kid)
+    rotated_private, rotated_jwk = _rsa_signer(kid)
+    signers = {"primary": private, "rotated": rotated_private}
+
+    def mint(*, headers: dict | None = None, signer: str = "primary", **claims) -> str:
+        hdr = {"kid": kid, "typ": "at+jwt", **(headers or {})}
+        return jwt.encode(claims, signers[signer], algorithm="RS256", headers=hdr)
+
+    return SimpleNamespace(
+        kid=kid,
+        jwk=jwk,
+        jwks={"keys": [jwk]},
+        rotated_jwk=rotated_jwk,
+        mint=mint,
+    )
