@@ -1,0 +1,22 @@
+# Context: pipeline-job-graph
+
+**Feature**: `docs/roadmap/features/367-pipeline-job-graph/feature.md`
+**Product Spec**: `docs/roadmap/features/367-pipeline-job-graph/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/367-pipeline-job-graph/implementation-spec.md`
+
+---
+
+## Session 2026-11-27 — sdd-story
+
+- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
+- Program context: `docs/roadmap/program-job-graph-analysis-pipeline.md`. This is feature 1 of 9.
+- Operator decisions that bind this feature (recorded in the program plan, 2026-11-27):
+  - D-1: Postgres job graph, no broker.
+  - D-10: future universe-relative ranking must not be blocked, hence a run id on every job.
+  - D-11: single-instance constraints are removed, hence leases with fencing. This **reverses**
+    the 156/158 ruling "do NOT rebuild lease/CAS fencing on an `instance_count:1` service"
+    (`docs/roadmap/ledger/insights.md` 2026-08-26 entries). The design must address the failure
+    that ruling cited: a lease taken before a crash wedging the work for the full hold.
+- Open fork raised to the operator (product-spec Open Questions, first item): a core that migrates
+  no pipeline has no consumer, which the "minimum that solves the stated problem" rule and C-18
+  will challenge. Not decided.
