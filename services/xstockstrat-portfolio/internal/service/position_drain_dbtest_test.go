@@ -46,6 +46,12 @@ func serviceTestPool(t *testing.T) *pgxpool.Pool {
 			t.Errorf("cleanup positions: %v", err)
 		}
 	})
+	t.Cleanup(func() {
+		if _, err := pool.Exec(context.Background(),
+			`DELETE FROM portfolio.consumer_applied_events WHERE user_id LIKE $1`, drainDBTestPrefix+"%"); err != nil {
+			t.Errorf("cleanup applied events: %v", err)
+		}
+	})
 	return pool
 }
 

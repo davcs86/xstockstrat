@@ -552,7 +552,7 @@ New logic is in excluded packages — no coverage threshold applies to it.
 
 ### Step 11 — test: real-Postgres proof for exactly-once (dbtest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/apply_fill_dbtest_test.go` — create
@@ -1481,3 +1481,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said** (Instruction 5): make `runOrderFillBatch` use a DB that supports `Begin`. **Actual**: `syncRecorderDB` in `portfolio_offline_test.go` gained `Begin`. It returns a recording `pgx.Tx`, and `noRow` moved into the same file. `portfolio_telemetry_test.go` needed no edit and is unchanged. `TestOrderFillConsumer_AC56_OneTickRecordPerBatch` still counts 4 `ok` with one tick record.
 - **Spec said** (Instruction 8): change only `:45` of `portfolio_fill_floor_test.go`. **Actual**: only that line changed. Its `fillEvent` now carries `order_id`, `side` and an event id (Instruction 2), so the case reaches the pre-check.
 - **Disposition**: these stay within the listed **Files** and the instructions' intent. No step body changed.
+
+### Step 11 — Verification block stops after its first line; the DB line cannot run here (2026-11-27)
+- **Spec said**: a three-line block whose lines each start `cd services/xstockstrat-portfolio && …`; the second line sets `PORTFOLIO_DB_TEST_URL=<url>` "with a migrated database available".
+- **Actual**: the same pattern as Steps 3-10. Inside the one subshell the first line's `cd` persists, so lines 2 and 3 fail with `cd: services/xstockstrat-portfolio: No such file or directory`; run verbatim (`.sdd-logs/v-1.log`), only `go vet -tags dbtest ./...` ran, and it printed nothing. The block exited 1 for this reason alone. No database is available and none may be started, and `<url>` is a placeholder that bash would read as a redirect from a file named `url`.
+- **Disposition**: the lint line ran unchanged, alone, from the repo root (`v-2.log`, `0 issues.`, with v2.14.0 first on `PATH`). The test line ran without the placeholder and with the URL unset (`v-3.log`, `-v` added): the 6 new cases compile, run and `--- SKIP`. The `portfolio-db-test` CI job, which sets `PORTFOLIO_DB_TEST_URL` and is fatal under `CI=true` when it is missing, is where they first execute. The step body was not changed (F-09).
+
+### Step 11 — `event_id` column type (2026-11-27)
+- **Spec said** (the Steps 9+10 `context.md` note): the applied row's `event_id` is a UUID column, so dbtest fixtures need UUID event ids.
+- **Actual**: `019_fill_applied_events.up.sql` declares `event_id TEXT NOT NULL`. The `testdata` `ev-<seq>` ids are therefore valid, and the fixtures use them.
+- **Disposition**: no change needed; recorded so the earlier note is not followed.

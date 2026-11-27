@@ -3210,3 +3210,25 @@ Tooling (steps 9+10): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_fill_fold_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_fill_errors_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_fill_sync_race_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_offline_test.go`, `services/xstockstrat-portfolio/internal/service/position_drain_dbtest_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_fill_floor_test.go`, `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go`
 - Deviations: the same Deviation Log entry (Steps 9+10), plus "Step 10 — how Instructions 2, 5 and 8 were met".
 - Step 11 needs to know: `ApplyFill` gets the ledger `event.EventId` as the applied row's `event_id`, which is a UUID column, so a dbtest fixture must use UUID event ids (the `testdata` `ev-<seq>` ids work only under pgxmock).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 11
+
+Tooling (step 11): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint run) · `PORTFOLIO_DB_TEST_URL` ✗ (unset; no database started, per the HARD CONSTRAINTS)
+
+### Step 11 — test: real-Postgres proof for exactly-once (dbtest) [done]
+- Both test pools (`testPool`, `serviceTestPool`) now also clean up `portfolio.consumer_applied_events` by their own user prefix (`it-281-`, `it-357-`; C-13, one consumer each). Their skip, CI-fatal and `lock_timeout` rules are unchanged. New `apply_fill_dbtest_test.go`:
+  - `TestApplyFillDB_ConcurrentSameKeyAppliesOnce`: two pools, run in default and `QueryExecModeExec` mode. Exactly one `ApplyFill` applies and the other gets `ErrFillAlreadyApplied`; qty goes 10 → 15 and there is 1 applied row.
+  - `TestApplyFillDB_RolledBackFoldLeavesNoAppliedRow`: a zero `FoldWrite` fails inside the tx, which leaves 0 applied rows and qty 10. A retry then applies.
+  - `TestFillFloorDB_EnsureTwiceStampsOnce`: the existing `order_fill` floor row is saved, cleared and restored. `stampedNow` is true then false, and both calls return the same floor.
+- New `fill_fold_dbtest_test.go`. Each service has its own pool and `positionsMu`, and `fillFloor` is set to one hour before the stamped events; the shared floor row is not written.
+  - `TestFillFoldDB_AC2_TwoInstancesApplyOnce`: buy 5 against a row of 10. One instance returns nil and the other returns `errFillAcked`; qty is 15 and there is exactly 1 applied row.
+  - `TestFillFoldDB_AC1_RestartDoesNotReapply`: a buy/buy/sell history reaches qty 12 with a non-zero realized. A second service then gets `errFillAcked` for every replayed event, and qty, `cost_basis` and `realized_accum` are unchanged.
+  - `TestFillFoldDB_SyncVersusFillNoDeadlock`: 25 two-symbol `processPositionSync` calls run against 25 fills on the same row, under a 60 s deadline. The check is no returned error and no sync WARN (`upsert position from sync failed` / `delete positions not in sync failed`). A broker sync returns nil even when a write fails, so the WARNs are where a `40P01` or lock timeout would show up.
+- TDD: red N/A locally. `PORTFOLIO_DB_TEST_URL` is unset and no database may be started, so the cases skip; the step's TDD line allows this, and the `portfolio-db-test` CI job is the proof (it is fatal under `CI=true` without the URL). Without a database, the RED "qty 20, not 15" against the pre-Step-9 tree was not shown. GREEN, local layer only:
+  - `v-1.log`: `go vet -tags dbtest ./...` printed nothing.
+  - `v-2.log`: lint printed `0 issues.`, `exit=0`.
+  - `v-3.log`: `ok …/internal/repository`, `ok …/internal/service`, `exit=0`. All 6 new cases (7 with the two subtests) `--- SKIP`.
+- The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/apply_fill_dbtest_test.go`, `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go`, `services/xstockstrat-portfolio/internal/service/fill_fold_dbtest_test.go`, `services/xstockstrat-portfolio/internal/service/position_drain_dbtest_test.go`
+- Deviations: two Deviation Log entries. "Step 11 — Verification block stops after its first line; the DB line cannot run here". "Step 11 — `event_id` column type": the column is `TEXT`, not UUID, so the `ev-<seq>` ids are valid.
+- Not covered here: the design's conflict-path case, where an uncommitted raw tx holds the applied row (debate O-37). Step 11's Instructions do not list it.
