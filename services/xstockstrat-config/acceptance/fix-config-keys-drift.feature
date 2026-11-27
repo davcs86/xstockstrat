@@ -85,9 +85,9 @@ Feature: xstockstrat-config - config key canonicalisation, heal and seed parity
     Then that row's value_type and value_data are unchanged
     And the sign-off report lists "trading trading.order.max_retries: stored string 7, reader int default 3"
 
-  @AC-25 @FR-1 @regression @feature-295
+  @AC-25 @FR-1 @regression @feature-295 @feature-319
   Scenario: Internal-caller grants and write bounds match on the canonical key
-    Given the grant for "trading-reconciliation-poller" on "platform" / "platform.trading_state"
+    Given the grant for "trading-reconciliation-poller" on "platform" / "platform.trading_state" from an mTLS peer with DNS SAN "xstockstrat-trading"
     When that caller sends SetConfig "platform" / "trading_state" = "REDUCE_ONLY"
     Then the stored "platform.trading_state" row holds "REDUCE_ONLY"
     And SetConfig "analysis" / "opportunity.max_universe_size" = 0 by an admin returns INVALID_ARGUMENT from the [1,1000] bound
@@ -99,6 +99,7 @@ Feature: xstockstrat-config - config key canonicalisation, heal and seed parity
     Then the subscriber observes no new snapshot version
     And when an operator then sets "ledger" / "ledger.export.max_window_days" to 180 it observes exactly one new version
 
+  # Changed by @feature-318 (fix-migration-tooling-safety), operator-signed 2026-11-20 (C-16 CHANGE, last clause only).
   @AC-28 @FR-3 @regression @feature-295
   Scenario: Replaying the heal after a later key was created never deletes that key
     Given the heal migration has already run
@@ -106,7 +107,7 @@ Feature: xstockstrat-config - config key canonicalisation, heal and seed parity
     When the heal is re-run by "migrate force 40" plus "scripts/db-migrate.sh up", with the latch present and with it removed
     Then "analysis" / "backtest.extra_knob" still exists
     And the latest run deletes no row, and with the latch present adds no report or audit row
-    And an automatic force 0 from a dirty 041 fails at migration 001 leaving row counts and audit functions unchanged, after which the probe-and-force runbook converges
+    And the dirty guard refuses a dirty 041 with exit 3 naming force 40, leaving row counts and audit functions unchanged, after which migrate force 40 and up converge
 
   @AC-29 @FR-5 @regression @feature-295
   Scenario: A key whose readers disagree on the default is not seeded

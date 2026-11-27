@@ -4568,6 +4568,11 @@ reusing.
 - **Evidence**: `docs/roadmap/features/306-config-keys-alias-removal/acceptance.feature` (@AC-7, amended Then); `docs/roadmap/features/306-config-keys-alias-removal/context.md` (Archive Synthesis, Why).
 - **Rule it implies**: A shim-removal earliest-start gate requires deployed-image ancestry of the consumer fix, in addition to a log zero-count with a positive control.
 
+### 2026-11-20 — fix-mcp-deadline-budget — design
+- **Pattern**: A heal migration that casts a text config value in its WHERE must put the cast inside `CASE WHEN value_data ~ re THEN value_data::numeric > N ELSE false END`. Postgres does not guarantee qual evaluation order, so `value_data ~ re AND value_data::numeric > N` can abort the migration on one non-numeric row.
+- **Evidence**: `docs/roadmap/features/314-fix-mcp-deadline-budget/debate.md` (O-20); `docs/roadmap/features/314-fix-mcp-deadline-budget/design.md` § 4.
+- **Rule it implies**: Guard every cast of `config.config_values.value_data` in a migration predicate with `CASE`, and test a non-numeric row.
+
 ### 2026-11-11 — homelab-otel-host-provider — design
 - **Pattern**: Before freezing a documented query or label design, interrogate the live datasource instead of the docs: three read-only Grafana checks falsified the spec's premise ("resource attributes land on `target_info` only"), showed Go/Node series carry no `instance`, and found per-restart duplicate `target_info` rows that make a bare `group_left` join error for ~5 minutes after any redeploy; the fix (a `group by` wrapper and `deployment_environment` in the join keys) came from those facts.
 - **Evidence**: `docs/roadmap/features/332-homelab-otel-host-provider/recon.md` § Live Grafana Cloud facts; `debate.md` D-3, D-9, D-14, D-20.
@@ -4865,3 +4870,11 @@ reusing.
 
   Why not `errors.Is`: an Internal wrapper hides the context error from a connect-first switch, while an `errors.Is` that sees through the wrapper reclassifies detached `context.WithoutCancel` budget timeouts as the caller's deadline. Fixed text keeps a wrapped vendor URL's `apikey=` out of the status. Pin it with an R-2 row: a live ctx plus `CodeInternal` wrapping `context.DeadlineExceeded` must give INTERNAL. Changing the signature makes the compiler catch every call site.
 - **Evidence**: `docs/roadmap/features/326-fix-grpc-status-mapping/design.md` (Chosen Approach §1; R-1, R-2, R-4); `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go:513-532`; `classification_service.go:171` (Internal wrap).
+
+### 2026-11-27 — fix-agent-bearer-secret-orphan — execute
+- **Pattern**: When a design accepts a redacted orphan instead of a compensating saga (secret-first two-write), pair the acceptance with
+  an operator-run reclaim (a heal SQL with a grace window, an audit row and a `config_changed` notify) so the orphan stays bounded.
+- **Evidence**: feature 328 `scripts/config-heal/mcp-credential-orphan-sweep.sql` reclaims per-user `ingest` / `mcp_credential.*` secrets
+  that no same-owner `signal_sources.credentials_ref` references; the 166 secret-first order is unchanged.
+- **Rule it implies**: record the reclaim path in the writer's docstring and runbook; never rewrite another feature's ledger entry to
+  say so (the ledger guard forbids it) — add your own entry.

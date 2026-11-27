@@ -33,7 +33,7 @@ async function writeOwnBearerSecret(bearerToken: string, reason: string): Promis
 
 /**
  * Register a `mcp_client` source SECRET-FIRST: the bearer goes to a per-user secret, then the source
- * registers with `credentials_ref` (never in `config_json`). A failed register leaves a redacted orphan.
+ * registers with `credentials_ref` (never in `config_json`). A failed register leaves a redacted orphan, reclaimed by the operator sweep (docs/runbooks/config-rollout.md).
  */
 export function useRegisterMcpClientSource() {
   return useInvalidatingMutation(

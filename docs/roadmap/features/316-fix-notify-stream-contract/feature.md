@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-10-19-notify-severities-type-runtime-mismatch-defect.md, docs/reports/2026-10-19-notify-stream-ignores-backpressure-defect.md
 **Severity**: SEV-3
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-20
+**Last Updated**: 2026-11-27
 
 ---
 
@@ -17,6 +17,8 @@
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
+| 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup) |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done (Step 8 last); `check-config-wiring.mjs --final` exit 0 |
 
 ---
 

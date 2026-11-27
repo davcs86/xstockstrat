@@ -31,7 +31,7 @@ func TestOrderWriters_ConcurrentCancelPollList_NoDataRace(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		if o, err := svc.GetOrder(context.Background(), &tradingv1.GetOrderRequest{OrderId: "ord-1"}); err == nil {
+		if o, err := svc.GetOrder(ctxAsUser("user-1"), &tradingv1.GetOrderRequest{OrderId: "ord-1"}); err == nil {
 			_ = o.String() // reads every field, as gRPC marshalling would
 		}
 	}()

@@ -6,6 +6,7 @@ populating _backtests/_strategies directly, same pattern as ingest.
 """
 
 import asyncio
+import contextlib
 import inspect
 import json
 import logging
@@ -36,6 +37,7 @@ from app.handlers.servicer import (
     _InsufficientData,
     _row_to_opportunity,
 )
+from app.repositories.opportunities import EVALUATION_FAILED_PROVENANCE
 from app.services import warmup as warmup_sizing
 from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
 from tests.conftest import OWNER_HEADERS, aio_rpc_error, ctx_with, snapshot_watcher
@@ -1162,7 +1164,7 @@ class TestScreenSymbols:
 
         out = Struct()
         out.update({"value": value})
-        return SimpleNamespace(success=True, output=out, error="")
+        return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
     @pytest.mark.asyncio
     async def test_repoints_off_config_to_ingest_reliability_weights(self):
@@ -1698,7 +1700,7 @@ class TestBacktestDiagnostics:
         out = Struct()
         out.update({"value": [None] * len(bars)})
         svc._indicators.ExecuteFormula = AsyncMock(
-            return_value=SimpleNamespace(success=True, output=out, error="")
+            return_value=SimpleNamespace(success=True, output=out, error="", exit_reason=0)
         )
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=3)
@@ -1755,8 +1757,8 @@ class TestFormulaErrorSurfacing:
         ok_out.update({"value": [1.0] * len(bars)})  # sibling trades (ff > 0)
         # AAPL formula fails (success=False → FormulaExecutionError); MSFT succeeds.
         side_effect = [
-            SimpleNamespace(success=False, output=Struct(), error="boom"),
-            SimpleNamespace(success=True, output=ok_out, error=""),
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0),
+            SimpleNamespace(success=True, output=ok_out, error="", exit_reason=0),
         ]
         svc = make_servicer()
         self._wire(svc, bars, side_effect)
@@ -1786,8 +1788,8 @@ class TestFormulaErrorSurfacing:
 
         bars = [_bar(7100 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 15])]
         side_effect = [
-            SimpleNamespace(success=False, output=Struct(), error="boom"),
-            SimpleNamespace(success=False, output=Struct(), error="boom"),
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0),
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0),
         ]
         svc = make_servicer()
         self._wire(svc, bars, side_effect)
@@ -1836,7 +1838,7 @@ class TestEvaluationFailureSurfacing:
 
         out = Struct()
         out.update({"value": [1.0] * n})  # ff > 0 on every bar
-        return SimpleNamespace(success=True, output=out, error="")
+        return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
     def _svc(self, execute_outcome=None):
         svc = make_servicer()
@@ -2041,7 +2043,9 @@ class TestEvaluationFailureSurfacing:
     async def test_formula_contract_error_adds_no_eval_warning(self):
         from google.protobuf.struct_pb2 import Struct
 
-        svc = self._svc(SimpleNamespace(success=False, output=Struct(), error="boom"))
+        svc = self._svc(
+            SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=0)
+        )
         result = await self._run(svc)
 
         assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR
@@ -4204,7 +4208,7 @@ class TestPrefixFormulaCost:
             sizes.append(n)
             out = Struct()
             out.update({"value": [1.0] * n})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
         svc._indicators.GetFormula = AsyncMock(
@@ -4259,7 +4263,7 @@ class TestPrefixFormulaCost:
             sizes.append(n)
             out = Struct()
             out.update({"value": [1.0] * n})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
         svc._indicators.GetFormula = AsyncMock(
@@ -4506,8 +4510,24 @@ class _FakeOppRepo:
         self.rows: dict[str, list[dict]] = {}
         self.actions: dict[tuple[str, str], dict] = {}  # (user, key) -> {action, snooze_until}
 
-    async def replace_for_user(self, user_id, rows):
-        self.rows[user_id] = [dict(r) for r in rows]
+    async def replace_for_user(self, user_id, rows, conn=None):
+        # Mirrors the INSERT's COALESCE(computed_at, now()): a carried row keeps its stored stamp.
+        self.rows[user_id] = [
+            {**r, "computed_at": r.get("computed_at") or datetime.now(UTC)} for r in rows
+        ]
+
+    async def read_attributed_rows(self, user_id):
+        return [dict(r) for r in self.rows.get(user_id, []) if r.get("strategy_id", "") != ""]
+
+    @contextlib.asynccontextmanager
+    async def transaction(self):
+        # Restores the rows on an exception, then re-raises — the real transaction's rollback.
+        snapshot = {uid: [dict(r) for r in rs] for uid, rs in self.rows.items()}
+        try:
+            yield None
+        except BaseException:
+            self.rows = snapshot
+            raise
 
     async def count_for_user(self, user_id):
         return len(self.rows.get(user_id, []))
@@ -4546,6 +4566,7 @@ class _FakeOppRepo:
                 and "denied" not in _prov
                 and "unavailable" not in _prov
                 and "formula_unreadable" not in _prov
+                and EVALUATION_FAILED_PROVENANCE not in _prov
             ):
                 continue
             act = self.actions.get((user_id, r["opportunity_key"]))
@@ -5508,7 +5529,7 @@ class TestOpportunityDataUnavailable:
             )
 
         with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _selective_fail):
-            rows = await svc._compute_opportunities("u1", self._META)
+            rows, _ = await svc._compute_opportunities("u1", self._META)
         by_sym = {r["symbol"]: r for r in rows}
         assert set(by_sym) == {"AAPL", "MSFT"}
         # AAPL: terminal unavailable, zeroed on BOTH ranking axes so it sinks in the read ORDER BY.
@@ -5532,7 +5553,7 @@ class TestOpportunityDataUnavailable:
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
             bars={},  # AAPL absent → GetBars returns [] (no raise)
         )
-        rows = await svc._compute_opportunities("u1", self._META)
+        rows, _ = await svc._compute_opportunities("u1", self._META)
         aapl = {r["symbol"]: r for r in rows}["AAPL"]
         assert "unavailable" not in aapl["provenance"]
         assert _row_to_opportunity(aapl).data_unavailable is False
@@ -5554,7 +5575,7 @@ class TestOpportunityDataUnavailable:
             strategies={"sx": _strat_row("sx", entry=three_fail)},
             bars={"AAPL": [50.0, 60.0, 70.0]},  # SMA≈60 — none of the three thresholds pass
         )
-        rows = await svc._compute_opportunities("u1", self._META)
+        rows, _ = await svc._compute_opportunities("u1", self._META)
         opp = _row_to_opportunity({r["symbol"]: r for r in rows}["AAPL"])
         assert opp.data_unavailable is False
         assert (opp.passing_conditions, opp.total_conditions) == (0, 3)
@@ -5622,7 +5643,7 @@ class TestOpportunityDataUnavailable:
             )
 
         with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _maybe_raise):
-            rows = await svc._compute_opportunities("u1", self._META)
+            rows, _ = await svc._compute_opportunities("u1", self._META)
         by_sym = {r["symbol"]: r for r in rows}
         assert _row_to_opportunity(by_sym["AAPL"]).data_unavailable is True
         msft = _row_to_opportunity(by_sym["MSFT"])
@@ -5630,9 +5651,9 @@ class TestOpportunityDataUnavailable:
         assert msft.passing_conditions == 1
 
     @pytest.mark.asyncio
-    async def test_formula_execution_error_still_propagates(self):
-        """A ``FormulaExecutionError`` is a formula BUG, not a data outage — it must NOT be
-        swallowed as unavailable; it propagates out of the compute (design Rejected Alt 8)."""
+    async def test_formula_execution_error_degrades_only_its_row(self, caplog):
+        """A ``FormulaExecutionError`` is a formula fault, not a data outage: the compute returns
+        and the row carries ``evaluation_failed``, never ``unavailable`` (feature 308 CHANGE)."""
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[("AAPL", "sx")])],
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
@@ -5653,9 +5674,15 @@ class TestOpportunityDataUnavailable:
         ):
             raise FormulaExecutionError("f-bad", "boom")
 
-        with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _boom):
-            with pytest.raises(FormulaExecutionError):
-                await svc._compute_opportunities("u1", self._META)
+        with (
+            patch.object(StrategyEvaluator, "evaluate_conditions_traced", _boom),
+            caplog.at_level(logging.WARNING),
+        ):
+            rows, _ = await svc._compute_opportunities("u1", self._META)
+        provenance = {r["symbol"]: r for r in rows}["AAPL"]["provenance"]
+        assert EVALUATION_FAILED_PROVENANCE in provenance
+        assert "unavailable" not in provenance
+        assert "opportunity_compute: 1/1" in caplog.text
 
 
 class _CountingSem:
@@ -5739,7 +5766,11 @@ class _StampedComputeState:
         return self._row
 
     async def upsert(self, user_id, valid_until):
-        self._row = {"computed_at": datetime.now(UTC), "valid_until": valid_until}
+        # Mirrors the real ON CONFLICT: only computed_at and valid_until change.
+        self._row = {**self._row, "computed_at": datetime.now(UTC), "valid_until": valid_until}
+
+    async def write_cursor(self, user_id, cursor, *, conn=None):
+        self._row = {**self._row, "live_only_cursor": cursor}
 
 
 @pytest.mark.usefixtures("read_path")
@@ -6813,7 +6844,7 @@ class TestBacktestDeletedFormulaWarning:
             n = len(req.input_data["close"])
             out = Struct()
             out.update({"value": [1.0] * n})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
         svc._indicators.GetFormula = AsyncMock(
@@ -7694,7 +7725,7 @@ class TestOpportunityConcurrencyFeature176:
             bars={s: _FIRING_BARS for s in syms},
         )
 
-        rows = await svc._compute_opportunities("u1", ())
+        rows, _ = await svc._compute_opportunities("u1", ())
 
         assert {r["symbol"] for r in rows} == set(syms)  # every symbol still produced its row
         # Feature 183: one BatchGetBars call for all symbols, no per-symbol fan-out.
@@ -7915,8 +7946,8 @@ class TestListOpportunitiesServerFilters190:
 
     @pytest.mark.asyncio
     async def test_symbol_filter_normalized_into_both_reads(self):
-        """feature 215 @AC-15 — request.symbol is normalized once and forwarded to the fresh AND
-        the stale read (expired rows force the stale branch, so both calls are exercised)."""
+        """feature 215 @AC-15 — request.symbol is normalized once and forwarded to both reads. The
+        only row is expired live-only (366 branch (v)), so 365's all-stale body re-reads it."""
         expired = datetime.now(UTC) - timedelta(hours=1)
         svc = self._svc_with_row([["live_strategy"]], [0.9], expired)
         svc._opportunities_repo.read = AsyncMock(wraps=svc._opportunities_repo.read)
@@ -7927,7 +7958,7 @@ class TestListOpportunitiesServerFilters190:
             _ctx(_HEADERS),
         )
         calls = svc._opportunities_repo.read.await_args_list
-        assert [c.kwargs["include_expired"] for c in calls] == [False, True]
+        assert [c.kwargs["include_expired"] for c in calls] == [True, True]
         assert all(c.kwargs["symbol"] == "SCHD" for c in calls)
 
     @pytest.mark.asyncio
@@ -8002,7 +8033,7 @@ class TestSymbolScoreRollup:
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
             bars={"AAPL": _FIRING_BARS, "MSFT": _FIRING_BARS},
         )
-        rows = await svc._compute_opportunities("u1", self._META)
+        rows, _ = await svc._compute_opportunities("u1", self._META)
         by_sym: dict[str, list[dict]] = {}
         for r in rows:
             by_sym.setdefault(r["symbol"], []).append(r)
@@ -8028,7 +8059,7 @@ class TestSymbolScoreRollup:
             )
 
         # Reference: a full compute over the inputs → AAPL's symbol_score.
-        ref_rows = await _fresh_svc()._compute_opportunities("u1", self._META)
+        ref_rows, _ = await _fresh_svc()._compute_opportunities("u1", self._META)
         ref_score = {r["symbol"]: r["symbol_score"] for r in ref_rows}["AAPL"]
         assert ref_score is not None
 

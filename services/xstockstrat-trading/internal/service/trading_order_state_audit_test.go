@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/pashagolub/pgxmock/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -198,6 +199,49 @@ func TestPlaceOrder_BrokerReject_FailedWriteLogged_AC2(t *testing.T) {
 	}
 	waitForLedgerEvents(t, ledger, 3) // order.created, order.submitted, order.broker_rejected
 	assertWriteFailureLogged(t, records(), "", "ORDER_STATUS_REJECTED", "broker_reject")
+}
+
+func TestPlaceOrder_AboveApprovalThreshold_PersistsRequiresApproval_F321_AC3(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	t.Cleanup(mock.Close)
+	ledger := &recordingLedgerClient{}
+	fb := &fakeBroker{submitOrderFn: func(context.Context, broker.OrderRequest) (*broker.BrokerOrder, error) {
+		t.Error("broker SubmitOrder called for an approval-required order")
+		return nil, errors.New("unexpected broker call")
+	}}
+	svc := auditSvc(&ctxCapturingDB{}, fb, ledger, map[string]*tradingv1.Order{})
+	svc.repo = repository.NewTradingRepoWithDB(mock)
+	svc.cfgW = config.MustSnapshotWatcher("trading", map[string]*configv1.ConfigValue{
+		"risk.max_position_pct":      {Value: &configv1.ConfigValue_FloatVal{FloatVal: 0}},
+		"approval.require_above_qty": {Value: &configv1.ConfigValue_FloatVal{FloatVal: 20}},
+	})
+
+	args := make([]any, 23)
+	stored := make([]any, 23)
+	for i := range args {
+		args[i] = rowCapture{row: &stored, i: i}
+	}
+	mock.ExpectExec(`INSERT INTO trading\.orders`).WithArgs(args...).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	req := placeReq()
+	req.Qty = 21
+	got, err := svc.PlaceOrder(ctxAsUser("u-1"), req)
+	if err != nil {
+		t.Fatalf("PlaceOrder: %v", err)
+	}
+	if got.Status != tradingv1.OrderStatus_ORDER_STATUS_PENDING_APPROVAL {
+		t.Errorf("status = %v, want ORDER_STATUS_PENDING_APPROVAL", got.Status)
+	}
+	if stored[upsertRequiresApprovalArg] != true {
+		t.Errorf("requires_approval bind = %v, want true", stored[upsertRequiresApprovalArg])
+	}
+	waitForLedgerEvents(t, ledger, 2) // order.created, order.approval_requested
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
 }
 
 func runCancelWriteFailure(t *testing.T, status tradingv1.OrderStatus) {

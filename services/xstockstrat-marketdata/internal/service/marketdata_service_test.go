@@ -1270,15 +1270,22 @@ func TestGetBarsMarksSymbolWarm(t *testing.T) {
 
 // TestGetBarsWarnsWhenMissAndLiveFetchEmpty is structural for the same reason as
 // TestGetBarsMarksSymbolWarm (GetBars needs a live DB pool): the DB-miss + empty-live-fetch branch
-// must stay a WARN, or a symbol the feed never serves is silent in the logs.
+// must stay a WARN on a live ctx, or a symbol the feed never serves is silent in the logs.
 func TestGetBarsWarnsWhenMissAndLiveFetchEmpty(t *testing.T) {
+	missSrc, err := os.ReadFile("bars_miss.go")
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	body := funcBody(t, string(missSrc), "func (s *MarketDataService) liveRefetch(")
+	if !strings.Contains(body, `warnUnlessDone(ctx, "GetBars: no bars stored and live fetch returned none"`) {
+		t.Error("liveRefetch must WARN (unless ctx is done) when no bars are stored and the live fetch returns none")
+	}
 	src, err := os.ReadFile("marketdata_service.go")
 	if err != nil {
 		t.Fatalf("read source: %v", err)
 	}
-	body := funcBody(t, string(src), "func (s *MarketDataService) GetBars(")
-	if !strings.Contains(body, `slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none"`) {
-		t.Error("GetBars must WARN when no bars are stored and the live fetch returns none")
+	if !strings.Contains(funcBody(t, string(src), "func (s *MarketDataService) GetBars("), "s.liveRefetch(") {
+		t.Error("GetBars' live-fetch fallback must go through s.liveRefetch")
 	}
 }
 
@@ -5840,11 +5847,17 @@ type barsCancelSource struct {
 	*fakeBackfillSource
 	newBars func() []*marketdatav1.Bar
 	cancel  context.CancelFunc
+	err     error
+	calls   int
 }
 
 func (f *barsCancelSource) GetBars(context.Context, string, string, time.Time, time.Time) ([]*marketdatav1.Bar, error) {
+	f.calls++
 	if f.cancel != nil {
 		f.cancel()
+	}
+	if f.err != nil {
+		return nil, f.err
 	}
 	return f.newBars(), nil
 }
@@ -5916,9 +5929,9 @@ type cachedBarsResult struct {
 }
 
 func fetchAAPLDaily(ctx context.Context, svc *MarketDataService) cachedBarsResult {
-	bars, token := svc.fetchAndCacheBars(ctx, "AAPL", "1d",
+	f := svc.fetchAndCacheBars(ctx, "AAPL", "1d",
 		time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC), 500, true)
-	return cachedBarsResult{bars: bars, token: token}
+	return cachedBarsResult{bars: f.bars, token: f.token}
 }
 
 func goFetchAAPLDaily(ctx context.Context, svc *MarketDataService) <-chan cachedBarsResult {

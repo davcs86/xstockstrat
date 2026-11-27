@@ -532,7 +532,7 @@ export interface ExternalSignal {
   symbol: string;
   /** "buy" | "sell" | "hold" | "watchlist" */
   direction: string;
-  /** 0.0 – 1.0 confidence (0.0 if not provided by source) */
+  /** 0.0 – 1.0 confidence; a 0.0 with conviction_provided unset means "not given" */
   conviction: number;
   validFrom?:
     | Date
@@ -548,6 +548,11 @@ export interface ExternalSignal {
     | undefined;
   /** owner of the signal (feature 224); server-stamped, ignored on write */
   userId: string;
+  /**
+   * True when the sender set conviction, including an explicit 0.0. Readers treat
+   * `conviction_provided || conviction != 0.0` as "given".
+   */
+  convictionProvided: boolean;
 }
 
 export interface IngestSignalRequest {
@@ -560,6 +565,7 @@ export interface IngestSignalResponse {
    * True when this submission matched an existing signal within the dedup window
    * (ingest.signals.dedup_window_hours) on (source, symbol, direction, conviction,
    * valid_until); signal_id is then the EXISTING signal's id, not a newly-inserted one.
+   * An explicit 0.0 conviction and an omitted conviction are different dedup values.
    */
   deduplicated: boolean;
 }
@@ -1828,6 +1834,7 @@ function createBaseExternalSignal(): ExternalSignal {
     tags: [],
     ingestedAt: undefined,
     userId: "",
+    convictionProvided: false,
   };
 }
 
@@ -1865,6 +1872,9 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
     }
     if (message.userId !== "") {
       writer.uint32(90).string(message.userId);
+    }
+    if (message.convictionProvided !== false) {
+      writer.uint32(96).bool(message.convictionProvided);
     }
     return writer;
   },
@@ -1964,6 +1974,14 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
           message.userId = reader.string();
           continue;
         }
+        case 12: {
+          if (tag !== 96) {
+            break;
+          }
+
+          message.convictionProvided = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2006,6 +2024,11 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
         : isSet(object.user_id)
         ? globalThis.String(object.user_id)
         : "",
+      convictionProvided: isSet(object.convictionProvided)
+        ? globalThis.Boolean(object.convictionProvided)
+        : isSet(object.conviction_provided)
+        ? globalThis.Boolean(object.conviction_provided)
+        : false,
     };
   },
 
@@ -2044,6 +2067,9 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
     if (message.userId !== "") {
       obj.userId = message.userId;
     }
+    if (message.convictionProvided !== false) {
+      obj.convictionProvided = message.convictionProvided;
+    }
     return obj;
   },
 
@@ -2063,6 +2089,7 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
     message.tags = object.tags?.map((e) => e) || [];
     message.ingestedAt = object.ingestedAt ?? undefined;
     message.userId = object.userId ?? "";
+    message.convictionProvided = object.convictionProvided ?? false;
     return message;
   },
 };

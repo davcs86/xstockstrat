@@ -32,6 +32,12 @@ resolves on its own with no ledger event and no halt (self-heal). A real finding
 halt (`HaltSource_HALT_SOURCE_RECONCILIATION`, reusing feature 030's `broker_accounts.halted`
 mechanism).
 
+The `halt` and `reconciliation` CRITICAL alerts are targeted at the account owner (`TargetUserId` = the pool entry's
+owner); an empty owner logs WARN `alert owner unresolved` and sends the alert untargeted (feature 315). The owner
+cannot resume, and admins get no in-product signal or account id: they use the Grafana rule `xstk-trading-account-halt`
+and the Loki ERROR line `account halted` until the follow-on `admin-halted-accounts-read` ships. The systemic alert
+stays untargeted, and the `reconciliation.mismatch_found` ledger owner stays NULL.
+
 The `unknown_broker_order` classification is **DB-grounded, not memory-only**. A broker order the
 in-memory map (`s.orders`) doesn't recognize is not immediately foreign: `s.orders` holds only this
 process's own orders plus `LoadInflightOrders`' NEW/PARTIALLY_FILLED hydrate, so a legitimate order
@@ -69,8 +75,11 @@ and the candidate clears — **no halt**; only a broker qty the platform's order
 genuine dashboard order) halts. A lookup error is **fail-safe** (position check skipped for the tick,
 never a false halt), mirroring the order side. Residuals (not closed; full list in feature 206
 `context.md` § Archive Synthesis): a stalled `pollFills` leaving `trading.orders.filled_qty` stale;
-corporate actions (splits) that change broker qty with no order; Alpaca bracket-leg fills, which never
-reach `trading.orders` (leg ids live only in `trading.order_brackets`); and the net being an unbounded
+corporate actions (splits) that change broker qty with no order; bracket-leg fills outside tracking
+(feature 311: a tracked leg's fills count through `trading.bracket_legs.observed_filled_qty`, which
+`NetFilledQtyBySymbol` adds under the same sign rule, but legs that closed before the cutover
+(forward-only, D-42), a `BASELINE_RETIRED` leg's post-adoption remainder and tombstoned legs still do
+not count); and the net being an unbounded
 lifetime sum, so any untracked position-reducing fill skews it for that symbol from then on — each can
 still trip the position-side halt. A net-zero foreign position is masked by design.
 

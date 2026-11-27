@@ -142,12 +142,102 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 | `system:config-migration-<NNN>` | `xstockstrat-config` (SQL migration) | A config migration's raw-SQL data write sets `updated_by` to this sentinel and `caller_identity` to NULL (not a SetConfig write); first used by 031 (feature 243) |
 | `system:config-migration-feature-<slug>` | `xstockstrat-config` (SQL migration) | A number-free actor sentinel for a config migration whose content must not carry its number, so a merge-time renumber renames files only; first used by feature 305 |
 | `system:config-migration-feature-330` | `xstockstrat-config` (SQL migration) | Feature 330's guarded reseed of `analysis` / `opportunity.live_enrich_ttl_seconds` (`*_analysis_live_enrich_ttl_reseed`): set only on the global rows whose value it moved `10 → 20`, with `caller_identity` NULL. Its down reverts only rows still carrying it, so an operator `SetConfig` (which rewrites `updated_by`) is never reverted |
+| `system:config-heal-mcp-credential-sweep` | operator SQL (`scripts/config-heal/mcp-credential-orphan-sweep.sql`) | Not a SetConfig write: the operator orphan sweep's `config_audit.changed_by` for each deleted per-user `ingest` / `mcp_credential.*` secret (`new_value` NULL, `old_value` the `[redacted]` sentinel, `caller_identity` NULL); feature 328 |
+| `system:config-migration-feature-fix-mcp-deadline-budget` | `xstockstrat-config` (SQL migration) | Feature 314's `*_mcp_deadline_budget`: the seed rows of `agent` / `extract.call_budget_seconds`, and the global `agent` / `opportunities.read_timeout_seconds` rows it clamped to `44`, with `caller_identity` NULL. Its down deletes only seed rows still carrying it and still holding `35`; the clamp is forward-only |
 
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
 Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
+
+### feature 314 — fix-mcp-deadline-budget (`xstockstrat-config` / `xstockstrat-agent`)
+
+Keeps every agent tool call under the MCP client's 60 s timeout and enforces the PLAT-13 cross-hop deadline
+ordering at the write edge. Approval: owner + config team; DBA + config owner for the migration.
+
+- **New key** `agent` / `extract.call_budget_seconds` (table below): the whole-call budget for the URL fetches of
+  one `extract_email_content` / `extract_website_content` call, entered after `_get_source` and the
+  attachments. auth 10 + source lookup 10 + budget ≤ 55 s. Read live from the config snapshot on every call, so
+  a change applies without a restart. Seeded `35` (staging + production, global, `float`,
+  `ON CONFLICT DO NOTHING`) by the config migration `*_mcp_deadline_budget`.
+- **Ceiling change**: `agent` / `opportunities.read_timeout_seconds` is SetConfig-bounded `[30,44]` (ceiling
+  lowered from 55), so auth 10 + policy read 3 + value ≤ 57 s. The feature-227 row below carries the new bounds.
+- **`CROSS_KEY_ORDERING`** (`configServiceImpl.ts`) — two rows, strict `>` (prevents inversion only, no margin):
+  - `portfolio.marketdata.quote_timeout_ms` > max(`marketdata.quotes.batch_timeout_ms`, `marketdata.quotes.mark_timeout_ms`);
+  - `analysis.opportunity.live_enrich_timeout_ms` > `marketdata.price.batch_timeout_ms`.
+
+  Global writes only, compared with the global siblings in the same environment; per-user writes skip it
+  (every reader watches global config). It runs after authz and the per-key bounds, before the existence gate.
+  An absent or non-numeric sibling skips that comparison with a key-only WARN. A violation is code 3 with no
+  write; the message names both keys and the stored value, and its remedy leads with "raise the greater key"
+  (it offers "lower the lesser key" only when exactly one lesser key violates). The rule is not visible in
+  `ListKeys` / config-ui. Write order → `docs/runbooks/config-rollout.md` § Step 3.
+- **Migration `*_mcp_deadline_budget`**: one statement — the seed above; a clamp of global, non-secret
+  `opportunities.read_timeout_seconds` rows whose value is a plain decimal above `44` down to `44`
+  (`CASE`-guarded cast; non-matching spellings and per-user rows are left as stored); and a `pg_notify`
+  over the distinct touched (namespace, environment) pairs. Actor sentinel
+  `system:config-migration-feature-fix-mcp-deadline-budget`, `caller_identity` NULL. The down deletes only the
+  sentinel seed rows still holding `35` and notifies; it never reverses the clamp.
+
+| Namespace | Key | Type | Default | Reader | Bounds | Notes |
+|---|---|---|---|---|---|---|
+| `agent` | `extract.call_budget_seconds` | float | `35` | `app/tools.py:_extract_call_budget_s` (via `_agent_policy`) | `[5,35]` | Non-finite or `≤ 0` → `35`. On expiry `extract_email_content` returns a `PARTIAL` result and `extract_website_content` raises `DEADLINE_EXCEEDED` (`docs/runbooks/mcp-tools.md`). |
+
+### feature 317 — fix-marketdata-miss-path-noise (`xstockstrat-marketdata` / `xstockstrat-config`)
+
+The window of marketdata's `GetBars` miss back-off: after an implicit first-page miss whose live fetch came
+back empty (no error, ctx live), that `(symbol,timeframe)` is not live-fetched again for this many ms, and
+later empty refetches log at Debug instead of WARN. The key has a full-dotted `SCALAR_BOUNDS_REGISTRY` entry
+in `xstockstrat-config` (`configServiceImpl.ts`) and is **seeded** `1800000` (staging + production, global,
+stored as `int`, insert-if-absent) by config migration `marketdata_bars_miss_backoff`, with the number-free
+actor sentinel `system:config-migration-feature-fix-marketdata-miss-path-noise`; the down deletes only a
+global row that still carries that sentinel and still holds `1800000`, so a value an operator has changed
+survives a rollback. No `scripts/config-wiring.json` baseline entry; one `registry.receivers` entry
+`bars_miss.go:cfg` attributes the reader. Approval: owner + config team.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `marketdata.bars.miss_backoff_ms` | int | `1800000` | `[0,21600000]`; never clamped on read | Reader `resolveBarsMissBackoff` (`bars_miss.go`), read live on each implicit first-page miss; `<= 0` disables the back-off and clears its state. |
+
+### feature 321 — fix-trading-config-plumbing (`xstockstrat-trading` / `xstockstrat-config`)
+
+No new key name; two existing `trading` keys change meaning. `broker.timeout_ms` now also bounds every
+signed IBKR request, read live (the IBKR handshake keeps its own `ibkr.handshake_timeout_ms` bound). The
+order-intent stale-threshold floor is the 10 s `IBKRDefaultHandshakeTimeout`; this supersedes the
+`IBKRRequestTimeout` wording of the feature-249 and feature-101 entries, which stay unedited.
+`broker.paper` is **seeded** per environment (staging `true`, production `false`, global, stored as
+`bool`, insert-if-absent) by config migration `trading_broker_paper_per_environment`, with the
+number-free actor sentinel `system:config-migration-feature-321`; its sole reader is
+`environmentIsPaper`, which falls back to `APPLICATION_ENV` (paper unless `production`) when no row
+exists, so `TRADING_MODE` no longer decides trading's paper/live. The `scripts/config-wiring.json`
+baseline is empty. Approval: DBA + config owner + trading owner.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `trading` | `broker.timeout_ms` | int | `5000` | `internal/service/trading.go:brokerCallTimeout` | Seeded by `041` (unchanged). Deadline of each Alpaca request and each signed IBKR request; re-read before every request. |
+| `trading` | `broker.paper` | bool | staging `true`, production `false` (no row: paper unless `APPLICATION_ENV=production`) | `internal/service/trading.go:environmentIsPaper` | Seeded per environment. Changing it does not re-route already-registered broker accounts. |
+
+### feature 366 — opportunity-live-only-rotation (`xstockstrat-config` / `xstockstrat-analysis`)
+
+The cycle bound of the live-only opportunity rotation: each compute evaluates the next
+`opportunity.max_live_only_symbols_per_compute` symbols of the non-held live-only pool after a persisted
+cursor, and a full rotation should finish within this many days. When it cannot at the configured chunk
+limit, the chunk limit wins and the shortfall is logged. Fresh live-only rows are stamped
+`valid_until = computed_at + this many days` (no 168h cap), and a carried live-only row aged `>=` this many
+days is dropped. The key has a full-dotted `SCALAR_BOUNDS_REGISTRY` entry in `xstockstrat-config`
+(`configServiceImpl.ts`) and is **seeded** `3` (staging + production, global, stored as `int`,
+insert-if-absent) by config migration `analysis_live_only_cycle_max_days`, with the number-free actor
+sentinel `system:config-migration-feature-opportunity-live-only-rotation`; the down deletes only a global
+row that still carries that sentinel and still holds `3`, so a value an operator has changed survives a
+rollback. This entry also supersedes the meaning of `opportunity.max_live_only_symbols_per_compute` in the
+feature-131 and feature-184 entries: it is now the per-compute chunk limit of the rotation, not a
+conviction-ranked truncation (C-16 CHANGE of 131 @AC-8, operator-signed 2026-11-26). Approval: owner +
+config team.
+
+| Namespace | Key | Type | Default | Reader | Bounds | Notes |
+|---|---|---|---|---|---|---|
+| `analysis` | `opportunity.live_only_cycle_max_days` | int | `3` | `app/handlers/servicer.py:_live_only_cycle_days` | `[1,30]` | Seeded `056`. Read via `int_positive`, so a stored `≤ 0` reads as `3`. Re-read at each compute and heal, so a change applies on the next compute without a restart. |
 
 ### feature 330 — fix-live-enrich-ttl-seed (`xstockstrat-config` / `xstockstrat-analysis`)
 
@@ -431,7 +521,7 @@ as the default; the three `int` keys must be stored as `int` (another `value_typ
 | `analysis.opportunity.read_db_budget_ms` | int | `20000` | `[1000,20000]` | Request-scoped budget for the read DB phase (acquire timeout + per-statement `SET LOCAL statement_timeout`). |
 | `analysis.opportunity.live_enrich_timeout_ms` | int | `3000` | `[500,4000]` | Deadline on the read-time `BatchGetLatestPrice` enrichment; on expiry rows are served unenriched. |
 | `marketdata.price.batch_timeout_ms` | int | `2500` | `[500,2500]` | Budget for the detached `BatchGetLatestPrice` singleflight closure. |
-| `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | `[30,55]` | `list_opportunities` tool deadline on analysis `ListOpportunities`; its policy read is capped by the fixed 3s `_POLICY_READ_TIMEOUT_S`. |
+| `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | `[30,44]` (feature 314) | `list_opportunities` tool deadline on analysis `ListOpportunities`; its policy read is capped by the fixed 3s `_POLICY_READ_TIMEOUT_S`. |
 
 Supersedes two feature-184 rows below: `analysis.opportunity.sparkline_bars` is **inert** (no reader —
 the server-side enrichment fetches no bars), and `analysis.opportunity.live_enrich_ttl_seconds`' code
@@ -444,7 +534,9 @@ is now a **per-user** secret row at an opaque key `ingest.mcp_credential.<uuid>`
 `user_id` = the source owner; never the slug, so it cannot collide across owners or leak the source
 name), written secret-first by the owner via `SetConfig(is_secret=true, create_key=true,
 user_id=<owner>)`. Ingest resolves it with `GetSecret(user_id=<source owner>)` — exact scope — under
-the `ingest` grant, now also bound to the mTLS peer SAN `xstockstrat-ingest`.
+the `ingest` grant, now also bound to the mTLS peer SAN `xstockstrat-ingest`. A secret left
+unreferenced by a failed register is reclaimed by the operator orphan sweep (runbook
+`docs/runbooks/config-rollout.md`).
 
 ### feature 217 — sector-classification-strategy-params (`xstockstrat-marketdata`)
 
@@ -535,11 +627,12 @@ seed `description`).
 | `analysis.opportunity.signal_rank_weight` | float | `0.3` | `[0,1]` | Signal-axis weight in the queue ORDER BY. `0` is honoured (feature 244). |
 | `analysis.opportunity.max_universe_size` | int | `100` | `[1,1000]` | Max candidates traced per compute. `get_int`. |
 | `analysis.opportunity.max_live_strategies_per_symbol` | int | `5` | `[1,50]` | Per-symbol live-attribution cap. `get_int`. |
-| `analysis.opportunity.max_live_only_symbols_per_compute` | int | `20` | `[1,500]` | Non-held live-covered symbol cap per compute. `get_int`. |
+| `analysis.opportunity.max_live_only_symbols_per_compute` | int | `20` | `[1,500]` | Per-compute chunk limit of the live-only rotation (feature 366). `int_positive`. |
 | `analysis.opportunity.max_live_held_symbols_per_compute` | int | `20` | `[1,500]` | Held-symbol live-attribution cap per compute. `get_int`. |
 | `analysis.opportunity.max_concurrent_candidates` | int | `4` | `[1,50]` | Per-candidate evaluate fan-out (priority-inversion guard). `get_int`, `__init__` — restart to apply. |
 | `analysis.opportunity.sparkline_bars` | int | `20` | `[1,500]` | Daily bar closes fetched per opportunity for the sparkline. `get_int`. |
 | `analysis.opportunity.valid_window_hours` | int | `24` | `[1,168]` | `valid_until` window from the compute session date. `get_int`. |
+| `analysis.opportunity.live_only_cycle_max_days` | int | `3` | `[1,30]` | Live-only rotation cycle bound in days; live-only rows are stamped `computed_at` + this many days (feature 366, seeded by config `056`, not `028`). `int_positive`. |
 | `analysis.opportunity.snooze_default_hours` | int | `24` | — | Default snooze when a SNOOZE carries no timestamp. `get_int`. |
 | `analysis.opportunity.startup_jitter_seconds` | int | `30` | — | One-shot loop-entry jitter; `get_int_present` (`0` disables). |
 | `analysis.opportunity.retry_seconds` | int | `300` | — | Retry cadence on enumeration error; `get_int_present`. Shared with the feature-180 materializer loop. |
@@ -650,7 +743,8 @@ settable 0; the `SCALAR_BOUNDS_REGISTRY` hardening was declined in favor of the 
 **Also introduces a dynamic secret key family** `ingest.mcp_credential.<slug>` (`is_secret=true`, one
 per registered `mcp_client` source) — **not seeded**; written at registration via
 `SetConfig(is_secret=true, create_key=true)` and resolvable only by ingest via `GetSecret` under the
-new `SECRET_CALLER_ALLOWLIST` `keyPrefixes: ['mcp_credential.']` grant (`authz.ts`). Superseded by
+new `SECRET_CALLER_ALLOWLIST` `keyPrefixes: ['mcp_credential.']` grant (`authz.ts`) + reclaimed by
+the orphan sweep (runbook). Superseded by
 feature 224 (below): the key is now an opaque per-user `ingest.mcp_credential.<uuid>`.
 
 ### feature 031 — strategy-performance-dashboard (`xstockstrat-ui`)

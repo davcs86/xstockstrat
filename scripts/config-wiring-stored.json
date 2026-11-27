@@ -1,6 +1,30 @@
 {
     "rows": [
         {
+            "key": "extract.call_budget_seconds",
+            "file": "057_mcp_deadline_budget.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "float",
+            "description": "Whole-call budget (seconds) for the URL fetches of one extract_email_content / extract_website_content call. Identity auth (10 s) + the source lookup (10 s) + this value must stay at or below 57 s, 3 s under the MCP client's 60 s timeout. Read live; a non-finite or <= 0 value reads as 35. SetConfig-bounded [5,35].",
+            "environment": "production",
+            "default_value": "35",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
+            "key": "extract.call_budget_seconds",
+            "file": "057_mcp_deadline_budget.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "agent",
+            "value_type": "float",
+            "description": "Whole-call budget (seconds) for the URL fetches of one extract_email_content / extract_website_content call. Identity auth (10 s) + the source lookup (10 s) + this value must stay at or below 57 s, 3 s under the MCP client's 60 s timeout. Read live; a non-finite or <= 0 value reads as 35. SetConfig-bounded [5,35].",
+            "environment": "staging",
+            "default_value": "35",
+            "consuming_service": "xstockstrat-agent"
+        },
+        {
             "key": "extract.connect_timeout_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -958,6 +982,30 @@
             "description": "Short TTL (seconds) for the success-only per-symbol live-quote memo (feature 177). Keep it above the 15s ListOpportunities UI poll so a warm re-poll is served from the memo. Read via get_int_present (0 = memo disabled -> always fetch). Seeded unbounded.",
             "environment": "staging",
             "default_value": "20",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "opportunity.live_only_cycle_max_days",
+            "file": "056_analysis_live_only_cycle_max_days.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Live-only opportunity rotation (feature 366): a full rotation of the live-only pool should finish within this many days, and a carried live-only row older than this is dropped. Fresh live-only rows are stamped valid_until = computed_at + this many days. Bounds [1,30]. A value of 0 or less reads as 3.",
+            "environment": "production",
+            "default_value": "3",
+            "consuming_service": "xstockstrat-analysis"
+        },
+        {
+            "key": "opportunity.live_only_cycle_max_days",
+            "file": "056_analysis_live_only_cycle_max_days.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "analysis",
+            "value_type": "int",
+            "description": "Live-only opportunity rotation (feature 366): a full rotation of the live-only pool should finish within this many days, and a carried live-only row older than this is dropped. Fresh live-only rows are stamped valid_until = computed_at + this many days. Bounds [1,30]. A value of 0 or less reads as 3.",
+            "environment": "staging",
+            "default_value": "3",
             "consuming_service": "xstockstrat-analysis"
         },
         {
@@ -2710,6 +2758,30 @@
             "description": "Static ceiling on outbound Alpaca REST calls per second. The effective rate is the lower of this ceiling and what the X-RateLimit response headers allow (alpaca.adaptive_rate_limit_enabled). Read live per request into a token-bucket limiter the client waits on before every REST call; `0` disables only this ceiling.",
             "environment": "staging",
             "default_value": "200",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "bars.miss_backoff_ms",
+            "file": "058_marketdata_bars_miss_backoff.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata GetBars miss window: milliseconds a servable symbol with no stored bars is not live-fetched again by GetBars after a live fetch returned none. Read live on each miss. A value of 0 or less disables the back-off, so every miss fetches and warns. Explicit-range reads always fetch.",
+            "environment": "production",
+            "default_value": "1800000",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "bars.miss_backoff_ms",
+            "file": "058_marketdata_bars_miss_backoff.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata GetBars miss window: milliseconds a servable symbol with no stored bars is not live-fetched again by GetBars after a live fetch returned none. Read live on each miss. A value of 0 or less disables the back-off, so every miss fetches and warns. Explicit-range reads always fetch.",
+            "environment": "staging",
+            "default_value": "1800000",
             "consuming_service": "xstockstrat-marketdata"
         },
         {
@@ -4508,6 +4580,30 @@
             "namespace": "trading",
             "value_type": "bool",
             "description": "Kill switch for adaptive Alpaca broker pacing in trading. When true the Alpaca client paces requests from the X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset response headers and retries an HTTP 429 within a budget derived from broker.timeout_ms and order_intent.stale_multiplier. When false every broker call is one unpaced attempt, as before feature 347. Read live on every Alpaca request. IBKR is not affected.",
+            "environment": "staging",
+            "default_value": "true",
+            "consuming_service": "xstockstrat-trading"
+        },
+        {
+            "key": "broker.paper",
+            "file": "059_trading_broker_paper_per_environment.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "trading",
+            "value_type": "bool",
+            "description": "Paper or live for this deployment: true stamps new orders and registers new broker accounts as paper, false as live. Seeded per environment (staging true, production false); with no row trading resolves paper unless APPLICATION_ENV is production. Read live. Accounts already registered keep routing by their own stored mode, so changing this value does not re-route them.",
+            "environment": "production",
+            "default_value": "false",
+            "consuming_service": "xstockstrat-trading"
+        },
+        {
+            "key": "broker.paper",
+            "file": "059_trading_broker_paper_per_environment.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "trading",
+            "value_type": "bool",
+            "description": "Paper or live for this deployment: true stamps new orders and registers new broker accounts as paper, false as live. Seeded per environment (staging true, production false); with no row trading resolves paper unless APPLICATION_ENV is production. Read live. Accounts already registered keep routing by their own stored mode, so changing this value does not re-route them.",
             "environment": "staging",
             "default_value": "true",
             "consuming_service": "xstockstrat-trading"
@@ -5137,5 +5233,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "554ca640c743a1363eee57f7c7c72c581dda682372011fab029fab2e3d31be8f"
+    "inputs_sha256": "29f47190323e82129ef0b18ded64eeb2bea5e628bea0745fceda482cf28c363c"
 }

@@ -111,8 +111,8 @@ func TestSnapshotOfflinePositions_RejectsCrossUser(t *testing.T) {
 }
 
 // TestBroadcastOrder_ScopesToSubscriberUser proves H-1: broadcastOrder delivers a live order
-// update only to subscribers whose user filter matches the order owner. A scoped subscriber never
-// receives another user's order; the internal all-users selector (userID == "") still gets every.
+// update only to subscribers whose user filter matches the order owner. A subscriber never
+// receives another user's order, and an empty filter receives nothing (no all-users selector).
 func TestBroadcastOrder_ScopesToSubscriberUser(t *testing.T) {
 	s := &TradingService{subs: make(map[string]orderSubscriber)}
 	own := s.SubscribeOrderUpdates("sub-own", "u1")
@@ -138,10 +138,7 @@ func TestBroadcastOrder_ScopesToSubscriberUser(t *testing.T) {
 
 	select {
 	case got := <-all:
-		if got.OrderId != "o1" {
-			t.Errorf("all-users subscriber: got %q, want o1", got.OrderId)
-		}
+		t.Errorf("empty-filter subscriber received u1's order %q, want nothing", got.OrderId)
 	default:
-		t.Error("all-users selector subscriber did not receive the order")
 	}
 }

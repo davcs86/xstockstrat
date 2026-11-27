@@ -5,7 +5,7 @@ filing-boundary epoch, and broadcast across the span.
 Covers @AC-1 (broadcast composite, rule fires on the dotted ``.composite``), @AC-2 (PIT epochs,
 no look-ahead, one ExecuteFormula per epoch, mid-window transition), @AC-5 (missing/​error → None
 hold, no fabrication), @AC-7 (a technical formula NOT declaring fundamentals is byte-identical),
-and @AC-8 (partial row omits the absent metric — never 0.0 — the producer-divergent option b).
+and @AC-8 (partial row omits the absent metric — never 0.0 — option b; the producer omits it too).
 
 Real ``marketdata_pb2.Bar`` (``bar.time``), never MagicMock — Ledger 2026-08-06 / fails.md:727.
 """
@@ -45,7 +45,7 @@ def _formula_comp(ref_name="fscore", formula_id="value_quality"):
 def _scalar_resp(**scalars):
     out = Struct()
     out.update(scalars)
-    return SimpleNamespace(success=True, output=out, error="")
+    return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
 
 def _bars_jan(days):
@@ -138,7 +138,9 @@ class TestFundamentalsFormulaOperand:
         catches it per-symbol; the evaluator must not swallow it into an all-None series)."""
         stub = AsyncMock()
         stub.ExecuteFormula = AsyncMock(
-            return_value=SimpleNamespace(success=False, output=Struct(), error="boom")
+            return_value=SimpleNamespace(
+                success=False, output=Struct(), error="boom", exit_reason=0
+            )
         )
         ev = StrategyEvaluator(stub, propagation_meta=())
         bars = _bars_jan((27, 28))
@@ -164,7 +166,7 @@ class TestFundamentalsFormulaOperand:
             closes_seen["data"] = dict(req.input_data)
             out = Struct()
             out.update({"value": [b for b in req.input_data["close"]]})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         stub = AsyncMock()
         stub.ExecuteFormula = AsyncMock(side_effect=_exec)
@@ -185,7 +187,7 @@ class TestFundamentalsFormulaOperand:
     @pytest.mark.asyncio
     async def test_ac8_partial_row_omits_absent_metric(self):
         """@AC-8 (option b): a row missing roe (present pe_ratio) omits roe from input_data entirely
-        — never fed as 0.0 — so the formula neutral-drops it (diverges from the producer)."""
+        — never fed as 0.0 — so the formula neutral-drops it (the producer omits it too)."""
         fed = {}
 
         async def _exec(req, metadata=None):

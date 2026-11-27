@@ -118,7 +118,7 @@ There is no proto step (D-8, R-8), no migration and no config key (F-01, F-07).
 
 ### Step 1 — service: nonce status line, classifier, missing-result failure and measured memory in the sandbox
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify
@@ -323,7 +323,7 @@ by Step 2.
 
 ### Step 2 — test: sandbox result-contract regression tests (@AC-1..4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox.py` — modify
@@ -441,7 +441,7 @@ RED evidence on the pre-Step-1 tree: `test_ac1_…` reports `import_blocked`, `t
 
 ### Step 3 — service: boot self-test for `memory_used_bytes` in the startup probe
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox_probe.py` — modify
@@ -545,7 +545,7 @@ Step 4.
 
 ### Step 4 — test: boot self-test logs a measured figure and reports an unmeasurable runtime
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox_probe.py` — modify
@@ -607,7 +607,7 @@ RED evidence on the pre-Step-3 tree: no record contains `SELF_TEST_MSG`.
 
 ### Step 5 — service: agent `test_formula` documents `memory_used_bytes`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -616,16 +616,16 @@ RED evidence on the pre-Step-3 tree: no record contains `SELF_TEST_MSG`.
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity
 
 **Codebase Evidence**:
-- `services/xstockstrat-agent/app/tools.py:1669` `async def test_formula(`; the docstring's return
-  list at `:1687-1689`: "Returns the full sandbox result: success, output (…), stdout, stderr,
+- `services/xstockstrat-agent/app/tools.py:1817` `async def test_formula(`; the docstring's return
+  list at `:1835-1837`: "Returns the full sandbox result: success, output (…), stdout, stderr,
   error, exit_reason, parameter_errors, execution_ms (int64 as a JSON string)." It does not name
   `memory_used_bytes`.
-- The field is already returned: `app/client.py:1178-1180` returns
+- The field is already returned: `app/client.py:1199-1201` returns
   `MessageToDict(resp, preserving_proto_field_name=True, always_print_fields_with_no_presence=True)`,
   so `memory_used_bytes` is always present and, being `int64`
   (`packages/proto/indicators/v1/indicators.proto:95`), is rendered as a JSON string.
-- Parity mirror: `docs/runbooks/mcp-tools.md:1060-1062` repeats the same return list.
-- No new outbound call: the tool body (`:1690-1700`) is unchanged, so header propagation is
+- Parity mirror: `docs/runbooks/mcp-tools.md:1172-1174` repeats the same return list.
+- No new outbound call: the tool body (`:1838-1849`) is unchanged, so header propagation is
   unaffected.
 - `test_formula` is not one of the `strat-lab`-coupled tools (root `CLAUDE.md` § Context Guide);
   the tool name, parameters, return shape and tool count do not change.
@@ -636,7 +636,7 @@ RED evidence on the pre-Step-3 tree: no record contains `SELF_TEST_MSG`.
 
 **Instructions**:
 
-1. In the `test_formula` docstring, extend the return sentence (`:1687-1689`) so it ends:
+1. In the `test_formula` docstring, extend the return sentence (`:1835-1837`) so it ends:
 
    ```text
    parameter_errors, execution_ms and memory_used_bytes (int64 as JSON strings).
@@ -647,7 +647,7 @@ RED evidence on the pre-Step-3 tree: no record contains `SELF_TEST_MSG`.
 
    Change nothing else in the docstring or the function.
 
-2. In `docs/runbooks/mcp-tools.md:1060-1062`, make the **Return** paragraph list
+2. In `docs/runbooks/mcp-tools.md:1172-1174`, make the **Return** paragraph list
    `memory_used_bytes` after `execution_ms` with the same definition in one sentence.
 
 **Verification**:
@@ -663,7 +663,7 @@ grep -n "memory_used_bytes" app/tools.py ../../docs/runbooks/mcp-tools.md   # ex
 
 ### Step 6 — test: `test_formula` description names `memory_used_bytes` and its zero meaning
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -671,11 +671,11 @@ grep -n "memory_used_bytes" app/tools.py ../../docs/runbooks/mcp-tools.md   # ex
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity
 
 **Codebase Evidence**:
-- `tests/test_tools.py:27-30` `_make_server()`; `:33-34` `_tool_fn`.
-- Description-assertion pattern: `:1088-1089`
+- `tests/test_tools.py:33` `_make_server()`; `:39` `_tool_fn`.
+- Description-assertion pattern: `:1094-1095`
   `description = server._tool_manager.get_tool("manage_strategy").description or ""` then
   `normalized = " ".join(description.split())`.
-- `class TestAdditiveTools` holds `test_test_formula_dispatches_inline_source` at `:1837-1846` (class at `:1835`).
+- `class TestAdditiveTools` holds `test_test_formula_dispatches_inline_source` at `:1946-1955` (class at `:1944`).
 
 **TDD**: `red-green required`
 
@@ -686,7 +686,7 @@ grep -n "memory_used_bytes" app/tools.py ../../docs/runbooks/mcp-tools.md   # ex
 In `TestAdditiveTools`, after `test_test_formula_dispatches_inline_source`, add
 `test_test_formula_description_defines_memory_used_bytes`: read
 `_make_server()._tool_manager.get_tool("test_formula").description`, normalize whitespace as at
-`:1089`, and assert it contains `memory_used_bytes`, `not measured` and `not usage of the memory cap`.
+`:1095`, and assert it contains `memory_used_bytes`, `not measured` and `not usage of the memory cap`.
 
 **C-13 verdict**: no domain data is used.
 
@@ -705,7 +705,7 @@ RED evidence on the pre-Step-5 tree: the description does not contain `memory_us
 
 ### Step 7 — test: `/insights` formula run shows the missing-result failure
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/formulas.spec.ts` — modify
@@ -775,7 +775,7 @@ No coverage threshold applies to `xstockstrat-ui` e2e.
 
 ### Step 8 — docs: result contract, memory definition and resolved findings rows
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-indicators/` docs
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
@@ -785,11 +785,11 @@ No coverage threshold applies to `xstockstrat-ui` e2e.
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `services/xstockstrat-indicators/CLAUDE.md:117` `## Sandbox Security Model`; `:213-216` the
-  "Execution enforcement" bullet; `:217-222` the "No-output failure (feature 268)" bullet;
-  `:230-236` the "Memory watchdog and startup probe (feature 300)" observability bullet listing the
-  boot INFO line and the ERRORs.
-- `services/xstockstrat-indicators/docs/context-constitution.md:41`: the row "Sandbox failure
+- `services/xstockstrat-indicators/CLAUDE.md:104` `## Sandbox Security Model`; `:159-162` the
+  "Execution enforcement" bullet; `:163-168` the "No-output failure (feature 268)" bullet;
+  `:174-181` the "Memory watchdog and startup probe (feature 300)" observability bullet (under
+  `## Observability (feature 294-signal-map-instrumentation)`) listing the boot INFO line and the ERRORs.
+- `services/xstockstrat-indicators/docs/context-constitution.md:37`: the row "Sandbox failure
   classification by stderr substring-match is a fixed contract | … | a maintainer ruling …".
 - `services/xstockstrat-indicators/docs/context-constitution-findings.md:22` (stderr
   classification, "status: **open**"), `:23` (`memory_used_bytes` hardcoded to 0, "status:
@@ -807,7 +807,7 @@ No coverage threshold applies to `xstockstrat-ui` e2e.
 **Instructions**:
 
 1. `CLAUDE.md` § Sandbox Security Model — add one bullet after the "No-output failure (feature
-   268)" bullet (`:222`), with this text (it is the O-10 definition, written out here because the
+   268)" bullet (`:168`), with this text (it is the O-10 definition, written out here because the
    register did not persist it):
 
    ```markdown
@@ -831,16 +831,16 @@ No coverage threshold applies to `xstockstrat-ui` e2e.
      formula that closes the descriptor zeroes its own figure only.
    ```
 
-2. `CLAUDE.md` "Execution enforcement" bullet (`:213-216`): add one sentence — a stored formula
+2. `CLAUDE.md` "Execution enforcement" bullet (`:159-162`): add one sentence — a stored formula
    that declares outputs and never assigns `result` now fails earlier with "formula did not assign
    result" (still `SANDBOX_EXIT_REASON_RUNTIME_ERROR`).
 
-3. `CLAUDE.md` observability bullet (`:230-236`): add the boot self-test — one INFO
+3. `CLAUDE.md` observability bullet (`:174-181`): add the boot self-test — one INFO
    `sandbox memory self-test exit_reason=… memory_measured=…` line at boot, and ERROR
    `sandbox memory_used_bytes unmeasurable on this runtime` when that run is not a success, measures
    0 or raises.
 
-4. `docs/context-constitution.md:41`: replace the row. The stderr substring match is no longer a
+4. `docs/context-constitution.md:37`: replace the row. The stderr substring match is no longer a
    fixed contract (operator ruling O-3, 2026-11-20, quoted in this feature's context.md). State the
    new invariant: failure class is carried by the per-run nonce status line; the
    `_MEMORY_EXHAUSTED_MARKERS` stderr check survives only as the no-status fallback, which keeps
@@ -876,3 +876,91 @@ _Populated by /sdd-execute as implementation proceeds._
   three sidecars untouched and puts the wording in the findings row (Step 8), because the sidecar
   contract (`.claude/skills/sdd-qa/reference/defect-filing.md:26-48`) allows only a status token and
   a `ref:` line. design.md is not amended. Operator confirmation pending (context.md Open Threads).
+- **2026-11-21 (Step 1)** — Instruction 5's verbatim `__OUTPUT__` print line is 108 characters
+  and fails the step's own `ruff check .` (E501, limit 100; the line is template text inside
+  `_SANDBOX_WRAPPER`, so `# noqa` cannot apply). It is split into
+  `_output = _output if isinstance(_output, dict) else {{"value": _output}}` followed by
+  `print("\\n__OUTPUT__:" + json.dumps(_output))`. The child's behaviour and output are unchanged.
+  **Disposition**: in-scope lint fix on the step's own line (HARD CONSTRAINTS exception).
+- **2026-11-21 (Step 1)** — TDD red evidence. The step's `**Verification**` exits 0 on the
+  pre-change tree, because its trailing greps print expectations and do not fail. RED is therefore
+  cited from those greps, `4` against an expected 2 and a match at `:809` against an expected none.
+  A scratch behaviour probe outside the repo adds behaviour evidence: it failed before the change
+  (missing `result` succeeded, memory 0, the guard-message ValueError was classed `import_blocked`)
+  and passed after it. The probe was not committed. Step 2 owns the regression tests.
+  **Disposition**: evidence recorded in context.md; no spec text changed.
+- **2026-11-21 (Step 1)** — The suite count is `610 passed`, not the spec's measured `571`. Tests
+  were added on the base after the spec was measured, and the run is green with the change. The
+  service venv reports Python 3.12.3, while root CLAUDE.md pins 3.13. **Disposition**:
+  informational only; no action.
+- **2026-11-21 (Step 2)** — RED ran against the pre-Step-1 `sandbox.py`, restored temporarily
+  from `4f57ba17~1` and put back before GREEN (Step 1 had already landed). The pre-existing
+  `SandboxResult(` fake is now at `tests/test_sandbox.py:399`, not `:311`, because the new class
+  sits above it. It is still the only match. The serialising-MemoryError source is split over two
+  string literals to pass E501. The isolation no-status marker test also passes on the pre-Step-1
+  tree, because the marker branch existed then; it is a characterization guard.
+  **Disposition**: in-scope; no spec text changed.
+- **2026-11-21 (Step 3)** — TDD red evidence. The step's `**Verification**` has no behaviour
+  assertion (Step 4 owns the tests), and it exits 0 on the pre-change tree. RED therefore comes from
+  a scratch behaviour probe outside the repo, which was not committed. Before the change it found no
+  self-test line and no unmeasurable ERROR. After the change it passed. In the run script the
+  Verification's closing `)` is on its own line, because the block's trailing `# expect …` comment
+  would otherwise swallow it. **Disposition**: evidence recorded in context.md; no spec text changed.
+- **2026-11-26 (Step 4, operator-approved fold, decision A of 2026-11-21)** — Step 4's tests showed
+  that the boot self-test could change the watchdog-observability outcome. A blind watchdog tick in
+  the self-test's sandbox run calls `_warn_unobservable_once()`. That logs `sandbox memory watchdog
+  cannot observe child`, latches the `unobservable` once-flag and sets
+  `indicators.sandbox.memory_watchdog_observable` to 0, overriding what the probe found. The fold
+  widens Step 4's scope to `services/xstockstrat-indicators/app/services/sandbox_probe.py`. A new
+  `_self_test_isolated()` pre-marks the `unobservable` once-flag for the duration of `_self_test()`,
+  so nothing is logged. Afterwards it re-arms the flag (unless the probe had already latched it) and
+  restores the gauge value. `run_startup_probe` now calls it in place of `_self_test()`. A sixth
+  test, `test_boot_self_test_blind_sample_leaves_the_probe_outcome_unchanged`, asserts no
+  `CANNOT_OBSERVE_MSG`, a gauge of 1, and a once-flag that is still armed. It simulates the blind
+  tick by calling `sandbox._warn_unobservable_once()` inside a wrapped `execute_formula`, because a
+  real tick needs the `result = {}` run to outlive one 50 ms `_TICK_S`. As a result the
+  Verification's `-k "boot_self_test"` line reports `6 passed`, not the commented `5 passed`. RED
+  for the five spec tests ran against the pre-Step-3 `sandbox_probe.py`, restored temporarily from
+  `5755e29d~1` and put back before GREEN. The Verification's trailing C-13 grep finds no match, so
+  it sets `exit=1`, which is the expected "no match". **Disposition**: fold approved by the
+  operator; in scope.
+- **2026-11-26 (Step 5)** — The verbatim docstring's last line, `not measured (…runs report "0").`
+  plus the closing `"""`, is 101 characters and fails the step's own `ruff check .` (E501, limit
+  100). The last two lines are rewrapped: `"0"` ends the cap line, and `means not measured (…; most
+  memory_exceeded runs` / `report "0")."""` follow it. The words are unchanged, so the
+  whitespace-normalized tool description matches the spec text exactly. **Disposition**: in-scope
+  lint fix on the step's own lines (HARD CONSTRAINTS exception).
+- **2026-11-26 (Step 5)** — TDD red evidence. Step 6 owns the description test, so RED comes from
+  the Verification's trailing grep on the pre-change tree (no match, `exit=1`; expected both files)
+  and from a scratch description probe outside the repo, which was not committed. The probe failed
+  before the change and passed after it. In the run script the Verification's closing `)` is on its
+  own line, because the block's trailing `# expect …` comment would otherwise swallow it.
+  **Disposition**: evidence recorded in context.md; no spec text changed.
+- **2026-11-26 (Step 6)** — Step 5 had already landed, so RED ran with `app/tools.py` restored
+  temporarily from `7efe5d7a~1` (the pre-Step-5 docstring) and put back before GREEN. In the run
+  script the Verification's closing `)` is on its own line, because the block's trailing
+  `# 1 passed` comment would otherwise swallow it. **Disposition**: in-scope; no spec text changed.
+- **2026-11-26 (Step 7)** — The host `pnpm dev` harness could not run the spec. In two verbatim runs
+  (`.sdd-logs/v-1.log`, `v-2.log`) the `[setup] pre-warm SSR routes` project hit `Test timeout of
+  10000ms exceeded` on the cold dev compile, and `12 did not run`. Both still printed `exit=0`,
+  because the block's trailing grep sets the status. The Docker runner (`scripts/run-e2e.py`) was
+  not used: the repo has no `.dockerignore`, so `COPY services/xstockstrat-ui/` would copy this
+  worktree's linked `node_modules` symlink over the image's installed tree. GREEN instead ran the
+  same block verbatim with `CI=true` (`.sdd-logs/v-3.log`). That is the mode CI's `frontend-e2e`
+  image sets (`Dockerfile.e2e` `ENV CI=true`): `pnpm build && pnpm start` with CI timeouts. In the
+  run script the Verification's closing `)` is on its own line, because the block's trailing
+  `# expect …` comment would otherwise swallow it. The assertions use `{ exact: true }` so `Failed`
+  cannot match `Failed to load fundamentals`. TDD: red N/A, a characterisation test of an unchanged
+  surface (the step's own `**TDD**` line). **Disposition**: CI-equivalent fallback.
+- **2026-11-26 (Step 8)** — In the run script the Verification's closing `)` is on its own line,
+  because the block's trailing `# expect no match` comment would otherwise swallow it. The block's
+  last grep expects no match, so the GREEN run's `exit=1` is the expected result. The constitution
+  row stays in `## Candidate rules (unverified)`, replaced in place as instructed, with its third
+  column recording the O-3 ruling; it is not promoted to an `INDICATORS-*` rule. **Disposition**:
+  in-scope; no spec text changed.
+- **2026-11-26 (post-Step 8, operator ruling)** — The operator ruled "Mark the reports resolved" on the
+  2026-11-20 entry's open question, after Step 8 had run without the sidecar flip (as specced). A
+  follow-up commit sets the three report sidecars to `resolved` / `ref: feature:310-fix-sandbox-result-contract`
+  and moves findings `:23` from the conditional wording to resolved. The "Report sidecars are not
+  edited" note under Step Dependencies is superseded by this entry. **Disposition**: operator ruling
+  (verbatim in context.md).

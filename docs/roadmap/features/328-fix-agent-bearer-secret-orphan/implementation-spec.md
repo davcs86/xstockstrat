@@ -143,7 +143,7 @@ not change. They pin the two facts the sweep depends on — one secret per attem
 
 ### Step 1 — test: config SQL-text suite for the sweep and preview
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/mcpCredentialSweep.test.ts` — create
@@ -219,7 +219,7 @@ Coverage threshold: ≥ 40% lines (C-08).
 
 ### Step 2 — test: migration-rerun assertion for the sweep, and its CI path filters
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/migration-assertions` (config + ingest schemas), `.github/workflows`
 **Files**:
 - `scripts/migration-assertions/config-mcp-credential-sweep.sql` — create
@@ -251,14 +251,14 @@ ciphertext read
   INSERT, never UPDATE (D-10, R-11); `config_value_audit_insert` AFTER INSERT (`010:27-28`) writes
   one audit row per seed (O-18). No DELETE trigger exists (`grep -n "CREATE TRIGGER" migrations/*.up.sql`
   → only those two).
-- SetConfig's secret row shape: `services/xstockstrat-config/src/grpc/configServiceImpl.ts:825`
-  (`valueData = REDACTED`, `REDACTED = '[redacted]'` at `:33`) and the insert column list at
-  `:833-834` (`namespace, key, value_type, value_data, value_encrypted, is_secret, updated_by,
+- SetConfig's secret row shape: `services/xstockstrat-config/src/grpc/configServiceImpl.ts:832`
+  (`valueData = REDACTED`, `REDACTED = '[redacted]'` at `:34`) and the insert column list at
+  `:840-841` (`namespace, key, value_type, value_data, value_encrypted, is_secret, updated_by,
   update_reason, environment, user_id, caller_identity`).
 - `ingest.signal_sources`: `credentials_ref TEXT` nullable (`002:12`), `user_id TEXT NOT NULL` and PK
   `(user_id, slug)` (`013:24-32`), `mcp_client` allowed in the `source_type` CHECK (`011:9-10`).
 - CI filters: `.github/workflows/ci.yml:60` (`xstockstrat-config: ['services/xstockstrat-config/**']`),
-  `:88-97` (`migrations:` list, entries indented 14 spaces as `- '<glob>'`), job trigger `:898-903`.
+  `:88-98` (`migrations:` list, entries indented 14 spaces as `- '<glob>'`), job trigger `:898-903`.
 - **Executed at spec time (2026-11-20)** on PostgreSQL 16.15 against a stand-in schema (the three
   tables, the two audit triggers, both CHECKs and the unique index above): the file below exits 0;
   the sweep prints `deleted 4, notified 2`, the replay `0, 0`; nine single-conjunct mutations of the
@@ -389,7 +389,7 @@ ROLLBACK;
      `xstockstrat-config:     ['services/xstockstrat-config/**', 'scripts/config-heal/mcp-credential-orphan-sweep*.sql']`
      (keep the existing column alignment);
    - append `              - 'scripts/config-heal/mcp-credential-orphan-sweep*.sql'` to the
-     `migrations:` list (`:88-97`), after `- 'scripts/migration-assertions/**'`.
+     `migrations:` list (`:88-98`), after `- 'scripts/migration-assertions/**'`.
 
 C-13: the seed literals have one consumer (this file) — inline is compliant.
 
@@ -422,7 +422,7 @@ service package); the unit's threshold is Step 1's `c8 check-coverage --lines 40
 
 ### Step 3 — service: operator sweep and read-only preview SQL
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/config-heal` (data owned by `xstockstrat-config`; reads `xstockstrat-ingest`'s `ingest.signal_sources`)
 **Files**:
 - `scripts/config-heal/mcp-credential-orphan-sweep.sql` — create
@@ -443,10 +443,10 @@ cross-schema read, run-order; Security — no ciphertext read, no widened secret
 - Ref semantics: `split_credentials_ref` splits on the first dot —
   `services/xstockstrat-ingest/app/config/watcher.py:21-26`; the consumer discards the namespace
   half — `app/engine/mcp_client_loop.py:140` (`_namespace, key = split_credentials_ref(credentials_ref)`).
-- Literal-prefix grant: `services/xstockstrat-config/src/grpc/authz.ts:146`
-  (`keyPrefixes: ['mcp_credential.']`), matched with `key.startsWith(prefix)` at `:190`.
+- Literal-prefix grant: `services/xstockstrat-config/src/grpc/authz.ts:153`
+  (`keyPrefixes: ['mcp_credential.']`), matched with `key.startsWith(prefix)` at `:199`.
 - Notify contract CONFIG-4: `services/xstockstrat-config/docs/context-constitution.md:17`; the
-  service's own producer is at `src/grpc/configServiceImpl.ts:846`.
+  service's own producer is at `src/grpc/configServiceImpl.ts:853`.
 - Migration order: `scripts/db-migrate.sh:152` (config) runs before `:173` (ingest) — why this is a
   script and not a config migration (D-1, R-1).
 - `scripts/config-heal/` holds no `mcp-credential*` file (`ls scripts/config-heal/`): **Not found** —
@@ -546,7 +546,7 @@ New logic is SQL outside any service package; the coverage threshold is enforced
 
 ### Step 4 — docs: operator runbook section for the sweep
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/config-rollout.md` — modify
@@ -626,7 +626,7 @@ grep -n "Step 4" docs/roadmap/features/328-fix-agent-bearer-secret-orphan/contex
 
 ### Step 5 — service: agent bearer-write text names the orphan sweep
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -701,7 +701,7 @@ grep -n "orphan sweep" app/tools.py CLAUDE.md docs/context-constitution-findings
 
 ### Step 6 — test: agent writer pins (AC-1, AC-2) and docstring ↔ runbook parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -709,7 +709,7 @@ grep -n "orphan sweep" app/tools.py CLAUDE.md docs/context-constitution-findings
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability and `mcp-tools.md` parity
 
 **Codebase Evidence**:
-- Seam to extend: `tests/test_tools.py:149-197`
+- Seam to extend: `tests/test_tools.py:150-197`
   (`test_manage_signal_source_mcp_client_secret_first_two_write`): `AsyncMock` on
   `client.set_config` and `client.manage_signal_source` via `patch.object` (`:165-168`), the tool
   reached with `_tool_fn(server, "manage_signal_source")(_ctx(ADMIN), …)` (`:169-178`), and the ref
@@ -723,7 +723,7 @@ grep -n "orphan sweep" app/tools.py CLAUDE.md docs/context-constitution-findings
 - `instantiate_template` tool body calls `client.instantiate_template(kind, template_id,
   strategy_id=…, slug=…, credentials_ref=…)` (`app/tools.py:1498-1504`; client function at
   `app/client.py:1510`).
-- Parity precedent: `tests/test_template_tools.py:262-269` (`_catalog()` from
+- Parity precedent: `tests/test_template_tools.py:261-268` (`_catalog()` from
   `tests.test_tools_endpoint` — defined at `tests/test_tools_endpoint.py:78` — plus a section split
   of `docs/runbooks/mcp-tools.md`).
 - C-13: the Python fixture home `tests/conftest.py` exists; `_rpc_error`, `ADMIN`, `_ctx` come from
@@ -761,7 +761,7 @@ Add three tests after `test_manage_signal_source_mcp_client_secret_first_two_wri
    `instantiate_mock.await_args.kwargs["credentials_ref"] == f"ingest.{key}"`.
 3. `test_bearer_docs_name_the_orphan_sweep` (sync). `_catalog()["manage_signal_source"]["description"]`
    contains `orphan sweep`; the `### \`manage_signal_source\`` section of
-   `docs/runbooks/mcp-tools.md` (split as at `test_template_tools.py:266-268`) contains `orphan sweep`
+   `docs/runbooks/mcp-tools.md` (split as at `test_template_tools.py:266`) contains `orphan sweep`
    and `config-rollout.md`.
 
 Name the scenario in each pin's docstring (`@AC-1` / `@AC-2`, feature 328). Before accepting green,
@@ -780,7 +780,7 @@ Coverage threshold: `--cov-fail-under=40` (C-08).
 
 ### Step 7 — service: UI secret-first hook comment names the orphan sweep
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/hooks/useSignalSourceMutations.ts` — modify
@@ -818,7 +818,7 @@ git diff --stat -- src/app/config-ui/hooks/useSignalSourceMutations.ts          
 
 ### Step 8 — test: Playwright pin for a failed config-ui register (AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/signal-sources.spec.ts` — modify
@@ -879,7 +879,7 @@ No coverage threshold applies to the UI e2e suite; `INVENTORY.md` is unchanged (
 
 ### Step 9 — docs: remaining "orphan accepted" text, author sentinel, ledger note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`, `services/xstockstrat-ingest/CLAUDE.md`, `docs/roadmap/ledger/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify
@@ -891,13 +891,13 @@ No coverage threshold applies to the UI e2e suite; `INVENTORY.md` is unchanged (
 
 **Codebase Evidence**:
 - `docs/patterns/config-governance.md`: author-sentinel table header `:138`, rows `:140-144` (last
-  row `system:config-migration-feature-330`); feature-224 paragraph `:440-447` ("written secret-first
-  by the owner via `SetConfig(is_secret=true, create_key=true, user_id=<owner>)`"); feature-166
-  paragraph `:650-654`.
+  row `system:config-migration-feature-330`); feature-224 block `:461-467` (heading `:461`; "written
+  secret-first by the owner via `SetConfig(is_secret=true, create_key=true, user_id=<owner>)`" at
+  `:466-467`); feature-166 dynamic-secret-family sentence `:672-676` (section heading `:663`).
 - `docs/patterns/inter-service-mtls.md:58` ("config `GetSecret` ← `xstockstrat-ingest`, for the
   `ingest` caller's `mcp_credential.*` keys").
-- `services/xstockstrat-ingest/CLAUDE.md:167-175` (the "`mcp_client` bearer secret" note; "written
-  secret-first as the caller's own row" at `:170-171`).
+- `services/xstockstrat-ingest/CLAUDE.md:178-186` (the "`mcp_client` bearer secret" note; "written
+  secret-first as the caller's own row" at `:181`).
 - `docs/roadmap/ledger/insights.md:2836-2843` (2026-09-02 — 166-mcp-client-signal-source — design:
   "skip the compensating saga because a failed register leaves only a harmless *redacted* orphan
   secret").
@@ -922,13 +922,13 @@ No coverage threshold applies to the UI e2e suite; `INVENTORY.md` is unchanged (
 1. `config-governance.md` author-sentinel table: add a row after `:144` —
    `| \`system:config-heal-mcp-credential-sweep\` | operator SQL (\`scripts/config-heal/mcp-credential-orphan-sweep.sql\`) | Not a SetConfig write: the operator orphan sweep's \`config_audit.changed_by\` for each deleted per-user \`ingest\` / \`mcp_credential.*\` secret (\`new_value\` NULL, \`old_value\` the \`[redacted]\` sentinel, \`caller_identity\` NULL); feature 328 |`
    (O-20, C-10(c)).
-2. `config-governance.md:440-447` (feature 224): append one sentence — a secret left unreferenced by
+2. `config-governance.md:461-467` (feature 224): append one sentence — a secret left unreferenced by
    a failed register is reclaimed by the operator orphan sweep (runbook `docs/runbooks/config-rollout.md`).
-3. `config-governance.md:650-654` (feature 166): append "+ reclaimed by the orphan sweep (runbook)"
+3. `config-governance.md:672-676` (feature 166): append "+ reclaimed by the orphan sweep (runbook)"
    to the dynamic-secret-family sentence.
 4. `inter-service-mtls.md:58`: append that unreferenced `mcp_credential.*` rows are reclaimed by the
    operator orphan sweep (runbook), which changes no grant.
-5. `services/xstockstrat-ingest/CLAUDE.md:167-175`: append one sentence to the bearer note — a
+5. `services/xstockstrat-ingest/CLAUDE.md:178-186`: append one sentence to the bearer note — a
    secret no source of the same owner references is reclaimed by the operator orphan sweep after its
    grace window (`docs/runbooks/config-rollout.md`).
 6. `docs/roadmap/ledger/insights.md:2836-2843`: append one bullet to the feature-166 entry —
@@ -953,3 +953,21 @@ git grep -n -i -E "orphan|secret-first" -- . ':!docs/roadmap/features' ':!docs/r
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 4 — operator-directed findings row outside the step's Files (2026-11-27)
+- **Planned**: modify `docs/runbooks/config-rollout.md` only.
+- **Actual**: the runbook section as specced, with the operator-confirmed staging-only target table (DO dev and homelab `xstockstrat-staging` swept; DO prod and any homelab production listed as not swept). Per the operator's binding decision, one row is also added to the root `docs/context-constitution-findings.md` § Documentation that lies, logging the `operator-db-access.md:59-64` vs `config-rollout.md:303-304` homelab-production disagreement as unresolved doc drift. It is committed alone, after the step commit.
+- **Disposition**: operator-directed (2026-11-27); out-of-scope change announced at the checkpoint.
+
+### Step 7 — `tsc --noEmit` re-run against this branch's proto stubs (2026-11-27)
+- **Planned**: `pnpm exec tsc --noEmit` in `services/xstockstrat-ui` (step Verification).
+- **Actual**: the linked `node_modules/@xstockstrat/proto` resolves to the main checkout's `packages/proto/gen/ts`, which predates `04d66e66`. So `tsc` reports two `TS2339 'INCOMPLETE'` errors (`e2e/fixtures/backfillJobs.ts:39`, `src/lib/backtestBackfill.ts:95`), the same before and after the edit; the block still exits 0 because `git diff` runs last. `tsc --noEmit` re-run with a scratch tsconfig (extends the UI tsconfig; maps `@xstockstrat/proto/*` to this worktree's `packages/proto/gen/ts/dist/*`) exits 0. Lint is clean (warnings only, none in the edited file).
+- **Disposition**: CI-equivalent fallback (CI type-checks against the branch's own stubs).
+
+### Step 8 — locator scope, assertion timeout and host-run flags (2026-11-27)
+- **Planned**: `await expect(page.getByText('signal source dup-src already exists')).toBeVisible();`, verified with the two `playwright test` lines of the step Verification as written.
+- **Actual**:
+  1. Locator deviation. The text assertion is scoped to the inline form error: `page.getByRole('main').getByText('signal source dup-src already exists')`.
+  2. Timeout deviation. The assertion uses `toBeVisible({ timeout: 30000 })`, because the cold compile of the secret-first SetConfig BFF route (~24 s) exceeds the 5000 ms local expect timeout. This follows the same pattern as `openPage`'s 15000 ms.
+  3. Both Playwright lines ran on the host with `--no-deps --timeout=240000 --reporter=list` added. Results: the `@feature-328` grep gave `1 passed`. The whole file gave `21 passed` and `2 failed`. The two failures are the cold-start `Own signal sources — list` tests (`:53`, `:64`, a 5000 ms cell wait), which the operator recorded as identical on the pre-edit tree.
+- **Disposition**: operator-directed (rulings 2026-11-27, Option A of both Step 8 blockers). CI's `frontend-e2e` job on the integration PR is the full gate.

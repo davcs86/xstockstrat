@@ -12,6 +12,7 @@ DISMISS=2, SNOOZE=1, TAKE=3 — a stored action of 0 (UNSPECIFIED) never occurs,
 ``COALESCE(action, 0)`` is a safe "no disposition" sentinel in the read filter.
 """
 
+import contextlib
 import json
 
 # analysis.proto OpportunityAction enum numbers (persisted in opportunity_actions.action).
@@ -25,12 +26,15 @@ _ACTION_TAKE = 3
 # deliberately absent (parity with _primary_source: an unavailable-led row surfaces "unavailable").
 # feature 215 — "fundamentals_unavailable" (the skip-row marker) must never become a source/facet.
 # feature 289 — likewise "formula_unreadable" (unreadable-formula marker) is never a source/facet.
+# feature 308 — likewise "evaluation_failed" (terminal per-symbol fault) is never a source/facet.
+EVALUATION_FAILED_PROVENANCE = "evaluation_failed"
 _PROVENANCE_STRUCTURAL_MARKERS = [
     "watchlist",
     "position",
     "denied",
     "fundamentals_unavailable",
     "formula_unreadable",
+    EVALUATION_FAILED_PROVENANCE,
 ]
 
 # feature 190 — the sort-key → ORDER BY fragment map (OpportunitySort enum ints). Selected by a
@@ -78,46 +82,76 @@ class OpportunitiesRepository:
     def __init__(self, db_pool):
         self._db = db_pool
 
-    async def replace_for_user(self, user_id: str, rows: list[dict]) -> None:
+    @contextlib.asynccontextmanager
+    async def transaction(self):
+        """One connection + transaction on this repository's pool, shared by the queue replace and
+        the cursor write (feature 366) so both commit or roll back together."""
+        async with self._db.acquire() as conn, conn.transaction():
+            yield conn
+
+    async def replace_for_user(self, user_id: str, rows: list[dict], *, conn=None) -> None:
         """Transactionally replace ALL of a user's materialized rows (delete + bulk insert).
 
         A whole-user replace (not per-row upsert) is what makes a recompute authoritative:
         a candidate that dropped out of the Universe since the last compute is removed, not
-        left stale. ``computed_at`` defaults to ``now()`` per row.
+        left stale. ``computed_at`` defaults to ``now()`` for a row without one; a carried row
+        keeps its stored value. With ``conn`` the write runs inside the caller's transaction.
         """
-        async with self._db.acquire() as conn, conn.transaction():
-            await conn.execute("DELETE FROM analysis.opportunities WHERE user_id = $1", user_id)
-            if not rows:
-                return
-            await conn.executemany(
-                """
-                INSERT INTO analysis.opportunities
-                    (user_id, opportunity_key, symbol, strategy_id, action, conviction,
-                     readiness_json, signal_axis, provenance, thesis, valid_until,
-                     composite_score, symbol_score)
-                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11, $12, $13)
-                """,
-                [
-                    (
-                        user_id,
-                        r["opportunity_key"],
-                        r["symbol"],
-                        r.get("strategy_id", ""),
-                        int(r["action"]),
-                        float(r.get("conviction", 0.0)),
-                        json.dumps(r.get("readiness_json", {})),
-                        float(r.get("signal_axis", 0.0)),
-                        json.dumps(r.get("provenance", [])),
-                        r.get("thesis", ""),
-                        r["valid_until"],
-                        # feature 199 — nullable; None passes straight through (NULL)
-                        r.get("composite_score"),
-                        # feature 200 — symbol-uniform roll-up; None → NULL
-                        r.get("symbol_score"),
-                    )
-                    for r in rows
-                ],
-            )
+        if conn is not None:
+            await self._replace_on(conn, user_id, rows)
+            return
+        async with self._db.acquire() as own, own.transaction():
+            await self._replace_on(own, user_id, rows)
+
+    async def _replace_on(self, conn, user_id: str, rows: list[dict]) -> None:
+        await conn.execute("DELETE FROM analysis.opportunities WHERE user_id = $1", user_id)
+        if not rows:
+            return
+        await conn.executemany(
+            """
+            INSERT INTO analysis.opportunities
+                (user_id, opportunity_key, symbol, strategy_id, action, conviction,
+                 readiness_json, signal_axis, provenance, thesis, valid_until,
+                 composite_score, symbol_score, computed_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11, $12, $13,
+                    COALESCE($14::timestamptz, now()))
+            """,
+            [
+                (
+                    user_id,
+                    r["opportunity_key"],
+                    r["symbol"],
+                    r.get("strategy_id", ""),
+                    int(r["action"]),
+                    float(r.get("conviction", 0.0)),
+                    json.dumps(r.get("readiness_json", {})),
+                    float(r.get("signal_axis", 0.0)),
+                    json.dumps(r.get("provenance", [])),
+                    r.get("thesis", ""),
+                    r["valid_until"],
+                    # feature 199 — nullable; None passes straight through (NULL)
+                    r.get("composite_score"),
+                    # feature 200 — symbol-uniform roll-up; None → NULL
+                    r.get("symbol_score"),
+                    r.get("computed_at"),
+                )
+                for r in rows
+            ],
+        )
+
+    async def read_attributed_rows(self, user_id: str) -> list[dict]:
+        """Every stored strategy-attributed row of the user (feature 366 carry candidates): no
+        actions join and no validity filter — the compute applies the carry predicates."""
+        rows = await self._db.fetch(
+            """
+            SELECT opportunity_key, symbol, strategy_id, action, conviction, readiness_json,
+                   signal_axis, provenance, thesis, valid_until, computed_at, composite_score
+              FROM analysis.opportunities
+             WHERE user_id = $1 AND strategy_id <> ''
+            """,
+            user_id,
+        )
+        return [_to_dict(r) for r in rows]
 
     async def replace_symbols(self, user_id: str, rows: list[dict]) -> None:
         """Heal-only UPDATE-in-place of specific materialized rows (feature 185 FR-5 surgical
@@ -263,7 +297,8 @@ class OpportunitiesRepository:
               -- feature 289: likewise the formula-unreadable row.
               AND (o.conviction >= $2 OR o.provenance ? 'denied' OR o.provenance ? 'unavailable'
                    OR o.provenance ? 'fundamentals_unavailable'
-                   OR o.provenance ? 'formula_unreadable')
+                   OR o.provenance ? 'formula_unreadable'
+                   OR o.provenance ? 'evaluation_failed')
               -- feature 190: source filter — an empty $7 array applies NO predicate (never = ANY of
               -- an empty array, which would return zero rows and empty the default view).
               AND (cardinality($7::text[]) = 0 OR ps.elem = ANY($7::text[]))

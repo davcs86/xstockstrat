@@ -34,6 +34,9 @@ type IBKRConfig struct {
 	EncryptionKey     string // PEM RSA private key (PKCS#1 or PKCS#8)
 	DHPrime           string // PEM "DH PARAMETERS"
 	Timing            func() IBKRTiming
+	// Timeout is read before every signed request; nil or non-positive falls back to defaultTimeoutMs.
+	// The handshake is bounded by Timing().HandshakeTimeout instead.
+	Timeout func() time.Duration
 
 	// Optional test seams; nil selects the production default.
 	Now      func() time.Time
@@ -54,6 +57,7 @@ type IBKRClient struct {
 	nonce             func() string
 	dhRandom          func() *big.Int
 	timingFn          func() IBKRTiming
+	timeoutFn         func() time.Duration
 	signatureKey      *rsa.PrivateKey
 	encryptionKey     *rsa.PrivateKey
 	dhP, dhG          *big.Int
@@ -62,10 +66,6 @@ type IBKRClient struct {
 }
 
 const ibkrRealm = "limited_poa"
-
-// IBKRRequestTimeout is IBKR's hardcoded HTTP client timeout — a confirmed pre-existing bug
-// (docs/context-constitution-findings.md); also the staleness-threshold formula's floor.
-const IBKRRequestTimeout = 10 * time.Second
 
 func NewIBKRClient(cfg IBKRConfig) *IBKRClient {
 	base := cfg.BaseURL
@@ -80,11 +80,12 @@ func NewIBKRClient(cfg IBKRConfig) *IBKRClient {
 		accessTokenSecret: cfg.AccessTokenSecret,
 		ibkrAccountID:     cfg.IBKRAccountID,
 		isPaper:           cfg.IsPaper,
-		httpClient:        &http.Client{Timeout: IBKRRequestTimeout},
+		httpClient:        &http.Client{},
 		now:               cfg.Now,
 		nonce:             cfg.Nonce,
 		dhRandom:          cfg.DHRandom,
 		timingFn:          cfg.Timing,
+		timeoutFn:         cfg.Timeout,
 	}
 	c.credErr = c.loadKeyMaterial(cfg)
 	if c.now == nil {
@@ -436,11 +437,16 @@ func (c *IBKRClient) GetOrder(ctx context.Context, brokerOrderID string) (*Broke
 			FilledQty float64 `json:"filledQuantity"`
 		} `json:"orders"`
 	}
-	if err := json.Unmarshal(respBody, &result); err != nil || len(result.Orders) == 0 {
+	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("ibkr GetOrder: parse response: %w", err)
 	}
-	o := result.Orders[0]
-	return &BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status, FilledQty: o.FilledQty, FilledAvgPrice: o.AvgPrice}, nil
+	// A miss must not wrap ErrOrderNotFound: this endpoint is the session order list, so absence proves nothing.
+	for _, o := range result.Orders {
+		if o.OrderID == brokerOrderID {
+			return &BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status, FilledQty: o.FilledQty, FilledAvgPrice: o.AvgPrice}, nil
+		}
+	}
+	return nil, fmt.Errorf("ibkr GetOrder: order %s not in response (%d orders)", brokerOrderID, len(result.Orders))
 }
 
 // ListOrders fetches every order IBKR knows for this account (explicit accountId query param

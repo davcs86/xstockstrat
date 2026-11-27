@@ -685,3 +685,214 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] UI instantiate writer stays unpinned (O-25).
 - [ ] `docs/repo-surveyor/debt-radar-findings.md:553` is unanswered and outside this feature's file set.
 - Next: `/sdd-execute fix-agent-bearer-secret-orphan`.
+
+## Session 2026-11-27 — operator ruling on the Step 4 gate and the two-seed-user reading, recorded by the orchestrator (verbatim)
+
+Operator answer (2026-11-27) to the orchestrator list item "328: Settle the Step 4 target-database and cadence gate, and the two-seed-user reading.": "B2 use defaults".
+
+Effect: use the defaults recorded in this file and in the implementation spec for the Step 4 target database, the sweep cadence and the two-seed-user reading (sweep328-v1 / sweep328-v2). The Step 4 operator gate is cleared on those defaults. Orchestrator note (not an operator quote): if the executor cannot identify a single default for any of the three, it must stop with a blocker rather than choose.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute)
+
+**Up-front confirmation** (operator-approved record, binding, verbatim):
+
+```json
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"d402f91496712ee53e3fd60dc0573f60ffa09144","specHash":"22ed7a8a0d0325efd8d4e0b8a5a0be3207a54180","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9],"mismatches":[{"n":1,"detail":"No blocking mismatch. The only Files path, services/xstockstrat-config/src/__tests__/mcpCredentialSweep.test.ts, is a create target and does not exist yet, as expected. The evidence holds: deadRowsMig"},{"n":2,"detail":"Files: scripts/migration-assertions/config-mcp-credential-sweep.sql is a create target and is absent, as expected; .github/workflows/ci.yml exists. ci.yml matches: the config filter is at :60, the mig"},{"n":3,"detail":"Files: both scripts/config-heal/mcp-credential-orphan-sweep*.sql are create targets and are absent, as expected; scripts/config-heal/ holds no mcp-credential* file. These match: 046_config_dead_rows_p"},{"n":6,"detail":"Files: services/xstockstrat-agent/tests/test_tools.py exists. The seam test test_manage_signal_source_mcp_client_secret_first_two_write is at :150 (spec :149) and the credentials_ref assertion is stil"},{"n":9,"detail":"All four Files exist. Line drift: in docs/patterns/config-governance.md the feature-224 paragraph is at :460-467 ('written secret-first by the owner' at :466; spec :440-447), and the feature-166 dynam"}]}
+```
+
+- **Branch sync**: merged `origin/main-dev@f802b184` into the dev branch (`8009fbcc`); the
+  merge-train resolver had nothing to resolve and `ledger-guard` reported clean.
+- **Re-spec (conditional)**: `aeac7a80 respec(fix-agent-bearer-secret-orphan): align steps 1,2,3,6,9 with current codebase`.
+  It corrects line citations only; no step changes its instructions, files or verification. Step 1's
+  evidence holds, so its body is unchanged.
+- **Tooling (detection)**: node v22 is the default on `PATH`, and Node 24 (v24.22.3) is at
+  `/opt/node24/bin`; pnpm 9.15.9, Python 3.13, uv and the Playwright Chromium
+  (`/opt/pw-browsers`) are present, and `uv` fetched `pglast` (Step 2's parse check). The hook check
+  passed and `pnpm-lock.yaml` matches `main-dev` after the merge.
+- Status: `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-27"}
+```
+
+### Step 1 — test: config SQL-text suite for the sweep and preview [done]
+- Atomic unit Steps 1+2+3 (one commit). Added the 9-case node:test suite `mcpCredentialSweep.test.ts`. TDD (AC-4 text pin): red against the uncommitted Step 3 skeletons, 7 of 9 failing on missing behavior (`sweep starts with SELECT 0 AS deleted`, `the final SELECT does not reference nt`, `expected exactly one -- mcp_orphan:begin`, `notify is not grouped per scope`, the actor and header cases); the transaction and forbidden-token cases pass on the skeleton because they assert absences → green: `ℹ tests 9 / pass 9 / fail 0 / skipped 0`; full config suite `tests 414 / pass 414`, `All files | 92.31` lines (≥ 40), lint 0 errors.
+- Files modified: `services/xstockstrat-config/src/__tests__/mcpCredentialSweep.test.ts`
+- Deviations: none
+
+### Step 2 — test: migration-rerun assertion for the sweep, and its CI path filters [done]
+- Atomic unit Steps 1+2+3. Created `scripts/migration-assertions/config-mcp-credential-sweep.sql` verbatim from the spec and added `scripts/config-heal/mcp-credential-orphan-sweep*.sql` to the `xstockstrat-config` and `migrations` CI filters. Verification green: BEGIN/ROLLBACK/filter counts 2/2/2, `config-wiring.test.mjs` 75/75 pass, `pglast ok` (1/1/9 statements). SQL red not captured locally (no `DATABASE_URL`; no database started); the CI `migration-rerun` job on the integration PR is the live gate (AC-1..AC-4 block 1).
+- Files modified: `scripts/migration-assertions/config-mcp-credential-sweep.sql`, `.github/workflows/ci.yml`
+- Deviations: none
+
+### Step 3 — service: operator sweep and read-only preview SQL [done]
+- Atomic unit Steps 1+2+3. Created the sweep and preview verbatim from the spec, replacing the skeleton placeholders. Verification green: marker blocks diff empty, forbidden-token counts 0/0, lint 0 errors; Step 1 suite and Step 2 pglast block green (above). Config-key wiring gate not applicable (no config key declared or seeded; no migration). Verification ran with Node 24 (`/opt/node24/bin` first on PATH), the pinned version.
+- Files modified: `scripts/config-heal/mcp-credential-orphan-sweep.sql`, `scripts/config-heal/mcp-credential-orphan-sweep-preview.sql`
+- Deviations: none
+
+### Step 4 — docs: operator runbook section for the sweep [done]
+- Operator gate answers (binding, operator-approved 2026-11-27, relayed by the orchestrator): (a) target databases are **staging only** — DO dev (cluster `xstockstrat`, database `xstockstrat-staging`) and homelab `xstockstrat-staging`; DO prod and any homelab production database are listed as "not swept: production out of scope (never launched; standing operator ruling)"; (b) cadence is the spec default, on demand and before each `main-dev` → `main` promotion ("B2 use defaults", session above). Added `## Operator sweep: orphaned \`mcp_credential\` secrets (feature 328)` to `docs/runbooks/config-rollout.md` between § Config Inventory and § Recovery: dirty 041, with the seven spec items in order. TDD: N/A (docs).
+- The `operator-db-access.md:59-64` (homelab `xstockstrat-production` database) vs `config-rollout.md:303-304` ("the homelab has no production instance") disagreement is logged as doc drift in the root `docs/context-constitution-findings.md` (operator-directed, separate commit); not resolved here.
+- Files modified: `docs/runbooks/config-rollout.md`
+- Deviations: operator-directed findings row outside the step's Files (see Deviation Log)
+
+### Step 5 — service: agent bearer-write text names the orphan sweep [done]
+- Atomic unit Steps 5+6 (one commit). The orphan-sweep text is now in the `_write_source_bearer` docstring, the `manage_signal_source` `credentials_ref:` param doc (grace rule), the `mcp-tools.md` `credentials_ref`/`bearer_token` rows (the latter links `config-rollout.md#operator-sweep-orphaned-mcp_credential-secrets-feature-328`), and agent `CLAUDE.md`. The agent finding `:46` is closed by feature 328 (report row left to `/sdd-archiver`). Verification is green: ruff `All checks passed!`, `79 files already formatted`, `834 passed`, and `orphan sweep` grep hits in all four files.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-agent/docs/context-constitution-findings.md`
+- Deviations: none
+
+### Step 6 — test: agent writer pins (AC-1, AC-2) and docstring ↔ runbook parity [done]
+- Atomic unit Steps 5+6. Added `test_failed_mcp_client_register_mints_one_secret_per_attempt` (AC-1), `test_failed_signal_source_instantiate_mints_one_secret` (AC-2) and `test_bearer_docs_name_the_orphan_sweep`.
+- TDD: the parity test failed first (`assert 'orphan sweep' in 'Register/update/reactivate/deactivate …'`; `1 failed, 2 passed`) and passed once Step 5's edits were in (`3 passed, 137 deselected`).
+- AC-1/AC-2 pins: red N/A — no behavior change; characterization test added (green on the pre-fix tree, O-19). The behavioral RED is Step 2 block 1.
+- Full suite: `834 passed`, `TOTAL 2818 325 88%` (≥ 40). The config-key wiring gate does not apply (no config key).
+- Files modified: `services/xstockstrat-agent/tests/test_tools.py`
+- Deviations: none
+
+### Step 7 — service: UI secret-first hook comment names the orphan sweep [done]
+- Comment-only edit. The last sentence of the `useRegisterMcpClientSource` JSDoc (`:36`) now reads "A failed register leaves a redacted orphan, reclaimed by the operator sweep (docs/runbooks/config-rollout.md)." The JSDoc stays at two lines, `writeOwnBearerSecret` and both hooks are untouched, and the diff is `1 insertion(+), 1 deletion(-)`.
+- TDD: red N/A — no behavior change; the characterization test is Step 8's Playwright pin. Pre-edit run (`.sdd-logs/v-1.log`): no `operator sweep` hit. Green (`.sdd-logs/v-2.log`, `exit=0`): grep `36: … reclaimed by the operator sweep (docs/runbooks/config-rollout.md).`, and lint shows warnings only, none in this file.
+- `tsc` in the linked env: 2 errors `TS2339 'INCOMPLETE'`, present before and after the edit, from the stale main-checkout proto stubs. CI-equivalent `tsc` against this branch's stubs (`.sdd-logs/v-3.log`): `exit=0`. The config-key wiring gate does not apply (no config key).
+- Files modified: `services/xstockstrat-ui/src/app/config-ui/hooks/useSignalSourceMutations.ts`
+- Deviations: CI-equivalent `tsc` fallback (see Deviation Log)
+
+### Operator rulings on the Step 8 blockers (2026-11-27, relayed by the orchestrator, verbatim)
+
+"Operator rulings 2026-11-27, both recorded verbatim in context.md. (1) Option A of the first Step 8 blocker: scope the text assertion to the inline form error with page.getByRole('main').getByText('signal source dup-src already exists'), a locator deviation in the Deviation Log. (2) Option A of the second Step 8 blocker (cold secret-first BFF route compile ~24 s exceeds the 5000 ms expect timeout): give that assertion an explicit timeout, toBeVisible({ timeout: 30000 }), the same pattern as openPage's 15000 ms; log it as a second timeout deviation. Accept as the CI-equivalent green the real-browser host run with --no-deps --timeout=240000 of the @feature-328 grep and the whole file (the 2 pre-existing cold-start list failures are identical on the pre-edit tree), plus lint and the import grep; CI's frontend-e2e job on the integration PR is the full gate. Re-run until the standalone @feature-328 run is green, then commit."
+
+### Step 8 — test: Playwright pin for a failed config-ui register (AC-3) [done]
+- Added `@feature-328 @AC-3 a failed mcp_client register shows the error and writes exactly one secret` to the feature-224 block. It fulfills `ManageSignalSource` with 409 `already_exists`, then asserts four things: the inline error text is shown, the `Bearer token` input stays (count 1), there is exactly one `/SetConfig` request, and the body has no `TOKEN`.
+- TDD: red N/A. This step changes no behavior and adds a characterization test, which is green on the pre-fix tree by design (O-19). The Then-clause RED for AC-3 is Step 2 block 1.
+- Green: `.sdd-logs/v-1.log`, `exit=0`. The test passed alone (`✓ 1 … @feature-328 @AC-3 … (33.7s)`, `1 passed (43.6s)`). On the whole file: `21 passed (1.1m)` and `2 failed`. The two failures are the cold-start list tests at `:53` and `:64` (a 5000 ms cell wait), which the operator ruling records as pre-existing. Lint shows warnings only, none in this file. The C-12 grep finds both imports (`2:` `helpers/auth`, `9:` `'../fixtures'`). The config-key wiring gate does not apply, because no config key is involved.
+- `pnpm-lock.yaml` differs from `origin/main-dev` (rc=1). The cause is `main-dev`'s `eb3839d9`, which removed lockfile entries; this branch made no lockfile change (`git diff --quiet origin/main-dev...HEAD -- pnpm-lock.yaml` → rc=0). It will resolve at the next `main-dev` merge.
+- Files modified: `services/xstockstrat-ui/e2e/insights/signal-sources.spec.ts`
+- Deviations: locator scope, assertion timeout and host-run flags (operator-directed; see Deviation Log)
+
+### Step 9 — docs: remaining "orphan accepted" text, author sentinel, ledger note [done]
+- Added the `system:config-heal-mcp-credential-sweep` row after the table's last row (`config-governance.md:145`, O-20). Also added the orphan-sweep sentence to the feature-224 paragraph and the feature-166 key-family sentence, the `inter-service-mtls.md` ingest `GetSecret` bullet, and the ingest `CLAUDE.md` bearer note. Appended the "Update (feature 328)" bullet to the insights.md feature-166 secret-first entry. No `DOC_BANNED` phrase is used and `acceptance.feature` is not edited. TDD: N/A (docs).
+- Pre-edit run (`.sdd-logs/v-1.log`, `exit=0`): `orphan sweep` count `0`, no sentinel hit. Green (`.sdd-logs/v-2.log`, `exit=0`): count `3` (>= 2), sentinel at `:145`, hits in `inter-service-mtls.md:61`, `services/xstockstrat-ingest/CLAUDE.md:188`, `insights.md:2844`, `config-wiring.test.mjs` `# tests 75` / `# pass 75` / `# fail 0`. The site grep turned up no missed site. Every hit is in a Step 5/7/9 file, one of the four secret-first-only sites, a feature-328 test, or `docs/repo-surveyor/debt-radar-findings.md:553` (an open thread, out of this feature's file set).
+- Feature-final gate: `node scripts/check-config-wiring.mjs --final` (`.sdd-logs/v-3.log`) `exit=0`. It reports only two pre-existing `REPORTED:` `readers-disagree` lines (`fundsignal_loop.py` `marketdata/fundamentals.provider`, `trading.go` `platform/trading_state`), neither a key of this feature. Status: `in-progress` → `code-completed`. No new insights ledger line; the lesson is the edited feature-166 entry.
+- Files modified: `docs/patterns/config-governance.md`, `docs/patterns/inter-service-mtls.md`, `services/xstockstrat-ingest/CLAUDE.md`, `docs/roadmap/ledger/insights.md`
+- Deviations: none
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-agent-bearer-secret-orphan (feature 328)
+
+Source: /home/user/xstockstrat/docs/roadmap/features/328-fix-agent-bearer-secret-orphan/acceptance.feature. I read it from the working tree, not from `origin/feature/fix-agent-bearer-secret-orphan`, because I have no git access. The orchestrator should confirm the working-tree copy matches the branch copy before writing. The path in the task text (`docs/roadmap/features/docs/roadmap/features/328-...`) was doubled, so I used the real path.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-agent/acceptance/fix-agent-bearer-secret-orphan.feature | CREATE | NEW | Subject is the `manage_signal_source` register tool call and its mapped ALREADY_EXISTS error. |
+| AC-2 | services/xstockstrat-agent/acceptance/fix-agent-bearer-secret-orphan.feature | CREATE | NEW | Subject is the `instantiate_template` signal_source tool call. |
+| AC-3 | services/xstockstrat-ui/acceptance/fix-agent-bearer-secret-orphan.feature | CREATE | NEW | Subject is the config-ui register error display. |
+| AC-4 | services/xstockstrat-config/acceptance/fix-agent-bearer-secret-orphan.feature | CREATE | NEW | Subject is the config-owned orphan sweep (referenced key survives, orphan deleted). |
+
+None of the three files exists yet, so each is CREATEd. Their `acceptance/` directories already exist.
+
+### Ready-to-write blocks
+The source scenarios carry no `@FR-*` tags, so only `@feature-328` is added. Given/When/Then and the `# guards:` comments are unchanged.
+
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-agent-bearer-secret-orphan.feature (CREATE) ---
+```
+# Promoted from docs/roadmap/features/328-fix-agent-bearer-secret-orphan/acceptance.feature
+# Source: @AC-1, @AC-2 - agent scenarios. @feature-328 marks provenance. Do not hand-author or rewrite.
+Feature: fix-agent-bearer-secret-orphan (agent)
+  Regression guard for defect report: signal-source bearer secret is orphaned when the source
+  register fails. Written for the operator's sweep ruling (2026-11-10): a failed register may leave the secret until the orphan sweep runs.
+
+  # guards: docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md
+  @AC-1 @regression @feature-328
+  Scenario: a failed manage_signal_source register leaves no unreferenced bearer secret
+    Given user U already has a signal source with slug "dup-src"
+    When U calls manage_signal_source register with source_type "mcp_client", a bearer_token and slug "dup-src"
+    And ingest rejects the register with ALREADY_EXISTS
+    And U retries the same call twice
+    Then each call returns the mapped already-exists error
+    And after the mcp_credential orphan sweep runs, list_config_keys namespace "ingest" for U shows no mcp_credential.<uuid> key that no source's credentials_ref references
+
+  # guards: docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md
+  @AC-2 @regression @feature-328
+  Scenario: a failed instantiate_template signal_source leaves no unreferenced bearer secret
+    Given user U already has a signal source with slug "dup-src"
+    When U calls instantiate_template with kind "signal_source", a bearer_token and slug "dup-src"
+    And ingest rejects the instantiation with ALREADY_EXISTS
+    Then the call returns the mapped already-exists error
+    And after the mcp_credential orphan sweep runs, list_config_keys namespace "ingest" for U shows no mcp_credential.<uuid> key that no source's credentials_ref references
+```
+
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-agent-bearer-secret-orphan.feature (CREATE) ---
+```
+# Promoted from docs/roadmap/features/328-fix-agent-bearer-secret-orphan/acceptance.feature
+# Source: @AC-3 - ui scenario. @feature-328 marks provenance. Do not hand-author or rewrite.
+Feature: fix-agent-bearer-secret-orphan (ui)
+  Regression guard for defect report: signal-source bearer secret is orphaned when the source
+  register fails. Written for the operator's sweep ruling (2026-11-10): a failed register may leave the secret until the orphan sweep runs.
+
+  # guards: docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md
+  @AC-3 @regression @feature-328
+  Scenario: a failed config-ui signal-source register leaves no unreferenced bearer secret
+    Given user U already has a signal source with slug "dup-src"
+    When U registers an mcp_client source with a bearer token and slug "dup-src" from the config-ui
+    And ingest rejects the register
+    Then the config-ui shows the register error
+    And after the mcp_credential orphan sweep runs, no mcp_credential.<uuid> key under namespace "ingest" for U is left unreferenced by any source
+```
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-agent-bearer-secret-orphan.feature (CREATE) ---
+```
+# Promoted from docs/roadmap/features/328-fix-agent-bearer-secret-orphan/acceptance.feature
+# Source: @AC-4 - config scenario. @feature-328 marks provenance. Do not hand-author or rewrite.
+Feature: fix-agent-bearer-secret-orphan (config)
+  Regression guard for defect report: signal-source bearer secret is orphaned when the source
+  register fails. Written for the operator's sweep ruling (2026-11-10): a failed register may leave the secret until the orphan sweep runs.
+
+  # guards: docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md
+  @AC-4 @regression @feature-328
+  Scenario: the orphan sweep never deletes a referenced bearer secret
+    Given user U has a registered mcp_client source whose credentials_ref is mcp_credential.<uuid-A>
+    And an orphaned mcp_credential.<uuid-B> that no source references
+    When the mcp_credential orphan sweep runs
+    Then mcp_credential.<uuid-A> still exists and the source still authenticates
+    And mcp_credential.<uuid-B> is deleted
+```
+
+### Notes / ambiguities / conflicts
+- **Attribution call.** AC-1 to AC-3 each assert on two things: the writer surface (agent tool or config-ui) and the post-sweep state of `ingest.mcp_credential.*` keys. I routed each to the surface its first `Then` asserts on: agent for AC-1 and AC-2, ui for AC-3. AC-4 asserts only on the config-owned sweep (`scripts/config-heal/mcp-credential-orphan-sweep.sql`), so it goes to config.
+- **Alternative.** The "no unreferenced bearer secret" guarantee could also be read as spanning agent, ui and config, which would put all four in `docs/sdd/business-rules/platform.feature`. I did not do that because each `Then` has a single owning surface. Switch if you prefer one cross-cutting suite.
+- **Preserved provenance.** Design.md and implementation-spec.md say `@AC-1..4` are all covered by the config SQL test and the sweep assertion at `scripts/migration-assertions/config-mcp-credential-sweep.sql`. That is consistent with config owning the sweep guarantee. The agent and ui suites still pin the writer-side observable behavior.
+- **Dedup.** I grepped all `services/*/acceptance/*.feature` and `docs/sdd/business-rules/platform.feature` for `orphan`, `unreferenced`, `ALREADY_EXISTS`, `mcp_credential`, `credentials_ref` and `@feature-328`. No existing scenario asserts the same outcome, so there are no DUP or OVERLAP verdicts.
+- **Related, not overlapping.** `services/xstockstrat-agent/acceptance/fix-config-audit-author-spoof.feature` (feature 241) covers the same two tools but asserts only the outbound `SetConfigRequest.author` and `x-user-id`. `docs/sdd/business-rules/platform.feature` around lines 260-325 covers per-owner bearer resolution and ALREADY_EXISTS for a different owner. Neither contradicts these scenarios, so there is no CONFLICT.
+- **No `@FR-*` tags.** The source scenarios have none, so I added none. Only `@feature-328` was added.
+
+### Coverage check
+- Source scenarios: 4 (`@AC-1` to `@AC-4`). Planned: 4 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT, none skipped.
+- Counts match: agent has 2, ui has 1, config has 1.
+````
+
+## Session 2026-11-27 — operator ruling recorded by the orchestrator (verbatim)
+
+Operator answer (2026-11-27) to the orchestrator question "328 C-16 promotion routing: per-service suites or one platform.feature block?": "Per-service suites (Recommended)".
+
+Effect: `@AC-1` and `@AC-2` promote to `services/xstockstrat-agent/acceptance/fix-agent-bearer-secret-orphan.feature`, `@AC-3` to `services/xstockstrat-ui/acceptance/fix-agent-bearer-secret-orphan.feature`, `@AC-4` to `services/xstockstrat-config/acceptance/fix-agent-bearer-secret-orphan.feature`; each promoted scenario carries `@feature-328` (no `@FR-*` tags added, the source scenarios have none). The orchestrator verified that the promotion plan's 21 Scenario/Given/When/Then/And lines match the branch's `acceptance.feature`.
+
+## Session 2026-11-27 — ALL-DONE tail: main-dev merge and config-key wiring gate (F-09)
+
+`origin/main-dev` merged into the feature branch (merge commit `f9beb109`). Two append-only doc conflicts, both resolved by keeping both sides: `docs/context-constitution-findings.md` (this feature's operator-db-access row and feature 318's `migration-rerun.py` row) and `docs/patterns/config-governance.md` (this feature's `system:config-heal-mcp-credential-sweep` author row and feature 314's `system:config-migration-feature-fix-mcp-deadline-budget` row). This feature adds no `xstockstrat-config` migration (only `scripts/config-heal/mcp-credential-orphan-sweep*.sql` and `scripts/migration-assertions/config-mcp-credential-sweep.sql`), so main-dev's `057_mcp_deadline_budget` / `058_marketdata_bars_miss_backoff` do not collide; `scripts/migration-assertions/` on main-dev holds no `config-mcp-credential-sweep.sql`.
+
+Gate, run after the merge: `node scripts/check-config-wiring.mjs --final`, exit `0`, output:
+
+```
+REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree
+REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree
+```
+
+## Session 2026-11-27 — C-16 promotion applied (per-service suites)
+
+Per the operator ruling above, all four scenarios were promoted as NEW (no DUP / OVERLAP / CONFLICT): `@AC-1`, `@AC-2` to `services/xstockstrat-agent/acceptance/fix-agent-bearer-secret-orphan.feature`, `@AC-3` to `services/xstockstrat-ui/acceptance/fix-agent-bearer-secret-orphan.feature`, `@AC-4` to `services/xstockstrat-config/acceptance/fix-agent-bearer-secret-orphan.feature`, each tagged `@feature-328`. The Scenario/Given/When/Then/And lines were diffed against the branch's `acceptance.feature` and are identical. `status.md` stays `code-completed`.
+
+## Session 2026-11-27 — defect-report closure ruling recorded by the orchestrator (verbatim)
+
+Question: mark `docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md` resolved (ref feature:328)? Operator answer: **"resolve the 328 report"**. The sidecar is now `resolved` / `ref: feature:328-fix-agent-bearer-secret-orphan`. Basis: the unbounded, unreclaimable persistence is gone because the operator-run sweep `scripts/config-heal/mcp-credential-orphan-sweep.sql` reclaims unreferenced per-user `ingest` / `mcp_credential.*` secrets after a 24 h grace; each failed register still mints one orphan row by design (secret-first write kept, `app/tools.py`). The sweep is operator-run, not scheduled; staging only.

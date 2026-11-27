@@ -245,6 +245,34 @@ test.describe('Formula fundamental inputs (feature 205)', () => {
     await expect.poll(() => executeBody?.inputData).toEqual({ pe_ratio: 12.5, roe: 0.3 });
   });
 
+  test('310 AC-3: a run that never assigns result shows the failure and its error', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await stubCatalog(page);
+    await stubGetFundamentalsFormula(page);
+    await page.route(
+      '**/xstockstrat.indicators.v1.IndicatorsService/ExecuteFormula',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: false,
+            error: 'formula did not assign result',
+            exitReason: 'SANDBOX_EXIT_REASON_RUNTIME_ERROR',
+            parameterErrors: [],
+          }),
+        });
+      },
+    );
+    await page.goto(`/insights/formulas/${FORMULA_FUNDAMENTALS.formulaId}`);
+    await page.getByRole('button', { name: 'Run' }).click();
+    await expect(page.getByText('Failed', { exact: true })).toBeVisible();
+    await expect(page.getByText('Runtime error', { exact: true })).toBeVisible();
+    await expect(page.getByText('formula did not assign result', { exact: true })).toBeVisible();
+  });
+
   test('AC-6: symbol-prefill fills the grid from GetFundamentalsMulti, never NaN', async ({
     page,
   }) => {

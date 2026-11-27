@@ -144,6 +144,18 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   (`chunk_window_days` × `chunk_max_bars`); chunks run in parallel (`max_concurrent_chunks`) and on
   restart any PENDING/FAILED chunks are re-driven (idempotent marketdata upsert makes re-fetch safe).
   `fill_mode=GAPS_ONLY` plans only the ranges marketdata's `GetDataCoverage` reports missing.
+  After the chunks, a verify pass (feature 364) re-reads coverage: a symbol whose sessions are still
+  missing gets the outcome `incomplete` (reason `missing sessions <from>..<to>[; …]`, stored under the
+  reserved `symbol_results` key `gaps_only`) and the job ends `PARTIAL`, with no notify alert (the
+  `ingest.backfill.completed` payload lists `incomplete_symbols`). A verify RPC error marks the symbol
+  `failed`; `skipped` symbols are not verified.
+  - **Fixed invariant (feature 364): head-gap lookback K = 730 days**, not a config key (aligned with
+    `backfill.self_serve_max_range_days`). The first gap counts as missing only if the store holds a
+    bar in the 730 days before it. Accepted residual (operator, O-1): an unfilled first gap ends
+    `COMPLETED` whenever the store has no bar in those 730 days — the symbol was not yet listed, was
+    never fetched before, or the request starts inside a hole longer than 730 days.
+  - One-time residual (O-7): GAPS_ONLY jobs created before the feature-364 deploy carry no `gaps_only`
+    marker and resume unverified.
 
 ## Config Keys Consumed
 
@@ -173,6 +185,8 @@ errors may print the FQN `ingest.<key>`.
 > with `x-internal-caller: ingest` under config's `keyPrefixes: ['mcp_credential.']` grant, which is
 > bound to the mTLS peer SAN `xstockstrat-ingest`. A missing or empty bearer marks the source
 > "bearer not configured". It is never in `config_json` and never returned by any read edge.
+> A secret no source of the same owner references is reclaimed by the operator orphan sweep after
+> its grace window (`docs/runbooks/config-rollout.md`).
 
 ## Ledger Events Emitted
 
@@ -182,7 +196,7 @@ errors may print the FQN `ingest.<key>`.
 | `ingest.backfill.running` | Job started |
 | `ingest.backfill.completed` | Job done |
 | `ingest.backfill.failed` | Job error |
-| `ingest.signal.ingested` | Newsletter signal persisted |
+| `ingest.signal.ingested` | Newsletter signal persisted; carries the signal owner as `AppendEventRequest.user_id` on both paths. On the `mcp_client` loop path `correlation_id` is one id per source per poll cycle (also sent as `x-trace-id`); on the `IngestSignal` RPC path it is empty |
 | `audit.admin_read` | An ADMIN read another owner's sources/signals (feature 224; 1 event on the admin's stream + 1 per foreign owner) |
 
 ## Running Tests

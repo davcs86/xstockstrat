@@ -263,6 +263,23 @@ func (noopAccountRepo) UpdateHaltStatus(ctx context.Context, id string, halted b
 	return nil
 }
 
+// alertByCategory returns the one recorded alert of the given category; it fails the test unless exactly one exists.
+func alertByCategory(t *testing.T, notify *fakeNotifyClient, category string) *notifyv1.EmitAlertRequest {
+	t.Helper()
+	notify.mu.Lock()
+	defer notify.mu.Unlock()
+	var found []*notifyv1.EmitAlertRequest
+	for _, c := range notify.calls {
+		if c.Category == category {
+			found = append(found, c)
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("recorded %d %q alerts, want exactly 1 (all calls: %v)", len(found), category, notify.calls)
+	}
+	return found[0]
+}
+
 func TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState(t *testing.T) {
 	for _, status := range []string{"filled", "new"} {
 		t.Run(status, func(t *testing.T) {
@@ -294,6 +311,12 @@ func TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState(t *testi
 			}
 			if !found {
 				t.Errorf("expected a reconciliation.mismatch_found event for status %q, got %v", status, ledger.eventTypes())
+			}
+			notify := svc.notify.(*fakeNotifyClient)
+			for _, category := range []string{"halt", "reconciliation"} {
+				if got := alertByCategory(t, notify, category).TargetUserId; got != "u-1" {
+					t.Errorf("%s alert TargetUserId = %q, want %q", category, got, "u-1")
+				}
 			}
 		})
 	}
@@ -513,6 +536,43 @@ func TestShouldPollHaltedAccount_ThrottlesAndRecovers(t *testing.T) {
 	}
 }
 
+// TestHaltedAndAdoptionThrottles_Independent: an adoption list does not consume the halted
+// reconcile slot, and a reconcile poll does not consume the adoption slot (feature 311, R-40).
+func TestHaltedAndAdoptionThrottles_Independent(t *testing.T) {
+	for _, order := range []string{"adoption first", "reconcile first"} {
+		t.Run(order, func(t *testing.T) {
+			var listOrdersCalls int
+			fb := &fakeReconciliationBroker{listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+				listOrdersCalls++
+				return []broker.BrokerOrder{}, nil
+			}}
+			svc := newTestReconciliationService(
+				map[string]brokerPoolEntry{adoptAcct: {client: fb, brokerType: ibkrType, userID: legUser}},
+				&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+			)
+			repo := &fakeBracketRepo{}
+			seedCandidate(repo, adoptAcct, "ord-1", bracketStatusActive, "leg-s1")
+			svc.bracketRepo = repo
+			svc.halted[adoptAcct] = true
+			clk := &adoptClock{t: time.Now()}
+			svc.now = clk.now
+
+			adopt := func() { svc.pollFills(context.Background()) }
+			reconcile := func() { svc.reconcileTick(context.Background(), 0, 1.1) }
+			first, second := adopt, reconcile
+			if order == "reconcile first" {
+				first, second = reconcile, adopt
+			}
+			first()
+			second()
+
+			if listOrdersCalls != 2 {
+				t.Errorf("ListOrders = %d, want 2 (each throttle allows its own first poll)", listOrdersCalls)
+			}
+		})
+	}
+}
+
 func TestReconcileTick_PartialFillWithinGraceWindow_NoFindingNoHalt(t *testing.T) {
 	svc := newTestReconciliationService(
 		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
@@ -545,13 +605,14 @@ func TestReconcileTick_PartialFillWithinGraceWindow_NoFindingNoHalt(t *testing.T
 }
 
 func TestReconcileTick_QuantityDiscrepancy_PastGraceWindow_HaltsAndEmits(t *testing.T) {
+	notify := &fakeNotifyClient{}
 	svc := newTestReconciliationService(
 		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
 			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
 				return []broker.BrokerOrder{{BrokerOrderID: "bo-1", Status: "partially_filled", FilledQty: 5}}, nil
 			},
 		}, userID: "u-1"}},
-		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, notify, noopAccountRepo{},
 	)
 	svc.orders["order-1"] = &tradingv1.Order{
 		OrderId: "order-1", AccountId: "acct-1", BrokerOrderId: "bo-1",
@@ -579,16 +640,39 @@ func TestReconcileTick_QuantityDiscrepancy_PastGraceWindow_HaltsAndEmits(t *test
 	if !svc.isAccountHalted("acct-1") {
 		t.Error("expected the account to be halted after the grace window passed")
 	}
+	assertOwnerTargetedFindingAlerts(t, notify, "u-1")
+}
+
+// assertOwnerTargetedFindingAlerts pins the accepted double push: exactly the halt and the
+// reconciliation alert, both CRITICAL and both targeted at owner.
+func assertOwnerTargetedFindingAlerts(t *testing.T, notify *fakeNotifyClient, owner string) {
+	t.Helper()
+	notify.mu.Lock()
+	n := len(notify.calls)
+	notify.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("EmitAlert called %d times, want 2 (halt + reconciliation)", n)
+	}
+	for _, category := range []string{"halt", "reconciliation"} {
+		a := alertByCategory(t, notify, category)
+		if a.Severity != notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL {
+			t.Errorf("%s alert severity = %v, want CRITICAL", category, a.Severity)
+		}
+		if a.TargetUserId != owner {
+			t.Errorf("%s alert TargetUserId = %q, want %q", category, a.TargetUserId, owner)
+		}
+	}
 }
 
 func TestReconcileTick_MissingBrokerOrder_HaltsAndEmits(t *testing.T) {
+	notify := &fakeNotifyClient{}
 	svc := newTestReconciliationService(
 		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
 			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
 				return nil, nil // broker reports no orders at all
 			},
 		}, userID: "u-1"}},
-		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, notify, noopAccountRepo{},
 	)
 	svc.orders["order-1"] = &tradingv1.Order{
 		OrderId: "order-1", AccountId: "acct-1", BrokerOrderId: "bo-missing",
@@ -610,6 +694,60 @@ func TestReconcileTick_MissingBrokerOrder_HaltsAndEmits(t *testing.T) {
 	}
 	if !svc.isAccountHalted("acct-1") {
 		t.Error("expected the account to be halted")
+	}
+	assertOwnerTargetedFindingAlerts(t, notify, "u-1")
+}
+
+// TestReconcileTick_EmptyOwner_WarnsAndAlertsUntargeted: an empty pool owner blocks nothing
+// (feature-206 @AC-2) — the halt, the event and both alerts still fire, untargeted, with a WARN.
+func TestReconcileTick_EmptyOwner_WarnsAndAlertsUntargeted(t *testing.T) {
+	logs := captureLogs(t)
+	notify := &fakeNotifyClient{}
+	ledger := &recordingLedgerClient{}
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
+			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+				return nil, nil
+			},
+		}, userID: ""}},
+		&fakeReconciliationPortfolioClient{}, ledger, notify, noopAccountRepo{},
+	)
+	svc.orders["order-1"] = &tradingv1.Order{
+		OrderId: "order-1", AccountId: "acct-1", BrokerOrderId: "bo-missing",
+		Status: tradingv1.OrderStatus_ORDER_STATUS_NEW, Qty: 10, FilledQty: 0,
+	}
+
+	svc.reconcileTick(context.Background(), 0, 1.1)
+
+	if !svc.isAccountHalted("acct-1") {
+		t.Error("expected the account to be halted despite the empty owner")
+	}
+	mismatches := 0
+	for _, e := range ledger.eventTypes() {
+		if e == "reconciliation.mismatch_found" {
+			mismatches++
+		}
+	}
+	if mismatches != 1 {
+		t.Errorf("reconciliation.mismatch_found events = %d, want 1", mismatches)
+	}
+	for _, category := range []string{"halt", "reconciliation"} {
+		if got := alertByCategory(t, notify, category).TargetUserId; got != "" {
+			t.Errorf("%s alert TargetUserId = %q, want untargeted", category, got)
+		}
+	}
+	warned := map[string]bool{}
+	for _, r := range logs() {
+		if r["level"] == "WARN" && r["msg"] == "alert owner unresolved" && r["account_id"] == "acct-1" {
+			if kind, ok := r["alert_kind"].(string); ok {
+				warned[kind] = true
+			}
+		}
+	}
+	for _, kind := range []string{"halt", "reconciliation"} {
+		if !warned[kind] {
+			t.Errorf("missing WARN \"alert owner unresolved\" for alert_kind %q (got %v)", kind, warned)
+		}
 	}
 }
 
@@ -643,6 +781,12 @@ func TestReconcileTick_PositionQuantityDiscrepancy_CaughtViaPositionSide(t *test
 	}
 	if !found {
 		t.Fatalf("expected a position-side quantity_discrepancy finding for AAPL, got %v", ledger.eventTypes())
+	}
+	notify := svc.notify.(*fakeNotifyClient)
+	for _, category := range []string{"halt", "reconciliation"} {
+		if got := alertByCategory(t, notify, category).TargetUserId; got != "u-1" {
+			t.Errorf("%s alert TargetUserId = %q, want %q", category, got, "u-1")
+		}
 	}
 }
 
@@ -769,6 +913,7 @@ func (f *fakeConfigSetter) SetConfig(ctx context.Context, callerID string, req *
 
 func TestReconcileTick_SystemicThresholdCrossed_EscalatesToReduceOnly(t *testing.T) {
 	// Two accounts, both erroring on ListOrders — 2/2 = 1.0, at/above the 0.5 threshold.
+	notify := &fakeNotifyClient{}
 	failingBroker := &fakeReconciliationBroker{
 		listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
 			return nil, context.DeadlineExceeded
@@ -779,12 +924,27 @@ func TestReconcileTick_SystemicThresholdCrossed_EscalatesToReduceOnly(t *testing
 			"acct-1": {client: failingBroker, userID: "u-1"},
 			"acct-2": {client: failingBroker, userID: "u-2"},
 		},
-		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, notify, noopAccountRepo{},
 	)
 	setter := &fakeConfigSetter{}
 	svc.configSetter = setter
 
 	svc.reconcileTick(context.Background(), 0, 0.5)
+
+	var systemic []*notifyv1.EmitAlertRequest
+	notify.mu.Lock()
+	for _, c := range notify.calls {
+		if strings.HasPrefix(c.Title, "Systemic broker-reconciliation failure") {
+			systemic = append(systemic, c)
+		}
+	}
+	notify.mu.Unlock()
+	if len(systemic) != 1 {
+		t.Fatalf("systemic alerts = %d, want 1", len(systemic))
+	}
+	if systemic[0].TargetUserId != "" {
+		t.Errorf("systemic alert TargetUserId = %q, want untargeted", systemic[0].TargetUserId)
+	}
 
 	if len(setter.calls) != 1 {
 		t.Fatalf("expected exactly 1 SetConfig call, got %d", len(setter.calls))

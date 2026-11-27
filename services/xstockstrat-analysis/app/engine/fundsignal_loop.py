@@ -59,6 +59,10 @@ _BUILTIN_BANDS = {
     "debt_to_equity": (0.3, 2.0),  # lower better; <0 handled specially
 }
 
+_NEUTRAL_SCORE = 0.5
+# 5 is calibrated to the default 0.80 / 0.20 quantiles (fundsignal.buy_quantile / sell_quantile).
+_MIN_CROSS_SECTION = 5
+
 
 def _lin(x, good, bad):
     if good == bad:
@@ -568,15 +572,13 @@ class FundamentalsSignalLoop:
         out = {}
         unscored = []
         for sym, f in fundamentals_by_symbol.items():
+            missing = set(f.missing_metrics)
             fundamentals = {
-                "pe_ratio": f.pe_ratio,
-                "pb_ratio": f.pb_ratio,
-                "dividend_yield": f.dividend_yield,
-                "roe": f.roe,
-                "debt_to_equity": f.debt_to_equity,
-                "eps": f.eps,
+                k: getattr(f, k)
+                for k in ("pe_ratio", "pb_ratio", "dividend_yield", "roe", "debt_to_equity", "eps")
+                if k not in missing
             }
-            if set(f.missing_metrics).issuperset(fundamentals):
+            if not fundamentals:
                 unscored.append(sym)
                 continue
             try:
@@ -591,15 +593,25 @@ class FundamentalsSignalLoop:
     @staticmethod
     def _map_directions(scores, buy_quantile, sell_quantile, reference_scores=()):
         """Cross-sectional quantile over the run's scores plus the day's stored scores
-        (``reference_scores``): >= buy_q → buy, <= sell_q → sell, else hold."""
+        (``reference_scores``): >= buy_q → buy, <= sell_q → sell, else hold. A degenerate set
+        (fewer than ``_MIN_CROSS_SECTION`` folded scores, or buy cut <= sell cut) also requires
+        buy > ``_NEUTRAL_SCORE`` and sell < ``_NEUTRAL_SCORE``; anything else is hold."""
         if not scores:
             return {}
         ordered = sorted([*scores.values(), *reference_scores])
         buy_cut = _quantile(ordered, buy_quantile)
         sell_cut = _quantile(ordered, sell_quantile)
+        degenerate = len(ordered) < _MIN_CROSS_SECTION or buy_cut <= sell_cut
         directions = {}
         for sym, s in scores.items():
-            if s >= buy_cut:
+            if degenerate:
+                if s >= buy_cut and s > _NEUTRAL_SCORE:
+                    directions[sym] = "buy"
+                elif s <= sell_cut and s < _NEUTRAL_SCORE:
+                    directions[sym] = "sell"
+                else:
+                    directions[sym] = "hold"
+            elif s >= buy_cut:
                 directions[sym] = "buy"
             elif s <= sell_cut:
                 directions[sym] = "sell"
@@ -656,6 +668,7 @@ class FundamentalsSignalLoop:
                         symbol=symbol,
                         direction=direction,
                         conviction=float(conviction),
+                        conviction_provided=True,
                         valid_from=valid_from,
                         valid_until=valid_until,
                     )

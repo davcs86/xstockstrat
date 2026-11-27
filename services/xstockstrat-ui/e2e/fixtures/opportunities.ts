@@ -92,6 +92,17 @@ export const MYSZ_FORMULA_UNREADABLE_HELD_OPPORTUNITY = {
   provenance: ['watchlist', 'position', 'formula_unreadable'],
 };
 
+// Mirrors `EVALUATION_FAILED_PROVENANCE` in src/lib/readinessCue.ts, which Playwright cannot load
+// (its @phosphor-icons/react import throws under the CJS transform); keep the two equal.
+const EVALUATION_FAILED_PROVENANCE = 'evaluation_failed';
+
+/** Evaluation-failed row (feature 308). NOT in OPPORTUNITIES; specs serve it via `page.route`. */
+export const MYSZ_EVALUATION_FAILED_OPPORTUNITY = {
+  ...MYSZ_FORMULA_UNREADABLE_OPPORTUNITY,
+  formulaUnreadable: false,
+  provenance: ['watchlist', EVALUATION_FAILED_PROVENANCE],
+};
+
 /** Chip-label rows (feature 339, @AC-2): one strategy row and one strategy-less `fundamentals` row
  *  on LYFT. NOT in OPPORTUNITIES; no `validUntil`, since its BigInt breaks `page.route` JSON bodies. */
 export const LYFT_SOURCE_LABEL_OPPORTUNITIES = [

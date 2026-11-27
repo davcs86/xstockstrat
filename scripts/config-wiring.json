@@ -2,14 +2,7 @@
   "policy": {
     "envReadUnseeded": "blocking"
   },
-  "findings": [
-    {
-      "namespace": "trading",
-      "key": "broker.paper",
-      "kind": "read-unseeded",
-      "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
-    }
-  ],
+  "findings": [],
   "registry": {
     "forwarders": {
       "services/xstockstrat-analysis/app/config/watcher.py:int_positive": {
@@ -49,10 +42,6 @@
       "services/xstockstrat-analysis/app/handlers/servicer.py:AnalysisServicer._load_fundamentals": [],
       "services/xstockstrat-analysis/app/services/evaluator.py:_fundamental_as_of_series": [],
       "services/xstockstrat-config/src/grpc/configServiceImpl.ts:contentVersion": [],
-      "services/xstockstrat-config/src/services/configWatcher.ts:getBool": [],
-      "services/xstockstrat-config/src/services/configWatcher.ts:getFloat": [],
-      "services/xstockstrat-config/src/services/configWatcher.ts:getInt": [],
-      "services/xstockstrat-config/src/services/configWatcher.ts:getString": [],
       "services/xstockstrat-identity/src/services/configWatcher.ts:lookup": [],
       "services/xstockstrat-indicators/app/config/watch_core.py:WatchCore._lookup": [],
       "services/xstockstrat-ingest/app/config/watch_core.py:WatchCore._lookup": [],
@@ -113,6 +102,7 @@
       "services/xstockstrat-marketdata/cmd/server/main.go:cfgWatcher": "marketdata",
       "services/xstockstrat-marketdata/internal/service/asset_servability.go:cfg": "marketdata",
       "services/xstockstrat-marketdata/internal/service/bar_hold.go:cfg": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/bars_miss.go:cfg": "marketdata",
       "services/xstockstrat-marketdata/internal/service/classification_service.go:s.cfg": "marketdata",
       "services/xstockstrat-marketdata/internal/service/etf_flags.go:s.fundCfg": "marketdata",
       "services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt": "marketdata",

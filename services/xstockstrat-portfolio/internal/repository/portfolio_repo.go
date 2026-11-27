@@ -57,62 +57,6 @@ func (r *PortfolioRepo) Pool() *pgxpool.Pool {
 	return r.pool
 }
 
-// UpsertPosition inserts or updates a position row. realizedDelta/feesDelta accumulate into
-// realized_accum/fees_accum on conflict — attribution-stats-only, never a user-facing figure.
-func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol string, qty, avgEntry, costBasis float64, mode commonv1.TradingMode, accountID string, realizedDelta, feesDelta float64) error {
-	const q = `
-		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, realized_accum, fees_accum, opened_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-		ON CONFLICT (user_id, symbol, trading_mode, account_id) DO UPDATE
-		SET qty=$3, avg_entry_price=$4, cost_basis=$5, realized_accum=portfolio.positions.realized_accum + $8, fees_accum=portfolio.positions.fees_accum + $9, updated_at=NOW()`
-	_, err := r.db.Exec(ctx, q, userID, symbol, qty, avgEntry, costBasis, mode.String(), accountID, realizedDelta, feesDelta)
-	return err
-}
-
-// GetRealizedAccum returns the position's accumulated realized P&L, or 0 when the row does not exist.
-func (r *PortfolioRepo) GetRealizedAccum(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) (float64, error) {
-	q := `SELECT COALESCE(realized_accum, 0) FROM portfolio.positions
-	      WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3`
-	args := []any{userID, symbol, mode.String()}
-	if accountID != "" {
-		q += ` AND account_id=$4`
-		args = append(args, accountID)
-	}
-	q += ` ORDER BY opened_at DESC LIMIT 1`
-	var accum float64
-	err := r.db.QueryRow(ctx, q, args...).Scan(&accum)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, nil
-	}
-	return accum, err
-}
-
-// GetFeesAccum returns the position's accumulated broker fees, or 0 when the row does not exist.
-func (r *PortfolioRepo) GetFeesAccum(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) (float64, error) {
-	q := `SELECT COALESCE(fees_accum, 0) FROM portfolio.positions
-	      WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3`
-	args := []any{userID, symbol, mode.String()}
-	if accountID != "" {
-		q += ` AND account_id=$4`
-		args = append(args, accountID)
-	}
-	q += ` ORDER BY opened_at DESC LIMIT 1`
-	var accum float64
-	err := r.db.QueryRow(ctx, q, args...).Scan(&accum)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, nil
-	}
-	return accum, err
-}
-
-// ClosePosition removes a position row (qty reached zero). Account-scoped so a multi-account user's
-// other-account position for the same (user, symbol, mode) survives.
-func (r *PortfolioRepo) ClosePosition(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) error {
-	const q = `DELETE FROM portfolio.positions WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3 AND account_id=$4`
-	_, err := r.db.Exec(ctx, q, userID, symbol, mode.String(), accountID)
-	return err
-}
-
 // GetPosition returns a single position for a user/symbol/mode.
 func (r *PortfolioRepo) GetPosition(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) (*portfoliov1.Position, error) {
 	// Scope to a specific account when requested: without it a multi-account user's GetPosition falls
@@ -244,7 +188,7 @@ func (r *PortfolioRepo) GetSnapshot(ctx context.Context, portfolioID string, atT
 		FROM portfolio.snapshots
 		WHERE portfolio_id=$1 AND snapshot_time <= $2
 		ORDER BY snapshot_time DESC LIMIT 1`
-	row := r.pool.QueryRow(ctx, q, portfolioID, atTime)
+	row := r.db.QueryRow(ctx, q, portfolioID, atTime)
 	var (
 		pid                  string
 		snapTime             time.Time
@@ -268,7 +212,7 @@ func (r *PortfolioRepo) GetSnapshot(ctx context.Context, portfolioID string, atT
 func (r *PortfolioRepo) CountPositions(ctx context.Context, userID string, mode commonv1.TradingMode) (int, error) {
 	const q = `SELECT COUNT(*) FROM portfolio.positions WHERE user_id=$1 AND trading_mode=$2`
 	var count int
-	err := r.pool.QueryRow(ctx, q, userID, mode.String()).Scan(&count)
+	err := r.db.QueryRow(ctx, q, userID, mode.String()).Scan(&count)
 	return count, err
 }
 
@@ -352,8 +296,8 @@ type PositionValuation struct {
 	AsOf string
 }
 
-// UpsertPositionFromSync upserts a position from a broker sync. Unlike UpsertPosition, opened_at is
-// never overwritten on conflict; cost_basis is total (qty × avg_cost) to match the per-fill P&L math.
+// UpsertPositionFromSync upserts a position from a broker sync. opened_at is never overwritten on
+// conflict; cost_basis is total (qty × avg_cost) to match the per-fill P&L math.
 func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symbol, tradingMode, accountID string, qty, avgCost float64, val PositionValuation) error {
 	costBasis := qty * avgCost
 	var asOf *time.Time
@@ -376,7 +320,7 @@ func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symb
 // UpdatePositionBracket sets or clears a position's bracket leg order IDs. Empty ID = "cleared":
 // NULLIF maps it to NULL so scanPositionRow's COALESCE round-trips back to "".
 func (r *PortfolioRepo) UpdatePositionBracket(ctx context.Context, userID, symbol, tradingMode, accountID, stopOrderID, takeProfitOrderID string) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := r.db.Exec(ctx, `
 		UPDATE portfolio.positions
 		SET stop_order_id = NULLIF($5, ''), take_profit_order_id = NULLIF($6, '')
 		WHERE user_id = $1 AND symbol = $2 AND trading_mode = $3 AND account_id = $4

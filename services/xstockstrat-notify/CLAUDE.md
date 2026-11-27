@@ -1,7 +1,7 @@
 # xstockstrat-notify — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (AlertSeverity string↔int at the DB boundary, numeric-`13` error style, config-as-startup-gate-only) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (dead `jsonwebtoken`/`bcrypt` deps, `severities` type/runtime mismatch) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (AlertSeverity string↔int at the DB boundary, numeric-`13` error style, config-as-startup-gate-only) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -29,7 +29,7 @@ gRPC-only on `50059`; the trader UI bridges `StreamAlerts` to browser SSE.
 - `StreamAlerts` holds long-lived gRPC server streams per subscriber
 - Fan-out is synchronous in `EmitAlert` — alerts are delivered to matching subscribers before the RPC returns
 - Alerts are also persisted to `notify.alerts` for history and replay
-- Per-user read state (`notify.alert_reads`, feature 203) and the owner fallback: NOTIFY-7.
+- Per-user read state (`notify.alert_reads`, feature 203): `ListAlerts` is header-only (a missing `x-user-id` is rejected with code 3); only `MarkAlertRead` keeps the body `userId` fallback (NOTIFY-7).
 - Alert matching: by `user_id`, `categories[]`, `severities[]`
 
 ## Authorization — EmitAlert is an internal-service-caller contract (feature 092)
@@ -122,7 +122,8 @@ deploy check): `operations.md` there.
 ## Observability (feature 294-signal-map-instrumentation)
 
 - No `loop tick ok`: the webhook worker's and the commsgun worker's 5 s ticks write no per-tick record.
-- Instruments: `notify.delivery{channel fanout|slack|sendgrid|push|webhook|commsgun, outcome}` (commsgun: queued|enqueue_error|unconfigured at dispatch, sent|http_error|timeout|error|no_app_key|secret_unresolved|no_endpoint per attempt, rerouted per rerouted row, dead once per undelivered row; fanout gates: gated_severity|gated_conviction|deduped|dispatch_error; slack/sendgrid: sent|http_error|timeout|error; push adds disabled|admin_lookup_error|no_audience|pruned; webhook: sent|http_error|timeout|error per attempt, plus dead once per dead-lettered row), `notify.stream.evictions{reason write_error|stream_error}`, gauge `notify.stream.subscribers`.
+- Instruments: `notify.delivery{channel fanout|slack|sendgrid|push|webhook|commsgun, outcome}` (commsgun: queued|enqueue_error|unconfigured at dispatch, sent|http_error|timeout|error|no_app_key|secret_unresolved|no_endpoint per attempt, rerouted per rerouted row, dead once per undelivered row; fanout gates: gated_severity|gated_conviction|deduped|dispatch_error; slack/sendgrid: sent|http_error|timeout|error; push adds disabled|admin_lookup_error|no_audience|pruned; webhook: sent|http_error|timeout|error per attempt, plus dead once per dead-lettered row), `notify.stream.evictions{reason write_error|stream_error|backpressure}`, gauge `notify.stream.subscribers`.
+- A `StreamAlerts` subscriber with 1024 queued alerts is evicted with gRPC status 8 (`RESOURCE_EXHAUSTED`); `stream_error` counts only an error that removed a live subscriber.
 - Load-bearing logs: INFO `delivery channels` at startup; WARN `StreamAlerts subscriber evicted` (`reason`); ERROR `webhook delivery dead` (`eventName`, `origin`, `idempotencyKey`, `attempts`, `lastError`); WARN `webhook.allowed_origins has malformed entries — they match nothing` (at most once per 60 s); WARN `commsgun delivery undelivered` (`alertId`, `outboxId`, `attempts`, `errorClass`); WARN `commsgun email rerouted` (`alertId`, `outboxId`, `reason`, `fallback`); WARN `commsgun app id changed while emails are queued`; WARN `commsgun app key resolve failed` (`status`, `failures`); WARN `fanout channel error` with `channel: 'commsgun'` on a failed enqueue. The startup `delivery channels` line lists `commsgun` as enabled when the worker's route at boot is `attempt`.
 
 ## Environment Variables

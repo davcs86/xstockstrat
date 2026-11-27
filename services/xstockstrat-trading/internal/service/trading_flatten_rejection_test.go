@@ -139,6 +139,9 @@ func TestFlattenAndHalt_AlwaysRejected_HaltsAccount(t *testing.T) {
 	if !h.svc.isAccountHalted("acct-1") {
 		t.Fatal("account not halted after every flatten attempt was rejected (pre-fix: attempt 1 replayed REJECTED as success)")
 	}
+	if got := alertByCategory(t, h.svc.notify.(*fakeNotifyClient), "halt").TargetUserId; got != "user-1" {
+		t.Errorf("halt alert TargetUserId = %q, want the pool owner %q", got, "user-1")
+	}
 	if rec.Status == bracketStatusCanceled {
 		t.Fatal("bracket marked CANCELED although the position was never flattened")
 	}
@@ -193,6 +196,26 @@ func TestFlattenAndHalt_UncertainTimeout_KeepsClientOrderID(t *testing.T) {
 	}
 	if !h.svc.isAccountHalted("acct-1") {
 		t.Fatal("exhausted retries must halt the account")
+	}
+}
+
+func TestFlattenAndHalt_IntRetryRowsSetAttempts_F321_AC2(t *testing.T) {
+	for _, n := range []int64{1, 5} {
+		h := newFlattenHarness(func(int) (*broker.BrokerOrder, error) { return nil, errBuyingPower })
+		h.svc.cfgW = snapshotInts(map[string]int64{"order.max_retries": n, "order.retry_delay_ms": 10})
+		start := time.Now()
+		h.run(t)
+		elapsed := time.Since(start)
+
+		if got, want := len(h.ids), int(1+n); got != want {
+			t.Errorf("max_retries int %d: submissions = %d, want %d", n, got, want)
+		}
+		if elapsed >= 400*time.Millisecond {
+			t.Errorf("max_retries int %d: elapsed %v, want < 400ms (int retry_delay_ms 10 honoured)", n, elapsed)
+		}
+		if !h.svc.isAccountHalted("acct-1") {
+			t.Errorf("max_retries int %d: account not halted after exhausting retries", n)
+		}
 	}
 }
 

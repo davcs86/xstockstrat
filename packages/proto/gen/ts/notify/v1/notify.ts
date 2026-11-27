@@ -157,6 +157,11 @@ export interface AcknowledgeAlertResponse {
 }
 
 export interface ListAlertsRequest {
+  /**
+   * DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+   *
+   * @deprecated
+   */
   userId: string;
   categories: string[];
   limit: number;

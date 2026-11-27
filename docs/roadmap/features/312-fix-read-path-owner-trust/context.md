@@ -533,3 +533,368 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] unaddressed — Overlap scan scope: the overlap pass read only a trunk checkout, so the impl-specs of peers that exist only on their feature branches (308–311, 313–316, 318–319, 322–325, 327–328, 331) were not scanned. Re-check them on `origin/feature/<slug>` before execute, in particular 315 and 316 (`notifyServiceImpl.ts`) and 322 (`trading.proto`, other messages per D-12).
 - [ ] unaddressed — `packages/proto/gen/**` conflicts with 321 and 322: the second merger re-runs `./scripts/buf-gen.sh` (Step 13).
 - [ ] unaddressed — Steps 14–17 doc and comment edits: 360 (`code-completed`) references `services/xstockstrat-ui/src/lib/connectClients.ts`, adjacent to Step 14's `traderBff.ts`; not verified to collide. Re-grep at Step 14.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan with this binding record (mismatches abridged to step numbers):
+  `{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"8c2e17f685a3ef289091754e5b7f6a5c30b7b286","specHash":"3569aa5f5ccf8ed9c9a5c175f57dab422bd37d84","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],"mismatches":[1,3,4,5,6,7,8,10,11,12,13,15,16,17,18,19]}`
+  (the full record, mismatch details included, is verbatim in the `9f69d778` commit body).
+- Merge: `origin/main-dev` `f802b184` merged into `feature/fix-read-path-owner-trust` (`4230df50`); resolver and `ledger-guard` clean. Feature 315 is now in the base (D-12).
+- Respec commits (`git log --first-parent origin/main-dev..HEAD`): `9f69d778` respec(fix-read-path-owner-trust): align steps 1,3,4,5,6,7,8,10,11,12,13,15,16,17,18,19 with current codebase.
+- Respec decisions to review: Step 15 now targets the agent `CLAUDE.md:22-24` "`ListOrders` filter" example. Step 17 no longer edits `services/xstockstrat-trading/docs/context-constitution.md`, because TRADING-N1 is retired. The notify `CLAUDE.md` edit moves to the `:32` NOTIFY-7 pointer. The proto-constitution edit moves to the `:33` "Also deprecated + server-ignored" additions, since the old `:38` inventory now lives only in root PLAT-11.
+- Tooling detection (steps 1-20): go1.27.0 ✓ · golangci-lint ✗ 2.5.0/go1.25 (the Go steps install v2.14.0 with `GOTOOLCHAIN=go1.27.0 go install`) · uv ✓ 0.11.32 · python ✓ 3.13 · pnpm ✓ 9.15.9 · node v22 (root pins 24) · buf ✗ (Steps 12-13 use the Docker codegen image via `scripts/localenv-setup.py`; docker CLI and dockerd present) · hook check hook=0.
+- Status `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
+```
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute)
+
+### Step 1 — service: trading stream identity interceptor [done]
+- Moved the incoming-metadata read into `withIncomingPropagation`, which `UnaryServerInterceptor` now calls. Added `StreamServerInterceptor`, which wraps the stream in `propagatedStream` so that `Context()` carries `PropagationData`, and registered it in `main.go` with `grpc.ChainStreamInterceptor` right after the unary chain. The stream adapter (`handler/trading.go:204`) is unchanged (R-1).
+- TDD: red-green. There is no paired test in this step's **Files**; Step 2 creates `propagation_test.go`. RED was this step's Verification on the pre-fix tree: exit=1 because the `ChainStreamInterceptor(middleware.StreamServerInterceptor)` grep had no match. Build and tests passed (`ok .../internal/middleware`, `ok .../internal/service`). GREEN was the same Verification: exit=0 with `156:		grpc.ChainStreamInterceptor(middleware.StreamServerInterceptor),`, both packages `ok` and golangci-lint v2.14.0 `0 issues.` The interceptor's behaviour is first asserted in Step 2, and on the wire in Step 6.
+- Stream RPC audit (design Open Risk 6): `StreamOrderUpdates` is the only streaming `TradingService` RPC. Health Watch and reflection also stream through this chain, but the interceptor only adds a context value, so their behaviour is unchanged.
+- Tooling: go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (`~/go/bin`, put first on PATH for the run; `/usr/local/bin` still has 2.5.0/go1.25). The config-key wiring gate does not apply because this step declares no config key.
+- Files modified: `services/xstockstrat-trading/internal/middleware/propagation.go`, `services/xstockstrat-trading/cmd/server/main.go`
+- Deviations: none
+
+### Step 2 — test: trading propagation interceptors [done]
+- Added `propagation_test.go` (`package middleware`) with the three specced cases. A `fakeServerStream` returns a metadata-bearing context, and the cases assert `FromContext` on the stream and unary paths, plus the zero `PropagationData` when there is no metadata (the handler is still called).
+- TDD: AC-1/AC-4 (stream identity precondition). RED: the step Verification was run with the new test against Step 1's parent `91e11e0e` versions of `propagation.go` and `main.go`, restored temporarily. It gave exit=1 with `propagation_test.go:41:12: undefined: StreamServerInterceptor`, as specced. GREEN: the same Verification on the Step 1 tree gave exit=0, `ok .../internal/middleware`, `total: (statements) 85.3%` (≥ 40%) and golangci-lint v2.14.0 `0 issues.` A `-v` run showed all 3 cases `--- PASS`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/internal/middleware/propagation_test.go`
+- Deviations: none
+
+### Step 3 — service: trading order reads resolve the owner from the header [done]
+- Added `missingCallerMsg` and `(*TradingService).ResolveOrderOwner(ctx)` above `GetOrder`; header-only, empty → `PermissionDenied`, no admin branch (D-7). `GetOrder` resolves first, and the absent and non-owner cases (in-memory and repo hit) all return `grpcstatus.Errorf(codes.NotFound, "order %s not found", …)` (D-15). `ListOrders` passes the owner to the repo and the in-memory fallback filters `o.UserId != owner`. `StreamOrderUpdates` resolves from `stream.Context()` and filters its snapshot the same way. The `broadcastOrder` `sub.userID != ""` all-users arm is deleted (D-8), and the three "empty = all users" comments are rewritten (the detached `broadcastOrder` doc now sits directly above `broadcastOrder`). `SubscribeOrderUpdates` keeps its signature. The test call sites now use `ctxAsUser(...)`, and `TestBroadcastOrder_ScopesToSubscriberUser` now requires the `""` subscriber to receive nothing.
+- TDD: red-green. RED: the step Verification ran with the test edits applied to the pre-fix `trading.go` and gave exit=1 (`.sdd-logs/v-1.log`) with `--- FAIL: TestBroadcastOrder_ScopesToSubscriberUser` / `trading_ownership_test.go:141: empty-filter subscriber received u1's order "o1", want nothing`. No other test failed. GREEN: the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `ok  github.com/xstockstrat/trading/internal/service 14.122s`, both `req.UserId` / `sub.userID != ""` greps empty, and golangci-lint v2.14.0 `0 issues.` The wire-level @AC-4/5/6 proof is Step 6.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`, `services/xstockstrat-trading/internal/service/trading_ownership_test.go`, `services/xstockstrat-trading/internal/service/trading_offline_test.go`, `services/xstockstrat-trading/internal/service/trading_order_race_test.go`
+- Deviations: none
+
+### Step 4 — service: trading broker-account owner gate and owner-less pool skip [done]
+- Added an inline `if <caller> == "" { … grpcstatus.Errorf(codes.PermissionDenied, missingCallerMsg) }` as the first statement of `RegisterBrokerAccount` (before the OFFLINE branch, so ALPACA, IBKR and OFFLINE are all covered), `UpdateBrokerAccountCredentials` (before `json.Valid`), `ListBrokerAccountsSvc` and `DeregisterBrokerAccountSvc` (D-13). `LoadBrokerPool`'s loop now opens with the owner-less skip, `slog.WarnContext(ctx, "LoadBrokerPool: account has no owner, skipping account", "account_id", rec.ID)` then `continue` (D-9). `ResumeAccountSvc` is unchanged (admin-gated). Accepted side effects (resolveAccount sole-account count, lost hydration, pollFills) carry no code, per Instruction 4.
+- TDD: red-green. This step's **Files** have no paired test; Step 7 asserts the behaviour. RED was this step's Verification on the pre-fix tree: exit=1 (`.sdd-logs/v-1.log`). Build and `ok  github.com/xstockstrat/trading/internal/service 14.026s` passed; the `codes.PermissionDenied, missingCallerMsg` count was 1, not 5. GREEN was the same Verification: exit=0 (`.sdd-logs/v-2.log`) with `ok  github.com/xstockstrat/trading/internal/service 14.596s`, `304:			slog.WarnContext(ctx, "LoadBrokerPool: account has no owner, skipping account", "account_id", rec.ID)`, and golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run).
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: none
+
+### Step 5 — service: trading handler owner resolution and status mapping [done]
+- `GetOrder`, `ListOrders` and the four broker-account Connect methods (Register, List, Deregister, UpdateCredentials) now return `connect.NewError(connectCodeFromErr(err), err)`, so `PermissionDenied`, `NotFound`, `FailedPrecondition` and `InvalidArgument` reach the wire instead of a blanket `NotFound`/`Internal` (D-14). Connect `StreamOrderUpdates` calls `h.svc.ResolveOrderOwner(ctx)` first and maps its error. The gRPC adapter's `StreamOrderUpdates` calls `a.h.svc.ResolveOrderOwner(grpcStream.Context())` and returns that status unchanged, without reading metadata itself (R-1). Both streams use the resolved owner for `subID` and `SubscribeOrderUpdates`. `ResumeAccount` is unchanged.
+- TDD: red-green. This step's **Files** have no paired test; Step 6 proves the refusal codes on the wire. RED was this step's Verification on the pre-fix tree: exit=1 (`.sdd-logs/v-1.log`). Build and `ok  github.com/xstockstrat/trading/internal/service 14.781s` passed, but the mapped-return count was 5, not 12. GREEN was the same Verification: exit=0 (`.sdd-logs/v-2.log`) with `ok  github.com/xstockstrat/trading/internal/service 14.524s`, the count at 12, a single `UserId` (`:90`), and golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run).
+- Consumer mappers (design Open Risk 4): per the spec's audit, the agent `_PASS_THROUGH_CODES` and the UI `connectCodeToHttp` need no edit. I did not re-read either here, because that is outside this step's **Files**.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/internal/handler/trading.go`
+- Deviations: none
+
+### Step 6 — test: trading owner-scope harness on the production interceptor chain [done]
+- Added `export_test.go` (`package service`, two funcs: `NewOwnerScopeTestService(repo, accounts, orders...)` and `BroadcastOrderForTest`) and `trading_owner_scope_test.go` (`package service_test`). The test serves `handler.NewTradingHandler(svc).GRPCHandler()` over bufconn behind `ChainUnaryInterceptor(middleware.UnaryServerInterceptor)` + `ChainStreamInterceptor(middleware.StreamServerInterceptor)`, sends identity only through `metadata.NewOutgoingContext`, and bounds every call with `context.WithTimeout`. Repo rows come from `testdata.NewOrderRow` with the `user_id` column overwritten via `testdata.OrderRowColumns`. The two body-`user_id` request helpers carry `//nolint:staticcheck`. A local `fixedAccountRepo` stub serves one OFFLINE record owned by `user-b` and counts writes. Six tests: `TestOwnerScope_ListOrdersScopedToHeader`, `TestOwnerScope_ListOrdersInMemoryFallback`, `TestOwnerScope_StreamOrderUpdatesScopedToHeader`, `TestHeaderless_OrderReadsRefused`, `TestOwnerScope_GetOrderCrossUserIsNotFound` and `TestBrokerAccountRefusals_OnTheWire`.
+- TDD: AC-1/AC-4/AC-5/AC-6/AC-2 (wire) red → green.
+  - RED setup: the step Verification ran with the new files against the pre-Step-3 versions (`a5b98f04`) of `service/trading.go`, `handler/trading.go` and the three Step-3-edited tests. Those were restored temporarily and then reverted.
+  - RED result: exit=1 (`.sdd-logs/v-1.log`).
+    - ListOrders, all four scope/body rows: `got 0 orders, want 1`
+    - Stream, all four rows: `received ob-poll owned by "user-b", want only user-a`
+    - Fallback: `got [... "ob-1" user_id:"user-b"], want only user-a's order`
+    - Headerless ListOrders, GetOrder and StreamOrderUpdates: `code = OK (err <nil>), want PermissionDenied`
+    - Cross-user GetOrder: `code = OK (err <nil>), want NotFound`
+  - The pre-fix headerless `RegisterBrokerAccount` ran past the missing guard into `environmentIsPaper` and panicked on the harness's nil `cfg`. A supplementary run of the other broker-account subtests on the same tree (`.sdd-logs/diag-1.log`) showed `code = Internal ... want PermissionDenied` and `want FailedPrecondition`, and `code = OK` for headerless `ListBrokerAccounts`.
+  - First GREEN run (`.sdd-logs/v-2.log`): exit=1. It failed only on my own message assertion, because the wire message is the nested `rpc error: code = NotFound desc = order <id> not found`. The assertion now compares each NotFound message with the absent-id message; the code assertion, which was the RED cause, is unchanged.
+  - GREEN re-run (`.sdd-logs/v-3.log`): exit=0, all six `--- PASS`, `ok  github.com/xstockstrat/trading/internal/service 14.084s`, `total: (statements) 85.3%` (≥ 40%), golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run).
+- Open item: the handler wraps service statuses twice. `connect.NewError(code, err)` is followed by `toGRPCError` using `connectErr.Message()`, so the gRPC message reads `rpc error: code = … desc = …`. The code is correct and only the text is nested. This predates the step and is outside its **Files**.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/internal/service/export_test.go`, `services/xstockstrat-trading/internal/service/trading_owner_scope_test.go`
+- Deviations: none
+
+### Step 7 — test: trading broker-account owner gate and pool skip [done]
+- Added `trading_broker_owner_gate_test.go` (`package service`) with five tests. The headerless `RegisterBrokerAccount` table runs over OFFLINE, ALPACA and IBKR, and the others cover a headerless Update and Deregister on a `UserID ""` row, a headerless List, and `LoadBrokerPool` with one owner-less and one `user-1` OFFLINE row, where the test asserts exactly one WARN `LoadBrokerPool: account has no owner, skipping account` with `account_id` `acct-ownerless`. A local `ownerGateAccountRepo` embeds `offlineAccountRepo` and adds recording `UpdateCredentials`/`ListBrokerAccounts`, so a missing gate fails on an assertion instead of a nil-interface panic. `http.DefaultTransport` is swapped to fail on any broker request. The Deregister row is ALPACA because the OFFLINE path reaches the nil `baselineStore`. Ids and `"user-1"` stay inline (C-13).
+- TDD: AC-2 red → green.
+  - RED: the step Verification ran with the new file against the pre-Step-4 `trading.go` (`24bfaf11`), restored temporarily and then reverted. Result: exit=1 (`.sdd-logs/v-2.log`).
+    - Register (all 3 rows): `headerless register persisted 1 record(s), first owner ""` and `code = OK, want PermissionDenied`
+    - Update: `headerless update rewrote credentials for [acct-ownerless]`
+    - List: `headerless list reached the repo ([""]) and returned 1 account(s)`
+    - Deregister: `headerless deregister deactivated [acct-ownerless]`
+    - `LoadBrokerPool`: `owner-less account was loaded into the broker pool` and `WARN records = []`
+  - The first RED run (`.sdd-logs/v-1.log`) aborted at the offline Deregister panic before `LoadBrokerPool` ran. That led to the ALPACA row.
+  - GREEN: the same Verification gave exit=0 (`.sdd-logs/v-3.log`) with `ok  github.com/xstockstrat/trading/internal/service 13.788s`, `total: (statements) 85.3%` (≥ 40%) and golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run). A `-v` run (`.sdd-logs/diag-1.log`) showed all five tests and the three register subtests `--- PASS`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_broker_owner_gate_test.go`
+- Deviations: none
+
+### Step 8 — service: portfolio skips owner-less ledger events [done]
+- Added `ownerlessEventMsg` (`"ledger event has no owner, skipping event"`). `processPositionSync`, `processAccountDeregistered` and `processBalanceSync` now WARN with `"account_id"` and `"event_type", event.EventType` and return before the lock or any write when `user_id` is `""`, then pass the payload's `UserID` directly. `processOrderFill` WARNs with `"order_id"` and `"event_type"` and returns nil on an empty `account_id` right after the payload parse. The four `"default"`/`"alpaca-default"` fallbacks and the legacy fallback comment are deleted, and `acctID := fill.AccountId` stays. `boundedRetry`, `classifyConsumerErr` and the telemetry labels are unchanged, so a skip counts as `acked` (`ok` for fills). Legacy pre-`user_id` events, including the deregister `DeleteOfflineRealized` purge, are dropped on replay (D-5).
+- TDD: red-green. This step's **Files** have no paired test; Step 9 asserts the skip (AC-2). RED was this step's Verification on the pre-fix tree: exit=1 (`.sdd-logs/v-1.log`). The build and `ok  	github.com/xstockstrat/portfolio/internal/service	11.692s` passed, but the `! grep` matched `438:		acctID = "alpaca-default"`, `1608:		userID = "default"`, `1661:` (the comment), `1664:` and `1812:		userID = "default"`. GREEN was the same Verification: exit=0 (`.sdd-logs/v-2.log`) with `ok  	github.com/xstockstrat/portfolio/internal/service	11.629s`, no grep match, and golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run).
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: none
+
+### Step 9 — test: portfolio owner-less event skip [done]
+- Added `portfolio_ownerless_event_test.go` (`package service`) with three tests on the `syncRecorderDB` recorder. `TestOwnerlessEvent_AC2_AccountEventsSkipped` covers `account.positions.synced`, `account.balance.synced` and `account.deregistered` with `user_id` absent: the handler returns nil, nothing is written, no argument is `"default"`, and exactly one WARN carries `account_id` `off-1`. `TestOwnerlessEvent_AC2_FillWithoutAccountSkipped` covers `order.filled` with no `account_id`: nothing is written and no argument is `"alpaca-default"`. `TestOwnerlessEvent_AC2_AckedNotParked` runs an owner-less event at seq 3 and a well-formed one at seq 4 through `boundedRetry` + `streamEventsFrom` (`streamLedger`), once for positions sync and once for deregistration. It asserts `lastSeq == 4`, that the seq-4 `offline_account_realized` write is recorded, that no argument is `"default"`, and `parkedCount == 0`. The tests match the WARN on its `account_id` attribute, not on `ownerlessEventMsg`. Removed the `resolveSyncUserID` mirror, its assertion in `TestPositionSyncPayload_ParsesUserID` and `TestPositionSyncPayload_FallsBackToDefault` from `portfolio_helpers_test.go`. Payload literals stay inline (C-13).
+- TDD: AC-2 red → green.
+  - RED: the step Verification ran with the new tests against the pre-Step-8 `portfolio_service.go` (`911b0f32`), restored temporarily and then reverted. Result: exit=1 (`.sdd-logs/v-1.log`).
+    - Positions and balance sync: `owner-less event was filed under the "default" owner`.
+    - Deregistration: `owner-less event wrote 2 row(s), want none`.
+    - All three: `WARN records carrying account_id off-1 = 0, want 1`.
+    - Fill: `fill without account_id was filed under "alpaca-default"` (args `[u1 AAPL 5 100 500 TRADING_MODE_PAPER alpaca-default 0 0]`).
+    - Ack positions sync: `owner-less event was filed under the "default" owner`.
+    - The deregistration ack subcase passed on the pre-fix tree, because its purge binds only `account_id`. Its skip is proven by the direct deregistration case.
+  - GREEN: the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `ok  	github.com/xstockstrat/portfolio/internal/service	11.071s`, `total:									(statements)		79.1%` (≥ 40%), no `resolveSyncUserID` match, and golangci-lint v2.14.0 `0 issues.` (`~/go/bin` first on PATH for the run). A `-v` run (`.sdd-logs/v-3.log`) showed all three tests and their five subtests `--- PASS`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_ownerless_event_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go`
+- Deviations: none
+
+### Step 10 — service: notify ListAlerts takes the owner from the header only [done]
+- `listAlerts` now reads the owner as `(call.metadata?.get?.('x-user-id')?.[0] ?? '').toString()` and returns `{ code: 3, message: 'x-user-id header required' }` when it is empty, the `registerPushSubscription` / `getAlert` idiom (D-4, NOTIFY-5). `req.userId` is no longer read. Both the main and count query predicates are now `(a.target_user_id = $1 OR a.target_user_id IS NULL)`, so untargeted alerts stay visible to every identified caller. The stale two-line comment is replaced by a one-line constraint comment. No new outbound call, config key or env var. Out of scope (D-11) and unchanged: `streamAlerts` `req.userId` (`:160`), `acknowledgeAlert` and the `markAlertRead` fallback.
+- TDD: red-green. This step's **Files** have no paired test; Step 11 asserts AC-3. RED was this step's Verification on the pre-fix tree: exit=1 (`.sdd-logs/v-1.log`). Build, `# tests 416` / `# fail 0` and lint (`0 errors`) passed, but the `! grep` matched `240:` and `248:` `WHERE ($1::text IS NULL OR a.target_user_id = $1 OR a.target_user_id IS NULL)`. GREEN was the same Verification: exit=0 (`.sdd-logs/v-2.log`) with `# tests 416`, `# pass 416`, `# fail 0`, `✖ 382 problems (0 errors, 382 warnings)` (all pre-existing `no-explicit-any` warnings), no `$1::text IS NULL` match, and one `req.userId` (`160:`). This Verification has no coverage step; Step 11 runs `c8 check-coverage`.
+- Note: notify `docs/context-constitution.md` NOTIFY-7 and `CLAUDE.md:32` still describe the `ListAlerts` body fallback and unscoped branch; Step 17 rewrites them.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`
+- Deviations: none
+
+### Step 11 — test: notify ListAlerts owner scope [done]
+- Added `describe('listAlerts — owner scope (feature 312)', …)` after the feature-203 `listAlerts` block, with three cases on `seqPool` + `metaCall`: a headerless `metaCall(null, {})` call gets `code 3` and runs no query; `metaCall('user-a', { userId: 'user-b' })` binds `'user-a'` as `params[0]` of both queries and `'user-b'` reaches neither; and neither SQL string matches `/\$1::text IS NULL/` while both match `/a\.target_user_id = \$1 OR a\.target_user_id IS NULL/` (untargeted alerts stay visible, PRESERVE notify `@AC-2` @feature-203). The test names say the proof is at the parameter and predicate level, because the pool is a fake. `user-a` / `user-b` stay inline (C-13).
+- TDD: AC-3 red → green.
+  - RED: the step Verification ran with the new tests against the pre-Step-10 `notifyServiceImpl.ts` (`82e3a73d`), restored temporarily and then reverted. Result: exit=1 (`.sdd-logs/v-1.log`), `# tests 419` / `# fail 2`. Headerless: `undefined !== 3`. Predicate: `The input was expected to not match the regular expression /\$1::text IS NULL/` on `WHERE ($1::text IS NULL OR a.target_user_id = $1 OR a.target_user_id IS NULL)`. The body-ignored case passed on the pre-fix tree, because the old chain already preferred the header over the body when both were present. The pre-fix exposure was the headerless body fallback and the unscoped branch, which the other two cases cover.
+  - GREEN: the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `# tests 419`, `# pass 419`, `# fail 0`, all three new subtests `ok`, `All files | 90.71 |` lines (c8 `--lines 40` passed), and `✖ 396 problems (0 errors, 396 warnings)`. The 14 new warnings are `no-explicit-any` on the new cases, which follow the file's existing `any`-typed callback style.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`
+- Deviations: none
+
+### Operator decision (2026-11-27, binding) — Steps 12+13 blocker
+- Ruling, verbatim: "Operator ruling 2026-11-27: option A. Add services/xstockstrat-trading/internal/service/trading_helpers_test.go to the Step 12+13 unit and delete the stale `if req.UserId != "" && o.UserId != req.UserId { return false }` clause (:292-294) from the TestListOrdersInMemoryFilters copy, since the production filter has been owner-based since Step 3 and no case in this test sets UserId. Log it in the Deviation Log as a scope expansion of Step 13, record this ruling verbatim in context.md, re-run the Verification and commit steps 12+13."
+
+### Step 12 — proto: deprecate the three ignored body user_id fields [done] (atomic unit Steps 12+13)
+- `ListOrdersRequest.user_id`, `StreamOrderUpdatesRequest.user_id` (`trading.proto`) and `ListAlertsRequest.user_id` (`notify.proto`) are now `[deprecated = true]` with the comment `// DEPRECATED: ignored; the owner is resolved from the x-user-id header.` (D-10). Each keeps field number `1`. `StreamAlertsRequest` and `AcknowledgeAlertRequest` are untouched (D-11). Under the union Verification, `buf lint` and `buf breaking` (against `feature/fix-read-path-owner-trust`, `subdir=packages/proto`) were clean.
+- TDD: N/A (proto).
+- Files modified: `packages/proto/trading/v1/trading.proto`, `packages/proto/notify/v1/notify.proto`
+- Deviations: none
+
+### Step 13 — proto-gen: regenerate trading and notify stubs [done] (atomic unit Steps 12+13)
+- Ran `scripts/buf-gen.sh` in the pinned `xstockstrat-codegen` image. 14 of the 16 listed stubs changed. `gen/ts/dist/{trading,notify}/v1/{trading,notify}.js` were byte-identical and were not staged. No path outside `trading/v1` or `notify/v1` changed. Per the operator ruling, the stale body-`UserId` clause was deleted from the `TestListOrdersInMemoryFilters` filter copy in `trading_helpers_test.go`.
+- TDD: N/A (proto-gen). Lint red → green.
+  - RED: the union Verification ran before the test edit. Result: exit=1 (`.sdd-logs/v-1.log`) with `internal/service/trading_helpers_test.go:292:6: SA1019: (github.com/xstockstrat/contracts/gen/go/trading/v1.ListOrdersRequest).UserId is deprecated` and `1 issues:`.
+  - GREEN: the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `ok  	github.com/xstockstrat/trading/internal/service	14.706s`, golangci-lint v2.14.0 `0 issues.`, and notify `# tests 419` / `# pass 419` / `# fail 0`. Only the Step 6 `//nolint:staticcheck` helpers still write the deprecated fields.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `packages/proto/gen/go/{trading,notify}/v1/*.pb.go`, `packages/proto/gen/python/{trading,notify}/v1/*_pb2.py`, `packages/proto/gen/ts/{trading,notify}/v1/*.ts`, `packages/proto/gen/ts/dist/{trading,notify}/v1/*.d.ts` and `*_pb.js`, `services/xstockstrat-trading/internal/service/trading_helpers_test.go`
+- Deviations: scope expansion (`trading_helpers_test.go`, operator ruling) and the Docker codegen fallback. Full detail is in the Deviation Log.
+
+### Step 14 — docs: xstockstrat-ui BFF order-read comment [done]
+- Rewrote the two-line comment under `router.service(TradingService, {` in `traderBff.ts`: ownership comes from the `x-user-id` header on every trading RPC, and the trading service ignores the body `user_id` that `listOrders` / `streamOrderUpdates` still set. No code changed; the `userId` pins on `listOrders` and `streamOrderUpdates` stay (Instruction 2). PRESERVE ui `@AC-2` @feature-270 holds, since no behaviour changed. C-12: no test or fixture touched. Re-grep for the feature-360 adjacency (impl-spec review thread): this step touches only `traderBff.ts`, not `connectClients.ts`, so there is no collision.
+- TDD: N/A (docs, comment-only). Verification: exit=0 (`.sdd-logs/v-1.log`). The `! grep "cross-user filter"` found no match, `next lint` printed warnings only (pre-existing, in other files), and vitest printed `Test Files  2 passed (2)` / `Tests  10 passed (10)`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-ui/src/lib/traderBff.ts`
+- Deviations: none
+
+### Step 15 — docs: xstockstrat-agent body user_id wording [done]
+- Took "`ListOrders` filter" out of the target/scope-selector examples in the agent `CLAUDE.md:22-25` paragraph and added "Trading ignores the body `user_id` on `ListOrders`; the owner is `x-user-id`." The other examples (config per-user scope, `emit_alert` target, `IssueAuthCode` subject) stay. No agent code, tool contract or test changed (Instruction 2). `list_account_orders` still sends body `user_id` equal to the `x-user-id` caller (`client.py:2600`), so results are unchanged.
+- TDD: N/A (docs). Verification: exit=0 (`.sdd-logs/v-1.log`). The `! grep "ListOrders. filter"` found no match, and `grep -n "ListOrders"` printed `24:subject), never to name the caller. Trading ignores the body `user_id` on `ListOrders`; the owner`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-agent/CLAUDE.md`
+- Deviations: none
+
+### Step 16 — docs: xstockstrat-analysis entry-backfill comment [done]
+- Replaced the stale comment above the `_backfill_pair` `ListOrders` call in `entry_backfill.py:73` with one constraint line: "x-user-id from owner_metadata is load-bearing: trading scopes ListOrders to that header." (98 columns, under ruff's 100). Line 72, the live-loop key comment, is unchanged. No code changed. The request keeps its body `user_id`, so PRESERVE analysis `@AC-1` @feature-262 holds (Instruction 2).
+- TDD: N/A (comment-only). Baseline: the step Verification on the pre-edit tree gave exit=1 (`.sdd-logs/v-1.log`) because the `! grep` matched `73:        # Body user_id is load-bearing: trading treats an empty user_id as all users.` After the edit the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `All checks passed!` and `143 files already formatted` (host ruff 0.16.9; CI installs unpinned `ruff`).
+- Evidence re-grepped on this tree: `servicer.py:6626` still holds the `GetStrategyAnalytics` `ListOrdersRequest(strategy_id=strategy_id, user_id=user_id)`, as the spec says. The `entry_backfill.py:78-84` call span actually ends at `:85`. Neither changes this step.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-analysis/app/engine/entry_backfill.py`
+- Deviations: none
+
+### Step 17 — docs: service CLAUDE.md files and context constitutions [done]
+- Trading `CLAUDE.md`: the `ListOrders`/`StreamOrderUpdates` body-selector Exception is replaced by the header-scoped order-read contract (`GetOrder`/`ListOrders`/`StreamOrderUpdates` via `ResolveOrderOwner`; body `user_id` ignored for every scope including ADMIN; headerless → `PermissionDenied`; cross-user `GetOrder` → `NotFound`; no cross-user order RPC), "empty = all users" is gone from the `broadcastOrder` sentence, and one sentence each covers the broker-account owner gate and the `LoadBrokerPool` owner-less skip (D-7 sign-off 2026-11-20). Notify `CLAUDE.md:32` now says `ListAlerts` is header-only (code 3) and only `MarkAlertRead` keeps the body fallback. NOTIFY-5 gains `ListAlerts` (+ `#listAlerts` evidence); NOTIFY-7 is narrowed to `MarkAlertRead` and its "`ListAlerts` is unscoped" clause removed. Portfolio rows `order.filled`, `account.positions.synced`, `account.deregistered`, `account.balance.synced` each state the owner-less event is acked, WARN-logged and skipped and dropped on replay. Proto constitution `:33` gains the feature-312 deprecated + server-ignored clause (not PROTO-10, D-10). Root PLAT-11 no longer lists `ListAlerts` or `ListOrders/StreamOrderUpdates` as live body `user_id`. The trading constitution is not edited (Instruction 2).
+- TDD: N/A (docs). Baseline: the step Verification on the pre-edit tree gave exit=1 (`.sdd-logs/v-1.log`), matching `services/xstockstrat-trading/CLAUDE.md:40` / `:43` and `docs/context-constitution.md:35` on "empty = all users". After the edits the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `40:` … `(ResolveOrderOwner)` (trading), `32:` … `ListAlerts` is header-only (notify), the portfolio count at 4, and `33:` … `ListAlertsRequest.user_id` (proto).
+- Note: `git diff --quiet origin/main-dev -- pnpm-lock.yaml` printed rc=1 because `origin/main-dev` moved on (`f5e691b1`); the three-dot diff from the merge base is empty, so this branch did not change the lockfile. This step installs nothing.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-trading/CLAUDE.md`, `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-notify/docs/context-constitution.md`, `services/xstockstrat-portfolio/CLAUDE.md`, `packages/proto/docs/context-constitution.md`, `docs/context-constitution.md`
+- Deviations: none
+
+### Step 18 — docs: mTLS rollout runbook flat-book check [done]
+- In §1.1 step 2, the "trader surface or `ListOrders`" check is replaced by a read-only `SELECT count(*) FROM trading.orders …` that copies the `ListSubmittedOrders` predicate (`trading_repo.go:310-312`) verbatim, with an expected result of `0`. It runs through a relative link to `operator-db-access.md`, and the access recipe is not repeated. "Wait for or cancel any working order" is kept, followed by a re-run of the query (D-18, O-9). This lands in the same PR as Step 3.
+- TDD: N/A (docs). Baseline: the step Verification on the pre-edit tree gave exit=1 (`.sdd-logs/v-1.log`, empty) because the predicate grep had no match. After the edit the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `104:` … `status IN ('new', 'partially_filled')` … and `101:` … `operator-db-access.md` …, and no `trader surface` match.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `docs/runbooks/inter-service-mtls-rollout.md`
+- Deviations: none
+
+### Step 19 — docs: file the two follow-up defect reports [done]
+- Filed both reports from the `defect-filing.md` template with `**Recorded**: 2026-11-20` and a single `**Severity**: SEV-3` token, each with an `open` sidecar. Report 1 (D-11) covers notify `StreamAlerts` (body `user_id`, empty = all, `notifyServiceImpl.ts:160`, `:388`) and `AcknowledgeAlert` (no owner check, `acknowledged_by` from the body, `:188`), with the NOTIFY-5 header-only model as Expected, and notes that 312 scoped only `ListAlerts`. Report 2 (D-9) covers active `user_id = ''` broker accounts skipped by the Step 4 `LoadBrokerPool` WARN (`trading.go:304`), the accepted side effects, the WARN trigger, a candidate trading `012` deactivation migration with DBA approval, and a pointer to the Step 20 O-11 count here.
+- Evidence re-grepped on this tree (`12fd7270`): `resolveAccount` is now `:360` and `pollFills` `:1846` (the spec cites `:356` and `:1816`). Report 2 also records that `pollFills`' sole-broker fallback (`:1880-1893`) can poll a phantom account's in-flight order through the one remaining non-offline account's client, rather than only skipping it.
+- TDD: N/A (docs). Verification: exit=0 (`.sdd-logs/v-1.log`, empty, as the block prints nothing on success). `grep -oE 'SEV-[123]'` printed exactly one `SEV-3` per report, and neither report contains `[x]` or `config-propagation`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `docs/reports/2026-11-20-notify-streamalerts-acknowledgealert-body-user-id-defect.md`, `docs/reports/2026-11-20-notify-streamalerts-acknowledgealert-body-user-id-defect.status`, `docs/reports/2026-11-20-trading-broker-accounts-ownerless-rows-cleanup-defect.md`, `docs/reports/2026-11-20-trading-broker-accounts-ownerless-rows-cleanup-defect.status`
+- Deviations: none
+
+## Session 2026-11-27 — O-11 count, homelab staging, supplied by the operator (verbatim)
+
+Operator ran the Step 20 / A6 read-only query on the homelab staging database and pasted the result:
+
+```
+SELECT count(*) FROM trading.broker_accounts WHERE user_id = '' AND is_active;
+ count
+-------
+     0
+(1 row)
+
+SELECT id, display_name, broker_type, is_paper, created_at
+FROM trading.broker_accounts WHERE user_id = '' AND is_active ORDER BY created_at;
+ id | display_name | broker_type | is_paper | created_at
+----+--------------+-------------+----------+------------
+(0 rows)
+```
+
+Homelab staging: 0 active owner-less `trading.broker_accounts` rows (2026-11-27). Outstanding for Step 20: the same count on DO staging. Production is out of scope (standing ruling; never launched), so no production count will be supplied.
+
+## Session 2026-11-27 — O-11 detail, DO staging, supplied by the operator (verbatim)
+
+Operator ran the A6 detail query on the DO staging database and pasted the result:
+
+```
+                  id                  | display_name | broker_type | is_paper |          created_at
+--------------------------------------+--------------+-------------+----------+-------------------------------
+ 6c9252af-393a-49a5-8af3-e36845249078 | Alpaca 1     |           1 | t        | 2026-05-31 00:24:30.778166+00
+```
+
+DO staging: 1 active owner-less `trading.broker_accounts` row (the detail query lists exactly one row; the `count(*)` line was not pasted, so the count is taken from the listing). Homelab staging: 0 (previous entry). Production: not taken — production is out of scope and was never launched (standing operator ruling), so no production count will be supplied. Per Step 20 Instruction 4, a non-zero count does not block the merge; it sizes the Step 19 cleanup follow-up (one paper Alpaca account, created 2026-05-31).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Step 20
+
+### Step 20 — docs: record the owner-less broker-account row count (operator gate) [done]
+- Recorded the operator-supplied O-11 counts from the two 2026-11-27 entries above. DO staging is 1: the A6 detail query (`WHERE user_id = '' AND is_active`) listed one row, `6c9252af-393a-49a5-8af3-e36845249078` "Alpaca 1", paper, created 2026-05-31. Homelab staging is 0 (`count(*)` pasted). Production was waived by the standing operator ruling (production out of scope, never launched), so no count was invented (Instruction 3). The non-zero DO staging count does not block the merge (Instruction 4); it sizes the Step 19 cleanup follow-up `docs/reports/2026-11-20-trading-broker-accounts-ownerless-rows-cleanup-defect.md`.
+- TDD: N/A (docs). Baseline: the step Verification on the pre-edit tree gave exit=1 (`.sdd-logs/v-1.log`, empty). After the edit the same Verification gave exit=0 (`.sdd-logs/v-3.log`) and matched the last bullet of this entry.
+- Config-key wiring gate (last step, `--final`): exit=0 (`.sdd-logs/v-2.log`). It printed two non-blocking `REPORTED:` lines, both outside 312's scope: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. This feature declares no config key.
+- All 20 steps are done. Status `in-progress` → `code-completed`.
+- Files modified: `docs/roadmap/features/312-fix-read-path-owner-trust/context.md`
+- Deviations: Instruction 1 asks for a staging and a production count. Production was waived by operator ruling, and staging is reported per environment (DO and homelab). Full detail is in the Deviation Log.
+- O-11 row count: DO staging 1 (2026-11-27); homelab staging 0 (2026-11-27); production waived (standing ruling: production out of scope)
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-read-path-owner-trust (feature 312)
+
+Source: `/home/user/xstockstrat/docs/roadmap/features/312-fix-read-path-owner-trust/acceptance.feature` (6 scenarios, AC-1..AC-6; AC-4, AC-5 and AC-6 are Scenario Outlines).
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature | CREATE | NEW | ListOrders/StreamOrderUpdates owner scoping; the observable subject is trading. No existing trading scenario asserts it. |
+| AC-2 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Cross-service: trading rejects headerless RegisterBrokerAccount, and portfolio skips identity-less events. See Notes. |
+| AC-3 | services/xstockstrat-notify/acceptance/fix-read-path-owner-trust.feature | CREATE | NEW | The observable subject is NotifyService.ListAlerts. It does not conflict with the feature-203 ListAlerts rules (see Notes). |
+| AC-4 | services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature | CREATE | NEW | Design D-17 names it a durable trading @AC. |
+| AC-5 | services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature | CREATE | NEW | Design D-17 names it a durable trading @AC. |
+| AC-6 | services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature | CREATE | NEW | Design D-17 names it a durable trading @AC. |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature (CREATE) ---
+```gherkin
+# Promoted from docs/roadmap/features/312-fix-read-path-owner-trust/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-312` tag.
+# Durable business rules trading already guarantees; a rule enters only by promotion from a reviewed acceptance.feature.
+
+Feature: xstockstrat-trading - order reads are scoped to the trusted x-user-id header
+  Order read paths scope ownership to the trusted x-user-id header, never to a body field.
+
+  # guards: docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md
+  @AC-1 @regression @feature-312
+  Scenario: A non-admin ListOrders with an empty body user_id returns only the caller's orders
+    Given trading holds orders for users "user-a" and "user-b"
+    When an internal caller sends ListOrders with an empty user_id and x-user-id "user-a" and x-access-scope "3" (ADMIN bit 0x04 unset)
+    Then only "user-a"'s orders are returned
+    And the same holds for StreamOrderUpdates
+
+  # guards: docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md (design D-7, D-17)
+  @AC-4 @regression @feature-312
+  Scenario Outline: Order reads are scoped to x-user-id for every scope and the body user_id is ignored
+    Given trading holds orders for users "user-a" and "user-b"
+    When an internal caller sends <rpc> with x-user-id "user-a", x-access-scope "<scope>" and body user_id "<body>"
+    Then only "user-a"'s orders are delivered
+
+    Examples:
+      | rpc                | scope | body   |
+      | ListOrders         | 3     | user-b |
+      | ListOrders         | 4     | user-b |
+      | ListOrders         | 4     |        |
+      | StreamOrderUpdates | 3     | user-b |
+      | StreamOrderUpdates | 4     | user-b |
+      | StreamOrderUpdates | 4     |        |
+
+  # guards: docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md (design D-7, D-15)
+  @AC-5 @regression @feature-312
+  Scenario Outline: An order read with no x-user-id is refused
+    Given trading holds orders for users "user-a" and "user-b"
+    When an internal caller sends <rpc> with no x-user-id metadata
+    Then the call fails with PERMISSION_DENIED
+    And no order is delivered
+
+    Examples:
+      | rpc                |
+      | ListOrders         |
+      | StreamOrderUpdates |
+      | GetOrder           |
+
+  # guards: docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md (design D-15)
+  @AC-6 @regression @feature-312
+  Scenario Outline: GetOrder for another user's order is indistinguishable from an absent order
+    Given trading holds an order owned by "user-b"
+    When an internal caller sends GetOrder for that order_id with x-user-id "user-a" and x-access-scope "<scope>"
+    Then the call fails with NOT_FOUND
+    And the status code and message match those returned for an order_id that does not exist
+
+    Examples:
+      | scope |
+      | 3     |
+      | 4     |
+```
+
+--- /home/user/xstockstrat/services/xstockstrat-notify/acceptance/fix-read-path-owner-trust.feature (CREATE) ---
+```gherkin
+# Promoted from docs/roadmap/features/312-fix-read-path-owner-trust/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-312` tag.
+# Durable business rules notify already guarantees; a rule enters only by promotion from a reviewed acceptance.feature.
+
+Feature: xstockstrat-notify - ListAlerts scopes ownership to the trusted x-user-id header
+  ListAlerts takes the owner from x-user-id metadata only; a body userId never widens or redirects the read.
+
+  # guards: docs/reports/2026-10-19-notify-listalerts-owner-fallback-unscoped-defect.md
+  @AC-3 @regression @feature-312
+  Scenario: ListAlerts without x-user-id is rejected and a body userId is ignored
+    Given alerts targeted to users "user-a" and "user-b"
+    When NotifyService.ListAlerts is called over mTLS with no x-user-id metadata
+    Then the call is rejected with INVALID_ARGUMENT or UNAUTHENTICATED
+    And when it is called with x-user-id "user-a" and body userId "user-b"
+    Then no alert targeted to "user-b" is returned
+```
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+```gherkin
+
+  # ─── broker-account identity is never filed under a placeholder owner (feature 312) ──
+  # Cross-service: trading's RegisterBrokerAccount rejection and portfolio's event consumption are
+  # one guarantee. Source defect: docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md
+
+  # guards: docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md
+  @AC-2 @regression @feature-312
+  Scenario: Broker-account identity is never filed under a placeholder owner
+    Given a RegisterBrokerAccount call with no x-user-id metadata
+    When trading handles the call
+    Then the call is rejected and no broker account is persisted
+    And when portfolio consumes an account.positions.synced, account.balance.synced or account.deregistered event with user_id ""
+    Then the event is acked, logged and skipped
+    And no portfolio row is written or purged under user_id "default"
+```
+
+### Notes / ambiguities / conflicts
+- **AC-2 routing (judgement call).** The scenario asserts on two services: trading rejects a headerless `RegisterBrokerAccount`, and portfolio skips identity-less events (the placeholder `"default"` at `portfolio_service.go:1614`). A scenario cannot be split, because it must be promoted verbatim, and neither service alone owns the whole guarantee. I routed it to `platform.feature` under the cross-service rule. The alternative is `services/xstockstrat-trading/acceptance/fix-read-path-owner-trust.feature`, since the placeholder originates in trading. A human can move it if they prefer. Design.md only names AC-4, AC-5 and AC-6 as trading rules, so AC-2's routing is not pre-decided.
+- **No FR tags.** The source scenarios carry `@regression` and no `@FR-*` tag (bug fix). I promoted them verbatim without inventing `@FR-n`. `docs/sdd/business-rules/CLAUDE.md` asks for at least one `@FR-n`, but other promoted bug-fix suites such as feature 329 in `platform.feature` also carry only `@regression`. The `# guards:` comment lines are kept as provenance.
+- **Dedup.** `grep feature-312` across the repo returns nothing, so there is no DUP. No existing suite asserts header-only order scoping, the headerless `PERMISSION_DENIED` on order reads, the `GetOrder` NOT_FOUND parity, or the `"default"` placeholder rule, so there is no OVERLAP. The `trading/acceptance` directory has no ListOrders ownership scenario. Its `fix-ibkr-request-signing.feature` mentions ListOrders only as a broker-signing table row.
+- **No CONFLICT.** The related guarantees are preserved as design.md § Business-rule alignment describes:
+  - `/home/user/xstockstrat/services/xstockstrat-notify/acceptance/alert-read-unread-persistence.feature` (@feature-203 AC-1..AC-5) always has an identified caller, so it is untouched.
+  - `/home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-owner-scope.feature` (@feature-262) sends body equal to header, so it is untouched.
+  - `/home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-ui-trader-feedback.feature` (@feature-270) is untouched.
+  - The old trading CLAUDE.md contract "admin empty user_id = all users" has no durable `@AC`. Design D-7 changes it, with user sign-off on 2026-11-20. This is a doc change for the execute steps, not a suite conflict.
+- **Overlap with the agent suite.** `/home/user/xstockstrat/services/xstockstrat-agent/acceptance/agent-broker-account-tools.feature` AC-7, on non-owner broker-account actions, is marked EXTEND in design.md. It is proven on the wire by feature 312's tests but is not a 312 scenario, so nothing is promoted for it.
+- **Create vs append.** `acceptance/` already exists for trading and notify, and the 312-named files are new. Both are CREATE, with the provenance header copied from the `fix-push-untargeted-broadcast.feature` style. The `platform.feature` block goes after the last scenario, the feature-329 Outline ending at line 2737.
+
+### Coverage check
+- Source scenarios: 6 (AC-1..AC-6; AC-4, AC-5 and AC-6 are Outlines promoted whole, with Examples intact). Planned: 6 NEW (4 trading, 1 notify, 1 platform), 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC is accounted for and none were skipped. Counts match.
+````

@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
-import { alertSeverityToNumber, alertSeverityFromJSON } from '@xstockstrat/proto/notify/v1/notify';
+import { alertSeverityToNumber, alertSeverityFromJSON, AlertSeverity } from '@xstockstrat/proto/notify/v1/notify';
 import { ConfigWatcher } from '../services/configWatcher';
 import { FanoutDispatcher } from '../fanout/fanout';
 import { WebPushDispatcher } from '../fanout/webPush';
@@ -15,6 +15,8 @@ const FANOUT_WEBHOOK_PEER_SANS: readonly string[] = ['xstockstrat-ingest'];
 const WEBHOOK_NAME_MAX_CHARS = 256;
 const WEBHOOK_PAYLOAD_MAX_BYTES = 64 * 1024;
 const ALERT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Memory-safety bound in messages (call.writableLength), not a config key.
+const MAX_QUEUED_ALERTS = 1024;
 
 function peerDnsSans(call: any): string[] {
   const raw: string = call.getAuthContext?.()?.sslPeerCertificate?.subjectaltname ?? '';
@@ -28,7 +30,7 @@ function peerDnsSans(call: any): string[] {
 interface StreamSubscriber {
   userId: string;
   categories: string[];
-  severities: number[];
+  severities: AlertSeverity[];
   includeAcknowledged: boolean;
   call: any;
 }
@@ -121,6 +123,18 @@ export class NotifyServiceImpl {
     let deliveredCount = 0;
     for (const [subId, sub] of this.subscribers) {
       if (this.matchesSubscriber(alert, sub)) {
+        if (sub.call.writableLength >= MAX_QUEUED_ALERTS) {
+          // The delete must precede the emit: any later write ends the stream with no status.
+          this.subscribers.delete(subId);
+          recordStreamEviction('backpressure');
+          log.warn('StreamAlerts subscriber evicted', { reason: 'backpressure' });
+          try {
+            sub.call.emit('error', { code: 8, details: 'slow consumer evicted' });
+          } catch (e: any) {
+            log.warn('StreamAlerts eviction teardown failed', { error: e?.message ?? String(e) });
+          }
+          continue;
+        }
         try {
           sub.call.write(alert);
           deliveredCount++;
@@ -172,12 +186,10 @@ export class NotifyServiceImpl {
     });
 
     call.on('cancelled', () => {
-      log.info('StreamAlerts subscriber disconnected', { subId });
-      this.subscribers.delete(subId);
+      if (this.subscribers.delete(subId)) log.info('StreamAlerts subscriber disconnected', { subId });
     });
     call.on('error', () => {
-      this.subscribers.delete(subId);
-      recordStreamEviction('stream_error');
+      if (this.subscribers.delete(subId)) recordStreamEviction('stream_error');
     });
   }
 
@@ -225,9 +237,11 @@ export class NotifyServiceImpl {
 
   async listAlerts(call: any, callback: any) {
     const req = call.request;
-    // Identity from the propagated x-user-id header (security tightening, design.md) — falls back to
-    // the body userId for direct gRPC test callers.
-    const userId = call.metadata?.get?.('x-user-id')?.[0]?.toString() || req.userId || null;
+    // The owner is the x-user-id header only; the body userId is ignored.
+    const userId = (call.metadata?.get?.('x-user-id')?.[0] ?? '').toString();
+    if (!userId) {
+      return callback({ code: 3, message: 'x-user-id header required' });
+    }
     // proto3 zero-default trap: `req.limit || 50` would also replace a real 0, `?? 50` would keep 0.
     const limit = req.limit > 0 ? req.limit : 50;
     try {
@@ -237,7 +251,7 @@ export class NotifyServiceImpl {
           `SELECT a.*, ar.read_at
            FROM notify.alerts a
            LEFT JOIN notify.alert_reads ar ON ar.alert_id = a.alert_id AND ar.user_id = $1
-           WHERE ($1::text IS NULL OR a.target_user_id = $1 OR a.target_user_id IS NULL)
+           WHERE (a.target_user_id = $1 OR a.target_user_id IS NULL)
              ${req.unreadOnly ? 'AND ar.alert_id IS NULL' : ''}
            ORDER BY a.created_at DESC LIMIT $2`,
           [userId, limit]
@@ -245,7 +259,7 @@ export class NotifyServiceImpl {
         this.pool.query(
           `SELECT COUNT(*) AS count
            FROM notify.alerts a
-           WHERE ($1::text IS NULL OR a.target_user_id = $1 OR a.target_user_id IS NULL)
+           WHERE (a.target_user_id = $1 OR a.target_user_id IS NULL)
              AND NOT EXISTS (
                SELECT 1 FROM notify.alert_reads ar
                WHERE ar.alert_id = a.alert_id AND ar.user_id = $1

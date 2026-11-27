@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: `docs/reports/2026-10-19-trading-listorders-body-user-id-filter-defect.md`, `docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md`, `docs/reports/2026-10-19-notify-listalerts-owner-fallback-unscoped-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-20
+**Last Updated**: 2026-11-27
 
 ---
 
@@ -17,6 +17,8 @@
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 20 steps |
+| 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); main-dev `f802b184` merged, steps 1,3,4,5,6,7,8,10,11,12,13,15,16,17,18,19 re-specced (`9f69d778`) |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 20 steps done (sequential, sdd-batch-execute); Step 20 O-11 count recorded (DO staging 1, homelab staging 0, production waived) |
 
 ---
 

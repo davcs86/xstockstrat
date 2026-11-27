@@ -71,6 +71,7 @@ from typing import Literal
 from urllib.parse import quote, urljoin, urlparse
 
 import grpc
+import httpx
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
@@ -239,7 +240,12 @@ _PASS_THROUGH_CODES = frozenset(
 )
 # Exact backend strings a call site allow-lists for UNAVAILABLE; a cross-service contract pinned by
 # tests/test_tool_errors.py::test_unavailable_pass_strings_match_backend_sources.
-_SCORE_UNAVAILABLE_PASS = frozenset({"fundamentals availability unknown — grade unchanged"})
+_SCORE_UNAVAILABLE_PASS = frozenset(
+    {
+        "fundamentals availability unknown — grade unchanged",
+        "formula version unavailable — grade unchanged",
+    }
+)
 _OFFLINE_UNAVAILABLE_PASS = frozenset({"positions not published; re-confirm to retry"})
 _BACKFILL_UNAVAILABLE_PASS = frozenset({"callback_url could not be validated; no job was created"})
 _RETRY_TAIL = "retry shortly"
@@ -479,8 +485,9 @@ def _historical_to_csv(periods: list[dict]) -> str:
 async def _write_source_bearer(ctx: Context, tool: str, slug: str, bearer_token: str) -> str:
     """Write a source bearer as the caller's own encrypted secret; return the credentials_ref.
 
-    Secret-first: a failed source write afterwards only orphans a redacted secret. The key is opaque
-    (never the slug), so it cannot collide across owners or leak the source name."""
+    Secret-first: a failed source write afterwards only orphans a redacted secret, reclaimed by the
+    operator orphan sweep (docs/runbooks/config-rollout.md). The key is opaque (never the slug), so
+    it cannot collide across owners or leak the source name."""
     secret_key = f"mcp_credential.{uuid.uuid4()}"
     try:
         await client.set_config(
@@ -674,7 +681,13 @@ def register_tools(server: MCPServer) -> None:
         attachments_b64: list of base64-encoded attachment bytes (PDF, etc.).
         urls: list of URLs to fetch (for mediated_linked_email sources).
         At least one of attachments_b64 or urls must be provided.
-        Returns {raw_text: str}. Credentials are never exposed in the response.
+        Returns {raw_text: str} when every URL is fetched. Credentials are never exposed.
+        URL fetches share one whole-call budget (agent extract.call_budget_seconds, default 35 s).
+            A URL that times out or fails in transport, or is not reached before the budget expires,
+            is skipped and the call returns {raw_text, error: "PARTIAL: N of M URLs not fetched
+            (deadline: a, transport: b)", unfetched_urls: [the given URLs, in input order]};
+            raw_text holds every text gathered (attachments included). An egress refusal or an
+            HTTP error status still fails the whole call.
         CREDENTIAL CAVEAT (feature 093): a source that requires credentials (has_credentials=true)
             currently RAISES — secure per-source credential resolution is not yet supported, because
             the platform stores secrets as is_secret references that the config service redacts, so
@@ -696,12 +709,57 @@ def register_tools(server: MCPServer) -> None:
                 text = _extract_from_bytes(raw, password=None)
                 texts.append(text)
 
-        if urls:
-            for url in urls:
-                text = await _fetch_url(url, password=None)
-                texts.append(text)
+        if not urls:
+            return {"raw_text": "\n\n".join(texts)}
 
-        return {"raw_text": "\n\n".join(texts)}
+        budget = await _extract_call_budget_s()
+        unfetched: list[str] = []
+        failed_classes: set[str] = set()
+        deadline_n = transport_n = 0
+        next_i = 0
+        scope = asyncio.timeout(budget)
+        try:
+            async with scope:
+                for i, url in enumerate(urls):
+                    try:
+                        texts.append(await _fetch_url(url, password=None))
+                    except httpx.TimeoutException as e:
+                        deadline_n += 1
+                        unfetched.append(url)
+                        failed_classes.add(type(e).__name__)
+                    except httpx.TransportError as e:
+                        transport_n += 1
+                        unfetched.append(url)
+                        failed_classes.add(type(e).__name__)
+                    next_i = i + 1
+        except TimeoutError:
+            if not scope.expired():
+                raise
+            remaining = urls[next_i:]
+            deadline_n += len(remaining)
+            unfetched.extend(remaining)
+            failed_classes.add("TimeoutError")
+
+        raw_text = "\n\n".join(texts)
+        if not unfetched:
+            return {"raw_text": raw_text}
+        log.warning(
+            "extract_email_content partial: %d of %d URLs not fetched "
+            "(deadline=%d, transport=%d, errors=%s)",
+            len(unfetched),
+            len(urls),
+            deadline_n,
+            transport_n,
+            ",".join(sorted(failed_classes)),
+        )
+        return {
+            "raw_text": raw_text,
+            "error": (
+                f"PARTIAL: {len(unfetched)} of {len(urls)} URLs not fetched "
+                f"(deadline: {deadline_n}, transport: {transport_n})"
+            ),
+            "unfetched_urls": unfetched,
+        }
 
     @server.tool()
     async def extract_website_content(
@@ -715,6 +773,10 @@ def register_tools(server: MCPServer) -> None:
             config_json.scrape_selector is NOT applied — it is only a hint naming the elements of
             raw_text that hold the content; read those and follow the source's
             extraction_instructions. Credentials are never exposed in the response.
+        The fetch has a whole-call budget (agent extract.call_budget_seconds, default 35 s).
+            Errors: "DEADLINE_EXCEEDED: content fetch did not complete within Ns" when the budget
+            expires; "FETCH_FAILED: <ExceptionClass>" on a transport failure (a per-request
+            connect/read timeout included). Neither message echoes the source URL.
         CREDENTIAL CAVEAT (feature 093): a source that requires credentials (has_credentials=true)
             currently RAISES — secure per-source credential resolution is not yet supported (the
             platform stores secrets as is_secret references the config service redacts). Only
@@ -735,7 +797,19 @@ def register_tools(server: MCPServer) -> None:
         if not isinstance(request_headers, dict):
             request_headers = None
 
-        text = await _fetch_url(url, password=None, headers=request_headers)
+        budget = await _extract_call_budget_s()
+        scope = asyncio.timeout(budget)
+        try:
+            async with scope:
+                text = await _fetch_url(url, password=None, headers=request_headers)
+        except TimeoutError:
+            if not scope.expired():
+                raise
+            raise ToolError(
+                f"DEADLINE_EXCEEDED: content fetch did not complete within {budget:g}s"
+            ) from None
+        except httpx.TransportError as e:
+            raise ToolError(f"FETCH_FAILED: {type(e).__name__}") from None
         return {"raw_text": text}
 
     @server.tool()
@@ -756,10 +830,11 @@ def register_tools(server: MCPServer) -> None:
         symbol: ticker symbol e.g. 'NVDA'.
         direction: one of 'buy', 'sell', 'hold', 'watchlist'.
         valid_from: ISO 8601 datetime string e.g. '2026-05-01T00:00:00Z'.
-        conviction: float in (0.0, 1.0], optional. There is NO source default — an omitted
-            conviction is stored as NULL, not backfilled, so pass it explicitly whenever known. An
+        conviction: float in [0.0, 1.0], optional. There is NO source default — an omitted
+            conviction is stored as NULL ("not given"), not backfilled, so pass it explicitly
+            whenever known. An explicit 0.0 is stored as 0 and scored as zero confidence. An
             out-of-range value (< 0.0 or > 1.0) or NaN is rejected INVALID_ARGUMENT at the ingest
-            boundary; 0.0 (or an omitted conviction) is stored as NULL.
+            boundary.
         SIDE EFFECT: on success this tool AUTO-EMITS an alert when conviction is present and >= the
             agent.signal.alert_threshold config value (default 0.6); an alert failure does not fail
             the ingest. Do NOT also call emit_alert for the same signal, or you will double-alert.
@@ -1201,7 +1276,8 @@ def register_tools(server: MCPServer) -> None:
         found nothing"), and null when analysis did not report it. Errors: PERMISSION_DENIED
         (strategy missing or not owned); NOT_FOUND (no eligible evidence — the stale grade is
         cleared; includes the "all evidence symbols excluded (fundamentals unavailable: …)"
-        variant); UNAVAILABLE ('fundamentals availability unknown — grade unchanged' is passed
+        and "formula … is not readable" variants); UNAVAILABLE ('fundamentals availability
+        unknown — grade unchanged' and 'formula version unavailable — grade unchanged' are passed
         through verbatim; a store outage surfaces as 'UNAVAILABLE: upstream unavailable; outcome
         unknown, verify before retrying'). A deadline means the outcome is unknown: verify with
         list_strategies rather than assuming the grade was or was not refreshed.
@@ -1541,7 +1617,9 @@ def register_tools(server: MCPServer) -> None:
         credentials_ref: reference forwarded to the backend; NEVER echoed back (FR-12). On update it
             is preserved when omitted; pass "" to explicitly clear it. A `authenticated_website` or
             `mediated_authenticated_website` source requires a credential (validated on the merged
-            result).
+            result). A `mcp_credential.*` secret that no source of yours references for longer than
+            the sweep's grace window (24h by default) is deleted by the operator orphan sweep, so
+            attach a staged credential within that window.
         reliability_weight: per-source ranking multiplier in [0, 1] (default 1.0 on register);
             higher weights rank this source's signals higher, 0 effectively ignores the source
             (feature 134). On update it is applied ONLY when supplied — omit it to preserve the
@@ -1775,7 +1853,10 @@ def register_tools(server: MCPServer) -> None:
         symbol_results (always present, possibly empty) lists the symbols that wrote nothing, as
             {"symbol", "outcome", "reason"} ("reason" omitted when empty). outcome is "empty"
             (nothing to write), "skipped" (a symbol flagged delisted that the data source could
-            not serve — it is NOT in failed_symbols and does not make the job PARTIAL) or "failed".
+            not serve — it is NOT in failed_symbols and does not make the job PARTIAL), "failed"
+            or "incomplete" (a GAPS_ONLY bars job verified that sessions in the range are still
+            missing; reason lists "missing sessions YYYY-MM-DD..YYYY-MM-DD[; …]", the symbol is
+            NOT in failed_symbols, and the job ends PARTIAL).
         Note: bars_processed and bars_total are 64-bit integers serialized as JSON STRINGS, not
             numbers — parse before arithmetic."""
         try:
@@ -1834,7 +1915,11 @@ def register_tools(server: MCPServer) -> None:
         timeout_ms: 0 = use the configured sandbox timeout.
         Returns the full sandbox result: success, output (the result dict; NON-FINITE values such
             as NaN/Infinity are returned as null), stdout, stderr, error, exit_reason,
-            parameter_errors, execution_ms (int64 as a JSON string)."""
+            parameter_errors, execution_ms and memory_used_bytes (int64 as JSON strings).
+        memory_used_bytes: peak resident memory of the sandbox process in bytes, INCLUDING the
+            interpreter and the imported modules, so it is not usage of the memory cap. "0"
+            means not measured (timeout, kill, abort or os._exit; most memory_exceeded runs
+            report "0")."""
         deadline_s = client.formula_deadline_s(timeout_ms)
         try:
             return await client.execute_formula(
@@ -2822,6 +2907,20 @@ def _same_origin(a: str, b: str) -> bool:
 # Outer bound keeping list_opportunities inside the MCP client's 60 s budget; looked up at call
 # time so tests can monkeypatch it.
 _POLICY_READ_TIMEOUT_S = 3.0
+
+# auth 10 s + _get_source 10 s + this budget must stay <= 57 s (the MCP client's 60 s timeout less
+# headroom); the [5,35] ceiling lives only in the config SetConfig registry.
+_EXTRACT_CALL_BUDGET_DEFAULT_S = 35.0
+
+
+async def _extract_call_budget_s() -> float:
+    """Whole-call fetch budget for the extract tools; non-finite or <= 0 falls back to 35 s."""
+    budget = await _agent_policy(
+        "extract.call_budget_seconds", _EXTRACT_CALL_BUDGET_DEFAULT_S, float
+    )
+    if not math.isfinite(budget) or budget <= 0:
+        return _EXTRACT_CALL_BUDGET_DEFAULT_S
+    return budget
 
 
 async def _agent_policy(key: str, default: float, cast: type) -> float:

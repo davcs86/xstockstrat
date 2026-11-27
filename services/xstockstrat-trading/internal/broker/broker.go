@@ -3,7 +3,17 @@ package broker
 import (
 	"context"
 	"errors"
+	"time"
 )
+
+func callTimeout(fn func() time.Duration) time.Duration {
+	if fn != nil {
+		if d := fn(); d > 0 {
+			return d
+		}
+	}
+	return defaultTimeoutMs * time.Millisecond
+}
 
 // ErrInvalidCredentials is returned on a definitive broker auth rejection (HTTP 401/403) or
 // deterministically unusable credentials; may come from any broker call, not only ValidateCredentials.
@@ -20,6 +30,9 @@ var ErrOrderNotCancelable = errors.New("broker order not cancelable: already ter
 // ErrRateLimited is a definite outcome: the broker did not process the request. It is never wrapped
 // together with a context error and is never ErrInvalidCredentials.
 var ErrRateLimited = errors.New("broker rate limited: request was not processed")
+
+// ErrOrderNotFound may wrap only a definitive single-order not-found from the broker, never a list miss.
+var ErrOrderNotFound = errors.New("broker order not found")
 
 // BrokerOrder is the normalized order representation returned by any broker.
 type BrokerOrder struct {

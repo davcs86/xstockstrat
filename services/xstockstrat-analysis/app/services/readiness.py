@@ -89,10 +89,44 @@ async def compute_readiness_row(
         )
     # bar_epoch = newest served bar (evaluated symbol or benchmark) — never a slow-path reuse, so a
     # same-time.seconds intraday 1d bar update never freezes a day-one verdict (feature 177).
-    # bar_epoch = -1 is the data-unavailable sentinel: written ONLY when the primary bars fetch
-    # RAISED (feature 181 R-E) — the sole UNKNOWN discriminant the GetWatchlistReadiness classifier
-    # reads. A successful (even empty) fetch never produces it (stays RESOLVED best-effort).
+    # bar_epoch = -1 is the data-unavailable sentinel: written when the primary bars fetch RAISED
+    # (feature 181 R-E) or when a caller isolated a per-symbol failure (unavailable_readiness_row) —
+    # the sole UNKNOWN discriminant the GetWatchlistReadiness classifier reads. A successful (even
+    # empty) fetch never produces it (stays RESOLVED best-effort).
     bar_epoch = -1 if not fetch_ok else max(bars[-1].time.seconds if bars else 0, benchmark_epoch)
+    return _staged_row(
+        symbol,
+        rule=rule,
+        fingerprint=fingerprint,
+        strategy_id=strategy_id,
+        user_id=user_id,
+        now=now,
+        valid_until=valid_until,
+        bar_epoch=bar_epoch,
+        readiness_json=trace,
+    )
+
+
+def unavailable_readiness_row(
+    symbol, *, rule, fingerprint, strategy_id, user_id, now, valid_until
+) -> dict:
+    """The staged row a caller writes for a symbol whose compute it isolated (feature 308)."""
+    return _staged_row(
+        symbol,
+        rule=rule,
+        fingerprint=fingerprint,
+        strategy_id=strategy_id,
+        user_id=user_id,
+        now=now,
+        valid_until=valid_until,
+        bar_epoch=-1,
+        readiness_json={},
+    )
+
+
+def _staged_row(
+    symbol, *, rule, fingerprint, strategy_id, user_id, now, valid_until, bar_epoch, readiness_json
+) -> dict:
     return {
         "user_id": user_id,
         "strategy_id": strategy_id,
@@ -100,7 +134,7 @@ async def compute_readiness_row(
         "symbol": symbol,
         "def_fingerprint": fingerprint,
         "bar_epoch": bar_epoch,
-        "readiness_json": trace,  # {} when the trace is empty (never NULL)
+        "readiness_json": readiness_json,  # {} when the trace is empty (never NULL)
         "computed_at": now,
         "valid_until": valid_until,
     }

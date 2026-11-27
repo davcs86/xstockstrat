@@ -249,6 +249,43 @@ test.describe('mcp_client bearer — per-user secret (feature 224)', () => {
     expect(await page.textContent('body')).not.toContain(TOKEN);
   });
 
+  test('@feature-328 @AC-3 a failed mcp_client register shows the error and writes exactly one secret', async ({
+    page,
+  }) => {
+    let setConfigCalls = 0;
+    page.on('request', (r) => {
+      if (r.url().endsWith('/SetConfig')) setConfigCalls += 1;
+    });
+    await page.route(`**${MANAGE_SOURCE_BFF}`, (route) =>
+      route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 'already_exists',
+          message: 'signal source dup-src already exists',
+        }),
+      }),
+    );
+    await openPage(page);
+    await page.getByRole('button', { name: 'Register New Source' }).click();
+    await page.getByPlaceholder('e.g. unusual_whales').fill('dup-src');
+    await page.getByPlaceholder('Display name').fill('Acme MCP');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'mcp_client' }).click();
+    await page.getByLabel('MCP endpoint').fill('https://mcp.acme.example/mcp');
+    await page.getByLabel('MCP tool name').fill('get_signals');
+    await page.getByLabel('Bearer token').fill(TOKEN);
+    await page.getByRole('button', { name: 'Register', exact: true }).click();
+
+    // Cold dev-server compile of the secret-first SetConfig BFF route can exceed the default expect timeout.
+    await expect(
+      page.getByRole('main').getByText('signal source dup-src already exists'),
+    ).toBeVisible({ timeout: 30000 });
+    await expect(page.getByLabel('Bearer token')).toHaveCount(1);
+    expect(setConfigCalls).toBe(1);
+    expect(await page.textContent('body')).not.toContain(TOKEN);
+  });
+
   test('the insights BFF forces isSecret, createKey and the session user on SetConfig', async ({
     page,
   }) => {

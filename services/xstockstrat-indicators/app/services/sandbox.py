@@ -35,6 +35,7 @@ import logging
 import math
 import os
 import re
+import secrets
 import signal
 import subprocess
 import sys
@@ -556,10 +557,13 @@ import resource
 _allowed = set({allowed_imports!r})
 _real_import = __import__
 
+class _ImportBlocked(ImportError):
+    pass
+
 def _safe_import(name, *args, **kwargs):
     base = name.split('.')[0]
     if base not in _allowed:
-        raise ImportError(f"Import '{{name}}' is not allowed in sandbox")
+        raise _ImportBlocked(f"Import '{{name}}' is not allowed in sandbox")
     return _real_import(name, *args, **kwargs)
 
 # Eagerly import every allowed module BEFORE the seccomp filter loads, so import-time syscalls
@@ -618,6 +622,7 @@ import pyseccomp as _seccomp
 # RLIMIT_DATA (not RLIMIT_AS, INDICATORS-2) = pre-lockdown VmData baseline + memory_bytes headroom.
 # CPU/NPROC derive from config; FSIZE=0/NOFILE=64 are jail constants.
 {vmdata_probe}
+_ms = os.open('/proc/self/status', os.O_RDONLY)
 if {memory_bytes} > 0:
     _cap = min(_baseline + {child_headroom}, 2**63 - 1)
     resource.setrlimit(resource.RLIMIT_DATA, (_cap, _cap))
@@ -641,16 +646,60 @@ for _sc in {seccomp_allow!r}:
         pass  # a name unknown to the host libseccomp is inert to ALLOW; the image validates the set
 _flt.load()
 # ── lockdown complete ───────────────────────────────────────────────────────────────────────────
+def _status(_kind):
+    try:
+        _hwm = 0
+        try:
+            os.lseek(_ms, 0, os.SEEK_SET)
+            for _l in os.read(_ms, 8192).decode().splitlines():
+                if _l.startswith('VmHWM:'):
+                    _hwm = int(_l.split()[1]) * 1024
+                    break
+        except BaseException:
+            _hwm = 0
+        print("\\n__STATUS__:{nonce}:" + _kind + ":" + str(_hwm), flush=True)
+    except BaseException:
+        pass
 
 # ── User formula begins ──────────────────────────────────────────────────────
 _formula_globals = {{'__builtins__': _restricted_builtins, 'data': data, 'params': params}}
-exec({source!r}, _formula_globals)
+try:
+    exec({source!r}, _formula_globals)
+    if 'result' in _formula_globals:
+        _output = _formula_globals['result']
+        _output = _output if isinstance(_output, dict) else {{"value": _output}}
+        print("\\n__OUTPUT__:" + json.dumps(_output))
+        _status('ok')
+    else:
+        _status('no_result')
+except _ImportBlocked:
+    _status('import_blocked')
+    raise
+except MemoryError:
+    _status('memory_exceeded')
+    raise
+except BaseException:
+    _status('raised')
+    raise
 # ── User formula ends ────────────────────────────────────────────────────────
-
-# Output must be assigned to `result` variable
-_output = _formula_globals.get('result', {{}})
-print("\\n__OUTPUT__:" + json.dumps(_output if isinstance(_output, dict) else {{"value": _output}}))
 """)
+
+
+_STATUS_LINE = re.compile(r"__STATUS__:([0-9a-f]{32}):([a-z_]+):([0-9]+)")
+
+
+# The nonce must never reach SandboxResult.stdout: drop the matching line and its injected newline.
+def _split_status(stdout: str, nonce: str) -> tuple[str, str | None, int]:
+    lines = stdout.splitlines(keepends=True)
+    for i in range(len(lines) - 1, -1, -1):
+        m = _STATUS_LINE.fullmatch(lines[i].rstrip("\n"))
+        if m is None or m.group(1) != nonce:
+            continue
+        del lines[i]
+        if i > 0 and lines[i - 1].endswith("\n"):
+            lines[i - 1] = lines[i - 1][:-1]
+        return "".join(lines), m.group(2), int(m.group(3))
+    return stdout, None, 0
 
 
 def _killpg(proc: subprocess.Popen) -> None:
@@ -697,6 +746,7 @@ def execute_formula(
         r, w = os.pipe()
         os.set_blocking(r, False)
         reader = _HandoffReader(r, hr)
+    nonce = secrets.token_hex(16)
     try:
         wrapped = _SANDBOX_WRAPPER.format(
             memory_bytes=memory_bytes,
@@ -712,6 +762,7 @@ def execute_formula(
             seccomp_allow=_SECCOMP_ALLOW,
             vmdata_probe=_VMDATA_PROBE,
             handoff=_HANDOFF.format(fd=w) if w >= 0 else "",
+            nonce=nonce,
         )
 
         # Source is fed on stdin (an inherited fd, UID-independent): no /tmp script the nobody
@@ -764,7 +815,7 @@ def execute_formula(
                         return SandboxResult(
                             success=False,
                             output={},
-                            stdout=out or "",
+                            stdout=_split_status(out or "", nonce)[0],
                             stderr=err or "",
                             execution_ms=int((_monotonic() - start) * 1000),
                             memory_used_bytes=0,
@@ -783,6 +834,7 @@ def execute_formula(
                     )
 
             elapsed_ms = int((_monotonic() - start) * 1000)
+            stdout, status, memory_used = _split_status(stdout, nonce)
 
             def _fail(error: str, exit_reason: str) -> SandboxResult:
                 return SandboxResult(
@@ -791,7 +843,7 @@ def execute_formula(
                     stdout=stdout,
                     stderr=stderr,
                     execution_ms=elapsed_ms,
-                    memory_used_bytes=0,
+                    memory_used_bytes=memory_used,
                     error=error,
                     exit_reason=exit_reason,
                 )
@@ -805,19 +857,24 @@ def execute_formula(
                     marker = line[len("__OUTPUT__:") :]
 
             if proc.returncode != 0:
-                exit_reason = "runtime_error"
-                if "is not allowed in sandbox" in stderr:
-                    exit_reason = "import_blocked"
+                if status in ("import_blocked", "memory_exceeded"):
+                    exit_reason = status
+                elif proc.returncode == -signal.SIGKILL and _oom_kill_rose(oom_before):
+                    exit_reason = "memory_exceeded"
+                elif status is not None:
+                    exit_reason = "runtime_error"
                 elif any(m in stderr for m in _MEMORY_EXHAUSTED_MARKERS):
                     exit_reason = "memory_exceeded"
-                elif proc.returncode == -signal.SIGKILL and _oom_kill_rose(oom_before):
-                    exit_reason = "memory_exceeded"  # the cgroup OOM killer, by counter evidence
+                else:
+                    exit_reason = "runtime_error"
                 return _fail(
                     stderr.strip()[-500:]
                     or f"formula exited with code {proc.returncode} before producing output",
                     exit_reason,
                 )
 
+            if status == "no_result":
+                return _fail("formula did not assign result", "runtime_error")
             if marker is None:
                 return _fail("formula produced no output", "runtime_error")
             try:
@@ -831,7 +888,7 @@ def execute_formula(
                 stdout=stdout,
                 stderr=stderr,
                 execution_ms=elapsed_ms,
-                memory_used_bytes=0,
+                memory_used_bytes=memory_used,
                 error="",
                 exit_reason="success",
             )

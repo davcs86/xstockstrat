@@ -6,6 +6,8 @@ default from the guard's AST scan; the seams build the real consumers).
 """
 
 import importlib
+import re
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -59,6 +61,7 @@ AC6_ROWS = [
     ("patterns.indicator_bucket_count", "int", 5),
     ("opportunity.max_live_strategies_per_symbol", "int", 5),
     ("opportunity.max_live_only_symbols_per_compute", "int", 20),
+    ("opportunity.live_only_cycle_max_days", "int", 3),
     ("opportunity.max_live_held_symbols_per_compute", "int", 20),
     ("opportunity.valid_window_hours", "int", 24),
     ("opportunity.snooze_default_hours", "int", 24),
@@ -123,6 +126,43 @@ def test_ac6_servicer_init_semaphores_and_pool():
         assert svc._candidates_sem.limit == 4
         assert svc._compute.limit == 4
         assert svc._readiness_materializer_bars_sem.limit == 2
+    finally:
+        svc._compute.shutdown(wait=False)
+
+
+_CYCLE_SEED_UP = (
+    Path(__file__).resolve().parents[2]
+    / "xstockstrat-config"
+    / "migrations"
+    / "056_analysis_live_only_cycle_max_days.up.sql"
+)
+
+
+def _seeded_cycle_days() -> int:
+    values = set(
+        re.findall(
+            r"'opportunity\.live_only_cycle_max_days', 'int', '(\d+)'", _CYCLE_SEED_UP.read_text()
+        )
+    )
+    assert len(values) == 1, values
+    return int(values.pop())
+
+
+@pytest.mark.parametrize("stored", ["seeded", 5])
+def test_live_only_cycle_days_real_reader_returns_stored_value(stored):
+    """Feature 366: the real reader returns the config-056 seed value and an operator value."""
+    from app.handlers.servicer import AnalysisServicer
+
+    value = _seeded_cycle_days() if stored == "seeded" else stored
+    svc = AnalysisServicer(
+        snapshot_watcher(**{"opportunity.live_only_cycle_max_days": value}),
+        marketdata_channel=MagicMock(),
+        indicators_channel=MagicMock(),
+        ingest_channel=MagicMock(),
+        ledger_channel=MagicMock(),
+    )
+    try:
+        assert svc._live_only_cycle_days() == value
     finally:
         svc._compute.shutdown(wait=False)
 

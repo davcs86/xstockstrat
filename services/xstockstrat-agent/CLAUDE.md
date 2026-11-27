@@ -20,8 +20,9 @@ In HTTP mode it also runs a second listener: the internal tool-catalog gRPC serv
 The agent is a platform edge: `CallerPropagationMiddleware` forwards the `x-user-id` /
 `x-access-scope` / `x-trace-id` trio on every backend gRPC from verified claims (constitution
 **AGENT-4**). Identity travels only in `x-user-id`; set a body `user_id` only when it is a target/scope
-selector (e.g. `ListOrders` filter, config per-user scope, `emit_alert` target, `IssueAuthCode`
-subject), never to name the caller. Backend role checks *verify* admin from the forwarded
+selector (e.g. config per-user scope, `emit_alert` target, `IssueAuthCode`
+subject), never to name the caller. Trading ignores the body `user_id` on `ListOrders`; the owner
+is `x-user-id`. Backend role checks *verify* admin from the forwarded
 `x-access-scope`. The strategy tools (`manage_strategy`/`set_strategy_live`) are the exception since feature
 133 — they are **ownership**-gated on the forwarded `x-user-id`, not admin-gated. See §
 Management-tool authorization.
@@ -32,7 +33,7 @@ The agent registers forty-five tools plus one MCP prompt (`list_correlation_guid
 server `instructions` string (`create_server`, `app/main.py`); the full per-tool parameter/return/error
 reference is `docs/runbooks/mcp-tools.md`.
 
-- `get_backfill_status` returns per-symbol `symbol_results` (`{symbol, outcome, reason}`, always present) for symbols that wrote nothing: `empty`, `skipped` (flagged delisted and unservable — not a failure, not in `failed_symbols`) or `failed` (feature 352).
+- `get_backfill_status` returns per-symbol `symbol_results` (`{symbol, outcome, reason}`, always present) for symbols that wrote nothing: `empty`, `skipped` (flagged delisted and unservable — not a failure, not in `failed_symbols`) or `failed` (feature 352), or `incomplete` (feature 364: a GAPS_ONLY bars job verified that sessions in the range are still missing — `reason` lists `missing sessions YYYY-MM-DD..YYYY-MM-DD[; …]`, the symbol is not in `failed_symbols`, and the job ends PARTIAL).
 
 ### Management-tool authorization
 
@@ -101,7 +102,8 @@ indicators backend enforces an **author-ownership** check instead (no admin over
 It is not a hardcoded-admin forwarder and was left unchanged by feature 092.
 
 `manage_signal_source`/`instantiate_template` write a source bearer as the caller's own per-user secret
-under an opaque `ingest.mcp_credential.<uuid>` key.
+under an opaque `ingest.mcp_credential.<uuid>` key. A failed register leaves the secret unreferenced;
+the operator orphan sweep (`docs/runbooks/config-rollout.md`) reclaims it.
 
 ### OAuth 2.1 edge auth (feature 049 Part B)
 
@@ -119,14 +121,18 @@ deadline is derived per call by `client.formula_deadline_s()`: `sandbox.timeout_
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403) |
+| `oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403; policy snapshot absent ⇒ 503) |
 | `oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only |
 | `signal.alert_threshold` | float | `0.6` | Conviction threshold above which `ingest_signal` auto-emits an alert (feature 093 — was env-blind, so effectively always the default; now env-scoped, best-effort) |
 | `extract.max_redirects` | int | `5` | Max redirect hops the `extract_*` fetch path follows; each hop's scheme + resolved address is re-validated (SSRF hardening, feature 207) |
 | `extract.max_bytes` | int | `5000000` | Max response body bytes read before the `extract_*` fetch aborts (feature 207) |
 | `extract.connect_timeout_seconds` | float | `10.0` | Connect timeout for the `extract_*` fetch (feature 207) |
 | `extract.read_timeout_seconds` | float | `30.0` | Read timeout for the `extract_*` fetch (feature 207) |
-| `opportunities.read_timeout_seconds` | float (int accepted) | `40` | gRPC deadline (s) on analysis `ListOpportunities` (feature 227); invalid/≤0 → `40`; bounded `[30,55]`; seeded by config migration `041` |
+| `extract.call_budget_seconds` | float | `35` | Whole-call budget (s) for the `extract_*` URL fetches, entered after `_get_source` and the attachments (feature 314); non-finite/≤0 → `35`; SetConfig-bounded `[5,35]` (auth 10 + source lookup 10 + budget ≤ 55 s); seeded by the `*_mcp_deadline_budget` config migration |
+| `opportunities.read_timeout_seconds` | float (int accepted) | `40` | gRPC deadline (s) on analysis `ListOpportunities` (feature 227); invalid/≤0 → `40`; SetConfig-bounded `[30,44]` so auth 10 + policy read 3 + value ≤ 57 s (feature 314); seeded by config migration `041` |
+
+Per-user rows of `opportunities.read_timeout_seconds` are never read (the agent watches global config only), so
+the `*_mcp_deadline_budget` clamp leaves them as stored; a future per-user watch must re-run that clamp first.
 
 ## Observability (feature 294-signal-map-instrumentation)
 

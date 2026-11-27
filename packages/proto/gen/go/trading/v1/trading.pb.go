@@ -1061,12 +1061,13 @@ func (x *ConfirmOrderRequest) GetFees() float64 {
 }
 
 type ListOrdersRequest struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	UserId     string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	StrategyId string                 `protobuf:"bytes,2,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
-	Status     OrderStatus            `protobuf:"varint,3,opt,name=status,proto3,enum=xstockstrat.trading.v1.OrderStatus" json:"status,omitempty"`
-	Range      *v1.TimeRange          `protobuf:"bytes,4,opt,name=range,proto3" json:"range,omitempty"`
-	Page       *v1.PageRequest        `protobuf:"bytes,5,opt,name=page,proto3" json:"page,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Deprecated: Marked as deprecated in trading/v1/trading.proto.
+	UserId     string          `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+	StrategyId string          `protobuf:"bytes,2,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
+	Status     OrderStatus     `protobuf:"varint,3,opt,name=status,proto3,enum=xstockstrat.trading.v1.OrderStatus" json:"status,omitempty"`
+	Range      *v1.TimeRange   `protobuf:"bytes,4,opt,name=range,proto3" json:"range,omitempty"`
+	Page       *v1.PageRequest `protobuf:"bytes,5,opt,name=page,proto3" json:"page,omitempty"`
 	// Filter by trading mode; UNSPECIFIED returns orders for all modes.
 	TradingMode v1.TradingMode `protobuf:"varint,6,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
 	// Additive filters: an UNSPECIFIED enum value or empty string means
@@ -1109,6 +1110,7 @@ func (*ListOrdersRequest) Descriptor() ([]byte, []int) {
 	return file_trading_v1_trading_proto_rawDescGZIP(), []int{6}
 }
 
+// Deprecated: Marked as deprecated in trading/v1/trading.proto.
 func (x *ListOrdersRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -1232,9 +1234,10 @@ func (x *ListOrdersResponse) GetPage() *v1.PageResponse {
 }
 
 type StreamOrderUpdatesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	StatusFilter  []OrderStatus          `protobuf:"varint,2,rep,packed,name=status_filter,json=statusFilter,proto3,enum=xstockstrat.trading.v1.OrderStatus" json:"status_filter,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Deprecated: Marked as deprecated in trading/v1/trading.proto.
+	UserId        string        `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: ignored; the owner is resolved from the x-user-id header.
+	StatusFilter  []OrderStatus `protobuf:"varint,2,rep,packed,name=status_filter,json=statusFilter,proto3,enum=xstockstrat.trading.v1.OrderStatus" json:"status_filter,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1269,6 +1272,7 @@ func (*StreamOrderUpdatesRequest) Descriptor() ([]byte, []int) {
 	return file_trading_v1_trading_proto_rawDescGZIP(), []int{8}
 }
 
+// Deprecated: Marked as deprecated in trading/v1/trading.proto.
 func (x *StreamOrderUpdatesRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -1524,9 +1528,9 @@ type RegisterBrokerAccountRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	DisplayName string                 `protobuf:"bytes,1,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	BrokerType  v1.BrokerType          `protobuf:"varint,2,opt,name=broker_type,json=brokerType,proto3,enum=xstockstrat.common.v1.BrokerType" json:"broker_type,omitempty"`
-	// Deprecated: paper/live is owned by the deployment environment
-	// (trading.broker.paper config key / TRADING_MODE env). The server derives
-	// is_paper from the environment and ignores this field.
+	// Deprecated: paper/live is owned by the deployment environment: the trading.broker.paper
+	// config key, seeded per environment, with APPLICATION_ENV as the fallback when the row is
+	// absent. The server derives is_paper from it and ignores this field.
 	//
 	// Deprecated: Marked as deprecated in trading/v1/trading.proto.
 	IsPaper bool `protobuf:"varint,3,opt,name=is_paper,json=isPaper,proto3" json:"is_paper,omitempty"`
@@ -2431,9 +2435,9 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\tfilled_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bfilledAt\x12\x1b\n" +
 	"\auser_id\x18\x05 \x01(\tB\x02\x18\x01R\x06userId\x12\x17\n" +
 	"\x04fees\x18\x06 \x01(\x01H\x00R\x04fees\x88\x01\x01B\a\n" +
-	"\x05_fees\"\xf1\x03\n" +
-	"\x11ListOrdersRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1f\n" +
+	"\x05_fees\"\xf5\x03\n" +
+	"\x11ListOrdersRequest\x12\x1b\n" +
+	"\auser_id\x18\x01 \x01(\tB\x02\x18\x01R\x06userId\x12\x1f\n" +
 	"\vstrategy_id\x18\x02 \x01(\tR\n" +
 	"strategyId\x12;\n" +
 	"\x06status\x18\x03 \x01(\x0e2#.xstockstrat.trading.v1.OrderStatusR\x06status\x126\n" +
@@ -2449,9 +2453,9 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	" \x01(\tR\taccountId\"\x84\x01\n" +
 	"\x12ListOrdersResponse\x125\n" +
 	"\x06orders\x18\x01 \x03(\v2\x1d.xstockstrat.trading.v1.OrderR\x06orders\x127\n" +
-	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"~\n" +
-	"\x19StreamOrderUpdatesRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12H\n" +
+	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\x82\x01\n" +
+	"\x19StreamOrderUpdatesRequest\x12\x1b\n" +
+	"\auser_id\x18\x01 \x01(\tB\x02\x18\x01R\x06userId\x12H\n" +
 	"\rstatus_filter\x18\x02 \x03(\x0e2#.xstockstrat.trading.v1.OrderStatusR\fstatusFilter\"\x95\x02\n" +
 	"\x13ReplaceOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x10\n" +

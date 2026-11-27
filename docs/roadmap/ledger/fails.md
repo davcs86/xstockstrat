@@ -3973,6 +3973,16 @@ ambiguity is logged here).
 - **Evidence**: `git show adf411c3:docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md` (lines 14, 16-17, 80-81); `git show adf411c3:docs/reports/2026-10-19-config-claude-md-drift-defect.md` (13, 35); `git show adf411c3:docs/reports/2026-10-19-identity-claude-md-drift-defect.md` (15, 47); fix commit adf411c3 (#1504).
 - **Rule it implies**: A PR that adds/removes an RPC, outbound dependency or payload field, or fixes a defect listed in a service CLAUDE.md banner, updates that CLAUDE.md (banner, method list, dependency table, diagrams) in the same PR; never copy service-type boilerplate into a service of a different shape. Extends `fails.md:306-309` from agent tool docs to every service CLAUDE.md (related `fails.md:1511`); candidate binding extension of C-10.
 
+### 2026-11-20 — fix-notify-stream-contract — assumption
+- **Mistake**: The design debate settled "evict a stalled server-stream subscriber with `call.destroy(err)`" for two rounds on the assumption that it resets the HTTP/2 stream. On `@grpc/grpc-js` 1.14.7 the server call has no `_destroy`, so `destroy()` sends no trailers and no RST: the recovered client hangs with no status and the queued messages are dropped. Bare `call.end()` flushes but reports `grpc-status: 0`. Only `call.emit('error', { code, details })` delivers the queue and then the status, and one `write()` after it kills the status, so the subscriber must leave the fan-out map first.
+- **Evidence**: `docs/roadmap/features/316-fix-notify-stream-contract/context.md:602-644` (spike table and verdict); `docs/roadmap/features/316-fix-notify-stream-contract/debate.md` (D-2, D-6 reopened; D-15, R-10, R-11).
+- **Rule it implies**: Before a design names a grpc-js teardown call for a server stream, spike it on the installed version against a flow-controlled (zero-window) client and record what reaches the wire; a library call's name is not evidence of its wire behaviour (F-04).
+
+### 2026-11-20 — fix-alert-event-targeting — assumption
+- **Mistake**: A design packet framed owner-targeting a per-account halt alert as "admins lose only Web Push". It took two rounds to notice that admins are the only role that can resume a halt and that the untargeted alert's title was their only in-product source of another user's halted account_id, so narrowing the audience removed the remediator's sole signal.
+- **Evidence**: `docs/roadmap/features/315-fix-alert-event-targeting/debate.md` R-7, O-5 (round 3); `services/xstockstrat-trading/internal/service/trading.go:3181` (`RequireAdminScope`), `internal/repository/account_repo.go:90`.
+- **Rule it implies**: Before narrowing an alert's audience, list who can act on it and how each of them learns the affected id today; if the alert is their only source, pair the change with a replacement signal and state the loss in the C-16 CHANGE row.
+
 ### 2026-11-10 — ui-env-themed-bundles — assumption
 - **Mistake**: Recon stated "dev and prod build distinct SHAs because `main` gets merge commits", and three design rounds were built on that claim. It was false for `main-dev`: the post-promotion sync (`sync-main-to-maindev.yml:52`) ran `git merge origin/main` without `--no-ff`, fast-forwarding main-dev onto main's merge commit. Both deploys would then build the same `<sha>` image tag with different contents (here, opposite UI themes). Turning on `--no-ff` then broke two more assumptions:
   - the commit-count "nothing to promote" gate (`promote.yml:42`);
@@ -4233,6 +4243,11 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/360-fix-mcp-tools-page/debate.md` O-3/D-11 and O-15/D-15; `services/xstockstrat-ui/src/app/accounts/api/mcp-tools/route.ts` (bare `catch` → `reachable: false`); precedent done right: `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts` (`missingCa` shared by the positive and mutation tests).
 - **Rule it implies**: When the code under test swallows errors, prove "no call" by asserting on the mock's call count, never by making the mock throw; a mutation self-check must call the same predicate as the positive test and assert the unmutated baseline first (reinforces the 2026-07-29 vacuous-gate rule; no new ID).
 
+### 2026-11-26 — fix-analysis-per-symbol-isolation — assumption
+- **Mistake**: The spec planned a contract reversal (a `FormulaExecutionError` no longer propagates out of `_compute_opportunities`), but its Step Dependencies listed only one of the two tests that pin the old contract. The second test, `test_formula_execution_error_still_propagates`, lived in a file outside the unit's **Files**, so Step 11 could not go green and blocked until the operator widened the scope. This is the same gap as the 2026-11-18 seed-curated-templates entry, where a seed migration broke earlier assertions nobody had listed. Design and spec both enumerated pinning tests by recall instead of by search.
+- **Evidence**: `docs/roadmap/features/308-fix-analysis-per-symbol-isolation/implementation-spec.md` Deviation Log "Steps 11+12"; `services/xstockstrat-analysis/tests/test_analysis_servicer.py:5637` at `4b52469c`; fails.md "2026-11-18 — seed-curated-templates — migration".
+- **Rule it implies**: When a step reverses a behavior, `/sdd-spec` must find every test that pins it with a repo-wide grep for the old outcome (for example `pytest.raises(<Error>)` near the changed entry point), not only the tests the debate cited, and list them all in the unit's **Files**. Candidate binding rule: extend step-constraints §C row 1.
+
 ### 2026-11-24 — authelia-sso — assumption
 - **Mistake**: The round-10 design bound a new account action to "the session the handler sees", assuming the UI middleware's
   token refresh makes the refreshed session visible to the route on the same request. It does not: the middleware sets the
@@ -4242,3 +4257,13 @@ ambiguity is logged here).
 - **Evidence**: `services/xstockstrat-ui/src/middleware.ts:56-69` (refresh branch), `:86-111`; `docs/roadmap/features/345-authelia-sso/debate.md` O-85, R-23, D-107.
 - **Rule it implies**: A UI step that needs the signed-in user after any idle gap reads it through a session-gated JSON route
   called with `apiFetch` (401 → refresh → retry once), never from a server component or a middleware-exempt route's cookies.
+
+### 2026-11-13 — fix-vendor-key-in-url — assumption
+- **Mistake**: The round-1 design said `CheckRedirect` would close the redirect `Location`-parse leak of a query-string key. It cannot: Go's `net/http` `Client.do` parses `Location` before it calls `checkRedirect`, so the parse error, which quotes the key-bearing `Location`, is returned anyway. The same design also missed that a custom auth header (such as `apikey` or `X-Finnhub-Token`) is forwarded on a cross-host redirect, because Go strips only `Authorization`, `WWW-Authenticate`, `Cookie` and `Cookie2`.
+- **Evidence**: `docs/roadmap/features/320-fix-vendor-key-in-url/debate.md` O-7 (round 2, blocking), D-4, D-5 and R-5; `services/xstockstrat-marketdata/internal/fmp/fmp_client.go:289-295`.
+- **Rule it implies**: Take the key out of the URL; never rely on `CheckRedirect` to protect it. When a secret moves to a custom header, land `CheckRedirect` (`http.ErrUseLastResponse`) in the same step, with a cross-host redirect test written RED first.
+
+### 2026-11-20 — fix-agent-mcp-transport-fallthrough — assumption
+- **Mistake**: A design round accepted a subprocess regression test whose stderr assertion matched a token the buggy code already prints: the old fall-back warning and the new fail-closed error both render `MCP_TRANSPORT='htp'`, and `logging.basicConfig` sends the warning to stderr. The claimed RED then rested only on the old path not exiting within the timeout. Caught by the adversary in round 2, before any code.
+- **Evidence**: `docs/roadmap/features/331-fix-agent-mcp-transport-fallthrough/debate.md` O-4/R-6; `services/xstockstrat-agent/app/main.py:44,64`.
+- **Rule it implies**: When a fix replaces a warning with an error about the same input, the RED assertion must match text only the fixed code emits and assert the old message is absent; an echoed input value is never the discriminator (same family as the 2026-11-19 guard-tests-that-cannot-fail entry; no new ID).
