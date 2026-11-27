@@ -918,7 +918,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_extraction_instruction
 
 ### Step 9 — docs: enumeration and read-back per environment (operator-run)
 
-**Status**: `pending`
+**Status**: `skipped`
 **Service**: `xstockstrat-config` (live databases; results recorded in `context.md`)
 **Files**:
 - `docs/roadmap/features/314-fix-mcp-deadline-budget/context.md` — modify (results only)
@@ -1052,3 +1052,15 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Disposition**: the block was run verbatim and judged from `.sdd-logs/v-1.log` (`exit=0`; the
   `[30,55]` grep printed nothing; `45 passed`). `--doc-check` was also run alone (`.sdd-logs/v-2.log`, `exit=0`,
   no output). No spec edit.
+
+### Step 9 — deferred to the operator after the integration PR deploys (2026-11-27)
+- **Spec said**: Step 9 runs the pre-deploy enumeration on the staging and production databases, the
+  post-rollout query, the `get_config` / `list_config_keys` read-back and a dev smoke test, and records the
+  readings in context.md.
+- **Actual**: the executing agent has no read path to either database and the feature is not deployed, so none
+  of the readings could be taken. The step was raised as a blocker.
+- **Disposition**: operator decision B (2026-11-27): Step 9 is `skipped` here and is operator-run after the
+  integration PR deploys. The four outstanding checks are a context.md Open Thread, and the sign-off stays
+  "unenumerated" until the operator runs them. Production readings are waived (standing ruling: production is
+  out of scope). The Verification block was still run; `check-config-wiring --final` exited 0. Step 9 does not
+  block `code-completed` (§ Step Dependencies). No spec edit.

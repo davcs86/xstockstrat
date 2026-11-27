@@ -1097,3 +1097,48 @@ the first body line of the re-spec commit below.
   `services/xstockstrat-config/docs/context-constitution-findings.md`,
   `services/xstockstrat-portfolio/docs/context-constitution-findings.md`
 - Deviations: the placement of the `httpx` row, the partial config row, and the node PATH (Deviation Log).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute, step 9)
+
+- Operator decision (2026-11-27, blocker on Step 9): **B**. Step 9 is deferred: it is operator-run after the
+  integration PR deploys. This agent has no read path to the databases, and the feature is not deployed yet.
+  Production readings are waived (standing ruling: production is out of scope).
+- Tooling: node ✓ v24 (`/opt/node24`; the default PATH node is v22). Pre-commit hook check: hook=0.
+- Config-key wiring gate `node scripts/check-config-wiring.mjs --final` (F-09), `.sdd-logs/v-1.log`, `exit=0`.
+  It printed only the two pre-existing `REPORTED:` lines:
+  `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree`
+  and `services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`.
+- Status: `in-progress` → `code-completed`. Steps 1–8 are done and Step 9 is skipped; Step 9 does not block
+  `code-completed` (implementation-spec.md § Step Dependencies).
+
+### Step 9 — docs: enumeration and read-back per environment (operator-run) [skipped]
+- Not run here. Operator decision B moves it to the operator after the integration PR deploys. The enumeration
+  sign-off stays **"unenumerated"**; the outstanding checks are in the Open Threads below.
+- TDD: N/A (docs, operator-run).
+- Files modified: `docs/roadmap/features/314-fix-mcp-deadline-budget/context.md`
+- Deviations: Step 9 deferred to the operator (Deviation Log).
+
+### Open Threads
+
+- **Operator-run Step 9 (outstanding; sign-off "unenumerated" until done).** Run through
+  `docs/runbooks/operator-db-access.md` and the queries in implementation-spec.md Step 9, then record the
+  readings here:
+  1. Pre-deploy enumeration on **staging**: global `agent` / `opportunities.read_timeout_seconds` rows above 44,
+     global rows with `matches_numeric = false` (fix by `SetConfig` before deploy), per-user rows above 44
+     (reported only), and inverted cross-hop pairs (fix by ordered `SetConfig` once the new config image is live,
+     never SQL).
+  2. Post-rollout query, after the dev app runs the new config image: every global row matches the regex and is
+     ≤ 44. Lower any 45–55 row written through the old image with `SetConfig`.
+  3. Read-back on the agent MCP: `get_config(namespace="agent")` lists `extract.call_budget_seconds` = `35.0`
+     (float) and `opportunities.read_timeout_seconds` ≤ 44; `list_config_keys(namespace="agent")` shows the new
+     key once.
+  4. Dev smoke test: `list_opportunities` and one `extract_website_content` both answer. Record any latency that
+     suggests an unmodelled term in the 57 s worst case (spec decision 9; the fallback to 43 is an operator call).
+- **Production readings: WAIVED** (standing ruling: production is out of scope).
+
+## Session 2026-11-27 — sdd-execute
+
+**Steps this session**: [9]
+**Progress**: 8 done, 1 skipped / 9 total
+**Stopped at**: all complete (Step 9 skipped by operator decision B)
+**Next**: integration PR → `main-dev`

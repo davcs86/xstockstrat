@@ -18,6 +18,7 @@
 | 2026-11-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); steps 3,1,2,5,7,8 re-spec'd (migration renumbered 056 → 057) |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | Steps 1–8 done; Step 9 skipped (operator decision B: operator-run after deploy, sign-off "unenumerated"); `check-config-wiring --final` exit 0 |
 
 ---
 
