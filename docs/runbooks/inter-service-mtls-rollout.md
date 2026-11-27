@@ -97,8 +97,14 @@ emitting on existing open-order fills. Therefore, before cutting over the tradin
 
 1. Set `platform.trading_state=HALTED` via config (`SetConfig`, propagates over `WatchConfig`).
 2. **Verify a flat book** — zero open/working orders across all accounts (so `pollFills` has nothing
-   to emit during the wave). Confirm via the trader surface or `ListOrders` filtered to
-   open/working states; wait for or cancel any working order.
+   to emit during the wave). Confirm with this read-only query against the `trading` schema, run
+   through [`operator-db-access.md`](operator-db-access.md); the expected result is `0`:
+
+   ```sql
+   SELECT count(*) FROM trading.orders WHERE status IN ('new', 'partially_filled') AND broker_order_id IS NOT NULL AND broker_order_id != '';
+   ```
+
+   On a non-zero count, wait for or cancel any working order, then re-run the query.
 3. Deploy `trading` and `ledger` adjacently.
 4. Lift `HALTED` only after both are healthy on the new mTLS version.
 

@@ -707,3 +707,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-trading/CLAUDE.md`, `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-notify/docs/context-constitution.md`, `services/xstockstrat-portfolio/CLAUDE.md`, `packages/proto/docs/context-constitution.md`, `docs/context-constitution.md`
 - Deviations: none
+
+### Step 18 — docs: mTLS rollout runbook flat-book check [done]
+- In §1.1 step 2, the "trader surface or `ListOrders`" check is replaced by a read-only `SELECT count(*) FROM trading.orders …` that copies the `ListSubmittedOrders` predicate (`trading_repo.go:310-312`) verbatim, with an expected result of `0`. It runs through a relative link to `operator-db-access.md`, and the access recipe is not repeated. "Wait for or cancel any working order" is kept, followed by a re-run of the query (D-18, O-9). This lands in the same PR as Step 3.
+- TDD: N/A (docs). Baseline: the step Verification on the pre-edit tree gave exit=1 (`.sdd-logs/v-1.log`, empty) because the predicate grep had no match. After the edit the same Verification gave exit=0 (`.sdd-logs/v-2.log`) with `104:` … `status IN ('new', 'partially_filled')` … and `101:` … `operator-db-access.md` …, and no `trader surface` match.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `docs/runbooks/inter-service-mtls-rollout.md`
+- Deviations: none

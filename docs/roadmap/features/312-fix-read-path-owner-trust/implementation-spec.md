@@ -1137,7 +1137,7 @@ cd services/xstockstrat-analysis \
 
 ### Step 18 — docs: mTLS rollout runbook flat-book check
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/inter-service-mtls-rollout.md` — modify
