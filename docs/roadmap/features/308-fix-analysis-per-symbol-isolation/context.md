@@ -783,3 +783,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ### Open Threads
 - [ ] The 2026-11-26 thread "the `sdd-batch-setup` approval record is stale; `/sdd-execute` must re-confirm before Step 15" was not re-confirmed inside this agent. The workflow launched Step 15 directly, so the orchestrator's approvals are taken as the re-confirmation.
 - [ ] Host e2e in a worktree needs a raised `--timeout` (cold `pnpm dev` compile), and `tsc` needs the branch's own proto dist when the main checkout's `packages/proto/gen/ts` is stale. Steps 16-22 will hit both.
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 16
+
+- Tooling: pnpm 9.15.9 ✓ · node v22.23.5 on PATH · chromium ✓ (`/opt/pw-browsers`) · hook check hook=0. The Docker e2e runner was not retried; Step 15 found it broken (`corepack prepare` fetch error).
+
+### Step 16 — test: Playwright assertion for a non-held `evaluation_failed` row [done]
+- `e2e/fixtures/opportunities.ts` gains `MYSZ_EVALUATION_FAILED_OPPORTUNITY`: the non-held unreadable row with `formulaUnreadable: false` and provenance `['watchlist', EVALUATION_FAILED_PROVENANCE]`. It is not in `OPPORTUNITIES`, and `INVENTORY.md` has a catalog row for it.
+- `e2e/insights/opportunities.spec.ts` has a new describe, `Opportunities — evaluation failed (feature 308)`, served through `routeWithUnreadableRow`. It asserts that `opportunity-evaluation-failed-MYSZ` is visible and contains `evaluation failed`, and that `snooze-MYSZ`, `opportunity-unavailable-MYSZ` and `opportunity-formula-unreadable-MYSZ` each have count 0. No `mock-backend.ts` edit.
+- **Import check failed, so the named fallback was taken (P-03, report at checkpoint).** Importing from `src/lib/readinessCue.ts` made the whole-suite `playwright test --list` exit 1 with `ReferenceError: exports is not defined in ES module scope` (`@phosphor-icons/react` under Playwright's CJS transform). The fixture module now holds a non-exported second TS copy of the token, and a comment says to keep the two equal. Steps 18, 20 and 22 reuse the fixture, so they inherit this.
+- TDD:
+  - RED (`.sdd-logs/v-1.log`, `page.tsx` checked out at the pre-Step-15 commit `58442bc5` and restored before GREEN): `getByTestId('opportunity-evaluation-failed-MYSZ')`, `element(s) not found`, with the `MYSZ` card rendered, `1 failed`.
+  - GREEN (`.sdd-logs/v-5.log`): `46 passed (3.6m)`.
+- Verification:
+  - The verbatim block (`.sdd-logs/v-2.log`) printed exit=0, but that status comes from the last grep.
+    - Lint passed, with warnings in untouched files only.
+    - `--list` printed `Total: 709 tests in 83 files`.
+    - vitest: `Tests  748 passed | 2 skipped (750)`, `Statements   : 81.13%`.
+    - Both greps hit.
+  - tsc failed on `BackfillSymbolOutcome.INCOMPLETE` (the stale linked proto dist). Against this branch's dist it exited 0 (`.sdd-logs/v-3.log`).
+  - The warmup timed out at 10 s. A re-run with `--timeout=240000` (`.sdd-logs/v-4.log`) gave `1 failed, 45 passed`. The failure was the untouched 5 s `mobile-ohlc-CAPR` assertion. An identical re-run gave `46 passed (3.6m)`, exit=0 (`.sdd-logs/v-5.log`).
+- Config-wiring gate: not applicable (no config key, no migration).
+- Files modified: `services/xstockstrat-ui/e2e/fixtures/opportunities.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`, `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts`
+- Deviations: the fixture-local token copy, plus the Step 15 `tsc` and e2e-timeout fallbacks (Deviation Log "Step 16").
+
+### Open Threads
+- [ ] The token `'evaluation_failed'` now has two TS copies: `src/lib/readinessCue.ts` and `e2e/fixtures/opportunities.ts`. A Playwright-loadable home for it (a module with no icon import) would remove the copy. That is a `src/lib` change outside this step's scope; operator to decide.
+- [ ] `feature 188: mobile card shows previous-day OHLC block` (`opportunities.spec.ts:592`) failed once on the host dev server (hard-coded 5 s wait) and passed on re-run. Possible flake; it is untouched by this feature.

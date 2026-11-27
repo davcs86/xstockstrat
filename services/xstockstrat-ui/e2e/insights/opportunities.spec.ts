@@ -5,6 +5,7 @@ import {
   SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY,
   MYSZ_FORMULA_UNREADABLE_OPPORTUNITY,
   MYSZ_FORMULA_UNREADABLE_HELD_OPPORTUNITY,
+  MYSZ_EVALUATION_FAILED_OPPORTUNITY,
 } from '../fixtures/opportunities';
 
 /**
@@ -780,6 +781,21 @@ test.describe('Opportunities — formula not readable (feature 289)', () => {
     await expect(card(page).getByRole('img', { name: 'formula not readable' })).toHaveCount(2);
     await expect(page.getByTestId('opportunity-formula-unreadable-MYSZ')).toBeVisible();
     await expect(page.getByTestId('opportunity-unavailable-MYSZ')).toHaveCount(0);
+  });
+});
+
+test.describe('Opportunities — evaluation failed (feature 308)', () => {
+  test('a non-held evaluation_failed row shows its cue and no act controls', async ({ page }) => {
+    await addAuthCookie(page);
+    await routeWithUnreadableRow(page, MYSZ_EVALUATION_FAILED_OPPORTUNITY);
+    await page.goto('/insights/opportunities');
+
+    const cue = page.getByTestId('opportunity-evaluation-failed-MYSZ');
+    await expect(cue).toBeVisible({ timeout: 15000 });
+    await expect(cue).toContainText('evaluation failed');
+    await expect(page.getByTestId('snooze-MYSZ')).toHaveCount(0);
+    await expect(page.getByTestId('opportunity-unavailable-MYSZ')).toHaveCount(0);
+    await expect(page.getByTestId('opportunity-formula-unreadable-MYSZ')).toHaveCount(0);
   });
 });
 

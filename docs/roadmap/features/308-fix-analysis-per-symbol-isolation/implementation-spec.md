@@ -944,7 +944,7 @@ grep -rn "'evaluation_failed'" src | grep -v "src/lib/readinessCue.ts"   # expec
 
 ### Step 16 — test: Playwright assertion for a non-held `evaluation_failed` row
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/opportunities.ts` — modify
@@ -1617,3 +1617,34 @@ _Populated by /sdd-execute as implementation proceeds._
       in the base stage). A host re-run with only `--timeout=240000` added gave `45 passed (2.9m)`.
 - **Disposition**: CI-equivalent fallback. No file outside Step 15's **Files** is committed. Step 16
   still adds the permanent Playwright test and its own RED as specced.
+
+### Step 16: the `readinessCue` import fails under Playwright, so the fixture holds the token (2026-11-27)
+
+- **Expected**: Instruction 1 imports `EVALUATION_FAILED_PROVENANCE` from `src/lib/readinessCue.ts` into
+  `e2e/fixtures/opportunities.ts`, and `playwright test --list` plus the spec run both succeed. The
+  Verification block (`lint`, `tsc --noEmit`, `--list`, the spec, `test:coverage`, two greps) passes
+  as written.
+- **Actual**:
+  - The import failed. With it in place, the whole-suite `pnpm exec playwright test --list` exited 1,
+    printing `Total: 0 tests in 0 files` and, for each spec, `ReferenceError: exports is not defined
+    in ES module scope` at `../src/lib/readinessCue.ts:6`. The cause: Playwright's CJS transform loads
+    `@phosphor-icons/react@2.1.10/dist/index.cjs.js` inside a `"type": "module"` package. Following
+    the instruction's named fallback, the import was removed and the fixture module declares a
+    non-exported `const EVALUATION_FAILED_PROVENANCE = 'evaluation_failed'`. That is a second TS copy
+    of the wire token, and a comment says to keep the two equal. The catalog row records this too.
+  - RED, with `page.tsx` checked out at the pre-Step-15 commit `58442bc5` and restored before GREEN:
+    `getByTestId('opportunity-evaluation-failed-MYSZ')` `element(s) not found`, with the `MYSZ` card
+    rendered (`1 failed`).
+  - The verbatim block exited 0, but that status comes from its last grep. Lint, `--list`
+    (`Total: 709 tests in 83 files`), vitest and both greps passed. The other two failures were
+    environmental, the same as in Step 15:
+    - `tsc` reported `BackfillSymbolOutcome.INCOMPLETE` errors in two files this step does not touch,
+      because the linked proto package is the main checkout's stale dist. A re-run against this
+      branch's dist, through a `tsconfig` `paths` override under `.sdd-logs/`, exited 0.
+    - The Playwright warmup hit its 10 s timeout. A re-run with only `--timeout=240000` added gave
+      `1 failed, 45 passed`. The failure was the untouched `feature 188: mobile card shows
+      previous-day OHLC block`, which waits a hard-coded 5 s for `mobile-ohlc-CAPR`. A second identical
+      re-run gave `46 passed (3.6m)`.
+- **Disposition**: the named fallback (a second TS copy of the token), reported at the checkpoint
+  (P-03), plus a CI-equivalent fallback for `tsc` and the e2e timeout. No file outside Step 16's
+  **Files** is committed.
