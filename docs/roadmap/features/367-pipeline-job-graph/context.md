@@ -361,3 +361,20 @@ Carried from design.md § Open Risks; each needs an owner at `/sdd-spec` or late
   note is updated. If 367 merges first, 345 moves above `061` and `060` stays a gap.
 - The scan's `host.provider` seam with feature 337 is moot: `_with_host_provider` is already on
   `main-dev` for analysis (`app/telemetry.py:49`).
+
+## Session 2026-11-27 — sdd-review impl-spec (advisory, round 3: criteria)
+
+- Result: 0 failures, 6 warnings, 8 notes. All round-2 fixes verified present; all 18 `@AC-*`
+  traced; no Floor breach. All 14 items applied to implementation-spec.md:
+  - [x] W1 Step 14 lacked evidence for `make_handler` and a test of the 30 s block budget; the
+    self-stop test now builds its own registry with an injected clock.
+  - [x] W2 `on_change` / `start_listening()` were untested and Step 11's rationale was wrong
+    (`snapshot_watcher` does support `on_change`, `app/config/watch_core.py:92-97`); tests added
+    in Steps 3 and 12.
+  - [x] W3 Step 16 never called `register_pipeline_gauges()` before reading the gauges.
+  - [x] W4, W5 two verification greps could not fail; both now exit non-zero on a match.
+  - [x] W6 Step 8 gates Step 9 onward and Step 12 gates Step 13 onward (design.md § Build order).
+  - [x] N1 Deviation Log seeded with the `061` ruling. N2 S-10 lists the remaining seams.
+    N3 Step 15 no longer requires Step 13. N4 the stats step uses the real monotonic clock.
+    N5 the handler gate is an `asyncio.Lock`. N6 `_create_pool` is async; `serve()` pool
+    defaults stated. N7 `prune_batch` tests run inside a transaction. N8 two more greps gate.
