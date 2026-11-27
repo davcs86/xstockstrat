@@ -304,7 +304,7 @@ ruff check . && ruff format --check .
 
 ### Step 6 — service: degenerate-only side gate in `_map_directions`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
@@ -342,7 +342,7 @@ ruff check . && ruff format --check .
 
 ### Step 7 — test: direction gate, calibration and the built-in score range
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify

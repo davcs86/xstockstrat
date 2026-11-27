@@ -684,3 +684,25 @@ Tooling setup (step 5): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.
 - Pre-existing flake, not touched: `tests/test_sandbox_watchdog.py::test_ac8_fork_bomb_is_not_a_success_the_service_recovers_and_nothing_is_unobservable` failed once in the baseline full run (`sandbox memory watchdog cannot observe child` logged) and went pass/fail/pass in three isolated re-runs; it passed in the GREEN run. Candidate for `/sdd-qa defect`.
 - Files modified: `services/xstockstrat-indicators/tests/test_fundamentals_formula.py`
 - Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (steps 6+7, atomic unit)
+
+Tooling setup (steps 6+7): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 6 — service: degenerate-only side gate in `_map_directions` [done]
+- Unit 6+7. Added `_NEUTRAL_SCORE = 0.5` and `_MIN_CROSS_SECTION = 5` after `_BUILTIN_BANDS`, with one comment line saying 5 is calibrated to the default 0.80 / 0.20 quantiles. `_map_directions` keeps `ordered` and both `_quantile` cuts, computes `degenerate = len(ordered) < _MIN_CROSS_SECTION or buy_cut <= sell_cut` over the folded set, and when degenerate requires `s > 0.5` for `buy` and `s < 0.5` for `sell` (otherwise `hold`). The non-degenerate three-way branch is unchanged, and the docstring names the rule. `_quantile` and the caller are untouched.
+- TDD: RED `.sdd-logs/v-1.log` `exit=1` — `9 failed, 89 passed` (AC-2 `assert 'buy' != 'buy'`; lone 0.05 / 0.5 / 0.49 returned `buy`; n=2..4 below-0.5 sets held a `buy`; `_MIN_CROSS_SECTION` AttributeError; lone 0.10 `{'AAPL': 'buy'} == {'AAPL': 'sell'}`). GREEN `.sdd-logs/v-2.log` `exit=0` — `98 passed`, both constants grep at `:62` / `:64`, ruff `All checks passed!`, `143 files already formatted`.
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`
+- Deviations: none
+
+### Step 7 — test: direction gate, calibration and the built-in score range [done]
+- Unit 6+7. AC-2 red: `signal.direction != "buy"` failed (`'buy'`) → green: passed. The lone-0.10 expectation in `test_map_directions_reference_scores_set_the_cuts` is now `sell`. New in `TestScoreDirection`:
+  - `test_ac2_lone_low_scoring_symbol_is_not_buy` (`@AC-2 @feature-309`): `_identity_loop`, an explicit one-symbol universe, and a `_fund` row with pe 40, roe 0, eps -1 and `pb_ratio`/`debt_to_equity` missing; `_db.fetch` returns `[]`; then a non-dry-run `run_once()`.
+  - `test_lone_score_follows_its_side` (5 cases).
+  - `test_small_cross_sections_take_the_degenerate_branch` (n=2..4).
+  - `test_min_cross_section_calibrated_to_default_quantiles`: for n=5..50 the `_map_directions` labels equal the `_quantile` labels, include a hold and have a buy share ≤ 0.40; the n=4 `_quantile` labels fail that property; the constant is 5.
+  - `test_builtin_score_stays_in_unit_range` (6 rows: full, partial, out-of-band and all-missing).
+- `test_quantile_buckets` and 260 `@AC-9` are untouched and pass.
+- GREEN `.sdd-logs/v-3.log` `exit=0` — `98 passed` in the file; full suite `1843 passed`, `Required test coverage of 40% reached. Total coverage: 91.91%`; ruff clean; the conftest grep prints `from tests.conftest import fundamentals_row, snapshot_watcher`.
+- Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`
+- Deviations: none

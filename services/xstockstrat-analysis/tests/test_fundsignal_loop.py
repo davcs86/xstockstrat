@@ -262,6 +262,72 @@ class TestScoreDirection:
         assert 0.0 <= loop._builtin_score(f) <= 1.0
 
     @pytest.mark.asyncio
+    async def test_ac2_lone_low_scoring_symbol_is_not_buy(self):
+        """@AC-2 @feature-309"""
+        loop = _identity_loop(
+            {"fundsignal.universe_source": "explicit", "fundsignal.explicit_symbols": "AAPL"}
+        )
+        row = _fund(
+            "AAPL", pe_ratio=40.0, roe=0.0, eps=-1.0, missing=("pb_ratio", "debt_to_equity")
+        )
+        loop._marketdata.GetFundamentalsMulti = AsyncMock(
+            return_value=SimpleNamespace(fundamentals=[row])
+        )
+        await loop.run_once()
+
+        (call,) = loop._ingest.of("IngestSignal")
+        assert call[1].signal.symbol == "AAPL"
+        assert call[1].signal.direction != "buy"
+
+    @pytest.mark.parametrize(
+        ("score", "expected"),
+        [(0.05, "sell"), (0.9, "buy"), (0.5, "hold"), (0.51, "buy"), (0.49, "sell")],
+    )
+    def test_lone_score_follows_its_side(self, score, expected):
+        assert FundamentalsSignalLoop._map_directions({"A": score}, 0.80, 0.20) == {"A": expected}
+
+    @pytest.mark.parametrize("n", [2, 3, 4])
+    def test_small_cross_sections_take_the_degenerate_branch(self, n):
+        scores = {f"S{i}": 0.10 + 0.05 * i for i in range(n)}
+        directions = FundamentalsSignalLoop._map_directions(scores, 0.80, 0.20)
+        assert "buy" not in directions.values()
+
+    def test_min_cross_section_calibrated_to_default_quantiles(self):
+        def quantile_labels(values):
+            ordered = sorted(values)
+            buy_cut = fundsignal_module._quantile(ordered, 0.80)
+            sell_cut = fundsignal_module._quantile(ordered, 0.20)
+            return ["buy" if s >= buy_cut else "sell" if s <= sell_cut else "hold" for s in values]
+
+        def holds_and_bounded_buys(labels):
+            return "hold" in labels and labels.count("buy") / len(labels) <= 0.40
+
+        for n in range(5, 51):
+            values = [(i + 1) / (n + 1) for i in range(n)]
+            labels = quantile_labels(values)
+            scores = {f"S{i}": v for i, v in enumerate(values)}
+            mapped = FundamentalsSignalLoop._map_directions(scores, 0.80, 0.20)
+            assert [mapped[f"S{i}"] for i in range(n)] == labels, n
+            assert holds_and_bounded_buys(labels), n
+        assert not holds_and_bounded_buys(quantile_labels([0.2, 0.4, 0.6, 0.8]))
+        assert fundsignal_module._MIN_CROSS_SECTION == 5
+
+    @pytest.mark.parametrize(
+        "kw",
+        [
+            {},
+            {"missing": ("pe_ratio", "roe")},
+            {"missing": ("pb_ratio", "debt_to_equity", "eps")},
+            {"pe_ratio": -5.0, "pb_ratio": 100.0, "roe": 5.0, "debt_to_equity": -1.0, "eps": -3.0},
+            {"pe_ratio": 1.0, "pb_ratio": 0.1, "roe": -2.0, "debt_to_equity": 50.0, "eps": 1e9},
+            {"missing": BUILTIN_SCORER_METRICS},
+        ],
+    )
+    def test_builtin_score_stays_in_unit_range(self, kw):
+        s = FundamentalsSignalLoop._builtin_score(_fund("R", **kw))
+        assert s is None or 0.0 <= s <= 1.0
+
+    @pytest.mark.asyncio
     async def test_below_min_conviction_dropped(self):
         loop = _make_loop({"fundsignal.min_conviction_to_emit": 1.1})
         await loop.run_once(override_symbols=["AAPL", "MSFT"])
@@ -1380,7 +1446,9 @@ class TestRetryStability:
         assert FundamentalsSignalLoop._map_directions(
             {"AAPL": 0.10}, 0.80, 0.20, reference_scores=[0.90, 0.70, 0.50]
         ) == {"AAPL": "sell"}
-        assert FundamentalsSignalLoop._map_directions({"AAPL": 0.10}, 0.80, 0.20) == {"AAPL": "buy"}
+        assert FundamentalsSignalLoop._map_directions({"AAPL": 0.10}, 0.80, 0.20) == {
+            "AAPL": "sell"
+        }
 
     @pytest.mark.asyncio
     async def test_ac10_force_keeps_now_anchored_valid_until(self):
