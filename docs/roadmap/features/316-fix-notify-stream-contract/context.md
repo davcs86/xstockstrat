@@ -1118,3 +1118,15 @@ test "$(git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c 
 - Green run `.sdd-logs/v-1.log`: lint `✖ 384 problems (0 errors, 384 warnings)`; `ℹ tests 417` / `ℹ pass 417` / `ℹ fail 0`; `All files | 90.7` lines; `c8 check-coverage --lines 40` passed silently; grep hits `31:  severities: AlertSeverity[];` and `392:    if (sub.severities.length > 0 && !sub.severities.includes(alert.severity)) {`; `exit=0`.
 - Files modified: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`; `implementation-spec.md` Step 3 status → done, `context.md`.
 - Deviations: none.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 4
+
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `57492722`. Tooling: none needed (docs step; Verification is `grep`/`head`). No install run.
+- Discovery confirmed: notify `CLAUDE.md:4` banner phrase; `context-constitution-findings.md:24` row under `## Latent bugs` (`:20`); `## Resolved` `:46`; report row `:72`; sidecar `triaged` / `ref: feature:316-fix-notify-stream-contract`; Steps 2–3 landed (`notifyServiceImpl.ts:31` `severities: AlertSeverity[];`, `@AC-1` test at `notifyServiceImpl.test.ts:723`). `services/xstockstrat-notify/docs/context-constitution.md` has no `severities`/`number[]` text, so it needs no edit.
+
+### Step 4 — docs: retire the severity-mismatch records and flip that report's sidecar [done]
+- Removed ", `severities` type/runtime mismatch" from the `CLAUDE.md:4` banner; deleted the findings `## Latent bugs` row; added a `RESOLVED 2026-11-26` entry at the top of `## Resolved` naming feature `316-fix-notify-stream-contract`; appended "— **resolved (feature 316)**, see the Resolved section" to the report row; sidecar line 1 → `resolved` (D-8), line 2 kept.
+- TDD: N/A (docs).
+- Verification run `.sdd-logs/v-1.log`: the `CLAUDE.md` grep printed nothing; the findings grep's only hit is `47:- **RESOLVED 2026-11-26 — Severity filter type/runtime mismatch (latent bug), by feature \`316-fix-notify-stream-contract\`.** …` (under `## Resolved` at `:45`, none under `## Latent bugs`); sidecar `resolved` / `ref: feature:316-fix-notify-stream-contract`; `exit=0`.
+- Files modified: `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-notify/docs/context-constitution-findings.md`, `docs/reports/2026-10-19-notify-severities-type-runtime-mismatch-defect.status`; `implementation-spec.md` Step 4 status → done, `context.md`.
+- Deviations: none. The `CLAUDE.md:4` banner line is still a likely textual conflict with feature 323 (keep both removals).

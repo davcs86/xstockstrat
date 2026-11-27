@@ -198,7 +198,7 @@ grep -n "sub.severities.includes(alert.severity)" services/xstockstrat-notify/sr
 
 ### Step 4 — docs: retire the severity-mismatch records and flip that report's sidecar
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify` (`services/xstockstrat-notify/`, `docs/reports/`)
 **Files**:
 - `services/xstockstrat-notify/CLAUDE.md` — modify
