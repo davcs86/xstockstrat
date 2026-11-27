@@ -1092,3 +1092,17 @@ test "$(git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c 
 - Verify-only gate passed (re-specced Verification block, run verbatim once): `package.json:21` `^1.14.7`; lock importer `:378-380` `^1.14.7`/`1.14.7`; `pnpm ls` → `@grpc/grpc-js 1.14.7`; notify suite `tests 416 / pass 416 / fail 0`; `merge-base --is-ancestor` `rc=0`; `git diff origin/main-dev HEAD --stat` shows only this feature's directory and `docs/roadmap/ledger/fails.md` (+5); zero removed `fails.md` lines; `exit=0`. TDD: N/A (branch sync; no executable logic).
 - Files modified: none (verify-only); `implementation-spec.md` Step 1 status → done, `context.md`.
 - Deviations: none.
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute), Step 2
+
+- Tree: detached @ `origin/feature/fix-notify-stream-contract` `058fc06b`. Tooling: node v24 (`/opt/node24/bin` prefixed on PATH for the runs) · pnpm 9.15.9 · linked notify `node_modules`. No install run.
+- Discovery confirmed: `makeAlert` `severity: 2` `:120`; numeric test `:696-701`; `describe('streamAlerts')` `:722`; filter `notifyServiceImpl.ts:392`; registration `:162`; enum `notify.proto:65-70`.
+
+### Step 2 — test: AC-1 string-enum severity filter test, and string-form severity fixtures [done]
+- Added `@AC-1: a subscriber filtered to WARNING and CRITICAL receives a CRITICAL alert and not an INFO alert` in `describe('streamAlerts')` (through `streamAlerts` + `emitAndFlush`/`REQ`); converted the `makeAlert` default to `'ALERT_SEVERITY_WARNING'` and the severity-filter test to `'ALERT_SEVERITY_ERROR'` vs `['ALERT_SEVERITY_INFO', 'ALERT_SEVERITY_WARNING']` (still `false`); `rowToAlert` rows left numeric.
+- AC-1 mutation red (never committed): `notifyServiceImpl.ts:392` temporarily compared `alertSeverityToNumber(alert.severity)`. Verification run `.sdd-logs/v-1.log`: `✖ @AC-1: a subscriber filtered to WARNING and CRITICAL receives a CRITICAL alert and not an INFO alert` with `AssertionError [ERR_ASSERTION]: Expected values to be strictly equal: 0 !== 1` (the "receives the alert" assert); `ℹ tests 417` / `ℹ pass 416` / `ℹ fail 1`; `ELIFECYCLE  Command failed with exit code 1.`
+- Old numeric test under the mutation (same run, pre-edit form `severity: 3` / `severities: [1, 2]`): `✔ filters by severity when severities array is set` — it cannot detect the type/runtime mismatch.
+- Reverted green: mutation reverted (`git diff -- services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts` empty) and fixtures converted. Run `.sdd-logs/v-2.log`: lint `✖ 384 problems (0 errors, 384 warnings)`; `✔ @AC-1: …` and `✔ filters by severity when severities array is set`; `ℹ tests 417` / `ℹ pass 417` / `ℹ fail 0`; `All files | 90.7` lines; `c8 check-coverage --lines 40` passed silently; the numeric-severity grep lists only DB rows (`:138`, `:160`, `:834`, `:921`, `:927`, `:933`, `:949`, `:974`); `__tests__/fixtures` count 0; `exit=0`.
+- The block's `exit=` reflects only its last command; lint and test were judged from their log lines (no `ELIFECYCLE` in the green log).
+- Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`; `implementation-spec.md` Step 2 status → done, `context.md`.
+- Deviations: none.

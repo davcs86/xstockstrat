@@ -111,7 +111,7 @@ If either of the first two checks fails, the eviction unit (Steps 5–7) does no
 
 ### Step 2 — test: AC-1 string-enum severity filter test, and string-form severity fixtures
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts` — modify

@@ -117,7 +117,7 @@ function fanoutCfg(over: { minSev?: number; minConf?: number; dedup?: number; fr
 function makeAlert(overrides: any = {}) {
   return {
     alertId: 'a1',
-    severity: 2,
+    severity: 'ALERT_SEVERITY_WARNING',
     category: 'trading',
     targetUserId: '',
     acknowledged: false,
@@ -695,8 +695,8 @@ describe('matchesSubscriber', () => {
 
   it('filters by severity when severities array is set', () => {
     const impl = makeImpl();
-    const alert = makeAlert({ severity: 3 });
-    const sub = { userId: '', categories: [], severities: [1, 2], includeAcknowledged: false, call: {} };
+    const alert = makeAlert({ severity: 'ALERT_SEVERITY_ERROR' });
+    const sub = { userId: '', categories: [], severities: ['ALERT_SEVERITY_INFO', 'ALERT_SEVERITY_WARNING'], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), false);
   });
 
@@ -720,6 +720,28 @@ describe('matchesSubscriber', () => {
 // ---------------------------------------------------------------------------
 
 describe('streamAlerts', () => {
+  it('@AC-1: a subscriber filtered to WARNING and CRITICAL receives a CRITICAL alert and not an INFO alert', async () => {
+    const impl = makeImpl();
+    const received: any[] = [];
+    impl.streamAlerts({
+      request: {
+        userId: '',
+        categories: [],
+        severities: ['ALERT_SEVERITY_WARNING', 'ALERT_SEVERITY_CRITICAL'],
+        includeAcknowledged: false,
+      },
+      on() {},
+      write(alert: any) { received.push(alert); },
+    });
+
+    await emitAndFlush(impl, REQ({ severity: 'ALERT_SEVERITY_CRITICAL' }));
+    assert.strictEqual(received.length, 1);
+    assert.strictEqual(received[0].severity, 'ALERT_SEVERITY_CRITICAL');
+
+    await emitAndFlush(impl, REQ({ severity: 'ALERT_SEVERITY_INFO' }));
+    assert.strictEqual(received.length, 1);
+  });
+
   it('registers subscriber and deregisters on cancelled', () => {
     const impl = makeImpl();
 
