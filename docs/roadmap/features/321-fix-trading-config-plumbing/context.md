@@ -146,3 +146,22 @@ Up-front confirmation: the operator approved the plan with this record (binding,
 ```sdd-batch-setup
 {"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
 ```
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), unit Steps 1+2
+
+- Tree: detached at `origin/feature/fix-trading-config-plumbing@360349ea`. Discovery re-verified every Step 1/2 anchor by symbol; trading.go lines: `brokerCallTimeout` :2638, `ibkrTiming` :2653 (literal `10000` :2663), `instantiateBrokerLocked` :3356.
+- Tooling (steps 1+2): go1.27 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.27.0, `/root/go/bin`; prepended to PATH for the Verification runs — `/usr/local/bin` still holds v2.5.0) · hook check hook=0.
+
+### Step 1 — service: IBKR signed requests read `broker.timeout_ms` live [done]
+- Atomic unit Steps 1+2. `callTimeout` (broker.go) is the shared fallback; Alpaca `timeout()` and IBKR `sendSigned` both use it. `IBKRRequestTimeout` deleted, IBKR `http.Client{}` has no fixed timeout, `send` (handshake) unchanged (R-7). `IBKRDefaultHandshakeTimeout` is the stale floor. `brokerTimeout` + `ibkrClientConfig` wire `Timeout: s.brokerTimeout` for both brokers.
+- Files modified: `services/xstockstrat-trading/internal/broker/{broker.go,alpaca.go,ibkr.go,ibkr_session.go}`, `services/xstockstrat-trading/internal/service/{trading.go,order_intent.go}`
+- Deviations: none
+- TDD: RED/GREEN recorded under Step 2 (one cycle for the unit). Config-key wiring gate (step-time, `--declared-from product-spec.md`): exit=0, only `PENDING: services/xstockstrat-trading/internal/service/trading.go:broker.paper:read-unseeded` (Steps 6–9 scope).
+
+### Step 2 — test: IBKR live timeout, shared fallback, floor and budget pins (AC-1) [done]
+- Atomic unit Steps 1+2. Added the seven F321 tests and the D-17/D-20 pin rows; `ibkrAuthService` now builds from `svc.ibkrClientConfig`; the rate-limit harness uses `h.svc.brokerTimeout`; `TestStaleThreshold_UsesLiveConfigDefaults` reads `broker.IBKRDefaultHandshakeTimeout`.
+- Files modified: `services/xstockstrat-trading/internal/broker/{ibkr_do_test.go,ibkr_session_internal_test.go}`, `services/xstockstrat-trading/internal/service/{trading_ibkr_auth_test.go,trading_rate_limit_test.go,order_intent_test.go}`
+- Deviations: none
+- AC-1 red (uncommitted scaffold, P-06): `TestCallTimeout_F321` "nil: callTimeout = 0s, want 5s"; `TestIBKRSignedRequest_BoundedByLiveTimeout_F321_AC1` "SubmitOrder returned after 10.015798976s, want under 3s"; `TestIBKRSignedRequest_TimeoutChangeAppliesWithoutRebuild_F321_AC1` "err = <nil>, want a timeout"; `TestIBKRClientConfig_WiresLiveBrokerTimeout_F321_AC1` "ValidateCredentials returned after 10.010744918s, want under 3s"; `TestBrokerTimeout_IntRow_F321` "int row 10000: brokerTimeout = 0s, want 10s" → green: all pass. Item 3 (R-7 guard) green on the scaffold as specced; discrimination by mutation: a `callTimeout` deadline inside `send` → FAIL "ibkr handshake: live_session_token: … context deadline exceeded"; reverted → PASS.
+- Green: selected run `ok internal/broker`, `ok internal/service` (39 tests PASS, 0 FAIL in the verbose re-run); full suite all `ok`, coverage `total: 85.0%` (>= 40%); `golangci-lint` v2.14.0 `0 issues.`; C-13 declaration count `3`.
+- Fixture note: the first RED run deadlocked in cleanup (the held order POST never drained its body, so the server never saw the client hang up, and the release channel closed after `srv.Close`); the hold now drains the body and its cleanup is registered after the client.

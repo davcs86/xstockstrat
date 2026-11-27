@@ -104,7 +104,7 @@ restated in product-spec.md § Consumer Surface(s). No UI or agent step exists b
 
 ### Step 1 — service: IBKR signed requests read `broker.timeout_ms` live
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify
@@ -213,7 +213,7 @@ Lint and the test run are in Step 2.
 
 ### Step 2 — test: IBKR live timeout, shared fallback, floor and budget pins (AC-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr_do_test.go` — modify

@@ -2643,6 +2643,10 @@ func brokerCallTimeout(cfgW *config.Watcher) time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+func (s *TradingService) brokerTimeout() time.Duration {
+	return brokerCallTimeout(s.cfgW)
+}
+
 // alpacaRateLimitBudget is the sole reader of trading.broker.adaptive_rate_limit_enabled (explicit true
 // default); the Alpaca client calls it before every request, so the kill switch is live.
 func (s *TradingService) alpacaRateLimitBudget() time.Duration {
@@ -3351,6 +3355,21 @@ func (s *TradingService) ResumeAccountSvc(ctx context.Context, accountID, reason
 	return recordToProtoAccount(refreshed), nil
 }
 
+func (s *TradingService) ibkrClientConfig(rec *repository.BrokerAccountRecord, creds ibkrCreds) broker.IBKRConfig {
+	return broker.IBKRConfig{
+		ConsumerKey:       creds.ConsumerKey,
+		AccessToken:       creds.AccessToken,
+		AccessTokenSecret: creds.AccessTokenSecret,
+		IBKRAccountID:     creds.IBKRAccountID,
+		IsPaper:           rec.IsPaper,
+		SignatureKey:      creds.SignatureKey,
+		EncryptionKey:     creds.EncryptionKey,
+		DHPrime:           creds.DHPrime,
+		Timing:            s.ibkrTiming,
+		Timeout:           s.brokerTimeout,
+	}
+}
+
 // instantiateBrokerLocked creates a broker.Broker from plaintext credentials JSON.
 // Caller must not hold brokersMu (it acquires no lock itself).
 func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRecord, plaintext []byte) (broker.Broker, error) {
@@ -3360,17 +3379,7 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 		if err := json.Unmarshal(plaintext, &creds); err != nil {
 			return nil, fmt.Errorf("unmarshal IBKR creds: %w", err)
 		}
-		return broker.NewIBKRClient(broker.IBKRConfig{
-			ConsumerKey:       creds.ConsumerKey,
-			AccessToken:       creds.AccessToken,
-			AccessTokenSecret: creds.AccessTokenSecret,
-			IBKRAccountID:     creds.IBKRAccountID,
-			IsPaper:           rec.IsPaper,
-			SignatureKey:      creds.SignatureKey,
-			EncryptionKey:     creds.EncryptionKey,
-			DHPrime:           creds.DHPrime,
-			Timing:            s.ibkrTiming,
-		}), nil
+		return broker.NewIBKRClient(s.ibkrClientConfig(rec, creds)), nil
 	default:
 		var creds alpacaCreds
 		if err := json.Unmarshal(plaintext, &creds); err != nil {
@@ -3382,7 +3391,7 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 			PaperURL:  "https://paper-api.alpaca.markets",
 			LiveURL:   "https://api.alpaca.markets",
 			Paper:     rec.IsPaper,
-			Timeout:   func() time.Duration { return brokerCallTimeout(s.cfgW) },
+			Timeout:   s.brokerTimeout,
 			// A method value, so service tests build their client from the same budget code.
 			RateLimitBudget: s.alpacaRateLimitBudget,
 		}), nil

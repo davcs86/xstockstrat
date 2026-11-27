@@ -73,12 +73,7 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 }
 
 func (c *Client) timeout() time.Duration {
-	if c.cfg.Timeout != nil {
-		if d := c.cfg.Timeout(); d > 0 {
-			return d
-		}
-	}
-	return defaultTimeoutMs * time.Millisecond
+	return callTimeout(c.cfg.Timeout)
 }
 
 // do sends req under a deadline of c.timeout(); the deadline is released when the caller closes resp.Body.
