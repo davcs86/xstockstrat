@@ -9,18 +9,23 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import grpc
 import pytest
 from gen.analysis.v1 import analysis_pb2
+from gen.indicators.v1 import indicators_pb2
 from google.protobuf.struct_pb2 import Struct
 
 from app.services.evaluator import (
     FormulaExecutionError,
     StrategyEvaluator,
+    _decode_formula_output,
     _eval_condition,
+    _is_transient_formula_error,
     _validate_definition,
     align_indicator_points,
     referenced_refs,
 )
+from tests.conftest import aio_rpc_error
 
 
 def _builtin(ref_name="sma_fast", indicator="SMA", period=10.0):
@@ -384,7 +389,7 @@ class TestEvaluate:
         bars = [SimpleNamespace(close=c, timestamp=None) for c in closes]
         output = Struct()
         output.update({"value": closes})
-        resp = SimpleNamespace(success=True, output=output, error="")
+        resp = SimpleNamespace(success=True, output=output, error="", exit_reason=0)
         stub = AsyncMock()
         stub.ExecuteFormula = AsyncMock(return_value=resp)
 
@@ -509,7 +514,7 @@ class TestReferencedRefs:
 # ---------------------------------------------------------------------------
 
 
-def _formula_stub(*, success=True, value=None, error="", extra=None):
+def _formula_stub(*, success=True, value=None, error="", extra=None, exit_reason=0):
     """AsyncMock indicators stub whose ExecuteFormula returns a Struct output."""
     output = Struct()
     payload: dict = {}
@@ -518,7 +523,7 @@ def _formula_stub(*, success=True, value=None, error="", extra=None):
     if extra:
         payload.update(extra)
     output.update(payload)
-    resp = SimpleNamespace(success=success, output=output, error=error)
+    resp = SimpleNamespace(success=success, output=output, error=error, exit_reason=exit_reason)
     stub = AsyncMock()
     stub.ExecuteFormula = AsyncMock(return_value=resp)
     return stub
@@ -616,6 +621,44 @@ class TestFormulaComponentDecode:
         evaluator = StrategyEvaluator(_formula_stub(value=1.0), propagation_meta=())
         with pytest.raises(FormulaExecutionError):
             await evaluator._compute_component(_formula(), closes)
+
+
+def _decoded_error(exit_reason) -> FormulaExecutionError:
+    resp = SimpleNamespace(success=False, output=Struct(), error="boom", exit_reason=exit_reason)
+    with pytest.raises(FormulaExecutionError) as ei:
+        _decode_formula_output("f-1", resp)
+    return ei.value
+
+
+class TestTransientFormulaError:
+    def test_decode_carries_timeout_exit_reason(self):
+        err = _decoded_error(indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT)
+        assert err.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+
+    def test_timeout_and_rpc_error_are_transient(self):
+        assert _is_transient_formula_error(
+            _decoded_error(indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT)
+        )
+        assert _is_transient_formula_error(aio_rpc_error(grpc.StatusCode.UNAVAILABLE))
+
+    @pytest.mark.parametrize(
+        "reason",
+        [
+            indicators_pb2.SANDBOX_EXIT_REASON_UNSPECIFIED,
+            indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
+            indicators_pb2.SANDBOX_EXIT_REASON_IMPORT_BLOCKED,
+            indicators_pb2.SANDBOX_EXIT_REASON_MEMORY_EXCEEDED,
+        ],
+    )
+    def test_non_timeout_exit_reason_is_terminal(self, reason):
+        assert not _is_transient_formula_error(_decoded_error(reason))
+
+    @pytest.mark.parametrize(
+        "exc",
+        [FormulaExecutionError("f-1", "boom"), ValueError("bad"), ZeroDivisionError()],
+    )
+    def test_other_exceptions_are_terminal(self, exc):
+        assert not _is_transient_formula_error(exc)
 
 
 class TestComputeComponentSeriesParity:

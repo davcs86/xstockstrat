@@ -3,7 +3,7 @@
 // `opportunityShared` is server-imported (traderBff → copilot), where a client-only icon lib breaks
 // the production build. Only client cue consumers import this module.
 
-import { Lightning, Eye, Moon, Question, Stack, LockSimple } from '@phosphor-icons/react';
+import { Lightning, Eye, Moon, Question, Stack, LockSimple, Warning } from '@phosphor-icons/react';
 import type { EnumRender } from './opportunityShared';
 import type { ReadinessState } from './readinessRollup';
 
@@ -22,3 +22,12 @@ export const READINESS_CUE: Record<ReadinessState, EnumRender> = {
 
 /** The shared "in queue" cue — info color + a queue-stack glyph. */
 export const IN_QUEUE_CUE: EnumRender = { label: 'in queue', role: 'info', icon: Stack };
+
+/** The analysis provenance wire token; the only TS copy — import it, never re-type the literal. */
+export const EVALUATION_FAILED_PROVENANCE = 'evaluation_failed';
+
+export const EVALUATION_FAILED_CUE: EnumRender = {
+  label: 'evaluation failed',
+  role: 'secondary',
+  icon: Warning,
+};

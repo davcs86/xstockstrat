@@ -199,7 +199,7 @@ def _svc(
     out = Struct()
     out.update({"value": 0.7, "composite": 0.7})
     svc._indicators.ExecuteFormula = AsyncMock(
-        return_value=SimpleNamespace(success=True, output=out, error="")
+        return_value=SimpleNamespace(success=True, output=out, error="", exit_reason=0)
     )
     return svc
 

@@ -45,7 +45,7 @@ def _formula_comp(ref_name="fscore", formula_id="value_quality"):
 def _scalar_resp(**scalars):
     out = Struct()
     out.update(scalars)
-    return SimpleNamespace(success=True, output=out, error="")
+    return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
 
 def _bars_jan(days):
@@ -138,7 +138,9 @@ class TestFundamentalsFormulaOperand:
         catches it per-symbol; the evaluator must not swallow it into an all-None series)."""
         stub = AsyncMock()
         stub.ExecuteFormula = AsyncMock(
-            return_value=SimpleNamespace(success=False, output=Struct(), error="boom")
+            return_value=SimpleNamespace(
+                success=False, output=Struct(), error="boom", exit_reason=0
+            )
         )
         ev = StrategyEvaluator(stub, propagation_meta=())
         bars = _bars_jan((27, 28))
@@ -164,7 +166,7 @@ class TestFundamentalsFormulaOperand:
             closes_seen["data"] = dict(req.input_data)
             out = Struct()
             out.update({"value": [b for b in req.input_data["close"]]})
-            return SimpleNamespace(success=True, output=out, error="")
+            return SimpleNamespace(success=True, output=out, error="", exit_reason=0)
 
         stub = AsyncMock()
         stub.ExecuteFormula = AsyncMock(side_effect=_exec)

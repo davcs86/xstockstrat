@@ -1263,6 +1263,9 @@ Every opportunity also carries `formula_unreadable` (feature 289):
   `ListOpportunities` `available_sources` facet).
 - It is mutually exclusive with `data_unavailable` and `fundamentals_unavailable`.
 
+An `"evaluation_failed"` provenance marker (feature 308) means the strategy's evaluation failed for
+that symbol; `data_unavailable` stays false.
+
 The live-market enrichment is **omit-not-fabricate**:
 
 - `live_price`, `change_pct`, `target_price`, `stop_price` — present **only** when the backend has a

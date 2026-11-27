@@ -685,7 +685,9 @@ def _identity_loop(overrides=None, author="system", ingest_responses=None):
     loop._indicators = RecordingStub(
         {
             "GetFormula": get_formula,
-            "ExecuteFormula": SimpleNamespace(success=True, output={"composite": 0.7}),
+            "ExecuteFormula": SimpleNamespace(
+                success=True, output={"composite": 0.7}, exit_reason=0
+            ),
         }
     )
     return loop
