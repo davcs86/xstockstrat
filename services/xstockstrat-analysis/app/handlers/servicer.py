@@ -2714,6 +2714,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         async with self._lock_for(caller_user_id, request.strategy_id):
             excluded: list[str] = []
+            unreadable: list[str] = []
             try:
                 score = await self._fetch_and_aggregate(
                     caller_user_id,
@@ -2721,7 +2722,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     row,
                     meta=propagation_meta,
                     excluded=excluded,
+                    unreadable=unreadable,
                 )
+            except _FormulaVersionUnknown as e:
+                log.warning("score: formula version unavailable for %s", e.formula_id)
+                await context.abort(
+                    grpc.StatusCode.UNAVAILABLE,
+                    "fundamentals availability unknown — grade unchanged"
+                    if self._cfg.get_bool("backtest.fundamentals.enabled", False)
+                    else _FORMULA_VERSION_UNKNOWN_MSG,
+                )
+                return
             except _GradeInputsUnknown as e:
                 log.warning("score: fundamentals availability unknown for %s", e.symbol)
                 await context.abort(
@@ -2744,6 +2755,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         log.warning("failed to clear stale score: %s", e)
                         await context.abort(grpc.StatusCode.UNAVAILABLE, "score store unavailable")
                         return
+                if unreadable:
+                    await context.abort(
+                        grpc.StatusCode.NOT_FOUND,
+                        f"no eligible evidence — formula {', '.join(unreadable)} is not readable "
+                        "and no evidence was recorded for a readable version; restore access to "
+                        "the formula or rebind the component, then run a backtest",
+                    )
+                    return
                 if excluded:
                     await context.abort(
                         grpc.StatusCode.NOT_FOUND,
@@ -2939,8 +2958,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         meta=None,
         sem=None,
         excluded=None,
+        unreadable=None,
     ):
-        """Read eligible cells for the strategy's CURRENT fingerprint and derive a score.
+        """Read eligible cells for the strategy's CURRENT formula-aware evidence fingerprint and
+        derive a score.
 
         Returns the derived (unpersisted) StrategyScore, or ``None`` when there is zero eligible
         evidence. Raises on a cells-read error so callers can choose best-effort vs. abort. Does
@@ -2950,8 +2971,34 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         guard-refused cells are excluded before the per-symbol dedup (never deleted). ``meta``
         defaults to the owner identity (the boot path has no inbound request).
         """
-        fingerprint = _definition_fingerprint(strategy_row["definition_json"])
+        formula_cache = formula_cache if formula_cache is not None else {}
+        failures = failures if failures is not None else {}
+        meta = meta if meta is not None else owner_metadata(user_id)
+        def_hash = _definition_fingerprint(strategy_row["definition_json"])
         definition = _row_to_strategy_definition(strategy_row)
+        fingerprint = def_hash
+        if any(
+            c.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and c.formula_id
+            for c in definition.components
+        ):
+            digests: dict = {}
+            await self._formula_fundamentals(
+                definition, meta, cache=formula_cache, failures=failures, digests=digests
+            )
+            missing = sorted(fid for fid, d in digests.items() if d is None)
+            refused = sorted(fid for fid, d in digests.items() if d is _UNREADABLE)
+            if missing:
+                raise _FormulaVersionUnknown(missing[0])
+            if refused:
+                fingerprint = await self._backtest_run_symbols_repo.latest_formula_fingerprint(
+                    user_id, strategy_id, def_hash
+                )
+                if fingerprint is None:
+                    if unreadable is not None:
+                        unreadable.extend(refused)
+                    return None
+            else:
+                fingerprint = _evidence_fingerprint(strategy_row["definition_json"], digests)
         guarded = self._cfg.get_bool("backtest.fundamentals.enabled", False) and any(
             c.kind
             in (analysis_pb2.COMPONENT_KIND_FUNDAMENTAL, analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA)
@@ -2974,9 +3021,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             definition,
             cells,
             fund_cache=fund_cache if fund_cache is not None else {},
-            formula_cache=formula_cache if formula_cache is not None else {},
-            failures=failures if failures is not None else {},
-            meta=meta if meta is not None else owner_metadata(user_id),
+            formula_cache=formula_cache,
+            failures=failures,
+            meta=meta,
             sem=sem,
         )
         if excluded is not None:
@@ -7610,6 +7657,7 @@ def _formula_digest(formula) -> str:
 # A refused formula's digest marker; an object(), never a string, so it can never be hashed.
 _UNREADABLE = object()
 _FORMULA_VERSION_WARNING = "evidence not recorded: formula version unavailable — rerun"
+_FORMULA_VERSION_UNKNOWN_MSG = "formula version unavailable — grade unchanged"
 
 
 class _FormulaRead(NamedTuple):

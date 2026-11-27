@@ -734,3 +734,35 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 - `tests/test_analysis_servicer.py` needed no change. No existing assertion turned red, and the `GetFormula` count pins stayed green.
 - Files modified: `services/xstockstrat-analysis/tests/test_run_backtest_fingerprint.py`
 - Deviations: in the duplicate-component case the assertion compares the formula digest map, not the full stamp (each definition has its own `def_hash`). Full detail is in the Deviation Log.
+
+### Step 11 — service: `_fetch_and_aggregate` reads by the formula-aware fingerprint; `ScoreStrategy` messages [done]
+- Atomic unit Steps 11+12 (one red→green, one commit). Phase-2 gate (instruction 0): the O-18 acknowledgement is on record ("Session 2026-11-27 — operator ruling …", "B1 approve"); no new ask.
+- `_fetch_and_aggregate` gained `unreadable=None` and binds `formula_cache`/`failures`/`meta` once at the top; `_exclude_refused_cells` now receives those bound names (D-11). Without a CUSTOM_FORMULA component the fingerprint stays `def_hash`. With one, a single `_formula_fundamentals(..., digests=)` read runs before any cell read on both gate paths:
+  - a `None` digest raises `_FormulaVersionUnknown(<first sorted fid>)`;
+  - an `_UNREADABLE` digest resolves through `latest_formula_fingerprint`; a `None` result extends `unreadable` with the sorted refused fids and returns `None`;
+  - otherwise the fingerprint is `_evidence_fingerprint(...)`.
+- `ScoreStrategy`:
+  - `_FORMULA_VERSION_UNKNOWN_MSG = "formula version unavailable — grade unchanged"` is a single-line module assignment beside `_FORMULA_VERSION_WARNING` (the AGENT-10 pin for Step 17).
+  - A new `except _FormulaVersionUnknown`, placed before `except _GradeInputsUnknown`, aborts UNAVAILABLE: with the pinned `@AC-23` message when the gate is on, with the new message when it is off.
+  - A non-empty `unreadable` gives the distinct NOT_FOUND naming the formula, checked before `excluded`.
+  - `_recompute_headline*` and `recompute_unscored_pairs` are unchanged.
+- TDD:
+  - Red (`.sdd-logs/v-1.log`, Step 12 Verification on the pre-unit tree, exit=1): `10 failed, 6 deselected` (e.g. `assert (<StatusCode....n a backtest') == (<StatusCode....de unchanged')`). Full suite: `17 failed, 1885 passed`, and every failure is a new or amended test.
+  - Green, Step 11 Verification (`.sdd-logs/v-3.log`, exit=0): three grep hits (`2725: unreadable=unreadable,`, `2993: … latest_formula_fingerprint(`, `7660:_FORMULA_VERSION_UNKNOWN_MSG = …`), no bare-fingerprint hit, `529 passed`, `All checks passed!`, `148 files already formatted`.
+  - The earlier `.sdd-logs/v-2.log` run failed only `ruff format --check`, on this step's own lines; they were reformatted.
+- Config-key wiring gate: not applicable (an existing `backtest.fundamentals.enabled` read; no new key).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none
+
+### Step 12 — test: AC-1 end to end, refusal fallback, gate-off outage, owner isolation [done]
+- Atomic unit Steps 11+12. Created `tests/test_evidence_grade_formula_aware.py` with an inline `_CellsRepo` (C-13, single consumer). It is keyed by fingerprint, implements `fetch_eligible`, `fetch_all_for_fingerprint`, `latest_formula_fingerprint` and `insert_many`, and records every fingerprint it is asked for. Cases:
+  - AC-1, gate on and off: v1 gives 3 symbols; an author-only edit still gives 3; a `source` edit gives NOT_FOUND `run a backtest`, the stale grade is cleared and all 3 rows are kept.
+  - AC-3, refusal (NOT_FOUND/PERMISSION_DENIED) × gate: the newest composite is read (1 symbol) and bare cells are never read. With only bare cells: NOT_FOUND naming `f-9` and containing `not readable`.
+  - AC-4: gate off aborts `"formula version unavailable — grade unchanged"`, gate on aborts `_UNKNOWN_MSG`. No cell is read, no delete or upsert runs, the grade is kept.
+  - O-19: with mixed refused and readable formulas, the newest composite is used as a whole.
+  - Boot-pass owner isolation, both owner orders × u1 readable or refused: each owner asks for its own fingerprint.
+  - Boot outage: the grade is kept and `boot recompute failed` is logged.
+- Amended `tests/test_grade_fundamentals_exclusion.py`: `test_ac23_refused_formula_score_strategy_succeeds_with_empty_trailer` and `test_boot_pass_refusal_for_one_owner_never_poisons_another` now mock `latest_formula_fingerprint` → `_BLEND_COMPOSITE` (`<def_hash>.x`), and the ac23 test also asserts `fetch_all_for_fingerprint` was awaited with it. The trailer and evidence assertions are unchanged (`@AC-23 @feature-289` PRESERVED). No other existing test needed a change.
+- TDD: red as in Step 11. Green, Step 12 Verification (`.sdd-logs/v-4.log`, exit=0): `10 passed, 6 deselected`, `30 passed`, the conftest grep printed no lines, `1902 passed`, `Total coverage: 91.99%`, `All checks passed!`, `148 files already formatted`.
+- Files modified: `services/xstockstrat-analysis/tests/test_evidence_grade_formula_aware.py`, `services/xstockstrat-analysis/tests/test_grade_fundamentals_exclusion.py`
+- Deviations: none

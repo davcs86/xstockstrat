@@ -527,7 +527,7 @@ ruff check . && ruff format --check .
 
 ### Step 11 — service: `_fetch_and_aggregate` reads by the formula-aware fingerprint; `ScoreStrategy` messages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -577,7 +577,7 @@ ruff check . && ruff format --check .
 
 ### Step 12 — test: AC-1 end to end, refusal fallback, gate-off outage, owner isolation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_evidence_grade_formula_aware.py` — create
