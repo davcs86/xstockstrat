@@ -735,3 +735,16 @@ Effect: use the defaults recorded in this file and in the implementation spec fo
 - The `operator-db-access.md:59-64` (homelab `xstockstrat-production` database) vs `config-rollout.md:303-304` ("the homelab has no production instance") disagreement is logged as doc drift in the root `docs/context-constitution-findings.md` (operator-directed, separate commit); not resolved here.
 - Files modified: `docs/runbooks/config-rollout.md`
 - Deviations: operator-directed findings row outside the step's Files (see Deviation Log)
+
+### Step 5 — service: agent bearer-write text names the orphan sweep [done]
+- Atomic unit Steps 5+6 (one commit). The orphan-sweep text is now in the `_write_source_bearer` docstring, the `manage_signal_source` `credentials_ref:` param doc (grace rule), the `mcp-tools.md` `credentials_ref`/`bearer_token` rows (the latter links `config-rollout.md#operator-sweep-orphaned-mcp_credential-secrets-feature-328`), and agent `CLAUDE.md`. The agent finding `:46` is closed by feature 328 (report row left to `/sdd-archiver`). Verification is green: ruff `All checks passed!`, `79 files already formatted`, `834 passed`, and `orphan sweep` grep hits in all four files.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-agent/docs/context-constitution-findings.md`
+- Deviations: none
+
+### Step 6 — test: agent writer pins (AC-1, AC-2) and docstring ↔ runbook parity [done]
+- Atomic unit Steps 5+6. Added `test_failed_mcp_client_register_mints_one_secret_per_attempt` (AC-1), `test_failed_signal_source_instantiate_mints_one_secret` (AC-2) and `test_bearer_docs_name_the_orphan_sweep`.
+- TDD: the parity test failed first (`assert 'orphan sweep' in 'Register/update/reactivate/deactivate …'`; `1 failed, 2 passed`) and passed once Step 5's edits were in (`3 passed, 137 deselected`).
+- AC-1/AC-2 pins: red N/A — no behavior change; characterization test added (green on the pre-fix tree, O-19). The behavioral RED is Step 2 block 1.
+- Full suite: `834 passed`, `TOTAL 2818 325 88%` (≥ 40). The config-key wiring gate does not apply (no config key).
+- Files modified: `services/xstockstrat-agent/tests/test_tools.py`
+- Deviations: none

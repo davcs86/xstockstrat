@@ -626,7 +626,7 @@ grep -n "Step 4" docs/roadmap/features/328-fix-agent-bearer-secret-orphan/contex
 
 ### Step 5 — service: agent bearer-write text names the orphan sweep
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -701,7 +701,7 @@ grep -n "orphan sweep" app/tools.py CLAUDE.md docs/context-constitution-findings
 
 ### Step 6 — test: agent writer pins (AC-1, AC-2) and docstring ↔ runbook parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify

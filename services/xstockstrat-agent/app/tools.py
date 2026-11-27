@@ -479,8 +479,9 @@ def _historical_to_csv(periods: list[dict]) -> str:
 async def _write_source_bearer(ctx: Context, tool: str, slug: str, bearer_token: str) -> str:
     """Write a source bearer as the caller's own encrypted secret; return the credentials_ref.
 
-    Secret-first: a failed source write afterwards only orphans a redacted secret. The key is opaque
-    (never the slug), so it cannot collide across owners or leak the source name."""
+    Secret-first: a failed source write afterwards only orphans a redacted secret, reclaimed by the
+    operator orphan sweep (docs/runbooks/config-rollout.md). The key is opaque (never the slug), so
+    it cannot collide across owners or leak the source name."""
     secret_key = f"mcp_credential.{uuid.uuid4()}"
     try:
         await client.set_config(
@@ -1541,7 +1542,9 @@ def register_tools(server: MCPServer) -> None:
         credentials_ref: reference forwarded to the backend; NEVER echoed back (FR-12). On update it
             is preserved when omitted; pass "" to explicitly clear it. A `authenticated_website` or
             `mediated_authenticated_website` source requires a credential (validated on the merged
-            result).
+            result). A `mcp_credential.*` secret that no source of yours references for longer than
+            the sweep's grace window (24h by default) is deleted by the operator orphan sweep, so
+            attach a staged credential within that window.
         reliability_weight: per-source ranking multiplier in [0, 1] (default 1.0 on register);
             higher weights rank this source's signals higher, 0 effectively ignores the source
             (feature 134). On update it is applied ONLY when supplied — omit it to preserve the
