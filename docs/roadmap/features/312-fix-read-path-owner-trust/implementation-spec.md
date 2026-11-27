@@ -933,7 +933,7 @@ empty (CI `proto-freshness`).
 
 ### Step 14 — docs: xstockstrat-ui BFF order-read comment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify

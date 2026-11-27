@@ -677,3 +677,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `packages/proto/gen/go/{trading,notify}/v1/*.pb.go`, `packages/proto/gen/python/{trading,notify}/v1/*_pb2.py`, `packages/proto/gen/ts/{trading,notify}/v1/*.ts`, `packages/proto/gen/ts/dist/{trading,notify}/v1/*.d.ts` and `*_pb.js`, `services/xstockstrat-trading/internal/service/trading_helpers_test.go`
 - Deviations: scope expansion (`trading_helpers_test.go`, operator ruling) and the Docker codegen fallback. Full detail is in the Deviation Log.
+
+### Step 14 — docs: xstockstrat-ui BFF order-read comment [done]
+- Rewrote the two-line comment under `router.service(TradingService, {` in `traderBff.ts`: ownership comes from the `x-user-id` header on every trading RPC, and the trading service ignores the body `user_id` that `listOrders` / `streamOrderUpdates` still set. No code changed; the `userId` pins on `listOrders` and `streamOrderUpdates` stay (Instruction 2). PRESERVE ui `@AC-2` @feature-270 holds, since no behaviour changed. C-12: no test or fixture touched. Re-grep for the feature-360 adjacency (impl-spec review thread): this step touches only `traderBff.ts`, not `connectClients.ts`, so there is no collision.
+- TDD: N/A (docs, comment-only). Verification: exit=0 (`.sdd-logs/v-1.log`). The `! grep "cross-user filter"` found no match, `next lint` printed warnings only (pre-existing, in other files), and vitest printed `Test Files  2 passed (2)` / `Tests  10 passed (10)`.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-ui/src/lib/traderBff.ts`
+- Deviations: none
