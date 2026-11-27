@@ -12,6 +12,7 @@ import {
   recordExchangeFailure,
   recordLoginFailure,
   recordRefreshRejection,
+  recordRevokeUnverifiable,
   recordValidateFailure,
   ValidateFailureReason,
 } from '../telemetry';
@@ -215,7 +216,7 @@ export class IdentityServiceImpl {
       return callback({ code: 3, message: 'token required' });
     }
     try {
-      const decoded = (jwt as any).verify(token, this.jwtSecret) as any;
+      const decoded = (jwt as any).verify(token, this.jwtSecret, { algorithms: ['HS256'] }) as any;
       callback(null, {
         userId: decoded.user_id ?? '',
         email: decoded.email ?? '',
@@ -280,8 +281,16 @@ export class IdentityServiceImpl {
     const { token } = call.request;
     if (!token) return callback(null, { success: true });
     try {
-      // Decode without verify to handle expired tokens
-      const decoded = (jwt as any).decode(token) as any;
+      const secret = this.jwtSecret;
+      let decoded: any;
+      try {
+        // Expired tokens must still revoke, so expiry is ignored; the signature never is.
+        decoded = (jwt as any).verify(token, secret, { ignoreExpiration: true, algorithms: ['HS256'] });
+      } catch (verifyErr: any) {
+        recordRevokeUnverifiable();
+        log.warn('RevokeToken: unverifiable token ignored', { errorName: verifyErr?.name });
+        return callback(null, { success: true });
+      }
       if (decoded?.user_id) {
         await this.pool.query(
           'UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',

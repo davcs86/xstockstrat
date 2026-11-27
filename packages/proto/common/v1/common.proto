@@ -158,9 +158,11 @@ enum BackfillSymbolOutcome {
   BACKFILL_SYMBOL_OUTCOME_EMPTY = 1;
   BACKFILL_SYMBOL_OUTCOME_SKIPPED = 2;
   BACKFILL_SYMBOL_OUTCOME_FAILED = 3;
+  BACKFILL_SYMBOL_OUTCOME_INCOMPLETE = 4;
 }
 
-// Lists non-written symbols only; reason is the source's error text, empty for EMPTY.
+// Lists non-written symbols only; reason is the source's error text (empty for EMPTY),
+// or for INCOMPLETE the still-missing session ranges.
 message BackfillSymbolResult {
   string symbol = 1;
   BackfillSymbolOutcome outcome = 2;
