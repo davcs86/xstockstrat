@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-10
 **Last Updated**: 2026-11-20
+**Committed to main**: 21e0d004e2ef2d7b79d3606e4f05843cd95a9d2d
+**Launched date**: 2026-11-23
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-11-13 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); merged `main-dev@d5de836b`, re-specced Step 19 (UI CLAUDE.md anchor `:325` → `:217`) |
 | 2026-11-20 | `in-progress` → `code-completed` | /sdd-execute | All 19 steps done (sequential, sdd-batch-execute); `check-config-wiring.mjs --final` exit 0 |
 
+| 2026-11-23 | `code-completed` → `launched` | CI workflow | Promoted via PR #1598; committed 21e0d004e2ef2d7b79d3606e4f05843cd95a9d2d |
 ---
 
 ## Artifacts

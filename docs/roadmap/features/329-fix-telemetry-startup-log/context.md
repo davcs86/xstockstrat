@@ -625,3 +625,10 @@ Feature: fix-telemetry-startup-log
   `vitest run src/telemetry.startupLog.test.ts`, `test:unit` (745 passed, 2 skipped); analysis /
   indicators / ingest / agent `pytest tests/test_telemetry.py` (34 / 29 / 31 / 30), `ruff check`,
   `ruff format --check`; `check-otel-produced-signals.py`; `check-duplication.py services/xstockstrat-ui/src`.
+
+## Session 2026-11-23 (CI: feature status automation)
+
+- Promotion PR #1598 merged to main
+- Feature promoted and committed: 21e0d004e2ef2d7b79d3606e4f05843cd95a9d2d
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-23

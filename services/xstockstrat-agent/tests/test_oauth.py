@@ -14,7 +14,9 @@ from grpc.aio import AioRpcError, Metadata
 from starlette.testclient import TestClient
 
 from app import client, oauth_server
+from app.config import watcher
 from app.config.watcher import get_watcher
+from tests.test_config_watcher import install_watcher
 from tests.test_tool_metrics import all_attribute_values, counter_values
 
 
@@ -165,21 +167,69 @@ def test_register_disabled_returns_403():
     assert r.status_code == 403
 
 
-def test_register_survives_config_read_failure():
-    """feature 093: a config read error must NOT 500 DCR — registration defaults to enabled
-    and an empty allowlist (best-effort reads), so a valid https client still registers."""
+def _assert_refused_503(r, register):
+    assert r.status_code == 503
+    assert r.json() == {"error": "server_error"}
+    assert "client_id" not in r.json()
+    register.assert_not_awaited()
+
+
+def test_register_fails_closed_on_config_read_failure():
+    """feature 319: an unreadable registration policy refuses DCR with 503 and issues no client."""
+    register = AsyncMock(return_value={"client_id": "oauthc_y", "redirect_uris": ["https://a/cb"]})
     with (
         patch.object(oauth_server, "read_config_value", MagicMock(side_effect=RuntimeError("x"))),
-        patch.object(
-            client,
-            "register_oauth_client",
-            AsyncMock(return_value={"client_id": "oauthc_y", "redirect_uris": ["https://a/cb"]}),
-        ),
+        patch.object(client, "register_oauth_client", register),
     ):
         with TestClient(_app()) as tc:
             r = tc.post("/oauth/register", json={"redirect_uris": ["https://a/cb"]})
-    assert r.status_code == 201
-    assert r.json()["client_id"] == "oauthc_y"
+    _assert_refused_503(r, register)
+
+
+def test_register_refused_without_policy_snapshot(monkeypatch):
+    """@AC-3 (319): DCR is refused while the registration policy cannot be read."""
+    register = AsyncMock(return_value={"client_id": "oauthc_z", "redirect_uris": []})
+    with patch.object(client, "register_oauth_client", register):
+        with TestClient(_app()) as tc:
+            # Installed after the lifespan's snapshot wait: install_watcher sets no snapshot event.
+            install_watcher(monkeypatch, "agent", **{"oauth.registration_enabled": False})
+            monkeypatch.delitem(watcher._WATCHERS, "agent")
+            r = tc.post("/oauth/register", json={"redirect_uris": ["https://attacker.example/cb"]})
+    _assert_refused_503(r, register)
+
+
+def test_register_refused_when_watcher_has_no_snapshot(monkeypatch):
+    register = AsyncMock(return_value={"client_id": "oauthc_z", "redirect_uris": []})
+    with patch.object(client, "register_oauth_client", register):
+        with TestClient(_app()) as tc:
+            bare = watcher.ConfigWatcher.__new__(watcher.ConfigWatcher)
+            monkeypatch.setitem(watcher._WATCHERS, "agent", bare)
+            r = tc.post("/oauth/register", json={"redirect_uris": ["https://a/cb"]})
+    _assert_refused_503(r, register)
+
+
+def test_register_readable_false_returns_403(monkeypatch):
+    with TestClient(_app()) as tc:
+        install_watcher(monkeypatch, "agent", **{"oauth.registration_enabled": False})
+        r = tc.post("/oauth/register", json={"redirect_uris": ["https://a/cb"]})
+    assert r.status_code == 403
+    assert r.json()["error"] == "access_denied"
+
+
+def test_register_snapshot_check_precedes_redirect_validation(monkeypatch):
+    register = AsyncMock()
+    with patch.object(client, "register_oauth_client", register):
+        with TestClient(_app()) as tc:
+            monkeypatch.delitem(watcher._WATCHERS, "agent")
+            empty = tc.post("/oauth/register", json={"redirect_uris": []})
+            bad_json = tc.post(
+                "/oauth/register",
+                content=b"{not json",
+                headers={"content-type": "application/json"},
+            )
+    _assert_refused_503(empty, register)
+    assert bad_json.status_code == 400
+    assert bad_json.json()["error"] == "invalid_request"
 
 
 # ── /oauth/authorize validation (AC-B3) ─────────────────────────────────────

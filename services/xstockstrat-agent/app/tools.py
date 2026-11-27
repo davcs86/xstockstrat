@@ -1775,7 +1775,10 @@ def register_tools(server: MCPServer) -> None:
         symbol_results (always present, possibly empty) lists the symbols that wrote nothing, as
             {"symbol", "outcome", "reason"} ("reason" omitted when empty). outcome is "empty"
             (nothing to write), "skipped" (a symbol flagged delisted that the data source could
-            not serve — it is NOT in failed_symbols and does not make the job PARTIAL) or "failed".
+            not serve — it is NOT in failed_symbols and does not make the job PARTIAL), "failed"
+            or "incomplete" (a GAPS_ONLY bars job verified that sessions in the range are still
+            missing; reason lists "missing sessions YYYY-MM-DD..YYYY-MM-DD[; …]", the symbol is
+            NOT in failed_symbols, and the job ends PARTIAL).
         Note: bars_processed and bars_total are 64-bit integers serialized as JSON STRINGS, not
             numbers — parse before arithmetic."""
         try:

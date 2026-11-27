@@ -1029,6 +1029,10 @@ A symbol flagged delisted that the data source cannot serve ends `skipped`, not 
 listed in the job's `symbol_results` (see `get_backfill_status`), stays out of `failed_symbols` and
 does not make the job `PARTIAL` (feature 352).
 
+A `gaps_only` bars job fills interior holes too, not only the head and tail of the stored range: gaps
+are computed per trading session, and sessions still missing after the fetch are reported as
+`incomplete` (feature 364).
+
 **Parameters**
 
 | Parameter | Type | Required | Description |
@@ -1125,6 +1129,7 @@ as `{"symbol", "outcome", "reason"}`; `reason` is omitted when empty. `outcome` 
 | `empty` | Nothing to write for the symbol in the requested range |
 | `skipped` | The symbol is flagged delisted and the data source could not serve it — not a failure: it is not in `failed_symbols` and does not make the job `PARTIAL` |
 | `failed` | A real failure; the symbol is also in `failed_symbols` |
+| `incomplete` | `gaps_only` bars jobs only: sessions in the range are still missing after the fetch. `reason` names the ranges (`missing sessions YYYY-MM-DD..YYYY-MM-DD[; …]`); the job ends `PARTIAL`, but the symbol is not in `failed_symbols` and no alert is sent. A head gap with no stored bar in the 730 days before it is exempt (treated as pre-listing) |
 
 **Errors**
 
