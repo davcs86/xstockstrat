@@ -852,7 +852,7 @@ npx --yes markdownlint-cli2 --config .markdownlint.yaml docs/patterns/database.m
 
 ### Step 12 — docs: record the gaps this feature leaves open
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/context-constitution-findings.md` — modify
@@ -997,3 +997,15 @@ _Populated by /sdd-execute as implementation proceeds._
   closing `_..._` footer emphasis changed to `*...*` (MD049, `:92-93`). No wording changed.
 - **Disposition**: operator decision (2026-11-27, "B3 fix the lint" → option A), raised as a Step 11
   blocker. Verification re-run: `Summary: 0 issues in 0 files`, `exit=0`.
+
+### Step 12 — 3 pre-existing markdownlint findings fixed (2026-11-27)
+- **Spec said**: add three rows to `docs/context-constitution-findings.md`. The Verification ends with
+  `markdownlint-cli2` on that file, which exited 1 on 3 findings already on lines the step did not
+  touch: MD012 (two blank lines at `:83-84`) and MD049 (the closing `_..._` footer at `:109-110`).
+- **Actually done**: scope expanded to fix all 3 in the same file (already in Step 12's **Files**):
+  one blank line deleted and the footer emphasis changed to `*...*`. No wording changed. The
+  `migration-rerun.py` row also cites `~L1079` (a third stale log line beside the docstring, `:735`
+  and `:1067-1068` named by the spec).
+- **Disposition**: operator decision (2026-11-27, option A, by extension of the Step 11 ruling
+  "B3 fix the lint"), raised as a Step 12 blocker. Verification re-run: `Summary: 0 issues in 0
+  files`, `exit=0`.

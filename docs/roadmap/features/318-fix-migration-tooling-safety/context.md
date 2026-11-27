@@ -742,3 +742,11 @@ Effect: option A — expand Step 11 scope to fix the 17 pre-existing findings in
 - Config-key wiring gate: N/A (no config key, no config migration).
 - Files modified: `docs/patterns/database.md`, `docs/patterns/script-tooling.md`, `docs/runbooks/config-rollout.md`, `docs/context-constitution.md`
 - Deviations: scope expanded to fix 17 pre-existing markdownlint findings in config-rollout.md and context-constitution.md (operator decision 2026-11-27, option A; Deviation Log)
+
+### Step 12 — docs: record the gaps this feature leaves open [done]
+- Operator decision (2026-11-27, option A, by extension of the Step 11 ruling "B3 fix the lint"): Step 12 also fixes the 3 pre-existing markdownlint findings in `docs/context-constitution-findings.md`.
+- Added three rows dated "found 2026-11-20, feature 318": two Latent bugs (the ahead-check's `force <n-1>` can name a missing version, marketdata 007 / config 024, 035, 036, 053; a cross-service `-- contract-of:` header passes every check) and one Documentation-that-lies row (`migration-rerun.py` `~L7`, `~L735`, `~L1067-1068`, `~L1079` still describe a contract floor and an automatic `force 0`; reword when next edited). Lint fixes: one blank line deleted at `:83-84`, footer `_..._` → `*...*`; no wording changed.
+- TDD: N/A (docs). Pre-edit baseline `.sdd-logs/v-1.log` `exit=1` (`Summary: 3 issues in 1 file`: MD012 `:84`, MD049 `:109`, `:110`) → Verification `.sdd-logs/v-2.log` `exit=0`: marker count 3, `Summary: 0 issues in 0 files`.
+- Config-key wiring gate: N/A (no config key, no config migration).
+- Files modified: `docs/context-constitution-findings.md`
+- Deviations: scope expanded to fix 3 pre-existing markdownlint findings in the same file (operator decision 2026-11-27, option A; Deviation Log)
