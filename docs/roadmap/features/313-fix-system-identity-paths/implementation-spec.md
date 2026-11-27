@@ -103,7 +103,7 @@ omission. The analysis change is internal-only.
 
 ### Step 1 — docs: acceptance scenarios, FR-1 to FR-3, consumer surface and register cells
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/313-fix-system-identity-paths/`
 **Files**:
 - `docs/roadmap/features/313-fix-system-identity-paths/acceptance.feature` — modify

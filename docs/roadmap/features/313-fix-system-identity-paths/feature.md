@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: `docs/reports/2026-10-19-ingest-mcp-loop-ledger-events-ownerless-defect.md`, `docs/reports/2026-10-19-analysis-pnl-compose-system-owner-raises-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-26
+**Last Updated**: 2026-11-27
 
 ---
 

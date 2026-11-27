@@ -1145,3 +1145,23 @@ What changed in `implementation-spec.md` (sdd-spec amendment, same date):
 ```sdd-batch-setup
 {"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
 ```
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), step 1
+
+### Step 1 — docs: acceptance scenarios, FR-1 to FR-3, consumer surface and register cells [done]
+- `acceptance.feature`: `@AC-1` gains only the `@FR-1` tag (Given/When/Then/And byte-for-byte, rulings of 2026-11-21 and 2026-11-26); `@AC-2` reworded and tagged `@FR-2`; new `@AC-3 @FR-3`. `product-spec.md`: FR-1 to FR-3, `## Consumer Surface(s)`, the D-12 drift fix ("an empty `propagation_meta` list"), the `**Expected**` per-cycle wording, Open Questions 1-3 marked resolved (D-17, D-5, D-6). `debate.md`: status cells only (D-2 → superseded by D-17, D-8 → superseded by operator ruling 2026-11-26, D-9 → superseded by D-14, O-1 reopened and closed @ 2026-11-26, O-17/O-18/O-19 closed @ round 5).
+- Consumer surface (C-14, extends D-7): the `/trader` ledger export. No UI or ledger code change. In that export the `correlation_id` column (`services/xstockstrat-ledger/acceptance/ledger-event-export.feature:40`) shows a poll-cycle id on `mcp_client` `ingest.signal.ingested` rows, not a request trace; RPC-path rows stay empty. The analysis change is internal-only.
+- A later `portfolio.position.closed` for a `system` owner is a no-op: no window was opened, so `seal` finds no row (D-4).
+- `@AC-2` rewording (pre-design Thens "_compose does not raise" / "marked degraded" replaced by the observable Thens; first Then is the operator's wording verbatim) rests on the operator's C-16 sign-off of 2026-11-20 (session "2026-11-20 — sdd-design (approved)"). `@AC-1`'s text was kept as confirmed (rulings of 2026-11-21 and 2026-11-26). Its second Then (ExportEvents) is run by no ingest test: it is delegated to ledger `@AC-11 @feature-021`, `ledgerServiceImpl.test.ts:675-709` and the `WHERE user_id = $1` predicate at `ledgerServiceImpl.ts:404` (Step 5 carries the matching test comment).
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0`: the `@AC-1` block diff is the one line `@AC-1 @regression` → `@AC-1 @FR-1 @regression`; product-spec shows FR-1/FR-2/FR-3 at `:34-36` and `## Consumer Surface(s)` at `:69`; debate.md counts 2 / 2. Config-key wiring gate not applicable (no config key).
+- Discovery notes: the FR-N form precedent `docs/roadmap/features/307-ui-env-themed-bundles/product-spec.md` no longer exists (307 archived, `662413d7`); the same `FR-N.` form was taken from `docs/roadmap/features/280-third-party-sso-oidc/product-spec.md:17`. D-12's line is `servicer.py:1355` on this tree, as the spec says.
+- Files modified: `docs/roadmap/features/313-fix-system-identity-paths/acceptance.feature`, `docs/roadmap/features/313-fix-system-identity-paths/product-spec.md`, `docs/roadmap/features/313-fix-system-identity-paths/debate.md`, `docs/roadmap/features/313-fix-system-identity-paths/context.md`
+- Deviations: none
+
+## Open Threads
+
+- [x] Register status cells lag the rulings (O-17, O-18, O-19; D-2 / D-9). Closed by Step 1.
+- [x] AC-3's observable-only Thens written into acceptance.feature, traced by `@FR-3`. Closed by Step 1.
+- [x] The export's `correlation_id` meaning change on mcp_client rows is recorded (Step 1 consumer-surface note above).
+- [ ] The `@AC-3` PRESERVE comment (spec text, landed verbatim) places `@AC-41 @feature-294` in `services/xstockstrat-ingest/acceptance/signal-map-instrumentation.feature`; that file holds `@AC-28`, `@AC-29` and `@AC-53` only. `@AC-41 @FR-15 @feature-294` is at `docs/sdd/business-rules/platform.feature:1346`. Target: operator (reword the comment before C-16 promotion, or leave it).
+- [ ] Carried: `**kw` spy rename risk (Step 7), two-header residual (Step 6), analysis findings `:24`/`:32` stale after Steps 2-3 (no step), merge-order row for 313/309.
