@@ -75,8 +75,11 @@ and the candidate clears — **no halt**; only a broker qty the platform's order
 genuine dashboard order) halts. A lookup error is **fail-safe** (position check skipped for the tick,
 never a false halt), mirroring the order side. Residuals (not closed; full list in feature 206
 `context.md` § Archive Synthesis): a stalled `pollFills` leaving `trading.orders.filled_qty` stale;
-corporate actions (splits) that change broker qty with no order; Alpaca bracket-leg fills, which never
-reach `trading.orders` (leg ids live only in `trading.order_brackets`); and the net being an unbounded
+corporate actions (splits) that change broker qty with no order; bracket-leg fills outside tracking
+(feature 311: a tracked leg's fills count through `trading.bracket_legs.observed_filled_qty`, which
+`NetFilledQtyBySymbol` adds under the same sign rule, but legs that closed before the cutover
+(forward-only, D-42), a `BASELINE_RETIRED` leg's post-adoption remainder and tombstoned legs still do
+not count); and the net being an unbounded
 lifetime sum, so any untracked position-reducing fill skews it for that symbol from then on — each can
 still trip the position-side halt. A net-zero foreign position is masked by design.
 

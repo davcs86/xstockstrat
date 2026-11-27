@@ -1384,7 +1384,7 @@ grep -n "consumer_floors\|stamped_now\|bracket_legs\|consumer_applied_events" do
 
 ### Step 29 — docs: service documentation, findings and the CI table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`, `xstockstrat-trading` (docs only)
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify

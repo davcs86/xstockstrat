@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: `docs/reports/2026-10-06-portfolio-fill-fold-not-exactly-once-defect.md`, `docs/reports/2026-10-21-portfolio-live-fold-sell-sign-loss-defect.md`, `docs/reports/2026-10-21-trading-bracket-leg-fills-missing-from-realized-pnl-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-26
+**Last Updated**: 2026-11-27
 
 ---
 
@@ -19,6 +19,7 @@
 | 2026-11-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 27 steps |
 | 2026-11-26 | `implementation-ready` → `implementation-ready` | /sdd-spec (re-spec) | Operator ruling 2026-11-21 added a real-Postgres trading test job: spec now 29 steps (new Steps 21-22; old 21-27 are now 23-29) |
 | 2026-11-26 | `implementation-ready` → `in-progress` | /sdd-execute (sdd-batch-execute setup) | → in-progress (sdd-batch-execute setup); merged main-dev f802b184 and re-specced steps 3,5,7,9,14,16,19,23,25,26,28,29 against it |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute (sdd-batch-execute) | All 29 steps done (Step 29: service docs, findings and the `trading-db-test` CI row); `check-config-wiring.mjs --final` exit 0 |
 
 ---
 
@@ -55,4 +56,4 @@ never sees bracket-leg exit fills because trading emits no ledger event for them
 
 ## Next Action
 
-`/sdd-review fix-position-fold-correctness impl-spec` — validate the re-specced implementation spec (29 steps), then `/sdd-execute fix-position-fold-correctness`. Before `/sdd-execute`: run `/sdd-distill fix-position-fold-correctness` (context.md is over the 65536-byte limit). The D-50 throttle was confirmed by the operator on 2026-11-21.
+Open the integration PR `feature/fix-position-fold-correctness` → `main-dev` (check `merge-order.md`). Its body carries the unenforced checklist item (portfolio stopped on every enabled staging target, `T_stop` recorded, `main-dev` frozen), quotes the first green `trading-db-test` run with 0 `--- SKIP`, and the operator answers the O-61 lines in `docs/runbooks/position-fold-cutover.md` §1 before the cutover.

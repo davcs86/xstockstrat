@@ -16,9 +16,11 @@ dashboard reads `cost_basis` for average return per trade and `opened_at` for av
 payload is built by the pure `closedPositionPayload` helper (unit-tested in
 `portfolio_close_payload_test.go`). The
 `positions.realized_accum` column (migration `010`) that backs it is **attribution-stats-only and
-never a user-facing figure** — `GetPnL` remains the authoritative realized P&L. **Named v1 scope
-limitation:** `realized_accum` is exact only for **long, order-fill-originated** positions; a short
-opened via `account.positions.synced` and covered by a live buy takes the "buying more" branch, so
-`realizedDelta` is not invoked and `realized_accum` understates (attribution-only impact; `GetPnL`
-still returns the true figure). It is deliberately **not** accumulated in `ConsumePositionSyncs`
+never a user-facing figure** — `GetPnL` remains the authoritative realized P&L. **Signed fold and flips (feature 311):** the live
+fold signs each fill from `side` and folds it with `pnl.FoldFrom`, so a covering buy on a short
+realizes into `realized_accum` like a reducing sell on a long. A fill that crosses zero is a
+**flip**: it emits `position.closed` for the old position (sealed as above), then
+`position.opened` for a fresh row holding the remainder with both accumulators at `0`. **Named
+residual (O-30):** the short a flip opens gets no order event of its own, so analysis's
+P&L-pattern consumer opens no window for it until that position's next fill. It is deliberately **not** accumulated in `ConsumePositionSyncs`
 (sync has no per-leg price — would reintroduce the feature-056 dual-source bug).
