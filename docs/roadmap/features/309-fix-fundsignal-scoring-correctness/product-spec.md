@@ -46,6 +46,7 @@
 - **Expected**: every stored fundamentals-source signal emitted for a data-less symbol is expired, so no
   reader sees it as active.
 - Report: [`docs/reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md`](../../../reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md)
+- **Re-spec 2026-11-27 (operator ruling):** no retraction mechanism ships. The operator's read-only SELECT for this report returned `(0 rows)` on DO staging and on homelab staging (production out of scope), so no fabricated row is active in an in-scope environment. `@AC-4` stays and is closed by that evidence (implementation-spec.md § Dropped Steps; context.md).
 
 ## Reproduction Steps
 

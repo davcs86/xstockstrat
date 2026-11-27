@@ -428,6 +428,17 @@ async def _run_cycle_with(monkeypatch, result, *, source=None, ingest=None):
     return servicer._ingest_external_signal, errors
 
 
+async def test_explicit_zero_conviction_marks_presence(monkeypatch):
+    # @AC-5 @feature-309: an mcp_client item's explicit 0.0 is built as a provided 0.0.
+    ingest, errors = await _run_cycle_with(monkeypatch, _FakeResult([_item(conviction=0.0)]))
+
+    ingest.assert_awaited_once()
+    signal = ingest.await_args.args[0]
+    assert signal.conviction == 0.0
+    assert signal.conviction_provided is True
+    assert errors == []
+
+
 async def test_ac5_signals_key_selected_alongside_other_list(monkeypatch):
     # AC-5 @FR-6: a `signals` list wins even when an earlier key holds another list.
     ingest, errors = await _run_cycle_with(

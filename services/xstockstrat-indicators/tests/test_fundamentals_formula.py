@@ -105,6 +105,38 @@ def test_no_value_metrics_returns_neutral_half():
     assert res.output["value"] == pytest.approx(0.5)
 
 
+def test_dividend_only_input_has_no_pb_or_de_subscore():
+    # @AC-1 @feature-309: absent pb_ratio / debt_to_equity never score as a top 1.0 sub-score.
+    res = run({"dividend_yield": 0.013})
+    assert res.success is True
+    assert res.output["value"] == pytest.approx(0.325)
+    assert res.output["quality"] == 0.5
+    assert res.output["composite"] == pytest.approx(0.4125)
+
+
+@pytest.mark.parametrize(
+    "fundamentals",
+    [
+        {},
+        {"pe_ratio": 18},
+        {"pb_ratio": 2.5},
+        {"dividend_yield": 0.02},
+        {"roe": 0.15},
+        {"debt_to_equity": 1.0},
+        {"eps": -1.0},
+        {"pe_ratio": -5.0},
+        {"roe": 5.0},
+        {"debt_to_equity": 50.0},
+        {"pe_ratio": -5.0, "roe": 5.0, "debt_to_equity": 50.0},
+    ],
+)
+def test_composite_in_unit_range_on_partial_and_extreme_rows(fundamentals):
+    res = run(fundamentals)
+    assert res.success is True
+    for key in ("value", "quality", "composite"):
+        assert 0.0 <= res.output[key] <= 1.0, f"{key}={res.output[key]} out of range"
+
+
 # ── FR-4 special cases ────────────────────────────────────────────────────────
 
 

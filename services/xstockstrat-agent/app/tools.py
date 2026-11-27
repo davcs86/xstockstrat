@@ -830,10 +830,11 @@ def register_tools(server: MCPServer) -> None:
         symbol: ticker symbol e.g. 'NVDA'.
         direction: one of 'buy', 'sell', 'hold', 'watchlist'.
         valid_from: ISO 8601 datetime string e.g. '2026-05-01T00:00:00Z'.
-        conviction: float in (0.0, 1.0], optional. There is NO source default — an omitted
-            conviction is stored as NULL, not backfilled, so pass it explicitly whenever known. An
+        conviction: float in [0.0, 1.0], optional. There is NO source default — an omitted
+            conviction is stored as NULL ("not given"), not backfilled, so pass it explicitly
+            whenever known. An explicit 0.0 is stored as 0 and scored as zero confidence. An
             out-of-range value (< 0.0 or > 1.0) or NaN is rejected INVALID_ARGUMENT at the ingest
-            boundary; 0.0 (or an omitted conviction) is stored as NULL.
+            boundary.
         SIDE EFFECT: on success this tool AUTO-EMITS an alert when conviction is present and >= the
             agent.signal.alert_threshold config value (default 0.6); an alert failure does not fail
             the ingest. Do NOT also call emit_alert for the same signal, or you will double-alert.

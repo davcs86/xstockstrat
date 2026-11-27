@@ -618,3 +618,296 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Possible follow-up feature: make `_MIN_CROSS_SECTION` a config key or derive it from the quantiles. Not in scope here.
 - [ ] Steps 16 and 17 have offline greps only; their real check is CI `migration-rerun` on the integration PR. Record that result here.
 - Earlier threads still open: `buf breaking` verdict (Step 1); post-deploy check per environment (O-18); EDGAR self-heal review against the list (Step 16).
+
+## Session 2026-11-26 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation (binding, verbatim operator-approved record):**
+  `{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","dev":"bfb2f32d0bf13476dad027a76c8a84e70b935ebc","specHash":"1e90132e7b12edf9e5665d315ab6273556f7ac50","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18],"mismatches":[{"n":4,"detail":"Line drift only; every symbol and Files path exists. In tests/test_fundsignal_loop.py the `assert inputs[\"pe_ratio\"] == 0.0` is at :967, not :966 (:966 is the dividend_yield approx assertion; `inputs = dict(req.input_data)` is still at :965). tests/test_fundam"},{"n":9,"detail":"services/xstockstrat-ingest/app/handlers/servicer.py has moved about 109 lines; the symbols are all present. `_ingest_external_signal` is at :1346 (spec :1237). The \"0.0 passes and is stored as NULL\" comment is at :1365 (spec :1255-1256). The write sentinel `c"},{"n":10,"detail":"services/xstockstrat-ingest/tests/test_ingest_servicer.py has moved about 59 lines. TestQuerySignals is at :1947 (spec :1888) and test_populates_ingested_at is at :1961 (spec :1902). TestIngestSignal._make_signal_req is at :1666 (spec :1608), with `conviction = 0"},{"n":11,"detail":"scoring.py anchors match (:10, :15, :31, :39) and screener.py:285 matches. app/handlers/servicer.py: the `_compute_signal_score = scoring.compute_signal_score` alias is at :97 (:96 is its comment). The literal `sig.conviction` readers have moved: :5115-5116, :"},{"n":12,"detail":"tests/test_analysis_helpers.py has 16 `_make_signal(` call sites (:208..:358), not 17. The file has 17 occurrences only if you count the def at :182. The other anchors match: _make_signal :182-194 MagicMock, test_zero_conviction_uses_default_half :235, real Ex"},{"n":16,"detail":"The reader filter `(valid_until IS NULL OR valid_until >= ${idx})` is at services/xstockstrat-ingest/app/handlers/servicer.py:1589, not :1480. The other evidence holds. The last ingest migration is 018 on both the merged tree and origin/main-dev, so 019 is fre"}]}`
+- Merged `main-dev` `f802b184` into the branch (`ca2cd4ad`; resolver: nothing to resolve; ledger-guard clean).
+- Re-spec commits (`git log --first-parent origin/main-dev..HEAD`):
+  - `6c83e236` respec(fix-fundsignal-scoring-correctness): align steps 4,9,10,11,12,16 with current codebase. Only line anchors changed, re-grepped on the merged tree. Step 12's call-site count went from 17 to 16. Step 16 also re-anchors the servicer `user_id` bind (`:1415`).
+- Tooling detection (steps 1-18): uv ✓ 0.11.32 · python ✓ 3.13 · go ✓ · buf ✗ on host → Docker codegen path (`dockerd` is present but not running; start it at Step 2) · migration steps need none.
+- The Step 3/6/11 anchors (Open Threads) were re-grepped after the merge: Step 11 matches (`_emit_signal :643`, `scoring.py:31`). Steps 3 and 6 were not in the mismatch set.
+
+```sdd-batch-setup
+{"mainDev":"f802b184b13bd899d858c4b0349a616e9981b9d9","date":"2026-11-26"}
+```
+
+## Session 2026-11-27 — Verification fixes (operator ruling precedent from 316), recorded by the orchestrator
+
+The batch executor reported that Step 2 Verification line 2 prints 0 on a correct tree: in the serialized descriptor a length byte precedes the field name, so Python writes the leading `c` as `\x63` (`\x13\x63onviction_provided\x18\x0c \x01(\x08`). The field is present (ExternalSignal `conviction_provided`, number 12, bool). Applying the operator's 316 ruling ("Re-spec the Verification first"; a separate respec commit rewrites the block, then the step re-runs verbatim). Scanned Steps 1-18; only Step 2 needed a change.
+
+- **Step 2, Verification line 2** (the only fix):
+  - Old: `grep -c "conviction_provided" packages/proto/gen/python/ingest/v1/ingest_pb2.py   # >= 1`
+  - New: `python3 -c "import sys; sys.path.insert(0,'packages/proto/gen/python'); from ingest.v1 import ingest_pb2; assert ingest_pb2.ExternalSignal.DESCRIPTOR.fields_by_name['conviction_provided'].number == 12"   # exit 0 (run from the repo root; KeyError before the stubs are regenerated)`
+  - Checked on the current tree: it raises `KeyError: 'conviction_provided'` today (the intended RED) and imports cleanly otherwise.
+- **Scan result, no other change**: no other `grep` reads generated protobuf bytes; every `cd` is the first command of its block and later lines in that block are relative to it (no line expects the repo root after a `cd`); every trailing no-match grep is guarded by `; test $? -eq 1`, and no block ends on a bare grep that exits 1 on the expected result; the file, test and doc anchors that exist before their step all resolve on this tree.
+
+## Session 2026-11-27 — sdd-execute sequential (steps 1+2, atomic unit)
+
+Tooling setup (steps 1+2): buf ✗ on host → Docker `xstockstrat-codegen` (cached image; buf 1.72.0, protoc-gen-go v1.36.11, protoc-gen-go-grpc v1.6.2, protoc-gen-connect-go v1.19.2, grpcio-tools 1.80.0) · docker ✓ · no Node install.
+
+### Step 1 — proto: add `conviction_provided` to `ExternalSignal` [done]
+- Unit 1+2. Added `bool conviction_provided = 12;` to `ExternalSignal`, rewrote the `conviction = 4` comment, extended the `deduplicated` comment (explicit 0.0 vs omitted are different dedup values), and added `ingest.proto#ExternalSignal` (`conviction` + `conviction_provided`) to PROTO-7's sibling-flag sentence. TDD: N/A (proto).
+- **`buf breaking` verdict: PASS** (no output, `buf lint` clean) against `#ref=5dfa9e14…,subdir=packages/proto` (synced tip, edit uncommitted), log `.sdd-logs/v-1.log`, `exit=0`. buf-gen.sh's own `buf breaking (against main-dev)` also passed in the Step 2 runs. CI `proto-lint` result still to be recorded on the integration PR.
+- Files modified: `packages/proto/ingest/v1/ingest.proto`, `packages/proto/docs/context-constitution.md`
+- Deviations: `buf breaking` ref form and containerized buf (Deviation Log).
+
+### Step 2 — proto-gen: regenerate ingest stubs [done]
+- Unit 1+2. Ran `./scripts/buf-gen.sh` (in the codegen container); the diff touches only ingest stubs (Go `ingest.pb.go`, Python `ingest_pb2.py`, TS `ingest.ts`/`ingest_pb.ts`, dist `ingest.{js,d.ts}`/`ingest_pb.{js,d.ts}`). The descriptor assert (field 12) passed; the second run after staging printed `second run clean: 0` (`.sdd-logs/v-3.log`, `exit=0`). TDD: N/A (proto-gen).
+- Files modified: `packages/proto/gen/go/ingest/v1/ingest.pb.go`, `packages/proto/gen/python/ingest/v1/ingest_pb2.py`, `packages/proto/gen/ts/ingest/v1/ingest.ts`, `packages/proto/gen/ts/ingest/v1/ingest_pb.ts`, `packages/proto/gen/ts/dist/ingest/v1/{ingest.js,ingest.d.ts,ingest_pb.js,ingest_pb.d.ts}`
+- Deviations: Verification ran in the codegen container with read-only mounts, twice (pre/post staging) — Deviation Log.
+
+## Session 2026-11-27 — sdd-execute sequential (steps 3+4, atomic unit)
+
+Tooling setup (steps 3+4): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 3 — service: build the formula input from present metrics only [done]
+- Unit 3+4. `_score_via_formula` builds `fundamentals` only from the six keys not in `set(f.missing_metrics)`; an empty dict goes to `unscored` (replaces the `issuperset` test). The `score_fundamentals` call, the `composite` read and the `except` branch are unchanged; no clamp.
+- TDD: RED `.sdd-logs/v-1.log` — `2 failed, 80 passed` (`assert set(inputs) == {"dividend_yield"}` failed with extra `pe_ratio`/`pb_ratio`/`roe`/`debt_to_equity`/`eps`; the omit-absent test failed with extra `pe_ratio`); `issuperset` still at `:579`. The block printed `exit=0` because its last command (ruff) passed. GREEN `.sdd-logs/v-2.log` `exit=0` — `82 passed`, no `issuperset` hit, ruff clean.
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`
+- Deviations: none
+
+### Step 4 — test: formula-path input and the changed durable rules [done]
+- Unit 3+4. AC-1 red: `set(inputs) == {"dividend_yield"}` failed → green: passed. `test_ac3_formula_all_missing_skipped_partial_scored` now pins the dividend-only input (`@AC-1 @feature-309` docstring); new `test_formula_partial_row_matches_strategy_omit_absent` (row via `_fund` → `fundamentals_row`, `pe_ratio` missing, `roe=0.0` present) pins the five present keys and the present zero. Durable rules changed per the 2026-11-20 C-16 sign-off: 246 `@AC-3` Then ("… with dividend_yield 0.013 as its only input"); 201 `@AC-4` stale comment deleted; 201 `@AC-8` title "… and matches the producer", second Then "… matches … which also omits pe_ratio", divergence sentence trimmed from the trailing comment. Tags/IDs unchanged. Two `test_fundamentals_formula_operand.py` docstrings now say the producer omits the metric too.
+- GREEN `.sdd-logs/v-3.log` `exit=0` — `88 passed`; full suite `1827 passed`, `Required test coverage of 40% reached. Total coverage: 91.88%`; ruff clean; the `pe_ratio 0.0|diverges` grep found nothing.
+- Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`, `services/xstockstrat-analysis/tests/test_fundamentals_formula_operand.py`, `services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature`, `services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature`
+- Deviations: none (the `pe_ratio` assertion sat at `:967`, not `:966` — line drift only, recorded at the 2026-11-26 up-front confirm).
+
+## Session 2026-11-27 — sdd-execute sequential (step 5)
+
+Tooling setup (step 5): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`, Python 3.12.3 per the service's `.python-version`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 5 — test: pin `value_quality` on a dividend-only input and its [0,1] range [done]
+- Added `test_dividend_only_input_has_no_pb_or_de_subscore` (`@AC-1 @feature-309`: `{"dividend_yield": 0.013}` → value 0.325, quality 0.5, composite 0.4125) and the parametrized `test_composite_in_unit_range_on_partial_and_extreme_rows` (11 rows: empty, each single metric, negative `pe_ratio`, `roe` 5.0, `debt_to_equity` 50, and all three together; every output in [0,1]). Formula source unchanged.
+- TDD: AC-1 red N/A — no behavior change; characterization test added (the formula already omits absent keys). Baseline `.sdd-logs/v-1.log` `exit=0`: `13 passed` in the step file. GREEN `.sdd-logs/v-2.log` `exit=0`: `25 passed`; full suite `622 passed`, `Required test coverage of 50% reached. Total coverage: 87.10%`; ruff `All checks passed!`, `65 files already formatted`.
+- Pre-existing flake, not touched: `tests/test_sandbox_watchdog.py::test_ac8_fork_bomb_is_not_a_success_the_service_recovers_and_nothing_is_unobservable` failed once in the baseline full run (`sandbox memory watchdog cannot observe child` logged) and went pass/fail/pass in three isolated re-runs; it passed in the GREEN run. Candidate for `/sdd-qa defect`.
+- Files modified: `services/xstockstrat-indicators/tests/test_fundamentals_formula.py`
+- Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (steps 6+7, atomic unit)
+
+Tooling setup (steps 6+7): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 6 — service: degenerate-only side gate in `_map_directions` [done]
+- Unit 6+7. Added `_NEUTRAL_SCORE = 0.5` and `_MIN_CROSS_SECTION = 5` after `_BUILTIN_BANDS`, with one comment line saying 5 is calibrated to the default 0.80 / 0.20 quantiles. `_map_directions` keeps `ordered` and both `_quantile` cuts, computes `degenerate = len(ordered) < _MIN_CROSS_SECTION or buy_cut <= sell_cut` over the folded set, and when degenerate requires `s > 0.5` for `buy` and `s < 0.5` for `sell` (otherwise `hold`). The non-degenerate three-way branch is unchanged, and the docstring names the rule. `_quantile` and the caller are untouched.
+- TDD: RED `.sdd-logs/v-1.log` `exit=1` — `9 failed, 89 passed` (AC-2 `assert 'buy' != 'buy'`; lone 0.05 / 0.5 / 0.49 returned `buy`; n=2..4 below-0.5 sets held a `buy`; `_MIN_CROSS_SECTION` AttributeError; lone 0.10 `{'AAPL': 'buy'} == {'AAPL': 'sell'}`). GREEN `.sdd-logs/v-2.log` `exit=0` — `98 passed`, both constants grep at `:62` / `:64`, ruff `All checks passed!`, `143 files already formatted`.
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`
+- Deviations: none
+
+### Step 7 — test: direction gate, calibration and the built-in score range [done]
+- Unit 6+7. AC-2 red: `signal.direction != "buy"` failed (`'buy'`) → green: passed. The lone-0.10 expectation in `test_map_directions_reference_scores_set_the_cuts` is now `sell`. New in `TestScoreDirection`:
+  - `test_ac2_lone_low_scoring_symbol_is_not_buy` (`@AC-2 @feature-309`): `_identity_loop`, an explicit one-symbol universe, and a `_fund` row with pe 40, roe 0, eps -1 and `pb_ratio`/`debt_to_equity` missing; `_db.fetch` returns `[]`; then a non-dry-run `run_once()`.
+  - `test_lone_score_follows_its_side` (5 cases).
+  - `test_small_cross_sections_take_the_degenerate_branch` (n=2..4).
+  - `test_min_cross_section_calibrated_to_default_quantiles`: for n=5..50 the `_map_directions` labels equal the `_quantile` labels, include a hold and have a buy share ≤ 0.40; the n=4 `_quantile` labels fail that property; the constant is 5.
+  - `test_builtin_score_stays_in_unit_range` (6 rows: full, partial, out-of-band and all-missing).
+- `test_quantile_buckets` and 260 `@AC-9` are untouched and pass.
+- GREEN `.sdd-logs/v-3.log` `exit=0` — `98 passed` in the file; full suite `1843 passed`, `Required test coverage of 40% reached. Total coverage: 91.91%`; ruff clean; the conftest grep prints `from tests.conftest import fundamentals_row, snapshot_watcher`.
+- Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`
+- Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (step 8)
+
+Tooling setup (step 8): docs step, none needed · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 8 — docs: producer scoring and direction contract [done]
+- `docs/fundsignal.md`: the unscored bullet now says a partial formula row omits its missing inputs and an empty input is unscored (the "wire 0.0" clause is gone). A new **Direction (feature 309)** bullet covers the degenerate-only gate: folded set < `_MIN_CROSS_SECTION` = 5 or `buy_cut <= sell_cut`, the side tie-break at `_NEUTRAL_SCORE` = 0.5 (hold band exactly 0.5), the n ≥ 5 all-weak top-quantile `buy`, and the 5 calibrated to the default 0.80 / 0.20 quantiles while those keys stay live. `docs/fundamentals-guard.md`: "diverges by design" → "the producer omits absent metrics too". Analysis `CLAUDE.md`: the `scoring_formula_id` row gains the [0,1], 0.5-neutral, no-clamp scale contract (D-10); the `buy_quantile` row points to the Direction bullet. This closes the "document the coupling and scale contract" Open Thread.
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0`: the `wire 0.0|diverges by design` grep found nothing; `_MIN_CROSS_SECTION` at `fundsignal.md:19`; `0.5 neutral` at `CLAUDE.md:259`.
+- A re-grep of `diverges by design|wire 0.0` across the analysis `acceptance/`, `docs/` and `CLAUDE.md` finds nothing (Step 4 already trimmed the `fundamentals-formula-inputs.feature` comment).
+- Files modified: `services/xstockstrat-analysis/docs/fundsignal.md`, `services/xstockstrat-analysis/docs/fundamentals-guard.md`, `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (step 9)
+
+Tooling setup (step 9): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 9 — service: conviction presence on ingest write, read-back and the mcp_client builder [done]
+- `_ingest_external_signal` now stores `signal.conviction if (signal.conviction_provided or signal.conviction != 0.0) else None` (range check kept; comment says an explicit 0.0 is stored as 0 and an omitted conviction as NULL). The dedup upsert is untouched (R-8). The `QuerySignals` builder sets `conviction` and `conviction_provided=True` only for a non-NULL row and leaves both unset for NULL (D-8). `_build_external_signal` sets `conviction_provided=True` unconditionally.
+- TDD: RED via an uncommitted scratch probe `.sdd-logs/v-2.log` `exit=1` — `3 failed, 2 passed` (explicit 0.0 stored `(None, None)`; QuerySignals gave `(False, …)` for every row; mcp builder `conviction_provided` `False`). The Verification block before the change, `.sdd-logs/v-1.log` `exit=0`: `210 passed`, the grep printed nothing. GREEN `.sdd-logs/v-3.log` `exit=0` — `210 passed`, grep hits `servicer.py:1387`, `:1641`, `mcp_client_loop.py:95`, ruff `All checks passed!`, `58 files already formatted`; probe `.sdd-logs/v-4.log` `exit=0` `5 passed`. The block has no coverage command; Step 10 runs the coverage gate.
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/app/engine/mcp_client_loop.py`
+- Deviations: RED shown by a scratch probe, not a committed test (Deviation Log).
+
+## Session 2026-11-27 — sdd-execute sequential (step 10)
+
+Tooling setup (step 10): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 10 — test: explicit-zero store, read-back and mcp_client presence [done]
+- `TestIngestSignalConvictionValidation` gains `test_explicit_zero_conviction_is_stored_as_zero` (`@AC-5`: INSERT `args[4]` and claim `args[6]` are 0.0, not None) and `test_omitted_conviction_is_stored_as_null` (both None), each on its own `transaction_conn`. The `test_in_range_conviction_proceeds` comment now says 0.0 without the flag is stored NULL. `TestQuerySignals.test_conviction_presence_round_trip`: rows `Decimal("0.000")` / `None` / `0.9` → `(True, 0.0)`, `(False, 0.0)`, `(True, 0.9)`. `test_mcp_client_loop.py::test_explicit_zero_conviction_marks_presence` (`_run_cycle_with` + `_item(conviction=0.0)`): `conviction == 0.0`, `conviction_provided is True`.
+- TDD: AC-5 red: with the pre-Step-9 service files (`faea4d0f`) temporarily checked out, `.sdd-logs/v-1.log` shows `3 failed, 211 passed` (`assert (None is not None)`; `At index 0 diff: (False, 0.0) != (True, 0.0)`; `assert False is True`) → green: `.sdd-logs/v-2.log` `exit=0`, `214 passed`; full suite `626 passed`, `Required test coverage of 40% reached. Total coverage: 87.70%`; ruff `All checks passed!`, `58 files already formatted`; the helpers grep prints the `tests._helpers` imports.
+- Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`, `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`
+- Deviations: RED run against the pre-Step-9 service files (Deviation Log).
+
+## Session 2026-11-27 — sdd-execute sequential (steps 11+12, atomic unit)
+
+Tooling setup (steps 11+12): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 11 — service: producer sets presence; scorer reads it [done]
+- Unit 11+12. `_emit_signal` builds `ExternalSignal(..., conviction_provided=True, ...)` unconditionally (D-8). `compute_signal_score` reads `sig.conviction if (sig.conviction_provided or sig.conviction != 0.0) else 0.5`; the two neutral `return 0.5` lines and the other `servicer.py` readers are unchanged. A legacy NULL row (flag unset, 0.0) keeps its 0.5 weight (R-1).
+- GREEN (Step 11 block) `.sdd-logs/v-2.log` `exit=0` — `173 passed`; grep hits `fundsignal_loop.py:671`, `scoring.py:32`; ruff `All checks passed!`, `143 files already formatted`.
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`, `services/xstockstrat-analysis/app/services/scoring.py`
+- Deviations: none
+
+### Step 12 — test: emit presence, scorer zero and the real-proto signal helper [done]
+- Unit 11+12. `_make_signal` is now a real `ingest_pb2.ExternalSignal` (same signature; `valid_from`/`valid_until` set via `FromDatetime` only when > 0); all 16 call sites and `test_zero_conviction_uses_default_half` (the R-1 pin, unchanged) passed on the pre-Step-11 tree. New: `test_explicit_zero_conviction_scores_zero` (`@AC-3 @feature-309`: not given → 0.75, given → 0.5); `test_screener.py::test_ac3_screen_scores_explicit_zero_conviction_as_zero` (`@AC-3 @feature-309`, `_in_window_signal("buy", 0.0)` plus the flag, a capturing wrapper over `scoring.compute_signal_score` → `[0.5]`); `test_fundsignal_loop.py::TestUnscoredSymbols::test_zero_score_emits_explicit_zero_conviction` (pe 40, roe 0, eps -1, pb / d-e missing → `conviction == 0.0`, `conviction_provided is True`).
+- TDD: AC-3 red `.sdd-logs/v-1.log` — `3 failed, 170 passed` (`assert 0.75 == 0.5 ± 5.0e-07`; `assert [0.75] == [0.5 ± 5.0e-07]`; `assert False is True` on `conviction_provided`); that block printed `exit=0` because its last command (the MagicMock grep guard) passed → green `.sdd-logs/v-3.log` `exit=0` — `173 passed`; full suite `1846 passed`, `Required test coverage of 40% reached. Total coverage: 91.91%`; ruff clean; no `sig = MagicMock()` left.
+- Files modified: `services/xstockstrat-analysis/tests/test_analysis_helpers.py`, `services/xstockstrat-analysis/tests/test_screener.py`, `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`
+- Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (step 13)
+
+Tooling setup (step 13): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 13 — service: agent `ingest_signal` sets presence; tool docs follow [done]
+- `client.ingest_signal` sets `signal.conviction_provided = True` inside `if conviction is not None:` (an omitted conviction leaves both unset). The `ingest_signal` tool docstring, the `mcp-tools.md` `conviction` row and the `signal_extraction.md` row now say: range [0.0, 1.0]; omitted → NULL ("not given"); explicit 0.0 → stored 0 and scored as zero confidence. The range-rejection sentence is kept. Tool name, parameters, return shape and tool count are unchanged; no new outbound call.
+- TDD: RED via an uncommitted scratch probe `.sdd-logs/v-2.log` `exit=1` — `2 failed, 1 passed` (`assert False is True` on `conviction_provided` for conviction 0.0 and 0.7). The Verification block before the change, `.sdd-logs/v-1.log` `exit=0`: `239 passed`, the `conviction_provided` grep printed nothing, `unknown confidence` hit `mcp-tools.md:269`. GREEN `.sdd-logs/v-3.log` `exit=0` — `239 passed`, grep hit `258:        signal.conviction_provided = True`, no `unknown confidence` hit, ruff `All checks passed!`, `79 files already formatted`; probe `.sdd-logs/v-4.log` `exit=0` `3 passed`. The block has no coverage command; Step 14 runs the coverage gate.
+- Files modified: `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/prompts/signal_extraction.md`, `docs/runbooks/mcp-tools.md`
+- Deviations: RED shown by a scratch probe, not a committed test (Deviation Log).
+
+## Session 2026-11-27 — sdd-execute sequential (step 14)
+
+Tooling setup (step 14): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 14 — test: agent client sets presence only when conviction is given [done]
+- `TestIngestSignalClient` gains `test_explicit_zero_conviction_sets_presence` (`conviction=0.0` → sent signal `conviction == 0.0`, `conviction_provided is True`) and `test_omitted_conviction_leaves_presence_unset` (`conviction_provided is False`), both on the existing `app.client.mtls` / `IngestServiceStub` patch pattern, reading the request from `mock_stub.IngestSignal.await_args.args[0].signal`. No fixture home (C-13: scenario one-offs).
+- TDD: red with the pre-Step-13 `client.py` (`385ce947`) temporarily checked out, `.sdd-logs/v-1.log`: `1 failed, 78 passed` (`assert False is True` at `tests/test_client.py:481`); full suite `1 failed, 832 passed`; that block printed `exit=0` because ruff ran last → green `.sdd-logs/v-2.log` `exit=0`: `79 passed`; full suite `833 passed`, `Required test coverage of 40% reached. Total coverage: 88.47%`; ruff `All checks passed!`, `79 files already formatted`.
+- Files modified: `services/xstockstrat-agent/tests/test_client.py`
+- Deviations: RED run against the pre-Step-13 client (Deviation Log).
+
+## Session 2026-11-27 — sdd-execute sequential (step 15)
+
+Tooling setup (step 15): docs step, none needed · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 15 — docs: conviction-presence invariant [done]
+- INGEST-4 rewritten: "given" iff `conviction_provided or conviction != 0.0`; write stores NULL only when not given (a stored 0 is a real zero); read sets `conviction` + `conviction_provided=True` for every non-NULL row and leaves both unset for NULL; the surviving legacy sentinel (a pre-flag client's deliberate 0.0 without the flag still reads as not given, 0.5 in the analysis scorer) is stated; anchors refreshed to the Step 9/11 symbols (`servicer.py` ~L1366/~L1386-1387/~L1639-1641, `mcp_client_loop.py#_build_external_signal` ~L95, `ingest.proto` ~L130/~L140, `scoring.py#compute_signal_score` ~L31-32). The "unknown confidence" wording is gone. This closes the "document the surviving legacy sentinel" Open Thread. `add-data-source.md` snippet: the `conviction = 4` comment now names the flag, and `bool conviction_provided = 12;` is shown.
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log` `exit=0`: `conviction_provided` at `context-constitution.md:18`, `add-data-source.md:358` and `:364`; no `unknown confidence` hit.
+- Not touched (outside Step 15's instructions; noted for a follow-up): other stale conviction text in `docs/runbooks/add-data-source.md` — `:289` ("otherwise `NULL`"), `:405` (`conviction=signal.conviction or None`, which contradicts the new invariant) and `:591` (`sig.get("conviction", 0.5)`).
+- Files modified: `services/xstockstrat-ingest/docs/context-constitution.md`, `docs/runbooks/add-data-source.md`
+- Deviations: none
+
+## Session 2026-11-27 — Operator Gate 1 read-only SELECT results, supplied by the operator (verbatim)
+
+The operator ran the Step 16 read-only SELECT (the one in `implementation-spec.md` Step 16 Instruction 0, with the cutoff `2026-10-31T00:00:00Z`, no list leg) in both environments and pasted the results:
+- DO staging (`xstockstrat-staging`): `(0 rows)`.
+- Homelab staging (`xstockstrat-staging` on the homelab VM): `(0 rows)`.
+
+The union over the in-scope environments is therefore empty. Production is out of scope (never launched; standing ruling), so it is not part of the union. Operator Gate 1 is answered with an empty list. Gates 2 (cutoff confirmation) and 4 (second cross-schema read approval) were not answered by the operator; they only matter if a migration is still written. The follow-up decision (drop Steps 16-18, keep them as a guarded no-op, or hold) is recorded in the entry that follows.
+
+## Session 2026-11-27 — operator rulings recorded by the orchestrator (verbatim)
+
+Operator rulings, recorded verbatim by the orchestrator:
+
+1. Question: what should happen with Steps 16-18 (the ingest `019_retract_fabricated_fundsignals` migration, its migration-assertions fixture, the cross-schema docs) given the empty frozen retraction list? Operator answer: **"Drop 16-18 (Recommended)"** — re-spec 309 to close out at Step 15: no retraction migration and no cross-schema read; the two zero-row results are the recorded evidence; Operator Gates 1, 2 and 4 become moot; `@AC-4` stays as the guarantee, closed by that evidence (state the AC-4 handling in the re-spec; the operator will be asked before promotion).
+2. Question: confirm O-14 (stored wrong-direction `buy` rows from degenerate days expire naturally up to `fundsignal.valid_days`, 90; no step retracts them), O-15 (opportunity rows built from retracted signals stay readable up to about 24 h, `opportunity.valid_window_hours`; no recompute step) and the `@AC-5` wording (added by /sdd-review impl-spec with no operator in the loop)? Operator answer: **"Confirm all three (Recommended)"**.
+
+Re-spec applied (`implementation-spec.md`): Steps 16-18 removed from the step list and recorded in `## Dropped Steps` plus a Deviation Log entry; Total Steps 18 → 15; Operator Gates 1-4 answered or moot; the O-18 post-deploy checks withdrawn. `@AC-4` has no covering step: it is closed by the two zero-row Operator Gate 1 results (entry above) and is not guarded by an automated test. The operator is to be asked about that C-15/C-16 exception before promotion. `feature.md` and `product-spec.md` carry a one-line note; `acceptance.feature` and `design.md` are untouched (C-15; design is a historical record).
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+> CORRECTED 2026-11-27 by the orchestrator under the operator ruling "Do not promote AC-4 (Recommended)": promote @AC-1, @AC-2,
+> @AC-3 (analysis suite) and @AC-5 (ingest suite) only. @AC-4 is NOT promoted: the retraction migration was dropped, so it has no mechanism
+> or test; it stays in acceptance.feature (C-15) and is closed by the recorded zero-row evidence. @AC-1 gate cleared: the 246 @AC-3 and
+> 201 @AC-8 amendments are on the branch. Everything else is unchanged.
+## Promotion plan — fix-fundsignal-scoring-correctness (feature 309)
+
+Source: docs/roadmap/features/309-fix-fundsignal-scoring-correctness/acceptance.feature. I read it from the working tree, not from origin/feature/fix-fundsignal-scoring-correctness, because I have no git access. The caller should confirm the working-tree copy matches the branch. Affected suites checked: xstockstrat-analysis, xstockstrat-ingest, and docs/sdd/business-rules/platform.feature. No `@feature-309` tag exists anywhere yet, so this is a first promotion.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW (gated, see Notes 1) | Subject is the producer's ExecuteFormula input, which lives in analysis. Related to `@AC-3 @feature-246` and `@AC-8 @feature-201`, both amended by this feature. |
+| @AC-2 | services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW | Subject is the direction on the emitted signal. No existing small-cross-section rule found. |
+| @AC-3 | services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW | Subject is `compute_signal_score` in the analysis screener and backtest. No existing explicit-zero-conviction rule found. |
+| @AC-4 | (not promoted) | — | NOT PROMOTED (operator ruling 2026-11-27) | The retraction migration was dropped (empty frozen list); @AC-4 has no mechanism, step or test and is closed by the recorded zero-row evidence. C-15 exception, recorded in context.md and the PR. |
+| @AC-5 | services/xstockstrat-ingest/acceptance/fix-fundsignal-scoring-correctness.feature | CREATE | NEW | Subject is the mcp_client ingest of conviction 0.0. It is distinct from `@AC-4 @feature-166` (conviction 0.72), so it is not a DUP or OVERLAP. See Notes 3. |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature (CREATE) ---
+# Promoted from docs/roadmap/features/309-fix-fundsignal-scoring-correctness/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-309` tag.
+# Durable business rules xstockstrat-analysis guarantees for fundamentals-signal scoring: absent metrics
+# are never fed to the formula as zeros, a lone scored symbol is not labelled buy, and an explicit
+# conviction of 0.0 stays 0.0 — a rule enters only by promotion, never by hand-authoring.
+
+Feature: fix-fundsignal-scoring-correctness (bug fix)
+  Regression guard for clustered defect reports: fundamentals signals are scored from present data
+  only, directions reflect the score, and explicit zero conviction stays zero.
+
+  # guards: docs/reports/2026-10-21-analysis-fundsignal-formula-partial-row-wire-zero-defect.md
+  @AC-1 @regression @feature-309
+  Scenario: The formula-path producer omits absent metrics from the formula input
+    Given analysis.fundsignal.scoring_formula_id is the system "value_quality" formula
+    And a symbol whose fundamentals row lists "pe_ratio", "pb_ratio", "roe", "debt_to_equity" and "eps" in missing_metrics
+    And its dividend_yield is 0.013
+    When a producer cycle scores that symbol
+    Then the ExecuteFormula input contains only "dividend_yield" with value 0.013
+    And no pb or debt_to_equity sub-score of 1.0 contributes to the composite
+
+  # guards: docs/reports/2026-10-21-analysis-fundsignal-small-cross-section-quantile-defect.md
+  @AC-2 @regression @feature-309
+  Scenario: A lone low-scoring symbol is not labelled buy
+    Given analysis.fundsignal.universe_source is "explicit" with one symbol
+    And that symbol's fundamentals are pe_ratio 40, roe 0.0 and eps -1
+    And no fundamentals scores are stored for the day
+    When a non-dry-run producer cycle runs
+    Then the emitted signal for that symbol does not carry direction "buy"
+
+  # guards: docs/reports/2026-10-21-analysis-zero-conviction-read-as-neutral-defect.md
+  @AC-3 @regression @feature-309
+  Scenario: An explicit conviction of 0.0 is scored as 0.0
+    Given an ExternalSignal with direction "buy" and conviction 0.0 is ingested for a weighted source
+    When compute_signal_score scores that source's signals for a screener or backtest
+    Then the signal adds 0.0 to buy_conviction, not 0.5 times the source weight
+
+--- /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-fundsignal-scoring-correctness.feature (CREATE) ---
+# Promoted from docs/roadmap/features/309-fix-fundsignal-scoring-correctness/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-309` tag.
+# Durable business rules xstockstrat-ingest guarantees: an explicit mcp_client conviction of 0.0 is stored
+# as 0 — a rule enters only by promotion, never by hand-authoring.
+
+Feature: fix-fundsignal-scoring-correctness (bug fix)
+  Regression guard: explicit zero conviction stays zero on ingest.
+
+  # guards: docs/reports/2026-10-21-analysis-zero-conviction-read-as-neutral-defect.md
+  # extends: services/xstockstrat-ingest/acceptance/mcp-client-signal-source.feature @AC-4 @feature-166 (design.md § Business Rules Touched)
+  @AC-5 @regression @feature-309
+  Scenario: An mcp_client item with an explicit conviction of 0.0 is ingested as 0.0
+    Given an active "mcp_client" source whose tool returns one item with symbol "AAPL", direction "buy" and conviction 0.0
+    When xstockstrat-ingest runs a query cycle for that source
+    Then IngestSignal is invoked with an ExternalSignal of conviction 0.0 and conviction_provided true
+    And the signal is stored with conviction 0, not NULL
+
+### Notes / ambiguities / conflicts
+1. **GATE on @AC-1 (potential CONFLICT).** On the tree I read, `services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature:42` (`@AC-3 @feature-246`) still says "with dividend_yield 0.013 and pe_ratio 0.0". That contradicts 309 `@AC-1`.
+   - Design § Business Rules Touched records a signed-off CHANGE (user, 2026-11-20, option A), and implementation-spec step 4 rewrites that Then to "dividend_yield 0.013 as its only input".
+   - Write the @AC-1 block only after confirming on the feature branch that this amendment landed and no `pe_ratio 0.0` remains in that file. If it did not land, treat @AC-1 as CONFLICT, do not write it, and escalate to a human.
+   - Once the amendment lands, @AC-1 is NEW but semantically close to the amended `@AC-3 @feature-246`. It is a consolidation candidate for a human to decide. Nothing should be deleted.
+2. **Other signed-off amendments in the same files** (spec step 5, tag IDs unchanged). These are not promotions, so I plan no write for them. The sdd-execute step applies them in the feature PR.
+   - `services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature`: `@AC-8 @feature-201` is retitled and its second Then changed, and the "diverges" comment near line 39 is removed.
+   - `@AC-4 @feature-201` is a full-row parity rule that is preserved.
+3. **@AC-5 placement.** The design says "EXTEND" `services/xstockstrat-ingest/acceptance/mcp-client-signal-source.feature:34`.
+   - Under the one-scenario-one-target, slug-named-file policy I put it in the new `fix-fundsignal-scoring-correctness.feature` and carry the `# extends:` comment.
+   - If the human prefers to append it to the 166 file, the scenario block is identical. The `@feature-309` tag keeps provenance either way.
+4. **@AC-4 service attribution.** The retraction is a one-off data migration (ingest `019`) that reads `marketdata.fundamentals`, and marketdata owner acknowledged that read. The `Then` outcome (`valid_until`, QuerySignals) lives in ingest, so it goes to the ingest suite rather than platform.feature.
+5. **Tags.** The source file has no `@FR-*` tags, so none are added. Each scenario keeps its original `@AC-n @regression` and gains `@feature-309`. The `# guards:` and `# extends:` comments are kept verbatim. The "Background" used by the 246 suite is not needed here.
+6. **No platform.feature write.** No scenario spans services or the deploy surface.
+7. **OVERLAP and DUP.** None, apart from the @AC-1 closeness in note 1.
+
+### Coverage check
+- Source scenarios: 5 (@AC-1 through @AC-5). Planned (NEW+DUP+OVERLAP): 5 NEW, 0 DUP, 0 OVERLAP. @AC-1 is gated on note 1.
+- Every @AC-* is accounted for and none were skipped. Two files are created: 3 scenarios in analysis and 2 in ingest. Neither directory needs creating, since `acceptance/` already exists for both services.
+```
+
+## Session 2026-11-27 — C-16 promotion ruling recorded by the orchestrator (verbatim)
+
+Question: with the retraction migration dropped, what happens to @AC-4 ("pre-246 fabricated signals no longer active: When the retraction runs...") at promotion? Operator answer: **"Do not promote AC-4 (Recommended)"** — promote @AC-1, @AC-2, @AC-3 and @AC-5 only; record @AC-4 as a C-15 exception closed by the zero-row evidence (DO staging and homelab staging, 2026-11-27), not by a guarded scenario. The `sdd-batch-promotion-plan` block above was corrected accordingly before the gate was approved.
+
+## Session 2026-11-27 — sdd-execute all-done path: C-16 promotion applied, code-completed
+
+- Config-wiring gate (`node scripts/check-config-wiring.mjs --final`, rc=0): two REPORTED lines, both outside this feature's files — `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. No key was added or changed by 309.
+- Merge-order: 309 has no row in `merge-order.md` (it is only named in the 334 servicer.py shared-file prose note, non-blocking).
+- Promotion plan (`sdd-batch-promotion-plan`, operator-confirmed, @AC-4 excluded) applied exactly: `services/xstockstrat-analysis/acceptance/fix-fundsignal-scoring-correctness.feature` (@AC-1, @AC-2, @AC-3) and `services/xstockstrat-ingest/acceptance/fix-fundsignal-scoring-correctness.feature` (@AC-5), each scenario tagged `@feature-309`. The plan's @AC-1 gate was checked on the branch: `@AC-3 @feature-246` now says "dividend_yield 0.013 as its only input" and no `pe_ratio 0.0` remains in the analysis suites; `@AC-8 @feature-201` carries the omit-absent wording.
+- @AC-4 is a recorded C-15 exception: not promoted, closed by the zero-row evidence (DO staging and homelab staging, 2026-11-27), not by a guarded scenario.
+- status.md `in-progress` → `code-completed`; feature.md history row added.

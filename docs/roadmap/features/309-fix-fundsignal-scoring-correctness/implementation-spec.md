@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-11-20
 **Feature**: `docs/roadmap/features/309-fix-fundsignal-scoring-correctness/feature.md`
-**Total Steps**: 18
+**Total Steps**: 15
 **Feature Branch**: `feature/fix-fundsignal-scoring-correctness`
 **Severity**: SEV-2
 **Anchors read from**: `origin/main-dev@36aed60b` (read-only `git archive` snapshot). The feature branch tip
@@ -17,9 +17,9 @@ symbol before editing; a moved line is not a deviation, a missing symbol is (F-0
 
 The build order follows design.md: proto first (Steps 1-2), then the two producer fixes in
 xstockstrat-analysis (formula input, Steps 3-5; direction gate, Steps 6-8), then conviction presence
-across ingest, analysis and the agent (Steps 9-15), and last the ingest retraction migration with its
-assertion fixture and docs (Steps 16-18). The migration is last because it is the only step that waits
-on operator input (the frozen symbol list); everything before it can land without that input.
+across ingest, analysis and the agent (Steps 9-15). The spec ends at Step 15. The ingest retraction
+migration with its assertion fixture and docs (former Steps 16-18) was dropped on 2026-11-27 by operator
+ruling: the frozen retraction list is empty (§ Dropped Steps).
 There is no xstockstrat-indicators code change (recon.md:60) and no new config key (`R-2`); indicators
 gets one characterization test step. Consumer surfaces (C-14): the agent `ingest_signal` path changes in
 Steps 13-14; `/insights/opportunities` (xstockstrat-ui) and MCP `list_opportunities` need no code change —
@@ -33,43 +33,37 @@ that is a design decision, not an omission (design.md § Consumer surfaces; no T
 | `@AC-1` formula input omits absent metrics | Step 4 (producer input), Step 5 (no pb / debt_to_equity sub-score of 1.0) |
 | `@AC-2` lone low-scoring symbol is not `buy` | Step 7 |
 | `@AC-3` explicit conviction 0.0 scored as 0.0 | Step 12 (scorer and screener path); Step 10 pins the store / read-back seam it depends on |
-| `@AC-4` pre-246 fabricated signals no longer active | Step 17 |
+| `@AC-4` pre-246 fabricated signals no longer active | No step: closed by the recorded zero-row evidence (Operator Gate 1 results in context.md, 2026-11-27); not guarded by an automated test — flag for the C-16 promotion decision |
 | `@AC-5` mcp_client explicit conviction 0.0 ingested as 0.0 | Step 10 |
 
 ## Operator Gates (P-03 — execute blocks and asks; never guesses)
 
-1. **Frozen retraction list (blocks Step 16).** The migration needs a literal symbol list. It is the
-   union, over every environment, of the read-only SELECT in Step 16, run by the operator and recorded
-   in `context.md` under a `Frozen retraction list` entry. The list is not in the repo and is not the
-   report's example symbols. Without the entry, Step 16 blocks.
-2. **Retraction cutoff (blocks Step 16).** `2026-10-31T00:00:00Z` comes from
-   `docs/roadmap/features/246-fix-fundsignal-neutral-score/feature.md:30` and is unchecked against
-   deploy logs (design.md Open Risks). The operator confirms it, or supplies the corrected instant, in
-   the same `context.md` entry.
-3. **O-14 / O-15 — not confirmed (ask before Step 1).** design.md asks `/sdd-spec` to confirm two
-   accepted residuals with the operator. The 2026-11-20 operator record names neither, and neither the
-   `/sdd-spec` run nor the `/sdd-review impl-spec` run had an operator to ask. The spec plans on the
-   synthesis default. `/sdd-execute` asks the operator at its up-front confirmation, before Step 1, and
-   records the answer in `context.md`:
+All four gates are resolved by the 2026-11-27 operator rulings (`context.md` § Session 2026-11-27 — operator
+rulings recorded by the orchestrator (verbatim)). No gate remains open and no step is blocked.
+
+1. **Frozen retraction list — answered, empty.** The Step 16 read-only SELECT returned `(0 rows)` on DO
+   staging and on homelab staging (`context.md` § Session 2026-11-27 — Operator Gate 1 read-only SELECT
+   results). Production is out of scope. The union is empty, so there is no list to freeze and no migration
+   to write (§ Dropped Steps).
+2. **Retraction cutoff — moot.** The cutoff `2026-10-31T00:00:00Z` was a parameter of the dropped migration.
+3. **O-14 / O-15 and the `@AC-5` wording — answered, "Confirm all three (Recommended)".**
    - O-14: stored wrong-direction `buy` rows from degenerate days expire naturally (up to
      `fundsignal.valid_days`, 90). No step retracts them.
    - O-15: opportunity rows built from retracted signals stay readable for up to about 24h
      (`opportunity.valid_window_hours`). No step triggers a recompute.
-   Choosing otherwise for either adds steps and needs a re-spec.
-4. **Second cross-schema migration read (blocks Step 16).** Step 16 reads `marketdata.fundamentals` at
-   migration time. Root `CLAUDE.md` § Database records one such exception today (analysis `029`), so
-   this is a second one. `context.md` § Session 2026-11-10 holds approval in principle for the
-   retraction (operator, as DBA + ingest owner), written before the mechanism was chosen; it does not
-   name the cross-schema read. Before Step 16 lands, `context.md` must hold the operator's explicit
-   approval of the second exception and the marketdata owner's acknowledgement (root `CLAUDE.md`
-   § Approval Flow: DB migration = DBA + service owner). Without it, Step 16 blocks.
+   - `@AC-5` (added by `/sdd-review impl-spec` with no operator in the loop) is confirmed as worded.
+4. **Second cross-schema migration read — moot.** No migration reads `marketdata.fundamentals`; root
+   `CLAUDE.md` § Database keeps its single recorded exception (analysis `029`).
 
-## Post-Deploy Checks (O-18 — per environment, recorded in `context.md`; not an execute step)
+**`@AC-4` handling.** The scenario stays in `acceptance.feature` (C-15: `@AC-*` ids are append-only) and is
+not edited. It has no covering step and no automated test. It is closed by the two zero-row Operator Gate 1
+results, which show no pre-246 fabricated row was active in either in-scope environment. This is a recorded
+exception to the C-15 coverage rule; the operator will be asked before promotion (C-16) whether to accept it.
 
-- Compare the `ingest 019: retracted N …` NOTICE in the db-migrator job log with the row count of the
-  frozen-list SELECT taken for that environment (Step 16).
-- Run the Step 16 SELECT again with the list leg added: it must return zero rows. A log line
-  `ingest 019: marketdata.fundamentals absent` means the guard no-opped and the retraction did not run.
+## Post-Deploy Checks (O-18 — withdrawn)
+
+The O-18 per-environment checks (the `ingest 019: retracted N …` NOTICE count, the repeat SELECT, the
+`marketdata.fundamentals absent` guard log line) belonged to the dropped migration and no longer apply.
 
 ## Step Dependencies
 
@@ -88,13 +82,7 @@ that is a design decision, not an omission (design.md § Consumer surfaces; no T
   `conviction_provided` truthy; Step 12 rebuilds the helper on a real proto.
 - Step 14 [test] covers Step 13 [service]. Not a unit: no existing agent test changes result under Step 13.
 - Step 15 [docs] requires Steps 9, 11 and 13.
-- Step 16 requires operator gates 1, 2 and 4. Migration number `019` is the next free number on
-  `main-dev@36aed60b` (last: `018_backfill_symbol_results`). No peer branch in this batch claims an
-  ingest `019` (grep of peer `design.md` / `implementation-spec.md`). Re-run
-  `ls services/xstockstrat-ingest/migrations | sort | tail -2` at execute; if `019` is taken, take the
-  next free number and rename the Step 17 fixture to match (record in the Deviation Log).
-- Step 17 [test] requires Step 16: the fixture `\ir`-includes the up file.
-- Step 18 [docs] requires Step 16.
+- Steps 16-18 were dropped (§ Dropped Steps); the spec ends at Step 15 and no step needs an operator gate.
 - The EXTEND of `services/xstockstrat-ingest/acceptance/mcp-client-signal-source.feature:34`
   (design.md § Business Rules Touched) is `@AC-5` in `acceptance.feature`, added by
   `/sdd-review impl-spec` on 2026-11-20 from the design.md wording. Step 10 covers it.
@@ -122,7 +110,7 @@ that is a design decision, not an omission (design.md § Consumer surfaces; no T
 
 ### Step 1 — proto: add `conviction_provided` to `ExternalSignal`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -162,7 +150,7 @@ Run this only after BRANCH SYNC. The local `feature/fix-fundsignal-scoring-corre
 
 ### Step 2 — proto-gen: regenerate ingest stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/ingest/v1/` — modify (generated)
@@ -187,7 +175,7 @@ Run `./scripts/buf-gen.sh` from the repo root and stage only the regenerated ing
 **Verification**:
 ```bash
 ./scripts/buf-gen.sh && git status --porcelain packages/proto/gen/ | grep -v "ingest" ; test $? -eq 1
-grep -c "conviction_provided" packages/proto/gen/python/ingest/v1/ingest_pb2.py   # >= 1
+python3 -c "import sys; sys.path.insert(0,'packages/proto/gen/python'); from ingest.v1 import ingest_pb2; assert ingest_pb2.ExternalSignal.DESCRIPTOR.fields_by_name['conviction_provided'].number == 12"   # exit 0 (run from the repo root; KeyError before the stubs are regenerated)
 ./scripts/buf-gen.sh && git diff --quiet packages/proto/gen/ ; echo "second run clean: $?"   # after staging
 ```
 
@@ -195,7 +183,7 @@ grep -c "conviction_provided" packages/proto/gen/python/ingest/v1/ingest_pb2.py 
 
 ### Step 3 — service: build the formula input from present metrics only
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
@@ -227,7 +215,7 @@ ruff check . && ruff format --check .
 
 ### Step 4 — test: formula-path input and the changed durable rules
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify
@@ -238,7 +226,7 @@ ruff check . && ruff format --check .
 **Reviewers**: `xstockstrat-analysis` owner — strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `tests/test_fundsignal_loop.py:949-973` — `test_ac3_formula_all_missing_skipped_partial_scored`; `inputs = dict(req.input_data)` at `:965`, `assert inputs["pe_ratio"] == 0.0` at `:966`.
+- `tests/test_fundsignal_loop.py:949-973` — `test_ac3_formula_all_missing_skipped_partial_scored`; `inputs = dict(req.input_data)` at `:965`, the `dividend_yield` approx assertion at `:966`, `assert inputs["pe_ratio"] == 0.0` at `:967`.
 - Helpers to reuse: `_identity_loop` (`:677`, canned `ExecuteFormula` composite 0.7), `_serve_rows` (`:888`), `_SYSTEM_FORMULA` (`:667`), `BUILTIN_SCORER_METRICS` (`:27`), `fundamentals_row` (`tests/conftest.py:57`), `_assert_system_identity` (`:704`).
 - `acceptance/fix-fundsignal-neutral-score.feature:42` — "… with dividend_yield 0.013 and pe_ratio 0.0" (`@AC-3 @feature-246`).
 - `acceptance/fundamentals-formula-inputs.feature:39` — stale "partial-row case diverges by design" comment (`@AC-4 @feature-201`); `:47-53` — `@AC-8 @feature-201` scenario title, second `Then`, and the trailing comment.
@@ -272,7 +260,7 @@ grep -n "pe_ratio 0.0\|diverges" acceptance/fix-fundsignal-neutral-score.feature
 
 ### Step 5 — test: pin `value_quality` on a dividend-only input and its [0,1] range
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_fundamentals_formula.py` — modify
@@ -304,7 +292,7 @@ ruff check . && ruff format --check .
 
 ### Step 6 — service: degenerate-only side gate in `_map_directions`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
@@ -342,7 +330,7 @@ ruff check . && ruff format --check .
 
 ### Step 7 — test: direction gate, calibration and the built-in score range
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify
@@ -385,7 +373,7 @@ grep -n "conftest\|fundamentals_row" tests/test_fundsignal_loop.py | head -3
 
 ### Step 8 — docs: producer scoring and direction contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/docs/fundsignal.md` — modify
@@ -420,7 +408,7 @@ grep -n "0.5 neutral" services/xstockstrat-analysis/CLAUDE.md
 
 ### Step 9 — service: conviction presence on ingest write, read-back and the mcp_client builder
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -429,9 +417,9 @@ grep -n "0.5 neutral" services/xstockstrat-analysis/CLAUDE.md
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion
 
 **Codebase Evidence**:
-- `servicer.py:1237` — `_ingest_external_signal`; comment at `:1255-1256` ("0.0 passes and is stored as NULL"); range check `:1257`; write sentinel `:1277` `conviction = signal.conviction if signal.conviction > 0.0 else None`.
-- The same `conviction` binds into the `newsletter_signals` INSERT (`:1291-1306`) and the `signal_dedup_claims` upsert (`:1313-1334`, `IS DISTINCT FROM EXCLUDED.conviction` at `:1323-1324`).
-- `servicer.py:1425` — `QuerySignals`; builder at `:1519-1528`; read-back sentinel `:1524` `conviction=float(row["conviction"]) if row["conviction"] is not None else 0.0`.
+- `servicer.py:1346` — `_ingest_external_signal`; comment at `:1364-1365` ("0.0 passes and is stored as NULL" on `:1365`); range check `:1366`; write sentinel `:1386` `conviction = signal.conviction if signal.conviction > 0.0 else None`.
+- The same `conviction` binds into the `newsletter_signals` INSERT (`:1398-1416`) and the `signal_dedup_claims` upsert (`:1419-1446`, `IS DISTINCT FROM EXCLUDED.conviction` at `:1432-1433`).
+- `servicer.py:1534` — `QuerySignals`; builder at `:1628-1637`; read-back sentinel `:1633` `conviction=float(row["conviction"]) if row["conviction"] is not None else 0.0`.
 - `mcp_client_loop.py:88-94` — `_build_external_signal`; `conviction=item["conviction"]` at `:94`. Conviction is mandatory there: `app/extractors/mcp_client.py:45` drops an item without a numeric in-range conviction.
 - Storage accepts 0: `conviction NUMERIC(4,3) CHECK (conviction BETWEEN 0 AND 1)`, nullable (`migrations/001_newsletter_signals.up.sql:14`). No schema change.
 - No other conviction site in `services/xstockstrat-ingest/app` (grep).
@@ -442,9 +430,9 @@ grep -n "0.5 neutral" services/xstockstrat-analysis/CLAUDE.md
 **Covers**: —
 
 **Instructions**:
-1. Write (`:1277`): `conviction = signal.conviction if (signal.conviction_provided or signal.conviction != 0.0) else None`. The range check stays. Rewrite the comment at `:1255-1256`: an explicit 0.0 is stored as 0; an omitted conviction is stored as NULL.
+1. Write (`:1386`): `conviction = signal.conviction if (signal.conviction_provided or signal.conviction != 0.0) else None`. The range check stays. Rewrite the comment at `:1364-1365`: an explicit 0.0 is stored as 0; an omitted conviction is stored as NULL.
 2. Do not special-case 0 against a legacy NULL in the dedup upsert (`R-8`).
-3. `QuerySignals` builder (`:1519-1528`): for a non-NULL row set `conviction=float(row["conviction"])` and `conviction_provided=True`; for a NULL row leave both unset (D-8).
+3. `QuerySignals` builder (`:1628-1637`): for a non-NULL row set `conviction=float(row["conviction"])` and `conviction_provided=True`; for a NULL row leave both unset (D-8).
 4. `_build_external_signal` (`mcp_client_loop.py:90-94`): add `conviction_provided=True` unconditionally.
 
 **Verification**:
@@ -458,7 +446,7 @@ ruff check . && ruff format --check .
 
 ### Step 10 — test: explicit-zero store, read-back and mcp_client presence
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -467,11 +455,11 @@ ruff check . && ruff format --check .
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion
 
 **Codebase Evidence**:
-- `tests/test_ingest_servicer.py:2101-2156` — `TestIngestSignalConvictionValidation`, built on a real `ingest_pb2.ExternalSignal` (`_make_signal_req` `:2110`); `_servicer_full_happy_path` (`:2122`) uses `transaction_conn(...)` but does not return `conn`; `test_in_range_conviction_proceeds` (`:2150`) carries the "0.0 … stored NULL" comment.
+- `tests/test_ingest_servicer.py:2160-2215` — `TestIngestSignalConvictionValidation`, built on a real `ingest_pb2.ExternalSignal` (`_make_signal_req` `:2169`); `_servicer_full_happy_path` (`:2181`) uses `transaction_conn(...)` but does not return `conn`; `test_in_range_conviction_proceeds` (`:2209`) carries the "0.0 … stored NULL" comment (`:2210-2211`).
 - `tests/_helpers.py:25` — `transaction_conn` returns `(db, conn)`; the INSERT is `conn.fetchrow` call 0 (conviction = positional `args[4]`), the claim upsert is call 1 (conviction = `args[6]`).
-- `tests/test_ingest_servicer.py:1888-1928` — `TestQuerySignals`; `test_populates_ingested_at` (`:1902`) shows the `db.fetch` row-dict shape.
+- `tests/test_ingest_servicer.py:1947-1986` — `TestQuerySignals`; `test_populates_ingested_at` (`:1961`) shows the `db.fetch` row-dict shape.
 - `tests/test_mcp_client_loop.py:94-115` — `test_cycle_parses_and_ingests_signal` reads the built signal from `servicer._ingest_external_signal.await_args.args[0]`; `_item` (`:338`), `_run_cycle_with` (`:342`).
-- `TestIngestSignal._make_signal_req` (`:1608`) is a MagicMock with `conviction = 0.8`; both branches of the new predicate store 0.8, so it is left as is.
+- `TestIngestSignal._make_signal_req` (`:1666`) is a MagicMock with `conviction = 0.8` (`:1674`); both branches of the new predicate store 0.8, so it is left as is.
 - No test stores a 0.0 today (recon.md:73).
 
 **TDD**: `red-green required`
@@ -498,7 +486,7 @@ grep -n "conftest\|_helpers" tests/test_ingest_servicer.py | head -3
 
 ### Step 11 — service: producer sets presence; scorer reads it
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
@@ -509,8 +497,8 @@ grep -n "conftest\|_helpers" tests/test_ingest_servicer.py | head -3
 **Codebase Evidence**:
 - `fundsignal_loop.py:643` — `_emit_signal`; `ingest_pb2.ExternalSignal(` at `:654-661`, `conviction=float(conviction)` at `:658`.
 - `scoring.py:10` — `compute_signal_score`; `:31` `conviction = sig.conviction if sig.conviction > 0 else 0.5`. The `return 0.5` at `:15` and after the loop are separate neutral returns and stay.
-- Callers: `app/services/screener.py:285`; alias `app/handlers/servicer.py:96`.
-- Other analysis readers already use `sig.conviction` literally (`app/handlers/servicer.py:5057-5058`, `:5546`, `:5584`, `:5601-5602`, `:6797`); they are not changed (design.md § 3).
+- Callers: `app/services/screener.py:285`; alias `_compute_signal_score = scoring.compute_signal_score` at `app/handlers/servicer.py:97` (its comment at `:96`).
+- Other analysis readers already use `sig.conviction` literally (`app/handlers/servicer.py:5115-5116`, `:5644-5645`, `:5708`, `:5725-5726`, `:6928`); they are not changed (design.md § 3).
 - Header propagation: no new outbound call; `_emit_signal` reuses the existing `IngestSignal` call and its `metadata`.
 
 **Lands with**: `Step 12`
@@ -534,7 +522,7 @@ ruff check . && ruff format --check .
 
 ### Step 12 — test: emit presence, scorer zero and the real-proto signal helper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_helpers.py` — modify
@@ -544,9 +532,9 @@ ruff check . && ruff format --check .
 **Reviewers**: `xstockstrat-analysis` owner — strategy scoring determinism, backtest reproducibility
 
 **Codebase Evidence**:
-- `tests/test_analysis_helpers.py:182-194` — `_make_signal` returns a `MagicMock`; 17 call sites in the same file (`:208`..`:358`), none elsewhere (grep `_make_signal\b` over `tests/`).
+- `tests/test_analysis_helpers.py:182-194` — `_make_signal` returns a `MagicMock`; 16 call sites in the same file (`:208`..`:358`; 17 occurrences counting the def at `:182`), none elsewhere (grep `_make_signal\b` over `tests/`).
 - `:235-239` — `test_zero_conviction_uses_default_half` (`_make_signal("buy", 0.0)`, asserts `> 0.5`): the only pin of `R-1`.
-- `:241-257` — a real `ingest_pb2.ExternalSignal` is already used in this file; `_seconds_to_datetime` at `:176`; `MagicMock` is still used by other tests (`:54`).
+- `:241-271` — a real `ingest_pb2.ExternalSignal` is already used in this file (`:251`, `:266`; import at `:12`); `_seconds_to_datetime` at `:176`; `MagicMock` is still used by other tests (`:54`).
 - `tests/test_screener.py:710-716` — `_in_window_signal(direction, conviction)` builds a real `ExternalSignal`; `:593-625` — a signal-weighted screen through `make_engine`; `:768-776` — the existing wrapper around `screener_mod.scoring.compute_signal_score`.
 - Ledger: fails.md:726 (MagicMock proto stand-ins hide field bugs); insights.md 2026-11-04 fix-fundsignal-neutral-score (migrate the doubles first, behavior-neutral, then the RED tests).
 
@@ -557,7 +545,7 @@ ruff check . && ruff format --check .
 **Covers**: `AC-3`
 
 **Instructions**:
-1. Rebuild `_make_signal` on a real `ingest_pb2.ExternalSignal(direction=…, conviction=…)`, keeping its signature; set `valid_from` / `valid_until` with `.FromDatetime(_seconds_to_datetime(sec))` only when the argument is > 0. This migration is behavior-neutral: all 17 call sites pass on the tree before Step 11.
+1. Rebuild `_make_signal` on a real `ingest_pb2.ExternalSignal(direction=…, conviction=…)`, keeping its signature; set `valid_from` / `valid_until` with `.FromDatetime(_seconds_to_datetime(sec))` only when the argument is > 0. This migration is behavior-neutral: all 16 call sites pass on the tree before Step 11.
 2. Keep `test_zero_conviction_uses_default_half` and its assertion unchanged; it is the "not given → 0.5" pin. Never invert it (O-16).
 3. Add its sibling `test_explicit_zero_conviction_scores_zero` (`@AC-3 @feature-309`): the same signal with `conviction_provided = True` → `_compute_signal_score(...) == pytest.approx(0.5)` (a buy adding 0.0), where the not-given signal gives 0.75. RED today: 0.75.
 4. `tests/test_screener.py`: add `test_ac3_screen_scores_explicit_zero_conviction_as_zero` on the `:593` pattern with `_in_window_signal("buy", 0.0)` plus `conviction_provided=True`; capture the `compute_signal_score` return through the `:768` wrapper pattern and assert `pytest.approx(0.5)`. AC-3 is scoped to the screener path (D-4).
@@ -576,7 +564,7 @@ grep -n "sig = MagicMock()" tests/test_analysis_helpers.py ; test $? -eq 1
 
 ### Step 13 — service: agent `ingest_signal` sets presence; tool docs follow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -619,7 +607,7 @@ ruff check . && ruff format --check .
 
 ### Step 14 — test: agent client sets presence only when conviction is given
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify
@@ -651,7 +639,7 @@ ruff check . && ruff format --check .
 
 ### Step 15 — docs: conviction-presence invariant
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest` (docs), `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-ingest/docs/context-constitution.md` — modify
@@ -680,142 +668,66 @@ grep -n "unknown confidence" services/xstockstrat-ingest/docs/context-constituti
 
 ---
 
-### Step 16 — migration: ingest `019_retract_fabricated_fundsignals`
+## Dropped Steps
 
-**Status**: `pending`
-**Service**: `xstockstrat-ingest`
-**Files**:
-- `services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql` — create
-- `services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.down.sql` — create
+Removed from the step list on 2026-11-27 by operator ruling, so every remaining step status marker is
+`pending` or `done`. The operator ruled "Drop 16-18 (Recommended)" (`context.md` § Session 2026-11-27 —
+operator rulings recorded by the orchestrator (verbatim)). Reason common to all three: the frozen
+retraction list is empty. The Step 16 read-only SELECT returned `(0 rows)` on DO staging and `(0 rows)` on
+homelab staging; production is out of scope. The two zero-row results are the recorded evidence.
 
-**Reviewers**: DBA — NNN numbering, up+down pair, run-order compliance; `xstockstrat-ingest` owner — idempotent ingestion; `xstockstrat-marketdata` owner — acknowledges the migration-time read of `marketdata.fundamentals` (D-12)
+**Dropped step 16 — migration: ingest `019_retract_fabricated_fundsignals`.** It would have expired
+pre-246 fabricated `0.5` fundamentals signals for data-less symbols by setting `valid_until` from a frozen
+operator list, behind a `to_regclass('marketdata.fundamentals')` guard. With no row matching in either
+in-scope environment there is nothing to expire; no migration and no cross-schema read are written.
 
-**Codebase Evidence**:
-- Last ingest migration on `main-dev@36aed60b`: `018_backfill_symbol_results` → next is `019`. design.md's provisional `017` is taken (`017_signal_source_extraction_instructions`).
-- `migrations/013_signal_ownership_templates.up.sql:101-104` — the `to_regclass`-guarded `DO $$` precedent; `:75`, `:80` — `GET DIAGNOSTICS … ROW_COUNT` and `RAISE NOTICE` precedent.
-- `migrations/001_newsletter_signals.up.sql` — `ingest.newsletter_signals` columns `ingested_at`, `source`, `symbol`, `conviction NUMERIC(4,3)`, `valid_until`; `user_id` added by `013` (`servicer.py:1293` inserts it).
-- `ingest.signal_sources`: `user_id` (`013:24-32`), `source_type` with `'derived'` (`006_signal_source_type_derived.up.sql`); `013:27` sets `user_id = 'system'` for derived sources.
-- `services/xstockstrat-marketdata/migrations/002_fundamentals.up.sql:7-25` — `marketdata.fundamentals(symbol text PRIMARY KEY, as_of timestamptz NOT NULL, pe_ratio, pb_ratio, dividend_yield, eps, roe, debt_to_equity numeric, …)`.
-- Run order puts marketdata before ingest (`docs/patterns/database.md` § Migration tooling; `scripts/migration-rerun.py:26-37`); both schemas share one database per environment (D-2).
-- Reader filter the expiry must defeat: `servicer.py:1480` `(valid_until IS NULL OR valid_until >= $n)`.
-- Down-file precedent: `docs/patterns/database.md` § Adding a new migration, item 2 ("or a stub comment if rollback is not supported").
-- Approval in principle: `context.md` § Session 2026-11-10 (operator, as DBA + ingest owner).
+**Dropped step 17 — test: migration-assertions fixture for ingest 019.** `scripts/migration-assertions/ingest-019.sql`
+asserted Step 16 and was the only step that covered `@AC-4`. With Step 16 dropped it has nothing to
+exercise. `@AC-4` is closed by the recorded zero-row evidence and carries no automated guard (§ Scenario
+Coverage).
 
-**TDD**: `N/A (migration)`
-
-**Covers**: —
-
-**Instructions**:
-0. **Precondition (operator gates 1, 2 and 4).** `context.md` must hold the `Frozen retraction list` entry, the cutoff confirmation, and the approval of the second cross-schema read. If any is missing, block and ask. `<frozen list>` in instruction 1 is a placeholder for the recorded list, and the cutoff literal is the confirmed instant; never commit the placeholder or a guessed list (F-04). The operator builds the list by running this read-only SELECT per environment and taking the union:
-   ```sql
-   SELECT DISTINCT s.symbol
-     FROM ingest.newsletter_signals s
-    WHERE s.user_id = 'system'
-      AND s.source IN (SELECT slug FROM ingest.signal_sources WHERE user_id = 'system' AND source_type = 'derived')
-      AND s.conviction = 0.5
-      AND s.ingested_at < '2026-10-31T00:00:00Z'
-      AND (s.valid_until IS NULL OR s.valid_until > now())
-      AND NOT EXISTS (SELECT 1 FROM marketdata.fundamentals f
-                       WHERE f.symbol = s.symbol
-                         AND COALESCE(f.pe_ratio, f.pb_ratio, f.dividend_yield, f.roe, f.debt_to_equity, f.eps) IS NOT NULL)
-    ORDER BY 1;
-   ```
-1. Up file: a three-line header (migration, service, "feature 309: expires pre-246 fabricated 0.5 fundamentals signals; reads marketdata.fundamentals"), then one `DO $$` block:
-   - `IF to_regclass('marketdata.fundamentals') IS NULL THEN RAISE NOTICE 'ingest 019: marketdata.fundamentals absent, nothing retracted'; RETURN; END IF;`
-   - `UPDATE ingest.newsletter_signals s SET valid_until = now() WHERE` the SELECT's predicate `AND s.symbol = ANY (ARRAY[<frozen list>])`.
-   - `GET DIAGNOSTICS retracted = ROW_COUNT; RAISE NOTICE 'ingest 019: retracted % fabricated fundamentals signal(s)', retracted;`
-2. Set `valid_until` only. Do not touch `conviction` or `ingest.signal_dedup_claims` (recon.md:152). Use no `requires-env` or `contract-of` header.
-3. A rerun is a no-op: an expired row fails `valid_until > now()`.
-4. Down file: a stub comment — the expiry is not reversible (the prior `valid_until` is not kept) (D-5).
-5. Record in `context.md`: the list used, the confirmed cutoff, and that EDGAR self-heal was reviewed against the list (design.md Open Risks).
-
-**Verification** (offline — no database):
-```bash
-ls services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.down.sql
-ls services/xstockstrat-ingest/migrations | sort | tail -2          # 019 is the highest number, used once
-grep -c "to_regclass('marketdata.fundamentals')\|GET DIAGNOSTICS\|RAISE NOTICE" services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql   # >= 3
-grep -n "signal_dedup_claims\|SET conviction\|DELETE" services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql ; test $? -eq 1
-grep -n "<frozen" services/xstockstrat-ingest/migrations/019_retract_fabricated_fundsignals.up.sql ; test $? -eq 1   # no placeholder left
-# read both files: the up changes valid_until only; the down is a comment stating why there is no reverse
-```
-
----
-
-### Step 17 — test: migration-assertions fixture for ingest 019
-
-**Status**: `pending`
-**Service**: `xstockstrat-ingest` (`scripts/migration-assertions/`)
-**Files**:
-- `scripts/migration-assertions/ingest-019.sql` — create
-
-**Reviewers**: `xstockstrat-ingest` owner — idempotent ingestion; DBA — run-order compliance
-
-**Codebase Evidence**:
-- `scripts/migration-rerun.py:575-576` — `assertion_names()` globs `scripts/migration-assertions/*.sql`; `:562-572` `split_assertions` runs every non-`fixtures-*`, non-`config-<below R>` file after the passes. A new file needs no harness edit.
-- Shape precedent: `scripts/migration-assertions/ingest-017.sql` and `ingest-016.sql:19-35` — `BEGIN; … \ir ../../services/xstockstrat-ingest/migrations/<file>.up.sql … DO $$ … RAISE EXCEPTION … $$; ROLLBACK;`.
-- The shared fixture holds a `system` `fundamentals` derived source (`fixtures-pre-224.sql:19-22`, re-owned by `013:27`). Its 120 signals are `FX<i>` symbols ingested at `NOW() - i hours`, so migration 019 changes none of them and no existing assertion file (`ingest-013.sql`, `ingest-014.sql`) is affected.
-- A fixture that INSERTs into `marketdata.fundamentals`: **Not found** — no precedent; columns per `002_fundamentals.up.sql:7-25` (`symbol`, `as_of` are required).
-- CI job `migration-rerun` (`.github/workflows/ci.yml:898`) is the only runner; its path filter includes `scripts/migration-assertions/**` (`:95`).
-
-**TDD**: `N/A (SQL assertion fixture; runs only in the CI job migration-rerun, which needs a database)`
-
-**Covers**: `AC-4`
-
-**Instructions**:
-Create `ingest-019.sql` with a two-line header naming migration 019 and feature 309 `@AC-4`. Every scenario is its own `BEGIN … ROLLBACK`, INSERTs its own `ingest.newsletter_signals` rows (`user_id='system'`, `source='fundamentals'`, `conviction=0.5`, `ingested_at` before the cutoff, future `valid_until`) and `marketdata.fundamentals` rows, then `\ir`-includes the up file and raises on a failed check. Never `CREATE` `marketdata.fundamentals` (D-13). Use symbols taken from the migration's frozen list for (a)-(c), (e), (f).
-- (a) a listed symbol whose fundamentals row has all six metrics NULL, and a listed symbol with no fundamentals row: both end with `valid_until <= now()`, and neither satisfies `(valid_until IS NULL OR valid_until >= clock_timestamp())` — the `QuerySignals` active filter at a later instant.
-- (b) a listed symbol with one non-null metric (`dividend_yield` only) keeps its `valid_until`.
-- (c) a listed, fully populated symbol with a computed 0.5 signal keeps its `valid_until`.
-- (d) a symbol outside the list, all-null, keeps its `valid_until`.
-- (e) `ALTER TABLE marketdata.fundamentals RENAME TO fundamentals_309_hidden;` then apply: zero rows change (the guard branch).
-- (f) apply twice: the second apply changes no row (`valid_until` equal before and after).
-Each retracted row also keeps its `conviction`, and `ingest.signal_dedup_claims` is unchanged.
-
-**Verification** (offline; the real run is CI `migration-rerun`):
-```bash
-ls scripts/migration-assertions/ingest-019.sql
-grep -c "^BEGIN;" scripts/migration-assertions/ingest-019.sql ; grep -c "^ROLLBACK;" scripts/migration-assertions/ingest-019.sql   # equal, >= 6
-grep -c "019_retract_fabricated_fundsignals.up.sql" scripts/migration-assertions/ingest-019.sql   # >= 6
-grep -n "CREATE TABLE" scripts/migration-assertions/ingest-019.sql ; test $? -eq 1
-uv run pytest scripts/tests/test_migration_rerun.py -q
-```
-No coverage threshold applies: the fixture is SQL outside every service's coverage scope, and the assertions run only in CI `migration-rerun`. Steps 16 and 17 therefore count as verified only when that job is green on the integration PR; record its result in `context.md` and do not mark `@AC-4` covered before then.
-
----
-
-### Step 18 — docs: second migration-time cross-schema read
-
-**Status**: `pending`
-**Service**: `docs/patterns/`, root `CLAUDE.md`, `xstockstrat-ingest`
-**Files**:
-- `docs/patterns/database.md` — modify
-- `CLAUDE.md` — modify
-- `services/xstockstrat-ingest/CLAUDE.md` — modify
-
-**Reviewers**: none
-
-**Codebase Evidence**:
-- `docs/patterns/database.md:21-22` — "The only migration-time cross-schema read is analysis `029_seed_fundamentals_blend_strategy`, which reads `identity.users` …".
-- Root `CLAUDE.md:195` (§ Database) — "A migration stays inside its own schema; the single recorded exception is analysis `029` reading `identity.users`".
-- `services/xstockstrat-ingest/CLAUDE.md:112-134` — the per-migration notes (`015`..`018`).
-
-**TDD**: `N/A (docs)`
-
-**Covers**: —
-
-**Instructions**:
-1. `database.md:21-22`: the migration-time cross-schema reads are two — analysis `029` (`identity.users`) and ingest `019` (`marketdata.fundamentals`, read-only, `to_regclass`-guarded; marketdata migrates before ingest).
-2. Root `CLAUDE.md` § Database: "the two recorded exceptions are analysis `029` reading `identity.users` and ingest `019` reading `marketdata.fundamentals`". Change that sentence only.
-3. `services/xstockstrat-ingest/CLAUDE.md`: add a `019_retract_fabricated_fundsignals` note (feature 309, data only; sets `valid_until`, logs a NOTICE with the count, down is a stub).
-
-**Verification**:
-```bash
-grep -n "The only migration-time cross-schema read\|single recorded exception" docs/patterns/database.md CLAUDE.md ; test $? -eq 1
-grep -n "019" docs/patterns/database.md CLAUDE.md services/xstockstrat-ingest/CLAUDE.md
-```
+**Dropped step 18 — docs: second migration-time cross-schema read.** It would have amended
+`docs/patterns/database.md`, root `CLAUDE.md` § Database and `services/xstockstrat-ingest/CLAUDE.md` for a
+second migration-time cross-schema read. With no such read, the docs keep their single recorded exception
+(analysis `029` reading `identity.users`) and stay correct.
 
 ---
 
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 1 — proto: add `conviction_provided` to `ExternalSignal`
+**Spec said**: `buf breaking --against "$(git rev-parse --path-format=absolute --git-common-dir)#branch=feature/fix-fundsignal-scoring-correctness,subdir=packages/proto"`; "If the ref is stale or absent, use the `#ref=HEAD` form with the Step 1 edit uncommitted."
+**Actual**: Ran `#ref=5dfa9e1434ab60e689198e6e881bd45387371f53,subdir=packages/proto` (the synced dev-branch tip, edit uncommitted), inside the pinned `xstockstrat-codegen` image (buf 1.72.0).
+**Reason**: The local `feature/fix-fundsignal-scoring-correctness` ref is stale (`bfb2f32d`; its `common.proto` differs from the tip). `#ref=HEAD` against the common git dir resolves the main checkout's HEAD (another branch, different `ingest.proto`), not this worktree's. buf is not installed on the host. **Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 2 — proto-gen: regenerate ingest stubs
+**Spec said**: `./scripts/buf-gen.sh && …` run on the host.
+**Actual**: The Verification block ran verbatim inside the pinned `xstockstrat-codegen` image (buf 1.72.0, Go plugins and grpcio-tools 1.80.0 pinned to CI `proto-freshness`), with the main checkout mounted read-only and its `packages/proto/gen/ts/node_modules` bind-mounted read-only so `tsc` could compile `gen/ts/dist`. The block ran twice: once before staging (line 3 printed `second run clean: 1`, as expected unstaged), then again after staging the regenerated stubs (`second run clean: 0`).
+**Reason**: buf and grpcio-tools are not on the host, and the worktree has no `packages/proto/gen/ts/node_modules`. Line 3 says "after staging", so a single pre-staging run cannot satisfy it. **Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 9 — service: conviction presence on ingest write, read-back and the mcp_client builder
+**Spec said**: `**TDD**: red-green required`, with the Verification block (the existing `test_ingest_servicer.py` / `test_mcp_client_loop.py` suites, a grep and ruff) as the run; Step 10 owns the new tests and is not a unit with Step 9.
+**Actual**: The block passes before and after the change (210 passed both times; only its grep line changes, from no output to three hits). RED → GREEN was shown with an uncommitted scratch probe (`.sdd-logs/probe_step9.py`, five cases mirroring Step 10 tests 1, 2, 4 and 5): 3 failed / 2 passed before the change, 5 passed after. The probe is not staged; Step 10 commits the real tests.
+**Reason**: No existing ingest test changes result under Step 9 (Step Dependencies), and Step 10's test files are outside Step 9's **Files** (F-08). **Disposition**: in-scope TDD evidence, no scope change.
+
+### Deviation: Step 10 — test: explicit-zero store, read-back and mcp_client presence
+**Spec said**: `**TDD**: red-green required`; RED "today: `conviction_provided` is unknown / the value is `None`".
+**Actual**: Step 9 had already landed, so the new tests pass on the branch tip. RED ran the Verification block with the two Step 9 service files temporarily checked out from `faea4d0f` (pre-Step-9) and restored before GREEN: 3 failed (`test_explicit_zero_conviction_is_stored_as_zero`, `test_conviction_presence_round_trip`, `test_explicit_zero_conviction_marks_presence`). `test_omitted_conviction_is_stored_as_null` passes on both trees because it pins the unchanged not-given behaviour. That block printed `exit=0` because its last command (the grep) passed.
+**Reason**: Step 9 lands before Step 10 (Step Dependencies; not an atomic unit). **Disposition**: in-scope TDD evidence, no scope change.
+
+### Deviation: Step 13 — service: agent `ingest_signal` sets presence; tool docs follow
+**Spec said**: `**TDD**: red-green required`, with the Verification block (the existing `test_client.py` / `test_tools.py` / `test_extraction_instructions.py` suites, two greps and ruff) as the run; Step 14 owns the new tests and is not a unit with Step 13.
+**Actual**: The block printed `exit=0` before and after the change (239 passed both times; ruff runs last). Only its grep lines changed: before, the `conviction_provided` grep printed nothing and `unknown confidence` hit `mcp-tools.md:269`; after, `client.py:258` and no `unknown confidence` hit. RED → GREEN was shown with an uncommitted scratch probe (`.sdd-logs/probe_step13.py`, three cases mirroring Step 14 plus a non-zero case): 2 failed / 1 passed before the change, 3 passed after. The probe is not staged; Step 14 commits the real tests.
+**Reason**: No existing agent test changes result under Step 13 (Step Dependencies), and `tests/test_client.py` is outside Step 13's **Files** (F-08). **Disposition**: in-scope TDD evidence, no scope change.
+
+### Deviation: Step 14 — test: agent client sets presence only when conviction is given
+**Spec said**: `**TDD**: red-green required`; RED "today: the flag is `False`".
+**Actual**: Step 13 had already landed, so the new tests pass on the branch tip. RED ran the Verification block with `services/xstockstrat-agent/app/client.py` temporarily checked out from `385ce947` (pre-Step-13) and restored before GREEN: 1 failed (`test_explicit_zero_conviction_sets_presence`, `assert False is True`). `test_omitted_conviction_leaves_presence_unset` passes on both trees because it pins the unchanged not-given behaviour. That block printed `exit=0` because its last command (ruff) passed.
+**Reason**: Step 13 lands before Step 14 (Step Dependencies; not an atomic unit). **Disposition**: in-scope TDD evidence, no scope change.
+
+### Deviation: Steps 16-18 — dropped
+**Spec said**: Steps 16-18 add ingest migration `019_retract_fabricated_fundsignals`, its `ingest-019.sql` assertion fixture and the cross-schema docs, behind Operator Gates 1, 2 and 4.
+**Actual**: The three steps are removed from the step list and recorded in § Dropped Steps. Operator Gates 1, 2 and 4 are answered or moot; `@AC-4` has no covering step.
+**Reason**: The operator's Step 16 SELECT returned `(0 rows)` on DO staging and homelab staging (production out of scope), and the operator ruled "Drop 16-18 (Recommended)" on 2026-11-27. **Disposition**: operator-approved scope reduction.
