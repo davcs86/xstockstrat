@@ -368,7 +368,7 @@ Feature: fix-trading-config-plumbing (bug fix, trading config and persistence gu
 ```
 
 --- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
-HOLD: write this block only after the orchestrator confirms the 304 @AC-14 supersession sign-off (see Notes). If it is not confirmed, drop the block and the comment edit below.
+CONFIRMED 2026-11-27: the operator confirmed the 304 @AC-14 supersession (sign-off 2026-11-20; context.md O-8/O-11/D-14, design.md § Business Rules Touched) and chose "Promote all, comment only". Write this block and the single companion comment line; do not rewrite 304 @AC-14.
 ```gherkin
   # guards: docs/reports/2026-11-06-trading-broker-paper-env-derived-default-unseedable-defect.md
   # Supersedes @feature-304 @AC-14 (the broker.paper baseline entry is removed, not respelled).
