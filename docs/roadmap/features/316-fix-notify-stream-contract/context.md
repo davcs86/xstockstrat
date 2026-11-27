@@ -1169,3 +1169,55 @@ test "$(git diff origin/main-dev HEAD -- docs/roadmap/ledger/fails.md | grep -c 
 - Last step: `node scripts/check-config-wiring.mjs --final` `.sdd-logs/v-3.log` `exit=0`. It reports two baseline lines from outside this feature: `REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree` and `REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`. Status `in-progress` → `code-completed`.
 - Files modified: `services/xstockstrat-notify/docs/context-constitution.md`, `services/xstockstrat-notify/docs/context-constitution-findings.md`, `docs/reports/2026-10-19-notify-stream-ignores-backpressure-defect.status`; `implementation-spec.md` Step 8 status → done, `feature.md`, `status.md`, `context.md`.
 - Deviations: none.
+
+## Session 2026-11-27 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan — fix-notify-stream-contract (feature 316)
+
+Source: docs/roadmap/features/316-fix-notify-stream-contract/acceptance.feature, read from the local working tree. Affected service per feature.md Reviewers: xstockstrat-notify only.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-notify/acceptance/fix-notify-stream-contract.feature | CREATE | NEW | The subject is the StreamAlerts `severities[]` filter. No notify suite asserts it. pwa-notifications, fix-push-untargeted-broadcast and notify-external-fanout cover the push and fanout severity gates, which are a different subject. |
+| AC-2 | /home/user/xstockstrat/services/xstockstrat-notify/acceptance/fix-notify-stream-contract.feature | CREATE | NEW | The subject is eviction of a subscriber whose `call.write` returns false and never drains. signal-map-instrumentation.feature (feature 294 @AC-32) covers a write that throws, so the trigger and outcome differ. Not an OVERLAP. |
+
+No CONFLICT. No existing scenario carries @feature-316, so there are no DUPs. The `acceptance/` directory already exists. platform.feature has nothing on StreamAlerts severity filtering or backpressure (its stream hits concern ledger, config and the otel guard), and neither scenario spans services, so nothing routes there.
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-notify/acceptance/fix-notify-stream-contract.feature (CREATE) ---
+```gherkin
+# Promoted from docs/roadmap/features/316-fix-notify-stream-contract/acceptance.feature (C-16). Verbatim; do not edit by hand.
+Feature: fix-notify-stream-contract (notify)
+  Regression guard for clustered defect reports: StreamAlerts severity filtering works with the wire's string
+  enums, and a subscriber that stops reading is evicted instead of buffered without bound.
+
+  # guards: docs/reports/2026-10-19-notify-severities-type-runtime-mismatch-defect.md
+  @AC-1 @regression @feature-316
+  Scenario: a severity-filtered subscriber receives alerts matched by the string enum form
+    Given a StreamAlerts subscriber with severities ["ALERT_SEVERITY_WARNING", "ALERT_SEVERITY_CRITICAL"]
+    When EmitAlert is called with severity "ALERT_SEVERITY_CRITICAL"
+    Then the subscriber receives the alert
+    And an alert with severity "ALERT_SEVERITY_INFO" is not delivered to it
+
+  # guards: docs/reports/2026-10-19-notify-stream-ignores-backpressure-defect.md
+  @AC-2 @regression @feature-316
+  Scenario: a subscriber whose stream stops draining is evicted
+    Given a StreamAlerts subscriber whose call.write returns false and never emits drain
+    When EmitAlert is called repeatedly past the backpressure threshold
+    Then the subscriber is removed from the fan-out set or its stream is ended
+    And further EmitAlert calls do not write to it
+```
+
+### Notes / ambiguities / conflicts
+- The source scenarios have no @FR-* tags, because this is a bug fix with no FR list. product-spec.md also defines no FR ids. I added none, since inventing them would break the verbatim rule. Each scenario keeps its `@AC-n` and `@regression` tags and gains `@feature-316`.
+- The `# guards:` comment lines are kept as provenance. They are paths to defect reports under docs/reports/. If the archiver prunes those reports, the comments become dangling pointers, and a human can decide whether to drop them then.
+- File name `fix-notify-stream-contract.feature` follows the convention of the existing notify suites (fix-push-untargeted-broadcast.feature and others). The header comment follows the style of signal-map-instrumentation.feature.
+- Adjacent to 294 @AC-32 (/home/user/xstockstrat/services/xstockstrat-notify/acceptance/signal-map-instrumentation.feature, line 12). That scenario asserts eviction when a write throws, with the `notify.stream.evictions{reason=write_error}` metric. AC-2 asserts eviction on backpressure with no metric clause. They are complementary. A human could later check whether the backpressure eviction should also emit an eviction reason, but that is outside this promotion.
+- Source: services/xstockstrat-notify/CLAUDE.md and its docs/context-constitution-findings.md already record the `severities` type/runtime mismatch defect that AC-1 guards. This is a context note only, not a dedup hit.
+- I could not run `git show origin/feature/fix-notify-stream-contract:...` because my tools are read-only and have no git. I read acceptance.feature from the working tree, which should match the branch. The caller should confirm the working-tree copy equals the branch copy before writing.
+
+### Coverage check
+- Source scenarios: 2 (AC-1, AC-2). Planned (NEW+DUP+OVERLAP): 2 (2 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Every @AC-* is accounted for and none were skipped.
+````
