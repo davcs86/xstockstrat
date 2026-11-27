@@ -8,12 +8,6 @@
       "key": "broker.paper",
       "kind": "read-unseeded",
       "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
-    },
-    {
-      "namespace": "agent",
-      "key": "extract.call_budget_seconds",
-      "kind": "seeded-unread",
-      "owner": "feature 314 fix-mcp-deadline-budget — temporary, removed by Step 5 (reader)"
     }
   ],
   "registry": {

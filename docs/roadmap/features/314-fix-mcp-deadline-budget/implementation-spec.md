@@ -561,7 +561,7 @@ RED capture (before Step 3's files exist): the suite fails with `expected exactl
 
 ### Step 5 — service: whole-call budget for `extract_email_content` and `extract_website_content`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -651,7 +651,7 @@ The agent test suite is green only with Step 6's edits in the tree (atomic unit)
 
 ### Step 6 — test: extract whole-call budget (`@AC-1`) and the affected guards
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_extract_call_budget.py` — create
@@ -1008,3 +1008,23 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Disposition**: the block was run verbatim and judged from its log `.sdd-logs/v-3.log`. Lint reported
   0 errors, the tests `# pass 427` / `# fail 0`, coverage `All files | 92.63` lines with no c8 `ERROR`
   line, and the grep printed nothing. No spec edit.
+
+### Steps 5+6 — `app/main.py` added to the unit's files (2026-11-27)
+- **Spec said**: Steps 5+6 touch `tools.py`, `scripts/config-wiring.json` and three test files. Step 6
+  asserts that no captured log record on a partial call contains a URL or host.
+- **Actual**: httpx's own INFO record `HTTP Request: GET <url> …` (logger `httpx`) carries the URL, so the
+  assertion cannot pass with only the specced files (the RED log shows the record).
+- **Disposition**: operator-approved scope expansion (Option A, 2026-11-27). One line in
+  `services/xstockstrat-agent/app/main.py` sets `logging.getLogger("httpx")` to WARNING. The Step 6
+  assertion is unchanged; the test imports `app.main` so the process level applies. Step 8 adds the
+  findings row.
+
+### Steps 5+6 — Verification block exit semantics and node version (2026-11-27)
+- **Spec said**: Step 6's block ends with a C-13 `grep`, and Step 5's block ends with `! grep -q …`.
+- **Actual**: each block's exit is its last command's exit, so it hides the pytest and
+  `check-config-wiring --final` exits. The default PATH node is v22, so the blocks ran with
+  `/opt/node24/bin` first on PATH (root CLAUDE.md pins Node 24).
+- **Disposition**: both blocks were run verbatim and judged from their logs. Step 6: ruff
+  `All checks passed!`, `80 files already formatted`, `848 passed`, coverage `TOTAL … 89%` with the 40 %
+  gate reached. Step 5: ruff clean, and the wiring check printed only the two pre-existing `REPORTED:`
+  lines. `check-config-wiring --final` was also run on its own and exited 0. No spec edit.

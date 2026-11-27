@@ -2474,6 +2474,7 @@ async def test_ac2_extract_website_content_proceeds_on_stalled_config(
         "extract.max_bytes": 5_000_000,
         "extract.connect_timeout_seconds": 10.0,
         "extract.read_timeout_seconds": 30.0,
+        "extract.call_budget_seconds": 35.0,
     }
 
 

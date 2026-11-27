@@ -971,3 +971,65 @@ the first body line of the re-spec commit below.
   `/UPDATE|INSERT/i` matched `updated_by`. It was fixed to `\b(UPDATE|INSERT)\b` before the green run.
 - Files modified: `services/xstockstrat-config/src/__tests__/mcpDeadlineBudgetMigration.test.ts`
 - Deviations: Step 4 Verification exit semantics (Deviation Log, no spec edit).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute, steps 5+6)
+
+- Operator decision (2026-11-27, blocker on Step 5): **A**. The Steps 5+6 scope grows by one line in
+  `services/xstockstrat-agent/app/main.py`, which sets `logging.getLogger("httpx")` to WARNING. That stops
+  httpx's INFO `HTTP Request: GET <url>` record from leaking the extract URL. Step 6's assertion stays as
+  specced. The extra file is in the Deviation Log, and Step 8 adds the findings row.
+- Tooling: uv ✓, python ✓ 3.13.18 (`uv sync --extra dev` in the agent), ruff ✓ (uv), node ✓ v24 (`/opt/node24`).
+  Pre-commit hook check: hook=0.
+
+### Step 5 — service: whole-call budget for `extract_email_content` and `extract_website_content` [done]
+- Atomic unit steps 5+6. Added `import httpx`, `_EXTRACT_CALL_BUDGET_DEFAULT_S = 35.0` and
+  `_extract_call_budget_s()` next to `_POLICY_READ_TIMEOUT_S`. The helper reads the budget through
+  `_agent_policy`; a non-finite or `<= 0` value falls back to 35.
+- `extract_email_content`:
+  - one `asyncio.timeout` scope around the URL loop, entered after `_get_source` and the attachments;
+  - a per-URL catch of `httpx.TimeoutException` (counted as deadline) and `httpx.TransportError` (counted as
+    transport);
+  - when the scope expires, the URL in flight and all untried URLs count as deadline;
+  - a partial call returns `PARTIAL: N of M URLs not fetched (deadline: a, transport: b)` plus
+    `unfetched_urls`, and logs one count-only WARN;
+  - when every URL is fetched, the result is still exactly `{raw_text}`.
+- `extract_website_content` raises `DEADLINE_EXCEEDED: … within {budget:g}s` or
+  `FETCH_FAILED: <ExceptionClass>`, both `from None`.
+- Both docstrings were updated. The temporary `seeded-unread` wiring entry was deleted. The httpx logger is
+  set to WARNING in `main.py` (operator A).
+- Verification `.sdd-logs/v-4.log`: ruff `All checks passed!` / `80 files already formatted`, and the wiring
+  `--final` check printed only the pre-existing `REPORTED:` lines, `exit=0`.
+- Separate config-wiring gates: step-time (`--declared-from product-spec.md`) `.sdd-logs/v-5.log` `exit=0`
+  with no output; `--final` `.sdd-logs/v-6.log` `exit=0` (2 pre-existing `REPORTED:` lines).
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/main.py`,
+  `scripts/config-wiring.json`
+- Deviations: `app/main.py` added (operator A); block exit semantics and the node 24 PATH (Deviation Log).
+
+### Step 6 — test: extract whole-call budget (`@AC-1`) and the affected guards [done]
+- Atomic unit steps 5+6. The new `tests/test_extract_call_budget.py` has 17 cases built on an inline
+  `_Trickle` `httpx.AsyncByteStream` served through respx, with the budget scaled to 0.3 s:
+  - `@AC-1`: 3 trickling URLs → PARTIAL 3 of 3;
+  - partial results keep the texts gathered so far, attachments included;
+  - a ConnectError is counted as transport and a ReadTimeout as deadline;
+  - when every fetch succeeds, the result shape is unchanged;
+  - an egress refusal still aborts the call, and HTTPStatusError still propagates;
+  - a partial call logs one WARN, and no captured record carries the URL or host;
+  - website DEADLINE_EXCEEDED and FETCH_FAILED;
+  - the budget guard (0, -1, nan, inf → 35; 12 is kept);
+  - a real snapshot read through `install_watcher`.
+- The test imports `_make_server`/`_tool_fn`/`_website_source` from `tests.test_tools`, `HANG_GUARD_S` from
+  conftest, and `install_watcher` from `tests.test_config_watcher`.
+- `test_tools.py`: `policy_reads` gains `"extract.call_budget_seconds": 35.0`.
+- `test_tool_deadlines.py`: adds `auth + _RPC_TIMEOUT_S + _EXTRACT_CALL_BUDGET_DEFAULT_S <= 57`, plus the same
+  sum using the `configServiceImpl.ts` ceiling (parsed; the test fails if the row is missing).
+- AC-1 RED (`.sdd-logs/v-2.log`, `16 failed, 832 passed`):
+  - the AC-1 case hit the hang guard (`TimeoutError`);
+  - ConnectError propagated;
+  - the helper cases raised `AttributeError: module 'app.tools' has no attribute '_extract_call_budget_s'`;
+  - `test_tools.py:2472` failed on the policy_reads equality;
+  - the log showed the leaking `INFO httpx … HTTP Request: GET https://news.example.test/a`.
+- GREEN (`.sdd-logs/v-3.log`): `848 passed`, `Required test coverage of 40% reached. Total coverage: 88.62%`.
+  Run `v-1` was a ruff-format failure on the new file, which was fixed by `ruff format`.
+- Files modified: `services/xstockstrat-agent/tests/test_extract_call_budget.py`,
+  `services/xstockstrat-agent/tests/test_tools.py`, `services/xstockstrat-agent/tests/test_tool_deadlines.py`
+- Deviations: see the Step 5 entry.

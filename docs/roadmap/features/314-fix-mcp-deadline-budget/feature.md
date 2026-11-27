@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled) — reports: docs/reports/2026-10-29-agent-extract-tools-no-mcp-cap-defect.md, docs/reports/2026-10-29-agent-list-opportunities-over-mcp-timeout-defect.md, docs/reports/2026-10-19-cross-hop-deadline-bounds-unenforced-defect.md
 **Severity**: SEV-2
 **Created**: 2026-11-10
-**Last Updated**: 2026-11-26
+**Last Updated**: 2026-11-27
 
 ---
 

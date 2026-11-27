@@ -4,7 +4,9 @@ import ast
 import asyncio
 import json
 import logging
+import re
 import time
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import grpc
@@ -292,6 +294,17 @@ def test_fr3_worst_cases_fit_under_57s():
     assert auth + client._LONG_RPC_TIMEOUT_S <= 57
     assert auth + 4 * client._RPC_TIMEOUT_S + client._CONFIG_READ_TIMEOUT_S <= 57
     assert auth + 2 * client._RPC_TIMEOUT_S <= 57
+    assert auth + client._RPC_TIMEOUT_S + tools._EXTRACT_CALL_BUDGET_DEFAULT_S <= 57
+    config_impl = (
+        Path(__file__).resolve().parents[3]
+        / "services/xstockstrat-config/src/grpc/configServiceImpl.ts"
+    ).read_text(encoding="utf-8")
+    row = re.search(
+        r"'agent\.extract\.call_budget_seconds':\s*\{\s*minValue:\s*[\d.]+,\s*maxValue:\s*([\d.]+)",
+        config_impl,
+    )
+    assert row, "agent.extract.call_budget_seconds bounds row not found in configServiceImpl.ts"
+    assert auth + client._RPC_TIMEOUT_S + float(row.group(1)) <= 57
 
 
 def _mapper_calls():
