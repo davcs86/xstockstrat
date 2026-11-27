@@ -11,7 +11,7 @@ vi.mock('@/lib/connectClients', () => ({
   identityClient: { refreshToken, revokeToken },
 }));
 
-const { refreshSession } = await import('@/lib/identity');
+const { refreshSession, revokeToken: revoke } = await import('@/lib/identity');
 
 describe('refreshSession — bounded refresh deadline (feature 271 @AC-2)', () => {
   beforeEach(() => {
@@ -56,5 +56,22 @@ describe('refreshSession — auth events (feature 294)', () => {
       .filter((m) => m.descriptor.name === 'ui.auth.events')
       .flatMap((m) => m.dataPoints as { attributes: unknown; value: unknown }[]);
     expect(events.map((p) => [p.attributes, p.value])).toEqual([[{ event: 'refresh_error' }, 1]]);
+  });
+});
+
+describe('revokeToken — bounded deadline (D-61)', () => {
+  beforeEach(() => {
+    revokeToken.mockReset();
+  });
+
+  it('passes timeoutMs 10_000 to identity RevokeToken', async () => {
+    revokeToken.mockResolvedValue({});
+    await revoke('at');
+    expect(revokeToken).toHaveBeenCalledWith({ token: 'at' }, { timeoutMs: 10_000 });
+  });
+
+  it('stays best-effort when the deadline is exceeded', async () => {
+    revokeToken.mockRejectedValue(new ConnectError('deadline', Code.DeadlineExceeded));
+    await expect(revoke('at')).resolves.toBeUndefined();
   });
 });

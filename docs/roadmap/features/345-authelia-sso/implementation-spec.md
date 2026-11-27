@@ -1526,7 +1526,7 @@ grep -n "REFRESH_TIMEOUT_MS" src/lib/identity.ts && grep -n "login_disabled" src
 
 ### Step 39 — test: Revoke deadline and the login 403
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/identity.test.ts` — modify

@@ -1012,3 +1012,9 @@
 - TDD: recorded under Step 39. Verification: typecheck, lint exit 0; `pnpm run test:unit` 98 files, 979 passed / 2 skipped; both greps hit (`identity.ts:44`, `login/route.ts:34-35`).
 - Files modified: `services/xstockstrat-ui/src/lib/identity.ts`, `services/xstockstrat-ui/src/app/api/auth/login/route.ts`
 - Deviations: none
+
+### Step 39 — test: Revoke deadline and the login 403 [done]
+- `identity.test.ts`: `revokeToken` calls identity with `{ timeoutMs: 10_000 }` and stays best-effort on `DeadlineExceeded`. New `login/route.test.ts`: **@AC-16** `PermissionDenied` → 403 `{error:'login_disabled'}`, `login_disabled` event, no Set-Cookie; `Unauthenticated` → 401 "Invalid credentials" + `login_failed`; `Unavailable` → 503 + `login_error`.
+- TDD: red (before Step 38): `expected "vi.fn()" to be called with arguments: [ { token: 'at' }, …(1) ]` and `expected 503 to be 403` (2 failed, 6 passed) → green: 8 passed; full `pnpm run test:coverage` 98 files, 979 passed / 2 skipped, `src/lib/**` 85.21 % lines; typecheck and lint exit 0.
+- Files modified: `services/xstockstrat-ui/src/lib/identity.test.ts`, `services/xstockstrat-ui/src/app/api/auth/login/route.test.ts` (new)
+- Deviations: none
