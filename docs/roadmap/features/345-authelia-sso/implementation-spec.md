@@ -302,7 +302,7 @@ git diff --stat scripts/config-wiring-stored.json   # regenerated, non-empty
 
 ### Step 5 — test: Static seed test for 060
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/autheliaSsoSeedMigration.test.ts` — create

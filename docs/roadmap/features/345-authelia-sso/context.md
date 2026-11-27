@@ -810,3 +810,9 @@
 - Verification: 2 `060_*` files; no `pg_notify`; `check-config-wiring.mjs --declared-migration …060…` exit=0 with 8 `PENDING` seeded-unread (readers land in Steps 7, 17, 30); `--final` shows 0 `STALE-STORED`. TDD: N/A.
 - Files modified: `services/xstockstrat-config/migrations/060_authelia_sso_keys.{up,down}.sql`, `scripts/config-wiring-stored.json`
 - Deviations: scratch Postgres used with owner sign-off (Deviation Log).
+
+### Step 5 — test: Static seed test for 060 [done]
+- `autheliaSsoSeedMigration.test.ts` (7 cases): two insert-if-absent INSERTs, no notify; 18 global sentinel rows; relative keys (`@AC-1 @feature-296`); **@AC-41** `auth.mode` = `local`/`local`; empty plain rows; the value-less secret rows; the guarded down.
+- TDD: AC-41 red: with the `060` files moved aside, `findOne` → "expected exactly one *authelia_sso_keys.up.sql, got []" (exit 1) → green: `pnpm run lint` 0, `pnpm run test:coverage` 445/445 pass (exit 0), `c8 check-coverage --lines 40` 0 (94.33 % lines). C-13: single consumer, inline.
+- Files modified: `services/xstockstrat-config/src/__tests__/autheliaSsoSeedMigration.test.ts`
+- Deviations: none. Note: the `splitTopLevel`/`unquote`/`parseInsert` helpers are cloned from `notifyCommsgunSeedMigration.test.ts` as the step instructs ("clone the shape"); hoisting them into `migrationSql.ts` would touch files outside the step — a DRY follow-up candidate, not done here.
