@@ -238,7 +238,7 @@ ruff check . && ruff format --check .
 **Reviewers**: `xstockstrat-analysis` owner — strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `tests/test_fundsignal_loop.py:949-973` — `test_ac3_formula_all_missing_skipped_partial_scored`; `inputs = dict(req.input_data)` at `:965`, `assert inputs["pe_ratio"] == 0.0` at `:966`.
+- `tests/test_fundsignal_loop.py:949-973` — `test_ac3_formula_all_missing_skipped_partial_scored`; `inputs = dict(req.input_data)` at `:965`, the `dividend_yield` approx assertion at `:966`, `assert inputs["pe_ratio"] == 0.0` at `:967`.
 - Helpers to reuse: `_identity_loop` (`:677`, canned `ExecuteFormula` composite 0.7), `_serve_rows` (`:888`), `_SYSTEM_FORMULA` (`:667`), `BUILTIN_SCORER_METRICS` (`:27`), `fundamentals_row` (`tests/conftest.py:57`), `_assert_system_identity` (`:704`).
 - `acceptance/fix-fundsignal-neutral-score.feature:42` — "… with dividend_yield 0.013 and pe_ratio 0.0" (`@AC-3 @feature-246`).
 - `acceptance/fundamentals-formula-inputs.feature:39` — stale "partial-row case diverges by design" comment (`@AC-4 @feature-201`); `:47-53` — `@AC-8 @feature-201` scenario title, second `Then`, and the trailing comment.
@@ -429,9 +429,9 @@ grep -n "0.5 neutral" services/xstockstrat-analysis/CLAUDE.md
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion
 
 **Codebase Evidence**:
-- `servicer.py:1237` — `_ingest_external_signal`; comment at `:1255-1256` ("0.0 passes and is stored as NULL"); range check `:1257`; write sentinel `:1277` `conviction = signal.conviction if signal.conviction > 0.0 else None`.
-- The same `conviction` binds into the `newsletter_signals` INSERT (`:1291-1306`) and the `signal_dedup_claims` upsert (`:1313-1334`, `IS DISTINCT FROM EXCLUDED.conviction` at `:1323-1324`).
-- `servicer.py:1425` — `QuerySignals`; builder at `:1519-1528`; read-back sentinel `:1524` `conviction=float(row["conviction"]) if row["conviction"] is not None else 0.0`.
+- `servicer.py:1346` — `_ingest_external_signal`; comment at `:1364-1365` ("0.0 passes and is stored as NULL" on `:1365`); range check `:1366`; write sentinel `:1386` `conviction = signal.conviction if signal.conviction > 0.0 else None`.
+- The same `conviction` binds into the `newsletter_signals` INSERT (`:1398-1416`) and the `signal_dedup_claims` upsert (`:1419-1446`, `IS DISTINCT FROM EXCLUDED.conviction` at `:1432-1433`).
+- `servicer.py:1534` — `QuerySignals`; builder at `:1628-1637`; read-back sentinel `:1633` `conviction=float(row["conviction"]) if row["conviction"] is not None else 0.0`.
 - `mcp_client_loop.py:88-94` — `_build_external_signal`; `conviction=item["conviction"]` at `:94`. Conviction is mandatory there: `app/extractors/mcp_client.py:45` drops an item without a numeric in-range conviction.
 - Storage accepts 0: `conviction NUMERIC(4,3) CHECK (conviction BETWEEN 0 AND 1)`, nullable (`migrations/001_newsletter_signals.up.sql:14`). No schema change.
 - No other conviction site in `services/xstockstrat-ingest/app` (grep).
@@ -442,9 +442,9 @@ grep -n "0.5 neutral" services/xstockstrat-analysis/CLAUDE.md
 **Covers**: —
 
 **Instructions**:
-1. Write (`:1277`): `conviction = signal.conviction if (signal.conviction_provided or signal.conviction != 0.0) else None`. The range check stays. Rewrite the comment at `:1255-1256`: an explicit 0.0 is stored as 0; an omitted conviction is stored as NULL.
+1. Write (`:1386`): `conviction = signal.conviction if (signal.conviction_provided or signal.conviction != 0.0) else None`. The range check stays. Rewrite the comment at `:1364-1365`: an explicit 0.0 is stored as 0; an omitted conviction is stored as NULL.
 2. Do not special-case 0 against a legacy NULL in the dedup upsert (`R-8`).
-3. `QuerySignals` builder (`:1519-1528`): for a non-NULL row set `conviction=float(row["conviction"])` and `conviction_provided=True`; for a NULL row leave both unset (D-8).
+3. `QuerySignals` builder (`:1628-1637`): for a non-NULL row set `conviction=float(row["conviction"])` and `conviction_provided=True`; for a NULL row leave both unset (D-8).
 4. `_build_external_signal` (`mcp_client_loop.py:90-94`): add `conviction_provided=True` unconditionally.
 
 **Verification**:
@@ -467,11 +467,11 @@ ruff check . && ruff format --check .
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion
 
 **Codebase Evidence**:
-- `tests/test_ingest_servicer.py:2101-2156` — `TestIngestSignalConvictionValidation`, built on a real `ingest_pb2.ExternalSignal` (`_make_signal_req` `:2110`); `_servicer_full_happy_path` (`:2122`) uses `transaction_conn(...)` but does not return `conn`; `test_in_range_conviction_proceeds` (`:2150`) carries the "0.0 … stored NULL" comment.
+- `tests/test_ingest_servicer.py:2160-2215` — `TestIngestSignalConvictionValidation`, built on a real `ingest_pb2.ExternalSignal` (`_make_signal_req` `:2169`); `_servicer_full_happy_path` (`:2181`) uses `transaction_conn(...)` but does not return `conn`; `test_in_range_conviction_proceeds` (`:2209`) carries the "0.0 … stored NULL" comment (`:2210-2211`).
 - `tests/_helpers.py:25` — `transaction_conn` returns `(db, conn)`; the INSERT is `conn.fetchrow` call 0 (conviction = positional `args[4]`), the claim upsert is call 1 (conviction = `args[6]`).
-- `tests/test_ingest_servicer.py:1888-1928` — `TestQuerySignals`; `test_populates_ingested_at` (`:1902`) shows the `db.fetch` row-dict shape.
+- `tests/test_ingest_servicer.py:1947-1986` — `TestQuerySignals`; `test_populates_ingested_at` (`:1961`) shows the `db.fetch` row-dict shape.
 - `tests/test_mcp_client_loop.py:94-115` — `test_cycle_parses_and_ingests_signal` reads the built signal from `servicer._ingest_external_signal.await_args.args[0]`; `_item` (`:338`), `_run_cycle_with` (`:342`).
-- `TestIngestSignal._make_signal_req` (`:1608`) is a MagicMock with `conviction = 0.8`; both branches of the new predicate store 0.8, so it is left as is.
+- `TestIngestSignal._make_signal_req` (`:1666`) is a MagicMock with `conviction = 0.8` (`:1674`); both branches of the new predicate store 0.8, so it is left as is.
 - No test stores a 0.0 today (recon.md:73).
 
 **TDD**: `red-green required`
@@ -509,8 +509,8 @@ grep -n "conftest\|_helpers" tests/test_ingest_servicer.py | head -3
 **Codebase Evidence**:
 - `fundsignal_loop.py:643` — `_emit_signal`; `ingest_pb2.ExternalSignal(` at `:654-661`, `conviction=float(conviction)` at `:658`.
 - `scoring.py:10` — `compute_signal_score`; `:31` `conviction = sig.conviction if sig.conviction > 0 else 0.5`. The `return 0.5` at `:15` and after the loop are separate neutral returns and stay.
-- Callers: `app/services/screener.py:285`; alias `app/handlers/servicer.py:96`.
-- Other analysis readers already use `sig.conviction` literally (`app/handlers/servicer.py:5057-5058`, `:5546`, `:5584`, `:5601-5602`, `:6797`); they are not changed (design.md § 3).
+- Callers: `app/services/screener.py:285`; alias `_compute_signal_score = scoring.compute_signal_score` at `app/handlers/servicer.py:97` (its comment at `:96`).
+- Other analysis readers already use `sig.conviction` literally (`app/handlers/servicer.py:5115-5116`, `:5644-5645`, `:5708`, `:5725-5726`, `:6928`); they are not changed (design.md § 3).
 - Header propagation: no new outbound call; `_emit_signal` reuses the existing `IngestSignal` call and its `metadata`.
 
 **Lands with**: `Step 12`
@@ -544,9 +544,9 @@ ruff check . && ruff format --check .
 **Reviewers**: `xstockstrat-analysis` owner — strategy scoring determinism, backtest reproducibility
 
 **Codebase Evidence**:
-- `tests/test_analysis_helpers.py:182-194` — `_make_signal` returns a `MagicMock`; 17 call sites in the same file (`:208`..`:358`), none elsewhere (grep `_make_signal\b` over `tests/`).
+- `tests/test_analysis_helpers.py:182-194` — `_make_signal` returns a `MagicMock`; 16 call sites in the same file (`:208`..`:358`; 17 occurrences counting the def at `:182`), none elsewhere (grep `_make_signal\b` over `tests/`).
 - `:235-239` — `test_zero_conviction_uses_default_half` (`_make_signal("buy", 0.0)`, asserts `> 0.5`): the only pin of `R-1`.
-- `:241-257` — a real `ingest_pb2.ExternalSignal` is already used in this file; `_seconds_to_datetime` at `:176`; `MagicMock` is still used by other tests (`:54`).
+- `:241-271` — a real `ingest_pb2.ExternalSignal` is already used in this file (`:251`, `:266`; import at `:12`); `_seconds_to_datetime` at `:176`; `MagicMock` is still used by other tests (`:54`).
 - `tests/test_screener.py:710-716` — `_in_window_signal(direction, conviction)` builds a real `ExternalSignal`; `:593-625` — a signal-weighted screen through `make_engine`; `:768-776` — the existing wrapper around `screener_mod.scoring.compute_signal_score`.
 - Ledger: fails.md:726 (MagicMock proto stand-ins hide field bugs); insights.md 2026-11-04 fix-fundsignal-neutral-score (migrate the doubles first, behavior-neutral, then the RED tests).
 
@@ -557,7 +557,7 @@ ruff check . && ruff format --check .
 **Covers**: `AC-3`
 
 **Instructions**:
-1. Rebuild `_make_signal` on a real `ingest_pb2.ExternalSignal(direction=…, conviction=…)`, keeping its signature; set `valid_from` / `valid_until` with `.FromDatetime(_seconds_to_datetime(sec))` only when the argument is > 0. This migration is behavior-neutral: all 17 call sites pass on the tree before Step 11.
+1. Rebuild `_make_signal` on a real `ingest_pb2.ExternalSignal(direction=…, conviction=…)`, keeping its signature; set `valid_from` / `valid_until` with `.FromDatetime(_seconds_to_datetime(sec))` only when the argument is > 0. This migration is behavior-neutral: all 16 call sites pass on the tree before Step 11.
 2. Keep `test_zero_conviction_uses_default_half` and its assertion unchanged; it is the "not given → 0.5" pin. Never invert it (O-16).
 3. Add its sibling `test_explicit_zero_conviction_scores_zero` (`@AC-3 @feature-309`): the same signal with `conviction_provided = True` → `_compute_signal_score(...) == pytest.approx(0.5)` (a buy adding 0.0), where the not-given signal gives 0.75. RED today: 0.75.
 4. `tests/test_screener.py`: add `test_ac3_screen_scores_explicit_zero_conviction_as_zero` on the `:593` pattern with `_in_window_signal("buy", 0.0)` plus `conviction_provided=True`; capture the `compute_signal_score` return through the `:768` wrapper pattern and assert `pytest.approx(0.5)`. AC-3 is scoped to the screener path (D-4).
@@ -691,13 +691,13 @@ grep -n "unknown confidence" services/xstockstrat-ingest/docs/context-constituti
 **Reviewers**: DBA — NNN numbering, up+down pair, run-order compliance; `xstockstrat-ingest` owner — idempotent ingestion; `xstockstrat-marketdata` owner — acknowledges the migration-time read of `marketdata.fundamentals` (D-12)
 
 **Codebase Evidence**:
-- Last ingest migration on `main-dev@36aed60b`: `018_backfill_symbol_results` → next is `019`. design.md's provisional `017` is taken (`017_signal_source_extraction_instructions`).
+- Last ingest migration on `main-dev@f802b184` (and on the merged feature tree): `018_backfill_symbol_results` → next is `019`. design.md's provisional `017` is taken (`017_signal_source_extraction_instructions`).
 - `migrations/013_signal_ownership_templates.up.sql:101-104` — the `to_regclass`-guarded `DO $$` precedent; `:75`, `:80` — `GET DIAGNOSTICS … ROW_COUNT` and `RAISE NOTICE` precedent.
-- `migrations/001_newsletter_signals.up.sql` — `ingest.newsletter_signals` columns `ingested_at`, `source`, `symbol`, `conviction NUMERIC(4,3)`, `valid_until`; `user_id` added by `013` (`servicer.py:1293` inserts it).
+- `migrations/001_newsletter_signals.up.sql` — `ingest.newsletter_signals` columns `ingested_at`, `source`, `symbol`, `conviction NUMERIC(4,3)`, `valid_until`; `user_id` added by `013` (`servicer.py:1415` binds it as `owner`).
 - `ingest.signal_sources`: `user_id` (`013:24-32`), `source_type` with `'derived'` (`006_signal_source_type_derived.up.sql`); `013:27` sets `user_id = 'system'` for derived sources.
 - `services/xstockstrat-marketdata/migrations/002_fundamentals.up.sql:7-25` — `marketdata.fundamentals(symbol text PRIMARY KEY, as_of timestamptz NOT NULL, pe_ratio, pb_ratio, dividend_yield, eps, roe, debt_to_equity numeric, …)`.
 - Run order puts marketdata before ingest (`docs/patterns/database.md` § Migration tooling; `scripts/migration-rerun.py:26-37`); both schemas share one database per environment (D-2).
-- Reader filter the expiry must defeat: `servicer.py:1480` `(valid_until IS NULL OR valid_until >= $n)`.
+- Reader filter the expiry must defeat: `servicer.py:1589` `(valid_until IS NULL OR valid_until >= ${idx})`.
 - Down-file precedent: `docs/patterns/database.md` § Adding a new migration, item 2 ("or a stub comment if rollback is not supported").
 - Approval in principle: `context.md` § Session 2026-11-10 (operator, as DBA + ingest owner).
 
