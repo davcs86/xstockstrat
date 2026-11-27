@@ -3248,3 +3248,20 @@ Tooling (steps 12+13): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1
 - TDD: the RED/GREEN results above; `@AC-4` and `@AC-5` (`GetPnL` half) are green.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_pnl_legs_test.go`
 - Deviations: the same Deviation Log entry (Steps 12+13).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 14+15
+
+Tooling (steps 14+15): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 14 — service: broker `ErrOrderNotFound` and IBKR `GetOrder` id match [done]
+- Atomic unit with Step 15 (planned, **Lands with**). `broker.go`: `ErrOrderNotFound` after `ErrRateLimited`, with a one-line comment that only a definitive single-order not-found may wrap it. `alpaca.go`: `GetOrder` returns `…(status 404): <body>: %w ErrOrderNotFound` on a 404; every other non-200 is unchanged, and `c.do` / `doPaced` are untouched. New exported `const ListOrdersLimit = 500` builds the `ListOrders` URL (`limit=%d`); the `:483` comment keeps its wording. `ibkr.go`: `GetOrder` returns the entry whose `OrderID == brokerOrderID`; a miss or an empty list returns `ibkr GetOrder: order <id> not in response (<n> orders)`, which wraps nothing (D-18, D-26, R-11). A parse error still wraps the `json` error. The old empty-list branch wrapped a nil error (`%!w(<nil>)`); that message is gone with it. `ListOrders` on both brokers is unchanged.
+- Step 23 needs to know: an IBKR miss is an ordinary error in the parent `pollFills` path too (a failed poll, no status change), as D-26 says; Step 29 logs it in the trading findings. `ListOrdersLimit` is the constant Step 26's complete-list gate reads.
+- TDD (unit): RED `.sdd-logs/v-1.log` `exit=1` was a compile failure (`undefined: broker.ErrOrderNotFound`). The sentinel alone was then added and RED re-run, `v-2.log` `exit=1`, the right reason: `status 404: errors.Is(err, ErrOrderNotFound) = false, want true`; `another order listed: GetOrder(42) = &{BrokerOrderID:7 Status:Filled FilledQty:3 …}`; `only another id: GetOrder(42) = &{BrokerOrderID:7 …}, want an error`. GREEN: Step 15 block `v-7.log` `ok github.com/xstockstrat/trading/internal/broker 14.951s` (`-race`); `v-9.log` (`-v`) shows 5 `--- PASS`, the 3 new tests plus the unchanged `TestAlpacaListOrders_QueryParams` (`limit=500`) and `TestIBKRGetOrder_SignsQueryOnTheWire`. Verification: build (`v-3.log`) clean; the `Orders[0]` grep (`v-4.log`) and the `status=all&limit=500` grep (`v-5.log`) print nothing; lint `v-6.log` `0 issues.` `exit=0`; coverage `v-8.log` `total: (statements) 84.9%` `exit=0`, every package `ok`. The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-trading/internal/broker/broker.go`, `services/xstockstrat-trading/internal/broker/alpaca.go`, `services/xstockstrat-trading/internal/broker/ibkr.go`
+- Deviations: the Verification blocks stop after their first line (Deviation Log, Steps 14+15).
+
+### Step 15 — test: broker not-found and id match [done]
+- Atomic unit with Step 14. `alpaca_test.go`: `TestAlpacaGetOrder_OnlyA404IsOrderNotFound` (httptest, default client with no rate-limit budget, so a 429 is one attempt): 404 wraps `ErrOrderNotFound`, 500 and 429 do not. `TestAlpacaListOrders_QueryParams` is unchanged and still sees `limit=500`. `ibkr_do_test.go` (on `lenientIBKRClient` and `writeJSON`): `TestIBKRGetOrder_ReturnsTheRequestedID` (the reused `ibkrOrdersJSON`, plus an inline body listing `"7"` then `"42"`: both return order 42 `Submitted`) and `TestIBKRGetOrder_MissIsAnOrdinaryError` (only `"7"`, and an empty list: an error for which `errors.Is(err, ErrOrderNotFound)` is false). New bodies are inline, one consumer each (C-13).
+- TDD: the RED/GREEN results above.
+- Files modified: `services/xstockstrat-trading/internal/broker/alpaca_test.go`, `services/xstockstrat-trading/internal/broker/ibkr_do_test.go`
+- Deviations: the same Deviation Log entry (Steps 14+15).

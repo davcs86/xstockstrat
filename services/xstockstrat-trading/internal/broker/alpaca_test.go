@@ -310,6 +310,31 @@ func TestGetOrder_AlpacaFilledAvgPrice(t *testing.T) {
 	}
 }
 
+func TestAlpacaGetOrder_OnlyA404IsOrderNotFound(t *testing.T) {
+	for _, tc := range []struct {
+		status   int
+		notFound bool
+	}{
+		{http.StatusNotFound, true},
+		{http.StatusInternalServerError, false},
+		{http.StatusTooManyRequests, false},
+	} {
+		srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(tc.status)
+			_, _ = io.WriteString(w, `{"message":"no"}`)
+		})
+		c := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s", PaperURL: srv.URL, Paper: true})
+		_, err := c.GetOrder(context.Background(), "order-gone")
+		srv.Close()
+		if err == nil {
+			t.Fatalf("status %d: GetOrder returned no error", tc.status)
+		}
+		if got := errors.Is(err, broker.ErrOrderNotFound); got != tc.notFound {
+			t.Errorf("status %d: errors.Is(err, ErrOrderNotFound) = %v, want %v (err: %v)", tc.status, got, tc.notFound, err)
+		}
+	}
+}
+
 func TestGetAccount_Alpaca(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/account", func(w http.ResponseWriter, r *http.Request) {

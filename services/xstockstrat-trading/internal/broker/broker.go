@@ -21,6 +21,9 @@ var ErrOrderNotCancelable = errors.New("broker order not cancelable: already ter
 // together with a context error and is never ErrInvalidCredentials.
 var ErrRateLimited = errors.New("broker rate limited: request was not processed")
 
+// ErrOrderNotFound may wrap only a definitive single-order not-found from the broker, never a list miss.
+var ErrOrderNotFound = errors.New("broker order not found")
+
 // BrokerOrder is the normalized order representation returned by any broker.
 type BrokerOrder struct {
 	BrokerOrderID  string

@@ -672,7 +672,7 @@ cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(go list ./... | grep
 
 ### Step 14 — service: broker `ErrOrderNotFound` and IBKR `GetOrder` id match
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify
@@ -714,7 +714,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 15 — test: broker not-found and id match
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify
@@ -1496,3 +1496,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 12 and Step 13 each give a three-line block whose lines each start `cd services/xstockstrat-portfolio && …`. Step 12's evidence cites `portfolio_service.go:993-1045`.
 - **Actual**: the same pattern as Steps 3-11. Inside the one subshell the first line's `cd` persists, so lines 2 and 3 fail with `cd: services/xstockstrat-portfolio: No such file or directory`. Run verbatim, Step 12's block (`.sdd-logs/v-2.log`) ran only `go build` and `go vet -tags dbtest`, and Step 13's block (`v-3.log`) ran only the filtered `go test -race`. Both exited 1 for this reason alone. Steps 7 and 9 moved `realizedPnL` to `:1076`; the dedup maps are at `:1085-1112`, the side lookup at `:1119` and the mixed-account refusal at `:1125-1137`. The code located by symbol matched the evidence.
 - **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the `GetPnL` filter run printed `ok` (`v-4.log`), `golangci-lint` v2.14.0 printed `0 issues.` (`v-5.log`), and the coverage line printed `total: (statements) 79.1%` (`v-6.log`). The step bodies were not changed (F-09).
+
+### Steps 14+15 — Verification blocks stop after their first line (2026-11-27)
+- **Spec said**: Step 14 gives a four-line block and Step 15 a three-line block. Each line starts `cd services/xstockstrat-trading && …` or names a repo-root-relative path.
+- **Actual**: the same pattern as Steps 3-13. Inside the one subshell the first line's `cd` persists, so later lines fail with `cd: services/xstockstrat-trading: No such file or directory` and the greps print `No such file or directory`. Run verbatim, Step 14's block (`.sdd-logs/v-3.log`) ran only `go build ./...`, and Step 15's block (`v-7.log`) ran only the broker `go test -race`. Both exited 1 for this reason alone.
+- **Disposition**: each block was run verbatim once. Then every line that had not run was run unchanged, alone, from the repo root, with its own log. All passed: the `Orders[0]` grep (`v-4.log`) and the `status=all&limit=500` grep (`v-5.log`) printed nothing (`exit=1`, no match); `golangci-lint` v2.14.0, the line both blocks share, printed `0 issues.` (`v-6.log`); the coverage line printed `total: (statements) 84.9%` with every package `ok` (`v-8.log`). The step bodies were not changed (F-09).

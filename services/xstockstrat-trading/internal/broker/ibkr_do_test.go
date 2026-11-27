@@ -138,6 +138,42 @@ func TestIBKRGetOrder_SignsQueryOnTheWire(t *testing.T) {
 	}
 }
 
+func TestIBKRGetOrder_ReturnsTheRequestedID(t *testing.T) {
+	for name, body := range map[string]string{
+		"single entry":         ibkrOrdersJSON,
+		"another order listed": `{"orders":[{"orderId":"7","status":"Filled","filledQuantity":3},{"orderId":"42","status":"Submitted"}]}`,
+	} {
+		c, _ := lenientIBKRClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusOK, body)
+		}), nil)
+		o, err := c.GetOrder(context.Background(), "42")
+		if err != nil {
+			t.Fatalf("%s: GetOrder: %v", name, err)
+		}
+		if o.BrokerOrderID != "42" || o.Status != "Submitted" || o.FilledQty != 0 {
+			t.Errorf("%s: GetOrder(42) = %+v, want order 42 Submitted with no fill", name, o)
+		}
+	}
+}
+
+func TestIBKRGetOrder_MissIsAnOrdinaryError(t *testing.T) {
+	for name, body := range map[string]string{
+		"only another id": `{"orders":[{"orderId":"7","status":"Filled","filledQuantity":3}]}`,
+		"empty list":      `{"orders":[]}`,
+	} {
+		c, _ := lenientIBKRClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusOK, body)
+		}), nil)
+		o, err := c.GetOrder(context.Background(), "42")
+		if err == nil {
+			t.Fatalf("%s: GetOrder(42) = %+v, want an error", name, o)
+		}
+		if errors.Is(err, broker.ErrOrderNotFound) {
+			t.Errorf("%s: an IBKR miss must not wrap ErrOrderNotFound: %v", name, err)
+		}
+	}
+}
+
 // @AC-2
 func TestIBKR_EveryMethodLSTSignedWithRealm(t *testing.T) {
 	c, h := strictIBKRClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
