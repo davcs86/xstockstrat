@@ -277,7 +277,7 @@ ruff check . && ruff format --check .
 
 ### Step 5 — service: carry formula digests on the existing single `GetFormula` read
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -319,7 +319,7 @@ ruff check . && ruff format --check .
 
 ### Step 6 — test: digests ride the single read (readable, refused, outage, cache hit)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_formula_digest_read.py` — create
@@ -857,5 +857,11 @@ grep -n "_FORMULA_VERSION_UNKNOWN_MSG" services/xstockstrat-agent/docs/context-c
 ## Deviation Log
 
 - 2026-11-20 (impl-spec review, before execution): design.md "Consumer surface (C-14)" calls the feature internal-only. The review showed the agent withholds any UNAVAILABLE text outside `_SCORE_UNAVAILABLE_PASS`, so Steps 16–18 were added and `xstockstrat-agent` joins the touched services. `feature.md` (Affected Services, Reviewers table) still lists analysis and indicators only; context.md Open Threads carries the operator confirmation of this scope addition to the `/sdd-execute` checkpoint. The insights BFF gets no step (a bare `forward`; recorded in the Execution Summary).
+
+### Deviation: Step 5 — service: carry formula digests on the existing single `GetFormula` read
+**Spec said**: Step 5 Codebase Evidence: "no test reads a cache value, so none needs editing"; Files: `services/xstockstrat-analysis/app/handlers/servicer.py` only (Step 6 adds `tests/test_formula_digest_read.py`).
+**Actual**: `services/xstockstrat-analysis/tests/test_unreadable_formula.py` was also edited. Its four `GetFormula` mocks returned `SimpleNamespace(fundamental_inputs=[])` (lines ~476, 651, 693, 859) and now return `indicators_pb2.FormulaDefinition()`, with the same empty `fundamental_inputs`. `from gen.indicators.v1 import indicators_pb2` was added.
+**Reason**: `_formula_fundamentals` now computes `_formula_digest(formula)` on every successful fetch. `json_format.MessageToDict` needs a real proto message, so those four tests raised `AttributeError: 'types.SimpleNamespace' object has no attribute 'DESCRIPTOR'` in the Step 5 Verification. The break-radius grep only matched direct helper calls and missed mocks reached through RPC paths.
+**Disposition**: existing mocks made proto-real for the digest read (operator-approved Option A, 2026-11-27). Behaviour is unchanged.
 
 _Further entries are added by /sdd-execute as implementation proceeds._

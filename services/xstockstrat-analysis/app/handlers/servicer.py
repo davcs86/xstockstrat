@@ -1930,7 +1930,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return out
 
     async def _formula_fundamentals(
-        self, definition, propagation_meta, *, cache=None, failures=None, warmups=None
+        self,
+        definition,
+        propagation_meta,
+        *,
+        cache=None,
+        failures=None,
+        warmups=None,
+        digests=None,
     ):
         """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for the definition's
         custom-formula components that declare fundamentals inputs, via one ``GetFormula`` per
@@ -1938,7 +1945,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         cache). An empty result means the definition has no fundamentals-formula operand. A
         refused ``GetFormula`` (NOT_FOUND/PERMISSION_DENIED) is "not a fundamentals formula" and
         records no failure; an outage records UNKNOWN. Either caches ``[]``. When ``warmups`` is
-        given, each fetched formula's declared ``warmup_period`` is recorded in it (feature 341)."""
+        given, each fetched formula's declared ``warmup_period`` is recorded in it (feature 341),
+        and when ``digests`` is given, every visited formula's ``_formula_digest`` (feature 327)."""
         out: dict[str, list] = {}
         for comp in definition.components:
             if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA or not comp.formula_id:
@@ -1947,7 +1955,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if fid in out:
                 continue
             if cache is not None and fid in cache:
-                metrics = cache[fid]
+                metrics, digest = cache[fid]
             else:
                 try:
                     formula = await self._indicators.GetFormula(
@@ -1955,14 +1963,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         metadata=propagation_meta,
                     )
                     metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
+                    digest = _formula_digest(formula)
                     if warmups is not None:
                         warmups[fid] = int(getattr(formula, "warmup_period", 0) or 0)
                 except grpc.RpcError as e:
                     metrics = []
+                    digest = _UNREADABLE if _rpc_code(e) in UNREADABLE_FORMULA_CODES else None
                     if failures is not None and _rpc_code(e) not in UNREADABLE_FORMULA_CODES:
                         failures[("formula", fid)] = Availability.UNKNOWN
                 if cache is not None:
-                    cache[fid] = metrics
+                    cache[fid] = _FormulaRead(metrics, digest)
+            if digests is not None:
+                digests[fid] = digest
             if metrics:
                 out[fid] = metrics
         return out
@@ -2544,7 +2556,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return warmup
 
     async def _declared_formula_warmup(
-        self, formula_id, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None
+        self,
+        formula_id,
+        cache,
+        propagation_meta,
+        deleted_cache=None,
+        fund_map=None,
+        failures=None,
+        digests=None,
     ) -> int:
         """Declared `warmup_period` for one formula, memoized in `cache` for the whole run.
 
@@ -2574,8 +2593,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     cache[formula_id] = int(getattr(formula, "warmup_period", 0) or 0)
                 if deleted_cache is not None and getattr(formula, "deleted", False):
                     deleted_cache[formula_id] = _deleted_formula_warning(formula.name, formula_id)
+                if digests is not None:
+                    digests[formula_id] = _formula_digest(formula)
             except grpc.RpcError as e:
                 cache[formula_id] = 0
+                if digests is not None:
+                    digests[formula_id] = (
+                        _UNREADABLE if _rpc_code(e) in UNREADABLE_FORMULA_CODES else None
+                    )
                 if (
                     fund_map is not None
                     and failures is not None
@@ -2585,7 +2610,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return cache[formula_id]
 
     async def _prefetch_formula_warmups(
-        self, definition, cache, propagation_meta, deleted_cache=None, fund_map=None, failures=None
+        self,
+        definition,
+        cache,
+        propagation_meta,
+        deleted_cache=None,
+        fund_map=None,
+        failures=None,
+        digests=None,
     ) -> None:
         """Fill `cache` for every referenced custom formula BEFORE the symbol loop (feature 071).
 
@@ -2630,7 +2662,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     formula_ids.append(comp.formula_id)
         for fid in formula_ids:
             await self._declared_formula_warmup(
-                fid, cache, propagation_meta, deleted_cache, fund_map, failures
+                fid, cache, propagation_meta, deleted_cache, fund_map, failures, digests
             )
 
     @owner_scoped
@@ -5151,7 +5183,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         benchmark_cache: dict[str, list] = {}
         fundamentals_cache: dict[str, list] = {}  # feature 198 — per-symbol PIT history dedup
         # feature 200 — routing map keyed by formula_id (shared across strategies) + snapshot dedup.
-        formula_fund_cache: dict[str, list] = {}
+        formula_fund_cache: dict[str, _FormulaRead] = {}
         fund_snap_cache: dict[str, list] = {}
         heal_failures: dict = {}  # feature 215 — this heal's loader failures (guard input)
         fund_gate = self._cfg.get_bool("backtest.fundamentals.enabled", False)
@@ -5792,7 +5824,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fundamentals_cache: dict[str, list] = {}
         # feature 200 — fundamentals-only formula routing map (keyed by formula_id, shared across
         # candidates) + per-symbol snapshot dedup; both filled lazily in _row_for (idempotent).
-        formula_fund_cache: dict[str, list] = {}
+        formula_fund_cache: dict[str, _FormulaRead] = {}
         fund_snap_cache: dict[str, list] = {}
         # Feature 215: (channel, symbol)/(formula, id) loader failures for this pass; row-local,
         # never folded into the symbol-wide fetch_failed.

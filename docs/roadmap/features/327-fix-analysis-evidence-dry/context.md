@@ -664,3 +664,32 @@ Effect: the C-14 agent scope addition (the agent-surface scope the design propos
 - TDD: AC-1 red: `FAILED tests/test_evidence_fingerprint.py::test_behavioural_edit_changes_digest[_set_source]` within `26 failed` (`.sdd-logs/v-1.log`, exit=1) → green (`.sdd-logs/v-3.log`, exit=0): `26 passed in 0.26s`, `11 passed, 399 deselected` (existing fingerprint/DeadSignalParams tests), the conftest grep printed no lines, `1854 passed`, `Total coverage: 91.92%`, `All checks passed!`, `144 files already formatted`.
 - Files modified: `services/xstockstrat-analysis/tests/test_evidence_fingerprint.py`
 - Deviations: none
+
+### Step 5 — service: carry formula digests on the existing single `GetFormula` read [done]
+- This is atomic unit Steps 5+6, with one red→green and one commit.
+- Added the `digests=None` keyword to `_formula_fundamentals`, `_declared_formula_warmup` and `_prefetch_formula_warmups`, and passed it through in the prefetch loop. Each digest is a hex string, `_UNREADABLE` (NOT_FOUND/PERMISSION_DENIED) or `None` (outage).
+- `_formula_fundamentals` cache values are now `_FormulaRead(metrics, digest)`. The return map is still `{fid: metrics}`.
+- In `_declared_formula_warmup`, digests are written only inside the `if formula_id not in cache` block. `cache` stays `dict[str, int]`.
+- Both `formula_fund_cache` owners are now annotated `dict[str, _FormulaRead]`. No caller passes `digests` yet.
+- Operator decision (2026-11-27, Option A, binding): expand scope to `tests/test_unreadable_formula.py`. Its four `SimpleNamespace(fundamental_inputs=[])` `GetFormula` mocks now return `indicators_pb2.FormulaDefinition()`, because `_formula_digest` needs a real proto.
+- TDD and verification (union of the Step 5 and Step 6 Verifications in one run):
+  - Red (`.sdd-logs/v-1.log`, exit=1): `TypeError: AnalysisServicer._formula_fundamentals() got an unexpected keyword argument 'digests'`, `9 failed, 1 passed`.
+  - First green run (`.sdd-logs/v-2.log`): `4 failed`, `AttributeError: 'types.SimpleNamespace' object has no attribute 'DESCRIPTOR'` in `tests/test_unreadable_formula.py`. The operator-approved fold above fixes this.
+  - Green (`.sdd-logs/v-3.log`, exit=0): 3 `digests=None` hits, 2 `formula_fund_cache: dict[str, _FormulaRead]` hits, `138 passed`, `10 passed`, `12 passed, 398 deselected`. The conftest grep printed no lines. Full suite: `1864 passed`, `Total coverage: 91.96%`, `All checks passed!`, `145 files already formatted`.
+- Config-key wiring gate: not applicable (no config key).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/tests/test_unreadable_formula.py`
+- Deviations: `tests/test_unreadable_formula.py` mocks were made proto-real. Full detail is in the Deviation Log.
+
+### Step 6 — test: digests ride the single read (readable, refused, outage, cache hit) [done]
+- This is atomic unit Steps 5+6.
+- Created `tests/test_formula_digest_read.py`, with inline formulas and definitions and `make_servicer()` (C-13). It covers:
+  - a readable formula: the digest and the `_FormulaRead` cache value are set, and a cache hit issues no second `GetFormula`;
+  - a refusal (NOT_FOUND, PERMISSION_DENIED): the digest is `_UNREADABLE` and no failure is recorded;
+  - an outage: the digest is `None` and `failures[("formula","f-9")]` is UNKNOWN;
+  - the prefetch over three components on two formula ids: two `GetFormula` calls and both digests set, and a cached `_declared_formula_warmup` adds no RPC;
+  - warmup-read refusal and outage digests;
+  - AC-1 through the read: a `source` edit moves the digest and an `author` edit does not;
+  - without `digests`, the fundamentals map is unchanged.
+- TDD: AC-1 red: `FAILED tests/test_formula_digest_read.py::test_ac1_source_edit_moves_digest_through_the_read[FormulaDefinition-False]`, within `9 failed` (`.sdd-logs/v-1.log`, exit=1). Green: `10 passed` (`.sdd-logs/v-3.log`, exit=0).
+- Files modified: `services/xstockstrat-analysis/tests/test_formula_digest_read.py`
+- Deviations: none
