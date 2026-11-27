@@ -760,7 +760,7 @@ cd scripts && uv run --no-sync ruff check . && uv run --no-sync ruff format --ch
 
 ### Step 17 — service: Agent mode foundation (PyJWT, sso_mode.py, the identity watcher)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/pyproject.toml` — modify

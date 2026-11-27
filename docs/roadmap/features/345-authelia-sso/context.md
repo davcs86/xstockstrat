@@ -880,3 +880,9 @@
 
 ### Checkpoint (logged, not paused — owner chose no checkpoints) — backend Steps 1–16 done
 - Next surface: agent (Steps 17–24). Out-of-scope changes: none. Open items: spec-level choice 8 (seed idempotence no longer replayed by `migration-rerun`). Unaddressed review warnings: Step 52 firefox `testIgnore`, Step 37 `bffAllowlist` (Steps 1/2 `buf breaking`, 3/4 migration numbers and Step 6 Node assert cleared). Deviations: Steps 1+2 host codegen; Step 4 scratch Postgres (owner).
+
+### Step 17 — Agent mode foundation (PyJWT, sso_mode.py, the identity watcher) [done]
+- `pyjwt[crypto]>=2.15.0` is now a direct dependency (`uv lock`); `watcher.py` watches `identity` too and exports the `read_config_value` alias; new `app/sso_mode.py` (`ISSUER_PATTERN` = the vector literal, `is_valid_issuer`, `AUTH_MODES`, `parse_auth_mode`, `_log_once`/`_reset_log_once`, `current_auth_mode` via receiver `identity_config`, `agent_issuer` via receiver `agent_config`).
+- Verification: `uv lock --check` ok; ruff check + format clean; `pytest --cov=app --cov-fail-under=40` 941 passed (88.77 %); `check-config-wiring.mjs --keys identity.auth.mode,agent.oidc.issuer` exit 0. TDD: recorded under Step 18.
+- Files modified: `services/xstockstrat-agent/{pyproject.toml,uv.lock,app/sso_mode.py,app/config/watcher.py}`
+- Deviations: none. Note: the host uv (0.11.32) rewrote the lock header `revision = 5` → `3`; restored to `5` by hand (`uv lock --check` passes), so the lock diff is only the two `pyjwt` lines.
