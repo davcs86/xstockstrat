@@ -471,7 +471,8 @@
 - [x] `/sdd-review authelia-sso product-spec` on the design-round amendments (O-94). Done 2026-11-24 (post-design re-review).
 - [ ] Cutover gates (homelab-edge): rate-limit zone over `POST /accounts/api/sso/confirm`; S17 fresh `auth_time` with
       `prompt=login` + `max_age=0`; Authelia web client ID-token claims `email`, `preferred_username`, `auth_time`; seed-row
-      `reset-password`. Due before `set-auth-mode both` on a homelab deployment.
+      `reset-password`. Due before `set-auth-mode both` on a homelab deployment. S17 part done 2026-11-27, with
+      `max_age=1` instead (D-139; session "S17: max_age=1" below).
 - [ ] Config migration number: next free at execute (`056` contested by 314/317/321). Due at the seed step.
 - [x] Draft feature 280-third-party-sso-oidc overlaps (owner decision). Done 2026-11-24: 280 `demoted/canceled`, superseded by 345.
 - [ ] Identity-less `oidc`: idea for the owner's xstockstrat-only Authentik exploration (out of scope, D-112).
@@ -612,8 +613,10 @@
       over `POST /accounts/api/sso/confirm` (and the other password-accepting Link/re-auth POSTs); S17 extended to
       `prompt=login` + `max_age=0` returning a fresh `auth_time`; `sso.md` § 6 listing design § 6 gates 1–4; `sso.md` § 4
       "Change an xstockstrat role" noting the web delay up to `jwt.access_ttl_seconds` (finding 11). Due before
-      `set-auth-mode both` on a homelab deployment.
-- [ ] Owner sign-off on the 24 h stale-key window (`_JWKS_STALE_MAX_S`). Due before Step 19.
+      `set-auth-mode both` on a homelab deployment. S17 part done 2026-11-27: the SSO spec's S17 and § 3 "Linking"
+      read `max_age=1` @ `0bbe7ca` and `sso.md` § 6 lists the gate (D-139; session "S17: max_age=1" below).
+- [x] Owner sign-off on the 24 h stale-key window (`_JWKS_STALE_MAX_S`). Due before Step 19. Superseded 2026-11-27: the
+      owner removed the window (D-138; session below).
 - [ ] Remaining impl-review ⚠ items (Step 52 firefox `testIgnore`, Step 37 `bffAllowlist`, Step 1/2 `buf breaking`
       fallback, Step 4/3 migration re-check, Step 6 Node assert). Due at those steps.
 
@@ -624,3 +627,150 @@
 - Gate 3 (D-119, design § 6): `auth_time` must be present in the ID token by default or via the claims policy, as spike S17
   shows; the claims policy lists `email` and `preferred_username`. This matches homelab-edge SSO spec § 4.6 at `3b4e7a5`.
 - Step 23's cited range `test_auth_deadline.py:51-99` (the file has 99 lines).
+
+## Session 2026-11-27 — owner decisions: no stale keys; no Claude Code clients
+
+- Source: davcs86/homelab-edge `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md` @ `1d12328` (branch
+  `ccr-589817f0-cyg7gy`). Tree: `ccr-589817f0-cyg7gy` restarted from `origin/main-dev@f3a506d` (PR #1602 merged). Docs
+  only; execution has not started (every step `pending`), so the step-body edits below are allowed (F-09 binds only
+  during execution) and are listed here.
+- **Decision 1 — no tokens on stale keys, no exceptions (owner).** SSO spec § 3 "Signing keys": a token or ID token is
+  accepted only on a key from an issuer key set fetched within the last 3600 s; past that, a failed refresh refuses every
+  token; no stale-key grace window anywhere.
+  - debate.md: **P-6** (target D-2's stale-on-error, D-31's STALE_MAX branches, D-37's `_JWKS_STALE_MAX_S`, D-110's carry
+    of them; user reopened) and **D-138** (`_JWKS_MAX_AGE_S = 3600` in the D-13/D-37 constant list; a token needing a key
+    from an older set, known `kid` or not, waits for a refetch under D-31's single-flight task and 30 s cooldown; a failed,
+    timed-out or cooled-down refetch → 503 `jwks_unavailable`, text/plain, no `WWW-Authenticate`; never a verify with the
+    old keys). Status cells of D-2, D-31, D-37 and D-110 point at D-138; their decision text is unchanged. D-71 (which
+    restated D-31's cooldown branch) was already superseded by P-4; nothing else to change there.
+  - design.md: header register line; new "Amendment after approval (owner, 2026-11-27)" section (D-138); § 2 MCP status
+    map step 4 gains the key-set-age branch; § 3 "Other UI pieces" gains one line on the UI's keys; § 7 seam row 79 and
+    its footnote; Open Risks "Stale signing keys" ticked as superseded, with the availability residual.
+  - UI relying party verified, no change: openid-client 6.8.9 with `enableNonRepudiationChecks` (D-29/D-34, Step 32);
+    oauth4webapi 3.8.9 `getPublicSigKeyFromIssuerJwksUri` (`build/index.js:1026-1046`, tarball fetched 2026-11-27)
+    clears and refetches the JWKS once the cached set is 300 s old and throws if that fetch fails.
+  - acceptance.feature: **AC-79** (`@FR-2`): a known `kid` on a set 3601 s past its last successful fetch with the
+    JWKS unreachable → HTTP 503, no `WWW-Authenticate`, `jwks_unavailable`, no verify with the cached key. AC-61 is
+    unchanged (unknown `kid`); no existing scenario pinned the known-`kid` case.
+  - product-spec.md: **Amended** line; Risks "Stale signing keys … pending owner sign-off" replaced by "Signing keys at
+    most 3600 s old, no stale-key grace" (availability cost accepted by the owner). FR-2 unchanged (its "keys cannot be
+    fetched → 503" sentence covers AC-79).
+  - implementation-spec.md: spec-level choice 2 (`_JWKS_MAX_AGE_S`, sign-off superseded); coverage table AC-79 → 20, 24;
+    Step 19 Instructions 1 (constant) and 4 (`key_for` per D-138); Step 20 Covers AC-61, AC-79 and the `test_jwks.py`
+    cases (the "stale serve" and "beyond STALE_MAX → unknown" cases replaced); Step 24 Covers + AC-79 case in
+    `test_sso_auth.py`; Step 54 cutover-runbook content (the signing-key rule replaces the 24 h trade-off; cites D-138)
+    and its grep (`_JWKS_MAX_AGE_S` replaces `_JWKS_STALE_MAX_S`).
+  - feature.md: Last Updated, an `(unchanged)` Status History row, the Artifacts register range, Next Action.
+  - Open Threads: the stale-key sign-off item is ticked as superseded.
+- **Decision 2 — no Claude Code clients on the homelab (owner).** SSO spec § 4.6 and decision 21 as amended: Claude.ai
+  clients only; S9 retired (§ 11). FRs and config keys unchanged: the two `ui/oidc.mcp_client_id_claude_code*` keys (four
+  rows) stay, and an empty value hides the line on the card (FR-11).
+  - implementation-spec.md Step 54: the cutover runbook tells the operator to leave `oidc.mcp_client_id_claude_code` and
+    `oidc.mcp_client_id_claude_code_readonly` empty in both environments on the homelab; its grep checks
+    `mcp_client_id_claude_code`.
+  - product-spec.md Feature Workflow Notes: the edge proofs before cutover are Claude.ai only (S1, S5); S9 is no longer
+    cited as a gate.
+  - Not changed (FR-level, owner call): FR-13 and AC-20 still require `docs/runbooks/mcp-tools.md` to list the four
+    Claude Code client IDs and a loopback redirect, and FR-13 still cites "SSO spec S9" for that redirect; Step 54 item 2
+    and Step 58's grep follow them. The Consumer Surface line "pre-registered … clients for Claude.ai and Claude Code" is
+    a capability statement, not a homelab claim.
+- Status stays `implementation-ready`: no FR changed and the new scenario is covered (C-15), so no SDD rule forces a
+  re-review; an advisory `/sdd-review authelia-sso impl-spec` pass over Steps 19/20/24/54 is optional.
+
+## Session 2026-11-27 — S17: max_age=1
+
+- Source: spike S17 on the edge droplet (Authelia v4.39.28, 2026-11-27) and the owner's decision on it; davcs86/homelab-edge
+  `docs/superpowers/specs/2026-11-23-authelia-sso-respec.md` § 3 "Linking" and § 11 S17 @ `0bbe7ca` (branch
+  `ccr-589817f0-cyg7gy`) now read `max_age=1`. Tree: `ccr-589817f0-cyg7gy` @ `2d1316a` (PR #1631). Docs only; execution
+  has not started (every step `pending`), so the step-body edits below are allowed (F-09 binds only during execution).
+- **Spike evidence.**
+  - `prompt=login` + `max_age=0` on a live portal session: the consent API reports `require_login: true` and issues no
+    code until the person re-authenticates (re-authentication is forced).
+  - After a correct re-authentication (`POST /api/firstfactor/reauthenticate`), with `max_age=0` the consent is still
+    refused: `require_login` stays true and `POST /api/oidc/consent` → `{"status":"KO"}`; no code, ever. Authelia's
+    `internal/oidc/util.go` `RequestFormRequiresLogin` returns true whenever `max_age == 0`.
+  - `prompt=login` + `max_age=1`: the same re-authentication completes; code issued; the ID token's `auth_time` is fresh
+    (≥ the request's start) and `email` and `preferred_username` are present.
+- **Decision (owner).** Every Link SSO authorization request sends `prompt=login` and `max_age=1` instead of
+  `max_age=0`. Unchanged: D-111's check (`auth_time` present and `≥ txn.created_at − OIDC_CLOCK_SKEW_S`) is the
+  enforcement line, and `checks.maxAge` is still not passed to openid-client.
+  - debate.md: **P-7** (target: D-119's `max_age=0` sentence; user reopened) and **D-139** (`max_age=1`, with the spike
+    evidence). D-119's Status cell points at D-139; its decision text is unchanged. D-111 is not touched: its text never
+    named `max_age` and its check stands.
+  - design.md: header register line; the post-approval amendment section (now "Amendments") gains D-139; § 3 link-route
+    row (`max_age=1`; D-119, D-139); § 6 heading cites D-139 and gate 2 reads `max_age=1`, proven 2026-11-27 on the spike
+    (it stays a listed gate, as homelab-edge `sso.md` § 6 lists it); Open Risks "S17 unproven" ticked as resolved by the
+    spike (re-authentication forced, fresh `auth_time` with `max_age=1`).
+  - product-spec.md: **Amended** line; FR-16.1 link request `max_age=1` (with why not `0`); Feature Workflow Notes: S17
+    removed from "still to be proven" and recorded as proven with `max_age=1`.
+  - acceptance.feature: **AC-65** (same ID) names `max_age=1`; header comment records the change.
+  - implementation-spec.md: Step 32 `buildSsoAuthorizationUrl` (`max_age: '1'`; D-119, D-139); Step 33 `oidcClient.test.ts`
+    link URL case; Step 43 `/link` happy path; Step 53 e2e @AC-65 (the stub sees `prompt=login&max_age=1`); Step 54
+    cutover-runbook S17 gate text, cite list (+D-139) and its grep (`"max_age=1"` replaces `"max_age=0"`). Step 50's stub
+    IdP only records `prompt`/`max_age` (no value asserted there), so it is unchanged.
+  - feature.md: an `(unchanged)` Status History row and the Artifacts register range.
+  - Open Threads (2026-11-24 re-run; 2026-11-24 final pre-merge review): the S17 part of each gate item is noted done.
+- Not changed: design § 6 gate 3 still says `auth_time` is present "by default or through the policy, as S17 shows"; the
+  spike observed `auth_time`, `email` and `preferred_username` in the ID token but this record does not say whether the
+  claims policy lists `auth_time`.
+- Status stays `implementation-ready`: FR-16.1's parameter value changed with the owner's decision and AC-65 is still
+  covered by Steps 33/43/53 (C-15); an advisory `/sdd-review authelia-sso impl-spec` pass over Steps 32/33/43/53/54 is
+  optional.
+
+## Session 2026-11-27 — re-ground on main-dev@187e9f8
+
+- Source: a read-only check of PR #1631 against the latest `main-dev`. Tree: `ccr-589817f0-cyg7gy@2c1d154`
+  (⊇ `origin/main-dev@187e9f8`; 31 commits since the spec's `0dbc26b`). Docs only; execution has not started (every
+  step `pending`), so the step-body edits below are allowed (F-09 binds only during execution). No decision, FR, scenario
+  or step design changed.
+- **Config seed `056` → `060`.** `main-dev` has `056_analysis_live_only_cycle_max_days` (366, #1608),
+  `057_mcp_deadline_budget` (314, #1622), `058_marketdata_bars_miss_backoff` (317, #1626) and
+  `059_trading_broker_paper_per_environment` (321, #1630); `053` stays a gap. Identity `007` is still free (`006` is the
+  highest). The new CI `migration-order-gate` (`ci.yml:1004-1024`, `scripts/check-migration-order.py`, feature 318 #1619)
+  refuses an added up-file not above the base branch's maximum, which is Step 4's rule.
+  - implementation-spec.md: Execution Summary seed sentence; Step Dependencies merge-order bullet (`060`; 319 satisfied);
+    Step 4 title, Files, Codebase Evidence (`tail -6` → `057`–`059`; cites the gate), Instruction 1 and Verification
+    (`060_*`, `grep -c '^060_'`); Step 5 title.
+  - product-spec.md: **Amended** line; Config Key Changes `NNN` sentence (`060` on 2026-11-27; the gate).
+  - design.md Open Risks: "Config migration number contested" ticked as settled.
+  - feature.md: Reviewers DBA row (`060`); an `(unchanged)` Status History row.
+  - merge-order.md: row 345 vs 314/317/321 **Resolved** (Yes); row 345 vs 319 **Resolved** (Yes: 319 merged first,
+    #1610, 2026-11-26; `revokeToken` verifies at `identityServiceImpl.ts:284-293`).
+- **Tree header** now `ccr-589817f0-cyg7gy@2c1d154 ≡ origin/ccr-589817f0-cyg7gy (⊇ origin/main-dev@187e9f8)`.
+- **Line citations re-verified** at `187e9f8` (old → new; content unchanged unless noted below):
+  - identity `identityServiceImpl.ts`: `authenticateUser` 150-206 → 151-207 and its sub-ranges +1; reply literals
+    189-200 / 258-269 → 190-201 / 259-270; `rotateRefreshToken` 364 → 373; `listAdminUserIds` 988 → 997. `telemetry.ts`
+    `recordAuditFailure` 426-429 → 434-437 (357-362, 380-388, 390 unchanged).
+  - config `authz.ts` `SECRET_CALLER_ALLOWLIST` 136-155 → 143-162, notify grant 150-153 → 157-160 (`:74` unchanged).
+  - agent: `watcher.py` `read_value` 68-77 → 73-82, `start_watchers` wait 92-97 → 97-102; `oauth_server.py` 28 → 29;
+    `tools.py` 79/80 → 80/81, 139 → 140, 148 → 149, 178 → 179, 195 → 196, 218 → 219; `main.py` every cited range +2
+    (`_authorized` 142-165, `handle_mcp` 197-223, routes 238-253); `client.py` `validate_token` 1595 → 1596.
+  - `ci.yml`: `frontend-e2e` 609 → 611, coverage step 794 → 818, `scripts-python` 861-894 → 907-940, `migration-rerun`
+    898 → 944, `config-wiring-stored` 1323 → 1444 (filters 59/62/64 unchanged). `config-wiring.json` receivers 105 → 94,
+    141 → 131, forwarder 42 → 35. `deploy/homelab/compose.yml` `APP_URL` 285 → 307.
+  - UI: `vitest.config.ts` include 20 → 24, coverage include 25 → 29, exclude 28 → 32, thresholds 29-33 → 33-37 (env `:19`
+    and `:16` unchanged); `playwright.config.ts` `globalSetup`/`globalTeardown` 91-92 → 98-99, `baseURL` 94 → 101, projects
+    98-125 → 105-132, `webServer` 128 → 135, `AGENT_PUBLIC_URL` 168 → 175.
+  - Ledger `fails.md` 4236-4244 → 4251-4259; agent `CLAUDE.md` Config Keys Consumed 112 → 114.
+- **Beyond line shifts** (flagged, not redesigned):
+  - `migration-rerun` no longer replays every up-file: since 318 (#1619) it applies every migration once and replays only
+    the feature-224/225 up-files ("Older up-files are not replayed.", `ci.yml:942-943`). Step 3's evidence now says so;
+    its instruction (idempotent DDL) is unchanged. Spec-level choice 8 ("idempotence comes from `ON CONFLICT DO NOTHING`
+    replayed by `migration-rerun`") no longer holds as written: the seed is applied once and no CI job replays it. Left
+    for the owner or the next `/sdd-review authelia-sso impl-spec`.
+  - `authz.ts` internal-caller grants gained an optional `peerSan` (319); Step 13's `SECRET_CALLER_ALLOWLIST` append is
+    unaffected.
+  - recon.md (the dated Phase-0 dossier) and design.md body citations still carry `0dbc26b` line numbers (e.g. design
+    `main.py:195-221`, `tools.py:148,218`, `telemetry.ts:426-429`, `authz.ts:136-155`, `identityServiceImpl.ts:364`) and
+    recon's `056`; not edited. product-spec Feature Workflow Notes "until 319 lands" is unchanged (319 has landed).
+- Not changed: FR-13, AC-20 and Steps 54/58's Claude Code client documentation (open owner question, session "owner
+  decisions: no stale keys; no Claude Code clients" above).
+- Status stays `implementation-ready`.
+
+## Session 2026-11-27 — owner answers (plans review)
+
+- FR-13 / AC-20 / Steps 54 and 58 (Claude Code client documentation): **owner decided to keep them** (2026-11-27). The
+  capability stays documented for other self-hosted deployments that register Claude Code clients; the homelab registers
+  none and leaves the two `ui/oidc.mcp_client_id_claude_code*` keys empty (Step 54's cutover runbook already says so).
+  The open thread at the 2026-11-27 entries above (FR-level owner call) is closed. FR-13's citation of the retired
+  homelab-edge spike item S9 stays as the redirect's design reference for those deployments; no spec text changes.

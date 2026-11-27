@@ -4,7 +4,7 @@
 **Rounds**: 13 total; this run 4 (rounds 10–13, full; termination: approved)
 **Approved by**: user @ 2026-11-24 (round-13 gate)
 **Grounded in**: recon.md (2026-11-24)
-**Debate register**: debate.md (this run: D-101..D-137, R-23..R-30, O-85..O-127, P-4..P-5)
+**Debate register**: debate.md (this run: D-101..D-137, R-23..R-30, O-85..O-127, P-4..P-5; owner amendments 2026-11-27: D-138, D-139, P-6, P-7)
 
 ---
 
@@ -31,6 +31,20 @@ Sign-out, the UI discovery documents (all `xstockstrat-ui`), and every MCP tool'
 - **D-136** In `oidc`, an unreadable `agent/oidc.issuer` makes the UI's protected-resource document answer 503 `no-store`
   (as for an invalid issuer). D-133's fallback to today's documents applies only when the mode itself is unreadable.
 - **D-137** Link `no_access` copy: "Your single sign-on account doesn't have access to xstockstrat. Ask an admin."
+
+### Amendments after approval (owner, 2026-11-27; override the text below)
+
+- **D-138 No tokens on stale keys** (P-6; homelab-edge SSO spec § 3 "Signing keys", no exceptions). The agent uses a
+  key only while its issuer key set is at most `_JWKS_MAX_AGE_S = 3600` s old (in the D-13/D-37 constant list, replacing
+  `_JWKS_STALE_MAX_S`). A token that needs a key from an older set, known `kid` or not, triggers a refetch under D-31's
+  single-flight task and 30 s cooldown; a failed refetch, a deadline or a cooldown with no task → 503 `jwks_unavailable`
+  (text/plain, no `WWW-Authenticate`, the existing JWKS-unavailable path), never a verify with the old keys (AC-79). The
+  FRESH-to-3600 s band keeps D-31's verify plus gated background refresh. The 24 h stale-key Open Risk is closed.
+- **D-139 Link requests send `max_age=1`** (P-7; homelab-edge SSO spec § 3 "Linking"; spike S17). Every Link SSO
+  authorization request sends `prompt=login` and `max_age=1` instead of `max_age=0`: with `max_age=0` Authelia
+  v4.39.28 refuses consent even after a correct re-authentication, so no link would complete. `checks.maxAge` is still
+  never passed; D-111's `auth_time` check stays the enforcement line. Cutover gate 2 is proven on the spike; the S17
+  Open Risk is resolved.
 
 ### 0. Summary
 
@@ -146,7 +160,9 @@ Sign-out, the UI discovery documents (all `xstockstrat-ui`), and every MCP tool'
    - `alg` must be in the asymmetric allow-list; HS256 and `none` are refused.
    - The unverified `iss` must equal the issuer.
    - Garbage tokens are refused.
-4. JWKS lookup under one `asyncio.timeout_at` (D-18/D-31):
+4. JWKS lookup under one `asyncio.timeout_at` (D-18/D-31, D-138):
+   - the key set is older than `_JWKS_MAX_AGE_S` (3600 s) or was never fetched: no cached key is used; the refetch
+     failed, timed out or is held by the cooldown → 503 `jwks_unavailable`;
    - unknown `kid` and the fetch failed or timed out → 503 `jwks_unavailable`;
    - unknown `kid` and the fetch succeeded → 401.
 5. Verified decode (any failure → 401):
@@ -271,7 +287,7 @@ Sign-out, the UI discovery documents (all `xstockstrat-ui`), and every MCP tool'
 | Route | Order and outcome |
 |---|---|
 | `GET /accounts/api/sso` | No verified session (`auth.ts:38`) → **401** `{error:'unauthorized'}`<br>→ `GetExternalIdentityLinks` fails → **503** `{error:'failed'}`<br>→ **200** `{mode, linked, canLink, pending}`, where:<br>• `canLink = mode==='both'` (also when already linked, AC-67);<br>• `linked` = valid web config ? `issuers.includes(issuer)` : `issuers.length>0`;<br>• `pending = {linkId, label, accountEmail}` only when `canLink` and a valid `sso_link` matches the session `user_id`;<br>• `accountEmail` is the session JWT's `email` (`auth.ts:7`);<br>• the body never carries `iss` or `sub`. |
-| `POST /accounts/api/sso/link` (no body) | 401<br>→ mode gate (404 outside `both`, 503 on `error`)<br>→ invalid web config **400** `not_configured`<br>→ `isSameOrigin('required')` fails **403** `failed`<br>→ secret unset **400** `not_configured`<br>→ GetSecret or discovery fault **503** `failed`<br>→ **200** `{url}` + link txn. The URL carries `prompt=login` and `max_age=0`; `checks.maxAge` is never passed (D-119). |
+| `POST /accounts/api/sso/link` (no body) | 401<br>→ mode gate (404 outside `both`, 503 on `error`)<br>→ invalid web config **400** `not_configured`<br>→ `isSameOrigin('required')` fails **403** `failed`<br>→ secret unset **400** `not_configured`<br>→ GetSecret or discovery fault **503** `failed`<br>→ **200** `{url}` + link txn. The URL carries `prompt=login` and `max_age=1`; `checks.maxAge` is never passed (D-119, D-139). |
 | `POST /accounts/api/sso/confirm` `{linkId,password}` | 401<br>→ mode gate<br>→ Origin **403** `failed`<br>→ `sso_link` missing, undecryptable or expired, or `user_id` ≠ the session's, or `link_id` ≠ `linkId` → **400** `failed` (cookie cleared)<br>→ empty password → **400** `invalid_credentials` (identity not called)<br>→ `LinkExternalIdentity`, mapped below |
 
 How confirm maps `LinkExternalIdentity`:
@@ -298,7 +314,7 @@ Every refusal records `sso_link_failed{reason}`. A refusal is never 401, because
 - `SignOutButton` (D-53/D-63).
 - Middleware exempt sets (D-40/D-62).
 - `OIDC_CLOCK_SKEW_S = 30` in the F-07 form (D-13).
-- `openid-client@6.8.9`, exact pin (D-34).
+- `openid-client@6.8.9`, exact pin (D-34). Its keys already meet D-138: with `enableNonRepudiationChecks`, oauth4webapi 3.8.9 refetches the JWKS once the cached set is 300 s old and fails the attempt if that fetch fails (`build/index.js:1026-1046`), so the ID token is never checked on a set older than 3600 s.
 - The `typecheck` CI step (D-93).
 - `APP_URL` in compose and in the Playwright env (D-67).
 - **E2E:**
@@ -342,12 +358,13 @@ Every refusal records `sso_link_failed{reason}`. A refusal is never 401, because
 - `DELETE … RETURNING issuer`; exit 1 when no rows are deleted.
 - **On success it prints "<email> can link again with Link SSO while the deployment's auth.mode is both."** It gives no issuer-email hint (D-130b).
 
-### 6. Cutover gates (homelab, before `set-auth-mode both`; D-119, P-5)
+### 6. Cutover gates (homelab, before `set-auth-mode both`; D-119, P-5, D-139)
 
 1. A homelab-edge path-scoped rate-limit zone over `POST /accounts/api/sso/confirm` (homelab-edge is adding it to the
    SSO spec's § 4.3 zones, owner 2026-11-24).
-2. S17 proven: Authelia re-authenticates on `prompt=login` + `max_age=0` and returns a fresh `auth_time` in the ID token
-   (homelab-edge is extending SSO spec S17 to this, owner 2026-11-24).
+2. S17 proven: Authelia re-authenticates on `prompt=login` + `max_age=1` and returns a fresh `auth_time` in the ID token
+   (SSO spec S17 as amended 2026-11-27). Proven 2026-11-27 by spike S17 on the edge droplet (Authelia v4.39.28, D-139):
+   re-authentication forced, code issued, `auth_time` ≥ the request's start, `email` and `preferred_username` present.
 3. Authelia's web client `xstockstrat[-staging]-web` is registered with scopes `openid profile email` (SSO spec § 4.6 as
    amended 2026-11-24, owner; `OIDC_SCOPE` requests all three, and Authelia refuses a scope the client is not registered
    for with `invalid_scope`, spike item (c)), and its `claims_policy.id_token` includes `email` and `preferred_username`;
@@ -437,9 +454,10 @@ Seam labels:
 | 76 (proposed) | D-132 advisory `openSsoTxn` at step 3 | UV (link txn + `error=access_denied` → 303 `/accounts/sso?error=no_access`, `sso_link_failed{no_access}`, `sso_login_failed` not recorded, txn cleared; `server_error` → `failed`; expired link txn → login page); E2E (`page.route` intercept) |
 | 77 (added post-design) | D-107/D-124 link-route statuses; row 1 is the middleware redirect, the handler's 401 is the stale-token case | UV (`middleware.test.ts`: no cookie → `/auth/login`; the three route tests, one case per remaining row) |
 | 78 (added post-design) | D-136 UI PRM 503 `no-store` when `agent` / `oidc.issuer` is unreadable in `oidc` | UV (`protected-resource/route.test.ts`) |
+| 79 (added 2026-11-27) | D-138 key-set age: a known `kid` on a set older than 3600 s + a failed refetch → 503 `jwks_unavailable` | AP (respx, fake clock: `test_jwks.py`, `test_sso_auth.py`) |
 
 No live AC is uncovered. The guard rows are labelled as guards (D-118). Rows 77 and 78 were added on 2026-11-24 after
-the post-design `/sdd-review product-spec` added those scenarios.
+the post-design `/sdd-review product-spec` added those scenarios; row 79 on 2026-11-27 with D-138.
 
 
 ## Rejected Alternatives
@@ -479,21 +497,26 @@ All locked alternatives in debate.md, both runs (R-2, R-13 and R-14 are moot und
 
 ## Open Risks
 
-- [ ] **S17 unproven**: if Authelia ignores `prompt=login`/`max_age=0` or omits `auth_time`, D-111 refuses every link
+- [x] **S17 unproven**: if Authelia ignores `prompt=login`/`max_age=0` or omits `auth_time`, D-111 refuses every link
   (fail closed). Cutover gate 2; signal WARN `sso_link_refused`. — homelab-edge P0/P1 (S17, being extended to
-  `max_age=0` + `auth_time`), before `both`.
+  `max_age=0` + `auth_time`), before `both`. — resolved 2026-11-27 by spike S17 on the edge droplet (Authelia
+  v4.39.28; D-139): `max_age=0` never yields a code (consent refused even after re-authentication), so links send
+  `max_age=1`, with which re-authentication is forced and the ID token carries a fresh `auth_time`.
 - [ ] **Edge cutover gates** (D-119): rate-limit zone over `POST /accounts/api/sso/confirm`; Authelia web client
   registered with `openid profile email` (else every SSO login and Link fails with `invalid_scope`) and
   `claims_policy.id_token` with `email`, `preferred_username` (`auth_time` by default or via the policy, per S17); seed-row `reset-password`. — homelab-edge
   (SSO spec § 4.3, § 4.6 and `sso.md` § 6 being amended, owner 2026-11-24), before `set-auth-mode both`.
-- [ ] **Stale signing keys** (D-31/D-37): while the JWKS cannot be fetched, the agent keeps verifying with a key it
+- [x] **Stale signing keys** (D-31/D-37): while the JWKS cannot be fetched, the agent keeps verifying with a key it
   already holds for up to `_JWKS_STALE_MAX_S` (24 h) after its last successful fetch, so a key the issuer retired or
-  revoked stays accepted that long, beyond SSO spec § 4.7's rotation window. — owner sign-off before Step 19; the
-  cutover runbook states it (Step 54).
+  revoked stays accepted that long, beyond SSO spec § 4.7's rotation window. — superseded by the owner's decision
+  2026-11-27 (D-138): no stale-key window; keys only from a set at most 3600 s old. The residual is availability: a
+  JWKS outage outlasting 3600 s from the last good fetch makes every `oidc` MCP call 503 (accepted; the cutover
+  runbook states it, Step 54).
 - [ ] **No identity DB-test job** (recon R-8): AC-25's row count and AC-50 rest on labelled Postgres guards and
   `migration-rerun` (D-118). — accepted residual.
-- [ ] **Config migration number contested**: `056` is also planned by 314, 317 and 321; take the next free number at
-  execute. — config seed step.
+- [x] **Config migration number contested**: `056` is also planned by 314, 317 and 321; take the next free number at
+  execute. — config seed step. Settled 2026-11-27: 314, 317 and 321 merged with `057`–`059` (366 took `056`); the seed
+  is `060` today, still highest + 1 at execute, which the CI `migration-order-gate` enforces.
 - [ ] **New shared vector file** `scripts/testdata/oidc-issuer-vectors.json` (issuer, app_url, mode, refusals {resolve,
   link, session}, expected PRM) gates identity, UI and agent CI filters. — first step that creates it.
 - [x] **Draft feature 280-third-party-sso-oidc** overlaps the problem (no key collision). — owner decision 2026-11-24:
