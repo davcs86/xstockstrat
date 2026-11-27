@@ -61,7 +61,7 @@ For each actionable signal found in the text, extract:
 | `symbol` | Yes | Ticker symbol (e.g. NVDA, AAPL) — uppercase |
 | `direction` | Yes | One of: `buy`, `sell`, `hold`, `watchlist` |
 | `valid_from` | Yes | Signal validity start — ISO 8601 UTC (e.g. 2026-05-01T00:00:00Z) |
-| `conviction` | No | 0.0–1.0 — omit if not determinable from context |
+| `conviction` | No | 0.0–1.0 — omit if not determinable from context; 0.0 is a real zero confidence, not "unknown" |
 | `valid_until` | No | Signal expiry — omit if open-ended |
 | `headline` | No | One-line summary of the signal reason |
 | `raw_url` | No | Source URL if provided in email |

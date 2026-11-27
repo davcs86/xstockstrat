@@ -753,3 +753,13 @@ Tooling setup (steps 11+12): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktr
 - TDD: AC-3 red `.sdd-logs/v-1.log` — `3 failed, 170 passed` (`assert 0.75 == 0.5 ± 5.0e-07`; `assert [0.75] == [0.5 ± 5.0e-07]`; `assert False is True` on `conviction_provided`); that block printed `exit=0` because its last command (the MagicMock grep guard) passed → green `.sdd-logs/v-3.log` `exit=0` — `173 passed`; full suite `1846 passed`, `Required test coverage of 40% reached. Total coverage: 91.91%`; ruff clean; no `sig = MagicMock()` left.
 - Files modified: `services/xstockstrat-analysis/tests/test_analysis_helpers.py`, `services/xstockstrat-analysis/tests/test_screener.py`, `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`
 - Deviations: none
+
+## Session 2026-11-27 — sdd-execute sequential (step 13)
+
+Tooling setup (step 13): uv ✓ 0.11.32 · `uv sync --extra dev` ⬇ (worktree `.venv`) · ruff ✓ 0.16.9 · no Node install. Config-key wiring gate: not applicable (no key, no config migration).
+
+### Step 13 — service: agent `ingest_signal` sets presence; tool docs follow [done]
+- `client.ingest_signal` sets `signal.conviction_provided = True` inside `if conviction is not None:` (an omitted conviction leaves both unset). The `ingest_signal` tool docstring, the `mcp-tools.md` `conviction` row and the `signal_extraction.md` row now say: range [0.0, 1.0]; omitted → NULL ("not given"); explicit 0.0 → stored 0 and scored as zero confidence. The range-rejection sentence is kept. Tool name, parameters, return shape and tool count are unchanged; no new outbound call.
+- TDD: RED via an uncommitted scratch probe `.sdd-logs/v-2.log` `exit=1` — `2 failed, 1 passed` (`assert False is True` on `conviction_provided` for conviction 0.0 and 0.7). The Verification block before the change, `.sdd-logs/v-1.log` `exit=0`: `239 passed`, the `conviction_provided` grep printed nothing, `unknown confidence` hit `mcp-tools.md:269`. GREEN `.sdd-logs/v-3.log` `exit=0` — `239 passed`, grep hit `258:        signal.conviction_provided = True`, no `unknown confidence` hit, ruff `All checks passed!`, `79 files already formatted`; probe `.sdd-logs/v-4.log` `exit=0` `3 passed`. The block has no coverage command; Step 14 runs the coverage gate.
+- Files modified: `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/prompts/signal_extraction.md`, `docs/runbooks/mcp-tools.md`
+- Deviations: RED shown by a scratch probe, not a committed test (Deviation Log).

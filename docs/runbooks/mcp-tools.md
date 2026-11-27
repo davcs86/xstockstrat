@@ -266,7 +266,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 | `symbol` | `string` | Yes | Ticker symbol, e.g. `"NVDA"` |
 | `direction` | `string` | Yes | One of `"buy"`, `"sell"`, `"hold"`, `"watchlist"` |
 | `valid_from` | `string` | Yes | ISO 8601 datetime, e.g. `"2026-05-01T00:00:00Z"` |
-| `conviction` | `float` | No | Signal confidence, `0.0`–`1.0`. Omit if unknown — ingest stores an absent (or `0.0`) value as unset (NULL) and reads it back as `0.0` meaning "unknown confidence" (invariant INGEST-4). **No source default is applied.** An out-of-range value (`< 0.0` or `> 1.0`) or NaN is rejected `INVALID_ARGUMENT` at the ingest boundary (not `INTERNAL`). |
+| `conviction` | `float` | No | Signal confidence, `0.0`–`1.0`. Omit if unknown — ingest stores an omitted value as NULL ("not given"; invariant INGEST-4). An explicit `0.0` is stored as `0` and scored as zero confidence. **No source default is applied.** An out-of-range value (`< 0.0` or `> 1.0`) or NaN is rejected `INVALID_ARGUMENT` at the ingest boundary (not `INTERNAL`). |
 | `valid_until` | `string` | No | ISO 8601 datetime — signal expiry |
 | `headline` | `string` | No | Short summary for display |
 | `raw_url` | `string` | No | Source URL for attribution |
