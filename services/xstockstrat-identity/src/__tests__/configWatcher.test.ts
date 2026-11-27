@@ -133,6 +133,22 @@ describe('ConfigWatcher getters (FR-11)', () => {
   });
 });
 
+describe('ConfigWatcher seeded auth.mode → readAuthMode (feature 345)', () => {
+  it('a seeded value reaches the real reader; an empty one reads as local and WARNs once', async () => {
+    const { readAuthMode, __resetAuthModeLogOnce } = await import('../authMode');
+    __resetAuthModeLogOnce();
+    // seeded() feeds opens[0], so each fresh watcher needs an empty opens list.
+    const fresh = (values: Record<string, ValueInit>) => {
+      opens.length = 0;
+      return seeded(values);
+    };
+    assert.equal(readAuthMode(await fresh({ 'auth.mode': { stringVal: 'both' } })), 'both');
+    assert.equal(readAuthMode(await fresh({ 'auth.mode': { stringVal: '' } })), 'local');
+    assert.equal(records.filter((r) => r.level === 'warn' && r.msg === 'auth_mode_invalid').length, 1);
+    assert.equal(readAuthMode(await fresh({ [KEY]: { intVal: 600 } })), 'local');
+  });
+});
+
 describe('ConfigWatcher channel options', () => {
   it('dials with client keepalive and the xstockstrat-config target override', () => {
     new ConfigWatcher('xstockstrat-config:50060', NS);

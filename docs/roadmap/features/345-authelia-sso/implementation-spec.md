@@ -422,7 +422,7 @@ cd ../.. && node scripts/check-config-wiring.mjs --keys identity.auth.mode   # e
 
 ### Step 8 — test: authMode parsing, log-once, watcher re-parse and the seeded row
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/authMode.test.ts` — create

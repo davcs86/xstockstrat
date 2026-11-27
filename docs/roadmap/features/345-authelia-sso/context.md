@@ -828,3 +828,9 @@
 - Verification: `pnpm run lint` exit 0 (0 errors, pre-existing warnings only); `pnpm run build` exit 0; hook grep → `src/index.ts:28`; `check-config-wiring.mjs --keys identity.auth.mode` exit 0. TDD: red/green recorded under Step 8 (one cycle).
 - Files modified: `services/xstockstrat-identity/src/authMode.ts`, `services/xstockstrat-identity/src/index.ts`
 - Deviations: none
+
+### Step 8 — test: authMode parsing, log-once, watcher re-parse and the seeded row [done]
+- `authMode.test.ts` (5 cases: the 10 shared `mode` vectors; **@AC-72** log-once per distinct value; **@AC-31** absent → `local`, no log; the key/default read; **@AC-71/@AC-44** identity leg, re-parse on `'update'`) and one `configWatcher.test.ts` case (seeded `both` → `both`; `''` → `local` + one WARN; no key → `local`). The `index.ts` hook is the labelled grep guard (D-129).
+- TDD: red: `tsc` → "TS2307: Cannot find module '../authMode'" (exit 2; behaviour absent) → green: lint 0, `test:coverage` 175/175 pass (exit 0), `c8 check-coverage --lines 40` exit 0 (85.7 % lines); guard `src/index.ts:28`.
+- Files modified: `services/xstockstrat-identity/src/__tests__/authMode.test.ts`, `services/xstockstrat-identity/src/__tests__/configWatcher.test.ts`
+- Deviations: none. Note: the existing `seeded()` helper always feeds `opens[0]`, so the new case clears `opens` before each fresh watcher (helper itself unchanged).
