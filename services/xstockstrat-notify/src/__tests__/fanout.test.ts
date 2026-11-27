@@ -10,14 +10,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { transports } from 'winston';
-
 import { FanoutDispatcher } from '../fanout/fanout.js';
 import { SendgridSender } from '../fanout/sendgridSender.js';
 import { counterValue, install, points } from './fixtures/collectingReader.js';
 import { fakeCommsgun, type FakeCommsgunOpts } from './fixtures/fakeCommsgun.js';
 import { fakeConfig, type Cfg } from './fixtures/fakeConfig.js';
 import { stubFetch } from './fixtures/stubFetch.js';
+import { withLogs } from './fixtures/withLogs.js';
 
 // ── Harness: import must succeed, never silently skip (074 guard) ─────────────
 describe('fanout test harness', () => {
@@ -238,22 +237,6 @@ function provider(mode: string | undefined, opts: { str?: Record<string, string>
 }
 
 const sendgridPosts = (f: { calls: Array<{ url: string }> }) => f.calls.filter((c) => c.url === SG_URL);
-
-/** Captures what the real logger writes while `run` executes. */
-async function withLogs(run: () => Promise<void>): Promise<Array<Record<string | symbol, unknown>>> {
-  const captured: Array<Record<string | symbol, unknown>> = [];
-  const original = transports.Console.prototype.log;
-  transports.Console.prototype.log = function (info: Record<string | symbol, unknown>, next: () => void) {
-    captured.push(info);
-    next();
-  };
-  try {
-    await run();
-  } finally {
-    transports.Console.prototype.log = original;
-  }
-  return captured;
-}
 
 describe('FanoutDispatcher email provider', () => {
   it('@AC-1 sendgrid mode sends one SendGrid email and never queues, even with commsgun configured', async () => {

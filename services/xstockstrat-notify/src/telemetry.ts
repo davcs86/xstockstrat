@@ -377,7 +377,7 @@ export type DeliveryOutcome =
   | 'secret_unresolved'
   | 'no_endpoint'
   | 'rerouted';
-export type StreamEvictionReason = 'write_error' | 'stream_error';
+export type StreamEvictionReason = 'write_error' | 'stream_error' | 'backpressure';
 
 let readSubscribers: () => number = () => 0;
 
