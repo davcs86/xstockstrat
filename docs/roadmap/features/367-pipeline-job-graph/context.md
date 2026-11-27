@@ -154,3 +154,8 @@
   (O-74 → D-56). Two small undecided points (park's parent lock mode; give-up clock start) and
   wording were fixed (D-57). No Floor breach, no C-16 regression, no register violation, no
   petition. `@AC-2` confirmed under the weaker claim lock; no deadlock cycle.
+
+## Session 2026-11-27 — sdd-design gate after round 8
+
+- **OPERATOR (design gate): "Run round 9"** — the round-8 prune fix (D-56) has not been through an
+  adversarial pass. Round 9 started. Not approved.
