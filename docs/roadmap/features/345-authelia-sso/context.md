@@ -871,3 +871,12 @@
 - Verification: `ruff check` and `ruff format --check` clean; `--help` lists `set-auth-mode` and `unlink-sso`. TDD: recorded under Step 16.
 - Files modified: `scripts/manage-users.py`
 - Deviations: none (the commands sit above the existing `if __name__ == "__main__"` guard so Typer registers them).
+
+### Step 16 — test: set-auth-mode and unlink-sso [done]
+- `_mock_conn` gains optional `fetchall_returns`; `TestSetAuthModeCmd` (**@AC-71** row 2 exit 2 + no connect; row 1/**@AC-44** `both`/`local` parameters, sentinel, `pg_notify` identity/auth.mode; 0 rows local ok / oidc exit 1; no `DATABASE_URL` exit 1), `TestUnlinkSsoCmd` (**@AC-50** `--force` delete + relink sentence; declined confirm deletes nothing; unknown email 1; nothing deleted 1; `--issuer` narrows), two `TestSqlParameterization` cases.
+- TDD: red (Step 15 reverted): 13 failed, 44 passed → green: ruff clean, `pytest tests/test_manage_users.py` 57 passed; full `scripts/` suite 543 passed.
+- Files modified: `scripts/tests/test_manage_users.py`
+- Deviations: none
+
+### Checkpoint (logged, not paused — owner chose no checkpoints) — backend Steps 1–16 done
+- Next surface: agent (Steps 17–24). Out-of-scope changes: none. Open items: spec-level choice 8 (seed idempotence no longer replayed by `migration-rerun`). Unaddressed review warnings: Step 52 firefox `testIgnore`, Step 37 `bffAllowlist` (Steps 1/2 `buf breaking`, 3/4 migration numbers and Step 6 Node assert cleared). Deviations: Steps 1+2 host codegen; Step 4 scratch Postgres (owner).

@@ -725,7 +725,7 @@ cd scripts && uv run --no-sync ruff check . && uv run --no-sync ruff format --ch
 
 ### Step 16 — test: set-auth-mode and unlink-sso
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/manage-users.py`
 **Files**:
 - `scripts/tests/test_manage_users.py` — modify
