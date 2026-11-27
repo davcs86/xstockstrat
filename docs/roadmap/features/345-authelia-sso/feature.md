@@ -27,6 +27,7 @@
 | 2026-11-27 | `implementation-ready` (unchanged) | owner | Specs re-grounded on `main-dev@187e9f8` (docs only): config seed `056` → `060`, Tree header, shifted line citations; `merge-order.md` 345 rows resolved |
 | 2026-11-27 | `implementation-ready` (unchanged) | /sdd-execute | Sequential re-spec gate on `main-dev@4edfa94` (owner: targeted re-spec): Step 10 gains `revokeToken.test.ts` (8th inline config mock, added by 319); citation-only fixes in Steps 11, 13, 27, 31, 32, 46, 47, 52, 55 |
 | 2026-11-27 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1+2 done (sequential mode) |
+| 2026-11-27 | `in-progress` → `code-completed` | /sdd-execute | All 58 steps done (sequential); `check-config-wiring --final` exit 0; 70 scenarios promoted (C-16); integration PR to `main-dev` |
 
 ---
 

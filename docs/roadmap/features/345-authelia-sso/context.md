@@ -1159,3 +1159,14 @@
 ### Post-execution fix 2026-11-27 — 060 issuer descriptions
 - The Step 54 executor reported that `060` seeded `ui/oidc.issuer` and `agent/oidc.issuer` with the description `'OIDC Iss'`. Fixed in place (the migration is unmerged and unapplied) with the FR-14 grammar text; the stored set was regenerated on the owner-approved throwaway Postgres (Step 4 override, same purpose). `check-config-wiring.mjs --final` exit 0 (only the two pre-existing `REPORTED` readers-disagree lines); config 449/449.
 - Owner accepted the Steps 45–53 gap-fills (2026-11-27). Docs executor's open notes: the Claude Code loopback redirect is written as `http://localhost:<port>/callback` (unverified by repo evidence); `docs/runbooks/CLAUDE.md` and the root Context Guide do not list `authelia-sso-cutover.md` (no step owned them).
+
+## Session 2026-11-27 — sdd-execute (sequential), ALL-DONE
+**Steps this session**: 1–58 (17–24, 25–39, 40–53, 54–58 run by delegated executors, each verified by the orchestrator)
+**Progress**: 58 done / 58 total — lifecycle `code-completed`
+- `check-config-wiring.mjs --final`: exit 0 (only the two pre-existing `REPORTED` readers-disagree lines: analysis `fundsignal_loop.py` marketdata/fundamentals.provider, trading `trading.go` platform/trading_state).
+- Merge-order gate: both 345 rows resolved (Yes). `main-dev@19d095bc` merged in (docs only), ledger-guard clean.
+- C-16 (owner-approved): 70 scenarios promoted with `@feature-345` — identity 10, config 1, agent 16, ui 37 (new `acceptance/authelia-sso.feature` each), platform 6 appended to `docs/sdd/business-rules/platform.feature`; no duplicates.
+- Step 2.6: no defect report closed (the CHANGE-target features cite only `2026-08-24-ohlcv-lock-table-exhaustion-recurrence-defect.md` and `2026-11-16-ui-row-menu-stays-open-after-confirm-defect.md`; 345 fixes neither).
+- Owner accepted the Steps 45–53 gap-fills (Deviation Log).
+- Open before merge: UI Docker compose build + boot smoke on a host whose build containers reach registry.npmjs.org; spec-level choice 8 wording (seed not replayed by `migration-rerun` since 318); the Claude Code loopback redirect `http://localhost:<port>/callback` in `mcp-tools.md` is unverified; `docs/runbooks/CLAUDE.md` / root Context Guide do not list `authelia-sso-cutover.md` (no step owned them).
+**Next**: CI on the integration PR; the coordinating session merges.

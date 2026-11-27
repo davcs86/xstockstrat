@@ -1,6 +1,6 @@
 # Implementation Spec: authelia-sso
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-24 (regenerated after the 2026-11-24 re-spec; the 2026-11-16 52-step spec is superseded and stays in git history at `f0ed7dc`)
 **Feature**: `docs/roadmap/features/345-authelia-sso/feature.md`
 **Total Steps**: 58
@@ -2265,3 +2265,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: `ui/oidc.issuer` and `agent/oidc.issuer` descriptions state the FR-14 grammar (Step 4 instruction 2).
 - **Actual**: the seed shipped `'OIDC Iss'` for both keys (an orchestrator generator bug: an implicitly concatenated string indexed as a tuple); found by the Step 54 executor.
 - **Disposition**: `060` has never left this feature branch (not on `main-dev`, never applied), so the four description literals were corrected in place and `scripts/config-wiring-stored.json` regenerated on the same owner-approved throwaway Postgres 16 (stopped and deleted after); `--final` exit 0, config 449/449.
+
+### Steps 45–53 — UI details the spec did not state (owner-accepted 2026-11-27)
+- **Expected**: the step Instructions.
+- **Actual**: as recorded per step in context.md: link-dialog Cancel only closes (the link cookie expires on its own); a non-password confirm refusal reloads the status; `data-testid="sign-out"`; the SSO card keeps "My Authorized Apps" and links "Open your sign-in provider" in a new tab; in `oidc` the AS route reads only the mode; e2e harness: a `down` setting stands for "stub IdP stopped" (AC-45), `GET /__test/state` records authorize params/logout/links, `requireHint` not built (unused); `getConfigFails` fails every config and secret read; the mock Resolve does not check recorded links; the login-side IdP-error cases rewrite `/start`'s `Location`.
+- **Disposition**: owner accepted all (this session, 2026-11-27); no code change.
