@@ -41,6 +41,7 @@ const RPC_KEYS = ['rpc.system', 'rpc.service', 'rpc.method', 'rpc.grpc.status_co
 
 function drive(): void {
   telemetry.recordLoginFailure('bad_password');
+  telemetry.recordLoginFailure('password_login_disabled');
   telemetry.recordValidateFailure('expired');
   telemetry.recordExchangeFailure('pkce_mismatch');
   telemetry.recordRefreshRejection('oauth');

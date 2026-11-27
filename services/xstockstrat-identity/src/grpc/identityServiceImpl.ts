@@ -8,6 +8,7 @@ import { getLogger } from '../services/logger';
 import { userIdFrom, hasAdminAccessScope, ADMIN_SCOPE_ERROR } from './authz';
 import { LedgerAudit, NOOP_LEDGER_AUDIT } from './ledgerAudit';
 import { listAdminUserIds } from './adminDirectory';
+import { readAuthMode } from '../authMode';
 import {
   recordExchangeFailure,
   recordLoginFailure,
@@ -56,6 +57,38 @@ export const SEED_ADMIN_PASSWORD_HASH =
 // (APPLICATION_ENV != 'production') keep the convenience login.
 export function isBlockedDefaultAdmin(passwordHash: string, appEnv: string | undefined): boolean {
   return (appEnv ?? 'development') === 'production' && passwordHash === SEED_ADMIN_PASSWORD_HASH;
+}
+
+interface PasswordUser {
+  user_id: string;
+  email: string;
+  password_hash: string;
+  roles: string[] | null;
+  is_active: boolean;
+}
+type PasswordCheck =
+  | { ok: true; user: PasswordUser }
+  | { ok: false; reason: 'unknown' | 'inactive' | 'bad_password' }
+  | { ok: false; reason: 'blocked_default_admin'; user_id: string };
+
+// Every argument is required: the reply shape of AuthenticateUser and RefreshToken (D-122).
+export function sessionResponse(
+  minted: { accessToken: string; issuedAt: number; expiresAt: number },
+  refreshToken: string,
+  claims: { userId: string; email: string; roles: string[] | null },
+) {
+  return {
+    accessToken: minted.accessToken,
+    refreshToken,
+    expiresAt: secondsToDate(minted.expiresAt),
+    claims: {
+      userId: claims.userId,
+      email: claims.email,
+      roles: claims.roles ?? [],
+      issuedAt: secondsToDate(minted.issuedAt),
+      expiresAt: secondsToDate(minted.expiresAt),
+    },
+  };
 }
 
 function toUserView(row: any) {
@@ -145,6 +178,26 @@ export class IdentityServiceImpl {
     return this.config.getInt('jwt.refresh_ttl_seconds', 2592000);
   }
 
+  // Records no metric and logs nothing: each caller maps the reason to its own reply (D-102).
+  private async verifyPassword(
+    selector: { email: string } | { userId: string },
+    password: string,
+  ): Promise<PasswordCheck> {
+    const [column, value] = 'email' in selector ? ['email', selector.email] : ['user_id', selector.userId];
+    const result = await this.pool.query(
+      `SELECT user_id, email, password_hash, roles, is_active FROM identity.users WHERE ${column} = $1`,
+      [value]
+    );
+    if (result.rows.length === 0) return { ok: false, reason: 'unknown' };
+    const user: PasswordUser = result.rows[0];
+    if (!user.is_active) return { ok: false, reason: 'inactive' };
+    if (isBlockedDefaultAdmin(user.password_hash, process.env.APPLICATION_ENV)) {
+      return { ok: false, reason: 'blocked_default_admin', user_id: user.user_id };
+    }
+    if (!(await bcrypt.compare(password, user.password_hash))) return { ok: false, reason: 'bad_password' };
+    return { ok: true, user };
+  }
+
   /**
    * AuthenticateUser — validates credentials, returns JWT pair.
    */
@@ -154,51 +207,32 @@ export class IdentityServiceImpl {
       recordLoginFailure('missing_fields');
       return callback({ code: 3, message: 'email and password required' });
     }
+    if (readAuthMode(this.config) === 'oidc') {
+      recordLoginFailure('password_login_disabled');
+      return callback({ code: 7, message: 'password login disabled' });
+    }
     try {
-      const result = await this.pool.query(
-        'SELECT user_id, password_hash, roles FROM identity.users WHERE email = $1 AND is_active = true',
-        [email]
-      );
-      if (result.rows.length === 0) {
-        recordLoginFailure('unknown_or_inactive');
+      const check = await this.verifyPassword({ email }, password);
+      if (!('user' in check)) {
+        if (check.reason === 'blocked_default_admin') {
+          // Production refuses the committed default-admin seed credential until it is rotated.
+          log.warn(
+            'Refused default seed-admin login in production; rotate its password via scripts/manage-users.py reset-password',
+            { user_id: check.user_id }
+          );
+          recordLoginFailure('blocked_default_admin');
+        } else {
+          recordLoginFailure(check.reason === 'bad_password' ? 'bad_password' : 'unknown_or_inactive');
+        }
         return callback({ code: 16, message: 'invalid credentials' });
       }
-      const user = result.rows[0];
+      const { user } = check;
 
-      // Refuse the committed default-admin seed credential in production (migration 002 seeds a
-      // known "admin" password for local dev only). This blocks a known-credential takeover until
-      // an operator rotates it via scripts/manage-users.py; dev/staging keep the convenience login.
-      if (isBlockedDefaultAdmin(user.password_hash, process.env.APPLICATION_ENV)) {
-        log.warn(
-          'Refused default seed-admin login in production; rotate its password via scripts/manage-users.py reset-password',
-          { user_id: user.user_id }
-        );
-        recordLoginFailure('blocked_default_admin');
-        return callback({ code: 16, message: 'invalid credentials' });
-      }
-
-      const passwordValid = await bcrypt.compare(password, user.password_hash);
-      if (!passwordValid) {
-        recordLoginFailure('bad_password');
-        return callback({ code: 16, message: 'invalid credentials' });
-      }
-
-      const { accessToken, issuedAt, expiresAt } = this.mintAccessToken(user.user_id, email, user.roles);
+      const minted = this.mintAccessToken(user.user_id, email, user.roles);
       const refreshToken = await this.issueRefreshToken(user.user_id);
 
       log.info('User authenticated', { userId: user.user_id });
-      callback(null, {
-        accessToken,
-        refreshToken,
-        expiresAt: secondsToDate(expiresAt),
-        claims: {
-          userId: user.user_id,
-          email,
-          roles: user.roles ?? [],
-          issuedAt: secondsToDate(issuedAt),
-          expiresAt: secondsToDate(expiresAt),
-        },
-      });
+      callback(null, sessionResponse(minted, refreshToken, { userId: user.user_id, email, roles: user.roles }));
     } catch (err: any) {
       recordLoginFailure('internal');
       log.error('authenticateUser failed', { error: err.message });
@@ -253,21 +287,10 @@ export class IdentityServiceImpl {
       const { user_id, email, roles } = rotated.row;
       const newRefreshToken = rotated.refreshToken;
 
-      const { accessToken: newAccessToken, issuedAt, expiresAt } = this.mintAccessToken(user_id, email, roles);
+      const minted = this.mintAccessToken(user_id, email, roles);
 
       log.info('Token refreshed', { userId: user_id });
-      callback(null, {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-        expiresAt: secondsToDate(expiresAt),
-        claims: {
-          userId: user_id,
-          email,
-          roles: roles ?? [],
-          issuedAt: secondsToDate(issuedAt),
-          expiresAt: secondsToDate(expiresAt),
-        },
-      });
+      callback(null, sessionResponse(minted, newRefreshToken, { userId: user_id, email, roles }));
     } catch (err: any) {
       log.error('refreshToken failed', { error: err.message });
       callback({ code: 13, message: err.message });

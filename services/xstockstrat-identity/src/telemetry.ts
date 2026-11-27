@@ -359,6 +359,7 @@ export type LoginFailureReason =
   | 'unknown_or_inactive'
   | 'blocked_default_admin'
   | 'bad_password'
+  | 'password_login_disabled'
   | 'internal';
 export type ValidateFailureReason =
   | 'missing_token'

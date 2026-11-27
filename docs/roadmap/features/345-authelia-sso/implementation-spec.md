@@ -458,7 +458,7 @@ grep -n "watchAuthMode(configWatcher)" src/index.ts   # (guard) AC-44/AC-71: ind
 
 ### Step 9 — service: verifyPassword, the pure sessionResponse builder and the oidc password gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -493,7 +493,7 @@ grep -c "sessionResponse(" src/grpc/identityServiceImpl.ts   # definition + 2 ca
 
 ### Step 10 — test: fakeConfig fixture, the mock sites and the oidc gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/fixtures/fakeConfig.ts` — create

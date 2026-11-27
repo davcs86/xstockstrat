@@ -8,9 +8,10 @@ import { IdentityServiceImpl } from '../grpc/identityServiceImpl';
 import { createLedgerAudit } from '../grpc/ledgerAudit';
 import * as mtls from '../mtls';
 import { counterValue, install, points } from './fixtures/collectingReader';
+import { fakeConfig } from './fixtures/fakeConfig';
 
 const reader = install();
-const config = { getInt: (_key: string, def: number) => def } as any;
+const config = fakeConfig();
 
 function validate(token: string): Promise<{ code: number; message: string }> {
   const impl = new IdentityServiceImpl({} as any, config);

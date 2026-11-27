@@ -1,9 +1,10 @@
 // Unit tests for IdentityServiceImpl and authz — pool and config are inline mocks; no real DB.
-import { describe, it, before } from 'node:test';
+import { describe, it, before, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import * as jwt from 'jsonwebtoken';
 import * as crypto from 'crypto';
 import { CollectingReader, counterValue, install } from './fixtures/collectingReader';
+import { fakeConfig } from './fixtures/fakeConfig';
 
 let IdentityServiceImpl: any;
 let userIdFrom: any;
@@ -55,7 +56,7 @@ function makePool(rows: any[] = [], throws?: Error) {
 
 function makeImpl(rows: any[] = [], throws?: Error) {
   const pool = makePool(rows, throws);
-  const config = { getInt: (_key: string, def: number) => def } as any;
+  const config = fakeConfig();
   return new IdentityServiceImpl(pool, config);
 }
 
@@ -135,7 +136,7 @@ describe('authenticateUser', () => {
     try {
       await withAppEnvUnset(async () => {
         const known = makeImpl([
-          { user_id: 'u-a', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['trader'] },
+          { user_id: 'u-a', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['trader'], is_active: true },
         ]);
         errs.push(await login(known, 'a@example.com', 'wrong-password'));
         errs.push(await login(makeImpl([]), 'nobody@example.com', 'admin'));
@@ -174,7 +175,7 @@ describe('default seed-admin lockout', () => {
 
   it('feature 274 AC-20: the refusal log line carries user_id and never the email', async () => {
     const impl = makeImpl([
-      { user_id: 'u-admin', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['admin', 'trader'] },
+      { user_id: 'u-admin', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['admin', 'trader'], is_active: true },
     ]);
     const prev = process.env.APPLICATION_ENV;
     process.env.APPLICATION_ENV = 'production';
@@ -203,7 +204,7 @@ describe('default seed-admin lockout', () => {
 
   it('authenticateUser refuses the default seed-admin credential in production (code 16)', async () => {
     const impl = makeImpl([
-      { user_id: 'u-admin', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['admin', 'trader'] },
+      { user_id: 'u-admin', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['admin', 'trader'], is_active: true },
     ]);
     const prev = process.env.APPLICATION_ENV;
     process.env.APPLICATION_ENV = 'production';
@@ -288,9 +289,7 @@ describe('revokeToken', () => {
 describe('AC-2 identity: relative jwt.access_ttl_seconds with the alias off', () => {
   it('mints an access token whose TTL is the stored 1800, not the default 900', () => {
     process.env.JWT_SECRET = 'ac2-identity-test-secret';
-    const config = {
-      getInt: (k: string, d: number) => (k === 'jwt.access_ttl_seconds' ? 1800 : d),
-    } as any;
+    const config = fakeConfig({ ints: { 'jwt.access_ttl_seconds': 1800 } });
     const impl = new IdentityServiceImpl(makePool(), config);
     const minted = impl.mintAccessToken('u1', 'u@example.com', ['trader']);
     assert.strictEqual(minted.expiresIn, 1800);
@@ -354,7 +353,7 @@ function makeSpyPool(rows: any[] = []) {
 }
 
 function implWithPool(pool: any) {
-  const config = { getInt: (_key: string, def: number) => def } as any;
+  const config = fakeConfig();
   return new IdentityServiceImpl(pool, config);
 }
 
@@ -851,7 +850,7 @@ describe('token claim-shape parity (AC-4)', () => {
     process.env.JWT_SECRET = 'ac4-secret';
     await withAppEnvUnset(async () => {
       const pool = makeSpyPool([
-        { user_id: 'u1', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['trader'] },
+        { user_id: 'u1', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['trader'], is_active: true },
       ]);
       const res: any = await new Promise((resolve, reject) => {
         implWithPool(pool).authenticateUser(
@@ -1138,7 +1137,7 @@ function routePool(routes: Array<{ re: RegExp; resp: any }>) {
 }
 
 function makeAdminImpl(pool: any) {
-  const config = { getInt: (_k: string, d: number) => d } as any;
+  const config = fakeConfig();
   return new IdentityServiceImpl(pool, config);
 }
 
@@ -1385,7 +1384,7 @@ function makeFakeAudit() {
 }
 
 function makeAuditImpl(pool: any, audit: any) {
-  const config = { getInt: (_k: string, d: number) => d } as any;
+  const config = fakeConfig();
   return new IdentityServiceImpl(pool, config, audit);
 }
 
@@ -1664,5 +1663,105 @@ describe('admin metadata handler registration (smoke)', () => {
   it('adminGetUserMetadata / adminUpdateUserMetadata are callable prototype methods', () => {
     assert.equal(typeof IdentityServiceImpl.prototype.adminGetUserMetadata, 'function');
     assert.equal(typeof IdentityServiceImpl.prototype.adminUpdateUserMetadata, 'function');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// authenticateUser — auth.mode password gate (feature 345, D-102/D-122)
+// ---------------------------------------------------------------------------
+
+describe('authenticateUser auth.mode gate (feature 345)', () => {
+  const USER = {
+    user_id: 'u1',
+    email: 'u@example.com',
+    password_hash: '',
+    roles: ['trader'],
+    is_active: true,
+  };
+  const login = (impl: any, email = 'u@example.com', password = 'admin') =>
+    new Promise<{ err: any; res: any }>((resolve) =>
+      impl.authenticateUser(makeCall({ email, password }), (err: any, res: any) =>
+        resolve({ err, res }),
+      ),
+    );
+  const withMode = (pool: any, mode?: string) =>
+    new IdentityServiceImpl(pool, fakeConfig(mode === undefined ? {} : { strings: { 'auth.mode': mode } }));
+  const failures = (reason: string) =>
+    counterValue(reader, 'identity.login.failures', 'reason', reason);
+
+  it('@AC-16 oidc refuses password login with code 7 before any query', async () => {
+    const pool = makeSpyPool([{ ...USER, password_hash: SEED_ADMIN_PASSWORD_HASH }]);
+    const before = await failures('password_login_disabled');
+    const { err, res } = await login(withMode(pool, 'oidc'));
+    assert.deepEqual(err, { code: 7, message: 'password login disabled' });
+    assert.equal(res, undefined);
+    assert.equal(pool.queries.length, 0, 'no pool.query in oidc');
+    assert.equal(await failures('password_login_disabled'), before + 1);
+  });
+
+  for (const [label, mode] of [
+    ['@AC-17 both', 'both'],
+    ['@AC-31 absent auth.mode', undefined],
+  ] as const) {
+    it(`${label} returns today's token pair`, async () => {
+      process.env.JWT_SECRET = 'ac17-secret';
+      await withAppEnvUnset(async () => {
+        const pool = makeSpyPool([{ ...USER, password_hash: SEED_ADMIN_PASSWORD_HASH }]);
+        const { err, res } = await login(withMode(pool, mode));
+        assert.equal(err, null);
+        assertSharedClaims(res.accessToken);
+        assert.ok(res.refreshToken);
+      });
+    });
+  }
+
+  it('an inactive user selected by email gets 16 unknown_or_inactive and no bcrypt', async () => {
+    // An unparseable hash would make bcrypt.compare throw (→ 13), so a 16 proves it never ran.
+    const pool = makeSpyPool([{ ...USER, password_hash: 'not-a-bcrypt-hash', is_active: false }]);
+    const before = await failures('unknown_or_inactive');
+    const { err } = await login(withMode(pool, 'both'));
+    assert.deepEqual(err, { code: 16, message: 'invalid credentials' });
+    assert.equal(await failures('unknown_or_inactive'), before + 1);
+    assert.match(pool.queries[0], /WHERE email = \$1$/);
+    assert.deepEqual(pool.params[0], ['u@example.com']);
+  });
+
+  it('with a frozen clock, login and refresh replies keep their pre-refactor shape', async () => {
+    process.env.JWT_SECRET = 'd122-secret';
+    mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 });
+    try {
+      const iat = 1_700_000_000;
+      const shape = (res: any, userId: string, email: string) => ({
+        accessToken: res.accessToken,
+        refreshToken: res.refreshToken,
+        expiresAt: new Date((iat + 900) * 1000),
+        claims: {
+          userId,
+          email,
+          roles: ['trader'],
+          issuedAt: new Date(iat * 1000),
+          expiresAt: new Date((iat + 900) * 1000),
+        },
+      });
+      await withAppEnvUnset(async () => {
+        const pool = makeSpyPool([{ ...USER, password_hash: SEED_ADMIN_PASSWORD_HASH }]);
+        const { res } = await login(withMode(pool));
+        assert.deepStrictEqual(res, shape(res, 'u1', 'u@example.com'));
+        const refreshPool = makeSpyPool([
+          { token_id: 't1', user_id: 'u2', client_id: null, email: 'v@example.com', roles: ['trader'] },
+        ]);
+        const refreshed: any = await new Promise((resolve, reject) =>
+          implWithPool(refreshPool).refreshToken(makeCall({ refreshToken: 'r1' }), (e: any, r: any) =>
+            e ? reject(e) : resolve(r),
+          ),
+        );
+        assert.deepStrictEqual(refreshed, shape(refreshed, 'u2', 'v@example.com'));
+        for (const token of [res.accessToken, refreshed.accessToken]) {
+          assert.ok(!('aud' in (jwt as any).decode(token)), 'claims have no aud');
+        }
+      });
+    } finally {
+      mock.timers.reset();
+    }
   });
 });

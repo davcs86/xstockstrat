@@ -4,12 +4,13 @@ import assert from 'node:assert/strict';
 import * as jwt from 'jsonwebtoken';
 import { IdentityServiceImpl } from '../grpc/identityServiceImpl';
 import { install, values } from './fixtures/collectingReader';
+import { fakeConfig } from './fixtures/fakeConfig';
 
 const SECRET = 'revoke-319-secret';
 process.env.JWT_SECRET = SECRET;
 
 const reader = install();
-const config = { getInt: (_key: string, def: number) => def } as any;
+const config = fakeConfig();
 
 const REVOKE_SQL =
   'UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL';
