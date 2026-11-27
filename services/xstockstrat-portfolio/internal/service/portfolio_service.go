@@ -1357,7 +1357,7 @@ func (s *PortfolioService) emitRiskAlert(ctx context.Context, userID, eventType 
 	}
 	payload["user_id"] = userID
 	payload["message"] = msg
-	s.emitEventAs(ctx, userID, eventType, "portfolio:risk", payload)
+	_ = s.emitEventAs(ctx, userID, eventType, "portfolio:risk", "", payload)
 	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
 		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING,
 		Category:      "risk",
@@ -1372,11 +1372,15 @@ func (s *PortfolioService) emitRiskAlert(ctx context.Context, userID, eventType 
 }
 
 func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey string, payload map[string]interface{}) {
-	s.emitEventAs(ctx, "", eventType, streamKey, payload)
+	_ = s.emitEventAs(ctx, "", eventType, streamKey, "", payload)
 }
 
 // emitEventAs sets the ledger event owner explicitly; "" leaves ledger to fall back to x-user-id metadata.
-func (s *PortfolioService) emitEventAs(ctx context.Context, ownerUserID, eventType, streamKey string, payload map[string]interface{}) {
+// An empty idempotencyKey gets a fresh random key per call.
+func (s *PortfolioService) emitEventAs(ctx context.Context, ownerUserID, eventType, streamKey, idempotencyKey string, payload map[string]interface{}) error {
+	if idempotencyKey == "" {
+		idempotencyKey = uuid.NewString()
+	}
 	fields := make(map[string]*structpb.Value, len(payload))
 	for k, v := range payload {
 		val, _ := structpb.NewValue(v)
@@ -1390,7 +1394,7 @@ func (s *PortfolioService) emitEventAs(ctx context.Context, ownerUserID, eventTy
 		Payload:       &structpb.Struct{Fields: fields},
 		// Stable per-emit dedup key, reused across the retries below so a retry after a committed-but-
 		// unacked append returns the stored event instead of writing a duplicate.
-		IdempotencyKey: uuid.NewString(),
+		IdempotencyKey: idempotencyKey,
 		UserId:         ownerUserID,
 	}
 
@@ -1401,7 +1405,7 @@ func (s *PortfolioService) emitEventAs(ctx context.Context, ownerUserID, eventTy
 	var err error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if _, err = s.ledger.AppendEvent(ctx, req); err == nil {
-			return
+			return nil
 		}
 		if status.Code(err) != codes.Unavailable || attempt == maxAttempts {
 			break
@@ -1409,11 +1413,12 @@ func (s *PortfolioService) emitEventAs(ctx context.Context, ownerUserID, eventTy
 		select {
 		case <-time.After(backoff):
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		}
 		backoff *= 2
 	}
 	slog.WarnContext(ctx, "ledger append failed", "event_type", eventType, "error", err)
+	return err
 }
 
 // positionSyncPayload is the expected shape of the account.positions.synced event payload.

@@ -57,7 +57,7 @@ func (s *PortfolioService) pruneOnce(ctx context.Context) {
 	for _, e := range res.Removed {
 		streamKey := "watchlist:" + e.WatchlistID
 		if e.SignalID != nil {
-			s.emitEventAs(tickCtx, e.UserID, "portfolio.watchlist.signal_entry_expired", streamKey, map[string]interface{}{
+			_ = s.emitEventAs(tickCtx, e.UserID, "portfolio.watchlist.signal_entry_expired", streamKey, "", map[string]interface{}{
 				"user_id":      e.UserID,
 				"watchlist_id": e.WatchlistID,
 				"symbol":       e.Symbol,
@@ -67,7 +67,7 @@ func (s *PortfolioService) pruneOnce(ctx context.Context) {
 			})
 			continue
 		}
-		s.emitEventAs(tickCtx, e.UserID, "portfolio.watchlist.signal_entry_removed_untracked", streamKey, map[string]interface{}{
+		_ = s.emitEventAs(tickCtx, e.UserID, "portfolio.watchlist.signal_entry_removed_untracked", streamKey, "", map[string]interface{}{
 			"user_id":      e.UserID,
 			"watchlist_id": e.WatchlistID,
 			"symbol":       e.Symbol,

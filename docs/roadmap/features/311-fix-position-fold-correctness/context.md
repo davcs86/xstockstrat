@@ -3109,3 +3109,20 @@ Tooling (steps 3+4): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.2
 - TDD: the RED/GREEN results above. Coverage line `v-6.log`: `total: (statements) 79.1%`, `exit=0` (≥ 40%; `repository` is excluded from the figure).
 - Files modified: `services/xstockstrat-portfolio/internal/repository/fill_apply_repo_test.go`
 - Deviations: the same Deviation Log entry (Steps 3+4).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), Steps 5+6
+
+Tooling (steps 5+6): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 (built with go1.27.0, at `/root/go/bin`, put first on `PATH` for the lint runs)
+
+### Step 5 — service: portfolio `emitEventAs` returns an error and takes a key [done]
+- Atomic unit with Step 6 (planned, **Lands with**). `emitEventAs(ctx, ownerUserID, eventType, streamKey, idempotencyKey string, payload) error`: an empty key gets `uuid.NewString()`; the key is set once on the request before the retry loop, so the 4× `Unavailable` retry still reuses one key. Success returns nil, the `ctx.Done()` branch returns `ctx.Err()`, and the WARN `ledger append failed` stays, followed by `return err`. `emitEvent`, `emitRiskAlert` and both `signal_prune.go` callers pass `""` and discard the error with `_ =`. No other emit site changed.
+- Step 9 needs to know: the `pending_closed` clear (D-21) must gate on `emitEventAs` returning nil; `emitEvent` never returns the error.
+- TDD (unit): RED `.sdd-logs/v-1.log` `exit=1`: `too many arguments in call to s.emitEventAs`, `(no value) used as value`, `FAIL github.com/xstockstrat/portfolio/internal/service [build failed]` → GREEN `v-2.log` `ok github.com/xstockstrat/portfolio/internal/service 1.041s` (`-race`); `v-7.log` (`-v`) shows the 5 new tests `--- PASS`. Verification: build+vet (`-tags dbtest`) `v-8.log` `exit=0`; grep `v-5.log` lists 4 production calls and 4 test calls, all with six arguments; lint `v-6.log` `0 issues.` `exit=0`; `Prune` `v-4.log` `ok` `exit=0`; whole package `-race` `v-9.log` `ok … 11.020s` `exit=0`. No coverage threshold (`service` is excluded). The config-wiring gate does not apply: the step declares no key.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/service/signal_prune.go`
+- Deviations: the Verification blocks stop after their first line (Deviation Log, Steps 5+6).
+
+### Step 6 — test: keyed emit and its error return [done]
+- Atomic unit with Step 5. Created `portfolio_emit_key_test.go` on the existing `fakeLedger`/`newSvc`: `TestEmitEventAs_CallerKeyReachesLedger`, `_EmptyKeyGeneratesDistinctKeys`, `_LedgerErrorIsReturned` (`codes.Internal`, one call), `TestEmitEvent_SwallowsLedgerError` and `TestEmitEventAs_SuccessReturnsNil`.
+- TDD: the RED/GREEN results above.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_emit_key_test.go`
+- Deviations: the same Deviation Log entry (Steps 5+6).
