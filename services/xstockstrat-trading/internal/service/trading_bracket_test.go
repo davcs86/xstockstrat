@@ -603,7 +603,7 @@ func TestHaltAccount_SetsInMemoryBeforeReleasingMutexThenWritesDB(t *testing.T) 
 
 	done := make(chan struct{})
 	go func() {
-		svc.haltAccount(context.Background(), "acct-1", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
+		svc.haltAccount(context.Background(), "acct-1", "user-owner", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
 		close(done)
 	}()
 
@@ -625,13 +625,23 @@ func TestHaltAccount_DBWriteFailureDoesNotRollBack(t *testing.T) {
 	accounts := &fakeAccountRepo{updateHaltStatusFn: func(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error {
 		return fmt.Errorf("db unavailable")
 	}}
+	notify := &fakeNotifyClient{}
 	svc := &TradingService{
-		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, accountRepo: accounts, notify: &fakeNotifyClient{},
+		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, accountRepo: accounts, notify: notify,
 		halted: map[string]bool{}, haltReasons: map[string]string{}, haltedLastPolled: map[string]time.Time{},
 	}
-	svc.haltAccount(context.Background(), "acct-1", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
+	svc.haltAccount(context.Background(), "acct-1", "user-owner", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
 	if !svc.isAccountHalted("acct-1") {
 		t.Error("expected isAccountHalted to remain true despite the DB write failure")
+	}
+	notify.mu.Lock()
+	defer notify.mu.Unlock()
+	if len(notify.calls) != 1 {
+		t.Fatalf("EmitAlert called %d times, want 1", len(notify.calls))
+	}
+	a := notify.calls[0]
+	if a.Category != "halt" || a.Severity != notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL || a.TargetUserId != "user-owner" {
+		t.Errorf("halt alert = {Category:%q Severity:%v TargetUserId:%q}, want {halt CRITICAL user-owner}", a.Category, a.Severity, a.TargetUserId)
 	}
 }
 
