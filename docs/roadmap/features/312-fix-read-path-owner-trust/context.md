@@ -642,3 +642,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate: does not apply, because no config key is declared.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_ownerless_event_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go`
 - Deviations: none
+
+### Step 10 — service: notify ListAlerts takes the owner from the header only [done]
+- `listAlerts` now reads the owner as `(call.metadata?.get?.('x-user-id')?.[0] ?? '').toString()` and returns `{ code: 3, message: 'x-user-id header required' }` when it is empty, the `registerPushSubscription` / `getAlert` idiom (D-4, NOTIFY-5). `req.userId` is no longer read. Both the main and count query predicates are now `(a.target_user_id = $1 OR a.target_user_id IS NULL)`, so untargeted alerts stay visible to every identified caller. The stale two-line comment is replaced by a one-line constraint comment. No new outbound call, config key or env var. Out of scope (D-11) and unchanged: `streamAlerts` `req.userId` (`:160`), `acknowledgeAlert` and the `markAlertRead` fallback.
+- TDD: red-green. This step's **Files** have no paired test; Step 11 asserts AC-3. RED was this step's Verification on the pre-fix tree: exit=1 (`.sdd-logs/v-1.log`). Build, `# tests 416` / `# fail 0` and lint (`0 errors`) passed, but the `! grep` matched `240:` and `248:` `WHERE ($1::text IS NULL OR a.target_user_id = $1 OR a.target_user_id IS NULL)`. GREEN was the same Verification: exit=0 (`.sdd-logs/v-2.log`) with `# tests 416`, `# pass 416`, `# fail 0`, `✖ 382 problems (0 errors, 382 warnings)` (all pre-existing `no-explicit-any` warnings), no `$1::text IS NULL` match, and one `req.userId` (`160:`). This Verification has no coverage step; Step 11 runs `c8 check-coverage`.
+- Note: notify `docs/context-constitution.md` NOTIFY-7 and `CLAUDE.md:32` still describe the `ListAlerts` body fallback and unscoped branch; Step 17 rewrites them.
+- Config-key wiring gate: does not apply, because no config key is declared.
+- Files modified: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`
+- Deviations: none

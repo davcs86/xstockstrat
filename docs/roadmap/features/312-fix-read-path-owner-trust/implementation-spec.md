@@ -720,7 +720,7 @@ threshold applies to it; the tests above are the evidence.
 
 ### Step 10 — service: notify ListAlerts takes the owner from the header only
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts` — modify
