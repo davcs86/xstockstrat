@@ -422,7 +422,7 @@ Lint is in Step 5.
 
 ### Step 5 — test: `requires_approval` bind (AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/trading_repo_test.go` — modify
@@ -1002,4 +1002,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 4 — RED captured with a transient, uncommitted probe test (2026-11-27)
 - **Spec said**: Step 4 is `TDD: red-green required`; its paired test is Step 5, which runs after it, and Step 4's own Verification passes before the change (impl-spec review warning "Step 5: say how the RED before Step 4 run is captured").
 - **Actual**: a transient `TestTransientStep4RedProbe` (PENDING_APPROVAL → true, NEW → false at arg index 16) was appended to `internal/repository/trading_repo_test.go`, the Verification block run RED (`argument 16 expected [bool - true] does not match actual [bool - false]`), the bind changed, run GREEN, then the probe reverted with `git checkout` before a final Verification run. Nothing outside Step 4's **Files** is committed; Step 5 authors the real AC-3 tests.
+- **Disposition**: RED-capture method only; no scope or behavior change.
+
+### Step 5 — RED captured by transiently reverting Step 4's bind (2026-11-27)
+- **Spec said**: "RED before Step 4" for both AC-3 tests, but Step 4 is already committed (`2ffd368d`) when Step 5 runs.
+- **Actual**: the `trading_repo.go` bind was set back to `false` in the worktree, the Verification block run RED (both new tests fail on the bound value), then the file restored with `git checkout` before the GREEN run. Not committed; `trading_repo.go` is unchanged by this step.
 - **Disposition**: RED-capture method only; no scope or behavior change.
