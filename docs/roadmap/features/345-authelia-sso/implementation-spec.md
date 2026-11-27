@@ -2270,3 +2270,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected**: the step Instructions.
 - **Actual**: as recorded per step in context.md: link-dialog Cancel only closes (the link cookie expires on its own); a non-password confirm refusal reloads the status; `data-testid="sign-out"`; the SSO card keeps "My Authorized Apps" and links "Open your sign-in provider" in a new tab; in `oidc` the AS route reads only the mode; e2e harness: a `down` setting stands for "stub IdP stopped" (AC-45), `GET /__test/state` records authorize params/logout/links, `requireHint` not built (unused); `getConfigFails` fails every config and secret read; the mock Resolve does not check recorded links; the login-side IdP-error cases rewrite `/start`'s `Location`.
 - **Disposition**: owner accepted all (this session, 2026-11-27); no code change.
+
+### Step 46 — header wordmark from lg so the Sign-out icon fits at 640–1023 px (owner-chosen 2026-11-27)
+- **Expected**: the header Sign-out icon from `sm` up with no horizontal overflow (feature 344's `mobile-overflow.spec.ts` 640/768/1024 px checks).
+- **Actual**: CI's Frontend E2E (shard 1/2, run 46073798739) failed "no horizontal overflow at 768px" on `/accounts/notifications` and `/insights/opportunities` (16 px). The top header row was exactly full at 768 px (brand 98 + nav 480 + actions 112) and the Sign-out icon added 40 px; local fonts happened to fit, CI's did not.
+- **Disposition**: owner chose "Wordmark from lg": the `xstockstrat` text beside the logo shows from `lg` (≥1024 px) instead of `sm`; the logo shows at every width and the Sign-out icon is unchanged. Measured at 768 px: 59 px free, 0 overflow (640 px: 185 px free). No test changed.

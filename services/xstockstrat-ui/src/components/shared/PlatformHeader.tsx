@@ -209,7 +209,7 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
           className="flex items-center gap-2 text-primary font-semibold shrink-0"
         >
           <Lightning className="h-5 w-5" weight="fill" />
-          <span className="hidden sm:inline text-sm">xstockstrat</span>
+          <span className="hidden lg:inline text-sm">xstockstrat</span>
         </Link>
 
         <Separator orientation="vertical" className="h-6 hidden sm:block" />
