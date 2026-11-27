@@ -58,6 +58,10 @@ type MarketDataService struct {
 	// per interval, so a weekend (newest bar legitimately old) doesn't refetch on every poll.
 	staleMu        sync.Mutex
 	lastStaleCheck map[string]time.Time
+	// lastEmptyFetch holds the time of the last confirmed-empty implicit miss per (symbol|timeframe);
+	// only noteMissResult writes it.
+	missMu         sync.Mutex
+	lastEmptyFetch map[string]time.Time
 	// departedBarsWrite admits at most one departed-client GetBars cache write at a time;
 	// the zero value is usable, so test literals need no setup.
 	departedBarsWrite atomic.Bool
@@ -251,6 +255,7 @@ func NewMarketDataService(
 		quoteSubs:        make(map[string]chan *marketdatav1.Quote),
 		warmSymbols:      make(map[string]struct{}),
 		lastStaleCheck:   make(map[string]time.Time),
+		lastEmptyFetch:   make(map[string]time.Time),
 		fundamentals:     fundamentals,
 		fundProvider:     provider,
 		fundCfg:          cfgWatcher,
@@ -360,14 +365,7 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 			}
 		}
 		if refetch && liveFetchAllowed(snap, req.Symbol) {
-			// Keep stale-but-present bars if the refetch yields nothing (e.g. a weekend) rather
-			// than blanking a chart that has data.
-			if fresh, freshToken := s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, readStart, end, pageSize, startImplicit); len(fresh) > 0 {
-				bars, nextToken = fresh, freshToken
-			} else if len(bars) == 0 {
-				slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none",
-					"symbol", req.Symbol, "timeframe", canonicalTf, "start", start, "end", end)
-			}
+			bars, nextToken = s.liveRefetch(ctx, req.Symbol, canonicalTf, start, readStart, end, pageSize, startImplicit, bars, nextToken, time.Now())
 		}
 	}
 
@@ -425,45 +423,45 @@ func warnUnlessDone(ctx context.Context, msg string, args ...any) {
 
 // fetchAndCacheBars persists the fetched bars even if the client leaves (bounded by barsCacheWriteGrace
 // after departure); on write/re-read failure it logs and returns the live page, never an error (MARKETDATA-3).
-func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int, recent bool) ([]*marketdatav1.Bar, string) {
+func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int, recent bool) barsFetch {
 	src, err := s.registry.Get("")
 	if err != nil {
 		slog.WarnContext(ctx, "GetBars: resolve source failed", "symbol", symbol, "error", err)
-		return nil, ""
+		return barsFetch{}
 	}
 	live, err := src.GetBars(ctx, symbol, tf, start, end)
 	if err != nil {
 		warnUnlessDone(ctx, "GetBars: live fetch failed", "symbol", symbol, "timeframe", tf, "error", err)
-		return nil, ""
+		return barsFetch{}
 	}
 	if len(live) == 0 {
-		return nil, ""
+		return barsFetch{confirmedEmpty: ctx.Err() == nil}
 	}
 	skipped, err := s.cacheLiveBars(ctx, live)
 	if skipped {
-		return truncateBars(live, pageSize, recent), ""
+		return barsFetch{bars: truncateBars(live, pageSize, recent)}
 	}
 	if err != nil {
 		slog.WarnContext(ctx, "GetBars: cache insert failed", "symbol", symbol, "error", err)
-		return truncateBars(live, pageSize, recent), ""
+		return barsFetch{bars: truncateBars(live, pageSize, recent)}
 	}
 	if ctx.Err() != nil {
-		return truncateBars(live, pageSize, recent), ""
+		return barsFetch{bars: truncateBars(live, pageSize, recent)}
 	}
 	if recent {
 		bars, err := s.repo.QueryRecentBars(ctx, symbol, tf, start, end, pageSize)
 		if err != nil {
 			warnUnlessDone(ctx, "GetBars: re-read after cache failed", "symbol", symbol, "error", err)
-			return truncateBars(live, pageSize, recent), ""
+			return barsFetch{bars: truncateBars(live, pageSize, recent)}
 		}
-		return bars, ""
+		return barsFetch{bars: bars}
 	}
 	bars, nextToken, err := s.repo.QueryBars(ctx, symbol, tf, start, end, pageSize, "")
 	if err != nil {
 		warnUnlessDone(ctx, "GetBars: re-read after cache failed", "symbol", symbol, "error", err)
-		return truncateBars(live, pageSize, recent), ""
+		return barsFetch{bars: truncateBars(live, pageSize, recent)}
 	}
-	return bars, nextToken
+	return barsFetch{bars: bars, token: nextToken}
 }
 
 // truncateBars returns at most pageSize bars from a freshly-fetched (ascending) live slice — the

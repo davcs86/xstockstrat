@@ -575,7 +575,7 @@ node scripts/check-config-wiring.mjs --final   # still exit 0: a bounds entry is
 
 ### Step 7 — test: seed-migration shape test for `bars.miss_backoff_ms`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/barsMissBackoffSeedMigration.test.ts` — create
@@ -633,7 +633,7 @@ All pass with Step 8 applied.
 
 ### Step 8 — migration: seed `marketdata` / `bars.miss_backoff_ms` (config `056`, provisional)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.up.sql` — create
@@ -711,7 +711,7 @@ on either route: Step 7's test pins its SQL text, and the rollback itself runs i
 
 ### Step 9 — test: GetBars miss-path negative-cache tests (AC-2) and the retargeted structural test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/bars_miss_test.go` — create
@@ -817,7 +817,7 @@ coverage threshold applies to it.
 
 ### Step 10 — service: GetBars miss-path negative cache (`bars_miss.go`, `liveRefetch`, `barsFetch`, reader)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/bars_miss.go` — create
@@ -1082,3 +1082,36 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Disposition**: CI-equivalent fallback. The commands and the judgment are unchanged; only the shell framing.
 - **Anchors**: the neighbour registry entry moved from `configServiceImpl.ts:163` to `:165`; the test row anchor
   `:283` is unchanged. Every symbol was found, so this is not a deviation (F-04).
+
+### Deviation 4 — Steps 7+8+9+10: stored-set route, shell framing, RED staging, one flaky re-run (2026-11-27)
+
+- **Spec said**: Step 8 instruction 4 regenerates `scripts/config-wiring-stored.json` against a scratch Postgres
+  (local route or CI artifact, preflight recorded before Step 7). The four Verification blocks run as written.
+- **Actual**:
+  - Stored set. The operator authorized the local route on 2026-11-26 (Option A, "Throwaway Docker Postgres here"):
+    a throwaway local PostgreSQL 16 the main session provisioned, plus `psql` 16 and `migrate` on `PATH`.
+    `python3 scripts/config-wiring-stored.py` was run once, for generation only; this agent started no database.
+    The output was committed unedited. Its diff is the two `057_marketdata_bars_miss_backoff.up.sql` rows and a new
+    `inputs_sha256`. The migration's live apply and rollback stay with CI.
+  - One commit. After the Step 7 blocker, the operator re-confirmed that Steps 7-10 land as one commit. The four
+    steps cannot pass apart: the seed without its reader is `seeded-unread` under `--final`, the
+    `fetchAndCacheBars` return change breaks the test helper's compile, and Step 7 is RED until Step 8's files exist.
+  - Number. The migration keeps `057`, as specced, on the operator's instruction. `057` is also claimed by
+    314 and 321; whichever feature merges first keeps it.
+  - Shell framing. The union of the four Verification blocks ran as one `&&` chain, each line in its own subshell
+    from the repo root (the Deviation 1 framing). Lines expected to print nothing ran as `test -z "$(…)"` so that
+    any output fails the chain, and the trailing `# …` comments were dropped. Step 9's first line added `-v`
+    to count the tests it ran. `PATH` put Node 24 and the pinned `golangci-lint` v2.14.0 first.
+  - RED staging. Run K=2 was a package-wide compile failure. For a per-test RED (run K=3), the
+    `marketdata_service.go` part of Step 10 (state, `barsFetch` return, the `GetBars` call) was applied first, and
+    throwaway stubs of the new symbols went in `bars_miss_stub.go`. That file was deleted before `bars_miss.go` was
+    written.
+  - Re-runs. Run K=4 failed SA4000 on a line in the new test file, which was then fixed. Run K=5 failed
+    `TestGateway_RateLimit_AC1` in `internal/fmp` on timing ("window starting at call 4 holds 6 requests, want <= 5").
+    No member of this unit touches that package, and the same test passed in K=4 and K=6. K=6 passed the whole
+    chain.
+- **Disposition**: CI-equivalent fallback for the framing; the operator authorized the stored-set route. The
+  commands and the judgment are unchanged.
+- **Anchors**: lines moved after BRANCH SYNC (`GetBars` `:271` → `:279`, the guard `:354` → `:362`,
+  `fetchAndCacheBars` `:410` → `:428`). Every symbol was found, so this is not a deviation (F-04). The
+  `scripts/config-wiring.json` neighbour `bar_hold.go:cfg` is still at `:115`.

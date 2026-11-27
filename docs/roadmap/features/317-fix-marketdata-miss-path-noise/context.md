@@ -810,3 +810,80 @@ Up-front confirmation: the operator approved the plan with this record (binding,
 - TDD: green per Step 5 (unit red→green); the grep finds one entry (`:168`); `--final` exit 0.
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
 - Deviations: Deviation 3 (shared).
+
+## Session 2026-11-27 — sdd-execute sequential (sdd-batch-execute), unit B2 (Steps 7+8+9+10)
+
+- Tree: detached at `origin/feature/fix-marketdata-miss-path-noise` @ `a9cba5f7`. The branch does not contain
+  `origin/main-dev` @ `9e4b23b8`, which is 2 commits ahead. Neither commit touches a file this unit diffs
+  against (`git diff --stat HEAD origin/main-dev` on those files is empty), and main-dev's config migrations still
+  end at `056`. Anchors re-grepped, all present at shifted lines: `GetBars` `:279`, the guard `:362`,
+  `staleCheckDue` `:382`, `fetchAndCacheBars` `:428`, `barsCancelSource` `marketdata_service_test.go:5839`,
+  `fetchAAPLDaily` `:5922`, `TestGetBarsWarnsWhenMissAndLiveFetchEmpty` `:1274`, `bar_hold.go:cfg`
+  `scripts/config-wiring.json:115`.
+- Merge checklist (O-20), re-run: `056*`/`057*`/`058*` on any ref finds only `056_mcp_deadline_budget` (314,
+  `270e850d`), 321's `056` seed (`8599b995`) and 366's `056` on trunk. `miss_backoff_ms` appears only in this
+  feature's `a9cba5f7`. Feature 317 keeps `057`.
+- **Step 8 preflight, regeneration route.** Operator decision for the Step 7 blocker, recorded verbatim from the
+  orchestrator note: "Option A, operator-authorized 2026-11-26 (answer 'Throwaway Docker Postgres here
+  (Recommended)' to the question on regenerating scripts/config-wiring-stored.json for 314, 317 and 321)."
+  - The main session provisioned a throwaway local PostgreSQL 16 (local-only, never shared or staging).
+  - This agent used it only to generate the stored set, and started and stopped no database.
+  - The migration's live apply and rollback stay with CI.
+  - Steps 7-10 run as one commit (the operator's re-confirmation of the planned unit; the reason is in the
+    Deviation Log, Deviation 4).
+- Tooling: go1.27.0 ✓ · golangci-lint ✓ v2.14.0 built with go1.27.0 · Node v24.22.3 (`/opt/node24/bin`) · pnpm ✓
+  9.15.9 · psql 16.15 ✓ · `migrate` ✓ (`/usr/local/bin`) · main-checkout `node_modules` linked; no install.
+- Config-key wiring gate (C-16, step-time, `--declared-from product-spec.md --declared-migration 057_…up.sql`):
+  exit 0, no output (log `.sdd-logs/v-7.log`). Step 8's and Step 10's
+  `--keys marketdata.bars.miss_backoff_ms --final` both exit 0. Each prints only the two pre-existing `REPORTED:
+  … readers-disagree` lines, for analysis `fundamentals.provider` and trading `trading_state`, which are unrelated.
+  `--final` without `--keys` runs at Step 11, the last step.
+
+### Step 7 — test: seed-migration shape test for `bars.miss_backoff_ms` [done]
+- Unit B2 (Steps 7+8+9+10, one commit). Created `barsMissBackoffSeedMigration.test.ts`, which follows the
+  `delistingConfirmationSeedMigration.test.ts` case list. It uses `findOne`/`splitStatements` only.
+- TDD red (pre-unit tree, run K=1): 4 of 5 cases failed on `expected exactly one *_marketdata_bars_miss_backoff.up.sql,
+  got []` (and `.down.sql`), with tests 412 / pass 408 / fail 4. The bounds case is a constant characterization.
+  Green (K=6): tests 412 / pass 412 / fail 0, All files 92.32% lines, lint 0 errors.
+- Files modified: `services/xstockstrat-config/src/__tests__/barsMissBackoffSeedMigration.test.ts`
+- Deviations: Deviation 4.
+
+### Step 8 — migration: seed `marketdata` / `bars.miss_backoff_ms` (config `057`) [done]
+- Unit B2. Added the `057_marketdata_bars_miss_backoff` up/down pair. The up is a two-row relative-key seed
+  (staging, production, `user_id` NULL, sentinel actor, `ON CONFLICT … DO NOTHING`). The down is the sentinel- and
+  value-filtered `DELETE`. The stored set was regenerated with the generator and committed unedited: two rows plus
+  `inputs_sha256`.
+- TDD: N/A (migration). Offline check: the pair is the highest number; `grep -c '^057_'` = 2; the stored set holds 2
+  rows for the file; `--final` for the key exits 0. The down reverses the up by inspection, and Step 7 pins its
+  text.
+- Files modified: `services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.up.sql`, `services/xstockstrat-config/migrations/057_marketdata_bars_miss_backoff.down.sql`, `scripts/config-wiring-stored.json`
+- Deviations: Deviation 4 (stored-set route, number kept).
+
+### Step 9 — test: GetBars miss-path negative-cache tests (AC-2) and the retargeted structural test [done]
+- Unit B2. Added `calls` to `barsCancelSource`. `fetchAAPLDaily` now reads the `barsFetch` result, and
+  `TestGetBarsWarnsWhenMissAndLiveFetchEmpty` is retargeted onto `bars_miss.go:liveRefetch` and
+  `s.liveRefetch(` in `GetBars`. Created `bars_miss_test.go` with the 11 specced tests. Cross-key uses the
+  timeframe (`1d`/`1h`), and `DNB` is declared only in this file.
+- TDD: AC-2 red (throwaway stub, deleted before commit; run K=3):
+  `TestLiveRefetch_AC2_ThreeCallsOneVendorFetchOneWarn` failed with "vendor calls = 3, want 1" and "miss WARNs = 3,
+  want 1". Expiry, cross-key, explicit-range, cancel-plus-empty, `TestMissFetchDue`, `TestNoteMissResult` and
+  `TestResolveBarsMissBackoff` failed by assertion. The structural test failed with "open bars_miss.go: no such
+  file". The window-zero, fetch-error and stale-branch controls passed under the stub, since they pin pre-fix
+  behaviour. Green (K=6): all 12 named tests PASS (37 `--- PASS` in the targeted run, 0 FAIL), module total 87.5%,
+  golangci-lint 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/service/bars_miss_test.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+- Deviations: Deviation 4 (RED staging; the K=4 lint fix; the K=5 `internal/fmp` timing flake).
+
+### Step 10 — service: GetBars miss-path negative cache (`bars_miss.go`, `liveRefetch`, `barsFetch`, reader) [done]
+- Unit B2. `bars_miss.go` holds the key constants, `resolveBarsMissBackoff(cfg intGetter)`, `barsFetch`,
+  `missFetchDue` (no reservation; window `<= 0` clears the map), `noteMissResult` (the only writer; it sweeps
+  entries `>=` window under `missMu`) and `liveRefetch`. `fetchAndCacheBars` returns `barsFetch`, with
+  `confirmedEmpty` set only when the fetch is empty and `ctx.Err() == nil`. `GetBars` keeps its guard
+  byte-identical and calls `s.liveRefetch`. `missMu`/`lastEmptyFetch` sit beside `staleMu`, and the constructor
+  initialises the map. `scripts/config-wiring.json` gains the one `bars_miss.go:cfg` receiver. `bar_hold.go` is
+  untouched, and there is no `resolveOffMs`.
+- TDD: green per Step 9 (unit red→green). `go build` and `go vet` pass; `config-wiring.test.mjs` passes 75/75.
+  The `config-wiring.json` diff is exactly the one added line, and `missMu` appears only at the field and in the two
+  writers.
+- Files modified: `services/xstockstrat-marketdata/internal/service/bars_miss.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go`, `scripts/config-wiring.json`
+- Deviations: Deviation 4 (shared).
